@@ -113,8 +113,13 @@ struct CpmLink {
     std::int32_t successor = 0;
     LinkType type = LinkType::finish_to_start;
     ticks lag = 0;
-    // Elapsed lag ignores calendars (§4.2).  The elapsed constants are [I]
-    // (W3-E1/W3-E2), so an elapsed lag is refused rather than guessed.
+    // Elapsed lag ignores calendars (§4.2): a plain wall-clock offset from the
+    // predecessor's finish/start instant.  MEASURED (wave 9b,
+    // corpus/probe/w9-elapsedlag.mpp): the stored lag is already in elapsed
+    // ticks ("2 edays" = 28800 = 48 h, "3 edays" = 43200 = 72 h) and Project's
+    // save carries link-row +18 (LagFormat) = 8 for them vs 7 for the matching
+    // "2 days" links; FS+3 edays from Wed 17:00 starts Mon 08:00 (Sat 17:00 ->
+    // next working instant) where 3 working days would start Tue 08:00.
     bool elapsed_lag = false;
 };
 
@@ -140,6 +145,14 @@ struct CpmOptions {
 
 // One task's schedule.  `start`/`finish` are the DISPLAYED dates (the early dates
 // for a normal task; the late dates for ALAP and for schedule-from-finish).
+//
+// MEASURED (wave 9b, corpus/probe/schedin.mpp uid 2 + docs/analysis/oracle/
+// schedin-probe.json): an ALAP task's displayed Start/Finish ARE its late dates.
+// The fixture's ALAP row stores +96/+100 (calculated) = 2026-11-03 08:00/17:00
+// and COM reports exactly those as Start/Finish, while its +104/+108
+// ("effective") pair still holds the ASAP early dates 2026-10-19 08:00/17:00.
+// So `early_start`/`early_finish` below are the dates that pair holds, and
+// `late_start`/`late_finish` the ones the ALAP display uses.
 struct CpmTaskResult {
     std::int32_t id = 0;
     date32 start = kDateNa;
@@ -158,6 +171,10 @@ struct CpmTaskResult {
     // TotalSlack 6240 = LF - EF.  TotalSlack goes below LF - EF only for a
     // NEGATIVE start-side conflict (w3-o4 MSO/SNLT rows: TotalSlack -2400 while
     // LF - EF is 0).
+    // MEASURED (wave 9b, schedin.mpp uid 2): an ALAP task is placed at its late
+    // start, so its StartSlack and FreeSlack are 0 (row +186 and +74) while its
+    // TotalSlack is still LF - EF on the unconstrained early dates (row +190 =
+    // 5280 min).  [I] scope: that one row, the only ALAP row in the corpus.
     ticks start_slack = 0;
     ticks finish_slack = 0;
     ticks free_slack = 0;
@@ -179,7 +196,6 @@ enum class CpmError : std::uint8_t {
     self_link,                 // predecessor == successor
     negative_duration,
     constraint_date_missing,   // a date-bearing constraint with constraint_date == NA
-    elapsed_lag_unsupported,   // elapsed lag constants are [I] (W3-E1)
     overflow,                  // a walk left the calendar domain (§0.1)
     cycle,                     // links form a cycle: reported, never iterated (§3.1)
     did_not_converge,          // the pass loop hit its cap (§3.8)

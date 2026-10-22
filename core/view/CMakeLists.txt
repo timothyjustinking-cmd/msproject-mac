@@ -64,6 +64,7 @@ add_library(core_view STATIC
     sort.cpp
     view_set.cpp
     defaults.cpp
+    table_registry.cpp
 )
 add_library(msproject::view ALIAS core_view)
 

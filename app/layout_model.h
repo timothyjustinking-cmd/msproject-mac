@@ -17,13 +17,21 @@
 //     Milestone/Critical are the reader's values (documented derivations in
 //     core/mpp/reader.h); the Gantt only lays them out.
 //
-// DATE ENCODINGS -- two, and the one conversion between them
+// DATE ENCODINGS -- two names for the same counter, so the conversion is IDENTITY
 //   mpp::PackedDate (the file): (day << 16) | ticks_of_day, day 0 = 1983-12-31,
 //   one tick = 6 seconds.  core::sched::date32 (the engine): day 1 = 1984-01-01,
-//   one unit = 1/10 minute = 6 seconds.  So day32 = packed_day + 1 and
-//   tenths_of_minute = ticks_of_day -- the same six-second resolution, shifted by
-//   one day.  date32_from_packed() is that conversion, and it is the only place
-//   the shift is written.
+//   one unit = 1/10 minute = 6 seconds.  Both count days from 1983-12-31 (day 1 =
+//   1984-01-01 in each), so packed day D and date32 day D are the same date and
+//   the units are the same size: date32 = (day << 16) | ticks, exactly the file
+//   word.  date32_from_packed()/packed_from_date32() are that identity, and they
+//   are the only place the conversion is written.
+//
+//   W38 CORRECTION: this file used to add 1 to the day ("day32 = packed_day +
+//   +1"), which displayed every date one day late.  Evidence: spec §3 pins
+//   packed 15346 = 2026-01-05 and 15636 = 2026-10-22, `core/sched/date.h` pins
+//   day 1 = 1984-01-01, and `weekday_of_day(0) = 6` (1983-12-31 was a Saturday).
+//   The round-trip test and a real task's stored start (a Monday, not a Tuesday)
+//   now pin the identity.
 //
 // UNITS
 //   RecordSet duration values are 6-second ticks (core::view::kTicksPerDay =
@@ -151,6 +159,28 @@ core::view::FieldId task_field_id(std::string_view field_name);
 // PercentComplete, Summary, Milestone, Critical, OutlineLevel (0-based).
 core::view::RecordSet make_record_set(const PlanInput& input);
 
+// The reverse mapping: reads the editable task fields back out of `records` into
+// a copy of `base` (uid, name, start, finish, duration, percent complete,
+// summary, milestone, critical, outline level).  `base` supplies what the
+// RecordSet does not carry: the title, the project dates, the links and the
+// skipped-link count.
+//
+// WHY. Once the user edits a cell, the RecordSet -- not the loaded plan -- is
+// the source of truth for that value (core::sheet writes through to it, and undo
+// writes back), so the app re-derives the plan it draws from before every
+// rebuild.  A start the user cleared reads back as kDateNa, which is exactly
+// what an undated task should be: the sheet keeps the row and the Gantt gives it
+// no bar.
+PlanInput sync_plan_from_records(const PlanInput& base, const core::view::RecordSet& records);
+
+// The columns the shell declares read-only: UID, ID and Outline number are
+// identity or calculated columns (RecordSet identity, Project's own ID column,
+// the outline path), so core::sheet refuses begin_edit on them while Name,
+// Start, Finish and Duration stay editable.  core/sheet deliberately does not
+// infer this ("read-only is host configuration"), so the policy lives here and
+// the headless test asserts it.
+void apply_edit_policy(core::sheet::SheetModel& sheet);
+
 // ---------------------------------------------------------------------------
 // Gantt mapping
 // ---------------------------------------------------------------------------
@@ -162,6 +192,18 @@ core::view::RecordSet make_record_set(const PlanInput& input);
 core::gantt::GanttSource make_gantt_source(const PlanInput& input,
                                            const std::vector<date32>& holidays = {},
                                            date32 status_date = kDateNa);
+
+// As make_gantt_source(), but only the tasks named by `rows` get a Gantt row, in
+// that order.  `rows` are RecordSet row indexes -- the app passes
+// SheetModel::visible_rows() (app::RowMap::rows), so after a collapse Gantt row
+// N is visible ordinal N, a hidden task has no bar, and a link whose endpoint is
+// hidden is dropped by build_gantt() (it skips a link with no bar).  This is the
+// whole of "the Gantt follows the visible row list": the chart is rebuilt, never
+// panned or blanked.
+core::gantt::GanttSource make_gantt_source_for_rows(const PlanInput& input,
+                                                    const std::vector<std::size_t>& rows,
+                                                    const std::vector<date32>& holidays = {},
+                                                    date32 status_date = kDateNa);
 
 // Day columns at `pixels_per_day`, Monday-first weeks, origin replaced by
 // build_gantt()'s backward snap.

@@ -243,7 +243,7 @@ void print_links(const mpp::Document& document, bool header) {
 void print_assignments(const mpp::Document& document, bool header) {
     if (header) {
         std::cout << "uid\ttask_uid\tresource_uid\tunits_pct\twork_min\twork_days"
-                     "\tstart\tfinish\tstop\n";
+                     "\tstart\tfinish\tresume\n";
     }
     for (const mpp::Assignment& assignment : document.assignments) {
         std::cout << assignment.uid << '\t' << assignment.task_uid << '\t'
@@ -252,7 +252,7 @@ void print_assignments(const mpp::Document& document, bool header) {
                   << assignment.work_days() << '\t'
                   << mpp::format_date_iso(assignment.start) << '\t'
                   << mpp::format_date_iso(assignment.finish) << '\t'
-                  << mpp::format_date_iso(assignment.stop) << '\n';
+                  << mpp::format_date_iso(assignment.resume) << '\n';
     }
 }
 

@@ -291,4 +291,91 @@ Open after the wave: the writer's manual-task Start store (effective dates are
 `manual-start-edited.mpp` is on disk), the slack/critical rules, task-calendar
 uid exposure at row +178, and elapsed lag.
 
+## Wave 8 — 2026-10-22 (complete, recorded retroactively)
+
+Seven streams, all merged by the coordinator; the evidence and the per-stream
+counts are in `docs/handoff/coordinator.md` (wave-8 sections) rather than
+repeated here.
+
+| # | Stream | Deliverable |
+|---|---|---|
+| W29 | writer | `pin_task_start` (SNET at `+64/+66`), oracle-verified on an auto task; manual 7-word set still fails |
+| W30 | sched/plan | three stored slack words (`+74` Free, `+186` Start, `+190` Total), actual start/finish, summary recompute -> **M2 332/332** |
+| W31 | reader | effective dates `+104/+108`, start anchor `+174`, task calendar `+178`, stored milestone bit, assignment `+52/+56/+60`, link liveness split |
+| W32 | app | first AppKit shell (sheet + Gantt from a real `.mpp`), `.github/workflows/app-macos.yml` green |
+| W33 | io | MSPDI parity breadth: assignments/resources compared, dead-endpoint accounting, decimal `LinkLag` |
+| W34 | sheet | editing transactions, undo/redo, ranges, copy/paste (1,052 checks) |
+| W35 | gantt | real-calendar shading, holiday probes, week anchor, routing (644 checks) |
+
+## Wave 9 — 2026-10-22 (in flight)
+
+Five streams launched together (W36-W40), plus two overflow streams (W41, W42)
+launched while those were still landing because their modules were untouched.
+Results and the merge log are appended at the end of the wave; the oracle work
+is the coordinator's (`scripts/oracle_task_fields.py` is new this wave).
+
+| # | Stream | Deliverable | Build dir |
+|---|---|---|---|
+| W36 | session | `core/session`: load -> reader -> plan -> sheet/Gantt rows + status, no AppKit (821 checks) | `build\vs-w36` |
+| W37 | writer | `core/mppwrite/save.h`: `save_date_edits` = SNET pin + clear the manual mode bit, `save_plan`; disk re-read proof | `build\vs-w37` |
+| W38 | app | shell v2: open dialog, selection sync, edit/undo, save through W37; app-macos CI gate | `build\vs-w38` |
+| W39 | render | `core/render`: dependency-free PDF writer + sheet/Gantt report renderer | `build\vs-w39` |
+| W40 | robustness | `core/mpp`/`core/io`: assignment Stop, resource Type/MaxUnits, error paths, large-programme perf harness | `build\vs-w40` |
+| W41 | engine tail | ALAP display dates, recurring calendar exceptions, elapsed lag, FF floor for a 0-d successor | `build\vs-w41` |
+| W42 | views | real task tables, filters/groups/multi-key sorts, Gantt zoom + bar labels | `build\vs-w42` |
+
+## Wave 10 — planned (launch only after wave 9/9b is committed and CI is green)
+
+Written before wave 9 finished so a successor can launch without re-deriving the
+plan. **Enter conditions are real**: if the wave-9 number a stream depends on did
+not land, re-scope that stream; do not force it. Build dirs are reserved and must
+not be shared. Every stream below is disjoint from the others.
+
+**Why these four.** After wave 9 the port can open, recalculate (332/332), draw,
+edit and save a date. It cannot create or delete a task (the writer cannot grow a
+table), show a resource or usage view, compute a custom field or formula, or
+offer a real menu/preferences shell. Those are the four blocks with the most
+product value; they are listed in increasing order of risk, not of value.
+
+| # | Stream | Deliverable | Owns | Build dir | Enter condition |
+|---|---|---|---|---|---|
+| W43 | resource + usage views | `core/usage/` (time-phased buckets: period rows, work/cost per assignment, task-usage and resource-usage projections); resource tables in `core/view`; tests | `core/usage/`, `core/view/`, `tests/view_*`, `tests/usage_*`, `memory/view.md` | `build\vs-w43` | W40's `Resource::type`/`max_units` landed; W39 exists for the printed form |
+| W44 | custom fields + formulas | `core/formula/`: expression parser + evaluator over field values (arithmetic, comparisons, `IIf`, date/time and duration functions), custom-field storage keys, computed columns in `core/view` + `core/sheet`; tests | `core/formula/`, `core/model/` read-only use, `tests/formula_*` | `build\vs-w44` | oracle: formula fixtures measured (see below) |
+| W45 | writer: add/delete rows | grow/shrink `FixedMeta`+`FixedData`+`Fixed2Meta`+`VarMeta` consistently, with the `214/` regeneration decision taken from measurement; tests | `core/mppwrite/`, `tests/roundtrip_*`, `memory/writer.md` | `build\vs-w45` | W37 committed; oracle: the add/delete stream diff measured (see below) |
+| W46 | app shell v3 | File/Edit/View/Insert menus, preferences (date/duration format, timescale, working-day shading), Export PDF via W39, filter dialog, dirty-state and save prompts, keyboard navigation | `app/`, `.github/workflows/app-macos.yml` | `build\vs-w46` | W38 committed and app-macos green |
+
+Gates: W43 must not change `core/sheet`'s public API (W42/W34 own it) — a new
+record type goes through `core/view`/`core/usage`; W44 must read computed fields
+through one function (`value_of_field`) so the sheet and the reports agree; W45
+is the only stream allowed to write `214/`, and only if the oracle says which
+streams Project itself rewrites; W46 is additive-only in `core/**` and codes
+against the APIs on disk at launch.
+
+**Oracle agenda (coordinator, before or at launch).** Each of these is one
+`corpus/probe` fixture plus one read-back; they are the difference between a
+measured stream and a guessed one.
+
+1. **Add a task, save, diff** — Project's own file after one `Tasks.Add` and one
+   delete, stream by stream against the pre-save copy, including `FixedMeta`'s
+   size words, `Fixed2Meta` entries, `VarMeta` and `Var2Data`. This is the whole
+   of W45's design and must exist before W45 starts.
+2. **Formula ground truth** — a project with 5-6 custom fields (`Number1 = [Duration]*2`,
+   `Date1 = [Start]+7`, `Flag1 = IIf([% Complete]>50;1;0)`, a text concat, a
+   duration division) read back through `GetField`, so the evaluator has
+   expected values and the reader has the storage keys.
+3. **Time-phased usage** — one assignment with work spread across three days and
+   one with a different profile; save, then compare what the file stores with the
+   per-period values Project reports (`TimeScaleData`), so W43 knows whether
+   usage is stored or computed.
+4. **Preferences storage** — where the date format, duration format and
+   timescale live (`114/Props` candidates), so W46's preferences persist rather
+   than reset.
+
+**Sequencing.** W45 (row add/delete) is the one that unlocks "real editing" and
+is the highest-risk item in the project after the manual-save bit; do not start
+it in the same wave as W44 unless the oracle diff is already in hand. If wave 9's
+W41 lands ALAP and the recurring-exception work, M2 stays the regression gate for
+every wave-10 stream: any movement is a stop-and-report, never a re-pin by a
+stream.
+
 

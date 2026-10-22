@@ -13,6 +13,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <unordered_set>
 #include <utility>
 
 #include "utf16.h"
@@ -30,12 +31,21 @@ constexpr std::size_t kDirectoryEntrySize = 128;
 constexpr std::size_t kHeaderSize = 512;
 constexpr std::size_t kDifatHeaderSlots = 109;
 
+/* Bounds-checked on purpose: parse() validates every range it reads, but a
+ * malformed file must never turn a missed check into a read past the buffer.
+ * An out-of-range read yields 0, which the range checks that follow reject. */
 std::uint16_t read_u16(const std::vector<std::uint8_t>& data, std::size_t offset) {
+    if (offset + 2 > data.size()) {
+        return 0;
+    }
     return static_cast<std::uint16_t>(data[offset]) |
            static_cast<std::uint16_t>(static_cast<std::uint16_t>(data[offset + 1]) << 8);
 }
 
 std::uint32_t read_u32(const std::vector<std::uint8_t>& data, std::size_t offset) {
+    if (offset + 4 > data.size()) {
+        return 0;
+    }
     return static_cast<std::uint32_t>(data[offset]) |
            (static_cast<std::uint32_t>(data[offset + 1]) << 8) |
            (static_cast<std::uint32_t>(data[offset + 2]) << 16) |
@@ -43,6 +53,9 @@ std::uint32_t read_u32(const std::vector<std::uint8_t>& data, std::size_t offset
 }
 
 std::uint64_t read_u64(const std::vector<std::uint8_t>& data, std::size_t offset) {
+    if (offset + 8 > data.size()) {
+        return 0;
+    }
     const std::uint64_t low = read_u32(data, offset);
     const std::uint64_t high = read_u32(data, offset + 4);
     return low | (high << 32);
@@ -261,6 +274,10 @@ void CompoundFile::parse() {
     if (data_.size() < sector_size_) {
         throw Error("file is smaller than one sector");
     }
+    /* Every sector id must name a sector inside the file, so this is the hard
+     * bound on any chain length and on the DIFAT/FAT counts a header may claim.
+     * Bounding them here is what stops a 4-billion count from allocating. */
+    const std::size_t file_sectors = data_.size() / sector_size_;
 
     /* [MS-CFB] 2.2: 0x2C FAT sector count, 0x30 first directory sector,
      * 0x38 mini stream cutoff, 0x3C first mini FAT sector, 0x40 mini FAT sector
@@ -283,10 +300,18 @@ void CompoundFile::parse() {
         }
     }
     if (difat_start < kMaxRegularSector && difat_sectors > 0) {
+        if (difat_sectors > file_sectors) {
+            throw Error("DIFAT claims " + std::to_string(difat_sectors) +
+                        " sectors, more than the file's " + std::to_string(file_sectors));
+        }
         std::uint32_t current = difat_start;
         const std::size_t per_sector = sector_size_ / 4;
+        std::unordered_set<std::uint32_t> difat_seen;
         for (std::uint32_t step = 0; step < difat_sectors && current < kMaxRegularSector;
              ++step) {
+            if (!difat_seen.insert(current).second) {
+                throw Error("DIFAT sector chain loops at sector " + std::to_string(current));
+            }
             const std::size_t offset = sector_offset(current);
             if (offset + per_sector * 4 > data_.size()) {
                 break;
@@ -299,6 +324,13 @@ void CompoundFile::parse() {
             }
             current = read_u32(data_, offset + (per_sector - 1) * 4);
         }
+    }
+    /* Each FAT sector is one sector of the file; more ids than that is damage,
+     * and honouring it would size the FAT array by the claimed count. */
+    if (fat_sector_ids.size() > file_sectors) {
+        throw Error("FAT sector list holds " + std::to_string(fat_sector_ids.size()) +
+                    " ids, more than the file's " + std::to_string(file_sectors) +
+                    " sectors");
     }
     if (fat_sectors_ != 0 && fat_sectors_ < fat_sector_ids.size()) {
         fat_sector_ids.resize(fat_sectors_);
@@ -322,10 +354,15 @@ void CompoundFile::parse() {
     std::vector<std::uint8_t> directory;
     {
         std::uint32_t current = dir_start_;
-        const std::size_t limit = fat_.size() + 8;
+        const std::size_t limit = std::min(fat_.size() + 8, file_sectors + 1);
+        std::unordered_set<std::uint32_t> seen;
         for (std::size_t step = 0; step < limit; ++step) {
             if (current >= kMaxRegularSector) {
                 break;
+            }
+            if (!seen.insert(current).second) {
+                throw Error("directory sector chain loops at sector " +
+                            std::to_string(current));
             }
             const std::size_t offset = sector_offset(current);
             if (offset + sector_size_ > data_.size()) {

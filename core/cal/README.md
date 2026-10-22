@@ -214,7 +214,8 @@ meaningful.  Arithmetic cross-check on `project_a.mpp` uid 102 day 2
 day carries intervals there and is stored the same way.  `PjExceptionType`
 **0 and 1 are a plain dated range** (measured: all 1331 exceptions in PROJECT_A and the
 one in holiday1 are type 1); 2..7 are genuinely recurring and this decoder
-reports them instead of applying them (`CalendarTable::recurring_exceptions`).
+reports them (`CalendarTable::recurring_exceptions`) and expands the derivable
+ones (wave 9b: `expand_recurring_exception`, see the W41 note at the end).
 Exception names are **skipped on purpose**: only the padded length is used, so
 no client label can reach a caller, a tool or a test.
 
@@ -345,8 +346,32 @@ python -c "import olefile,struct;ole=olefile.OleFileIO('corpus/probe/holiday1.mp
 
 * MPP14 only (this is the format of every file in the corpus).  MPP12 uses
   different FixedMeta entry sizes and a different id-offset order.
-* Recurring exceptions (types 2..7) are not expanded; they are counted.
+* Recurring exceptions (types 2..7): the recurrence PARAMETER words are not
+decoded, so a derivable type (2..6) is expanded at period 1 and checked against
+the +4 occurrence word, while type 7 is refused.  See the W41 note at the end.
 * `core::sched::DayPattern` stores minutes, so a sub-minute interval would be
   rounded; `CalendarTable::sub_minute_intervals` counts any (0 in every file).
 * Calendar names are decoded because lookup needs them; nothing here writes a
   name to a file, and no test or tool prints one from a corpus file.
+
+## W41 note (wave 9b): recurring exceptions
+
+The record's recurrence PARAMETERS are still not decoded (weekday mask, "every
+N", position, month/day); what is now implemented is the derivable half:
+
+* `DatedException::occurrences` decodes the +4 word (a check, never a source of
+  truth — its identity is [I]: no file on disk has a recurring exception).
+* `expand_recurring_exception()` expands PjExceptionType 2..6 from the range's
+  first day at the shortest period (every week/month/year): yearly month+day,
+  yearly positional, monthly month+day, monthly positional, weekly.  Type 7
+  (every N days) is refused because N is not derivable.  The expansion is refused
+  (with a stable `why`) when the type is not recurring, the range is empty, the
+  expansion exceeds the caller's day cap, or the +4 occurrence word disagrees
+  with the expanded count.
+* `build_calendar(table, calendar, RecurrenceReport*)` applies an expansion
+  exactly like a plain dated range and counts `applied` / `not_applied`.
+
+`tests/cal_tests.cpp` pins the expansion (weekly/monthly/yearly/positional/
+month-existence), every refusal, and the builder application on synthetic
+records — no file on disk has a recurring exception, so the parameter words are
+the named wave-10 inference (`memory/cal.md`: the `w9-r-*` fixture set).

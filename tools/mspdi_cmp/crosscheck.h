@@ -81,6 +81,10 @@
 
 namespace mspdi_cmp {
 
+/* The date32 the reader stores for a civil date/time, or kNoDate when the value
+ * is absent. */
+inline constexpr std::int64_t kNoDate = -1;
+
 /* One link identity, the way both sides can express it.  type is Project's
  * PjRelationType: 0 = FF, 1 = FS, 2 = SF, 3 = SS. */
 struct LinkRow {
@@ -104,6 +108,23 @@ struct AssignmentRow {
     double units = 0.0; /* percentage, 100.0 == 100 % (both sides normalised) */
     bool work_compared = false;
     std::int64_t work_ticks = 0;
+    /* Assignment dates: the reader's +52/+56/+60 against the export's
+     * <Start>/<Finish>/<Resume>.  kNoDate means "not set"; Start/Finish are
+     * compared always (absent == kNoDate on both sides), Resume only when the
+     * export carries the element. */
+    std::int64_t start = kNoDate;
+    std::int64_t finish = kNoDate;
+    std::int64_t resume = kNoDate;
+    bool resume_compared = false;
+};
+
+/* One resource's compared values: identity plus the two fields the MSPDI
+ * export carries and the reader exposes.  max_units is a percentage on both
+ * sides after normalisation (the export writes a fraction). */
+struct ResourceRow {
+    std::uint32_t uid = 0;
+    int type = 0;          /* reader ResourceType as int */
+    double max_units = 0;  /* percentage, 100.0 == 100 % */
 };
 
 /* One field whose two readings disagree.  The values are already formatted for
@@ -142,6 +163,8 @@ struct Result {
     std::size_t xml_resources = 0; /* including the UID 0 placeholder */
     std::size_t compared_resources = 0;
     std::size_t matched_resources = 0;
+    std::size_t compared_resource_types = 0;
+    std::size_t compared_resource_max_units = 0;
 
     std::size_t reader_assignments = 0;
     std::size_t live_reader_assignments = 0;
@@ -151,6 +174,8 @@ struct Result {
     std::size_t matched_assignments = 0;
     std::size_t compared_assignment_units = 0;
     std::size_t compared_assignment_work = 0;
+    std::size_t compared_assignment_dates = 0;   /* Start+Finish pairs */
+    std::size_t compared_assignment_resume = 0;  /* exports carrying <Resume> */
 
     std::vector<std::uint32_t> reader_only_uids;  /* live in the .mpp, absent from XML */
     std::vector<std::uint32_t> xml_only_uids;     /* in XML, absent from the .mpp */
@@ -169,6 +194,7 @@ struct Result {
 
     std::vector<std::uint32_t> reader_only_resource_uids;
     std::vector<std::uint32_t> xml_only_resource_uids;
+    std::vector<FieldMismatch> resource_mismatches;
     std::vector<AssignmentRow> reader_only_assignments;
     std::vector<AssignmentRow> xml_only_assignments;
     std::vector<FieldMismatch> assignment_mismatches;
@@ -185,7 +211,8 @@ struct Result {
         return reader_only_uids.size() + xml_only_uids.size();
     }
     std::size_t resource_differences() const {
-        return reader_only_resource_uids.size() + xml_only_resource_uids.size();
+        return reader_only_resource_uids.size() + xml_only_resource_uids.size() +
+               resource_mismatches.size();
     }
     std::size_t assignment_differences() const {
         return reader_only_assignments.size() + xml_only_assignments.size() +
@@ -214,7 +241,6 @@ std::string format_json(const Result& result, const std::string& mpp_path,
 
 /* The date32 the reader stores for a civil date/time, or kNoDate when the value
  * is absent.  Exposed for the test that builds a synthetic pair. */
-inline constexpr std::int64_t kNoDate = -1;
 std::int64_t date32_of(const core::view::DateValue& date);
 
 }  // namespace mspdi_cmp

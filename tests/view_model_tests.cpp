@@ -1,6 +1,7 @@
 // tests/view_model_tests.cpp -- the view model: values, record sets, table,
 // filter, group, sort definitions, their JSON round-trip, and the default-table
 // data checked against the analysis TSV it claims to come from.
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -13,12 +14,14 @@
 #include "record_set.h"
 #include "sort.h"
 #include "table.h"
+#include "table_registry.h"
 #include "value.h"
 #include "view_set.h"
 #include "view_test_support.h"
 
 namespace {
 
+using core::view::Column;
 using core::view::ColumnAlign;
 using core::view::DateValue;
 using core::view::FieldId;
@@ -398,6 +401,120 @@ void test_filter(view_test::TestContext& ctx) {
     ctx.contains(error, "unknown filter op", "unknown filter op error text");
 }
 
+void test_filter_lists_and_auto_filter(view_test::TestContext& ctx) {
+    const RecordSet records = sample_tasks();
+
+    // Value list: "name is Design or Rollup".
+    FilterDefinition in_names;
+    in_names.id = "names";
+    in_names.name = "Names";
+    in_names.criteria =
+        FilterCriterion::in_list(kName, {Value::of_text("Design"), Value::of_text("Rollup")});
+    const auto in_rows = core::view::matching_rows(in_names, records);
+    ctx.equal(in_rows.size(), std::size_t{2}, "in() matches two names");
+    if (in_rows.size() == 2) {
+        ctx.equal(in_rows[0], std::size_t{0}, "in() first row");
+        ctx.equal(in_rows[1], std::size_t{2}, "in() second row");
+    }
+
+    FilterDefinition not_in_names;
+    not_in_names.criteria = FilterCriterion::not_in_list(
+        kName, {Value::of_text("Design"), Value::of_text("Rollup")});
+    const auto not_in_rows = core::view::matching_rows(not_in_names, records);
+    ctx.equal(not_in_rows.size(), std::size_t{3}, "not_in() matches the other three rows");
+
+    // Value list with a coerced constant (text "2" against an integer field).
+    FilterDefinition in_ids;
+    in_ids.criteria = FilterCriterion::in_list(kId, {Value::of_text("2"), Value::of_int(4)});
+    const auto in_id_rows = core::view::matching_rows(in_ids, records);
+    ctx.equal(in_id_rows.size(), std::size_t{2}, "in() coerces text to the field kind");
+    if (in_id_rows.size() == 2) {
+        ctx.equal(in_id_rows[0], std::size_t{1}, "in() coerced first row");
+        ctx.equal(in_id_rows[1], std::size_t{3}, "in() coerced second row");
+    }
+
+    // IsNull / IsNotNull.
+    FilterDefinition null_notes;
+    null_notes.id = "null-notes";
+    null_notes.name = "No notes";
+    null_notes.criteria = FilterCriterion::is_null(kNotes);
+    ctx.equal(core::view::matching_rows(null_notes, records).size(), std::size_t{4},
+              "is_null() finds the four notes-less rows");
+    FilterDefinition has_notes;
+    has_notes.criteria = FilterCriterion::is_not_null(kNotes);
+    const auto has_notes_rows = core::view::matching_rows(has_notes, records);
+    ctx.equal(has_notes_rows.size(), std::size_t{1}, "is_not_null() finds one row");
+    if (!has_notes_rows.empty()) {
+        ctx.equal(has_notes_rows[0], std::size_t{1}, "is_not_null() row");
+    }
+
+    // Auto-filter values: distinct, sorted, nulls omitted.
+    const std::vector<Value> names = core::view::distinct_values(records, kName);
+    ctx.equal(names.size(), std::size_t{4}, "four distinct names");
+    if (names.size() == 4) {
+        ctx.equal_string(names[0].text, "Build, install", "distinct names sorted: first");
+        ctx.equal_string(names[1].text, "Design", "distinct names sorted: second");
+        ctx.equal_string(names[2].text, "Milestone", "distinct names sorted: third");
+        ctx.equal_string(names[3].text, "Rollup", "distinct names sorted: fourth");
+    }
+    const std::vector<Value> ids = core::view::distinct_values(records, kId);
+    ctx.equal(ids.size(), std::size_t{5}, "five distinct ids");
+    if (ids.size() == 5) {
+        ctx.equal(ids[0].integer, std::int64_t{1}, "distinct ids sorted ascending");
+        ctx.equal(ids[3].integer, std::int64_t{4}, "distinct ids sorted descending end");
+        ctx.equal(ids[4].integer, std::int64_t{5}, "distinct ids includes the null-notes row");
+    }
+    ctx.equal(core::view::distinct_values(records, 0x0b4004ff).size(), std::size_t{0},
+              "distinct_values of an absent field is empty");
+
+    FilterDefinition auto_names =
+        core::view::auto_filter("auto-name", "AutoFilter Name",
+                                core::model::RecordType::Task, kName,
+                                {Value::of_text("Design")});
+    const auto auto_rows = core::view::matching_rows(auto_names, records);
+    ctx.equal(auto_rows.size(), std::size_t{1}, "auto_filter matches one value");
+    if (!auto_rows.empty()) {
+        ctx.equal(auto_rows[0], std::size_t{0}, "auto_filter row");
+    }
+    FilterDefinition empty_filter =
+        core::view::auto_filter("auto-empty", "AutoFilter empty",
+                                core::model::RecordType::Task, kName, {});
+    ctx.equal(core::view::matching_rows(empty_filter, records).size(), std::size_t{0},
+              "an empty value list matches nothing");
+
+    // JSON: in/not_in carry "values"; is_null needs no value.
+    const JsonValue list_json = core::view::filter_to_json(in_names);
+    FilterDefinition parsed;
+    std::string error;
+    ctx.check(core::view::filter_from_json(list_json, parsed, "filter", error),
+              "in() JSON round-trip: " + error);
+    ctx.equal(parsed.criteria.values.size(), std::size_t{2}, "in() values round-trip");
+    ctx.check(parsed.criteria.op == FilterOp::In, "in() op round-trip");
+    ctx.equal(core::view::matching_rows(parsed, records).size(), std::size_t{2},
+              "reparsed in() matches the same rows");
+
+    const JsonValue null_json = core::view::filter_to_json(null_notes);
+    ctx.check(core::view::filter_from_json(null_json, parsed, "filter", error),
+              "is_null() JSON round-trip: " + error);
+    ctx.check(parsed.criteria.op == FilterOp::IsNull, "is_null() op round-trip");
+
+    const auto array_value = core::view::parse_json(
+        "{\"id\":\"f\",\"name\":\"F\",\"criteria\":{\"field\":\"Name\",\"op\":\"in\","
+        "\"values\":[\"Design\",\"Rollup\"]}}");
+    ctx.check(array_value.ok, "in() JSON parses");
+    ctx.check(core::view::filter_from_json(array_value.value, parsed, "f", error),
+              "in() values array accepted: " + error);
+    ctx.equal(core::view::matching_rows(parsed, records).size(), std::size_t{2},
+              "parsed values array matches two rows");
+
+    const auto missing_values = core::view::parse_json(
+        "{\"id\":\"f\",\"name\":\"F\",\"criteria\":{\"field\":\"Name\",\"op\":\"in\"}}");
+    FilterDefinition ignored;
+    ctx.check(!core::view::filter_from_json(missing_values.value, ignored, "f", error),
+              "in() without values is rejected");
+    ctx.contains(error, "values", "missing values error text");
+}
+
 void test_group(view_test::TestContext& ctx) {
     const RecordSet records = sample_tasks();
 
@@ -475,6 +592,188 @@ void test_group(view_test::TestContext& ctx) {
     ctx.equal(parsed.keys.size(), std::size_t{2}, "group keys round-trip");
     ctx.check(parsed.keys[1].interval == GroupInterval::Month, "group interval round-trip");
     ctx.check(parsed.show_summary, "show_summary round-trip");
+}
+
+void test_group_order_and_summary(view_test::TestContext& ctx) {
+    // Five synthetic tasks with a group field, deliberately not in name order.
+    RecordSet records(core::model::RecordType::Task);
+    records.add_field(kId);
+    records.add_field(kName);
+    records.add_field(kResourceNames);
+    records.add_field(kSummary);
+    const char* names[] = {"Zulu", "Alpha", "Bravo", "Yankee", "Charlie"};
+    const char* crews[] = {"Crew", "Crew", "Plant", "Plant", "Crew"};
+    const bool summary[] = {false, false, false, true, false};
+    for (std::size_t i = 0; i < 5; ++i) {
+        const std::size_t row = records.add_row(static_cast<std::uint32_t>(i + 1));
+        records.set_field(row, kId, Value::of_int(static_cast<std::int64_t>(i + 1)));
+        records.set_field(row, kName, Value::of_text(names[i]));
+        records.set_field(row, kResourceNames, Value::of_text(crews[i]));
+        records.set_field(row, kSummary, Value::of_bool(summary[i]));
+    }
+
+    GroupDefinition by_crew;
+    by_crew.id = "crew";
+    by_crew.name = "By crew";
+    by_crew.keys.push_back({kResourceNames, GroupInterval::None, true});
+
+    SortDefinition by_name;
+    by_name.id = "name";
+    by_name.name = "By name";
+    by_name.keys.push_back({kName, true});
+    const std::vector<std::size_t> name_order = core::view::apply_sort(by_name, records);
+
+    const std::vector<core::view::GroupBucket> buckets =
+        core::view::build_groups(by_crew, records, name_order);
+    ctx.equal(buckets.size(), std::size_t{2}, "two crew buckets");
+    if (buckets.size() == 2) {
+        ctx.equal_string(buckets[0].label, "Crew", "Crew bucket first");
+        ctx.equal(buckets[0].row_count, std::size_t{3}, "Crew direct row count");
+        ctx.equal(buckets[0].total_row_count, std::size_t{3}, "Crew total row count");
+        ctx.equal_string(buckets[0].summary_line, "3 tasks", "Crew summary line");
+        // Rows inside a bucket keep the sorted order given to build_groups.
+        const std::size_t expected[] = {1, 4, 0};  // Alpha, Charlie, Zulu
+        bool order_ok = buckets[0].rows.size() == 3;
+        for (std::size_t i = 0; order_ok && i < 3; ++i) {
+            order_ok = buckets[0].rows[i] == expected[i];
+        }
+        ctx.check(order_ok, "rows inside a bucket follow the supplied sort order");
+        ctx.equal_string(buckets[1].label, "Plant", "Plant bucket second");
+        ctx.equal(buckets[1].total_row_count, std::size_t{2}, "Plant total row count");
+        ctx.equal_string(buckets[1].summary_line, "2 tasks", "Plant summary line");
+    }
+
+    // A nested group totals the children, and the display lines are heading,
+    // summary, then rows (decision, unmeasured).
+    GroupDefinition nested;
+    nested.id = "crew-summary";
+    nested.name = "Crew then summary";
+    nested.keys.push_back({kResourceNames, GroupInterval::None, true});
+    nested.keys.push_back({kSummary, GroupInterval::None, false});
+    const std::vector<core::view::GroupBucket> nested_buckets =
+        core::view::build_groups(nested, records, name_order);
+    ctx.equal(nested_buckets.size(), std::size_t{2}, "nested group top buckets");
+    if (nested_buckets.size() == 2) {
+        ctx.equal(nested_buckets[0].children.size(), std::size_t{1},
+                  "Crew has one child bucket (all its rows are non-summary)");
+        ctx.equal(nested_buckets[1].children.size(), std::size_t{2},
+                  "Plant has true and false children");
+        ctx.equal(nested_buckets[0].total_row_count, std::size_t{3},
+                  "nested total counts children");
+        ctx.equal_string(nested_buckets[0].summary_line, "3 tasks", "nested summary line");
+        ctx.check(nested_buckets[0].row_count == 0,
+                  "a bucket with children has no direct rows of its own here");
+    }
+
+    const std::vector<core::view::GroupLine> lines =
+        core::view::group_display_lines(nested_buckets);
+    ctx.check(!lines.empty(), "group display lines exist");
+    if (!lines.empty()) {
+        ctx.check(lines[0].kind == core::view::GroupLineKind::heading, "first line is a heading");
+        ctx.equal_string(lines[0].text, "Crew", "first heading text");
+        ctx.equal(lines[0].depth, 0, "top heading depth");
+        ctx.check(lines[1].kind == core::view::GroupLineKind::summary,
+                  "second line is the summary");
+        ctx.equal_string(lines[1].text, "3 tasks", "second line summary text");
+        bool saw_row = false;
+        for (const core::view::GroupLine& line : lines) {
+            saw_row = saw_row || line.kind == core::view::GroupLineKind::row;
+        }
+        ctx.check(saw_row, "display lines contain task rows");
+    }
+    const std::vector<core::view::GroupLine> no_summary =
+        core::view::group_display_lines(nested_buckets, false);
+    bool has_summary_line = false;
+    for (const core::view::GroupLine& line : no_summary) {
+        has_summary_line = has_summary_line || line.kind == core::view::GroupLineKind::summary;
+    }
+    ctx.check(!has_summary_line, "include_summary=false omits summary lines");
+
+    GroupDefinition no_summary_group = by_crew;
+    no_summary_group.show_summary = false;
+    const std::vector<core::view::GroupBucket> quiet =
+        core::view::build_groups(no_summary_group, records, name_order);
+    ctx.check(!quiet.empty() && quiet[0].summary_line.empty(),
+              "show_summary=false leaves the summary line empty");
+}
+
+void test_outline_sort(view_test::TestContext& ctx) {
+    RecordSet records(core::model::RecordType::Task);
+    const FieldId level = 0x0b400055;  // Task.OutlineLevel
+    records.add_field(kName);
+    records.add_field(level);
+    records.add_field(kSummary);
+    const char* names[] = {"Zulu", "Bravo", "Alpha", "Yankee", "Charlie"};
+    const std::int64_t levels[] = {1, 2, 2, 1, 2};
+    for (std::size_t i = 0; i < 5; ++i) {
+        const std::size_t row = records.add_row(static_cast<std::uint32_t>(i + 1));
+        records.set_field(row, kName, Value::of_text(names[i]));
+        records.set_field(row, level, Value::of_int(levels[i]));
+        records.set_field(row, kSummary, Value::of_bool(levels[i] == 1));
+    }
+
+    SortDefinition by_name;
+    by_name.id = "name";
+    by_name.name = "By name";
+    by_name.keys.push_back({kName, true});
+
+    const std::vector<std::size_t> flat = core::view::apply_sort(by_name, records);
+    const std::size_t flat_expected[] = {2, 1, 4, 3, 0};  // Alpha Bravo Charlie Yankee Zulu
+    bool flat_ok = flat.size() == 5;
+    for (std::size_t i = 0; flat_ok && i < 5; ++i) {
+        flat_ok = flat[i] == flat_expected[i];
+    }
+    ctx.check(flat_ok, "flat sort ignores the outline");
+
+    core::view::SortOptions options;
+    options.keep_outline = true;
+    const std::vector<std::size_t> nested = core::view::apply_sort(by_name, records, options);
+    // Parents sort among themselves; children sort inside each parent.
+    const std::size_t nested_expected[] = {3, 4, 0, 2, 1};  // Yankee Charlie Zulu Alpha Bravo
+    bool nested_ok = nested.size() == 5;
+    for (std::size_t i = 0; nested_ok && i < 5; ++i) {
+        nested_ok = nested[i] == nested_expected[i];
+    }
+    ctx.check(nested_ok, "outline sort keeps children under their parent");
+    ctx.check(nested != flat, "outline sort is not the flat order");
+
+    // Grouping by a field flattens: the outline order is only the input order.
+    GroupDefinition by_summary;
+    by_summary.id = "summary";
+    by_summary.name = "By summary";
+    by_summary.keys.push_back({kSummary, GroupInterval::None, false});
+    const std::vector<core::view::GroupBucket> buckets =
+        core::view::build_groups(by_summary, records, nested);
+    ctx.equal(buckets.size(), std::size_t{2}, "grouping over an outline flattens to two buckets");
+    if (buckets.size() == 2) {
+        ctx.equal(buckets[0].total_row_count, std::size_t{2}, "summary=true bucket count");
+        ctx.equal(buckets[1].total_row_count, std::size_t{3}, "summary=false bucket count");
+        ctx.check(buckets[0].children.empty() && buckets[1].children.empty(),
+                  "no outline nesting survives inside a group bucket");
+    }
+
+    // Multi-key sort with equal keys keeps file order (the stable tie-break).
+    RecordSet ties(core::model::RecordType::Task);
+    ties.add_field(kName);
+    ties.add_field(kDuration);
+    const char* tie_names[] = {"B", "A", "C", "A", "B"};
+    for (std::size_t i = 0; i < 5; ++i) {
+        const std::size_t row = ties.add_row(static_cast<std::uint32_t>(i + 1));
+        ties.set_field(row, kName, Value::of_text(tie_names[i]));
+        ties.set_field(row, kDuration, Value::of_duration(4800));
+    }
+    SortDefinition two_keys;
+    two_keys.id = "name-duration";
+    two_keys.name = "Name then duration";
+    two_keys.keys.push_back({kName, true});
+    two_keys.keys.push_back({kDuration, true});
+    const std::vector<std::size_t> tie_order = core::view::apply_sort(two_keys, ties);
+    const std::size_t tie_expected[] = {1, 3, 0, 4, 2};  // A(1) A(3) B(0) B(4) C(2)
+    bool tie_ok = tie_order.size() == 5;
+    for (std::size_t i = 0; tie_ok && i < 5; ++i) {
+        tie_ok = tie_order[i] == tie_expected[i];
+    }
+    ctx.check(tie_ok, "equal keys keep file order (stable tie-break)");
 }
 
 void test_sort(view_test::TestContext& ctx) {
@@ -602,6 +901,226 @@ void test_defaults(view_test::TestContext& ctx) {
               "four builtin tables");
 }
 
+std::string field_hex(FieldId field) {
+    char buffer[16];
+    std::snprintf(buffer, sizeof(buffer), "%08x", field);
+    return buffer;
+}
+
+char align_letter(ColumnAlign align) {
+    switch (align) {
+        case ColumnAlign::Left: return 'L';
+        case ColumnAlign::Right: return 'R';
+        case ColumnAlign::Center: return 'C';
+        case ColumnAlign::Auto: return 'A';
+    }
+    return 'A';
+}
+
+struct PinnedTable {
+    const char* id;
+    const char* fields;  // comma-separated 8-digit PjField ids, in column order
+    const char* widths;  // width + alignment letter, in column order
+};
+
+/*
+ * The expected data is the decoded RT_RCDATA 330/311 table definition, not a
+ * copy of table_registry.cpp: the resource records are (field id, width,
+ * alignment code), so a drift in either order, id, width or alignment fails.
+ */
+constexpr PinnedTable kPinnedTables[] = {
+    {"entry",
+     "0b400017,0b4000cd,0b40000e,0b40001d,0b400023,0b400024,0b40002f,0b400031",
+     "6R,6L,24L,9R,12R,12R,14L,17L"},
+    {"variance",
+     "0b400017,0b40000e,0b400023,0b400024,0b40002b,0b40002c,0b40002d,0b40002e",
+     "6R,20L,12R,12R,15R,15R,11R,11R"},
+    {"earned-value",
+     "0b400017,0b40000e,0b40000c,0b40000b,0b400078,0b40000d,0b400053,0b40021d,"
+     "0b400006,0b4001b9",
+     "6R,24L,11R,11R,11R,11R,11R,11R,11R,11R"},
+    {"baseline",
+     "0b400017,0b40000e,0b40001b,0b40002b,0b40002c,0b400001,0b400006",
+     "6R,24L,13R,15R,15R,14R,14R"},
+    {"tracking",
+     "0b400017,0b40000e,0b400029,0b40002a,0b400020,0b40045f,0b40001c,0b40001f,"
+     "0b400007,0b400002",
+     "6R,20L,12R,12R,9R,9C,9R,10R,11R,10R"},
+    {"schedule",
+     "0b400017,0b40000e,0b400023,0b400024,0b400027,0b400028,0b400015,0b400016",
+     "6R,20L,12R,12R,12R,12R,11R,11R"},
+    {"work",
+     "0b400017,0b40000e,0b400000,0b400001,0b400003,0b400002,0b400004,0b400021",
+     "6R,24L,11R,11R,11R,11R,11R,12R"},
+    {"cost",
+     "0b400017,0b40000e,0b400008,0b4000c8,0b400005,0b400006,0b400009,0b400007,"
+     "0b40000a",
+     "6R,24L,11R,17R,11R,11R,11R,11R,11R"},
+    {"summary",
+     "0b400017,0b40000e,0b40001d,0b400023,0b400024,0b400020,0b400005,0b400000",
+     "6R,24L,12R,12R,12R,9R,11R,10R"},
+    {"constraint-dates", "0b400017,0b40000e,0b40001d,0b400011,0b400012",
+     "6R,24L,9R,19R,15R"},
+    {"delay",
+     "0b400017,0b4000cd,0b40000e,0b400014,0b40001d,0b400023,0b400024,0b400030,"
+     "0b400031",
+     "6R,6L,24L,13R,9R,12R,12R,14L,17L"},
+    {"usage", "0b400017,0b4000cd,0b40000e,0b400000,0b40001d,0b400023,0b400024",
+     "6R,6L,24L,10R,10R,12R,12R"},
+    {"hyperlink", "0b400017,0b4000cd,0b40000e,0b4000d9,0b4000da,0b4000db",
+     "6R,6L,24L,17L,24L,17L"},
+    {"earned-value-schedule-indicators",
+     "0b400017,0b40000e,0b40000c,0b40000b,0b40000d,0b40021c,0b40021a",
+     "6R,24L,11R,11R,11R,9R,9R"},
+    {"earned-value-cost-indicators",
+     "0b400017,0b40000e,0b40000c,0b40000b,0b400053,0b40021b,0b400219,0b400006,"
+     "0b40021d,0b4001b9,0b40021e",
+     "6R,24L,11R,11R,11R,9R,9R,11R,11R,11R,9R"},
+    {"resource-entry",
+     "0c400000,0c400056,0c400001,0c4000fc,0c40012c,0c40012b,0c400002,0c400003,"
+     "0c400004,0c400006,0c400007,0c400012,0c400013,0c400005,0c40000a",
+     "6R,6L,20L,20L,11L,13L,11L,10L,10R,11R,11R,11R,10L,14L,13L"},
+    {"resource-usage", "0c400000,0c400056,0c400001,0c40000d", "6R,6L,20L,10R"},
+    {"resource-cost", "0c400000,0c400001,0c40000c,0c400011,0c400018,0c40000b,0c400015",
+     "6R,20L,14R,14R,14R,14R,14R"},
+    {"resource-work",
+     "0c400000,0c400001,0c40001d,0c40000d,0c400010,0c40000f,0c400017,0c40000e,"
+     "0c400016",
+     "6R,20L,9R,11R,11R,11R,11R,11R,11R"},
+    {"resource-summary",
+     "0c400000,0c400001,0c400003,0c400004,0c40001a,0c400006,0c400007,0c40000c,"
+     "0c40000d",
+     "6R,20L,10L,10R,5R,11R,11R,14R,11R"},
+    {"resource-hyperlink", "0c400000,0c400056,0c400001,0c40008a,0c40008b,0c40008c",
+     "6R,6L,24L,17L,24L,17L"},
+    {"resource-earned-value",
+     "0c400000,0c400001,0c400033,0c400034,0c400035,0c400036,0c40010c,0c40000c,"
+     "0c400011,0c40012d",
+     "6R,24L,11R,11R,11R,11R,11R,11R,11R,11R"},
+    {"resource-entry-work-resources",
+     "0c400000,0c400056,0c400001,0c40012c,0c4000fc,0c400002,0c400003,0c400004,"
+     "0c400006,0c400007,0c400012,0c400013,0c400005,0c40000a",
+     "6R,6L,20L,11L,20L,11L,10L,10R,11R,11R,11R,10L,14L,13L"},
+    {"resource-entry-material-resources",
+     "0c400000,0c400056,0c400001,0c40012c,0c40012b,0c4000fc,0c400002,0c400003,"
+     "0c400006,0c400012,0c400013,0c40000a",
+     "6R,6L,20L,11L,13L,20L,11L,10L,11R,11R,10L,13L"},
+};
+
+void test_table_registry(view_test::TestContext& ctx) {
+    using core::view::registry::all_tables;
+    using core::view::registry::find_table;
+    using core::view::registry::resource_tables;
+    using core::view::registry::task_tables;
+
+    ctx.equal(task_tables().size(), std::size_t{15}, "15 measured task tables");
+    ctx.equal(resource_tables().size(), std::size_t{9}, "9 measured resource tables");
+    ctx.equal(all_tables().size(), std::size_t{24}, "24 tables in the registry");
+
+    for (const PinnedTable& pinned : kPinnedTables) {
+        const TableDefinition* table = find_table(pinned.id);
+        ctx.check(table != nullptr, std::string("registry has table ") + pinned.id);
+        if (table == nullptr) {
+            continue;
+        }
+        ctx.contains(table->source, "RT_RCDATA",
+                     std::string(pinned.id) + " cites the resource");
+        ctx.check(!table->columns.empty(), std::string(pinned.id) + " has columns");
+        std::string fields;
+        std::string widths;
+        bool duplicate = false;
+        for (std::size_t i = 0; i < table->columns.size(); ++i) {
+            const Column& column = table->columns[i];
+            if (i != 0) {
+                fields += ',';
+                widths += ',';
+            }
+            fields += field_hex(column.field);
+            widths += std::to_string(column.width);
+            widths += align_letter(column.align);
+            const core::model::FieldInfo* info = core::model::find_field_by_id(column.field);
+            ctx.check(info != nullptr,
+                      std::string(pinned.id) + " field exists in the descriptor table");
+            if (info != nullptr) {
+                ctx.equal(static_cast<int>(info->record_type),
+                          static_cast<int>(table->record_type),
+                          std::string(pinned.id) + " field belongs to the table's record type");
+            }
+            const std::string title = column.display_title(table->record_type);
+            ctx.check(!title.empty(), std::string(pinned.id) + " column has a title");
+            ctx.check(title.rfind("0x", 0) != 0,
+                      std::string(pinned.id) + " column title is not a hex id");
+            if (table->find(column.field) != &column) {
+                duplicate = true;
+            }
+        }
+        ctx.check(!duplicate, std::string(pinned.id) + " has no duplicate field");
+        ctx.equal_string(fields, pinned.fields, std::string(pinned.id) + " column list");
+        ctx.equal_string(widths, pinned.widths,
+                         std::string(pinned.id) + " widths and alignment");
+    }
+
+    // Lookup forms: id, name, and name scoped by record type.
+    const TableDefinition* entry = find_table("entry");
+    ctx.check(entry != nullptr && entry->record_type == core::model::RecordType::Task,
+              "find_table by id returns the Task Entry table");
+    const TableDefinition* by_name = find_table("Entry");
+    ctx.check(by_name != nullptr && by_name->id == "entry",
+              "find_table by name finds the first Entry");
+    const TableDefinition* resource_entry =
+        find_table("Entry", core::model::RecordType::Resource);
+    ctx.check(resource_entry != nullptr && resource_entry->id == "resource-entry",
+              "find_table scoped to Resource finds the Resource Entry table");
+    ctx.check(find_table("Entry", core::model::RecordType::Assignment) == nullptr,
+              "find_table returns null for an unknown record type");
+    ctx.check(find_table("no-such-table") == nullptr, "find_table misses an unknown id");
+
+    // The measured Entry table is the canonical 8-column sheet, including the
+    // Indicators column the old inferred table omitted.
+    ctx.equal(entry->columns.size(), std::size_t{8}, "Entry has eight columns");
+    if (entry != nullptr && entry->columns.size() == 8) {
+        const char* titles[] = {"ID",       "Indicators", "Task Name",   "Duration",
+                                "Start",    "Finish",     "Predecessors", "Resource Names"};
+        for (std::size_t i = 0; i < 8; ++i) {
+            ctx.equal_string(entry->columns[i].display_title(entry->record_type), titles[i],
+                             "Entry title " + std::to_string(i));
+        }
+        ctx.equal(entry->columns[0].width, 6, "Entry ID width");
+        ctx.check(entry->columns[0].align == ColumnAlign::Right, "Entry ID is right aligned");
+        ctx.equal(entry->columns[2].width, 24, "Entry Task Name width");
+        ctx.check(entry->columns[2].align == ColumnAlign::Left, "Entry Task Name is left aligned");
+    }
+
+    // Tracking pins the resource's abbreviated captions, not the field names.
+    const TableDefinition* tracking = find_table("tracking");
+    ctx.check(tracking != nullptr, "Tracking table exists");
+    if (tracking != nullptr && tracking->columns.size() == 10) {
+        ctx.equal_string(tracking->columns[2].display_title(tracking->record_type), "Act. Start",
+                         "Tracking ActualStart caption");
+        ctx.equal_string(tracking->columns[4].display_title(tracking->record_type), "% Comp.",
+                         "Tracking PercentComplete caption");
+        ctx.equal_string(tracking->columns[5].display_title(tracking->record_type),
+                         "Phys. % Comp.", "Tracking PhysicalPercentComplete caption");
+        ctx.check(tracking->columns[5].align == ColumnAlign::Center,
+                  "Tracking Phys. % Comp. is centred (resource alignment code 2)");
+    }
+    const TableDefinition* schedule = find_table("schedule");
+    ctx.check(schedule != nullptr && schedule->columns.size() == 8,
+              "Schedule has eight columns");
+    if (schedule != nullptr && schedule->columns.size() == 8) {
+        ctx.equal_string(schedule->columns[4].display_title(schedule->record_type), "LateStart",
+                         "Schedule LateStart title");
+        ctx.equal_string(schedule->columns[6].display_title(schedule->record_type), "FreeSlack",
+                         "Schedule FreeSlack title");
+    }
+
+    // The old (inferred) API is untouched, so the macOS shell keeps compiling.
+    ctx.equal(core::view::defaults::builtin_tables().size(), std::size_t{4},
+              "legacy builtin table list is unchanged");
+    ctx.equal(core::view::defaults::inferred_entry().columns.size(), std::size_t{7},
+              "legacy inferred Entry is unchanged");
+}
+
 void test_view_set(view_test::TestContext& ctx) {
     const char* text = R"JSON({
   "version": 1,
@@ -679,9 +1198,13 @@ int main() {
     test_record_set(ctx);
     test_table(ctx);
     test_filter(ctx);
+    test_filter_lists_and_auto_filter(ctx);
     test_group(ctx);
+    test_group_order_and_summary(ctx);
+    test_outline_sort(ctx);
     test_sort(ctx);
     test_defaults(ctx);
+    test_table_registry(ctx);
     test_view_set(ctx);
     return ctx.finish("view_model_tests");
 }

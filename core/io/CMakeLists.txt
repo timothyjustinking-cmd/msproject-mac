@@ -125,6 +125,8 @@ if(IO_BUILD_TESTS)
          IO_CROSSCHECK_PROJECT_B_XML_CMAKE)
     file(TO_CMAKE_PATH "${IO_REPO_ROOT}/corpus/probe/assign1.mpp"
          IO_CROSSCHECK_ASSIGN_MPP_CMAKE)
+    file(TO_CMAKE_PATH "${IO_REPO_ROOT}/corpus/probe/assign1.xml"
+         IO_CROSSCHECK_ASSIGN_XML_CMAKE)
 
     add_executable(io_mspdi_tests "${IO_REPO_ROOT}/tests/io_mspdi_tests.cpp")
     target_link_libraries(io_mspdi_tests PRIVATE core_io)
@@ -140,6 +142,15 @@ if(IO_BUILD_TESTS)
     target_compile_features(io_csv_tests PRIVATE cxx_std_20)
     set_target_properties(io_csv_tests PROPERTIES CXX_EXTENSIONS OFF)
     io_set_warnings(io_csv_tests)
+
+    # W40: malformed MSPDI inputs.  No fixture files: every case is a string.
+    add_executable(io_error_paths "${IO_REPO_ROOT}/tests/io_error_paths.cpp")
+    target_link_libraries(io_error_paths PRIVATE core_io)
+    target_compile_features(io_error_paths PRIVATE cxx_std_20)
+    set_target_properties(io_error_paths PROPERTIES CXX_EXTENSIONS OFF)
+    io_set_warnings(io_error_paths)
+    add_test(NAME io_error_paths COMMAND io_error_paths)
+    set_tests_properties(io_error_paths PROPERTIES WORKING_DIRECTORY "${IO_REPO_ROOT}")
 
     add_executable(io_mspdi_writer_tests "${IO_REPO_ROOT}/tests/io_mspdi_writer_tests.cpp")
     target_link_libraries(io_mspdi_writer_tests PRIVATE core_io)
@@ -174,6 +185,7 @@ if(IO_BUILD_TESTS)
             IO_CROSSCHECK_PROJECT_B_MPP="${IO_CROSSCHECK_PROJECT_B_MPP_CMAKE}"
             IO_CROSSCHECK_PROJECT_B_XML="${IO_CROSSCHECK_PROJECT_B_XML_CMAKE}"
             IO_CROSSCHECK_ASSIGN_MPP="${IO_CROSSCHECK_ASSIGN_MPP_CMAKE}"
+            IO_CROSSCHECK_ASSIGN_XML="${IO_CROSSCHECK_ASSIGN_XML_CMAKE}"
         )
         add_test(NAME io_mspdi_crosscheck COMMAND io_mspdi_crosscheck)
         set_tests_properties(io_mspdi_crosscheck PROPERTIES

@@ -483,3 +483,159 @@ StartText/FinishText VarMeta entries removed) still reopens with uid 1 Start
 2026-01-04 13:00, Finish 2026-01-16 17:00, Duration 5040. **Manual date writes
 remain open.** The supported save path is `pin_task_start` (SNET + date at
 +64/+66), which Project honours (`w29-snet.mpp`: uid 1 on 2026-10-21 08:00-17:00).
+
+## W37 (2026-10-22): the save flow API, its tests, and the manual/auto oracle split
+
+### ORACLE RESULT (coordinator, MS Project, read-only open) -- final for this wave
+
+**SNET is honoured for an AUTO-SCHEDULED row, STORED-BUT-IGNORED for a
+Manual=True row, and HONOURED for a manual row whose Fixed2Meta mode bit is
+cleared (the row becomes auto-scheduled).**
+
+- `w29-snet.mpp` (from `w3-o1.mpp`, auto): uid 1 reopened Start 2026-10-21
+  08:00, Finish 17:00, Late 10-26, slack 1440. Project recalculated the project
+  start to the earliest remaining task. SNET is the working date store.
+- `w37-snet-save.mpp` (W37; from `base.mpp`, all three tasks Manual=True): uid 1
+  reopened with **ConstraintType 4 and ConstraintDate 2026-10-21 08:00 read
+  back exactly, Start unchanged 2026-01-04 13:00**, Finish 2026-01-09 12:00,
+  Duration 2400, Early/Late unchanged, slack 0. So Project reads and keeps the
+  constraint and still schedules the manual row at its own start. A manual
+  row's date is not made effective by writing SNET.
+- `w37-snet-auto.mpp` (W37, **MEASURED SUCCESS**): the same SNET plus the row's
+  Fixed2Meta per-row flags byte bit 0x80 cleared (0xff -> 0x7f). Project
+  reopened it with uid 1 **Manual=False**, Start **2026-10-21 08:00**, Finish
+  2026-10-27 17:00, Duration 2400, project finish 10-27; the other two rows stay
+  Manual=True at their own dates. So **Fixed2Meta entry +8 bit 0x80 is the
+  manual/auto mode bit** (the reader's `manually_scheduled`; that inference is
+  now measured), and **"SNET + clear the bit" is the save path that makes a date
+  stick on a manual row too**. Manual scheduling itself is NOT preserved: the
+  row becomes auto-scheduled.
+- Same bytes, same hash: `--write-fixture-auto` now emits this file through
+  `save_date_edits`, which is exactly the file the coordinator opened
+  (FNV `0xc917b3380e0d660c`). `--write-fixture` is the negative control only
+  (direct `pin_task_start`, manual bit kept, FNV `0xfabd15409e013b8c`).
+
+### What was added (files)
+
+| path | what |
+|---|---|
+| `core/mppwrite/save.h` | **new**: `DateEdit{uid, start}`, `SaveResult{rows_written, warnings}`, `save_date_edits`, `save_plan` -- the exact contract W38 codes against; top comment carries the oracle verdict above |
+| `core/mppwrite/save.cpp` | **new**: validate -> copy -> apply -> prove only intended bytes moved -> save -> re-open from disk -> re-read (`read_task_constraint` + `read_task_values`) -> receipt in `SaveResult::warnings`; throws on any mismatch |
+| `tests/roundtrip_save_flow.cpp` | **new**: corpus-free (tests/data/synthetic-base.mpp) + corpus (corpus/probe/base.mpp) + 7 refusal cases + `--write-fixture` / `--write-fixture-auto` modes |
+| `core/mppwrite/CMakeLists.txt` | `save.cpp` in the library; ctest `mppwrite_save_flow`; `MPPWRITE_TEST_DATA` injected into every writer test; `MPPWRITE_PROBE_DIR` may now be overridden (used to prove the no-corpus path) |
+
+### Behaviour (re-runnable)
+
+- `save_date_edits`: refuses empty list, uid 0 / row 0, unknown uid, duplicate
+  uid, invalid packed date, missing output directory, and a row with no FixedMeta
+  entry (Project treats such a row as deleted, so the pin would be dead). Applies
+  `pin_task_start` to a COPY of the doc; for a row whose Fixed2Meta flags byte has
+  bit 0x80 set it ALSO clears that bit (the measured manual -> auto conversion,
+  so the date sticks). Verifies FixedData changed only in the 6-byte constraint
+  window (+64/+66) of the edited rows, Fixed2Meta only at those flag bytes, and
+  no other stream at all; saves; re-opens; requires the reread bytes to equal
+  what was written, `check()` and `check_table()` clean, the constraint +
+  `read_task_values` to match, and a converted row's flag byte to read back
+  clear. On success `doc` is replaced by the written document.
+- Warning text for a converted row: "uid N: was manual; written as SNET and
+  converted to auto-scheduled so Project honours the date (manual scheduling is
+  not preserved, measured 2026-10-22)". An unreadable Fixed2Meta flag gets a
+  "scheduling mode unknown" warning instead (pin written, not converted).
+- `save_plan`: pre-resolves every planned row with `resolve_task_values` (the
+  same refusals `write_task_row` has) before touching the file; uid 0 is legal
+  (the project row); writes via `recalculate_write_path` on a copy; verifies only
+  FixedData/Fixed2Data changed and only inside the planned rows; saves and
+  re-opens/re-reads every row. Empty list is legal (writes unchanged, 0 rows).
+- `SaveResult::warnings` carries the writer's genuine warnings plus an
+  informational "re-read from disk: ..." receipt per edit (one summary line for a
+  plan). This is the only reporting channel the fixed struct has; document it in
+  any UI that shows warnings.
+
+### Verification (exact, 2026-10-22)
+
+Standalone (the tree that works even when another stream is mid-write):
+```
+cmake -S core\mppwrite -B build\vs-w37-mppwrite -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DCORE_WARNINGS_AS_ERRORS=ON
+cmake --build build\vs-w37-mppwrite --config Release
+ctest --test-dir build\vs-w37-mppwrite -C Release --output-on-failure -R "mppwrite|roundtrip"
+```
+Canonical top-level (run at 16:40 once core/render and core/mpp landed):
+```
+cmake -S . -B build\vs-w37 -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DCORE_WARNINGS_AS_ERRORS=ON
+cmake --build build\vs-w37 --config Release --target mppwrite_save_flow mppwrite_roundtrip_authority mppwrite_roundtrip_cfb mppwrite_inplace_patch mppwrite_roundtrip_stream mppwrite_roundtrip_row mppwrite_roundtrip_manual
+ctest --test-dir build\vs-w37 -C Release --output-on-failure -R "mppwrite|roundtrip"
+```
+Both give **7/7 passed** (six existing writer tests + `mppwrite_save_flow`), no
+regression. `mppwrite_save_flow.exe` prints **101 checks, 0 failures** with corpus
+present, **76 checks, 0 failures** with `MPPWRITE_PROBE_DIR` pointed at a
+non-existent path (corpus case SKIPs; the no-corpus run is
+`build\vs-w37-nocorpus\Release\mppwrite_save_flow.exe`).
+
+Independent parser pass (olefile 0.47, scratch script in `build\`, not committed):
+`w37-snet-save.mpp` differs from base.mpp in FixedData only, bytes
+[314, 316, 317, 318, 319] 00 ff ff ff ff -> 04 c0 12 13 3d, and its Fixed2Meta
+flags byte at 408 stays 0xff; `w37-snet-auto.mpp` is the same plus Fixed2Meta
+offset 408 ff -> 7f and nothing else (7 checks, 0 failures).
+
+Fixtures (git-ignored, regenerated by the test binary):
+| file | source | bytes | FNV-1a 64 | change |
+|---|---|---|---|---|
+| `corpus/probe/w37-snet-save.mpp` | `corpus/probe/base.mpp` | 237,568 | `0xfabd15409e013b8c` | negative control: FixedData row 1 +64/+66 = SNET 2026-10-21 08:00, manual bit 0xff kept (direct `pin_task_start`) |
+| `corpus/probe/w37-snet-auto.mpp` | `corpus/probe/base.mpp` | 237,568 | `0xc917b3380e0d660c` | save-flow fixture: that plus Fixed2Meta entry 4 +8 bit 0x80 cleared (0xff -> 0x7f), through `save_date_edits` |
+
+Commands: `...\mppwrite_save_flow.exe --write-fixture` (negative control) and
+`--write-fixture-auto` (the save flow's own fixture; byte-identical to the file
+the coordinator opened successfully).
+
+### Manual-scheduling verdict: **pin + convert works; manual scheduling itself is not preserved**
+
+Measured: a date edit written as SNET alone reopens at the row's own start for a
+Manual=True row (`w37-snet-save.mpp`), while the same edit plus a cleared
+Fixed2Meta mode bit reopens with `Manual=False`, Start on the SNET date and Finish
+recalculated (`w37-snet-auto.mpp`). `save_date_edits` therefore always does
+"pin + clear the mode bit" for a manual row and says so in a warning. This makes
+a date stick on every task type, at the cost of converting the row to
+auto-scheduled. What is still NOT proved: that a *manually scheduled* row (mode
+bit set) can have its Start moved while staying manual -- the seven-word set
+(W29 manual/manual2) and SNET alone all failed; no further candidate is known.
+Nobody needs that for the app's save path anymore.
+
+### Open / next three actions
+
+1. Unmeasured, flagged in save.h: SNET is "no earlier than", so a linked successor
+   may reopen at max(predecessor finish, pin) rather than at the pin. Build
+   `w37-snet-link.mpp` (auto FS pair, pin the successor's start BEFORE its
+   predecessor's finish) to measure it; until then do not claim exact-date writes
+   for linked rows.
+2. W38/writer glue: `save_plan` for "write the recalculated plan";
+   `save_date_edits` for a single Start edit, surfacing `SaveResult::warnings`
+   (the conversion warning + the re-read receipt) in the UI. If the app must
+   preserve manual scheduling, it needs a different feature, not a writer tweak.
+3. When the coordinator merges: note that the canonical `build\vs-w37` writer
+   ctest now matches 7 tests (`-R "mppwrite|roundtrip"`), not 8; the other wave-9
+   suites live under different names.
+
+### Traps added this wave
+
+- Top-level configure fails while ANOTHER stream is mid-write (`core/render`
+  missing report.cpp/render_test_main.cpp, then `core/mpp` missing
+  tests/mpp_perf_large.cpp). That is a transient of the shared tree, not a bug
+  here: retry, or verify the standalone `core\mppwrite` build meanwhile. Do not
+  edit another stream's CMakeLists to work around it. Both landed by ~16:40.
+- `Fixed2Meta` entries are paired with `FixedMeta` by ENTRY INDEX, not array
+  position: locate the entry through FixedMeta's +4 FixedData-offset word. Entry
+  4 is row 1 in base.mpp; flags at entry +8 (stream offset 408 for row 1). Bit
+  0x80 is now MEASURED as the manual/auto mode bit (w37-snet-auto open).
+- A manual row is converted, not refused, on a date edit: the warning is how a
+  caller learns that the row changed scheduling mode. Do not turn it into a
+  refusal without checking the app's edit model first.
+- The conversion must be part of the same "only intended bytes changed" check:
+  Fixed2Meta's flag byte is an allowed change (exactly the edited manual rows),
+  and a re-read must show it clear. If Fixed2Meta is unreadable the row is pinned
+  without conversion and warned about.
+- `MPPWRITE_PROBE_DIR` is now a cache-overridable variable so the no-corpus path
+  can be exercised on a machine that has corpus/; CI does not need it.
+- Two fixture modes, two purposes: `--write-fixture` (negative control, direct
+  `pin_task_start`) must NOT be switched to `save_date_edits`, or the evidence
+  for "SNET alone is ignored on a manual row" stops being regenerable.
+

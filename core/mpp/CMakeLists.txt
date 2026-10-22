@@ -54,8 +54,12 @@ if(MPP_BUILD_TESTS)
     set(MPP_PROBE_DIR "${MPP_REPO_ROOT}/corpus/probe")
     # MS Project's own export (83 tasks, hashed names); committed, unlike the corpus.
     set(MPP_GOLDEN_PATH "${MPP_REPO_ROOT}/tests/data/project_a_golden.tsv")
+    # Project's assignment dates, uids/dates only (W40 oracle artifact).
+    set(MPP_ASSIGNMENT_GOLDEN_PATH
+        "${MPP_REPO_ROOT}/tests/mpp_assignment_dates_golden.tsv")
     # Forward slashes only: these become C string literals.
-    foreach(path_var MPP_PROJECT_A_PATH MPP_PROJECT_B_PATH MPP_PROBE_DIR MPP_GOLDEN_PATH)
+    foreach(path_var MPP_PROJECT_A_PATH MPP_PROJECT_B_PATH MPP_PROBE_DIR MPP_GOLDEN_PATH
+                     MPP_ASSIGNMENT_GOLDEN_PATH)
         file(TO_CMAKE_PATH "${${path_var}}" ${path_var})
     endforeach()
 
@@ -69,10 +73,45 @@ if(MPP_BUILD_TESTS)
         MPP_PROJECT_B_PATH="${MPP_PROJECT_B_PATH}"
         MPP_PROBE_DIR="${MPP_PROBE_DIR}"
         MPP_GOLDEN_PATH="${MPP_GOLDEN_PATH}"
+        MPP_ASSIGNMENT_GOLDEN_PATH="${MPP_ASSIGNMENT_GOLDEN_PATH}"
     )
 
     add_test(NAME mpp_reader COMMAND mpp_reader_tests)
     set_tests_properties(mpp_reader PROPERTIES
         WORKING_DIRECTORY "${MPP_REPO_ROOT}"
     )
+
+    # ---- W40: malformed-input coverage.  The fixtures are generated in memory,
+    # so this test needs no corpus.  Each case must throw mpp::Error or produce a
+    # warning -- never crash, read past a buffer, or allocate from an unchecked
+    # size word.
+    add_executable(mpp_error_paths "${MPP_REPO_ROOT}/tests/mpp_error_paths.cpp")
+    target_link_libraries(mpp_error_paths PRIVATE core_mpp)
+    target_compile_features(mpp_error_paths PRIVATE cxx_std_20)
+    set_target_properties(mpp_error_paths PROPERTIES CXX_EXTENSIONS OFF)
+    mpp_set_warnings(mpp_error_paths)
+    add_test(NAME mpp_error_paths COMMAND mpp_error_paths)
+    set_tests_properties(mpp_error_paths PROPERTIES
+        WORKING_DIRECTORY "${MPP_REPO_ROOT}"
+    )
+
+    # ---- W40: performance harness on a synthetic 4,000-task programme.  It
+    # links the later stream libraries (core/sched, core/plan, core/view,
+    # core/io, core/sheet, core/gantt), which only the repository's top-level
+    # build creates.  A standalone core/mpp configure or the reader_dump tool's
+    # configure must not add it (no core/gantt include path there), so the guard
+    # is "the source root is this repository root", not "this directory is not
+    # the source root".
+    if(CMAKE_SOURCE_DIR STREQUAL MPP_REPO_ROOT)
+        add_executable(mpp_perf_large "${MPP_REPO_ROOT}/tests/mpp_perf_large.cpp")
+        target_link_libraries(mpp_perf_large PRIVATE
+            core_mpp core_sched core_plan core_view core_io core_sheet core_gantt)
+        target_compile_features(mpp_perf_large PRIVATE cxx_std_20)
+        set_target_properties(mpp_perf_large PROPERTIES CXX_EXTENSIONS OFF)
+        mpp_set_warnings(mpp_perf_large)
+        add_test(NAME mpp_perf_large COMMAND mpp_perf_large)
+        set_tests_properties(mpp_perf_large PROPERTIES
+            WORKING_DIRECTORY "${MPP_REPO_ROOT}"
+        )
+    endif()
 endif()

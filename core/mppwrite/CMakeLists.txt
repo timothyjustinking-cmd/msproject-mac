@@ -29,6 +29,7 @@ add_library(core_mppwrite STATIC
     inplace.cpp
     table.cpp
     row_writer.cpp
+    save.cpp
 )
 add_library(msproject::mppwrite ALIAS core_mppwrite)
 
@@ -67,15 +68,23 @@ if(MPPWRITE_BUILD_TESTS)
     enable_testing()
 
     get_filename_component(MPPWRITE_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
-    set(MPPWRITE_PROBE_DIR "${MPPWRITE_REPO_ROOT}/corpus/probe")
+    # A caller may override the probe directory, e.g. to point at a path that
+    # does not exist and exercise the writer tests' no-corpus path on a machine
+    # that has corpus/.  The default is the real probe fixture directory.
+    if(NOT DEFINED MPPWRITE_PROBE_DIR)
+        set(MPPWRITE_PROBE_DIR "${MPPWRITE_REPO_ROOT}/corpus/probe")
+    endif()
     set(MPPWRITE_PROJECT_A_PATH "${MPPWRITE_REPO_ROOT}/corpus/project_a.mpp")
     set(MPPWRITE_PROJECT_B_PATH "${MPPWRITE_REPO_ROOT}/corpus/project_b.mpp")
+    # Committed, non-client fixture (tests/data/README.md): the writer's
+    # no-corpus test path needs one .mpp that exists on a clean checkout.
+    set(MPPWRITE_TEST_DATA "${MPPWRITE_REPO_ROOT}/tests/data")
     # Tests never write into corpus/ (it is read-only for every stream); all
     # written fixtures go to the build tree.
     set(MPPWRITE_TEST_OUT "${CMAKE_CURRENT_BINARY_DIR}/test-out")
     foreach(path_var
             MPPWRITE_PROBE_DIR MPPWRITE_PROJECT_A_PATH MPPWRITE_PROJECT_B_PATH
-            MPPWRITE_TEST_OUT)
+            MPPWRITE_TEST_DATA MPPWRITE_TEST_OUT)
         file(TO_CMAKE_PATH "${${path_var}}" ${path_var})
     endforeach()
 
@@ -89,6 +98,7 @@ if(MPPWRITE_BUILD_TESTS)
             MPPWRITE_PROBE_DIR="${MPPWRITE_PROBE_DIR}"
             MPPWRITE_PROJECT_A_PATH="${MPPWRITE_PROJECT_A_PATH}"
             MPPWRITE_PROJECT_B_PATH="${MPPWRITE_PROJECT_B_PATH}"
+            MPPWRITE_TEST_DATA="${MPPWRITE_TEST_DATA}"
             MPPWRITE_TEST_OUT="${MPPWRITE_TEST_OUT}"
         )
         add_test(NAME ${name} COMMAND ${name})
@@ -103,4 +113,5 @@ if(MPPWRITE_BUILD_TESTS)
     mppwrite_add_test(mppwrite_roundtrip_row roundtrip_row_write.cpp)
     mppwrite_add_test(mppwrite_roundtrip_authority roundtrip_authority.cpp)
     mppwrite_add_test(mppwrite_roundtrip_manual roundtrip_manual_start.cpp)
+    mppwrite_add_test(mppwrite_save_flow roundtrip_save_flow.cpp)
 endif()

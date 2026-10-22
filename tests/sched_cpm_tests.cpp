@@ -33,8 +33,11 @@ constexpr std::int32_t kWed2110 = 15635;   // Wed 2026-10-21
 constexpr std::int32_t kThu2210 = 15636;   // Thu 2026-10-22
 constexpr std::int32_t kFri2310 = 15637;   // Fri 2026-10-23
 constexpr std::int32_t kMon2610 = 15640;   // Mon 2026-10-26
+constexpr std::int32_t kTue2710 = 15641;   // Tue 2026-10-27
+constexpr std::int32_t kWed2810 = 15642;   // Wed 2026-10-28
 constexpr std::int32_t kFri3010 = 15644;   // Fri 2026-10-30
 constexpr std::int32_t kMon0211 = 15647;   // Mon 2026-11-02
+constexpr std::int32_t kTue0311 = 15648;   // Tue 2026-11-03 (schedin's ALAP day)
 constexpr std::int32_t kMon2812 = 15703;   // Mon 2026-12-28 (milestone-probe ID3)
 
 constexpr sched::date32 at(std::int32_t day, std::int32_t hour, std::int32_t minute) {
@@ -971,19 +974,70 @@ int main() {
         check_row(ctx, result, 4, t4, "LAGFF/T4 FF-6d floored");
         check_row(ctx, result, 5, t5, "LAGFF/T5 FF+0");
         ctx.equal_date(result.project_finish, at(kFri2310, 17, 0), "LAGFF project finish");
-        // T6: FF-1ed (LagFormat 8).  Project's row is Thu 22 08:00-17:00, exactly
-        // the FF-1d row, because Thursday is a working day: an elapsed day (24 h)
-        // and a working day (8 h) subtracted from Fri 17:00 land on the same
-        // instant here.  So this fixture does NOT separate elapsed from working
-        // lag and is not evidence for the elapsed constants (still [I], W3-E1).
-        // The engine refuses an elapsed lag rather than guessing 1440 min/day.
-        sched::CpmLink elapsed = link(1, 2, sched::LinkType::finish_to_finish, -mins(1440));
-        elapsed.elapsed_lag = true;
-        sched::CpmOptions gate_options;
-        gate_options.project_start = kProjectStart;
-        const std::vector<sched::CpmTask> two{task(1, mins(2400)), task(2, mins(480))};
-        check_error(ctx, sched::schedule_tasks(two, {elapsed}, calendar, gate_options),
-                    sched::CpmError::elapsed_lag_unsupported, "LAGFF/T6 FF-1ed elapsed gate");
+        // T6: FF-1ed (LagFormat 8), MEASURED (lagff-probe.json) as Thu 22 08:00-17:00
+        // -- exactly the FF-1d row, because Thursday is a working day.  That
+        // fixture does NOT separate elapsed from working lag.
+        // MEASURED (wave 9b, corpus/probe/w9-elapsedlag.mpp): an elapsed lag is
+        // plain wall-clock arithmetic on the finish instant -- see the dedicated
+        // ELAPSED block below.  This test used to assert that the engine REFUSED
+        // an elapsed lag (CpmError::elapsed_lag_unsupported); wave 9b measured the
+        // rule and removed the refusal, so the old assertion encoded a rule that
+        // is now known to be incomplete rather than wrong.
+    }
+
+    // --- ELAPSED lag: measured on corpus/probe/w9-elapsedlag.mpp ------------
+    // ORACLE: docs/analysis/oracle/w9-elapsedlag.json.  Standard calendar,
+    // project start Mon 2026-10-19 08:00.  T1 3 d finishes Wed 10-21 17:00;
+    // T5 5 d finishes Fri 10-23 17:00.  Project's own save stores link-row +18
+    // (LagFormat) = 8 for "2 edays"/"3 edays" and 7 for "2 days", and the lag
+    // value is already elapsed ticks (2 edays = 28800 = 48 h, 3 edays = 43200).
+    // Measured placements (Start/Finish, minutes of slack):
+    //   FS+2 edays from T1 -> Mon 10-26 08:00-17:00   (Fri 17:00 -> next start)
+    //   FS+3 edays from T1 -> Mon 10-26 08:00-17:00   (Sat 17:00 -> next start)
+    //   FS+2 days  from T1 -> Mon 10-26 08:00-17:00   (Fri 17:00 -> next start)
+    //   FS+2 edays from T5 -> Mon 10-26 08:00-17:00   (Sun 17:00 -> next start)
+    //   FS+2 days  from T5 -> Wed 10-28 08:00-17:00   (Tue 17:00 -> next start)
+    // The FS+3-edays row separates the readings: 3 WORKING days from Wed 17:00
+    // would start Tue 10-27, and no elapsed row would land on Mon 10-26.
+    {
+        sched::CpmOptions options;
+        options.project_start = kProjectStart;
+        const std::vector<sched::CpmTask> tasks{task(1, mins(1440)), task(2, mins(480)),
+                                                task(3, mins(480)), task(4, mins(480)), task(5, mins(2400)),
+                                                task(6, mins(480)), task(7, mins(480))};
+        sched::CpmLink two_elapsed = link(1, 2, sched::LinkType::finish_to_start, mins(2880));
+        two_elapsed.elapsed_lag = true;
+        sched::CpmLink three_elapsed = link(1, 3, sched::LinkType::finish_to_start, mins(4320));
+        three_elapsed.elapsed_lag = true;
+        const sched::CpmLink two_working = link(1, 4, sched::LinkType::finish_to_start, mins(960));
+        sched::CpmLink five_elapsed = link(5, 6, sched::LinkType::finish_to_start, mins(2880));
+        five_elapsed.elapsed_lag = true;
+        const sched::CpmLink five_working = link(5, 7, sched::LinkType::finish_to_start, mins(960));
+        const std::vector<sched::CpmLink> links{two_elapsed, three_elapsed, two_working,
+                                               five_elapsed, five_working};
+        const sched::CpmResult result = sched::schedule_tasks(tasks, links, calendar, options);
+        check_ok(ctx, result, "ELAPSED");
+        const auto start_of = [&result](std::int32_t id) {
+            const sched::CpmTaskResult* row = find(result, id);
+            return row != nullptr ? row->early_start : sched::kDateNa;
+        };
+        const auto finish_of = [&result](std::int32_t id) {
+            const sched::CpmTaskResult* row = find(result, id);
+            return row != nullptr ? row->early_finish : sched::kDateNa;
+        };
+        ctx.equal_date(finish_of(1), at(kWed2110, 17, 0), "ELAPSED: T1 finishes Wed 17:00");
+        ctx.equal_date(start_of(2), at(kMon2610, 8, 0), "ELAPSED: FS+2 edays starts Mon 08:00");
+        ctx.equal_date(finish_of(2), at(kMon2610, 17, 0), "ELAPSED: FS+2 edays finishes Mon 17:00");
+        ctx.equal_date(start_of(3), at(kMon2610, 8, 0),
+                       "ELAPSED: FS+3 edays starts Mon 08:00 (Sat 17:00 + 72 h)");
+        ctx.equal_date(start_of(4), at(kMon2610, 8, 0), "ELAPSED: FS+2 days control starts Mon 08:00");
+        ctx.equal_date(finish_of(5), at(kFri2310, 17, 0), "ELAPSED: T5 finishes Fri 17:00");
+        ctx.equal_date(start_of(6), at(kMon2610, 8, 0), "ELAPSED: FS+2 edays from Fri starts Mon");
+        ctx.equal_date(start_of(7), at(kWed2810, 8, 0),
+                       "ELAPSED: FS+2 days from Fri starts Wed 10-28");
+        // The elapsed read of a 3-elapsed-day lag is NOT the working one.
+        ctx.check(start_of(3) != at(kTue2710, 8, 0),
+                  "ELAPSED: a 3 edays lag is not scheduled as 3 working days");
     }
 
     // --- a chain: slack is 0 all the way down -------------------------------
@@ -1028,9 +1082,57 @@ int main() {
     }
 
     // --- ALAP ---------------------------------------------------------------
-    // PARTLY VERIFIED: the oracle's ALAP row was stored as SNET(4), so only the
-    // definition "display the late dates" is exercised here.
-    // TODO(open: ALAP) clean re-test with no ContraintDate assigned.
+    // MEASURED (wave 9b): corpus/probe/schedin.mpp uid 2 is an ALAP task with no
+    // links in a project whose finish is driven by a 2 d SNET 2026-11-02 task.
+    // docs/analysis/oracle/schedin-probe.json reports the ALAP task's COM
+    // Start/Finish as 2026-11-03 08:00 / 17:00 (the LATE placement), and the
+    // file stores +96/+100 = 11-03, +104/+108 = the ASAP early dates 10-19,
+    // +112/+116 = 11-03, +186 StartSlack 0, +190 TotalSlack 52800 ticks.
+    // So: display = late, early dates unchanged, StartSlack/FreeSlack 0,
+    // TotalSlack = LF - EF.
+    {
+        sched::CpmOptions options;
+        options.project_start = kProjectStart;
+        const std::vector<sched::CpmTask> tasks{
+            task(1, mins(480)),
+            task(2, mins(480), sched::ConstraintType::as_late_as_possible),
+            task(3, mins(960), sched::ConstraintType::start_no_earlier_than, at(kMon0211, 8, 0)),
+        };
+        const sched::CpmResult result = sched::schedule_tasks(tasks, {}, calendar, options);
+        check_ok(ctx, result, "ALAP (schedin shape)");
+        ctx.equal_date(result.project_finish, at(kTue0311, 17, 0),
+                       "ALAP (schedin): project finish is the SNET 11-02 task's finish");
+        const sched::CpmTaskResult* b = find(result, 2);
+        ctx.check(b != nullptr, "ALAP (schedin): task present");
+        if (b != nullptr) {
+            ctx.equal_date(b->early_start, at(kMon1910, 8, 0),
+                           "ALAP (schedin): early start is the ASAP date (+104 pair)");
+            ctx.equal_date(b->early_finish, at(kMon1910, 17, 0),
+                           "ALAP (schedin): early finish is the ASAP date (+108 pair)");
+            ctx.equal_date(b->late_start, at(kTue0311, 8, 0), "ALAP (schedin): late start (+112)");
+            ctx.equal_date(b->late_finish, at(kTue0311, 17, 0), "ALAP (schedin): late finish (+116)");
+            ctx.equal_date(b->start, at(kTue0311, 8, 0),
+                           "ALAP (schedin): displayed start is the late start (COM Start)");
+            ctx.equal_date(b->finish, at(kTue0311, 17, 0),
+                           "ALAP (schedin): displayed finish is the late finish (COM Finish)");
+            ctx.equal(b->total_slack, mins(5280), "ALAP (schedin): total slack 5280 min (+190)");
+            ctx.equal(b->start_slack, sched::ticks{0}, "ALAP (schedin): start slack 0 (+186)");
+            ctx.equal(b->free_slack, sched::ticks{0}, "ALAP (schedin): free slack 0 (+74)");
+        }
+        const sched::CpmTaskResult* a = find(result, 1);
+        ctx.check(a != nullptr, "ALAP (schedin): the ASAP sibling is present");
+        if (a != nullptr) {
+            // The control row: an ASAP 1 d task in the same project keeps its
+            // early dates as the display and reports StartSlack = TotalSlack =
+            // 5280 min (+186 = +190 = 52800, schedin uid 1).
+            ctx.equal_date(a->start, at(kMon1910, 8, 0), "ALAP (schedin): ASAP display is early");
+            ctx.equal(a->total_slack, mins(5280), "ALAP (schedin): ASAP total slack 5280 min");
+            ctx.equal(a->start_slack, mins(5280), "ALAP (schedin): ASAP start slack 5280 min");
+            ctx.equal(a->free_slack, mins(5280), "ALAP (schedin): ASAP free slack 5280 min");
+        }
+    }
+    // PARTLY VERIFIED: the predecessor shape is a hand-computed consequence, not
+    // a measured row (the fixture's ALAP task has no links).
     {
         sched::CpmOptions options;
         options.project_start = kProjectStart;
@@ -1118,11 +1220,18 @@ int main() {
         check_error(ctx, sched::schedule_tasks(no_date, {}, calendar, options),
                     sched::CpmError::constraint_date_missing, "missing constraint date");
 
-        // An elapsed lag is gated on W3-E1/W3-E2.
+        // An elapsed lag is NOT an error any more (wave 9b measured the rule on
+        // corpus/probe/w9-elapsedlag.mpp; the old assertion pinned the refusal).
+        // A zero elapsed lag must behave exactly like a zero working lag.
         sched::CpmLink elapsed = link(1, 2);
         elapsed.elapsed_lag = true;
-        check_error(ctx, sched::schedule_tasks(two, {elapsed}, calendar, options),
-                    sched::CpmError::elapsed_lag_unsupported, "elapsed lag");
+        const sched::CpmResult elapsed_ok =
+            sched::schedule_tasks(two, {elapsed}, calendar, options);
+        check_ok(ctx, elapsed_ok, "zero elapsed lag");
+        ctx.equal_date(elapsed_ok.tasks.at(1).early_start, at(kTue2010, 8, 0),
+                       "zero elapsed lag: the successor still starts the next morning");
+        ctx.equal_date(elapsed_ok.tasks.at(0).early_finish, at(kMon1910, 17, 0),
+                       "zero elapsed lag: the predecessor is unaffected");
 
         // An empty task list and a missing project start.
         check_error(ctx, sched::schedule_tasks({}, {}, calendar, options), sched::CpmError::no_tasks,

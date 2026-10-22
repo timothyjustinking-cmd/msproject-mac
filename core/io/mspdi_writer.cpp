@@ -167,14 +167,30 @@ bool value_to_text(const Value& value, std::string& text) {
     return false;
 }
 
+/* MSPDI writes MaxUnits/Units as a fraction (1.0 == 100 %); the model stores
+ * percent (see mspdi.cpp's is_percent_fraction_field).  Scale on the way out so
+ * a round trip is exact and Project sees the spelling it emits itself. */
+bool is_percent_fraction_field(core::model::RecordType record_type,
+                               std::string_view element) {
+    return (record_type == core::model::RecordType::Assignment && element == "Units") ||
+           (record_type == core::model::RecordType::Resource && element == "MaxUnits");
+}
+
 void write_record_fields(std::string& out, const RecordSet& records, std::size_t row,
                          const std::vector<ElementRef>& elements) {
     for (const ElementRef& element : elements) {
         const Value* value = records.get(row, element.field);
         std::string text;
-        if (value != nullptr && value_to_text(*value, text)) {
-            write_text_element(out, kFieldDepth, element.name, text);
-            continue;
+        if (value != nullptr) {
+            Value scaled = *value;
+            if (scaled.kind == ValueKind::Number &&
+                is_percent_fraction_field(records.record_type(), element.name)) {
+                scaled.number /= 100.0;
+            }
+            if (value_to_text(scaled, text)) {
+                write_text_element(out, kFieldDepth, element.name, text);
+                continue;
+            }
         }
         /* <ID> is a display sequence number, not project data: Project's
          * exports always carry it, so fall back to the row's 1-based position

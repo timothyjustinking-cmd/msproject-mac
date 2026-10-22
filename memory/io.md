@@ -1,34 +1,87 @@
-# io stream (MSPDI import/export) — memory, W33 parity breadth
+# io stream (MSPDI import/export) — memory, W40 parity tail
 
-_Updated 2026-10-22 ~14:55 (W33). The import/export design is `spec/mspdi.md`
-(mapping, conversion, warnings, writer rules). This file carries what W27 and
-W33 added and the cross-check against Project's own exports. Successor: read
+_Updated 2026-10-22 ~16:45 (W40). The import/export design is `spec/mspdi.md`
+(mapping, conversion, warnings, writer rules). This file carries what W27, W33
+and W40 added and the cross-check against Project's own exports. Successor: read
 `spec/mspdi.md` §4–§8, then this._
 
-## W33 deliverable on disk (coordinator commits; no git from this stream)
+## W40 deliverable on disk (coordinator commits; no git from this stream)
 
 | path | what |
 |---|---|
-| `tools/mspdi_cmp/crosscheck.{h,cpp}` | + **dead-endpoint accounting** for links and assignments, + **resources** (UID set, UID 0 placeholder excluded), + **assignments** (task/resource UID, `Units`, `Work`), + **milestone notes** (reported, not a verdict). `ok()` ignores excluded rows and notes; `strictly_ok()` also fails on notes |
-| `tools/mspdi_cmp/main.cpp` | report/JSON for the new categories; `--strict`; exit 0 iff `ok()` (plus no notes under `--strict`) |
-| `tools/mspdi_cmp/date_pairs.py` (new) | read-only diagnostic: prints the rows where the stored calculated dates `+96/+100` differ from the effective dates `+104/+108`; uids/dates/counts only. Used to attribute the PROJECT_B Start/Finish difference |
-| `core/io/mspdi.h` | `LinkLagSpelling` + `parse_link_lag` / `format_link_lag_decimal` / `format_link_lag_iso`; `MspdiAssignmentRef::resource_uid` documents the -65535 sentinel |
-| `core/io/mspdi.cpp` | LinkLag parsing centralised in `parse_link_lag` (**decimal is canonical**, ISO still accepted); `<ResourceUID>` now parses **signed** 32-bit (`-65535` → `0xFFFF0001`, no warning) |
-| `core/io/mspdi_writer.cpp` | **`<LinkLag>` is now decimal tenths of a minute** (`4800`), the form Project exports; previously ISO `PT8H0M0S`. Exact string pinned by the writer test |
-| `core/io/CMakeLists.txt` | PROJECT_B and assign1 compile definitions for the cross-check test |
-| `tests/io_mspdi_crosscheck.cpp` | + dead-endpoint tests (both sides), assignment/resource comparison, assignment Units/Work negative controls, PROJECT_B case, assign1 no-export case |
-| `tests/io_mspdi_tests.cpp` | +19: both LinkLag spellings and their exact text, `-65535` ResourceUID sentinel |
-| `tests/io_mspdi_writer_tests.cpp` | +2 net: writer output pins `<LinkLag>4800</LinkLag>` and asserts the ISO form is *not* emitted; `format_link_lag_iso` still returns `PT8H0M0S` |
+| `core/io/mspdi.h` | `MspdiAssignmentRef` now carries `<Start>/<Finish>/<Stop>/<Resume>` as `Value` (Date or Null); `Units`/`MaxUnits` convention documented |
+| `core/io/mspdi.cpp` | **`Units` and `MaxUnits` are normalised from MSPDI fractions to the model's percent on import** (`is_percent_fraction_field`); `Stop`/`Resume` are consumed into the ref instead of warned as unsupported; duplicate resource/assignment UIDs and assignments naming a dead task/resource are warned |
+| `core/io/mspdi_writer.cpp` | `Units`/`MaxUnits` are scaled percent -> fraction on output (pinned: `<Units>1</Units>` for 100 %) |
+| `tests/io_sample_full.xml` | sample values converted to Project's fraction spelling (`1`, `0.5`); the imported model values are unchanged (100 %, 50 %) |
+| `tests/io_mspdi_tests.cpp` | 145 checks (+1: 0.5 -> 50 %) |
+| `tests/io_mspdi_writer_tests.cpp` | 864 checks (+2: the exact `<Units>1</Units>` output and no `<Units>100</Units>`) |
+| `tests/io_error_paths.cpp` (new) | 21 checks: empty/truncated/wrong-root/unknown-entity/mismatched-tag/400-level nesting/missing-file all throw `MspdiError`; bad values, duplicate UIDs and dead assignment refs warn |
+| `tests/io_mspdi_crosscheck.cpp` | 127 checks (+18): Resource `Type`/`MaxUnits`, assignment `Start`/`Finish`/`Resume`, real-resource assign1 export |
+| `memory/io.md` | this file. |
 
-Reader tree this was measured against (W31 changed `core/mpp` twice during the
-session, so the hash matters): `core/mpp/reader.h` sha256
-`BFB17BC3DF7A05190BBF742C686DB6BED1124D3E740C8C02518592660FDD5F1A` (34,625 B,
-14:45:11), `core/mpp/reader.cpp` sha256
-`FB2F1BECCB7CEA69C951737FD9C041828745E1D0FAEB4862C57D8A11BC09CF45` (79,628 B,
-14:44:50). The first measurements (14:40 reader, milestone stored bit) gave the
-same PROJECT_B/PROJECT_A counts. **Re-run `mspdi_cmp` after any `core/mpp` change.**
+## W40 measured results (all re-runnable)
+
+`mspdi_cmp` on the three exports (exit 0, MATCH):
+
+| file | tasks | links | assignments | resources | field diffs |
+|---|---|---|---|---|---|
+| PROJECT_A | 83 | 88/88 | 67/67, units 67, work 67, Start/Finish 67, **Resume 21** | 22/22, type 22, max units 22 | 0 |
+| PROJECT_B | 73 | 70/70 (2 dead excluded) | 63/63 (10 dead excluded), units/work/dates 63, Resume 0 | 22/22, type 22, max units 22 | 0 |
+| assign1 | 2 | 0 | **3/3 with real resources 1/2**, units 3, work 3, dates 3, Resume 0 | 2/2, type 2, max units 2 | 0 |
+
+### W40 verification (MSVC 19.44, `/W4 /permissive- /utf-8 /WX`)
+
+```
+$vc='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat'
+cmd /c "call `"$vc`" >nul && cmake --build build\vs-w40 --config Release --target io_mspdi_tests io_mspdi_writer_tests io_mspdi_crosscheck io_error_paths mspdi_cmp"
+build\vs-w40\core\io\Release\io_mspdi_tests.exe            -> 145 checks passed
+build\vs-w40\core\io\Release\io_mspdi_writer_tests.exe     -> 864 checks passed
+build\vs-w40\core\io\Release\io_error_paths.exe            -> PASS: 21 checks
+build\vs-w40\core\io\Release\io_mspdi_crosscheck.exe       -> 127 checks passed
+build\vs-w40\tools\mspdi_cmp\Release\mspdi_cmp.exe corpus\probe\assign1.mpp corpus\probe\assign1.xml -> MATCH (exit 0)
+cmd /c "call `"$vc`" >nul && ctest --test-dir build\vs-w40 -C Release -R `"io_`" --output-on-failure"
+  -> 5/5 passed (io_mspdi, io_csv, io_mspdi_writer, io_mspdi_crosscheck, io_error_paths)
+```
+
+
+### Units convention (closed)
+
+* **Wire spelling is a fraction**: Project's own exports write `<Units>1</Units>`
+  for a 100 % assignment and `<MaxUnits>1.00</MaxUnits>` for a 100 % resource.
+  assign1.xml is the real-resource fixture: 3 assignments at Units=1, 2 real
+  resources at MaxUnits=1.00, and the reader reports 100 %/100 %.
+* **Model spelling is percent** (`mpp::Assignment::units() == 100.0`,
+  `mpp::Resource::max_units() == 100.0`). The importer now multiplies by 100 and
+  the writer divides by 100, so `import -> RecordSet -> write` is exact and a
+  view that formats Units sees 100 %, not 1 %.
+* The hand-written samples were the only place that used percent on the wire;
+  they now use fractions. Exact strings pinned in the writer test.
+
+### Assignment dates: `<Resume>` is the +60 value
+
+The import keeps `<Start>/<Finish>/<Stop>/<Resume>` in
+`MspdiAssignmentRef`. PROJECT_A: 21 non-empty `<Resume>` elements, reader +60 matches
+21/21; **Stop is a different date on the two split rows** (Stop = previous
+working instant, Resume = +60). The crosscheck compares Start/Finish on all 67
+and Resume on the 21. This is the independent proof of the core/mpp correction
+(W31 had called +60 "Stop"). PROJECT_B and assign1 export no Stop/Resume.
+
+### Resource Type / MaxUnits
+
+All 46 resources in PROJECT_A/PROJECT_B are `<Type>1</Type>` (Work),
+`<MaxUnits>1.00</MaxUnits>`; assign1 adds 2 more. The crosscheck compares
+`Resource::type` (1 == Work) and `max_units()` (percent) on every matched
+resource: 0 mismatches. The Type value is unlocated in the .mpp row (no fixture
+varies it), and the MaxUnits scale is still inference; see "Open".
+
 
 ## mspdi_cmp results (exact, 2026-10-22 ~14:52, MSVC 19.44 `/W4 /permissive- /utf-8 /WX`)
+
+> **HISTORICAL (W33).** The verdicts below predate W40. Current numbers are the
+> W40 table above: PROJECT_B now has **0** field mismatches (W31's effective pair),
+> Resources Type/MaxUnits and assignment Start/Finish/Resume are compared, and
+> `Units`/`MaxUnits` are normalised to percent on import. Where this section says
+> "2 mismatches", "Units=1 lands as 1.0" or "assign1 has no export", it is stale.
 
 ```
 build\vs-w33\tools\mspdi_cmp\Release\mspdi_cmp.exe corpus\project_a.mpp corpus\probe\project_a-export.xml
@@ -197,46 +250,38 @@ dates, numbers and counts only.
 
 ## Verified vs inferred
 
-* **Verified**: PROJECT_A XML (84 Task incl UID 0, 88 links, 23 Resource incl UID 0,
-  67 Assignment) and full agreement; PROJECT_B XML (74 Task incl UID 0, 70 links,
-  23 Resource incl UID 0, 63 Assignment) and 70/70 links, 63/63 assignments,
-  22/22 resources agree; 2 dead links + 10 dead assignments reference non-live
-  task UIDs; PROJECT_B uid 10805 is the only row whose `+96/+100` differs from
-  `+104/+108`, and its export dates equal `+104/+108`; all 136 live assignments
-  export `Units=1` and `ResourceUID=-65535`; Work matches on all 136; the writer
-  emits `<LinkLag>4800</LinkLag>`; both LinkLag spellings parse to the same ticks;
-  `-65535` imports without a warning as `0xFFFF0001`.
-* **Inferred**: that Project's *export* uses `+104/+108` as its date source is
-  inferred from the one differing row where the values are byte-equal (all other
-  rows have the pairs equal, so they cannot distinguish the two); that the
-  PROJECT_B file was "edited without a full recalc" is the explanation consistent
-  with that evidence, not separately measured; that Project's *importer* accepts
-  the writer's decimal `<LinkLag>` is inferred from it being Project's own export
-  spelling (no oracle FileOpen of writer output).
-* **Not checked**: real resource-assignment parity (assign1 has no export); MPP
-  date-only/UTC behaviour; whether a writer-produced file opens in Project.
+* **Verified (W40)**: PROJECT_A (83 tasks, 88/88 links, 67/67 assignments, 22/22
+  resources, Type/MaxUnits 22/22, assignment Start/Finish 67/67, Resume 21/21),
+  PROJECT_B (73, 70/70 live links, 63/63 live assignments, 22/22 resources) and
+  assign1 (2 tasks, 3/3 real-resource assignments, 2/2 resources) all MATCH with
+  0 differences; Project's `Units`/`MaxUnits` are fractions and the model
+  percent; assignment `<Resume>` equals the reader's +60 on 21/21 PROJECT_A rows while
+  `<Stop>` differs on the two split rows; duplicate UIDs and dead assignment
+  references are warned by the importer; malformed XML throws `MspdiError`;
+  400-level nesting is refused.
+* **Inferred**: that Project's export uses `+104/+108` as its date source (the
+  one differing PROJECT_B row is byte-equal to the export); that the PROJECT_B file
+  was "edited without a full recalc"; that Project's *importer* accepts the
+  writer's decimal `<LinkLag>` and fraction `<Units>` (no oracle FileOpen).
+* **Not checked**: Resource Type's .mpp location and the MaxUnits scale (no
+  fixture varies them); MPP12; whether a writer-produced file opens in Project;
+  MPP date-only/UTC behaviour.
 
 ## Open items for the next io session
 
-1. **PROJECT_B `+96/+100` vs `+104/+108`** is now a `core/mpp` question (W31): if
-   `Task.start/finish` moves to the effective pair (or exposes both),
-   `mspdi_cmp` PROJECT_B drops from 2 field differences to 0. Do not paper over it
-   in `core/io`.
-2. **Assignment Units convention in the model**: `import_mspdi` stores the XML
-   value raw, so a real export's `Units=1` lands as 1.0 while the hand-written
-   sample's `100` lands as 100.0 in the same PjField. The cross-check normalises
-   for comparison only; a view that formats Units would show 1 % vs 100 %. Needs
-   a fixture with a variable assignment unit before changing the importer.
-3. **Real resource assignments**: ask the coordinator for an `assign1.xml`
-   export (`FileSaveAs FormatID="MSProject.xml"` of `corpus/probe/assign1.mpp`);
-   the cross-check will then exercise real resource UIDs, and 2 resources.
-4. **Writer acceptance**: one coordinator-only `FileOpen` of a writer-produced
-   MSPDI file would settle element order *and* the decimal `<LinkLag>`; still
-   unverified.
-5. `tests/io_mspdi_crosscheck.cpp` still reports the PROJECT_A reader differences
-   instead of pinning agreement; it asserts `ok()` when it holds and can be
-   tightened once the reader is frozen (unchanged from W27).
-6. `spec/mspdi.md` is behind the code — see "Spec notes" below (coordinator
+1. **Resource Type's .mpp location and the MaxUnits scale** are the only reader-
+   side gaps left in this file. All fixtures are Work/100 %, so no byte can be
+   correlated. Oracle ask: one `.mpp` + MSPDI export with a material resource, a
+   cost resource, and one Work resource at MaxUnits 50 %.
+2. **Writer acceptance**: one coordinator-only `FileOpen` of a writer-produced
+   MSPDI file would settle element order, the decimal `<LinkLag>`, and the
+   fraction `<Units>` the writer now emits; still unverified.
+3. **MPP date-only/UTC behaviour** in assignment/resource values is unchanged;
+   `Z` is ignored (no conversion), documented in `spec/mspdi.md`.
+4. `tests/io_mspdi_crosscheck.cpp` still prints a report but now pins the PROJECT_A /
+   PROJECT_B / assign1 agreement on every compared category; it can be tightened
+   further if the reader changes.
+5. `spec/mspdi.md` is behind the code — see "Spec notes" below (coordinator
    edits `spec/`; this stream must not).
 
 ## Spec notes for `spec/mspdi.md` (for the coordinator)
@@ -245,10 +290,12 @@ dates, numbers and counts only.
 * §4 Resource: add that Project's export writes a **UID 0 placeholder resource**
   (`IsNull`) and that the cross-check compares the UID set excluding it.
 * §4 Assignment: `Units` in Project's export is a **fraction** (`1` = 100 %),
-  while the reader stores a percentage; `ResourceUID=-65535` is the
+  and so is Resource `MaxUnits`; **the importer now scales both to the model's
+  percent and the writer scales back** (`is_percent_fraction_field`). The
+  hand-written samples use fractions too. `ResourceUID=-65535` is the
   **"no resource" sentinel** (`0xFFFF0001`); `TaskUID`/`ResourceUID` come from
-  `assignment_refs`; `Work` is an ISO duration in ticks. The importer stores
-  `Units` raw (known inconsistency, open item 2).
+  `assignment_refs`; `Work` is an ISO duration in ticks; `Start`/`Finish`/
+  `Stop`/`Resume` are also carried in the ref (Resume is the .mpp +60).
 * §4/§5 `PredecessorLink`: **`LinkLag` is canonical as decimal tenths of a
   minute**; ISO is accepted only as the legacy hand-written-sample spelling;
   `parse_link_lag`/`format_link_lag_decimal`/`format_link_lag_iso` are the API.
@@ -258,13 +305,14 @@ dates, numbers and counts only.
   ISO is no longer emitted.
 * §8.4/§8.5: writer output changed for `LinkLag` only; the three sample
   round-trips still pass because both spellings parse to the same ticks.
-* §9: counts are now `io_mspdi_tests 144`, `io_mspdi_writer_tests 862`,
-  `io_mspdi_crosscheck 109`, `ctest -R io_ 4/4`, PROJECT_A/lagff1 `mspdi_cmp` exit 0.
+* §9: counts are now `io_mspdi_tests 145`, `io_mspdi_writer_tests 864`,
+  `io_mspdi_crosscheck 127`, `io_error_paths 21`, `ctest -R io_ 5/5`,
+  PROJECT_A/PROJECT_B/assign1 `mspdi_cmp` exit 0.
 * §10: add the `mspdi_cmp` exclusions (dead endpoints, milestone notes), the
-  PROJECT_B conclusion (2 stored-vs-effective date fields; 0 after a reader
-  date-source fix), and replace "PROJECT_B has no MSPDI export yet" with the
-  results above. Assignment/resource comparison is no longer a gap; real
-  resource assignments are.
+  final verdicts (PROJECT_A/PROJECT_B/assign1 all MATCH, 0 field differences), the
+  assignment-date/Resume comparison, and Resource Type/MaxUnits comparison.
+  Real resource assignments are no longer a gap: `corpus/probe/assign1.xml`
+  exists and is pinned.
 
 ## Traps (do not relearn)
 
@@ -274,8 +322,13 @@ dates, numbers and counts only.
 * **`ResourceUID` can be negative.** `-65535` is "no resource"; parse it as
   signed bits, not with an unsigned-only parser (it used to warn once per
   assignment and fold to 0).
-* **MSPDI `Units` is a fraction; the reader's `units()` is a percentage.**
-  Multiplying one side by 100 is the comparison rule, not a data fix.
+* **MSPDI `Units`/`MaxUnits` are fractions; the model uses percent.** The
+  importer multiplies by 100 and the writer divides by 100; do not change one
+  side without the other. The crosscheck now compares percent directly (it used
+  to multiply the XML side; that `*100` is gone).
+* **`<Resume>` is the .mpp assignment +60; `<Stop>` is a different date** on a
+  split assignment. Keep both in `MspdiAssignmentRef`; do not compare Stop to
+  +60.
 * **A real export excludes rows whose task slot was deleted**, and the reader
   does not. That is what dead-endpoint accounting is for; it is an exclusion with
   a printed count, not a tolerance.

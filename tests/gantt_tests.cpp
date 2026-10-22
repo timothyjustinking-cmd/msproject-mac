@@ -1286,8 +1286,212 @@ void test_backward_fs_lane(Context& context) {
     context.rect(route.bounds, 372.0, 11.0, 76.0, 44.0, "backward route bounds");
 }
 
+void test_zoom_breadth(Context& context) {
+    // Zoom specs: unit, default pixels-per-unit and header vocabulary.
+    const gantt::ZoomSpec day_spec = gantt::zoom_spec(gantt::GanttZoom::day);
+    const gantt::ZoomSpec week_spec = gantt::zoom_spec(gantt::GanttZoom::week);
+    const gantt::ZoomSpec month_spec = gantt::zoom_spec(gantt::GanttZoom::month);
+    context.equal(day_spec.unit, gantt::TimescaleUnit::day, "day zoom unit");
+    context.near(day_spec.pixels_per_unit, 20.0, "day zoom 20 px/day");
+    context.equal(week_spec.unit, gantt::TimescaleUnit::week, "week zoom unit");
+    context.near(week_spec.pixels_per_unit, 140.0, "week zoom 140 px/week");
+    context.equal(month_spec.unit, gantt::TimescaleUnit::month, "month zoom unit");
+    context.near(month_spec.pixels_per_unit, 300.0, "month zoom 300 px/month");
+    context.equal(gantt::zoom_name(gantt::GanttZoom::month), "month",
+                         "month zoom name");
+    const gantt::Timescale day_scale_zoom =
+        gantt::timescale_for_zoom(gantt::GanttZoom::day, day(10, 1));
+    const gantt::Timescale week_scale_zoom =
+        gantt::timescale_for_zoom(gantt::GanttZoom::week, day(10, 19));
+    const gantt::Timescale month_scale_zoom =
+        gantt::timescale_for_zoom(gantt::GanttZoom::month, day(10, 1));
+    context.equal(gantt::zoom_for_timescale(day_scale_zoom), gantt::GanttZoom::day,
+                  "zoom_for_timescale day");
+    context.equal(gantt::zoom_for_timescale(week_scale_zoom), gantt::GanttZoom::week,
+                  "zoom_for_timescale week");
+    context.equal(gantt::zoom_for_timescale(month_scale_zoom), gantt::GanttZoom::month,
+                  "zoom_for_timescale month");
+
+    // Header text at each zoom.
+    const auto day_minor = day_scale_zoom.header(gantt::HeaderTier::minor, 420.0, 440.0);
+    context.check(day_minor.size() == 1 && day_minor[0].label == "22",
+                  "day minor header is the day number");
+    const auto day_major = day_scale_zoom.header(gantt::HeaderTier::major, 0.0, 1200.0);
+    context.check(!day_major.empty() && day_major[0].label == "October 2026",
+                  "day major header is month + year");
+    const auto week_minor = week_scale_zoom.header(gantt::HeaderTier::minor, 0.0, 400.0);
+    context.check(!week_minor.empty() && week_minor[0].label == "19 Oct",
+                  "week minor header is the week start");
+    const auto week_major = week_scale_zoom.header(gantt::HeaderTier::major, 0.0, 400.0);
+    context.check(!week_major.empty() && week_major[0].label == "October 2026",
+                  "week major header is month + year");
+    const auto month_minor = month_scale_zoom.header(gantt::HeaderTier::minor, 0.0, 900.0);
+    context.check(!month_minor.empty() && month_minor[0].label == "October",
+                  "month minor header is the month name");
+    const auto month_major = month_scale_zoom.header(gantt::HeaderTier::major, 0.0, 1000.0);
+    context.check(!month_major.empty() && month_major[0].label == "2026",
+                  "month major header is the year");
+
+    // Bar label content: all eight choices, date ranges, and the percent clamp.
+    gantt::TaskBarInput task;
+    task.uid = 1;
+    task.label = "Task 1";
+    task.resource = "Crew A";
+    task.start = at(10, 22, 8, 0);
+    task.finish = at(10, 23, 17, 0);
+    task.percent_complete = 0.42;
+    gantt::GanttStyle style = fixed_style();
+    style.bar_label = gantt::BarLabelContent::none;
+    context.equal(gantt::bar_label_text(task, style), "", "label none");
+    style.bar_label = gantt::BarLabelContent::name;
+    context.equal(gantt::bar_label_text(task, style), "Task 1", "label name");
+    style.bar_label = gantt::BarLabelContent::resource;
+    context.equal(gantt::bar_label_text(task, style), "Crew A", "label resource");
+    style.bar_label = gantt::BarLabelContent::dates;
+    context.equal(gantt::bar_label_text(task, style), "2026-10-22 - 2026-10-23",
+                         "label dates range");
+    style.bar_label = gantt::BarLabelContent::percent;
+    context.equal(gantt::bar_label_text(task, style), "42%", "label percent");
+    style.bar_label = gantt::BarLabelContent::name_and_percent;
+    context.equal(gantt::bar_label_text(task, style), "Task 1 42%",
+                         "label name + percent");
+    style.bar_label = gantt::BarLabelContent::name_and_resource;
+    context.equal(gantt::bar_label_text(task, style), "Task 1 Crew A",
+                         "label name + resource");
+    style.bar_label = gantt::BarLabelContent::name_and_dates;
+    context.equal(gantt::bar_label_text(task, style),
+                         "Task 1 2026-10-22 - 2026-10-23", "label name + dates");
+    gantt::TaskBarInput same_day = task;
+    same_day.finish = same_day.start;
+    style.bar_label = gantt::BarLabelContent::dates;
+    context.equal(gantt::bar_label_text(same_day, style), "2026-10-22",
+                         "label single-day dates");
+    gantt::BarLabelContent content = gantt::BarLabelContent::none;
+    context.check(gantt::bar_label_content_from_name("name_and_resource", content) &&
+                      content == gantt::BarLabelContent::name_and_resource,
+                  "bar label content parses from a name");
+    context.check(!gantt::bar_label_content_from_name("nope", content),
+                  "unknown bar label content rejected");
+
+    // Shapes: rectangle / bracket / diamond, and the month zoom shrinks the
+    // diamond so it stays inside its ~9.7 px day column.
+    const gantt::GanttLayout day_layout =
+        build_gantt(fixed_source(), fixed_style(), day_scale_zoom);
+    context.equal(find_bar(day_layout, 1).shape, gantt::BarShape::rectangle,
+                  "normal bar shape");
+    context.equal(find_bar(day_layout, 4).shape, gantt::BarShape::summary_bracket,
+                  "summary bar shape");
+    context.equal(find_bar(day_layout, 3).shape, gantt::BarShape::diamond,
+                  "milestone bar shape");
+    const gantt::Bar day_summary = find_bar(day_layout, 4);
+    context.near(day_summary.cap_left[0].x, day_summary.rect.x, "summary left cap starts at x");
+    context.near(day_summary.cap_left[0].y, day_summary.rect.bottom(), "summary cap sits on the bar bottom");
+    context.near(day_summary.cap_right[0].x, day_summary.rect.right(), "summary right cap starts at the right edge");
+    const gantt::Bar month_milestone = find_bar(
+        build_gantt(fixed_source(), fixed_style(), month_scale_zoom), 3);
+    const double month_day_width = month_scale_zoom.x_for_day_start(day(10, 27)) -
+                                   month_scale_zoom.x_for_day_start(day(10, 26));
+    context.near(month_milestone.rect.w, month_day_width,
+                 "month-zoom diamond shrinks to the day column");
+    context.check(month_milestone.rect.x >= month_scale_zoom.x_for_day_start(day(10, 26)) &&
+                      month_milestone.rect.right() <=
+                          month_scale_zoom.x_for_day_start(day(10, 27)),
+                  "month-zoom diamond stays inside its day column");
+    context.near(month_milestone.diamond[0].x, month_milestone.rect.center_x(),
+                 "diamond top is centred");
+
+    // Hit tolerance follows the day-column width: 3 px at day/week, 2 px floor
+    // at month; the layout uses it.
+    context.near(gantt::hit_test_tolerance(day_scale_zoom, fixed_style()), 3.0,
+                 "day hit tolerance is the old 3 px");
+    context.near(gantt::hit_test_tolerance(week_scale_zoom, fixed_style()), 3.0,
+                 "week hit tolerance is 3 px");
+    context.near(gantt::hit_test_tolerance(month_scale_zoom, fixed_style()), 2.0,
+                 "month hit tolerance falls to the 2 px floor");
+    gantt::GanttStyle fixed = fixed_style();
+    fixed.hit_tolerance_days = 0.0;
+    context.near(gantt::hit_test_tolerance(month_scale_zoom, fixed), 3.0,
+                 "hit_tolerance_days=0 uses the fixed tolerance");
+    const gantt::GanttLayout month_layout =
+        build_gantt(fixed_source(), fixed_style(), month_scale_zoom);
+    const gantt::Bar month_one_day = find_bar(month_layout, 1);
+    context.equal(
+        month_layout.hit_test(month_one_day.rect.center_x(), month_one_day.rect.bottom() + 2.0).kind,
+        gantt::HitKind::bar, "month layout hits 2 px below a bar");
+    context.equal(
+        month_layout.hit_test(month_one_day.rect.center_x(), month_one_day.rect.bottom() + 3.0).kind,
+        gantt::HitKind::none, "month layout misses 3 px below a bar");
+
+    // Routing at the month zoom: endpoints stay on the bar edges, the arrow is
+    // a unit vector, and the route is hit-testable.
+    gantt::GanttSource routed = fixed_source();
+    gantt::LinkInput link;
+    link.predecessor_uid = 1;
+    link.successor_uid = 2;
+    link.type = gantt::LinkType::finish_to_start;
+    routed.links = {link};
+    const gantt::GanttLayout month_routed =
+        build_gantt(routed, fixed_style(), month_scale_zoom);
+    context.equal(month_routed.links.size(), std::size_t{1}, "month route exists");
+    if (month_routed.links.size() == 1) {
+        const gantt::LinkRoute& route = month_routed.links[0];
+        const gantt::Bar* pred = month_routed.bar(1);
+        const gantt::Bar* succ = month_routed.bar(2);
+        context.check(pred != nullptr && succ != nullptr, "month route has both bars");
+        if (pred != nullptr && succ != nullptr) {
+            context.near(route.points.front().x, pred->rect.right(),
+                         "month route exits the predecessor finish edge");
+            context.near(route.arrow.tip.x, succ->rect.x,
+                         "month route enters the successor start edge");
+            context.near(std::sqrt(route.arrow.direction.x * route.arrow.direction.x +
+                                   route.arrow.direction.y * route.arrow.direction.y),
+                         1.0, "month route arrow direction is a unit vector");
+            context.check(std::isfinite(route.bounds.w) && std::isfinite(route.bounds.h),
+                          "month route bounds are finite");
+            if (route.points.size() >= 3) {
+                const gantt::Point mid{(route.points[1].x + route.points[2].x) / 2.0,
+                                       (route.points[1].y + route.points[2].y) / 2.0};
+                context.equal(month_routed.hit_test(mid.x, mid.y).kind, gantt::HitKind::link,
+                              "month route is hit-testable");
+            }
+        }
+    }
+
+    // Calendar shading at the week and month zooms: whole-day weekends survive.
+    // Turn off the calendar-driven week anchor so the plain and shaded layouts
+    // use the same columns (the anchor itself is covered by its own test).
+    gantt::Timescale week_no_adopt = week_scale_zoom;
+    week_no_adopt.adopt_calendar_week_start = false;
+    gantt::GanttSource shaded = fixed_source();
+    const core::sched::Calendar standard_zoom(standard_week());
+    shaded.set_calendar(standard_zoom);
+    const gantt::GanttLayout week_shaded =
+        build_gantt(shaded, fixed_style(), week_no_adopt);
+    const std::vector<gantt::NonworkingSpan> week_spans =
+        week_shaded.nonworking_spans(0.0, 180.0);
+    std::size_t week_whole = 0;
+    for (const gantt::NonworkingSpan& span : week_spans) {
+        if (!span.partial) {
+            ++week_whole;
+        }
+    }
+    context.equal(week_whole, std::size_t{2}, "week zoom shades Sat and Sun");
+    const gantt::GanttLayout month_shaded =
+        build_gantt(shaded, fixed_style(), month_scale_zoom);
+    std::size_t month_whole = 0;
+    for (const gantt::NonworkingSpan& span : month_shaded.nonworking_spans(0.0, 300.0)) {
+        if (!span.partial) {
+            ++month_whole;
+        }
+    }
+    context.equal(month_whole, std::size_t{9},
+                  "month zoom shades the nine October weekend days");
+    check_same_bars(context, week_shaded,
+                    build_gantt(fixed_source(), fixed_style(), week_no_adopt),
+                    "week shading does not move bars");
+}
+
 #if defined(GANTT_HAS_CAL)
-// The corpus probe: holiday1.mpp is a synthetic COM-built fixture (precedent:
 // tests/cal_tests.cpp), so its calendar names are not client data.  It carries
 // one dated exception (Wednesday non-working) and a 4-hour Friday in the task
 // calendar the three tasks select.  No name is printed; absence is a SKIP.
@@ -1422,6 +1626,7 @@ int main() {
     test_calendar_week_anchor(context);
     test_milestone_centring(context);
     test_backward_fs_lane(context);
+    test_zoom_breadth(context);
 #if defined(GANTT_HAS_CAL)
     test_holiday_probe(context);
 #endif

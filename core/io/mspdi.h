@@ -67,7 +67,17 @@ struct MspdiProject {
     std::string default_finish_time;
 };
 
-/* One MSPDI <Assignment> identity triple. */
+/* One MSPDI <Assignment> identity triple plus its own dates.  The dates are
+ * `core::view::Value` (Date when present, Null when the element is absent) so
+ * the cross-check can compare them without a descriptor field: the Assignment
+ * table has no named Resume/Stop field.  They are copied from the imported
+ * document for `mspdi_cmp`; nothing else reads them.
+ *
+ * MEASURED (W40, assign1.xml and project_a-export.xml): Project writes `<Start>`,
+ * `<Finish>`, `<Stop>` and `<Resume>` as local wall-clock ISO dates; `<Stop>`
+ * and `<Resume>` are absent when the assignment has neither, and `<Resume>` is
+ * what the .mpp assignment row stores at +60 (not Stop -- on a split row Stop
+ * is the previous working instant). */
 struct MspdiAssignmentRef {
     std::uint32_t uid = 0;
     std::uint32_t task_uid = 0;
@@ -77,6 +87,10 @@ struct MspdiAssignmentRef {
      * 0, so callers can tell "the element said no resource" from a missing
      * element.  Real resource UIDs start at 1. */
     std::uint32_t resource_uid = 0;
+    core::view::Value start;   /* <Start>, Date or Null */
+    core::view::Value finish;  /* <Finish>, Date or Null */
+    core::view::Value stop;    /* <Stop>, Date or Null (not stored in .mpp) */
+    core::view::Value resume;  /* <Resume>, Date or Null (the .mpp row's +60) */
 };
 
 /* One MSPDI <PredecessorLink>, attached to its successor Task. */

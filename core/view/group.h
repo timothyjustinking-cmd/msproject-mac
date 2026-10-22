@@ -64,10 +64,39 @@ struct GroupBucket {
     std::string label;           // heading text
     std::vector<std::size_t> rows;
     std::vector<GroupBucket> children;
+    // Appended (additive): the count line a group heading shows, and how many
+    // rows the bucket represents directly and including its children.
+    std::size_t row_count = 0;
+    std::size_t total_row_count = 0;
+    std::string summary_line;    // e.g. "3 tasks"; empty when show_summary is false
 };
 
-/* Recursive bucketing by group.keys[level..]. */
+/* One display line of a grouped view.  A heading carries the bucket label, a
+ * summary line the bucket count, and a task line the row index.  `depth` is 0
+ * for a top-level bucket, 1 for its rows/summary, 2 for a nested bucket, ... */
+enum class GroupLineKind : std::uint8_t { heading = 0, summary, row };
+
+struct GroupLine {
+    GroupLineKind kind = GroupLineKind::heading;
+    int depth = 0;
+    std::size_t row = 0;   // kind == row
+    std::string text;      // heading/summary text
+};
+
+/* Recursive bucketing by group.keys[level..], in RecordSet order. */
 std::vector<GroupBucket> build_groups(const GroupDefinition& group, const RecordSet& records);
+
+/* Same, but visits rows in `order` (e.g. apply_sort()'s result).  Out-of-range
+ * row indices are ignored.  Within a bucket the input order is preserved. */
+std::vector<GroupBucket> build_groups(const GroupDefinition& group, const RecordSet& records,
+                                      const std::vector<std::size_t>& order);
+
+/* Flatten a bucket tree into the lines a sheet draws: heading, summary, then
+ * either child headings or the bucket's rows.  The summary line is emitted
+ * before the rows (decision, unmeasured: Project's exact placement is not in
+ * the resources).  When include_summary is false the summary lines are omitted. */
+std::vector<GroupLine> group_display_lines(const std::vector<GroupBucket>& buckets,
+                                           bool include_summary = true);
 
 /* Label for a single key value at one interval (also used by tests). */
 std::string group_value_label(const Value& value, GroupInterval interval);

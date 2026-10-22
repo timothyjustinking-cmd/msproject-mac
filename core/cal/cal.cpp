@@ -35,6 +35,7 @@ constexpr std::size_t kWeekAreaBytes = kWeekBlockBytes;  // 420
 constexpr std::size_t kExceptionFixedBytes = 92;
 constexpr std::size_t kExceptionNameOffset = 88;             // u32 name byte length
 constexpr std::size_t kExceptionRecurrenceOffset = 72;       // u16 PjExceptionType
+constexpr std::size_t kExceptionOccurrencesOffset = 4;       // u16, recurring only
 constexpr std::size_t kExceptionPeriodCountOffset = 14;      // u16
 constexpr std::size_t kExceptionStartOffset = 20;            // u16 start[i]
 constexpr std::size_t kExceptionLengthOffset = 32;           // u32 length[i]
@@ -252,6 +253,66 @@ void collect_chain(CalendarTable const& table, CalendarDefinition const& calenda
     chain.push_back(&calendar);
 }
 
+// --- recurring-exception expansion helpers (see expand_recurring_exception) --
+
+constexpr bool is_leap_year(std::int32_t year) noexcept {
+    return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+}
+
+std::int32_t days_in_month(std::int32_t year, std::int32_t month) noexcept {
+    constexpr std::int32_t kMonthDays[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (month < 1 || month > 12) {
+        return 0;
+    }
+    if (month == 2 && is_leap_year(year)) {
+        return 29;
+    }
+    return kMonthDays[static_cast<std::size_t>(month - 1)];
+}
+
+core::sched::CivilDate civil_of_day(std::int32_t day) noexcept {
+    return core::sched::to_civil(static_cast<core::sched::date32>(day) << 16);
+}
+
+// Day number of a civil date, or 0 when the month has no such day.
+std::int32_t day_of_civil(std::int32_t year, std::int32_t month, std::int32_t day) noexcept {
+    if (day < 1 || day > days_in_month(year, month)) {
+        return 0;
+    }
+    core::sched::CivilDate civil;
+    civil.year = year;
+    civil.month = month;
+    civil.day = day;
+    return core::sched::day_of(core::sched::from_civil(civil));
+}
+
+// Day-of-month of the `position`-th `weekday` in (year, month); position 0 means
+// "the last one".  0 when the month has no such day.
+std::int32_t nth_weekday_of_month(std::int32_t year, std::int32_t month, std::int32_t weekday,
+                                 std::int32_t position) noexcept {
+    const std::int32_t length = days_in_month(year, month);
+    if (length == 0 || weekday < 0 || weekday > 6 || position < 0 || position > 5) {
+        return 0;
+    }
+    if (position == 0) {
+        for (std::int32_t day = length; day >= 1; --day) {
+            if (core::sched::weekday_of_day(day_of_civil(year, month, day)) == weekday) {
+                return day;
+            }
+        }
+        return 0;
+    }
+    std::int32_t seen = 0;
+    for (std::int32_t day = 1; day <= length; ++day) {
+        if (core::sched::weekday_of_day(day_of_civil(year, month, day)) == weekday) {
+            if (++seen == position) {
+                return day;
+            }
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 // --- public decoders --------------------------------------------------------
@@ -352,6 +413,8 @@ CalendarData decode_calendar_data(std::vector<std::uint8_t> const& data) {
             exception.end_day = read_u16(data, offset + 2, "calendar exception end");
             exception.recurrence_type =
                 read_u16(data, offset + kExceptionRecurrenceOffset, "calendar exception recurrence");
+            exception.occurrences =
+                read_u16(data, offset + kExceptionOccurrencesOffset, "calendar exception occurrences");
             std::int32_t periods =
                 read_u16(data, offset + kExceptionPeriodCountOffset, "calendar exception periods");
             periods = std::min(periods, kMaxStoredIntervals);
@@ -596,8 +659,109 @@ CalendarDefinition const* find_calendar_by_uid(CalendarTable const& table, std::
     return nullptr;
 }
 
+RecurrenceExpansion expand_recurring_exception(DatedException const& exception,
+                                               std::int32_t max_days) {
+    RecurrenceExpansion out;
+    const std::int32_t type = exception.recurrence_type;
+    if (type <= 1) {
+        out.why = "not a recurring exception (PjExceptionType 0/1 is a plain range)";
+        return out;
+    }
+    if (type > 7) {
+        out.why = "PjExceptionType is outside 0..7";
+        return out;
+    }
+    if (type == 7) {
+        out.why = "day-count recurrence: the 'every N days' period is not decoded";
+        return out;
+    }
+    if (exception.start_day <= 0) {
+        out.why = "no recurrence start day";
+        return out;
+    }
+
+    const std::int32_t first = exception.start_day;
+    const std::int32_t last = std::max(first, exception.end_day);
+    const core::sched::CivilDate start = civil_of_day(first);
+    const core::sched::CivilDate end = civil_of_day(last);
+    const std::int32_t weekday = core::sched::weekday_of_day(first);
+    // The start day is a matching instance, so it carries the rule: its
+    // day-of-month for types 2/4, and its position inside its own month for the
+    // positional types 3/5 (1..4, or "last" when a further same-weekday day
+    // would leave the month).
+    const std::int32_t position =
+        (start.day + core::sched::kDaysPerWeek > days_in_month(start.year, start.month))
+            ? 0
+            : ((start.day - 1) / core::sched::kDaysPerWeek + 1);
+
+    const auto add = [&out, first, last](std::int32_t day) {
+        if (day >= first && day <= last) {
+            out.days.push_back(day);
+        }
+    };
+
+    switch (type) {
+        case 2:  // yearly: month + day-of-month
+            for (std::int32_t year = start.year; year <= end.year; ++year) {
+                add(day_of_civil(year, start.month, start.day));
+            }
+            break;
+        case 3:  // yearly: month + position + weekday
+            for (std::int32_t year = start.year; year <= end.year; ++year) {
+                add(day_of_civil(year, start.month,
+                                 nth_weekday_of_month(year, start.month, weekday, position)));
+            }
+            break;
+        case 4:  // monthly: day-of-month
+        case 5:  // monthly: position + weekday
+            for (std::int32_t year = start.year; year <= end.year; ++year) {
+                const std::int32_t first_month = year == start.year ? start.month : 1;
+                const std::int32_t last_month = year == end.year ? end.month : 12;
+                for (std::int32_t month = first_month; month <= last_month; ++month) {
+                    const std::int32_t day =
+                        type == 4 ? day_of_civil(year, month, start.day)
+                                  : day_of_civil(year, month,
+                                                 nth_weekday_of_month(year, month, weekday, position));
+                    add(day);
+                }
+            }
+            break;
+        case 6:  // weekly: the start day's weekday, every week
+            for (std::int32_t day = first; day <= last; day += core::sched::kDaysPerWeek) {
+                add(day);
+            }
+            break;
+        default:
+            break;
+    }
+
+    if (out.days.empty()) {
+        out.days.clear();
+        out.why = "the expansion produced no day inside the recurrence range";
+        return out;
+    }
+    if (max_days > 0 && static_cast<std::int32_t>(out.days.size()) > max_days) {
+        out.days.clear();
+        out.why = "the expansion is longer than the caller's day cap";
+        return out;
+    }
+    // The occurrence word (+4) is a check, never a source of truth: it must agree
+    // with the expansion or the expansion is refused (this is what catches a
+    // period other than one week/month/year, which the decoded record cannot
+    // express yet).
+    if (exception.occurrences > 0 &&
+        out.days.size() != static_cast<std::size_t>(exception.occurrences)) {
+        out.days.clear();
+        out.why = "the expansion disagrees with the stored occurrence word (+4)";
+        return out;
+    }
+    out.applied = true;
+    return out;
+}
+
 core::sched::Calendar build_calendar(CalendarTable const& table,
-                                     CalendarDefinition const& calendar) {
+                                     CalendarDefinition const& calendar,
+                                     RecurrenceReport* report) {
     const WeekSpec resolved = resolve_week(table, calendar, 0);
     core::sched::Week base_week{};
     for (std::size_t day = 0; day < base_week.size(); ++day) {
@@ -643,9 +807,6 @@ core::sched::Calendar build_calendar(CalendarTable const& table,
     const core::sched::DayPattern non_working{};
     for (CalendarDefinition const* link : chain) {
         for (DatedException const& exception : link->exceptions) {
-            if (exception.recurrence_type > 1) {
-                continue;  // reported through CalendarTable::recurring_exceptions
-            }
             core::sched::DayPattern pattern{};
             if (exception.working) {
                 DaySpec spec;
@@ -655,12 +816,31 @@ core::sched::Calendar build_calendar(CalendarTable const& table,
             } else {
                 pattern = non_working;
             }
-            const std::int32_t last = std::max(exception.start_day, exception.end_day);
-            for (std::int32_t day = exception.start_day; day <= last; ++day) {
-                apply_day(day, pattern);
-                if (day == last) {
-                    break;
+            std::vector<std::int32_t> days;
+            if (exception.recurrence_type > 1) {
+                // Recurring: expand into concrete days (see cal.h for exactly
+                // which parameters are measured and which are [I]), then apply
+                // them exactly like a plain range.  An expansion that cannot be
+                // justified is skipped and counted, never guessed.
+                const RecurrenceExpansion expansion = expand_recurring_exception(exception);
+                if (!expansion.applied) {
+                    if (report != nullptr) {
+                        ++report->not_applied;
+                    }
+                    continue;
                 }
+                if (report != nullptr) {
+                    ++report->applied;
+                }
+                days = expansion.days;
+            } else {
+                const std::int32_t last = std::max(exception.start_day, exception.end_day);
+                for (std::int32_t day = exception.start_day; day <= last; ++day) {
+                    days.push_back(day);
+                }
+            }
+            for (const std::int32_t day : days) {
+                apply_day(day, pattern);
             }
         }
     }
@@ -672,10 +852,11 @@ core::sched::Calendar build_calendar(CalendarTable const& table,
 }
 
 core::sched::Calendar build_project_calendar(CalendarTable const& table,
-                                             std::string const& calendar_name) {
+                                             std::string const& calendar_name,
+                                             RecurrenceReport* report) {
     const std::string wanted = calendar_name.empty() ? table.default_calendar_name : calendar_name;
     if (CalendarDefinition const* calendar = find_calendar(table, wanted)) {
-        return build_calendar(table, *calendar);
+        return build_calendar(table, *calendar, report);
     }
     if (!calendar_name.empty()) {
         throw mpp::Error("core/cal: no calendar named \"" + calendar_name + "\"");
@@ -691,7 +872,7 @@ core::sched::Calendar build_project_calendar(CalendarTable const& table,
         }
     }
     if (bases == 1 && only != nullptr) {
-        return build_calendar(table, *only);
+        return build_calendar(table, *only, report);
     }
     throw mpp::Error("core/cal: the project's default calendar is not in 114/TBkndCal");
 }

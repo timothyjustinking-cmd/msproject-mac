@@ -30,7 +30,7 @@
       <mspdi:Type>1</mspdi:Type>
       <mspdi:Initials>AL</mspdi:Initials>
       <mspdi:Group>Engineering</mspdi:Group>
-      <mspdi:MaxUnits>100</mspdi:MaxUnits>
+      <mspdi:MaxUnits>1</mspdi:MaxUnits>
       <mspdi:StandardRate>120</mspdi:StandardRate>
       <mspdi:OvertimeRate>180</mspdi:OvertimeRate>
       <mspdi:CostPerUse>25</mspdi:CostPerUse>
@@ -41,7 +41,7 @@
       <mspdi:ID>2</mspdi:ID>
       <mspdi:Name>Bob</mspdi:Name>
       <mspdi:Type>1</mspdi:Type>
-      <mspdi:MaxUnits>50</mspdi:MaxUnits>
+      <mspdi:MaxUnits>0.5</mspdi:MaxUnits>
       <mspdi:StandardRate>90</mspdi:StandardRate>
     </mspdi:Resource>
   </mspdi:Resources>
@@ -52,7 +52,7 @@
       <mspdi:ResourceUID>1</mspdi:ResourceUID>
       <mspdi:TaskID>1</mspdi:TaskID>
       <mspdi:ResourceID>1</mspdi:ResourceID>
-      <mspdi:Units>100</mspdi:Units>
+      <mspdi:Units>1</mspdi:Units>
       <mspdi:Work>PT24H0M0S</mspdi:Work>
       <mspdi:Cost>2880</mspdi:Cost>
       <mspdi:Start>2024-04-01T08:00:00</mspdi:Start>
@@ -66,14 +66,14 @@
       <mspdi:UID>2</mspdi:UID>
       <mspdi:TaskUID>1</mspdi:TaskUID>
       <mspdi:ResourceUID>2</mspdi:ResourceUID>
-      <mspdi:Units>50</mspdi:Units>
+      <mspdi:Units>0.5</mspdi:Units>
       <mspdi:Work>PT8H0M0S</mspdi:Work>
     </mspdi:Assignment>
     <mspdi:Assignment>
       <mspdi:UID>3</mspdi:UID>
       <mspdi:TaskUID>2</mspdi:TaskUID>
       <mspdi:ResourceUID>1</mspdi:ResourceUID>
-      <mspdi:Units>100</mspdi:Units>
+      <mspdi:Units>1</mspdi:Units>
       <mspdi:Work>PT8H0M0S</mspdi:Work>
     </mspdi:Assignment>
   </mspdi:Assignments>

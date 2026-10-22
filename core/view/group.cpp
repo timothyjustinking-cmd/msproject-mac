@@ -186,13 +186,34 @@ Derived derive(const Value& value, GroupInterval interval) {
     return result;
 }
 
-void build_level(const std::vector<GroupKey>& keys, std::size_t level,
-                 const RecordSet& records, const std::vector<std::size_t>& rows,
-                 std::vector<GroupBucket>& buckets) {
-    if (level >= keys.size()) {
+std::string summary_line_for(std::size_t count, core::model::RecordType record_type) {
+    const char* singular = "row";
+    const char* plural = "rows";
+    switch (record_type) {
+        case core::model::RecordType::Task:
+            singular = "task";
+            plural = "tasks";
+            break;
+        case core::model::RecordType::Resource:
+            singular = "resource";
+            plural = "resources";
+            break;
+        case core::model::RecordType::Assignment:
+            singular = "assignment";
+            plural = "assignments";
+            break;
+        default:
+            break;
+    }
+    return std::to_string(count) + " " + (count == 1 ? singular : plural);
+}
+
+void build_level(const GroupDefinition& group, std::size_t level, const RecordSet& records,
+                 const std::vector<std::size_t>& rows, std::vector<GroupBucket>& buckets) {
+    if (level >= group.keys.size()) {
         return;
     }
-    const GroupKey& key = keys[level];
+    const GroupKey& key = group.keys[level];
     for (const std::size_t row : rows) {
         const Value* pointer = records.get(row, key.field);
         const Value value = pointer != nullptr ? *pointer : Value{};
@@ -226,7 +247,51 @@ void build_level(const std::vector<GroupKey>& keys, std::size_t level,
                          return ascending ? order < 0 : order > 0;
                      });
     for (auto& bucket : buckets) {
-        build_level(keys, level + 1, records, bucket.rows, bucket.children);
+        build_level(group, level + 1, records, bucket.rows, bucket.children);
+        if (bucket.children.empty()) {
+            bucket.row_count = bucket.rows.size();
+            bucket.total_row_count = bucket.row_count;
+        } else {
+            bucket.row_count = 0;  // the rows live in the child buckets
+            bucket.total_row_count = 0;
+            for (const GroupBucket& child : bucket.children) {
+                bucket.total_row_count += child.total_row_count;
+            }
+        }
+        if (group.show_summary) {
+            bucket.summary_line = summary_line_for(bucket.total_row_count, records.record_type());
+        }
+    }
+}
+
+void append_lines(const std::vector<GroupBucket>& buckets, int depth, bool include_summary,
+                  std::vector<GroupLine>& lines) {
+    for (const GroupBucket& bucket : buckets) {
+        GroupLine heading;
+        heading.kind = GroupLineKind::heading;
+        heading.depth = depth;
+        heading.text = bucket.label;
+        lines.push_back(std::move(heading));
+
+        if (include_summary && !bucket.summary_line.empty()) {
+            GroupLine summary;
+            summary.kind = GroupLineKind::summary;
+            summary.depth = depth + 1;
+            summary.text = bucket.summary_line;
+            lines.push_back(std::move(summary));
+        }
+
+        if (!bucket.children.empty()) {
+            append_lines(bucket.children, depth + 1, include_summary, lines);
+        } else {
+            for (const std::size_t row : bucket.rows) {
+                GroupLine line;
+                line.kind = GroupLineKind::row;
+                line.depth = depth + 1;
+                line.row = row;
+                lines.push_back(std::move(line));
+            }
+        }
     }
 }
 
@@ -283,16 +348,35 @@ std::string group_value_label(const Value& value, GroupInterval interval) {
 }
 
 std::vector<GroupBucket> build_groups(const GroupDefinition& group, const RecordSet& records) {
-    std::vector<GroupBucket> buckets;
-    if (group.keys.empty() || records.row_count() == 0) {
-        return buckets;
-    }
     std::vector<std::size_t> rows(records.row_count());
     for (std::size_t i = 0; i < rows.size(); ++i) {
         rows[i] = i;
     }
-    build_level(group.keys, 0, records, rows, buckets);
+    return build_groups(group, records, rows);
+}
+
+std::vector<GroupBucket> build_groups(const GroupDefinition& group, const RecordSet& records,
+                                      const std::vector<std::size_t>& order) {
+    std::vector<GroupBucket> buckets;
+    if (group.keys.empty() || records.row_count() == 0 || order.empty()) {
+        return buckets;
+    }
+    std::vector<std::size_t> rows;
+    rows.reserve(order.size());
+    for (const std::size_t row : order) {
+        if (row < records.row_count()) {
+            rows.push_back(row);
+        }
+    }
+    build_level(group, 0, records, rows, buckets);
     return buckets;
+}
+
+std::vector<GroupLine> group_display_lines(const std::vector<GroupBucket>& buckets,
+                                           bool include_summary) {
+    std::vector<GroupLine> lines;
+    append_lines(buckets, 0, include_summary, lines);
+    return lines;
 }
 
 JsonValue group_to_json(const GroupDefinition& group) {

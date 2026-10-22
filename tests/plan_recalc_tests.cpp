@@ -28,12 +28,15 @@
 //    SNLT, FNET, FNLT, a 50 % complete task and a deadline task, with the COM
 //    values in docs/analysis/oracle/schedin-probe.json.  The file stores
 //    Project's own recalculated schedule, so comparing against it proves the
-//    constraint/deadline/actual mapping without needing a second .mpp.  Nine of
-//    the ten slack values match; the ALAP task's TotalSlack is the known open
-//    divergence (engine 5280 min, stored 0) and is asserted explicitly.
+//    constraint/deadline/actual mapping without needing a second .mpp.  All ten
+//    slack values and all twenty date fields match.  The ALAP row needs one
+//    rule: its stored "effective" pair (+104/+108) still holds the ASAP early
+//    dates while the calculated pair (+96/+100), the late pair (+112/+116) and
+//    COM's own Start/Finish all hold the late placement, which is what the
+//    engine reports (measured wave 9b; see the comment in test_schedin).
 //
 // THE STORED SLACK.  mpp::Task exposes Project's stored TotalSlack
-// (total_slack_ticks, read from task-row +74) and the derived Critical flag
+// (total_slack_ticks, read from task-row +190) and the derived Critical flag
 // (slack <= 0 at MS Project's default CriticalSlackLimit of 0, spec §3.5,
 // measured in w3-o4b.json), so the comparison needs no raw-row decoding.
 //
@@ -609,7 +612,19 @@ void test_schedin(TestContext& context) {
     }
 
     /* Every start and finish, one row per constraint type.  Expected values are
-     * the ones Project stored (docs/analysis/oracle/schedin-probe.json). */
+     * the ones Project stored (docs/analysis/oracle/schedin-probe.json).
+     *
+     * The ALAP row (uid 2) stores TWO date pairs, which is why the comparison
+     * needs a rule rather than one field (measured, wave 9b, on this fixture):
+     *   +96/+100 calculated = 2026-11-03 08:00-17:00 -- the ALAP placement, and
+     *                         exactly what COM reports as Start/Finish for that
+     *                         row (schedin-probe.json ID 2);
+     *   +104/+108 effective = 2026-10-19 08:00-17:00 -- the ASAP early dates.
+     * Project's own date for an ALAP task is therefore the CALCULATED pair.  The
+     * old pin compared the engine with +104 and recorded an 18/20 "divergence";
+     * that is the same field-identification artefact as W30's +74/+190 misread
+     * (memory/schedcore.md), not an engine bug.  The two pairs are identical on
+     * every other schedin row, so this rule changes only uid 2. */
     std::size_t date_matches = 0;
     std::size_t date_fields = 0;
     std::size_t slack_matches = 0;
@@ -622,54 +637,64 @@ void test_schedin(TestContext& context) {
         if (actual == nullptr) {
             continue;
         }
+        const bool alap_row =
+            task.constraint_type == static_cast<std::uint16_t>(sched::ConstraintType::as_late_as_possible);
+        const sched::date32 stored_start =
+            alap_row ? task.calculated_start.raw : task.start.raw;
+        const sched::date32 stored_finish =
+            alap_row ? task.calculated_finish.raw : task.finish.raw;
         ++date_fields;
-        if (actual->start == task.start.raw) {
+        if (actual->start == stored_start) {
             ++date_matches;
         } else {
             std::cout << "  schedin start mismatch uid " << task.uid << " recalculated="
                       << plan::format_date(actual->start) << " stored="
-                      << plan::format_date(task.start.raw) << '\n';
+                      << plan::format_date(stored_start) << '\n';
         }
-        if (task.uid != 2) {
-            context.equal_date(actual->start, task.start.raw, label + " recalculated start");
-        }
+        context.equal_date(actual->start, stored_start, label + " recalculated start");
         ++date_fields;
-        if (actual->finish == task.finish.raw) {
+        if (actual->finish == stored_finish) {
             ++date_matches;
         } else {
             std::cout << "  schedin finish mismatch uid " << task.uid << " recalculated="
                       << plan::format_date(actual->finish) << " stored="
-                      << plan::format_date(task.finish.raw) << '\n';
+                      << plan::format_date(stored_finish) << '\n';
         }
-        if (task.uid != 2) {
-            context.equal_date(actual->finish, task.finish.raw,
-                               label + " recalculated finish");
-        }
+        context.equal_date(actual->finish, stored_finish, label + " recalculated finish");
         if (actual->total_slack == static_cast<sched::ticks>(task.total_slack_ticks)) {
             ++slack_matches;
         }
     }
-    /* The ALAP row (uid 2) is the one known divergence: the engine reports its
-     * late placement (2026-11-03 08:00-17:00) while the file stores the early
-     * dates (2026-10-19).  W30's finish-slack/actual changes moved it; recorded
-     * in memory/schedcore.md as open, not hidden. */
-    const plan::PlanTaskResult* alap_early = find_result(result, 2);
-    context.check(alap_early != nullptr &&
-                      plan::format_date(alap_early->start) == "2026-11-03 08:00",
-                  "schedin ALAP start is the engine's late placement (known divergence)");
-    context.equal(date_matches, std::size_t{18},
-                  "18 of the 20 schedin date fields match; the ALAP row is known");
+    /* The ALAP row's two stored pairs, and which one the engine matches.  The
+     * diverging pair is a storage fact of the fixture, not a scheduling result:
+     * both checks below fail if the reader or this rule ever collapses the two
+     * pairs. */
+    const mpp::Task* alap_stored = find_task(document, 2);
+    context.check(alap_stored != nullptr &&
+                      alap_stored->calculated_start.raw != alap_stored->start.raw,
+                  "schedin ALAP row stores different calculated (+96) and effective (+104) starts");
+    context.check(alap_stored != nullptr &&
+                      alap_stored->calculated_finish.raw != alap_stored->finish.raw,
+                  "schedin ALAP row stores different calculated (+100) and effective (+108) finishes");
+    context.equal(date_matches, std::size_t{20},
+                  "20 of the 20 schedin date fields match (the ALAP row against +96/+100)");
     context.equal(date_fields, std::size_t{20},
                   "20 date fields were compared on schedin.mpp");
 
-    /* The ALAP task now matches: TotalSlack is finish slack (LF-EF), so an ALAP
-     * task with no successor slack reports 0, the stored value.  The old
-     * "engine 5280 vs Project 0" divergence was the +74 FreeSlack misread. */
+    /* The ALAP slack words (measured, wave 9b): TotalSlack is finish slack
+     * (LF-EF) = 5280 min (+190, already matching: the old "engine 5280 vs
+     * Project 0" divergence was the +74 FreeSlack misread), while StartSlack
+     * (+186) and FreeSlack (+74) are 0 because an ALAP task is placed at its late
+     * start.  The engine now reports the same three words. */
     const plan::PlanTaskResult* alap = find_result(result, 2);
     context.check(alap != nullptr, "schedin ALAP task is in the recalculation");
     if (alap != nullptr) {
         context.equal(alap->total_slack, static_cast<sched::ticks>(52800),
-                      "schedin ALAP total slack is the engine's 5280 min (known divergence)");
+                      "schedin ALAP total slack is the stored 5280 min (+190)");
+        context.equal(alap->start_slack, sched::ticks{0},
+                      "schedin ALAP start slack is the stored 0 (+186)");
+        context.equal(alap->free_slack, sched::ticks{0},
+                      "schedin ALAP free slack is the stored 0 (+74)");
         const mpp::Task* stored = find_task(document, 2);
         context.check(stored != nullptr &&
                           stored->total_slack_ticks == static_cast<std::int32_t>(52800),
@@ -682,6 +707,118 @@ void test_schedin(TestContext& context) {
               << std::flush;
 }
 
+/* ---- 4. w9-elapsedlag.mpp: elapsed lag through the bridge ---------------- */
+/* The elapsed-lag fixture (wave 9b; docs/analysis/oracle/w9-elapsedlag.json).
+ * Project built it over COM, recalculated and saved it, and its +96/+104 pairs
+ * agree on every row, so the stored dates are Project's own.
+ *
+ * What it proves HERE is the bridge, not only the engine: the link row's +18
+ * LagFormat word (7 = working days, 8 = elapsed days; Project stored 8 for the
+ * "2 edays"/"3 edays" links and 7 for the matching "2 days" links) has to reach
+ * CpmLink::elapsed_lag through core::plan, and the engine then applies the lag
+ * as wall-clock time.  Rows T1..T7 (two 3 d/5 d anchors and five 1 d
+ * successors) are compared exactly; the FS+3-edays row is the discriminator,
+ * because 3 WORKING days from Wed 17:00 would start Tue 10-27 08:00.
+ *
+ * T8 is the elapsed-DURATION control (2 edays = 28800 ticks) and is NOT
+ * reproduced: core/mpp exposes no duration-format word, so 28800 ticks is
+ * indistinguishable from a six-working-day duration and the engine schedules it
+ * as working time.  That is recorded as an open item in memory/schedcore.md,
+ * not hidden here: T8's stored start still matches, its stored finish is the
+ * documented divergence. */
+void test_elapsed_lag(TestContext& context) {
+    if (corpus_hidden()) {
+        std::cout << "SKIP: elapsed-lag fixture (MPP_NO_CORPUS is set)\n";
+        return;
+    }
+    const std::string path = PLAN_ELAPSED_PATH;
+    if (!file_exists(path)) {
+        std::cout << "SKIP: " << PLAN_ELAPSED_PATH << " is not present (corpus is git-ignored)\n";
+        return;
+    }
+
+    const mpp::Document document = mpp::load_file(path);
+    context.equal(document.tasks.size(), std::size_t{8}, "w9-elapsedlag.mpp has 8 live tasks");
+    context.equal(document.links.size(), std::size_t{5}, "w9-elapsedlag.mpp has 5 live links");
+    std::size_t elapsed_links = 0;
+    std::size_t working_links = 0;
+    for (const mpp::Link& link : document.links) {
+        if (!link.endpoints_live()) {
+            continue;
+        }
+        if (link.lag_units == 8) {
+            ++elapsed_links;
+        } else if (link.lag_units == 7) {
+            ++working_links;
+        }
+    }
+    context.equal(elapsed_links, std::size_t{3},
+                  "3 links store LagFormat 8 (elapsed days): the two 2 edays and the 3 edays");
+    context.equal(working_links, std::size_t{2},
+                  "2 links store LagFormat 7 (working days): the two '2 days' controls");
+
+    const plan::PlanInput input = from_mpp_with_calendar(document, path);
+    context.equal(input.links.size(), std::size_t{5}, "the bridge maps all 5 links");
+    std::size_t mapped_elapsed = 0;
+    for (const plan::PlanLink& link : input.links) {
+        if (link.elapsed_lag) {
+            ++mapped_elapsed;
+        }
+    }
+    context.equal(mapped_elapsed, std::size_t{3},
+                  "the bridge marks exactly the 3 LagFormat-8 links as elapsed");
+
+    const plan::PlanResult result = plan::recalculate(input);
+    context.check(result.ok(), "w9-elapsedlag.mpp recalculation succeeds (" + describe(result) + ")");
+    if (!result.ok()) {
+        return;
+    }
+    context.equal_date(result.project_finish, sched::from_ymd(2026, 10, 28, 17, 0),
+                       "w9-elapsedlag.mpp project finish is the working-day path (Wed 10-28)");
+
+    std::size_t date_matches = 0;
+    std::size_t date_fields = 0;
+    for (const mpp::Task& task : document.tasks) {
+        const plan::PlanTaskResult* actual =
+            find_result(result, static_cast<std::int32_t>(task.uid));
+        const std::string label = "elapsed uid " + std::to_string(task.uid);
+        context.check(actual != nullptr, label + " is in the recalculation");
+        if (actual == nullptr) {
+            continue;
+        }
+        ++date_fields;
+        if (actual->start == task.start.raw) {
+            ++date_matches;
+        }
+        ++date_fields;
+        if (actual->finish == task.finish.raw) {
+            ++date_matches;
+        }
+        if (task.uid == 8) {
+            // The elapsed-duration control: start matches, finish is the open
+            // item.  Assert both halves so a fix shows up as a failure here.
+            context.equal_date(actual->start, task.start.raw,
+                               label + " elapsed-duration start (Mon 10-19 08:00)");
+            context.check(actual->finish != task.finish.raw,
+                          "elapsed uid 8 finish is the documented divergence "
+                          "(no duration-format word in the reader)");
+            continue;
+        }
+        context.equal_date(actual->start, task.start.raw, label + " recalculated start");
+        context.equal_date(actual->finish, task.finish.raw, label + " recalculated finish");
+        context.equal(actual->total_slack, static_cast<sched::ticks>(task.total_slack_ticks),
+                      label + " recalculated total slack");
+    }
+    // 7 supported tasks x 2 dates match; T8's start matches and its finish is
+    // counted as the one diverging field.
+    context.equal(date_fields, std::size_t{16}, "16 date fields were compared");
+    context.equal(date_matches, std::size_t{15},
+                  "15 of the 16 date fields match (only the elapsed-duration finish diverges)");
+    std::cout << "elapsed: " << date_matches << " / " << date_fields
+              << " date fields match, " << elapsed_links << " of 5 links are elapsed\n"
+              << std::flush;
+}
+
 }  // namespace
 
 int main() {
@@ -691,6 +828,7 @@ int main() {
         test_base(context);
         test_project_a(context);
         test_schedin(context);
+        test_elapsed_lag(context);
     } catch (const std::exception& error) {
         std::cerr << "FAIL: unhandled exception: " << error.what() << '\n';
         return 2;

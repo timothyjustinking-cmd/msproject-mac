@@ -340,6 +340,22 @@ bool parse_value(const XmlElement& element, Kind kind, Value& value, std::string
     return false;
 }
 
+/* MSPDI writes a resource's MaxUnits and an assignment's Units as a FRACTION
+ * (1.0 == 100 %), while the shared model uses percent (the .mpp reader's
+ * units()/max_units() are 100.0 at 100 %).  The two fields are the only such
+ * pair; everything else is already in model units.  MEASURED: Project's own
+ * exports of PROJECT_A/PROJECT_B/assign1 write `<Units>1</Units>` and
+ * `<MaxUnits>1.00</MaxUnits>` for assignments/resources the reader reports at
+ * 100 % (assign1 is the real-resource fixture).
+ *
+ * Import therefore scales the fraction to percent, and the writer scales back;
+ * the RecordSet a caller sees always uses percent. */
+bool is_percent_fraction_field(core::model::RecordType record_type,
+                               std::string_view element) {
+    return (record_type == core::model::RecordType::Assignment && element == "Units") ||
+           (record_type == core::model::RecordType::Resource && element == "MaxUnits");
+}
+
 struct ResolvedSpec {
     std::string element;
     FieldId field = 0;
@@ -448,6 +464,10 @@ void import_resource_fields(const XmlElement& element, RecordSet& records, std::
             warnings.add(label + "/" + attribute.name + ": " + error);
             continue;
         }
+        if (value.kind == ValueKind::Number &&
+            is_percent_fraction_field(records.record_type(), attribute.name)) {
+            value.number *= 100.0; /* MSPDI fraction -> model percent */
+        }
         if (!value.is_null()) {
             records.set_field(row, spec->field, std::move(value));
         }
@@ -459,7 +479,11 @@ void import_assignment_fields(const XmlElement& element, RecordSet& records, std
                               const std::string& label, Warnings& warnings) {
     for (const auto& attribute : element.children) {
         if (attribute.name == "UID" || attribute.name == "TaskUID" ||
-            attribute.name == "ResourceUID") {
+            attribute.name == "ResourceUID" || attribute.name == "Stop" ||
+            attribute.name == "Resume") {
+            /* Stop/Resume have no Assignment descriptor field; they are carried
+             * in MspdiAssignmentRef for the cross-check instead of warned about
+             * as unsupported. */
             continue;
         }
         const ResolvedSpec* spec = find_spec(specs, attribute.name);
@@ -474,6 +498,10 @@ void import_assignment_fields(const XmlElement& element, RecordSet& records, std
         if (!parse_value(attribute, spec->kind, value, error)) {
             warnings.add(label + "/" + attribute.name + ": " + error);
             continue;
+        }
+        if (value.kind == ValueKind::Number &&
+            is_percent_fraction_field(records.record_type(), attribute.name)) {
+            value.number *= 100.0; /* MSPDI fraction -> model percent */
         }
         if (!value.is_null()) {
             records.set_field(row, spec->field, std::move(value));
@@ -548,10 +576,33 @@ void import_resources(const XmlElement& container, MspdiDocument& document, Warn
     for (const XmlElement* resource : children(container, "Resource")) {
         const std::uint32_t uid = read_uid(*resource, warnings, "Resource", fallback);
         const std::string label = "Resource[UID=" + std::to_string(uid) + "]";
+        if (document.resources.row_of_uid(uid) >= 0) {
+            warnings.add(label + ": duplicate UID; row kept");
+        }
         const std::size_t row = document.resources.add_row(uid);
         import_resource_fields(*resource, document.resources, row, specs, label, warnings);
         ++fallback;
     }
+}
+
+void read_assignment_date(const XmlElement& assignment, const char* name,
+                          core::view::Value& out, const std::string& label,
+                          Warnings& warnings) {
+    const XmlElement* element = child(assignment, name);
+    if (element == nullptr) {
+        return; /* absent is not an error */
+    }
+    const std::string text = text_of(*element);
+    if (text.empty()) {
+        return;
+    }
+    core::view::DateValue date;
+    if (!core::view::parse_iso_datetime(text, date)) {
+        warnings.add(label + "/" + name + ": expected an ISO date/time, got \"" + text +
+                     "\"");
+        return;
+    }
+    out = Value::of_date(date);
 }
 
 void import_assignments(const XmlElement& container, MspdiDocument& document,
@@ -562,6 +613,10 @@ void import_assignments(const XmlElement& container, MspdiDocument& document,
         const std::string label = "Assignment[UID=" + std::to_string(uid) + "]";
         MspdiAssignmentRef ref;
         ref.uid = uid;
+        read_assignment_date(*assignment, "Start", ref.start, label, warnings);
+        read_assignment_date(*assignment, "Finish", ref.finish, label, warnings);
+        read_assignment_date(*assignment, "Stop", ref.stop, label, warnings);
+        read_assignment_date(*assignment, "Resume", ref.resume, label, warnings);
         if (const XmlElement* task_uid = child(*assignment, "TaskUID")) {
             if (!parse_uint32(text_of(*task_uid), ref.task_uid)) {
                 warnings.add(label + "/TaskUID: expected a 32-bit integer");
@@ -575,6 +630,18 @@ void import_assignments(const XmlElement& container, MspdiDocument& document,
             }
         } else {
             warnings.add(label + ": no <ResourceUID>");
+        }
+        if (document.assignments.row_of_uid(uid) >= 0) {
+            warnings.add(label + ": duplicate UID; row kept");
+        }
+        if (ref.task_uid != 0 && document.tasks.row_of_uid(ref.task_uid) < 0) {
+            warnings.add(label + ": TaskUID " + std::to_string(ref.task_uid) +
+                         " names no imported task");
+        }
+        if (ref.resource_uid != 0 && ref.resource_uid != 0xFFFF0001u &&
+            document.resources.row_of_uid(ref.resource_uid) < 0) {
+            warnings.add(label + ": ResourceUID " + std::to_string(ref.resource_uid) +
+                         " names no imported resource");
         }
         const std::size_t row = document.assignments.add_row(uid);
         import_assignment_fields(*assignment, document.assignments, row, specs, label,

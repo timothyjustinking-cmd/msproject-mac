@@ -232,12 +232,15 @@ Rules in `cpm.cpp` and pinned in `tests/sched_cpm_tests.cpp`:
 
 ## Still inference (do not claim)
 
-- CPM: ALAP scheduling itself (its stored +190 slack is now verified; its
-  displayed dates are not); schedule-from-finish (W3-P5); negative free slack
-  clamp (W3-P3); free slack with several measured-different successors; per-task
-  calendars inside a link bound; elapsed durations/lag (refused by code;
-  FF-1ed separates nothing); non-default HoursPerDay for criticality; a
-  start-side link's late finish when a later constraint coexists with it.
+- CPM: ~~ALAP scheduling itself~~ **MEASURED in wave 9b (W41, see the last
+  section: the displayed dates ARE the late dates, confirmed by COM)**;
+  schedule-from-finish (W3-P5); negative free slack clamp (W3-P3); free slack
+  with several measured-different successors; per-task calendars inside a link
+  bound; ~~elapsed lag~~ **MEASURED in wave 9b (W41)** — elapsed DURATION is still
+  open and is a `core/mpp` format-word gap; non-default HoursPerDay for
+  criticality; a start-side link's late finish when a later constraint coexists
+  with it; an ALAP task that HAS successors (only the no-successor row is
+  measured); the FF floor for a 0-d successor (W41 item 4).
 - **A completed successor's link** — the rule is encoded and reproduces the one
   measured row (uid 10851, three stored words) and is pinned by `COMPLETED/*`,
   but it is measured on ONE row (FS) and extended to the other link types by
@@ -362,3 +365,178 @@ core::plan's four slack columns (recompute mode), which `tools/recalc` does not.
 - clang/GCC reject unused file-scope constants/functions and missing
   initializers; `[[maybe_unused]]` any doc-only constant, value-init every
   member. MSVC only is not the CI gate.
+
+## W41 (wave 9b, 2026-10-22 16:55) — ALAP closed, elapsed lag measured
+
+Stream: `core/sched` + `core/plan` + `core/cal`; own build dir `build\vs-w41`.
+Nothing was run through git, MS Project was not driven, no corpus name appears
+below (uids/dates/counts only). Files touched by this stream:
+`core/sched/cpm.h`, `core/sched/cpm.cpp`, `core/plan/plan.cpp`,
+`core/plan/CMakeLists.txt`, `core/cal/cal.h`, `core/cal/cal.cpp`,
+`tests/sched_cpm_tests.cpp`, `tests/plan_recalc_tests.cpp`, `tests/cal_tests.cpp`,
+`memory/schedcore.md`, `memory/plan.md`, `memory/cal.md`.
+
+### (1) ALAP display dates — CLOSED; the engine was already right
+
+**Reader-facing finding (the coordinator asked for this sentence verbatim):**
+the reader's +96/+100 calculated pair and +104/+108 effective pair are NOT
+interchangeable on an ALAP row.
+
+Measured from the stored row of `corpus/probe/schedin.mpp` uid 2 (dump:
+`python build\vs-w30\rows.py corpus\probe\schedin.mpp`, offsets from
+`spec/mpp-records.md`):
+
+| word | value | meaning on an ALAP row |
+|---|---|---|
+| +96/+100 (calculated) | **2026-11-03 08:00 / 17:00** | the ALAP placement |
+| +104/+108 (effective) | **2026-10-19 08:00 / 17:00** | the ASAP early dates |
+| +112/+116 (late) | 2026-11-03 08:00 / 17:00 | the same late dates |
+| +74 FreeSlack | 0 ticks | |
+| +186 StartSlack | 0 ticks | |
+| +190 TotalSlack | 52800 ticks = 5280 min | LF - EF on the early dates |
+
+`docs/analysis/oracle/schedin-probe.json` ID 2 reports COM Start
+2026-11-03 08:00 and Finish 2026-11-03 17:00 — i.e. Project's own displayed
+dates for the ALAP task ARE the late placement, which is the CALCULATED pair, and
+the effective pair still holds the early dates.  So:
+
+* the engine's ALAP display rule (`display_late` -> late dates) was **already
+  correct**; the old "18/20 dates, ALAP is the known divergence" pin was
+  comparing it with the wrong stored word — the same class of bug as W30's
+  +74-as-TotalSlack misread, not an engine defect;
+* **new engine rule (measured, one row)**: an ALAP task is placed at its late
+  start, so `start_slack` and `free_slack` are **0** (row +186 and +74), while
+  `total_slack` stays LF - EF (row +190 = 52800). `cpm.cpp` encodes it; the `[I]`
+  scope is that it is measured on that single ALAP row (the only one in the
+  corpus);
+* `tests/sched_cpm_tests.cpp` now has a measured ALAP block (schedin's shape:
+  1 d ASAP + 1 d ALAP + 2 d SNET 11-02 driving the project finish) pinning
+  early = 10-19, late = 11-03, display = late, slack words 0/0/5280 and the ASAP
+  control row's 5280/5280/5280;
+* `tests/plan_recalc_tests.cpp` compares the ALAP row against the calculated
+  pair and pins the two pairs as different: schedin is now **20/20 dates and
+  10/10 slack**, no divergence.
+
+### (2) Elapsed lag — measured and implemented (fixture A)
+
+`corpus/probe/w9-elapsedlag.mpp` + `docs/analysis/oracle/w9-elapsedlag.json`
+(built by the coordinator, recipe `python scripts/oracle_w9.py elapsedlag`).
+Link rows decoded with `python build\vs-w41\links.py <file>` (TBkndCons
+FixedData is 20 bytes/row: +12 u16 type, +14 i32 lag ticks, **+18 u16
+LagFormat**):
+
+| pred -> succ | lag ticks | LagFormat | spelling |
+|---|---|---|---|
+| 1 -> 2 | 28800 (=48 h) | **8** | "2 edays" |
+| 1 -> 3 | 43200 (=72 h) | **8** | "3 edays" |
+| 1 -> 4 | 9600 (=16 h) | **7** | "2 days" |
+| 5 -> 6 | 28800 | **8** | "2 edays" |
+| 5 -> 7 | 9600 | **7** | "2 days" |
+
+So **LagFormat 7 = working days, 8 = elapsed days**, Project did NOT silently
+convert an elapsed lag to working days, and an elapsed lag's stored tick value is
+already wall-clock time (2 edays = 28800, 3 edays = 43200).  Two single-variable
+pairs prove it (same predecessor, same "2"-day spelling, only the unit differs).
+
+Two measured scheduling rules, both now in `cpm.cpp`:
+
+1. **An elapsed lag is plain packed-date arithmetic** — the calendar is not
+   walked (`add_elapsed`), forward and backward.
+2. **An elapsed lag anchors on the predecessor's RAW finish instant**, not on its
+   aligned next start.  Discriminators (do not lose these):
+   * FS+3 edays from Wed 10-21 17:00 = Sat 10-24 17:00 -> Start **Mon 10-26
+     08:00** (Project).  Three WORKING days would start **Tue 10-27 08:00**, so
+     the dates do separate the two readings — on this row, not on the 2-eday
+     rows, where 48 h from a 17:00 finish and 2 working days coincide.
+   * FS+2 edays from **Fri** 10-23 17:00 = Sun 17:00 -> Start Mon 10-26 08:00
+     (Project).  Aligning first (Mon 08:00 + 48 h = Wed 10-28 08:00) is exactly
+     the WORKING-day answer of the sibling row, so this row is what fixed the
+     anchor rule after the first engine cut got it wrong.
+
+Code: `CpmLink::elapsed_lag` is honoured; `CpmError::elapsed_lag_unsupported` is
+**gone** (two tests that pinned the refusal were corrected, with a comment saying
+the old assertion encoded an incomplete rule).  `core/plan` now maps the field:
+`lag_is_elapsed(lag_units)` = true for 8 (measured) and for every even value
+4..12 (the enum's +1 = elapsed rule, spec §0.4 [B]) — PROJECT_A/PROJECT_B store 7, so M2
+is untouched.
+
+### (3) Elapsed DURATION — measured, NOT implemented; it is a `core/mpp` gap
+
+T8 in the same fixture is "2 edays" of DURATION: the row stores **28800 ticks**
+(= 48 h) and Project schedules it Mon 2026-10-19 08:00 -> **Wed 2026-10-21
+08:00**, with its slack words computed in elapsed time (+190 = 106200 ticks =
+10620 min).  The engine cannot reproduce it: **stored 28800 ticks is
+indistinguishable from a six-day working duration because `core/mpp` exposes no
+duration-format word**.  Project's answer is measured and in
+`docs/analysis/oracle/w9-elapsedlag.json`; no new fixture is needed, only the
+reader field (PjFormatUnit for the task duration row word) — wave 10 with the
+reader.  `tests/plan_recalc_tests.cpp` pins the divergence explicitly (T8 start
+matches, finish is asserted to differ today, so a fix shows up as that assertion
+failing).
+
+### (4) FF floor for a 0-duration successor — still inference, still flagged
+
+Unchanged and deliberately not touched (no new oracle row; the brief says do not
+silently change FF behaviour).  The code path is `has_ff_link`:
+`finish_bound = max(finish_bound, add_work(floor, duration))` with
+`floor = next_start(project_start)`; for `duration == 0` that floors a milestone
+to the project's first working instant.  The reasoning from the two measured
+rules (FF placement floored at the project start for a 1 d successor; a 0-d
+successor keeps a PLACED instant and never snaps) is consistent with that, but
+no fixture separates "floor to the first working instant" from "floor to the raw
+project-start instant" for a milestone.  A fixture would be: 5 d task + 0 d
+successor with FF-6d, plus the same with FF+0.
+
+### Counts (wave 9b, build\vs-w41, all passing)
+
+| binary | wave-8 | now |
+|---|---|---|
+| `core_sched_date_tests` | 43 | 43 |
+| `core_sched_duration_tests` | 125 | 125 |
+| `core_sched_calendar_tests` | 117 | 117 |
+| `core_sched_cpm_tests` | 1282 | **1308** |
+| `core_sched_units_tests` | 201 | 201 |
+| `core_sched_rollup_tests` | 155 | 155 |
+| `cal_tests` | 165 | **217** |
+| `plan_attribution_tests` | 54 | 54 |
+| `plan_recalc_tests` | 185 | **231** |
+
+`ctest -R "sched|plan|flip"` = 8/8 passed.  M2 re-run on the final tree:
+**start 83/83, finish 83/83, slack 83/83, critical 83/83 = 332/332**, no DIFF
+lines, attribution matrix all zero.  `tests/data/project_a_recalc_golden.tsv` was
+restored to its pinned content after every `plan_recalc_tests` run (sha256
+`DB81218ECCC9219B2DA9864D5F3A0387FBB16BC5D8F027089E826B7BEFC46A0A`, 83 uids).
+
+### Traps added by this stream
+
+* **+104/+108 is not "the displayed date" on an ALAP row.** The calculated
+  +96/+100 and the late +112/+116 hold the ALAP placement; the effective pair
+  holds the early dates.  Any comparison of an ALAP task's dates must pick the
+  pair deliberately (plan_recalc_tests does, per row).
+* **An ALAP task's stored StartSlack and FreeSlack are 0** while its TotalSlack
+  is LF - EF.  Do not derive StartSlack from LS - ES for an ALAP row.
+* **LagFormat lives at link row +18**: 7 working, 8 elapsed.  An elapsed lag is
+  plain wall-clock arithmetic AND anchors on the raw predecessor finish.
+* `CpmError` no longer has `elapsed_lag_unsupported`; the numeric values after it
+  shifted, so nothing may persist those integers.
+* The elapsed-duration control (28800 ticks) is NOT six working days; nothing in
+  `core/sched` can tell the difference until the reader exposes the format word.
+
+## Next three actions (wave 10, from the W41 state)
+
+1. **Elapsed duration** (the only measured row the engine still misses): get a
+   task duration-format word (PjFormatUnit) exposed from `core/mpp`, set a
+   `CpmTask::elapsed_duration` flag in the bridge, and schedule it as
+   `add_elapsed` forward / `add_elapsed` backward, with slack measured in elapsed
+   time.  The expected values are already measured: T8 of
+   `corpus/probe/w9-elapsedlag.mpp` = Mon 2026-10-19 08:00 -> Wed 2026-10-21
+   08:00 with +190 = 106200 ticks.  `tests/plan_recalc_tests.cpp` already asserts
+   that this row's finish diverges, so the fix flips one assertion.
+2. **ALAP with successors / ALAP start-slack wider check**: the W41 rule is
+   measured on one no-successor row.  A fixture with an ALAP task that HAS
+   successors, and one where the ALAP task is also started, would settle whether
+   StartSlack/FreeSlack stay 0 and where the late dates come from.
+3. **FF floor for a 0-duration successor**: one fixture (5 d task + a 0 d
+   successor with FF-6d, and the same with FF+0) separates "floor to the first
+   working instant" from "floor to the raw project start".  Until then the
+   behaviour in `cpm.cpp` (`has_ff_link` block) stays flagged as inference.

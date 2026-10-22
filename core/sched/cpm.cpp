@@ -74,6 +74,44 @@ date32 add_finish_lag(const Calendar& calendar, date32 t, ticks lag) {
     return calendar.align_back(calendar.sub_work(t, -lag));
 }
 
+// MEASURED RULE (wave 9b; corpus/probe/w9-elapsedlag.mpp and
+// docs/analysis/oracle/w9-elapsedlag.json): an ELAPSED lag is plain wall-clock
+// arithmetic -- the calendar is not walked at all.  The stored lag value is
+// already in ticks of elapsed time ("2 edays" = 28800 ticks = 48 h,
+// "3 edays" = 43200 = 72 h), so only the addition differs.  Project's own save
+// stores the link's LagFormat word (row +18) as 8 for both "2 edays"/"3 edays"
+// links and 7 for the matching "2 days" links, in two single-variable pairs
+// (same predecessor, same 2-day spelling).
+//
+// The measured placements: T1 finishes Wed 2026-10-21 17:00; FS+2 edays ->
+// Fri 10-23 17:00 -> successor Start Mon 10-26 08:00; FS+3 edays ->
+// Sat 10-24 17:00 -> Start Mon 10-26 08:00.  A 3 WORKING-day lag from the same
+// finish would start Tue 10-27 08:00, so the scheduled dates do separate the
+// two readings (and the stored LagFormat word settles it independently).
+date32 add_elapsed(date32 t, ticks amount) {
+    if (!is_set(t)) {
+        return kDateNa;
+    }
+    return pack(day_of(t) + static_cast<std::int32_t>(amount / kTenthsPerDay),
+                time_of(t) + static_cast<std::int32_t>(amount % kTenthsPerDay));
+}
+
+// One link's forward lag, choosing the working-time or the elapsed rule from the
+// link itself.
+date32 add_link_lag(const Calendar& calendar, date32 t, const CpmLink& link) {
+    return link.elapsed_lag ? add_elapsed(t, link.lag) : add_lag(calendar, t, link.lag);
+}
+
+date32 add_finish_link_lag(const Calendar& calendar, date32 t, const CpmLink& link) {
+    return link.elapsed_lag ? add_elapsed(t, link.lag) : add_finish_lag(calendar, t, link.lag);
+}
+
+// The backward inverse: the same rule with the sign flipped, so an elapsed lag
+// subtracts wall-clock time too.
+date32 sub_link_lag(const Calendar& calendar, date32 t, const CpmLink& link) {
+    return link.elapsed_lag ? add_elapsed(t, -link.lag) : sub_lag(calendar, t, link.lag);
+}
+
 // MEASURED RULE (docs/analysis/oracle/w3-o3.json, W3-O3): a displayed Start of a
 // task that CONSUMES working time is always a working instant.  When an FS/SS
 // lower bound lands on an interval end, MSP shows the next working instant:
@@ -169,8 +207,6 @@ const char* to_string(CpmError error) noexcept {
             return "negative duration";
         case CpmError::constraint_date_missing:
             return "constraint date missing";
-        case CpmError::elapsed_lag_unsupported:
-            return "elapsed lag unsupported";
         case CpmError::overflow:
             return "calendar overflow";
         case CpmError::cycle:
@@ -254,12 +290,6 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
     }
 
     for (const CpmLink& link : links) {
-        if (link.elapsed_lag) {
-            return make_error(CpmError::elapsed_lag_unsupported,
-                              "schedule_tasks: elapsed lag on " + std::to_string(link.predecessor) +
-                                  "->" + std::to_string(link.successor) +
-                                  " needs W3-E1/W3-E2 (elapsed constants are inference)");
-        }
         if (link.predecessor == link.successor) {
             return make_error(CpmError::self_link,
                               "schedule_tasks: task " + std::to_string(link.predecessor) +
@@ -378,7 +408,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                 const Calendar& pred_cal = *pred.calendar;
                 date32 candidate = kDateNa;
                 switch (link.type) {
-                    case LinkType::finish_to_start:
+                    case LinkType::finish_to_start: {
                         // §4.2: the anchor is the next working instant after the
                         // predecessor's finish, which is why FS+0 starts the
                         // successor the next morning (measured: w3-o4 baseline,
@@ -391,14 +421,22 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // start == finish 17:00 (IDs 2 and 7), and FS+50d keeps the
                         // 17:00 instant (ID 3).  Using next_start here would move
                         // the milestone to the next morning.
+                        // MEASURED (wave 9b, w9-elapsedlag.mpp): an ELAPSED lag
+                        // anchors on the predecessor's finish instant, not on its
+                        // aligned next start -- 2 edays from Fri 17:00 is Sun
+                        // 17:00 -> Start Mon 10-26 08:00, while aligning first
+                        // (Mon 08:00 + 48 h = Wed 08:00) gives Project's
+                        // WORKING-day answer for the same spellings.  The
+                        // working-day lag keeps the next_start anchor (measured
+                        // w3-o3/w3-o4).
+                        const date32 fs_anchor =
+                            link.elapsed_lag ? pred.ef : pred_cal.next_start(pred.ef);
                         candidate =
                             consumes_time
-                                ? align_start_bound(
-                                      cal,
-                                      add_lag(cal, pred_cal.next_start(pred.ef), link.lag),
-                                      true)
-                                : add_lag(cal, pred.ef, link.lag);
+                                ? align_start_bound(cal, add_link_lag(cal, fs_anchor, link), true)
+                                : add_link_lag(cal, pred.ef, link);
                         break;
+                    }
                     case LinkType::start_to_start:
                         // MEASURED (w3-o3): SS+0 starts at the predecessor's
                         // start; SS+1d lands on Mon 17:00 and starts Tue 08:00
@@ -406,7 +444,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // bound instant (milestone-probe ID 5: SS+0 -> Mon 08:00;
                         // that bound is already a working instant, so the shape of
                         // the rule, not a second row, is what is measured here).
-                        candidate = align_start_bound(cal, add_lag(cal, pred.es, link.lag),
+                        candidate = align_start_bound(cal, add_link_lag(cal, pred.es, link),
                                                       consumes_time);
                         break;
                     case LinkType::finish_to_finish:
@@ -420,7 +458,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // finishes Thu 22 17:00, FF-3d Tue 20 17:00, FF-6d Thu
                         // 10/15 17:00 (see add_finish_lag above).
                         has_ff_link = true;
-                        candidate = add_finish_lag(cal, pred.ef, link.lag);
+                        candidate = add_finish_link_lag(cal, pred.ef, link);
                         break;
                     case LinkType::start_to_finish:
                         // MEASURED (w3-o3 SF): the anchor is the predecessor's
@@ -430,7 +468,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // so this side does NOT go through add_finish_lag.  SF+1d
                         // is not anomalous: AddWork(Mon 08:00, 1 d) = Mon 17:00,
                         // so the placed finish is Mon 08:00-17:00.
-                        candidate = add_lag(cal, pred.es, link.lag);
+                        candidate = add_link_lag(cal, pred.es, link);
                         break;
                 }
                 if (!is_set(candidate)) {
@@ -649,10 +687,10 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // align_back-then-sub_lag order) gave Tue 20 08:00 for
                         // FS+1d where Project reports Mon 19 17:00.
                         has_finish_link = true;
-                        take_min_finish(cal.align_back(sub_lag(cal, succ.ls, link.lag)));
+                        take_min_finish(cal.align_back(sub_link_lag(cal, succ.ls, link)));
                         break;
                     case LinkType::start_to_start:
-                        take_min_start(sub_lag(cal, succ.ls, link.lag));
+                        take_min_start(sub_link_lag(cal, succ.ls, link));
                         break;
                     case LinkType::finish_to_finish:
                         // MEASURED (w3-o3 FF+1d): the same finish-side rule --
@@ -671,10 +709,10 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // earlier instant and align_back only moves it earlier).
                         has_finish_link = true;
                         take_min_finish(std::min(
-                            succ.lf, cal.align_back(sub_lag(cal, succ.lf, link.lag))));
+                            succ.lf, cal.align_back(sub_link_lag(cal, succ.lf, link))));
                         break;
                     case LinkType::start_to_finish:
-                        take_min_start(sub_lag(cal, succ.lf, link.lag));
+                        take_min_start(sub_link_lag(cal, succ.lf, link));
                         break;
                 }
             }
@@ -840,6 +878,16 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
         node.total_slack = total;
         node.start_slack = std::min(start_raw, total);
         node.finish_slack = finish_raw;
+        // MEASURED (wave 9b; corpus/probe/schedin.mpp uid 2, the ALAP row, storage
+        // words only): an ALAP task is PLACED at its late start, so it has no
+        // start slack and no free slack left -- row +186 (StartSlack) and +74
+        // (FreeSlack) are both 0 there -- while TotalSlack stays LF - EF on the
+        // unconstrained early dates (row +190 = 52800 ticks = 5280 min, the value
+        // this engine reports).  That is why the three words differ on this one
+        // row and nowhere else in the corpus.
+        // [I] scope: one measured row; the task has no successors and no links,
+        // and the rule is applied to every ALAP task.
+        const bool alap = node.constraint == ConstraintType::as_late_as_possible;
         if (node.outgoing.empty()) {
             // MEASURED (w3-o1): a task with no successors reports free slack equal
             // to its total slack, clamped at zero (w3-o4 pinned rows report 0).
@@ -891,6 +939,12 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             // no-successor rule applies (free == total).
             node.free_slack =
                 any_counted ? std::max<ticks>(std::min(free, total), 0) : std::max<ticks>(total, 0);
+        }
+        if (alap) {
+            // See the ALAP block above: placed at the late start, nothing left to
+            // slip.  A negative total still wins, hence the min with 0.
+            node.start_slack = std::min<ticks>(0, total);
+            node.free_slack = std::min<ticks>(0, node.free_slack);
         }
         node.critical = node.total_slack <= critical_limit;
     }

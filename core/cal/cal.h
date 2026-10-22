@@ -103,17 +103,22 @@ using WeekSpec = std::array<DaySpec, 7>;
 // intervals); true is a special working day with its own intervals.
 //
 // `recurrence_type` is PjExceptionType as stored at block +72.  0 and 1 are a
-// plain dated range (measured: every exception in every file on disk is 1).
-// Types 2..7 are genuinely recurring: they cannot be expressed as per-week
-// overrides without expanding the recurrence, so the builder reports them
-// through CalendarTable::recurring_exceptions and does not apply them.  No
-// fixture on disk contains one.
+// plain dated range (measured: every exception in every file on disk is 1 --
+// "daily" over the range IS the whole range).  Types 2..7 are genuinely
+// recurring; see expand_recurring_exception() for what can be expanded from this
+// record and what the missing parameters are.
 struct DatedException {
     std::int32_t start_day = 0;
     std::int32_t end_day = 0;
     bool working = false;
     std::vector<WorkInterval> intervals;
     std::int32_t recurrence_type = 0;
+    // +4, the word the record keeps for recurring exceptions.  mpxj calls it the
+    // occurrence count; NOT applied by this decoder and NOT used as the source of
+    // truth anywhere ([I]: no file on disk has a recurring exception, so its
+    // identity is unmeasured).  expand_recurring_exception() uses it only as a
+    // consistency CHECK on an expansion.
+    std::int32_t occurrences = 0;
 };
 
 // A dated work-week override ("Calendar > Work Weeks"): a seven-day pattern
@@ -195,6 +200,53 @@ WeekSpec stock_default_week();
 // Ticks are converted to the minutes core::sched::DayPattern stores.
 core::sched::DayPattern to_day_pattern(DaySpec const& day);
 
+// --- recurring exceptions ---------------------------------------------------
+
+// Cap on the number of concrete days one recurring exception may expand into.
+// Ten years of every-day occurrences; a recurrence that needs more is almost
+// certainly a mis-decoded range, and refusing is better than installing 60,000
+// week overrides.
+inline constexpr std::int32_t kMaxExpandedExceptionDays = 3660;
+
+// One recurring exception expanded into the concrete days it makes non-working
+// (or specially working).
+struct RecurrenceExpansion {
+    std::vector<std::int32_t> days;  // ascending, distinct
+    bool applied = false;            // `days` is usable
+    const char* why = "";            // stable short reason when !applied
+};
+
+// Expand one PjExceptionType 2..7 record into the days it covers.
+//
+// MEASURED: the 92-byte record carries the recurrence RANGE (start/end day at
+// +0/+2), the interval list (+14/+20/+32), the type (+72) and an occurrence
+// word (+4); every exception in every file on disk is type 1 (a plain range),
+// which the builder already applies.
+// [I]: the recurrence PARAMETERS are NOT decoded.  This expansion therefore
+// uses the shortest period ("every week" / "every month" / "every year") and
+// derives the weekday, the day-of-month and the positional rule from the
+// range's first day, which is by definition a matching instance:
+//   2 yearly month+day   -> (month, day) of the start day, once a year
+//   3 yearly positional  -> the same nth weekday of the start day's month
+//   4 monthly month+day  -> the start day's day-of-month, every month
+//   5 monthly positional -> the same nth weekday, every month
+//   6 weekly             -> the start day's weekday, every week
+//   7 day-count          -> REFUSED: "every N days" has no derivable period
+// The nth-weekday "position" is (day-1)/7+1, or "last" when no further
+// same-weekday day fits in that month.
+// The stored occurrence word (+4) is a check, never a source of truth: when it
+// is non-zero and disagrees with the expanded count, the expansion is refused.
+// The fixture that would turn this into a measurement is named in
+// memory/cal.md: one file per type, one exception each.
+RecurrenceExpansion expand_recurring_exception(
+    DatedException const& exception, std::int32_t max_days = kMaxExpandedExceptionDays);
+
+// Counters for one build_calendar() call; ask for one when the caller reports.
+struct RecurrenceReport {
+    std::size_t applied = 0;      // recurring exceptions expanded and installed
+    std::size_t not_applied = 0;  // recurring exceptions left out
+};
+
 CalendarDefinition const* find_calendar(CalendarTable const& table, std::string_view name);
 CalendarDefinition const* find_calendar_by_uid(CalendarTable const& table, std::int32_t uid);
 
@@ -205,16 +257,22 @@ CalendarDefinition const* find_calendar_by_uid(CalendarTable const& table, std::
 //     Calendar::set_work_week, because core::sched has no dated-exception API.
 //     Two exceptions in one week merge into that week; exceptions win over a
 //     dated work week; a child calendar's exceptions win over its base's.
-// Recurring exceptions (PjExceptionType 2..7) are not applied.
+//   - a recurring exception (PjExceptionType 2..7) is expanded through
+//     expand_recurring_exception() and then applied exactly like a plain range;
+//     one that cannot be expanded (type 7, or an occurrence-count disagreement)
+//     is counted in CalendarTable::recurring_exceptions and skipped, never
+//     guessed.  `report`, when given, counts both outcomes.
 core::sched::Calendar build_calendar(CalendarTable const& table,
-                                     CalendarDefinition const& calendar);
+                                     CalendarDefinition const& calendar,
+                                     RecurrenceReport* report = nullptr);
 
 // Name resolution: an empty `calendar_name` means "the project's default
 // calendar" (114/Props DEFAULT_CALENDAR_NAME).  Throws mpp::Error when the name
 // is not in the table; when the default name is missing and the file has
 // exactly one base calendar that calendar is used instead.
 core::sched::Calendar build_project_calendar(CalendarTable const& table,
-                                             std::string const& calendar_name = {});
+                                             std::string const& calendar_name = {},
+                                             RecurrenceReport* report = nullptr);
 
 // Convenience: decode + build in one call.  `calendar_name` empty = project
 // default.  Throws mpp::Error for an unreadable file or a missing calendar.

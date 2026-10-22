@@ -865,3 +865,50 @@ A second candidate that also sets Fixed2Meta entry `+88` to 0 and removes uid
 1's StartText/FinishText VarMeta entries (`w29-manual2.mpp`) still reopens with
 Start 2026-01-04 13:00 (Finish and Duration move). Manual scheduling therefore
 remains open; `pin_task_start` (SNET) is the documented, measured save path.
+
+§10.8 (wave 9) settles the manual half: the mode bit is `Fixed2Meta` entry byte
+`+8` bit `0x80`, and clearing it is what makes the SNET pin authoritative.
+
+### 10.8 The manual mode bit, and the save path that finally sticks (measured 2026-10-22)
+
+Three fixtures built from `corpus/probe/base.mpp` (three tasks, all `Manual=True`
+in the file) and opened read-only in Project; Project recalculates on open, and
+`Project.Task.Manual` is read back. Each fixture differs from `base.mpp` only in
+the bytes listed.
+
+| fixture | bytes changed vs `base.mpp` | `Manual` after open | con/date | Start | Finish | Duration |
+|---|---|---|---|---|---|---|
+| `base.mpp` | — | True | 0 / NA | 2026-01-04 13:00 | 2026-01-09 12:00 | 2400 |
+| `w37-snet-save.mpp` | row 1 `+64`=4, `+66`=SNET date (5 B) | **True** | **4 / 2026-10-21 08:00** | **2026-01-04 13:00** | 2026-01-09 12:00 | 2400 |
+| `w37-snet-auto.mpp` | the same 5 B **plus** `Fixed2Meta` entry 4 byte `+8` `0xff->0x7f` (1 B) | **False** | 4 / 2026-10-21 08:00 | **2026-10-21 08:00** | 2026-10-27 17:00 | 2400 |
+
+Facts (measured, `python scripts/oracle_task_fields.py <fixture>`, JSON under
+`docs/analysis/oracle/task-fields-*.json`):
+
+1. **`Fixed2Meta` entry byte `+8` bit `0x80` is the manual/auto mode switch.**
+   Clearing it alone makes Project report `Manual=False` and schedule the row
+   from its constraint. `core/mpp`'s `kF2MetaFlagManual` was an inference; it is
+   now measured on two fixtures that differ only in that bit.
+2. **SNET on a `Manual=True` row is stored but ignored.** Project keeps
+   type 4 and the exact date in the file's model and still places Start at the
+   manual date. This is why W29's manual fixtures never moved: the constraint
+   was never the missing piece.
+3. **SNET + the bit cleared is honoured.** Start lands on the pin, Duration is
+   untouched (2400), Finish is recomputed through the task calendar (5 working
+   days from Wed 2026-10-21 -> Tue 2026-10-27 17:00), and the project recalculates
+   around it. The other two rows, left manual, do not move.
+
+The supported date write is therefore: `save_date_edits` = **SNET pin at
+`+64/+66` + clear the row's `Fixed2Meta` mode bit**, in one all-or-nothing
+operation, followed by a re-read from disk (`core/mppwrite/save.h`).
+
+**Product consequence, state it plainly:** the row becomes auto-scheduled. A
+manual task's date cannot be changed while keeping manual scheduling with any
+write path we have measured. `save_date_edits` warns on every row it converts.
+
+**Limits (inference, unmeasured):** SNET is *no earlier than*, so for a row with
+an FS predecessor Project places it at `max(predecessor finish, pin)`; an edit
+earlier than the dependency allows will not be reproduced exactly. The
+last-writer-wins assumption also applies to any `214/` cache (see §10.4). What
+would prove or disprove the linked case: one fixture with an FS pair whose
+successor start is pinned before its predecessor's finish, opened read-only.

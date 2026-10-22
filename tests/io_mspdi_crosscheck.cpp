@@ -424,10 +424,18 @@ void test_project_a(view_test::TestContext& ctx) {
     ctx.equal(result.compared_assignment_units, std::size_t{67},
               "PROJECT_A assignment units compared");
     ctx.equal(result.compared_assignment_work, std::size_t{67}, "PROJECT_A assignment work compared");
+    ctx.equal(result.compared_assignment_dates, std::size_t{67},
+              "PROJECT_A assignment Start/Finish compared");
+    ctx.equal(result.compared_assignment_resume, std::size_t{21},
+              "PROJECT_A assignment Resume compared (21 non-empty <Resume>)");
     ctx.equal(result.assignment_differences(), std::size_t{0},
               "PROJECT_A assignments agree with the export");
     ctx.equal(result.reader_resources, std::size_t{22}, "PROJECT_A reader resource count");
     ctx.equal(result.compared_resources, std::size_t{22}, "PROJECT_A compared resource count");
+    ctx.equal(result.compared_resource_types, std::size_t{22},
+              "PROJECT_A resource Type compared");
+    ctx.equal(result.compared_resource_max_units, std::size_t{22},
+              "PROJECT_A resource MaxUnits compared");
     ctx.equal(result.resource_differences(), std::size_t{0},
               "PROJECT_A resources agree with the export");
 
@@ -499,12 +507,20 @@ void test_project_b(view_test::TestContext& ctx) {
               "PROJECT_B assignment units compared");
     ctx.equal(result.compared_assignment_work, std::size_t{63},
               "PROJECT_B assignment work compared");
+    ctx.equal(result.compared_assignment_dates, std::size_t{63},
+              "PROJECT_B assignment Start/Finish compared");
+    ctx.equal(result.compared_assignment_resume, std::size_t{0},
+              "PROJECT_B export carries no <Resume>");
     ctx.equal(result.assignment_differences(), std::size_t{0},
               "PROJECT_B: all 63 live assignments match the export");
 
     ctx.equal(result.reader_resources, std::size_t{22}, "PROJECT_B reader resource count");
     ctx.equal(result.compared_resources, std::size_t{22},
               "PROJECT_B: all 22 live resources match the export");
+    ctx.equal(result.compared_resource_types, std::size_t{22},
+              "PROJECT_B resource Type compared");
+    ctx.equal(result.compared_resource_max_units, std::size_t{22},
+              "PROJECT_B resource MaxUnits compared");
     ctx.equal(result.resource_differences(), std::size_t{0},
               "PROJECT_B: no resource difference");
     ctx.equal(result.uid_differences(), std::size_t{0}, "PROJECT_B: no task UID difference");
@@ -531,27 +547,45 @@ void test_project_b(view_test::TestContext& ctx) {
 }
 
 /* assign1.mpp is a synthetic fixture with three REAL assignments (unlike the
- * corpus, whose assignment rows all name no resource).  The coordinator did not
- * export it to MSPDI, so there is nothing to cross-check: say so, and pin the
- * reader counts that a later export would have to match. */
+ * corpus, whose assignment rows all name no resource).  W40: its MSPDI export
+ * assign1.xml is on disk now, so this is the real-resource and Units-convention
+ * cross-check. */
 void test_assign1(view_test::TestContext& ctx) {
-    if (!present(IO_CROSSCHECK_ASSIGN_MPP)) {
-        std::cout << "SKIP: assign1 fixture not present (" << IO_CROSSCHECK_ASSIGN_MPP
-                  << ")\n";
+    if (!present(IO_CROSSCHECK_ASSIGN_MPP) || !present(IO_CROSSCHECK_ASSIGN_XML)) {
+        std::cout << "SKIP: assign1 fixture/export not present (" << IO_CROSSCHECK_ASSIGN_MPP
+                  << ", " << IO_CROSSCHECK_ASSIGN_XML << ")\n";
         return;
     }
     const mpp::Document reader = mpp::load_file(IO_CROSSCHECK_ASSIGN_MPP);
+    const core::io::MspdiDocument xml =
+        core::io::import_mspdi_file(IO_CROSSCHECK_ASSIGN_XML);
+    const Result result = mspdi_cmp::compare(reader, xml);
+    std::cout << "assign1 (synthetic fixture with real resources):\n"
+              << mspdi_cmp::format_report(result);
+
     ctx.equal(reader.assignments.size(), std::size_t{3}, "assign1 reader assignment count");
     ctx.equal(reader.resources.size(), std::size_t{2}, "assign1 reader resource count");
-    bool any_real_resource = false;
-    for (const mpp::Assignment& assignment : reader.assignments) {
-        any_real_resource = any_real_resource || assignment.has_resource();
-    }
-    ctx.check(any_real_resource, "assign1 has at least one real resource assignment");
-    std::cout << "assign1 (synthetic fixture): reader " << reader.assignments.size()
-              << " assignments / " << reader.resources.size()
-              << " resources; NO MSPDI export on disk, so it is not comparable "
-                 "(mspdi_cmp needs the <file>.xml)\n";
+    ctx.equal(result.compared_assignments, std::size_t{3},
+              "assign1: all 3 real assignments compared");
+    ctx.equal(result.compared_assignment_units, std::size_t{3},
+              "assign1 assignment Units compared (export fraction 1 = reader 100 %)");
+    ctx.equal(result.compared_assignment_work, std::size_t{3},
+              "assign1 assignment Work compared");
+    ctx.equal(result.compared_assignment_dates, std::size_t{3},
+              "assign1 assignment Start/Finish compared");
+    ctx.equal(result.compared_assignment_resume, std::size_t{0},
+              "assign1 exports no <Resume> (no progress)");
+    ctx.equal(result.compared_resources, std::size_t{2},
+              "assign1: both real resources compared (UID 0 placeholder excluded)");
+    ctx.equal(result.compared_resource_types, std::size_t{2},
+              "assign1 resource Type compared");
+    ctx.equal(result.compared_resource_max_units, std::size_t{2},
+              "assign1 resource MaxUnits compared");
+    ctx.equal(result.assignment_differences(), std::size_t{0},
+              "assign1: real resource UIDs, Units and Work agree");
+    ctx.equal(result.resource_differences(), std::size_t{0},
+              "assign1: resources agree");
+    ctx.check(result.ok(), "assign1: reader and Project's export agree");
 }
 
 }  // namespace

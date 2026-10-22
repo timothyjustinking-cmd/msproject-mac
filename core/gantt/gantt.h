@@ -127,6 +127,35 @@ struct WorkingWeek {
 
 enum class TimescaleUnit : std::uint8_t { day, week, month };
 
+struct Timescale;  // defined below; the zoom helpers return/reference it
+
+// The three zoom levels the brief calls for.  This is a naming/defaults layer on
+// top of TimescaleUnit, not a second axis: timescale_for_zoom() returns an
+// ordinary Timescale whose origin the caller can still snap or override.
+enum class GanttZoom : std::uint8_t { day = 0, week, month };
+
+struct ZoomSpec {
+    GanttZoom zoom = GanttZoom::day;
+    TimescaleUnit unit = TimescaleUnit::day;
+    double pixels_per_unit = 20.0;  // decision: day 20 px/day, week 140 px/week, month 300 px/month
+    const char* name = "day";
+    // What the two header tiers say at this zoom.  Descriptive metadata for the
+    // shell and the tests; Timescale::header() produces the actual strings.
+    const char* minor_header = "day number";
+    const char* major_header = "month and year";
+};
+
+ZoomSpec zoom_spec(GanttZoom zoom) noexcept;
+const char* zoom_name(GanttZoom zoom) noexcept;
+
+// A default Timescale for the zoom: unit and pixels_per_unit from zoom_spec(),
+// origin as supplied.  The origin is snapped by build_gantt(), as usual.
+Timescale timescale_for_zoom(GanttZoom zoom,
+                             date32 origin = core::sched::from_ymd(1984, 1, 2)) noexcept;
+
+// The zoom that matches a Timescale's unit.  Unknown/invalid scales report day.
+GanttZoom zoom_for_timescale(const Timescale& scale) noexcept;
+
 // Tier major = the coarser band on top (month for day/week units, year for the
 // month unit); tier minor = the unit columns (day, week, month).
 enum class HeaderTier : std::uint8_t { major, minor };
@@ -253,6 +282,12 @@ struct RowLayout {
 
 enum class BarKind : std::uint8_t { normal, summary, milestone };
 
+// How the shell should draw the bar.  `rect` remains the authoritative box; the
+// extra points in Bar let a renderer draw the diamond / bracket exactly.
+// decision (unmeasured): the summary bracket is two small downward triangles at
+// the bar's lower outer corners.  The product's exact caps are not measured.
+enum class BarShape : std::uint8_t { rectangle = 0, diamond, summary_bracket };
+
 struct LabelPlacement {
     bool visible = false;
     bool inside = false;  // true: drawn within the bar; false: to its right
@@ -269,6 +304,13 @@ struct Bar {
     Rect fill;                      // completed portion (width 0 at 0 %)
     LabelPlacement label;
     std::string label_text;
+    // Appended (additive).  shape is redundant with kind but makes the drawing
+    // contract explicit.  diamond = 4 outline points (top, right, bottom, left)
+    // for a milestone; cap_left/cap_right = 3-point triangles for a summary.
+    BarShape shape = BarShape::rectangle;
+    std::array<Point, 4> diamond{};
+    std::array<Point, 3> cap_left{};
+    std::array<Point, 3> cap_right{};
 };
 
 // The per-task input.  `finish` is the task's finish *instant* (the real
@@ -282,6 +324,9 @@ struct TaskBarInput {
     double percent_complete = 0.0;
     BarKind kind = BarKind::normal;
     bool critical = false;
+    // Appended: the resource text a resource-labelled bar shows.  The Gantt does
+    // not know field ids, so the caller supplies it (usually ResourceNames).
+    std::string resource;
 };
 
 // ---------------------------------------------------------------------------
@@ -327,16 +372,36 @@ struct LinkRoute {
 // Layout style: all numbers are ours, not measured from Project
 // ---------------------------------------------------------------------------
 
+// Which text a bar shows.  The product's BarLabelDialog (UIFILE 4807) proves the
+// feature exists but its defaults are not in the resources, so the set below is
+// a decision (unmeasured); `name` is the compatible default.
+enum class BarLabelContent : std::uint8_t {
+    none = 0,
+    name,
+    resource,
+    dates,
+    percent,
+    name_and_percent,
+    name_and_resource,
+    name_and_dates,
+};
+
+const char* bar_label_content_name(BarLabelContent content) noexcept;
+bool bar_label_content_from_name(std::string_view name, BarLabelContent& out) noexcept;
+
 struct GanttStyle {
     double row_height = 22.0;
     double bar_height = 12.0;
-    // Summary bars are plain rectangles here.  The product draws bracket-like
-    // end caps (a triangular tail at each end); their exact shape and size are
-    // not measured, so they are NOT modelled -- the shell can derive them from
-    // Bar::rect.  Open item, deliberately left unguessed.
+    // Summary bars are a thin rectangle plus two small end-cap triangles
+    // (Bar::cap_left/cap_right).  The product's exact cap shape is unmeasured;
+    // this is a decision, not evidence.
     double summary_height = 8.0;
+    double summary_cap_width = 4.0;
+    double summary_cap_height = 4.0;
     // The diamond's bounding-box side.  decision (settled): the diamond is
     // centred in its own day column, not on the date line -- see gantt.cpp.
+    // At a scale whose day column is narrower than this (month zoom), the
+    // diamond shrinks to the column so it never spills into a neighbour.
     double milestone_size = 12.0;
     double label_gap = 4.0;        // bar edge -> label, and inside padding
     // Fallback text measurement when measure_text is unset: 7 px per UTF-8
@@ -345,13 +410,31 @@ struct GanttStyle {
     double link_gap = 8.0;        // horizontal stub / clearance for elbows
     double arrow_length = 6.0;
     double arrow_width = 4.0;
-    double hit_tolerance = 3.0;   // "a few pixels" for hit testing
+    double hit_tolerance = 3.0;   // fixed fallback; see hit_tolerance_days below
 
     // Optional: measured width of a label in pixels.  When empty, the fallback
     // above is used.  This is the only callback in the model and it is stdlib
     // (no UI dependency).
     std::function<double(std::string_view)> measure_text;
+
+    // Appended (additive).  Bar label content and zoom-aware hit testing.
+    BarLabelContent bar_label = BarLabelContent::name;
+    // Tolerance follows the day-column width: day/week 20 px * 0.15 = 3 px
+    // (the old fixed value), month 9.68 px * 0.15 -> clamped to the 2 px floor.
+    // decision (unmeasured); set hit_tolerance_days to 0 for the fixed value.
+    double hit_tolerance_days = 0.15;
+    double min_hit_tolerance = 2.0;
+    double max_hit_tolerance = 8.0;
 };
+
+// Effective hit tolerance for a timescale (see GanttStyle::hit_tolerance_days).
+double hit_test_tolerance(const Timescale& timescale, const GanttStyle& style) noexcept;
+
+// The text a bar shows for `content`.  `dates` is formatted from the task's
+// start/finish (ISO "YYYY-MM-DD", or "start - finish" when they differ);
+// `percent` is the clamped percent rounded to a whole number.  A missing name
+// yields an empty string, so the label is simply not placed.
+std::string bar_label_text(const TaskBarInput& task, const GanttStyle& style);
 
 // ---------------------------------------------------------------------------
 // Non-working shading sources

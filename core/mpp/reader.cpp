@@ -299,13 +299,14 @@ constexpr std::size_t kAssnRowTaskUid = 4;
 constexpr std::size_t kAssnRowResourceUid = 8;
 constexpr std::size_t kAssnRowUnits = 12; /* double, x100 */
 constexpr std::size_t kAssnRowWork = 20;  /* double, minutes x1000 */
-/* Assignment dates (W31): +52 Start, +56 Finish, +60 a within-span third date
- * (Project's Stop; inference).  Measured against PROJECT_B/PROJECT_A/link1/assign1:
- * +52 == the task's effective +104 on 72/73, 68/69, 4/4 and 3/3 rows; +56 == +108 on the
- * same rows; +60 == +52 on every 0 % assignment and == +56 on every 100 % one. */
+/* Assignment dates (W31, corrected W40): +52 Start, +56 Finish, +60 Resume.
+ * +52/+56 were measured against the task's effective pair; +60 is the Resume
+ * date, proved against Project's MSPDI export of PROJECT_A (21 non-empty <Resume>
+ * elements, 21/21 equal).  It is NOT Stop: on the two split rows Stop is the
+ * preceding working instant.  See reader.h's ASSIGNMENTS block. */
 constexpr std::size_t kAssnRowStart = 52;  /* u32: packed date */
 constexpr std::size_t kAssnRowFinish = 56; /* u32: packed date */
-constexpr std::size_t kAssnRowStop = 60;   /* u32: packed date, within the span */
+constexpr std::size_t kAssnRowResume = 60; /* u32: packed date */
 
 /* ---- Fixed-row field offsets, relative to the start of a 202-byte Task row. */
 constexpr std::size_t kRowId = 0;        /* u32: MS Project ID */
@@ -919,6 +920,26 @@ std::vector<std::uint32_t> uids_by_row(const std::vector<std::uint8_t>& fixed,
     return uids;
 }
 
+/* A duplicate UniqueID is not fatal (a damaged file can still carry the rows)
+ * but it is reported: every consumer keys records by uid, so two rows with the
+ * same uid are ambiguous.  `skip_first` lets the task table leave row 0 (the
+ * project row, whose uid is 0) out of the check. */
+void warn_duplicate_uids(const std::vector<std::uint32_t>& uids, std::string_view label,
+                         bool skip_first, std::vector<std::string>& warnings) {
+    std::unordered_map<std::uint32_t, std::uint32_t> seen;
+    seen.reserve(uids.size());
+    for (std::size_t row = skip_first ? 1u : 0u; row < uids.size(); ++row) {
+        std::uint32_t& count = seen[uids[row]];
+        ++count;
+        if (count == 2) {
+            warnings.emplace_back(std::string(label) + " UniqueID " +
+                                  std::to_string(uids[row]) +
+                                  " appears on more than one row; records keyed by uid "
+                                  "are ambiguous");
+        }
+    }
+}
+
 /* ---- Outline hierarchy (Fixed2Data).  See "OUTLINE" in reader.h for the byte
  * evidence.  Fixed2Meta entry i describes the same row as FixedMeta entry i, so
  * the pairing goes through the two metadata streams' entry *index*, not the row
@@ -926,21 +947,25 @@ std::vector<std::uint32_t> uids_by_row(const std::vector<std::uint8_t>& fixed,
  * count is stale, which is exactly the case a row-indexed read would get wrong.
  * Everything below degrades to a flat outline plus a warning, never to a guess.
  *
- * The same pass reads Fixed2Meta's per-entry flags byte, whose bit 0x80 is the
- * reader's only handle on Project's "manually scheduled" task mode -- needed
- * because a manually scheduled task is never reported as critical (base.mpp's
- * Task A: TotalSlack 0, Critical false, Manual true in
- * docs/analysis/oracle/writer-base.json).  Evidence that the bit is that flag:
- *   - base.mpp and resaved-base.mpp: set on rows 1..3, the three tasks
- *     writer-base.json reports as Manual=true, and clear on row 0;
- *   - w3-o1.mpp and outline1.mpp: clear on every row, and those are exactly the
- *     fixtures whose oracle rows are Manual=false;
- *   - PROJECT_B: set on 3 of its 86 rows (42, 55, 85) and clear on the rest, so it
- *     is a per-row flag and not a file-level save mode;
- *   - fixed-row Manual is nowhere: no VarMeta entry carries key 0x0b400500 in
- *     any corpus file, and no byte of the 202-byte row splits manual from auto.
- * It is still labelled an inference: a fixture that flips Task.Manual only, on
- * a file that already has a mix, would prove it. */
+ * The same pass reads Fixed2Meta's per-entry flags byte, whose bit 0x80 is
+ * Project's "manually scheduled" task mode -- needed because a manually
+ * scheduled task is never reported as critical (base.mpp's Task A: TotalSlack 0,
+ * Critical false, Manual true in docs/analysis/oracle/writer-base.json).
+ * MEASURED (coordinator oracle, 2026-10-22, wave 9): corpus/probe/
+ * w37-snet-auto.mpp is base.mpp with six bytes changed -- FixedData row 1
+ * +64/+66 set to SNET 2026-10-21 08:00 AND Fixed2Meta stream offset 408
+ * (entry 4, byte +8: 0xff -> 0x7f, bit 0x80 cleared).  Project opens it with
+ * uid 1 Manual=False, Start 2026-10-21 08:00, Finish 2026-10-27 17:00,
+ * Duration 2400, ConstraintType=4, while uids 2/3 stay Manual=True.  The
+ * otherwise identical w37-snet-save.mpp (bit left set) opens with uid 1
+ * Manual=True and Start unchanged at 2026-01-04 13:00.  Same constraint,
+ * different bit, different scheduling: the bit is the mode switch.
+ * Supporting rows: base.mpp/resaved-base.mpp set it on rows 1..3 (the three
+ * writer-base.json Manual=true tasks) and clear row 0; w3-o1.mpp and
+ * outline1.mpp clear it on every row (Manual=false); PROJECT_B sets it on 3 of its
+ * 86 rows (42, 55, 85), so it is per-row, not a file-level save mode; no
+ * VarMeta key 0x0b400500 exists in any corpus file and no byte of the 202-byte
+ * row splits manual from auto. */
 struct Outline {
     std::vector<std::uint32_t> level;        /* per FixedData row; 0 = project row */
     std::vector<std::string> number;         /* per row; "" for the project row */
@@ -1176,6 +1201,7 @@ Document parse_document(const CompoundFile& cfb) {
 
     const std::vector<std::uint32_t> uid_by_row =
         uids_by_row(fixed, kFixedHeaderSize, kFixedRowSize, rows, kRowUid);
+    warn_duplicate_uids(uid_by_row, "Task", true, document.warnings);
 
     const VarTable table = parse_var_meta(var_meta, var2, "Task", document.warnings);
     std::vector<std::uint32_t> task_meta_offsets;
@@ -1347,6 +1373,7 @@ Document parse_document(const CompoundFile& cfb) {
             const std::vector<std::uint32_t> rsc_uid_by_row =
                 uids_by_row(rsc_fixed, kRscHeaderSize, kRscRowSize, rsc_rows,
                             kRscRowUid);
+            warn_duplicate_uids(rsc_uid_by_row, "Resource", false, document.warnings);
             const std::vector<std::uint8_t> rsc_var_meta =
                 read_optional_stream(cfb, "TBkndRsc", "VarMeta", document.warnings);
             const std::vector<std::uint8_t> rsc_var2 =
@@ -1410,6 +1437,7 @@ Document parse_document(const CompoundFile& cfb) {
             cons_rows > 0) {
             const std::vector<std::uint32_t> cons_uid_by_row =
                 uids_by_row(cons_fixed, 0, kConsRowSize, cons_rows, kConsRowUid);
+            warn_duplicate_uids(cons_uid_by_row, "Link", false, document.warnings);
             const std::vector<bool> cons_live =
                 fixed_meta_coverage(cfb, "TBkndCons", "Link", 0, kConsRowSize,
                                     kConsFixedMetaEntrySize, 0, cons_rows,
@@ -1469,18 +1497,24 @@ Document parse_document(const CompoundFile& cfb) {
                     "treated as deleted link slots, not links");
             }
             for (const Link& link : document.links) {
-                if (all_task_uids.count(link.predecessor_uid) == 0) {
+                if (live_task_uids.count(link.predecessor_uid) == 0) {
                     document.warnings.emplace_back(
                         "Link uid " + std::to_string(link.uid) +
                         " names predecessor task " +
                         std::to_string(link.predecessor_uid) +
-                        ", which no task row holds");
+                        ", which no live task holds" +
+                        (all_task_uids.count(link.predecessor_uid) != 0
+                             ? " (only a deleted row slot)"
+                             : ""));
                 }
-                if (all_task_uids.count(link.successor_uid) == 0) {
+                if (live_task_uids.count(link.successor_uid) == 0) {
                     document.warnings.emplace_back(
                         "Link uid " + std::to_string(link.uid) +
                         " names successor task " + std::to_string(link.successor_uid) +
-                        ", which no task row holds");
+                        ", which no live task holds" +
+                        (all_task_uids.count(link.successor_uid) != 0
+                             ? " (only a deleted row slot)"
+                             : ""));
                 }
             }
         }
@@ -1499,6 +1533,7 @@ Document parse_document(const CompoundFile& cfb) {
             assn_rows > 0) {
             const std::vector<std::uint32_t> assn_uid_by_row =
                 uids_by_row(assn_fixed, 0, kAssnRowSize, assn_rows, kAssnRowUid);
+            warn_duplicate_uids(assn_uid_by_row, "Assignment", false, document.warnings);
             const std::vector<bool> assn_live =
                 fixed_meta_coverage(cfb, "TBkndAssn", "Assignment", 0, kAssnRowSize,
                                     kAssnFixedMetaEntrySize, 0, assn_rows,
@@ -1523,7 +1558,7 @@ Document parse_document(const CompoundFile& cfb) {
                 assignment.work_x1000 = f64_at(assn_fixed, base + kAssnRowWork);
                 assignment.start.raw = u32_at(assn_fixed, base + kAssnRowStart);
                 assignment.finish.raw = u32_at(assn_fixed, base + kAssnRowFinish);
-                assignment.stop.raw = u32_at(assn_fixed, base + kAssnRowStop);
+                assignment.resume.raw = u32_at(assn_fixed, base + kAssnRowResume);
                 /* assign1.mpp keeps a FixedMeta entry for its two placeholder
                  * rows (uid 1 and 2 but task uid 0, no resource, no work); the
                  * task uid is what tells them apart from real assignments. */
@@ -1534,6 +1569,15 @@ Document parse_document(const CompoundFile& cfb) {
                     skipped.reason = "placeholder row with task UniqueID 0";
                     document.skipped_assignments.push_back(std::move(skipped));
                     continue;
+                }
+                if (live_task_uids.count(assignment.task_uid) == 0) {
+                    document.warnings.emplace_back(
+                        "Assignment uid " + std::to_string(assignment.uid) +
+                        " names task " + std::to_string(assignment.task_uid) +
+                        ", which no live task holds" +
+                        (all_task_uids.count(assignment.task_uid) != 0
+                             ? " (only a deleted row slot)"
+                             : ""));
                 }
                 document.assignments.push_back(assignment);
             }

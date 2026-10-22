@@ -1,4 +1,4 @@
-# app/ -- the first macOS shell: a native AppKit window over the portable core.
+# app/ -- the macOS shell (v2): a native AppKit window over the portable core.
 #
 # STANDALONE PROJECT.  This file is NOT added to the repository's top-level
 # CMakeLists.txt (that file is owned by the build stream) and it does not edit
@@ -8,17 +8,21 @@
 #
 #   macOS:   cmake -S app -B build-app -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
 #            cmake --build build-app
-#            -> msproject_app.app (main.mm: NSApplication + PlanView)
+#            ctest --test-dir build-app -C Release
+#            -> msproject_app.app (main.mm: NSApplication + PlanView) and the three
+#               headless tests
 #
-#   Windows: cmake -S app -B app\build\vs -G "Visual Studio 17 2022" -A x64
-#            cmake --build app\build\vs --config Release
-#            -> layout_model_tests.exe only; ObjC++/AppKit does not exist here,
-#               so the AppKit target is skipped and the headless test is the gate.
+#   Windows: cmake -S app -B build\vs-w38 -G "Visual Studio 17 2022" -A x64
+#            cmake --build build\vs-w38 --config Release
+#            ctest --test-dir build\vs-w38 -C Release
+#            -> layout_model_tests.exe, selection_model_tests.exe,
+#               document_tests.exe; ObjC++/AppKit does not exist here, so the AppKit
+#               target is skipped and the headless tests are the gate.
 #
-#   Linux:   same as Windows (headless test only).
+#   Linux:   same as Windows (headless tests only).
 #
 # Options:
-#   APP_BUILD_TESTS         build + register layout_model_tests (default ON)
+#   APP_BUILD_TESTS         build + register the three headless tests (default ON)
 #   CORE_WARNINGS_AS_ERRORS same meaning as the top-level build (default OFF;
 #                           the macOS workflow passes ON).  It also reaches the
 #                           core subdirectories, which read this variable.
@@ -27,9 +31,9 @@
 
 cmake_minimum_required(VERSION 3.20)
 
-project(msproject_app VERSION 0.1.0 LANGUAGES CXX)
+project(msproject_app VERSION 0.2.0 LANGUAGES CXX)
 
-option(APP_BUILD_TESTS "Build the headless layout model tests" ON)
+option(APP_BUILD_TESTS "Build the headless app tests" ON)
 option(CORE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -98,7 +102,7 @@ set(IO_BUILD_TESTS OFF CACHE BOOL "core/io tests (off: app configure)" FORCE)
 set(MPPWRITE_BUILD_TESTS OFF CACHE BOOL "core/mppwrite tests (off: app configure)" FORCE)
 
 # Order matters: view needs model, sheet needs view, gantt needs sched.
-foreach(app_core_dep mpp sched view sheet gantt)
+foreach(app_core_dep mpp sched view sheet gantt mppwrite)
     if(NOT EXISTS "${APP_REPO_ROOT}/core/${app_core_dep}/CMakeLists.txt")
         message(FATAL_ERROR
             "app: core/${app_core_dep}/CMakeLists.txt is missing. The shell links the "
@@ -109,11 +113,32 @@ foreach(app_core_dep mpp sched view sheet gantt)
 endforeach()
 
 # ---------------------------------------------------------------------------
-# app_layout -- the portable half of the shell (date32 conversions, RecordSet
-# mapping, sheet row strings, GanttSource/GanttStyle).  No AppKit, so it builds
-# and is tested on every platform.
+# Which save path app/document.cpp compiles (see that file's header comment).
+# Stream W37 owns core/mppwrite/save.h; it is not on disk yet, so the default
+# body is pin_task_start + CfbDocument::save.  When the header lands this flips
+# to the single mppwrite::save_date_edits call -- on the next configure, and the
+# status line says which one ran.  Nothing else in app/ changes.
 # ---------------------------------------------------------------------------
-add_library(app_layout STATIC layout_model.cpp)
+if(EXISTS "${APP_REPO_ROOT}/core/mppwrite/save.h")
+    set(APP_MPPWRITE_SAVE_HEADER 1)
+    message(STATUS "app: core/mppwrite/save.h found -- saves use mppwrite::save_date_edits")
+else()
+    set(APP_MPPWRITE_SAVE_HEADER 0)
+    message(STATUS
+        "app: core/mppwrite/save.h absent -- saves use pin_task_start + CfbDocument::save")
+endif()
+
+# ---------------------------------------------------------------------------
+# app_layout -- the portable half of the shell: date32 conversions, RecordSet
+# mapping, sheet row strings, GanttSource/GanttStyle, the sheet<->Gantt selection
+# mapping (selection_model) and the save helper (document).  No AppKit, so it
+# builds and is tested on every platform.
+# ---------------------------------------------------------------------------
+add_library(app_layout STATIC
+    layout_model.cpp
+    selection_model.cpp
+    document.cpp
+)
 add_library(msproject::app_layout ALIAS app_layout)
 target_compile_features(app_layout PUBLIC cxx_std_20)
 set_target_properties(app_layout PROPERTIES CXX_EXTENSIONS OFF)
@@ -121,8 +146,12 @@ target_include_directories(app_layout PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 # core_mpp is needed by reader_adapter.h's include of "reader.h"; the layout
-# model itself never includes it.
-target_link_libraries(app_layout PUBLIC core_sheet core_gantt core_mpp)
+# model itself never includes it.  core_mppwrite is the save path in document.cpp.
+target_link_libraries(app_layout PUBLIC core_sheet core_gantt core_mpp core_mppwrite)
+# PUBLIC so the tests see the same branch of app/document.cpp the shell compiles.
+target_compile_definitions(app_layout PUBLIC
+    APP_MPPWRITE_SAVE_HEADER=${APP_MPPWRITE_SAVE_HEADER}
+)
 app_set_warnings(app_layout)
 
 # ---------------------------------------------------------------------------
@@ -135,6 +164,15 @@ if(APP_BUILD_TESTS)
         "corpus/probe directory for the headless probes (may be absent)")
     file(TO_CMAKE_PATH "${APP_CORPUS_PROBE_DIR}" APP_CORPUS_PROBE_DIR_CMAKE)
 
+    # The committed synthetic fixture (tests/data/README.md) is what the save
+    # round trip reads; written files go under the build tree, never into
+    # tests/data/ or corpus/.
+    set(APP_TEST_DATA_DIR "${APP_REPO_ROOT}/tests/data")
+    file(TO_CMAKE_PATH "${APP_TEST_DATA_DIR}" APP_TEST_DATA_DIR_CMAKE)
+    set(APP_TEST_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test-out")
+    file(TO_CMAKE_PATH "${APP_TEST_OUT_DIR}" APP_TEST_OUT_DIR_CMAKE)
+    file(MAKE_DIRECTORY "${APP_TEST_OUT_DIR}")
+
     add_executable(layout_model_tests layout_model_tests.cpp)
     target_compile_features(layout_model_tests PRIVATE cxx_std_20)
     set_target_properties(layout_model_tests PROPERTIES CXX_EXTENSIONS OFF)
@@ -146,6 +184,33 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_layout COMMAND layout_model_tests)
     set_tests_properties(app_layout PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # The sheet <-> Gantt selection mapping (row ordinals, collapse, hit testing,
+    # scroll targets).  Synthetic rows only: no fixture, no corpus.
+    add_executable(selection_model_tests selection_model_tests.cpp)
+    target_compile_features(selection_model_tests PRIVATE cxx_std_20)
+    set_target_properties(selection_model_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(selection_model_tests PRIVATE app_layout)
+    app_set_warnings(selection_model_tests)
+
+    add_test(NAME app_selection COMMAND selection_model_tests)
+    set_tests_properties(app_selection PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # The save helper: diff the RecordSet against the loaded plan, write the
+    # edited starts through core/mppwrite, reload and check.  Runs on the
+    # committed synthetic fixture and writes only under APP_TEST_OUT_DIR.
+    add_executable(document_tests document_tests.cpp)
+    target_compile_features(document_tests PRIVATE cxx_std_20)
+    set_target_properties(document_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(document_tests PRIVATE app_layout)
+    target_compile_definitions(document_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(document_tests)
+
+    add_test(NAME app_document COMMAND document_tests)
+    set_tests_properties(app_document PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -157,6 +222,10 @@ if(APPLE)
     enable_language(OBJCXX)
 
     find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
+    # main.mm filters the open panel with UTType (NSOpenPanel's non-deprecated
+    # content-type API); UTType lives in UniformTypeIdentifiers.framework, which
+    # is not part of Cocoa.
+    find_library(UNIFORM_TYPE_IDENTIFIERS_FRAMEWORK UniformTypeIdentifiers REQUIRED)
 
     add_executable(msproject_app MACOSX_BUNDLE main.mm)
     target_compile_features(msproject_app PRIVATE cxx_std_20)
@@ -166,15 +235,16 @@ if(APPLE)
         CXX_EXTENSIONS OFF
         MACOSX_BUNDLE_BUNDLE_NAME "MS Project Shell"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.msprojectdecompile.shell"
-        MACOSX_BUNDLE_BUNDLE_VERSION "0.1"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
+        MACOSX_BUNDLE_BUNDLE_VERSION "0.2"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.2"
     )
     # ARC for the one Objective-C++ translation unit; the core and app_layout stay
     # plain C++.
     target_compile_options(msproject_app PRIVATE
         "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>"
     )
-    target_link_libraries(msproject_app PRIVATE app_layout ${COCOA_FRAMEWORK})
+    target_link_libraries(msproject_app PRIVATE app_layout ${COCOA_FRAMEWORK}
+                          ${UNIFORM_TYPE_IDENTIFIERS_FRAMEWORK})
 
     # Fixture search paths compiled in so the app opens something with no argv.
     file(TO_CMAKE_PATH "${APP_REPO_ROOT}/corpus/probe" APP_FIXTURE_DIR_CMAKE)

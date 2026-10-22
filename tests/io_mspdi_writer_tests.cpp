@@ -553,11 +553,22 @@ void test_unrepresentable_records(view_test::TestContext& ctx) {
               "an assignment with no ref is not written");
     ctx.contains(xml, "<Assignments/>", "the empty container is still present");
 
-    document.assignment_refs.push_back(core::io::MspdiAssignmentRef{1, 1, 1});
+    // Value-initialised: appleclang/gcc treat a missing member initializer as an
+    // error under -Wmissing-field-initializers (MSVC does not).
+    core::io::MspdiAssignmentRef assignment_ref{};
+    assignment_ref.uid = 1;
+    assignment_ref.task_uid = 1;
+    assignment_ref.resource_uid = 1;
+    document.assignment_refs.push_back(assignment_ref);
     xml = core::io::mspdi::write(document);
     ctx.contains(xml, "<Assignment>", "an assignment with a ref is written");
     ctx.contains(xml, "<TaskUID>1</TaskUID>", "TaskUID from the ref");
     ctx.contains(xml, "<ResourceUID>1</ResourceUID>", "ResourceUID from the ref");
+    /* The model holds percent; Project's export writes a fraction.  Pinned
+     * exactly, like LinkLag: 100 % -> <Units>1</Units>. */
+    ctx.contains(xml, "<Units>1</Units>", "Units written as the MSPDI fraction");
+    ctx.check(xml.find("<Units>100</Units>") == std::string::npos,
+              "Units is not written as percent");
 
     /* A link whose successor is not a task row has nowhere to go. */
     document.links.push_back(core::io::PredecessorLink{2, 99, 1, 4800, 7});

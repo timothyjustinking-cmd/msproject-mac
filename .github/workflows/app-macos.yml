@@ -1,21 +1,35 @@
-# macOS verification for the AppKit shell in app/.
+# macOS verification for the AppKit shell in app/ (app shell v2, W38).
 #
-# WHY A SEPARATE WORKFLOW.  ci.yml owns the portable core's portability matrix
-# and must not grow an app job; app/ is a standalone CMake project (it is not
-# added to the root CMakeLists.txt), so it gets its own configure/build/test.
-# Nothing here depends on ci.yml and ci.yml depends on nothing here.
+# WHY A SEPARATE WORKFLOW.  ci.yml owns the portable core's portability matrix and
+# must not grow an app job; app/ is a standalone CMake project (it is not added to
+# the root CMakeLists.txt), so it gets its own configure/build/test.  Nothing here
+# depends on ci.yml and ci.yml depends on nothing here.
 #
 # WHAT THIS PROVES, AND WHY IT IS THE ONLY PROOF:
 #   * main.mm is Objective-C++ against AppKit, which cannot be compiled on the
-#     Windows development box.  This job is where the shell is compiled at all.
+#     Windows development box.  This job is where the shell is compiled at all:
+#     NSOpenPanel/NSSavePanel, the mouse/keyboard handling, the undo/redo menu and
+#     the drawing code all get their first compiler here, with
+#     -Wall -Wextra -Wpedantic -Werror, so an AppKit deprecation, a misspelt
+#     selector or an ARC slip is a red build rather than a warning nobody reads.
 #   * the app target links the real core libraries (core_mpp, core_sched,
-#     core_view, core_sheet, core_gantt plus core_model) built from this tree,
-#     with every core stream test switched off by app/CMakeLists.txt.
-#   * the ObjC++ translation unit compiles with -Wall -Wextra -Wpedantic -Werror
-#     (CORE_WARNINGS_AS_ERRORS=ON), so an AppKit deprecation or a typo in a
-#     selector is a red build rather than a warning nobody reads.
-#   * the headless layout test (app/layout_model_tests.cpp) builds and passes on
-#     macOS as well as on Windows; corpus probes SKIP (a runner has no corpus/).
+#     core_view, core_sheet, core_gantt, core_mppwrite, plus core_model) built
+#     from this tree, with every core stream test switched off by
+#     app/CMakeLists.txt.  core_mppwrite is new in v2: Cmd-S writes through it.
+#   * the three headless test binaries build and pass on macOS as well as on
+#     Windows:
+#       app_layout    (layout_model_tests)   mapping + the packed-date identity
+#       app_selection (selection_model_tests) sheet<->Gantt selection, collapse,
+#                                            edit/undo through SheetModel
+#       app_document  (document_tests)       the real save round trip, on the
+#                                            committed synthetic fixture
+#     The corpus probes inside app_layout print SKIP on a runner (no corpus/), as
+#     they must; app_document writes only under build-app/test-out.
+#
+# The configure log says which save path app/document.cpp compiled: "found --
+# saves use mppwrite::save_date_edits" when core/mppwrite/save.h is present, or
+# "absent -- saves use pin_task_start + CfbDocument::save" otherwise.  Both build;
+# the message is there so a reviewer knows which one CI proved.
 #
 # NO GUI LAUNCH.  There is no window server session on a runner and no need for
 # one: "built + the bundle executable exists + it links AppKit" is the claim.
@@ -41,27 +55,41 @@ jobs:
         uses: actions/checkout@v4
 
       # Standalone configure of app/ only: no -S . (that is ci.yml's job), and no
-      # --parallel anywhere (see docs/build.md).
+      # --parallel anywhere (see docs/build.md).  pipefail so a failed configure is
+      # not masked by the `tee` that records its log.
       - name: Configure the app project
         shell: bash
         run: |
+          set -o pipefail
           cmake -S app -B build-app \
             -G "Unix Makefiles" \
             -DCMAKE_BUILD_TYPE=Release \
             -DAPP_BUILD_TESTS=ON \
-            -DCORE_WARNINGS_AS_ERRORS=ON
+            -DCORE_WARNINGS_AS_ERRORS=ON 2>&1 | tee configure.log
+          # Make the save-path choice visible in the build log.
+          grep -E "app: (core/mppwrite/save.h|not APPLE)" configure.log
 
       # Builds every target in the project: the core libraries the shell links,
-      # layout_model_tests, and msproject_app.app (the ObjC++ / AppKit target).
+      # the three headless tests, and msproject_app.app (the ObjC++ / AppKit
+      # target).  No --parallel: one job thread, as docs/build.md requires.
       - name: Build
         shell: bash
         run: cmake --build build-app --config Release
 
-      # The headless test is the same binary Windows builds; on a runner the
-      # corpus probes print SKIP and the synthetic checks still run.
-      - name: Test (headless layout model)
+      # The test names are part of the contract: a silently unregistered test is
+      # as bad as a failing one.
+      - name: The three headless tests are registered
         shell: bash
-        run: ctest --test-dir build-app -C Release --output-on-failure --timeout 60
+        run: |
+          set -euo pipefail
+          ctest --test-dir build-app -C Release -N | tee tests.txt
+          grep -q "app_layout" tests.txt
+          grep -q "app_selection" tests.txt
+          grep -q "app_document" tests.txt
+
+      - name: Test (headless layout, selection, save round trip)
+        shell: bash
+        run: ctest --test-dir build-app -C Release --output-on-failure --timeout 120
 
       # The gate the brief asks for: the ObjC++ application target actually
       # materialised and actually links AppKit.  If main.mm failed to compile or
@@ -75,4 +103,7 @@ jobs:
           test -x "$app"
           file "$app"
           otool -L "$app" | grep -q "AppKit"
-          echo "OK: $app exists and links AppKit"
+          # v2 uses UTType for the open panel's content filter, which lives in
+          # its own framework; prove it is linked rather than assumed.
+          otool -L "$app" | grep -q "UniformTypeIdentifiers"
+          echo "OK: $app exists and links AppKit + UniformTypeIdentifiers"

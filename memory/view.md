@@ -113,3 +113,77 @@ cmd /c "call `"$vc`" >nul && `"$cmake`" --build build\vs --config Release"   # n
 - Concurrent builds by other streams share `build\vs`; a first `--build` can hit
   transient `C1083 ... Permission denied` on `.obj` files. Re-run the same build
   before treating it as a real failure.
+
+## Wave 9b (W42) — measured tables, list filters, grouping, outline sort
+
+Done and green on `build\vs-w42` (MSVC 19.44, Release, `/W4 /permissive- /utf-8 /WX`):
+
+- **`core/view/table_registry.h/.cpp`** — the real Task/Resource table set, decoded
+  from PJINTL.DLL **RT_RCDATA 330 (15 Task tables)** and **311 (9 Resource
+  tables)**. The resource records are `(PjField id, width, align code)`; the
+  resource's six-byte block header is `01 01 <count> <flag> ff 00`, each column is
+  8 bytes, custom captions follow the zero terminator. Export tables (84 Task /
+  24 Resource columns) are deliberately excluded: they are data-export layouts,
+  not sheets.
+  - **Measured**: column field ids, order, widths, alignment codes (0 left,
+    1 right, 2 centre). Entry = 8 columns including Indicators (the old inferred
+    table omitted it): ID 6R, Indicators 6L, Task Name 24L, Duration 9R, Start
+    12R, Finish 12R, Predecessors 14L, Resource Names 17L. Schedule and Tracking
+    are pinned in `tests/view_model_tests.cpp` too.
+  - **Decision / inference**: the resource emits custom captions as a string list
+    without a per-caption field id; the caption→field assignment in
+    `table_registry.cpp` is by field meaning ("Task Name"→Name, "Start Var."→
+    StartVariance, …). The captions and fields are measured, the pairing is
+    inferred. Unnamed PjField ids (0x0b4000cd Indicators, 0x0b40002f
+    Predecessors, 0x0b400030 Successors, 0x0b400031 Resource Names,
+    0x0b400056 UniqueID, and the resource counterparts) get their title from
+    `analysis/typelib.tsv`'s PjField enum name — also a decision.
+  - Alignment code 2 appears exactly once in 330 (Tracking → PhysicalPercentComplete)
+    and is mapped to `ColumnAlign::Center`; treated as a decision until a second
+    observation.
+  - The old `defaults::inferred_entry()` / `builtin_tables()` API is **unchanged**
+    (still 4 tables, Entry still 7 columns); the registry is additive so the
+    macOS shell keeps compiling. `tests/view_model_tests.cpp` pins that.
+  - Every column is checked against `core::model::find_field_by_id` and its record
+    type; every column title is non-empty and not a hex id.
+
+- **Filter breadth** (`filter.h/.cpp`): `FilterOp::In/NotIn` with
+  `FilterCriterion::values`, `IsNull/IsNotNull`, `distinct_values()` (sorted,
+  nulls omitted), `value_in_list()`, `auto_filter_criterion()` and
+  `auto_filter()`. JSON uses `"values": [...]` for in/not_in (a `"value"` array
+  is accepted too). Membership uses the same coercion as Equals; null only
+  matches a null member; an empty list matches nothing.
+
+- **Grouping breadth** (`group.h/.cpp`): `build_groups()` overload taking a row
+  order (sort first, group second); `GroupBucket::row_count/total_row_count/
+  summary_line` (`"3 tasks"`, singular/plural by record type); nested buckets
+  report `row_count == 0` and the sum of their children; `group_display_lines()`
+  flattens a bucket tree into heading/summary/row lines. **Decision,
+  unmeasured**: the summary line is emitted *after* the heading and *before* the
+  rows.
+
+- **Sort breadth** (`sort.h/.cpp`): `SortOptions { keep_outline; outline_level_field }`
+  and an `apply_sort(..., options)` overload. `keep_outline` builds the
+  OutlineLevel tree, sorts siblings (including top-level parents) with the same
+  stable multi-key comparator and emits a pre-order walk, so children stay under
+  their parent. Grouping over that order is a flat partition, which is the
+  documented "grouping flattens" rule. The flat sort stays stable and keeps file
+  order for equal keys.
+
+Verification (last run 2026-10-22, `build\vs-w42`):
+
+```powershell
+cmd /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul && cmake --build build\vs-w42 --config Release --target view_model_tests'
+.\build\vs-w42\core\view\Release\view_model_tests.exe
+# -> "view_model_tests: 1339 checks passed"   (wave-8 baseline was 270; +1069)
+$ctest='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe'
+& $ctest --test-dir build\vs-w42 -C Release --output-on-failure -R "view|gantt"
+# -> 2/2 passed (view_model, gantt)
+```
+
+Open after W42: the Export tables, a second observation for alignment code 2,
+the caption→field pairing (coordinator oracle could confirm through
+`TaskTables(...).TableFields` per `spec/view-model.md` §9.3), group summary
+placement, and whether Project sorts top-level parents in outline sort the same
+way. No UI was added.
+

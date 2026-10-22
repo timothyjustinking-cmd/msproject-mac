@@ -1,0 +1,637 @@
+{
+  "case": "elapsed-lag",
+  "run_at": "2026-10-22T16:46:09",
+  "project_start": "2026-10-19 08:00:00",
+  "project_finish": "2026-10-28 17:00:00",
+  "calendar": "<win32com.gen_py.Microsoft Project . Object Library.Calendar instance at 0x1984609860112>",
+  "plan": [
+    {
+      "id": 1,
+      "duration": "3d",
+      "pred": null,
+      "lag": null
+    },
+    {
+      "id": 2,
+      "duration": "1d",
+      "pred": 1,
+      "lag": "2 edays"
+    },
+    {
+      "id": 3,
+      "duration": "1d",
+      "pred": 1,
+      "lag": "3 edays"
+    },
+    {
+      "id": 4,
+      "duration": "1d",
+      "pred": 1,
+      "lag": "2 days"
+    },
+    {
+      "id": 5,
+      "duration": "5d",
+      "pred": null,
+      "lag": null
+    },
+    {
+      "id": 6,
+      "duration": "1d",
+      "pred": 5,
+      "lag": "2 edays"
+    },
+    {
+      "id": 7,
+      "duration": "1d",
+      "pred": 5,
+      "lag": "2 days"
+    },
+    {
+      "id": 8,
+      "duration": "2 edays",
+      "pred": null,
+      "lag": null
+    }
+  ],
+  "links": [
+    {
+      "succ": 2,
+      "pred": 1,
+      "type": 1,
+      "lag": "2 edays"
+    },
+    {
+      "succ": 3,
+      "pred": 1,
+      "type": 1,
+      "lag": "3 edays"
+    },
+    {
+      "succ": 4,
+      "pred": 1,
+      "type": 1,
+      "lag": "2 days"
+    },
+    {
+      "succ": 6,
+      "pred": 5,
+      "type": 1,
+      "lag": "2 edays"
+    },
+    {
+      "succ": 7,
+      "pred": 5,
+      "type": 1,
+      "lag": "2 days"
+    }
+  ],
+  "tasks": [
+    {
+      "ID": 1,
+      "Name": "T1",
+      "Duration": 1440,
+      "DurationText": "3 days",
+      "Work": 0.0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-21 17:00:00",
+      "EarlyStart": "2026-10-19 08:00:00",
+      "EarlyFinish": "2026-10-21 17:00:00",
+      "LateStart": "2026-10-21 08:00:00",
+      "LateFinish": "2026-10-23 17:00:00",
+      "StartSlack": 960,
+      "FinishSlack": 960,
+      "FreeSlack": 0,
+      "TotalSlack": 960,
+      "Critical": false,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "",
+      "Successors": "2FS+2 edays,3FS+3 edays,4FS+2 days",
+      "raw": {
+        "Duration": {
+          "value": "3 days",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Wed 21/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Wed 21/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Wed 21/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Fri 23/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 2,
+      "Name": "T2",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-26 08:00:00",
+      "Finish": "2026-10-26 17:00:00",
+      "EarlyStart": "2026-10-26 08:00:00",
+      "EarlyFinish": "2026-10-26 17:00:00",
+      "LateStart": "2026-10-28 08:00:00",
+      "LateFinish": "2026-10-28 17:00:00",
+      "StartSlack": 960,
+      "FinishSlack": 960,
+      "FreeSlack": 960,
+      "TotalSlack": 960,
+      "Critical": false,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "1FS+2 edays",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 3,
+      "Name": "T3",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-26 08:00:00",
+      "Finish": "2026-10-26 17:00:00",
+      "EarlyStart": "2026-10-26 08:00:00",
+      "EarlyFinish": "2026-10-26 17:00:00",
+      "LateStart": "2026-10-28 08:00:00",
+      "LateFinish": "2026-10-28 17:00:00",
+      "StartSlack": 960,
+      "FinishSlack": 960,
+      "FreeSlack": 960,
+      "TotalSlack": 960,
+      "Critical": false,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "1FS+3 edays",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 4,
+      "Name": "T4",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-26 08:00:00",
+      "Finish": "2026-10-26 17:00:00",
+      "EarlyStart": "2026-10-26 08:00:00",
+      "EarlyFinish": "2026-10-26 17:00:00",
+      "LateStart": "2026-10-28 08:00:00",
+      "LateFinish": "2026-10-28 17:00:00",
+      "StartSlack": 960,
+      "FinishSlack": 960,
+      "FreeSlack": 960,
+      "TotalSlack": 960,
+      "Critical": false,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "1FS+2 days",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 5,
+      "Name": "T5",
+      "Duration": 2400,
+      "DurationText": "5 days",
+      "Work": 0.0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-23 17:00:00",
+      "EarlyStart": "2026-10-19 08:00:00",
+      "EarlyFinish": "2026-10-23 17:00:00",
+      "LateStart": "2026-10-19 08:00:00",
+      "LateFinish": "2026-10-23 17:00:00",
+      "StartSlack": 0,
+      "FinishSlack": 0,
+      "FreeSlack": 0,
+      "TotalSlack": 0,
+      "Critical": true,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "",
+      "Successors": "6FS+2 edays,7FS+2 days",
+      "raw": {
+        "Duration": {
+          "value": "5 days",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Fri 23/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Fri 23/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Fri 23/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 6,
+      "Name": "T6",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-26 08:00:00",
+      "Finish": "2026-10-26 17:00:00",
+      "EarlyStart": "2026-10-26 08:00:00",
+      "EarlyFinish": "2026-10-26 17:00:00",
+      "LateStart": "2026-10-28 08:00:00",
+      "LateFinish": "2026-10-28 17:00:00",
+      "StartSlack": 960,
+      "FinishSlack": 960,
+      "FreeSlack": 960,
+      "TotalSlack": 960,
+      "Critical": false,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "5FS+2 edays",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 7,
+      "Name": "T7",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-28 08:00:00",
+      "Finish": "2026-10-28 17:00:00",
+      "EarlyStart": "2026-10-28 08:00:00",
+      "EarlyFinish": "2026-10-28 17:00:00",
+      "LateStart": "2026-10-28 08:00:00",
+      "LateFinish": "2026-10-28 17:00:00",
+      "StartSlack": 0,
+      "FinishSlack": 0,
+      "FreeSlack": 0,
+      "TotalSlack": 0,
+      "Critical": true,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "5FS+2 days",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 8,
+      "Name": "T8",
+      "Duration": 2880,
+      "DurationText": "2 edays",
+      "Work": 0.0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-21 08:00:00",
+      "EarlyStart": "2026-10-19 08:00:00",
+      "EarlyFinish": "2026-10-21 08:00:00",
+      "LateStart": "2026-10-26 17:00:00",
+      "LateFinish": "2026-10-28 17:00:00",
+      "StartSlack": 10620,
+      "FinishSlack": 10620,
+      "FreeSlack": 10620,
+      "TotalSlack": 10620,
+      "Critical": false,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "2 edays",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Wed 21/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Wed 21/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    }
+  ],
+  "saved": "corpus\\probe\\w9-elapsedlag.mpp",
+  "saved_bytes": 245760
+}

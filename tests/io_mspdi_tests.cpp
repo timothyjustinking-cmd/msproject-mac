@@ -292,6 +292,11 @@ void test_resources(view_test::TestContext& ctx) {
     constexpr core::view::FieldId kWork = 0x0f400008;
     constexpr core::view::FieldId kAssigneeTaskId = 0x0f400003;
     ctx.equal(document.assignments.get(0, kUnits)->number, 100.0, "assignment units");
+    /* MSPDI writes Units as a fraction: the sample's second assignment stores
+     * 0.5 and the model exposes 50 %.  Measured against Project's assign1.xml
+     * (Units=1 for a real 100 % assignment) -- see mspdi.cpp. */
+    ctx.equal(document.assignments.get(1, kUnits)->number, 50.0,
+              "assignment units fraction 0.5 imports as 50 %");
     ctx.equal(document.assignments.get(0, kWork)->integer, std::int64_t{14400},
               "assignment work 24h");
     ctx.equal(document.assignments.get(0, kAssigneeTaskId)->integer, std::int64_t{1},

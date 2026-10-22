@@ -6,6 +6,7 @@
 
 #include "layout_model.h"
 
+#include <algorithm>
 #include <chrono>
 #include <utility>
 
@@ -97,14 +98,15 @@ date32 date32_from_packed(std::uint32_t packed_raw) noexcept {
     }
     const std::uint32_t packed_day = packed_raw >> 16;
     const std::uint32_t ticks = packed_raw & 0xFFFFu;
-    // date32 keeps the day in 16 bits and 0xffff is the NA day, so day 0xfffe
-    // (+1) is already the last usable one.
-    if (packed_day >= 0xFFFEu) {
-        return kDateNa;
+    // The file's day 0 is 1983-12-31 and date32's day 1 is 1984-01-01, i.e. both
+    // count days from 1983-12-31: file day D and date32 day D are the SAME date.
+    // One 6-second tick is one 1/10 minute, which is also the same unit, so the
+    // mapping is the identity (W38 correction; the earlier `+1` showed every
+    // date one day late -- see app/README.md "date32 identity").
+    if (packed_day > static_cast<std::uint32_t>(core::sched::kMaxDay)) {
+        return kDateNa;  // day 0xffff would be the NA day's day field
     }
-    // The file's day 0 is 1983-12-31; the engine's day 1 is 1984-01-01.
-    // One 6-second tick is one 1/10 minute, which is the engine's unit.
-    return core::sched::pack(static_cast<std::int32_t>(packed_day) + 1,
+    return core::sched::pack(static_cast<std::int32_t>(packed_day),
                              static_cast<std::int32_t>(ticks));
 }
 
@@ -112,11 +114,14 @@ std::uint32_t packed_from_date32(date32 day) noexcept {
     if (day == kDateNa || core::sched::is_overflow(day)) {
         return 0xFFFFFFFFu;
     }
+    // The inverse of date32_from_packed(), also the identity.  One instant cannot
+    // be expressed: 1983-12-31 00:00 packs to 0, which the file reads as "not
+    // set".  Every other date32 value round-trips exactly.
     const std::int32_t engine_day = core::sched::day_of(day);
-    if (engine_day < core::sched::kMinDay) {
+    if (engine_day < 0) {
         return 0xFFFFFFFFu;
     }
-    return (static_cast<std::uint32_t>(engine_day - 1) << 16) |
+    return (static_cast<std::uint32_t>(engine_day) << 16) |
            static_cast<std::uint32_t>(core::sched::time_of(day));
 }
 
@@ -256,9 +261,110 @@ core::view::FieldId task_field_id(std::string_view field_name) {
     return TaskFields::resolve_id(field_name);
 }
 
+PlanInput sync_plan_from_records(const PlanInput& base, const core::view::RecordSet& records) {
+    PlanInput input = base;
+    const TaskFields& field = task_fields();
+    const std::size_t rows = std::min(input.tasks.size(), records.row_count());
+    for (std::size_t index = 0; index < rows; ++index) {
+        TaskRow& row = input.tasks[index];
+        row.uid = records.uid(index);
+
+        if (const Value* value = records.get(index, field.name);
+            value != nullptr && value->kind == core::view::ValueKind::Text) {
+            row.name = value->text;
+        }
+        // A Null date is a cleared cell, not "leave the old value": clearing a
+        // start makes the task undated, which the Gantt then draws no bar for.
+        if (const Value* value = records.get(index, field.start); value != nullptr) {
+            row.start = value->kind == core::view::ValueKind::Date
+                            ? date32_from_date_value(value->date)
+                            : kDateNa;
+        }
+        if (const Value* value = records.get(index, field.finish); value != nullptr) {
+            row.finish = value->kind == core::view::ValueKind::Date
+                             ? date32_from_date_value(value->date)
+                             : kDateNa;
+        }
+        if (const Value* value = records.get(index, field.duration); value != nullptr &&
+            (value->kind == core::view::ValueKind::Duration ||
+             value->kind == core::view::ValueKind::Integer)) {
+            row.duration_ticks = value->integer;
+        }
+        if (const Value* value = records.get(index, field.percent_complete);
+            value != nullptr && value->kind == core::view::ValueKind::Integer) {
+            const std::int64_t percent = std::clamp<std::int64_t>(value->integer, 0, 100);
+            row.percent_complete = static_cast<std::uint16_t>(percent);
+        }
+        if (const Value* value = records.get(index, field.summary);
+            value != nullptr && value->kind == core::view::ValueKind::Bool) {
+            row.summary = value->boolean;
+        }
+        if (const Value* value = records.get(index, field.milestone);
+            value != nullptr && value->kind == core::view::ValueKind::Bool) {
+            row.milestone = value->boolean;
+        }
+        if (const Value* value = records.get(index, field.critical);
+            value != nullptr && value->kind == core::view::ValueKind::Bool) {
+            row.critical = value->boolean;
+        }
+        if (const Value* value = records.get(index, field.outline_level);
+            value != nullptr && value->kind == core::view::ValueKind::Integer) {
+            row.outline_level = static_cast<int>(std::max<std::int64_t>(value->integer, 0));
+        }
+    }
+    input.skipped_links = base.skipped_links;
+    return input;
+}
+
+void apply_edit_policy(core::sheet::SheetModel& sheet) {
+    const TaskFields& field = task_fields();
+    for (std::size_t index = 0; index < sheet.column_count(); ++index) {
+        const core::view::FieldId id = sheet.column(index).field;
+        if (id == field.uid || id == field.id || id == field.outline_number) {
+            sheet.set_column_read_only(index, true);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Gantt
 // ---------------------------------------------------------------------------
+
+namespace {
+
+core::gantt::TaskBarInput bar_input_for(const TaskRow& row) {
+    core::gantt::TaskBarInput task;
+    task.uid = row.uid;
+    task.label = row.name;
+    task.start = row.start;
+    task.finish = row.finish;
+    task.percent_complete = clamp_unit(row.percent_complete);
+    if (row.summary) {
+        task.kind = core::gantt::BarKind::summary;
+    } else if (row.milestone) {
+        task.kind = core::gantt::BarKind::milestone;
+    } else {
+        task.kind = core::gantt::BarKind::normal;
+    }
+    task.critical = row.critical;
+    return task;
+}
+
+std::vector<core::gantt::LinkInput> link_inputs_for(const PlanInput& input) {
+    std::vector<core::gantt::LinkInput> links;
+    links.reserve(input.links.size());
+    for (const LinkRow& row : input.links) {
+        core::gantt::LinkInput link;
+        link.predecessor_uid = row.predecessor_uid;
+        link.successor_uid = row.successor_uid;
+        link.type = row.type;
+        link.critical = row.critical;
+        links.push_back(link);
+    }
+    return links;
+}
+
+}  // namespace
 
 core::gantt::GanttSource make_gantt_source(const PlanInput& input,
                                            const std::vector<date32>& holidays,
@@ -266,31 +372,29 @@ core::gantt::GanttSource make_gantt_source(const PlanInput& input,
     core::gantt::GanttSource source;
     source.tasks.reserve(input.tasks.size());
     for (const TaskRow& row : input.tasks) {
-        core::gantt::TaskBarInput task;
-        task.uid = row.uid;
-        task.label = row.name;
-        task.start = row.start;
-        task.finish = row.finish;
-        task.percent_complete = clamp_unit(row.percent_complete);
-        if (row.summary) {
-            task.kind = core::gantt::BarKind::summary;
-        } else if (row.milestone) {
-            task.kind = core::gantt::BarKind::milestone;
-        } else {
-            task.kind = core::gantt::BarKind::normal;
+        source.tasks.push_back(bar_input_for(row));
+    }
+    source.links = link_inputs_for(input);
+    source.working_week = core::gantt::WorkingWeek::monday_to_friday();
+    source.nonworking_days = holidays;
+    source.status_date = status_date;
+    return source;
+}
+
+core::gantt::GanttSource make_gantt_source_for_rows(const PlanInput& input,
+                                                    const std::vector<std::size_t>& rows,
+                                                    const std::vector<date32>& holidays,
+                                                    date32 status_date) {
+    core::gantt::GanttSource source;
+    source.tasks.reserve(rows.size());
+    for (const std::size_t row : rows) {
+        if (row < input.tasks.size()) {
+            source.tasks.push_back(bar_input_for(input.tasks[row]));
         }
-        task.critical = row.critical;
-        source.tasks.push_back(std::move(task));
     }
-    source.links.reserve(input.links.size());
-    for (const LinkRow& row : input.links) {
-        core::gantt::LinkInput link;
-        link.predecessor_uid = row.predecessor_uid;
-        link.successor_uid = row.successor_uid;
-        link.type = row.type;
-        link.critical = row.critical;
-        source.links.push_back(link);
-    }
+    // Links stay in the source; build_gantt() skips one whose endpoint has no
+    // bar, which is exactly a link to a hidden task.
+    source.links = link_inputs_for(input);
     source.working_week = core::gantt::WorkingWeek::monday_to_friday();
     source.nonworking_days = holidays;
     source.status_date = status_date;

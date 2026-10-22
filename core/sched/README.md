@@ -264,7 +264,7 @@ matrix are measured; the effort-driven add/remove transition is not.
 | schedule-from-finish | no fixture; the flag changes the backward anchor and the displayed dates only | `W3-P5` |
 | a constraint's slack when the task has no links (the "link-driven" anchor is the project start) | no measured row | needs a fixture |
 | per-task calendars inside a link bound (the align_back uses the successor's calendar) | single-calendar fixtures only | `W3-L1` |
-| elapsed durations and elapsed lag (refused, not guessed) | elapsed constants are [I]; `lagff-probe` FF-1ed lands on the same instant as FF-1d because Thursday is a working day, so it separates nothing | `W3-E1`, `W3-E2` |
+| **elapsed lag — MEASURED in wave 9b** (`CpmLink::elapsed_lag` = plain wall-clock arithmetic anchored on the raw predecessor finish); elapsed DURATION still open (the reader exposes no duration-format word) | `corpus/probe/w9-elapsedlag.mpp` + `docs/analysis/oracle/w9-elapsedlag.json`: link row +18 LagFormat 8 for "2 edays"/"3 edays" vs 7 for "2 days", lag stored in elapsed ticks; FS+3 edays starts Mon where 3 working days would start Tue; FS+2 edays from Fri 17:00 starts Mon (aligning first gives the working answer) | `W9-E1` (lag); duration stays `W3-E1` |
 | non-default HoursPerDay for criticality | only 8 h/day measured | `W3-O5` |
 | effort-driven add/remove (total work held vs duration held) | W3-O2 recorded identical two-resource states with the flag false and true, but did not isolate the add/remove step; the code implements the spec's candidate | `W3-U2`: add a resource to an existing task and compare Duration with EffortDriven on/off |
 | the .mpp units double and Work field scales (units x100 -> 10000 = 100 %, Work minutes x1000) | the stream brief gives them; no oracle row in W3 measured the raw bytes | read the raw Work/Units cells back from a saved `.mpp` |
@@ -405,7 +405,7 @@ These are places where the measurements contradict or refine the written rules.
 
 | what | why | recipe |
 |---|---|---|
-| elapsed duration semantics (`1ed`, `3ew`, `1emon`) — parsed, but `duration_to_ticks`/`format_elapsed` return `nullopt`; an elapsed link lag is a `CpmError` | elapsed tick constants (1440/10080/43200 min) are [I] | `W3-E1`, `W3-E2` |
+| elapsed duration semantics (`1ed`, `3ew`, `1emon`) — parsed, but `duration_to_ticks`/`format_elapsed` return `nullopt`; an elapsed link lag is now SCHEDULED (wave 9b), an elapsed DURATION is still not (no reader format word) | elapsed tick constants (1440/10080/43200 min) are [I]; `w9-elapsedlag.mpp` T8 measured the 2 edays duration (28800 ticks) and Project's Mon 10-19 08:00 -> Wed 10-21 08:00 | `W3-E1`, `W3-E2` |
 | non-default HoursPerDay/Week/DaysPerMonth for duration text | "conversion constants only" is [I] | `W3-O5` |
 | duration text display policy | DurationFormat is a user setting | `W3-O2` |
 | a pinned start on a non-working instant | exact forward alignment is [O]; the walk snaps forward | `W3-C2` |

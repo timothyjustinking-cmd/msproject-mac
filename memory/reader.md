@@ -1,27 +1,81 @@
 # Reader stream — memory
 
-_Updated 2026-10-22 (W31). Successor: read this, then `docs/handoff/reader.md`
+_Updated 2026-10-22 (W40). Successor: read this, then `docs/handoff/reader.md`
 (W6, still accurate for the Task table and the four-table geometry) and the
 header comments in `core/mpp/`. The record spec is `spec/mpp-records.md` (W1);
-W6, W18, W19, W24, W30, W31 and W33 each corrected claims in it — see "Spec
-corrections" at the end. Oracle files: `docs/analysis/oracle/` (w3-o1.json,
+W6, W18, W19, W24, W30, W31, W33, W37 and W40 each corrected claims in it — see
+"Spec corrections" at the end. Oracle files: `docs/analysis/oracle/` (w3-o1.json,
 outline-probe.json, milestone-probe.json, schedin-probe.json,
 holiday-probe.json, manual-start-edit.json, writer-base.json,
-assign-probe.json) and the coordinator's MSPDI exports
-`corpus/probe/project_a-export.xml`, `corpus/probe/project_b-export.xml` (the PROJECT_B one
-is new in W31; only its link uids are committed, as
-`docs/analysis/oracle/project_b_export_links.json`)._
+assign-probe.json, task-fields-w37-snet-auto.json) and the coordinator's MSPDI
+exports `corpus/probe/project_a-export.xml`, `corpus/probe/project_b-export.xml`,
+`corpus/probe/assign1.xml` (new in W40; only the PROJECT_A assignment dates are
+committed, as `tests/mpp_assignment_dates_golden.tsv`)._
+
 
 ## W31 deliverable on disk (all committed paths are `core/mpp/`,
 `tools/reader_dump/`, `tests/`, `memory/reader.md`; no git run from this stream)
 
 | path | what |
 |---|---|
-| `core/mpp/reader.h` | `Task::start_anchor` (+174), `Task::calendar_uid` (+178), `Task::milestone` / `milestone_stored` (stored FixedMeta flag, duration==0 fallback), `Task::calculated_start`/`calculated_finish` (+96/+100) with `start`/`finish` now the **effective** +104/+108 pair (W33), `Task::free_slack_ticks` (+74) / `start_slack_ticks` (+186) / `total_slack_ticks` (+190, W30), `Assignment::start`/`finish`/`stop` (+52/+56/+60), `Link::endpoints_live()`, `Document::link_count_with_live_endpoints()` / `_with_dead_endpoints()`, `kDateNa`. |
-| `core/mpp/reader.cpp` | reads all of the above; `critical` now uses TotalSlack (+190); milestone from FixedMeta entry byte +10 bit 0x02; link liveness stays FixedMeta coverage and endpoint liveness is separate; assignment dates. |
-| `tools/reader_dump/main.cpp` | new `--anchor` (start_anchor, calendar_uid) and `--slack` (free/start/total slack ticks) columns; `--links` now prints a `# links N (live L, dead-endpoint D)` line; `--assignments` now prints start/finish/stop. Default 8-column task output untouched. |
-| `tests/mpp_reader_tests.cpp` | **581 checks** with corpus (was 489), **239** with `MPP_NO_CORPUS=1` (was 207). New `test_w31_fixed_fields`; W31/W30/W33 assertions in `test_project_a`, `test_project_b`, `test_status_fixture`, `test_outline_fixture`, `test_links`, `test_assignments`, `test_synthetic_fixture`. |
+| `core/mpp/reader.h` | `Task::start_anchor` (+174), `Task::calendar_uid` (+178), `Task::milestone` / `milestone_stored` (stored FixedMeta flag, duration==0 fallback), `Task::calculated_start`/`calculated_finish` (+96/+100) with `start`/`finish` now the **effective** +104/+108 pair (W33), `Task::free_slack_ticks` (+74) / `start_slack_ticks` (+186) / `total_slack_ticks` (+190, W30), `Assignment::start`/`finish`/**`resume`** (+52/+56/+60, W40 corrected the old `stop` name), `Resource::type` / `type_stored` / `max_units()` / `max_units_fraction()`, `Link::endpoints_live()`, `Document::link_count_with_live_endpoints()` / `_with_dead_endpoints()`, `kDateNa`. |
+| `core/mpp/reader.cpp` | reads all of the above; `critical` now uses TotalSlack (+190); milestone from FixedMeta entry byte +10 bit 0x02; link liveness stays FixedMeta coverage and endpoint liveness is separate; assignment dates (+60 = **Resume**, measured, not Stop); duplicate-uid and dead-endpoint warnings. |
+| `tools/reader_dump/main.cpp` | new `--anchor` (start_anchor, calendar_uid) and `--slack` (free/start/total slack ticks) columns; `--links` now prints a `# links N (live L, dead-endpoint D)` line; `--assignments` now prints start/finish/**resume**. Default 8-column task output untouched. |
+| `tests/mpp_reader_tests.cpp` | **663 checks** with corpus, **316** with `MPP_NO_CORPUS=1` (W40: assignment-date golden, manual-bit fixture, warning checks). |
+| `tests/mpp_error_paths.cpp` (new) | **28 checks**: truncated/not-CFB/missing table/lying size word/4-billion count/duplicate uid/dead refs/empty streams + 256-byte mutation loop. |
+| `tests/mpp_perf_large.cpp` (new) | 4,000-task / 6-level synthetic programme; reader parse, CPM/recalc, RecordSet, sheet, Gantt timings (see "Performance"). |
+| `tests/mpp_fixture_builder.h` (new) | in-memory CFB writer used by the two W40 tests. |
+| `tests/mpp_assignment_dates_golden.tsv` (new) | Project's PROJECT_A assignment dates (uid, task uid, Start/Finish/Stop/Resume), uids/dates only. |
 | `memory/reader.md` | this file. |
+
+## W40 measured facts (2026-10-22)
+
+### Assignment +60 is Resume, NOT Stop (corrects the W31 inference)
+
+Project's PROJECT_A MSPDI export carries **21 non-empty `<Resume>` elements**, and the
+reader's +60 equals one on **21/21** rows. It is not Stop:
+
+| uid | +60 | export Stop | export Resume |
+|---|---|---|---|
+| 9821 | 2026-05-11 08:00 | 2026-05-08 17:00 | 2026-05-11 08:00 |
+| 9823 | 2026-04-15 08:00 | 2026-04-14 17:00 | 2026-04-15 08:00 |
+| 9729 | 2026-08-05 11:12 | 2026-08-05 11:12 | 2026-08-05 11:12 |
+
+On the other 19 exported rows Stop == Resume, which is why the old reading looked
+right; on the two split rows Stop is the previous working instant (Resume minus a
+calendar step). The export has neither element on the remaining 46 assignments,
+where +60 equals Start on 0 % rows and Finish on 100 % rows (Project's default
+resume). **Stop is not stored** in the assignment row; deriving it needs the
+calendar, so the reader does not invent it. `Assignment::resume` is the field;
+`tools/mspdi_cmp` compares it and reports `resume on 21` for PROJECT_A, 0 for PROJECT_B /
+assign1 / lagff1. Evidence command:
+`build\vs-w40\core\io\Release\io_mspdi_crosscheck.exe` and the committed golden.
+
+### Resource Type and MaxUnits
+
+* **MaxUnits** is the double at +8, x100. All 46 resources in PROJECT_A/PROJECT_B plus the
+  assign1 pair are 10000.0 -> 100 %, and all three exports write
+  `<MaxUnits>1.00</MaxUnits>`; `mspdi_cmp` compares `max_units()` (percent) on
+  22+22+2 resources, 0 mismatches. No fixture varies it, so the **scale** (+8 is
+  x100) remains inference; the value and the export agreement are measured.
+* **Resource Type is NOT located.** All 46 exported resources are `<Type>1</Type>`
+  (Work); no corpus fixture has a material/cost resource and no row word or
+  VarMeta key correlates with an alternative value (`Resource::type` is Work and
+  `type_stored == false`). `mspdi_cmp` compares it (1 == Work) on 22+22+2 and
+  reports 0 mismatches, but that cannot distinguish "stored Work" from
+  "default". **Needs an oracle fixture**: a material and a cost resource, plus
+  one Work resource at MaxUnits 50 %, saved to .mpp + MSPDI export.
+
+### Manual-mode bit is measured (W37 oracle)
+
+`corpus/probe/w37-snet-auto.mpp` = base.mpp with Fixed2Meta entry 4 byte +8
+`0xff -> 0x7f` (bit 0x80 cleared) and SNET 2026-10-21 08:00 on row 1's +64/+66:
+Project opens it with uid 1 **Manual=False**, Start 2026-10-21 08:00, Finish
+2026-10-27 17:00, ConstraintType=4; uid 2/3 stay Manual=True. The same edit
+without clearing the bit (`w37-snet-save.mpp`) opens Manual=True with Start
+unchanged. `mpp_reader_tests` checks base's 3 rows true and w37-snet-auto row 1
+false (guarded; the fixture is git-ignored).
+
 
 ## W31 measured facts (every one re-runnable; offsets are into the 202-byte row)
 
@@ -102,7 +156,7 @@ all 0-day. PROJECT_B: 10 milestones, 2 with non-zero duration.
 |---|---|---|
 | 52 | Start | equals the task's **effective** +104 on all 67 live PROJECT_A assignments, all 63 PROJECT_B assignments whose task is a live task, 4/4 link1 and 3/3 real assign1 rows. base's 3 unassigned rows store the project row's date-only start. |
 | 56 | Finish | same files against +108 (67/67, 63/63, 4/4, 3/3). |
-| 60 | Stop (INFERENCE) | inside [Start, Finish]: equals Start on the 51 zero-percent PROJECT_A assignments, Finish on all 13 at 100 %, and strictly between on the 3 partial PROJECT_A rows (10 % / 40 % / 40 %). PROJECT_B's 63 resolved ones are all 0 % so all store Start. No oracle export carries assignment dates, hence inference. |
+| 60 | **Resume** (MEASURED W40) | 21/21 PROJECT_A assignments with a non-empty export `<Resume>` match it; the old "Stop" reading is withdrawn (two split rows have Stop one working interval earlier). Where the export has no Resume (46 rows) it equals Start on 0 % rows and Finish on 100 % rows. Stop is not stored. |
 
 PROJECT_B's assignment table is stale like its links: 73 live rows but 10 name
 deleted task uids (8141, 8142, 10637, 10722..10727, 10732), so only 63 resolve
@@ -171,64 +225,75 @@ base/outline1/w3-o1/PROJECT_A(17)/PROJECT_B(13) and a disagreement is warned.
 `outline_number` = sibling-index path over **live** rows only (PROJECT_B's 12
 deleted rows would otherwise start the live outline at "6").
 
-## Counts (reader_dump / tests, measured 2026-10-22 W31)
+## Counts (measured 2026-10-22 W40)
 
 PROJECT_A 83 tasks / 22 resources / 88 links (88 endpoint-live) / 67 assignments;
 PROJECT_B 73 / 22 / **72 (70 endpoint-live)** / 73 (63 resolve to a live task);
 link1 4 / 0 / 5 / 4; assign1 2 / 2 / 0 / 3. PROJECT_A golden 83/83, zero field
-mismatches. PROJECT_B mspdi_cmp MATCH; PROJECT_A mspdi_cmp MATCH.
+mismatches. `mspdi_cmp`: PROJECT_A MATCH (830 fields, 88/88 links, 67/67 assignments,
+resources 22/22, type+max units 22/22, assignment Start/Finish 67/67, Resume
+21/21), PROJECT_B MATCH (730 fields, 70/70 links, 63/63 assignments, resources
+22/22), assign1 MATCH (20 fields, 3/3 assignments, 2/2 resources).
+`mpp_reader_tests` 663 with corpus / 316 with `MPP_NO_CORPUS=1`;
+`mpp_error_paths` 28; `io_mspdi_crosscheck` 127; `io_error_paths` 21;
+`io_mspdi_tests` 145; `io_mspdi_writer_tests` 864.
 
-## Verified commands (from the repo root)
+## Performance (W40 `mpp_perf_large`, Release, MSVC 19.44)
+
+4,000 tasks in a 6-level outline, 732 links, 200 resources, 200 assignments:
+
+| phase | ms (one run, 2026-10-22) |
+|---|---|
+| reader parse (`mpp::load_bytes` on a synthetic 4,000-row CFB) | 3.0–4.3 |
+| CPM/recalc (`core::plan::from_mpp` + `recalculate`) | 3.8–5.0 |
+| RecordSet build (`core::io::to_record_set`) | 1.9–2.2 |
+| sheet build + visible-row walk + column layout | 0.08–0.17 |
+| Gantt build (`build_gantt`) | 1.8–2.7 |
+| **total** | **11–15 ms** |
+
+The test asserts a 10 s ceiling per phase and in total, so a slow CI runner
+cannot flake; the numbers above are the regression signal.
+
+## Verified commands (from the repo root, W40)
 
 ```
 $vc='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat'
-cmd /c "call `"$vc`" >nul && cmake -S . -B build\vs-w31 -G `"Visual Studio 17 2022`" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON"
-cmd /c "call `"$vc`" >nul && cmake --build build\vs-w31 --config Release --target mpp_reader_tests"   # never --parallel
-build\vs-w31\core\mpp\Release\mpp_reader_tests.exe        -> PASS: 581 checks
-$env:MPP_NO_CORPUS='1'; build\vs-w31\core\mpp\Release\mpp_reader_tests.exe -> PASS: 239 checks
-& 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe' --test-dir build\vs-w31 -C Release -E plan_recalc
-  -> 24/24 passed (plan_recalc excluded: it is the plan stream's and rewrites its golden)
-# reader_dump is NOT in the top-level build:
-cmake -S tools\reader_dump -B build\vs-w31\reader-dump -G "Visual Studio 17 2022" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON
-cmake --build build\vs-w31\reader-dump --config Release
-build\vs-w31\reader-dump\Release\reader_dump.exe --anchor --slack --outline corpus\probe\holiday1.mpp
-build\vs-w31\tools\mspdi_cmp\Release\mspdi_cmp.exe corpus\project_b.mpp corpus\probe\project_b-export.xml  -> MATCH
-build\vs-w31\tools\mspdi_cmp\Release\mspdi_cmp.exe corpus\project_a.mpp corpus\probe\project_a-export.xml -> MATCH
-build\vs-w31\tools\recalc\Release\recalc.exe corpus\probe\project_a-recalc.mpp --compare corpus\probe\project_a-recalc.mpp
-  -> start 83/83 finish 83/83 slack 82/83 critical 83/83 (331/332)
+cmd /c "call `"$vc`" >nul && cmake -S . -B build\vs-w40 -G `"Visual Studio 17 2022`" -A x64 -DCMAKE_BUILD_TYPE=Release -DCORE_WARNINGS_AS_ERRORS=ON"
+cmd /c "call `"$vc`" >nul && cmake --build build\vs-w40 --config Release --target mpp_reader_tests mpp_error_paths mpp_perf_large io_mspdi_crosscheck"
+build\vs-w40\core\mpp\Release\mpp_reader_tests.exe        -> PASS: 663 checks (PROJECT_A golden 83/83)
+$env:MPP_NO_CORPUS='1'; build\vs-w40\core\mpp\Release\mpp_reader_tests.exe -> PASS: 316 checks
+build\vs-w40\core\mpp\Release\mpp_error_paths.exe         -> PASS: 28 checks
+build\vs-w40\core\mpp\Release\mpp_perf_large.exe          -> PASS, total ~11-15 ms
+build\vs-w40\core\io\Release\io_mspdi_crosscheck.exe      -> 127 checks
+cmd /c "call `"$vc`" >nul && ctest --test-dir build\vs-w40 -C Release --output-on-failure -R `"mpp|io_`""
+  -> 15/15 passed (includes the 7 mppwrite tests built from W37's tree)
+build\vs-w40\core\plan\Release\plan_recalc_tests.exe      -> 185 checks; M2 83/83/83/83 = 332/332;
+  tests/data/project_a_recalc_golden.tsv SHA256 unchanged (DB81218E...C46A0A)
+build\vs-w40\tools\mspdi_cmp\Release\mspdi_cmp.exe corpus\probe\assign1.mpp corpus\probe\assign1.xml -> MATCH
 ```
-
-Results 2026-10-22 (W31): configure OK after the one retry that Dropbox/AV
-sometimes requires; MSVC `/W4 /permissive- /utf-8 /WX` build 0 warnings;
-full tree rebuilt (24 ctest targets), 24/24 passed with `-E plan_recalc`.
 
 ## Still open
 
-1. **Plan re-pin (plan stream, not this one).** `tests/plan_recalc_tests.cpp`
-   pins 92 links / 5 skipped and 73/69/34/52 slack; the reader now gives 88
-   links / 0 skipped and 83/83/82/83. It also rewrites
-   `tests/data/project_a_recalc_golden.tsv`. Re-run and re-pin there; do not run it
-   from this stream.
-2. **Assignment `stop` (+60) is an inference**: no oracle export carries
-   assignment dates. A COM export of `Assignment.Start/Finish/Stop` (or one
-   fixture with a 50 %-complete assignment) would prove it.
+1. **Resource Type is unlocated and MaxUnits' scale is unproven.** All fixtures
+   are Work/100 %. Oracle ask: one .mpp + MSPDI export with a material resource,
+   a cost resource, and one Work resource at MaxUnits 50 % (also settles whether
+   +8 is x100).
+2. **MPP12**: no MPP12 fixture exists on disk (all corpus/probe files are
+   MPP14). Unmeasurable here; the reader's container/config path is MPP14-only.
 3. **ActualStart/ActualFinish (+120/+124) identity**: pattern-consistent, no
    COM export; `schedin-probe.json` reports ActualStart null for P50.
-4. **Manual flag** is still inferred from Fixed2Meta +8 bit 0x80; one fixture
-   flipping `Task.Manual` on mixed-mode PROJECT_B would prove it.
-5. **The Milestone bit is pinned on PROJECT_B/milestone1/w3-o1** but the exact
-   bit position inside the 16-byte FixedMeta blob is only demonstrated by
-   correlation (plus 0 false positives). A save that toggles Milestone alone
-   would make it a byte-diff proof.
-6. **OutlineLevel COM export** was only ever obtained for outline1; the
+4. **The Milestone bit** is pinned on PROJECT_B/milestone1/w3-o1 but the exact bit
+   position inside the 16-byte FixedMeta blob is demonstrated by correlation
+   (plus 0 false positives). A save that toggles Milestone alone would make it a
+   byte-diff proof.
+5. **OutlineLevel COM export** was only ever obtained for outline1; the
    derivation has not been measured on PROJECT_A's 83 rows.
-7. Type names 0 (FF) and 2 (SF) are still inference (1 FS and 3 SS are
+6. Type names 0 (FF) and 2 (SF) are still inference (1 FS and 3 SS are
    oracle-confirmed); link1 is the only FF/SF evidence.
-8. Resource Type (Work/Material/Cost) and MaxUnits identity are unchanged from
-   W10; no fixture varies them.
-9. No corpus file lacks `TBkndTask/FixedMeta`, so the "milestone flag absent →
+7. No corpus file lacks `TBkndTask/FixedMeta`, so the "milestone flag absent →
    duration fallback" path is unexercised (the no-Fixed2Data flat-outline path
    is still unexercised too).
+
 
 ## Traps (do not relearn)
 
@@ -252,6 +317,24 @@ full tree rebuilt (24 ctest targets), 24/24 passed with `-E plan_recalc`.
   `format_date` to add an offset.
 * **PROJECT_A's link FixedMeta is not one entry per row**; always take the row from
   the entry's +4 offset.
+* **`+60` is Resume, not Stop** (W40): 21/21 PROJECT_A exported `<Resume>` values
+  match it; the two split rows have Stop one working interval earlier. Stop is
+  not stored — do not add it from `+60` without a calendar.
+* **Warnings are part of the contract**: duplicate uids, dead link/assignment
+  endpoints and stale metadata counts are non-fatal and reported; only a
+  truncated container, a missing Task table, an empty Task FixedData and a size
+  word larger than the file throw `mpp::Error`. `mpp_error_paths` pins both
+  classes, including a 256-byte mutation loop.
+* **Never trust a size/count word without a bound**: `cfb.cpp` bounds DIFAT/FAT
+  sector counts and directory chains by the file's sector count, and the
+  FixtureBuilder writes a chain for the bytes actually present even when the
+  directory claims 4 GiB (the reader must reject the claim, not allocate).
+* **`mpp_perf_large` is a top-level-only target** (it links core/plan, core/sheet,
+  core/gantt, which are added after core/mpp); a standalone core/mpp configure
+  omits it. The fixture builder is `tests/mpp_fixture_builder.h`.
+* **The PROJECT_A assignment-date golden** is
+  `tests/mpp_assignment_dates_golden.tsv` (67 uids, no names); it is committed,
+  so CI can prove Resume without `corpus/`.
 * **`reader_dump` is not in the top-level build**; configure `tools\reader_dump`
   in its own tree (`build\vs-w31\reader-dump`).
 * **`plan_recalc_tests` rewrites `tests/data/project_a_recalc_golden.tsv`** whenever
@@ -287,7 +370,13 @@ full tree rebuilt (24 ctest targets), 24/24 passed with `-E plan_recalc`.
 6. Deadline is NOT VarMeta `0x0b4001b5`; that key occurs in no corpus file.
 7. **§10.1 link liveness** is FixedMeta coverage, and it has a second level:
    endpoint liveness (PROJECT_B 72/70/2, Project exports 70).
-8. **§10.2 assignment dates**: +52 Start, +56 Finish, +60 a within-span date
-   (Project's Stop; inference) — measured against PROJECT_B/PROJECT_A/link1/assign1.
+8. **§10.2 assignment dates**: +52 Start, +56 Finish, **+60 Resume** (W40:
+   measured against Project's export, 21/21; W31's "Stop" label is withdrawn).
+   Stop is not stored in the row; it is the previous working instant before
+   Resume.
 9. **W31: Task row +174 is the start anchor** (manual Start / pre-alignment
    predecessor bound) and **+178 is the task-calendar uid** (-1 = none).
+10. **Fixed2Meta entry byte +8 bit 0x80 is the manual-mode bit** (W40, measured
+    with w37-snet-auto/w37-snet-save; the W18/W31 "inference" wording is
+    withdrawn). Resource Type remains unlocated and MaxUnits is still only
+    value-proven — see "Still open".

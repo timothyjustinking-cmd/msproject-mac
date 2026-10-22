@@ -347,6 +347,18 @@ Result compare(const mpp::Document& reader, const core::io::MspdiDocument& xml) 
         result.problems.push_back(
             "the descriptor table has no Assignment field \"Work\"; work cannot be compared");
     }
+    FieldId resource_type_field = 0;
+    FieldId resource_max_units_field = 0;
+    if (!core::view::field_id_by_name(core::model::RecordType::Resource, "Type",
+                                      resource_type_field)) {
+        result.problems.push_back(
+            "the descriptor table has no Resource field \"Type\"; it cannot be compared");
+    }
+    if (!core::view::field_id_by_name(core::model::RecordType::Resource, "MaxUnits",
+                                      resource_max_units_field)) {
+        result.problems.push_back(
+            "the descriptor table has no Resource field \"MaxUnits\"; it cannot be compared");
+    }
 
     /* ---- Task UID sets. */
     result.reader_tasks = reader.tasks.size();
@@ -550,6 +562,48 @@ Result compare(const mpp::Document& reader, const core::io::MspdiDocument& xml) 
               result.xml_only_resource_uids);
     result.compared_resources = result.matched_resources;
 
+    /* Resource Type/MaxUnits.  All 46 resources in the three real exports are
+     * Type=1 (Work) with MaxUnits=1.00, and the reader's +8 double is 10000.0
+     * (100 %).  The comparison normalises the XML fraction to percent; the
+     * non-Work enum values are not mapped because no fixture contains one. */
+    for (const mpp::Resource& resource : reader.resources) {
+        const int xml_row = xml.resources.row_of_uid(resource.uid);
+        if (xml_row < 0) {
+            continue;
+        }
+        const std::size_t row = static_cast<std::size_t>(xml_row);
+        if (resource_type_field != 0) {
+            const Value* type = xml.resources.get(row, resource_type_field);
+            if (type != nullptr && type->kind == ValueKind::Integer) {
+                ++result.compared_resource_types;
+                const bool reader_work = resource.type == mpp::ResourceType::work;
+                /* MSPDI Type 1 is Work (measured on all 46 resources; 0/2/3 have
+                 * no fixture, so they are reported as a mismatch rather than
+                 * guessed). */
+                if (!(reader_work && type->integer == 1)) {
+                    result.resource_mismatches.push_back(
+                        {resource.uid, "Type",
+                         reader_work ? std::string("work (0)")
+                                     : std::string("non-work"),
+                         std::to_string(type->integer)});
+                }
+            }
+        }
+        if (resource_max_units_field != 0) {
+            const Value* max_units = xml.resources.get(row, resource_max_units_field);
+            if (max_units != nullptr && max_units->kind == ValueKind::Number) {
+                ++result.compared_resource_max_units;
+                /* core::io already scaled the export fraction to percent. */
+                const double xml_percent = max_units->number;
+                if (!(std::fabs(resource.max_units() - xml_percent) <= 1e-6)) {
+                    result.resource_mismatches.push_back(
+                        {resource.uid, "MaxUnits", format_percent(resource.max_units()),
+                         format_percent(xml_percent)});
+                }
+            }
+        }
+    }
+
     /* ---- Assignments.  Identity is the assignment UID; the task UID decides
      * liveness (a deleted task slot takes its assignments with it). */
     result.reader_assignments = reader.assignments.size();
@@ -566,6 +620,9 @@ Result compare(const mpp::Document& reader, const core::io::MspdiDocument& xml) 
         row.units = assignment.units();
         row.work_compared = true;
         row.work_ticks = static_cast<std::int64_t>(assignment.work_ticks());
+        row.start = reader_date32(assignment.start);
+        row.finish = reader_date32(assignment.finish);
+        row.resume = reader_date32(assignment.resume);
         if (!is_live(row.task_uid)) {
             result.dead_endpoint_assignments.push_back(row);
         } else {
@@ -584,6 +641,15 @@ Result compare(const mpp::Document& reader, const core::io::MspdiDocument& xml) 
             out.task_uid = xml.assignment_refs[row].task_uid;
             out.resource_uid =
                 normalize_resource_uid(xml.assignment_refs[row].resource_uid);
+            const auto ref_date = [](const Value& value) {
+                return value.kind == ValueKind::Date ? date32_of(value.date) : kNoDate;
+            };
+            out.start = ref_date(xml.assignment_refs[row].start);
+            out.finish = ref_date(xml.assignment_refs[row].finish);
+            if (xml.assignment_refs[row].resume.kind == ValueKind::Date) {
+                out.resume = date32_of(xml.assignment_refs[row].resume.date);
+                out.resume_compared = true;
+            }
         } else {
             result.problems.push_back("Assignment[UID=" + std::to_string(uid) +
                                       "] has no matching assignment_ref; its task and "
@@ -594,7 +660,9 @@ Result compare(const mpp::Document& reader, const core::io::MspdiDocument& xml) 
             if (units != nullptr) {
                 if (units->kind == ValueKind::Number) {
                     out.units_compared = true;
-                    out.units = units->number * 100.0; /* fraction -> percent */
+                    /* core::io normalises Project's fraction to the model's
+                     * percent, so both sides are already percent. */
+                    out.units = units->number;
                 } else {
                     result.problems.push_back("Assignment[UID=" + std::to_string(uid) +
                                               "]/Units is not a number");
@@ -666,6 +734,33 @@ Result compare(const mpp::Document& reader, const core::io::MspdiDocument& xml) 
                          format_ticks(xml_row.work_ticks)});
                 }
             }
+            /* Start/Finish: both sides use kNoDate for "not set", so an absent
+             * XML element and an NA reader field compare equal. */
+            const auto format_date32 = [](std::int64_t value) {
+                return value == kNoDate
+                           ? std::string("(none)")
+                           : format_reader_date(
+                                 mpp::PackedDate{static_cast<std::uint32_t>(value)});
+            };
+            ++result.compared_assignment_dates;
+            if (reader_row.start != xml_row.start) {
+                result.assignment_mismatches.push_back(
+                    {reader_row.uid, "Start", format_date32(reader_row.start),
+                     format_date32(xml_row.start)});
+            }
+            if (reader_row.finish != xml_row.finish) {
+                result.assignment_mismatches.push_back(
+                    {reader_row.uid, "Finish", format_date32(reader_row.finish),
+                     format_date32(xml_row.finish)});
+            }
+            if (xml_row.resume_compared) {
+                ++result.compared_assignment_resume;
+                if (reader_row.resume != xml_row.resume) {
+                    result.assignment_mismatches.push_back(
+                        {reader_row.uid, "Resume", format_date32(reader_row.resume),
+                         format_date32(xml_row.resume)});
+                }
+            }
             ++i;
             ++j;
         }
@@ -695,7 +790,9 @@ std::string format_report(const Result& result) {
     if (result.xml_has_placeholder_resource) {
         out += " (1 placeholder resource uid 0 excluded)";
     }
-    out += ", compared " + std::to_string(result.compared_resources) + "\n";
+    out += ", compared " + std::to_string(result.compared_resources) + " (type on " +
+           std::to_string(result.compared_resource_types) + ", max units on " +
+           std::to_string(result.compared_resource_max_units) + ")\n";
 
     out += "assignments: reader " + std::to_string(result.reader_assignments) + " (" +
            std::to_string(result.live_reader_assignments) + " live, " +
@@ -703,7 +800,9 @@ std::string format_report(const Result& result) {
            " dead-endpoint excluded), xml " + std::to_string(result.xml_assignments) +
            ", compared " + std::to_string(result.compared_assignments) + " (units on " +
            std::to_string(result.compared_assignment_units) + ", work on " +
-           std::to_string(result.compared_assignment_work) + ")\n";
+           std::to_string(result.compared_assignment_work) + ", start+finish on " +
+           std::to_string(result.compared_assignment_dates) + ", resume on " +
+           std::to_string(result.compared_assignment_resume) + ")\n";
 
     out += "links: reader " + std::to_string(result.reader_links) + " (" +
            std::to_string(result.live_reader_links) + " live, " +
@@ -783,6 +882,8 @@ std::string format_report(const Result& result) {
     for (const std::uint32_t uid : result.xml_only_resource_uids) {
         out += "  resource " + std::to_string(uid) + "  xml only\n";
     }
+    append_mismatch_section(out, "resource field mismatches",
+                            result.resource_mismatches);
 
     out += "assignment differences: " +
            std::to_string(result.assignment_differences()) + " (reader only " +
@@ -854,7 +955,11 @@ std::string format_json(const Result& result, const std::string& mpp_path,
            ", \"assignments\": " + std::to_string(result.compared_assignments) +
            ", \"assignment_units\": " + std::to_string(result.compared_assignment_units) +
            ", \"assignment_work\": " + std::to_string(result.compared_assignment_work) +
-           "},\n";
+           ", \"assignment_dates\": " + std::to_string(result.compared_assignment_dates) +
+           ", \"assignment_resume\": " + std::to_string(result.compared_assignment_resume) +
+           ", \"resource_types\": " + std::to_string(result.compared_resource_types) +
+           ", \"resource_max_units\": " +
+           std::to_string(result.compared_resource_max_units) + "},\n";
 
     const auto write_uids = [&out](const char* name, const std::vector<std::uint32_t>& uids,
                                    bool last) {

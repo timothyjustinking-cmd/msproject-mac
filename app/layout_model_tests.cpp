@@ -178,27 +178,44 @@ constexpr std::size_t kDurationColumn = 6;
 // ---------------------------------------------------------------------------
 
 void test_date_conversion() {
-    // The file's day 0 is 1983-12-31; date32's day 1 is 1984-01-01.  A packed
+    // The file's day 0 is 1983-12-31 and date32's day 1 is 1984-01-01, so both
+    // count from 1983-12-31: file day D IS date32 day D (identity).  A packed
     // 08:00 is tick 4800 (8 h * 3600 s / 6 s), and one tick is one 1/10 minute.
+    //
+    // W38: these expectations used to add one day (day 0 -> 1984-01-01), which
+    // made every date in the shell one day late.  spec/mpp-records.md §3 pins
+    // 15346 = 2026-01-05 and 15636 = 2026-10-22; both hold under the identity and
+    // not under the shift.
     check_date(app::date32_from_packed(0u), kDateNa, "packed 0 is NA");
     check_date(app::date32_from_packed(0xFFFFFFFFu), kDateNa, "packed 0xffffffff is NA");
-    check_date(app::date32_from_packed(0xFFFE0000u), kDateNa, "packed day 0xfffe is out of range");
-    check_date(app::date32_from_packed(4800u), from_ymd(1984, 1, 1, 8, 0),
-               "packed day 0 08:00 -> 1984-01-01 08:00");
-    check_date(app::date32_from_packed(0x00010000u), from_ymd(1984, 1, 2),
-               "packed day 1 00:00 -> 1984-01-02");
-    check_date(app::date32_from_packed(0x000113ECu), from_ymd(1984, 1, 2, 8, 30),
-               "packed day 1 08:30 -> 1984-01-02 08:30");
+    check_date(app::date32_from_packed(4800u), from_ymd(1983, 12, 31, 8, 0),
+               "packed day 0 08:00 -> 1983-12-31 08:00");
+    check_date(app::date32_from_packed(0x00010000u), from_ymd(1984, 1, 1),
+               "packed day 1 00:00 -> 1984-01-01");
+    check_date(app::date32_from_packed(0x000113ECu), from_ymd(1984, 1, 1, 8, 30),
+               "packed day 1 08:30 -> 1984-01-01 08:30");
+    // The two values spec/mpp-records.md §3 pins, in both directions.
+    check_date(app::date32_from_packed(15346u << 16), from_ymd(2026, 1, 5),
+               "packed 15346 is 2026-01-05");
+    check_date(app::date32_from_packed((15636u << 16) | 4800u), from_ymd(2026, 10, 22, 8, 0),
+               "packed 15636 08:00 is 2026-10-22 08:00");
+    check_int(static_cast<std::int64_t>(app::packed_from_date32(from_ymd(2026, 10, 22, 8, 0)) >> 16),
+              15636, "2026-10-22 packs to day 15636");
 
-    // Round trip, including the shift and the time of day.
+    // Round trip, including the time of day.  The mapping is the identity, so the
+    // packed day equals the engine day.
     const date32 instant = from_ymd(2026, 10, 19, 8, 30);
     const std::uint32_t packed = app::packed_from_date32(instant);
     check_int(static_cast<std::int64_t>(packed >> 16),
-              static_cast<std::int64_t>(core::sched::day_of(instant) - 1),
-              "packed round trip day is engine day - 1");
+              static_cast<std::int64_t>(core::sched::day_of(instant)),
+              "packed round trip day is engine day");
     check_int(static_cast<std::int64_t>(packed & 0xFFFFu), 8 * 600 + 30 * 10,
               "packed round trip tick == tenths of minute");
     check_date(app::date32_from_packed(packed), instant, "packed round trip is exact");
+    // PROJECT_A's stored start is a Monday (2026-10-19).  Under the old +1 shift this
+    // read as Tuesday, which is the bug this pins.
+    check_int(core::sched::weekday(app::date32_from_packed(15633u << 16)), 1,
+              "2026-10-19 file day 15633 reads back as a Monday");
     check_int(static_cast<std::int64_t>(app::packed_from_date32(kDateNa)), 0xFFFFFFFFll,
               "NA packs back to 0xffffffff");
 
@@ -508,8 +525,12 @@ void test_empty() {
 // Corpus probes.  Counts and errors only, never a task name.
 // ---------------------------------------------------------------------------
 
+// `expected_project_start` is kDateNa except for a fixture whose project start
+// reader.h pins: it proves the packed -> date32 mapping end to end on real file
+// bytes (W38: the old mapping was one day late, and this is where that shows).
 void test_corpus_file(const std::filesystem::path& path, const char* label,
-                      std::size_t pinned_tasks) {
+                      std::size_t pinned_tasks,
+                      date32 expected_project_start = kDateNa) {
     if (!std::filesystem::exists(path)) {
         std::printf("SKIP: %s not present at %s\n", label, path.string().c_str());
         return;
@@ -530,6 +551,26 @@ void test_corpus_file(const std::filesystem::path& path, const char* label,
         check(!input.tasks.empty(), "corpus has tasks");
     }
     check_size(input.tasks.size(), document.tasks.size(), "reader task count == plan rows");
+
+    // The identity mapping, on every stored date in the file: packed -> date32 ->
+    // packed must reproduce the file's own word.  A shift in either direction
+    // fails here.
+    std::size_t round_trip_mismatch = 0;
+    for (const mpp::Task& task : document.tasks) {
+        if (task.start.valid() &&
+            app::packed_from_date32(app::date32_from_packed(task.start.raw)) != task.start.raw) {
+            ++round_trip_mismatch;
+        }
+        if (task.finish.valid() &&
+            app::packed_from_date32(app::date32_from_packed(task.finish.raw)) != task.finish.raw) {
+            ++round_trip_mismatch;
+        }
+    }
+    check_size(round_trip_mismatch, 0, "packed <-> date32 round trips on every stored date");
+    if (!core::sched::is_na(expected_project_start)) {
+        check_date(app::date32_from_packed(document.project.start.raw), expected_project_start,
+                   "corpus project start is the pinned date (not one day later)");
+    }
 
     std::size_t dated = 0;
     std::size_t bad_dates = 0;
@@ -589,9 +630,10 @@ void test_corpus_file(const std::filesystem::path& path, const char* label,
 void test_corpus() {
 #if defined(APP_CORPUS_PROBE_DIR)
     const std::filesystem::path probe{APP_CORPUS_PROBE_DIR};
-    // w3-o1.mpp is the COM-built 4-task fixture (reader.h cites it); holiday1.mpp
-    // is the calendar fixture.  Neither count is client data.
-    test_corpus_file(probe / "w3-o1.mpp", "w3-o1", 4);
+    // w3-o1.mpp is the COM-built 4-task fixture (reader.h cites it, including its
+    // 2026-10-19 08:00 project start); holiday1.mpp is the calendar fixture.
+    // Neither count nor date is client data.
+    test_corpus_file(probe / "w3-o1.mpp", "w3-o1", 4, from_ymd(2026, 10, 19, 8, 0));
     test_corpus_file(probe / "holiday1.mpp", "holiday1", 0);
     if (std::filesystem::exists(probe.parent_path() / "project_a.mpp")) {
         test_corpus_file(probe.parent_path() / "project_a.mpp", "project_a", 0);

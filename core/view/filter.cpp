@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <utility>
 
 namespace core::view {
 namespace {
@@ -69,6 +70,16 @@ bool evaluate_comparison(const FilterCriterion& criterion, const RecordSet& reco
     const Value* pointer = records.get(row, criterion.field);
     const Value actual = pointer != nullptr ? *pointer : Value{};
     Value constant = criterion.value;
+    if (criterion.op == FilterOp::IsNull) {
+        return actual.is_null();
+    }
+    if (criterion.op == FilterOp::IsNotNull) {
+        return !actual.is_null();
+    }
+    if (criterion.op == FilterOp::In || criterion.op == FilterOp::NotIn) {
+        const bool found = value_in_list(actual, criterion.values);
+        return criterion.op == FilterOp::In ? found : !found;
+    }
     if (criterion.op == FilterOp::IsTrue || criterion.op == FilterOp::IsFalse) {
         const Value as_bool = coerce_value(actual, ValueKind::Bool);
         if (as_bool.is_null()) {
@@ -124,6 +135,10 @@ const char* filter_op_name(FilterOp op) noexcept {
         case FilterOp::EndsWith: return "ends_with";
         case FilterOp::IsTrue: return "is_true";
         case FilterOp::IsFalse: return "is_false";
+        case FilterOp::IsNull: return "is_null";
+        case FilterOp::IsNotNull: return "is_not_null";
+        case FilterOp::In: return "in";
+        case FilterOp::NotIn: return "not_in";
     }
     return "equals";
 }
@@ -141,6 +156,10 @@ bool filter_op_from_name(std::string_view name, FilterOp& out) noexcept {
     if (name == "ends_with") { out = FilterOp::EndsWith; return true; }
     if (name == "is_true") { out = FilterOp::IsTrue; return true; }
     if (name == "is_false") { out = FilterOp::IsFalse; return true; }
+    if (name == "is_null") { out = FilterOp::IsNull; return true; }
+    if (name == "is_not_null") { out = FilterOp::IsNotNull; return true; }
+    if (name == "in") { out = FilterOp::In; return true; }
+    if (name == "not_in") { out = FilterOp::NotIn; return true; }
     return false;
 }
 
@@ -151,6 +170,32 @@ FilterCriterion FilterCriterion::comparison(FieldId field, FilterOp op, Value va
     criterion.op = op;
     criterion.value = std::move(value);
     return criterion;
+}
+
+FilterCriterion FilterCriterion::in_list(FieldId field, std::vector<Value> values) {
+    FilterCriterion criterion;
+    criterion.kind = Kind::Comparison;
+    criterion.field = field;
+    criterion.op = FilterOp::In;
+    criterion.values = std::move(values);
+    return criterion;
+}
+
+FilterCriterion FilterCriterion::not_in_list(FieldId field, std::vector<Value> values) {
+    FilterCriterion criterion;
+    criterion.kind = Kind::Comparison;
+    criterion.field = field;
+    criterion.op = FilterOp::NotIn;
+    criterion.values = std::move(values);
+    return criterion;
+}
+
+FilterCriterion FilterCriterion::is_null(FieldId field) {
+    return comparison(field, FilterOp::IsNull, Value{});
+}
+
+FilterCriterion FilterCriterion::is_not_null(FieldId field) {
+    return comparison(field, FilterOp::IsNotNull, Value{});
 }
 
 FilterCriterion FilterCriterion::all(std::vector<FilterCriterion> children) {
@@ -213,6 +258,70 @@ std::vector<std::size_t> matching_rows(const FilterDefinition& filter,
     return rows;
 }
 
+bool value_in_list(const Value& value, const std::vector<Value>& values) {
+    for (const Value& candidate : values) {
+        if (value.is_null() || candidate.is_null()) {
+            if (value.is_null() && candidate.is_null()) {
+                return true;
+            }
+            continue;
+        }
+        Value constant = candidate;
+        if (constant.kind != value.kind) {
+            const Value coerced = coerce_value(constant, value.kind);
+            if (!coerced.is_null()) {
+                constant = coerced;
+            }
+        }
+        if (compare_values(value, constant) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<Value> distinct_values(const RecordSet& records, FieldId field) {
+    std::vector<Value> distinct;
+    if (!records.has_field(field)) {
+        return distinct;
+    }
+    for (std::size_t row = 0; row < records.row_count(); ++row) {
+        const Value* pointer = records.get(row, field);
+        if (pointer == nullptr || pointer->is_null()) {
+            continue;
+        }
+        bool seen = false;
+        for (const Value& existing : distinct) {
+            if (existing.kind == pointer->kind && compare_values(existing, *pointer) == 0) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen) {
+            distinct.push_back(*pointer);
+        }
+    }
+    std::stable_sort(distinct.begin(), distinct.end(), [](const Value& left, const Value& right) {
+        return compare_values(left, right) < 0;
+    });
+    return distinct;
+}
+
+FilterCriterion auto_filter_criterion(FieldId field, std::vector<Value> values) {
+    return FilterCriterion::in_list(field, std::move(values));
+}
+
+FilterDefinition auto_filter(std::string id, std::string name,
+                             core::model::RecordType record_type, FieldId field,
+                             std::vector<Value> values) {
+    FilterDefinition filter;
+    filter.id = std::move(id);
+    filter.name = std::move(name);
+    filter.record_type = record_type;
+    filter.criteria = auto_filter_criterion(field, std::move(values));
+    return filter;
+}
+
 JsonValue criterion_to_json(const FilterCriterion& criterion, core::model::RecordType record_type) {
     JsonValue json = JsonValue::object();
     switch (criterion.kind) {
@@ -222,7 +331,16 @@ JsonValue criterion_to_json(const FilterCriterion& criterion, core::model::Recor
                 json.set(member.first, member.second);
             }
             json.set("op", JsonValue::string(filter_op_name(criterion.op)));
-            if (criterion.op != FilterOp::IsTrue && criterion.op != FilterOp::IsFalse) {
+            if (criterion.op == FilterOp::In || criterion.op == FilterOp::NotIn) {
+                JsonValue values = JsonValue::array();
+                for (const Value& value : criterion.values) {
+                    values.push(value_to_json(value));
+                }
+                json.set("values", std::move(values));
+            } else if (criterion.op != FilterOp::IsTrue &&
+                       criterion.op != FilterOp::IsFalse &&
+                       criterion.op != FilterOp::IsNull &&
+                       criterion.op != FilterOp::IsNotNull) {
                 json.set("value", value_to_json(criterion.value));
             }
             break;
@@ -312,6 +430,37 @@ bool criterion_from_json(const JsonValue& json, core::model::RecordType record_t
     FieldId parsed_field = 0;
     if (!field_ref_from_json(json, record_type, parsed_field, prefix, error)) {
         return false;
+    }
+    if (parsed_op == FilterOp::In || parsed_op == FilterOp::NotIn) {
+        const JsonValue* values_json = json.find("values");
+        if (values_json == nullptr) {
+            const JsonValue* value_json = json.find("value");
+            if (value_json != nullptr && value_json->is_array()) {
+                values_json = value_json;
+            }
+        }
+        if (values_json == nullptr || !values_json->is_array()) {
+            error = prefix + "in/not_in needs a \"values\" array";
+            return false;
+        }
+        std::vector<Value> values;
+        values.reserve(values_json->items().size());
+        for (std::size_t i = 0; i < values_json->items().size(); ++i) {
+            Value member;
+            if (!value_from_json(values_json->items()[i], member,
+                                 prefix + "values[" + std::to_string(i) + "]", error)) {
+                return false;
+            }
+            values.push_back(std::move(member));
+        }
+        criterion = parsed_op == FilterOp::In
+                        ? FilterCriterion::in_list(parsed_field, std::move(values))
+                        : FilterCriterion::not_in_list(parsed_field, std::move(values));
+        return true;
+    }
+    if (parsed_op == FilterOp::IsNull || parsed_op == FilterOp::IsNotNull) {
+        criterion = FilterCriterion::comparison(parsed_field, parsed_op, Value{});
+        return true;
     }
     Value value;
     if (parsed_op != FilterOp::IsTrue && parsed_op != FilterOp::IsFalse) {

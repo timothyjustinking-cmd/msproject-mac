@@ -1271,6 +1271,34 @@ void test_status_fixture(TestContext& context) {
         [](const mpp::Task& task) { return task.calendar_uid != -1; });
     context.equal(calendars, std::ptrdiff_t{0},
                   "no w3-o1 task names a task calendar (+178 is -1)");
+
+    /* ---- W40: the manual-mode bit is measured, not inferred.  The coordinator
+     * built corpus/probe/w37-snet-auto.mpp from base.mpp by clearing bit 0x80
+     * of Fixed2Meta entry 4 (row 1) and setting SNET on +64/+66; Project opens
+     * it with uid 1 Manual=False while the otherwise identical w37-snet-save.mpp
+     * opens Manual=True.  The fixture is git-ignored, so guard it. */
+    const std::string base_path = directory + "/base.mpp";
+    const std::string auto_path = directory + "/w37-snet-auto.mpp";
+    if (file_exists(base_path) && file_exists(auto_path)) {
+        const mpp::Document base = mpp::load_file(base_path);
+        for (const std::uint32_t uid : {1u, 2u, 3u}) {
+            const mpp::Task* task = find_task(base, uid);
+            context.check(task != nullptr && task->manually_scheduled,
+                          "base uid " + std::to_string(uid) +
+                              " reads the set manual bit (COM Manual=true)");
+        }
+        const mpp::Document auto_doc = mpp::load_file(auto_path);
+        const mpp::Task* cleared = find_task(auto_doc, 1);
+        context.check(cleared != nullptr && !cleared->manually_scheduled,
+                      "w37-snet-auto uid 1 reads the cleared manual bit "
+                      "(COM Manual=false)");
+        const mpp::Task* kept = find_task(auto_doc, 2);
+        context.check(kept != nullptr && kept->manually_scheduled,
+                      "w37-snet-auto uid 2 keeps its manual bit (COM Manual=true)");
+    } else {
+        std::cout << "SKIP: " << auto_path
+                  << " is not present (manual-bit oracle fixture absent)\n";
+    }
 }
 
 /* ---- 8b. W31: the start anchor (+174) and task-calendar uid (+178) on the
@@ -2114,19 +2142,19 @@ void test_assignments(TestContext& context) {
     context.equal(project_a_null, std::ptrdiff_t{67},
                   "all 67 live PROJECT_A assignments carry the null-resource sentinel");
 
-    /* ---- W31: the assignment dates.  +52 is the assignment Start and +56 its
-     * Finish: both equal the task's own +96/+100 on every live assignment of
-     * these files.  +60 is a date inside [start, finish] -- Project's Stop:
-     * equal to Start on the zero-percent rows, equal to Finish on the 100 %
-     * ones, and strictly between on PROJECT_A's 10 % / 40 % rows.  Counts only, no
-     * names. */
+    /* ---- W31 dates, W40 identity.  +52 is the assignment Start and +56 its
+     * Finish: both equal the task's own effective pair on every live assignment
+     * of these files.  +60 is the assignment's **Resume** date, measured against
+     * Project's own export (21 non-empty <Resume> elements, 21/21 equal; the
+     * golden TSV below).  It is not Stop: the two split rows have Stop one
+     * working interval earlier.  Counts only, no names. */
     struct DateCounts {
         std::size_t assignments = 0;
         std::size_t start_matches = 0;
         std::size_t finish_matches = 0;
-        std::size_t stop_is_start = 0;
-        std::size_t stop_is_finish = 0;
-        std::size_t stop_between = 0;
+        std::size_t resume_is_start = 0;
+        std::size_t resume_is_finish = 0;
+        std::size_t resume_between = 0;
     };
     const auto count_dates = [](const mpp::Document& document) {
         DateCounts counts;
@@ -2142,13 +2170,13 @@ void test_assignments(TestContext& context) {
             ++counts.assignments;
             counts.start_matches += assignment.start.raw == found->start.raw ? 1u : 0u;
             counts.finish_matches += assignment.finish.raw == found->finish.raw ? 1u : 0u;
-            if (assignment.stop.raw == assignment.start.raw) {
-                ++counts.stop_is_start;
-            } else if (assignment.stop.raw == assignment.finish.raw) {
-                ++counts.stop_is_finish;
-            } else if (assignment.stop.raw > assignment.start.raw &&
-                       assignment.stop.raw < assignment.finish.raw) {
-                ++counts.stop_between;
+            if (assignment.resume.raw == assignment.start.raw) {
+                ++counts.resume_is_start;
+            } else if (assignment.resume.raw == assignment.finish.raw) {
+                ++counts.resume_is_finish;
+            } else if (assignment.resume.raw > assignment.start.raw &&
+                       assignment.resume.raw < assignment.finish.raw) {
+                ++counts.resume_between;
             }
         }
         return counts;
@@ -2158,13 +2186,13 @@ void test_assignments(TestContext& context) {
                   "every live PROJECT_A assignment's +52 equals its task's Start");
     context.equal(project_a_dates.finish_matches, project_a_dates.assignments,
                   "every live PROJECT_A assignment's +56 equals its task's Finish");
-    context.equal(project_a_dates.stop_is_start, std::size_t{51},
-                  "51 zero-percent PROJECT_A assignments store Start at +60");
-    context.equal(project_a_dates.stop_is_finish, std::size_t{13},
-                  "13 completed PROJECT_A assignments store Finish at +60");
-    context.equal(project_a_dates.stop_between, std::size_t{3},
+    context.equal(project_a_dates.resume_is_start, std::size_t{51},
+                  "51 zero-percent PROJECT_A assignments store Start at +60 (Resume)");
+    context.equal(project_a_dates.resume_is_finish, std::size_t{13},
+                  "13 completed PROJECT_A assignments store Finish at +60 (Resume)");
+    context.equal(project_a_dates.resume_between, std::size_t{3},
                   "3 partial PROJECT_A assignments (10 %, 40 %, 40 %) store a date "
-                  "strictly between +52 and +56 at +60");
+                  "strictly between +52 and +56 at +60 (Resume)");
     context.equal(project_a_dates.assignments, std::size_t{67},
                   "all 67 live PROJECT_A assignments resolve to a live task");
 
@@ -2178,7 +2206,7 @@ void test_assignments(TestContext& context) {
                   "all 63 resolved PROJECT_B +52 dates equal their task's effective Start");
     context.equal(project_b_dates.finish_matches, std::size_t{63},
                   "all 63 resolved PROJECT_B +56 dates equal their task's effective Finish");
-    context.equal(project_b_dates.stop_is_start, std::size_t{63},
+    context.equal(project_b_dates.resume_is_start, std::size_t{63},
                   "every resolved PROJECT_B assignment is at 0 %, so +60 equals Start");
 
     const DateCounts link1_dates = count_dates(mpp::load_file(probe + "/link1.mpp"));
@@ -2186,7 +2214,7 @@ void test_assignments(TestContext& context) {
                   "all 4 link1.mpp assignment starts match their task Start");
     context.equal(link1_dates.finish_matches, std::size_t{4},
                   "all 4 link1.mpp assignment finishes match their task Finish");
-    context.equal(link1_dates.stop_is_start, std::size_t{4},
+    context.equal(link1_dates.resume_is_start, std::size_t{4},
                   "all 4 link1.mpp assignments store Start at +60");
 
     if (file_exists(assign1)) {
@@ -2198,6 +2226,112 @@ void test_assignments(TestContext& context) {
         context.equal(assign1_dates.finish_matches, std::size_t{3},
                       "assign1.mpp +56 is the task Finish on all 3 assignments");
     }
+
+    /* ---- W40: the oracle's own assignment dates, committed as
+     * tests/mpp_assignment_dates_golden.tsv from Project's MSPDI export of PROJECT_A:
+     * 67 uids, dates only (no names).  This is the independent proof that +60
+     * is Resume, not Stop. */
+#ifndef MPP_ASSIGNMENT_GOLDEN_PATH
+#define MPP_ASSIGNMENT_GOLDEN_PATH ""
+#endif
+    const std::string assignment_golden = MPP_ASSIGNMENT_GOLDEN_PATH;
+    if (assignment_golden.empty() || !file_exists(assignment_golden)) {
+        std::cout << "SKIP: " << assignment_golden
+                  << " is not present (no assignment date oracle)\n";
+        return;
+    }
+    struct GoldenAssignmentDate {
+        std::uint32_t uid = 0;
+        std::uint32_t task_uid = 0;
+        std::string start;
+        std::string finish;
+        std::string stop;
+        std::string resume;
+    };
+    std::vector<GoldenAssignmentDate> golden_rows;
+    for (const std::string& line : read_lines(assignment_golden)) {
+        if (line.empty() || line[0] == 'u') {
+            continue; /* header */
+        }
+        const std::vector<std::string> fields = split_tabs(line);
+        if (fields.size() < 6) {
+            context.check(false, "assignment golden line has fewer than 6 fields");
+            continue;
+        }
+        GoldenAssignmentDate row;
+        row.uid = static_cast<std::uint32_t>(std::stoul(fields[0]));
+        row.task_uid = static_cast<std::uint32_t>(std::stoul(fields[1]));
+        row.start = fields[2];
+        row.finish = fields[3];
+        row.stop = fields[4];
+        row.resume = fields[5];
+        golden_rows.push_back(row);
+    }
+    context.equal(golden_rows.size(), std::size_t{67},
+                  "assignment date golden holds all 67 PROJECT_A assignment uids");
+    std::size_t golden_start = 0;
+    std::size_t golden_finish = 0;
+    std::size_t golden_resume_present = 0;
+    std::size_t golden_resume_match = 0;
+    std::size_t golden_stop_equal_resume = 0;
+    std::size_t golden_stop_differs = 0;
+    std::size_t golden_resume_absent = 0;
+    for (const GoldenAssignmentDate& row : golden_rows) {
+        const mpp::Assignment* assignment = find_assignment(project_a, row.uid);
+        context.check(assignment != nullptr,
+                      "PROJECT_A golden assignment uid " + std::to_string(row.uid) +
+                          " is present in the reader");
+        if (assignment == nullptr) {
+            continue;
+        }
+        const auto iso = [](const mpp::PackedDate& date) {
+            std::string text = mpp::format_date_iso(date);
+            if (!text.empty()) {
+                text[10] = 'T';
+                if (text.size() > 6) {
+                    text.resize(text.size() - 6); /* drop "+00:00" */
+                }
+            }
+            return text;
+        };
+        if (iso(assignment->start) == row.start) {
+            ++golden_start;
+        }
+        if (iso(assignment->finish) == row.finish) {
+            ++golden_finish;
+        }
+        if (!row.resume.empty()) {
+            ++golden_resume_present;
+            if (iso(assignment->resume) == row.resume) {
+                ++golden_resume_match;
+            }
+            if (row.stop == row.resume) {
+                ++golden_stop_equal_resume;
+            } else {
+                ++golden_stop_differs;
+                context.check(iso(assignment->resume) != row.stop,
+                              "uid " + std::to_string(row.uid) +
+                                  ": +60 is Resume, not the earlier Stop");
+            }
+        } else {
+            ++golden_resume_absent;
+        }
+    }
+    context.equal(golden_start, std::size_t{67},
+                  "all 67 assignment Starts equal Project's export");
+    context.equal(golden_finish, std::size_t{67},
+                  "all 67 assignment Finishes equal Project's export");
+    context.equal(golden_resume_present, std::size_t{21},
+                  "Project's export carries Resume on 21 assignments");
+    context.equal(golden_resume_match, std::size_t{21},
+                  "all 21 exported Resume dates equal the reader's +60");
+    context.equal(golden_stop_equal_resume, std::size_t{19},
+                  "on 19 rows Stop and Resume coincide");
+    context.equal(golden_stop_differs, std::size_t{2},
+                  "on 2 split rows Stop and Resume differ, and +60 is Resume");
+    context.equal(golden_resume_absent, std::size_t{46},
+                  "the other 46 assignments export no Resume (stored value is "
+                  "Start or Finish)");
 }
 
 int run_tests() {

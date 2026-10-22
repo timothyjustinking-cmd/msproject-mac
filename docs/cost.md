@@ -31,12 +31,21 @@ context is much longer-lived and its per-turn cost is higher.
 | 4 | 2026-10-22 | W10–W13 + oracle | **4** | reader breadth, MSPDI export, CPM, CI fixture; the oracle work is the coordinator's and costs no agent session |
 | 5–6 | 2026-10-22 | W14–W22 | **11** | views/M2/reader fields/row writer, reconstructed from the 51-session state at the wave-7 start (the split was not logged per spawn) |
 | 7 | 2026-10-22 | W23–W28 | **7** | six streams (sched, reader, calendar, writer, io, plan) + one W26 resume for the E1/E2 fixtures |
-| — | — | coordinator | 3 (ongoing) | the predecessor's chats and this one |
+| 8 | 2026-10-22 | W29–W35 | **8** | seven streams + one resume; the balancing figure to the 66-session total recorded at the wave-8 handoff |
+| 9 | 2026-10-22 | W36–W42 | **7** | five streams launched together, then W41/W42 while the first five were still landing; **no restarts** (the first wave with none) |
+| — | — | coordinator | 5 (ongoing) | the predecessor's chats and this one |
 
-**To date (end of wave 7): 58 agent sessions + 3 coordinator sessions.**
+**To date (end of wave 9): 73 agent sessions + 5 coordinator sessions.**
 Measured spend at the wave-7 start was **~$3.90**, **~390M tokens** (51 agent
-sessions); wave 7 adds 7 sessions at ~$0.076–0.08 → **~$4.45**, **~445M tokens**,
-about **$0.077 per agent session**, still flat.
+sessions); waves 7–8 added 15 sessions, and wave 9 adds 7 at ~$0.08 →
+**~$5.60**, **~565M tokens**, about **$0.077 per agent session**, flat for the
+sixth wave running.
+
+The useful new number is the per-wave cost of a *wide* wave: seven streams on one
+tree cost ~$0.56 of agent spend, but they cost the coordinator its context — five
+merge/verify cycles, two oracle gates and one full rebuild. Splitting a wave is
+cheaper in tokens than one long agent, as the wave-7 note said; it is not cheaper
+in coordinator attention.
 
 ## Calibration
 

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <utility>
 
@@ -391,6 +392,60 @@ NonworkingSpan whole_day_span(date32 day, double x, double width) {
     return span;
 }
 
+// ISO date for a bar label; empty for NA.  decision (unmeasured): the product's
+// bar-label date format is not in the resources, so use the file format's
+// unambiguous YYYY-MM-DD rather than inventing a localised pattern.
+std::string format_iso_date(date32 d) {
+    if (is_na(d) || is_overflow(d)) {
+        return {};
+    }
+    const CivilDate civil = to_civil(d);
+    char buffer[16];
+    std::snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d", civil.year, civil.month,
+                  civil.day);
+    return buffer;
+}
+
+std::string format_percent(double value) {
+    double clamped = value;
+    if (!(clamped > 0.0)) {
+        clamped = 0.0;
+    }
+    if (clamped > 1.0) {
+        clamped = 1.0;
+    }
+    const int percent = static_cast<int>(clamped * 100.0 + 0.5);
+    return std::to_string(percent) + "%";
+}
+
+std::string combine_text(std::string left, const std::string& right) {
+    if (left.empty()) {
+        return right;
+    }
+    if (right.empty()) {
+        return left;
+    }
+    left += ' ';
+    left += right;
+    return left;
+}
+
+std::string task_date_text(const TaskBarInput& task) {
+    const std::string start = format_iso_date(task.start);
+    date32 finish = task.finish;
+    if (is_na(finish) || is_overflow(finish)) {
+        finish = task.start;
+    }
+    const std::string end = format_iso_date(finish);
+    if (start.empty()) {
+        return end;
+    }
+    if (end.empty() || end == start) {
+        return start;
+    }
+    return start + " - " + end;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -691,6 +746,121 @@ double Timescale::pixels_per_day() const noexcept {
 }
 
 // ---------------------------------------------------------------------------
+// Zoom levels and bar labels
+// ---------------------------------------------------------------------------
+
+ZoomSpec zoom_spec(GanttZoom zoom) noexcept {
+    switch (zoom) {
+        case GanttZoom::week:
+            return ZoomSpec{GanttZoom::week, TimescaleUnit::week, 140.0, "week",
+                            "week start (d mmm)", "month and year"};
+        case GanttZoom::month:
+            return ZoomSpec{GanttZoom::month, TimescaleUnit::month, 300.0, "month",
+                            "month name", "year"};
+        case GanttZoom::day:
+        default:
+            return ZoomSpec{GanttZoom::day, TimescaleUnit::day, 20.0, "day", "day number",
+                            "month and year"};
+    }
+}
+
+const char* zoom_name(GanttZoom zoom) noexcept { return zoom_spec(zoom).name; }
+
+Timescale timescale_for_zoom(GanttZoom zoom, date32 origin) noexcept {
+    const ZoomSpec spec = zoom_spec(zoom);
+    Timescale scale;
+    scale.unit = spec.unit;
+    scale.pixels_per_unit = spec.pixels_per_unit;
+    scale.origin = origin;
+    return scale;
+}
+
+GanttZoom zoom_for_timescale(const Timescale& scale) noexcept {
+    switch (scale.unit) {
+        case TimescaleUnit::week: return GanttZoom::week;
+        case TimescaleUnit::month: return GanttZoom::month;
+        case TimescaleUnit::day:
+        default: return GanttZoom::day;
+    }
+}
+
+const char* bar_label_content_name(BarLabelContent content) noexcept {
+    switch (content) {
+        case BarLabelContent::none: return "none";
+        case BarLabelContent::name: return "name";
+        case BarLabelContent::resource: return "resource";
+        case BarLabelContent::dates: return "dates";
+        case BarLabelContent::percent: return "percent";
+        case BarLabelContent::name_and_percent: return "name_and_percent";
+        case BarLabelContent::name_and_resource: return "name_and_resource";
+        case BarLabelContent::name_and_dates: return "name_and_dates";
+    }
+    return "name";
+}
+
+bool bar_label_content_from_name(std::string_view name, BarLabelContent& out) noexcept {
+    if (name == "none") { out = BarLabelContent::none; return true; }
+    if (name == "name") { out = BarLabelContent::name; return true; }
+    if (name == "resource") { out = BarLabelContent::resource; return true; }
+    if (name == "dates") { out = BarLabelContent::dates; return true; }
+    if (name == "percent") { out = BarLabelContent::percent; return true; }
+    if (name == "name_and_percent") { out = BarLabelContent::name_and_percent; return true; }
+    if (name == "name_and_resource") { out = BarLabelContent::name_and_resource; return true; }
+    if (name == "name_and_dates") { out = BarLabelContent::name_and_dates; return true; }
+    return false;
+}
+
+std::string bar_label_text(const TaskBarInput& task, const GanttStyle& style) {
+    switch (style.bar_label) {
+        case BarLabelContent::none:
+            return {};
+        case BarLabelContent::name:
+            return task.label;
+        case BarLabelContent::resource:
+            return task.resource;
+        case BarLabelContent::dates:
+            return task_date_text(task);
+        case BarLabelContent::percent:
+            return format_percent(task.percent_complete);
+        case BarLabelContent::name_and_percent:
+            return combine_text(task.label, format_percent(task.percent_complete));
+        case BarLabelContent::name_and_resource:
+            return combine_text(task.label, task.resource);
+        case BarLabelContent::name_and_dates:
+            return combine_text(task.label, task_date_text(task));
+    }
+    return task.label;
+}
+
+double hit_test_tolerance(const Timescale& timescale, const GanttStyle& style) noexcept {
+    const double fixed = style.hit_tolerance > 0.0 ? style.hit_tolerance : 0.0;
+    if (!(style.hit_tolerance_days > 0.0)) {
+        return fixed;
+    }
+    double day_width = timescale.pixels_per_day();
+    if (!std::isfinite(day_width)) {
+        if (!timescale.valid()) {
+            return fixed;
+        }
+        // Month columns are equal-width, so use the first day's width as the
+        // representative one.  x_for_day_start handles the piecewise mapping.
+        day_width = timescale.x_for_day_start(add_days(timescale.origin, 1)) -
+                    timescale.x_for_day_start(timescale.origin);
+    }
+    if (!std::isfinite(day_width) || !(day_width > 0.0)) {
+        return fixed;
+    }
+    double tolerance = day_width * style.hit_tolerance_days;
+    if (style.min_hit_tolerance > 0.0 && tolerance < style.min_hit_tolerance) {
+        tolerance = style.min_hit_tolerance;
+    }
+    if (style.max_hit_tolerance > 0.0 && tolerance > style.max_hit_tolerance) {
+        tolerance = style.max_hit_tolerance;
+    }
+    return tolerance;
+}
+
+// ---------------------------------------------------------------------------
 // Rows
 // ---------------------------------------------------------------------------
 
@@ -759,7 +929,7 @@ HitResult GanttLayout::hit_test(double x, double y) const {
     if (!std::isfinite(x) || !std::isfinite(y)) {
         return result;
     }
-    const double tolerance = style.hit_tolerance > 0.0 ? style.hit_tolerance : 0.0;
+    const double tolerance = hit_test_tolerance(timescale, style);
     for (const Bar& candidate : bars) {
         if (!candidate.rect.contains(x, y, tolerance)) {
             continue;
@@ -919,13 +1089,25 @@ GanttLayout build_gantt(const GanttSource& source, const GanttStyle& style,
         bar.kind = task.kind;
         bar.critical = task.critical;
         bar.percent_complete = clamp_unit(task.percent_complete);
-        bar.label_text = task.label;
+        bar.label_text = bar_label_text(task, layout.style);
+
+        const double next_x = scale.x_for_day_start(add_days(start_day, 1));
+        const double day_width = std::isfinite(next_x) ? next_x - left : 0.0;
 
         double height = layout.style.bar_height;
         if (bar.kind == BarKind::summary) {
             height = layout.style.summary_height;
         } else if (bar.kind == BarKind::milestone) {
-            height = layout.style.milestone_size;
+            double side = layout.style.milestone_size > 0.0
+                              ? layout.style.milestone_size
+                              : 0.0;
+            // Keep the diamond inside its own day column at every zoom.  At the
+            // day/week zoom the column is 20 px so the size stays 12; at the
+            // month zoom a 31-day column is ~9.7 px and the diamond shrinks.
+            if (day_width > 0.0 && side > day_width) {
+                side = day_width;
+            }
+            height = side;
         }
         if (!(height > 0.0)) {
             height = 0.0;
@@ -934,17 +1116,18 @@ GanttLayout build_gantt(const GanttSource& source, const GanttStyle& style,
             layout.rows.y_for_row(bar.row) + (row_height - height) / 2.0;
 
         if (bar.kind == BarKind::milestone) {
-            const double next_x = scale.x_for_day_start(add_days(start_day, 1));
-            const double day_width = next_x - left;
-            const double size = layout.style.milestone_size > 0.0
-                                    ? layout.style.milestone_size
-                                    : 0.0;
             // decision (settled, memory/gantt.md): the diamond is centred in its
             // own day column, not on the date line.  Rationale: it stays inside
             // the day cell the milestone belongs to, is never clipped at x = 0,
             // and never spills into the previous day; a date-line centre would
             // sit half a diamond left of the column and is unmeasured anyway.
-            bar.rect = Rect{left + (day_width - size) / 2.0, top, size, height};
+            bar.shape = BarShape::diamond;
+            const double size = height;
+            bar.rect = Rect{left + (day_width - size) / 2.0, top, size, size};
+            bar.diamond[0] = Point{bar.rect.center_x(), bar.rect.y};
+            bar.diamond[1] = Point{bar.rect.right(), bar.rect.center_y()};
+            bar.diamond[2] = Point{bar.rect.center_x(), bar.rect.bottom()};
+            bar.diamond[3] = Point{bar.rect.x, bar.rect.center_y()};
         } else {
             date32 finish = task.finish;
             if (is_na(finish) || is_overflow(finish)) {
@@ -955,6 +1138,29 @@ GanttLayout build_gantt(const GanttSource& source, const GanttStyle& style,
             }
             const double right = scale.x_for_day_start(add_days(date_only(finish), 1));
             bar.rect = Rect{left, top, std::max(0.0, right - left), height};
+            if (bar.kind == BarKind::summary) {
+                bar.shape = BarShape::summary_bracket;
+                // decision (unmeasured): two downward triangles at the lower outer
+                // corners; clamped to half the bar so a short summary stays sane.
+                const double cap_width =
+                    layout.style.summary_cap_width > 0.0
+                        ? std::min(layout.style.summary_cap_width, bar.rect.w / 2.0)
+                        : 0.0;
+                const double cap_height =
+                    layout.style.summary_cap_height > 0.0
+                        ? layout.style.summary_cap_height
+                        : 0.0;
+                if (cap_width > 0.0 && cap_height > 0.0) {
+                    bar.cap_left[0] = Point{bar.rect.x, bar.rect.bottom()};
+                    bar.cap_left[1] = Point{bar.rect.x + cap_width, bar.rect.bottom()};
+                    bar.cap_left[2] = Point{bar.rect.x, bar.rect.bottom() + cap_height};
+                    bar.cap_right[0] = Point{bar.rect.right(), bar.rect.bottom()};
+                    bar.cap_right[1] = Point{bar.rect.right() - cap_width, bar.rect.bottom()};
+                    bar.cap_right[2] = Point{bar.rect.right(), bar.rect.bottom() + cap_height};
+                }
+            } else {
+                bar.shape = BarShape::rectangle;
+            }
         }
         bar.fill = Rect{bar.rect.x, bar.rect.y, bar.rect.w * bar.percent_complete,
                         bar.rect.h};

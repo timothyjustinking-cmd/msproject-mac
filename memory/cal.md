@@ -201,10 +201,12 @@ Recurring exceptions (`PjExceptionType` 2..7) are counted and **not** applied.
    24 remaining date diffs go away.  The 1331 exceptions include holidays that
    the hard-coded calendar cannot cross; expect movement on the 2026 links that
    jump a public holiday.
-4. If a recurring exception ever appears (types 2..7), it needs expansion into
-   weeks; today it is counted in `CalendarTable::recurring_exceptions` and
-   skipped rather than guessed.  A fixture for it is a coordinator job (MS
-   Project's "recur: yearly" exception).
+4. ~~Recurring exceptions are skipped~~ **DONE in wave 9b (W41, see the addendum
+   at the end of this file)**: types 2..6 are expanded and applied when the
+   record implies the recurrence, type 7 is refused and counted.  The remaining
+   gap is the recurrence PARAMETER words (weekday mask, every-N, position,
+   month/day); the fixture set `w9-r-*` named in the addendum is the wave-10
+   oracle work.
 5. `Fixed2Data`/`Fixed2Meta` (per-calendar GUIDs, 48/10-byte records) are
    present but not decoded — calendar arithmetic does not need them.  A writer
    would.
@@ -242,3 +244,77 @@ Recurring exceptions (`PjExceptionType` 2..7) are counted and **not** applied.
 * `core/cal/README.md` — byte evidence, counts, API, limits.
 * `tests/cal_tests.cpp` — 165 checks with corpus / 38 without.
 * `memory/cal.md` — this file.
+
+## W41 addendum (wave 9b, 2026-10-22 16:55) — recurring exceptions: decoded, expanded, applied when derivable
+
+Owned paths touched: `core/cal/cal.h`, `core/cal/cal.cpp`,
+`tests/cal_tests.cpp`, this file.  `core/sched` was edited by this stream for
+other items, not for this one (the builder still installs per-week overrides).
+No client name is used below (counts/dates only).
+
+### What changed
+
+1. **The +4 word is now decoded** as `DatedException::occurrences` (u16, the word
+   the 92-byte record keeps for recurring exceptions; mpxj calls it the
+   occurrence count).  It is a **check, never a source of truth** ([I] identity:
+   no file on disk has a recurring exception).
+2. **`core::cal::expand_recurring_exception()`** expands one PjExceptionType 2..7
+   record into the concrete days it covers:
+   * type 2 yearly month+day -> the start day's (month, day) once a year;
+   * type 3 yearly positional -> the same nth weekday of the start day's month;
+   * type 4 monthly month+day -> the start day's day-of-month every month;
+   * type 5 monthly positional -> the same nth weekday every month;
+   * type 6 weekly -> the start day's weekday every week;
+   * type 7 day-count -> **refused** ("the 'every N days' period is not
+     decoded");
+   * the positional "nth" is `(day-1)/7 + 1`, or "last" when no further
+     same-weekday day fits in that month;
+   * a refusal (`why`) is returned instead of a guess when: the type is not
+     recurring, the type is outside 0..7, the expansion is empty, it exceeds the
+     caller's day cap (`kMaxExpandedExceptionDays` = 3660), or the occurrence
+     word disagrees with the expanded count.
+3. **`build_calendar()` applies the expansion** exactly like a plain dated range,
+   and takes an optional `RecurrenceReport*` (`applied` / `not_applied`).
+   `build_project_calendar()` forwards it.  An exception that cannot be expanded
+   is counted and skipped, never guessed.  `CalendarTable::recurring_exceptions`
+   still counts every PjExceptionType 2..7 row.
+
+### The inference, named exactly (wave-10 oracle agenda)
+
+The recurrence **parameters are not decoded**.  The record carries the range
+(+0/+2), the occurrence word (+4), the interval list (+14/+20/+32) and the type
+(+72) — but not the **weekday mask** (type 6), the **"every N" period** (types
+4/5/6/7), the **position** (types 3/5), or the **month/day** parameter words
+(types 2/3).  The expansion therefore assumes the shortest period (every
+week/month/year) and derives weekday / day-of-month / position from the range's
+first day.  The occurrence word catches a wrong period (it refuses when the
+expanded count differs), which is why type 7 is refused rather than expanded at
+period 1.
+
+Fixture set that would turn this into a measurement (one file per type, one
+exception each, `RecurCal` = the Standard week, one 10 d task using it, project
+start Mon 2026-10-12, save + record Start/Finish):
+`w9-r-weekly` (every Monday, 2026-10-19..2026-11-02), `w9-r-monthly` (day 15,
+2026-10..2027-01), `w9-r-yearly` (every 21 October, 2026..2028), `w9-r-relative`
+(second Tuesday, 2026-10..2027-01), `w9-r-daycount` (every 3 days,
+2026-10-19..2026-10-31).  The coordinator's probe shows `Project.Calendar`
+exposes `Exceptions`, `Years`, `WeekDays`, `WorkWeeks`, `Period`, `Reset`, so
+the object model can probably build them; the coordinator owns that oracle work
+(wave-10 agenda) and this stream did not spend any more on it.
+
+### Counts
+
+`cal_tests` **165 -> 217 checks** (52 new: the expansion and refusal rules, the +4
+decoder word, and the builder application), all passing with corpus
+and under `CAL_NO_CORPUS=1` (the new tests are CI-safe; no fixture needed).
+`ctest -R "^cal$"` = 1/1.
+
+### Traps added
+
+* A recurring exception must never be applied without the count check: the
+  period is an assumption.
+* `build_calendar(table, calendar, &report)` — the report is optional and
+  per-call; the table's `recurring_exceptions` is a decode-time count, not an
+  applied count.
+* The exception's name bytes are still skipped (client-data rule); nothing here
+  prints an exception name.

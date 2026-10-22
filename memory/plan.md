@@ -254,3 +254,64 @@ content as a W28 edit.
 * The attribution JSON is written with escaped backslashes/quotes; all per-row
   values are dates, numbers, yes/no or NA by construction (validated).
 * `--attrib-json` without `--compare` returns 2; an unwritable path returns 1.
+
+## W41 addendum (wave 9b, 2026-10-22 16:55) — the plan-side changes
+
+This stream owned `core/plan` this wave.  Everything below is in
+`core/plan/plan.cpp`, `core/plan/CMakeLists.txt`,
+`tests/plan_recalc_tests.cpp`; nothing in `core/mpp`, `core/io`, `app/` or
+another stream's tests was touched.
+
+### (a) The ALAP comparison is now per-field-choice, not per-engine
+
+`schedin.mpp` uid 2 stores TWO date pairs (measured, see `memory/schedcore.md`):
++96/+100 calculated = the ALAP placement (2026-11-03), +104/+108 effective = the
+ASAP early dates (2026-10-19).  COM reports the calculated pair
+(`docs/analysis/oracle/schedin-probe.json` ID 2), so `test_schedin` now compares
+an ALAP row against `task.calculated_start` / `task.calculated_finish` and every
+other row against `task.start` / `task.finish`, and it pins that the ALAP row's
+two pairs differ.  Result: **20 of 20 date fields match, 10 of 10 slack values
+match** (was 18/20 with a "known divergence").  The two pairs are identical on
+every other schedin row, so the rule changes nothing else.
+
+The M2 pins in `test_project_a` (start/finish/slack/critical 83/83 each) were NOT
+touched, and the golden TSV was restored to its pinned content after every run.
+
+### (b) Elapsed lag reaches the engine
+
+`plan.cpp` used to hard-code `kLagIsElapsed = false` because the link row's +18
+word was undecoded.  It now maps it: `lag_is_elapsed(lag_units)` is true for 8
+(measured: `w9-elapsedlag.mpp` stores 8 for "2 edays"/"3 edays" and 7 for the
+matching "2 days") and for every even value 4..12 (PjFormatUnit's +1 = elapsed
+rule, spec §0.4 [B]).  PROJECT_A and PROJECT_B store 7 everywhere, so M2 is unchanged.
+
+### (c) New corpus-gated test: `w9-elapsedlag.mpp` through the bridge
+
+`test_elapsed_lag` (new, 4th test in `plan_recalc_tests.cpp`) proves the bridge
+AND the engine on Project's own save: 8 tasks, 5 links, **3 links store
+LagFormat 8** and exactly **3 reach `CpmLink::elapsed_lag`**, and **15 of 16
+stored date fields** are reproduced.  The one divergence is T8, the
+elapsed-DURATION control, which is asserted as a divergence on purpose:
+`core/mpp` exposes no duration-format word, so its 28800-tick duration is
+indistinguishable from six working days.  Expected values are in
+`docs/analysis/oracle/w9-elapsedlag.json`; a fix shows up as that assertion
+failing.  The fixture path is a new CMake define `PLAN_ELAPSED_PATH`.
+
+### Counts (wave 9b, `build\vs-w41`)
+
+| binary | wave-8 | now |
+|---|---|---|
+| `plan_recalc_tests` | 185 | **231** |
+| `plan_attribution_tests` | 54 | 54 |
+
+M2 re-run on the final tree (`recalc --compare`): **332/332**, no DIFF, matrix
+all zero.  Golden TSV untouched (sha256 `DB81218E…C46A0A`).
+
+### Still open on the plan side
+
+1. **Elapsed duration** — engine + bridge follow the reader (see (c)); wave 10
+   with `core/mpp`.
+2. **Recurring calendar exceptions** are decoded and now applied when derivable
+   (`core/cal`, see `memory/cal.md`); PROJECT_A/PROJECT_B have none, so M2 cannot move.
+3. The `plan_recalc_tests` "fully matching uids" count is still 83 for PROJECT_A; the
+   schedin ALAP row is not part of that golden file.

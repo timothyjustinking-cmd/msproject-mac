@@ -289,3 +289,65 @@ below is a decision pinned by `tests/gantt_tests.cpp`, not evidence.
    `Calendar` per task calendar and pass the right one per row; that needs a
    per-row shading source (either a windowed union or a `TaskBarInput` field),
    which is a bigger API step than this session's single-layout calendar.
+
+## Wave 9b (W42) — zoom breadth, bar labels, shapes, zoom hit testing
+
+Additive only: no existing function, struct field or enum value changed.
+
+- **Zoom layer**: `GanttZoom { day, week, month }`, `ZoomSpec` (unit, default
+  px/unit, name, header vocabulary), `zoom_spec()`, `zoom_name()`,
+  `timescale_for_zoom()` and `zoom_for_timescale()`. Defaults are **decision**:
+  day 20 px/day, week 140 px/week, month 300 px/month (the same numbers the old
+  tests used). Header text is the existing `Timescale::header()`: day "22" /
+  "October 2026"; week "19 Oct" / "October 2026"; month "October" / "2026".
+- **Bar labels**: `BarLabelContent` + `GanttStyle::bar_label` (default `name`,
+  so the old API is unchanged) and `bar_label_text()`. Modes: none, name,
+  resource, dates, percent, name+percent, name+resource, name+dates.
+  `TaskBarInput::resource` is appended for resource labels. **Decision,
+  unmeasured**: the set of modes (the product's BarLabelDialog is a UIFILE class
+  but its defaults are not in the resources) and the date spelling
+  (`YYYY-MM-DD`, or `start - finish` when they differ). The percent label is
+  clamped and rounded to a whole number.
+- **Shapes**: `BarShape { rectangle, diamond, summary_bracket }` and
+  `Bar::diamond[4]`, `Bar::cap_left[3]`, `Bar::cap_right[3]`. The summary bar
+  gets two downward end-cap triangles (clamped to half the bar width);
+  `GanttStyle::summary_cap_width/height` = 4 px. **Decision, unmeasured**: the
+  cap shape. The milestone diamond is 12 px at day/week; at the month zoom a
+  31-day column is ~9.7 px, so the diamond shrinks to the day column and stays
+  inside it (the old "never spills into the previous day" rule now holds at
+  every zoom). `Bar::rect` is unchanged in meaning.
+- **Zoom-aware hit testing**: `GanttStyle::hit_tolerance_days = 0.15`,
+  `min_hit_tolerance = 2`, `max_hit_tolerance = 8`; `hit_test_tolerance()` uses
+  the day-column width (for month, the first day of the origin month). Day/week
+  20 px × 0.15 = 3 px (the old fixed value), month ~9.68 px × 0.15 → the 2 px
+  floor. Setting `hit_tolerance_days = 0` keeps the old fixed
+  `hit_tolerance`. `GanttLayout::hit_test()` now calls it, so the old 3/4 px
+  pins at the day zoom still pass.
+- **Routing at zoom**: geometry is unchanged and remains screen-space (the
+  `link_gap` is a pixel clearance, not a date distance). New tests assert at the
+  month zoom that the route still leaves/enters the correct bar edges, the arrow
+  direction is a unit vector, the bounds are finite and the route is
+  hit-testable. **Open**: no per-zoom link-gap scaling; the product's zoom
+  routing is unmeasured.
+- **Calendar shading** is asserted at the week and month zooms as well as the
+  existing day zoom: standard weekends are whole-day spans, a 4-hour Friday's
+  gaps are partial, and with the calendar-driven week anchor disabled the bars
+  are identical with and without a calendar. The calendar still never moves a
+  bar; the week **anchor** adoption legitimately moves columns, so the shading
+  comparison pins `adopt_calendar_week_start = false`.
+
+Verification (last run 2026-10-22, `build\vs-w42`):
+
+```powershell
+cmd /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul && cmake --build build\vs-w42 --config Release --target gantt_tests'
+.\build\vs-w42\core\gantt\Release\gantt_tests.exe
+# -> "gantt_tests: 733 checks passed"   (wave-8 baseline 644; +89)
+$ctest='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe'
+& $ctest --test-dir build\vs-w42 -C Release --output-on-failure -R "view|gantt"
+# -> 2/2 passed (view_model, gantt)
+```
+
+Open after W42: bar-label content/format and summary cap shape need an oracle
+screenshot; link-gap scaling per zoom is not modelled; no `hour` timescale unit;
+per-task calendars still blocked on the reader's task-calendar uid.
+

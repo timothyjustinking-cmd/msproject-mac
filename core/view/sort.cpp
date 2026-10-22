@@ -1,37 +1,127 @@
 #include "sort.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <functional>
+#include <utility>
+#include <vector>
 
 namespace core::view {
+namespace {
 
-std::vector<std::size_t> apply_sort(const SortDefinition& sort, const RecordSet& records) {
-    std::vector<std::size_t> order(records.row_count());
-    for (std::size_t i = 0; i < order.size(); ++i) {
+bool row_less(const SortDefinition& sort, const RecordSet& records, std::size_t left,
+              std::size_t right) {
+    for (const auto& key : sort.keys) {
+        const Value* left_pointer = records.get(left, key.field);
+        const Value* right_pointer = records.get(right, key.field);
+        const Value left_value = left_pointer != nullptr ? *left_pointer : Value{};
+        const Value right_value = right_pointer != nullptr ? *right_pointer : Value{};
+        if (left_value.is_null() != right_value.is_null()) {
+            return right_value.is_null();  // nulls last
+        }
+        const int order = compare_values(left_value, right_value);
+        if (order == 0) {
+            continue;
+        }
+        return key.ascending ? order < 0 : order > 0;
+    }
+    return false;
+}
+
+std::vector<std::size_t> identity_order(std::size_t count) {
+    std::vector<std::size_t> order(count);
+    for (std::size_t i = 0; i < count; ++i) {
         order[i] = i;
     }
+    return order;
+}
+
+}  // namespace
+
+std::vector<std::size_t> apply_sort(const SortDefinition& sort, const RecordSet& records) {
+    std::vector<std::size_t> order = identity_order(records.row_count());
     if (sort.keys.empty() || records.row_count() < 2) {
         return order;
     }
     std::stable_sort(order.begin(), order.end(),
                      [&sort, &records](std::size_t left, std::size_t right) {
-                         for (const auto& key : sort.keys) {
-                             const Value* left_pointer = records.get(left, key.field);
-                             const Value* right_pointer = records.get(right, key.field);
-                             const Value left_value =
-                                 left_pointer != nullptr ? *left_pointer : Value{};
-                             const Value right_value =
-                                 right_pointer != nullptr ? *right_pointer : Value{};
-                             if (left_value.is_null() != right_value.is_null()) {
-                                 return right_value.is_null();  // nulls last
-                             }
-                             const int order = compare_values(left_value, right_value);
-                             if (order == 0) {
-                                 continue;
-                             }
-                             return key.ascending ? order < 0 : order > 0;
-                         }
-                         return false;
+                         return row_less(sort, records, left, right);
                      });
+    return order;
+}
+
+std::vector<std::size_t> apply_sort(const SortDefinition& sort, const RecordSet& records,
+                                    const SortOptions& options) {
+    if (!options.keep_outline || sort.keys.empty() || records.row_count() < 2) {
+        return apply_sort(sort, records);
+    }
+    FieldId level_field = options.outline_level_field;
+    if (level_field == 0 &&
+        !field_id_by_name(records.record_type(), "OutlineLevel", level_field)) {
+        return apply_sort(sort, records);
+    }
+    if (level_field == 0) {
+        return apply_sort(sort, records);
+    }
+
+    struct Node {
+        std::size_t row = 0;
+        int level = 1;
+        std::vector<std::size_t> children;
+    };
+
+    std::vector<Node> nodes;
+    nodes.reserve(records.row_count());
+    std::vector<std::size_t> roots;
+    std::vector<std::size_t> stack;
+
+    for (std::size_t row = 0; row < records.row_count(); ++row) {
+        int level = 1;
+        const Value* pointer = records.get(row, level_field);
+        if (pointer != nullptr && pointer->kind == ValueKind::Integer) {
+            const std::int64_t raw = pointer->integer;
+            level = raw < 1 ? 1 : raw > 1000 ? 1000 : static_cast<int>(raw);
+        }
+        nodes.push_back(Node{row, level, {}});
+        const std::size_t index = nodes.size() - 1;
+        while (!stack.empty() && nodes[stack.back()].level >= level) {
+            stack.pop_back();
+        }
+        if (stack.empty()) {
+            roots.push_back(index);
+        } else {
+            nodes[stack.back()].children.push_back(index);
+        }
+        stack.push_back(index);
+    }
+
+    const auto compare_rows = [&sort, &records, &nodes](std::size_t left, std::size_t right) {
+        return row_less(sort, records, nodes[left].row, nodes[right].row);
+    };
+    std::stable_sort(roots.begin(), roots.end(), compare_rows);
+
+    std::function<void(std::size_t)> sort_node = [&](std::size_t index) {
+        std::vector<std::size_t>& children = nodes[index].children;
+        std::stable_sort(children.begin(), children.end(), compare_rows);
+        for (const std::size_t child : children) {
+            sort_node(child);
+        }
+    };
+    for (const std::size_t root : roots) {
+        sort_node(root);
+    }
+
+    std::vector<std::size_t> order;
+    order.reserve(records.row_count());
+    std::function<void(std::size_t)> emit = [&](std::size_t index) {
+        order.push_back(nodes[index].row);
+        for (const std::size_t child : nodes[index].children) {
+            emit(child);
+        }
+    };
+    for (const std::size_t root : roots) {
+        emit(root);
+    }
     return order;
 }
 

@@ -131,8 +131,11 @@
  *              exception: base.mpp's Task A has slack 0 and COM reports
  *              Critical=false, because it is manually scheduled.  The rule
  *              reproduces COM on all 10 task rows of base, w3-o1 and outline1.
- *              "Manually scheduled" itself is inferred from Fixed2Meta's per-row
- *              flags byte (+8, bit 0x80); the evidence is in reader.cpp.
+ *              "Manually scheduled" is MEASURED: Fixed2Meta's per-row flags
+ *              byte (+8, bit 0x80).  corpus/probe/w37-snet-auto.mpp (base.mpp
+ *              with that bit cleared on row 1 only, plus a constraint) opens in
+ *              Project as Manual=False for uid 1 while w37-snet-save.mpp (bit
+ *              set) opens Manual=True; see reader.cpp.
  *   Milestone  IS stored: bit 0x02 of byte +10 of the Task FixedMeta entry (the
  *              16-byte per-row blob at +8).  Duration == 0 is only the
  *              fallback, because Project lets a milestone keep a duration:
@@ -193,16 +196,21 @@
  *     +4    u32     UniqueID
  *     +8    double  MaxUnits, x100: 10000.0 is 100 %.  Same x10000 encoding
  *                   the COM-validated in-memory assignment Units uses
- *                   (memory/assignment-flat-buffer.md).  All corpus resources
- *                   are at 100 %, so the *identity* is inference; the value is
- *                   measured.
+ *                   (memory/assignment-flat-buffer.md).  MEASURED value: every
+ *                   resource in PROJECT_A/PROJECT_B/assign1 exports reports
+ *                   `<MaxUnits>1.00</MaxUnits>` and the row double is 10000.0 on
+ *                   every one (46 resources + the assign1 pair); no fixture
+ *                   varies MaxUnits, so the *scale* (+8 is x100) is still
+ *                   inference even though the stored value is measured.
  *     +80   u32     AccrueAt (3 = prorated, the Project default; not exposed)
  *     +154  u16     per-row counter (unmapped; not exposed)
  * Name = VarMeta key 0x0c400001 (UTF-16LE, raw and display forms), Initials =
- * 0x0c400002.  Resource Type is NOT in these 172 bytes that we could prove:
- * mpxj reads Material/Cost from a FixedMeta bit, and no corpus fixture has a
- * material or cost resource.  Resource::type is therefore reported as Work and
- * documented as unproven.
+ * 0x0c400002.  Resource Type: NOT located.  All 46 resources in the three
+ * exports are `<Type>1</Type>` (Work) and no fixture stores a material or cost
+ * resource, so neither a fixed-row word nor a VarMeta key can be correlated
+ * with the value; `Resource::type` is reported as Work and `type_stored` is
+ * false.  A material/cost + MaxUnits-under-100% oracle fixture is the missing
+ * discriminator (memory/reader.md, "Still open").
  *
  * LINKS (TBkndCons, Project's "relationship" table).  FixedData = 20 bytes per
  * row, NO header; FixedMeta = 16 + 10 bytes per entry.  There is no VarMeta
@@ -265,13 +273,20 @@
  *                  rows store the project row's date-only start.
  *     +56  u32     assignment Finish (packed date).  Same counts against the
  *                  task's +108 (67/67 PROJECT_A, 63/63 resolved PROJECT_B, 4/4, 3/3).
- *     +60  u32     a third date inside [Start, Finish]: it equals Start on 51
- *                  of PROJECT_A's zero-percent assignments, Finish on all 13 at
- *                  100 %, and is strictly between on the 3 partial rows
- *                  (PROJECT_A 10 % / 40 % / 40 %); PROJECT_B's 63 resolved assignments
- *                  are all 0 % so all store Start.  That is Project's Stop
- *                  semantics; the *identity* is an inference (no oracle
- *                  export carries assignment dates).
+ *     +60  u32     the assignment's **Resume** date (packed date).  MEASURED
+ *                  (W40) against Project's own MSPDI export of PROJECT_A: the export
+ *                  carries 21 non-empty `<Resume>` elements and +60 equals one
+ *                  of them on 21/21 rows.  It is NOT Stop: the two split rows
+ *                  (uids 9821 and 9823) have Stop = the previous working
+ *                  instant (2026-05-08 17:00 / 2026-04-14 17:00) while +60 =
+ *                  Resume (2026-05-11 08:00 / 2026-04-15 08:00).  On the other
+ *                  19 exported rows Stop and Resume coincide, which is why the
+ *                  old "Stop" reading looked right.  Where the export has
+ *                  neither element (46 rows), +60 equals Start on the 0 % rows
+ *                  and Finish on the 100 % rows: Project's default resume.
+ *                  Stop is NOT stored in the assignment row; it is the last
+ *                  working instant before Resume and needs the calendar to
+ *                  derive, so the reader does not invent it.
  *     +92  u32     7 (unmapped; same value as the in-memory assignment record's
  *                  +116 i16).
  *
@@ -393,9 +408,11 @@ struct Task {
      * +74 is FreeSlack, +186 StartSlack, +190 TotalSlack (W18 had called +74
      * TotalSlack).  milestone1.mpp's ID6 separates them: +74 = 0 with +186 =
      * +190 = 220800; outline1's summary has +74 = +190 = 0 with +186 = 19200.
-     * manually_scheduled is INFERRED from bit 0x80 of Fixed2Meta's per-row flags
-     * byte (+8), the only place the reader found the task mode; see the evidence
-     * block in reader.cpp.  critical is derived as "not manually scheduled and
+     * manually_scheduled is MEASURED from bit 0x80 of Fixed2Meta's per-row
+     * flags byte (+8): corpus/probe/w37-snet-auto.mpp clears it on row 1 and
+     * Project reports uid 1 Manual=False, while w37-snet-save.mpp (bit set)
+     * reports Manual=True with the same constraint.  See reader.cpp.  critical
+     * is derived as "not manually scheduled and
      * total_slack_ticks (+190) <= 0": a manually scheduled task is never reported
      * critical, which is why base.mpp's Task A (slack 0) is Critical=false over
      * COM while w3-o1's T2 (slack 0) is Critical=true. */
@@ -451,10 +468,16 @@ struct Resource {
     /* MaxUnits as stored: double at +8, x100 (10000.0 = 100 %). */
     double max_units_x100 = 0.0;
     /* Unproven: see the header comment.  Work unless a future fixture says
-     * otherwise. */
+     * otherwise.  `type_stored` is false because no fixture distinguishes the
+     * Work default from a stored value, so callers can tell the two apart. */
     ResourceType type = ResourceType::work;
+    bool type_stored = false;
 
     double max_units() const { return max_units_x100 / 100.0; }
+    /* The MSPDI spelling: a fraction, 1.0 == 100 %.  Project's exports write
+     * `<MaxUnits>1.00</MaxUnits>` for every resource we have, and that is the
+     * same quantity as max_units()/100. */
+    double max_units_fraction() const { return max_units_x100 / 10000.0; }
     std::uint32_t max_units_percent() const {
         return static_cast<std::uint32_t>(max_units_x100 / 100.0 + 0.5);
     }
@@ -514,11 +537,15 @@ struct Assignment {
      * base.mpp's unassigned rows store the project row's date-only start. */
     PackedDate start{kDateNa};
     PackedDate finish{kDateNa};
-    /* +60: a third date inside [start, finish].  Equals start on zero-percent
-     * assignments, finish at 100 %, and lies strictly between on PROJECT_A's three
-     * partial rows -- Project's Stop semantics.  INFERENCE: no oracle export
-     * carries assignment dates. */
-    PackedDate stop{kDateNa};
+    /* +60: the assignment's **Resume** date (packed).  MEASURED (W40) against
+     * Project's MSPDI export of PROJECT_A: non-empty `<Resume>` on 21 assignments,
+     * and +60 equals it on 21/21.  It is not Stop -- on the two split rows
+     * (uids 9821, 9823) Stop is the previous working instant while +60 is the
+     * next working start.  Where the export has no Resume element (46 rows) the
+     * stored value is Start on 0 % rows and Finish on 100 % rows.  Stop itself
+     * is not stored (it is derivable from Resume + calendar, so not invented
+     * here).  See "ASSIGNMENTS" in the file comment. */
+    PackedDate resume{kDateNa};
 
     /* Both the null sentinel and 0 occur in the corpus for "no resource";
      * real resource uids start at 1. */

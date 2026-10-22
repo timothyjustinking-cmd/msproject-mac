@@ -28,10 +28,17 @@ bool fits_int32(std::uint32_t value) {
     return value <= static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max());
 }
 
-// The lag-format word in a link row is not decoded (reader.h: "lag units/format,
-// meaning unproven").  Every live corpus row stores 7, so the bridge treats lag
-// as working time; it does not claim elapsed lag.
-constexpr bool kLagIsElapsed = false;
+// The link row's +18 word is PjFormatUnit (reader.h "LINKS"; spec §0.4 [B],
+// typelib line 3194: 3 min, 5 hour, 7 day, 9 week, 11 month, +1 = elapsed).
+// MEASURED (wave 9b, corpus/probe/w9-elapsedlag.mpp): two single-variable pairs
+// store 7 for a "2 days" lag and 8 for the same 2-day lag written "2 edays",
+// and the stored tick value of an elapsed lag is already elapsed time
+// ("2 edays" = 28800 ticks = 48 h, "3 edays" = 43200).  So 7 = working and
+// 8 = elapsed days, and the enum's +1 = elapsed rule covers the rest: every even
+// value in 4..12 is an elapsed format.  Every other corpus row stores 7.
+bool lag_is_elapsed(std::uint16_t lag_units) noexcept {
+    return lag_units >= 4 && lag_units <= 12 && (lag_units % 2 == 0);
+}
 
 // PjConstraint 0..7 is the same enum as core::sched::ConstraintType (spec §0.4).
 // A value outside that range cannot be interpreted and becomes ASAP.
@@ -345,7 +352,7 @@ PlanInput from_mpp(const mpp::Document& document) {
         mapped.type = static_cast<LinkType>(static_cast<unsigned>(link.type_raw) & 3u);
         // The reader's lag is signed 6-second ticks -- the engine's unit exactly.
         mapped.lag = static_cast<ticks>(link.lag_ticks);
-        mapped.elapsed_lag = kLagIsElapsed;
+        mapped.elapsed_lag = lag_is_elapsed(link.lag_units);
         input.links.push_back(mapped);
     }
 

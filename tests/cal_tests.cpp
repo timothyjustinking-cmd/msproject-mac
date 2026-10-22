@@ -162,10 +162,11 @@ std::vector<std::uint8_t> make_five_day_week() {
 void append_exception(std::vector<std::uint8_t>& blob, std::int32_t start_day,
                       std::int32_t end_day,
                       std::initializer_list<std::pair<std::int32_t, std::int32_t>> intervals,
-                      std::int32_t recurrence_type) {
+                      std::int32_t recurrence_type, std::int32_t occurrences = 0) {
     std::vector<std::uint8_t> block(92, 0);
     set_u16(block, 0, static_cast<std::uint32_t>(start_day));
     set_u16(block, 2, static_cast<std::uint32_t>(end_day));
+    set_u16(block, 4, static_cast<std::uint32_t>(occurrences));
     set_u16(block, 72, static_cast<std::uint32_t>(recurrence_type));
     std::size_t index = 0;
     for (std::pair<std::int32_t, std::int32_t> const& interval : intervals) {
@@ -208,6 +209,209 @@ cal::CalendarTable make_synthetic_table() {
     calendar.exceptions.push_back(saturday);
     table.calendars.push_back(calendar);
     return table;
+}
+
+// A table with one calendar carrying exactly one exception, for the recurrence
+// tests.  `type` is the stored PjExceptionType and `occurrences` the +4 word.
+cal::CalendarTable make_recurring_table(std::int32_t type, std::int32_t start_day,
+                                        std::int32_t end_day, std::int32_t occurrences) {
+    cal::CalendarTable table;
+    table.default_week = cal::stock_default_week();
+    table.default_calendar_name = "Recurring";
+    cal::CalendarDefinition calendar;
+    calendar.uid = 1;
+    calendar.base_uid = -1;
+    calendar.resource_uid = -1;
+    calendar.name = "Recurring";
+    calendar.has_week_data = false;
+    cal::DatedException exception;
+    exception.start_day = start_day;
+    exception.end_day = end_day;
+    exception.recurrence_type = type;
+    exception.occurrences = occurrences;
+    calendar.exceptions.push_back(exception);
+    table.calendars.push_back(calendar);
+    if (type > 1) {
+        ++table.recurring_exceptions;
+    }
+    return table;
+}
+
+cal::RecurrenceExpansion expand(std::int32_t type, std::int32_t start_day, std::int32_t end_day,
+                                std::int32_t occurrences = 0) {
+    cal::DatedException exception;
+    exception.start_day = start_day;
+    exception.end_day = end_day;
+    exception.recurrence_type = type;
+    exception.occurrences = occurrences;
+    return cal::expand_recurring_exception(exception);
+}
+
+// --- recurring exceptions ([I] parameters: see cal.h) -----------------------
+//
+// The record carries the range and the type; the recurrence PARAMETERS are not
+// decoded, so the expansion derives the rule from the range's first day and
+// assumes the shortest period.  These tests pin the derived rule, the refusals,
+// and the occurrence-word check -- NOT a measurement of Project (no file on disk
+// has a recurring exception; the fixture that would settle it is named in
+// memory/cal.md).
+void test_recurrence(sched_test::TestContext& ctx) {
+    // PjExceptionType 6 = weekly: "every Monday", range Mon 2026-10-19 (day
+    // 15633) .. Mon 2026-11-02 (15647) -> three Mondays.
+    {
+        const cal::RecurrenceExpansion weekly = expand(6, 15633, 15647);
+        ctx.check(weekly.applied, "recurrence weekly: expands");
+        ctx.equal(weekly.days.size(), std::size_t{3}, "recurrence weekly: three Mondays");
+        if (weekly.days.size() == 3) {
+            ctx.equal(weekly.days[0], std::int32_t{15633}, "recurrence weekly: first Monday");
+            ctx.equal(weekly.days[1], std::int32_t{15640}, "recurrence weekly: one week later");
+            ctx.equal(weekly.days[2], std::int32_t{15647}, "recurrence weekly: two weeks later");
+        }
+        // The +4 occurrence word agreeing is accepted...
+        const cal::RecurrenceExpansion check_ok = expand(6, 15633, 15647, 3);
+        ctx.check(check_ok.applied, "recurrence weekly: an agreeing occurrence word is applied");
+        // ...and disagreeing refuses the expansion instead of guessing a period.
+        const cal::RecurrenceExpansion mismatch = expand(6, 15633, 15647, 4);
+        ctx.check(!mismatch.applied, "recurrence weekly: a disagreeing occurrence word refuses");
+        ctx.check(mismatch.days.empty(), "recurrence weekly: a refused expansion has no days");
+        ctx.check(mismatch.why[0] != '\0', "recurrence weekly: the refusal carries a reason");
+    }
+
+    // PjExceptionType 2 = yearly, month + day-of-month: "every 21 October",
+    // 2026..2028 (2028 is a leap year, so the second gap is 366 days).
+    {
+        const cal::RecurrenceExpansion yearly = expand(2, 15635, 16366);
+        ctx.check(yearly.applied, "recurrence yearly: expands");
+        ctx.equal(yearly.days.size(), std::size_t{3}, "recurrence yearly: three years");
+        if (yearly.days.size() == 3) {
+            ctx.equal(yearly.days[0], std::int32_t{15635}, "recurrence yearly: 2026-10-21");
+            ctx.equal(yearly.days[1], std::int32_t{16000}, "recurrence yearly: 2027-10-21");
+            ctx.equal(yearly.days[2], std::int32_t{16366}, "recurrence yearly: 2028-10-21");
+        }
+    }
+
+    // PjExceptionType 4 = monthly, day-of-month: the 15th, Oct 2026 .. Jan 2027.
+    {
+        const cal::RecurrenceExpansion monthly = expand(4, 15629, 15721);
+        ctx.check(monthly.applied, "recurrence monthly: expands");
+        ctx.equal(monthly.days.size(), std::size_t{4}, "recurrence monthly: four months");
+        if (monthly.days.size() == 4) {
+            ctx.equal(monthly.days[0], std::int32_t{15629}, "recurrence monthly: 2026-10-15");
+            ctx.equal(monthly.days[3], std::int32_t{15721}, "recurrence monthly: 2027-01-15");
+        }
+    }
+
+    // PjExceptionType 5 = monthly positional: the second Tuesday, Oct 2026 ..
+    // Jan 2027 (2026-10-13, 11-10, 12-08, 2027-01-12).
+    {
+        const cal::RecurrenceExpansion second_tuesday = expand(5, 15627, 15718);
+        ctx.check(second_tuesday.applied, "recurrence monthly positional: expands");
+        ctx.equal(second_tuesday.days.size(), std::size_t{4},
+                  "recurrence monthly positional: four second Tuesdays");
+        if (second_tuesday.days.size() == 4) {
+            ctx.equal(second_tuesday.days[0], std::int32_t{15627},
+                      "recurrence monthly positional: 2026-10-13");
+            ctx.equal(second_tuesday.days[1], std::int32_t{15655},
+                      "recurrence monthly positional: 2026-11-10");
+            ctx.equal(second_tuesday.days[3], std::int32_t{15718},
+                      "recurrence monthly positional: 2027-01-12");
+        }
+    }
+
+    // PjExceptionType 3 = yearly positional: the first Monday of November,
+    // 2026 (11-02 = 15647) .. 2028 (11-06 = 16382).
+    {
+        const cal::RecurrenceExpansion first_monday = expand(3, 15647, 16382);
+        ctx.check(first_monday.applied, "recurrence yearly positional: expands");
+        ctx.equal(first_monday.days.size(), std::size_t{3},
+                  "recurrence yearly positional: three years");
+        if (first_monday.days.size() == 3) {
+            ctx.equal(first_monday.days[0], std::int32_t{15647},
+                      "recurrence yearly positional: 2026-11-02");
+            ctx.equal(first_monday.days[1], std::int32_t{16011},
+                      "recurrence yearly positional: 2027-11-01");
+            ctx.equal(first_monday.days[2], std::int32_t{16382},
+                      "recurrence yearly positional: 2028-11-06");
+        }
+    }
+
+    // PjExceptionType 7 = day-count: "every N days" has no derivable period.
+    {
+        const cal::RecurrenceExpansion day_count = expand(7, 15633, 15647);
+        ctx.check(!day_count.applied, "recurrence day-count: refused");
+        ctx.check(day_count.days.empty(), "recurrence day-count: no days installed");
+        ctx.check(std::string(day_count.why).find("period") != std::string::npos,
+                  "recurrence day-count: the reason names the missing period");
+    }
+
+    // A plain range is not a recurring exception, and an out-of-range type is
+    // refused rather than treated as one.
+    {
+        ctx.check(!expand(1, 15633, 15647).applied,
+                  "recurrence: PjExceptionType 1 is not recurring");
+        ctx.check(!expand(0, 15633, 15647).applied,
+                  "recurrence: PjExceptionType 0 is not recurring");
+        ctx.check(!expand(9, 15633, 15647).applied,
+                  "recurrence: a type outside 0..7 is refused");
+    }
+
+    // The day cap is a refusal, not a silent truncation.
+    {
+        cal::DatedException weekly;
+        weekly.start_day = 15633;
+        weekly.end_day = 15633 + 7 * 400;  // 401 Mondays
+        weekly.recurrence_type = 6;
+        const cal::RecurrenceExpansion capped = cal::expand_recurring_exception(weekly, 300);
+        ctx.check(!capped.applied, "recurrence: a cap smaller than the expansion refuses");
+        ctx.check(capped.days.empty(), "recurrence: a capped expansion installs nothing");
+    }
+
+    // --- builder: a recurring exception is really applied -------------------
+    {
+        // Every Monday for three weeks, non-working.
+        const cal::CalendarTable table = make_recurring_table(6, kMon, kMon + 14, 0);
+        cal::RecurrenceReport report;
+        const sched::Calendar calendar = cal::build_project_calendar(table, "", &report);
+        ctx.equal(report.applied, std::size_t{1},
+                  "recurrence builder: one recurring exception applied");
+        ctx.equal(report.not_applied, std::size_t{0}, "recurrence builder: nothing refused");
+        ctx.equal(table.recurring_exceptions, std::size_t{1},
+                  "recurrence builder: the table counts it as recurring");
+        ctx.equal(calendar.day_total_ticks(kMon), 0, "recurrence builder: the first Monday is free");
+        ctx.equal(calendar.day_total_ticks(kNextMon), 0,
+                  "recurrence builder: the second Monday is free");
+        ctx.equal(calendar.day_total_ticks(kTue), 4800,
+                  "recurrence builder: the Tuesday between them still works");
+        // 3 d from Monday 08:00 must skip the two Mondays in the way: Tue+Wed
+        // (2 d), Thu+Fri (3 d).
+        ctx.equal_date(calendar.add_work(at(kMon, 8, 0), 3 * 4800), at(kThu, 17, 0),
+                       "recurrence builder: 3 d from Mon 08:00 ends Thu 17:00");
+    }
+
+    // A type-7 exception is counted, not applied, and changes nothing.
+    {
+        const cal::CalendarTable table = make_recurring_table(7, kMon, kMon + 14, 0);
+        cal::RecurrenceReport report;
+        const sched::Calendar calendar = cal::build_project_calendar(table, "", &report);
+        ctx.equal(report.applied, std::size_t{0}, "recurrence builder type 7: not applied");
+        ctx.equal(report.not_applied, std::size_t{1}, "recurrence builder type 7: counted");
+        ctx.equal(calendar.day_total_ticks(kMon), 4800,
+                  "recurrence builder type 7: the calendar is unchanged");
+        ctx.equal(calendar.work_week_count(), 0u,
+                  "recurrence builder type 7: no week override installed");
+    }
+
+    // A weekly exception whose occurrence word disagrees with the range is
+    // counted, not applied.
+    {
+        const cal::CalendarTable table = make_recurring_table(6, kMon, kMon + 14, 5);
+        cal::RecurrenceReport report;
+        const sched::Calendar calendar = cal::build_project_calendar(table, "", &report);
+        ctx.equal(report.not_applied, std::size_t{1},
+                  "recurrence builder: an inconsistent occurrence word is counted");
+        ctx.equal(calendar.day_total_ticks(kMon), 4800,
+                  "recurrence builder: an inconsistent occurrence word changes nothing");
+    }
 }
 
 // --- corpus-gated cases -----------------------------------------------------
@@ -522,7 +726,7 @@ int main() {
         append_u16(blob, 2);   // exception count
         append_u16(blob, 0);   // padding
         append_exception(blob, kWed, kWed, {}, 1);                        // non-working
-        append_exception(blob, kSat, kSat, {{9 * 60, 12 * 60}}, 1);       // special working
+        append_exception(blob, kSat, kSat, {{9 * 60, 12 * 60}}, 1, 3);     // special working
         append_u32(blob, 0);   // empty work-week section
         const cal::CalendarData data = cal::decode_calendar_data(blob);
         ctx.check(!data.truncated, "synthetic 2: the block decodes completely");
@@ -530,7 +734,13 @@ int main() {
         if (data.exceptions.size() == 2) {
             ctx.equal(data.exceptions[0].start_day, kWed, "synthetic 2: first exception date");
             ctx.check(!data.exceptions[0].working, "synthetic 2: first exception is non-working");
+            ctx.equal(data.exceptions[0].recurrence_type, std::int32_t{1},
+                      "synthetic 2: a plain range stores PjExceptionType 1");
+            ctx.equal(data.exceptions[0].occurrences, std::int32_t{0},
+                      "synthetic 2: a plain range stores no occurrence word");
             ctx.check(data.exceptions[1].working, "synthetic 2: second exception is working");
+            ctx.equal(data.exceptions[1].occurrences, std::int32_t{3},
+                      "synthetic 2: the +4 occurrence word is decoded");
             ctx.equal(data.exceptions[1].intervals.size(), 1u,
                       "synthetic 2: the working exception has one interval");
             if (data.exceptions[1].intervals.size() == 1) {
@@ -593,6 +803,9 @@ int main() {
         }
         ctx.check(threw, "builder: an unknown calendar name throws mpp::Error");
     }
+
+    // --- CI-safe: recurring exceptions --------------------------------------
+    test_recurrence(ctx);
 
     // --- corpus-gated cases --------------------------------------------------
     const std::string probe_dir = CAL_PROBE_DIR;
