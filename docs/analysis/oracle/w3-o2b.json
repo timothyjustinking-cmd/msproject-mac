@@ -1,0 +1,471 @@
+{
+  "case": "W3-O2b",
+  "runs": [
+    {
+      "type": 0,
+      "type_name": "fixed units",
+      "step": "initial",
+      "task": {
+        "Duration": 1440,
+        "DurationText": "3 days",
+        "Work": 1440.0,
+        "Units": "<err AttributeError>",
+        "Type": 0,
+        "EffortDriven": false,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-21 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 1.0,
+            "Work": 1440.0,
+            "RemainingWork": 1440.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 1.0,
+          "Work": 1440.0,
+          "RemainingWork": 1440.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 0,
+      "type_name": "fixed units",
+      "step": "Units=50%",
+      "set_ok": true,
+      "task": {
+        "Duration": 2880,
+        "DurationText": "6 days",
+        "Work": 1440.0,
+        "Units": "<err AttributeError>",
+        "Type": 0,
+        "EffortDriven": false,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-26 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 0.5,
+            "Work": 1440.0,
+            "RemainingWork": 1440.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 0.5,
+          "Work": 1440.0,
+          "RemainingWork": 1440.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 0,
+      "type_name": "fixed units",
+      "step": "Units=200%",
+      "set_ok": true,
+      "task": {
+        "Duration": 720,
+        "DurationText": "1.5 days",
+        "Work": 1440.0,
+        "Units": "<err AttributeError>",
+        "Type": 0,
+        "EffortDriven": false,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-20 12:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 2.0,
+            "Work": 1440.0,
+            "RemainingWork": 1440.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 2.0,
+          "Work": 1440.0,
+          "RemainingWork": 1440.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 0,
+      "type_name": "fixed units",
+      "step": "Units=50% again",
+      "set_ok": true,
+      "task": {
+        "Duration": 2880,
+        "DurationText": "6 days",
+        "Work": 1440.0,
+        "Units": "<err AttributeError>",
+        "Type": 0,
+        "EffortDriven": false,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-26 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 0.5,
+            "Work": 1440.0,
+            "RemainingWork": 1440.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 0.5,
+          "Work": 1440.0,
+          "RemainingWork": 1440.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "type_name": "fixed duration",
+      "step": "initial",
+      "task": {
+        "Duration": 1440,
+        "DurationText": "3 days",
+        "Work": 1440.0,
+        "Units": "<err AttributeError>",
+        "Type": 1,
+        "EffortDriven": false,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-21 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 1.0,
+            "Work": 1440.0,
+            "RemainingWork": 1440.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 1.0,
+          "Work": 1440.0,
+          "RemainingWork": 1440.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "type_name": "fixed duration",
+      "step": "Units=50%",
+      "set_ok": true,
+      "task": {
+        "Duration": 1440,
+        "DurationText": "3 days",
+        "Work": 720.0,
+        "Units": "<err AttributeError>",
+        "Type": 1,
+        "EffortDriven": false,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-21 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 0.5,
+            "Work": 720.0,
+            "RemainingWork": 720.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 0.5,
+          "Work": 720.0,
+          "RemainingWork": 720.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "type_name": "fixed duration",
+      "step": "Units=200%",
+      "set_ok": true,
+      "task": {
+        "Duration": 1440,
+        "DurationText": "3 days",
+        "Work": 2880.0,
+        "Units": "<err AttributeError>",
+        "Type": 1,
+        "EffortDriven": false,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-21 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 2.0,
+            "Work": 2880.0,
+            "RemainingWork": 2880.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 2.0,
+          "Work": 2880.0,
+          "RemainingWork": 2880.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "type_name": "fixed duration",
+      "step": "Units=50% again",
+      "set_ok": true,
+      "task": {
+        "Duration": 1440,
+        "DurationText": "3 days",
+        "Work": 720.0,
+        "Units": "<err AttributeError>",
+        "Type": 1,
+        "EffortDriven": false,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-21 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 0.5,
+            "Work": 720.0,
+            "RemainingWork": 720.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 0.5,
+          "Work": 720.0,
+          "RemainingWork": 720.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 2,
+      "type_name": "fixed work",
+      "step": "initial",
+      "task": {
+        "Duration": 1440,
+        "DurationText": "3 days",
+        "Work": 1440.0,
+        "Units": "<err AttributeError>",
+        "Type": 2,
+        "EffortDriven": true,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-21 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 1.0,
+            "Work": 1440.0,
+            "RemainingWork": 1440.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 1.0,
+          "Work": 1440.0,
+          "RemainingWork": 1440.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 2,
+      "type_name": "fixed work",
+      "step": "Units=50%",
+      "set_ok": true,
+      "task": {
+        "Duration": 2880,
+        "DurationText": "6 days",
+        "Work": 1440.0,
+        "Units": "<err AttributeError>",
+        "Type": 2,
+        "EffortDriven": true,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-26 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 0.5,
+            "Work": 1440.0,
+            "RemainingWork": 1440.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 0.5,
+          "Work": 1440.0,
+          "RemainingWork": 1440.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 2,
+      "type_name": "fixed work",
+      "step": "Units=200%",
+      "set_ok": true,
+      "task": {
+        "Duration": 720,
+        "DurationText": "1.5 days",
+        "Work": 1440.0,
+        "Units": "<err AttributeError>",
+        "Type": 2,
+        "EffortDriven": true,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-20 12:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 2.0,
+            "Work": 1440.0,
+            "RemainingWork": 1440.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 2.0,
+          "Work": 1440.0,
+          "RemainingWork": 1440.0,
+          "ActualWork": 0.0
+        }
+      ]
+    },
+    {
+      "type": 2,
+      "type_name": "fixed work",
+      "step": "Units=50% again",
+      "set_ok": true,
+      "task": {
+        "Duration": 2880,
+        "DurationText": "6 days",
+        "Work": 1440.0,
+        "Units": "<err AttributeError>",
+        "Type": 2,
+        "EffortDriven": true,
+        "Start": "2026-10-19 08:00:00",
+        "Finish": "2026-10-26 17:00:00",
+        "PercentComplete": 0,
+        "assignments": [
+          {
+            "TaskID": 1,
+            "ResourceID": 1,
+            "ResourceName": "R1",
+            "Units": 0.5,
+            "Work": 1440.0,
+            "RemainingWork": 1440.0,
+            "ActualWork": 0.0
+          }
+        ]
+      },
+      "assignment": [
+        {
+          "TaskID": 1,
+          "ResourceID": 1,
+          "ResourceName": "R1",
+          "Units": 0.5,
+          "Work": 1440.0,
+          "RemainingWork": 1440.0,
+          "ActualWork": 0.0
+        }
+      ]
+    }
+  ],
+  "run_at": "2026-10-22T12:52:52"
+}

@@ -1,0 +1,138 @@
+Phase 1: Advanced Function Naming Summary
+============================================================
+
+Total functions:            55978
+Originally named:           3731
+Phase 0 named:              17213
+Phase 1 NEW names:          34044
+Total named (all sources):  54988
+Coverage:                   98.2%
+
+Phase 1 breakdown:
+  final_sweep                      9706
+  callgraph_relaxed                8843
+  callgraph                        6907
+  module_based                     4429
+  address_locality                 2267
+  string_diagnostic                1096
+  import_pattern                    515
+  thunk_detection                   113
+  thunk_round2                      103
+  string_cpp_scope                   61
+  field_cluster                       4
+
+
+Sample names by strategy:
+------------------------------------------------------------
+
+address_locality:
+  1401d296c  CFrontendCallback::local_0                         conf=30
+  1401d298c  CFrontendCallback::local_1                         conf=30
+  1401d2b1c  CFrontendCallback::local_2                         conf=30
+  1401d2bc0  CFrontendCallback::local_3                         conf=30
+  1401d2c20  CFrontendCallback::local_4                         conf=30
+  1401d324c  CAccTbl::local_0                                   conf=30
+  1401d3340  CAccTbl::local_1                                   conf=30
+  1401d33c0  CAccTbl::local_2                                   conf=30
+  1401d3508  CAccTbl::local_3                                   conf=30
+  1401dba30  CTextConv::local_0                                 conf=30
+
+callgraph:
+  1401c71b0  Experimentation::sub_0                             conf=55
+  1401d07e0  CTextConv::sub_0_0                                 conf=55
+  1401d27b8  CTextConv::sub_0_1                                 conf=55
+  1401d2838  CTextConv::sub_0_2                                 conf=55
+  1401d36a0  CAccTbl::sub_0                                     conf=55
+  1401d765c  CFrontendCallback::sub_2_0                         conf=55
+  1401d7920  CFrontendCallback::sub_2_1                         conf=55
+  1401d7d64  CFrontendCallback::sub_3_0                         conf=55
+  1401d7db0  CFrontendCallback::sub_0_0                         conf=55
+  1401dfdc4  ConverterWrapper::sub_0_1                          conf=55
+
+callgraph_relaxed:
+  1401c4b14  TaskBoardUI::related_0                             conf=26
+  1401c5550  DownloaderCallback::related_0                      conf=26
+  1401c63d0  TSequentialStream::related_0                       conf=40
+  1401ca320  CDocument::related_0                               conf=25
+  1401cb054  Osf::related_0                                     conf=40
+  1401cb06c  Osf::related_1                                     conf=26
+  1401d0d90  CTextConv::related_1                               conf=25
+  1401d10e0  CTextConv::related_3                               conf=40
+  1401d1a10  CTextConv::related_8                               conf=40
+  1401d4720  ResourceSheetGridUser::related_0                   conf=30
+
+field_cluster:
+
+final_sweep:
+  1401c4aec  TSprintTable::func_0                               conf=20
+  1401c56bc  PjDr::func_0                                       conf=20
+  1401c6410  TSequentialStream::func_1                          conf=20
+  1401c6584  TaskBoardUI::func_8                                conf=20
+  1401c69d4  ProjectOsfHost::func_0                             conf=20
+  1401c749c  TTaskTable::func_2                                 conf=20
+  1401ca2b0  LeftTitleCell::func_0                              conf=20
+  1401ca394  CDocument::func_0                                  conf=20
+  1401ca740  TaskBoardUI::func_16                               conf=20
+  1401ca7a0  TaskBoardUI::func_17                               conf=20
+
+import_pattern:
+  140941868  window_mgmt_func_59                                conf=40
+  140941d2c  window_mgmt_func_60                                conf=40
+  1401ce158  window_mgmt_func_0                                 conf=40
+  14090c520  file_io_func_2                                     conf=40
+  140a62880  file_io_func_3                                     conf=40
+  140b306e0  file_io_func_4                                     conf=40
+  14033fc3c  memory_mapped_io_func                              conf=40
+  140894320  file_io_func_0                                     conf=40
+  140a2b4e8  com_ole_func_46                                    conf=40
+  140c60c80  file_io_func_6                                     conf=40
+
+module_based:
+  140001010  tasks::func_0                                      conf=15
+  140001060  tasks::func_1                                      conf=15
+  1400010b0  tasks::func_2                                      conf=15
+  140001100  tasks::func_3                                      conf=15
+  140001150  tasks::func_4                                      conf=15
+  1400011a0  tasks::func_5                                      conf=15
+  1400011f0  tasks::func_6                                      conf=15
+  140001260  tasks::func_7                                      conf=15
+  140001280  tasks::func_8                                      conf=15
+  1400012a0  tasks::func_9                                      conf=15
+
+string_cpp_scope:
+  1405b3240  BorderCmd::Log                                     conf=80
+  1405f94c0  NewTableColumnCmd::Perform                         conf=80
+  1402bb2b0  TBkndRecalc::XP_RecomputeOutline                   conf=80
+  1405f7bc0  ModifyTablePropsCmd::Perform                       conf=80
+  1405b7fe0  CutCopyCellsAction::Perform                        conf=80
+  1405b6770  TableResizeCmd::Log                                conf=80
+  1405b50d0  InsertColCmd::Log                                  conf=80
+  1404c3f10  ColumnWidthResizeCmd::Log                          conf=80
+  1404c4190  RowHeightResizeCmd::Log                            conf=80
+  1405b30c0  AutoSizeColCmd::Log                                conf=80
+
+string_diagnostic:
+  1401c6318  BKND_LIB_ContextInit                               conf=65
+  14020bdf8  Profile_0                                          conf=65
+  1408a23ac  Parsing                                            conf=65
+  1401c39f0  Sprint_0                                           conf=65
+  140a874f8  Sprint_5                                           conf=65
+  140d251ec  Sprint_6                                           conf=65
+  140e95ec0  Sprint_7                                           conf=65
+  1404f9f44  Sprint_3                                           conf=65
+  1404f9f50  Sprint_4                                           conf=65
+  140e9600c  Sprint_8                                           conf=65
+
+thunk_detection:
+  140001000  thunk_atexit_0                                     conf=70
+  140001240  thunk_atexit_1                                     conf=70
+  140001250  thunk_atexit_2                                     conf=70
+  1400012c0  thunk_atexit_3                                     conf=70
+  140064ed0  thunk_atexit_4                                     conf=70
+  1401b8100  thunk_atexit_5                                     conf=70
+  1401b8160  thunk_atexit_6                                     conf=70
+  1401b8170  thunk_atexit_7                                     conf=70
+  1401b8180  thunk_atexit_8                                     conf=70
+  1401b8190  thunk_atexit_9                                     conf=70
+
+thunk_round2:

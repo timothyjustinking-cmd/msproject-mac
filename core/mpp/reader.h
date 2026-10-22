@@ -1,0 +1,628 @@
+/*
+ * reader.h -- read the Task, Resource, Link and Assignment tables of a
+ * Microsoft Project .mpp file.
+ *
+ * SCOPE.  Reader v1: open a real MPP14 file and return one record per *live*
+ * task (UniqueID, ID, Name, Duration, Start, Finish, Priority,
+ * PercentComplete, OutlineLevel, OutlineNumber, Summary, Milestone, Critical,
+ * ConstraintType, ConstraintDate, Deadline, the actual dates/duration, the
+ * start anchor and the task-calendar uid), one per live resource (UniqueID, ID,
+ * Name, Initials, MaxUnits), one per live link (UniqueID, predecessor/successor,
+ * type, lag) and one per live assignment (UniqueID, task UniqueID, Units, Work,
+ * Start/Finish/Stop), plus the project row's title, start and finish.  No
+ * calendars, baselines or writing.
+ *
+ * WHERE THE BYTES COME FROM.  Container layout: `spec/mpp-container.md`.
+ * Task layout: `spec/mpp-records.md` (W1), with three corrections this stream
+ * established against the files and against MS Project's own output
+ * (tests/data/project_a_golden.tsv).  See reader.cpp for the evidence of each:
+ *
+ *   1. VarMeta has a 24-byte header and 12-byte entries laid out
+ *      (uid, Var2Data offset, key) -- not (key, uid, offset) after 32 bytes.
+ *      W1 §5.1 was misaligned by 8 bytes; that shift pairs every key with the
+ *      previous key's block.
+ *   2. Task.Name is key 0x0b40000e, which is COM's PjFieldTaskName.  The key
+ *      table in analysis/field_id_map.tsv therefore does decode Var2Data, and
+ *      there is no separate file-side key space.
+ *   3. PercentComplete is a u16 at +92, not a u32 (100 % stores 64 00 64 00).
+ *
+ * FROM THE FIXED TASK ROW (202 bytes inside TBkndTask/FixedData, 48-byte
+ * header):
+ *     +0    u32  ID (display/outline order; matches MS Project's ID column)
+ *     +4    u32  UniqueID
+ *     +64   u16  ConstraintType, Project's PjConstraint 0=ASAP .. 7=FNLT
+ *     +66   u32  ConstraintDate (packed date; unaligned; 0xffffffff = NA)
+ *     +78   u16  Priority
+ *     +80   u32  ActualDuration in 6-second ticks
+ *     +84   u32  Duration in 6-second ticks (4800 = one 8-hour day,
+ *                10 ticks = one minute)
+ *     +92   u16  PercentComplete
+ *     +96   u32  calculated Start  (packed date; W33: not the effective one)
+ *     +100  u32  calculated Finish (packed date)
+ *     +104  u32  effective Start   (packed date; Task::start)
+ *     +108  u32  effective Finish  (packed date; Task::finish)
+ *     +120  u32  ActualStart (packed date; 0xffffffff until work is recorded)
+ *     +124  u32  ActualFinish (packed date; 0xffffffff until 100 % complete)
+ *     +182  u32  Deadline (packed date; unaligned; 0xffffffff = NA)
+ *
+ * SCHEDULING INPUTS (W19).  The row groups above were proved from fixture
+ * diffs, not guessed:
+ *
+ *   ConstraintType / ConstraintDate.  corpus/probe/schedin.mpp has one task
+ *   per PjConstraint value in ID order (KASAP..KFNLT): +64 reads
+ *   0/1/2/3/4/5/6/7 exactly and +66 reads 0x3d1812c0 (2026-10-26 08:00) on
+ *   KMSO..KFNLT and 0xffffffff on KASAP/KALAP.  corpus/probe/w3-o1.mpp is the
+ *   independent COM check: its T1 is type 0 / NA date and T2/T3/T4 are type 4
+ *   with 2026-10-20 08:00, 2026-10-23 15:00 and 2026-10-21 08:00, exactly what
+ *   docs/analysis/oracle/w3-o1.json reports.  spec/scheduling.md §3.6's
+ *   "+0x84 short, date at +0x78" are the in-memory TASKNODE offsets, not the
+ *   file row; the serialized row puts them at +64/+66.
+ *
+ *   Deadline.  +182 (unaligned), NOT a VarMeta field: no corpus file stores
+ *   field id 0x0b4001b5 in any VarMeta stream.  schedin.mpp's DL row stores
+ *   0x3d1327d8 = 2026-10-21 17:00, the COM deadline; w3-o4-last.mpp's T2
+ *   stores 0x3d1227d8 = 2026-10-20 17:00, also the COM deadline
+ *   (docs/analysis/oracle/w3-o4.json, critical_slack_limit runs).  Every row
+ *   without a deadline stores 0xffffffff there.
+ *
+ *   Start anchor (+174, u32 packed date; 0xffffffff = none).  This is the bound
+ *   a task's Start is aligned *from*, not the scheduled Start (+104).  Measured
+ *   on corpus/project_a.mpp: uid 10759 stores 2026-08-10 17:00 at
+ *   +174, which is its predecessor's finish, while its own Start is
+ *   2026-08-11 08:00; uid 10742 stores its own 17:00 (its Start == Finish).
+ *   corpus/probe/link1.mpp's T2/T3 store T1's 17:00 finish at +174 and start
+ *   the next morning; corpus/probe/holiday1.mpp's T2 stores 2026-10-20 17:00
+ *   (T1's finish) and starts 2026-10-21 08:00.  A manually scheduled task's
+ *   +174 is its manual Start: corpus/probe/manual-start-edited.mpp's uid 1 was
+ *   given 2026-01-12 08:00 over COM and stores it at +174 while the stale
+ *   calculated +96 still says 2026-01-05 08:00 (+104 carries the new value);
+ *   base.mpp's three manual tasks store the project's date-only start
+ *   (2026-01-04 13:00 UTC) there.  Auto tasks with no such bound store
+ *   0xffffffff (w3-o1, schedin, lagff1, assign1, ...).  The reader exposes it
+ *   as Task::start_anchor and deliberately does NOT use it for Task::start:
+ *   Project's Start is the effective +104.
+ *
+ *   Task calendar (+178, i32; -1 = none).  corpus/probe/holiday1.mpp is the
+ *   proof: all three live tasks store 3, and docs/analysis/oracle/
+ *   holiday-probe.json records SiteCal as the task calendar with uid 3 (the
+ *   project default is Standard).  Every PROJECT_A and PROJECT_B task row stores -1, so
+ *   their tasks correctly fall back to the project calendar.  Exposed as
+ *   Task::calendar_uid; core/cal can consume it.
+ *
+ *   Actuals.  +80 ActualDuration (ticks) is the W1 var-pct diff (0 -> 12000
+ *   when task 1 became 50 % of 5 d); schedin's P50 is a 2-day task at 50 % and
+ *   stores 4800.  +120 ActualStart and +124 ActualFinish are the two dates at
+ *   the head of the actual/stop/resume block W1 documented at +120..+139.
+ *   Every Project-written row with progress has +120, and +124 is set on all
+ *   38 rows at 100 % (PROJECT_A and its recalc copy) but on none of the 346 rows
+ *   below 100 %; +124 equals the stored Finish on those 38.  The only rows
+ *   with progress and no +120 are four writer-patched fixtures that set
+ *   PercentComplete alone, which is what a percent-only patch does.  schedin's
+ *   P50 (50 %) stores its 2026-11-02 08:00 start at +120 and NA at +124.  The
+ *   *identity* of +120/+124 as ActualStart/ActualFinish is an inference from
+ *   that pattern: no oracle JSON exports them (`schedin-probe.json` reports
+ *   ActualStart null even for P50, which is the one unresolved discrepancy).
+ *   They are decoded anyway because the block is documented and the pattern
+ *   matches, but treat the values as unproven against COM.
+ *
+ * STATUS FIELDS (W18; the slack fields corrected by W30).  Three stored slack
+ * words and three values derived because no fixture moves a stored copy:
+ *
+ *     +74   i32  FreeSlack in 6-second ticks (4800 = one working day, 10 = one
+ *                minute).
+ *     +186  i32  StartSlack, same units.
+ *     +190  i32  TotalSlack, same units.  W18 read +74 as TotalSlack; W30
+ *                separated the three.  corpus/probe/milestone1.mpp's ID6 is the
+ *                discriminator: +74 = 0 (COM FreeSlack 0) while +186 = +190 =
+ *                220800 ticks (COM StartSlack = TotalSlack = 22080 minutes).
+ *                outline1.mpp's summary stores +186 = 19200 (COM StartSlack 1920
+ *                minutes) with +74 = +190 = 0 (FreeSlack = TotalSlack = 0).
+ *                w3-o1's four tasks have all three equal (24000/0/3600/19200
+ *                ticks against COM's 2400/0/360/1920 minutes), which is why they
+ *                could not separate the fields.  +190 is also where schedin's
+ *                ALAP task stores 52800 ticks = the 5280 minutes the engine used
+ *                to report as a divergence when it read +74.
+ *   Critical   is NOT stored as a flag: no byte of the 202-byte row, and no bit
+ *              in Fixed2Data, is set only on w3-o1's critical task T2.  It is
+ *              derived as "not manually scheduled && total_slack (+190) <= 0",
+ *              which is
+ *              MS Project's rule ("critical if slack is less than or equal to 0
+ *              days", docs/handoff/coordinator.md) with the manual-task
+ *              exception: base.mpp's Task A has slack 0 and COM reports
+ *              Critical=false, because it is manually scheduled.  The rule
+ *              reproduces COM on all 10 task rows of base, w3-o1 and outline1.
+ *              "Manually scheduled" itself is inferred from Fixed2Meta's per-row
+ *              flags byte (+8, bit 0x80); the evidence is in reader.cpp.
+ *   Milestone  IS stored: bit 0x02 of byte +10 of the Task FixedMeta entry (the
+ *              16-byte per-row blob at +8).  Duration == 0 is only the
+ *              fallback, because Project lets a milestone keep a duration:
+ *              corpus/probe/project_b-export.xml (Project's MSPDI export of
+ *              PROJECT_B) says Milestone=1 for uid 10735 (10 days) and uid 10799
+ *              (1 day), and the file sets the bit on exactly those two rows in
+ *              addition to its 8 zero-day milestones (10 total, 0 false
+ *              positives on PROJECT_B's 63 other live rows).  The bit reproduces
+ *              COM on milestone1.mpp: its 5 milestones are exactly its 5 rows
+ *              with the bit, and docs/analysis/oracle/milestone-probe.json's
+ *              Milestone flags agree row for row (uids 2,3,4,5,7) while its
+ *              two non-milestone rows are clear; w3-o1's T4 has the bit and is
+ *              COM's only milestone there.  A row with no FixedMeta entry
+ *              falls back to duration == 0 (Task::milestone_stored says which
+ *              path was taken).
+ *
+ * OUTLINE (Fixed2Data).  OutlineLevel is not stored as a number anywhere; the
+ * *hierarchy* is.  `114/TBkndTask/Fixed2Data` holds one 64-byte record per row
+ * (spec/mpp-records.md §7), and Fixed2Meta's entry i describes the same row as
+ * FixedMeta's entry i, which is what pairs a record with its row:
+ *
+ *     +0   16 B  row identity.  NOT the UniqueID: it is a GUID-like value that
+ *                changes when Project rewrites the row.
+ *     +16  f64   sequence number 1.0, 2.0, 3.0, ... in freshly saved files.
+ *                spec §7 calls this a "level" double; it is not one (PROJECT_A's 85
+ *                rows hold 1.0, 84.0, 46.39, ... and outline1's level-2 rows
+ *                hold 3.0 and 4.0).
+ *     +24  16 B  identity of the *parent* row; all zero on the project row.
+ *     +42  u8    flags.  Bit 0x40 is set exactly on the rows that have children
+ *                (outline1's summary and the project row; PROJECT_A 17/17 and PROJECT_B
+ *                13/13 rows, checked against the parent links below).
+ *
+ * Evidence that +24 is the parent and not the previous row (spec §7's reading):
+ * base.mpp is flat, so "every task's +24 is the project row's id" fits both.
+ * outline1.mpp does not: there C1's +24 is S1's id and C2's is *also* S1's id,
+ * not C1's, which a previous-row chain would have produced.  COM reports
+ * OutlineLevel 1/2/2 for S1/C1/C2 and the depths of the stored chain are 1/2/2.
+ * Every other fixture's chain is flat (base 1/1/1, w3-o1 1/1/1/1) and so is its
+ * outline, but COM's OutlineLevel itself was only exported for outline1: one
+ * oracle pass over PROJECT_A's 83 rows would turn the derivation into a measured
+ * match.  So OutlineLevel is derived as the depth of the stored parent chain
+ * (the project row is 0, its children 1) and OutlineNumber as the sibling-index
+ * path "1", "1.1", "1.2", ... over live rows in row order, which is COM's
+ * Task.OutlineNumber.  Both are marked derived here rather than measured,
+ * because no fixture changes a level byte: the evidence is that the chain
+ * reproduces COM's numbers on the fixture that has a hierarchy.
+ *
+ * Summary is derived as child_count > 0.  The stored 0x40 flag agrees with that
+ * on every row of every file we have; a disagreement is reported as damage, not
+ * silently resolved.
+ *
+ * RESOURCES (TBkndRsc).  FixedData = 48-byte header + 172 bytes per row; row 0
+ * is a uid-0 placeholder, rows 1.. are the resources in table order.  The row
+ * offsets proved from the corpus are:
+ *     +0    u32     ID (equal to UniqueID in every corpus file; Project hands
+ *                   resource uids out sequentially, so the two cannot be told
+ *                   apart from these bytes)
+ *     +4    u32     UniqueID
+ *     +8    double  MaxUnits, x100: 10000.0 is 100 %.  Same x10000 encoding
+ *                   the COM-validated in-memory assignment Units uses
+ *                   (memory/assignment-flat-buffer.md).  All corpus resources
+ *                   are at 100 %, so the *identity* is inference; the value is
+ *                   measured.
+ *     +80   u32     AccrueAt (3 = prorated, the Project default; not exposed)
+ *     +154  u16     per-row counter (unmapped; not exposed)
+ * Name = VarMeta key 0x0c400001 (UTF-16LE, raw and display forms), Initials =
+ * 0x0c400002.  Resource Type is NOT in these 172 bytes that we could prove:
+ * mpxj reads Material/Cost from a FixedMeta bit, and no corpus fixture has a
+ * material or cost resource.  Resource::type is therefore reported as Work and
+ * documented as unproven.
+ *
+ * LINKS (TBkndCons, Project's "relationship" table).  FixedData = 20 bytes per
+ * row, NO header; FixedMeta = 16 + 10 bytes per entry.  There is no VarMeta
+ * content (24-byte header, zero entries) and Var2Data is empty: a link is
+ * entirely fixed.  Row:
+ *     +0   u32  link UniqueID
+ *     +4   u32  predecessor task UniqueID
+ *     +8   u32  successor task UniqueID
+ *     +12  u16  type: 0 = FF, 1 = FS, 2 = SF, 3 = SS (Project's enum).  PROJECT_B
+ *               stores 1 (FS) in all 72 links and its links are sequential
+ *               finish-to-start chains; PROJECT_A stores one 3.  The 0/2/3 names are
+ *               inference from the documented enum.
+ *     +14  i32  lag in 6-second ticks (4800 = one 8-hour day, negative = lead).
+ *               PROJECT_A's live rows hold 96000 = 20 d, 139200 = 29 d and
+ *               240000 = 50 d; fixture link1.mpp stores 4800 and -4800 in the
+ *               same field.
+ *     +18  u16  7 in every live corpus row; lag units/format, meaning unproven.
+ * LIVENESS: a row is a link only when a FixedMeta entry names it (the entry's +4
+ * offset).  PROJECT_A has 99 rows, 91 entries and 88 distinct covered rows; the 11
+ * rows without an entry (including the all-zero 85/86) go to
+ * Document::skipped_links.  Reading every non-zero row instead returned 97 links
+ * and invented links MS Project does not schedule -- see reader.cpp's LIVENESS
+ * note.
+ *
+ * LIVENESS HAS TWO LEVELS, and they are not the same question:
+ *   (a) row liveness  -- a FixedMeta entry names the row (above);
+ *   (b) endpoint liveness -- both the predecessor and successor uids name a
+ *       *live task*, which Link::predecessor_known / successor_known report.
+ * PROJECT_B is the measured case where they differ: 72 rows are live by (a) but
+ * Project exports only 70 <PredecessorLink> elements, because the first two
+ * links (10722 -> 10723 and 10723 -> 10724) name uids that only exist in
+ * PROJECT_B's 12 deleted task slots (rows 6..8).  PROJECT_B's links are therefore
+ * 72 returned / 70 with both endpoints live / 2 dead-endpoint.  Project does
+ * not schedule a dead-endpoint link; the reader keeps it (so a caller can see
+ * the stored bytes) and Link::endpoints_live() is false for it.  PROJECT_A and
+ * link1 are 88/88 and 5/5: no dead endpoints.  Document::
+ * link_count_with_live_endpoints() / link_count_with_dead_endpoints() give the
+ * split, and reader_dump prints it.
+ *
+ * ASSIGNMENTS (TBkndAssn).  FixedData = 110 bytes per assignment, NO header;
+ * FixedMeta = 16 + 34 bytes per assignment.  Row:
+ *     +0   u32     assignment UniqueID (equals the VarMeta entry's uid)
+ *     +4   u32     task UniqueID
+ *     +8   u32     resource UniqueID.  Proved by the coordinator's
+ *                  corpus/probe/assign1.mpp: its three real rows hold 1, 2, 1
+ *                  for the documented T1/R1, T1/R2, T2/R1 assignments.
+ *                  base/probe-v1/PROJECT_A/PROJECT_B store 0xFFFF0001 there on their
+ *                  unassigned placeholder rows; that is -65535, mpxj's
+ *                  ASSIGNMENT_NULL_RESOURCE_ID, so Assignment::has_resource()
+ *                  is false for them and the raw word is preserved.
+ *     +12  double  Units, x100: 10000.0 = 100 %.
+ *     +20  double  Work, minutes x1000: 2,400,000 = 2,400 min = 5 days.
+ *                  Measured against base.mpp's 5/3/2-day tasks and against
+ *                  probe-v2 (task 1 5 d -> 7 d scales exactly x1.4).
+ *     +52  u32     assignment Start (packed date).  Measured: equals the
+ *                  task's effective +104 on all 67 live PROJECT_A assignments, all 63
+ *                  of PROJECT_B's assignments whose task is a live task (10 of
+ *                  PROJECT_B's 73 assignments name deleted task uids), 4/4 link1
+ *                  and the 3 real assign1 rows.  base.mpp's three unassigned
+ *                  rows store the project row's date-only start.
+ *     +56  u32     assignment Finish (packed date).  Same counts against the
+ *                  task's +108 (67/67 PROJECT_A, 63/63 resolved PROJECT_B, 4/4, 3/3).
+ *     +60  u32     a third date inside [Start, Finish]: it equals Start on 51
+ *                  of PROJECT_A's zero-percent assignments, Finish on all 13 at
+ *                  100 %, and is strictly between on the 3 partial rows
+ *                  (PROJECT_A 10 % / 40 % / 40 %); PROJECT_B's 63 resolved assignments
+ *                  are all 0 % so all store Start.  That is Project's Stop
+ *                  semantics; the *identity* is an inference (no oracle
+ *                  export carries assignment dates).
+ *     +92  u32     7 (unmapped; same value as the in-memory assignment record's
+ *                  +116 i16).
+ *
+ * Row 0 of the Task table is the project row and is returned as
+ * Document::project, never as a task.  A task row with no VarMeta group has no
+ * Name entry and is a deleted slot: PROJECT_A's row 67 (uid 10856) and PROJECT_B's rows
+ * 1..12 are, and MS Project does not report them.  They go to
+ * Document::skipped_rows, not to tasks.  Resources are rows 1.. (row 0 is a
+ * uid-0 placeholder); links need a FixedMeta entry that names the row (PROJECT_A has
+ * 88 covered rows out of 99); assignments need a FixedMeta entry and a non-zero
+ * task uid (assign1.mpp stores two covered placeholder rows with task uid 0).
+ * See reader.cpp.
+ *
+ * TOLERANCE.  Real files carry damage: PROJECT_A's VarMeta declares 1,076 entries but
+ * holds 1,081, repeats 5 (uid, key) pairs, has 101 entries whose offset
+ * (0xffffffff) is "not stored", and one dead task row; its link FixedMeta says
+ * 88 entries but holds 91 (88 of 99 rows covered), and its assignment FixedMeta
+ * says 67 but holds 68 for 69 rows.  None of that is fatal; everything worked
+ * around is reported in Document::warnings with offsets.
+ */
+
+#ifndef MPP_READER_H
+#define MPP_READER_H
+
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "cfb.h"  /* mpp::Error */
+
+namespace mpp {
+
+/* One 8-hour working day, in 6-second ticks (W1, spec/mpp-records.md §4). */
+constexpr std::uint32_t kTicksPerDay = 4800;
+/* Ten ticks make one minute: MS Project's internal duration unit is 0.1 min. */
+constexpr std::uint32_t kTicksPerMinute = 10;
+/* One tick is 6 seconds: value = (day << 16) | (seconds_of_day / 6). */
+constexpr std::uint32_t kTickSeconds = 6;
+/* The packed-date word Project stores for "no date": 0xffffffff.  (0 is also
+ * treated as not-a-date by PackedDate::valid().)  It is the initial value of
+ * every optional PackedDate member, e.g. Task::start_anchor. */
+constexpr std::uint32_t kDateNa = 0xFFFFFFFFu;
+
+/*
+ * A date/time as stored in the fixed row: one u32, `(day << 16) | secs/6`,
+ * where day 0 is 1983-12-31.  A value of 0 or 0xffffffff is not a date.
+ */
+struct PackedDate {
+    std::uint32_t raw = 0;
+
+    bool valid() const { return raw != 0 && raw != 0xFFFFFFFFu; }
+    int day() const { return static_cast<int>(raw >> 16); }
+    int seconds_of_day() const { return static_cast<int>((raw & 0xFFFFu) * kTickSeconds); }
+    std::uint32_t ticks_of_day() const { return (raw & 0xFFFFu); }
+};
+
+struct Task {
+    std::uint32_t row = 0;     /* FixedData row index, 0-based, project row excluded */
+    std::uint32_t row_id = 0;  /* u32 at +0: MS Project's ID column */
+    std::uint32_t uid = 0;     /* u32 at +4: UniqueID */
+    /* name is the display form: ASCII spaces trimmed, which is what MS Project's
+     * COM surface reports (PROJECT_A row 1 is stored as "Site establishment ").
+     * name_raw is the decoded block verbatim, for a writer's round trip. */
+    std::string name;
+    std::string name_raw;
+    std::uint32_t duration_ticks = 0;   /* +84 */
+    std::uint16_t priority = 0;         /* +78 */
+    std::uint16_t percent_complete = 0; /* +92 (u16; see note 3 above) */
+    /* start/finish are the EFFECTIVE pair (+104/+108, W33): what Project's own
+     * UI and MSPDI export report.  calculated_start/calculated_finish are the
+     * calculated pair (+96/+100), which goes stale after a manual Start edit or
+     * in a file that is not fully calculated (PROJECT_B uid 10805 is the one
+     * corpus row where the pairs differ).  Both are packed dates. */
+    PackedDate start;                   /* +104 (effective) */
+    PackedDate finish;                  /* +108 (effective) */
+    PackedDate calculated_start;        /* +96 (calculated copy) */
+    PackedDate calculated_finish;       /* +100 (calculated copy) */
+
+    /* ---- Scheduling inputs for core::plan and the CPM engine (wave 6).
+     * Decoded by W19 from the fixed row; see "SCHEDULING INPUTS" in the file
+     * comment for the byte evidence.  0xffffffff means "not set"
+     * (PackedDate::valid() is false for both 0 and 0xffffffff). */
+    std::uint16_t constraint_type = 0;         /* +64: PjConstraint 0=ASAP .. 7=FNLT */
+    PackedDate constraint_date{0xFFFFFFFFu};   /* +66: only for the types that carry one */
+    PackedDate deadline{0xFFFFFFFFu};          /* +182, not VarMeta 0x0b4001b5 */
+    /* +174: the start anchor.  NOT the scheduled Start (+96).  For a manually
+     * scheduled task it is the manual Start; for an auto task it is the bound
+     * the start was aligned from (usually a predecessor's finish, hence 17:00
+     * the previous workday); kDateNa when the file stores none.  See "Start
+     * anchor" in the file comment for the PROJECT_A/link1/holiday1/manual fixture
+     * evidence.  Deliberately not used for start. */
+    PackedDate start_anchor{kDateNa};
+    /* +178: task calendar UniqueID (i32).  -1 means "no task calendar", i.e.
+     * the task uses the project calendar.  holiday1.mpp's three tasks store 3
+     * (SiteCal); every PROJECT_A/PROJECT_B row stores -1. */
+    std::int32_t calendar_uid = -1;
+    /* +120/+124.  Unproven against COM (no oracle export); see the file
+     * comment.  A 50 %-complete task has an actual start and no actual
+     * finish. */
+    PackedDate actual_start{0xFFFFFFFFu};
+    PackedDate actual_finish{0xFFFFFFFFu};
+    std::uint32_t actual_duration_ticks = 0;   /* +80 */
+
+    /* ---- Outline.  Derived from the stored parent links in Fixed2Data; see
+     * "OUTLINE" in the file comment.  outline_level is MS Project's
+     * Task.OutlineLevel (1 for a top-level task, 0 only for the project row),
+     * outline_number its "1"/"1.1"/"1.2" sibling path.  Both stay at the flat
+     * default when a file has no usable Fixed2Data. */
+    std::uint32_t outline_level = 1;
+    std::string outline_number;
+    /* Rows whose stored parent is this task.  summary == child_count > 0. */
+    std::uint32_t child_count = 0;
+    bool summary = false;
+
+    /* ---- Status.  Three stored slack words, in 6-second ticks (4800 = one
+     * working day); negative is possible in Project (an SNLT/FNLT clamp can give
+     * negative slack) but no corpus file has one.  W30 corrected the mapping:
+     * +74 is FreeSlack, +186 StartSlack, +190 TotalSlack (W18 had called +74
+     * TotalSlack).  milestone1.mpp's ID6 separates them: +74 = 0 with +186 =
+     * +190 = 220800; outline1's summary has +74 = +190 = 0 with +186 = 19200.
+     * manually_scheduled is INFERRED from bit 0x80 of Fixed2Meta's per-row flags
+     * byte (+8), the only place the reader found the task mode; see the evidence
+     * block in reader.cpp.  critical is derived as "not manually scheduled and
+     * total_slack_ticks (+190) <= 0": a manually scheduled task is never reported
+     * critical, which is why base.mpp's Task A (slack 0) is Critical=false over
+     * COM while w3-o1's T2 (slack 0) is Critical=true. */
+    std::int32_t free_slack_ticks = 0;  /* +74 */
+    std::int32_t start_slack_ticks = 0; /* +186 */
+    std::int32_t total_slack_ticks = 0; /* +190 */
+    bool manually_scheduled = false;
+    bool critical = false;
+    /* Milestone, stored: bit 0x02 at byte +10 of the Task FixedMeta entry.
+     * Project lets a milestone keep a duration (PROJECT_B uids 10735 10 d and
+     * 10799 1 d are Milestone=1 in its MSPDI export), so duration == 0 is only
+     * the fallback.  `milestone` is the effective value; `milestone_stored` is
+     * true when the file carried the flag for this row and false when the
+     * duration fallback was used.  See "Milestone" in the file comment. */
+    bool milestone = false;
+    bool milestone_stored = false;
+
+    double duration_days() const {
+        return static_cast<double>(duration_ticks) / static_cast<double>(kTicksPerDay);
+    }
+    std::uint32_t duration_minutes() const { return duration_ticks / kTicksPerMinute; }
+    /* The effective milestone value: the stored FixedMeta bit when the file has
+     * one for this row, otherwise the duration == 0 fallback. */
+    bool is_milestone() const { return milestone; }
+    double total_slack_days() const {
+        return static_cast<double>(total_slack_ticks) / static_cast<double>(kTicksPerDay);
+    }
+    std::int32_t total_slack_minutes() const { return total_slack_ticks / 10; }
+    double free_slack_days() const {
+        return static_cast<double>(free_slack_ticks) / static_cast<double>(kTicksPerDay);
+    }
+    std::int32_t free_slack_minutes() const { return free_slack_ticks / 10; }
+    double start_slack_days() const {
+        return static_cast<double>(start_slack_ticks) / static_cast<double>(kTicksPerDay);
+    }
+    std::int32_t start_slack_minutes() const { return start_slack_ticks / 10; }
+};
+
+/*
+ * Resource type.  MS Project's Material/Cost encoding is not proved from the
+ * corpus (all resources are Work), so the reader reports Work.  The enum names
+ * match Project's Resource.Type values so a later stream can fill it in.
+ */
+enum class ResourceType : std::uint8_t { work = 0, material = 1, cost = 2 };
+
+struct Resource {
+    std::uint32_t row = 0;     /* FixedData row index; row 0 is the placeholder */
+    std::uint32_t row_id = 0;  /* u32 at +0 (== uid in every corpus file) */
+    std::uint32_t uid = 0;     /* u32 at +4 */
+    std::string name;          /* VarMeta 0x0c400001, display form (trimmed) */
+    std::string name_raw;      /* the same block verbatim */
+    std::string initials;      /* VarMeta 0x0c400002 */
+    /* MaxUnits as stored: double at +8, x100 (10000.0 = 100 %). */
+    double max_units_x100 = 0.0;
+    /* Unproven: see the header comment.  Work unless a future fixture says
+     * otherwise. */
+    ResourceType type = ResourceType::work;
+
+    double max_units() const { return max_units_x100 / 100.0; }
+    std::uint32_t max_units_percent() const {
+        return static_cast<std::uint32_t>(max_units_x100 / 100.0 + 0.5);
+    }
+    bool is_work() const { return type == ResourceType::work; }
+};
+
+/* Project's relation type values (PjRelationType order). */
+enum class LinkType : std::uint16_t {
+    finish_finish = 0, /* FF */
+    finish_start = 1,  /* FS */
+    start_finish = 2,  /* SF */
+    start_start = 3,   /* SS */
+};
+
+struct Link {
+    std::uint32_t row = 0;
+    std::uint32_t uid = 0;              /* +0 */
+    std::uint32_t predecessor_uid = 0;  /* +4: task UniqueID */
+    std::uint32_t successor_uid = 0;    /* +8: task UniqueID */
+    std::uint16_t type_raw = 0;         /* +12 */
+    /* +14: signed 6-second ticks, 4800 = one working day; negative = lead.
+     * fixture link1.mpp stores both 4800 and -4800 here. */
+    std::int32_t lag_ticks = 0;
+    std::uint16_t lag_units = 0;        /* +18: 7 in every live corpus row */
+    /* Set after the task table is known: the endpoint names one of the live
+     * tasks this reader returns (PROJECT_A has links to its deleted task 10856,
+     * PROJECT_B to its deleted slots 10722..10724). */
+    bool predecessor_known = false;
+    bool successor_known = false;
+
+    LinkType type() const { return static_cast<LinkType>(type_raw & 0x3u); }
+    std::string type_name() const; /* "FF", "FS", "SF", "SS" or "?" */
+    /* Both endpoints name a live task.  PROJECT_B's two dead-endpoint links
+     * (10722 -> 10723, 10723 -> 10724) are returned but not scheduled by
+     * Project; they are the difference between the reader's 72 and the 70
+     * <PredecessorLink> elements in Project's export. */
+    bool endpoints_live() const { return predecessor_known && successor_known; }
+    double lag_days() const {
+        return static_cast<double>(lag_ticks) / static_cast<double>(kTicksPerDay);
+    }
+};
+
+/* 0xFFFF0001 == -65535, mpxj's ASSIGNMENT_NULL_RESOURCE_ID: "no resource". */
+constexpr std::uint32_t kNullResourceUid = 0xFFFF0001u;
+
+struct Assignment {
+    std::uint32_t row = 0;
+    std::uint32_t uid = 0;         /* +0; equals the VarMeta entry's uid */
+    std::uint32_t task_uid = 0;    /* +4: task UniqueID */
+    /* Raw u32 at +8.  kNullResourceUid in every corpus row; see reader.h. */
+    std::uint32_t resource_uid_raw = 0;
+    double units_x100 = 0.0;   /* +12: 10000.0 = 100 % */
+    double work_x1000 = 0.0;   /* +20: minutes x1000 (2,400,000 = 5 days) */
+    /* +52/+56: the assignment's own Start and Finish (packed dates).  They
+     * equal the task's +104/+108 on all 67 live PROJECT_A assignments, all 63 of
+     * PROJECT_B's assignments whose task is live, 4/4 link1 and 3/3 real assign1 rows;
+     * base.mpp's unassigned rows store the project row's date-only start. */
+    PackedDate start{kDateNa};
+    PackedDate finish{kDateNa};
+    /* +60: a third date inside [start, finish].  Equals start on zero-percent
+     * assignments, finish at 100 %, and lies strictly between on PROJECT_A's three
+     * partial rows -- Project's Stop semantics.  INFERENCE: no oracle export
+     * carries assignment dates. */
+    PackedDate stop{kDateNa};
+
+    /* Both the null sentinel and 0 occur in the corpus for "no resource";
+     * real resource uids start at 1. */
+    bool has_resource() const {
+        return resource_uid_raw != kNullResourceUid && resource_uid_raw != 0u;
+    }
+    std::uint32_t resource_uid() const { return has_resource() ? resource_uid_raw : 0u; }
+    double units() const { return units_x100 / 100.0; }
+    std::uint32_t units_percent() const {
+        return static_cast<std::uint32_t>(units_x100 / 100.0 + 0.5);
+    }
+    std::uint32_t work_minutes() const {
+        return static_cast<std::uint32_t>(work_x1000 / 1000.0 + 0.5);
+    }
+    std::uint32_t work_ticks() const { return work_minutes() * kTicksPerMinute; }
+    double work_days() const {
+        return static_cast<double>(work_ticks()) / static_cast<double>(kTicksPerDay);
+    }
+};
+
+/* Row 0: the project row (spec/mpp-records.md §6).  start/finish are the row's
+ * +96/+100, i.e. MS Project's project-summary row dates:
+ *   - corpus/probe/w3-o1.mpp and outline1.mpp store the earliest task start and
+ *     the latest task finish (2026-10-19 08:00 / 2026-10-26 17:00), which is
+ *     exactly the span COM reports for the summary task;
+ *   - base.mpp and var-projstart.mpp store the project's *date-only* start and
+ *     finish instead: base holds 2026-01-04 13:00 and 2026-01-09 12:00, i.e.
+ *     2026-01-05 00:00 in Sydney, and var-projstart's 2026-05-31 14:00 is
+ *     2026-06-01 00:00, the project start the oracle set.  That is the UTC
+ *     encoding of a date-only field (spec §3), so COM's Project.Start is the
+ *     local reading of the same instant.
+ * The reader formats the stored wall-clock value and does not convert
+ * timezones; the UTC-vs-local rule is spec §3's open question, not this
+ * reader's.  These are the project row's +96/+100 pair, which equals its
+ * +104/+108 pair in every corpus file probed, so the calculated/effective
+ * distinction does not arise for the project summary. */
+struct ProjectRow {
+    std::uint32_t row_id = 0;
+    std::uint32_t uid = 0;
+    std::string title;           /* the project row's Name, trimmed (key 0x0b40000e) */
+    std::string title_raw;       /* same block, untrimmed */
+    std::uint32_t duration_ticks = 0;
+    std::uint16_t priority = 0;
+    std::uint16_t percent_complete = 0;
+    PackedDate start;
+    PackedDate finish;
+};
+
+/* A row that is present in FixedData but is not a live record. */
+struct SkippedRow {
+    std::uint32_t row = 0;
+    std::uint32_t uid = 0;
+    std::string reason;
+    /* When the slot still has variable blocks but no metadata, the name block
+     * in the gap between its neighbours is reported here as evidence. */
+    std::string orphan_name;
+};
+
+struct Document {
+    ProjectRow project;
+    std::vector<Task> tasks;           /* live task rows, FixedData order */
+    std::vector<Resource> resources;   /* live resources, FixedData order */
+    std::vector<Link> links;           /* live links, FixedData order */
+    std::vector<Assignment> assignments; /* live assignments, FixedData order */
+    std::vector<SkippedRow> skipped_rows;
+    std::vector<SkippedRow> skipped_resources;
+    std::vector<SkippedRow> skipped_links;
+    std::vector<SkippedRow> skipped_assignments;
+    std::vector<std::string> warnings; /* recoverable anomalies, in file order */
+
+    /* Link liveness split: a link is counted "live" only when BOTH endpoints
+     * name a live task (Link::endpoints_live()).  PROJECT_B: 72 links, 70 live,
+     * 2 dead-endpoint (Project's export has 70).  PROJECT_A: 88/88.  link1: 5/5. */
+    std::size_t link_count_with_live_endpoints() const;
+    std::size_t link_count_with_dead_endpoints() const;
+};
+
+/* Both throw mpp::Error on anything fatal; non-fatal anomalies are warnings. */
+Document load_file(std::string const& path);
+Document load_bytes(std::vector<std::uint8_t> bytes);
+
+/*
+ * "YYYY-MM-DD HH:MM", with ":SS" appended when the stored time is not a whole
+ * minute; "" for an invalid packed date.  The value is the wall-clock time as
+ * stored -- no timezone conversion is applied (spec/mpp-records.md §3 records
+ * the open UTC-vs-local question; MS Project's own export prints the same
+ * wall-clock values with a +00:00 suffix).
+ */
+std::string format_date(const PackedDate& date);
+
+/* Same, with seconds always present and a "+00:00" suffix, matching the ISO
+ * form MS Project reports in tests/data/project_a_golden.tsv. */
+std::string format_date_iso(const PackedDate& date);
+
+/*
+ * Working days: "204" when the tick count is a whole number of 8-hour days,
+ * otherwise up to four decimals ("1.5").  A reader must divide by 4800; it
+ * must not report minutes.
+ */
+std::string format_duration_days(std::uint32_t ticks);
+
+/* Duration in minutes, the unit MS Project's COM surface uses. */
+std::uint32_t duration_minutes(std::uint32_t ticks);
+
+}  // namespace mpp
+
+#endif /* MPP_READER_H */

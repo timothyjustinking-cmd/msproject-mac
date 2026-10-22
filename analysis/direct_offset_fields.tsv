@@ -1,0 +1,116 @@
+array_pos	field_index	field_id_hex	property_name
+0	0	0x0b400017	ID
+1	0	0x0b400017	ID
+2	2	0x0b400062	LinkedFields
+3	3	0x0b40009f	
+4	4	0x0b4000f7	
+5	5	0x0b400477	Guid
+6	8	0x0b400002	ActualWork
+7	17	0x0b400014	LevelingDelay
+8	18	0x0b400015	FreeSlack
+9	19	0x0b400018	Milestone
+10	21	0x0b40001c	ActualDuration
+11	22	0x0b40001d	Duration
+12	23	0x0b40001f	RemainingDuration
+13	106	0x0b400592	
+14	108	0x0b400598	
+15	109	0x0b40059c	
+16	110	0x0b4005a3	
+17	111	0x0b4000a4	ActualOvertimeWork
+18	113	0x0b4000a8	OvertimeCost
+19	114	0x0b4000a9	ActualOvertimeCost
+20	115	0x0b4000aa	RemainingOvertimeCost
+21	120	0x0b400563	
+22	121	0x0b400564	
+23	122	0x0b400565	PathDrivingPredecessor
+24	124	0x0b400567	PathDrivenSuccessor
+25	128	0x0b4000ad	
+26	129	0x0b4000ae	
+27	139	0x0b4001eb	
+28	140	0x0b4001ec	
+29	141	0x0b4001ed	Baseline2Start
+30	145	0x0b4001f2	Baseline2Duration
+31	146	0x0b4001f3	
+32	147	0x0b4001f4	Baseline2FixedCost
+33	148	0x0b4001f5	
+34	149	0x0b4001f6	
+35	150	0x0b4001f7	
+36	151	0x0b4001f8	Baseline3Start
+37	164	0x0b400206	Baseline4Work
+38	165	0x0b400208	Baseline4Duration
+39	166	0x0b400209	
+40	167	0x0b40020a	Baseline4FixedCost
+41	170	0x0b40020d	
+42	171	0x0b40020e	Baseline5Start
+43	184	0x0b400223	Baseline6Work
+44	186	0x0b400226	
+45	196	0x0b400231	
+46	197	0x0b400232	Baseline7FixedCost
+47	198	0x0b400233	
+48	199	0x0b400234	
+49	206	0x0b40023c	
+50	247	0x0b400267	EnterpriseDate7
+51	253	0x0b40026d	EnterpriseDate13
+52	259	0x0b400273	EnterpriseDate19
+53	290	0x0b400292	
+54	298	0x0b40029a	EnterpriseFlag8
+55	303	0x0b40029f	EnterpriseFlag13
+56	313	0x0b4002a9	
+57	318	0x0b4002ae	
+58	338	0x0b4002c2	EnterpriseNumber8
+59	368	0x0b4002e0	EnterpriseNumber38
+60	371	0x0b4002e4	
+61	372	0x0b4002e6	
+62	403	0x0b400321	EnterpriseText3
+63	404	0x0b400322	EnterpriseText4
+64	439	0x0b400345	EnterpriseText39
+65	444	0x0b400354	EnterpriseProjectCost4
+66	445	0x0b400355	EnterpriseProjectCost5
+67	478	0x0b400376	EnterpriseProjectDate28
+68	546	0x0b4003d8	EnterpriseProjectFlag16
+69	570	0x0b4003f0	
+70	664	0x0b400494	BudgetCost
+71	665	0x0b400496	BaselineDeliverableStart
+72	666	0x0b400497	BaselineDeliverableFinish
+73	667	0x0b400498	BaselineBudgetWork
+74	668	0x0b400499	BaselineBudgetCost
+75	669	0x0b40049a	
+76	732	0x0b4004d9	
+77	747	0x0b400512	
+78	748	0x0b400513	BaselineStartText
+79	750	0x0b400515	BaselineDurationText
+80	752	0x0b400517	Baseline1FinishText
+81	755	0x0b40051a	Baseline2FinishText
+82	756	0x0b40051b	Baseline2DurationText
+83	757	0x0b40051c	Baseline3StartText
+84	759	0x0b40051e	Baseline3DurationText
+85	762	0x0b400521	Baseline4DurationText
+86	779	0x0b400532	Baseline10FinishText
+87	793	0x0b40059a	
+88	801	0x0b40018d	
+89	802	0x0b400001	BaselineWork
+90	803	0x0b400006	BaselineCost
+91	830	0x0b40004b	Flag4
+92	839	0x0b400059	Number3
+93	840	0x0b40005a	Number4
+94	842	0x0b400067	Duration1
+95	844	0x0b400069	Duration3
+96	849	0x0b40007c	
+97	865	0x0b400102	Cost4
+98	866	0x0b400103	Cost5
+99	867	0x0b400104	Cost6
+100	868	0x0b400105	Cost7
+101	873	0x0b40010a	Date2
+102	927	0x0b400140	Text14
+103	937	0x0b40014a	Text24
+104	959	0x0b4001a5	
+105	960	0x0b4001a7	
+106	962	0x0b4001ab	
+107	983	0x0b4001db	
+108	984	0x0b4001dc	
+109	1015	0x0b400072	
+110	1016	0x0b400073	
+111	1017	0x0b4000cf	
+112	1018	0x0b4000d9	Hyperlink
+113	1019	0x0b4000da	HyperlinkAddress
+114	1020	0x0b4000db	HyperlinkSubAddress

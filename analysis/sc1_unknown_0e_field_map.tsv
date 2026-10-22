@@ -1,0 +1,10 @@
+byte_pos	type_code	type_name	size	class_slot	field_id_hex	field_name	dispatch_type	byte_off_raw
+0	3	u32/dur	4	0	0x0e400002		1	0
+4	3	u32/dur	4	1	0x0e400005		1	128
+8	72		16	6	0x0e400016		1	256
+24	72		16	7	0x0e400017		1	768
+40	11	bool	2	3	0x0e400008		1	1281
+40	11	bool	2	8	0x0e40001c		1	1285
+44	3	u32/dur	4	4	0x0e400009		1	1408
+48	2	i16	2	2	0x0e400007		1	1536
+50	2	i16	2	5	0x0e40000a		1	1600

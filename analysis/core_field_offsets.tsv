@@ -1,0 +1,68 @@
+record_type	index	field_id_hex	record_offset_hex	record_offset_dec	property_name
+Task	0	0x0b400017	0x0000	0	ID
+Task	1	0x0b400056	0x0004	4	
+Task	2	0x0b400062	0x0007	7	LinkedFields
+Task	3	0x0b40009f	0x0030	48	
+Task	4	0x0b4000f7	0x0064	100	
+Task	5	0x0b400477	0x0070	112	Guid
+Task	6	0x0b400479	0x0079	121	
+Task	7	0x0b400000	0x02dd	733	Work
+Task	8	0x0b400002	0x02de	734	ActualWork
+Task	9	0x0b400004	0x02e1	737	RemainingWork
+Task	10	0x0b400005	0x0383	899	Cost
+Task	11	0x0b400007	0x0384	900	ActualCost
+Task	12	0x0b400008	0x038e	910	FixedCost
+Task	13	0x0b40000a	0x038f	911	RemainingCost
+Task	14	0x0b400011	0x039a	922	ConstraintType
+Task	15	0x0b400012	0x039e	926	ConstraintDate
+Task	16	0x0b400013	0x03a1	929	Critical
+Task	17	0x0b400014	0x03f9	1017	LevelingDelay
+Task	18	0x0b400015	0x0432	1074	FreeSlack
+Task	19	0x0b400018	0x04c7	1223	Milestone
+Task	20	0x0b400019	0x04da	1242	Priority
+Task	21	0x0b40001c	0x04da	1242	ActualDuration
+Task	22	0x0b40001d	0x04fe	1278	Duration
+Task	23	0x0b40001f	0x04ff	1279	RemainingDuration
+Resource	0	0x0c400000	0x0000	0	ID
+Resource	1	0x0c40001b	0x0002	2	
+Resource	2	0x0c400022	0x0005	5	LinkedFields
+Resource	3	0x0c400051	0x001b	27	
+Resource	4	0x0c40009e	0x002b	43	
+Resource	5	0x0c4002d8	0x0036	54	Guid
+Resource	6	0x0c4002da	0x003b	59	
+Resource	7	0x0c400004	0x013c	316	MaxUnits
+Resource	8	0x0c400006	0x013d	317	StandardRate
+Resource	9	0x0c400007	0x0146	326	OvertimeRate
+Resource	10	0x0c40000b	0x0224	548	ActualCost
+Resource	11	0x0c40000c	0x0225	549	Cost
+Resource	12	0x0c40000d	0x022f	559	Work
+Resource	13	0x0c40000e	0x0265	613	ActualWork
+Resource	14	0x0c400010	0x029e	670	OvertimeWork
+Resource	15	0x0c400012	0x029f	671	CostPerUse
+Resource	16	0x0c400013	0x029f	671	AccrueAt
+Resource	17	0x0c400015	0x02a7	679	RemainingCost
+Resource	18	0x0c400016	0x02d0	720	RemainingWork
+Resource	19	0x0c400019	0x02d1	721	Overallocated
+Assignment	0	0x0f400000	0x0000	0	
+Assignment	1	0x0f400044	0x0004	4	
+Assignment	2	0x0f400084	0x0007	7	LinkedFields
+Assignment	3	0x0f40008d	0x0016	22	
+Assignment	4	0x0f40027c	0x0020	32	Guid
+Assignment	5	0x0f400001	0x0032	50	TaskUniqueID
+Assignment	6	0x0f400002	0x0145	325	ResourceUniqueID
+Assignment	7	0x0f400007	0x014f	335	Units
+Assignment	8	0x0f400008	0x0214	532	Work
+Assignment	9	0x0f40000a	0x0215	533	ActualWork
+Assignment	10	0x0f40000b	0x0216	534	RegularWork
+Assignment	11	0x0f40000c	0x0220	544	RemainingWork
+Assignment	12	0x0f400014	0x0228	552	Start
+Assignment	13	0x0f400015	0x0273	627	Finish
+Assignment	14	0x0f400018	0x0275	629	
+Assignment	15	0x0f400019	0x0299	665	Delay
+Assignment	16	0x0f40001a	0x029a	666	Cost
+Assignment	17	0x0f40001c	0x029c	668	ActualCost
+Assignment	18	0x0f40001d	0x029c	668	RemainingCost
+Assignment	19	0x0f400028	0x02a4	676	
+Assignment	20	0x0f400029	0x02a6	678	
+Assignment	21	0x0f40002a	0x0327	807	
+Assignment	22	0x0f400037	0x0328	808	

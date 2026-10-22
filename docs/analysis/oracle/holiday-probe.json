@@ -1,0 +1,251 @@
+{
+  "case": "holiday-calendar",
+  "run_at": "2026-10-22T13:52:30",
+  "project_start": "2026-10-19 00:00:00",
+  "project_calendar": "Standard",
+  "hours_per_day": 8.0,
+  "calendar": {
+    "note": "COM read-back of the WeekDays collection failed; the byte-level decode is authoritative here. 114/Props DEFAULT_CALENDAR_NAME = Standard; each task row's +178 = 3 names SiteCal. The three task dates below prove the task calendar. Re-run scripts/oracle_wave7.py holiday to rebuild the fixture."
+  },
+  "tasks": [
+    {
+      "ID": 1,
+      "Name": "T1",
+      "Duration": 960,
+      "DurationText": "2 days",
+      "Work": 0.0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-20 17:00:00",
+      "EarlyStart": "2026-10-19 08:00:00",
+      "EarlyFinish": "2026-10-20 17:00:00",
+      "LateStart": "2026-10-19 08:00:00",
+      "LateFinish": "2026-10-20 17:00:00",
+      "StartSlack": 0,
+      "FinishSlack": 0,
+      "FreeSlack": 0,
+      "TotalSlack": 0,
+      "Critical": true,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "",
+      "Successors": "2",
+      "raw": {
+        "Duration": {
+          "value": "2 days",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 2,
+      "Name": "T2",
+      "Duration": 2400,
+      "DurationText": "5 days",
+      "Work": 0.0,
+      "Start": "2026-10-22 08:00:00",
+      "Finish": "2026-10-29 12:00:00",
+      "EarlyStart": "2026-10-22 08:00:00",
+      "EarlyFinish": "2026-10-29 12:00:00",
+      "LateStart": "2026-10-22 08:00:00",
+      "LateFinish": "2026-10-29 12:00:00",
+      "StartSlack": 0,
+      "FinishSlack": 0,
+      "FreeSlack": 0,
+      "TotalSlack": 0,
+      "Critical": true,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "1",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "5 days",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Thu 29/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Thu 22/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Thu 22/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Thu 29/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Thu 22/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Thu 29/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 3,
+      "Name": "T3",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-23 08:00:00",
+      "Finish": "2026-10-26 12:00:00",
+      "EarlyStart": "2026-10-23 08:00:00",
+      "EarlyFinish": "2026-10-26 12:00:00",
+      "LateStart": "2026-10-28 13:00:00",
+      "LateFinish": "2026-10-29 12:00:00",
+      "StartSlack": 1440,
+      "FinishSlack": 1440,
+      "FreeSlack": 1440,
+      "TotalSlack": 1440,
+      "Critical": false,
+      "ConstraintType": 4,
+      "ConstraintDate": "2026-10-23 08:00:00",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Priority": 500,
+      "OutlineLevel": 1,
+      "Predecessors": "",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Fri 23/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Fri 23/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Mon 26/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Wed 28/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Thu 29/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    }
+  ],
+  "saved": "corpus/probe/holiday1.mpp",
+  "saved_bytes": 245760,
+  "calendar_built": {
+    "name": "SiteCal",
+    "base": "Standard",
+    "work_week_change": {
+      "weekday": 6,
+      "weekday_name": "Friday",
+      "working": true,
+      "shifts": [
+        [
+          "08:00",
+          "12:00"
+        ]
+      ]
+    },
+    "exception": {
+      "start": "2026-10-21",
+      "finish": "2026-10-21",
+      "working": false,
+      "label": "one non-working exception (Wednesday)"
+    },
+    "applied_to": "task calendar of T1/T2/T3 (task row +178 = 3); the PROJECT default calendar stayed Standard (114/Props key 37748750), so this fixture proves the task calendar, not the project calendar",
+    "proof_from_task_dates": [
+      "T2 (5d, FS after T1) starts Thu 2026-10-22 08:00, not Wed 10-21: the exception is non-working.",
+      "T3 (1d from Fri 2026-10-23 08:00) finishes Mon 2026-10-26 12:00: Friday has 4 working hours, so the day continues into Monday morning.",
+      "T1 (2d from Mon 10-19) finishes Tue 10-20 17:00, unaffected by either change."
+    ],
+    "built_by": "scripts/oracle_wave7.py holiday",
+    "project_default_calendar": "Standard",
+    "task_calendar_uid": 3
+  },
+  "calendar_read_back": {
+    "error": "AttributeError: 'function' object has no attribute 'Count'"
+  }
+}

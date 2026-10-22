@@ -1,0 +1,260 @@
+====================================================================================================
+MS PROJECT FIELD ACCESS ARCHITECTURE - DEFINITIVE ANALYSIS
+====================================================================================================
+
+================================================================================
+1. FIELD INVENTORY
+================================================================================
+
+  Total fields across all record types: 3207
+    Assignment     :   777
+    Calendar       :    14
+    Links          :    30
+    OutlineCode    :    16
+    Project        :     9
+    Resource       :   883
+    Task           :  1444
+    Task34         :    34
+
+  Task fields: 1444
+  Task fields with COM names: 838 (58%)
+  Task fields with byte offsets: 102
+
+================================================================================
+2. STORAGE CLASS DISTRIBUTION (Task fields only)
+================================================================================
+
+  Class Name             Count  Named  Offset Types
+  ----- --------------- ------ ------ ------- ------------------------------
+      0 direct               7      3       0 bool, guid, i32, i64
+      1 baseline0          104     54      18 bool, date32, guid, i16, i32, i64, virtu
+      2 dynamic             16      9       0 bool, date32, i32, i64
+      3 baseline1-10       671    468      30 bool, date32, guid, i16, i32, i64, order
+      4 text                 4      3       0 text
+      5 user_custom        188    127      13 bool, date32, i16, i32, i64, text, virtu
+      6 special              3      0       0 virtual
+      7 dyn_text            12      1       0 virtual
+      8 unk_8                2      1       0 text, virtual
+      9 lookup             120    107       4 bool, date32, i32, text, virtual
+     10 computed            61     33       9 bool, date32, i16, i32, i64, text
+     11 proj_text           42      1       3 bool, date32, i16, i32, i64, text
+     12 unk_12               2      0       0 bool, i32
+     13 structural         207     31      24 bool, date32, guid, i16, i32, i64, null,
+     14 virtual              4      0       1 i32
+     15 unk_15               1      0       0 virtual
+
+================================================================================
+3. ENGINE TYPE CODE DISTRIBUTION (Task fields)
+================================================================================
+
+   Code Name        Count Dispatch path
+  ----- ---------- ------ ----------------------------------------
+      0 null           15 vtable slot 120 (null handler)
+      2 i16           109 default 8-byte scalar read
+      3 i32           121 default 8-byte scalar read
+      5 i64           269 i64 special (checks storage_class==18)
+      8 text          316 string-type handler (sub_2682A4)
+      9 obj_ref        13 default 8-byte scalar read
+     11 bool          229 default 8-byte scalar read
+     19 date32        172 default 8-byte scalar read
+     21 order_id        4 default 8-byte scalar read
+     29 virtual       186 string-type handler (sub_2682A4)
+     72 guid           10 string-type handler (sub_2682A4)
+
+================================================================================
+4. COMPLETE DISPATCH CHAIN
+================================================================================
+
+  COM Application.ActiveProject.Tasks(1).GetField(pjFieldId)
+    |
+    v
+  [IBkndElem vtable dispatch]
+    -> TBkndTaskElem.GetValue(field_id)
+       |
+       v
+  [TTaskTable virtual dispatch]
+    -> TTaskTable.vfunc[87] at RVA 0x231F00
+       |  Loads prop container from TTaskTable+0x5E8
+       |  Gets sub-object at prop_container+0x1E8
+       v
+  [TBkndPropContainer vtable[158]]
+    -> PRIMARY DISPATCHER at RVA 0x239380 (~4KB)
+       |
+       |-- 1. Lookup PropInfoData entry for field_id
+       |     R14 -> entry (contains type_code, storage_class, slot_index, etc.)
+       |
+       |-- 2. Early check: storage_class == 10 (computed)?
+       |     YES -> call computation function directly
+       |     NO  -> continue
+       |
+       |-- 3. Check flags (AND 0x1FF, AND 0xC000)
+       |
+       |-- 4. Switch on engine_type_code [R14+0x48]:
+       |     |
+       |     |-- Case 0,1 (null):      vtable slot 120
+       |     |-- Case 5 (i64):         special handler
+       |     |     |-- Check storage_class==18 at [R14+0x4A]
+       |     |-- Case 8,29,72 (text/virtual/guid): sub_2682A4
+       |     |-- Default (all other):  8-byte scalar read
+       |     v
+       |-- 5. Storage class dispatcher (sub_4A1610 at 0x4A1610):
+       |     |-- Classes 0-10: common handler (getter pair dispatch)
+       |     |-- Class 11: project text handler
+       |     |-- Class 12: specific handler
+       |     |-- Class 13: structural/relational (obj_ref collections)
+       |     |-- Class 14: virtual field handler
+       |     |-- Class 16: specific handler
+       |     |-- Class 17: specific handler
+       |     |-- Class 21: order_id handler
+       |     v
+       |-- 6. Main getter dispatch (sub_23EC60 at 0x23EC60):
+       |     Uses slot_index [R14+0x28] and field_size [R14+0x44]
+       |     Calls through this+0x58 -> vtable+0x988
+       |     -> getter1 function (from PropInfoData header)
+       |     -> getter2 function (from PropInfoData header)
+       |        |
+       |        |-- DEFAULT_VALUE (78% of fields): returns zero/empty
+       |        |-- RECORD_READER (20% of fields): __RTDynamicCast
+       |        |   to get TASKNODE, read at byte_offset
+       |        v
+       v
+  [Return formatted value through COM automation layer]
+
+================================================================================
+5. TASKNODE BYTE OFFSET MAP
+================================================================================
+
+  7 unique offsets covering 102 fields:
+
+  Offset     Hex      Fields Types                          Sample names
+  ---------- -------- ------ ------------------------------ ----------------------------------------
+  0x01a0     0x01a0      13 date32                         Start, Finish, EarlyStart
+  0x0730     0x0730       1 i16                            ConstraintType
+  0x0740     0x0740      15 i32                            FreeSlack, TotalSlack, Duration
+  0x074a     0x074a      45 i16                            (unnamed)
+  0x074c     0x074c      18 i16                            (unnamed)
+  0x07c4     0x07c4       9 date32                         Created, ResumeNoEarlierThan
+  0x0910     0x0910       1 i16                            Priority
+
+================================================================================
+6. GETTER FUNCTION PATTERNS
+================================================================================
+
+  Getter2 functions (27 unique):
+    PATTERN           FUNCTIONS  FIELDS   DESCRIPTION
+    DEFAULT_VALUE     15         1130     Returns zero/empty (memset buffer)
+    RECORD_READER     11          286     __RTDynamicCast to TASKNODE, read at byte offset
+    SIMPLE_DEFAULT     1           10     Returns simple default constant
+
+  Getter1 functions (5 unique):
+    RVA 0x4B43A0: memset trampoline    (928 fields) - initializes output buffer
+    RVA 0x7DE620: indexed reader       (66 fields, class 3/5) - baseline/custom
+    RVA 0x7DE660: project text reader  (18 fields, class 11)
+    + 2 others for special cases
+
+================================================================================
+7. UNNAMED FIELD ANALYSIS
+================================================================================
+
+  Unnamed Task fields: 606 (42%)
+
+  Unnamed by storage class:
+    Class  0 (direct         ):    4
+    Class  1 (baseline0      ):   50
+    Class  2 (dynamic        ):    7
+    Class  3 (baseline1-10   ):  203
+    Class  4 (text           ):    1
+    Class  5 (user_custom    ):   61
+    Class  6 (special        ):    3
+    Class  7 (dyn_text       ):   11
+    Class  8 (unk_8          ):    1
+    Class  9 (lookup         ):   13
+    Class 10 (computed       ):   28
+    Class 11 (proj_text      ):   41
+    Class 12 (unk_12         ):    2
+    Class 13 (structural     ):  176
+    Class 14 (virtual        ):    4
+    Class 15 (unk_15         ):    1
+
+  Unnamed by engine type:
+    Type  0 (null      ):   15
+    Type  2 (i16       ):   85
+    Type  3 (i32       ):   60
+    Type  5 (i64       ):   54
+    Type  8 (text      ):   72
+    Type  9 (obj_ref   ):    1
+    Type 11 (bool      ):  111
+    Type 19 (date32    ):   16
+    Type 29 (virtual   ):  185
+    Type 72 (guid      ):    7
+
+================================================================================
+8. KEY RVA REFERENCE TABLE
+================================================================================
+
+  FUNCTION/STRUCTURE                        RVA            ROLE
+  -----------------------------------------  -------------- -----------------------------------
+  TTaskTable descriptor (Task)               0xF8BDA0       Static field metadata (1444 entries)
+  TTaskTable.vfunc[87]                       0x231F00       Entry from TBkndTaskElem
+  TTaskTable.vfunc[100]                      0x231D90       Prop container accessor
+  TGeneralPropContainer ctor                 0x1E8910       Constructor (0x3A0 bytes)
+  TBkndPropContainer base ctor               0x1E8C2C       Sets primary vtable
+  PRIMARY vtable (TBkndPropContainer)        0x102A0A8      vtable at prop_container+0x1E8
+  vtable[158] (field dispatcher)             0x239380       ~4KB main dispatcher
+
+  sub_248B40 (record type resolver)          0x248B40       field_id prefix -> record type index
+  sub_4A1610 (storage class dispatcher)      0x4A1610       storage_class -> handler
+  sub_2682A4 (text/string handler)           0x2682A4       Handles text/virtual/guid types
+  sub_23EC60 (main getter dispatch)          0x23EC60       Calls getter1/getter2 pair
+  sub_23A624 (special field handler)         0x23A624       Linked/special field_id dispatch
+  sub_268560 (type size resolver)            0x268560       engine_type_code -> byte size
+  sub_226E2C (base+0x38 dispatch)            0x226E2C       Index into offset table
+  sub_282C60 (string compare helper)         0x282C60       String result comparison
+
+  PropInfoData stride                        0xA8 (168)     Cache entry size
+  PropInfoData.getter1                       +0x00          Function pointer (8 bytes)
+  PropInfoData.getter2                       +0x08          Function pointer (8 bytes)
+  PropInfoData.slot_index                    +0x28          Array index (4 bytes)
+  PropInfoData.field_id                      +0x40          PjField value (4 bytes)
+  PropInfoData.field_size                    +0x44          Output buffer size (4 bytes)
+  PropInfoData.engine_type_code              +0x48          Data type (2 bytes)
+  PropInfoData.storage_class                 +0x4A          Storage mechanism (2 bytes)
+  PropInfoData.flags                         +0x4C          Bit flags (4 bytes)
+  PropInfoData.dirty_bit_index               +0x50          Change tracking (4 bytes)
+  PropInfoData.linked_field                  +0x54          Related field_id (4 bytes)
+  PropInfoData.secondary_index               +0x58          Sub-index (4 bytes)
+
+================================================================================
+9. COVERAGE SUMMARY
+================================================================================
+
+  FULLY MAPPED:
+  - Complete dispatch chain: COM -> TBkndTaskElem -> TTaskTable -> PropContainer -> vtable[158]
+  - 3207 fields across 8 record types (Task, Resource, Assignment, Links, Calendar, Project, OutlineCode, Task34)
+  - 1444 Task field descriptors with 18 properties each (type, storage class, flags, etc.)
+  - 838 Task fields with COM property names (58% of Task fields)
+  - 16 storage classes identified with semantics
+  - 12 engine type codes with dispatch paths
+  - 27 unique getter2 functions classified (DEFAULT_VALUE, RECORD_READER, SIMPLE_DEFAULT)
+  - 11 unique TASKNODE byte offsets covering 149 fields with direct record access
+  - vtable[158] fully decoded: type-code switch, storage-class dispatcher, flags checks
+  - COM validation: 838/838 named fields read successfully (0 errors)
+
+  PARTIALLY MAPPED:
+  - 606 unnamed Task fields (42%) - need COM property name resolution
+  - Storage class internal handlers (sub_4A1610 branches for each class)
+  - Indexed storage (class 3/5/9): slot_index maps to position within storage array
+  - Linked field pairs (66 total): how Duration<->DurationUnits sync works
+
+  NOT YET ACCESSIBLE:
+  - Resource, Assignment descriptor caches (garbage pointers from static descriptor)
+  - Runtime prop container live inspection (requires process attach with write)
+  - Computed field formulas (class 10): each has its own computation function
+  - Virtual field implementations (class 14): dynamically generated content
+
+
+Architecture analysis complete.
+Scripts in: scripts/phase2d_*.py
+Data in:    analysis/field_definitive_map.tsv (3207 fields)
+            analysis/com_validation.tsv (838 validated)
+            analysis/getter2_offsets.tsv (27 functions)

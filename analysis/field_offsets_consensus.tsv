@@ -1,0 +1,238 @@
+field_type	field_id_hex	property_name	offset_hex	offset_dec	access_types	n_funcs	n_evidence	alternatives	confidence	sample_func
+Task	0x0b400000	Work	0x74c	1868	u16	1	2	1	medium	FUN_140240b10
+Task	0x0b400001	BaselineWork	0x74c	1868	u16	1	2	2	medium	FUN_140240b10
+Task	0x0b400002	ActualWork	0x74c	1868	u16	1	2	1	medium	FUN_140240b10
+Task	0x0b400004	RemainingWork	0x74c	1868	u16	1	2	1	medium	FUN_140240b10
+Task	0x0b400006	BaselineCost	0x140	320	u8	1	1	1	medium	FUN_140240b10
+Task	0x0b400008	FixedCost	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40000c	BCWS	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40000e	Name	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40000f	Notes	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400010	WBS	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400011	ConstraintType	0x28	40	u16	1	70	1	medium	FUN_1406d1f10
+Task	0x0b400012	ConstraintDate	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400013	Critical	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400014	LevelingDelay	0x3c	60	u16	1	2	1	medium	FUN_140240b10
+Task	0x0b400015	FreeSlack	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400016	TotalSlack	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400017	ID	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400018	Milestone	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400019	Priority	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40001a	Subproject	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40001b	BaselineDuration	0x130	304	u32	1	2	2	medium	FUN_140240b10
+Task	0x0b40001c	ActualDuration	0x20	32	u8	1	2	1	medium	FUN_140240b10
+Task	0x0b40001e	DurationVariance	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40001f	RemainingDuration	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400020	PercentComplete	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400021	PercentWorkComplete	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400022	FixedDuration	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400023	Start	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400024	Finish	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400025	EarlyStart	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400026	EarlyFinish	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400027	LateStart	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400028	LateFinish	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400029	ActualStart	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40002a	ActualFinish	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40002b	BaselineStart	0x140	320	u8	1	1	1	medium	FUN_140240b10
+Task	0x0b40002c	BaselineFinish	0x140	320	u8	1	1	1	medium	FUN_140240b10
+Task	0x0b40002d	StartVariance	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40002e	FinishVariance	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40002f		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400030		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400032		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400033	Text1	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400034	Start1	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400035	Finish1	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400036	Text2	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400037	Start2	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400038	Finish2	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400039	Text3	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40003a	Start3	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40003b	Finish3	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40003c	Text4	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40003d	Start4	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40003e	Finish4	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40003f	Text5	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400040	Start5	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400041	Finish5	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400042	Text6	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400043	Text7	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400044	Text8	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400045	Text9	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400046	Text10	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400047	Marked	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400048	Flag1	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400049	Flag2	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40004a	Flag3	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40004b	Flag4	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40004c	Flag5	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40004d	Flag6	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40004e	Flag7	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40004f	Flag8	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400050	Flag9	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400051	Flag10	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400052	Rollup	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400054	Project	0x1c	28	u32	1	2	2	medium	FUN_140240b10
+Task	0x0b400055	OutlineLevel	0x28	40	u16	1	70	1	medium	FUN_1406d1f10
+Task	0x0b400056		0x140	320	u8	1	1	2	medium	FUN_140240b10
+Task	0x0b400057	Number1	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400058	Number2	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400059	Number3	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40005a	Number4	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40005b	Number5	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40005c	Summary	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40005d	Created	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40005e		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40005f	UniqueIDPredecessors	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400060	UniqueIDSuccessors	0x140	320	u8	1	1	1	medium	FUN_140240b10
+Task	0x0b400061	Objects	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400062	LinkedFields	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400063	Resume	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400064	Stop	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400065	ResumeNoEarlierThan	0x130	304	u32	1	2	1	medium	FUN_140240b10
+Task	0x0b400066	OutlineNumber	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400067	Duration1	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400068	Duration2	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400069	Duration3	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40006a	Cost1	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40006b	Cost2	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40006c	Cost3	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40006d	HideBar	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40006e	Confirmed	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40006f	UpdateNeeded	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400070	Contact	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400071	ResourceGroup	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400072		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400073		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400074		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400075		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400076		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400079		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40007a		0x3e	62	ptr	1	2	3	medium	FUN_140240b10
+Task	0x0b40007b		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40007c		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40007d		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40007e		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40007f		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400080	Type	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400081	Recurring	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400082		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400083		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400084	EffortDriven	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400085		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400086		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400087		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400088		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400089	OutlineChildren	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40008a		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40008b	PredecessorTasks	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40008c		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40008d	SuccessorTasks	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40008e		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40008f		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400090		0x140	320	u8	1	1	1	medium	FUN_140240b10
+Task	0x0b400091		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400092		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400093		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400094		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400095		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400096		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400097		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400098		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b400099		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40009a		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40009b		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40009c		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40009d		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40009e		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b40009f		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b4000a0		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b4000a1		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b4000a2		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b4000a3	OvertimeWork	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b4000a4	ActualOvertimeWork	0x14	20	u32	1	2	1	medium	FUN_140240b10
+Task	0x0b4000a5	RemainingOvertimeWork	0x14	20	u32	1	2	1	medium	FUN_140240b10
+Task	0x0b4000a6	RegularWork	0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b4000a7		0x140	320	u8	1	1	0	medium	FUN_140240b10
+Task	0x0b4000a8	OvertimeCost	0x140	320	u8	1	1	2	medium	FUN_140240b10
+Task	0x0b4000a9	ActualOvertimeCost	0x140	320	u8	1	1	2	medium	FUN_140240b10
+Task	0x0b4000aa	RemainingOvertimeCost	0x140	320	u8	1	1	2	medium	FUN_140240b10
+Task	0x0b4000ad		0x14	20	u32	1	1	0	medium	FUN_140240b10
+Task	0x0b4000ae		0x14	20	u32	1	1	0	medium	FUN_140240b10
+Task	0x0b4000af		0x14	20	u32	1	1	0	medium	FUN_140240b10
+Task	0x0b4000b3		0x14	20	u32	1	1	0	medium	FUN_140240b10
+Task	0x0b400168	Index	0x130	304	u32	1	2	0	medium	FUN_140240b10
+Task	0x0b40017f		0x58	88	u64	1	2	0	low	FUN_140240b10
+Task	0x0b400181		0x58	88	u64	1	2	0	low	FUN_140240b10
+Task	0x0b400192	Calendar	0x118	280	u32	1	4	3	medium	FUN_140240b10
+Task	0x0b4001b9	VAC	0x130	304	u32	1	4	0	medium	FUN_140240b10
+Task	0x0b4001c9		0x58	88	u64	1	2	0	low	FUN_140240b10
+Task	0x0b400219	CPI	0x130	304	u32	1	2	0	medium	FUN_140240b10
+Task	0x0b40021a	SPI	0x130	304	u32	1	2	0	medium	FUN_140240b10
+Task	0x0b40021b	CVPercent	0x130	304	u32	1	2	0	medium	FUN_140240b10
+Task	0x0b40021c	SVPercent	0x130	304	u32	1	2	0	medium	FUN_140240b10
+Task	0x0b40021d	EAC	0x130	304	u32	1	2	0	medium	FUN_140240b10
+Task	0x0b40021e	TCPI	0x130	304	u32	1	2	0	medium	FUN_140240b10
+Task	0x0b400246	Baseline9Duration	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400251	Baseline10Duration	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b40027f	EnterpriseDuration1	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400280	EnterpriseDuration2	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400281	EnterpriseDuration3	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400282	EnterpriseDuration4	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400283	EnterpriseDuration5	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400284	EnterpriseDuration6	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400285	EnterpriseDuration7	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400286	EnterpriseDuration8	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400287	EnterpriseDuration9	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400288	EnterpriseDuration10	0x20	32	u16	1	78	1	medium	FUN_1406d1f10
+Task	0x0b400462	EarnedValueMethod	0x130	304	u32	1	71	1	medium	FUN_140240b10
+Task	0x0b40047b	DeliverableType	0x28	40	u16	1	102	0	medium	FUN_1406d1f10
+Task	0x0b40048e	StatusManagerName	0x58	88	u64	1	3	0	low	FUN_140240b10
+Task	0x0b400492		0x58	88	u64	1	3	0	low	FUN_140240b10
+Task	0x0b4004e9		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004ea		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004eb		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004ec		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004ed		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004ee		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004ef		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004f1		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004f3		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004f4		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004f5		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004f6		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004f7		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004fa		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004fb		0x130	304	u32	1	2414	0	medium	FUN_140240b10
+Task	0x0b4004ff	Active	0x20	32	u16	1	1	0	medium	FUN_140240b10
+Task	0x0b400500	Manual	0x20	32	u16	1	1	0	medium	FUN_140240b10
+Task	0x0b400502	Warning	0x130	304	u32	1	3	1	medium	FUN_140240b10
+Task	0x0b400514	BaselineFinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400515	BaselineDurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400517	Baseline1FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400518	Baseline1DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b40051a	Baseline2FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b40051b	Baseline2DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b40051d	Baseline3FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b40051e	Baseline3DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400520	Baseline4FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400521	Baseline4DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400523	Baseline5FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400524	Baseline5DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400526	Baseline6FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400527	Baseline6DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400529	Baseline7FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b40052a	Baseline7DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b40052c	Baseline8FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b40052d	Baseline8DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b40052f	Baseline9FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400530	Baseline9DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400532	Baseline10FinishText	0xca3	3235	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b400533	Baseline10DurationText	0xca4	3236	u8	1	21	0	low	FUN_14064e05c
+Task	0x0b40053a	ScheduledStart	0x130	304	u32	1	3	0	medium	FUN_140240b10
+Task	0x0b40053b	ScheduledFinish	0x130	304	u32	1	3	0	medium	FUN_140240b10
+Task	0x0b40053c	ScheduledDuration	0x130	304	u32	1	3	0	medium	FUN_140240b10
+Task	0x0b40058c	Count	0x130	304	u32	1	7	0	medium	FUN_140240b10
+Resource	0x0c400006	StandardRate	0x28	40	u64	1	21	0	medium	FUN_1406d1f10
+Resource	0x0c400007	OvertimeRate	0x28	40	u64	1	21	0	medium	FUN_1406d1f10

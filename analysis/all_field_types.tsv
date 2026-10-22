@@ -1,0 +1,8 @@
+record_type	oledb_count	engine_count	id_prefix	field_array_va	descriptor_va	cache_rva
+Task	1444	1444	0x0b4	0x1410e77a0	0x140f8bda0	0x130be10
+Resource	562	883	0x0c4	0x1410e8f50	0x140f8bf60	0x12e0d30
+Assignment	564	(no descriptor)	0x0f4	0x1410e6b70	(not found)	(not found)
+Links	(n/a)	30	0x0e4	(n/a)	0x140f8c080	0x1378be0
+Calendar	9	14	0x3c4	0x140fb9520	0x140f863b0	0x1381ae0
+Project	9	9	0x074	0x140fb9568	0x140f85ff0	0x1382aa0
+OutlineCode	10	16	0x3e4	0x140fb95a0	0x140f86350	0x1384990

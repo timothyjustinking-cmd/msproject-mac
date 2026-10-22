@@ -1,0 +1,10 @@
+category	start_index	end_index	count	named_count	description
+Standard	0	1020	1021	673	Core task fields (standard PjField values)
+Estimated	1021	1042	22	21	Estimated duration fields, Calendar, Index, HyperlinkHREF
+OutlineCodes	1043	1045	3	3	OutlineCode7-9
+EnterpriseOC_1	1046	1068	23	22	OutlineCode10 + EnterpriseOutlineCode1-20 + HyperlinkScreenTip
+EnterpriseOC_2	1069	1081	13	13	EnterpriseOutlineCode21-30
+BaselineEst_1	1082	1083	2	2	Baseline4/5 DurationEstimated
+BaselineEst_2	1084	1133	50	47	Baseline6-10 DurationEstimated + EnterpriseProjectOutlineCodes
+Variance	1134	1155	22	10	Variance fields, CV, Project, Objects
+Extended	1156	1443	288	48	Extended/enterprise/miscellaneous fields

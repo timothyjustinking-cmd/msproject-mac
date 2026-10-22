@@ -1,0 +1,18 @@
+{
+  "source": "corpus/probe/assign1.mpp",
+  "export": "corpus/probe/project_a-export.xml",
+  "bytes": 27210,
+  "tasks": 3,
+  "milestones": 0,
+  "links": 0,
+  "link_rows": [],
+  "constraints": [
+    {
+      "uid": 2,
+      "type": 4,
+      "date": "2026-10-22T08:00:00"
+    }
+  ],
+  "deadlines": [],
+  "actual_rows": []
+}

@@ -1,0 +1,60 @@
+prio_offset	field_name	class_slot	data_type	encoding	confidence	notes
+-267	_dirty_flag	-	u8	bits 0+7 toggle	confirmed	Not a data field; toggles with every boolean change
+-265	Active_inverse	-	u8.bit3	set=inactive	confirmed	Task inactive when bit3 set
+-264	_version_counter	-	u8	increments	confirmed	Increments with every field write via COM
+-212	_flag_byte_A	-	u8	bitfield	confirmed	bit0=Milestone, bit1=Active, bit4=Manual
+-211	_flag_byte_B	-	u8	bitfield	confirmed	bit1=Marked, bit2=unknown_preexist
+-210	_flag_byte_C	-	u8	bitfield	observed	0x80 in clean state
+-209	_flag_byte_D	-	u8	bitfield	confirmed	bit2=Rollup
+-208	_flag_byte_E	-	u8	bitfield	confirmed	bit0=HideBar
+-207	_flag_byte_F	-	u8	bitfield	confirmed	bit3=FixedDuration
+-206	_flag_byte_G	-	u8	bitfield	confirmed	bit6=LevelingCanSplit
+-205	_flag_byte_H	-	u8	bitfield	observed	0x3c in clean state
+-204	_flag_byte_I	-	u8	bitfield	confirmed	bit0=Active (redundant copy)
+-200	_unknown_i32	-	i32	raw	observed	33658272 in clean state; not a task field
+-196	Duration	15	i32	x10 ticks	confirmed	2400 min -> stored as 24000; COM uses raw minutes
+-192	_scheduling_flag	-	i32	raw	observed	Value=7 in clean state
+-188	ActualDuration	14	i32	x10 ticks	confirmed	0 at 0%, 12000 at 50% of 5d task
+-184	RemainingDuration	16	i32	x10 ticks	confirmed	24000 at 0%, 12000 at 50%
+-180	LevelingDelay	10	i32	x10 ticks	confirmed	Set to 4800 min -> stored as 48000
+-174	_duration_copy	-	i16	x10 ticks	observed	Changes with Duration; another duration field
+-168	Created	31	packed_date	(day<<16)|(min*10)	confirmed	0x3d122bf2 = Oct 20 18:45 = COM Created
+-164	Start	-	packed_date	(day<<16)|(min*10)	confirmed	Tracks COM Start; changed when Start moved
+-160	Finish	-	packed_date	(day<<16)|(min*10)	confirmed	Tracks COM Finish
+-156	EarlyStart	-	packed_date	(day<<16)|(min*10)	confirmed	= Start when zero slack
+-152	EarlyFinish	-	packed_date	(day<<16)|(min*10)	confirmed	= Finish when zero slack
+-148	LateStart	-	packed_date	(day<<16)|(min*10)	confirmed	= Start when zero slack; diverges on reschedule
+-144	LateFinish	-	packed_date	(day<<16)|(min*10)	confirmed	= Finish when zero slack; diverges on reschedule
+-140	ActualStart	26	packed_date	(day<<16)|(min*10)	confirmed	0xFFFFFFFF -> Start date when %Complete>0
+-136	ActualFinish	-	packed_date	(day<<16)|(min*10)	confirmed	0xFFFFFFFF -> Finish date when %Complete=100
+-132	ConstraintDate?	-	packed_date	(day<<16)|(min*10)	inferred	0xFFFFFFFF (untested)
+-128	Deadline?	-	packed_date	(day<<16)|(min*10)	inferred	0xFFFFFFFF (untested)
+-124	Stop	-	packed_date	(day<<16)|(min*10)	confirmed	Oct 22 12:00 at 50% = COM Stop
+-120	Resume	-	packed_date	(day<<16)|(min*10)	confirmed	Oct 22 13:00 at 50% = COM Resume
+-116	_unknown_date	-	packed_date	(day<<16)|(min*10)	observed	0xFFFFFFFF normally; Start value after reschedule
+-112	_unknown_date	-	packed_date	(day<<16)|(min*10)	observed	Always 0xFFFFFFFF
+-108	_start_copy	-	packed_date	(day<<16)|(min*10)	observed	= Start at 0%, 0xFFFFFFFF at 100%
+-108	_zero_double_0	-	f64	-	observed	Always 0; may be BaselineWork or OvertimeWork
+-100	_zero_double_1	-	f64	-	observed	Always 0; may be BaselineWork or OvertimeWork
+-92	_zero_double_2	-	f64	-	observed	Always 0; may be BaselineWork or OvertimeWork
+-84	Work	0	f64	min*1000	confirmed	2400000=2400min; resource@$100/hr 5d task. Encoding: 1/10min ticks * 100
+-76	ActualWork	1	f64	min*1000	confirmed	0->1200000->2400000 at 0%->50%->100%
+-68	RemainingWork	2	f64	min*1000	confirmed	2400000->1200000->0 at 0%->50%->100%
+-60	Cost	3	f64	$x100	confirmed	$54000=WorkCost($4000)+FixedCost($50000); $4000 with no FixedCost
+-52	FixedCost	5	f64	$x100	confirmed	Differential + resource isolation
+-44	_zero_double_3	82?	f64	$x100	observed	Always 0; possibly BaselineFixedCost (slot 82)
+-36	ActualCost	4	f64	$x100	confirmed	Tracks %Complete*rate; respects FixedCostAccrual
+-28	RemainingCost	6	f64	$x100	confirmed	Cost-ActualCost; $0 at 100%
+-20	ActualFixedCost	42?	f64	$x100	confirmed	Prorated FixedCost actual ($25k at 50% of $50k FixedCost)
+-12	RemainingFixedCost	43?	f64	$x100	confirmed	Prorated FixedCost remaining ($25k at 50% of $50k FixedCost)
+-4	FixedCostAccrual	48	i16	enum	confirmed	1=Start, 2=End, 3=Prorated (default)
+-2	_unknown_i16	-	i16	raw	observed	Value=3 in clean state
+0	Priority	13	i16	raw	confirmed	Direct value 500 default, 777 probe
+2	PercentComplete	17	i16	raw	confirmed	Direct value (67), NOT x10
+4	PercentWorkComplete	18	i16	raw	confirmed	Set to 33, found at +4
+6	Type	35	i16	enum	confirmed	0=FixedUnits, 1=FixedDuration, 2=FixedWork
+8	Created	31	date32	date	confirmed	0x3d1212c0
+12	_scheduling_mode	-	u32	raw	observed	Value changes with Duration/PercentComplete
+16	_sentinel	-	i32	sentinel	observed	0xFFFFFFFF
+196	ActualStart_baseline	-	date32	date	observed	Second ActualStart in baseline copy region
+576	Priority_baseline	13	i16	raw	observed	Value=500 (default) in baseline copy; stride=576 from current

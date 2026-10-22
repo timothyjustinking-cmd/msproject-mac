@@ -1,0 +1,64 @@
+{
+  "case": "patch",
+  "source": "corpus\\probe\\oracle-patch.mpp",
+  "run_at": "2026-10-22T10:19:12",
+  "stored_rows": [
+    {
+      "row": 0,
+      "id": 0,
+      "uid": 0,
+      "priority": 500,
+      "duration_ticks": 21600,
+      "percent": 0,
+      "start_raw": "0x3bf11e78",
+      "finish_raw": "0x3bf61c20",
+      "start_file": "2026-01-04 13:00:00",
+      "finish_file": "2026-01-09 12:00:00"
+    },
+    {
+      "row": 1,
+      "id": 1,
+      "uid": 1,
+      "priority": 900,
+      "duration_ticks": 33600,
+      "percent": 50,
+      "start_raw": "0x3c2a12c0",
+      "finish_raw": "0x3bf627d8",
+      "start_file": "2026-03-02 08:00:00",
+      "finish_file": "2026-01-09 17:00:00"
+    },
+    {
+      "row": 2,
+      "id": 2,
+      "uid": 2,
+      "priority": 500,
+      "duration_ticks": 14400,
+      "percent": 0,
+      "start_raw": "0x3bf212c0",
+      "finish_raw": "0x3bf427d8",
+      "start_file": "2026-01-05 08:00:00",
+      "finish_file": "2026-01-07 17:00:00"
+    },
+    {
+      "row": 3,
+      "id": 3,
+      "uid": 3,
+      "priority": 500,
+      "duration_ticks": 9600,
+      "percent": 0,
+      "start_raw": "0x3bf212c0",
+      "finish_raw": "0x3bf327d8",
+      "start_file": "2026-01-05 08:00:00",
+      "finish_file": "2026-01-06 17:00:00"
+    }
+  ],
+  "opened_name": null,
+  "windows": [
+    "    JWinproj-WhimperMainClass: Project Professional",
+    "      child MsoCommandBarDock: MsoDockLeft",
+    "      child MsoCommandBarDock: MsoDockRight",
+    "      child MsoCommandBarDock: MsoDockTop",
+    "      child MsoCommandBarDock: MsoDockBottom"
+  ],
+  "quitting": "no project open; killing WINPROJ"
+}

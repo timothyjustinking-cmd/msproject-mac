@@ -1,0 +1,19 @@
+field_id	name	type	storage	com_value	tasknode_value	direct_value	source
+0x0b400013	Critical	bool	direct	Yes		1	DB
+0x0b40001c	ActualDuration	i32	direct	2.1 days		10080	DB
+0x0b40001f	RemainingDuration	i32	direct	2.9 days		13920	DB
+0x0b400020	PercentComplete	i16	direct	42%		42	DB
+0x0b400029	ActualStart	date32	direct	Tue 20/10/26		1024594624	DB
+0x0b400048	Flag1	bool	baseline	Yes	2		TN
+0x0b400057	Number1	i64	baseline	0	0	0	BOTH
+0x0b40005a	Number4	i64	baseline	0	0	0	BOTH
+0x0b400063	Resume	date32	direct	Thu 22/10/26		1024726176	DB
+0x0b400064	Stop	date32	direct	Thu 22/10/26		1024726176	DB
+0x0b40006a	Cost1	i64	baseline	$0.00	0	0	BOTH
+0x0b40006b	Cost2	i64	baseline	$31,415,926.00	3.14159e+09	3.14159e+09	BOTH
+0x0b4000a4	ActualOvertimeWork	i64	unk_2	0 hrs	0		TN
+0x0b400466	unnamed_0xb400466	date32	unk_11	NA	-1		TN
+0x0b4004e9	unnamed_0xb4004e9	i64	unk_11	$0.00	-4.18678e-151		TN
+0x0b400563	unnamed_0xb400563	date32	unk_2	NA	-1		TN
+0x0b400564	unnamed_0xb400564	date32	unk_2	NA	-1		TN
+0x0b400593	unnamed_0xb400593	i64	unk_11	$0.00	0		TN

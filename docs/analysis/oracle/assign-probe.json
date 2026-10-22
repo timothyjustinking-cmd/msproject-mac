@@ -1,0 +1,32 @@
+{
+  "resource_ids": [
+    1,
+    2
+  ],
+  "task_ids": [
+    1,
+    2
+  ],
+  "assignments": [
+    {
+      "task": 1,
+      "resource": 1,
+      "units": 1.0,
+      "work": 1440.0
+    },
+    {
+      "task": 1,
+      "resource": 2,
+      "units": 1.0,
+      "work": 1440.0
+    },
+    {
+      "task": 2,
+      "resource": 1,
+      "units": 1.0,
+      "work": 960.0
+    }
+  ],
+  "saved": "assign1.mpp",
+  "bytes": 245760
+}

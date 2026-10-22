@@ -1,0 +1,319 @@
+{
+  "before": [
+    {
+      "ID": 1,
+      "Name": "A",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-19 17:00:00",
+      "EarlyStart": "2026-10-19 08:00:00",
+      "EarlyFinish": "2026-10-19 17:00:00",
+      "LateStart": "2026-10-20 08:00:00",
+      "LateFinish": "2026-10-20 17:00:00",
+      "StartSlack": 480,
+      "FinishSlack": 480,
+      "FreeSlack": 480,
+      "TotalSlack": 480,
+      "Critical": false,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Predecessors": "",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 2,
+      "Name": "B",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-20 08:00:00",
+      "Finish": "2026-10-20 17:00:00",
+      "EarlyStart": "2026-10-20 08:00:00",
+      "EarlyFinish": "2026-10-20 17:00:00",
+      "LateStart": "2026-10-20 08:00:00",
+      "LateFinish": "2026-10-20 17:00:00",
+      "StartSlack": 0,
+      "FinishSlack": 0,
+      "FreeSlack": 0,
+      "TotalSlack": 0,
+      "Critical": true,
+      "ConstraintType": 4,
+      "ConstraintDate": "2026-10-20 08:00:00",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Predecessors": "",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "label": "Task.LinkPredecessors(Task1)",
+      "ok": true,
+      "result": null
+    },
+    {
+      "label": "TaskDependencies.Count(task2)",
+      "ok": true,
+      "result": 1
+    },
+    {
+      "label": "TaskDependencies.Add(Task1)",
+      "ok": true,
+      "result": null
+    },
+    {
+      "label": "TaskDependencies.Add(Task1,1,0)",
+      "ok": true,
+      "result": null
+    },
+    {
+      "label": "Project.TaskDependencies.Add(a,b)",
+      "ok": false,
+      "error": "AttributeError: '<win32com.gen_py.Microsoft Project . Object Library._IProjectDoc instance at 0x1538717622800>' object has no attribute 'TaskDependencies'"
+    },
+    {
+      "label": "Application.LinkTasks",
+      "ok": false,
+      "error": "TypeError: _MSProject.LinkTasks() takes 1 positional argument but 3 were given"
+    },
+    {
+      "label": "Task.Predecessors set '1FS'",
+      "ok": true,
+      "result": null
+    }
+  ],
+  "task_members": [
+    "LinkPredecessors",
+    "PathDrivingPredecessor",
+    "PathPredecessor",
+    "PredecessorTasks",
+    "Predecessors",
+    "TaskDependencies",
+    "UniqueIDPredecessors",
+    "UnlinkPredecessors",
+    "WBSPredecessors"
+  ],
+  "project_members": [],
+  "after": [
+    {
+      "ID": 1,
+      "Name": "A",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-19 17:00:00",
+      "EarlyStart": "2026-10-19 08:00:00",
+      "EarlyFinish": "2026-10-19 17:00:00",
+      "LateStart": "2026-10-19 08:00:00",
+      "LateFinish": "2026-10-19 17:00:00",
+      "StartSlack": 0,
+      "FinishSlack": 0,
+      "FreeSlack": 0,
+      "TotalSlack": 0,
+      "Critical": true,
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Predecessors": "",
+      "Successors": "2",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Mon 19/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    },
+    {
+      "ID": 2,
+      "Name": "B",
+      "Duration": 480,
+      "DurationText": "1 day",
+      "Work": 0.0,
+      "Start": "2026-10-20 08:00:00",
+      "Finish": "2026-10-20 17:00:00",
+      "EarlyStart": "2026-10-20 08:00:00",
+      "EarlyFinish": "2026-10-20 17:00:00",
+      "LateStart": "2026-10-20 08:00:00",
+      "LateFinish": "2026-10-20 17:00:00",
+      "StartSlack": 0,
+      "FinishSlack": 0,
+      "FreeSlack": 0,
+      "TotalSlack": 0,
+      "Critical": true,
+      "ConstraintType": 4,
+      "ConstraintDate": "2026-10-20 08:00:00",
+      "Deadline": "NA",
+      "Type": 0,
+      "EffortDriven": false,
+      "Milestone": false,
+      "Manual": false,
+      "Summary": false,
+      "PercentComplete": 0,
+      "Predecessors": "1",
+      "Successors": "",
+      "raw": {
+        "Duration": {
+          "value": "1 day",
+          "hex": null,
+          "type": "str"
+        },
+        "Finish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "Start": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyStart": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "EarlyFinish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateStart": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        },
+        "LateFinish": {
+          "value": "Tue 20/10/26",
+          "hex": null,
+          "type": "str"
+        }
+      }
+    }
+  ]
+}

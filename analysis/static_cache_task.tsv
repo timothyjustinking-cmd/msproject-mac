@@ -1,0 +1,2 @@
+index	field_id_hex	field_id_dec	property_name	type_code	type_name	record_offset_hex	record_offset_dec	size	flags_hex	vtable_hex	hash_key_hex	extra1_hex	extra2_hex
+0	0x0b400000	188743680	Work	5	Work	0x0008	8	8	0x00020028	0x0000000141050670	0x0000000091b82900	0x00002822	0x400014ed

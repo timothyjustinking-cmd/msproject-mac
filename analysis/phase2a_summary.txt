@@ -1,0 +1,226 @@
+======================================================================
+Phase 2a: Struct Recovery Summary
+======================================================================
+
+--- Field ID Extraction (COM Dispatch) ---
+Total field ID entries extracted: 3477
+  Successfully matched to typelib: 3472
+  No typelib match: 5
+  Function not found in decompiled: 45
+
+Top interfaces by extracted fields:
+  Task: 1587
+  Assignment: 877
+  Resource: 872
+  Engagement: 58
+  Risk: 37
+  Issue: 33
+  Calendar: 13
+
+--- Direct Offset Scanning ---
+Total offset accesses found: 95884
+Classes with offsets: 1095
+
+Top classes by offset access count:
+  CDocument: 13010 accesses, 1491 distinct offsets
+  PjDr: 4367 accesses, 184 distinct offsets
+  TAssnTable: 4076 accesses, 153 distinct offsets
+  TTaskTable: 3924 accesses, 249 distinct offsets
+  Mso: 2147 accesses, 134 distinct offsets
+  TBkndDoc: 1828 accesses, 309 distinct offsets
+  ResourceSheetGridUser: 1296 accesses, 192 distinct offsets
+  TOdbc9ContainerSer: 1279 accesses, 136 distinct offsets
+  TOdbcContainerSer: 1100 accesses, 184 distinct offsets
+  GridRec: 1096 accesses, 141 distinct offsets
+  TOutlTable: 1089 accesses, 138 distinct offsets
+  TaskBoardUI: 1037 accesses, 119 distinct offsets
+  RSVDrawnController: 1024 accesses, 309 distinct offsets
+  GanttPrintState: 1016 accesses, 420 distinct offsets
+  CalendarPrintState: 983 accesses, 185 distinct offsets
+  CalendarGridUser: 978 accesses, 206 distinct offsets
+  CDocSer: 922 accesses, 127 distinct offsets
+  AssignmentElement: 899 accesses, 55 distinct offsets
+  Osf: 879 accesses, 71 distinct offsets
+  Task: 864 accesses, 5 distinct offsets
+  TProj14To12Translator: 848 accesses, 598 distinct offsets
+  serialization: 830 accesses, 171 distinct offsets
+  core: 824 accesses, 159 distinct offsets
+  HistoPrintState: 805 accesses, 362 distinct offsets
+  TCalTable: 777 accesses, 134 distinct offsets
+  GanttRightPaneGridUser: 749 accesses, 164 distinct offsets
+  TaskElement: 722 accesses, 71 distinct offsets
+  tasks: 626 accesses, 101 distinct offsets
+  oart: 625 accesses, 54 distinct offsets
+  TRscTable: 609 accesses, 115 distinct offsets
+
+--- TTaskTable struct layout (249 fields) ---
+       0xb  undefined2      (size=2)  W  (1 accesses in 1 funcs)
+       0xc  int             (size=8)  RW  (38 accesses in 21 funcs)
+       0xe  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+       0xf  undefined4      (size=4)  RW  (5 accesses in 4 funcs)
+      0x10  longlong        (size=8)  RW  (116 accesses in 63 funcs)
+      0x11  undefined4      (size=4)  W  (2 accesses in 2 funcs)
+      0x12  ushort          (size=8)  RW  (5 accesses in 4 funcs)
+      0x13  char            (size=1)  R  (2 accesses in 1 funcs)
+      0x14  ushort          (size=8)  RW  (47 accesses in 30 funcs)
+      0x16  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x18  byte            (size=8)  RW  (241 accesses in 150 funcs)
+      0x19  uint            (size=4)  RW  (13 accesses in 5 funcs)
+      0x1c  uint            (size=8)  RW  (72 accesses in 65 funcs)
+      0x1d  undefined2      (size=2)  W  (1 accesses in 1 funcs)
+      0x20  uint            (size=8)  RW  (394 accesses in 185 funcs)
+      0x21  undefined2      (size=2)  W  (1 accesses in 1 funcs)
+      0x22  undefined8      (size=8)  W  (2 accesses in 2 funcs)
+      0x24  uint            (size=8)  RW  (9 accesses in 9 funcs)
+      0x25  uint            (size=4)  R  (9 accesses in 2 funcs)
+      0x26  undefined4      (size=8)  RW  (11 accesses in 3 funcs)
+      0x28  uint            (size=8)  RW  (232 accesses in 83 funcs)
+      0x2a  undefined8      (size=8)  W  (2 accesses in 2 funcs)
+      0x2c  byte            (size=8)  RW  (48 accesses in 29 funcs)
+      0x2e  undefined8      (size=8)  W  (2 accesses in 2 funcs)
+      0x2f  uint            (size=4)  R  (2 accesses in 1 funcs)
+      0x30  int             (size=8)  RW  (60 accesses in 38 funcs)
+      0x32  undefined8      (size=8)  W  (2 accesses in 2 funcs)
+      0x34  int             (size=8)  RW  (10 accesses in 9 funcs)
+      0x36  undefined8      (size=8)  W  (2 accesses in 2 funcs)
+      0x38  int             (size=8)  RW  (55 accesses in 35 funcs)
+      0x3a  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x3b  undefined2      (size=2)  W  (1 accesses in 1 funcs)
+      0x3c  int             (size=8)  RW  (6 accesses in 5 funcs)
+      0x3e  int             (size=4)  R  (10 accesses in 7 funcs)
+      0x40  undefined8      (size=8)  RW  (23 accesses in 17 funcs)
+      0x42  undefined2      (size=8)  RW  (7 accesses in 6 funcs)
+      0x44  uint            (size=8)  RW  (11 accesses in 9 funcs)
+      0x46  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x48  uint            (size=8)  RW  (60 accesses in 40 funcs)
+      0x4a  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+  ... and 209 more fields
+
+--- TaskElement struct layout (71 fields) ---
+       0xc  undefined8      (size=8)  R  (2 accesses in 2 funcs)
+       0xe  longlong        (size=8)  R  (11 accesses in 5 funcs)
+      0x10  undefined4      (size=8)  RW  (92 accesses in 85 funcs)
+      0x14  undefined4      (size=8)  R  (3 accesses in 3 funcs)
+      0x15  undefined1      (size=1)  W  (3 accesses in 3 funcs)
+      0x16  longlong        (size=8)  R  (1 accesses in 1 funcs)
+      0x17  undefined1      (size=1)  W  (1 accesses in 1 funcs)
+      0x18  longlong        (size=8)  RW  (303 accesses in 259 funcs)
+      0x19  undefined1      (size=1)  W  (1 accesses in 1 funcs)
+      0x1a  undefined1      (size=1)  W  (1 accesses in 1 funcs)
+      0x1c  uint            (size=8)  RW  (8 accesses in 7 funcs)
+      0x1e  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x20  uint            (size=8)  RW  (46 accesses in 24 funcs)
+      0x2c  byte            (size=1)  R  (2 accesses in 1 funcs)
+      0x30  uint            (size=4)  R  (3 accesses in 3 funcs)
+      0x34  byte            (size=4)  RW  (4 accesses in 2 funcs)
+      0x38  undefined8      (size=8)  RW  (16 accesses in 9 funcs)
+      0x40  uint            (size=8)  RW  (4 accesses in 2 funcs)
+      0x48  int             (size=8)  RW  (4 accesses in 3 funcs)
+      0x4c  undefined4      (size=4)  R  (1 accesses in 1 funcs)
+      0x50  uint            (size=8)  RW  (5 accesses in 4 funcs)
+      0x54  uint            (size=4)  R  (3 accesses in 3 funcs)
+      0x58  longlong        (size=8)  RW  (17 accesses in 12 funcs)
+      0x5c  uint            (size=4)  R  (5 accesses in 3 funcs)
+      0x60  int             (size=4)  RW  (5 accesses in 5 funcs)
+      0x68  code            (size=4)  R  (2 accesses in 2 funcs)
+      0x6c  uint            (size=4)  R  (3 accesses in 2 funcs)
+      0x70  longlong        (size=8)  RW  (4 accesses in 1 funcs)
+      0x78  longlong        (size=8)  RW  (2 accesses in 1 funcs)
+      0x84  short           (size=2)  R  (1 accesses in 1 funcs)
+      0x88  int             (size=4)  R  (2 accesses in 1 funcs)
+      0x8c  int             (size=4)  R  (3 accesses in 1 funcs)
+      0x98  undefined8      (size=8)  R  (2 accesses in 1 funcs)
+      0xa0  undefined8      (size=8)  R  (3 accesses in 2 funcs)
+      0xa8  undefined8      (size=8)  R  (1 accesses in 1 funcs)
+      0xe0  undefined8      (size=8)  RW  (10 accesses in 1 funcs)
+      0xe8  longlong        (size=8)  RW  (4 accesses in 1 funcs)
+      0xee  ushort          (size=2)  R  (2 accesses in 2 funcs)
+      0xf0  short           (size=4)  R  (2 accesses in 2 funcs)
+      0xf2  short           (size=2)  R  (2 accesses in 2 funcs)
+  ... and 31 more fields
+
+--- TRscTable struct layout (115 fields) ---
+       0xc  int             (size=8)  RW  (7 accesses in 4 funcs)
+       0xe  undefined4      (size=4)  RW  (6 accesses in 3 funcs)
+      0x10  undefined8      (size=8)  RW  (30 accesses in 24 funcs)
+      0x11  undefined2      (size=4)  W  (2 accesses in 2 funcs)
+      0x12  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x13  undefined2      (size=2)  W  (1 accesses in 1 funcs)
+      0x14  undefined8      (size=8)  RW  (2 accesses in 2 funcs)
+      0x16  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x17  undefined1      (size=1)  W  (2 accesses in 2 funcs)
+      0x18  undefined8      (size=8)  RW  (5 accesses in 4 funcs)
+      0x19  uint            (size=4)  R  (1 accesses in 1 funcs)
+      0x1a  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x1c  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x1e  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x20  undefined8      (size=8)  RW  (9 accesses in 7 funcs)
+      0x22  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x24  undefined2      (size=2)  W  (1 accesses in 1 funcs)
+      0x26  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x28  uint            (size=8)  RW  (61 accesses in 21 funcs)
+      0x2a  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x2c  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x2e  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x30  undefined8      (size=8)  RW  (8 accesses in 6 funcs)
+      0x32  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x34  undefined4      (size=8)  RW  (5 accesses in 2 funcs)
+      0x36  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x38  undefined8      (size=8)  RW  (2 accesses in 2 funcs)
+      0x3a  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x3c  byte            (size=8)  RW  (4 accesses in 2 funcs)
+      0x40  undefined8      (size=8)  RW  (2 accesses in 2 funcs)
+      0x42  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x44  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x47  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x48  undefined4      (size=4)  R  (1 accesses in 1 funcs)
+      0x49  undefined2      (size=2)  W  (1 accesses in 1 funcs)
+      0x4b  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+      0x4c  uint            (size=4)  R  (1 accesses in 1 funcs)
+      0x4d  undefined2      (size=2)  W  (1 accesses in 1 funcs)
+      0x50  undefined8      (size=8)  RW  (3 accesses in 2 funcs)
+      0x52  undefined8      (size=8)  W  (1 accesses in 1 funcs)
+  ... and 75 more fields
+
+--- TAssnTable struct layout (153 fields) ---
+       0xb  undefined1      (size=1)  W  (1 accesses in 1 funcs)
+       0xc  undefined4      (size=8)  RW  (49 accesses in 31 funcs)
+       0xe  longlong        (size=8)  RW  (8 accesses in 7 funcs)
+      0x10  undefined8      (size=8)  RW  (102 accesses in 68 funcs)
+      0x11  char            (size=1)  R  (1 accesses in 1 funcs)
+      0x12  double          (size=8)  RW  (7 accesses in 4 funcs)
+      0x13  undefined1      (size=1)  W  (2 accesses in 2 funcs)
+      0x14  undefined4      (size=4)  RW  (8 accesses in 7 funcs)
+      0x16  uint            (size=4)  RW  (2 accesses in 2 funcs)
+      0x17  undefined1      (size=1)  W  (6 accesses in 6 funcs)
+      0x18  int             (size=8)  RW  (136 accesses in 76 funcs)
+      0x19  uint            (size=4)  RW  (16 accesses in 5 funcs)
+      0x1a  longlong        (size=8)  RW  (6 accesses in 4 funcs)
+      0x1c  uint            (size=8)  RW  (17 accesses in 14 funcs)
+      0x1e  undefined1      (size=1)  W  (2 accesses in 2 funcs)
+      0x20  uint            (size=8)  RW  (133 accesses in 70 funcs)
+      0x21  char            (size=1)  R  (1 accesses in 1 funcs)
+      0x23  byte            (size=1)  R  (1 accesses in 1 funcs)
+      0x24  undefined4      (size=4)  R  (4 accesses in 3 funcs)
+      0x25  byte            (size=1)  R  (2 accesses in 1 funcs)
+      0x28  uint            (size=8)  R  (143 accesses in 59 funcs)
+      0x2c  byte            (size=4)  R  (283 accesses in 127 funcs)
+      0x30  uint            (size=8)  RW  (83 accesses in 61 funcs)
+      0x34  uint            (size=4)  RW  (5 accesses in 3 funcs)
+      0x38  undefined8      (size=8)  R  (49 accesses in 25 funcs)
+      0x3a  longlong        (size=8)  RW  (12 accesses in 3 funcs)
+      0x3c  int             (size=4)  RW  (22 accesses in 4 funcs)
+      0x40  undefined8      (size=8)  R  (54 accesses in 41 funcs)
+      0x42  undefined4      (size=4)  W  (2 accesses in 1 funcs)
+      0x44  int             (size=4)  RW  (5 accesses in 3 funcs)
+      0x48  undefined8      (size=8)  RW  (81 accesses in 54 funcs)
+      0x4c  uint            (size=4)  RW  (11 accesses in 6 funcs)
+      0x50  undefined8      (size=8)  RW  (17 accesses in 12 funcs)
+      0x54  int             (size=4)  RW  (3 accesses in 1 funcs)
+      0x58  longlong        (size=8)  RW  (300 accesses in 153 funcs)
+      0x5c  char            (size=1)  R  (4 accesses in 2 funcs)
+      0x60  uint            (size=8)  RW  (126 accesses in 72 funcs)
+      0x68  undefined4      (size=8)  RW  (237 accesses in 118 funcs)
+      0x6c  uint            (size=4)  R  (222 accesses in 99 funcs)
+      0x70  int             (size=8)  R  (33 accesses in 23 funcs)
+  ... and 113 more fields

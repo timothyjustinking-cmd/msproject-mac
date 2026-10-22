@@ -1,0 +1,126 @@
+{
+  "tasks": [
+    {
+      "ID": 1,
+      "Name": "KASAP",
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-19 17:00:00"
+    },
+    {
+      "ID": 2,
+      "Name": "KALAP",
+      "ConstraintType": 1,
+      "ConstraintDate": "NA",
+      "Deadline": "NA",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 0,
+      "Start": "2026-11-03 08:00:00",
+      "Finish": "2026-11-03 17:00:00"
+    },
+    {
+      "ID": 3,
+      "Name": "KMSO",
+      "ConstraintType": 2,
+      "ConstraintDate": "2026-10-26 08:00:00",
+      "Deadline": "NA",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 0,
+      "Start": "2026-10-26 08:00:00",
+      "Finish": "2026-10-26 17:00:00"
+    },
+    {
+      "ID": 4,
+      "Name": "KMFO",
+      "ConstraintType": 3,
+      "ConstraintDate": "2026-10-26 08:00:00",
+      "Deadline": "NA",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 0,
+      "Start": "2026-10-22 08:00:00",
+      "Finish": "2026-10-26 08:00:00"
+    },
+    {
+      "ID": 5,
+      "Name": "KSNET",
+      "ConstraintType": 4,
+      "ConstraintDate": "2026-10-26 08:00:00",
+      "Deadline": "NA",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 0,
+      "Start": "2026-10-26 08:00:00",
+      "Finish": "2026-10-26 17:00:00"
+    },
+    {
+      "ID": 6,
+      "Name": "KSNLT",
+      "ConstraintType": 5,
+      "ConstraintDate": "2026-10-26 08:00:00",
+      "Deadline": "NA",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-19 17:00:00"
+    },
+    {
+      "ID": 7,
+      "Name": "KFNET",
+      "ConstraintType": 6,
+      "ConstraintDate": "2026-10-26 08:00:00",
+      "Deadline": "NA",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 0,
+      "Start": "2026-10-23 08:00:00",
+      "Finish": "2026-10-26 08:00:00"
+    },
+    {
+      "ID": 8,
+      "Name": "KFNLT",
+      "ConstraintType": 7,
+      "ConstraintDate": "2026-10-26 08:00:00",
+      "Deadline": "NA",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-19 17:00:00"
+    },
+    {
+      "ID": 9,
+      "Name": "P50",
+      "ConstraintType": 4,
+      "ConstraintDate": "2026-11-02 08:00:00",
+      "Deadline": "NA",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 50,
+      "Start": "2026-11-02 08:00:00",
+      "Finish": "2026-11-03 17:00:00"
+    },
+    {
+      "ID": 10,
+      "Name": "DL",
+      "ConstraintType": 0,
+      "ConstraintDate": "NA",
+      "Deadline": "2026-10-21 17:00:00",
+      "ActualStart": null,
+      "ActualFinish": null,
+      "PercentComplete": 0,
+      "Start": "2026-10-19 08:00:00",
+      "Finish": "2026-10-20 17:00:00"
+    }
+  ],
+  "saved": "schedin.mpp",
+  "bytes": 245760
+}

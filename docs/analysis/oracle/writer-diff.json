@@ -1,0 +1,562 @@
+{
+  "oracle-rebuild.mpp": {
+    "bytes_src": 237568,
+    "bytes_resaved": 239104,
+    "streams_src": 96,
+    "streams_resaved": 96,
+    "changed": [
+      {
+        "stream": "\u0005SummaryInformation",
+        "src": 264,
+        "dst": 264,
+        "differing": 5,
+        "first": 200
+      },
+      {
+        "stream": "   114/Props",
+        "src": 88690,
+        "dst": 88690,
+        "differing": 17,
+        "first": 434
+      },
+      {
+        "stream": "   114/TBkndAssn/Fixed2Data",
+        "src": 144,
+        "dst": 144,
+        "differing": 30,
+        "first": 0
+      },
+      {
+        "stream": "   114/TBkndAssn/Fixed2Meta",
+        "src": 175,
+        "dst": 175,
+        "differing": 3,
+        "first": 68
+      },
+      {
+        "stream": "   114/TBkndAssn/FixedMeta",
+        "src": 118,
+        "dst": 118,
+        "differing": 3,
+        "first": 18
+      },
+      {
+        "stream": "   114/TBkndAssn/Var2Data",
+        "src": 336,
+        "dst": 396,
+        "differing": 0,
+        "first": null
+      },
+      {
+        "stream": "   114/TBkndAssn/VarMeta",
+        "src": 96,
+        "dst": 132,
+        "differing": 18,
+        "first": 8
+      },
+      {
+        "stream": "   114/TBkndCal/Fixed2Data",
+        "src": 336,
+        "dst": 336,
+        "differing": 19,
+        "first": 272
+      },
+      {
+        "stream": "   114/TBkndRsc/Fixed2Data",
+        "src": 200,
+        "dst": 200,
+        "differing": 10,
+        "first": 160
+      },
+      {
+        "stream": "   114/TBkndRsc/FixedMeta",
+        "src": 201,
+        "dst": 201,
+        "differing": 1,
+        "first": 176
+      },
+      {
+        "stream": "   114/TBkndTask/Fixed2Data",
+        "src": 448,
+        "dst": 448,
+        "differing": 39,
+        "first": 192
+      },
+      {
+        "stream": "   114/TBkndTask/FixedMeta",
+        "src": 345,
+        "dst": 345,
+        "differing": 1,
+        "first": 315
+      },
+      {
+        "stream": "   214/CEdl/FixedData",
+        "src": 160,
+        "dst": 160,
+        "differing": 5,
+        "first": 144
+      },
+      {
+        "stream": "   214/CEdl/Var2Data",
+        "src": 474,
+        "dst": 702,
+        "differing": 142,
+        "first": 0
+      },
+      {
+        "stream": "   214/CEdl/VarMeta",
+        "src": 36,
+        "dst": 36,
+        "differing": 2,
+        "first": 20
+      },
+      {
+        "stream": "   214/CFilter/FixedData",
+        "src": 230,
+        "dst": 460,
+        "differing": 5,
+        "first": 214
+      },
+      {
+        "stream": "   214/CFilter/FixedMeta",
+        "src": 26,
+        "dst": 36,
+        "differing": 3,
+        "first": 8
+      },
+      {
+        "stream": "   214/CFilter/Var2Data",
+        "src": 108,
+        "dst": 224,
+        "differing": 0,
+        "first": null
+      },
+      {
+        "stream": "   214/CFilter/VarMeta",
+        "src": 36,
+        "dst": 48,
+        "differing": 2,
+        "first": 8
+      },
+      {
+        "stream": "   214/CGrouping/FixedData",
+        "src": 460,
+        "dst": 460,
+        "differing": 10,
+        "first": 214
+      },
+      {
+        "stream": "   214/CTable/FixedData",
+        "src": 230,
+        "dst": 230,
+        "differing": 5,
+        "first": 214
+      },
+      {
+        "stream": "   214/CV_iew/FixedData",
+        "src": 414,
+        "dst": 414,
+        "differing": 15,
+        "first": 122
+      },
+      {
+        "stream": "   214/CV_iew/Var2Data",
+        "src": 100178,
+        "dst": 100178,
+        "differing": 103,
+        "first": 42613
+      },
+      {
+        "stream": "   214/Props",
+        "src": 13102,
+        "dst": 13102,
+        "differing": 12,
+        "first": 8892
+      },
+      {
+        "stream": "Props14",
+        "src": 452,
+        "dst": 638,
+        "differing": 191,
+        "first": 0
+      }
+    ],
+    "added": [],
+    "removed": []
+  },
+  "oracle-name.mpp": {
+    "bytes_src": 238080,
+    "bytes_resaved": 239104,
+    "streams_src": 96,
+    "streams_resaved": 96,
+    "changed": [
+      {
+        "stream": "\u0005SummaryInformation",
+        "src": 264,
+        "dst": 264,
+        "differing": 5,
+        "first": 200
+      },
+      {
+        "stream": "   114/Props",
+        "src": 88690,
+        "dst": 88690,
+        "differing": 19,
+        "first": 434
+      },
+      {
+        "stream": "   114/TBkndAssn/Fixed2Data",
+        "src": 144,
+        "dst": 144,
+        "differing": 30,
+        "first": 0
+      },
+      {
+        "stream": "   114/TBkndAssn/Fixed2Meta",
+        "src": 175,
+        "dst": 175,
+        "differing": 3,
+        "first": 68
+      },
+      {
+        "stream": "   114/TBkndAssn/FixedMeta",
+        "src": 118,
+        "dst": 118,
+        "differing": 3,
+        "first": 18
+      },
+      {
+        "stream": "   114/TBkndAssn/Var2Data",
+        "src": 336,
+        "dst": 396,
+        "differing": 0,
+        "first": null
+      },
+      {
+        "stream": "   114/TBkndAssn/VarMeta",
+        "src": 96,
+        "dst": 132,
+        "differing": 18,
+        "first": 8
+      },
+      {
+        "stream": "   114/TBkndCal/Fixed2Data",
+        "src": 336,
+        "dst": 336,
+        "differing": 19,
+        "first": 272
+      },
+      {
+        "stream": "   114/TBkndRsc/Fixed2Data",
+        "src": 200,
+        "dst": 200,
+        "differing": 10,
+        "first": 160
+      },
+      {
+        "stream": "   114/TBkndRsc/FixedMeta",
+        "src": 201,
+        "dst": 201,
+        "differing": 1,
+        "first": 176
+      },
+      {
+        "stream": "   114/TBkndTask/Fixed2Data",
+        "src": 448,
+        "dst": 448,
+        "differing": 39,
+        "first": 192
+      },
+      {
+        "stream": "   114/TBkndTask/FixedMeta",
+        "src": 345,
+        "dst": 345,
+        "differing": 1,
+        "first": 315
+      },
+      {
+        "stream": "   214/CEdl/FixedData",
+        "src": 160,
+        "dst": 160,
+        "differing": 5,
+        "first": 144
+      },
+      {
+        "stream": "   214/CEdl/Var2Data",
+        "src": 474,
+        "dst": 696,
+        "differing": 142,
+        "first": 0
+      },
+      {
+        "stream": "   214/CEdl/VarMeta",
+        "src": 36,
+        "dst": 36,
+        "differing": 2,
+        "first": 20
+      },
+      {
+        "stream": "   214/CFilter/FixedData",
+        "src": 230,
+        "dst": 460,
+        "differing": 5,
+        "first": 214
+      },
+      {
+        "stream": "   214/CFilter/FixedMeta",
+        "src": 26,
+        "dst": 36,
+        "differing": 3,
+        "first": 8
+      },
+      {
+        "stream": "   214/CFilter/Var2Data",
+        "src": 108,
+        "dst": 224,
+        "differing": 0,
+        "first": null
+      },
+      {
+        "stream": "   214/CFilter/VarMeta",
+        "src": 36,
+        "dst": 48,
+        "differing": 2,
+        "first": 8
+      },
+      {
+        "stream": "   214/CGrouping/FixedData",
+        "src": 460,
+        "dst": 460,
+        "differing": 10,
+        "first": 214
+      },
+      {
+        "stream": "   214/CTable/FixedData",
+        "src": 230,
+        "dst": 230,
+        "differing": 5,
+        "first": 214
+      },
+      {
+        "stream": "   214/CV_iew/FixedData",
+        "src": 414,
+        "dst": 414,
+        "differing": 15,
+        "first": 122
+      },
+      {
+        "stream": "   214/CV_iew/Var2Data",
+        "src": 100178,
+        "dst": 100178,
+        "differing": 103,
+        "first": 42613
+      },
+      {
+        "stream": "   214/Props",
+        "src": 13102,
+        "dst": 13102,
+        "differing": 13,
+        "first": 8892
+      },
+      {
+        "stream": "Props14",
+        "src": 452,
+        "dst": 632,
+        "differing": 192,
+        "first": 0
+      }
+    ],
+    "added": [],
+    "removed": []
+  },
+  "base.mpp": {
+    "bytes_src": 237568,
+    "bytes_resaved": 239104,
+    "streams_src": 96,
+    "streams_resaved": 96,
+    "changed": [
+      {
+        "stream": "\u0005SummaryInformation",
+        "src": 264,
+        "dst": 264,
+        "differing": 5,
+        "first": 200
+      },
+      {
+        "stream": "   114/Props",
+        "src": 88690,
+        "dst": 88690,
+        "differing": 17,
+        "first": 434
+      },
+      {
+        "stream": "   114/TBkndAssn/Fixed2Data",
+        "src": 144,
+        "dst": 144,
+        "differing": 30,
+        "first": 0
+      },
+      {
+        "stream": "   114/TBkndAssn/Fixed2Meta",
+        "src": 175,
+        "dst": 175,
+        "differing": 3,
+        "first": 68
+      },
+      {
+        "stream": "   114/TBkndAssn/FixedMeta",
+        "src": 118,
+        "dst": 118,
+        "differing": 3,
+        "first": 18
+      },
+      {
+        "stream": "   114/TBkndAssn/Var2Data",
+        "src": 336,
+        "dst": 396,
+        "differing": 0,
+        "first": null
+      },
+      {
+        "stream": "   114/TBkndAssn/VarMeta",
+        "src": 96,
+        "dst": 132,
+        "differing": 18,
+        "first": 8
+      },
+      {
+        "stream": "   114/TBkndCal/Fixed2Data",
+        "src": 336,
+        "dst": 336,
+        "differing": 19,
+        "first": 272
+      },
+      {
+        "stream": "   114/TBkndRsc/Fixed2Data",
+        "src": 200,
+        "dst": 200,
+        "differing": 10,
+        "first": 160
+      },
+      {
+        "stream": "   114/TBkndRsc/FixedMeta",
+        "src": 201,
+        "dst": 201,
+        "differing": 1,
+        "first": 176
+      },
+      {
+        "stream": "   114/TBkndTask/Fixed2Data",
+        "src": 448,
+        "dst": 448,
+        "differing": 39,
+        "first": 192
+      },
+      {
+        "stream": "   114/TBkndTask/FixedMeta",
+        "src": 345,
+        "dst": 345,
+        "differing": 1,
+        "first": 315
+      },
+      {
+        "stream": "   214/CEdl/FixedData",
+        "src": 160,
+        "dst": 160,
+        "differing": 5,
+        "first": 144
+      },
+      {
+        "stream": "   214/CEdl/Var2Data",
+        "src": 474,
+        "dst": 698,
+        "differing": 142,
+        "first": 0
+      },
+      {
+        "stream": "   214/CEdl/VarMeta",
+        "src": 36,
+        "dst": 36,
+        "differing": 2,
+        "first": 20
+      },
+      {
+        "stream": "   214/CFilter/FixedData",
+        "src": 230,
+        "dst": 460,
+        "differing": 5,
+        "first": 214
+      },
+      {
+        "stream": "   214/CFilter/FixedMeta",
+        "src": 26,
+        "dst": 36,
+        "differing": 3,
+        "first": 8
+      },
+      {
+        "stream": "   214/CFilter/Var2Data",
+        "src": 108,
+        "dst": 224,
+        "differing": 0,
+        "first": null
+      },
+      {
+        "stream": "   214/CFilter/VarMeta",
+        "src": 36,
+        "dst": 48,
+        "differing": 2,
+        "first": 8
+      },
+      {
+        "stream": "   214/CGrouping/FixedData",
+        "src": 460,
+        "dst": 460,
+        "differing": 10,
+        "first": 214
+      },
+      {
+        "stream": "   214/CTable/FixedData",
+        "src": 230,
+        "dst": 230,
+        "differing": 5,
+        "first": 214
+      },
+      {
+        "stream": "   214/CV_iew/FixedData",
+        "src": 414,
+        "dst": 414,
+        "differing": 15,
+        "first": 122
+      },
+      {
+        "stream": "   214/CV_iew/Var2Data",
+        "src": 100178,
+        "dst": 100178,
+        "differing": 103,
+        "first": 42613
+      },
+      {
+        "stream": "   214/Props",
+        "src": 13102,
+        "dst": 13102,
+        "differing": 13,
+        "first": 8892
+      },
+      {
+        "stream": "Props14",
+        "src": 428,
+        "dst": 634,
+        "differing": 176,
+        "first": 0
+      }
+    ],
+    "added": [],
+    "removed": [],
+    "summary": {
+      "214_streams_changed": 0,
+      "114_streams_changed": 0,
+      "214_total": 0
+    }
+  }
+}

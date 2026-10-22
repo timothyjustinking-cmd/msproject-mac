@@ -1,0 +1,59 @@
+{
+  "file": "oracle-recalc.mpp",
+  "bytes": 237568,
+  "opened": true,
+  "project_start": "2026-01-04 13:00:00",
+  "project_finish": "2026-01-27 12:00:00",
+  "tasks_before": [
+    {
+      "uid": 1,
+      "dur": 8160,
+      "start": "2026-01-04 13:00:00",
+      "finish": "2026-01-27 12:00:00",
+      "slack": 0,
+      "crit": false
+    },
+    {
+      "uid": 2,
+      "dur": 6240,
+      "start": "2026-01-04 13:00:00",
+      "finish": "2026-01-21 12:00:00",
+      "slack": 1920,
+      "crit": false
+    },
+    {
+      "uid": 3,
+      "dur": 5760,
+      "start": "2026-01-04 13:00:00",
+      "finish": "2026-01-20 12:00:00",
+      "slack": 2400,
+      "crit": false
+    }
+  ],
+  "tasks_after": [
+    {
+      "uid": 1,
+      "dur": 8160,
+      "start": "2026-01-04 13:00:00",
+      "finish": "2026-01-27 12:00:00",
+      "slack": 0,
+      "crit": false
+    },
+    {
+      "uid": 2,
+      "dur": 6240,
+      "start": "2026-01-04 13:00:00",
+      "finish": "2026-01-21 12:00:00",
+      "slack": 1920,
+      "crit": false
+    },
+    {
+      "uid": 3,
+      "dur": 5760,
+      "start": "2026-01-04 13:00:00",
+      "finish": "2026-01-20 12:00:00",
+      "slack": 2400,
+      "crit": false
+    }
+  ]
+}

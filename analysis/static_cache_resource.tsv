@@ -1,0 +1,2 @@
+index	field_id_hex	field_id_dec	property_name	type_code	type_name	record_offset_hex	record_offset_dec	size	flags_hex	vtable_hex	hash_key_hex	extra1_hex	extra2_hex
+0	0x0c400000	205520896	ID	3	Duration	0x0025	37	4	0x00000020	0x0000000141050670	0x0000000089890308	0x00002822	0x000010a5

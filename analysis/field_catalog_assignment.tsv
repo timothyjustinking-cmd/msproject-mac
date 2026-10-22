@@ -1,0 +1,778 @@
+index	field_id_hex	field_id_dec	property_name	category	static_type	static_offset	static_size	static_flags
+0	0x0f400001	255852545	TaskUniqueID	Standard	3	0x1	4	0x20
+1	0x0f400002	255852546	ResourceUniqueID	Standard				
+2	0x0f400003	255852547	TaskID	Standard				
+3	0x0f400004	255852548	ResourceID	Standard				
+4	0x0f400006	255852550	ResourceName	Standard				
+5	0x0f400018	255852568		Standard				
+6	0x0f400028	255852584		Standard				
+7	0x0f400029	255852585		Standard				
+8	0x0f40002a	255852586		Standard				
+9	0x0f40002d	255852589		Standard				
+10	0x0f40002e	255852590		Standard				
+11	0x0f40002f	255852591		Standard				
+12	0x0f400031	255852593		Standard				
+13	0x0f400032	255852594		Standard				
+14	0x0f400033	255852595		Standard				
+15	0x0f400036	255852598		Standard				
+16	0x0f400037	255852599		Standard				
+17	0x0f400040	255852608		Standard				
+18	0x0f400041	255852609		Standard				
+19	0x0f400042	255852610		Standard				
+20	0x0f400043	255852611		Standard				
+21	0x0f40004c	255852620		Standard				
+22	0x0f40004d	255852621		Standard				
+23	0x0f400050	255852624	CostRateTable	Standard				
+24	0x0f400053	255852627		Standard				
+25	0x0f400057	255852631		Standard				
+26	0x0f40008b	255852683		Standard				
+27	0x0f40008f	255852687		Standard				
+28	0x0f400090	255852688		Standard				
+29	0x0f400094	255852692		Standard				
+30	0x0f400095	255852693		Standard				
+31	0x0f40009e	255852702		Standard				
+32	0x0f4000f9	255852793		Standard				
+33	0x0f4000fa	255852794		Standard				
+34	0x0f4000fb	255852795		Standard				
+35	0x0f4000fc	255852796		Standard				
+36	0x0f4000fd	255852797		Standard				
+37	0x0f400101	255852801		Standard				
+38	0x0f400102	255852802		Standard				
+39	0x0f400104	255852804		Standard				
+40	0x0f400106	255852806	StartVariance	Standard				
+41	0x0f400107	255852807	FinishVariance	Standard				
+42	0x0f400108	255852808		Standard				
+43	0x0f400109	255852809		Standard				
+44	0x0f40010a	255852810		Standard				
+45	0x0f40010b	255852811		Standard				
+46	0x0f40010c	255852812		Standard				
+47	0x0f40010d	255852813		Standard				
+48	0x0f400112	255852818		Standard				
+49	0x0f400115	255852821		Standard				
+50	0x0f400116	255852822		Standard				
+51	0x0f400118	255852824		Standard				
+52	0x0f400119	255852825		Standard				
+53	0x0f40011a	255852826		Standard				
+54	0x0f40011b	255852827		Standard				
+55	0x0f40011c	255852828		Standard				
+56	0x0f40011d	255852829		Standard				
+57	0x0f40011f	255852831		Standard				
+58	0x0f400125	255852837		Standard				
+59	0x0f400129	255852841		Standard				
+60	0x0f40012e	255852846		Standard				
+61	0x0f400132	255852850		Standard				
+62	0x0f400137	255852855		Standard				
+63	0x0f40013b	255852859		Standard				
+64	0x0f400140	255852864		Standard				
+65	0x0f400144	255852868		Standard				
+66	0x0f400149	255852873		Standard				
+67	0x0f40014d	255852877		Standard				
+68	0x0f400152	255852882		Standard				
+69	0x0f400156	255852886		Standard				
+70	0x0f40015b	255852891		Standard				
+71	0x0f40015f	255852895		Standard				
+72	0x0f400164	255852900		Standard				
+73	0x0f400168	255852904		Standard				
+74	0x0f40016d	255852909		Standard				
+75	0x0f400171	255852913		Standard				
+76	0x0f400176	255852918		Standard				
+77	0x0f40017a	255852922		Standard				
+78	0x0f40017c	255852924		Standard				
+79	0x0f40021d	255853085		Standard				
+80	0x0f40021e	255853086		Standard				
+81	0x0f40021f	255853087		Standard				
+82	0x0f400220	255853088		Standard				
+83	0x0f40023f	255853119		Standard				
+84	0x0f400240	255853120		Standard				
+85	0x0f400241	255853121		Standard				
+86	0x0f400242	255853122		Standard				
+87	0x0f400243	255853123		Standard				
+88	0x0f400244	255853124		Standard				
+89	0x0f400245	255853125		Standard				
+90	0x0f400246	255853126		Standard				
+91	0x0f400247	255853127		Standard				
+92	0x0f400248	255853128		Standard				
+93	0x0f400249	255853129		Standard				
+94	0x0f40024a	255853130		Standard				
+95	0x0f40024b	255853131		Standard				
+96	0x0f40024c	255853132		Standard				
+97	0x0f40024d	255853133		Standard				
+98	0x0f40024e	255853134		Standard				
+99	0x0f40024f	255853135		Standard				
+100	0x0f400250	255853136		Standard				
+101	0x0f400251	255853137		Standard				
+102	0x0f400252	255853138		Standard				
+103	0x0f400253	255853139		Standard				
+104	0x0f400254	255853140		Standard				
+105	0x0f400255	255853141		Standard				
+106	0x0f400256	255853142		Standard				
+107	0x0f400257	255853143		Standard				
+108	0x0f400258	255853144		Standard				
+109	0x0f400259	255853145		Standard				
+110	0x0f40025a	255853146		Standard				
+111	0x0f40025b	255853147		Standard				
+112	0x0f40025c	255853148		Standard				
+113	0x0f40025e	255853150		Standard				
+114	0x0f400260	255853152		Standard				
+115	0x0f400263	255853155		Standard				
+116	0x0f400265	255853157		Standard				
+117	0x0f400267	255853159		Standard				
+118	0x0f400269	255853161		Standard				
+119	0x0f40026b	255853163		Standard				
+120	0x0f40026d	255853165		Standard				
+121	0x0f40026f	255853167		Standard				
+122	0x0f400271	255853169		Standard				
+123	0x0f400273	255853171		Standard				
+124	0x0f400275	255853173		Standard				
+125	0x0f40027b	255853179		Standard				
+126	0x0f40027d	255853181	TaskGuid	Standard				
+127	0x0f40027e	255853182	ResourceGuid	Standard				
+128	0x0f40027f	255853183		Standard				
+129	0x0f400280	255853184		Standard				
+130	0x0f400281	255853185		Standard				
+131	0x0f400282	255853186		Standard				
+132	0x0f400283	255853187		Standard				
+133	0x0f400284	255853188		Standard				
+134	0x0f400285	255853189		Standard				
+135	0x0f400287	255853191		Standard				
+136	0x0f400288	255853192		Standard				
+137	0x0f400289	255853193		Standard				
+138	0x0f40028a	255853194		Standard				
+139	0x0f40028b	255853195		Standard				
+140	0x0f40028c	255853196		Standard				
+141	0x0f40028d	255853197		Standard				
+142	0x0f40028e	255853198		Standard				
+143	0x0f40028f	255853199		Standard				
+144	0x0f400290	255853200		Standard				
+145	0x0f400291	255853201		Standard				
+146	0x0f400292	255853202		Standard				
+147	0x0f400293	255853203		Standard				
+148	0x0f400294	255853204		Standard				
+149	0x0f400295	255853205		Standard				
+150	0x0f400296	255853206		Standard				
+151	0x0f400297	255853207		Standard				
+152	0x0f400298	255853208		Standard				
+153	0x0f400299	255853209		Standard				
+154	0x0f40029a	255853210		Standard				
+155	0x0f40029b	255853211		Standard				
+156	0x0f40029f	255853215		Standard				
+157	0x0f4002a0	255853216		Standard				
+158	0x0f4002cd	255853261		Standard				
+159	0x0f4002ce	255853262		Standard				
+160	0x0f4002cf	255853263		Standard				
+161	0x0f4002d0	255853264		Standard				
+162	0x0f4002d2	255853266	Task	Standard				
+163	0x0f4002d3	255853267	Resource	Standard				
+164	0x0f4002d4	255853268		Standard				
+165	0x0f4002d5	255853269		Standard				
+166	0x0f4002d6	255853270		Standard				
+167	0x0f4002e5	255853285		Standard				
+168	0x0f4002e6	255853286		Standard				
+169	0x0f4002e7	255853287		Standard				
+170	0x0f4002e8	255853288		Standard				
+171	0x0f4002e9	255853289		Standard				
+172	0x0f4002ea	255853290		Standard				
+173	0x0f4002eb	255853291		Standard				
+174	0x0f4002ec	255853292		Standard				
+175	0x0f4002ed	255853293		Standard				
+176	0x0f4002ee	255853294		Standard				
+177	0x0f4002ef	255853295		Standard				
+178	0x0f4002fb	255853307		Standard				
+179	0x0f4002fd	255853309	TaskBoardStatus	Standard				
+180	0x0f4002fe	255853310	Agile	Standard				
+181	0x0f4002ff	255853311	Sprint	Standard				
+182	0x0f400300	255853312	SprintStart	Standard				
+183	0x0f400301	255853313	SprintFinish	Standard				
+184	0x0f400302	255853314		Standard				
+185	0x0f400303	255853315		Standard				
+186	0x0f400304	255853316		Standard				
+187	0x0f400305	255853317		Standard				
+188	0x0f400306	255853318		Standard				
+189	0x0f400307	255853319		Standard				
+190	0x0f400308	255853320		Standard				
+191		0		Standard				
+192		0		Standard				
+193		0		Standard				
+194		0		Standard				
+195		0		Standard				
+196		0		Standard				
+197		0		Standard				
+198		0		Standard				
+199		0		Standard				
+200		0		Standard				
+201		0		Standard				
+202		0		Standard				
+203		0		Standard				
+204		0		Standard				
+205		0		Standard				
+206		0		Standard				
+207		0		Standard				
+208		0		Standard				
+209		0		Standard				
+210		0		Standard				
+211		0		Standard				
+212		0		Standard				
+213		0		Standard				
+214		0		Standard				
+215		0		Standard				
+216		0		Standard				
+217		0		Standard				
+218		0		Standard				
+219		0		Standard				
+220		0		Standard				
+221		0		Standard				
+222		0		Standard				
+223		0		Standard				
+224		0		Standard				
+225		0		Standard				
+226		0		Standard				
+227		0		Standard				
+228		0		Standard				
+229		0		Standard				
+230		0		Standard				
+231		0		Standard				
+232		0		Standard				
+233		0		Standard				
+234		0		Standard				
+235		0		Standard				
+236		0		Standard				
+237		0		Standard				
+238		0		Standard				
+239		0		Standard				
+240		0		Standard				
+241		0		Standard				
+242		0		Standard				
+243		0		Standard				
+244		0		Standard				
+245		0		Standard				
+246		0		Standard				
+247		0		Standard				
+248		0		Standard				
+249		0		Standard				
+250		0		Standard				
+251		0		Standard				
+252		0		Standard				
+253		0		Standard				
+254		0		Standard				
+255		0		Standard				
+256		0		Standard				
+257		0		Standard				
+258		0		Standard				
+259		0		Standard				
+260		0		Standard				
+261		0		Standard				
+262		0		Standard				
+263		0		Standard				
+264		0		Standard				
+265		0		Standard				
+266		0		Standard				
+267		0		Standard				
+268		0		Standard				
+269		0		Standard				
+270		0		Standard				
+271		0		Standard				
+272		0		Standard				
+273		0		Standard				
+274		0		Standard				
+275		0		Standard				
+276		0		Standard				
+277		0		Standard				
+278		0		Standard				
+279		0		Standard				
+280		0		Standard				
+281		0		Standard				
+282		0		Standard				
+283		0		Standard				
+284		0		Standard				
+285		0		Standard				
+286		0		Standard				
+287		0		Standard				
+288		0		Standard				
+289		0		Standard				
+290		0		Standard				
+291		0		Standard				
+292		0		Standard				
+293		0		Standard				
+294		0		Standard				
+295		0		Standard				
+296		0		Standard				
+297		0		Standard				
+298		0		Standard				
+299		0		Standard				
+300		0		Standard				
+301		0		Standard				
+302		0		Standard				
+303		0		Standard				
+304		0		Standard				
+305		0		Standard				
+306		0		Standard				
+307		0		Standard				
+308		0		Standard				
+309		0		Standard				
+310		0		Standard				
+311		0		Standard				
+312		0		Standard				
+313		0		Standard				
+314		0		Standard				
+315		0		Standard				
+316		0		Standard				
+317		0		Standard				
+318		0		Standard				
+319		0		Standard				
+320		0		Standard				
+321		0		Standard				
+322		0		Standard				
+323		0		Standard				
+324		0		Standard				
+325		0		Standard				
+326		0		Standard				
+327		0		Standard				
+328		0		Standard				
+329		0		Standard				
+330		0		Standard				
+331		0		Standard				
+332		0		Standard				
+333		0		Standard				
+334		0		Standard				
+335		0		Standard				
+336		0		Standard				
+337		0		Standard				
+338		0		Standard				
+339		0		Standard				
+340		0		Standard				
+341		0		Standard				
+342		0		Standard				
+343		0		Standard				
+344		0		Standard				
+345		0		Standard				
+346		0		Standard				
+347		0		Standard				
+348		0		Standard				
+349		0		Standard				
+350		0		Standard				
+351		0		Standard				
+352		0		Standard				
+353		0		Standard				
+354		0		Standard				
+355		0		Standard				
+356		0		Standard				
+357		0		Standard				
+358		0		Standard				
+359		0		Standard				
+360		0		Standard				
+361		0		Standard				
+362		0		Standard				
+363		0		Standard				
+364		0		Standard				
+365		0		Standard				
+366		0		Standard				
+367		0		Standard				
+368		0		Standard				
+369		0		Standard				
+370		0		Standard				
+371		0		Standard				
+372		0		Standard				
+373		0		Standard				
+374		0		Standard				
+375		0		Standard				
+376		0		Standard				
+377		0		Standard				
+378		0		Standard				
+379		0		Standard				
+380		0		Standard				
+381		0		Standard				
+382		0		Standard				
+383		0		Standard				
+384		0		Standard				
+385		0		Standard				
+386		0		Standard				
+387		0		Standard				
+388		0		Standard				
+389		0		Standard				
+390		0		Standard				
+391		0		Standard				
+392		0		Standard				
+393		0		Standard				
+394		0		Standard				
+395		0		Standard				
+396		0		Standard				
+397		0		Standard				
+398		0		Standard				
+399		0		Standard				
+400		0		Standard				
+401		0		Standard				
+402		0		Standard				
+403		0		Standard				
+404		0		Standard				
+405		0		Standard				
+406		0		Standard				
+407		0		Standard				
+408		0		Standard				
+409		0		Standard				
+410		0		Standard				
+411		0		Standard				
+412		0		Standard				
+413		0		Standard				
+414		0		Standard				
+415		0		Standard				
+416		0		Standard				
+417		0		Standard				
+418		0		Standard				
+419		0		Standard				
+420		0		Standard				
+421		0		Standard				
+422		0		Standard				
+423		0		Standard				
+424		0		Standard				
+425		0		Standard				
+426		0		Standard				
+427		0		Standard				
+428		0		Standard				
+429		0		Standard				
+430		0		Standard				
+431		0		Standard				
+432		0		Standard				
+433		0		Standard				
+434		0		Standard				
+435		0		Standard				
+436		0		Standard				
+437		0		Standard				
+438		0		Standard				
+439		0		Standard				
+440		0		Standard				
+441		0		Standard				
+442		0		Standard				
+443		0		Standard				
+444		0		Standard				
+445		0		Standard				
+446		0		Standard				
+447		0		Standard				
+448		0		Standard				
+449		0		Standard				
+450		0		Standard				
+451		0		Standard				
+452		0		Standard				
+453		0		Standard				
+454		0		Standard				
+455		0		Standard				
+456		0		Standard				
+457		0		Standard				
+458		0		Standard				
+459		0		Standard				
+460		0		Standard				
+461		0		Standard				
+462		0		Standard				
+463		0		Standard				
+464		0		Standard				
+465		0		Standard				
+466		0		Standard				
+467		0		Standard				
+468		0		Standard				
+469		0		Standard				
+470		0		Standard				
+471		0		Standard				
+472		0		Standard				
+473		0		Standard				
+474		0		Standard				
+475		0		Standard				
+476		0		Standard				
+477		0		Standard				
+478		0		Standard				
+479		0		Standard				
+480		0		Standard				
+481		0		Standard				
+482		0		Standard				
+483		0		Standard				
+484		0		Standard				
+485		0		Standard				
+486		0		Standard				
+487		0		Standard				
+488		0		Standard				
+489		0		Standard				
+490		0		Standard				
+491		0		Standard				
+492		0		Standard				
+493		0		Standard				
+494		0		Standard				
+495		0		Standard				
+496		0		Standard				
+497		0		Standard				
+498		0		Standard				
+499		0		Standard				
+500		0		Standard				
+501		0		Standard				
+502		0		Standard				
+503		0		Standard				
+504		0		Standard				
+505		0		Standard				
+506		0		Standard				
+507		0		Standard				
+508		0		Standard				
+509		0		Standard				
+510		0		Standard				
+511		0		Standard				
+512		0		Standard				
+513		0		Standard				
+514		0		Standard				
+515		0		Standard				
+516		0		Standard				
+517		0		Standard				
+518		0		Standard				
+519		0		Standard				
+520		0		Standard				
+521		0		Standard				
+522		0		Standard				
+523		0		Standard				
+524		0		Standard				
+525		0		Standard				
+526		0		Standard				
+527		0		Standard				
+528		0		Standard				
+529		0		Standard				
+530		0		Standard				
+531		0		Standard				
+532		0		Standard				
+533		0		Standard				
+534		0		Standard				
+535		0		Standard				
+536		0		Standard				
+537		0		Standard				
+538		0		Standard				
+539		0		Standard				
+540		0		Standard				
+541		0		Standard				
+542		0		Standard				
+543		0		Standard				
+544		0		Standard				
+545		0		Standard				
+546		0		Standard				
+547		0		Standard				
+548		0		Standard				
+549		0		Standard				
+550		0		Standard				
+551		0		Standard				
+552		0		Standard				
+553		0		Standard				
+554		0		Standard				
+555		0		Standard				
+556		0		Standard				
+557		0		Standard				
+558		0		Standard				
+559		0		Standard				
+560		0		Standard				
+561		0		Standard				
+562		0		Standard				
+563		0		Standard				
+564		0		Standard				
+565		0		Standard				
+566		0		Standard				
+567		0		Standard				
+568		0		Standard				
+569		0		Standard				
+570		0		Standard				
+571		0		Standard				
+572		0		Standard				
+573		0		Standard				
+574		0		Standard				
+575		0		Standard				
+576		0		Standard				
+577		0		Standard				
+578		0		Standard				
+579		0		Standard				
+580		0		Standard				
+581		0		Standard				
+582		0		Standard				
+583		0		Standard				
+584		0		Standard				
+585		0		Standard				
+586		0		Standard				
+587		0		Standard				
+588		0		Standard				
+589		0		Standard				
+590		0		Standard				
+591		0		Standard				
+592		0		Standard				
+593		0		Standard				
+594		0		Standard				
+595		0		Standard				
+596		0		Standard				
+597		0		Standard				
+598		0		Standard				
+599		0		Standard				
+600		0		Standard				
+601		0		Standard				
+602		0		Standard				
+603		0		Standard				
+604		0		Standard				
+605		0		Standard				
+606		0		Standard				
+607		0		Standard				
+608		0		Standard				
+609		0		Standard				
+610		0		Standard				
+611		0		Standard				
+612		0		Standard				
+613		0		Standard				
+614		0		Standard				
+615		0		Standard				
+616		0		Standard				
+617		0		Standard				
+618		0		Standard				
+619		0		Standard				
+620		0		Standard				
+621		0		Standard				
+622		0		Standard				
+623		0		Standard				
+624		0		Standard				
+625		0		Standard				
+626		0		Standard				
+627		0		Standard				
+628		0		Standard				
+629		0		Standard				
+630		0		Standard				
+631		0		Standard				
+632		0		Standard				
+633		0		Standard				
+634		0		Standard				
+635		0		Standard				
+636		0		Standard				
+637		0		Standard				
+638		0		Standard				
+639		0		Standard				
+640		0		Standard				
+641		0		Standard				
+642		0		Standard				
+643		0		Standard				
+644		0		Standard				
+645		0		Standard				
+646		0		Standard				
+647		0		Standard				
+648		0		Standard				
+649		0		Standard				
+650		0		Standard				
+651		0		Standard				
+652		0		Standard				
+653		0		Standard				
+654		0		Standard				
+655		0		Standard				
+656		0		Standard				
+657		0		Standard				
+658		0		Standard				
+659		0		Standard				
+660		0		Standard				
+661		0		Standard				
+662		0		Standard				
+663		0		Standard				
+664		0		Standard				
+665		0		Standard				
+666		0		Standard				
+667		0		Standard				
+668		0		Standard				
+669		0		Standard				
+670		0		Standard				
+671		0		Standard				
+672		0		Standard				
+673		0		Standard				
+674		0		Standard				
+675		0		Standard				
+676		0		Standard				
+677		0		Standard				
+678		0		Standard				
+679		0		Standard				
+680		0		Standard				
+681		0		Standard				
+682		0		Standard				
+683		0		Standard				
+684		0		Standard				
+685		0		Standard				
+686		0		Standard				
+687		0		Standard				
+688		0		Standard				
+689		0		Standard				
+690		0		Standard				
+691		0		Standard				
+692		0		Standard				
+693		0		Standard				
+694		0		Standard				
+695		0		Standard				
+696		0		Standard				
+697		0		Standard				
+698		0		Standard				
+699		0		Standard				
+700		0		Standard				
+701		0		Standard				
+702		0		Standard				
+703		0		Standard				
+704		0		Standard				
+705		0		Standard				
+706		0		Standard				
+707		0		Standard				
+708		0		Standard				
+709		0		Standard				
+710		0		Standard				
+711		0		Standard				
+712		0		Standard				
+713		0		Standard				
+714		0		Standard				
+715		0		Standard				
+716		0		Standard				
+717		0		Standard				
+718		0		Standard				
+719		0		Standard				
+720		0		Standard				
+721		0		Standard				
+722		0		Standard				
+723		0		Standard				
+724		0		Standard				
+725		0		Standard				
+726		0		Standard				
+727		0		Standard				
+728		0		Standard				
+729		0		Standard				
+730		0		Standard				
+731		0		Standard				
+732		0		Standard				
+733		0		Standard				
+734		0		Standard				
+735		0		Standard				
+736		0		Standard				
+737		0		Standard				
+738		0		Standard				
+739		0		Standard				
+740		0		Standard				
+741		0		Standard				
+742		0		Standard				
+743		0		Standard				
+744		0		Standard				
+745		0		Standard				
+746		0		Standard				
+747		0		Standard				
+748		0		Standard				
+749		0		Standard				
+750		0		Standard				
+751		0		Standard				
+752		0		Standard				
+753		0		Standard				
+754		0		Standard				
+755		0		Standard				
+756		0		Standard				
+757		0		Standard				
+758		0		Standard				
+759		0		Standard				
+760		0		Standard				
+761		0		Standard				
+762		0		Standard				
+763		0		Standard				
+764		0		Standard				
+765		0		Standard				
+766		0		Standard				
+767		0		Standard				
+768		0		Standard				
+769		0		Standard				
+770		0		Standard				
+771		0		Standard				
+772		0		Standard				
+773		0		Standard				
+774		0		Standard				
+775		0		Standard				
+776		0		Standard				

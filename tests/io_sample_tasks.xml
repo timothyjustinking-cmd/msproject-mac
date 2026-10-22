@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Three tasks: a summary, a child, and a milestone; one predecessor link;
+     escaped text and CDATA; two custom fields; one element with no named
+     descriptor field (DurationFormat) to exercise the warning path. -->
+<Project xmlns="http://schemas.microsoft.com/project">
+  <Name>Tasks sample</Name>
+  <StartDate>2024-03-04T08:00:00</StartDate>
+  <FinishDate>2024-03-08T17:00:00</FinishDate>
+  <ScheduleFromStart>1</ScheduleFromStart>
+  <MinutesPerDay>480</MinutesPerDay>
+  <Tasks>
+    <Task>
+      <UID>1</UID>
+      <ID>1</ID>
+      <Name>Phase &amp; design</Name>
+      <OutlineNumber>1</OutlineNumber>
+      <OutlineLevel>1</OutlineLevel>
+      <Summary>1</Summary>
+      <Duration>PT40H0M0S</Duration>
+      <Start>2024-03-04T08:00:00</Start>
+      <Finish>2024-03-08T17:00:00</Finish>
+      <PercentComplete>0</PercentComplete>
+    </Task>
+    <Task>
+      <UID>2</UID>
+      <ID>2</ID>
+      <Name>Draft &lt;spec&gt;</Name>
+      <OutlineNumber>1.1</OutlineNumber>
+      <OutlineLevel>2</OutlineLevel>
+      <Summary>0</Summary>
+      <Duration>PT16H0M0S</Duration>
+      <Start>2024-03-04T08:00:00</Start>
+      <Finish>2024-03-05T17:00:00</Finish>
+      <PercentComplete>50</PercentComplete>
+      <PercentWorkComplete>50</PercentWorkComplete>
+      <Priority>600</Priority>
+      <Cost>1250.5</Cost>
+      <FixedCost>100</FixedCost>
+      <Notes><![CDATA[Line one & line two]]></Notes>
+      <Text1>draft</Text1>
+      <Number1>7</Number1>
+      <Flag1>1</Flag1>
+      <Date1>2024-03-06T00:00:00</Date1>
+      <DurationFormat>7</DurationFormat>
+    </Task>
+    <Task>
+      <UID>3</UID>
+      <ID>3</ID>
+      <Name>Sign-off</Name>
+      <OutlineNumber>1.2</OutlineNumber>
+      <OutlineLevel>2</OutlineLevel>
+      <Summary>0</Summary>
+      <Milestone>1</Milestone>
+      <Duration>PT0H0M0S</Duration>
+      <Start>2024-03-08T17:00:00</Start>
+      <Finish>2024-03-08T17:00:00</Finish>
+      <PercentComplete>0</PercentComplete>
+      <PredecessorLink>
+        <PredecessorUID>2</PredecessorUID>
+        <Type>1</Type>
+        <CrossProject>0</CrossProject>
+        <LinkLag>PT8H0M0S</LinkLag>
+        <LagFormat>7</LagFormat>
+      </PredecessorLink>
+    </Task>
+  </Tasks>
+</Project>

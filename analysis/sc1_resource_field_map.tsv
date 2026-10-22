@@ -1,0 +1,45 @@
+byte_pos	type_code	type_name	size	class_slot	field_id_hex	field_name	dispatch_type	byte_off_raw
+4	11	bool	2	39	0x0c4002e0		1	129
+4	11	bool	2	12	0x0c400019	Overallocated	1	130
+4	11	bool	2	25	0x0c400052		1	131
+4	11	bool	2	27	0x0c40005d		1	132
+4	11	bool	2	32	0x0c40013b		1	133
+4	11	bool	2	36	0x0c4002b3	Enterprise	1	142
+4	11	bool	2	31	0x0c40012a		1	143
+4	11	bool	2	26	0x0c400054		1	144
+5	11	bool	2	28	0x0c400095		1	145
+5	11	bool	2	29	0x0c4000a3	CanLevel	1	147
+5	11	bool	2	33	0x0c40013c		1	148
+5	11	bool	2	34	0x0c400151		1	149
+5	11	bool	2	35	0x0c400153		1	150
+5	11	bool	2	38	0x0c4002df		1	151
+5	11	bool	2	40	0x0c4002f0	Budget	1	152
+8	11	bool	2	41	0x0c40036d		1	258
+8	11	bool	2	42	0x0c400371		1	260
+8	11	bool	2	43	0x0c400372		1	264
+16	5	Work	8	0	0x0c400004	MaxUnits	1	512
+24	5	Work	8	1	0x0c400006	StandardRate	1	768
+32	2	i16	2	23	0x0c400046		1	1024
+40	5	Work	8	2	0x0c400007	OvertimeRate	1	1280
+48	2	i16	2	24	0x0c400047		1	1536
+56	2	i16	2	9	0x0c400013	AccrueAt	1	1792
+58	2	i16	2	30	0x0c400110	Workgroup	1	1856
+60	3	u32/dur	4	20	0x0c400038		1	1920
+64	72		16	37	0x0c4002d9	CalendarGuid	1	2048
+80	5	Work	8	5	0x0c40000d	Work	1	2560
+88	5	Work	8	6	0x0c40000e	ActualWork	1	2816
+96	5	Work	8	7	0x0c400010	OvertimeWork	1	3072
+104	5	Work	8	11	0x0c400016	RemainingWork	1	3328
+112	5	Work	8	14	0x0c400026	RegularWork	1	3584
+120	5	Work	8	15	0x0c400027	ActualOvertimeWork	1	3840
+128	5	Work	8	16	0x0c400028	RemainingOvertimeWork	1	4096
+152	5	Work	8	3	0x0c40000b	ActualCost	1	4864
+160	5	Work	8	4	0x0c40000c	Cost	1	5120
+168	5	Work	8	8	0x0c400012	CostPerUse	1	5376
+176	5	Work	8	10	0x0c400015	RemainingCost	1	5632
+184	5	Work	8	17	0x0c40002f	OvertimeCost	1	5888
+192	5	Work	8	18	0x0c400030	ActualOvertimeCost	1	6144
+200	5	Work	8	19	0x0c400031	RemainingOvertimeCost	1	6400
+248	19	date	4	21	0x0c400039	AvailableFrom	1	7936
+252	19	date	4	22	0x0c40003a	AvailableTo	1	8064
+256	5	Work	8	13	0x0c40001a	PeakUnits	1	8192

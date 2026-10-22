@@ -1,0 +1,78 @@
+# macOS verification for the AppKit shell in app/.
+#
+# WHY A SEPARATE WORKFLOW.  ci.yml owns the portable core's portability matrix
+# and must not grow an app job; app/ is a standalone CMake project (it is not
+# added to the root CMakeLists.txt), so it gets its own configure/build/test.
+# Nothing here depends on ci.yml and ci.yml depends on nothing here.
+#
+# WHAT THIS PROVES, AND WHY IT IS THE ONLY PROOF:
+#   * main.mm is Objective-C++ against AppKit, which cannot be compiled on the
+#     Windows development box.  This job is where the shell is compiled at all.
+#   * the app target links the real core libraries (core_mpp, core_sched,
+#     core_view, core_sheet, core_gantt plus core_model) built from this tree,
+#     with every core stream test switched off by app/CMakeLists.txt.
+#   * the ObjC++ translation unit compiles with -Wall -Wextra -Wpedantic -Werror
+#     (CORE_WARNINGS_AS_ERRORS=ON), so an AppKit deprecation or a typo in a
+#     selector is a red build rather than a warning nobody reads.
+#   * the headless layout test (app/layout_model_tests.cpp) builds and passes on
+#     macOS as well as on Windows; corpus probes SKIP (a runner has no corpus/).
+#
+# NO GUI LAUNCH.  There is no window server session on a runner and no need for
+# one: "built + the bundle executable exists + it links AppKit" is the claim.
+
+name: app-macos
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-app:
+    name: macos-appkit
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # Standalone configure of app/ only: no -S . (that is ci.yml's job), and no
+      # --parallel anywhere (see docs/build.md).
+      - name: Configure the app project
+        shell: bash
+        run: |
+          cmake -S app -B build-app \
+            -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DAPP_BUILD_TESTS=ON \
+            -DCORE_WARNINGS_AS_ERRORS=ON
+
+      # Builds every target in the project: the core libraries the shell links,
+      # layout_model_tests, and msproject_app.app (the ObjC++ / AppKit target).
+      - name: Build
+        shell: bash
+        run: cmake --build build-app --config Release
+
+      # The headless test is the same binary Windows builds; on a runner the
+      # corpus probes print SKIP and the synthetic checks still run.
+      - name: Test (headless layout model)
+        shell: bash
+        run: ctest --test-dir build-app -C Release --output-on-failure --timeout 60
+
+      # The gate the brief asks for: the ObjC++ application target actually
+      # materialised and actually links AppKit.  If main.mm failed to compile or
+      # link, the build step above already failed; this makes the artifact
+      # explicit in the log.
+      - name: Prove the app bundle was produced
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="build-app/msproject_app.app/Contents/MacOS/msproject_app"
+          test -x "$app"
+          file "$app"
+          otool -L "$app" | grep -q "AppKit"
+          echo "OK: $app exists and links AppKit"

@@ -1,0 +1,839 @@
+field_id_hex	com_name	type	storage	value	status
+0x0b400000	Work	i64	direct	"0 hrs"	OK
+0x0b400001	BaselineWork	i64	baseline	"0 hrs"	OK
+0x0b400002	ActualWork	i64	direct	"0 hrs"	OK
+0x0b400003	WorkVariance	i64	computed	"0 hrs"	OK
+0x0b400004	RemainingWork	i64	direct	"0 hrs"	OK
+0x0b400005	Cost	i64	direct	"$0.00"	OK
+0x0b400006	BaselineCost	i64	baseline	"$0.00"	OK
+0x0b400007	ActualCost	i64	direct	"$0.00"	OK
+0x0b400008	FixedCost	i64	direct	"$0.00"	OK
+0x0b400009	CostVariance	i64	computed	"$0.00"	OK
+0x0b40000a	RemainingCost	i64	direct	"$0.00"	OK
+0x0b40000b	BCWP	i64	computed	"$0.00"	OK
+0x0b40000c	BCWS	i64	computed	"$0.00"	OK
+0x0b40000d	SV	i64	computed	"$0.00"	OK
+0x0b40000e	Name	text	text	"Task 1"	OK
+0x0b40000f	Notes	virtual	virtual	""	OK
+0x0b400010	WBS	text	text	"1"	OK
+0x0b400011	ConstraintType	i16	direct	"As Soon As Possible"	OK
+0x0b400012	ConstraintDate	date32	direct	"NA"	OK
+0x0b400013	Critical	bool	direct	"No"	OK
+0x0b400014	LevelingDelay	i32	direct	"0 edays"	OK
+0x0b400015	FreeSlack	i32	direct	"0 days"	OK
+0x0b400016	TotalSlack	i32	computed	"0 days"	OK
+0x0b400017	ID	i32	special	"1"	OK
+0x0b400018	Milestone	bool	direct	"No"	OK
+0x0b400019	Priority	i16	direct	"500"	OK
+0x0b40001a	Subproject	text	dyn_text	""	OK
+0x0b40001b	BaselineDuration	i32	baseline	"0 days"	OK
+0x0b40001c	ActualDuration	i32	direct	"0 days"	OK
+0x0b40001d	Duration	i32	direct	"5 days"	OK
+0x0b40001e	DurationVariance	i32	computed	"5 days"	OK
+0x0b40001f	RemainingDuration	i32	direct	"5 days"	OK
+0x0b400020	PercentComplete	i16	direct	"0%"	OK
+0x0b400021	PercentWorkComplete	i16	direct	"0%"	OK
+0x0b400022	FixedDuration	bool	direct	"No"	OK
+0x0b400023	Start	date32	direct	"Tue 20/10/26"	OK
+0x0b400024	Finish	date32	direct	"Mon 26/10/26"	OK
+0x0b400025	EarlyStart	date32	direct	"Tue 20/10/26"	OK
+0x0b400026	EarlyFinish	date32	direct	"Mon 26/10/26"	OK
+0x0b400027	LateStart	date32	direct	"Tue 20/10/26"	OK
+0x0b400028	LateFinish	date32	direct	"Mon 26/10/26"	OK
+0x0b400029	ActualStart	date32	direct	"NA"	OK
+0x0b40002a	ActualFinish	date32	direct	"NA"	OK
+0x0b40002b	BaselineStart	date32	baseline	"NA"	OK
+0x0b40002c	BaselineFinish	date32	baseline	"NA"	OK
+0x0b40002d	StartVariance	i32	computed	"0 days"	OK
+0x0b40002e	FinishVariance	i32	computed	"0 days"	OK
+0x0b400033	Text1	text	baseline	"Custom text"	OK
+0x0b400034	Start1	date32	baseline	"NA"	OK
+0x0b400035	Finish1	date32	baseline	"NA"	OK
+0x0b400036	Text2	text	baseline	""	OK
+0x0b400037	Start2	date32	baseline	"NA"	OK
+0x0b400038	Finish2	date32	baseline	"NA"	OK
+0x0b400039	Text3	text	baseline	""	OK
+0x0b40003a	Start3	date32	baseline	"NA"	OK
+0x0b40003b	Finish3	date32	baseline	"NA"	OK
+0x0b40003c	Text4	text	baseline	""	OK
+0x0b40003d	Start4	date32	baseline	"NA"	OK
+0x0b40003e	Finish4	date32	baseline	"NA"	OK
+0x0b40003f	Text5	text	baseline	""	OK
+0x0b400040	Start5	date32	baseline	"NA"	OK
+0x0b400041	Finish5	date32	baseline	"NA"	OK
+0x0b400042	Text6	text	baseline	""	OK
+0x0b400043	Text7	text	baseline	""	OK
+0x0b400044	Text8	text	baseline	""	OK
+0x0b400045	Text9	text	baseline	""	OK
+0x0b400046	Text10	text	baseline	""	OK
+0x0b400047	Marked	bool	direct	"No"	OK
+0x0b400048	Flag1	bool	baseline	"Yes"	OK
+0x0b400049	Flag2	bool	baseline	"No"	OK
+0x0b40004a	Flag3	bool	baseline	"No"	OK
+0x0b40004b	Flag4	bool	baseline	"No"	OK
+0x0b40004c	Flag5	bool	baseline	"No"	OK
+0x0b40004d	Flag6	bool	baseline	"No"	OK
+0x0b40004e	Flag7	bool	baseline	"No"	OK
+0x0b40004f	Flag8	bool	baseline	"No"	OK
+0x0b400050	Flag9	bool	baseline	"No"	OK
+0x0b400051	Flag10	bool	baseline	"No"	OK
+0x0b400052	Rollup	bool	direct	"No"	OK
+0x0b400053	CV	i64	computed	"$0.00"	OK
+0x0b400054	Project	text	computed	"test_project"	OK
+0x0b400055	OutlineLevel	i16	unk_13	"1"	OK
+0x0b400057	Number1	i64	baseline	"42"	OK
+0x0b400058	Number2	i64	baseline	"0"	OK
+0x0b400059	Number3	i64	baseline	"0"	OK
+0x0b40005a	Number4	i64	baseline	"0"	OK
+0x0b40005b	Number5	i64	baseline	"0"	OK
+0x0b40005c	Summary	bool	direct	"No"	OK
+0x0b40005d	Created	date32	direct	"Tue 20/10/26"	OK
+0x0b40005f	UniqueIDPredecessors	text	unk_9	""	OK
+0x0b400060	UniqueIDSuccessors	text	unk_9	""	OK
+0x0b400061	Objects	i32	computed	"0"	OK
+0x0b400062	LinkedFields	bool	special	"No"	OK
+0x0b400063	Resume	date32	direct	"NA"	OK
+0x0b400064	Stop	date32	direct	"NA"	OK
+0x0b400065	ResumeNoEarlierThan	date32	unk_9	"NA"	OK
+0x0b400066	OutlineNumber	text	computed	"1"	OK
+0x0b400067	Duration1	i32	baseline	"0 days"	OK
+0x0b400068	Duration2	i32	baseline	"0 days"	OK
+0x0b400069	Duration3	i32	baseline	"0 days"	OK
+0x0b40006a	Cost1	i64	baseline	"$0.00"	OK
+0x0b40006b	Cost2	i64	baseline	"$0.00"	OK
+0x0b40006c	Cost3	i64	baseline	"$0.00"	OK
+0x0b40006d	HideBar	bool	direct	"No"	OK
+0x0b40006e	Confirmed	bool	computed	"No"	OK
+0x0b40006f	UpdateNeeded	bool	computed	"No"	OK
+0x0b400070	Contact	text	text	""	OK
+0x0b400071	ResourceGroup	text	computed	""	OK
+0x0b400078	ACWP	i64	computed	"$0.00"	OK
+0x0b400080	Type	i16	direct	"Fixed Units"	OK
+0x0b400081	Recurring	bool	direct	"No"	OK
+0x0b400084	EffortDriven	bool	direct	"No"	OK
+0x0b400089	OutlineChildren	obj_ref	unk_13	""	OK
+0x0b40008b	PredecessorTasks	obj_ref	unk_13	""	OK
+0x0b40008d	SuccessorTasks	obj_ref	unk_13	""	OK
+0x0b4000a3	OvertimeWork	i64	computed	"0 hrs"	OK
+0x0b4000a4	ActualOvertimeWork	i64	unk_2	"0 hrs"	OK
+0x0b4000a5	RemainingOvertimeWork	i64	unk_2	"0 hrs"	OK
+0x0b4000a6	RegularWork	i64	computed	"0 hrs"	OK
+0x0b4000a8	OvertimeCost	i64	unk_2	"$0.00"	OK
+0x0b4000a9	ActualOvertimeCost	i64	unk_2	"$0.00"	OK
+0x0b4000aa	RemainingOvertimeCost	i64	unk_2	"$0.00"	OK
+0x0b4000c8	FixedCostAccrual	i16	direct	"Prorated"	OK
+0x0b4000ce	Assignments	obj_ref	unk_13	""	OK
+0x0b4000d5	Parent	obj_ref	unk_13	""	OK
+0x0b4000d6	Application	obj_ref	unk_13	""	OK
+0x0b4000d9	Hyperlink	text	unk_9	""	OK
+0x0b4000da	HyperlinkAddress	text	unk_9	""	OK
+0x0b4000db	HyperlinkSubAddress	text	unk_9	""	OK
+0x0b4000dc	HyperlinkHREF	text	unk_9	""	OK
+0x0b4000e1	Overallocated	bool	computed	"No"	OK
+0x0b4000e2	SplitParts	obj_ref	unk_13	""	OK
+0x0b4000e8	ExternalTask	bool	direct	"No"	OK
+0x0b4000ee	OutlineParent	obj_ref	unk_13	""	OK
+0x0b4000ef	Resources	obj_ref	unk_13	""	OK
+0x0b4000f6	SubProjectReadOnly	bool	direct	"No"	OK
+0x0b4000fa	ResponsePending	bool	computed	"No"	OK
+0x0b4000fb	TeamStatusPending	bool	computed	"No"	OK
+0x0b4000fc	LevelingCanSplit	bool	direct	"Yes"	OK
+0x0b4000fd	LevelIndividualAssignments	bool	direct	"Yes"	OK
+0x0b400102	Cost4	i64	baseline	"$0.00"	OK
+0x0b400103	Cost5	i64	baseline	"$0.00"	OK
+0x0b400104	Cost6	i64	baseline	"$0.00"	OK
+0x0b400105	Cost7	i64	baseline	"$0.00"	OK
+0x0b400106	Cost8	i64	baseline	"$0.00"	OK
+0x0b400107	Cost9	i64	baseline	"$0.00"	OK
+0x0b400108	Cost10	i64	baseline	"$0.00"	OK
+0x0b400109	Date1	date32	baseline	"NA"	OK
+0x0b40010a	Date2	date32	baseline	"NA"	OK
+0x0b40010b	Date3	date32	baseline	"NA"	OK
+0x0b40010c	Date4	date32	baseline	"NA"	OK
+0x0b40010d	Date5	date32	baseline	"NA"	OK
+0x0b40010e	Date6	date32	baseline	"NA"	OK
+0x0b40010f	Date7	date32	baseline	"NA"	OK
+0x0b400110	Date8	date32	baseline	"NA"	OK
+0x0b400111	Date9	date32	baseline	"NA"	OK
+0x0b400112	Date10	date32	baseline	"NA"	OK
+0x0b400113	Duration4	i32	baseline	"0 days"	OK
+0x0b400114	Duration5	i32	baseline	"0 days"	OK
+0x0b400115	Duration6	i32	baseline	"0 days"	OK
+0x0b400116	Duration7	i32	baseline	"0 days"	OK
+0x0b400117	Duration8	i32	baseline	"0 days"	OK
+0x0b400118	Duration9	i32	baseline	"0 days"	OK
+0x0b400119	Duration10	i32	baseline	"0 days"	OK
+0x0b40011a	Start6	date32	baseline	"NA"	OK
+0x0b40011b	Finish6	date32	baseline	"NA"	OK
+0x0b40011c	Start7	date32	baseline	"NA"	OK
+0x0b40011d	Finish7	date32	baseline	"NA"	OK
+0x0b40011e	Start8	date32	baseline	"NA"	OK
+0x0b40011f	Finish8	date32	baseline	"NA"	OK
+0x0b400120	Start9	date32	baseline	"NA"	OK
+0x0b400121	Finish9	date32	baseline	"NA"	OK
+0x0b400122	Start10	date32	baseline	"NA"	OK
+0x0b400123	Finish10	date32	baseline	"NA"	OK
+0x0b400124	Flag11	bool	baseline	"No"	OK
+0x0b400125	Flag12	bool	baseline	"No"	OK
+0x0b400126	Flag13	bool	baseline	"No"	OK
+0x0b400127	Flag14	bool	baseline	"No"	OK
+0x0b400128	Flag15	bool	baseline	"No"	OK
+0x0b400129	Flag16	bool	baseline	"No"	OK
+0x0b40012a	Flag17	bool	baseline	"No"	OK
+0x0b40012b	Flag18	bool	baseline	"No"	OK
+0x0b40012c	Flag19	bool	baseline	"No"	OK
+0x0b40012d	Flag20	bool	baseline	"No"	OK
+0x0b40012e	Number6	i64	baseline	"0"	OK
+0x0b40012f	Number7	i64	baseline	"0"	OK
+0x0b400130	Number8	i64	baseline	"0"	OK
+0x0b400131	Number9	i64	baseline	"0"	OK
+0x0b400132	Number10	i64	baseline	"0"	OK
+0x0b400133	Number11	i64	baseline	"0"	OK
+0x0b400134	Number12	i64	baseline	"0"	OK
+0x0b400135	Number13	i64	baseline	"0"	OK
+0x0b400136	Number14	i64	baseline	"0"	OK
+0x0b400137	Number15	i64	baseline	"0"	OK
+0x0b400138	Number16	i64	baseline	"0"	OK
+0x0b400139	Number17	i64	baseline	"0"	OK
+0x0b40013a	Number18	i64	baseline	"0"	OK
+0x0b40013b	Number19	i64	baseline	"0"	OK
+0x0b40013c	Number20	i64	baseline	"0"	OK
+0x0b40013d	Text11	text	baseline	""	OK
+0x0b40013e	Text12	text	baseline	""	OK
+0x0b40013f	Text13	text	baseline	""	OK
+0x0b400140	Text14	text	baseline	""	OK
+0x0b400141	Text15	text	baseline	""	OK
+0x0b400142	Text16	text	baseline	""	OK
+0x0b400143	Text17	text	baseline	""	OK
+0x0b400144	Text18	text	baseline	""	OK
+0x0b400145	Text19	text	baseline	""	OK
+0x0b400146	Text20	text	baseline	""	OK
+0x0b400147	Text21	text	baseline	""	OK
+0x0b400148	Text22	text	baseline	""	OK
+0x0b400149	Text23	text	baseline	""	OK
+0x0b40014a	Text24	text	baseline	""	OK
+0x0b40014b	Text25	text	baseline	""	OK
+0x0b40014c	Text26	text	baseline	""	OK
+0x0b40014d	Text27	text	baseline	""	OK
+0x0b40014e	Text28	text	baseline	""	OK
+0x0b40014f	Text29	text	baseline	""	OK
+0x0b400150	Text30	text	baseline	""	OK
+0x0b40015d	ResourcePhonetics	text	computed	""	OK
+0x0b400168	Index	i32	unk_9	"1"	OK
+0x0b400171	PreleveledStart	date32	baseline	"NA"	OK
+0x0b400172	PreleveledFinish	date32	baseline	"NA"	OK
+0x0b400186	Predecessors	text	unk_13	""	OK
+0x0b400187	Successors	text	unk_13	""	OK
+0x0b40018a	ResourceNames	text	unk_13	""	OK
+0x0b40018b	ResourceInitials	text	unk_13	""	OK
+0x0b40018c	Estimated	bool	unk_9	"No"	OK
+0x0b40018f	IgnoreResourceCalendar	bool	direct	"No"	OK
+0x0b400192	Calendar	text	unk_9	"None"	OK
+0x0b400193	Duration1Estimated	bool	unk_9	"Yes"	OK
+0x0b400194	Duration2Estimated	bool	unk_9	"Yes"	OK
+0x0b400195	Duration3Estimated	bool	unk_9	"Yes"	OK
+0x0b400196	Duration4Estimated	bool	unk_9	"Yes"	OK
+0x0b400197	Duration5Estimated	bool	unk_9	"Yes"	OK
+0x0b400198	Duration6Estimated	bool	unk_9	"Yes"	OK
+0x0b400199	Duration7Estimated	bool	unk_9	"Yes"	OK
+0x0b40019a	Duration8Estimated	bool	unk_9	"Yes"	OK
+0x0b40019b	Duration9Estimated	bool	unk_9	"Yes"	OK
+0x0b40019c	Duration10Estimated	bool	unk_9	"Yes"	OK
+0x0b40019d	BaselineDurationEstimated	bool	unk_9	"Yes"	OK
+0x0b4001a0	OutlineCode1	text	unk_9	""	OK
+0x0b4001a2	OutlineCode2	text	unk_9	""	OK
+0x0b4001a4	OutlineCode3	text	unk_9	""	OK
+0x0b4001a6	OutlineCode4	text	unk_9	""	OK
+0x0b4001a8	OutlineCode5	text	unk_9	""	OK
+0x0b4001aa	OutlineCode6	text	unk_9	""	OK
+0x0b4001ac	OutlineCode7	text	unk_9	""	OK
+0x0b4001ae	OutlineCode8	text	unk_9	""	OK
+0x0b4001b0	OutlineCode9	text	unk_9	""	OK
+0x0b4001b2	OutlineCode10	text	unk_9	""	OK
+0x0b4001b5	Deadline	date32	direct	"NA"	OK
+0x0b4001b6	StartSlack	i32	direct	"0 days"	OK
+0x0b4001b7	FinishSlack	i32	direct	"0 days"	OK
+0x0b4001b9	VAC	i64	computed	"$0.00"	OK
+0x0b4001bd	TaskDependencies	obj_ref	unk_13	""	OK
+0x0b4001be	GroupBySummary	bool	computed	"No"	OK
+0x0b4001c1	WBSPredecessors	text	unk_13	""	OK
+0x0b4001c2	WBSSuccessors	text	unk_13	""	OK
+0x0b4001c4	HyperlinkScreenTip	text	unk_9	""	OK
+0x0b4001e0	BaselineFixedCost	i64	direct	"$0.00"	OK
+0x0b4001e2	Baseline1Start	date32	unk_3	"NA"	OK
+0x0b4001e3	Baseline1Finish	date32	unk_3	"NA"	OK
+0x0b4001e4	Baseline1Cost	i64	unk_3	"$0.00"	OK
+0x0b4001e5	Baseline1Work	i64	unk_3	"0 hrs"	OK
+0x0b4001e7	Baseline1Duration	i32	unk_3	"0 days"	OK
+0x0b4001e9	Baseline1FixedCost	i64	unk_3	"$0.00"	OK
+0x0b4001ed	Baseline2Start	date32	unk_3	"NA"	OK
+0x0b4001ee	Baseline2Finish	date32	unk_3	"NA"	OK
+0x0b4001ef	Baseline2Cost	i64	unk_3	"$0.00"	OK
+0x0b4001f0	Baseline2Work	i64	unk_3	"0 hrs"	OK
+0x0b4001f2	Baseline2Duration	i32	unk_3	"0 days"	OK
+0x0b4001f4	Baseline2FixedCost	i64	unk_3	"$0.00"	OK
+0x0b4001f8	Baseline3Start	date32	unk_3	"NA"	OK
+0x0b4001f9	Baseline3Finish	date32	unk_3	"NA"	OK
+0x0b4001fa	Baseline3Cost	i64	unk_3	"$0.00"	OK
+0x0b4001fb	Baseline3Work	i64	unk_3	"0 hrs"	OK
+0x0b4001fd	Baseline3Duration	i32	unk_3	"0 days"	OK
+0x0b4001ff	Baseline3FixedCost	i64	unk_3	"$0.00"	OK
+0x0b400203	Baseline4Start	date32	unk_3	"NA"	OK
+0x0b400204	Baseline4Finish	date32	unk_3	"NA"	OK
+0x0b400205	Baseline4Cost	i64	unk_3	"$0.00"	OK
+0x0b400206	Baseline4Work	i64	unk_3	"0 hrs"	OK
+0x0b400208	Baseline4Duration	i32	unk_3	"0 days"	OK
+0x0b40020a	Baseline4FixedCost	i64	unk_3	"$0.00"	OK
+0x0b40020e	Baseline5Start	date32	unk_3	"NA"	OK
+0x0b40020f	Baseline5Finish	date32	unk_3	"NA"	OK
+0x0b400210	Baseline5Cost	i64	unk_3	"$0.00"	OK
+0x0b400211	Baseline5Work	i64	unk_3	"0 hrs"	OK
+0x0b400213	Baseline5Duration	i32	unk_3	"0 days"	OK
+0x0b400215	Baseline5FixedCost	i64	unk_3	"$0.00"	OK
+0x0b400219	CPI	i64	computed	"0"	OK
+0x0b40021a	SPI	i64	computed	"0"	OK
+0x0b40021b	CVPercent	i16	computed	"0%"	OK
+0x0b40021c	SVPercent	i16	computed	"0%"	OK
+0x0b40021d	EAC	i64	computed	"$0.00"	OK
+0x0b40021e	TCPI	i64	computed	"0"	OK
+0x0b40021f	Status	i16	computed	"On Schedule"	OK
+0x0b400220	Baseline6Start	date32	unk_3	"NA"	OK
+0x0b400221	Baseline6Finish	date32	unk_3	"NA"	OK
+0x0b400222	Baseline6Cost	i64	unk_3	"$0.00"	OK
+0x0b400223	Baseline6Work	i64	unk_3	"0 hrs"	OK
+0x0b400225	Baseline6Duration	i32	unk_3	"0 days"	OK
+0x0b400227	Baseline6FixedCost	i64	unk_3	"$0.00"	OK
+0x0b40022b	Baseline7Start	date32	unk_3	"NA"	OK
+0x0b40022c	Baseline7Finish	date32	unk_3	"NA"	OK
+0x0b40022d	Baseline7Cost	i64	unk_3	"$0.00"	OK
+0x0b40022e	Baseline7Work	i64	unk_3	"0 hrs"	OK
+0x0b400230	Baseline7Duration	i32	unk_3	"0 days"	OK
+0x0b400232	Baseline7FixedCost	i64	unk_3	"$0.00"	OK
+0x0b400236	Baseline8Start	date32	unk_3	"NA"	OK
+0x0b400237	Baseline8Finish	date32	unk_3	"NA"	OK
+0x0b400238	Baseline8Cost	i64	unk_3	"$0.00"	OK
+0x0b400239	Baseline8Work	i64	unk_3	"0 hrs"	OK
+0x0b40023b	Baseline8Duration	i32	unk_3	"0 days"	OK
+0x0b40023d	Baseline8FixedCost	i64	unk_3	"$0.00"	OK
+0x0b400241	Baseline9Start	date32	unk_3	"NA"	OK
+0x0b400242	Baseline9Finish	date32	unk_3	"NA"	OK
+0x0b400243	Baseline9Cost	i64	unk_3	"$0.00"	OK
+0x0b400244	Baseline9Work	i64	unk_3	"0 hrs"	OK
+0x0b400246	Baseline9Duration	i32	unk_3	"0 days"	OK
+0x0b400248	Baseline9FixedCost	i64	unk_3	"$0.00"	OK
+0x0b40024c	Baseline10Start	date32	unk_3	"NA"	OK
+0x0b40024d	Baseline10Finish	date32	unk_3	"NA"	OK
+0x0b40024e	Baseline10Cost	i64	unk_3	"$0.00"	OK
+0x0b40024f	Baseline10Work	i64	unk_3	"0 hrs"	OK
+0x0b400251	Baseline10Duration	i32	unk_3	"0 days"	OK
+0x0b400253	Baseline10FixedCost	i64	unk_3	"$0.00"	OK
+0x0b400257	EnterpriseCost1	i64	unk_3	"$0.00"	OK
+0x0b400258	EnterpriseCost2	i64	unk_3	"$0.00"	OK
+0x0b400259	EnterpriseCost3	i64	unk_3	"$0.00"	OK
+0x0b40025a	EnterpriseCost4	i64	unk_3	"$0.00"	OK
+0x0b40025b	EnterpriseCost5	i64	unk_3	"$0.00"	OK
+0x0b40025c	EnterpriseCost6	i64	unk_3	"$0.00"	OK
+0x0b40025d	EnterpriseCost7	i64	unk_3	"$0.00"	OK
+0x0b40025e	EnterpriseCost8	i64	unk_3	"$0.00"	OK
+0x0b40025f	EnterpriseCost9	i64	unk_3	"$0.00"	OK
+0x0b400260	EnterpriseCost10	i64	unk_3	"$0.00"	OK
+0x0b400261	EnterpriseDate1	date32	unk_3	"NA"	OK
+0x0b400262	EnterpriseDate2	date32	unk_3	"NA"	OK
+0x0b400263	EnterpriseDate3	date32	unk_3	"NA"	OK
+0x0b400264	EnterpriseDate4	date32	unk_3	"NA"	OK
+0x0b400265	EnterpriseDate5	date32	unk_3	"NA"	OK
+0x0b400266	EnterpriseDate6	date32	unk_3	"NA"	OK
+0x0b400267	EnterpriseDate7	date32	unk_3	"NA"	OK
+0x0b400268	EnterpriseDate8	date32	unk_3	"NA"	OK
+0x0b400269	EnterpriseDate9	date32	unk_3	"NA"	OK
+0x0b40026a	EnterpriseDate10	date32	unk_3	"NA"	OK
+0x0b40026b	EnterpriseDate11	date32	unk_3	"NA"	OK
+0x0b40026c	EnterpriseDate12	date32	unk_3	"NA"	OK
+0x0b40026d	EnterpriseDate13	date32	unk_3	"NA"	OK
+0x0b40026e	EnterpriseDate14	date32	unk_3	"NA"	OK
+0x0b40026f	EnterpriseDate15	date32	unk_3	"NA"	OK
+0x0b400270	EnterpriseDate16	date32	unk_3	"NA"	OK
+0x0b400271	EnterpriseDate17	date32	unk_3	"NA"	OK
+0x0b400272	EnterpriseDate18	date32	unk_3	"NA"	OK
+0x0b400273	EnterpriseDate19	date32	unk_3	"NA"	OK
+0x0b400274	EnterpriseDate20	date32	unk_3	"NA"	OK
+0x0b400275	EnterpriseDate21	date32	unk_3	"NA"	OK
+0x0b400276	EnterpriseDate22	date32	unk_3	"NA"	OK
+0x0b400277	EnterpriseDate23	date32	unk_3	"NA"	OK
+0x0b400278	EnterpriseDate24	date32	unk_3	"NA"	OK
+0x0b400279	EnterpriseDate25	date32	unk_3	"NA"	OK
+0x0b40027a	EnterpriseDate26	date32	unk_3	"NA"	OK
+0x0b40027b	EnterpriseDate27	date32	unk_3	"NA"	OK
+0x0b40027c	EnterpriseDate28	date32	unk_3	"NA"	OK
+0x0b40027d	EnterpriseDate29	date32	unk_3	"NA"	OK
+0x0b40027e	EnterpriseDate30	date32	unk_3	"NA"	OK
+0x0b40027f	EnterpriseDuration1	i32	unk_3	"0 days"	OK
+0x0b400280	EnterpriseDuration2	i32	unk_3	"0 days"	OK
+0x0b400281	EnterpriseDuration3	i32	unk_3	"0 days"	OK
+0x0b400282	EnterpriseDuration4	i32	unk_3	"0 days"	OK
+0x0b400283	EnterpriseDuration5	i32	unk_3	"0 days"	OK
+0x0b400284	EnterpriseDuration6	i32	unk_3	"0 days"	OK
+0x0b400285	EnterpriseDuration7	i32	unk_3	"0 days"	OK
+0x0b400286	EnterpriseDuration8	i32	unk_3	"0 days"	OK
+0x0b400287	EnterpriseDuration9	i32	unk_3	"0 days"	OK
+0x0b400288	EnterpriseDuration10	i32	unk_3	"0 days"	OK
+0x0b400293	EnterpriseFlag1	bool	unk_3	"Yes"	OK
+0x0b400294	EnterpriseFlag2	bool	unk_3	"No"	OK
+0x0b400295	EnterpriseFlag3	bool	unk_3	"No"	OK
+0x0b400296	EnterpriseFlag4	bool	unk_3	"No"	OK
+0x0b400297	EnterpriseFlag5	bool	unk_3	"No"	OK
+0x0b400298	EnterpriseFlag6	bool	unk_3	"No"	OK
+0x0b400299	EnterpriseFlag7	bool	unk_3	"No"	OK
+0x0b40029a	EnterpriseFlag8	bool	unk_3	"No"	OK
+0x0b40029b	EnterpriseFlag9	bool	unk_3	"No"	OK
+0x0b40029c	EnterpriseFlag10	bool	unk_3	"No"	OK
+0x0b40029d	EnterpriseFlag11	bool	unk_3	"No"	OK
+0x0b40029e	EnterpriseFlag12	bool	unk_3	"No"	OK
+0x0b40029f	EnterpriseFlag13	bool	unk_3	"No"	OK
+0x0b4002a0	EnterpriseFlag14	bool	unk_3	"No"	OK
+0x0b4002a1	EnterpriseFlag15	bool	unk_3	"No"	OK
+0x0b4002a2	EnterpriseFlag16	bool	unk_3	"No"	OK
+0x0b4002a3	EnterpriseFlag17	bool	unk_3	"No"	OK
+0x0b4002a4	EnterpriseFlag18	bool	unk_3	"No"	OK
+0x0b4002a5	EnterpriseFlag19	bool	unk_3	"No"	OK
+0x0b4002a6	EnterpriseFlag20	bool	unk_3	"No"	OK
+0x0b4002bb	EnterpriseNumber1	i64	unk_3	"0"	OK
+0x0b4002bc	EnterpriseNumber2	i64	unk_3	"0"	OK
+0x0b4002bd	EnterpriseNumber3	i64	unk_3	"0"	OK
+0x0b4002be	EnterpriseNumber4	i64	unk_3	"0"	OK
+0x0b4002bf	EnterpriseNumber5	i64	unk_3	"0"	OK
+0x0b4002c0	EnterpriseNumber6	i64	unk_3	"0"	OK
+0x0b4002c1	EnterpriseNumber7	i64	unk_3	"0"	OK
+0x0b4002c2	EnterpriseNumber8	i64	unk_3	"0"	OK
+0x0b4002c3	EnterpriseNumber9	i64	unk_3	"0"	OK
+0x0b4002c4	EnterpriseNumber10	i64	unk_3	"0"	OK
+0x0b4002c5	EnterpriseNumber11	i64	unk_3	"0"	OK
+0x0b4002c6	EnterpriseNumber12	i64	unk_3	"0"	OK
+0x0b4002c7	EnterpriseNumber13	i64	unk_3	"0"	OK
+0x0b4002c8	EnterpriseNumber14	i64	unk_3	"0"	OK
+0x0b4002c9	EnterpriseNumber15	i64	unk_3	"0"	OK
+0x0b4002ca	EnterpriseNumber16	i64	unk_3	"0"	OK
+0x0b4002cb	EnterpriseNumber17	i64	unk_3	"0"	OK
+0x0b4002cc	EnterpriseNumber18	i64	unk_3	"0"	OK
+0x0b4002cd	EnterpriseNumber19	i64	unk_3	"0"	OK
+0x0b4002ce	EnterpriseNumber20	i64	unk_3	"0"	OK
+0x0b4002cf	EnterpriseNumber21	i64	unk_3	"0"	OK
+0x0b4002d0	EnterpriseNumber22	i64	unk_3	"0"	OK
+0x0b4002d1	EnterpriseNumber23	i64	unk_3	"0"	OK
+0x0b4002d2	EnterpriseNumber24	i64	unk_3	"0"	OK
+0x0b4002d3	EnterpriseNumber25	i64	unk_3	"0"	OK
+0x0b4002d4	EnterpriseNumber26	i64	unk_3	"0"	OK
+0x0b4002d5	EnterpriseNumber27	i64	unk_3	"0"	OK
+0x0b4002d6	EnterpriseNumber28	i64	unk_3	"0"	OK
+0x0b4002d7	EnterpriseNumber29	i64	unk_3	"0"	OK
+0x0b4002d8	EnterpriseNumber30	i64	unk_3	"0"	OK
+0x0b4002d9	EnterpriseNumber31	i64	unk_3	"0"	OK
+0x0b4002da	EnterpriseNumber32	i64	unk_3	"0"	OK
+0x0b4002db	EnterpriseNumber33	i64	unk_3	"0"	OK
+0x0b4002dc	EnterpriseNumber34	i64	unk_3	"0"	OK
+0x0b4002dd	EnterpriseNumber35	i64	unk_3	"0"	OK
+0x0b4002de	EnterpriseNumber36	i64	unk_3	"0"	OK
+0x0b4002df	EnterpriseNumber37	i64	unk_3	"0"	OK
+0x0b4002e0	EnterpriseNumber38	i64	unk_3	"0"	OK
+0x0b4002e1	EnterpriseNumber39	i64	unk_3	"0"	OK
+0x0b4002e2	EnterpriseNumber40	i64	unk_3	"0"	OK
+0x0b4002e3	EnterpriseOutlineCode1	text	unk_9	""	OK
+0x0b4002e5	EnterpriseOutlineCode2	text	unk_9	""	OK
+0x0b4002e7	EnterpriseOutlineCode3	text	unk_9	""	OK
+0x0b4002e9	EnterpriseOutlineCode4	text	unk_9	""	OK
+0x0b4002eb	EnterpriseOutlineCode5	text	unk_9	""	OK
+0x0b4002ed	EnterpriseOutlineCode6	text	unk_9	""	OK
+0x0b4002ef	EnterpriseOutlineCode7	text	unk_9	""	OK
+0x0b4002f1	EnterpriseOutlineCode8	text	unk_9	""	OK
+0x0b4002f3	EnterpriseOutlineCode9	text	unk_9	""	OK
+0x0b4002f5	EnterpriseOutlineCode10	text	unk_9	""	OK
+0x0b4002f7	EnterpriseOutlineCode11	text	unk_9	""	OK
+0x0b4002f9	EnterpriseOutlineCode12	text	unk_9	""	OK
+0x0b4002fb	EnterpriseOutlineCode13	text	unk_9	""	OK
+0x0b4002fd	EnterpriseOutlineCode14	text	unk_9	""	OK
+0x0b4002ff	EnterpriseOutlineCode15	text	unk_9	""	OK
+0x0b400301	EnterpriseOutlineCode16	text	unk_9	""	OK
+0x0b400303	EnterpriseOutlineCode17	text	unk_9	""	OK
+0x0b400305	EnterpriseOutlineCode18	text	unk_9	""	OK
+0x0b400307	EnterpriseOutlineCode19	text	unk_9	""	OK
+0x0b400309	EnterpriseOutlineCode20	text	unk_9	""	OK
+0x0b40030b	EnterpriseOutlineCode21	text	unk_9	""	OK
+0x0b40030d	EnterpriseOutlineCode22	text	unk_9	""	OK
+0x0b40030f	EnterpriseOutlineCode23	text	unk_9	""	OK
+0x0b400311	EnterpriseOutlineCode24	text	unk_9	""	OK
+0x0b400313	EnterpriseOutlineCode25	text	unk_9	""	OK
+0x0b400315	EnterpriseOutlineCode26	text	unk_9	""	OK
+0x0b400317	EnterpriseOutlineCode27	text	unk_9	""	OK
+0x0b400319	EnterpriseOutlineCode28	text	unk_9	""	OK
+0x0b40031b	EnterpriseOutlineCode29	text	unk_9	""	OK
+0x0b40031d	EnterpriseOutlineCode30	text	unk_9	""	OK
+0x0b40031f	EnterpriseText1	text	unk_3	""	OK
+0x0b400320	EnterpriseText2	text	unk_3	""	OK
+0x0b400321	EnterpriseText3	text	unk_3	""	OK
+0x0b400322	EnterpriseText4	text	unk_3	""	OK
+0x0b400323	EnterpriseText5	text	unk_3	""	OK
+0x0b400324	EnterpriseText6	text	unk_3	""	OK
+0x0b400325	EnterpriseText7	text	unk_3	""	OK
+0x0b400326	EnterpriseText8	text	unk_3	""	OK
+0x0b400327	EnterpriseText9	text	unk_3	""	OK
+0x0b400328	EnterpriseText10	text	unk_3	""	OK
+0x0b400329	EnterpriseText11	text	unk_3	""	OK
+0x0b40032a	EnterpriseText12	text	unk_3	""	OK
+0x0b40032b	EnterpriseText13	text	unk_3	""	OK
+0x0b40032c	EnterpriseText14	text	unk_3	""	OK
+0x0b40032d	EnterpriseText15	text	unk_3	""	OK
+0x0b40032e	EnterpriseText16	text	unk_3	""	OK
+0x0b40032f	EnterpriseText17	text	unk_3	""	OK
+0x0b400330	EnterpriseText18	text	unk_3	""	OK
+0x0b400331	EnterpriseText19	text	unk_3	""	OK
+0x0b400332	EnterpriseText20	text	unk_3	""	OK
+0x0b400333	EnterpriseText21	text	unk_3	""	OK
+0x0b400334	EnterpriseText22	text	unk_3	""	OK
+0x0b400335	EnterpriseText23	text	unk_3	""	OK
+0x0b400336	EnterpriseText24	text	unk_3	""	OK
+0x0b400337	EnterpriseText25	text	unk_3	""	OK
+0x0b400338	EnterpriseText26	text	unk_3	""	OK
+0x0b400339	EnterpriseText27	text	unk_3	""	OK
+0x0b40033a	EnterpriseText28	text	unk_3	""	OK
+0x0b40033b	EnterpriseText29	text	unk_3	""	OK
+0x0b40033c	EnterpriseText30	text	unk_3	""	OK
+0x0b40033d	EnterpriseText31	text	unk_3	""	OK
+0x0b40033e	EnterpriseText32	text	unk_3	""	OK
+0x0b40033f	EnterpriseText33	text	unk_3	""	OK
+0x0b400340	EnterpriseText34	text	unk_3	""	OK
+0x0b400341	EnterpriseText35	text	unk_3	""	OK
+0x0b400342	EnterpriseText36	text	unk_3	""	OK
+0x0b400343	EnterpriseText37	text	unk_3	""	OK
+0x0b400344	EnterpriseText38	text	unk_3	""	OK
+0x0b400345	EnterpriseText39	text	unk_3	""	OK
+0x0b400346	EnterpriseText40	text	unk_3	""	OK
+0x0b400347	Baseline1DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b400348	Baseline2DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b400349	Baseline3DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b40034a	Baseline4DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b40034b	Baseline5DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b40034c	Baseline6DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b40034d	Baseline7DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b40034e	Baseline8DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b40034f	Baseline9DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b400350	Baseline10DurationEstimated	bool	unk_9	"Yes"	OK
+0x0b400351	EnterpriseProjectCost1	i64	unk_3	"$0.00"	OK
+0x0b400352	EnterpriseProjectCost2	i64	unk_3	"$0.00"	OK
+0x0b400353	EnterpriseProjectCost3	i64	unk_3	"$0.00"	OK
+0x0b400354	EnterpriseProjectCost4	i64	unk_3	"$0.00"	OK
+0x0b400355	EnterpriseProjectCost5	i64	unk_3	"$0.00"	OK
+0x0b400356	EnterpriseProjectCost6	i64	unk_3	"$0.00"	OK
+0x0b400357	EnterpriseProjectCost7	i64	unk_3	"$0.00"	OK
+0x0b400358	EnterpriseProjectCost8	i64	unk_3	"$0.00"	OK
+0x0b400359	EnterpriseProjectCost9	i64	unk_3	"$0.00"	OK
+0x0b40035a	EnterpriseProjectCost10	i64	unk_3	"$0.00"	OK
+0x0b40035b	EnterpriseProjectDate1	date32	unk_3	"NA"	OK
+0x0b40035c	EnterpriseProjectDate2	date32	unk_3	"NA"	OK
+0x0b40035d	EnterpriseProjectDate3	date32	unk_3	"NA"	OK
+0x0b40035e	EnterpriseProjectDate4	date32	unk_3	"NA"	OK
+0x0b40035f	EnterpriseProjectDate5	date32	unk_3	"NA"	OK
+0x0b400360	EnterpriseProjectDate6	date32	unk_3	"NA"	OK
+0x0b400361	EnterpriseProjectDate7	date32	unk_3	"NA"	OK
+0x0b400362	EnterpriseProjectDate8	date32	unk_3	"NA"	OK
+0x0b400363	EnterpriseProjectDate9	date32	unk_3	"NA"	OK
+0x0b400364	EnterpriseProjectDate10	date32	unk_3	"NA"	OK
+0x0b400365	EnterpriseProjectDate11	date32	unk_3	"NA"	OK
+0x0b400366	EnterpriseProjectDate12	date32	unk_3	"NA"	OK
+0x0b400367	EnterpriseProjectDate13	date32	unk_3	"NA"	OK
+0x0b400368	EnterpriseProjectDate14	date32	unk_3	"NA"	OK
+0x0b400369	EnterpriseProjectDate15	date32	unk_3	"NA"	OK
+0x0b40036a	EnterpriseProjectDate16	date32	unk_3	"NA"	OK
+0x0b40036b	EnterpriseProjectDate17	date32	unk_3	"NA"	OK
+0x0b40036c	EnterpriseProjectDate18	date32	unk_3	"NA"	OK
+0x0b40036d	EnterpriseProjectDate19	date32	unk_3	"NA"	OK
+0x0b40036e	EnterpriseProjectDate20	date32	unk_3	"NA"	OK
+0x0b40036f	EnterpriseProjectDate21	date32	unk_3	"NA"	OK
+0x0b400370	EnterpriseProjectDate22	date32	unk_3	"NA"	OK
+0x0b400371	EnterpriseProjectDate23	date32	unk_3	"NA"	OK
+0x0b400372	EnterpriseProjectDate24	date32	unk_3	"NA"	OK
+0x0b400373	EnterpriseProjectDate25	date32	unk_3	"NA"	OK
+0x0b400374	EnterpriseProjectDate26	date32	unk_3	"NA"	OK
+0x0b400375	EnterpriseProjectDate27	date32	unk_3	"NA"	OK
+0x0b400376	EnterpriseProjectDate28	date32	unk_3	"NA"	OK
+0x0b400377	EnterpriseProjectDate29	date32	unk_3	"NA"	OK
+0x0b400378	EnterpriseProjectDate30	date32	unk_3	"NA"	OK
+0x0b400379	EnterpriseProjectDuration1	i32	unk_3	"0 days"	OK
+0x0b40037a	EnterpriseProjectDuration2	i32	unk_3	"0 days"	OK
+0x0b40037b	EnterpriseProjectDuration3	i32	unk_3	"0 days"	OK
+0x0b40037c	EnterpriseProjectDuration4	i32	unk_3	"0 days"	OK
+0x0b40037d	EnterpriseProjectDuration5	i32	unk_3	"0 days"	OK
+0x0b40037e	EnterpriseProjectDuration6	i32	unk_3	"0 days"	OK
+0x0b40037f	EnterpriseProjectDuration7	i32	unk_3	"0 days"	OK
+0x0b400380	EnterpriseProjectDuration8	i32	unk_3	"0 days"	OK
+0x0b400381	EnterpriseProjectDuration9	i32	unk_3	"0 days"	OK
+0x0b400382	EnterpriseProjectDuration10	i32	unk_3	"0 days"	OK
+0x0b40038d	EnterpriseProjectOutlineCode1	text	unk_9	""	OK
+0x0b40038e	EnterpriseProjectOutlineCode2	text	unk_9	""	OK
+0x0b40038f	EnterpriseProjectOutlineCode3	text	unk_9	""	OK
+0x0b400390	EnterpriseProjectOutlineCode4	text	unk_9	""	OK
+0x0b400391	EnterpriseProjectOutlineCode5	text	unk_9	""	OK
+0x0b400392	EnterpriseProjectOutlineCode6	text	unk_9	""	OK
+0x0b400393	EnterpriseProjectOutlineCode7	text	unk_9	""	OK
+0x0b400394	EnterpriseProjectOutlineCode8	text	unk_9	""	OK
+0x0b400395	EnterpriseProjectOutlineCode9	text	unk_9	""	OK
+0x0b400396	EnterpriseProjectOutlineCode10	text	unk_9	""	OK
+0x0b400397	EnterpriseProjectOutlineCode11	text	unk_9	""	OK
+0x0b400398	EnterpriseProjectOutlineCode12	text	unk_9	""	OK
+0x0b400399	EnterpriseProjectOutlineCode13	text	unk_9	""	OK
+0x0b40039a	EnterpriseProjectOutlineCode14	text	unk_9	""	OK
+0x0b40039b	EnterpriseProjectOutlineCode15	text	unk_9	""	OK
+0x0b40039c	EnterpriseProjectOutlineCode16	text	unk_9	""	OK
+0x0b40039d	EnterpriseProjectOutlineCode17	text	unk_9	""	OK
+0x0b40039e	EnterpriseProjectOutlineCode18	text	unk_9	""	OK
+0x0b40039f	EnterpriseProjectOutlineCode19	text	unk_9	""	OK
+0x0b4003a0	EnterpriseProjectOutlineCode20	text	unk_9	""	OK
+0x0b4003a1	EnterpriseProjectOutlineCode21	text	unk_9	""	OK
+0x0b4003a2	EnterpriseProjectOutlineCode22	text	unk_9	""	OK
+0x0b4003a3	EnterpriseProjectOutlineCode23	text	unk_9	""	OK
+0x0b4003a4	EnterpriseProjectOutlineCode24	text	unk_9	""	OK
+0x0b4003a5	EnterpriseProjectOutlineCode25	text	unk_9	""	OK
+0x0b4003a6	EnterpriseProjectOutlineCode26	text	unk_9	""	OK
+0x0b4003a7	EnterpriseProjectOutlineCode27	text	unk_9	""	OK
+0x0b4003a8	EnterpriseProjectOutlineCode28	text	unk_9	""	OK
+0x0b4003a9	EnterpriseProjectOutlineCode29	text	unk_9	""	OK
+0x0b4003aa	EnterpriseProjectOutlineCode30	text	unk_9	""	OK
+0x0b4003c9	EnterpriseProjectFlag1	bool	unk_3	"No"	OK
+0x0b4003ca	EnterpriseProjectFlag2	bool	unk_3	"No"	OK
+0x0b4003cb	EnterpriseProjectFlag3	bool	unk_3	"No"	OK
+0x0b4003cc	EnterpriseProjectFlag4	bool	unk_3	"No"	OK
+0x0b4003cd	EnterpriseProjectFlag5	bool	unk_3	"No"	OK
+0x0b4003ce	EnterpriseProjectFlag6	bool	unk_3	"No"	OK
+0x0b4003cf	EnterpriseProjectFlag7	bool	unk_3	"No"	OK
+0x0b4003d0	EnterpriseProjectFlag8	bool	unk_3	"No"	OK
+0x0b4003d1	EnterpriseProjectFlag9	bool	unk_3	"No"	OK
+0x0b4003d2	EnterpriseProjectFlag10	bool	unk_3	"No"	OK
+0x0b4003d3	EnterpriseProjectFlag11	bool	unk_3	"No"	OK
+0x0b4003d4	EnterpriseProjectFlag12	bool	unk_3	"No"	OK
+0x0b4003d5	EnterpriseProjectFlag13	bool	unk_3	"No"	OK
+0x0b4003d6	EnterpriseProjectFlag14	bool	unk_3	"No"	OK
+0x0b4003d7	EnterpriseProjectFlag15	bool	unk_3	"No"	OK
+0x0b4003d8	EnterpriseProjectFlag16	bool	unk_3	"No"	OK
+0x0b4003d9	EnterpriseProjectFlag17	bool	unk_3	"No"	OK
+0x0b4003da	EnterpriseProjectFlag18	bool	unk_3	"No"	OK
+0x0b4003db	EnterpriseProjectFlag19	bool	unk_3	"No"	OK
+0x0b4003dc	EnterpriseProjectFlag20	bool	unk_3	"No"	OK
+0x0b4003f1	EnterpriseProjectNumber1	i64	unk_3	"0"	OK
+0x0b4003f2	EnterpriseProjectNumber2	i64	unk_3	"0"	OK
+0x0b4003f3	EnterpriseProjectNumber3	i64	unk_3	"0"	OK
+0x0b4003f4	EnterpriseProjectNumber4	i64	unk_3	"0"	OK
+0x0b4003f5	EnterpriseProjectNumber5	i64	unk_3	"0"	OK
+0x0b4003f6	EnterpriseProjectNumber6	i64	unk_3	"0"	OK
+0x0b4003f7	EnterpriseProjectNumber7	i64	unk_3	"0"	OK
+0x0b4003f8	EnterpriseProjectNumber8	i64	unk_3	"0"	OK
+0x0b4003f9	EnterpriseProjectNumber9	i64	unk_3	"0"	OK
+0x0b4003fa	EnterpriseProjectNumber10	i64	unk_3	"0"	OK
+0x0b4003fb	EnterpriseProjectNumber11	i64	unk_3	"0"	OK
+0x0b4003fc	EnterpriseProjectNumber12	i64	unk_3	"0"	OK
+0x0b4003fd	EnterpriseProjectNumber13	i64	unk_3	"0"	OK
+0x0b4003fe	EnterpriseProjectNumber14	i64	unk_3	"0"	OK
+0x0b4003ff	EnterpriseProjectNumber15	i64	unk_3	"0"	OK
+0x0b400400	EnterpriseProjectNumber16	i64	unk_3	"0"	OK
+0x0b400401	EnterpriseProjectNumber17	i64	unk_3	"0"	OK
+0x0b400402	EnterpriseProjectNumber18	i64	unk_3	"0"	OK
+0x0b400403	EnterpriseProjectNumber19	i64	unk_3	"0"	OK
+0x0b400404	EnterpriseProjectNumber20	i64	unk_3	"0"	OK
+0x0b400405	EnterpriseProjectNumber21	i64	unk_3	"0"	OK
+0x0b400406	EnterpriseProjectNumber22	i64	unk_3	"0"	OK
+0x0b400407	EnterpriseProjectNumber23	i64	unk_3	"0"	OK
+0x0b400408	EnterpriseProjectNumber24	i64	unk_3	"0"	OK
+0x0b400409	EnterpriseProjectNumber25	i64	unk_3	"0"	OK
+0x0b40040a	EnterpriseProjectNumber26	i64	unk_3	"0"	OK
+0x0b40040b	EnterpriseProjectNumber27	i64	unk_3	"0"	OK
+0x0b40040c	EnterpriseProjectNumber28	i64	unk_3	"0"	OK
+0x0b40040d	EnterpriseProjectNumber29	i64	unk_3	"0"	OK
+0x0b40040e	EnterpriseProjectNumber30	i64	unk_3	"0"	OK
+0x0b40040f	EnterpriseProjectNumber31	i64	unk_3	"0"	OK
+0x0b400410	EnterpriseProjectNumber32	i64	unk_3	"0"	OK
+0x0b400411	EnterpriseProjectNumber33	i64	unk_3	"0"	OK
+0x0b400412	EnterpriseProjectNumber34	i64	unk_3	"0"	OK
+0x0b400413	EnterpriseProjectNumber35	i64	unk_3	"0"	OK
+0x0b400414	EnterpriseProjectNumber36	i64	unk_3	"0"	OK
+0x0b400415	EnterpriseProjectNumber37	i64	unk_3	"0"	OK
+0x0b400416	EnterpriseProjectNumber38	i64	unk_3	"0"	OK
+0x0b400417	EnterpriseProjectNumber39	i64	unk_3	"0"	OK
+0x0b400418	EnterpriseProjectNumber40	i64	unk_3	"0"	OK
+0x0b400419	EnterpriseProjectText1	text	unk_3	""	OK
+0x0b40041a	EnterpriseProjectText2	text	unk_3	""	OK
+0x0b40041b	EnterpriseProjectText3	text	unk_3	""	OK
+0x0b40041c	EnterpriseProjectText4	text	unk_3	""	OK
+0x0b40041d	EnterpriseProjectText5	text	unk_3	""	OK
+0x0b40041e	EnterpriseProjectText6	text	unk_3	""	OK
+0x0b40041f	EnterpriseProjectText7	text	unk_3	""	OK
+0x0b400420	EnterpriseProjectText8	text	unk_3	""	OK
+0x0b400421	EnterpriseProjectText9	text	unk_3	""	OK
+0x0b400422	EnterpriseProjectText10	text	unk_3	""	OK
+0x0b400423	EnterpriseProjectText11	text	unk_3	""	OK
+0x0b400424	EnterpriseProjectText12	text	unk_3	""	OK
+0x0b400425	EnterpriseProjectText13	text	unk_3	""	OK
+0x0b400426	EnterpriseProjectText14	text	unk_3	""	OK
+0x0b400427	EnterpriseProjectText15	text	unk_3	""	OK
+0x0b400428	EnterpriseProjectText16	text	unk_3	""	OK
+0x0b400429	EnterpriseProjectText17	text	unk_3	""	OK
+0x0b40042a	EnterpriseProjectText18	text	unk_3	""	OK
+0x0b40042b	EnterpriseProjectText19	text	unk_3	""	OK
+0x0b40042c	EnterpriseProjectText20	text	unk_3	""	OK
+0x0b40042d	EnterpriseProjectText21	text	unk_3	""	OK
+0x0b40042e	EnterpriseProjectText22	text	unk_3	""	OK
+0x0b40042f	EnterpriseProjectText23	text	unk_3	""	OK
+0x0b400430	EnterpriseProjectText24	text	unk_3	""	OK
+0x0b400431	EnterpriseProjectText25	text	unk_3	""	OK
+0x0b400432	EnterpriseProjectText26	text	unk_3	""	OK
+0x0b400433	EnterpriseProjectText27	text	unk_3	""	OK
+0x0b400434	EnterpriseProjectText28	text	unk_3	""	OK
+0x0b400435	EnterpriseProjectText29	text	unk_3	""	OK
+0x0b400436	EnterpriseProjectText30	text	unk_3	""	OK
+0x0b400437	EnterpriseProjectText31	text	unk_3	""	OK
+0x0b400438	EnterpriseProjectText32	text	unk_3	""	OK
+0x0b400439	EnterpriseProjectText33	text	unk_3	""	OK
+0x0b40043a	EnterpriseProjectText34	text	unk_3	""	OK
+0x0b40043b	EnterpriseProjectText35	text	unk_3	""	OK
+0x0b40043c	EnterpriseProjectText36	text	unk_3	""	OK
+0x0b40043d	EnterpriseProjectText37	text	unk_3	""	OK
+0x0b40043e	EnterpriseProjectText38	text	unk_3	""	OK
+0x0b40043f	EnterpriseProjectText39	text	unk_3	""	OK
+0x0b400440	EnterpriseProjectText40	text	unk_3	""	OK
+0x0b40045f	PhysicalPercentComplete	i16	unk_3	"0%"	OK
+0x0b400462	EarnedValueMethod	i16	unk_3	"% Complete"	OK
+0x0b400473	ActualWorkProtected	i64	unk_3	"0 hrs"	OK
+0x0b400474	ActualOvertimeWorkProtected	i64	unk_3	"0 hrs"	OK
+0x0b400477	Guid	guid	special	"3823F12F-5ACC-F111-9F60-1CC10C054C03"	OK
+0x0b400478	CalendarGuid	guid	unk_3	"00000000-0000-0000-0000-000000000000"	OK
+0x0b40047a	DeliverableGuid	guid	unk_3	"00000000-0000-0000-0000-000000000000"	OK
+0x0b40047b	DeliverableType	i16	unk_3	"0"	OK
+0x0b400480	DeliverableStart	date32	unk_3	"NA"	OK
+0x0b400481	DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b40048d	IsPublished	bool	unk_13	"Yes"	OK
+0x0b40048e	StatusManagerName	text	unk_13	""	OK
+0x0b40048f	ErrorMessage	text	unk_11	""	OK
+0x0b400493	BudgetWork	i64	unk_3	""	OK
+0x0b400494	BudgetCost	i64	unk_3	""	OK
+0x0b400495	BaselineFixedCostAccrual	i16	direct	"Prorated"	OK
+0x0b400496	BaselineDeliverableStart	date32	unk_3	"NA"	OK
+0x0b400497	BaselineDeliverableFinish	date32	unk_3	"NA"	OK
+0x0b400498	BaselineBudgetWork	i64	unk_3	""	OK
+0x0b400499	BaselineBudgetCost	i64	unk_3	""	OK
+0x0b40049c	Baseline1FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b40049d	Baseline1DeliverableStart	date32	unk_3	"NA"	OK
+0x0b40049e	Baseline1DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b40049f	Baseline1BudgetWork	i64	unk_3	""	OK
+0x0b4004a0	Baseline1BudgetCost	i64	unk_3	""	OK
+0x0b4004a3	Baseline2FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b4004a4	Baseline2DeliverableStart	date32	unk_3	"NA"	OK
+0x0b4004a5	Baseline2DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b4004a6	Baseline2BudgetWork	i64	unk_3	""	OK
+0x0b4004a7	Baseline2BudgetCost	i64	unk_3	""	OK
+0x0b4004aa	Baseline3FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b4004ab	Baseline3DeliverableStart	date32	unk_3	"NA"	OK
+0x0b4004ac	Baseline3DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b4004ad	Baseline3BudgetWork	i64	unk_3	""	OK
+0x0b4004ae	Baseline3BudgetCost	i64	unk_3	""	OK
+0x0b4004b1	Baseline4FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b4004b2	Baseline4DeliverableStart	date32	unk_3	"NA"	OK
+0x0b4004b3	Baseline4DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b4004b4	Baseline4BudgetWork	i64	unk_3	""	OK
+0x0b4004b5	Baseline4BudgetCost	i64	unk_3	""	OK
+0x0b4004b8	Baseline5FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b4004b9	Baseline5DeliverableStart	date32	unk_3	"NA"	OK
+0x0b4004ba	Baseline5DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b4004bb	Baseline5BudgetWork	i64	unk_3	""	OK
+0x0b4004bc	Baseline5BudgetCost	i64	unk_3	""	OK
+0x0b4004bf	Baseline6FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b4004c0	Baseline6DeliverableStart	date32	unk_3	"NA"	OK
+0x0b4004c1	Baseline6DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b4004c2	Baseline6BudgetWork	i64	unk_3	""	OK
+0x0b4004c3	Baseline6BudgetCost	i64	unk_3	""	OK
+0x0b4004c6	Baseline7FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b4004c7	Baseline7DeliverableStart	date32	unk_3	"NA"	OK
+0x0b4004c8	Baseline7DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b4004c9	Baseline7BudgetWork	i64	unk_3	""	OK
+0x0b4004ca	Baseline7BudgetCost	i64	unk_3	""	OK
+0x0b4004cd	Baseline8FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b4004ce	Baseline8DeliverableStart	date32	unk_3	"NA"	OK
+0x0b4004cf	Baseline8DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b4004d0	Baseline8BudgetWork	i64	unk_3	""	OK
+0x0b4004d1	Baseline8BudgetCost	i64	unk_3	""	OK
+0x0b4004d4	Baseline9FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b4004d5	Baseline9DeliverableStart	date32	unk_3	"NA"	OK
+0x0b4004d6	Baseline9DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b4004d7	Baseline9BudgetWork	i64	unk_3	""	OK
+0x0b4004d8	Baseline9BudgetCost	i64	unk_3	""	OK
+0x0b4004db	Baseline10FixedCostAccrual	i16	unk_3	"Prorated"	OK
+0x0b4004dc	Baseline10DeliverableStart	date32	unk_3	"NA"	OK
+0x0b4004dd	Baseline10DeliverableFinish	date32	unk_3	"NA"	OK
+0x0b4004de	Baseline10BudgetWork	i64	unk_3	""	OK
+0x0b4004df	Baseline10BudgetCost	i64	unk_3	""	OK
+0x0b4004e2	RecalcFlags	i32	direct	"16"	OK
+0x0b4004e6	StartDriver	obj_ref	unk_13	""	OK
+0x0b4004fc	DeliverableName	text	unk_3	""	OK
+0x0b4004ff	Active	bool	direct	"Yes"	OK
+0x0b400500	Manual	bool	direct	"Manually Scheduled"	OK
+0x0b400501	Placeholder	bool	unk_13	"Yes"	OK
+0x0b400502	Warning	bool	unk_13	"No"	OK
+0x0b400505	StartText	text	unk_3	""	OK
+0x0b400506	FinishText	text	unk_3	""	OK
+0x0b400507	DurationText	text	unk_3	"5 days"	OK
+0x0b40050f	IsStartValid	bool	unk_13	"No"	OK
+0x0b400510	IsFinishValid	bool	unk_13	"No"	OK
+0x0b400511	IsDurationValid	bool	unk_13	"Yes"	OK
+0x0b400513	BaselineStartText	text	unk_3	"NA"	OK
+0x0b400514	BaselineFinishText	text	unk_3	"NA"	OK
+0x0b400515	BaselineDurationText	text	unk_3	"0 days?"	OK
+0x0b400516	Baseline1StartText	text	unk_3	"NA"	OK
+0x0b400517	Baseline1FinishText	text	unk_3	"NA"	OK
+0x0b400518	Baseline1DurationText	text	unk_3	"0 days?"	OK
+0x0b400519	Baseline2StartText	text	unk_3	"NA"	OK
+0x0b40051a	Baseline2FinishText	text	unk_3	"NA"	OK
+0x0b40051b	Baseline2DurationText	text	unk_3	"0 days?"	OK
+0x0b40051c	Baseline3StartText	text	unk_3	"NA"	OK
+0x0b40051d	Baseline3FinishText	text	unk_3	"NA"	OK
+0x0b40051e	Baseline3DurationText	text	unk_3	"0 days?"	OK
+0x0b40051f	Baseline4StartText	text	unk_3	"NA"	OK
+0x0b400520	Baseline4FinishText	text	unk_3	"NA"	OK
+0x0b400521	Baseline4DurationText	text	unk_3	"0 days?"	OK
+0x0b400522	Baseline5StartText	text	unk_3	"NA"	OK
+0x0b400523	Baseline5FinishText	text	unk_3	"NA"	OK
+0x0b400524	Baseline5DurationText	text	unk_3	"0 days?"	OK
+0x0b400525	Baseline6StartText	text	unk_3	"NA"	OK
+0x0b400526	Baseline6FinishText	text	unk_3	"NA"	OK
+0x0b400527	Baseline6DurationText	text	unk_3	"0 days?"	OK
+0x0b400528	Baseline7StartText	text	unk_3	"NA"	OK
+0x0b400529	Baseline7FinishText	text	unk_3	"NA"	OK
+0x0b40052a	Baseline7DurationText	text	unk_3	"0 days?"	OK
+0x0b40052b	Baseline8StartText	text	unk_3	"NA"	OK
+0x0b40052c	Baseline8FinishText	text	unk_3	"NA"	OK
+0x0b40052d	Baseline8DurationText	text	unk_3	"0 days?"	OK
+0x0b40052e	Baseline9StartText	text	unk_3	"NA"	OK
+0x0b40052f	Baseline9FinishText	text	unk_3	"NA"	OK
+0x0b400530	Baseline9DurationText	text	unk_3	"0 days?"	OK
+0x0b400531	Baseline10StartText	text	unk_3	"NA"	OK
+0x0b400532	Baseline10FinishText	text	unk_3	"NA"	OK
+0x0b400533	Baseline10DurationText	text	unk_3	"0 days?"	OK
+0x0b400534	IgnoreWarnings	bool	direct	"No"	OK
+0x0b400536	CalendarObject	obj_ref	unk_13	""	OK
+0x0b40053a	ScheduledStart	date32	unk_9	"Tue 20/10/26"	OK
+0x0b40053b	ScheduledFinish	date32	unk_9	"Mon 26/10/26"	OK
+0x0b40053c	ScheduledDuration	i32	unk_9	"5 days"	OK
+0x0b400565	PathDrivingPredecessor	bool	unk_2	"No"	OK
+0x0b400566	PathPredecessor	bool	unk_2	"No"	OK
+0x0b400567	PathDrivenSuccessor	bool	unk_2	"No"	OK
+0x0b400568	PathSuccessor	bool	unk_2	"No"	OK
+0x0b40057c	Compliant	bool	computed	"Yes"	OK
+0x0b40057d	SummaryTaskName	text	unk_13	""	OK
+0x0b40057f	TaskBoardStatus	text	unk_9	""	OK
+0x0b400580	Agile	bool	direct	"Yes"	OK
+0x0b400581	Sprint	text	unk_9	""	OK
+0x0b400582	SprintStart	date32	unk_13	"NA"	OK
+0x0b400583	SprintFinish	date32	unk_13	"NA"	OK
+0x0b400584	BoardColumnUid	i32	unk_3	""	OK
+0x0b400585	SprintUid	i32	unk_3	"-1"	OK
+0x0b400586	BoardStatusColumnOrderingID	order_id	unk_3	"0"	OK
+0x0b400587	SprintColumnOrderingID	order_id	unk_3	"0"	OK
+0x0b400588	NextAvailableBoardStatusColumnOrderingID	order_id	unk_3	"0"	OK
+0x0b400589	NextAvailableSprintColumnOrderingID	order_id	unk_3	"0"	OK
+0x0b40058c	Count	i32	unk_13	"1"	OK
+0x0b40058d	BoardColumnId	i32	unk_13	"0"	OK

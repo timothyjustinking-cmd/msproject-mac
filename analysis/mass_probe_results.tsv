@@ -1,0 +1,116 @@
+field_id	name	type	storage_class	storage_name	secondary_idx	set_value	com_value	tasknode_value	direct_value	tn_match	db_match	source
+0x0b400008	FixedCost	i64	1	direct	7	12345	$12,345.00			False	False	NONE
+0x0b400019	Priority	i16	1	direct	19	750	500			False	False	NONE
+0x0b400020	PercentComplete	i16	1	direct	25	42	42%		42	False	True	DB
+0x0b400033	Text1	text	5	baseline	38	PROBE_TXT_001	MASS_PROBE_ANCHOR_TN		blob(sz=42,ptr=0x23b7f693090)	False	True	DB
+0x0b400034	Start1	date32	5	baseline	39	2/2/2025	Sun 2/02/25	983634624	983634624	True	True	BOTH
+0x0b400035	Finish1	date32	5	baseline	40	12/12/2025	Fri 12/12/25	1004152792	1004152792	True	True	BOTH
+0x0b400036	Text2	text	5	baseline	41	PROBE_TXT_002	PROBE_TXT_002		blob(sz=28,ptr=0x23b7f849580)	False	True	DB
+0x0b400037	Start2	date32	5	baseline	42	3/3/2025	Mon 3/03/25	985535168	985535168	True	True	BOTH
+0x0b400039	Text3	text	5	baseline	44	PROBE_TXT_003	PROBE_TXT_003		blob(sz=28,ptr=0x23b7f84a300)	False	True	DB
+0x0b40003a	Start3	date32	5	baseline	45	4/4/2025	Fri 4/04/25	987632320	987632320	True	True	BOTH
+0x0b40003c	Text4	text	5	baseline	47	PROBE_TXT_004	PROBE_TXT_004		blob(sz=28,ptr=0x23b7f84a3f0)	False	True	DB
+0x0b40003d	Start4	date32	5	baseline	48	5/5/2025	Mon 5/05/25	989663936	989663936	True	True	BOTH
+0x0b40003f	Text5	text	5	baseline	50	PROBE_TXT_005	PROBE_TXT_005		blob(sz=28,ptr=0x23b7f8494c0)	False	True	DB
+0x0b400040	Start5	date32	5	baseline	51	6/6/2025	Fri 6/06/25	991761088	991761088	True	True	BOTH
+0x0b400042	Text6	text	5	baseline	53	PROBE_TXT_006	PROBE_TXT_006		blob(sz=28,ptr=0x23b7f84b080)	False	True	DB
+0x0b400043	Text7	text	5	baseline	54	PROBE_TXT_007	PROBE_TXT_007		blob(sz=28,ptr=0x23b7f84ac90)	False	True	DB
+0x0b400044	Text8	text	5	baseline	55	PROBE_TXT_008	PROBE_TXT_008		blob(sz=28,ptr=0x23b7f84b260)	False	True	DB
+0x0b400045	Text9	text	5	baseline	56	PROBE_TXT_009	PROBE_TXT_009		blob(sz=28,ptr=0x23b7f84adb0)	False	True	DB
+0x0b400046	Text10	text	5	baseline	57	PROBE_TXT_010	PROBE_TXT_010		blob(sz=28,ptr=0x23b7f84ab40)	False	True	DB
+0x0b400047	Marked	bool	1	direct	58	Yes	Yes		1	False	True	DB
+0x0b400048	Flag1	bool	5	baseline	59	Yes	Yes	2		True	False	TN
+0x0b400049	Flag2	bool	5	baseline	60	Yes	Yes	4	1	True	True	BOTH
+0x0b40004a	Flag3	bool	5	baseline	61	Yes	Yes	8	1	True	True	BOTH
+0x0b40004b	Flag4	bool	5	baseline	62	Yes	Yes	16	1	True	True	BOTH
+0x0b40004c	Flag5	bool	5	baseline	63	Yes	Yes	32	1	True	True	BOTH
+0x0b40004d	Flag6	bool	5	baseline	64	Yes	Yes	64	1	True	True	BOTH
+0x0b40004e	Flag7	bool	5	baseline	65	Yes	Yes	128	1	True	True	BOTH
+0x0b40004f	Flag8	bool	5	baseline	66	Yes	Yes	256	1	True	True	BOTH
+0x0b400050	Flag9	bool	5	baseline	67	Yes	Yes	512	1	True	True	BOTH
+0x0b400051	Flag10	bool	5	baseline	68	Yes	Yes	1024	1	True	True	BOTH
+0x0b400057	Number1	i64	5	baseline	71	10111	10111	10111	10111	True	True	BOTH
+0x0b400058	Number2	i64	5	baseline	72	10222	10222	10222	10222	True	True	BOTH
+0x0b400059	Number3	i64	5	baseline	73	10333	10333	10333	10333	True	True	BOTH
+0x0b40005a	Number4	i64	5	baseline	74	10444	10444	10444	10444	True	True	BOTH
+0x0b40005b	Number5	i64	5	baseline	75	10555	10555	10555	10555	True	True	BOTH
+0x0b400067	Duration1	i32	5	baseline	82	2d	2 days	9600	9600	True	False	TN
+0x0b400068	Duration2	i32	5	baseline	83	3d	3 days	14400	14400	True	False	TN
+0x0b400069	Duration3	i32	5	baseline	84	4d	4 days	19200	19200	True	False	TN
+0x0b40006a	Cost1	i64	5	baseline	85	20222	$20,222.00	2.0222e+06	2.0222e+06	True	True	BOTH
+0x0b40006b	Cost2	i64	5	baseline	86	20444	$20,444.00	2.0444e+06	2.0444e+06	True	True	BOTH
+0x0b40006c	Cost3	i64	5	baseline	87	20666	$20,666.00	2.0666e+06	2.0666e+06	True	True	BOTH
+0x0b400102	Cost4	i64	5	baseline	146	20888	$20,888.00	2.0888e+06	2.0888e+06	True	True	BOTH
+0x0b400103	Cost5	i64	5	baseline	147	21110	$21,110.00	2.111e+06	2.111e+06	True	True	BOTH
+0x0b400104	Cost6	i64	5	baseline	148	21332	$21,332.00	2.1332e+06	2.1332e+06	True	True	BOTH
+0x0b400105	Cost7	i64	5	baseline	149	21554	$21,554.00	2.1554e+06	2.1554e+06	True	True	BOTH
+0x0b400106	Cost8	i64	5	baseline	150	21776	$21,776.00	2.1776e+06	2.1776e+06	True	True	BOTH
+0x0b400107	Cost9	i64	5	baseline	151	21998	$21,998.00	2.1998e+06	2.1998e+06	True	True	BOTH
+0x0b400108	Cost10	i64	5	baseline	152	22220	$22,220.00	2.222e+06	2.222e+06	True	True	BOTH
+0x0b400109	Date1	date32	5	baseline	153	2/2/2025	Sun 2/02/25	983634624	983634624	True	True	BOTH
+0x0b40010a	Date2	date32	5	baseline	154	3/3/2025	Mon 3/03/25	985535168	985535168	True	True	BOTH
+0x0b40010b	Date3	date32	5	baseline	155	4/4/2025	Fri 4/04/25	987632320	987632320	True	True	BOTH
+0x0b40010c	Date4	date32	5	baseline	156	5/5/2025	Mon 5/05/25	989663936	989663936	True	True	BOTH
+0x0b40010d	Date5	date32	5	baseline	157	6/6/2025	Fri 6/06/25	991761088	991761088	True	True	BOTH
+0x0b40010e	Date6	date32	5	baseline	158	7/7/2025	Mon 7/07/25	993792704	993792704	True	True	BOTH
+0x0b40010f	Date7	date32	5	baseline	159	8/8/2025	Fri 8/08/25	995889856	995889856	True	True	BOTH
+0x0b400110	Date8	date32	5	baseline	160	9/9/2025	Tue 9/09/25	997987008	997987008	True	True	BOTH
+0x0b400111	Date9	date32	5	baseline	161	10/10/2025	Fri 10/10/25	1000018624	1000018624	True	True	BOTH
+0x0b400112	Date10	date32	5	baseline	162	11/11/2025	Tue 11/11/25	1002115776	1002115776	True	True	BOTH
+0x0b400113	Duration4	i32	5	baseline	163	5d	5 days	24000	24000	True	False	TN
+0x0b400114	Duration5	i32	5	baseline	164	6d	6 days	28800	28800	True	False	TN
+0x0b400115	Duration6	i32	5	baseline	165	7d	7 days	33600	33600	True	False	TN
+0x0b400116	Duration7	i32	5	baseline	166	8d	8 days	38400	38400	True	False	TN
+0x0b400117	Duration8	i32	5	baseline	167	9d	9 days	43200	43200	True	False	TN
+0x0b400118	Duration9	i32	5	baseline	168	10d	10 days	48000	48000	True	False	TN
+0x0b400119	Duration10	i32	5	baseline	169	11d	11 days	52800	52800	True	False	TN
+0x0b40011a	Start6	date32	5	baseline	170	7/7/2025	Mon 7/07/25	993792704	993792704	True	True	BOTH
+0x0b40011c	Start7	date32	5	baseline	172	8/8/2025	Fri 8/08/25	995889856	995889856	True	True	BOTH
+0x0b40011e	Start8	date32	5	baseline	174	9/9/2025	Tue 9/09/25	997987008	997987008	True	True	BOTH
+0x0b400120	Start9	date32	5	baseline	176	10/10/2025	Fri 10/10/25	1000018624	1000018624	True	True	BOTH
+0x0b400122	Start10	date32	5	baseline	178	11/11/2025	Tue 11/11/25	1002115776	1002115776	True	True	BOTH
+0x0b400124	Flag11	bool	5	baseline	180	Yes	Yes	2048	1	True	True	BOTH
+0x0b400125	Flag12	bool	5	baseline	181	Yes	Yes	4096	1	True	True	BOTH
+0x0b400126	Flag13	bool	5	baseline	182	Yes	Yes	8192	1	True	True	BOTH
+0x0b400127	Flag14	bool	5	baseline	183	Yes	Yes	16384	1	True	True	BOTH
+0x0b400128	Flag15	bool	5	baseline	184	Yes	Yes	32768	1	True	True	BOTH
+0x0b400129	Flag16	bool	5	baseline	185	Yes	Yes	65536	1	True	True	BOTH
+0x0b40012a	Flag17	bool	5	baseline	186	Yes	Yes	131072	1	True	True	BOTH
+0x0b40012b	Flag18	bool	5	baseline	187	Yes	Yes	262144	1	True	True	BOTH
+0x0b40012c	Flag19	bool	5	baseline	188	Yes	Yes	524288	1	True	True	BOTH
+0x0b40012d	Flag20	bool	5	baseline	189	Yes	Yes	1048576	1	True	True	BOTH
+0x0b40012e	Number6	i64	5	baseline	190	10666	10666	10666	10666	True	True	BOTH
+0x0b40012f	Number7	i64	5	baseline	191	10777	10777	10777	10777	True	True	BOTH
+0x0b400130	Number8	i64	5	baseline	192	10888	10888	10888	10888	True	True	BOTH
+0x0b400131	Number9	i64	5	baseline	193	10999	10999	10999	10999	True	True	BOTH
+0x0b400132	Number10	i64	5	baseline	194	11110	11110	11110	11110	True	True	BOTH
+0x0b400133	Number11	i64	5	baseline	195	11221	11221	11221	11221	True	True	BOTH
+0x0b400134	Number12	i64	5	baseline	196	11332	11332	11332	11332	True	True	BOTH
+0x0b400135	Number13	i64	5	baseline	197	11443	11443	11443	11443	True	True	BOTH
+0x0b400136	Number14	i64	5	baseline	198	11554	11554	11554	11554	True	True	BOTH
+0x0b400137	Number15	i64	5	baseline	199	11665	11665	11665	11665	True	True	BOTH
+0x0b400138	Number16	i64	5	baseline	200	11776	11776	11776	11776	True	True	BOTH
+0x0b400139	Number17	i64	5	baseline	201	11887	11887	11887	11887	True	True	BOTH
+0x0b40013a	Number18	i64	5	baseline	202	11998	11998	11998	11998	True	True	BOTH
+0x0b40013b	Number19	i64	5	baseline	203	12109	12109	12109	12109	True	True	BOTH
+0x0b40013c	Number20	i64	5	baseline	204	12220	12220	12220	12220	True	True	BOTH
+0x0b40013d	Text11	text	5	baseline	205	PROBE_TXT_011	PROBE_TXT_011		blob(sz=28,ptr=0x23b7f84a720)	False	True	DB
+0x0b40013e	Text12	text	5	baseline	206	PROBE_TXT_012	PROBE_TXT_012		blob(sz=28,ptr=0x23b7f84a870)	False	True	DB
+0x0b40013f	Text13	text	5	baseline	207	PROBE_TXT_013	PROBE_TXT_013		blob(sz=28,ptr=0x23b7f84b470)	False	True	DB
+0x0b400140	Text14	text	5	baseline	208	PROBE_TXT_014	PROBE_TXT_014		blob(sz=28,ptr=0x23b7f84be30)	False	True	DB
+0x0b400141	Text15	text	5	baseline	209	PROBE_TXT_015	PROBE_TXT_015		blob(sz=28,ptr=0x23b7f84b530)	False	True	DB
+0x0b400142	Text16	text	5	baseline	210	PROBE_TXT_016	PROBE_TXT_016		blob(sz=28,ptr=0x23b7f84b800)	False	True	DB
+0x0b400143	Text17	text	5	baseline	211	PROBE_TXT_017	PROBE_TXT_017		blob(sz=28,ptr=0x23b7f84bbc0)	False	True	DB
+0x0b400144	Text18	text	5	baseline	212	PROBE_TXT_018	PROBE_TXT_018		blob(sz=28,ptr=0x23b7f84b860)	False	True	DB
+0x0b400145	Text19	text	5	baseline	213	PROBE_TXT_019	PROBE_TXT_019		blob(sz=28,ptr=0x23b7f84b3e0)	False	True	DB
+0x0b400146	Text20	text	5	baseline	214	PROBE_TXT_020	PROBE_TXT_020		blob(sz=28,ptr=0x23b7f84b7d0)	False	True	DB
+0x0b400147	Text21	text	5	baseline	215	PROBE_TXT_021	PROBE_TXT_021		blob(sz=28,ptr=0x23b7f84c3a0)	False	True	DB
+0x0b400148	Text22	text	5	baseline	216	PROBE_TXT_022	PROBE_TXT_022		blob(sz=28,ptr=0x23b7f84b9e0)	False	True	DB
+0x0b400149	Text23	text	5	baseline	217	PROBE_TXT_023	PROBE_TXT_023		blob(sz=28,ptr=0x23b7f8499d0)	False	True	DB
+0x0b40014a	Text24	text	5	baseline	218	PROBE_TXT_024	PROBE_TXT_024		blob(sz=28,ptr=0x23b7f849130)	False	True	DB
+0x0b40014b	Text25	text	5	baseline	219	PROBE_TXT_025	PROBE_TXT_025		blob(sz=28,ptr=0x23b7f849b80)	False	True	DB
+0x0b40014c	Text26	text	5	baseline	220	PROBE_TXT_026	PROBE_TXT_026		blob(sz=28,ptr=0x23b7f849010)	False	True	DB
+0x0b40014d	Text27	text	5	baseline	221	PROBE_TXT_027	PROBE_TXT_027		blob(sz=28,ptr=0x23b7f84aa20)	False	True	DB
+0x0b40014e	Text28	text	5	baseline	222	PROBE_TXT_028	PROBE_TXT_028		blob(sz=28,ptr=0x23b7f84c250)	False	True	DB
+0x0b40014f	Text29	text	5	baseline	223	PROBE_TXT_029	PROBE_TXT_029		blob(sz=28,ptr=0x23b7f84ab10)	False	True	DB
+0x0b400150	Text30	text	5	baseline	224	PROBE_TXT_030	PROBE_TXT_030		blob(sz=28,ptr=0x23b7f84aea0)	False	True	DB

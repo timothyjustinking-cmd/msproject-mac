@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Minimal MSPDI: one task, no links, no resources.
+     Committed as a test input; see tests/io_mspdi_tests.cpp. -->
+<Project xmlns="http://schemas.microsoft.com/project">
+  <Name>Minimal</Name>
+  <Title>Minimal project</Title>
+  <StartDate>2024-01-01T08:00:00</StartDate>
+  <FinishDate>2024-01-01T17:00:00</FinishDate>
+  <ScheduleFromStart>1</ScheduleFromStart>
+  <MinutesPerDay>480</MinutesPerDay>
+  <MinutesPerWeek>2400</MinutesPerWeek>
+  <DaysPerMonth>20</DaysPerMonth>
+  <CalendarUID>3</CalendarUID>
+  <Tasks>
+    <Task>
+      <UID>1</UID>
+      <ID>1</ID>
+      <Name>Task one</Name>
+      <Type>1</Type>
+      <Duration>PT8H0M0S</Duration>
+      <Start>2024-01-01T08:00:00</Start>
+      <Finish>2024-01-01T17:00:00</Finish>
+      <PercentComplete>25</PercentComplete>
+      <Milestone>0</Milestone>
+      <Summary>0</Summary>
+      <Critical>1</Critical>
+    </Task>
+  </Tasks>
+</Project>

@@ -1,0 +1,30 @@
+======================================================================
+Phase 2c Improved: Field ID -> Record Offset Cross-Reference
+======================================================================
+
+Total raw mappings extracted: 38781
+Unique field IDs with offset data: 237
+  High confidence: 0
+  Medium confidence: 210
+  Low confidence: 27
+  Named: 167
+  Unnamed: 70
+
+
+--- Task (235 fields) ---
+    0x14  ActualOvertimeWork; RemainingOvertimeWork                               [medium]
+    0x1c  Project                                                                 [medium]
+    0x20  Active; ActualDuration; Baseline10Duration; Baseline9Duration; Enterpr  [medium]
+    0x28  ConstraintType; DeliverableType; OutlineLevel                           [medium]
+    0x3c  LevelingDelay                                                           [medium]
+    0x3e  (unnamed)                                                               [medium]
+    0x58  StatusManagerName                                                       [low]
+   0x118  Calendar                                                                [medium]
+   0x130  BaselineDuration; CPI; CVPercent; Count; EAC; EarnedValueMethod; Index  [medium]
+   0x140  ActualFinish; ActualOvertimeCost; ActualStart; BCWS; BaselineCost; Bas  [medium]
+   0x74c  ActualWork; BaselineWork; RemainingWork; Work                           [medium]
+   0xca3  Baseline10FinishText; Baseline1FinishText; Baseline2FinishText; Baseli  [low]
+   0xca4  Baseline10DurationText; Baseline1DurationText; Baseline2DurationText;   [low]
+
+--- Resource (2 fields) ---
+    0x28  OvertimeRate; StandardRate                                              [medium]

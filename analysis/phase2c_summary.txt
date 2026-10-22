@@ -1,0 +1,80 @@
+======================================================================
+Phase 2c: Field ID → Struct Offset Cross-Reference
+======================================================================
+
+Total field_id → offset mappings: 179
+  Named (with typelib property): 144
+  Unnamed: 35
+
+
+--- Assignment ---
+  Field IDs mapped: 1
+  Distinct struct offsets: 1
+  Named mappings: 0
+
+
+--- Resource ---
+  Field IDs mapped: 3
+  Distinct struct offsets: 3
+  Named mappings: 4
+
+    0x28  StandardRate                             VT_VARIANT   (0x0c400006)
+    0x28  OvertimeRate                             VT_VARIANT   (0x0c400007)
+    0x90  MaterialLabel                            VT_BSTR      (0x0c40012b)
+   0x358  MaterialLabel                            VT_BSTR      (0x0c40012b)
+
+--- Task ---
+  Field IDs mapped: 107
+  Distinct struct offsets: 23
+  Named mappings: 140
+
+    0x14  BaselineWork                             VT_VARIANT   (0x0b400001)
+    0x14  BaselineCost                             VT_VARIANT   (0x0b400006)
+    0x14  BaselineDuration                         VT_VARIANT   (0x0b40001b)
+    0x14  BaselineStart                            VT_VARIANT   (0x0b40002b)
+    0x14  BaselineFinish                           VT_VARIANT   (0x0b40002c)
+    0x14  pjTaskUniqueID                           VT_I4        (0x0b400056)
+    0x14  ActualOvertimeWork                       VT_VARIANT   (0x0b4000a4)
+    0x14  RemainingOvertimeWork                    VT_VARIANT   (0x0b4000a5)
+    0x14  OvertimeCost                             VT_VARIANT   (0x0b4000a8)
+    0x14  ActualOvertimeCost                       VT_VARIANT   (0x0b4000a9)
+    0x14  RemainingOvertimeCost                    VT_VARIANT   (0x0b4000aa)
+    0x1c  Project                                  VT_BSTR      (0x0b400054)
+    0x1c  OvertimeCost                             VT_VARIANT   (0x0b4000a8)
+    0x1c  ActualOvertimeCost                       VT_VARIANT   (0x0b4000a9)
+    0x1c  RemainingOvertimeCost                    VT_VARIANT   (0x0b4000aa)
+    0x1c  Calendar                                 VT_BSTR      (0x0b400192)
+    0x20  ActualDuration                           VT_VARIANT   (0x0b40001c)
+    0x20  Baseline9Duration                        VT_VARIANT   (0x0b400246)
+    0x20  Baseline10Duration                       VT_VARIANT   (0x0b400251)
+    0x20  EnterpriseDuration1                      VT_VARIANT   (0x0b40027f)
+    0x20  EnterpriseDuration2                      VT_VARIANT   (0x0b400280)
+    0x20  EnterpriseDuration3                      VT_VARIANT   (0x0b400281)
+    0x20  EnterpriseDuration4                      VT_VARIANT   (0x0b400282)
+    0x20  EnterpriseDuration5                      VT_VARIANT   (0x0b400283)
+    0x20  EnterpriseDuration6                      VT_VARIANT   (0x0b400284)
+    0x20  EnterpriseDuration7                      VT_VARIANT   (0x0b400285)
+    0x20  EnterpriseDuration8                      VT_VARIANT   (0x0b400286)
+    0x20  EnterpriseDuration9                      VT_VARIANT   (0x0b400287)
+    0x20  EnterpriseDuration10                     VT_VARIANT   (0x0b400288)
+    0x20  Active                                   VT_VARIANT   (0x0b4004ff)
+    0x20  Manual                                   VT_VARIANT   (0x0b400500)
+    0x28  ConstraintType                           VT_VARIANT   (0x0b400011)
+    0x28  OutlineLevel                             VT_I2        (0x0b400055)
+    0x28  Baseline9Duration                        VT_VARIANT   (0x0b400246)
+    0x28  Baseline10Duration                       VT_VARIANT   (0x0b400251)
+    0x28  EnterpriseDuration1                      VT_VARIANT   (0x0b40027f)
+    0x28  EnterpriseDuration2                      VT_VARIANT   (0x0b400280)
+    0x28  EnterpriseDuration3                      VT_VARIANT   (0x0b400281)
+    0x28  EnterpriseDuration4                      VT_VARIANT   (0x0b400282)
+    0x28  EnterpriseDuration5                      VT_VARIANT   (0x0b400283)
+    0x28  EnterpriseDuration6                      VT_VARIANT   (0x0b400284)
+    0x28  EnterpriseDuration7                      VT_VARIANT   (0x0b400285)
+    0x28  EnterpriseDuration8                      VT_VARIANT   (0x0b400286)
+    0x28  EnterpriseDuration9                      VT_VARIANT   (0x0b400287)
+    0x28  EnterpriseDuration10                     VT_VARIANT   (0x0b400288)
+    0x28  DeliverableType                          VT_I2        (0x0b40047b)
+    0x3c  LevelingDelay                            VT_VARIANT   (0x0b400014)
+    0x42  ActualDuration                           VT_VARIANT   (0x0b40001c)
+    0x58  Work                                     VT_VARIANT   (0x0b400000)
+    0x58  BaselineWork                             VT_VARIANT   (0x0b400001)

@@ -1,0 +1,15 @@
+index	field_id_hex	field_id_dec	property_name	vtable_type	type_code	type_name	record_offset	size	flags_hex
+0	0x3c400000	1010827264		PropInfoData	3	Duration	37	4	0x00000020
+1	0x3c400001	1010827265		PropInfoData	3	Duration	1	4	0x00000020
+2	0x3c400002	1010827266		PropInfoData	72	type_72	42	16	0x00020020
+3	0x3c400003	1010827267		PropInfoData	8	Boolean	21	512	0x000000ca
+4	0x3c400004	1010827268		PropInfoData	9	Start	0	8	0x00000020
+5	0x3c400005	1010827269		PropInfoData	8	Boolean	21	0	0x000000ca
+6	0x3c400006	1010827270		PropInfoData	0	Unknown	0	0	0x00000000
+7	0x3c400007	1010827271		PropInfoData	0	Unknown	0	0	0x00000000
+8	0x3c400008	1010827272		PropInfoData	0	Unknown	0	0	0x00000000
+9	0x3c400009	1010827273		PropInfoData	11	Cost	17	2	0x00000020
+10	0x3c40000a	1010827274		PropInfoData	29	type_29	0	0	0x0002004a
+11	0x3c40000b	1010827275		PropInfoData	2	Date	5	2	0x000000e8
+12	0x3c40000c	1010827276		PropInfoData	29	type_29	0	0	0x000010c8
+13	0x3c40000d	1010827277		PropInfoData	3	Duration	24	4	0x000010aa

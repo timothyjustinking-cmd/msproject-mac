@@ -1,0 +1,37 @@
+# Regenerable from the Ghidra project — do not commit
+ghidra-project/
+decompiled/part_*.c
+
+# Resource blobs (index.tsv and the type breakdown are kept)
+analysis/res/**/*.bin
+
+# Raw Ghidra exports — regenerate with scripts/ExportMeta.java
+analysis/meta/
+
+# Large raw intermediates (derived tables are kept)
+analysis/struct_offsets.tsv
+analysis/field_offsets_raw.tsv
+
+# Python bytecode (was tracked by accident)
+__pycache__/
+*.pyc
+
+# Host noise / scratch
+logs/
+_acl-recovery/
+*.log
+.DS_Store
+Thumbs.db
+
+# Client project files and any other real .mpp corpus — never commit
+corpus/
+
+# Oracle lock (serialises MS Project automation across agents)
+.oracle.lock
+
+# retired worktree root
+.wt/
+
+# Rust/CMake build output seen in the wild
+build/
+tests/data/*_full.tsv

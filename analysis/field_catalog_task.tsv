@@ -1,0 +1,1445 @@
+index	field_id_hex	field_id_dec	property_name	category	static_type	static_offset	static_size	static_flags
+0	0x0b400000	188743680	Work	Standard	5	0x8	8	0x20028
+1	0x0b400001	188743681	BaselineWork	Standard				
+2	0x0b400002	188743682	ActualWork	Standard				
+3	0x0b400003	188743683	WorkVariance	Standard				
+4	0x0b400004	188743684	RemainingWork	Standard				
+5	0x0b400005	188743685	Cost	Standard				
+6	0x0b400006	188743686	BaselineCost	Standard				
+7	0x0b400007	188743687	ActualCost	Standard				
+8	0x0b400009	188743689	CostVariance	Standard				
+9	0x0b40000a	188743690	RemainingCost	Standard				
+10	0x0b40000b	188743691	BCWP	Standard				
+11	0x0b40000c	188743692	BCWS	Standard				
+12	0x0b40000d	188743693	SV	Standard				
+13	0x0b40000e	188743694	Name	Standard				
+14	0x0b40000f	188743695	Notes	Standard				
+15	0x0b400013	188743699	Critical	Standard				
+16	0x0b400014	188743700	LevelingDelay	Standard				
+17	0x0b400018	188743704	Milestone	Standard				
+18	0x0b400019	188743705	Priority	Standard				
+19	0x0b400021	188743713	PercentWorkComplete	Standard				
+20	0x0b400029	188743721	ActualStart	Standard				
+21	0x0b40002a	188743722	ActualFinish	Standard				
+22	0x0b40002b	188743723	BaselineStart	Standard				
+23	0x0b40002c	188743724	BaselineFinish	Standard				
+24	0x0b40002d	188743725	StartVariance	Standard				
+25	0x0b40002e	188743726	FinishVariance	Standard				
+26	0x0b400031	188743729		Standard				
+27	0x0b400032	188743730		Standard				
+28	0x0b400033	188743731	Text1	Standard				
+29	0x0b400034	188743732	Start1	Standard				
+30	0x0b400035	188743733	Finish1	Standard				
+31	0x0b400036	188743734	Text2	Standard				
+32	0x0b400037	188743735	Start2	Standard				
+33	0x0b400038	188743736	Finish2	Standard				
+34	0x0b400039	188743737	Text3	Standard				
+35	0x0b40003a	188743738	Start3	Standard				
+36	0x0b40003b	188743739	Finish3	Standard				
+37	0x0b40003c	188743740	Text4	Standard				
+38	0x0b40003d	188743741	Start4	Standard				
+39	0x0b40003e	188743742	Finish4	Standard				
+40	0x0b40003f	188743743	Text5	Standard				
+41	0x0b400040	188743744	Start5	Standard				
+42	0x0b400041	188743745	Finish5	Standard				
+43	0x0b400042	188743746	Text6	Standard				
+44	0x0b400043	188743747	Text7	Standard				
+45	0x0b400044	188743748	Text8	Standard				
+46	0x0b400045	188743749	Text9	Standard				
+47	0x0b400046	188743750	Text10	Standard				
+48	0x0b400047	188743751	Marked	Standard				
+49	0x0b400048	188743752	Flag1	Standard				
+50	0x0b400049	188743753	Flag2	Standard				
+51	0x0b40004a	188743754	Flag3	Standard				
+52	0x0b40004b	188743755	Flag4	Standard				
+53	0x0b40004c	188743756	Flag5	Standard				
+54	0x0b40004d	188743757	Flag6	Standard				
+55	0x0b40004e	188743758	Flag7	Standard				
+56	0x0b40004f	188743759	Flag8	Standard				
+57	0x0b400050	188743760	Flag9	Standard				
+58	0x0b400051	188743761	Flag10	Standard				
+59	0x0b400053	188743763	CV	Standard				
+60	0x0b400054	188743764	Project	Standard				
+61	0x0b400056	188743766		Standard				
+62	0x0b400057	188743767	Number1	Standard				
+63	0x0b400058	188743768	Number2	Standard				
+64	0x0b400059	188743769	Number3	Standard				
+65	0x0b40005a	188743770	Number4	Standard				
+66	0x0b40005b	188743771	Number5	Standard				
+67	0x0b40005c	188743772	Summary	Standard				
+68	0x0b40005d	188743773	Created	Standard				
+69	0x0b40005e	188743774		Standard				
+70	0x0b400062	188743778	LinkedFields	Standard				
+71	0x0b400063	188743779	Resume	Standard				
+72	0x0b400064	188743780	Stop	Standard				
+73	0x0b400067	188743783	Duration1	Standard				
+74	0x0b400068	188743784	Duration2	Standard				
+75	0x0b400069	188743785	Duration3	Standard				
+76	0x0b40006a	188743786	Cost1	Standard				
+77	0x0b40006b	188743787	Cost2	Standard				
+78	0x0b40006c	188743788	Cost3	Standard				
+79	0x0b40006e	188743790	Confirmed	Standard				
+80	0x0b40006f	188743791	UpdateNeeded	Standard				
+81	0x0b400071	188743793	ResourceGroup	Standard				
+82	0x0b400078	188743800	ACWP	Standard				
+83	0x0b400087	188743815		Standard				
+84	0x0b400090	188743824		Standard				
+85	0x0b40009f	188743839		Standard				
+86	0x0b4000a3	188743843	OvertimeWork	Standard				
+87	0x0b4000a4	188743844	ActualOvertimeWork	Standard				
+88	0x0b4000a5	188743845	RemainingOvertimeWork	Standard				
+89	0x0b4000a6	188743846	RegularWork	Standard				
+90	0x0b4000a7	188743847		Standard				
+91	0x0b4000a8	188743848	OvertimeCost	Standard				
+92	0x0b4000a9	188743849	ActualOvertimeCost	Standard				
+93	0x0b4000aa	188743850	RemainingOvertimeCost	Standard				
+94	0x0b4000ad	188743853		Standard				
+95	0x0b4000ae	188743854		Standard				
+96	0x0b4000af	188743855		Standard				
+97	0x0b4000b0	188743856		Standard				
+98	0x0b4000b1	188743857		Standard				
+99	0x0b4000b2	188743858		Standard				
+100	0x0b4000b7	188743863		Standard				
+101	0x0b4000b8	188743864		Standard				
+102	0x0b4000b9	188743865		Standard				
+103	0x0b4000ba	188743866		Standard				
+104	0x0b4000bb	188743867		Standard				
+105	0x0b4000bc	188743868		Standard				
+106	0x0b4000bd	188743869		Standard				
+107	0x0b4000be	188743870		Standard				
+108	0x0b4000bf	188743871		Standard				
+109	0x0b4000c0	188743872		Standard				
+110	0x0b4000c1	188743873		Standard				
+111	0x0b4000c2	188743874		Standard				
+112	0x0b4000c6	188743878		Standard				
+113	0x0b4000c7	188743879		Standard				
+114	0x0b4000c9	188743881		Standard				
+115	0x0b4000cd	188743885		Standard				
+116	0x0b4000d2	188743890		Standard				
+117	0x0b4000d5	188743893	Parent	Standard				
+118	0x0b4000d6	188743894	Application	Standard				
+119	0x0b4000d7	188743895		Standard				
+120	0x0b4000d8	188743896		Standard				
+121	0x0b4000d9	188743897	Hyperlink	Standard				
+122	0x0b4000da	188743898	HyperlinkAddress	Standard				
+123	0x0b4000db	188743899	HyperlinkSubAddress	Standard				
+124	0x0b4000dc	188743900	HyperlinkHREF	Standard				
+125	0x0b4000dd	188743901		Standard				
+126	0x0b4000e0	188743904		Standard				
+127	0x0b4000e1	188743905	Overallocated	Standard				
+128	0x0b4000e7	188743911		Standard				
+129	0x0b4000ec	188743916		Standard				
+130	0x0b4000ed	188743917		Standard				
+131	0x0b4000f1	188743921		Standard				
+132	0x0b4000f3	188743923		Standard				
+133	0x0b4000f5	188743925		Standard				
+134	0x0b4000f7	188743927		Standard				
+135	0x0b4000fa	188743930	ResponsePending	Standard				
+136	0x0b4000fb	188743931	TeamStatusPending	Standard				
+137	0x0b400100	188743936		Standard				
+138	0x0b400102	188743938	Cost4	Standard				
+139	0x0b400103	188743939	Cost5	Standard				
+140	0x0b400104	188743940	Cost6	Standard				
+141	0x0b400105	188743941	Cost7	Standard				
+142	0x0b400106	188743942	Cost8	Standard				
+143	0x0b400107	188743943	Cost9	Standard				
+144	0x0b400108	188743944	Cost10	Standard				
+145	0x0b400109	188743945	Date1	Standard				
+146	0x0b40010a	188743946	Date2	Standard				
+147	0x0b40010b	188743947	Date3	Standard				
+148	0x0b40010c	188743948	Date4	Standard				
+149	0x0b40010d	188743949	Date5	Standard				
+150	0x0b40010e	188743950	Date6	Standard				
+151	0x0b40010f	188743951	Date7	Standard				
+152	0x0b400110	188743952	Date8	Standard				
+153	0x0b400111	188743953	Date9	Standard				
+154	0x0b400112	188743954	Date10	Standard				
+155	0x0b400113	188743955	Duration4	Standard				
+156	0x0b400114	188743956	Duration5	Standard				
+157	0x0b400115	188743957	Duration6	Standard				
+158	0x0b400116	188743958	Duration7	Standard				
+159	0x0b400117	188743959	Duration8	Standard				
+160	0x0b400118	188743960	Duration9	Standard				
+161	0x0b400119	188743961	Duration10	Standard				
+162	0x0b40011a	188743962	Start6	Standard				
+163	0x0b40011b	188743963	Finish6	Standard				
+164	0x0b40011c	188743964	Start7	Standard				
+165	0x0b40011d	188743965	Finish7	Standard				
+166	0x0b40011e	188743966	Start8	Standard				
+167	0x0b40011f	188743967	Finish8	Standard				
+168	0x0b400120	188743968	Start9	Standard				
+169	0x0b400121	188743969	Finish9	Standard				
+170	0x0b400122	188743970	Start10	Standard				
+171	0x0b400123	188743971	Finish10	Standard				
+172	0x0b400124	188743972	Flag11	Standard				
+173	0x0b400125	188743973	Flag12	Standard				
+174	0x0b400126	188743974	Flag13	Standard				
+175	0x0b400127	188743975	Flag14	Standard				
+176	0x0b400128	188743976	Flag15	Standard				
+177	0x0b400129	188743977	Flag16	Standard				
+178	0x0b40012a	188743978	Flag17	Standard				
+179	0x0b40012b	188743979	Flag18	Standard				
+180	0x0b40012c	188743980	Flag19	Standard				
+181	0x0b40012d	188743981	Flag20	Standard				
+182	0x0b40012e	188743982	Number6	Standard				
+183	0x0b40012f	188743983	Number7	Standard				
+184	0x0b400130	188743984	Number8	Standard				
+185	0x0b400131	188743985	Number9	Standard				
+186	0x0b400132	188743986	Number10	Standard				
+187	0x0b400133	188743987	Number11	Standard				
+188	0x0b400134	188743988	Number12	Standard				
+189	0x0b400135	188743989	Number13	Standard				
+190	0x0b400136	188743990	Number14	Standard				
+191	0x0b400137	188743991	Number15	Standard				
+192	0x0b400138	188743992	Number16	Standard				
+193	0x0b400139	188743993	Number17	Standard				
+194	0x0b40013a	188743994	Number18	Standard				
+195	0x0b40013b	188743995	Number19	Standard				
+196	0x0b40013c	188743996	Number20	Standard				
+197	0x0b40013d	188743997	Text11	Standard				
+198	0x0b40013e	188743998	Text12	Standard				
+199	0x0b40013f	188743999	Text13	Standard				
+200	0x0b400140	188744000	Text14	Standard				
+201	0x0b400141	188744001	Text15	Standard				
+202	0x0b400142	188744002	Text16	Standard				
+203	0x0b400143	188744003	Text17	Standard				
+204	0x0b400144	188744004	Text18	Standard				
+205	0x0b400145	188744005	Text19	Standard				
+206	0x0b400146	188744006	Text20	Standard				
+207	0x0b400147	188744007	Text21	Standard				
+208	0x0b400148	188744008	Text22	Standard				
+209	0x0b400149	188744009	Text23	Standard				
+210	0x0b40014a	188744010	Text24	Standard				
+211	0x0b40014b	188744011	Text25	Standard				
+212	0x0b40014c	188744012	Text26	Standard				
+213	0x0b40014d	188744013	Text27	Standard				
+214	0x0b40014e	188744014	Text28	Standard				
+215	0x0b40014f	188744015	Text29	Standard				
+216	0x0b400150	188744016	Text30	Standard				
+217	0x0b400151	188744017		Standard				
+218	0x0b400152	188744018		Standard				
+219	0x0b400153	188744019		Standard				
+220	0x0b400154	188744020		Standard				
+221	0x0b400155	188744021		Standard				
+222	0x0b400156	188744022		Standard				
+223	0x0b400157	188744023		Standard				
+224	0x0b400168	188744040	Index	Standard				
+225	0x0b40016e	188744046		Standard				
+226	0x0b40016f	188744047		Standard				
+227	0x0b400170	188744048		Standard				
+228	0x0b40017f	188744063		Standard				
+229	0x0b400181	188744065		Standard				
+230	0x0b4001b9	188744121	VAC	Standard				
+231	0x0b4001ba	188744122		Standard				
+232	0x0b4001bb	188744123		Standard				
+233	0x0b4001bc	188744124		Standard				
+234	0x0b4001c3	188744131		Standard				
+235	0x0b4001c4	188744132	HyperlinkScreenTip	Standard				
+236	0x0b4001c6	188744134		Standard				
+237	0x0b4001e1	188744161		Standard				
+238	0x0b4001e2	188744162	Baseline1Start	Standard				
+239	0x0b4001e3	188744163	Baseline1Finish	Standard				
+240	0x0b4001e4	188744164	Baseline1Cost	Standard				
+241	0x0b4001e5	188744165	Baseline1Work	Standard				
+242	0x0b4001e6	188744166		Standard				
+243	0x0b4001ea	188744170		Standard				
+244	0x0b4001eb	188744171		Standard				
+245	0x0b4001ec	188744172		Standard				
+246	0x0b4001ed	188744173	Baseline2Start	Standard				
+247	0x0b4001ee	188744174	Baseline2Finish	Standard				
+248	0x0b4001ef	188744175	Baseline2Cost	Standard				
+249	0x0b4001f0	188744176	Baseline2Work	Standard				
+250	0x0b4001f1	188744177		Standard				
+251	0x0b4001f5	188744181		Standard				
+252	0x0b4001f6	188744182		Standard				
+253	0x0b4001f7	188744183		Standard				
+254	0x0b4001f8	188744184	Baseline3Start	Standard				
+255	0x0b4001f9	188744185	Baseline3Finish	Standard				
+256	0x0b4001fa	188744186	Baseline3Cost	Standard				
+257	0x0b4001fb	188744187	Baseline3Work	Standard				
+258	0x0b4001fc	188744188		Standard				
+259	0x0b400200	188744192		Standard				
+260	0x0b400201	188744193		Standard				
+261	0x0b400202	188744194		Standard				
+262	0x0b400203	188744195	Baseline4Start	Standard				
+263	0x0b400204	188744196	Baseline4Finish	Standard				
+264	0x0b400205	188744197	Baseline4Cost	Standard				
+265	0x0b400206	188744198	Baseline4Work	Standard				
+266	0x0b400207	188744199		Standard				
+267	0x0b40020b	188744203		Standard				
+268	0x0b40020c	188744204		Standard				
+269	0x0b40020d	188744205		Standard				
+270	0x0b40020e	188744206	Baseline5Start	Standard				
+271	0x0b40020f	188744207	Baseline5Finish	Standard				
+272	0x0b400210	188744208	Baseline5Cost	Standard				
+273	0x0b400211	188744209	Baseline5Work	Standard				
+274	0x0b400212	188744210		Standard				
+275	0x0b400216	188744214		Standard				
+276	0x0b400217	188744215		Standard				
+277	0x0b400218	188744216		Standard				
+278	0x0b400220	188744224	Baseline6Start	Standard				
+279	0x0b400221	188744225	Baseline6Finish	Standard				
+280	0x0b400222	188744226	Baseline6Cost	Standard				
+281	0x0b400223	188744227	Baseline6Work	Standard				
+282	0x0b400224	188744228		Standard				
+283	0x0b400228	188744232		Standard				
+284	0x0b400229	188744233		Standard				
+285	0x0b40022a	188744234		Standard				
+286	0x0b40022b	188744235	Baseline7Start	Standard				
+287	0x0b40022c	188744236	Baseline7Finish	Standard				
+288	0x0b40022d	188744237	Baseline7Cost	Standard				
+289	0x0b40022e	188744238	Baseline7Work	Standard				
+290	0x0b40022f	188744239		Standard				
+291	0x0b400233	188744243		Standard				
+292	0x0b400234	188744244		Standard				
+293	0x0b400235	188744245		Standard				
+294	0x0b400236	188744246	Baseline8Start	Standard				
+295	0x0b400237	188744247	Baseline8Finish	Standard				
+296	0x0b400238	188744248	Baseline8Cost	Standard				
+297	0x0b400239	188744249	Baseline8Work	Standard				
+298	0x0b40023a	188744250		Standard				
+299	0x0b40023e	188744254		Standard				
+300	0x0b40023f	188744255		Standard				
+301	0x0b400240	188744256		Standard				
+302	0x0b400241	188744257	Baseline9Start	Standard				
+303	0x0b400242	188744258	Baseline9Finish	Standard				
+304	0x0b400243	188744259	Baseline9Cost	Standard				
+305	0x0b400244	188744260	Baseline9Work	Standard				
+306	0x0b400245	188744261		Standard				
+307	0x0b400249	188744265		Standard				
+308	0x0b40024a	188744266		Standard				
+309	0x0b40024b	188744267		Standard				
+310	0x0b40024c	188744268	Baseline10Start	Standard				
+311	0x0b40024d	188744269	Baseline10Finish	Standard				
+312	0x0b40024e	188744270	Baseline10Cost	Standard				
+313	0x0b40024f	188744271	Baseline10Work	Standard				
+314	0x0b400250	188744272		Standard				
+315	0x0b400254	188744276		Standard				
+316	0x0b400255	188744277		Standard				
+317	0x0b400256	188744278		Standard				
+318	0x0b400257	188744279	EnterpriseCost1	Standard				
+319	0x0b400258	188744280	EnterpriseCost2	Standard				
+320	0x0b400259	188744281	EnterpriseCost3	Standard				
+321	0x0b40025a	188744282	EnterpriseCost4	Standard				
+322	0x0b40025b	188744283	EnterpriseCost5	Standard				
+323	0x0b40025c	188744284	EnterpriseCost6	Standard				
+324	0x0b40025d	188744285	EnterpriseCost7	Standard				
+325	0x0b40025e	188744286	EnterpriseCost8	Standard				
+326	0x0b40025f	188744287	EnterpriseCost9	Standard				
+327	0x0b400260	188744288	EnterpriseCost10	Standard				
+328	0x0b400261	188744289	EnterpriseDate1	Standard				
+329	0x0b400262	188744290	EnterpriseDate2	Standard				
+330	0x0b400263	188744291	EnterpriseDate3	Standard				
+331	0x0b400264	188744292	EnterpriseDate4	Standard				
+332	0x0b400265	188744293	EnterpriseDate5	Standard				
+333	0x0b400266	188744294	EnterpriseDate6	Standard				
+334	0x0b400267	188744295	EnterpriseDate7	Standard				
+335	0x0b400268	188744296	EnterpriseDate8	Standard				
+336	0x0b400269	188744297	EnterpriseDate9	Standard				
+337	0x0b40026a	188744298	EnterpriseDate10	Standard				
+338	0x0b40026b	188744299	EnterpriseDate11	Standard				
+339	0x0b40026c	188744300	EnterpriseDate12	Standard				
+340	0x0b40026d	188744301	EnterpriseDate13	Standard				
+341	0x0b40026e	188744302	EnterpriseDate14	Standard				
+342	0x0b40026f	188744303	EnterpriseDate15	Standard				
+343	0x0b400270	188744304	EnterpriseDate16	Standard				
+344	0x0b400271	188744305	EnterpriseDate17	Standard				
+345	0x0b400272	188744306	EnterpriseDate18	Standard				
+346	0x0b400273	188744307	EnterpriseDate19	Standard				
+347	0x0b400274	188744308	EnterpriseDate20	Standard				
+348	0x0b400275	188744309	EnterpriseDate21	Standard				
+349	0x0b400276	188744310	EnterpriseDate22	Standard				
+350	0x0b400277	188744311	EnterpriseDate23	Standard				
+351	0x0b400278	188744312	EnterpriseDate24	Standard				
+352	0x0b400279	188744313	EnterpriseDate25	Standard				
+353	0x0b40027a	188744314	EnterpriseDate26	Standard				
+354	0x0b40027b	188744315	EnterpriseDate27	Standard				
+355	0x0b40027c	188744316	EnterpriseDate28	Standard				
+356	0x0b40027d	188744317	EnterpriseDate29	Standard				
+357	0x0b40027e	188744318	EnterpriseDate30	Standard				
+358	0x0b40027f	188744319	EnterpriseDuration1	Standard				
+359	0x0b400280	188744320	EnterpriseDuration2	Standard				
+360	0x0b400281	188744321	EnterpriseDuration3	Standard				
+361	0x0b400282	188744322	EnterpriseDuration4	Standard				
+362	0x0b400283	188744323	EnterpriseDuration5	Standard				
+363	0x0b400284	188744324	EnterpriseDuration6	Standard				
+364	0x0b400285	188744325	EnterpriseDuration7	Standard				
+365	0x0b400286	188744326	EnterpriseDuration8	Standard				
+366	0x0b400287	188744327	EnterpriseDuration9	Standard				
+367	0x0b400288	188744328	EnterpriseDuration10	Standard				
+368	0x0b400289	188744329		Standard				
+369	0x0b40028a	188744330		Standard				
+370	0x0b40028b	188744331		Standard				
+371	0x0b40028c	188744332		Standard				
+372	0x0b40028d	188744333		Standard				
+373	0x0b40028e	188744334		Standard				
+374	0x0b40028f	188744335		Standard				
+375	0x0b400290	188744336		Standard				
+376	0x0b400291	188744337		Standard				
+377	0x0b400292	188744338		Standard				
+378	0x0b400293	188744339	EnterpriseFlag1	Standard				
+379	0x0b400294	188744340	EnterpriseFlag2	Standard				
+380	0x0b400295	188744341	EnterpriseFlag3	Standard				
+381	0x0b400296	188744342	EnterpriseFlag4	Standard				
+382	0x0b400297	188744343	EnterpriseFlag5	Standard				
+383	0x0b400298	188744344	EnterpriseFlag6	Standard				
+384	0x0b400299	188744345	EnterpriseFlag7	Standard				
+385	0x0b40029a	188744346	EnterpriseFlag8	Standard				
+386	0x0b40029b	188744347	EnterpriseFlag9	Standard				
+387	0x0b40029c	188744348	EnterpriseFlag10	Standard				
+388	0x0b40029d	188744349	EnterpriseFlag11	Standard				
+389	0x0b40029e	188744350	EnterpriseFlag12	Standard				
+390	0x0b40029f	188744351	EnterpriseFlag13	Standard				
+391	0x0b4002a0	188744352	EnterpriseFlag14	Standard				
+392	0x0b4002a1	188744353	EnterpriseFlag15	Standard				
+393	0x0b4002a2	188744354	EnterpriseFlag16	Standard				
+394	0x0b4002a3	188744355	EnterpriseFlag17	Standard				
+395	0x0b4002a4	188744356	EnterpriseFlag18	Standard				
+396	0x0b4002a5	188744357	EnterpriseFlag19	Standard				
+397	0x0b4002a6	188744358	EnterpriseFlag20	Standard				
+398	0x0b4002bb	188744379	EnterpriseNumber1	Standard				
+399	0x0b4002bc	188744380	EnterpriseNumber2	Standard				
+400	0x0b4002bd	188744381	EnterpriseNumber3	Standard				
+401	0x0b4002be	188744382	EnterpriseNumber4	Standard				
+402	0x0b4002bf	188744383	EnterpriseNumber5	Standard				
+403	0x0b4002c0	188744384	EnterpriseNumber6	Standard				
+404	0x0b4002c1	188744385	EnterpriseNumber7	Standard				
+405	0x0b4002c2	188744386	EnterpriseNumber8	Standard				
+406	0x0b4002c3	188744387	EnterpriseNumber9	Standard				
+407	0x0b4002c4	188744388	EnterpriseNumber10	Standard				
+408	0x0b4002c5	188744389	EnterpriseNumber11	Standard				
+409	0x0b4002c6	188744390	EnterpriseNumber12	Standard				
+410	0x0b4002c7	188744391	EnterpriseNumber13	Standard				
+411	0x0b4002c8	188744392	EnterpriseNumber14	Standard				
+412	0x0b4002c9	188744393	EnterpriseNumber15	Standard				
+413	0x0b4002ca	188744394	EnterpriseNumber16	Standard				
+414	0x0b4002cb	188744395	EnterpriseNumber17	Standard				
+415	0x0b4002cc	188744396	EnterpriseNumber18	Standard				
+416	0x0b4002cd	188744397	EnterpriseNumber19	Standard				
+417	0x0b4002ce	188744398	EnterpriseNumber20	Standard				
+418	0x0b4002cf	188744399	EnterpriseNumber21	Standard				
+419	0x0b4002d0	188744400	EnterpriseNumber22	Standard				
+420	0x0b4002d1	188744401	EnterpriseNumber23	Standard				
+421	0x0b4002d2	188744402	EnterpriseNumber24	Standard				
+422	0x0b4002d3	188744403	EnterpriseNumber25	Standard				
+423	0x0b4002d4	188744404	EnterpriseNumber26	Standard				
+424	0x0b4002d5	188744405	EnterpriseNumber27	Standard				
+425	0x0b4002d6	188744406	EnterpriseNumber28	Standard				
+426	0x0b4002d7	188744407	EnterpriseNumber29	Standard				
+427	0x0b4002d8	188744408	EnterpriseNumber30	Standard				
+428	0x0b4002d9	188744409	EnterpriseNumber31	Standard				
+429	0x0b4002da	188744410	EnterpriseNumber32	Standard				
+430	0x0b4002db	188744411	EnterpriseNumber33	Standard				
+431	0x0b4002dc	188744412	EnterpriseNumber34	Standard				
+432	0x0b4002dd	188744413	EnterpriseNumber35	Standard				
+433	0x0b4002de	188744414	EnterpriseNumber36	Standard				
+434	0x0b4002df	188744415	EnterpriseNumber37	Standard				
+435	0x0b4002e0	188744416	EnterpriseNumber38	Standard				
+436	0x0b4002e1	188744417	EnterpriseNumber39	Standard				
+437	0x0b4002e2	188744418	EnterpriseNumber40	Standard				
+438	0x0b40031f	188744479	EnterpriseText1	Standard				
+439	0x0b400320	188744480	EnterpriseText2	Standard				
+440	0x0b400321	188744481	EnterpriseText3	Standard				
+441	0x0b400322	188744482	EnterpriseText4	Standard				
+442	0x0b400323	188744483	EnterpriseText5	Standard				
+443	0x0b400324	188744484	EnterpriseText6	Standard				
+444	0x0b400325	188744485	EnterpriseText7	Standard				
+445	0x0b400326	188744486	EnterpriseText8	Standard				
+446	0x0b400327	188744487	EnterpriseText9	Standard				
+447	0x0b400328	188744488	EnterpriseText10	Standard				
+448	0x0b400329	188744489	EnterpriseText11	Standard				
+449	0x0b40032a	188744490	EnterpriseText12	Standard				
+450	0x0b40032b	188744491	EnterpriseText13	Standard				
+451	0x0b40032c	188744492	EnterpriseText14	Standard				
+452	0x0b40032d	188744493	EnterpriseText15	Standard				
+453	0x0b40032e	188744494	EnterpriseText16	Standard				
+454	0x0b40032f	188744495	EnterpriseText17	Standard				
+455	0x0b400330	188744496	EnterpriseText18	Standard				
+456	0x0b400331	188744497	EnterpriseText19	Standard				
+457	0x0b400332	188744498	EnterpriseText20	Standard				
+458	0x0b400333	188744499	EnterpriseText21	Standard				
+459	0x0b400334	188744500	EnterpriseText22	Standard				
+460	0x0b400335	188744501	EnterpriseText23	Standard				
+461	0x0b400336	188744502	EnterpriseText24	Standard				
+462	0x0b400337	188744503	EnterpriseText25	Standard				
+463	0x0b400338	188744504	EnterpriseText26	Standard				
+464	0x0b400339	188744505	EnterpriseText27	Standard				
+465	0x0b40033a	188744506	EnterpriseText28	Standard				
+466	0x0b40033b	188744507	EnterpriseText29	Standard				
+467	0x0b40033c	188744508	EnterpriseText30	Standard				
+468	0x0b40033d	188744509	EnterpriseText31	Standard				
+469	0x0b40033e	188744510	EnterpriseText32	Standard				
+470	0x0b40033f	188744511	EnterpriseText33	Standard				
+471	0x0b400340	188744512	EnterpriseText34	Standard				
+472	0x0b400341	188744513	EnterpriseText35	Standard				
+473	0x0b400342	188744514	EnterpriseText36	Standard				
+474	0x0b400343	188744515	EnterpriseText37	Standard				
+475	0x0b400344	188744516	EnterpriseText38	Standard				
+476	0x0b400345	188744517	EnterpriseText39	Standard				
+477	0x0b400346	188744518	EnterpriseText40	Standard				
+478	0x0b400441	188744769		Standard				
+479	0x0b400442	188744770		Standard				
+480	0x0b400443	188744771		Standard				
+481	0x0b400444	188744772		Standard				
+482	0x0b400445	188744773		Standard				
+483	0x0b400446	188744774		Standard				
+484	0x0b400447	188744775		Standard				
+485	0x0b400448	188744776		Standard				
+486	0x0b400449	188744777		Standard				
+487	0x0b40044a	188744778		Standard				
+488	0x0b40044b	188744779		Standard				
+489	0x0b40044c	188744780		Standard				
+490	0x0b40044d	188744781		Standard				
+491	0x0b40044e	188744782		Standard				
+492	0x0b40044f	188744783		Standard				
+493	0x0b400450	188744784		Standard				
+494	0x0b400451	188744785		Standard				
+495	0x0b400452	188744786		Standard				
+496	0x0b400453	188744787		Standard				
+497	0x0b400454	188744788		Standard				
+498	0x0b400455	188744789		Standard				
+499	0x0b400456	188744790		Standard				
+500	0x0b400457	188744791		Standard				
+501	0x0b400458	188744792		Standard				
+502	0x0b400459	188744793		Standard				
+503	0x0b40045a	188744794		Standard				
+504	0x0b40045b	188744795		Standard				
+505	0x0b40045c	188744796		Standard				
+506	0x0b40045d	188744797		Standard				
+507	0x0b40045e	188744798		Standard				
+508	0x0b400460	188744800		Standard				
+509	0x0b400464	188744804		Standard				
+510	0x0b400468	188744808		Standard				
+511	0x0b400469	188744809		Standard				
+512	0x0b40046a	188744810		Standard				
+513	0x0b40046b	188744811		Standard				
+514	0x0b40046c	188744812		Standard				
+515	0x0b40046d	188744813		Standard				
+516	0x0b40046e	188744814		Standard				
+517	0x0b40046f	188744815		Standard				
+518	0x0b400470	188744816		Standard				
+519	0x0b400471	188744817		Standard				
+520	0x0b400472	188744818		Standard				
+521	0x0b400473	188744819	ActualWorkProtected	Standard				
+522	0x0b400474	188744820	ActualOvertimeWorkProtected	Standard				
+523	0x0b400475	188744821		Standard				
+524	0x0b400476	188744822		Standard				
+525	0x0b400477	188744823	Guid	Standard				
+526	0x0b400492	188744850		Standard				
+527	0x0b400493	188744851	BudgetWork	Standard				
+528	0x0b400494	188744852	BudgetCost	Standard				
+529	0x0b400498	188744856	BaselineBudgetWork	Standard				
+530	0x0b400499	188744857	BaselineBudgetCost	Standard				
+531	0x0b40049a	188744858		Standard				
+532	0x0b40049b	188744859		Standard				
+533	0x0b40049f	188744863	Baseline1BudgetWork	Standard				
+534	0x0b4004a0	188744864	Baseline1BudgetCost	Standard				
+535	0x0b4004a1	188744865		Standard				
+536	0x0b4004a2	188744866		Standard				
+537	0x0b4004a6	188744870	Baseline2BudgetWork	Standard				
+538	0x0b4004a7	188744871	Baseline2BudgetCost	Standard				
+539	0x0b4004a8	188744872		Standard				
+540	0x0b4004a9	188744873		Standard				
+541	0x0b4004ad	188744877	Baseline3BudgetWork	Standard				
+542	0x0b4004ae	188744878	Baseline3BudgetCost	Standard				
+543	0x0b4004af	188744879		Standard				
+544	0x0b4004b0	188744880		Standard				
+545	0x0b4004b4	188744884	Baseline4BudgetWork	Standard				
+546	0x0b4004b5	188744885	Baseline4BudgetCost	Standard				
+547	0x0b4004b6	188744886		Standard				
+548	0x0b4004b7	188744887		Standard				
+549	0x0b4004bb	188744891	Baseline5BudgetWork	Standard				
+550	0x0b4004bc	188744892	Baseline5BudgetCost	Standard				
+551	0x0b4004bd	188744893		Standard				
+552	0x0b4004be	188744894		Standard				
+553	0x0b4004c2	188744898	Baseline6BudgetWork	Standard				
+554	0x0b4004c3	188744899	Baseline6BudgetCost	Standard				
+555	0x0b4004c4	188744900		Standard				
+556	0x0b4004c5	188744901		Standard				
+557	0x0b4004c9	188744905	Baseline7BudgetWork	Standard				
+558	0x0b4004ca	188744906	Baseline7BudgetCost	Standard				
+559	0x0b4004cb	188744907		Standard				
+560	0x0b4004cc	188744908		Standard				
+561	0x0b4004d0	188744912	Baseline8BudgetWork	Standard				
+562	0x0b4004d1	188744913	Baseline8BudgetCost	Standard				
+563	0x0b4004d2	188744914		Standard				
+564	0x0b4004d3	188744915		Standard				
+565	0x0b4004d7	188744919	Baseline9BudgetWork	Standard				
+566	0x0b4004d8	188744920	Baseline9BudgetCost	Standard				
+567	0x0b4004d9	188744921		Standard				
+568	0x0b4004da	188744922		Standard				
+569	0x0b4004de	188744926	Baseline10BudgetWork	Standard				
+570	0x0b4004df	188744927	Baseline10BudgetCost	Standard				
+571	0x0b4004e0	188744928		Standard				
+572	0x0b4004e1	188744929		Standard				
+573	0x0b4004ff	188744959	Active	Standard				
+574	0x0b400500	188744960	Manual	Standard				
+575	0x0b400501	188744961	Placeholder	Standard				
+576	0x0b400503	188744963		Standard				
+577	0x0b400504	188744964		Standard				
+578	0x0b400505	188744965	StartText	Standard				
+579	0x0b400506	188744966	FinishText	Standard				
+580	0x0b400513	188744979	BaselineStartText	Standard				
+581	0x0b400514	188744980	BaselineFinishText	Standard				
+582	0x0b400516	188744982	Baseline1StartText	Standard				
+583	0x0b400517	188744983	Baseline1FinishText	Standard				
+584	0x0b400519	188744985	Baseline2StartText	Standard				
+585	0x0b40051a	188744986	Baseline2FinishText	Standard				
+586	0x0b40051c	188744988	Baseline3StartText	Standard				
+587	0x0b40051d	188744989	Baseline3FinishText	Standard				
+588	0x0b40051f	188744991	Baseline4StartText	Standard				
+589	0x0b400520	188744992	Baseline4FinishText	Standard				
+590	0x0b400522	188744994	Baseline5StartText	Standard				
+591	0x0b400523	188744995	Baseline5FinishText	Standard				
+592	0x0b400525	188744997	Baseline6StartText	Standard				
+593	0x0b400526	188744998	Baseline6FinishText	Standard				
+594	0x0b400528	188745000	Baseline7StartText	Standard				
+595	0x0b400529	188745001	Baseline7FinishText	Standard				
+596	0x0b40052b	188745003	Baseline8StartText	Standard				
+597	0x0b40052c	188745004	Baseline8FinishText	Standard				
+598	0x0b40052e	188745006	Baseline9StartText	Standard				
+599	0x0b40052f	188745007	Baseline9FinishText	Standard				
+600	0x0b400531	188745009	Baseline10StartText	Standard				
+601	0x0b400532	188745010	Baseline10FinishText	Standard				
+602	0x0b400537	188745015		Standard				
+603	0x0b40053d	188745021		Standard				
+604	0x0b40053e	188745022		Standard				
+605	0x0b40053f	188745023		Standard				
+606	0x0b400542	188745026		Standard				
+607	0x0b400543	188745027		Standard				
+608	0x0b400544	188745028		Standard				
+609	0x0b400545	188745029		Standard				
+610	0x0b400546	188745030		Standard				
+611	0x0b400547	188745031		Standard				
+612	0x0b400548	188745032		Standard				
+613	0x0b400549	188745033		Standard				
+614	0x0b40054a	188745034		Standard				
+615	0x0b40054b	188745035		Standard				
+616	0x0b40054c	188745036		Standard				
+617	0x0b40054d	188745037		Standard				
+618	0x0b40054e	188745038		Standard				
+619	0x0b40054f	188745039		Standard				
+620	0x0b400550	188745040		Standard				
+621	0x0b400551	188745041		Standard				
+622	0x0b400552	188745042		Standard				
+623	0x0b400553	188745043		Standard				
+624	0x0b400554	188745044		Standard				
+625	0x0b400555	188745045		Standard				
+626	0x0b400556	188745046		Standard				
+627	0x0b400557	188745047		Standard				
+628	0x0b400558	188745048		Standard				
+629	0x0b400559	188745049		Standard				
+630	0x0b40055a	188745050		Standard				
+631	0x0b40055b	188745051		Standard				
+632	0x0b40055c	188745052		Standard				
+633	0x0b40055d	188745053		Standard				
+634	0x0b40055e	188745054		Standard				
+635	0x0b40055f	188745055		Standard				
+636	0x0b400560	188745056		Standard				
+637	0x0b400561	188745057		Standard				
+638	0x0b400562	188745058		Standard				
+639	0x0b40057c	188745084	Compliant	Standard				
+640	0x0b40057f	188745087	TaskBoardStatus	Standard				
+641	0x0b400580	188745088	Agile	Standard				
+642	0x0b400581	188745089	Sprint	Standard				
+643	0x0b400582	188745090	SprintStart	Standard				
+644	0x0b400583	188745091	SprintFinish	Standard				
+645	0x0b400008	188743688	FixedCost	Standard				
+646	0x0b400010	188743696	WBS	Standard				
+647	0x0b400011	188743697	ConstraintType	Standard				
+648	0x0b400012	188743698	ConstraintDate	Standard				
+649	0x0b400015	188743701	FreeSlack	Standard				
+650	0x0b400016	188743702	TotalSlack	Standard				
+651	0x0b400017	188743703	ID	Standard				
+652	0x0b40001a	188743706	Subproject	Standard				
+653	0x0b40001b	188743707	BaselineDuration	Standard				
+654	0x0b40001c	188743708	ActualDuration	Standard				
+655	0x0b40001d	188743709	Duration	Standard				
+656	0x0b40001e	188743710	DurationVariance	Standard				
+657	0x0b40001f	188743711	RemainingDuration	Standard				
+658	0x0b400020	188743712	PercentComplete	Standard				
+659	0x0b400022	188743714	FixedDuration	Standard				
+660	0x0b400023	188743715	Start	Standard				
+661	0x0b400024	188743716	Finish	Standard				
+662	0x0b400025	188743717	EarlyStart	Standard				
+663	0x0b400026	188743718	EarlyFinish	Standard				
+664	0x0b400027	188743719	LateStart	Standard				
+665	0x0b400028	188743720	LateFinish	Standard				
+666	0x0b40002f	188743727		Standard				
+667	0x0b400030	188743728		Standard				
+668	0x0b400052	188743762	Rollup	Standard				
+669	0x0b400055	188743765	OutlineLevel	Standard				
+670	0x0b40005f	188743775	UniqueIDPredecessors	Standard				
+671	0x0b400060	188743776	UniqueIDSuccessors	Standard				
+672	0x0b400061	188743777	Objects	Standard				
+673	0x0b400065	188743781	ResumeNoEarlierThan	Standard				
+674	0x0b400066	188743782	OutlineNumber	Standard				
+675	0x0b40006d	188743789	HideBar	Standard				
+676	0x0b400070	188743792	Contact	Standard				
+677	0x0b400072	188743794		Standard				
+678	0x0b400073	188743795		Standard				
+679	0x0b400074	188743796		Standard				
+680	0x0b400075	188743797		Standard				
+681	0x0b400076	188743798		Standard				
+682	0x0b400077	188743799		Standard				
+683	0x0b400079	188743801		Standard				
+684	0x0b40007a	188743802		Standard				
+685	0x0b40007b	188743803		Standard				
+686	0x0b40007c	188743804		Standard				
+687	0x0b40007d	188743805		Standard				
+688	0x0b40007e	188743806		Standard				
+689	0x0b40007f	188743807		Standard				
+690	0x0b400080	188743808	Type	Standard				
+691	0x0b400081	188743809	Recurring	Standard				
+692	0x0b400082	188743810		Standard				
+693	0x0b400083	188743811		Standard				
+694	0x0b400084	188743812	EffortDriven	Standard				
+695	0x0b400085	188743813		Standard				
+696	0x0b400086	188743814		Standard				
+697	0x0b400088	188743816		Standard				
+698	0x0b400089	188743817	OutlineChildren	Standard				
+699	0x0b40008a	188743818		Standard				
+700	0x0b40008b	188743819	PredecessorTasks	Standard				
+701	0x0b40008c	188743820		Standard				
+702	0x0b40008d	188743821	SuccessorTasks	Standard				
+703	0x0b40008e	188743822		Standard				
+704	0x0b40008f	188743823		Standard				
+705	0x0b400091	188743825		Standard				
+706	0x0b400092	188743826		Standard				
+707	0x0b400093	188743827		Standard				
+708	0x0b400094	188743828		Standard				
+709	0x0b400095	188743829		Standard				
+710	0x0b400096	188743830		Standard				
+711	0x0b400097	188743831		Standard				
+712	0x0b400098	188743832		Standard				
+713	0x0b400099	188743833		Standard				
+714	0x0b40009a	188743834		Standard				
+715	0x0b40009b	188743835		Standard				
+716	0x0b40009c	188743836		Standard				
+717	0x0b40009d	188743837		Standard				
+718	0x0b40009e	188743838		Standard				
+719	0x0b4000a0	188743840		Standard				
+720	0x0b4000a1	188743841		Standard				
+721	0x0b4000a2	188743842		Standard				
+722	0x0b4000ab	188743851		Standard				
+723	0x0b4000ac	188743852		Standard				
+724	0x0b4000b3	188743859		Standard				
+725	0x0b4000b4	188743860		Standard				
+726	0x0b4000b5	188743861		Standard				
+727	0x0b4000b6	188743862		Standard				
+728	0x0b4000c3	188743875		Standard				
+729	0x0b4000c4	188743876		Standard				
+730	0x0b4000c5	188743877		Standard				
+731	0x0b4000c8	188743880	FixedCostAccrual	Standard				
+732	0x0b4000ca	188743882		Standard				
+733	0x0b4000cb	188743883		Standard				
+734	0x0b4000cc	188743884		Standard				
+735	0x0b4000ce	188743886	Assignments	Standard				
+736	0x0b4000cf	188743887		Standard				
+737	0x0b4000d0	188743888		Standard				
+738	0x0b4000d1	188743889		Standard				
+739	0x0b4000d3	188743891		Standard				
+740	0x0b4000d4	188743892		Standard				
+741	0x0b4000de	188743902		Standard				
+742	0x0b4000df	188743903		Standard				
+743	0x0b4000e2	188743906	SplitParts	Standard				
+744	0x0b4000e3	188743907		Standard				
+745	0x0b4000e4	188743908		Standard				
+746	0x0b4000e5	188743909		Standard				
+747	0x0b4000e6	188743910		Standard				
+748	0x0b4000e8	188743912	ExternalTask	Standard				
+749	0x0b4000e9	188743913		Standard				
+750	0x0b4000ea	188743914		Standard				
+751	0x0b4000eb	188743915		Standard				
+752	0x0b4000ee	188743918	OutlineParent	Standard				
+753	0x0b4000ef	188743919	Resources	Standard				
+754	0x0b4000f0	188743920		Standard				
+755	0x0b4000f2	188743922		Standard				
+756	0x0b4000f4	188743924		Standard				
+757	0x0b4000f6	188743926	SubProjectReadOnly	Standard				
+758	0x0b4000f8	188743928		Standard				
+759	0x0b4000f9	188743929		Standard				
+760	0x0b4000fc	188743932	LevelingCanSplit	Standard				
+761	0x0b4000fd	188743933	LevelIndividualAssignments	Standard				
+762	0x0b4000fe	188743934		Standard				
+763	0x0b4000ff	188743935		Standard				
+764	0x0b400101	188743937		Standard				
+765	0x0b400158	188744024		Standard				
+766	0x0b400159	188744025		Standard				
+767	0x0b40015a	188744026		Standard				
+768	0x0b40015b	188744027		Standard				
+769	0x0b40015c	188744028		Standard				
+770	0x0b40015d	188744029	ResourcePhonetics	Standard				
+771	0x0b40015e	188744030		Standard				
+772	0x0b40015f	188744031		Standard				
+773	0x0b400160	188744032		Standard				
+774	0x0b400161	188744033		Standard				
+775	0x0b400162	188744034		Standard				
+776	0x0b400163	188744035		Standard				
+777	0x0b400164	188744036		Standard				
+778	0x0b400165	188744037		Standard				
+779	0x0b400166	188744038		Standard				
+780	0x0b400167	188744039		Standard				
+781	0x0b400169	188744041		Standard				
+782	0x0b40016a	188744042		Standard				
+783	0x0b40016b	188744043		Standard				
+784	0x0b40016c	188744044		Standard				
+785	0x0b40016d	188744045		Standard				
+786	0x0b400171	188744049	PreleveledStart	Standard				
+787	0x0b400172	188744050	PreleveledFinish	Standard				
+788	0x0b400173	188744051		Standard				
+789	0x0b400174	188744052		Standard				
+790	0x0b400175	188744053		Standard				
+791	0x0b400176	188744054		Standard				
+792	0x0b400177	188744055		Standard				
+793	0x0b400178	188744056		Standard				
+794	0x0b400179	188744057		Standard				
+795	0x0b40017a	188744058		Standard				
+796	0x0b40017b	188744059		Standard				
+797	0x0b40017c	188744060		Standard				
+798	0x0b40017d	188744061		Standard				
+799	0x0b40017e	188744062		Standard				
+800	0x0b400180	188744064		Standard				
+801	0x0b400182	188744066		Standard				
+802	0x0b400183	188744067		Standard				
+803	0x0b400184	188744068		Standard				
+804	0x0b400185	188744069		Standard				
+805	0x0b400186	188744070	Predecessors	Standard				
+806	0x0b400187	188744071	Successors	Standard				
+807	0x0b400188	188744072		Standard				
+808	0x0b400189	188744073		Standard				
+809	0x0b40018a	188744074	ResourceNames	Standard				
+810	0x0b40018b	188744075	ResourceInitials	Standard				
+811	0x0b40018c	188744076	Estimated	Standard				
+812	0x0b40018d	188744077		Standard				
+813	0x0b40018e	188744078		Standard				
+814	0x0b40018f	188744079	IgnoreResourceCalendar	Standard				
+815	0x0b400190	188744080		Standard				
+816	0x0b400191	188744081		Standard				
+817	0x0b400192	188744082	Calendar	Standard				
+818	0x0b400193	188744083	Duration1Estimated	Standard				
+819	0x0b400194	188744084	Duration2Estimated	Standard				
+820	0x0b400195	188744085	Duration3Estimated	Standard				
+821	0x0b400196	188744086	Duration4Estimated	Standard				
+822	0x0b400197	188744087	Duration5Estimated	Standard				
+823	0x0b400198	188744088	Duration6Estimated	Standard				
+824	0x0b400199	188744089	Duration7Estimated	Standard				
+825	0x0b40019a	188744090	Duration8Estimated	Standard				
+826	0x0b40019b	188744091	Duration9Estimated	Standard				
+827	0x0b40019c	188744092	Duration10Estimated	Standard				
+828	0x0b40019d	188744093	BaselineDurationEstimated	Standard				
+829	0x0b40019e	188744094		Standard				
+830	0x0b40019f	188744095		Standard				
+831	0x0b4001a0	188744096	OutlineCode1	Standard				
+832	0x0b4001a1	188744097		Standard				
+833	0x0b4001a2	188744098	OutlineCode2	Standard				
+834	0x0b4001a3	188744099		Standard				
+835	0x0b4001a4	188744100	OutlineCode3	Standard				
+836	0x0b4001a5	188744101		Standard				
+837	0x0b4001a6	188744102	OutlineCode4	Standard				
+838	0x0b4001a7	188744103		Standard				
+839	0x0b4001a8	188744104	OutlineCode5	Standard				
+840	0x0b4001a9	188744105		Standard				
+841	0x0b4001aa	188744106	OutlineCode6	Standard				
+842	0x0b4001ab	188744107		Standard				
+843	0x0b4001ac	188744108	OutlineCode7	Standard				
+844	0x0b4001ad	188744109		Standard				
+845	0x0b4001ae	188744110	OutlineCode8	Standard				
+846	0x0b4001af	188744111		Standard				
+847	0x0b4001b0	188744112	OutlineCode9	Standard				
+848	0x0b4001b1	188744113		Standard				
+849	0x0b4001b2	188744114	OutlineCode10	Standard				
+850	0x0b4001b3	188744115		Standard				
+851	0x0b4001b4	188744116		Standard				
+852	0x0b4001b5	188744117	Deadline	Standard				
+853	0x0b4001b6	188744118	StartSlack	Standard				
+854	0x0b4001b7	188744119	FinishSlack	Standard				
+855	0x0b4001b8	188744120		Standard				
+856	0x0b4001bd	188744125	TaskDependencies	Standard				
+857	0x0b4001be	188744126	GroupBySummary	Standard				
+858	0x0b4001bf	188744127		Standard				
+859	0x0b4001c0	188744128		Standard				
+860	0x0b4001c1	188744129	WBSPredecessors	Standard				
+861	0x0b4001c2	188744130	WBSSuccessors	Standard				
+862	0x0b4001c5	188744133		Standard				
+863	0x0b4001c7	188744135		Standard				
+864	0x0b4001c8	188744136		Standard				
+865	0x0b4001c9	188744137		Standard				
+866	0x0b4001ca	188744138		Standard				
+867	0x0b4001cb	188744139		Standard				
+868	0x0b4001cc	188744140		Standard				
+869	0x0b4001cd	188744141		Standard				
+870	0x0b4001ce	188744142		Standard				
+871	0x0b4001cf	188744143		Standard				
+872	0x0b4001d0	188744144		Standard				
+873	0x0b4001d1	188744145		Standard				
+874	0x0b4001d2	188744146		Standard				
+875	0x0b4001d3	188744147		Standard				
+876	0x0b4001d4	188744148		Standard				
+877	0x0b4001d5	188744149		Standard				
+878	0x0b4001d6	188744150		Standard				
+879	0x0b4001d7	188744151		Standard				
+880	0x0b4001d8	188744152		Standard				
+881	0x0b4001d9	188744153		Standard				
+882	0x0b4001da	188744154		Standard				
+883	0x0b4001db	188744155		Standard				
+884	0x0b4001dc	188744156		Standard				
+885	0x0b4001dd	188744157		Standard				
+886	0x0b4001de	188744158		Standard				
+887	0x0b4001df	188744159		Standard				
+888	0x0b4001e0	188744160	BaselineFixedCost	Standard				
+889	0x0b4001e7	188744167	Baseline1Duration	Standard				
+890	0x0b4001e8	188744168		Standard				
+891	0x0b4001e9	188744169	Baseline1FixedCost	Standard				
+892	0x0b4001f2	188744178	Baseline2Duration	Standard				
+893	0x0b4001f3	188744179		Standard				
+894	0x0b4001f4	188744180	Baseline2FixedCost	Standard				
+895	0x0b4001fd	188744189	Baseline3Duration	Standard				
+896	0x0b4001fe	188744190		Standard				
+897	0x0b4001ff	188744191	Baseline3FixedCost	Standard				
+898	0x0b400208	188744200	Baseline4Duration	Standard				
+899	0x0b400209	188744201		Standard				
+900	0x0b40020a	188744202	Baseline4FixedCost	Standard				
+901	0x0b400213	188744211	Baseline5Duration	Standard				
+902	0x0b400214	188744212		Standard				
+903	0x0b400215	188744213	Baseline5FixedCost	Standard				
+904	0x0b400219	188744217	CPI	Standard				
+905	0x0b40021a	188744218	SPI	Standard				
+906	0x0b40021b	188744219	CVPercent	Standard				
+907	0x0b40021c	188744220	SVPercent	Standard				
+908	0x0b40021d	188744221	EAC	Standard				
+909	0x0b40021e	188744222	TCPI	Standard				
+910	0x0b40021f	188744223	Status	Standard				
+911	0x0b400225	188744229	Baseline6Duration	Standard				
+912	0x0b400226	188744230		Standard				
+913	0x0b400227	188744231	Baseline6FixedCost	Standard				
+914	0x0b400230	188744240	Baseline7Duration	Standard				
+915	0x0b400231	188744241		Standard				
+916	0x0b400232	188744242	Baseline7FixedCost	Standard				
+917	0x0b40023b	188744251	Baseline8Duration	Standard				
+918	0x0b40023c	188744252		Standard				
+919	0x0b40023d	188744253	Baseline8FixedCost	Standard				
+920	0x0b400246	188744262	Baseline9Duration	Standard				
+921	0x0b400247	188744263		Standard				
+922	0x0b400248	188744264	Baseline9FixedCost	Standard				
+923	0x0b400251	188744273	Baseline10Duration	Standard				
+924	0x0b400252	188744274		Standard				
+925	0x0b400253	188744275	Baseline10FixedCost	Standard				
+926	0x0b4002a7	188744359		Standard				
+927	0x0b4002a8	188744360		Standard				
+928	0x0b4002a9	188744361		Standard				
+929	0x0b4002aa	188744362		Standard				
+930	0x0b4002ab	188744363		Standard				
+931	0x0b4002ac	188744364		Standard				
+932	0x0b4002ad	188744365		Standard				
+933	0x0b4002ae	188744366		Standard				
+934	0x0b4002af	188744367		Standard				
+935	0x0b4002b0	188744368		Standard				
+936	0x0b4002b1	188744369		Standard				
+937	0x0b4002b2	188744370		Standard				
+938	0x0b4002b3	188744371		Standard				
+939	0x0b4002b4	188744372		Standard				
+940	0x0b4002b5	188744373		Standard				
+941	0x0b4002b6	188744374		Standard				
+942	0x0b4002b7	188744375		Standard				
+943	0x0b4002b8	188744376		Standard				
+944	0x0b4002b9	188744377		Standard				
+945	0x0b4002ba	188744378		Standard				
+946	0x0b4002e3	188744419	EnterpriseOutlineCode1	Standard				
+947	0x0b4002e4	188744420		Standard				
+948	0x0b4002e5	188744421	EnterpriseOutlineCode2	Standard				
+949	0x0b4002e6	188744422		Standard				
+950	0x0b4002e7	188744423	EnterpriseOutlineCode3	Standard				
+951	0x0b4002e8	188744424		Standard				
+952	0x0b4002e9	188744425	EnterpriseOutlineCode4	Standard				
+953	0x0b4002ea	188744426		Standard				
+954	0x0b4002eb	188744427	EnterpriseOutlineCode5	Standard				
+955	0x0b4002ec	188744428		Standard				
+956	0x0b4002ed	188744429	EnterpriseOutlineCode6	Standard				
+957	0x0b4002ee	188744430		Standard				
+958	0x0b4002ef	188744431	EnterpriseOutlineCode7	Standard				
+959	0x0b4002f0	188744432		Standard				
+960	0x0b4002f1	188744433	EnterpriseOutlineCode8	Standard				
+961	0x0b4002f2	188744434		Standard				
+962	0x0b4002f3	188744435	EnterpriseOutlineCode9	Standard				
+963	0x0b4002f4	188744436		Standard				
+964	0x0b4002f5	188744437	EnterpriseOutlineCode10	Standard				
+965	0x0b4002f6	188744438		Standard				
+966	0x0b4002f7	188744439	EnterpriseOutlineCode11	Standard				
+967	0x0b4002f8	188744440		Standard				
+968	0x0b4002f9	188744441	EnterpriseOutlineCode12	Standard				
+969	0x0b4002fa	188744442		Standard				
+970	0x0b4002fb	188744443	EnterpriseOutlineCode13	Standard				
+971	0x0b4002fc	188744444		Standard				
+972	0x0b4002fd	188744445	EnterpriseOutlineCode14	Standard				
+973	0x0b4002fe	188744446		Standard				
+974	0x0b4002ff	188744447	EnterpriseOutlineCode15	Standard				
+975	0x0b400300	188744448		Standard				
+976	0x0b400301	188744449	EnterpriseOutlineCode16	Standard				
+977	0x0b400302	188744450		Standard				
+978	0x0b400303	188744451	EnterpriseOutlineCode17	Standard				
+979	0x0b400304	188744452		Standard				
+980	0x0b400305	188744453	EnterpriseOutlineCode18	Standard				
+981	0x0b400306	188744454		Standard				
+982	0x0b400307	188744455	EnterpriseOutlineCode19	Standard				
+983	0x0b400308	188744456		Standard				
+984	0x0b400309	188744457	EnterpriseOutlineCode20	Standard				
+985	0x0b40030a	188744458		Standard				
+986	0x0b40030b	188744459	EnterpriseOutlineCode21	Standard				
+987	0x0b40030c	188744460		Standard				
+988	0x0b40030d	188744461	EnterpriseOutlineCode22	Standard				
+989	0x0b40030e	188744462		Standard				
+990	0x0b40030f	188744463	EnterpriseOutlineCode23	Standard				
+991	0x0b400310	188744464		Standard				
+992	0x0b400311	188744465	EnterpriseOutlineCode24	Standard				
+993	0x0b400312	188744466		Standard				
+994	0x0b400313	188744467	EnterpriseOutlineCode25	Standard				
+995	0x0b400314	188744468		Standard				
+996	0x0b400315	188744469	EnterpriseOutlineCode26	Standard				
+997	0x0b400316	188744470		Standard				
+998	0x0b400317	188744471	EnterpriseOutlineCode27	Standard				
+999	0x0b400318	188744472		Standard				
+1000	0x0b400319	188744473	EnterpriseOutlineCode28	Standard				
+1001	0x0b40031a	188744474		Standard				
+1002	0x0b40031b	188744475	EnterpriseOutlineCode29	Standard				
+1003	0x0b40031c	188744476		Standard				
+1004	0x0b40031d	188744477	EnterpriseOutlineCode30	Standard				
+1005	0x0b40031e	188744478		Standard				
+1006	0x0b400347	188744519	Baseline1DurationEstimated	Standard				
+1007	0x0b400348	188744520	Baseline2DurationEstimated	Standard				
+1008	0x0b400349	188744521	Baseline3DurationEstimated	Standard				
+1009	0x0b40034a	188744522	Baseline4DurationEstimated	Standard				
+1010	0x0b40034b	188744523	Baseline5DurationEstimated	Standard				
+1011	0x0b40034c	188744524	Baseline6DurationEstimated	Standard				
+1012	0x0b40034d	188744525	Baseline7DurationEstimated	Standard				
+1013	0x0b40034e	188744526	Baseline8DurationEstimated	Standard				
+1014	0x0b40034f	188744527	Baseline9DurationEstimated	Standard				
+1015	0x0b400350	188744528	Baseline10DurationEstimated	Standard				
+1016	0x0b400351	188744529	EnterpriseProjectCost1	Standard				
+1017	0x0b400352	188744530	EnterpriseProjectCost2	Standard				
+1018	0x0b400353	188744531	EnterpriseProjectCost3	Standard				
+1019	0x0b400354	188744532	EnterpriseProjectCost4	Standard				
+1020	0x0b400355	188744533	EnterpriseProjectCost5	Standard				
+1021	0x0b400356	188744534	EnterpriseProjectCost6	Estimated				
+1022	0x0b400357	188744535	EnterpriseProjectCost7	Estimated				
+1023	0x0b400358	188744536	EnterpriseProjectCost8	Estimated				
+1024	0x0b400359	188744537	EnterpriseProjectCost9	Estimated				
+1025	0x0b40035a	188744538	EnterpriseProjectCost10	Estimated				
+1026	0x0b40035b	188744539	EnterpriseProjectDate1	Estimated				
+1027	0x0b40035c	188744540	EnterpriseProjectDate2	Estimated				
+1028	0x0b40035d	188744541	EnterpriseProjectDate3	Estimated				
+1029	0x0b40035e	188744542	EnterpriseProjectDate4	Estimated				
+1030	0x0b40035f	188744543	EnterpriseProjectDate5	Estimated				
+1031	0x0b400360	188744544	EnterpriseProjectDate6	Estimated				
+1032	0x0b400361	188744545	EnterpriseProjectDate7	Estimated				
+1033	0x0b400362	188744546	EnterpriseProjectDate8	Estimated				
+1034	0x0b400363	188744547	EnterpriseProjectDate9	Estimated				
+1035	0x0b400364	188744548	EnterpriseProjectDate10	Estimated				
+1036	0x0b400365	188744549	EnterpriseProjectDate11	Estimated				
+1037	0x0b400366	188744550	EnterpriseProjectDate12	Estimated				
+1038	0x0b400367	188744551	EnterpriseProjectDate13	Estimated				
+1039	0x0b400368	188744552	EnterpriseProjectDate14	Estimated				
+1040	0x0b400369	188744553	EnterpriseProjectDate15	Estimated				
+1041	0x0b40036a	188744554	EnterpriseProjectDate16	Estimated				
+1042	0x0b40036b	188744555	EnterpriseProjectDate17	Estimated				
+1043	0x0b40036c	188744556	EnterpriseProjectDate18	OutlineCodes				
+1044	0x0b40036d	188744557	EnterpriseProjectDate19	OutlineCodes				
+1045	0x0b40036e	188744558	EnterpriseProjectDate20	OutlineCodes				
+1046	0x0b40036f	188744559	EnterpriseProjectDate21	EnterpriseOC_1				
+1047	0x0b400370	188744560	EnterpriseProjectDate22	EnterpriseOC_1				
+1048	0x0b400371	188744561	EnterpriseProjectDate23	EnterpriseOC_1				
+1049	0x0b400372	188744562	EnterpriseProjectDate24	EnterpriseOC_1				
+1050	0x0b400373	188744563	EnterpriseProjectDate25	EnterpriseOC_1				
+1051	0x0b400374	188744564	EnterpriseProjectDate26	EnterpriseOC_1				
+1052	0x0b400375	188744565	EnterpriseProjectDate27	EnterpriseOC_1				
+1053	0x0b400376	188744566	EnterpriseProjectDate28	EnterpriseOC_1				
+1054	0x0b400377	188744567	EnterpriseProjectDate29	EnterpriseOC_1				
+1055	0x0b400378	188744568	EnterpriseProjectDate30	EnterpriseOC_1				
+1056	0x0b400379	188744569	EnterpriseProjectDuration1	EnterpriseOC_1				
+1057	0x0b40037a	188744570	EnterpriseProjectDuration2	EnterpriseOC_1				
+1058	0x0b40037b	188744571	EnterpriseProjectDuration3	EnterpriseOC_1				
+1059	0x0b40037c	188744572	EnterpriseProjectDuration4	EnterpriseOC_1				
+1060	0x0b40037d	188744573	EnterpriseProjectDuration5	EnterpriseOC_1				
+1061	0x0b40037e	188744574	EnterpriseProjectDuration6	EnterpriseOC_1				
+1062	0x0b40037f	188744575	EnterpriseProjectDuration7	EnterpriseOC_1				
+1063	0x0b400380	188744576	EnterpriseProjectDuration8	EnterpriseOC_1				
+1064	0x0b400381	188744577	EnterpriseProjectDuration9	EnterpriseOC_1				
+1065	0x0b400382	188744578	EnterpriseProjectDuration10	EnterpriseOC_1				
+1066	0x0b400383	188744579		EnterpriseOC_1				
+1067	0x0b400384	188744580		EnterpriseOC_1				
+1068	0x0b400385	188744581		EnterpriseOC_1				
+1069	0x0b400386	188744582		EnterpriseOC_2				
+1070	0x0b400387	188744583		EnterpriseOC_2				
+1071	0x0b400388	188744584		EnterpriseOC_2				
+1072	0x0b400389	188744585		EnterpriseOC_2				
+1073	0x0b40038a	188744586		EnterpriseOC_2				
+1074	0x0b40038b	188744587		EnterpriseOC_2				
+1075	0x0b40038c	188744588		EnterpriseOC_2				
+1076	0x0b40038d	188744589	EnterpriseProjectOutlineCode1	EnterpriseOC_2				
+1077	0x0b40038e	188744590	EnterpriseProjectOutlineCode2	EnterpriseOC_2				
+1078	0x0b40038f	188744591	EnterpriseProjectOutlineCode3	EnterpriseOC_2				
+1079	0x0b400390	188744592	EnterpriseProjectOutlineCode4	EnterpriseOC_2				
+1080	0x0b400391	188744593	EnterpriseProjectOutlineCode5	EnterpriseOC_2				
+1081	0x0b400392	188744594	EnterpriseProjectOutlineCode6	EnterpriseOC_2				
+1082	0x0b400393	188744595	EnterpriseProjectOutlineCode7	BaselineEst_1				
+1083	0x0b400394	188744596	EnterpriseProjectOutlineCode8	BaselineEst_1				
+1084	0x0b400395	188744597	EnterpriseProjectOutlineCode9	BaselineEst_2				
+1085	0x0b400396	188744598	EnterpriseProjectOutlineCode10	BaselineEst_2				
+1086	0x0b400397	188744599	EnterpriseProjectOutlineCode11	BaselineEst_2				
+1087	0x0b400398	188744600	EnterpriseProjectOutlineCode12	BaselineEst_2				
+1088	0x0b400399	188744601	EnterpriseProjectOutlineCode13	BaselineEst_2				
+1089	0x0b40039a	188744602	EnterpriseProjectOutlineCode14	BaselineEst_2				
+1090	0x0b40039b	188744603	EnterpriseProjectOutlineCode15	BaselineEst_2				
+1091	0x0b40039c	188744604	EnterpriseProjectOutlineCode16	BaselineEst_2				
+1092	0x0b40039d	188744605	EnterpriseProjectOutlineCode17	BaselineEst_2				
+1093	0x0b40039e	188744606	EnterpriseProjectOutlineCode18	BaselineEst_2				
+1094	0x0b40039f	188744607	EnterpriseProjectOutlineCode19	BaselineEst_2				
+1095	0x0b4003a0	188744608	EnterpriseProjectOutlineCode20	BaselineEst_2				
+1096	0x0b4003a1	188744609	EnterpriseProjectOutlineCode21	BaselineEst_2				
+1097	0x0b4003a2	188744610	EnterpriseProjectOutlineCode22	BaselineEst_2				
+1098	0x0b4003a3	188744611	EnterpriseProjectOutlineCode23	BaselineEst_2				
+1099	0x0b4003a4	188744612	EnterpriseProjectOutlineCode24	BaselineEst_2				
+1100	0x0b4003a5	188744613	EnterpriseProjectOutlineCode25	BaselineEst_2				
+1101	0x0b4003a6	188744614	EnterpriseProjectOutlineCode26	BaselineEst_2				
+1102	0x0b4003a7	188744615	EnterpriseProjectOutlineCode27	BaselineEst_2				
+1103	0x0b4003a8	188744616	EnterpriseProjectOutlineCode28	BaselineEst_2				
+1104	0x0b4003a9	188744617	EnterpriseProjectOutlineCode29	BaselineEst_2				
+1105	0x0b4003aa	188744618	EnterpriseProjectOutlineCode30	BaselineEst_2				
+1106	0x0b4003ab	188744619		BaselineEst_2				
+1107	0x0b4003ac	188744620		BaselineEst_2				
+1108	0x0b4003ad	188744621		BaselineEst_2				
+1109	0x0b4003ae	188744622		BaselineEst_2				
+1110	0x0b4003af	188744623		BaselineEst_2				
+1111	0x0b4003b0	188744624		BaselineEst_2				
+1112	0x0b4003b1	188744625		BaselineEst_2				
+1113	0x0b4003b2	188744626		BaselineEst_2				
+1114	0x0b4003b3	188744627		BaselineEst_2				
+1115	0x0b4003b4	188744628		BaselineEst_2				
+1116	0x0b4003b5	188744629		BaselineEst_2				
+1117	0x0b4003b6	188744630		BaselineEst_2				
+1118	0x0b4003b7	188744631		BaselineEst_2				
+1119	0x0b4003b8	188744632		BaselineEst_2				
+1120	0x0b4003b9	188744633		BaselineEst_2				
+1121	0x0b4003ba	188744634		BaselineEst_2				
+1122	0x0b4003bb	188744635		BaselineEst_2				
+1123	0x0b4003bc	188744636		BaselineEst_2				
+1124	0x0b4003bd	188744637		BaselineEst_2				
+1125	0x0b4003be	188744638		BaselineEst_2				
+1126	0x0b4003bf	188744639		BaselineEst_2				
+1127	0x0b4003c0	188744640		BaselineEst_2				
+1128	0x0b4003c1	188744641		BaselineEst_2				
+1129	0x0b4003c2	188744642		BaselineEst_2				
+1130	0x0b4003c3	188744643		BaselineEst_2				
+1131	0x0b4003c4	188744644		BaselineEst_2				
+1132	0x0b4003c5	188744645		BaselineEst_2				
+1133	0x0b4003c6	188744646		BaselineEst_2				
+1134	0x0b4003c7	188744647		Variance				
+1135	0x0b4003c8	188744648		Variance				
+1136	0x0b4003c9	188744649	EnterpriseProjectFlag1	Variance				
+1137	0x0b4003ca	188744650	EnterpriseProjectFlag2	Variance				
+1138	0x0b4003cb	188744651	EnterpriseProjectFlag3	Variance				
+1139	0x0b4003cc	188744652	EnterpriseProjectFlag4	Variance				
+1140	0x0b4003cd	188744653	EnterpriseProjectFlag5	Variance				
+1141	0x0b4003ce	188744654	EnterpriseProjectFlag6	Variance				
+1142	0x0b4003cf	188744655	EnterpriseProjectFlag7	Variance				
+1143	0x0b4003d0	188744656	EnterpriseProjectFlag8	Variance				
+1144	0x0b4003d1	188744657	EnterpriseProjectFlag9	Variance				
+1145	0x0b4003d2	188744658	EnterpriseProjectFlag10	Variance				
+1146	0x0b4003d3	188744659	EnterpriseProjectFlag11	Variance				
+1147	0x0b4003d4	188744660	EnterpriseProjectFlag12	Variance				
+1148	0x0b4003d5	188744661	EnterpriseProjectFlag13	Variance				
+1149	0x0b4003d6	188744662	EnterpriseProjectFlag14	Variance				
+1150	0x0b4003d7	188744663	EnterpriseProjectFlag15	Variance				
+1151	0x0b4003d8	188744664	EnterpriseProjectFlag16	Variance				
+1152	0x0b4003d9	188744665	EnterpriseProjectFlag17	Variance				
+1153	0x0b4003da	188744666	EnterpriseProjectFlag18	Variance				
+1154	0x0b4003db	188744667	EnterpriseProjectFlag19	Variance				
+1155	0x0b4003dc	188744668	EnterpriseProjectFlag20	Variance				
+1156	0x0b4003dd	188744669		Extended				
+1157	0x0b4003de	188744670		Extended				
+1158	0x0b4003df	188744671		Extended				
+1159	0x0b4003e0	188744672		Extended				
+1160	0x0b4003e1	188744673		Extended				
+1161	0x0b4003e2	188744674		Extended				
+1162	0x0b4003e3	188744675		Extended				
+1163	0x0b4003e4	188744676		Extended				
+1164	0x0b4003e5	188744677		Extended				
+1165	0x0b4003e6	188744678		Extended				
+1166	0x0b4003e7	188744679		Extended				
+1167	0x0b4003e8	188744680		Extended				
+1168	0x0b4003e9	188744681		Extended				
+1169	0x0b4003ea	188744682		Extended				
+1170	0x0b4003eb	188744683		Extended				
+1171	0x0b4003ec	188744684		Extended				
+1172	0x0b4003ed	188744685		Extended				
+1173	0x0b4003ee	188744686		Extended				
+1174	0x0b4003ef	188744687		Extended				
+1175	0x0b4003f0	188744688		Extended				
+1176	0x0b4003f1	188744689	EnterpriseProjectNumber1	Extended				
+1177	0x0b4003f2	188744690	EnterpriseProjectNumber2	Extended				
+1178	0x0b4003f3	188744691	EnterpriseProjectNumber3	Extended				
+1179	0x0b4003f4	188744692	EnterpriseProjectNumber4	Extended				
+1180	0x0b4003f5	188744693	EnterpriseProjectNumber5	Extended				
+1181	0x0b4003f6	188744694	EnterpriseProjectNumber6	Extended				
+1182	0x0b4003f7	188744695	EnterpriseProjectNumber7	Extended				
+1183	0x0b4003f8	188744696	EnterpriseProjectNumber8	Extended				
+1184	0x0b4003f9	188744697	EnterpriseProjectNumber9	Extended				
+1185	0x0b4003fa	188744698	EnterpriseProjectNumber10	Extended				
+1186	0x0b4003fb	188744699	EnterpriseProjectNumber11	Extended				
+1187	0x0b4003fc	188744700	EnterpriseProjectNumber12	Extended				
+1188	0x0b4003fd	188744701	EnterpriseProjectNumber13	Extended				
+1189	0x0b4003fe	188744702	EnterpriseProjectNumber14	Extended				
+1190	0x0b4003ff	188744703	EnterpriseProjectNumber15	Extended				
+1191	0x0b400400	188744704	EnterpriseProjectNumber16	Extended				
+1192	0x0b400401	188744705	EnterpriseProjectNumber17	Extended				
+1193	0x0b400402	188744706	EnterpriseProjectNumber18	Extended				
+1194	0x0b400403	188744707	EnterpriseProjectNumber19	Extended				
+1195	0x0b400404	188744708	EnterpriseProjectNumber20	Extended				
+1196	0x0b400405	188744709	EnterpriseProjectNumber21	Extended				
+1197	0x0b400406	188744710	EnterpriseProjectNumber22	Extended				
+1198	0x0b400407	188744711	EnterpriseProjectNumber23	Extended				
+1199	0x0b400408	188744712	EnterpriseProjectNumber24	Extended				
+1200	0x0b400409	188744713	EnterpriseProjectNumber25	Extended				
+1201	0x0b40040a	188744714	EnterpriseProjectNumber26	Extended				
+1202	0x0b40040b	188744715	EnterpriseProjectNumber27	Extended				
+1203	0x0b40040c	188744716	EnterpriseProjectNumber28	Extended				
+1204	0x0b40040d	188744717	EnterpriseProjectNumber29	Extended				
+1205	0x0b40040e	188744718	EnterpriseProjectNumber30	Extended				
+1206	0x0b40040f	188744719	EnterpriseProjectNumber31	Extended				
+1207	0x0b400410	188744720	EnterpriseProjectNumber32	Extended				
+1208	0x0b400411	188744721	EnterpriseProjectNumber33	Extended				
+1209	0x0b400412	188744722	EnterpriseProjectNumber34	Extended				
+1210	0x0b400413	188744723	EnterpriseProjectNumber35	Extended				
+1211	0x0b400414	188744724	EnterpriseProjectNumber36	Extended				
+1212	0x0b400415	188744725	EnterpriseProjectNumber37	Extended				
+1213	0x0b400416	188744726	EnterpriseProjectNumber38	Extended				
+1214	0x0b400417	188744727	EnterpriseProjectNumber39	Extended				
+1215	0x0b400418	188744728	EnterpriseProjectNumber40	Extended				
+1216	0x0b400419	188744729	EnterpriseProjectText1	Extended				
+1217	0x0b40041a	188744730	EnterpriseProjectText2	Extended				
+1218	0x0b40041b	188744731	EnterpriseProjectText3	Extended				
+1219	0x0b40041c	188744732	EnterpriseProjectText4	Extended				
+1220	0x0b40041d	188744733	EnterpriseProjectText5	Extended				
+1221	0x0b40041e	188744734	EnterpriseProjectText6	Extended				
+1222	0x0b40041f	188744735	EnterpriseProjectText7	Extended				
+1223	0x0b400420	188744736	EnterpriseProjectText8	Extended				
+1224	0x0b400421	188744737	EnterpriseProjectText9	Extended				
+1225	0x0b400422	188744738	EnterpriseProjectText10	Extended				
+1226	0x0b400423	188744739	EnterpriseProjectText11	Extended				
+1227	0x0b400424	188744740	EnterpriseProjectText12	Extended				
+1228	0x0b400425	188744741	EnterpriseProjectText13	Extended				
+1229	0x0b400426	188744742	EnterpriseProjectText14	Extended				
+1230	0x0b400427	188744743	EnterpriseProjectText15	Extended				
+1231	0x0b400428	188744744	EnterpriseProjectText16	Extended				
+1232	0x0b400429	188744745	EnterpriseProjectText17	Extended				
+1233	0x0b40042a	188744746	EnterpriseProjectText18	Extended				
+1234	0x0b40042b	188744747	EnterpriseProjectText19	Extended				
+1235	0x0b40042c	188744748	EnterpriseProjectText20	Extended				
+1236	0x0b40042d	188744749	EnterpriseProjectText21	Extended				
+1237	0x0b40042e	188744750	EnterpriseProjectText22	Extended				
+1238	0x0b40042f	188744751	EnterpriseProjectText23	Extended				
+1239	0x0b400430	188744752	EnterpriseProjectText24	Extended				
+1240	0x0b400431	188744753	EnterpriseProjectText25	Extended				
+1241	0x0b400432	188744754	EnterpriseProjectText26	Extended				
+1242	0x0b400433	188744755	EnterpriseProjectText27	Extended				
+1243	0x0b400434	188744756	EnterpriseProjectText28	Extended				
+1244	0x0b400435	188744757	EnterpriseProjectText29	Extended				
+1245	0x0b400436	188744758	EnterpriseProjectText30	Extended				
+1246	0x0b400437	188744759	EnterpriseProjectText31	Extended				
+1247	0x0b400438	188744760	EnterpriseProjectText32	Extended				
+1248	0x0b400439	188744761	EnterpriseProjectText33	Extended				
+1249	0x0b40043a	188744762	EnterpriseProjectText34	Extended				
+1250	0x0b40043b	188744763	EnterpriseProjectText35	Extended				
+1251	0x0b40043c	188744764	EnterpriseProjectText36	Extended				
+1252	0x0b40043d	188744765	EnterpriseProjectText37	Extended				
+1253	0x0b40043e	188744766	EnterpriseProjectText38	Extended				
+1254	0x0b40043f	188744767	EnterpriseProjectText39	Extended				
+1255	0x0b400440	188744768	EnterpriseProjectText40	Extended				
+1256	0x0b40045f	188744799	PhysicalPercentComplete	Extended				
+1257	0x0b400461	188744801		Extended				
+1258	0x0b400462	188744802	EarnedValueMethod	Extended				
+1259	0x0b400463	188744803		Extended				
+1260	0x0b400465	188744805		Extended				
+1261	0x0b400466	188744806		Extended				
+1262	0x0b400467	188744807		Extended				
+1263	0x0b400478	188744824	CalendarGuid	Extended				
+1264	0x0b400479	188744825		Extended				
+1265	0x0b40047a	188744826	DeliverableGuid	Extended				
+1266	0x0b40047b	188744827	DeliverableType	Extended				
+1267	0x0b40047c	188744828		Extended				
+1268	0x0b40047d	188744829		Extended				
+1269	0x0b40047e	188744830		Extended				
+1270	0x0b40047f	188744831		Extended				
+1271	0x0b400480	188744832	DeliverableStart	Extended				
+1272	0x0b400481	188744833	DeliverableFinish	Extended				
+1273	0x0b400482	188744834		Extended				
+1274	0x0b400483	188744835		Extended				
+1275	0x0b400484	188744836		Extended				
+1276	0x0b400485	188744837		Extended				
+1277	0x0b400486	188744838		Extended				
+1278	0x0b400487	188744839		Extended				
+1279	0x0b400488	188744840		Extended				
+1280	0x0b400489	188744841		Extended				
+1281	0x0b40048a	188744842		Extended				
+1282	0x0b40048b	188744843		Extended				
+1283	0x0b40048c	188744844		Extended				
+1284	0x0b40048d	188744845	IsPublished	Extended				
+1285	0x0b40048e	188744846	StatusManagerName	Extended				
+1286	0x0b40048f	188744847	ErrorMessage	Extended				
+1287	0x0b400490	188744848		Extended				
+1288	0x0b400491	188744849		Extended				
+1289	0x0b400495	188744853	BaselineFixedCostAccrual	Extended				
+1290	0x0b400496	188744854	BaselineDeliverableStart	Extended				
+1291	0x0b400497	188744855	BaselineDeliverableFinish	Extended				
+1292	0x0b40049c	188744860	Baseline1FixedCostAccrual	Extended				
+1293	0x0b40049d	188744861	Baseline1DeliverableStart	Extended				
+1294	0x0b40049e	188744862	Baseline1DeliverableFinish	Extended				
+1295	0x0b4004a3	188744867	Baseline2FixedCostAccrual	Extended				
+1296	0x0b4004a4	188744868	Baseline2DeliverableStart	Extended				
+1297	0x0b4004a5	188744869	Baseline2DeliverableFinish	Extended				
+1298	0x0b4004aa	188744874	Baseline3FixedCostAccrual	Extended				
+1299	0x0b4004ab	188744875	Baseline3DeliverableStart	Extended				
+1300	0x0b4004ac	188744876	Baseline3DeliverableFinish	Extended				
+1301	0x0b4004b1	188744881	Baseline4FixedCostAccrual	Extended				
+1302	0x0b4004b2	188744882	Baseline4DeliverableStart	Extended				
+1303	0x0b4004b3	188744883	Baseline4DeliverableFinish	Extended				
+1304	0x0b4004b8	188744888	Baseline5FixedCostAccrual	Extended				
+1305	0x0b4004b9	188744889	Baseline5DeliverableStart	Extended				
+1306	0x0b4004ba	188744890	Baseline5DeliverableFinish	Extended				
+1307	0x0b4004bf	188744895	Baseline6FixedCostAccrual	Extended				
+1308	0x0b4004c0	188744896	Baseline6DeliverableStart	Extended				
+1309	0x0b4004c1	188744897	Baseline6DeliverableFinish	Extended				
+1310	0x0b4004c6	188744902	Baseline7FixedCostAccrual	Extended				
+1311	0x0b4004c7	188744903	Baseline7DeliverableStart	Extended				
+1312	0x0b4004c8	188744904	Baseline7DeliverableFinish	Extended				
+1313	0x0b4004cd	188744909	Baseline8FixedCostAccrual	Extended				
+1314	0x0b4004ce	188744910	Baseline8DeliverableStart	Extended				
+1315	0x0b4004cf	188744911	Baseline8DeliverableFinish	Extended				
+1316	0x0b4004d4	188744916	Baseline9FixedCostAccrual	Extended				
+1317	0x0b4004d5	188744917	Baseline9DeliverableStart	Extended				
+1318	0x0b4004d6	188744918	Baseline9DeliverableFinish	Extended				
+1319	0x0b4004db	188744923	Baseline10FixedCostAccrual	Extended				
+1320	0x0b4004dc	188744924	Baseline10DeliverableStart	Extended				
+1321	0x0b4004dd	188744925	Baseline10DeliverableFinish	Extended				
+1322	0x0b4004e2	188744930	RecalcFlags	Extended				
+1323	0x0b4004e3	188744931		Extended				
+1324	0x0b4004e4	188744932		Extended				
+1325	0x0b4004e5	188744933		Extended				
+1326	0x0b4004e6	188744934	StartDriver	Extended				
+1327	0x0b4004e7	188744935		Extended				
+1328	0x0b4004e8	188744936		Extended				
+1329	0x0b4004e9	188744937		Extended				
+1330	0x0b4004ea	188744938		Extended				
+1331	0x0b4004eb	188744939		Extended				
+1332	0x0b4004ec	188744940		Extended				
+1333	0x0b4004ed	188744941		Extended				
+1334	0x0b4004ee	188744942		Extended				
+1335	0x0b4004ef	188744943		Extended				
+1336	0x0b4004f0	188744944		Extended				
+1337	0x0b4004f1	188744945		Extended				
+1338	0x0b4004f2	188744946		Extended				
+1339	0x0b4004f3	188744947		Extended				
+1340	0x0b4004f4	188744948		Extended				
+1341	0x0b4004f5	188744949		Extended				
+1342	0x0b4004f6	188744950		Extended				
+1343	0x0b4004f7	188744951		Extended				
+1344	0x0b4004f8	188744952		Extended				
+1345	0x0b4004f9	188744953		Extended				
+1346	0x0b4004fa	188744954		Extended				
+1347	0x0b4004fb	188744955		Extended				
+1348	0x0b4004fc	188744956	DeliverableName	Extended				
+1349	0x0b4004fd	188744957		Extended				
+1350	0x0b4004fe	188744958		Extended				
+1351	0x0b400502	188744962	Warning	Extended				
+1352	0x0b400507	188744967	DurationText	Extended				
+1353	0x0b400508	188744968		Extended				
+1354	0x0b400509	188744969		Extended				
+1355	0x0b40050a	188744970		Extended				
+1356	0x0b40050b	188744971		Extended				
+1357	0x0b40050c	188744972		Extended				
+1358	0x0b40050d	188744973		Extended				
+1359	0x0b40050e	188744974		Extended				
+1360	0x0b40050f	188744975	IsStartValid	Extended				
+1361	0x0b400510	188744976	IsFinishValid	Extended				
+1362	0x0b400511	188744977	IsDurationValid	Extended				
+1363	0x0b400512	188744978		Extended				
+1364	0x0b400515	188744981	BaselineDurationText	Extended				
+1365	0x0b400518	188744984	Baseline1DurationText	Extended				
+1366	0x0b40051b	188744987	Baseline2DurationText	Extended				
+1367	0x0b40051e	188744990	Baseline3DurationText	Extended				
+1368	0x0b400521	188744993	Baseline4DurationText	Extended				
+1369	0x0b400524	188744996	Baseline5DurationText	Extended				
+1370	0x0b400527	188744999	Baseline6DurationText	Extended				
+1371	0x0b40052a	188745002	Baseline7DurationText	Extended				
+1372	0x0b40052d	188745005	Baseline8DurationText	Extended				
+1373	0x0b400530	188745008	Baseline9DurationText	Extended				
+1374	0x0b400533	188745011	Baseline10DurationText	Extended				
+1375	0x0b400534	188745012	IgnoreWarnings	Extended				
+1376	0x0b400535	188745013		Extended				
+1377	0x0b400536	188745014	CalendarObject	Extended				
+1378	0x0b400538	188745016		Extended				
+1379	0x0b400539	188745017		Extended				
+1380	0x0b40053a	188745018	ScheduledStart	Extended				
+1381	0x0b40053b	188745019	ScheduledFinish	Extended				
+1382	0x0b40053c	188745020	ScheduledDuration	Extended				
+1383	0x0b400540	188745024		Extended				
+1384	0x0b400541	188745025		Extended				
+1385	0x0b400563	188745059		Extended				
+1386	0x0b400564	188745060		Extended				
+1387	0x0b400565	188745061	PathDrivingPredecessor	Extended				
+1388	0x0b400566	188745062	PathPredecessor	Extended				
+1389	0x0b400567	188745063	PathDrivenSuccessor	Extended				
+1390	0x0b400568	188745064	PathSuccessor	Extended				
+1391	0x0b400569	188745065		Extended				
+1392	0x0b40056a	188745066		Extended				
+1393	0x0b40056b	188745067		Extended				
+1394	0x0b40056c	188745068		Extended				
+1395	0x0b40056d	188745069		Extended				
+1396	0x0b40056e	188745070		Extended				
+1397	0x0b40056f	188745071		Extended				
+1398	0x0b400570	188745072		Extended				
+1399	0x0b400571	188745073		Extended				
+1400	0x0b400572	188745074		Extended				
+1401	0x0b400573	188745075		Extended				
+1402	0x0b400574	188745076		Extended				
+1403	0x0b400575	188745077		Extended				
+1404	0x0b400576	188745078		Extended				
+1405	0x0b400577	188745079		Extended				
+1406	0x0b400578	188745080		Extended				
+1407	0x0b400579	188745081		Extended				
+1408	0x0b40057a	188745082		Extended				
+1409	0x0b40057b	188745083		Extended				
+1410	0x0b40057d	188745085	SummaryTaskName	Extended				
+1411	0x0b40057e	188745086		Extended				
+1412	0x0b400584	188745092	BoardColumnUid	Extended				
+1413	0x0b400585	188745093	SprintUid	Extended				
+1414	0x0b400586	188745094	BoardStatusColumnOrderingID	Extended				
+1415	0x0b400587	188745095	SprintColumnOrderingID	Extended				
+1416	0x0b400588	188745096	NextAvailableBoardStatusColumnOrderingID	Extended				
+1417	0x0b400589	188745097	NextAvailableSprintColumnOrderingID	Extended				
+1418	0x0b40058a	188745098		Extended				
+1419	0x0b40058b	188745099		Extended				
+1420	0x0b40058c	188745100	Count	Extended				
+1421	0x0b40058d	188745101	BoardColumnId	Extended				
+1422	0x0b40058e	188745102		Extended				
+1423	0x0b40058f	188745103		Extended				
+1424	0x0b400590	188745104		Extended				
+1425	0x0b400591	188745105		Extended				
+1426	0x0b400592	188745106		Extended				
+1427	0x0b400593	188745107		Extended				
+1428	0x0b400594	188745108		Extended				
+1429	0x0b400595	188745109		Extended				
+1430	0x0b400596	188745110		Extended				
+1431	0x0b400597	188745111		Extended				
+1432	0x0b400598	188745112		Extended				
+1433	0x0b400599	188745113		Extended				
+1434	0x0b40059a	188745114		Extended				
+1435	0x0b40059b	188745115		Extended				
+1436	0x0b40059c	188745116		Extended				
+1437	0x0b40059d	188745117		Extended				
+1438	0x0b40059e	188745118		Extended				
+1439	0x0b40059f	188745119		Extended				
+1440	0x0b4005a0	188745120		Extended				
+1441	0x0b4005a1	188745121		Extended				
+1442	0x0b4005a2	188745122		Extended				
+1443	0x0b4005a3	188745123		Extended				

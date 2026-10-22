@@ -1,0 +1,13 @@
+#pragma once
+
+// Configured by CMakeLists.txt.  Raw string literals avoid quoting issues with
+// spaces and backslashes in the source path.
+#define CORE_FIELD_METADATA_TSV R"core_test_tsv(@CORE_METADATA_TSV@)core_test_tsv"
+#define CORE_FIELD_DEFINITIVE_TSV R"core_test_tsv(@CORE_DEFINITIVE_TSV@)core_test_tsv"
+
+// The committed test data: the golden TSVs and the one synthetic .mpp fixture
+// (synthetic-base.mpp).  PROJECT_SOURCE_DIR rather than CMAKE_CURRENT_SOURCE_DIR
+// so the value is the repository root whoever includes this file.  A test that
+// needs an absolute data path should prefer this over the working directory,
+// which differs between ctest, a direct run and an IDE.
+#define TEST_DATA_DIR R"core_test_tsv(@PROJECT_SOURCE_DIR@/tests/data)core_test_tsv"

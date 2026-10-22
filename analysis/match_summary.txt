@@ -1,0 +1,243 @@
+MS Project (WINPROJ.EXE) Type Library → Binary Analysis
+============================================================
+
+Total functions:        55,978
+Unnamed (FUN_*):        52,247 (93.3%)
+Already named:          3,731
+
+Typelib interfaces:     97
+Typelib dispatches:     14
+Typelib methods:        4609
+Typelib enum types:     183
+Typelib enum values:    5884
+
+Binary vtable classes:  2,060
+Binary vtable entries:  89,486
+Unique funcs in vtbls:  18,694
+
+Matching Results
+----------------------------------------
+Interfaces matched:     98 of 111
+Functions named (COM):  4,113 (4,108 were unnamed)
+Functions named (RTTI): 13,100
+Total functions named:  17,213
+Coverage:               30.7% of all functions
+
+Module Map
+----------------------------------------
+Functions with module:  53,062 of 55,978
+Distinct modules:       56
+
+Module breakdown:
+  scheduling.tasks                         11,259 ( 20.1%)
+  backend.core                             10,542 ( 18.8%)
+  scheduling.resources                      9,287 ( 16.6%)
+  backend.serialization                     6,484 ( 11.6%)
+  ui.drawing.oart                           3,879 (  6.9%)
+  unknown                                   2,916 (  5.2%)
+  scheduling.assignments                    1,875 (  3.3%)
+  ui.ribbon                                 1,676 (  3.0%)
+  print                                     1,285 (  2.3%)
+  com.dispatch                              1,114 (  2.0%)
+  ui.windows                                1,099 (  2.0%)
+  scheduling.calendar                         507 (  0.9%)
+  backend.server                              374 (  0.7%)
+  document.core                               363 (  0.6%)
+  ui.timeline                                 320 (  0.6%)
+  ui.drawing                                  306 (  0.5%)
+  collab.engagements                          247 (  0.4%)
+  ui.reports                                  244 (  0.4%)
+  io.xml                                      208 (  0.4%)
+  vba.macro                                   200 (  0.4%)
+  web.psi                                     196 (  0.4%)
+  data.filter                                 178 (  0.3%)
+  com.application                             166 (  0.3%)
+  ui.dialogs                                  138 (  0.2%)
+  ui.charts                                   134 (  0.2%)
+  ui.autofilter                               109 (  0.2%)
+  com.core                                    108 (  0.2%)
+  ui.gantt                                    102 (  0.2%)
+  backend.storage                              97 (  0.2%)
+  scheduling.custom_fields                     74 (  0.1%)
+  infrastructure.cache                         69 (  0.1%)
+  ui.sheet                                     55 (  0.1%)
+  scheduling.resource_pool                     49 (  0.1%)
+  com.factories                                47 (  0.1%)
+  data.group                                   39 (  0.1%)
+  io.edl                                       34 (  0.1%)
+  com.enumerators                              34 (  0.1%)
+  interprocess.dde                             23 (  0.0%)
+  scheduling.outline_codes                     21 (  0.0%)
+  scheduling.baselines                         16 (  0.0%)
+  ui.animation                                 14 (  0.0%)
+  com.events                                   14 (  0.0%)
+  collab.conflicts                             13 (  0.0%)
+  scheduling.work_time                         12 (  0.0%)
+  ui.bars                                      11 (  0.0%)
+  io.clipboard                                 10 (  0.0%)
+  util.field                                    7 (  0.0%)
+  backend.tables                                6 (  0.0%)
+  ui.toolbars                                   5 (  0.0%)
+  infrastructure.logging                        2 (  0.0%)
+  ui.combos                                     2 (  0.0%)
+  scheduling.subprojects                        2 (  0.0%)
+  util.bondi                                    2 (  0.0%)
+  vba.addins                                    2 (  0.0%)
+  io.import_export                              1 (  0.0%)
+  infrastructure.recovery                       1 (  0.0%)
+
+
+Matched Interfaces (by confidence)
+------------------------------------------------------------
+  Projects                            → CDocsDisp                                [special] conf=95 methods=1
+  Window                              → CDocFrm                                  [special] conf=95 methods=1
+  _EProjectApp                        → CAppDisp                                 [special] conf=95 methods=1
+  _EProjectApp2                       → CAppDisp                                 [special] conf=95 methods=1
+  _EProjectDoc                        → CDocDisp                                 [special] conf=95 methods=1
+  _Global                             → CAppDisp                                 [special] conf=95 methods=1
+  _IProjectDoc                        → CDocDisp                                 [special] conf=95 methods=1
+  _MSProject                          → CAppDisp                                 [special] conf=95 methods=1
+  ActualStartDrivers                  → TBkndStartDriversDispatch                [IBkndDispatch] conf=92 methods=6
+  Assignment                          → IBkndAssnDispatch                        [IBkndDispatch] conf=92 methods=881
+  Assignments                         → IBkndAssnsDispatch                       [IBkndDispatch] conf=92 methods=7
+  Availabilities                      → TRscUnitsAvailabilitiesDispatch          [IBkndDispatch] conf=92 methods=6
+  Availability                        → TRscUnitsAvailabilityDispatch            [IBkndDispatch] conf=92 methods=10
+  Calendar                            → IBkndCalDispatch                         [IBkndDispatch] conf=92 methods=16
+  CalendarDrivers                     → TBkndStartDriversDispatch                [IBkndDispatch] conf=92 methods=6
+  Calendars                           → IBkndCalsDispatch                        [IBkndDispatch] conf=92 methods=5
+  ChildDrivers                        → TBkndStartDriversDispatch                [IBkndDispatch] conf=92 methods=6
+  CostRateTable                       → TRscCostRateTableDispatch                [IBkndDispatch] conf=92 methods=5
+  CostRateTables                      → TRscCostRateTablesDispatch               [IBkndDispatch] conf=92 methods=5
+  Day                                 → TBkndDayDispatch                         [IBkndDispatch] conf=92 methods=14
+  Days                                → TBkndDaysDispatch                        [IBkndDispatch] conf=92 methods=5
+  Engagement                          → IBkndEgmtDispatch                        [IBkndDispatch] conf=92 methods=61
+  Engagements                         → IBkndEgmtsDispatch                       [IBkndDispatch] conf=92 methods=7
+  Exception                           → TBkndExceptionDispatch                   [IBkndDispatch] conf=92 methods=31
+  Exceptions                          → TBkndExceptionsDispatch                  [IBkndDispatch] conf=92 methods=6
+  Issue                               → IBkndIssueDispatch                       [IBkndDispatch] conf=92 methods=36
+  Issues                              → IBkndIssuesDispatch                      [IBkndDispatch] conf=92 methods=7
+  Month                               → TBkndMonthDispatch                       [IBkndDispatch] conf=92 methods=15
+  Months                              → TBkndMonthsDispatch                      [IBkndDispatch] conf=92 methods=5
+  OverAllocatedAssignments            → IBkndAssnsDispatch                       [IBkndDispatch] conf=92 methods=6
+  PayRate                             → TRscPayRateDispatch                      [IBkndDispatch] conf=92 methods=11
+  PayRates                            → TRscPayRatesDispatch                     [IBkndDispatch] conf=92 methods=6
+  Period                              → TBkndPeriodDispatch                      [IBkndDispatch] conf=92 methods=12
+  PredecessorDrivers                  → TBkndStartDriversDispatch                [IBkndDispatch] conf=92 methods=6
+  Resource                            → IBkndRscDispatch                         [IBkndDispatch] conf=92 methods=879
+  Resources                           → IBkndSetsDispatch                        [IBkndDispatch] conf=92 methods=7
+  Risk                                → IBkndRiskDispatch                        [IBkndDispatch] conf=92 methods=40
+  Risks                               → IBkndRisksDispatch                       [IBkndDispatch] conf=92 methods=7
+  Shift                               → TBkndShiftDispatch                       [IBkndDispatch] conf=92 methods=8
+  SplitPart                           → IBkndTaskOnePartDispatch                 [IBkndDispatch] conf=92 methods=8
+  SplitParts                          → IBkndTaskPartsDispatch                   [IBkndDispatch] conf=92 methods=6
+  StartDriver                         → TBkndStartDriverDispatch                 [IBkndDispatch] conf=92 methods=12
+  Task                                → IBkndTaskDispatch                        [IBkndDispatch] conf=92 methods=1602
+  TaskDependencies                    → TBkndTaskDependenciesDispatch            [IBkndDispatch] conf=92 methods=6
+  TaskDependency                      → TBkndTaskDependencyDispatch              [IBkndDispatch] conf=92 methods=13
+  Tasks                               → IBkndSetsDispatch                        [IBkndDispatch] conf=92 methods=7
+  TimeScaleValue                      → TBkndTSValueDispatch                     [IBkndDispatch] conf=92 methods=9
+  TimeScaleValues                     → TBkndTSValuesDispatch                    [IBkndDispatch] conf=92 methods=6
+  WeekDay                             → TBkndWeekDayDispatch                     [IBkndDispatch] conf=92 methods=14
+  WeekDays                            → TBkndWeekDaysDispatch                    [IBkndDispatch] conf=92 methods=5
+  WorkWeek                            → TBkndWorkWeekDispatch                    [IBkndDispatch] conf=92 methods=11
+  WorkWeekDay                         → TBkndWorkWeekDayDispatch                 [IBkndDispatch] conf=92 methods=14
+  WorkWeekDays                        → TBkndWorkWeekDaysDispatch                [IBkndDispatch] conf=92 methods=5
+  WorkWeeks                           → TBkndWorkWeeksDispatch                   [IBkndDispatch] conf=92 methods=6
+  Year                                → TBkndYearDispatch                        [IBkndDispatch] conf=92 methods=15
+  Years                               → TBkndYearsDispatch                       [IBkndDispatch] conf=92 methods=5
+  Cell                                → CCellDisp                                [CDisp] conf=90 methods=1
+  Pane                                → CPaneDisp                                [CDisp] conf=90 methods=1
+  Chart                               → CGenericUnknownWrap<CChartDisp,IMsoChart*___ptr64,IChartDisp> [GenericWrap] conf=85 methods=129
+  CodeMask                            → CGenericUnknownWrap<CCodeMaskDisp,CCodeMaskDisp::CodeMaskParams,ICodeMaskDisp> [GenericWrap] conf=85 methods=6
+  CodeMaskLevel                       → CGenericUnknownWrap<CCodeMaskLevelDisp,CCodeMaskLevelDisp::CodeMaskLevelParams,ICodeMaskLevelDisp> [GenericWrap] conf=85 methods=11
+  EngagementComment                   → CGenericUnknownWrap<CEngagementCommentDisp,CEngagementCommentDisp::EngagementCommentParams,IEngagementCommentDisp> [GenericWrap] conf=85 methods=9
+  EngagementComments                  → CGenericUnknownWrap<CEngagementCommentsDisp,CEngagementCommentsDisp::EngagementCommentsParams,IEngagementCommentsDisp> [GenericWrap] conf=85 methods=6
+  Filter                              → CGenericUnknownWrap<CFilterDisp,TUIElemDispatchInfo,IFilterDisp> [GenericWrap] conf=85 methods=12
+  Filters                             → CGenericUnknownWrap<CFiltersDisp,CTUITableDispInfo,IFiltersDisp> [GenericWrap] conf=85 methods=6
+  LookupTable                         → CGenericUnknownWrap<CLookupTableDisp,CLookupTableDisp::LookupTableParams,ILookupTableDisp> [GenericWrap] conf=85 methods=6
+  LookupTableEntry                    → CGenericUnknownWrap<CLookupTableEntryDisp,CLookupTableEntryDisp::LookupTableEntryParams,ILookupTableEntryDisp> [GenericWrap] conf=85 methods=16
+  OutlineCode                         → CGenericUnknownWrap<COutlineCodeDisp,COutlineCodeDisp::OutlineCodeParams,IOutlineCodeDisp> [GenericWrap] conf=85 methods=25
+  OutlineCodes                        → CGenericUnknownWrap<COutlineCodesDisp,CDocument*___ptr64,IOutlineCodesDisp> [GenericWrap] conf=85 methods=6
+  Profile                             → CGenericUnknownWrap<CProfileDisp,CProfileDisp::ProfileParams,IProfileDisp> [GenericWrap] conf=85 methods=12
+  Profiles                            → CGenericUnknownWrap<CProfilesDisp,CProfilesConstructorDisp,IProfilesDisp> [GenericWrap] conf=85 methods=7
+  Report                              → CGenericUnknownWrap<CTUITableEnum<CReportDisp,IReportDisp>,TUITableEnumInfo,IEnumVARIANT> [GenericWrap] conf=85 methods=8
+  ReportTable                         → CGenericUnknownWrap<CReportTableDisp,Shape*___ptr64,IReportTableDisp> [GenericWrap] conf=85 methods=4
+  ReportTemplate                      → CGenericUnknownWrap<CReportTemplateDisp,CReportTemplateDisp::ReportTemplateParams,IReportTemplateDisp> [GenericWrap] conf=85 methods=3
+  ReportTemplates                     → CGenericUnknownWrap<CReportTemplatesDisp,CReportTemplatesConstructorDisp*___ptr64,IReportTemplatesDisp> [GenericWrap] conf=85 methods=3
+  Reports                             → CGenericUnknownWrap<CReportsDisp,CTUITableDispInfo,IReportsDisp> [GenericWrap] conf=85 methods=8
+  Series                              → CGenericUnknownWrap<CSeriesDisp,IMsoSeries*___ptr64,ISeriesDisp> [GenericWrap] conf=85 methods=5
+  SeriesCollection                    → CGenericUnknownWrap<CSeriesCollectionDisp,SeriesCollection*___ptr64,ISeriesCollectionDisp> [GenericWrap] conf=85 methods=7
+  Shape                               → CGenericUnknownWrap<CShapeDisp,Shape*___ptr64,IShapeDisp> [GenericWrap] conf=85 methods=84
+  ShapeRange                          → CGenericUnknownWrap<CShapeRangeDisp,ShapeRange*___ptr64,IShapeRangeDisp> [GenericWrap] conf=85 methods=93
+  Shapes                              → CGenericUnknownWrap<CShapesDisp,Shapes*___ptr64,IShapesDisp> [GenericWrap] conf=85 methods=22
+  Table                               → CGenericUnknownWrap<CViewsDisp<IViewsDisp,IViewDisp>,CTUITableDispInfo,IViewsDisp> [GenericWrap] conf=85 methods=19
+  TableField                          → CGenericUnknownWrap<CTableFieldDisp,CTableFieldDispInfo*___ptr64,ITableFieldDisp> [GenericWrap] conf=85 methods=16
+  TableFields                         → CGenericUnknownWrap<CTableFieldsDisp,CTableDisp*___ptr64,ITableFieldsDisp> [GenericWrap] conf=85 methods=6
+  Tables                              → CGenericUnknownWrap<CTablesDisp,CTUITableDispInfo,ITablesDisp> [GenericWrap] conf=85 methods=7
+  Timeline                            → CGenericUnknownWrap<CTimelineDisp,void*___ptr64,ITimelineDisp> [GenericWrap] conf=85 methods=7
+  View                                → CGenericUnknownWrap<CViewsDisp<IViewsDisp,IViewDisp>,CTUITableDispInfo,IViewsDisp> [GenericWrap] conf=85 methods=12
+  ViewCombination                     → CGenericUnknownWrap<CViewDisp,TUIElemDispatchInfo,IViewCombinationDisp> [GenericWrap] conf=85 methods=4
+  ViewSingle                          → CGenericUnknownWrap<CViewDisp,TUIElemDispatchInfo,IViewSingleDisp> [GenericWrap] conf=85 methods=8
+  Views                               → CGenericUnknownWrap<CViewsDisp<IViewsDisp,IViewDisp>,CTUITableDispInfo,IViewsDisp> [GenericWrap] conf=85 methods=6
+  ViewsCombination                    → CGenericUnknownWrap<CViewsCombinationDisp,CTUITableDispInfo,IViewsCombinationDisp> [GenericWrap] conf=85 methods=1
+  ViewsSingle                         → CGenericUnknownWrap<CViewsSingleDisp,CTUITableDispInfo,IViewsSingleDisp> [GenericWrap] conf=85 methods=1
+  Group                               → CGenericUnknownWrap<CGroupCriteriaDisp,GroupCriteriaDispInfo,CGroupCriteriaDisp> [GenericWrap_name] conf=82 methods=12
+  GroupCriteria                       → CGenericUnknownWrap<CGroupCriteriaDisp,GroupCriteriaDispInfo,CGroupCriteriaDisp> [GenericWrap_name] conf=82 methods=6
+  GroupCriterion                      → CGenericUnknownWrap<CGroupCriterionDisp,GroupCriterionDispInfo,CGroupCriterionDisp> [GenericWrap_name] conf=82 methods=32
+  Groups                              → CGenericUnknownWrap<CTaskGroupsDisp,CDocument*___ptr64,CTaskGroupsDisp> [GenericWrap_name] conf=82 methods=7
+  ResourceGroups                      → CGenericUnknownWrap<CResourceGroupsDisp,CDocument*___ptr64,CResourceGroupsDisp> [GenericWrap_name] conf=82 methods=7
+  TaskGroups                          → CGenericUnknownWrap<CTaskGroupsDisp,CDocument*___ptr64,CTaskGroupsDisp> [GenericWrap_name] conf=82 methods=7
+
+
+Top 50 classes by vtable size
+------------------------------------------------------------
+  IBkndTaskDispatch                                            1609 slots @ 1410c0248 [implements Task]
+  IBkndAssnDispatch                                             888 slots @ 1410b4300 [implements Assignment]
+  IBkndRscDispatch                                              886 slots @ 1410b24d0 [implements Resource]
+  CVBADB                                                        436 slots @ 14106fe20
+  CSimpleVbaDB                                                  433 slots @ 141072730
+  CCustomFieldDB                                                433 slots @ 1410734e8
+  CRoundTripVbaDB                                               433 slots @ 14107e288
+  CViewDB                                                       431 slots @ 1410742a0
+  CReportDB                                                     431 slots @ 141075048
+  TUITable                                                      430 slots @ 141070bf0
+  CTableDB                                                      430 slots @ 141071990
+  CMapDB                                                        430 slots @ 141075df0
+  CGroupingDB                                                   430 slots @ 141076b90
+  CFilterDB                                                     430 slots @ 141077930
+  CDrawingDB                                                    430 slots @ 1410786d0
+  CCalDB                                                        430 slots @ 141079470
+  CEDLDB                                                        430 slots @ 14107ac90
+  TTaskTable                                                    428 slots @ 141048648
+  ProjectBase                                                   418 slots @ 14104c458
+  CDocument                                                     418 slots @ 141059568
+  TOutlCodeTable                                                417 slots @ 141029080
+  TOutlTable                                                    416 slots @ 141028350
+  TRscTable                                                     401 slots @ 14102eeb0
+  Global                                                        398 slots @ 141059608
+  TAssnTable                                                    389 slots @ 141038b08
+  TAssnTableSharer                                              389 slots @ 14103eb58
+  TObjTable                                                     387 slots @ 14103df10
+  TCalTable                                                     382 slots @ 14102e290
+  TLabelAssociationTable                                        382 slots @ 1410311c8
+  TSimpleContainer<LabelAssociationContainerDetails>            382 slots @ 141031de8
+  TConversationTable                                            382 slots @ 141032a08
+  TSimpleContainer<ConversationContainerDetails>                382 slots @ 141033628
+  TChecklistItemTable                                           382 slots @ 141034248
+  TSimpleContainer<ChecklistItemContainerDetails>               382 slots @ 141034e68
+  TAttachmentTable                                              382 slots @ 141035a88
+  TSimpleContainer<AttachmentContainerDetails>                  382 slots @ 1410366a8
+  TRiskTable                                                    382 slots @ 1410372c8
+  TIssueTable                                                   382 slots @ 141037ee8
+  TSimpleContainer<LabelContainerDetails>                       382 slots @ 141039760
+  TLabelTable                                                   382 slots @ 14103a380
+  TSprintTable                                                  382 slots @ 14103afa0
+  TBoardColumnTable                                             382 slots @ 14103bbc0
+  TConsTable                                                    382 slots @ 14103c7e0
+  TTable                                                        382 slots @ 1410405b0
+  TEgmtTable                                                    382 slots @ 141041ce8
+  TSummaryTable                                                 382 slots @ 141043418
+  TBaselineMetadataTable                                        382 slots @ 1410493d8
+  TSimpleContainer<BaselineMetadataContainerDetails>            382 slots @ 141049ff8
+  TSimpleContainer<GoalAssociationContainerDetails>             382 slots @ 14104ac18
+  TSimpleContainer<GoalContainerDetails>                        382 slots @ 14104b838

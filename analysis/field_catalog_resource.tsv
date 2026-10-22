@@ -1,0 +1,884 @@
+index	field_id_hex	field_id_dec	property_name	category	static_type	static_offset	static_size	static_flags
+0	0x0c400000	205520896	ID	Standard	3	0x25	4	0x20
+1	0x0c400002	205520898	Initials	Standard				
+2	0x0c400003	205520899	Group	Standard				
+3	0x0c400004	205520900	MaxUnits	Standard				
+4	0x0c400005	205520901	BaseCalendar	Standard				
+5	0x0c400006	205520902	StandardRate	Standard				
+6	0x0c400007	205520903	OvertimeRate	Standard				
+7	0x0c400008	205520904	Text1	Standard				
+8	0x0c400009	205520905	Text2	Standard				
+9	0x0c40000a	205520906	Code	Standard				
+10	0x0c40000b	205520907	ActualCost	Standard				
+11	0x0c40000c	205520908	Cost	Standard				
+12	0x0c40000d	205520909	Work	Standard				
+13	0x0c40000e	205520910	ActualWork	Standard				
+14	0x0c40000f	205520911	BaselineWork	Standard				
+15	0x0c400010	205520912	OvertimeWork	Standard				
+16	0x0c400011	205520913	BaselineCost	Standard				
+17	0x0c400012	205520914	CostPerUse	Standard				
+18	0x0c400013	205520915	AccrueAt	Standard				
+19	0x0c400014	205520916	Notes	Standard				
+20	0x0c400015	205520917	RemainingCost	Standard				
+21	0x0c400016	205520918	RemainingWork	Standard				
+22	0x0c400017	205520919	WorkVariance	Standard				
+23	0x0c400018	205520920	CostVariance	Standard				
+24	0x0c400019	205520921	Overallocated	Standard				
+25	0x0c40001a	205520922	PeakUnits	Standard				
+26	0x0c40001c	205520924		Standard				
+27	0x0c40001d	205520925	PercentWorkComplete	Standard				
+28	0x0c40001e	205520926	Text3	Standard				
+29	0x0c40001f	205520927	Text4	Standard				
+30	0x0c400020	205520928	Text5	Standard				
+31	0x0c400021	205520929	Objects	Standard				
+32	0x0c400022	205520930	LinkedFields	Standard				
+33	0x0c400023	205520931	EMailAddress	Standard				
+34	0x0c400024	205520932		Standard				
+35	0x0c400025	205520933		Standard				
+36	0x0c400026	205520934	RegularWork	Standard				
+37	0x0c400027	205520935	ActualOvertimeWork	Standard				
+38	0x0c400028	205520936	RemainingOvertimeWork	Standard				
+39	0x0c400029	205520937		Standard				
+40	0x0c40002a	205520938		Standard				
+41	0x0c40002b	205520939		Standard				
+42	0x0c40002c	205520940		Standard				
+43	0x0c40002d	205520941		Standard				
+44	0x0c40002e	205520942		Standard				
+45	0x0c40002f	205520943	OvertimeCost	Standard				
+46	0x0c400030	205520944	ActualOvertimeCost	Standard				
+47	0x0c400031	205520945	RemainingOvertimeCost	Standard				
+48	0x0c400032	205520946		Standard				
+49	0x0c400033	205520947	BCWS	Standard				
+50	0x0c400034	205520948	BCWP	Standard				
+51	0x0c400035	205520949	ACWP	Standard				
+52	0x0c400036	205520950	SV	Standard				
+53	0x0c400037	205520951	Assignments	Standard				
+54	0x0c400038	205520952		Standard				
+55	0x0c400039	205520953	AvailableFrom	Standard				
+56	0x0c40003a	205520954	AvailableTo	Standard				
+57	0x0c40003b	205520955		Standard				
+58	0x0c40003c	205520956		Standard				
+59	0x0c40003d	205520957		Standard				
+60	0x0c40003e	205520958		Standard				
+61	0x0c40003f	205520959		Standard				
+62	0x0c400040	205520960		Standard				
+63	0x0c400041	205520961		Standard				
+64	0x0c400042	205520962		Standard				
+65	0x0c400043	205520963		Standard				
+66	0x0c400044	205520964		Standard				
+67	0x0c400045	205520965		Standard				
+68	0x0c400046	205520966		Standard				
+69	0x0c400047	205520967		Standard				
+70	0x0c400048	205520968		Standard				
+71	0x0c400049	205520969		Standard				
+72	0x0c40004a	205520970		Standard				
+73	0x0c40004b	205520971		Standard				
+74	0x0c40004c	205520972		Standard				
+75	0x0c40004d	205520973		Standard				
+76	0x0c40004e	205520974		Standard				
+77	0x0c40004f	205520975		Standard				
+78	0x0c400050	205520976		Standard				
+79	0x0c400052	205520978		Standard				
+80	0x0c400053	205520979		Standard				
+81	0x0c400054	205520980		Standard				
+82	0x0c400055	205520981		Standard				
+83	0x0c400057	205520983		Standard				
+84	0x0c400058	205520984		Standard				
+85	0x0c400059	205520985		Standard				
+86	0x0c40005a	205520986		Standard				
+87	0x0c40005b	205520987		Standard				
+88	0x0c40005d	205520989		Standard				
+89	0x0c40005e	205520990		Standard				
+90	0x0c400061	205520993	Text6	Standard				
+91	0x0c400062	205520994	Text7	Standard				
+92	0x0c400063	205520995	Text8	Standard				
+93	0x0c400064	205520996	Text9	Standard				
+94	0x0c400065	205520997	Text10	Standard				
+95	0x0c400066	205520998	Start1	Standard				
+96	0x0c400067	205520999	Start2	Standard				
+97	0x0c400068	205521000	Start3	Standard				
+98	0x0c400069	205521001	Start4	Standard				
+99	0x0c40006a	205521002	Start5	Standard				
+100	0x0c40006b	205521003	Finish1	Standard				
+101	0x0c40006c	205521004	Finish2	Standard				
+102	0x0c40006d	205521005	Finish3	Standard				
+103	0x0c40006e	205521006	Finish4	Standard				
+104	0x0c40006f	205521007	Finish5	Standard				
+105	0x0c400070	205521008	Number1	Standard				
+106	0x0c400071	205521009	Number2	Standard				
+107	0x0c400072	205521010	Number3	Standard				
+108	0x0c400073	205521011	Number4	Standard				
+109	0x0c400074	205521012	Number5	Standard				
+110	0x0c400075	205521013	Duration1	Standard				
+111	0x0c400076	205521014	Duration2	Standard				
+112	0x0c400077	205521015	Duration3	Standard				
+113	0x0c400078	205521016		Standard				
+114	0x0c400079	205521017		Standard				
+115	0x0c40007a	205521018		Standard				
+116	0x0c40007b	205521019	Cost1	Standard				
+117	0x0c40007c	205521020	Cost2	Standard				
+118	0x0c40007d	205521021	Cost3	Standard				
+119	0x0c40007e	205521022	Flag10	Standard				
+120	0x0c40007f	205521023	Flag1	Standard				
+121	0x0c400080	205521024	Flag2	Standard				
+122	0x0c400081	205521025	Flag3	Standard				
+123	0x0c400082	205521026	Flag4	Standard				
+124	0x0c400083	205521027	Flag5	Standard				
+125	0x0c400084	205521028	Flag6	Standard				
+126	0x0c400085	205521029	Flag7	Standard				
+127	0x0c400086	205521030	Flag8	Standard				
+128	0x0c400087	205521031	Flag9	Standard				
+129	0x0c400088	205521032		Standard				
+130	0x0c400089	205521033		Standard				
+131	0x0c40008a	205521034	Hyperlink	Standard				
+132	0x0c40008b	205521035	HyperlinkAddress	Standard				
+133	0x0c40008c	205521036	HyperlinkSubAddress	Standard				
+134	0x0c40008d	205521037	HyperlinkHREF	Standard				
+135	0x0c40008e	205521038		Standard				
+136	0x0c40008f	205521039		Standard				
+137	0x0c400090	205521040		Standard				
+138	0x0c400091	205521041		Standard				
+139	0x0c400092	205521042		Standard				
+140	0x0c400095	205521045		Standard				
+141	0x0c400096	205521046	Calendar	Standard				
+142	0x0c400097	205521047		Standard				
+143	0x0c400098	205521048		Standard				
+144	0x0c40009a	205521050		Standard				
+145	0x0c40009c	205521052		Standard				
+146	0x0c40009d	205521053		Standard				
+147	0x0c40009e	205521054		Standard				
+148	0x0c40009f	205521055		Standard				
+149	0x0c4000a0	205521056	CostRateTables	Standard				
+150	0x0c4000a1	205521057	PayRates	Standard				
+151	0x0c4000a2	205521058		Standard				
+152	0x0c4000a3	205521059	CanLevel	Standard				
+153	0x0c4000a4	205521060		Standard				
+154	0x0c4000a5	205521061		Standard				
+155	0x0c4000a6	205521062	Cost4	Standard				
+156	0x0c4000a7	205521063	Cost5	Standard				
+157	0x0c4000a8	205521064	Cost6	Standard				
+158	0x0c4000a9	205521065	Cost7	Standard				
+159	0x0c4000aa	205521066	Cost8	Standard				
+160	0x0c4000ab	205521067	Cost9	Standard				
+161	0x0c4000ac	205521068	Cost10	Standard				
+162	0x0c4000ad	205521069	Date1	Standard				
+163	0x0c4000ae	205521070	Date2	Standard				
+164	0x0c4000af	205521071	Date3	Standard				
+165	0x0c4000b0	205521072	Date4	Standard				
+166	0x0c4000b1	205521073	Date5	Standard				
+167	0x0c4000b2	205521074	Date6	Standard				
+168	0x0c4000b3	205521075	Date7	Standard				
+169	0x0c4000b4	205521076	Date8	Standard				
+170	0x0c4000b5	205521077	Date9	Standard				
+171	0x0c4000b6	205521078	Date10	Standard				
+172	0x0c4000b7	205521079	Duration4	Standard				
+173	0x0c4000b8	205521080	Duration5	Standard				
+174	0x0c4000b9	205521081	Duration6	Standard				
+175	0x0c4000ba	205521082	Duration7	Standard				
+176	0x0c4000bb	205521083	Duration8	Standard				
+177	0x0c4000bc	205521084	Duration9	Standard				
+178	0x0c4000bd	205521085	Duration10	Standard				
+179	0x0c4000be	205521086	Finish6	Standard				
+180	0x0c4000bf	205521087	Finish7	Standard				
+181	0x0c4000c0	205521088	Finish8	Standard				
+182	0x0c4000c1	205521089	Finish9	Standard				
+183	0x0c4000c2	205521090	Finish10	Standard				
+184	0x0c4000c3	205521091	Flag11	Standard				
+185	0x0c4000c4	205521092	Flag12	Standard				
+186	0x0c4000c5	205521093	Flag13	Standard				
+187	0x0c4000c6	205521094	Flag14	Standard				
+188	0x0c4000c7	205521095	Flag15	Standard				
+189	0x0c4000c8	205521096	Flag16	Standard				
+190	0x0c4000c9	205521097	Flag17	Standard				
+191	0x0c4000ca	205521098	Flag18	Standard				
+192	0x0c4000cb	205521099	Flag19	Standard				
+193	0x0c4000cc	205521100	Flag20	Standard				
+194	0x0c4000cd	205521101	Number6	Standard				
+195	0x0c4000ce	205521102	Number7	Standard				
+196	0x0c4000cf	205521103	Number8	Standard				
+197	0x0c4000d0	205521104	Number9	Standard				
+198	0x0c4000d1	205521105	Number10	Standard				
+199	0x0c4000d2	205521106	Number11	Standard				
+200	0x0c4000d3	205521107	Number12	Standard				
+201	0x0c4000d4	205521108	Number13	Standard				
+202	0x0c4000d5	205521109	Number14	Standard				
+203	0x0c4000d6	205521110	Number15	Standard				
+204	0x0c4000d7	205521111	Number16	Standard				
+205	0x0c4000d8	205521112	Number17	Standard				
+206	0x0c4000d9	205521113	Number18	Standard				
+207	0x0c4000da	205521114	Number19	Standard				
+208	0x0c4000db	205521115	Number20	Standard				
+209	0x0c4000dc	205521116	Start6	Standard				
+210	0x0c4000dd	205521117	Start7	Standard				
+211	0x0c4000de	205521118	Start8	Standard				
+212	0x0c4000df	205521119	Start9	Standard				
+213	0x0c4000e0	205521120	Start10	Standard				
+214	0x0c4000e1	205521121	Text11	Standard				
+215	0x0c4000e2	205521122	Text12	Standard				
+216	0x0c4000e3	205521123	Text13	Standard				
+217	0x0c4000e4	205521124	Text14	Standard				
+218	0x0c4000e5	205521125	Text15	Standard				
+219	0x0c4000e6	205521126	Text16	Standard				
+220	0x0c4000e7	205521127	Text17	Standard				
+221	0x0c4000e8	205521128	Text18	Standard				
+222	0x0c4000e9	205521129	Text19	Standard				
+223	0x0c4000ea	205521130	Text20	Standard				
+224	0x0c4000eb	205521131	Text21	Standard				
+225	0x0c4000ec	205521132	Text22	Standard				
+226	0x0c4000ed	205521133	Text23	Standard				
+227	0x0c4000ee	205521134	Text24	Standard				
+228	0x0c4000ef	205521135	Text25	Standard				
+229	0x0c4000f0	205521136	Text26	Standard				
+230	0x0c4000f1	205521137	Text27	Standard				
+231	0x0c4000f2	205521138	Text28	Standard				
+232	0x0c4000f3	205521139	Text29	Standard				
+233	0x0c4000f4	205521140	Text30	Standard				
+234	0x0c4000f5	205521141		Standard				
+235	0x0c4000f6	205521142		Standard				
+236	0x0c4000f7	205521143		Standard				
+237	0x0c4000f8	205521144		Standard				
+238	0x0c4000f9	205521145		Standard				
+239	0x0c4000fa	205521146		Standard				
+240	0x0c4000fb	205521147		Standard				
+241	0x0c4000fc	205521148	Phonetics	Standard				
+242	0x0c4000fe	205521150		Standard				
+243	0x0c4000ff	205521151		Standard				
+244	0x0c400100	205521152		Standard				
+245	0x0c400101	205521153		Standard				
+246	0x0c400102	205521154		Standard				
+247	0x0c400103	205521155		Standard				
+248	0x0c400104	205521156		Standard				
+249	0x0c400105	205521157	Confirmed	Standard				
+250	0x0c400106	205521158		Standard				
+251	0x0c400107	205521159		Standard				
+252	0x0c400108	205521160	ResponsePending	Standard				
+253	0x0c400109	205521161		Standard				
+254	0x0c40010a	205521162	TeamStatusPending	Standard				
+255	0x0c40010b	205521163	UpdateNeeded	Standard				
+256	0x0c40010c	205521164	CV	Standard				
+257	0x0c40010d	205521165		Standard				
+258	0x0c40010e	205521166		Standard				
+259	0x0c40010f	205521167		Standard				
+260	0x0c400110	205521168	Workgroup	Standard				
+261	0x0c400112	205521170		Standard				
+262	0x0c400113	205521171		Standard				
+263	0x0c400114	205521172		Standard				
+264	0x0c400115	205521173	Availabilities	Standard				
+265	0x0c400116	205521174	OutlineCode1	Standard				
+266	0x0c400117	205521175		Standard				
+267	0x0c400118	205521176	OutlineCode2	Standard				
+268	0x0c400119	205521177		Standard				
+269	0x0c40011a	205521178	OutlineCode3	Standard				
+270	0x0c40011b	205521179		Standard				
+271	0x0c40011c	205521180	OutlineCode4	Standard				
+272	0x0c40011d	205521181		Standard				
+273	0x0c40011e	205521182	OutlineCode5	Standard				
+274	0x0c40011f	205521183		Standard				
+275	0x0c400120	205521184	OutlineCode6	Standard				
+276	0x0c400121	205521185		Standard				
+277	0x0c400122	205521186	OutlineCode7	Standard				
+278	0x0c400123	205521187		Standard				
+279	0x0c400124	205521188	OutlineCode8	Standard				
+280	0x0c400125	205521189		Standard				
+281	0x0c400126	205521190	OutlineCode9	Standard				
+282	0x0c400127	205521191		Standard				
+283	0x0c400128	205521192	OutlineCode10	Standard				
+284	0x0c400129	205521193		Standard				
+285	0x0c40012a	205521194		Standard				
+286	0x0c40012b	205521195	MaterialLabel	Standard				
+287	0x0c40012c	205521196	Type	Standard				
+288	0x0c40012d	205521197	VAC	Standard				
+289	0x0c40012e	205521198		Standard				
+290	0x0c40012f	205521199		Standard				
+291	0x0c400130	205521200		Standard				
+292	0x0c400131	205521201		Standard				
+293	0x0c400132	205521202	GroupBySummary	Standard				
+294	0x0c400133	205521203		Standard				
+295	0x0c400134	205521204		Standard				
+296	0x0c400135	205521205		Standard				
+297	0x0c400136	205521206		Standard				
+298	0x0c400137	205521207	WindowsUserAccount	Standard				
+299	0x0c400138	205521208	HyperlinkScreenTip	Standard				
+300	0x0c400139	205521209		Standard				
+301	0x0c40013a	205521210		Standard				
+302	0x0c40013b	205521211		Standard				
+303	0x0c40013c	205521212		Standard				
+304	0x0c40013d	205521213		Standard				
+305	0x0c40013e	205521214		Standard				
+306	0x0c40013f	205521215		Standard				
+307	0x0c400140	205521216		Standard				
+308	0x0c400141	205521217		Standard				
+309	0x0c400142	205521218		Standard				
+310	0x0c400143	205521219		Standard				
+311	0x0c400144	205521220		Standard				
+312	0x0c400145	205521221		Standard				
+313	0x0c400146	205521222		Standard				
+314	0x0c400147	205521223		Standard				
+315	0x0c400148	205521224		Standard				
+316	0x0c400149	205521225		Standard				
+317	0x0c40014a	205521226		Standard				
+318	0x0c40014b	205521227		Standard				
+319	0x0c40014c	205521228		Standard				
+320	0x0c40014d	205521229		Standard				
+321	0x0c40014e	205521230		Standard				
+322	0x0c40014f	205521231		Standard				
+323	0x0c400150	205521232		Standard				
+324	0x0c400151	205521233		Standard				
+325	0x0c400152	205521234		Standard				
+326	0x0c400153	205521235		Standard				
+327	0x0c400154	205521236		Standard				
+328	0x0c400155	205521237		Standard				
+329	0x0c400156	205521238	Baseline1Work	Standard				
+330	0x0c400157	205521239	Baseline1Cost	Standard				
+331	0x0c400158	205521240		Standard				
+332	0x0c400159	205521241		Standard				
+333	0x0c40015a	205521242		Standard				
+334	0x0c40015b	205521243		Standard				
+335	0x0c40015c	205521244		Standard				
+336	0x0c40015d	205521245		Standard				
+337	0x0c40015e	205521246		Standard				
+338	0x0c40015f	205521247		Standard				
+339	0x0c400160	205521248	Baseline2Work	Standard				
+340	0x0c400161	205521249	Baseline2Cost	Standard				
+341	0x0c400162	205521250		Standard				
+342	0x0c400163	205521251		Standard				
+343	0x0c400164	205521252		Standard				
+344	0x0c400165	205521253		Standard				
+345	0x0c400166	205521254		Standard				
+346	0x0c400167	205521255		Standard				
+347	0x0c400168	205521256		Standard				
+348	0x0c400169	205521257		Standard				
+349	0x0c40016a	205521258	Baseline3Work	Standard				
+350	0x0c40016b	205521259	Baseline3Cost	Standard				
+351	0x0c40016c	205521260		Standard				
+352	0x0c40016d	205521261		Standard				
+353	0x0c40016e	205521262		Standard				
+354	0x0c40016f	205521263		Standard				
+355	0x0c400170	205521264		Standard				
+356	0x0c400171	205521265		Standard				
+357	0x0c400172	205521266		Standard				
+358	0x0c400173	205521267		Standard				
+359	0x0c400174	205521268	Baseline4Work	Standard				
+360	0x0c400175	205521269	Baseline4Cost	Standard				
+361	0x0c400176	205521270		Standard				
+362	0x0c400177	205521271		Standard				
+363	0x0c400178	205521272		Standard				
+364	0x0c400179	205521273		Standard				
+365	0x0c40017a	205521274		Standard				
+366	0x0c40017b	205521275		Standard				
+367	0x0c40017c	205521276		Standard				
+368	0x0c40017d	205521277		Standard				
+369	0x0c40017e	205521278	Baseline5Work	Standard				
+370	0x0c40017f	205521279	Baseline5Cost	Standard				
+371	0x0c400180	205521280		Standard				
+372	0x0c400181	205521281		Standard				
+373	0x0c400182	205521282		Standard				
+374	0x0c400183	205521283		Standard				
+375	0x0c400184	205521284		Standard				
+376	0x0c400185	205521285		Standard				
+377	0x0c400186	205521286		Standard				
+378	0x0c400187	205521287		Standard				
+379	0x0c400188	205521288	Baseline6Work	Standard				
+380	0x0c400189	205521289	Baseline6Cost	Standard				
+381	0x0c40018a	205521290		Standard				
+382	0x0c40018b	205521291		Standard				
+383	0x0c40018c	205521292		Standard				
+384	0x0c40018d	205521293		Standard				
+385	0x0c40018e	205521294		Standard				
+386	0x0c40018f	205521295		Standard				
+387	0x0c400190	205521296		Standard				
+388	0x0c400191	205521297		Standard				
+389	0x0c400192	205521298	Baseline7Work	Standard				
+390	0x0c400193	205521299	Baseline7Cost	Standard				
+391	0x0c400194	205521300		Standard				
+392	0x0c400195	205521301		Standard				
+393	0x0c400196	205521302		Standard				
+394	0x0c400197	205521303		Standard				
+395	0x0c400198	205521304		Standard				
+396	0x0c400199	205521305		Standard				
+397	0x0c40019a	205521306		Standard				
+398	0x0c40019b	205521307		Standard				
+399	0x0c40019c	205521308	Baseline8Work	Standard				
+400	0x0c40019d	205521309	Baseline8Cost	Standard				
+401	0x0c40019e	205521310		Standard				
+402	0x0c40019f	205521311		Standard				
+403	0x0c4001a0	205521312		Standard				
+404	0x0c4001a1	205521313		Standard				
+405	0x0c4001a2	205521314		Standard				
+406	0x0c4001a3	205521315		Standard				
+407	0x0c4001a4	205521316		Standard				
+408	0x0c4001a5	205521317		Standard				
+409	0x0c4001a6	205521318	Baseline9Work	Standard				
+410	0x0c4001a7	205521319	Baseline9Cost	Standard				
+411	0x0c4001a8	205521320		Standard				
+412	0x0c4001a9	205521321		Standard				
+413	0x0c4001aa	205521322		Standard				
+414	0x0c4001ab	205521323		Standard				
+415	0x0c4001ac	205521324		Standard				
+416	0x0c4001ad	205521325		Standard				
+417	0x0c4001ae	205521326		Standard				
+418	0x0c4001af	205521327		Standard				
+419	0x0c4001b0	205521328	Baseline10Work	Standard				
+420	0x0c4001b1	205521329	Baseline10Cost	Standard				
+421	0x0c4001b2	205521330		Standard				
+422	0x0c4001b3	205521331		Standard				
+423	0x0c4001b4	205521332		Standard				
+424	0x0c4001b5	205521333		Standard				
+425	0x0c4001b6	205521334		Standard				
+426	0x0c4001b7	205521335		Standard				
+427	0x0c4001b8	205521336		Standard				
+428	0x0c4001b9	205521337		Standard				
+429	0x0c4001ba	205521338		Standard				
+430	0x0c4001bb	205521339	EnterpriseUniqueID	Standard				
+431	0x0c4001bc	205521340		Standard				
+432	0x0c4001bd	205521341		Standard				
+433	0x0c4001be	205521342	EnterpriseCost1	Standard				
+434	0x0c4001bf	205521343	EnterpriseCost2	Standard				
+435	0x0c4001c0	205521344	EnterpriseCost3	Standard				
+436	0x0c4001c1	205521345	EnterpriseCost4	Standard				
+437	0x0c4001c2	205521346	EnterpriseCost5	Standard				
+438	0x0c4001c3	205521347	EnterpriseCost6	Standard				
+439	0x0c4001c4	205521348	EnterpriseCost7	Standard				
+440	0x0c4001c5	205521349	EnterpriseCost8	Standard				
+441	0x0c4001c6	205521350	EnterpriseCost9	Standard				
+442	0x0c4001c7	205521351	EnterpriseCost10	Standard				
+443	0x0c4001c8	205521352	EnterpriseDate1	Standard				
+444	0x0c4001c9	205521353	EnterpriseDate2	Standard				
+445	0x0c4001ca	205521354	EnterpriseDate3	Standard				
+446	0x0c4001cb	205521355	EnterpriseDate4	Standard				
+447	0x0c4001cc	205521356	EnterpriseDate5	Standard				
+448	0x0c4001cd	205521357	EnterpriseDate6	Standard				
+449	0x0c4001ce	205521358	EnterpriseDate7	Standard				
+450	0x0c4001cf	205521359	EnterpriseDate8	Standard				
+451	0x0c4001d0	205521360	EnterpriseDate9	Standard				
+452	0x0c4001d1	205521361	EnterpriseDate10	Standard				
+453	0x0c4001d2	205521362	EnterpriseDate11	Standard				
+454	0x0c4001d3	205521363	EnterpriseDate12	Standard				
+455	0x0c4001d4	205521364	EnterpriseDate13	Standard				
+456	0x0c4001d5	205521365	EnterpriseDate14	Standard				
+457	0x0c4001d6	205521366	EnterpriseDate15	Standard				
+458	0x0c4001d7	205521367	EnterpriseDate16	Standard				
+459	0x0c4001d8	205521368	EnterpriseDate17	Standard				
+460	0x0c4001d9	205521369	EnterpriseDate18	Standard				
+461	0x0c4001da	205521370	EnterpriseDate19	Standard				
+462	0x0c4001db	205521371	EnterpriseDate20	Standard				
+463	0x0c4001dc	205521372	EnterpriseDate21	Standard				
+464	0x0c4001dd	205521373	EnterpriseDate22	Standard				
+465	0x0c4001de	205521374	EnterpriseDate23	Standard				
+466	0x0c4001df	205521375	EnterpriseDate24	Standard				
+467	0x0c4001e0	205521376	EnterpriseDate25	Standard				
+468	0x0c4001e1	205521377	EnterpriseDate26	Standard				
+469	0x0c4001e2	205521378	EnterpriseDate27	Standard				
+470	0x0c4001e3	205521379	EnterpriseDate28	Standard				
+471	0x0c4001e4	205521380	EnterpriseDate29	Standard				
+472	0x0c4001e5	205521381	EnterpriseDate30	Standard				
+473	0x0c4001e6	205521382	EnterpriseDuration1	Standard				
+474	0x0c4001e7	205521383	EnterpriseDuration2	Standard				
+475	0x0c4001e8	205521384	EnterpriseDuration3	Standard				
+476	0x0c4001e9	205521385	EnterpriseDuration4	Standard				
+477	0x0c4001ea	205521386	EnterpriseDuration5	Standard				
+478	0x0c4001eb	205521387	EnterpriseDuration6	Standard				
+479	0x0c4001ec	205521388	EnterpriseDuration7	Standard				
+480	0x0c4001ed	205521389	EnterpriseDuration8	Standard				
+481	0x0c4001ee	205521390	EnterpriseDuration9	Standard				
+482	0x0c4001ef	205521391	EnterpriseDuration10	Standard				
+483	0x0c4001f0	205521392		Standard				
+484	0x0c4001f1	205521393		Standard				
+485	0x0c4001f2	205521394		Standard				
+486	0x0c4001f3	205521395		Standard				
+487	0x0c4001f4	205521396		Standard				
+488	0x0c4001f5	205521397		Standard				
+489	0x0c4001f6	205521398		Standard				
+490	0x0c4001f7	205521399		Standard				
+491	0x0c4001f8	205521400		Standard				
+492	0x0c4001f9	205521401		Standard				
+493	0x0c4001fa	205521402	EnterpriseFlag1	Standard				
+494	0x0c4001fb	205521403	EnterpriseFlag2	Standard				
+495	0x0c4001fc	205521404	EnterpriseFlag3	Standard				
+496	0x0c4001fd	205521405	EnterpriseFlag4	Standard				
+497	0x0c4001fe	205521406	EnterpriseFlag5	Standard				
+498	0x0c4001ff	205521407	EnterpriseFlag6	Standard				
+499	0x0c400200	205521408	EnterpriseFlag7	Standard				
+500	0x0c400201	205521409	EnterpriseFlag8	Standard				
+501	0x0c400202	205521410	EnterpriseFlag9	Standard				
+502	0x0c400203	205521411	EnterpriseFlag10	Standard				
+503	0x0c400204	205521412	EnterpriseFlag11	Standard				
+504	0x0c400205	205521413	EnterpriseFlag12	Standard				
+505	0x0c400206	205521414	EnterpriseFlag13	Standard				
+506	0x0c400207	205521415	EnterpriseFlag14	Standard				
+507	0x0c400208	205521416	EnterpriseFlag15	Standard				
+508	0x0c400209	205521417	EnterpriseFlag16	Standard				
+509	0x0c40020a	205521418	EnterpriseFlag17	Standard				
+510	0x0c40020b	205521419	EnterpriseFlag18	Standard				
+511	0x0c40020c	205521420	EnterpriseFlag19	Standard				
+512	0x0c40020d	205521421	EnterpriseFlag20	Standard				
+513	0x0c40020e	205521422		Standard				
+514	0x0c40020f	205521423		Standard				
+515	0x0c400210	205521424		Standard				
+516	0x0c400211	205521425		Standard				
+517	0x0c400212	205521426		Standard				
+518	0x0c400213	205521427		Standard				
+519	0x0c400214	205521428		Standard				
+520	0x0c400215	205521429		Standard				
+521	0x0c400216	205521430		Standard				
+522	0x0c400217	205521431		Standard				
+523	0x0c400218	205521432		Standard				
+524	0x0c400219	205521433		Standard				
+525	0x0c40021a	205521434		Standard				
+526	0x0c40021b	205521435		Standard				
+527	0x0c40021c	205521436		Standard				
+528	0x0c40021d	205521437		Standard				
+529	0x0c40021e	205521438		Standard				
+530	0x0c40021f	205521439		Standard				
+531	0x0c400220	205521440		Standard				
+532	0x0c400221	205521441		Standard				
+533	0x0c400222	205521442	EnterpriseNumber1	Standard				
+534	0x0c400223	205521443	EnterpriseNumber2	Standard				
+535	0x0c400224	205521444	EnterpriseNumber3	Standard				
+536	0x0c400225	205521445	EnterpriseNumber4	Standard				
+537	0x0c400226	205521446	EnterpriseNumber5	Standard				
+538	0x0c400227	205521447	EnterpriseNumber6	Standard				
+539	0x0c400228	205521448	EnterpriseNumber7	Standard				
+540	0x0c400229	205521449	EnterpriseNumber8	Standard				
+541	0x0c40022a	205521450	EnterpriseNumber9	Standard				
+542	0x0c40022b	205521451	EnterpriseNumber10	Standard				
+543	0x0c40022c	205521452	EnterpriseNumber11	Standard				
+544	0x0c40022d	205521453	EnterpriseNumber12	Standard				
+545	0x0c40022e	205521454	EnterpriseNumber13	Standard				
+546	0x0c40022f	205521455	EnterpriseNumber14	Standard				
+547	0x0c400230	205521456	EnterpriseNumber15	Standard				
+548	0x0c400231	205521457	EnterpriseNumber16	Standard				
+549	0x0c400232	205521458	EnterpriseNumber17	Standard				
+550	0x0c400233	205521459	EnterpriseNumber18	Standard				
+551	0x0c400234	205521460	EnterpriseNumber19	Standard				
+552	0x0c400235	205521461	EnterpriseNumber20	Standard				
+553	0x0c400236	205521462	EnterpriseNumber21	Standard				
+554	0x0c400237	205521463	EnterpriseNumber22	Standard				
+555	0x0c400238	205521464	EnterpriseNumber23	Standard				
+556	0x0c400239	205521465	EnterpriseNumber24	Standard				
+557	0x0c40023a	205521466	EnterpriseNumber25	Standard				
+558	0x0c40023b	205521467	EnterpriseNumber26	Standard				
+559	0x0c40023c	205521468	EnterpriseNumber27	Standard				
+560	0x0c40023d	205521469	EnterpriseNumber28	Standard				
+561	0x0c40023e	205521470	EnterpriseNumber29	Standard				
+562	0x0c40023f	205521471	EnterpriseNumber30	Standard				
+563	0x0c400240	205521472	EnterpriseNumber31	Standard				
+564	0x0c400241	205521473	EnterpriseNumber32	Standard				
+565	0x0c400242	205521474	EnterpriseNumber33	Standard				
+566	0x0c400243	205521475	EnterpriseNumber34	Standard				
+567	0x0c400244	205521476	EnterpriseNumber35	Standard				
+568	0x0c400245	205521477	EnterpriseNumber36	Standard				
+569	0x0c400246	205521478	EnterpriseNumber37	Standard				
+570	0x0c400247	205521479	EnterpriseNumber38	Standard				
+571	0x0c400248	205521480	EnterpriseNumber39	Standard				
+572	0x0c400249	205521481	EnterpriseNumber40	Standard				
+573	0x0c40024a	205521482	EnterpriseOutlineCode1	Standard				
+574	0x0c40024b	205521483		Standard				
+575	0x0c40024c	205521484	EnterpriseOutlineCode2	Standard				
+576	0x0c40024d	205521485		Standard				
+577	0x0c40024e	205521486	EnterpriseOutlineCode3	Standard				
+578	0x0c40024f	205521487		Standard				
+579	0x0c400250	205521488	EnterpriseOutlineCode4	Standard				
+580	0x0c400251	205521489		Standard				
+581	0x0c400252	205521490	EnterpriseOutlineCode5	Standard				
+582	0x0c400253	205521491		Standard				
+583	0x0c400254	205521492	EnterpriseOutlineCode6	Standard				
+584	0x0c400255	205521493		Standard				
+585	0x0c400256	205521494	EnterpriseOutlineCode7	Standard				
+586	0x0c400257	205521495		Standard				
+587	0x0c400258	205521496	EnterpriseOutlineCode8	Standard				
+588	0x0c400259	205521497		Standard				
+589	0x0c40025a	205521498	EnterpriseOutlineCode9	Standard				
+590	0x0c40025b	205521499		Standard				
+591	0x0c40025c	205521500	EnterpriseOutlineCode10	Standard				
+592	0x0c40025d	205521501		Standard				
+593	0x0c40025e	205521502	EnterpriseOutlineCode11	Standard				
+594	0x0c40025f	205521503		Standard				
+595	0x0c400260	205521504	EnterpriseOutlineCode12	Standard				
+596	0x0c400261	205521505		Standard				
+597	0x0c400262	205521506	EnterpriseOutlineCode13	Standard				
+598	0x0c400263	205521507		Standard				
+599	0x0c400264	205521508	EnterpriseOutlineCode14	Standard				
+600	0x0c400265	205521509		Standard				
+601	0x0c400266	205521510	EnterpriseOutlineCode15	Standard				
+602	0x0c400267	205521511		Standard				
+603	0x0c400268	205521512	EnterpriseOutlineCode16	Standard				
+604	0x0c400269	205521513		Standard				
+605	0x0c40026a	205521514	EnterpriseOutlineCode17	Standard				
+606	0x0c40026b	205521515		Standard				
+607	0x0c40026c	205521516	EnterpriseOutlineCode18	Standard				
+608	0x0c40026d	205521517		Standard				
+609	0x0c40026e	205521518	EnterpriseOutlineCode19	Standard				
+610	0x0c40026f	205521519		Standard				
+611	0x0c400270	205521520	EnterpriseOutlineCode20	Standard				
+612	0x0c400271	205521521		Standard				
+613	0x0c400272	205521522	EnterpriseOutlineCode21	Standard				
+614	0x0c400273	205521523		Standard				
+615	0x0c400274	205521524	EnterpriseOutlineCode22	Standard				
+616	0x0c400275	205521525		Standard				
+617	0x0c400276	205521526	EnterpriseOutlineCode23	Standard				
+618	0x0c400277	205521527		Standard				
+619	0x0c400278	205521528	EnterpriseOutlineCode24	Standard				
+620	0x0c400279	205521529		Standard				
+621	0x0c40027a	205521530	EnterpriseOutlineCode25	Standard				
+622	0x0c40027b	205521531		Standard				
+623	0x0c40027c	205521532	EnterpriseOutlineCode26	Standard				
+624	0x0c40027d	205521533		Standard				
+625	0x0c40027e	205521534	EnterpriseOutlineCode27	Standard				
+626	0x0c40027f	205521535		Standard				
+627	0x0c400280	205521536	EnterpriseOutlineCode28	Standard				
+628	0x0c400281	205521537		Standard				
+629	0x0c400282	205521538	EnterpriseOutlineCode29	Standard				
+630	0x0c400283	205521539		Standard				
+631	0x0c400284	205521540	EnterpriseRBS	Standard				
+632	0x0c400285	205521541		Standard				
+633	0x0c400286	205521542	EnterpriseText1	Standard				
+634	0x0c400287	205521543	EnterpriseText2	Standard				
+635	0x0c400288	205521544	EnterpriseText3	Standard				
+636	0x0c400289	205521545	EnterpriseText4	Standard				
+637	0x0c40028a	205521546	EnterpriseText5	Standard				
+638	0x0c40028b	205521547	EnterpriseText6	Standard				
+639	0x0c40028c	205521548	EnterpriseText7	Standard				
+640	0x0c40028d	205521549	EnterpriseText8	Standard				
+641	0x0c40028e	205521550	EnterpriseText9	Standard				
+642	0x0c40028f	205521551	EnterpriseText10	Standard				
+643	0x0c400290	205521552	EnterpriseText11	Standard				
+644	0x0c400291	205521553	EnterpriseText12	Standard				
+645	0x0c400292	205521554	EnterpriseText13	Standard				
+646	0x0c400293	205521555	EnterpriseText14	Standard				
+647	0x0c400294	205521556	EnterpriseText15	Standard				
+648	0x0c400295	205521557	EnterpriseText16	Standard				
+649	0x0c400296	205521558	EnterpriseText17	Standard				
+650	0x0c400297	205521559	EnterpriseText18	Standard				
+651	0x0c400298	205521560	EnterpriseText19	Standard				
+652	0x0c400299	205521561	EnterpriseText20	Standard				
+653	0x0c40029a	205521562	EnterpriseText21	Standard				
+654	0x0c40029b	205521563	EnterpriseText22	Standard				
+655	0x0c40029c	205521564	EnterpriseText23	Standard				
+656	0x0c40029d	205521565	EnterpriseText24	Standard				
+657	0x0c40029e	205521566	EnterpriseText25	Standard				
+658	0x0c40029f	205521567	EnterpriseText26	Standard				
+659	0x0c4002a0	205521568	EnterpriseText27	Standard				
+660	0x0c4002a1	205521569	EnterpriseText28	Standard				
+661	0x0c4002a2	205521570	EnterpriseText29	Standard				
+662	0x0c4002a3	205521571	EnterpriseText30	Standard				
+663	0x0c4002a4	205521572	EnterpriseText31	Standard				
+664	0x0c4002a5	205521573	EnterpriseText32	Standard				
+665	0x0c4002a6	205521574	EnterpriseText33	Standard				
+666	0x0c4002a7	205521575	EnterpriseText34	Standard				
+667	0x0c4002a8	205521576	EnterpriseText35	Standard				
+668	0x0c4002a9	205521577	EnterpriseText36	Standard				
+669	0x0c4002aa	205521578	EnterpriseText37	Standard				
+670	0x0c4002ab	205521579	EnterpriseText38	Standard				
+671	0x0c4002ac	205521580	EnterpriseText39	Standard				
+672	0x0c4002ad	205521581	EnterpriseText40	Standard				
+673	0x0c4002ae	205521582	EnterpriseGeneric	Standard				
+674	0x0c4002af	205521583	EnterpriseBaseCalendar	Standard				
+675	0x0c4002b0	205521584	EnterpriseRequiredValues	Standard				
+676	0x0c4002b1	205521585	EnterpriseNameUsed	Standard				
+677	0x0c4002b2	205521586		Standard				
+678	0x0c4002b3	205521587	Enterprise	Standard				
+679	0x0c4002b4	205521588	EnterpriseIsCheckedOut	Standard				
+680	0x0c4002b5	205521589	EnterpriseCheckedOutBy	Standard				
+681	0x0c4002b6	205521590	EnterpriseLastModifiedDate	Standard				
+682	0x0c4002b7	205521591		Standard				
+683	0x0c4002b8	205521592	EnterpriseInactive	Standard				
+684	0x0c4002b9	205521593		Standard				
+685	0x0c4002ba	205521594		Standard				
+686	0x0c4002bb	205521595	BookingType	Standard				
+687	0x0c4002bc	205521596	EnterpriseMultiValue20	Standard				
+688	0x0c4002bd	205521597		Standard				
+689	0x0c4002be	205521598	EnterpriseMultiValue21	Standard				
+690	0x0c4002bf	205521599		Standard				
+691	0x0c4002c0	205521600	EnterpriseMultiValue22	Standard				
+692	0x0c4002c1	205521601		Standard				
+693	0x0c4002c2	205521602	EnterpriseMultiValue23	Standard				
+694	0x0c4002c3	205521603		Standard				
+695	0x0c4002c4	205521604	EnterpriseMultiValue24	Standard				
+696	0x0c4002c5	205521605		Standard				
+697	0x0c4002c6	205521606	EnterpriseMultiValue25	Standard				
+698	0x0c4002c7	205521607		Standard				
+699	0x0c4002c8	205521608	EnterpriseMultiValue26	Standard				
+700	0x0c4002c9	205521609		Standard				
+701	0x0c4002ca	205521610	EnterpriseMultiValue27	Standard				
+702	0x0c4002cb	205521611		Standard				
+703	0x0c4002cc	205521612	EnterpriseMultiValue28	Standard				
+704	0x0c4002cd	205521613		Standard				
+705	0x0c4002ce	205521614	EnterpriseMultiValue29	Standard				
+706	0x0c4002cf	205521615		Standard				
+707	0x0c4002d0	205521616	ActualWorkProtected	Standard				
+708	0x0c4002d1	205521617	ActualOvertimeWorkProtected	Standard				
+709	0x0c4002d2	205521618		Standard				
+710	0x0c4002d3	205521619		Standard				
+711	0x0c4002d4	205521620		Standard				
+712	0x0c4002d5	205521621		Standard				
+713	0x0c4002d7	205521623		Standard				
+714	0x0c4002d9	205521625	CalendarGuid	Standard				
+715	0x0c4002da	205521626		Standard				
+716	0x0c4002db	205521627		Standard				
+717	0x0c4002dc	205521628		Standard				
+718	0x0c4002dd	205521629		Standard				
+719	0x0c4002de	205521630		Standard				
+720	0x0c4002df	205521631		Standard				
+721	0x0c4002e0	205521632		Standard				
+722	0x0c4002e1	205521633		Standard				
+723	0x0c4002e2	205521634	ErrorMessage	Standard				
+724	0x0c4002e3	205521635		Standard				
+725	0x0c4002e4	205521636	DefaultAssignmentOwner	Standard				
+726	0x0c4002e5	205521637		Standard				
+727	0x0c4002e6	205521638		Standard				
+728	0x0c4002e7	205521639		Standard				
+729	0x0c4002e8	205521640		Standard				
+730	0x0c4002e9	205521641		Standard				
+731	0x0c4002ea	205521642		Standard				
+732	0x0c4002eb	205521643		Standard				
+733	0x0c4002ec	205521644		Standard				
+734	0x0c4002ed	205521645		Standard				
+735	0x0c4002ee	205521646		Standard				
+736	0x0c4002ef	205521647		Standard				
+737	0x0c4002f0	205521648	Budget	Standard				
+738	0x0c4002f1	205521649	BudgetWork	Standard				
+739	0x0c4002f2	205521650	BudgetCost	Standard				
+740	0x0c4002f3	205521651	Import	Standard				
+741	0x0c4002f4	205521652	BaselineBudgetWork	Standard				
+742	0x0c4002f5	205521653	BaselineBudgetCost	Standard				
+743	0x0c4002f6	205521654		Standard				
+744	0x0c4002f7	205521655		Standard				
+745	0x0c4002f8	205521656	Baseline1BudgetWork	Standard				
+746	0x0c4002f9	205521657	Baseline1BudgetCost	Standard				
+747	0x0c4002fa	205521658		Standard				
+748	0x0c4002fb	205521659		Standard				
+749	0x0c4002fc	205521660	Baseline2BudgetWork	Standard				
+750	0x0c4002fd	205521661	Baseline2BudgetCost	Standard				
+751	0x0c4002fe	205521662		Standard				
+752	0x0c4002ff	205521663		Standard				
+753	0x0c400300	205521664	Baseline3BudgetWork	Standard				
+754	0x0c400301	205521665	Baseline3BudgetCost	Standard				
+755	0x0c400302	205521666		Standard				
+756	0x0c400303	205521667		Standard				
+757	0x0c400304	205521668	Baseline4BudgetWork	Standard				
+758	0x0c400305	205521669	Baseline4BudgetCost	Standard				
+759	0x0c400306	205521670		Standard				
+760	0x0c400307	205521671		Standard				
+761	0x0c400308	205521672	Baseline5BudgetWork	Standard				
+762	0x0c400309	205521673	Baseline5BudgetCost	Standard				
+763	0x0c40030a	205521674		Standard				
+764	0x0c40030b	205521675		Standard				
+765	0x0c40030c	205521676	Baseline6BudgetWork	Standard				
+766	0x0c40030d	205521677	Baseline6BudgetCost	Standard				
+767	0x0c40030e	205521678		Standard				
+768	0x0c40030f	205521679		Standard				
+769	0x0c400310	205521680	Baseline7BudgetWork	Standard				
+770	0x0c400311	205521681	Baseline7BudgetCost	Standard				
+771	0x0c400312	205521682		Standard				
+772	0x0c400313	205521683		Standard				
+773	0x0c400314	205521684	Baseline8BudgetWork	Standard				
+774	0x0c400315	205521685	Baseline8BudgetCost	Standard				
+775	0x0c400316	205521686		Standard				
+776	0x0c400317	205521687		Standard				
+777	0x0c400318	205521688	Baseline9BudgetWork	Standard				
+778	0x0c400319	205521689	Baseline9BudgetCost	Standard				
+779	0x0c40031a	205521690		Standard				
+780	0x0c40031b	205521691		Standard				
+781	0x0c40031c	205521692	Baseline10BudgetWork	Standard				
+782	0x0c40031d	205521693	Baseline10BudgetCost	Standard				
+783	0x0c40031e	205521694		Standard				
+784	0x0c40031f	205521695		Standard				
+785	0x0c400320	205521696	IsTeam	Standard				
+786	0x0c400321	205521697	CostCenter	Standard				
+787	0x0c400322	205521698		Standard				
+788	0x0c400323	205521699		Standard				
+789	0x0c400324	205521700		Standard				
+790	0x0c400325	205521701		Standard				
+791	0x0c400326	205521702		Standard				
+792	0x0c400327	205521703		Standard				
+793	0x0c400328	205521704		Standard				
+794	0x0c400329	205521705		Standard				
+795	0x0c40032a	205521706		Standard				
+796	0x0c40032b	205521707		Standard				
+797	0x0c40032c	205521708		Standard				
+798	0x0c40032d	205521709		Standard				
+799	0x0c40032e	205521710		Standard				
+800	0x0c40032f	205521711		Standard				
+801	0x0c400330	205521712		Standard				
+802	0x0c400331	205521713		Standard				
+803	0x0c400332	205521714		Standard				
+804	0x0c400333	205521715		Standard				
+805	0x0c400334	205521716		Standard				
+806	0x0c400335	205521717		Standard				
+807	0x0c400336	205521718		Standard				
+808	0x0c400337	205521719		Standard				
+809	0x0c400338	205521720		Standard				
+810	0x0c400339	205521721		Standard				
+811	0x0c40033a	205521722		Standard				
+812	0x0c40033b	205521723		Standard				
+813	0x0c40033c	205521724		Standard				
+814	0x0c40033d	205521725		Standard				
+815	0x0c40033e	205521726		Standard				
+816	0x0c40033f	205521727		Standard				
+817	0x0c400340	205521728		Standard				
+818	0x0c400341	205521729		Standard				
+819	0x0c400342	205521730		Standard				
+820	0x0c400343	205521731		Standard				
+821	0x0c400344	205521732		Standard				
+822	0x0c400345	205521733		Standard				
+823	0x0c400346	205521734		Standard				
+824	0x0c400347	205521735		Standard				
+825	0x0c400348	205521736		Standard				
+826	0x0c400349	205521737	IsLocked	Standard				
+827	0x0c40034a	205521738	Compliant	Standard				
+828	0x0c40034b	205521739		Standard				
+829	0x0c40034d	205521741		Standard				
+830	0x0c40036b	205521771		Standard				
+831	0x0c40036c	205521772		Standard				
+832	0x0c40036d	205521773		Standard				
+833	0x0c40036e	205521774		Standard				
+834	0x0c40036f	205521775		Standard				
+835	0x0c400370	205521776		Standard				
+836	0x0c400371	205521777		Standard				
+837	0x0c400372	205521778		Standard				
+838		0		Standard				
+839		0		Standard				
+840		0		Standard				
+841		0		Standard				
+842		0		Standard				
+843		0		Standard				
+844		0		Standard				
+845		0		Standard				
+846		0		Standard				
+847		0		Standard				
+848		0		Standard				
+849		0		Standard				
+850		0		Standard				
+851		0		Standard				
+852		0		Standard				
+853		0		Standard				
+854		0		Standard				
+855		0		Standard				
+856		0		Standard				
+857		0		Standard				
+858		0		Standard				
+859		0		Standard				
+860		0		Standard				
+861		0		Standard				
+862		0		Standard				
+863		0		Standard				
+864		0		Standard				
+865		0		Standard				
+866		0		Standard				
+867		0		Standard				
+868		0		Standard				
+869		0		Standard				
+870		0		Standard				
+871		0		Standard				
+872		0		Standard				
+873		0		Standard				
+874		0		Standard				
+875		0		Standard				
+876		0		Standard				
+877		0		Standard				
+878		0		Standard				
+879		0		Standard				
+880		0		Standard				
+881		0		Standard				
+882		0		Standard				

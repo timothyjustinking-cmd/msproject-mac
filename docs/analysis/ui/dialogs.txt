@@ -1,0 +1,25 @@
+32248_1033         988 cdit=19 style=0x80c800c4 title='Insert Object' consumed=988 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+32249_1033         760 cdit=17 style=0x80c800c4 title='Change Icon' consumed=760 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+32250_1033         936 cdit=18 style=0x80c800c4 title='Convert' consumed=936 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+32251_1033         888 cdit=18 style=0x80c800c4 title='Paste Special' consumed=888 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+32252_1033         900 cdit=18 style=0x80c800c4 title='Links' consumed=900 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+32254_1033         632 cdit= 6 style=0x80c800c4 title='Server Busy' consumed=632 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+32257_1033         336 cdit= 6 style=0x80c800c4 title='Change Source' consumed=336 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+FONTWITHBG_1033   1204 cdit=26 style=0x80c800c4 title='Font' consumed=1204 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+PROTECTED_1033     300 cdit= 5 style=0x90c000c0 title='Password' consumed=300 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+RESERVED_1033      564 cdit= 9 style=0x90c000c0 title='Password' consumed=564 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+TEXT_1033         1348 cdit=29 style=0x80c800c4 title='Text Styles' consumed=1348 pad=0 OK
+                 font={'points': 8, 'weight': 0, 'italic': 0, 'charset': 0, 'face': 'Tahoma'}
+
+11/11 dialogs parsed with exact consumption
+wrote docs/analysis/ui/dialogs.tsv

@@ -1,0 +1,55 @@
+field_id	name	type	slot	byte_offset	com_value	in_db	db_val	db_sz
+0x0b400000	Work	i64	8	-1	0 hrs	False		
+0x0b400002	ActualWork	i64	8	-1	0 hrs	False		
+0x0b400004	RemainingWork	i64	8	-1	0 hrs	False		
+0x0b400005	Cost	i64	9	-1	$0.00	False		
+0x0b400007	ActualCost	i64	9	-1	$0.00	False		
+0x0b400008	FixedCost	i64	9	-1	$0.00	False		
+0x0b40000a	RemainingCost	i64	9	-1	$0.00	False		
+0x0b400011	ConstraintType	i16	3	1840	As Soon As Possible	False		
+0x0b400012	ConstraintDate	date32	4	-1	NA	False		
+0x0b400013	Critical	bool	17	-1	Yes	False		
+0x0b400014	LevelingDelay	i32	28	-1	0 edays	False		
+0x0b400015	FreeSlack	i32	6	1856	0 days	False		
+0x0b400018	Milestone	bool	17	-1	No	False		
+0x0b400019	Priority	i16	2	2320	500	False		
+0x0b40001c	ActualDuration	i32	6	-1	0 days	False		
+0x0b40001d	Duration	i32	6	1856	5 days	False		
+0x0b40001f	RemainingDuration	i32	6	-1	5 days	False		
+0x0b400020	PercentComplete	i16	5	-1	0%	False		
+0x0b400021	PercentWorkComplete	i16	5	-1	0%	False		
+0x0b400022	FixedDuration	bool	17	-1	No	False		
+0x0b400023	Start	date32	4	416	Tue 20/10/26	False		
+0x0b400024	Finish	date32	27	416	Mon 26/10/26	False		
+0x0b400025	EarlyStart	date32	4	416	Tue 20/10/26	False		
+0x0b400026	EarlyFinish	date32	27	416	Mon 26/10/26	False		
+0x0b400027	LateStart	date32	4	416	Tue 20/10/26	False		
+0x0b400028	LateFinish	date32	27	416	Mon 26/10/26	False		
+0x0b400029	ActualStart	date32	4	-1	NA	False		
+0x0b40002a	ActualFinish	date32	27	-1	NA	False		
+0x0b400047	Marked	bool	17	-1	No	False		
+0x0b400052	Rollup	bool	17	-1	No	False		
+0x0b40005c	Summary	bool	17	-1	No	False		
+0x0b40005d	Created	date32	4	1988	Tue 20/10/26	False		
+0x0b400063	Resume	date32	4	-1	NA	False		
+0x0b400064	Stop	date32	27	-1	NA	False		
+0x0b40006d	HideBar	bool	17	-1	No	False		
+0x0b400080	Type	i16	29	-1	Fixed Units	False		
+0x0b400081	Recurring	bool	17	-1	No	False		
+0x0b400084	EffortDriven	bool	17	-1	No	False		
+0x0b4000c8	FixedCostAccrual	i16	13	-1	Prorated	False		
+0x0b4000e8	ExternalTask	bool	17	-1	No	False		
+0x0b4000f6	SubProjectReadOnly	bool	17	-1	No	False		
+0x0b4000fc	LevelingCanSplit	bool	17	-1	Yes	False		
+0x0b4000fd	LevelIndividualAssignments	bool	17	-1	Yes	False		
+0x0b40018f	IgnoreResourceCalendar	bool	17	-1	No	False		
+0x0b4001b5	Deadline	date32	27	-1	NA	False		
+0x0b4001b6	StartSlack	i32	6	1856	0 days	False		
+0x0b4001b7	FinishSlack	i32	6	1856	0 days	False		
+0x0b4001e0	BaselineFixedCost	i64	9	-1	$0.00	False		
+0x0b400495	BaselineFixedCostAccrual	i16	13	-1	Prorated	False		
+0x0b4004e2	RecalcFlags	i32	24	-1	16	False		
+0x0b4004ff	Active	bool	17	-1	Yes	False		
+0x0b400500	Manual	bool	17	-1	Manually Scheduled	False		
+0x0b400534	IgnoreWarnings	bool	17	-1	No	False		
+0x0b400580	Agile	bool	17	-1	Yes	False		

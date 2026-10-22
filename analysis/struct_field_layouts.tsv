@@ -1,0 +1,15 @@
+class	offset_hex	offset	n_fields	property_names	access_types	max_funcs	max_evidence	confidence
+Resource	0x28	40	2	OvertimeRate; StandardRate	u64	1	21	medium
+Task	0x14	20	6	ActualOvertimeWork; RemainingOvertimeWork	u32	1	2	medium
+Task	0x1c	28	1	Project	u32	1	2	medium
+Task	0x20	32	15	Active; ActualDuration; Baseline10Duration; Baseline9Duration; EnterpriseDuration1; EnterpriseDuration10; EnterpriseDuration2; EnterpriseDuration3; EnterpriseDuration4; EnterpriseDuration5; EnterpriseDuration6; EnterpriseDuration7; EnterpriseDuration8; EnterpriseDuration9; Manual	u16,u8	1	78	medium
+Task	0x28	40	3	ConstraintType; DeliverableType; OutlineLevel	u16	1	102	medium
+Task	0x3c	60	1	LevelingDelay	u16	1	2	medium
+Task	0x3e	62	1	(unnamed)	ptr	1	2	medium
+Task	0x58	88	5	StatusManagerName	u64	1	3	low
+Task	0x118	280	1	Calendar	u32	1	4	medium
+Task	0x130	304	31	BaselineDuration; CPI; CVPercent; Count; EAC; EarnedValueMethod; Index; ResumeNoEarlierThan; SPI; SVPercent; ScheduledDuration; ScheduledFinish; ScheduledStart; TCPI; VAC; Warning	u32	1	2414	medium
+Task	0x140	320	145	ActualFinish; ActualOvertimeCost; ActualStart; BCWS; BaselineCost; BaselineFinish; BaselineStart; Confirmed; ConstraintDate; Contact; Cost1; Cost2; Cost3; Created; Critical; Duration1; Duration2; Duration3; DurationVariance; EarlyFinish; EarlyStart; EffortDriven; Finish; Finish1; Finish2; Finish3; Finish4; Finish5; FinishVariance; FixedCost; FixedDuration; Flag1; Flag10; Flag2; Flag3; Flag4; Flag5; Flag6; Flag7; Flag8; Flag9; FreeSlack; HideBar; ID; LateFinish; LateStart; LinkedFields; Marked; Milestone; Name; Notes; Number1; Number2; Number3; Number4; Number5; Objects; OutlineChildren; OutlineNumber; OvertimeCost; OvertimeWork; PercentComplete; PercentWorkComplete; PredecessorTasks; Priority; Recurring; RegularWork; RemainingDuration; RemainingOvertimeCost; ResourceGroup; Resume; Rollup; Start; Start1; Start2; Start3; Start4; Start5; StartVariance; Stop; Subproject; SuccessorTasks; Summary; Text1; Text10; Text2; Text3; Text4; Text5; Text6; Text7; Text8; Text9; TotalSlack; Type; UniqueIDPredecessors; UniqueIDSuccessors; UpdateNeeded; WBS	u8	1	1	medium
+Task	0x74c	1868	4	ActualWork; BaselineWork; RemainingWork; Work	u16	1	2	medium
+Task	0xca3	3235	11	Baseline10FinishText; Baseline1FinishText; Baseline2FinishText; Baseline3FinishText; Baseline4FinishText; Baseline5FinishText; Baseline6FinishText; Baseline7FinishText; Baseline8FinishText; Baseline9FinishText; BaselineFinishText	u8	1	21	low
+Task	0xca4	3236	11	Baseline10DurationText; Baseline1DurationText; Baseline2DurationText; Baseline3DurationText; Baseline4DurationText; Baseline5DurationText; Baseline6DurationText; Baseline7DurationText; Baseline8DurationText; Baseline9DurationText; BaselineDurationText	u8	1	21	low

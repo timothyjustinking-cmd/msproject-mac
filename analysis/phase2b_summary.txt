@@ -1,0 +1,31 @@
+======================================================================
+Phase 2b: Enum Resolution Summary
+======================================================================
+
+Enums in typelib: 183
+Total enum values defined: 5884
+Enum constant usages resolved: 6777
+Distinct (func, constant) pairs: 6777
+Enums with at least one resolved usage: 14
+
+Top 20 most-referenced enums:
+  PjField: 3295 usages (1445 defined values)
+  PjAssignmentField: 1586 usages (454 defined values)
+  PjDateLabel: 657 usages (148 defined values)
+  PjPERTField: 495 usages (840 defined values)
+  PjTaskTimescaledData: 181 usages (109 defined values)
+  PjTimescaledData: 139 usages (120 defined values)
+  PjServerVersionInfo: 126 usages (8 defined values)
+  PjAssignmentTimescaledData: 104 usages (90 defined values)
+  PjResourceTimescaledData: 79 usages (93 defined values)
+  PjMailField: 52 usages (144 defined values)
+  PjTaskWarnings: 18 usages (26 defined values)
+  PjCalendarDateLabel: 16 usages (35 defined values)
+  PjIndicator: 16 usages (66 defined values)
+  PjTextItem: 13 usages (18 defined values)
+
+Confidence distribution:
+  90%: 3126 entries
+  80%: 3352 entries
+  70%: 32 entries
+  50%: 267 entries

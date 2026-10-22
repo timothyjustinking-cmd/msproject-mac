@@ -1,0 +1,106 @@
+# CI is the portability oracle: the project targets macOS but is developed on
+# Windows, so these macos-latest runs are the only proof the core is portable.
+#
+# Deliberately small: one job per platform, no caching, no packaging, no code
+# signing.  Windows proves the MSVC build, macOS proves AppleClang (arm64),
+# Linux proves GCC.  Warnings are errors everywhere, so a warning on one
+# compiler is a red build rather than a line nobody reads.
+#
+# Windows uses Ninja, not the "Visual Studio 17 2022" generator: windows-latest
+# stopped exposing an installation that generator could find (CI run 2026-10-22:
+# "could not find any instance of Visual Studio").  msvc-dev-cmd loads the MSVC
+# environment exactly like vcvars64.bat does locally and Ninja compiles with the
+# same cl and the same flags, so the job no longer depends on VS discovery.
+#
+# See docs/build.md for the local equivalents of these commands.
+#
+# `mpp_reader` is no longer excluded (2026-10-22, W13): its synthetic fixture is
+# committed at tests/data/synthetic-base.mpp, so the reader test runs on a clean
+# checkout where corpus/ does not exist.  The checks that genuinely need the real
+# corpus (PROJECT_A and PROJECT_B) print SKIP and pass.  A second, focused step re-runs
+# the reader test with MPP_NO_CORPUS=1 so the committed-fixture path is proved on
+# every run, not merely assumed.  See docs/ci.md.  `--timeout 60` remains the
+# safety net for any test that wedges.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      # Report every platform even if one fails; a red macos job next to a green
+      # windows job is the signal this workflow exists to produce.
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-msvc
+            os: windows-latest
+            generator: Ninja
+          - name: macos-appleclang
+            os: macos-latest
+            generator: Unix Makefiles
+          - name: ubuntu-gcc
+            os: ubuntu-latest
+            generator: Unix Makefiles
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # Puts cl.exe, link.exe and Ninja on PATH (and sets INCLUDE/LIB) the same
+      # way `vcvars64.bat` does in docs/build.md.  Windows-only: the other two
+      # platforms use the compilers the image already provides.
+      - name: Set up the MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # bash exists on all three images (Git Bash on Windows) so the commands
+      # below are identical everywhere and are exactly what docs/build.md
+      # documents.  Quoted generator names survive the space in a generator name.
+      # On Windows this is a single-config Ninja tree, so -DCMAKE_BUILD_TYPE is
+      # honoured; on macOS/Linux it is honoured the same way.
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -G "${{ matrix.generator }}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCORE_WARNINGS_AS_ERRORS=ON
+
+      # No --parallel: it buys nothing on a build this size and Ninja already
+      # runs the configured number of jobs.  See docs/build.md.
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release
+
+      # -C Release: harmless on the single-config generators, required if the
+      # generator ever becomes multi-config again.  --timeout 60 turns a wedged
+      # test into a 60-second failure instead of a hung runner.
+      # No exclusions: mpp_reader runs everywhere now that its synthetic fixture
+      # is committed (tests/data/synthetic-base.mpp, tests/data/README.md).
+      - name: Test
+        shell: bash
+        run: ctest --test-dir build -C Release --output-on-failure --timeout 60
+
+      # Re-runs the reader with the corpus forced absent.  GitHub's runners have
+      # no corpus/ anyway, so this repeats the step above by design: MPP_NO_CORPUS
+      # is the supported way to prove the committed-fixture path on a machine that
+      # *does* have the client corpus (a self-hosted runner or a developer box),
+      # and it fails loudly if the reader ever starts needing corpus/ for the
+      # checks that are supposed to run everywhere.  Cheap: one test, well under
+      # a second (docs/ci.md, tests/data/README.md).
+      - name: Test the reader without the corpus (committed fixture only)
+        shell: bash
+        run: |
+          export MPP_NO_CORPUS=1
+          ctest --test-dir build -C Release --output-on-failure --timeout 60 -R '^mpp_reader$'

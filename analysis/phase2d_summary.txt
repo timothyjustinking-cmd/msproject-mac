@@ -1,0 +1,271 @@
+Phase 2d: Complete Field Descriptor Architecture Summary
+========================================================
+
+Date: 2026-10-20 (Updated)
+Binary: WINPROJ.EXE (PE32+, image base 0x140000000)
+
+ARCHITECTURE OVERVIEW
+=====================
+
+MS Project's field system has three layers:
+
+1. COM Layer (IBkndTaskDispatch)
+   - External callers use field IDs (PjField enum values, e.g. pjTaskDuration)
+   - COM dispatch routes through FUN_1403cff50 -> TBkndElem -> TTaskTable
+
+2. Scheduling Engine Layer (TTaskTable)
+   - TTaskTable::vfunc[87] is the high-level GetFieldValue
+   - TTaskTable::vfunc[158] is the bottom of the chain
+   - Uses PropInfoData objects at 0xA8-byte stride (see CACHE STRIDE BREAKTHROUGH)
+
+3. Record Layer (TASKNODE/RSCNODE/ASSNNODE)
+   - In-memory structs with type-specific slot arrays
+   - PropInfoData +0x18 = slot index within the type-specific array
+   - Getter function pointers in the 0x68-byte tail dispatch to actual record data
+
+CACHE STRIDE BREAKTHROUGH
+=========================
+
+*** The cache entry stride is 0xA8 (168 bytes), NOT 0x40 (64 bytes) ***
+
+Each 0xA8-byte "slot" consists of:
+  - 0x40 bytes: PropInfoData object (vtable + field metadata)
+  - 0x68 bytes: Auxiliary data (getter/setter ptrs, related field IDs, index)
+
+Using cache_base + index * 0xA8 yields 100% of all 3,207 entries.
+
+Previous assumption (0x40 stride) only found ~5% of entries due to
+interleaved auxiliary data being misinterpreted as "garbage".
+
+DUAL-STRIDE ADDRESSING IN VFUNC[158]
+=====================================
+
+The function at RVA 0x239380 uses TWO different strides:
+
+1. SHL RDX, 6 (at RVA 0x23955C): index * 0x40
+   - Used with R13 (4th parameter = cache pointer from caller)
+   - Reads type_code at [R13 + index*64 + 0x0C]
+   - Quick-access path for type validation
+
+2. IMUL R14, RCX, 0x78 (at RVA 0x23957D): index * 0x78 (120)
+   - Used with this->member_0x58 (saved at [RBP+0x28] in prologue)
+   - Indexes into secondary data structure
+   - May contain the actual TASKNODE record access functions
+
+Prologue (RVA 0x239380):
+  R13 = R9 (4th parameter = cache base passed by caller)
+  [RBP+0x28] = this->field_at_0x58
+  EBX = EDX = field_id (2nd parameter)
+  R14D = R8D (3rd parameter)
+
+Relationship: 0x40 + 0x68 = 0xA8 (total stride), but the secondary
+stride is 0x78 (not 0x68). The exact mapping between the three strides
+(0x40, 0x68/0xA8, 0x78) requires deeper analysis of the caller.
+
+PROPINFODATA CLASS HIERARCHY
+=============================
+
+4 classes found via RTTI:
+  PropInfoData          - base, 0x40 bytes, vtable 0x141050670 (21 entries, 3410 construction sites)
+  CustomPropInfoData    - derived, ~0xF0 bytes, vtable 0x140fb4a80 (21 entries, 2 construction sites)
+  PropInfoDataPersist   - type_info at 0x1414a8050, no separate vtable
+  CustomPropInfoDataPersist - type_info at 0x1413e37e0, no separate vtable
+
+PropInfoData vtable (21 entries):
+  [0]  GetTypeCode    - MOVZX EAX, WORD [this+0x14]
+  [1]  SetTypeCode    - no-op
+  [2]  GetSubTypeCode - return 0
+  [3]  SetSubTypeCode - no-op
+  [4]  GetFieldCount  - MOV EAX, [this+0x10]
+  [5]  SetFieldCount  - no-op
+  [6-13] GUID getters/setters (4 GUIDs, all return GUID_NULL)
+  [14] IsCustomField  - return false
+  [15] IsEnterprise   - return false
+  [16] IsCalculated   - return false
+  [17] IsFormula      - return false
+  [18] IsOutlineCode  - return false
+  [19] IsLookupTable  - return false
+  [20] IsPersistable  - return false
+
+CustomPropInfoData overrides 19/21 (all except [0] and [4]).
+Bitfield at +0xEC: bit0=Enterprise, bit1=Calculated, bit2=LookupTable,
+bit3=Formula, bit4=OutlineCode, bit5=Persistable.
+
+ENGINE TYPE CODES (CORRECTED)
+=============================
+
+Code  Storage  Size      Semantic          Examples
+ 0    null     0         Unused            (33 unnamed internal fields)
+ 2    i16      2 bytes   Enum/short        ConstraintType, Priority, PercentComplete, OutlineLevel
+ 3    i32      4 bytes   Integer           Duration, ID, Slack, LevelingDelay, Objects
+ 5    i64      8 bytes   Currency/Work     Work, Cost, BCWP, BCWS, FixedCost
+ 8    Text     512/131K  String            Name, WBS, Text1-30, Subproject
+ 9    Object   8 bytes   COM reference     OutlineChildren, Assignments, Parent, Application
+11    i16      2 bytes   Boolean/Flag      Critical, Milestone, Flag1-20, Rollup, Marked
+19    Date32   4 bytes   Date              Start, Finish, ConstraintDate, ActualStart
+20    CompDur  8 bytes   Special           (1 unnamed assignment field)
+21    i64      8 bytes   Ordering ID       BoardStatusColumnOrderingID, SprintColumnOrderingID
+29    Virtual  0+        Computed/RTF      Notes, unnamed computed fields
+72    GUID     16 bytes  UUID              Guid, CalendarGuid, TaskGuid, ResourceGuid
+
+RECORD OFFSET = SLOT INDEX (NOT BYTE OFFSET)
+=============================================
+
+The record_offset field (+0x18 in PropInfoData) is a SLOT INDEX within a
+type-specific sub-array, NOT a direct byte offset into the record struct.
+
+Multiple fields share the same (type, offset):
+  Type 5, offset 8:  Work, BaselineWork, ActualWork, WorkVariance, etc. (71 Task fields)
+  Type 5, offset 9:  Cost, BaselineCost, ActualCost, FixedCost, etc. (92 Task fields)
+  Type 8, offset 21: Name, WBS, Text1-30, Subproject, etc. (311 Task fields)
+  Type 11, offset 17: Critical, Milestone, Flag1-20, etc. (229 Task fields)
+  Type 19, offset 4:  Start, EarlyStart, LateStart, etc. (126 Task fields)
+  Type 19, offset 27: Finish, EarlyFinish, LateFinish, etc. (46 Task fields)
+
+The FLAGS field (at +0x1C) distinguishes individual fields within a group:
+  - Baseline number (0-10)
+  - Actual/remaining/variance/computed mode
+  - Enterprise vs standard
+  - Read/write permissions
+
+The getter function (code pointer in 0x68-byte tail at +0x58) uses the
+field_id + flags to compute the actual value from the record data.
+
+FLAGS BIT ANALYSIS
+==================
+
+Bit  Mask       Count  Meaning (inferred)
+ 1   0x00000002  1815  Standard access (writable)
+ 3   0x00000008  2483  Has value / is supported
+ 5   0x00000020  2169  Readable
+ 6   0x00000040  1982  Serializable
+ 7   0x00000080  2233  Extended access
+12   0x00001000   574  Fixed-cost/duration related
+15   0x00008000  1053  Enterprise category
+17   0x00020000  1890  Has standard COM access
+19   0x00080000   649  Enterprise field
+
+Common flag patterns:
+  0x00020028: Standard read/write (Work, Duration, Start, etc.)
+  0x001a00e8: Baseline fields (BaselineWork, BaselineCost, etc.)
+  0x00020022: Calculated/variance (WorkVariance, TotalSlack, etc.)
+  0x000200ca: Custom text (Text1-30)
+  0x000200a8: Custom flags (Flag1-20)
+  0x000200ea: Custom dates/numbers (Start1-10, Number1-20)
+  0x00000020: Read-only (ID, Created, Objects)
+  0x000280ea: Enterprise cost/number
+  0x000280ca: Enterprise text
+
+COMPLETE FIELD COVERAGE (ALL 8 RECORD TYPES)
+=============================================
+
+Record Type    Total  Named  Types Distribution
+Task           1444    838   8:316, 5:269, 11:229, 29:186, 19:172, 3:121, 2:109
+Resource        883    468   5:198, 8:166, 11:135, 29:130, 19:111, 3:62, 2:59
+Assignment      777    457   5:193, 8:140, 29:135, 19:97, 11:91, 3:57, 2:48
+Links            30      0   3:11, 11:6, 8:5, 29:3, 72:3, 2:2
+Calendar         14      0   3:3, 0:3, 8:2, 29:2, 72:1, 9:1, 11:1, 2:1
+Project           9      0   3:3, 72:2, 8:2, 11:1, 29:1
+OutlineCode      16      0   3:3, 0:3, 8:2, 19:2, 29:2, 72:1, 9:1, 11:1, 2:1
+Task34           34      0   3:11, 11:8, 8:6, 29:3, 72:3, 2:2, 5:1
+─────────────────────────────────────
+TOTAL          3207   1763
+
+Max slot offsets by (record_type, type_code):
+  Task:       i16→54, i32→37, i64→18, text→46, date→27, bool→17, guid→42
+  Resource:   i16→59, i32→37, i64→41, text→46, date→27, bool→17, guid→42
+  Assignment: i16→54, i32→37, i64→41, text→46, date→27, bool→17, guid→42
+
+THREE OFFSET SYSTEMS
+====================
+
+1. SQL/OLE DB Offsets (67 total)
+   - Statically stored in .rdata at VA 0x1410e8e30
+   - 24 Task + 20 Resource + 23 Assignment
+   - Used for database column mapping
+
+2. Display/Render Offsets (24 total)
+   - Two triple tables: Task (14) at VA 0x14111a854, Resource (10) at VA 0x141154cf4
+   - Used for UI column rendering
+
+3. Engine Slot Indices (3207 total — COMPLETE!)
+   - Stored in PropInfoData at +0x18 within 0xA8-stride cache entries
+   - Type-specific array indices, not byte offsets
+   - Scripts: phase2d_full_dump.py, phase2d_scan_vtables.py
+
+ALL RECORD TYPE DESCRIPTORS
+============================
+
+Type         Marker      Fields  Descriptor VA   Cache RVA   Sorted Array
+Task         0x0b404000  1444    0x140f8bda0     0x130be10   0x12a9060
+Resource     0x0c404000   883    0x140f8bf60     0x12e0d30   (runtime)
+Assignment   0x0f4040c8   777    0x140f86410     0x12c0f30   (runtime)
+Links        0x0e404000    30    0x140f8c080     0x1378be0   (runtime)
+Calendar     0x3c404000    14    0x140f863b0     0x1381ae0   (runtime)
+Project      0x07404000     9    0x140f85ff0     0x1382aa0   (runtime)
+OutlineCode  0x3e404000    16    0x140f86350     0x1384990   (runtime)
+Task34       0x0b404000    34    0x140f864d0     0x137e9a0   (runtime)
+
+Note: Assignment descriptor WAS found (previous summary was wrong).
+All 8 descriptors are confirmed with complete field coverage.
+
+AUXILIARY TAIL DATA (bytes 0x40-0xA7 of each entry)
+===================================================
+
+Each entry's 0x68-byte tail contains:
+  +0x58: Code pointer (getter function, in .text ~RVA 0x4b43a0 or 0x7de620)
+  +0x60: Related field_id (e.g., text representation of current field)
+  +0x68: Code pointer (common accessor, in .text ~RVA 0x7ddf30)
+  +0x90: Data pointer (RVA ~0xf6b768, consistent per record type)
+  +0x98: Code pointer (RVA ~0x7ddd60, consistent per record type)
+  +0xA0: Entry index (0, 1, 2, ...)
+
+OUTPUT FILES
+============
+
+Definitive field metadata (THIS session):
+  analysis/field_metadata_task.tsv         - 1444 Task fields with types, offsets, flags
+  analysis/field_metadata_resource.tsv     - 883 Resource fields
+  analysis/field_metadata_assignment.tsv   - 777 Assignment fields
+  analysis/field_metadata_links.tsv        - 30 Links fields
+  analysis/field_metadata_calendar.tsv     - 14 Calendar fields
+  analysis/field_metadata_project.tsv      - 9 Project fields
+  analysis/field_metadata_outlinecode.tsv  - 16 OutlineCode fields
+  analysis/field_metadata_task34.tsv       - 34 Task34 fields
+  analysis/field_metadata_all.tsv          - Combined 3207-field master file
+
+Previous session files (still valid):
+  analysis/field_id_map.tsv               - 3477 field IDs with COM property names
+  analysis/core_field_offsets.tsv          - 67 SQL-layer offsets
+  analysis/static_field_triples.tsv        - 24 display/render offsets
+  analysis/task_categories.tsv             - 9 named categories
+  analysis/direct_offset_fields.tsv        - 115 direct-offset field indices
+  analysis/column_field_map.tsv            - 42 UI column mappings
+  analysis/sql_ddl_strings.txt             - Raw SQL DDL from binary
+  analysis/sql_columns.tsv                 - Extracted SQL column definitions
+
+Scripts (THIS session):
+  scripts/phase2d_scan_vtables.py          - Discovered the 0xA8 stride
+  scripts/phase2d_full_dump.py             - Dumps all 3207 entries with correct stride
+  scripts/phase2d_type_analysis.py         - Type code and flag analysis
+  scripts/phase2d_disasm_raw.py            - vfunc[158] disassembly (dual-stride)
+  scripts/phase2d_propinfodata.py          - PropInfoData class analysis
+  scripts/phase2d_propinfo_hierarchy.py    - Class hierarchy and vtable scan
+  scripts/phase2d_propinfo_layout.py       - Object layout and CustomPropInfoData
+  scripts/phase2d_dump_runtime.py          - Runtime cache dump (older, used 0x40 stride)
+  scripts/phase2d_trace_lookup.py          - COM field access test
+  scripts/phase2d_create_project.py        - Test project creation via COM
+
+REMAINING WORK
+==============
+
+1. RESOLVED: Cache population mystery (stride was 0xA8, not 0x40)
+2. RESOLVED: All 3207 fields extracted (100% coverage)
+
+Still open:
+3. Map slot indices to actual TASKNODE byte offsets
+   - Need to understand how getter functions use (type, slot_index, flags) to compute byte addresses
+   - May require disassembly of the getter functions found in tail +0x58
+4. Correlate engine slot indices with SQL/OLE DB offsets for the 67 fields that have both
+5. Deeper analysis of the dual-stride addressing (0x40 vs 0x78 vs 0xA8) in vfunc[158]
+6. Name the remaining ~1444 unnamed fields using heuristics (offset patterns, type groupings)

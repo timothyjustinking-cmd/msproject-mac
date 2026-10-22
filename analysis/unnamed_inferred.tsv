@@ -1,0 +1,620 @@
+field_id_hex	field_id_dec	inferred_name	method	type	storage	probe_value
+0x0b40002f	188743727	FinishVariance+1	near_after_1	text	unk_9	
+0x0b400030	188743728	FinishVariance+2	near_after_2	text	unk_9	
+0x0b400031	188743729	Text1-2	near_before_2	text	unk_9	
+0x0b400032	188743730	Text1-1	near_before_1	text	unk_9	
+0x0b400056	188743766	UniqueID_Internal	known_id	i32	special	1
+0x0b40005e	188743774	Created+1	near_after_1	text	unk_9	
+0x0b400072	188743794	ResourceGroup+1	near_after_1	text	unk_9	
+0x0b400073	188743795	ResourceGroup+2	near_after_2	text	unk_9	
+0x0b400074	188743796	ResourceGroup+3	near_after_3	i32	computed	1 day
+0x0b400075	188743797	ACWP-3	near_before_3	text	computed	
+0x0b400076	188743798	ACWP-2	near_before_2	virtual	baseline	
+0x0b400077	188743799	ACWP-1	near_before_1	date32	computed	NA
+0x0b400079	188743801	ACWP+1	near_after_1	text	computed	
+0x0b40007a	188743802	ACWP+2	near_after_2	i32	computed	1 day
+0x0b40007b	188743803	ACWP+3	near_after_3	i32	computed	1 day
+0x0b40007c	188743804	ACWP+4_virt	virt_near_4	virtual	baseline	
+0x0b40007d	188743805	Type-3	near_before_3	text	unk_13	
+0x0b40007e	188743806	Type-2	near_before_2	text	unk_13	
+0x0b40007f	188743807	Type-1	near_before_1	virtual	unk_6	
+0x0b400082	188743810	Recurring+1	near_after_1	virtual	unk_13	
+0x0b400083	188743811	EffortDriven-1	near_before_1	bool	direct	No
+0x0b400085	188743813	EffortDriven+1	near_after_1	bool	direct	No
+0x0b400086	188743814	EffortDriven+2	near_after_2	i16	computed	9
+0x0b400087	188743815	OutlineChildren-2	near_before_2	i32	unk_13	
+0x0b400088	188743816	OutlineChildren-1	near_before_1	i16	computed	0
+0x0b40008a	188743818	OutlineChildren+1	near_after_1	i16	computed	0
+0x0b40008c	188743820	PredecessorTasks+1	near_after_1	i16	computed	0
+0x0b40008e	188743822	SuccessorTasks+1	near_after_1	virtual	unk_13	
+0x0b40008f	188743823	SuccessorTasks+2	near_after_2	text	computed	
+0x0b400090	188743824	SuccessorTasks+3	near_after_3	virtual	baseline	
+0x0b4000a0	188743840	OvertimeWork-3	near_before_3	i32	direct	0
+0x0b4000a1	188743841	OvertimeWork-2	near_before_2	i32	computed	0
+0x0b4000a2	188743842	OvertimeWork-1	near_before_1	i32	unk_13	
+0x0b4000a7	188743847	RegularWork+1	near_after_1	i64	computed	0 hrs
+0x0b4000ab	188743851	RemainingOvertimeCost+1	near_after_1	i64	direct	$0.00
+0x0b4000ac	188743852	RemainingOvertimeCost+2	near_after_2	i64	direct	$0.00
+0x0b4000ad	188743853	RemainingOvertimeCost+3	near_after_3	virtual	unk_3	
+0x0b4000ae	188743854	RemainingOvertimeCost+4_virt	virt_near_4	virtual	unk_3	
+0x0b4000af	188743855	RemainingOvertimeCost+5_virt	virt_near_5	virtual	unk_3	
+0x0b4000ba	188743866	UnkSeries_0x0b4000ba-0x0b4000c11Units	series_units	i16	unk_13	2
+0x0b4000bb	188743867	UnkSeries_0x0b4000ba-0x0b4000c12Units	series_units	i16	unk_13	2
+0x0b4000bc	188743868	UnkSeries_0x0b4000ba-0x0b4000c13Units	series_units	i16	unk_13	2
+0x0b4000bd	188743869	UnkSeries_0x0b4000ba-0x0b4000c14Units	series_units	i16	unk_13	2
+0x0b4000be	188743870	UnkSeries_0x0b4000ba-0x0b4000c15Units	series_units	i16	unk_13	2
+0x0b4000bf	188743871	UnkSeries_0x0b4000ba-0x0b4000c16Units	series_units	i16	unk_13	2
+0x0b4000c0	188743872	UnkSeries_0x0b4000ba-0x0b4000c17Units	series_units	i16	unk_13	2
+0x0b4000c1	188743873	UnkSeries_0x0b4000ba-0x0b4000c18Units	series_units	i16	unk_13	2
+0x0b4000c5	188743877	FixedCostAccrual-3	near_before_3	i32	baseline	
+0x0b4000c6	188743878	FixedCostAccrual-2	near_before_2	bool	computed	No
+0x0b4000c7	188743879	FixedCostAccrual-1	near_before_1	bool	direct	No
+0x0b4000c9	188743881	FixedCostAccrual+1	near_after_1	virtual	direct	
+0x0b4000ca	188743882	FixedCostAccrual+2	near_after_2	i16	baseline	0
+0x0b4000cb	188743883	FixedCostAccrual+3	near_after_3	virtual	baseline	
+0x0b4000cc	188743884	Assignments-2	near_before_2	bool	direct	No
+0x0b4000cd	188743885	Assignments-1	near_before_1	i32	unk_13	
+0x0b4000cf	188743887	Assignments+1	near_after_1	virtual	unk_9	
+0x0b4000d0	188743888	Assignments+2	near_after_2	virtual	dyn_text	
+0x0b4000d1	188743889	Assignments+3	near_after_3	i16	unk_13	-1
+0x0b4000d2	188743890	Parent-3	near_before_3	bool	direct	Yes
+0x0b4000d3	188743891	Parent-2	near_before_2	bool	direct	No
+0x0b4000d4	188743892	Parent-1	near_before_1	bool	direct	No
+0x0b4000d7	188743895	Application+1	near_after_1	virtual	unk_6	
+0x0b4000d8	188743896	Hyperlink-1	near_before_1	i32	unk_13	0
+0x0b4000dd	188743901	HyperlinkHREF+1	near_after_1	virtual	unk_13	
+0x0b4000de	188743902	HyperlinkHREF+2	near_after_2	bool	direct	No
+0x0b4000df	188743903	Overallocated-2	near_before_2	bool	direct	No
+0x0b4000e0	188743904	Overallocated-1	near_before_1	bool	computed	No
+0x0b4000e3	188743907	SplitParts+1	near_after_1	obj_ref	unk_13	
+0x0b4000e4	188743908	SplitParts+2	near_after_2	bool	computed	No
+0x0b4000e5	188743909	SplitParts+3	near_after_3	null	unk_13	
+0x0b4000e6	188743910	ExternalTask-2	near_before_2	null	unk_13	
+0x0b4000e7	188743911	ExternalTask-1	near_before_1	bool	direct	No
+0x0b4000e9	188743913	ExternalTask+1	near_after_1	text	unk_13	
+0x0b4000ea	188743914	ExternalTask+2	near_after_2	i16	unk_13	-1
+0x0b4000eb	188743915	ExternalTask+3	near_after_3	virtual	unk_13	
+0x0b4000ec	188743916	OutlineParent-2	near_before_2	null	unk_13	
+0x0b4000ed	188743917	OutlineParent-1	near_before_1	null	unk_13	
+0x0b4000f0	188743920	Resources+1	near_after_1	i16	unk_13	
+0x0b4000f1	188743921	SentinelNone	known_id	i32	unk_11	-1
+0x0b4000f2	188743922	Resources+3	near_after_3	i32	unk_2	
+0x0b4000f3	188743923	SubProjectReadOnly-3	near_before_3	virtual	unk_13	
+0x0b4000f4	188743924	SubProjectReadOnly-2	near_before_2	i32	baseline	0
+0x0b4000f5	188743925	SubProjectReadOnly-1	near_before_1	null	unk_13	
+0x0b4000f7	188743927	SubProjectReadOnly+1	near_after_1	bool	special	No
+0x0b4000f8	188743928	SubProjectReadOnly+2	near_after_2	virtual	unk_9	
+0x0b4000f9	188743929	ResponsePending-1	near_before_1	i16	direct	1
+0x0b4000fe	188743934	LevelIndividualAssignments+1	near_after_1	i32	computed	2
+0x0b4000ff	188743935	LevelIndividualAssignments+2	near_after_2	i32	baseline	0
+0x0b400100	188743936	Cost4-2	near_before_2	i16	computed	
+0x0b400101	188743937	Cost4-1	near_before_1	virtual	unk_15	
+0x0b400151	188744017	UnkSeries_0x0b400151-0x0b4001571Units	series_units	i16	baseline	39
+0x0b400152	188744018	UnkSeries_0x0b400151-0x0b4001572Units	series_units	i16	baseline	39
+0x0b400153	188744019	UnkSeries_0x0b400151-0x0b4001573Units	series_units	i16	baseline	39
+0x0b400154	188744020	UnkSeries_0x0b400151-0x0b4001574Units	series_units	i16	baseline	39
+0x0b400155	188744021	UnkSeries_0x0b400151-0x0b4001575Units	series_units	i16	baseline	39
+0x0b400156	188744022	UnkSeries_0x0b400151-0x0b4001576Units	series_units	i16	baseline	39
+0x0b400157	188744023	UnkSeries_0x0b400151-0x0b4001577Units	series_units	i16	baseline	39
+0x0b400158	188744024	ResourcePhonetics-5_virt	virt_near_5	virtual	virtual	
+0x0b400159	188744025	ResourcePhonetics-4_virt	virt_near_4	virtual	virtual	
+0x0b40015a	188744026	ResourcePhonetics-3	near_before_3	virtual	virtual	
+0x0b40015b	188744027	ResourcePhonetics-2	near_before_2	virtual	virtual	
+0x0b40015c	188744028	ResourcePhonetics-1	near_before_1	virtual	virtual	
+0x0b40015e	188744030	ResourcePhonetics+1	near_after_1	virtual	unk_6	
+0x0b40015f	188744031	ResourcePhonetics+2	near_after_2	null	unk_13	
+0x0b400160	188744032	ResourcePhonetics+3	near_after_3	null	unk_13	
+0x0b400161	188744033	ResourcePhonetics+4_ref	ref_near_4	null	unk_13	
+0x0b400162	188744034	ResourcePhonetics+5_ref	ref_near_5	null	unk_13	
+0x0b400163	188744035	Index-5_ref	ref_near_5	null	unk_13	
+0x0b400164	188744036	Index-4_ref	ref_near_4	null	unk_13	
+0x0b400165	188744037	Index-3	near_before_3	null	unk_13	
+0x0b400166	188744038	Index-2	near_before_2	null	unk_13	
+0x0b400167	188744039	Index-1	near_before_1	null	unk_13	
+0x0b400169	188744041	Index+1	near_after_1	virtual	virtual	
+0x0b40016a	188744042	Index+2	near_after_2	virtual	virtual	
+0x0b40016b	188744043	Index+3	near_after_3	virtual	virtual	
+0x0b40016c	188744044	Index+4_virt	virt_near_4	virtual	virtual	
+0x0b40016d	188744045	PreleveledStart-4_virt	virt_near_4	virtual	virtual	
+0x0b40016e	188744046	PreleveledStart-3	near_before_3	i32	unk_13	
+0x0b40016f	188744047	PreleveledStart-2	near_before_2	i64	unk_13	
+0x0b400170	188744048	PreleveledStart-1	near_before_1	text	unk_13	
+0x0b400173	188744051	PreleveledFinish+1	near_after_1	virtual	baseline	
+0x0b400174	188744052	PreleveledFinish+2	near_after_2	date32	computed	NA
+0x0b400175	188744053	PreleveledFinish+3	near_after_3	virtual	baseline	
+0x0b400176	188744054	PreleveledFinish+4_ref	ref_near_4	null	unk_13	
+0x0b400181	188744065	Predecessors-5_virt	virt_near_5	virtual	unk_13	
+0x0b400183	188744067	InternalStartDate	known_id	date32	direct	Tue 20/10/26
+0x0b400184	188744068	Predecessors-2	near_before_2	bool	direct	No
+0x0b400185	188744069	Predecessors-1	near_before_1	text	unk_13	
+0x0b400188	188744072	Successors+1	near_after_1	date32	unk_2	NA
+0x0b400189	188744073	ResourceNames-1	near_before_1	date32	unk_2	NA
+0x0b40018d	188744077	Estimated+1	near_after_1	text	text	
+0x0b40018e	188744078	IgnoreResourceCalendar-1	near_before_1	bool	unk_12	No
+0x0b400190	188744080	IgnoreResourceCalendar+1	near_after_1	i32	unk_12	-1
+0x0b400191	188744081	Calendar-1	near_before_1	i32	direct	-1
+0x0b40019e	188744094	BaselineDurationEstimated+1	near_after_1	i32	unk_13	
+0x0b40019f	188744095	OutlineCode1-1	near_before_1	text	baseline	
+0x0b4001a1	188744097	OutlineCode1+1	near_after_1	virtual	baseline	
+0x0b4001a3	188744099	OutlineCode2+1	near_after_1	virtual	baseline	
+0x0b4001a5	188744101	OutlineCode3+1	near_after_1	virtual	baseline	
+0x0b4001a7	188744103	OutlineCode4+1	near_after_1	virtual	baseline	
+0x0b4001a9	188744105	OutlineCode5+1	near_after_1	virtual	baseline	
+0x0b4001ab	188744107	OutlineCode6+1	near_after_1	virtual	baseline	
+0x0b4001ad	188744109	OutlineCode7+1	near_after_1	virtual	baseline	
+0x0b4001af	188744111	OutlineCode8+1	near_after_1	virtual	baseline	
+0x0b4001b1	188744113	OutlineCode9+1	near_after_1	virtual	baseline	
+0x0b4001b3	188744115	OutlineCode10+1	near_after_1	virtual	baseline	
+0x0b4001b4	188744116	Deadline-1	near_before_1	bool	direct	No
+0x0b4001b8	188744120	FinishSlack+1	near_after_1	virtual	unk_9	
+0x0b4001ba	188744122	VAC+1	near_after_1	bool	computed	No
+0x0b4001bb	188744123	VAC+2	near_after_2	text	computed	
+0x0b4001bc	188744124	TaskDependencies-1	near_before_1	bool	computed	Yes
+0x0b4001bf	188744127	GroupBySummary+1	near_after_1	i32	computed	0
+0x0b4001c0	188744128	WBSPredecessors-1	near_before_1	i16	computed	0
+0x0b4001c3	188744131	WBSSuccessors+1	near_after_1	i16	unk_13	
+0x0b4001c5	188744133	HyperlinkScreenTip+1	near_after_1	bool	direct	Yes
+0x0b4001c6	188744134	HyperlinkScreenTip+2	near_after_2	i16	unk_13	0
+0x0b4001c7	188744135	HyperlinkScreenTip+3	near_after_3	bool	direct	No
+0x0b4001c9	188744137	ProjectName_Ref	known_id	text	unk_13	test_project
+0x0b4001dd	188744157	BaselineFixedCost-3	near_before_3	bool	baseline	No
+0x0b4001de	188744158	BaselineFixedCost-2	near_before_2	bool	baseline	No
+0x0b4001df	188744159	BaselineFixedCost-1	near_before_1	bool	direct	Yes
+0x0b4001e1	188744161	BaselineFixedCost+1	near_after_1	virtual	unk_3	
+0x0b4001e6	188744166	Baseline1WorkUnits	adjacent_units	i16	unk_13	2
+0x0b4001e8	188744168	Baseline1DurationUnits	adjacent_units	i16	unk_3	39
+0x0b4001ea	188744170	Baseline1FixedCost+1	near_after_1	virtual	unk_3	
+0x0b4001eb	188744171	Baseline1FixedCost+2	near_after_2	virtual	unk_3	
+0x0b4001ec	188744172	Baseline2Start-1	near_before_1	virtual	unk_3	
+0x0b4001f1	188744177	Baseline2WorkUnits	adjacent_units	i16	unk_13	2
+0x0b4001f3	188744179	Baseline2DurationUnits	adjacent_units	i16	unk_3	39
+0x0b4001f5	188744181	Baseline2FixedCost+1	near_after_1	virtual	unk_3	
+0x0b4001f6	188744182	Baseline2FixedCost+2	near_after_2	virtual	unk_3	
+0x0b4001f7	188744183	Baseline3Start-1	near_before_1	virtual	unk_3	
+0x0b4001fc	188744188	Baseline3WorkUnits	adjacent_units	i16	unk_13	2
+0x0b4001fe	188744190	Baseline3DurationUnits	adjacent_units	i16	unk_3	39
+0x0b400200	188744192	Baseline3FixedCost+1	near_after_1	virtual	unk_3	
+0x0b400201	188744193	Baseline3FixedCost+2	near_after_2	virtual	unk_3	
+0x0b400202	188744194	Baseline4Start-1	near_before_1	virtual	unk_3	
+0x0b400207	188744199	Baseline4WorkUnits	adjacent_units	i16	unk_13	2
+0x0b400209	188744201	Baseline4DurationUnits	adjacent_units	i16	unk_3	39
+0x0b40020b	188744203	Baseline4FixedCost+1	near_after_1	virtual	unk_3	
+0x0b40020c	188744204	Baseline4FixedCost+2	near_after_2	virtual	unk_3	
+0x0b40020d	188744205	Baseline5Start-1	near_before_1	virtual	unk_3	
+0x0b400212	188744210	Baseline5WorkUnits	adjacent_units	i16	unk_13	2
+0x0b400214	188744212	Baseline5DurationUnits	adjacent_units	i16	unk_3	39
+0x0b400216	188744214	Baseline5FixedCost+1	near_after_1	virtual	unk_3	
+0x0b400217	188744215	Baseline5FixedCost+2	near_after_2	virtual	unk_3	
+0x0b400218	188744216	CPI-1	near_before_1	virtual	unk_3	
+0x0b400224	188744228	Baseline6WorkUnits	adjacent_units	i16	unk_13	2
+0x0b400226	188744230	Baseline6DurationUnits	adjacent_units	i16	unk_3	39
+0x0b400228	188744232	Baseline6FixedCost+1	near_after_1	virtual	unk_3	
+0x0b400229	188744233	Baseline6FixedCost+2	near_after_2	virtual	unk_3	
+0x0b40022a	188744234	Baseline7Start-1	near_before_1	virtual	unk_3	
+0x0b40022f	188744239	Baseline7WorkUnits	adjacent_units	i16	unk_13	2
+0x0b400231	188744241	Baseline7DurationUnits	adjacent_units	i16	unk_3	39
+0x0b400233	188744243	Baseline7FixedCost+1	near_after_1	virtual	unk_3	
+0x0b400234	188744244	Baseline7FixedCost+2	near_after_2	virtual	unk_3	
+0x0b400235	188744245	Baseline8Start-1	near_before_1	virtual	unk_3	
+0x0b40023a	188744250	Baseline8WorkUnits	adjacent_units	i16	unk_13	2
+0x0b40023c	188744252	Baseline8DurationUnits	adjacent_units	i16	unk_3	39
+0x0b40023e	188744254	Baseline8FixedCost+1	near_after_1	virtual	unk_3	
+0x0b40023f	188744255	Baseline8FixedCost+2	near_after_2	virtual	unk_3	
+0x0b400240	188744256	Baseline9Start-1	near_before_1	virtual	unk_3	
+0x0b400245	188744261	Baseline9WorkUnits	adjacent_units	i16	unk_13	2
+0x0b400247	188744263	Baseline9DurationUnits	adjacent_units	i16	unk_3	39
+0x0b400249	188744265	Baseline9FixedCost+1	near_after_1	virtual	unk_3	
+0x0b40024a	188744266	Baseline9FixedCost+2	near_after_2	virtual	unk_3	
+0x0b40024b	188744267	Baseline10Start-1	near_before_1	virtual	unk_3	
+0x0b400250	188744272	Baseline10WorkUnits	adjacent_units	i16	unk_13	2
+0x0b400252	188744274	Baseline10DurationUnits	adjacent_units	i16	unk_3	39
+0x0b400254	188744276	Baseline10FixedCost+1	near_after_1	virtual	unk_3	
+0x0b400255	188744277	Baseline10FixedCost+2	near_after_2	virtual	unk_3	
+0x0b400256	188744278	EnterpriseCost1-1	near_before_1	virtual	unk_3	
+0x0b400289	188744329	EnterpriseDuration10Units	adjacent_units	i16	unk_3	39
+0x0b40028a	188744330	EnterpriseDuration1Units	series_units	i16	unk_3	39
+0x0b40028b	188744331	EnterpriseDuration2Units	series_units	i16	unk_3	39
+0x0b40028c	188744332	EnterpriseDuration3Units	series_units	i16	unk_3	39
+0x0b40028d	188744333	EnterpriseDuration4Units	series_units	i16	unk_3	39
+0x0b40028e	188744334	EnterpriseDuration5Units	series_units	i16	unk_3	39
+0x0b40028f	188744335	EnterpriseDuration6Units	series_units	i16	unk_3	39
+0x0b400290	188744336	EnterpriseDuration7Units	series_units	i16	unk_3	39
+0x0b400291	188744337	EnterpriseDuration8Units	series_units	i16	unk_3	39
+0x0b400292	188744338	EnterpriseDuration9Units	series_units	i16	unk_3	39
+0x0b4002a7	188744359	EnterpriseFlag20+1	near_after_1	bool	unk_3	No
+0x0b4002a8	188744360	EnterpriseFlag20+2	near_after_2	bool	unk_3	No
+0x0b4002a9	188744361	EnterpriseFlag20+3	near_after_3	bool	unk_3	No
+0x0b4002b8	188744376	EnterpriseNumber1-3	near_before_3	bool	unk_3	No
+0x0b4002b9	188744377	EnterpriseNumber1-2	near_before_2	bool	unk_3	No
+0x0b4002ba	188744378	EnterpriseNumber1-1	near_before_1	bool	unk_3	No
+0x0b4002e4	188744420	EnterpriseOutlineCode1+1	near_after_1	virtual	unk_3	
+0x0b4002e6	188744422	EnterpriseOutlineCode2+1	near_after_1	virtual	unk_3	
+0x0b4002e8	188744424	EnterpriseOutlineCode3+1	near_after_1	virtual	unk_3	
+0x0b4002ea	188744426	EnterpriseOutlineCode4+1	near_after_1	virtual	unk_3	
+0x0b4002ec	188744428	EnterpriseOutlineCode5+1	near_after_1	virtual	unk_3	
+0x0b4002ee	188744430	EnterpriseOutlineCode6+1	near_after_1	virtual	unk_3	
+0x0b4002f0	188744432	EnterpriseOutlineCode7+1	near_after_1	virtual	unk_3	
+0x0b4002f2	188744434	EnterpriseOutlineCode8+1	near_after_1	virtual	unk_3	
+0x0b4002f4	188744436	EnterpriseOutlineCode9+1	near_after_1	virtual	unk_3	
+0x0b4002f6	188744438	EnterpriseOutlineCode10+1	near_after_1	virtual	unk_3	
+0x0b4002f8	188744440	EnterpriseOutlineCode11+1	near_after_1	virtual	unk_3	
+0x0b4002fa	188744442	EnterpriseOutlineCode12+1	near_after_1	virtual	unk_3	
+0x0b4002fc	188744444	EnterpriseOutlineCode13+1	near_after_1	virtual	unk_3	
+0x0b4002fe	188744446	EnterpriseOutlineCode14+1	near_after_1	virtual	unk_3	
+0x0b400300	188744448	EnterpriseOutlineCode15+1	near_after_1	virtual	unk_3	
+0x0b400302	188744450	EnterpriseOutlineCode16+1	near_after_1	virtual	unk_3	
+0x0b400304	188744452	EnterpriseOutlineCode17+1	near_after_1	virtual	unk_3	
+0x0b400306	188744454	EnterpriseOutlineCode18+1	near_after_1	virtual	unk_3	
+0x0b400308	188744456	EnterpriseOutlineCode19+1	near_after_1	virtual	unk_3	
+0x0b40030a	188744458	EnterpriseOutlineCode20+1	near_after_1	virtual	unk_3	
+0x0b40030c	188744460	EnterpriseOutlineCode21+1	near_after_1	virtual	unk_3	
+0x0b40030e	188744462	EnterpriseOutlineCode22+1	near_after_1	virtual	unk_3	
+0x0b400310	188744464	EnterpriseOutlineCode23+1	near_after_1	virtual	unk_3	
+0x0b400312	188744466	EnterpriseOutlineCode24+1	near_after_1	virtual	unk_3	
+0x0b400314	188744468	EnterpriseOutlineCode25+1	near_after_1	virtual	unk_3	
+0x0b400316	188744470	EnterpriseOutlineCode26+1	near_after_1	virtual	unk_3	
+0x0b400318	188744472	EnterpriseOutlineCode27+1	near_after_1	virtual	unk_3	
+0x0b40031a	188744474	EnterpriseOutlineCode28+1	near_after_1	virtual	unk_3	
+0x0b40031c	188744476	EnterpriseOutlineCode29+1	near_after_1	virtual	unk_3	
+0x0b40031e	188744478	EnterpriseOutlineCode30+1	near_after_1	virtual	unk_3	
+0x0b400383	188744579	EnterpriseProjectDuration10Units	adjacent_units	i16	unk_3	39
+0x0b400384	188744580	EnterpriseProjectDuration1Units	series_units	i16	unk_3	39
+0x0b400385	188744581	EnterpriseProjectDuration2Units	series_units	i16	unk_3	39
+0x0b400386	188744582	EnterpriseProjectDuration3Units	series_units	i16	unk_3	39
+0x0b400387	188744583	EnterpriseProjectDuration4Units	series_units	i16	unk_3	39
+0x0b400388	188744584	EnterpriseProjectDuration5Units	series_units	i16	unk_3	39
+0x0b400389	188744585	EnterpriseProjectDuration6Units	series_units	i16	unk_3	39
+0x0b40038a	188744586	EnterpriseProjectDuration7Units	series_units	i16	unk_3	39
+0x0b40038b	188744587	EnterpriseProjectDuration8Units	series_units	i16	unk_3	39
+0x0b40038c	188744588	EnterpriseProjectDuration9Units	series_units	i16	unk_3	39
+0x0b4003ab	188744619	EnterpriseProjectOutlineCode30+1	near_after_1	virtual	unk_3	
+0x0b4003ac	188744620	EnterpriseProjectOutlineCode30+2	near_after_2	virtual	unk_3	
+0x0b4003ad	188744621	EnterpriseProjectOutlineCode30+3	near_after_3	virtual	unk_3	
+0x0b4003ae	188744622	EnterpriseProjectOutlineCode30+4_virt	virt_near_4	virtual	unk_3	
+0x0b4003af	188744623	EnterpriseProjectOutlineCode30+5_virt	virt_near_5	virtual	unk_3	
+0x0b4003c4	188744644	EnterpriseProjectFlag1-5_virt	virt_near_5	virtual	unk_3	
+0x0b4003c5	188744645	EnterpriseProjectFlag1-4_virt	virt_near_4	virtual	unk_3	
+0x0b4003c6	188744646	EnterpriseProjectFlag1-3	near_before_3	virtual	unk_3	
+0x0b4003c7	188744647	EnterpriseProjectFlag1-2	near_before_2	virtual	unk_3	
+0x0b4003c8	188744648	EnterpriseProjectFlag1-1	near_before_1	virtual	unk_3	
+0x0b4003dd	188744669	EnterpriseProjectFlag20+1	near_after_1	bool	unk_3	No
+0x0b4003de	188744670	EnterpriseProjectFlag20+2	near_after_2	bool	unk_3	No
+0x0b4003df	188744671	EnterpriseProjectFlag20+3	near_after_3	bool	unk_3	No
+0x0b4003ee	188744686	EnterpriseProjectNumber1-3	near_before_3	bool	unk_3	No
+0x0b4003ef	188744687	EnterpriseProjectNumber1-2	near_before_2	bool	unk_3	No
+0x0b4003f0	188744688	EnterpriseProjectNumber1-1	near_before_1	bool	unk_3	No
+0x0b400441	188744769	EnterpriseProjectText40+1	near_after_1	text	unk_13	
+0x0b400442	188744770	EnterpriseProjectText40+2	near_after_2	text	unk_13	
+0x0b400443	188744771	EnterpriseProjectText40+3	near_after_3	text	unk_13	
+0x0b40045c	188744796	PhysicalPercentComplete-3	near_before_3	text	unk_13	
+0x0b40045d	188744797	PhysicalPercentComplete-2	near_before_2	text	unk_13	
+0x0b40045e	188744798	PhysicalPercentComplete-1	near_before_1	text	unk_13	
+0x0b400460	188744800	PhysicalPercentComplete+1	near_after_1	i16	unk_13	
+0x0b400461	188744801	EarnedValueMethod-1	near_before_1	i32	computed	
+0x0b400463	188744803	EarnedValueMethod+1	near_after_1	virtual	unk_3	
+0x0b400464	188744804	EarnedValueMethod+2	near_after_2	bool	unk_13	No
+0x0b400465	188744805	EarnedValueMethod+3	near_after_3	virtual	unk_13	
+0x0b400470	188744816	ActualWorkProtected-3	near_before_3	text	unk_13	
+0x0b400471	188744817	ActualWorkProtected-2	near_before_2	text	unk_13	
+0x0b400472	188744818	ActualWorkProtected-1	near_before_1	text	unk_13	
+0x0b400475	188744821	ActualOvertimeWorkProtected+1	near_after_1	virtual	unk_13	
+0x0b400476	188744822	Guid-1	near_before_1	virtual	unk_13	
+0x0b400479	188744825	VersionCounter	known_id	i64	special	2.00
+0x0b40047c	188744828	DeliverableType+1	near_after_1	virtual	unk_13	
+0x0b40047d	188744829	DeliverableType+2	near_after_2	virtual	unk_13	
+0x0b40047e	188744830	DeliverableStart-2	near_before_2	i32	unk_14	1 day
+0x0b40047f	188744831	SecondaryGUID	known_id	guid	direct	2923F12F-5ACC-F111-9F60-1CC10C054C03
+0x0b400482	188744834	DeliverableFinish+1	near_after_1	virtual	unk_13	
+0x0b400483	188744835	DeliverableFinish+2	near_after_2	virtual	unk_13	
+0x0b400484	188744836	DeliverableFinish+3	near_after_3	virtual	unk_13	
+0x0b400485	188744837	DeliverableFinish+4_virt	virt_near_4	virtual	unk_13	
+0x0b400486	188744838	DeliverableFinish+5_virt	virt_near_5	virtual	unk_13	
+0x0b400488	188744840	IsPublished-5_virt	virt_near_5	virtual	unk_13	
+0x0b400489	188744841	IsPublished-4_virt	virt_near_4	virtual	unk_13	
+0x0b40048a	188744842	IsPublished-3	near_before_3	virtual	unk_13	
+0x0b40048b	188744843	IsPublished-2	near_before_2	virtual	unk_13	
+0x0b40048c	188744844	IsPublished-1	near_before_1	virtual	unk_13	
+0x0b400490	188744848	ErrorMessage+1	near_after_1	guid	unk_3	00000000-0000-0000-0000-000000000000
+0x0b400491	188744849	ErrorMessage+2	near_after_2	guid	unk_3	00000000-0000-0000-0000-000000000000
+0x0b400492	188744850	BudgetWork-1	near_before_1	text	unk_13	
+0x0b40049a	188744858	BaselineBudgetCost+1	near_after_1	virtual	unk_3	
+0x0b40049b	188744859	Baseline1FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004a1	188744865	Baseline1BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004a2	188744866	Baseline2FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004a8	188744872	Baseline2BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004a9	188744873	Baseline3FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004af	188744879	Baseline3BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004b0	188744880	Baseline4FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004b6	188744886	Baseline4BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004b7	188744887	Baseline5FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004bd	188744893	Baseline5BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004be	188744894	Baseline6FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004c4	188744900	Baseline6BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004c5	188744901	Baseline7FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004cb	188744907	Baseline7BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004cc	188744908	Baseline8FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004d2	188744914	Baseline8BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004d3	188744915	Baseline9FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004d9	188744921	Baseline9BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004da	188744922	Baseline10FixedCostAccrual-1	near_before_1	virtual	unk_3	
+0x0b4004e0	188744928	Baseline10BudgetCost+1	near_after_1	virtual	unk_3	
+0x0b4004e1	188744929	RecalcFlags-1	near_before_1	virtual	unk_3	
+0x0b4004e3	188744931	RecalcFlags+1	near_after_1	virtual	baseline	
+0x0b4004e4	188744932	RecalcFlags+2	near_after_2	virtual	baseline	
+0x0b4004e5	188744933	StartDriver-1	near_before_1	virtual	baseline	
+0x0b4004e7	188744935	StartDriver+1	near_after_1	date32	direct	Tue 20/10/26
+0x0b4004e8	188744936	StartDriver+2	near_after_2	bool	unk_11	No
+0x0b4004e9	188744937	StartDriver+3	near_after_3	i64	unk_11	$0.00
+0x0b4004f9	188744953	DeliverableName-3	near_before_3	date32	unk_11	Tue 20/10/26
+0x0b4004fa	188744954	DeliverableName-2	near_before_2	i64	unk_11	-153,722,867,280,912.9 hrs
+0x0b4004fb	188744955	DeliverableName-1	near_before_1	i64	unk_11	
+0x0b4004fd	188744957	DeliverableName+1	near_after_1	date32	unk_13	Tue 20/10/26
+0x0b4004fe	188744958	Active-1	near_before_1	date32	unk_13	Mon 26/10/26
+0x0b400503	188744963	Warning+1	near_after_1	date32	direct	Tue 20/10/26
+0x0b400504	188744964	StartText-1	near_before_1	date32	direct	Mon 26/10/26
+0x0b400508	188744968	DurationText+1	near_after_1	i32	direct	5 days
+0x0b400509	188744969	DurationText+2	near_after_2	i16	direct	7
+0x0b40050a	188744970	DurationText+3	near_after_3	date32	unk_13	Tue 20/10/26
+0x0b40050c	188744972	IsStartValid-3	near_before_3	i64	unk_3	????20/10/26
+0x0b40050d	188744973	IsStartValid-2	near_before_2	bool	direct	No
+0x0b40050e	188744974	IsStartValid-1	near_before_1	bool	unk_13	No
+0x0b400512	188744978	IsDurationValid+1	near_after_1	i32	unk_3	0
+0x0b400535	188745013	IgnoreWarnings+1	near_after_1	i32	unk_13	
+0x0b400537	188745015	CalendarObject+1	near_after_1	i64	unk_13	
+0x0b400538	188745016	CalendarObject+2	near_after_2	virtual	unk_3	
+0x0b400539	188745017	ScheduledStart-1	near_before_1	virtual	unk_3	
+0x0b40053d	188745021	ScheduledDuration+1	near_after_1	i64	unk_13	0 hrs
+0x0b40053e	188745022	ScheduledDuration+2	near_after_2	i64	unk_13	0 hrs
+0x0b40053f	188745023	ScheduledDuration+3	near_after_3	i64	unk_13	0 hrs
+0x0b400562	188745058	PathDrivingPredecessor-3	near_before_3	i64	unk_13	0 hrs
+0x0b400563	188745059	PathDrivingPredecessor-2	near_before_2	date32	unk_2	NA
+0x0b400564	188745060	PathDrivingPredecessor-1	near_before_1	date32	unk_2	NA
+0x0b400569	188745065	PathSuccessor+1	near_after_1	bool	unk_2	No
+0x0b40056a	188745066	PathSuccessor+2	near_after_2	text	unk_11	
+0x0b40056b	188745067	PathSuccessor+3	near_after_3	text	unk_11	
+0x0b400579	188745081	Compliant-3	near_before_3	bool	unk_11	No
+0x0b40057a	188745082	Compliant-2	near_before_2	bool	unk_11	No
+0x0b40057b	188745083	Compliant-1	near_before_1	i32	unk_11	-1
+0x0b40057e	188745086	SummaryTaskName+1	near_after_1	guid	unk_13	00000000-0000-0000-0000-000000000000
+0x0b40058a	188745098	NextAvailableSprintColumnOrderingID+1	near_after_1	text	unk_3	
+0x0b40058b	188745099	Count-1	near_before_1	bool	direct	No
+0x0b40058e	188745102	BoardColumnId+1	near_after_1	virtual	unk_3	
+0x0b40058f	188745103	BoardColumnId+2	near_after_2	virtual	unk_3	
+0x0b400590	188745104	BoardColumnId+3	near_after_3	bool	direct	No
+0x0c40003c	205520956	AvailableTo+2_virt	virt_near_2	virtual		
+0x0c40003d	205520957	AvailableTo+3_virt	virt_near_3	virtual		
+0x0c40003e	205520958	AvailableTo+4_virt	virt_near_4	virtual		
+0x0c40003f	205520959	AvailableTo+5_virt	virt_near_5	virtual		
+0x0c40005b	205520987	Parent-4_virt	virt_near_4	virtual		
+0x0c400078	205521016	Duration3Units	adjacent_units	i16		
+0x0c400088	205521032	Flag9+1_virt	virt_near_1	virtual		
+0x0c40008e	205521038	HyperlinkHREF+1_virt	virt_near_1	virtual		
+0x0c40008f	205521039	HyperlinkHREF+2_virt	virt_near_2	virtual		
+0x0c400093	205521043	Calendar-3_ref	ref_near_3	null		
+0x0c400094	205521044	Calendar-2_ref	ref_near_2	null		
+0x0c400099	205521049	Calendar+3_ref	ref_near_3	null		
+0x0c40009a	205521050	Calendar+4_ref	ref_near_4	null		
+0x0c40009d	205521053	CostRateTables-3_ref	ref_near_3	null		
+0x0c4000a5	205521061	Cost4-1_virt	virt_near_1	virtual		
+0x0c4000fe	205521150	Index+1_ref	ref_near_1	null		
+0x0c400112	205521170	Project+1_virt	virt_near_1	virtual		
+0x0c400113	205521171	Project+2_virt	virt_near_2	virtual		
+0x0c400114	205521172	Availabilities-1_virt	virt_near_1	virtual		
+0x0c400117	205521175	OutlineCode1+1_virt	virt_near_1	virtual		
+0x0c400119	205521177	OutlineCode2+1_virt	virt_near_1	virtual		
+0x0c40011b	205521179	OutlineCode3+1_virt	virt_near_1	virtual		
+0x0c40011d	205521181	OutlineCode4+1_virt	virt_near_1	virtual		
+0x0c40011f	205521183	OutlineCode5+1_virt	virt_near_1	virtual		
+0x0c400121	205521185	OutlineCode6+1_virt	virt_near_1	virtual		
+0x0c400123	205521187	OutlineCode7+1_virt	virt_near_1	virtual		
+0x0c400125	205521189	OutlineCode8+1_virt	virt_near_1	virtual		
+0x0c400127	205521191	OutlineCode9+1_virt	virt_near_1	virtual		
+0x0c400129	205521193	OutlineCode10+1_virt	virt_near_1	virtual		
+0x0c400155	205521237	Baseline1Work-1_virt	virt_near_1	virtual		
+0x0c40015e	205521246	Baseline2Work-2_virt	virt_near_2	virtual		
+0x0c40015f	205521247	Baseline2Work-1_virt	virt_near_1	virtual		
+0x0c400168	205521256	Baseline3Work-2_virt	virt_near_2	virtual		
+0x0c400169	205521257	Baseline3Work-1_virt	virt_near_1	virtual		
+0x0c400172	205521266	Baseline4Work-2_virt	virt_near_2	virtual		
+0x0c400173	205521267	Baseline4Work-1_virt	virt_near_1	virtual		
+0x0c40017c	205521276	Baseline5Work-2_virt	virt_near_2	virtual		
+0x0c40017d	205521277	Baseline5Work-1_virt	virt_near_1	virtual		
+0x0c400186	205521286	Baseline6Work-2_virt	virt_near_2	virtual		
+0x0c400187	205521287	Baseline6Work-1_virt	virt_near_1	virtual		
+0x0c400190	205521296	Baseline7Work-2_virt	virt_near_2	virtual		
+0x0c400191	205521297	Baseline7Work-1_virt	virt_near_1	virtual		
+0x0c40019a	205521306	Baseline8Work-2_virt	virt_near_2	virtual		
+0x0c40019b	205521307	Baseline8Work-1_virt	virt_near_1	virtual		
+0x0c4001a4	205521316	Baseline9Work-2_virt	virt_near_2	virtual		
+0x0c4001a5	205521317	Baseline9Work-1_virt	virt_near_1	virtual		
+0x0c4001ae	205521326	Baseline10Work-2_virt	virt_near_2	virtual		
+0x0c4001af	205521327	Baseline10Work-1_virt	virt_near_1	virtual		
+0x0c4001b8	205521336	EnterpriseUniqueID-3_virt	virt_near_3	virtual		
+0x0c4001b9	205521337	EnterpriseUniqueID-2_virt	virt_near_2	virtual		
+0x0c4001f0	205521392	EnterpriseDuration10Units	adjacent_units	i16		
+0x0c40024b	205521483	EnterpriseOutlineCode1+1_virt	virt_near_1	virtual		
+0x0c40024d	205521485	EnterpriseOutlineCode2+1_virt	virt_near_1	virtual		
+0x0c40024f	205521487	EnterpriseOutlineCode3+1_virt	virt_near_1	virtual		
+0x0c400251	205521489	EnterpriseOutlineCode4+1_virt	virt_near_1	virtual		
+0x0c400253	205521491	EnterpriseOutlineCode5+1_virt	virt_near_1	virtual		
+0x0c400255	205521493	EnterpriseOutlineCode6+1_virt	virt_near_1	virtual		
+0x0c400257	205521495	EnterpriseOutlineCode7+1_virt	virt_near_1	virtual		
+0x0c400259	205521497	EnterpriseOutlineCode8+1_virt	virt_near_1	virtual		
+0x0c40025b	205521499	EnterpriseOutlineCode9+1_virt	virt_near_1	virtual		
+0x0c40025d	205521501	EnterpriseOutlineCode10+1_virt	virt_near_1	virtual		
+0x0c40025f	205521503	EnterpriseOutlineCode11+1_virt	virt_near_1	virtual		
+0x0c400261	205521505	EnterpriseOutlineCode12+1_virt	virt_near_1	virtual		
+0x0c400263	205521507	EnterpriseOutlineCode13+1_virt	virt_near_1	virtual		
+0x0c400265	205521509	EnterpriseOutlineCode14+1_virt	virt_near_1	virtual		
+0x0c400267	205521511	EnterpriseOutlineCode15+1_virt	virt_near_1	virtual		
+0x0c400269	205521513	EnterpriseOutlineCode16+1_virt	virt_near_1	virtual		
+0x0c40026b	205521515	EnterpriseOutlineCode17+1_virt	virt_near_1	virtual		
+0x0c40026d	205521517	EnterpriseOutlineCode18+1_virt	virt_near_1	virtual		
+0x0c40026f	205521519	EnterpriseOutlineCode19+1_virt	virt_near_1	virtual		
+0x0c400271	205521521	EnterpriseOutlineCode20+1_virt	virt_near_1	virtual		
+0x0c400273	205521523	EnterpriseOutlineCode21+1_virt	virt_near_1	virtual		
+0x0c400275	205521525	EnterpriseOutlineCode22+1_virt	virt_near_1	virtual		
+0x0c400277	205521527	EnterpriseOutlineCode23+1_virt	virt_near_1	virtual		
+0x0c400279	205521529	EnterpriseOutlineCode24+1_virt	virt_near_1	virtual		
+0x0c40027b	205521531	EnterpriseOutlineCode25+1_virt	virt_near_1	virtual		
+0x0c40027d	205521533	EnterpriseOutlineCode26+1_virt	virt_near_1	virtual		
+0x0c40027f	205521535	EnterpriseOutlineCode27+1_virt	virt_near_1	virtual		
+0x0c400281	205521537	EnterpriseOutlineCode28+1_virt	virt_near_1	virtual		
+0x0c400283	205521539	EnterpriseOutlineCode29+1_virt	virt_near_1	virtual		
+0x0c400285	205521541	EnterpriseRBS+1_virt	virt_near_1	virtual		
+0x0c4002b9	205521593	EnterpriseInactive+1_ref	ref_near_1	null		
+0x0c4002bd	205521597	EnterpriseMultiValue20+1_virt	virt_near_1	virtual		
+0x0c4002bf	205521599	EnterpriseMultiValue21+1_virt	virt_near_1	virtual		
+0x0c4002c1	205521601	EnterpriseMultiValue22+1_virt	virt_near_1	virtual		
+0x0c4002c3	205521603	EnterpriseMultiValue23+1_virt	virt_near_1	virtual		
+0x0c4002c5	205521605	EnterpriseMultiValue24+1_virt	virt_near_1	virtual		
+0x0c4002c7	205521607	EnterpriseMultiValue25+1_virt	virt_near_1	virtual		
+0x0c4002c9	205521609	EnterpriseMultiValue26+1_virt	virt_near_1	virtual		
+0x0c4002cb	205521611	EnterpriseMultiValue27+1_virt	virt_near_1	virtual		
+0x0c4002cd	205521613	EnterpriseMultiValue28+1_virt	virt_near_1	virtual		
+0x0c4002cf	205521615	EnterpriseMultiValue29+1_virt	virt_near_1	virtual		
+0x0c4002d2	205521618	ActualOvertimeWorkProtected+1_virt	virt_near_1	virtual		
+0x0c4002d3	205521619	ActualOvertimeWorkProtected+2_virt	virt_near_2	virtual		
+0x0c4002db	205521627	CalendarGuid+2_virt	virt_near_2	virtual		
+0x0c4002dc	205521628	CalendarGuid+3_virt	virt_near_3	virtual		
+0x0c4002dd	205521629	CalendarGuid+4_virt	virt_near_4	virtual		
+0x0c4002de	205521630	ErrorMessage-4_virt	virt_near_4	virtual		
+0x0c4002e5	205521637	DefaultAssignmentOwner+1_virt	virt_near_1	virtual		
+0x0c4002e6	205521638	DefaultAssignmentOwner+2_virt	virt_near_2	virtual		
+0x0c4002e7	205521639	DefaultAssignmentOwner+3_virt	virt_near_3	virtual		
+0x0c4002e8	205521640	DefaultAssignmentOwner+4_virt	virt_near_4	virtual		
+0x0c4002e9	205521641	DefaultAssignmentOwner+5_virt	virt_near_5	virtual		
+0x0c4002eb	205521643	Budget-5_virt	virt_near_5	virtual		
+0x0c4002ec	205521644	Budget-4_virt	virt_near_4	virtual		
+0x0c4002ed	205521645	Budget-3_virt	virt_near_3	virtual		
+0x0c4002ee	205521646	Budget-2_virt	virt_near_2	virtual		
+0x0c4002ef	205521647	Budget-1_virt	virt_near_1	virtual		
+0x0c4002f6	205521654	BaselineBudgetCost+1_virt	virt_near_1	virtual		
+0x0c4002f7	205521655	Baseline1BudgetWork-1_virt	virt_near_1	virtual		
+0x0c4002fa	205521658	Baseline1BudgetCost+1_virt	virt_near_1	virtual		
+0x0c4002fb	205521659	Baseline2BudgetWork-1_virt	virt_near_1	virtual		
+0x0c4002fe	205521662	Baseline2BudgetCost+1_virt	virt_near_1	virtual		
+0x0c4002ff	205521663	Baseline3BudgetWork-1_virt	virt_near_1	virtual		
+0x0c400302	205521666	Baseline3BudgetCost+1_virt	virt_near_1	virtual		
+0x0c400303	205521667	Baseline4BudgetWork-1_virt	virt_near_1	virtual		
+0x0c400306	205521670	Baseline4BudgetCost+1_virt	virt_near_1	virtual		
+0x0c400307	205521671	Baseline5BudgetWork-1_virt	virt_near_1	virtual		
+0x0c40030a	205521674	Baseline5BudgetCost+1_virt	virt_near_1	virtual		
+0x0c40030b	205521675	Baseline6BudgetWork-1_virt	virt_near_1	virtual		
+0x0c40030e	205521678	Baseline6BudgetCost+1_virt	virt_near_1	virtual		
+0x0c40030f	205521679	Baseline7BudgetWork-1_virt	virt_near_1	virtual		
+0x0c400312	205521682	Baseline7BudgetCost+1_virt	virt_near_1	virtual		
+0x0c400313	205521683	Baseline8BudgetWork-1_virt	virt_near_1	virtual		
+0x0c400316	205521686	Baseline8BudgetCost+1_virt	virt_near_1	virtual		
+0x0c400317	205521687	Baseline9BudgetWork-1_virt	virt_near_1	virtual		
+0x0c40031a	205521690	Baseline9BudgetCost+1_virt	virt_near_1	virtual		
+0x0c40031b	205521691	Baseline10BudgetWork-1_virt	virt_near_1	virtual		
+0x0c40031e	205521694	Baseline10BudgetCost+1_virt	virt_near_1	virtual		
+0x0c40031f	205521695	IsTeam-1_virt	virt_near_1	virtual		
+0x0c40035e	205521758	EngagementCommittedMaxUnitsUnits	adjacent_i64_units	i16		
+0x0c400360	205521760	EngagementDraftWorkUnits	adjacent_units	i16		
+0x0c400362	205521762	EngagementProposedWorkUnits	adjacent_units	i16		
+0x0c400364	205521764	EngagementCommittedWorkUnits	adjacent_units	i16		
+0x0f400031	255852593	Project+5_virt	virt_near_5	virtual		
+0x0f400051	255852625	CostRateTable+1_virt	virt_near_1	virtual		
+0x0f400057	255852631	Application+1_virt	virt_near_1	virtual		
+0x0f400074	255852660	Duration3Units	adjacent_units	i16		
+0x0f400085	255852677	LinkedFields+1_virt	virt_near_1	virtual		
+0x0f400088	255852680	Overallocated+1_ref	ref_near_1	null		
+0x0f400089	255852681	Overallocated+2_ref	ref_near_2	null		
+0x0f40008b	255852683	TaskSummaryName-3_virt	virt_near_3	virtual		
+0x0f40008c	255852684	TaskSummaryName-2_ref	ref_near_2	null		
+0x0f400090	255852688	LevelingDelay-1_virt	virt_near_1	virtual		
+0x0f400096	255852694	Hyperlink-2_virt	virt_near_2	virtual		
+0x0f40009c	255852700	HyperlinkHREF+1_virt	virt_near_1	virtual		
+0x0f40009e	255852702	Cost4-1_virt	virt_near_1	virtual		
+0x0f400103	255852803	StartVariance-3_virt	virt_near_3	virtual		
+0x0f400105	255852805	StartVariance-1_virt	virt_near_1	virtual		
+0x0f400120	255852832	Baseline1Work-1_virt	virt_near_1	virtual		
+0x0f400123	255852835	Baseline1Cost+1_virt	virt_near_1	virtual		
+0x0f400124	255852836	Baseline1Cost+2_virt	virt_near_2	virtual		
+0x0f400125	255852837	Baseline1Start-2_virt	virt_near_2	virtual		
+0x0f40012c	255852844	Baseline2Cost+1_virt	virt_near_1	virtual		
+0x0f40012d	255852845	Baseline2Cost+2_virt	virt_near_2	virtual		
+0x0f40012e	255852846	Baseline2Start-2_virt	virt_near_2	virtual		
+0x0f400135	255852853	Baseline3Cost+1_virt	virt_near_1	virtual		
+0x0f400136	255852854	Baseline3Cost+2_virt	virt_near_2	virtual		
+0x0f400137	255852855	Baseline3Start-2_virt	virt_near_2	virtual		
+0x0f40013e	255852862	Baseline4Cost+1_virt	virt_near_1	virtual		
+0x0f40013f	255852863	Baseline4Cost+2_virt	virt_near_2	virtual		
+0x0f400140	255852864	Baseline4Start-2_virt	virt_near_2	virtual		
+0x0f400147	255852871	Baseline5Cost+1_virt	virt_near_1	virtual		
+0x0f400148	255852872	Baseline5Cost+2_virt	virt_near_2	virtual		
+0x0f400149	255852873	Baseline5Start-2_virt	virt_near_2	virtual		
+0x0f400150	255852880	Baseline6Cost+1_virt	virt_near_1	virtual		
+0x0f400151	255852881	Baseline6Cost+2_virt	virt_near_2	virtual		
+0x0f400152	255852882	Baseline6Start-2_virt	virt_near_2	virtual		
+0x0f400159	255852889	Baseline7Cost+1_virt	virt_near_1	virtual		
+0x0f40015a	255852890	Baseline7Cost+2_virt	virt_near_2	virtual		
+0x0f40015b	255852891	Baseline7Start-2_virt	virt_near_2	virtual		
+0x0f400162	255852898	Baseline8Cost+1_virt	virt_near_1	virtual		
+0x0f400163	255852899	Baseline8Cost+2_virt	virt_near_2	virtual		
+0x0f400164	255852900	Baseline8Start-2_virt	virt_near_2	virtual		
+0x0f40016b	255852907	Baseline9Cost+1_virt	virt_near_1	virtual		
+0x0f40016c	255852908	Baseline9Cost+2_virt	virt_near_2	virtual		
+0x0f40016d	255852909	Baseline9Start-2_virt	virt_near_2	virtual		
+0x0f400174	255852916	Baseline10Cost+1_virt	virt_near_1	virtual		
+0x0f400175	255852917	Baseline10Cost+2_virt	virt_near_2	virtual		
+0x0f400176	255852918	Baseline10Start-2_virt	virt_near_2	virtual		
+0x0f4001af	255852975	EnterpriseDuration10Units	adjacent_units	i16		
+0x0f40023f	255853119	EnterpriseResourceRBS+1_virt	virt_near_1	virtual		
+0x0f400240	255853120	EnterpriseResourceRBS+2_virt	virt_near_2	virtual		
+0x0f400241	255853121	EnterpriseResourceRBS+3_virt	virt_near_3	virtual		
+0x0f400242	255853122	EnterpriseResourceRBS+4_virt	virt_near_4	virtual		
+0x0f400243	255853123	EnterpriseResourceRBS+5_virt	virt_near_5	virtual		
+0x0f400258	255853144	ResourceRequestType-5_virt	virt_near_5	virtual		
+0x0f400259	255853145	ResourceRequestType-4_virt	virt_near_4	virtual		
+0x0f40025a	255853146	ResourceRequestType-3_virt	virt_near_3	virtual		
+0x0f40025b	255853147	ResourceRequestType-2_virt	virt_near_2	virtual		
+0x0f40025c	255853148	ResourceRequestType-1_virt	virt_near_1	virtual		
+0x0f400260	255853152	BookingType-1_ref	ref_near_1	null		
+0x0f400263	255853155	EnterpriseResourceMultiValue20+1_virt	virt_near_1	virtual		
+0x0f400265	255853157	EnterpriseResourceMultiValue21+1_virt	virt_near_1	virtual		
+0x0f400267	255853159	EnterpriseResourceMultiValue22+1_virt	virt_near_1	virtual		
+0x0f400269	255853161	EnterpriseResourceMultiValue23+1_virt	virt_near_1	virtual		
+0x0f40026b	255853163	EnterpriseResourceMultiValue24+1_virt	virt_near_1	virtual		
+0x0f40026d	255853165	EnterpriseResourceMultiValue25+1_virt	virt_near_1	virtual		
+0x0f40026f	255853167	EnterpriseResourceMultiValue26+1_virt	virt_near_1	virtual		
+0x0f400271	255853169	EnterpriseResourceMultiValue27+1_virt	virt_near_1	virtual		
+0x0f400273	255853171	EnterpriseResourceMultiValue28+1_virt	virt_near_1	virtual		
+0x0f400275	255853173	EnterpriseResourceMultiValue29+1_virt	virt_near_1	virtual		
+0x0f400278	255853176	ActualOvtWorkProtected+1_virt	virt_near_1	virtual		
+0x0f400279	255853177	Created-1_virt	virt_near_1	virtual		
+0x0f40027b	255853179	Created+1_virt	virt_near_1	virtual		
+0x0f40027f	255853183	ResourceGuid+1_virt	virt_near_1	virtual		
+0x0f400280	255853184	ResourceGuid+2_virt	virt_near_2	virtual		
+0x0f400289	255853193	Summary+3_virt	virt_near_3	virtual		
+0x0f40028a	255853194	Summary+4_virt	virt_near_4	virtual		
+0x0f400297	255853207	Owner-5_virt	virt_near_5	virtual		
+0x0f40029f	255853215	BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002a0	255853216	BaselineBudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002a3	255853219	BaselineBudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002a4	255853220	Baseline1BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002a7	255853223	Baseline1BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002a8	255853224	Baseline2BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002ab	255853227	Baseline2BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002ac	255853228	Baseline3BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002af	255853231	Baseline3BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002b0	255853232	Baseline4BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002b3	255853235	Baseline4BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002b4	255853236	Baseline5BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002b7	255853239	Baseline5BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002b8	255853240	Baseline6BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002bb	255853243	Baseline6BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002bc	255853244	Baseline7BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002bf	255853247	Baseline7BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002c0	255853248	Baseline8BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002c3	255853251	Baseline8BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002c4	255853252	Baseline9BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002c7	255853255	Baseline9BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002c8	255853256	Baseline10BudgetWork-1_virt	virt_near_1	virtual		
+0x0f4002cb	255853259	Baseline10BudgetCost+1_virt	virt_near_1	virtual		
+0x0f4002cc	255853260	Baseline10BudgetCost+2_virt	virt_near_2	virtual		
+0x0f4002d4	255853268	Resource+1_ref	ref_near_1	null		
+0x0f400304	255853316	SprintFinish+3_virt	virt_near_3	virtual		
+0x0f400306	255853318	SprintFinish+5_virt	virt_near_5	virtual		

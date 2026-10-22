@@ -1,0 +1,28 @@
+class	table_class	offset_hex	offset	field_name	vt_type	cast_type	access_count	n_field_ids	all_names
+Assignment	TAssnTable	0x430	1072			code	1	1	
+Resource	TRscTable	0x28	40	StandardRate	VT_VARIANT	uint	61	2	OvertimeRate; StandardRate
+Resource	TRscTable	0x90	144	MaterialLabel	VT_BSTR		0	1	MaterialLabel
+Resource	TRscTable	0x358	856	MaterialLabel	VT_BSTR		0	1	MaterialLabel
+Task	TTaskTable	0x14	20	BaselineWork	VT_VARIANT	ushort	47	16	ActualOvertimeCost; ActualOvertimeWork; BaselineCost; BaselineDuration; BaselineFinish
+Task	TTaskTable	0x1c	28	Project	VT_BSTR	uint	72	5	ActualOvertimeCost; Calendar; OvertimeCost; Project; RemainingOvertimeCost
+Task	TTaskTable	0x20	32	ActualDuration	VT_VARIANT	uint	394	16	Active; ActualDuration; Baseline10Duration; Baseline9Duration; EnterpriseDuration1
+Task	TTaskTable	0x28	40	ConstraintType	VT_VARIANT	uint	232	15	Baseline10Duration; Baseline9Duration; ConstraintType; DeliverableType; EnterpriseDuration1
+Task	TTaskTable	0x3c	60	LevelingDelay	VT_VARIANT	int	6	1	LevelingDelay
+Task	TTaskTable	0x42	66	ActualDuration	VT_VARIANT	undefined2	7	1	ActualDuration
+Task	TTaskTable	0x58	88	Work	VT_VARIANT	longlong	314	25	ActualWork; Baseline10DurationText; Baseline1DurationText; Baseline2DurationText; Baseline3DurationText
+Task	TTaskTable	0x68	104			undefined4	49	2	
+Task	TTaskTable	0x90	144	DurationText	VT_BSTR	longlong	1	12	Baseline10DurationText; Baseline1DurationText; Baseline2DurationText; Baseline3DurationText; Baseline4DurationText
+Task	TTaskTable	0xc0	192	StatusManagerName	VT_BSTR		0	1	StatusManagerName
+Task	TTaskTable	0x118	280	Calendar	VT_BSTR	undefined4	7	1	Calendar
+Task	TTaskTable	0x130	304	BaselineDuration	VT_VARIANT	undefined4	522	31	BaselineDuration; CPI; CVPercent; Count; EAC
+Task	TTaskTable	0x140	320	OvertimeWork	VT_VARIANT	uint	51	2	OvertimeWork; RegularWork
+Task	TTaskTable	0x250	592	DurationText	VT_BSTR		0	12	Baseline10DurationText; Baseline1DurationText; Baseline2DurationText; Baseline3DurationText; Baseline4DurationText
+Task	TTaskTable	0x260	608	ID	VT_I4	code	1	1	ID
+Task	TTaskTable	0x448	1096				0	1	
+Task	TTaskTable	0x510	1296				0	2	
+Task	TTaskTable	0x638	1592			longlong	20	2	
+Task	TTaskTable	0x74c	1868	Work	VT_VARIANT	ushort	1	4	ActualWork; BaselineWork; RemainingWork; Work
+Task	TTaskTable	0x778	1912	StatusManagerName	VT_BSTR		0	1	StatusManagerName
+Task	TTaskTable	0xca3	3235	BaselineFinishText	VT_BSTR		0	11	Baseline10FinishText; Baseline1FinishText; Baseline2FinishText; Baseline3FinishText; Baseline4FinishText
+Task	TTaskTable	0xca4	3236	BaselineDurationText	VT_BSTR		0	11	Baseline10DurationText; Baseline1DurationText; Baseline2DurationText; Baseline3DurationText; Baseline4DurationText
+Task	TTaskTable	0xd50	3408	WBS	VT_BSTR		0	1	WBS

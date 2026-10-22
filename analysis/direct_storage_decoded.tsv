@@ -1,0 +1,19 @@
+field_id_hex	field_id_dec	name	type	storage	values
+0x0b400033	188743731	Text1	text	baseline	[+8]=2454096035440 [+16]=24 [+24]=0 [+32]=0
+0x0b40006b	188743787	Cost2	i64	baseline	dbl_a=0.00 | dbl_b=3141592600.00
+0x0b40006a	188743786	Cost1	i64	baseline	dbl_a=0.00 | dbl_b=0.00
+0x0b400020	188743712	PercentComplete	i16	direct	i16_a=0 i32_a=0 | i16_b=42 i32_b=42
+0x0b400057	188743767	Number1	i64	baseline	dbl_a=42.00 | dbl_b=0.00
+0x0b400063	188743779	Resume	date32	direct	date_a=0xffffffff | date_b=0x3d1414a0
+0x0b40005a	188743770	Number4	i64	baseline	dbl_a=0.00 | dbl_b=0.00
+0x0b400029	188743721	ActualStart	date32	direct	date_a=0xffffffff | date_b=0x3d1212c0
+0x0b40015e	188744030	unnamed_0x0b40015e	virtual	unk_6	[+8]=0 [+16]=0 [+24]=2454403923088 [+32]=96
+0x0b400013	188743699	Critical	bool	direct	bool_a=0 | bool_b=1
+0x0b400019	188743705	Priority	i16	direct	i16_a=500 i32_a=500 | i16_b=543 i32_b=543
+0x0b40001c	188743708	ActualDuration	i32	direct	i16_a=0 i32_a=0 | i16_b=10080 i32_b=10080
+0x0b40001f	188743711	RemainingDuration	i32	direct	i16_a=24000 i32_a=24000 | i16_b=13920 i32_b=13920
+0x0b400064	188743780	Stop	date32	direct	date_a=0xffffffff | date_b=0x3d1414a0
+0x0b400505	188744965	StartText	text	unk_3	[+8]=0 [+16]=2 [+24]=0 [+32]=0
+0x0b400506	188744966	FinishText	text	unk_3	[+8]=0 [+16]=2 [+24]=0 [+32]=0
+0x0b4000c9	188743881	unnamed_0x0b4000c9	virtual	direct	[+8]=128 [+16]=4 [+24]=36992 [+32]=4
+0x0b4004e2	188744930	RecalcFlags	i32	direct	i16_a=16 i32_a=16 | i16_b=1 i32_b=1
