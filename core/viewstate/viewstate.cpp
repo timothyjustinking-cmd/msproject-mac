@@ -95,6 +95,274 @@ void append_u32(std::vector<std::uint8_t>& bytes, std::uint32_t value) {
     bytes.push_back(static_cast<std::uint8_t>((value >> 24u) & 0xffu));
 }
 
+// ---------------------------------------------------------------------------
+// Wave 17 (F1) helpers.
+// ---------------------------------------------------------------------------
+
+// True only for the printable ASCII this module can read back: the decoder
+// stops at the first non-printable UTF-16 unit, so writing anything else would
+// not round-trip.
+bool printable_ascii(std::string_view text, std::string& why) {
+    if (text.empty()) {
+        why = "name is empty";
+        return false;
+    }
+    for (const char ch : text) {
+        const unsigned char byte = static_cast<unsigned char>(ch);
+        if (byte < 0x20 || byte > 0x7e) {
+            why = "name must be printable ASCII (the decoder reads ASCII names only)";
+            return false;
+        }
+    }
+    return true;
+}
+
+// UTF-16LE bytes for `text`, optionally with a terminating NUL unit.
+std::vector<std::uint8_t> utf16_bytes(std::string_view text, bool nul_terminated) {
+    std::vector<std::uint8_t> out(text.size() * 2 + (nul_terminated ? 2u : 0u), 0);
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        out[i * 2] = static_cast<std::uint8_t>(text[i]);
+    }
+    return out;
+}
+
+std::string strip_accelerators(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (const char ch : text) {
+        if (ch != '&') {
+            out.push_back(ch);
+        }
+    }
+    return out;
+}
+
+// Inference, not a stored flag (wave 15): a combination view stores other view
+// names in 0x2240000a/0x2240000b.  Mark a view when its table-or-top matches the
+// name or display name of another view in the same collection.
+void recompute_combination_flags(ViewState& state) {
+    for (auto& view : state.views) {
+        view.looks_like_combination = false;
+    }
+    for (auto& view : state.views) {
+        if (view.table_or_top.empty()) {
+            continue;
+        }
+        const std::string needle = strip_accelerators(view.table_or_top);
+        for (const auto& other : state.views) {
+            if (&other == &view) {
+                continue;
+            }
+            if (strip_accelerators(other.name) == needle ||
+                (!other.display_name.empty() &&
+                 strip_accelerators(other.display_name) == needle)) {
+                view.looks_like_combination = true;
+                break;
+            }
+        }
+    }
+}
+
+std::size_t pad_to_even(std::size_t value) {
+    return (value & 1u) != 0 ? value + 1 : value;
+}
+
+// The name a view/table list shows for a table: the measured second-caption
+// (display_caption) when it decodes, else the row caption.  CEdl stores this
+// form ("Entry" for a "&Entry" caption; "W14 Entry C" when the caption has no
+// accelerator).
+std::string table_selector_name(const TableDef& table) {
+    return table.display_caption.empty() ? table.caption : table.display_caption;
+}
+
+// Value 0 when the entry cannot be read.
+std::size_t block_index_for_offset(const ViewState& state, std::uint32_t offset) {
+    for (std::size_t i = 0; i < state.blocks.size(); ++i) {
+        if (state.blocks[i].offset == offset) {
+            return i;
+        }
+    }
+    return state.blocks.size();
+}
+
+// Replaces the payload of the block whose length word is at `block_offset`,
+// fixes the length word, shifts every later block / VarMeta offset / decoded
+// block offset by the size delta and refreshes the parsed stream sizes.  The
+// caller has already validated `payload` and any decoded view of it.
+bool replace_block_payload(ViewState& state,
+                           std::uint32_t block_offset,
+                           std::vector<std::uint8_t> payload,
+                           WriteError* error) {
+    const std::size_t index = block_index_for_offset(state, block_offset);
+    if (index == state.blocks.size()) {
+        return write_fail(error, "block at offset " + std::to_string(block_offset) +
+                                     " is not in the Var2Data walk");
+    }
+    const std::size_t start = static_cast<std::size_t>(block_offset) + 4;
+    const std::size_t old_length = state.blocks[index].payload_length;
+    if (start > state.var2_data.size() || old_length > state.var2_data.size() - start) {
+        return write_fail(error, "block at offset " + std::to_string(block_offset) +
+                                     " runs past Var2Data");
+    }
+    if (payload.size() > 0xffffffffu) {
+        return write_fail(error, "new block payload does not fit a u32 length word");
+    }
+    const std::int64_t delta = static_cast<std::int64_t>(payload.size()) -
+                               static_cast<std::int64_t>(old_length);
+    state.var2_data.erase(state.var2_data.begin() + static_cast<std::ptrdiff_t>(start),
+                          state.var2_data.begin() +
+                              static_cast<std::ptrdiff_t>(start + old_length));
+    state.var2_data.insert(state.var2_data.begin() + static_cast<std::ptrdiff_t>(start),
+                           payload.begin(), payload.end());
+    put_u32(state.var2_data, block_offset, static_cast<std::uint32_t>(payload.size()));
+    state.blocks[index].payload_length = static_cast<std::uint32_t>(payload.size());
+    state.block_refs[index].payload_length = state.blocks[index].payload_length;
+    if (delta != 0) {
+        for (auto& block : state.blocks) {
+            if (block.offset > block_offset) {
+                block.offset = static_cast<std::uint32_t>(
+                    static_cast<std::int64_t>(block.offset) + delta);
+            }
+        }
+        for (auto& entry : state.var_meta.entries) {
+            if (entry.offset > block_offset) {
+                entry.offset = static_cast<std::uint32_t>(
+                    static_cast<std::int64_t>(entry.offset) + delta);
+            }
+        }
+        for (auto& table : state.tables) {
+            if (table.block_offset > block_offset) {
+                table.block_offset = static_cast<std::uint32_t>(
+                    static_cast<std::int64_t>(table.block_offset) + delta);
+            }
+        }
+        for (auto& view : state.views) {
+            if (view.main_block_offset > block_offset) {
+                view.main_block_offset = static_cast<std::uint32_t>(
+                    static_cast<std::int64_t>(view.main_block_offset) + delta);
+            }
+        }
+        for (auto& embedded : state.embedded_props) {
+            if (embedded.block_offset > block_offset) {
+                embedded.block_offset = static_cast<std::uint32_t>(
+                    static_cast<std::int64_t>(embedded.block_offset) + delta);
+            }
+        }
+    }
+    // block_refs are index-aligned with the block walk (built that way by the
+    // parser); keep their offsets in step after the shift.
+    for (std::size_t i = 0; i < state.block_refs.size() && i < state.blocks.size(); ++i) {
+        state.block_refs[i].offset = state.blocks[i].offset;
+    }
+    state.var2.blocks = state.blocks;
+    state.var2.size = static_cast<std::uint32_t>(state.var2_data.size());
+    state.var_meta.var2_size = state.var2.size;
+    return true;
+}
+
+// Decodes the CV_iew main block named by `view.main_block_offset` into
+// view.records / names / options.  Leaves view untouched and returns false when
+// the item walk does not validate (the caller then keeps the block opaque).
+bool decode_view_main(const ViewState& state, ViewDef& view) {
+    const std::size_t index = block_index_for_offset(state, view.main_block_offset);
+    if (index == state.blocks.size()) {
+        return false;
+    }
+    const std::span<const std::uint8_t> payload = state.block_bytes(state.blocks[index]);
+    std::vector<ViewRecord> records;
+    if (!parse_view_records(payload, records, nullptr)) {
+        return false;
+    }
+    view.main_decoded = true;
+    view.main_payload_length = state.blocks[index].payload_length;
+    view.records = std::move(records);
+    view.display_name.clear();
+    view.table_or_top.clear();
+    view.filter_or_bottom.clear();
+    view.group_name.clear();
+    view.options_decoded = false;
+    view.page_margins_thousandths = {};
+    view.page_margin_extra = 0;
+    for (const auto& record : view.records) {
+        const std::size_t base = record.record_offset + kViewItemHeaderSize;
+        if (record.id == kViewNameKey) {
+            view.display_name = utf16_ascii(payload, base, record.payload_length / 2);
+        } else if (record.id == kViewTableKey) {
+            view.table_or_top = utf16_ascii(payload, base, record.payload_length / 2);
+        } else if (record.id == kViewFilterKey) {
+            view.filter_or_bottom = utf16_ascii(payload, base, record.payload_length / 2);
+        } else if (record.id == kViewGroupKey) {
+            view.group_name = utf16_ascii(payload, base, record.payload_length / 2);
+        } else if (record.id == kViewOptionsKey && record.payload_length == kViewOptionsSize) {
+            view.options_decoded = true;
+            for (std::size_t margin = 0; margin < view.page_margins_thousandths.size();
+                 ++margin) {
+                view.page_margins_thousandths[margin] =
+                    read_u32(payload, base + margin * 4);
+            }
+            view.page_margin_extra = read_u32(payload, base + 16);
+        }
+    }
+    return true;
+}
+
+// Decodes one CEdl Props block into its typed form.  Returns false (with a
+// warning posted by the caller) when the payload is not a Props document.
+bool decode_edl_block(const ViewState& state, const VarBlock& block, EmbeddedProps& out) {
+    out = EmbeddedProps{};
+    out.block_offset = block.offset;
+    out.payload_length = block.payload_length;
+    props::PropsDocument document;
+    props::ParseError props_error;
+    if (!props::parse_props(state.block_bytes(block), document, &props_error)) {
+        return false;
+    }
+    out.document = std::move(document);
+    for (const auto& record : out.document.records) {
+        EdlRecord typed;
+        typed.offset = record.offset;
+        typed.id = record.id;
+        typed.kind = record.kind;
+        typed.payload_length = record.payload_length;
+        typed.preview = preview_bytes(out.document.payload(record));
+        out.records.push_back(std::move(typed));
+    }
+    const auto decode_name = [&out](std::uint32_t id, std::string& target) {
+        const props::PropsRecord* record = out.document.find(id);
+        if (record == nullptr || record->kind != 1u) {
+            return false;
+        }
+        target = utf16_ascii(out.document.payload(*record), 0, record->payload_length / 2);
+        return !target.empty();
+    };
+    out.view_name_decoded = decode_name(kEdlViewNameKey, out.view_name);
+    out.table_name_decoded = decode_name(kEdlTableNameKey, out.table_name);
+    const props::PropsRecord* field_list = out.document.find(kEdlFieldListKey);
+    if (field_list != nullptr && field_list->payload_length % 4u == 0) {
+        const std::span<const std::uint8_t> data = out.document.payload(*field_list);
+        std::vector<std::uint32_t> ids;
+        bool valid = true;
+        for (std::size_t at = 0; at + 4 <= data.size(); at += 4) {
+            ids.push_back(read_u32(data, at));
+        }
+        if (!ids.empty() && ids.back() == kNoFieldId) {
+            out.field_list_terminated = true;
+            ids.pop_back();
+        }
+        for (const std::uint32_t id : ids) {
+            const std::uint32_t kind = id & 0xffff0000u;
+            if (kind != 0x0b400000u && kind != 0x0c400000u) {
+                valid = false;
+            }
+        }
+        if (valid) {
+            out.field_list_decoded = true;
+            out.field_ids = std::move(ids);
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 std::span<const std::uint8_t> ViewState::block_bytes(const VarBlock& block) const {
@@ -116,6 +384,42 @@ const ViewBlockRef* ViewState::find_block_ref(std::uint32_t uid, std::uint32_t k
     return nullptr;
 }
 
+const RowRecord* RowRecordSet::find(std::uint32_t id) const {
+    for (const auto& record : records) {
+        if (record.id == id) {
+            return &record;
+        }
+    }
+    return nullptr;
+}
+
+const EdlRecord* EmbeddedProps::find(std::uint32_t id) const {
+    for (const auto& record : records) {
+        if (record.id == id) {
+            return &record;
+        }
+    }
+    return nullptr;
+}
+
+ViewState* ViewState::find_related(std::string_view wanted_klass) {
+    for (ViewState* candidate : related) {
+        if (candidate != nullptr && candidate->klass == wanted_klass) {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
+const ViewState* ViewState::find_related(std::string_view wanted_klass) const {
+    for (const ViewState* candidate : related) {
+        if (candidate != nullptr && candidate->klass == wanted_klass) {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
 bool is_known_class(std::string_view klass) {
     return klass == "CTable" || klass == "CV_iew" || klass == "CEdl" ||
            klass == "CFilter" || klass == "CGrouping" || klass == "CDrawing" ||
@@ -132,6 +436,12 @@ std::string_view block_kind(std::string_view klass, std::uint32_t key) {
         }
         if (klass == "CEdl") {
             return "props-document";
+        }
+        if (klass == "CFilter") {
+            return "filter-definition";
+        }
+        if (klass == "CGrouping") {
+            return "grouping-definition";
         }
         return "opaque";
     }
@@ -445,6 +755,112 @@ bool parse_view_records(std::span<const std::uint8_t> payload,
     return true;
 }
 
+bool parse_row_record_set(std::span<const std::uint8_t> row,
+                          RowRecordSet& out,
+                          ParseError* error) {
+    out = RowRecordSet{};
+    if (row.size() < kRowRecordSetOffset + 8) {
+        if (error != nullptr) {
+            error->message = "row is " + std::to_string(row.size()) +
+                             " bytes, too short for the record set at +0x6e";
+            error->offset = row.size();
+        }
+        return false;
+    }
+    const std::uint32_t size = read_u32(row, kRowRecordSetOffset);
+    const std::uint32_t count = read_u32(row, kRowRecordSetOffset + 4);
+    out.size = size;
+    if (count == 0) {
+        // Measured "no set" shape (all-zero size/count, e.g. the corpus file's
+        // built-in tables).  A non-zero size with no records is not understood.
+        if (size != 0) {
+            if (error != nullptr) {
+                error->message = "row record set declares 0 records but " +
+                                 std::to_string(size) + " bytes";
+                error->offset = kRowRecordSetOffset;
+            }
+            return false;
+        }
+        return true;
+    }
+    if (count > 1024) {
+        if (error != nullptr) {
+            error->message = "row record set declares " + std::to_string(count) +
+                             " records; refusing an implausible count";
+            error->offset = kRowRecordSetOffset + 4;
+        }
+        return false;
+    }
+    if (static_cast<std::size_t>(size) < 8 + static_cast<std::size_t>(count) * 8 ||
+        static_cast<std::size_t>(size) > row.size() - kRowRecordSetOffset) {
+        if (error != nullptr) {
+            error->message = "row record set size " + std::to_string(size) +
+                             " does not fit the row with " + std::to_string(count) +
+                             " record(s)";
+            error->offset = kRowRecordSetOffset;
+        }
+        return false;
+    }
+    out.records.reserve(count);
+    std::uint32_t previous = 0;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        const std::size_t entry = kRowRecordSetOffset + 8 + static_cast<std::size_t>(i) * 8;
+        const std::uint32_t id = read_u32(row, entry);
+        const std::uint32_t offset = read_u32(row, entry + 4);
+        if (!props::is_props_id(id)) {
+            if (error != nullptr) {
+                error->message = "row record " + std::to_string(i) + " has id " + hex32(id) +
+                                 ", which is not a property id";
+                error->offset = entry;
+            }
+            return false;
+        }
+        if (offset < 8 + static_cast<std::size_t>(count) * 8 || offset >= size ||
+            (i != 0 && offset <= previous)) {
+            if (error != nullptr) {
+                error->message = "row record " + std::to_string(i) + " payload offset " +
+                                 std::to_string(offset) +
+                                 " is outside the record set or out of order";
+                error->offset = entry + 4;
+            }
+            return false;
+        }
+        RowRecord record;
+        record.id = id;
+        record.payload_offset = offset;
+        record.payload_length = (i + 1 < count ? read_u32(row, entry + 12) : size) - offset;
+        if (i + 1 < count) {
+            const std::uint32_t next = read_u32(row, entry + 12);
+            if (next < offset || next > size) {
+                if (error != nullptr) {
+                    error->message = "row record " + std::to_string(i) +
+                                     " payload runs past the record set";
+                    error->offset = entry + 4;
+                }
+                return false;
+            }
+            record.payload_length = next - offset;
+        }
+        record.preview = preview_bytes(
+            row.subspan(kRowRecordSetOffset + offset, record.payload_length));
+        out.records.push_back(std::move(record));
+        previous = offset;
+    }
+    out.decoded = true;
+    // ...0009 is the display name for both measured key families
+    // (0x20400009 on CTable/CFilter, 0x2d400009 on CGrouping).
+    for (const auto& record : out.records) {
+        if ((record.id & 0x0000ffffu) == 0x0009u) {
+            out.name = utf16_ascii(row, kRowRecordSetOffset + record.payload_offset,
+                                   record.payload_length / 2);
+            break;
+        }
+    }
+    // A malformed entry/name is still a framing-level success: the parser has
+    // exposed the records, and the name (when printable) is decoded.
+    return true;
+}
+
 bool parse_view_state(std::string_view klass,
                       const PartSet& parts,
                       ViewState& out,
@@ -512,8 +928,34 @@ bool parse_view_state(std::string_view klass,
                 out.row_size > 4 ? std::min<std::size_t>(128, out.row_size - 4) : 0;
             row.caption = utf16_ascii(out.fixed_data, base + 4, caption_capacity / 2);
             if (out.row_size == kDisplayCaptionRowSize) {
-                row.display_caption = utf16_ascii(out.fixed_data,
-                                                  base + kDisplayCaptionOffset, 39);
+                // The row's inline record set carries the display name (wave 17,
+                // F1) on the three measured 230-byte classes.  CDrawing also has
+                // 230-byte rows but its bytes at +0x6e are not a record set, so
+                // it keeps the legacy +136 read.
+                const bool has_record_set = out.klass == "CTable" || out.klass == "CFilter" ||
+                                            out.klass == "CGrouping";
+                if (!has_record_set) {
+                    row.display_caption = utf16_ascii(out.fixed_data,
+                                                      base + kDisplayCaptionOffset, 39);
+                } else {
+                    const std::span<const std::uint8_t> row_bytes(out.fixed_data.data() + base,
+                                                                  out.row_size);
+                    ParseError set_error;
+                    if (parse_row_record_set(row_bytes, row.definition, &set_error)) {
+                        if (!row.definition.name.empty()) {
+                            row.display_caption = row.definition.name;
+                        } else {
+                            row.display_caption = utf16_ascii(out.fixed_data,
+                                                              base + kDisplayCaptionOffset, 39);
+                        }
+                    } else {
+                        out.warnings.push_back("row " + std::to_string(i + 1) +
+                                               " record set at +0x6e is opaque: " +
+                                               set_error.message);
+                        row.display_caption = utf16_ascii(out.fixed_data,
+                                                          base + kDisplayCaptionOffset, 39);
+                    }
+                }
             }
             if (out.row_size >= kIdentitySize) {
                 const std::size_t identity = base + out.row_size - kIdentitySize;
@@ -711,48 +1153,10 @@ bool parse_view_state(std::string_view klass,
                 }
                 view.main_block_offset = var_block->offset;
                 view.main_payload_length = var_block->payload_length;
-                std::vector<ViewRecord> records;
-                ParseError record_error;
-                if (parse_view_records(out.block_bytes(*var_block), records, &record_error)) {
-                    view.main_decoded = true;
-                    view.records = std::move(records);
-                    for (const auto& record : view.records) {
-                        if (record.id == kViewNameKey) {
-                            view.display_name = utf16_ascii(
-                                out.block_bytes(*var_block),
-                                record.record_offset + kViewItemHeaderSize,
-                                record.payload_length / 2);
-                        } else if (record.id == kViewTableKey) {
-                            view.table_or_top = utf16_ascii(
-                                out.block_bytes(*var_block),
-                                record.record_offset + kViewItemHeaderSize,
-                                record.payload_length / 2);
-                        } else if (record.id == kViewFilterKey) {
-                            view.filter_or_bottom = utf16_ascii(
-                                out.block_bytes(*var_block),
-                                record.record_offset + kViewItemHeaderSize,
-                                record.payload_length / 2);
-                        } else if (record.id == kViewGroupKey) {
-                            view.group_name = utf16_ascii(
-                                out.block_bytes(*var_block),
-                                record.record_offset + kViewItemHeaderSize,
-                                record.payload_length / 2);
-                        } else if (record.id == kViewOptionsKey &&
-                                   record.payload_length == kViewOptionsSize) {
-                            const std::span<const std::uint8_t> payload = out.block_bytes(*var_block);
-                            const std::size_t base = record.record_offset + kViewItemHeaderSize;
-                            view.options_decoded = true;
-                            for (std::size_t margin = 0; margin < view.page_margins_thousandths.size();
-                                 ++margin) {
-                                view.page_margins_thousandths[margin] =
-                                    read_u32(payload, base + margin * 4);
-                            }
-                            view.page_margin_extra = read_u32(payload, base + 16);
-                        }
-                    }
-                } else {
+                if (!decode_view_main(out, view)) {
+                    view.main_decoded = false;
                     out.warnings.push_back("view row " + std::to_string(i + 1) +
-                                           " main block is opaque: " + record_error.message);
+                                           " main block is opaque");
                 }
                 break;
             }
@@ -796,48 +1200,99 @@ bool parse_view_state(std::string_view klass,
         }
         // Inference: a combination view stores view names (not a table name) in
         // 0x2240000a.  If that name matches another view's name, mark it.
-        for (auto& view : out.views) {
-            if (view.table_or_top.empty()) {
-                continue;
-            }
-            const auto normalize = [](std::string_view text) {
-                std::string out_text;
-                out_text.reserve(text.size());
-                for (const char ch : text) {
-                    if (ch != '&') {
-                        out_text.push_back(ch);
-                    }
-                }
-                return out_text;
-            };
-            const std::string needle = normalize(view.table_or_top);
-            for (const auto& other : out.views) {
-                if (&other == &view) {
-                    continue;
-                }
-                if (normalize(other.name) == needle ||
-                    (!other.display_name.empty() && normalize(other.display_name) == needle)) {
-                    view.looks_like_combination = true;
-                    break;
-                }
-            }
-        }
+        recompute_combination_flags(out);
     } else if (out.klass == "CEdl") {
-        // Measured: CEdl's single Var2Data block payload is a complete
-        // Props-format document (header, records, no tail).  Parse it with
-        // core/props instead of re-implementing the record framing.
+        // Measured: a CEdl Var2Data block payload is a complete Props-format
+        // document (header, records, no tail).  Parse it with core/props rather
+        // than re-implementing the record framing, then decode the records whose
+        // payload is understood (view name, table name, column field list).
         for (const auto& block : out.blocks) {
-            props::PropsDocument document;
-            props::ParseError props_error;
-            if (props::parse_props(out.block_bytes(block), document, &props_error)) {
-                EmbeddedProps embedded;
-                embedded.block_offset = block.offset;
-                embedded.document = std::move(document);
+            EmbeddedProps embedded;
+            if (decode_edl_block(out, block, embedded)) {
                 out.embedded_props.push_back(std::move(embedded));
             } else {
                 out.warnings.push_back("CEdl block at " + std::to_string(block.offset) +
-                                       " did not parse as a Props document: " +
-                                       props_error.message);
+                                       " did not parse as a Props document: "
+                                       "the documented size/record framing does not match");
+            }
+        }
+    } else if (out.klass == "CFilter" || out.klass == "CGrouping") {
+        // Framing-level decode (wave 17, F1): the row's inline record set is
+        // already on FixedRow::definition.  Here we resolve each row's
+        // 0x20400006 block and, for CFilter, the applies-to string the block
+        // points at (payload +16).
+        const bool filter = out.klass == "CFilter";
+        for (std::size_t i = 0; i < out.rows.size(); ++i) {
+            const FixedRow& row = out.rows[i];
+            const ViewBlockRef* ref =
+                out.find_block_ref(row.ordinal, filter ? kFilterBlockKey : kGroupingBlockKey);
+            const VarBlock* var_block = nullptr;
+            if (ref != nullptr) {
+                for (const auto& candidate : out.blocks) {
+                    if (candidate.offset == ref->offset) {
+                        var_block = &candidate;
+                        break;
+                    }
+                }
+            }
+            if (var_block == nullptr) {
+                out.warnings.push_back(std::string(filter ? "filter" : "grouping") + " row " +
+                                       std::to_string(i + 1) +
+                                       " has no decoded 0x20400006 block");
+            }
+            const std::span<const std::uint8_t> payload =
+                var_block != nullptr ? out.block_bytes(*var_block)
+                                     : std::span<const std::uint8_t>();
+            if (filter) {
+                FilterDef def;
+                def.row_index = row.row_index;
+                def.ordinal = row.ordinal;
+                def.caption = row.caption;
+                def.display_name = row.display_caption;
+                def.definition = row.definition;
+                if (var_block != nullptr) {
+                    def.block_offset = var_block->offset;
+                    def.block_length = var_block->payload_length;
+                    def.block_decoded = payload.size() >= 20;
+                    def.block_ordinal = read_u32(payload, 0);
+                    if (def.block_ordinal != def.ordinal) {
+                        out.warnings.push_back("filter row " + std::to_string(i + 1) +
+                                               " ordinal " + std::to_string(def.ordinal) +
+                                               " disagrees with block ordinal " +
+                                               std::to_string(def.block_ordinal));
+                    }
+                    const std::uint32_t offset = read_u32(payload, 16);
+                    if (offset >= 20 && offset + 4 <= payload.size() && (offset & 1u) == 0) {
+                        std::string applies_to =
+                            utf16_ascii(payload, offset, (payload.size() - offset) / 2);
+                        if (!applies_to.empty()) {
+                            def.applies_to_decoded = true;
+                            def.applies_to_offset = offset;
+                            def.applies_to = std::move(applies_to);
+                        }
+                    }
+                }
+                out.filters.push_back(std::move(def));
+            } else {
+                GroupingDef def;
+                def.row_index = row.row_index;
+                def.ordinal = row.ordinal;
+                def.caption = row.caption;
+                def.display_name = row.display_caption;
+                def.definition = row.definition;
+                if (var_block != nullptr) {
+                    def.block_offset = var_block->offset;
+                    def.block_length = var_block->payload_length;
+                    def.block_decoded = payload.size() >= 4;
+                    def.block_ordinal = read_u32(payload, 0);
+                    if (def.block_ordinal != def.ordinal && payload.size() >= 4) {
+                        out.warnings.push_back("grouping row " + std::to_string(i + 1) +
+                                               " ordinal " + std::to_string(def.ordinal) +
+                                               " disagrees with block ordinal " +
+                                               std::to_string(def.block_ordinal));
+                    }
+                }
+                out.groupings.push_back(std::move(def));
             }
         }
     }
@@ -955,10 +1410,64 @@ std::string describe_view_state(const ViewState& state,
             ++shown;
         }
     }
+    for (const auto& filter : state.filters) {
+        out << "  filter " << filter.ordinal << " \"" << filter.caption << "\"";
+        if (!filter.display_name.empty()) {
+            out << " display=\"" << filter.display_name << "\"";
+        }
+        out << " block=" << filter.block_offset << "+" << filter.block_length;
+        if (filter.block_decoded) {
+            out << " block-ordinal=" << filter.block_ordinal;
+        } else {
+            out << " undecoded";
+        }
+        if (filter.applies_to_decoded) {
+            out << " applies-to=\"" << filter.applies_to << "\"@" << filter.applies_to_offset;
+        }
+        out << " records=" << filter.definition.records.size();
+        if (filter.definition.decoded) {
+            out << " name=\"" << filter.definition.name << "\"";
+        }
+        out << "\n";
+    }
+    for (const auto& grouping : state.groupings) {
+        out << "  grouping " << grouping.ordinal << " \"" << grouping.caption << "\"";
+        if (!grouping.display_name.empty()) {
+            out << " display=\"" << grouping.display_name << "\"";
+        }
+        out << " block=" << grouping.block_offset << "+" << grouping.block_length;
+        if (grouping.block_decoded) {
+            out << " block-ordinal=" << grouping.block_ordinal;
+        } else {
+            out << " undecoded";
+        }
+        out << " records=" << grouping.definition.records.size();
+        if (grouping.definition.decoded) {
+            out << " name=\"" << grouping.definition.name << "\"";
+        }
+        out << "\n";
+    }
     for (const auto& embedded : state.embedded_props) {
         out << "  props block off=" << embedded.block_offset
             << " records=" << embedded.document.records.size()
-            << " tail=" << embedded.document.tail_size() << "\n";
+            << " tail=" << embedded.document.tail_size();
+        if (embedded.view_name_decoded) {
+            out << " view=\"" << embedded.view_name << "\"";
+        }
+        if (embedded.table_name_decoded) {
+            out << " table=\"" << embedded.table_name << "\"";
+        }
+        if (embedded.field_list_decoded) {
+            out << " field-list=" << embedded.field_ids.size()
+                << (embedded.field_list_terminated ? "+terminator" : "");
+            if (max_columns == 0) {
+                out << " fields=";
+                for (std::size_t i = 0; i < embedded.field_ids.size(); ++i) {
+                    out << (i == 0 ? "" : ",") << hex32(embedded.field_ids[i]);
+                }
+            }
+        }
+        out << "\n";
     }
     return out.str();
 }
@@ -1438,6 +1947,544 @@ bool apply_table_edits(const ViewState& state,
         }
     }
     return encode_view_state(work, out, error);
+}
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// Wave 17 (F1): CV_iew editing and derived-record regeneration.
+// ---------------------------------------------------------------------------
+
+// The view an Edl record names: exact caption, then accelerator-insensitive
+// caption, then display name, then (only when unambiguous) the single view that
+// applies the CEdl table name, then the only single view in the collection.
+const ViewDef* find_applied_view(const ViewState& views,
+                                 std::string_view view_name,
+                                 std::string_view table_name) {
+    if (views.klass != "CV_iew") {
+        return nullptr;
+    }
+    const std::string needle = strip_accelerators(view_name);
+    for (const auto& view : views.views) {
+        if (view.name == view_name) {
+            return &view;
+        }
+    }
+    for (const auto& view : views.views) {
+        if (strip_accelerators(view.name) == needle) {
+            return &view;
+        }
+    }
+    for (const auto& view : views.views) {
+        if (!view.display_name.empty() &&
+            strip_accelerators(view.display_name) == needle) {
+            return &view;
+        }
+    }
+    if (!table_name.empty()) {
+        const std::string table_needle = strip_accelerators(table_name);
+        const ViewDef* match = nullptr;
+        std::size_t count = 0;
+        for (const auto& view : views.views) {
+            if (!view.looks_like_combination && !view.table_or_top.empty() &&
+                strip_accelerators(view.table_or_top) == table_needle) {
+                match = &view;
+                ++count;
+            }
+        }
+        if (count == 1) {
+            return match;
+        }
+    }
+    const ViewDef* only = nullptr;
+    std::size_t count = 0;
+    for (const auto& view : views.views) {
+        if (!view.looks_like_combination && !view.table_or_top.empty()) {
+            only = &view;
+            ++count;
+        }
+    }
+    return count == 1 ? only : nullptr;
+}
+
+// The table a view names, accelerator-insensitive.  Returns nullptr when no
+// table matches OR when more than one does (the caller refuses rather than
+// picking one).
+const TableDef* find_table_for_selector(const ViewState& tables, std::string_view selector) {
+    if (tables.klass != "CTable" || selector.empty()) {
+        return nullptr;
+    }
+    const std::string needle = strip_accelerators(selector);
+    const TableDef* match = nullptr;
+    for (const auto& table : tables.tables) {
+        if (strip_accelerators(table_selector_name(table)) == needle) {
+            if (match != nullptr) {
+                return nullptr;
+            }
+            match = &table;
+        }
+    }
+    return match;
+}
+
+struct EdlReplacement {
+    std::uint32_t id = 0;
+    std::vector<std::uint8_t> payload;
+};
+
+// Rebuilds a CEdl Props document with the listed records' payloads replaced.
+// Every other record (id, kind, payload), the record order, the tail and the
+// header's format/declared-entry words are preserved; the two size words are
+// recomputed with the input's variant delta (measured: stream_size - 4 for both
+// the synthetic and the corpus CEdl documents).
+bool rebuild_edl_document(const props::PropsDocument& document,
+                          const std::vector<EdlReplacement>& replacements,
+                          std::vector<std::uint8_t>& out,
+                          WriteError* error) {
+    if (document.bytes.size() < kFixedMetaHeaderSize ||
+        document.header.size_word > document.bytes.size() ||
+        document.tail_offset > document.bytes.size()) {
+        return write_fail(error, "embedded Props document is structurally inconsistent");
+    }
+    for (const auto& replacement : replacements) {
+        if (document.find(replacement.id) == nullptr) {
+            return write_fail(error, "CEdl document has no record " + hex32(replacement.id) +
+                                         " to regenerate");
+        }
+    }
+    const auto replacement_for = [&replacements](std::uint32_t id) -> const EdlReplacement* {
+        for (const auto& replacement : replacements) {
+            if (replacement.id == id) {
+                return &replacement;
+            }
+        }
+        return nullptr;
+    };
+
+    std::vector<std::uint8_t> built;
+    built.reserve(document.bytes.size() + 64);
+    built.insert(built.end(), document.bytes.begin(),
+                 document.bytes.begin() + static_cast<std::ptrdiff_t>(kFixedMetaHeaderSize));
+    for (const auto& record : document.records) {
+        const EdlReplacement* replacement = replacement_for(record.id);
+        const std::size_t length =
+            replacement != nullptr ? replacement->payload.size() : record.payload_length;
+        if (length > 0xffffffffu) {
+            return write_fail(error, "regenerated CEdl record " + hex32(record.id) +
+                                         " does not fit a u32 payload length");
+        }
+        append_u32(built, static_cast<std::uint32_t>(length));
+        append_u32(built, record.id);
+        append_u32(built, record.kind);
+        if (replacement != nullptr) {
+            built.insert(built.end(), replacement->payload.begin(),
+                         replacement->payload.end());
+        } else {
+            const std::span<const std::uint8_t> payload = document.payload(record);
+            built.insert(built.end(), payload.begin(), payload.end());
+        }
+    }
+    built.insert(built.end(),
+                 document.bytes.begin() + static_cast<std::ptrdiff_t>(document.tail_offset),
+                 document.bytes.end());
+    const std::size_t delta = document.bytes.size() - document.header.size_word;
+    if (built.size() < delta + kFixedMetaHeaderSize) {
+        return write_fail(error, "regenerated CEdl document is too short for its header");
+    }
+    const std::uint64_t new_word = built.size() - delta;
+    if (new_word > 0xffffffffu) {
+        return write_fail(error, "regenerated CEdl document does not fit a u32 size word");
+    }
+    put_u32(built, 0, static_cast<std::uint32_t>(new_word));
+    put_u32(built, 4, static_cast<std::uint32_t>(new_word));
+    props::PropsDocument check;
+    if (!props::parse_props(built, check, nullptr)) {
+        return write_fail(error, "regenerated CEdl document does not re-parse as Props");
+    }
+    if (check.records.size() != document.records.size()) {
+        return write_fail(error, "regenerated CEdl document re-parses to " +
+                                     std::to_string(check.records.size()) + " record(s), not " +
+                                     std::to_string(document.records.size()));
+    }
+    out = std::move(built);
+    return true;
+}
+
+}  // namespace
+
+bool set_view_name(ViewState& state,
+                   std::size_t view_index,
+                   std::string_view name,
+                   WriteError* error) {
+    if (!state.parsed) {
+        return write_fail(error, "view state did not parse: set_view_name() needs a parsed state");
+    }
+    if (state.klass != "CV_iew") {
+        return write_fail(error, "set_view_name() expects a 214/CV_iew state, not " + state.klass);
+    }
+    if (view_index >= state.views.size()) {
+        return write_fail(error, "view index " + std::to_string(view_index) +
+                                     " is out of range (" + std::to_string(state.views.size()) +
+                                     " view(s))");
+    }
+    const ViewDef& view = state.views[view_index];
+    if (view.row_index >= state.rows.size()) {
+        return write_fail(error, "view " + std::to_string(view_index) + " has no decoded row");
+    }
+    if (state.row_size < 4 + kIdentitySize) {
+        return write_fail(error, "CV_iew row size " + std::to_string(state.row_size) +
+                                     " cannot hold a caption");
+    }
+    const std::size_t capacity = (state.row_size - 4 - kIdentitySize) / 2;
+    std::string why;
+    if (!printable_ascii(name, why)) {
+        return write_fail(error, why);
+    }
+    if (name.size() > capacity) {
+        return write_fail(error, "view name is " + std::to_string(name.size()) +
+                                     " code units; the CV_iew caption capacity is " +
+                                     std::to_string(capacity));
+    }
+    const std::size_t base =
+        static_cast<std::size_t>(view.row_index) * state.row_size + 4;
+    const std::size_t end = base + (static_cast<std::size_t>(state.row_size) - 4 - kIdentitySize);
+    if (end > state.fixed_data.size()) {
+        return write_fail(error, "view caption lies outside FixedData");
+    }
+    std::fill(state.fixed_data.begin() + static_cast<std::ptrdiff_t>(base),
+              state.fixed_data.begin() + static_cast<std::ptrdiff_t>(end), std::uint8_t{0});
+    for (std::size_t i = 0; i < name.size(); ++i) {
+        state.fixed_data[base + i * 2] = static_cast<std::uint8_t>(name[i]);
+    }
+    state.rows[view.row_index].caption = std::string(name);
+    state.views[view_index].name = std::string(name);
+    recompute_combination_flags(state);
+    return true;
+}
+
+bool set_view_table(ViewState& state,
+                    std::size_t view_index,
+                    std::string_view table_name,
+                    WriteError* error) {
+    if (!state.parsed) {
+        return write_fail(error, "view state did not parse: set_view_table() needs a parsed state");
+    }
+    if (state.klass != "CV_iew") {
+        return write_fail(error, "set_view_table() expects a 214/CV_iew state, not " + state.klass);
+    }
+    if (view_index >= state.views.size()) {
+        return write_fail(error, "view index " + std::to_string(view_index) +
+                                     " is out of range (" + std::to_string(state.views.size()) +
+                                     " view(s))");
+    }
+    const ViewDef& view = state.views[view_index];
+    if (!view.main_decoded) {
+        return write_fail(error, "view " + std::to_string(view_index) +
+                                     " main block is not item-decoded");
+    }
+    const ViewRecord* target = nullptr;
+    for (const auto& record : view.records) {
+        if (record.id == kViewTableKey) {
+            target = &record;
+            break;
+        }
+    }
+    if (target == nullptr) {
+        return write_fail(error, "view " + std::to_string(view_index) +
+                                     " main block has no 0x2240000a table item");
+    }
+    std::string why;
+    if (!printable_ascii(table_name, why)) {
+        return write_fail(error, why);
+    }
+    if (table_name.size() > kViewTableNameCapacity) {
+        return write_fail(error, "table name is " + std::to_string(table_name.size()) +
+                                     " code units; the writer's bound is " +
+                                     std::to_string(kViewTableNameCapacity));
+    }
+    const std::size_t block_index = block_index_for_offset(state, view.main_block_offset);
+    if (block_index == state.blocks.size()) {
+        return write_fail(error, "view " + std::to_string(view_index) +
+                                     " main block is not in the Var2Data walk");
+    }
+    const std::span<const std::uint8_t> payload = state.block_bytes(state.blocks[block_index]);
+    const std::size_t item_start = target->record_offset;
+    if (item_start + kViewItemHeaderSize + target->payload_length > payload.size()) {
+        return write_fail(error, "view " + std::to_string(view_index) +
+                                     " table item lies outside its block");
+    }
+    std::vector<std::uint8_t> new_item;
+    const std::vector<std::uint8_t> text = utf16_bytes(table_name, true);
+    append_u32(new_item, static_cast<std::uint32_t>(text.size()));
+    append_u32(new_item, target->id);
+    append_u32(new_item, target->kind);
+    new_item.insert(new_item.end(), text.begin(), text.end());
+    const std::size_t old_stride =
+        pad_to_even(kViewItemHeaderSize + static_cast<std::size_t>(target->payload_length));
+    const std::size_t new_stride = pad_to_even(kViewItemHeaderSize + text.size());
+    new_item.resize(new_stride, std::uint8_t{0});
+    std::size_t old_end = item_start + old_stride;
+    if (old_end > payload.size()) {
+        old_end = payload.size();  // a missing pad after the LAST measured item
+    }
+    std::vector<std::uint8_t> built;
+    built.reserve(payload.size() - old_stride + new_stride);
+    built.insert(built.end(), payload.begin(),
+                 payload.begin() + static_cast<std::ptrdiff_t>(item_start));
+    built.insert(built.end(), new_item.begin(), new_item.end());
+    built.insert(built.end(), payload.begin() + static_cast<std::ptrdiff_t>(old_end),
+                 payload.end());
+    if (built.size() < kViewMainHeaderSize) {
+        return write_fail(error, "regenerated CV_iew main block is shorter than its header");
+    }
+    put_u32(built, 0, static_cast<std::uint32_t>(built.size() - 4));
+    put_u32(built, 4, static_cast<std::uint32_t>(built.size() - 4));
+    std::vector<ViewRecord> check_records;
+    if (!parse_view_records(built, check_records, nullptr)) {
+        return write_fail(error, "regenerated CV_iew main block does not re-parse");
+    }
+    if (!replace_block_payload(state, view.main_block_offset, std::move(built), error)) {
+        return false;
+    }
+    ViewDef& changed = state.views[view_index];
+    if (!decode_view_main(state, changed)) {
+        return write_fail(error, "regenerated CV_iew main block could not be decoded back");
+    }
+    recompute_combination_flags(state);
+    return true;
+}
+
+bool set_view_page_margins(ViewState& state,
+                           std::size_t view_index,
+                           const std::array<std::uint32_t, 4>& margins,
+                           WriteError* error) {
+    if (!state.parsed) {
+        return write_fail(error,
+                          "view state did not parse: set_view_page_margins() needs a parsed state");
+    }
+    if (state.klass != "CV_iew") {
+        return write_fail(error, "set_view_page_margins() expects a 214/CV_iew state, not " +
+                                     state.klass);
+    }
+    if (view_index >= state.views.size()) {
+        return write_fail(error, "view index " + std::to_string(view_index) +
+                                     " is out of range (" + std::to_string(state.views.size()) +
+                                     " view(s))");
+    }
+    const ViewDef& view = state.views[view_index];
+    if (!view.options_decoded) {
+        return write_fail(error, "view " + std::to_string(view_index) +
+                                     " has no decoded 970-byte 0x22400009 options item");
+    }
+    for (const std::uint32_t margin : margins) {
+        if (margin > 100000u) {
+            return write_fail(error, "page margin " + std::to_string(margin) +
+                                         " exceeds the writer's 100000 (100 inch) bound");
+        }
+    }
+    const ViewRecord* target = nullptr;
+    for (const auto& record : view.records) {
+        if (record.id == kViewOptionsKey && record.payload_length == kViewOptionsSize) {
+            target = &record;
+            break;
+        }
+    }
+    const std::size_t block_index = block_index_for_offset(state, view.main_block_offset);
+    if (target == nullptr || block_index == state.blocks.size()) {
+        return write_fail(error, "view " + std::to_string(view_index) +
+                                     " options item is not in its main block");
+    }
+    const std::size_t payload_start =
+        static_cast<std::size_t>(state.blocks[block_index].offset) + 4;
+    const std::size_t base = payload_start + target->record_offset + kViewItemHeaderSize +
+                             kViewOptionsMarginOffset;
+    if (base + kViewOptionsMarginSize > state.var2_data.size()) {
+        return write_fail(error, "view " + std::to_string(view_index) +
+                                     " options margins lie outside Var2Data");
+    }
+    for (std::size_t i = 0; i < margins.size(); ++i) {
+        put_u32(state.var2_data, base + i * 4, margins[i]);
+    }
+    state.views[view_index].page_margins_thousandths = margins;
+    return true;
+}
+
+bool regenerate_edl(ViewState& state,
+                    const ViewState& from_table_state,
+                    WriteError* error) {
+    if (!state.parsed) {
+        return write_fail(error, "view state did not parse: regenerate_edl() needs a parsed state");
+    }
+    if (state.klass != "CEdl") {
+        return write_fail(error, "regenerate_edl() expects a 214/CEdl state, not " + state.klass);
+    }
+    if (!from_table_state.parsed || from_table_state.klass != "CTable") {
+        return write_fail(error,
+                          "regenerate_edl() needs a parsed 214/CTable state as its source");
+    }
+    if (state.embedded_props.empty()) {
+        return write_fail(error, "CEdl has no decoded Props block");
+    }
+
+    // Identify the current Props block.  One block: it is the one.  Several
+    // (corpus files cache one per row): use the block named by the first fixed
+    // row's ordinal, then a block whose view name matches a linked view.
+    std::size_t target_index = state.embedded_props.size();
+    if (state.embedded_props.size() == 1) {
+        target_index = 0;
+    } else if (!state.rows.empty()) {
+        const ViewBlockRef* ref = state.find_block_ref(state.rows[0].ordinal, kColumnBlockKey);
+        if (ref != nullptr) {
+            for (std::size_t i = 0; i < state.embedded_props.size(); ++i) {
+                if (state.embedded_props[i].block_offset == ref->offset) {
+                    target_index = i;
+                    break;
+                }
+            }
+        }
+    }
+    if (target_index == state.embedded_props.size()) {
+        return write_fail(error, "CEdl has " + std::to_string(state.embedded_props.size()) +
+                                     " decoded Props block(s); the current one cannot be "
+                                     "identified from the first fixed row");
+    }
+    const EmbeddedProps& edl = state.embedded_props[target_index];
+    const ViewState* views = from_table_state.find_related("CV_iew");
+    if (views != nullptr && (!views->parsed || views->klass != "CV_iew")) {
+        return write_fail(error, "linked 214/CV_iew state is not a parsed CV_iew collection");
+    }
+
+    const ViewDef* applied_view = nullptr;
+    if (views != nullptr) {
+        applied_view = find_applied_view(*views, edl.view_name, edl.table_name);
+        if (applied_view == nullptr) {
+            return write_fail(error, "CEdl view name \"" + edl.view_name +
+                                         "\" does not resolve to a view in the linked 214/CV_iew");
+        }
+    }
+    std::string table_selector =
+        applied_view != nullptr ? applied_view->table_or_top : edl.table_name;
+    if (table_selector.empty()) {
+        table_selector = edl.table_name;
+    }
+    const TableDef* table = find_table_for_selector(from_table_state, table_selector);
+    if (table == nullptr) {
+        return write_fail(error, "CEdl applied table \"" + table_selector +
+                                     "\" does not resolve to exactly one decoded table");
+    }
+    if (!table->decoded) {
+        return write_fail(error, "CEdl applied table \"" + table_selector +
+                                     "\" has no decoded 0x20400006 column block");
+    }
+
+    std::vector<EdlReplacement> replacements;
+    if (applied_view != nullptr) {
+        EdlReplacement view_name;
+        view_name.id = kEdlViewNameKey;
+        view_name.payload = utf16_bytes(applied_view->name, true);
+        replacements.push_back(std::move(view_name));
+    }
+    EdlReplacement table_name;
+    table_name.id = kEdlTableNameKey;
+    table_name.payload = utf16_bytes(table_selector_name(*table), true);
+    replacements.push_back(std::move(table_name));
+
+    std::vector<std::uint8_t> fields;
+    for (std::size_t column = 1; column < table->columns.size(); ++column) {
+        append_u32(fields, table->columns[column].field_id);
+    }
+    if (edl.field_list_terminated) {
+        append_u32(fields, kNoFieldId);
+    }
+    EdlReplacement field_list;
+    field_list.id = kEdlFieldListKey;
+    field_list.payload = std::move(fields);
+    replacements.push_back(std::move(field_list));
+
+    std::vector<std::uint8_t> built;
+    if (!rebuild_edl_document(edl.document, replacements, built, error)) {
+        return false;
+    }
+    if (built == edl.document.bytes) {
+        return true;  // already consistent: nothing to change
+    }
+    const std::uint32_t block_offset = edl.block_offset;
+    if (!replace_block_payload(state, block_offset, std::move(built), error)) {
+        return false;
+    }
+    const std::size_t index = block_index_for_offset(state, block_offset);
+    if (index == state.blocks.size()) {
+        return write_fail(error, "regenerated CEdl block is not in the Var2Data walk");
+    }
+    EmbeddedProps refreshed;
+    if (!decode_edl_block(state, state.blocks[index], refreshed)) {
+        return write_fail(error, "regenerated CEdl block does not parse back as Props");
+    }
+    state.embedded_props[target_index] = std::move(refreshed);
+    return true;
+}
+
+bool regenerate_view_state(ViewState& state, const TableEdits& edits, WriteError* error) {
+    if (!state.parsed) {
+        return write_fail(error,
+                          "view state did not parse: regenerate_view_state() needs a parsed "
+                          "ViewState");
+    }
+    if (state.klass != "CTable") {
+        return write_fail(error,
+                          "regenerate_view_state() expects the 214/CTable state, not " + state.klass);
+    }
+    ViewState table = state;
+    for (std::size_t i = 0; i < edits.size(); ++i) {
+        const TableEdit& edit = edits[i];
+        WriteError local;
+        local.message = "unknown edit kind";
+        bool ok = false;
+        switch (edit.kind) {
+            case TableEdit::Kind::date_format:
+                ok = set_table_date_format(table, edit.table_index, edit.date_format, &local);
+                break;
+            case TableEdit::Kind::replace_column:
+                ok = set_table_column(table, edit.table_index, edit.column_index, edit.field_id,
+                                      edit.title, &local);
+                break;
+            case TableEdit::Kind::append_column:
+                ok = append_table_column(table, edit.table_index, edit.field_id, edit.title,
+                                         &local);
+                break;
+        }
+        if (!ok) {
+            return write_fail(error, "table edit " + std::to_string(i) + ": " + local.message);
+        }
+    }
+    ViewState* edl_state = state.find_related("CEdl");
+    ViewState* views_state = state.find_related("CV_iew");
+    ViewState edl_work;
+    const bool have_edl = edl_state != nullptr;
+    if (have_edl) {
+        if (!edl_state->parsed) {
+            return write_fail(error, "linked 214/CEdl state did not parse");
+        }
+        edl_work = *edl_state;
+        if (!regenerate_edl(edl_work, table, error)) {
+            return false;
+        }
+    }
+    if (views_state != nullptr && !views_state->parsed) {
+        return write_fail(error, "linked 214/CV_iew state did not parse");
+    }
+    for (const std::string_view klass : {"CFilter", "CGrouping"}) {
+        const ViewState* related = state.find_related(klass);
+        if (related != nullptr && !related->parsed) {
+            return write_fail(error, "linked 214/" + std::string(klass) + " state did not parse");
+        }
+    }
+    // Everything validated; commit.
+    state = std::move(table);
+    if (have_edl) {
+        *edl_state = std::move(edl_work);
+    }
+    return true;
 }
 
 }  // namespace msproject::viewstate

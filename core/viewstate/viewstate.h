@@ -38,9 +38,28 @@
 //
 //   FixedData rows: a row starts with u32 ordinal (1-based, matches the VarMeta
 //   uid) and a NUL-terminated UTF-16 caption at +4.  Every measured row ends in
-//   a 16-byte identity/GUID-like value that changes on every Project save.  The
-//   230-byte classes (CTable, CFilter, CGrouping) carry a second UTF-16 caption
-//   at +136 (the display name without the accelerator '&').
+//   a 16-byte identity/GUID-like value that changes on every Project save.
+//
+//   Every 230-byte row (CTable, CFilter, CGrouping) also carries an inline
+//   record set at row + 0x6e (wave 17, F1; this replaces the wave-13 note that
+//   called +136 "a second UTF-16 caption"):
+//
+//       +0  u32 set size (the set ends at row + 0x6e + size; 0 = no set)
+//       +4  u32 record count
+//       +8  count * {u32 id, u32 payload_offset relative to row + 0x6e}
+//       payloads, in record order
+//
+//   The ...0009 record is a NUL-terminated UTF-16 display name without the
+//   accelerator ("Entry", "All Tasks", "No Task Group"); the ...0007 record is
+//   the criteria blob and stays opaque.  CTable and CFilter use ids
+//   0x20400007/0x20400009, CGrouping uses 0x2d400007/0x2d400009.  The measured
+//   task-shaped set is 24 bytes of entries then the criteria (2 bytes) and the
+//   name at relative offset 26, which lands at row + 136 -- that coincidence is
+//   where the old "+136 caption" came from.  Resource-shaped sets have count 1
+//   and put the name at relative offset 16 = row + 126, so reading +136 there
+//   used to yield tails such as "esources" / "sk Group" on corpus rows.  The
+//   decoder now reads the record set and only falls back to +136 when a row has
+//   no set.
 //
 // WHAT IS DECODED (measured, see docs/handoff/w56.md)
 //
@@ -125,10 +144,40 @@
 //   the two later saves).  This module parses it with core/props
 //   (props::parse_props) rather than re-implementing the framing.
 //
+//   Wave 17 (F1) decodes the CEdl record set as a TYPED view:
+//
+//       0x26400018  the applied view's name (a CV_iew FixedData caption, so it
+//                   carries the accelerator: "&Gantt Chart")
+//       0x26400019  the applied table's display name (CTable display_caption
+//                   when non-empty, else the caption: "Entry", "W14 Entry C",
+//                   "&Entry" on the corpus file)
+//       0x26400017  the applied table's field list: the field ids of columns
+//                   1..n-1, optionally terminated by 0xffffffff.  The
+//                   terminator is present on tables whose CTable flags word is
+//                   6 (base, w14-tablecol-C, w15 gate/project) and absent on
+//                   flags 2 (w14-tablecol-A/B, tablecol2-I/J/K); regeneration
+//                   preserves whichever shape the record already has.
+//       0x26400031  a host path (the .mpp that was opened).  OPAQUE, never
+//                   regenerated, never copied into a test or a commit.
+//
+//   Every CEdl Props record is exposed with its id/kind/payload length and a
+//   preview; records other than the four above stay opaque.  The embedded
+//   document is rebuilt (record headers + header size words) when a known
+//   record changes size, and every other byte is preserved.
+//
+//   `214/CFilter` / `214/CGrouping` rows are decoded at the FRAMING level:
+//   the 230-byte row's inline record set (above) and the Var2Data block named
+//   by key 0x20400006.  The ...0009 row record is the display name; the
+//   ...0007 row record is the criteria blob (opaque).  For CFilter the block's
+//   u32 at payload +16 is the offset of a UTF-16 "tasks"/"resources" string
+//   (the filter's applies-to kind), measured on every synthetic view and on the
+//   corpus file.  Everything else in a CFilter/CGrouping block is opaque,
+//   including CGrouping's non-zero words at +8 in some fixtures.
+//
 //   `214/Props` is a normal Props stream and is decoded by core/props directly;
 //   this module does not duplicate that.
 //
-// THE WRITER (wave 14 W58, wave 15 W62)
+// THE WRITER (wave 14 W58, wave 15 W62, wave 17 F1)
 //
 // encode_view_state() re-serialises all four parts from a parsed ViewState:
 // FixedData verbatim (Project's per-save identity bytes are preserved, never
@@ -169,11 +218,43 @@
 //                          coordinator Project-resave gate), not an oracle
 //                          measurement of Project's own append.
 //
-// Not provided, because not measured:
+// Wave 17 (F1) adds:
 //
-//   * editing CV_iew, CFilter, CGrouping, CEdl, CDrawing, CMap or CReport
-//     payload bodies.  The CV_iew main block is decoded (above) but not edited;
-//     every payload is copied verbatim by the encoder.
+//   set_view_name          renames a CV_iew view: the NUL-terminated UTF-16
+//                          caption in its 138-byte FixedData row (capacity
+//                          row_size - 4 - 16 = 118 bytes = 59 code units).
+//                          The main-block 0x2240002a "display name" is NOT
+//                          changed: the measured caption/display pair is not a
+//                          one-to-one relation (synthetic view 1 is
+//                          "Gantt &with Timeline" / "Gantt Chart with Timeline"),
+//                          so a rename cannot derive it.
+//   set_view_table         replaces the main-block 0x2240000a item's UTF-16
+//                          payload (the applied table name for a single view,
+//                          the top-pane view name for a combination view),
+//                          re-framing the item (length, padding) and the block
+//                          (two size words) and shifting every later Var2Data
+//                          block / VarMeta offset.
+//   set_view_page_margins  writes the four page-margin u32 (1/1000 inch) at the
+//                          start of the measured 970-byte 0x22400009 template.
+//                          The field layout is W62's measurement; no oracle save
+//                          changed a margin, so the write is structural.
+//   regenerate_edl         refreshes CEdl's 0x26400018/0x26400019/0x26400017
+//                          from a table state (and its linked CV_iew), leaving
+//                          every other record -- including the host path --
+//                          byte-identical.
+//   regenerate_view_state  the app seam: applies TableEdits to a CTable state
+//                          and refreshes the linked CEdl (and nothing it cannot
+//                          derive), all-or-nothing.
+//
+// Still not provided, because not measured or not decodable:
+//
+//   * editing CFilter/CGrouping row record sets or block payloads, and editing
+//     CDrawing/CMap/CReport payload bodies.  They are decoded at the framing
+//     level and copied verbatim by the encoder.
+//   * regenerating the CEdl host path, the CEdl opaque records (0x26400022,
+//     0x26400026, 0x26400024, 0x26400027, 0x26400028, 0x2640002a/b/d,
+//     0x26400035, 0x26400036, 0x2640003d) or the 0x26400031 host path.
+//   * deriving a CV_iew display name from a renamed caption.
 //   * generating Project identity/GUID values.  Every row/entry identity is
 //     preserved verbatim because Project regenerates it on each save.
 
@@ -206,8 +287,39 @@ inline constexpr std::size_t kColumnRecordSize = 115;
 inline constexpr std::size_t kColumnTitleOffset = 13;
 inline constexpr std::size_t kColumnTitleCapacity = 51;
 inline constexpr std::size_t kIdentitySize = 16;
+// Legacy read offset for a 230-byte row's second caption.  Wave 17 replaced this
+// with the inline record set (kRowRecordSetOffset): +136 is where the ...0009
+// name payload happens to land for a task-shaped set (0x6e + 26), not a fixed
+// field.  Kept only as the fallback when a row has no record set.
 inline constexpr std::size_t kDisplayCaptionOffset = 136;
 inline constexpr std::size_t kDisplayCaptionRowSize = 230;
+
+// 230-byte FixedData rows: the inline record set (wave 17, F1).
+inline constexpr std::size_t kRowRecordSetOffset = 0x6Eu;
+inline constexpr std::uint32_t kFilterBlockKey = 0x20400006u;
+inline constexpr std::uint32_t kGroupingBlockKey = 0x20400006u;
+inline constexpr std::uint32_t kFilterCriteriaKey = 0x20400007u;
+inline constexpr std::uint32_t kFilterNameKey = 0x20400009u;
+inline constexpr std::uint32_t kGroupingCriteriaKey = 0x2D400007u;
+inline constexpr std::uint32_t kGroupingNameKey = 0x2D400009u;
+// An absent field id at the end of a CEdl 0x26400017 field list.
+inline constexpr std::uint32_t kNoFieldId = 0xFFFFFFFFu;
+
+// CEdl Props record ids whose payload is understood (wave 17, F1).
+inline constexpr std::uint32_t kEdlFieldListKey = 0x26400017u;
+inline constexpr std::uint32_t kEdlViewNameKey = 0x26400018u;
+inline constexpr std::uint32_t kEdlTableNameKey = 0x26400019u;
+// Opaque: the host .mpp path the file was opened from.  Never regenerated or
+// committed.
+inline constexpr std::uint32_t kEdlHostPathKey = 0x26400031u;
+
+// 214/CEdl and 214/CView caption capacities (NUL-terminated UTF-16 code units).
+inline constexpr std::size_t kEdlNameCapacity = 127;
+inline constexpr std::size_t kViewNameCapacity = 59;
+// The table-name item 0x2240000a is variable-length; the bound is defensive
+// (CTable captions are at most 63 printable ASCII units plus NUL).  127 is
+// generous but keeps the item inside the block framing this writer re-frames.
+inline constexpr std::size_t kViewTableNameCapacity = 127;
 
 // The nine bytes Project wrote for a fresh column in wave 14 (Number1 and Text1
 // replacements both carried them).  Only the first byte is understood (very
@@ -379,18 +491,105 @@ struct ViewDef {
     std::uint32_t page_margin_extra = 0;
 };
 
+// One record of the record set embedded in a 230-byte FixedData row (wave 17,
+// F1).  `payload_offset` is relative to row + kRowRecordSetOffset; the record's
+// bytes are row[kRowRecordSetOffset + payload_offset .. + payload_length).
+struct RowRecord {
+    std::uint32_t id = 0;
+    std::uint32_t payload_offset = 0;
+    std::uint32_t payload_length = 0;
+    std::string preview;
+};
+
+// The inline record set of one 230-byte row.
+//
+// `decoded == false` with `records.empty()` is the measured "no set" shape
+// (all-zero size/count, e.g. the corpus file's built-in CTable rows); a
+// malformed set is reported by parse_row_record_set() returning false, and the
+// row keeps only its caption.
+struct RowRecordSet {
+    bool decoded = false;
+    std::uint32_t row_offset = kRowRecordSetOffset;
+    std::uint32_t size = 0;
+    std::vector<RowRecord> records;
+    // Payload of the ...0009 record read as printable UTF-16 ASCII: the row's
+    // display name without the accelerator ("Entry", "All Tasks", ...).
+    std::string name;
+
+    [[nodiscard]] const RowRecord* find(std::uint32_t id) const;
+};
+
 struct FixedRow {
     std::uint32_t row_index = 0;
     std::uint32_t ordinal = 0;
     std::string caption;
     std::string display_caption;
     std::array<std::uint8_t, kIdentitySize> identity{};
+    RowRecordSet definition;
+};
+
+// A CFilter row (214/CFilter), decoded at the framing level.
+struct FilterDef {
+    std::uint32_t row_index = 0;
+    std::uint32_t ordinal = 0;
+    std::string caption;        // FixedData +4, with accelerator ("&All Tasks")
+    std::string display_name;   // row record ...0009 ("All Tasks"), when decoded
+    RowRecordSet definition;
+
+    bool block_decoded = false;
+    std::uint32_t block_offset = 0;   // Var2Data length-word offset
+    std::uint32_t block_length = 0;
+    std::uint32_t block_ordinal = 0;  // payload +0
+
+    // Payload +16 is the offset of a UTF-16 applies-to string, measured as
+    // "tasks"/"resources".  Only decoded when the offset validates.
+    bool applies_to_decoded = false;
+    std::uint32_t applies_to_offset = 0;
+    std::string applies_to;
+};
+
+// A CGrouping row (214/CGrouping), decoded at the framing level.
+struct GroupingDef {
+    std::uint32_t row_index = 0;
+    std::uint32_t ordinal = 0;
+    std::string caption;
+    std::string display_name;
+    RowRecordSet definition;
+
+    bool block_decoded = false;
+    std::uint32_t block_offset = 0;
+    std::uint32_t block_length = 0;
+    std::uint32_t block_ordinal = 0;
+};
+
+// One record of the Props document embedded in a CEdl block, in the typed form
+// exposed on EmbeddedProps.  The payload itself lives in the document bytes.
+struct EdlRecord {
+    std::uint32_t offset = 0;  // record header offset inside the document
+    std::uint32_t id = 0;
+    std::uint32_t kind = 0;
+    std::uint32_t payload_length = 0;
+    std::string preview;
 };
 
 // A Props-format document found inside a class block (measured for CEdl only).
+// The known CEdl records are decoded by id; everything else is exposed through
+// `records` and stays opaque.
 struct EmbeddedProps {
-    std::uint32_t block_offset = 0;
+    std::uint32_t block_offset = 0;   // Var2Data length-word offset
+    std::uint32_t payload_length = 0;
     props::PropsDocument document;
+    std::vector<EdlRecord> records;
+
+    bool view_name_decoded = false;
+    std::string view_name;            // 0x26400018
+    bool table_name_decoded = false;
+    std::string table_name;           // 0x26400019
+    bool field_list_decoded = false;
+    bool field_list_terminated = false;
+    std::vector<std::uint32_t> field_ids;  // 0x26400017, terminator excluded
+
+    [[nodiscard]] const EdlRecord* find(std::uint32_t id) const;
 };
 
 // The four decoded parts of one `214/<Class>` collection.  Byte copies are kept
@@ -418,12 +617,22 @@ struct ViewState {
     std::vector<ViewBlockRef> block_refs;
     std::vector<TableDef> tables;
     std::vector<ViewDef> views;
+    std::vector<FilterDef> filters;
+    std::vector<GroupingDef> groupings;
     std::vector<EmbeddedProps> embedded_props;
     std::vector<std::string> warnings;
+
+    // Non-owning links between the collections that make up one window's view
+    // state (typically CTable -> CV_iew, CEdl).  Used only by
+    // regenerate_view_state(); parse leaves this empty, encode ignores it, and
+    // copying a ViewState copies the pointers, not the states.
+    std::vector<ViewState*> related;
 
     [[nodiscard]] std::span<const std::uint8_t> block_bytes(const VarBlock& block) const;
     [[nodiscard]] const ViewBlockRef* find_block_ref(std::uint32_t uid,
                                                      std::uint32_t key) const;
+    [[nodiscard]] ViewState* find_related(std::string_view klass);
+    [[nodiscard]] const ViewState* find_related(std::string_view klass) const;
 };
 
 struct PartSet {
@@ -556,6 +765,105 @@ struct TableEdit {
                                      EncodedParts& out,
                                      WriteError* error = nullptr);
 
+// The edit list type of the wave-17 seam.
+using TableEdits = std::span<const TableEdit>;
+
+// ---------------------------------------------------------------------------
+// Wave 17 (F1): CV_iew editing and derived-record regeneration.
+// ---------------------------------------------------------------------------
+
+// Renames view `view_index` by rewriting the NUL-terminated UTF-16 caption at
+// FixedData row +4 (capacity row_size - 4 - 16 = 118 bytes = 59 code units for
+// the measured 138-byte rows).  `name` must be non-empty printable ASCII.
+//
+// This does NOT touch the main-block 0x2240002a display name: the measured
+// caption/display pair is not derivable (synthetic view 1 stores the caption
+// "Gantt &with Timeline" but the display name "Gantt Chart with Timeline"), so
+// the writer refuses to guess.  It also does not rewrite other views'
+// combination references, which name the view by its display text.
+//
+// Refuses (leaving the state untouched) a bad index, an undecoded row, an empty
+// name, a non-ASCII name, or a name longer than the caption capacity.
+[[nodiscard]] bool set_view_name(ViewState& state,
+                                 std::size_t view_index,
+                                 std::string_view name,
+                                 WriteError* error = nullptr);
+
+// Replaces the main-block 0x2240000a item payload with `table_name` encoded as
+// UTF-16 plus its trailing NUL.  For a single view that item is the applied
+// table name; for a combination view it is the top-pane view name (wave 15's
+// inference).  The item's length and pad byte, the block's two size words, the
+// VarBlock payload length, every later Var2Data block/VarMeta offset and the
+// decoded ViewDef::main_block_offset are re-framed; the bytes of every other
+// item are copied verbatim.
+//
+// Refuses (leaving the state untouched) a bad index, a view whose main block or
+// 0x2240000a item did not decode, an empty name, a non-ASCII name, or a name
+// longer than kViewTableNameCapacity.  It does not check that the table exists;
+// the caller owns that semantic check (regenerate_edl() resolves it).
+[[nodiscard]] bool set_view_table(ViewState& state,
+                                  std::size_t view_index,
+                                  std::string_view table_name,
+                                  WriteError* error = nullptr);
+
+// Writes four page margins (1/1000 inch) into the measured 970-byte 0x22400009
+// template at item payload +0..15.  The layout is wave-15's measurement; no
+// oracle save changed a margin, so this write is structural (the decoder reads
+// back exactly the four words written) and not an oracle measurement.
+//
+// Refuses (leaving the state untouched) a bad index, a view whose 0x22400009
+// item did not decode at the measured 970-byte size, or a value above 100000
+// (100 inch; a defensive bound, not a measured Project limit).
+[[nodiscard]] bool set_view_page_margins(ViewState& state,
+                                         std::size_t view_index,
+                                         const std::array<std::uint32_t, 4>& margins,
+                                         WriteError* error = nullptr);
+
+// Refreshes the records Project derives in `214/CEdl` from the edited table:
+//
+//   0x26400018  the applied view's FixedData caption          (view name)
+//   0x26400019  the applied table's display name              (table reference)
+//   0x26400017  the applied table's columns[1..] field ids    (field list)
+//
+// The applied view is resolved from `from_table_state.find_related("CV_iew")`:
+// first by the CEdl record's current view name (accelerator-insensitive), then
+// by the table name the CEdl record carries, then -- only when exactly one
+// single (non-combination) view exists -- that view.  Without a linked CV_iew,
+// the view-name record is left untouched and the table is resolved from the
+// CEdl record's own table name.  The field list keeps the 0xffffffff terminator
+// only when the existing record has one (the measured flags-6 shape).
+//
+// The embedded Props document is rebuilt (record count/order, header size words
+// with the input's variant delta, tail) and the Var2Data block is re-framed and
+// spliced; every other record's bytes -- including the 0x26400031 host path --
+// and every other block are preserved verbatim.  Returns false and leaves
+// `state` untouched when the state is not a parsed CEdl, has no decoded Props
+// block, or the applied view/table cannot be resolved unambiguously.
+[[nodiscard]] bool regenerate_edl(ViewState& state,
+                                  const ViewState& from_table_state,
+                                  WriteError* error = nullptr);
+
+// THE APP SEAM (wave 17, F1).  `state` must be a parsed `214/CTable` ViewState.
+//
+//  1. Copies `state`, applies every TableEdit to the copy through the mutators
+//     above (so a later failure leaves the caller's state untouched).
+//  2. For every ViewState linked through `state.related` by class:
+//       - "CEdl":  regenerate_edl() with the edited table;
+//       - "CV_iew": validated, then left byte-identical (no TableEdit derives a
+//                    view name, table reference or margin; page margins stay
+//                    exactly as W62 decoded them);
+//       - "CFilter"/"CGrouping": left byte-identical (nothing derived is
+//                    decoded there);
+//       - any other class: left byte-identical.
+//  3. Commits the table copy (and the refreshed CEdl copy) back into the
+//     caller's states only after every step succeeded.
+//
+// Without links this is the in-place table-edit apply.  On failure `error` names
+// the edit index or the class that refused, and no state is modified.
+[[nodiscard]] bool regenerate_view_state(ViewState& state,
+                                         const TableEdits& edits,
+                                         WriteError* error = nullptr);
+
 // The class names measured under 214/.  Unknown classes still parse with the
 // generic framing and every block stays opaque.
 [[nodiscard]] bool is_known_class(std::string_view klass);
@@ -582,6 +890,17 @@ struct TableEdit {
 [[nodiscard]] bool parse_view_records(std::span<const std::uint8_t> payload,
                                       std::vector<ViewRecord>& out,
                                       ParseError* error = nullptr);
+
+// Parses the record set embedded at `row[kRowRecordSetOffset]` in a 230-byte
+// FixedData row.  A zero size/count pair is the measured "no set" shape: it
+// returns true with `out.decoded == false`.  Every record id must carry the
+// 0x0040 byte in position 2, every payload offset must land inside the set, and
+// the set must end inside the row; otherwise it returns false with a message and
+// the caller keeps the row opaque.  The ...0009 record is decoded into
+// `out.name` as printable UTF-16 ASCII.
+[[nodiscard]] bool parse_row_record_set(std::span<const std::uint8_t> row,
+                                        RowRecordSet& out,
+                                        ParseError* error = nullptr);
 
 // Decodes one whole `214/<Class>` collection.  Structural failures (bad magic,
 // truncated meta, a block length that runs past the stream) return false and

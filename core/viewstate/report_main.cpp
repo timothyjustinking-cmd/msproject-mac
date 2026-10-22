@@ -17,16 +17,24 @@
 // with encode_view_state() and checks the result against the extracted
 // streams, which is the writer's no-op proof on real fixture bytes.  See
 // docs/handoff/w58.md for the writer's measured scope.
+//
+// --regenerate-edl parses 214/CTable, 214/CV_iew and 214/CEdl from one tree,
+// links them and runs regenerate_edl() with no table edits.  It prints the
+// derived CEdl records before and after and the byte delta.  It never writes a
+// file: on a tree Project re-saved the run is a no-op, while on a tree whose
+// CEdl is stale relative to its CTable it reports the records it would refresh.
 
 #include "viewstate.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
 #include <map>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -75,6 +83,58 @@ std::string part_name(const fs::path& path) {
 
 int g_exit = 0;
 
+bool load_class(const std::map<std::string, std::map<std::string, fs::path>>& classes,
+                const std::string& klass,
+                std::array<std::vector<std::uint8_t>, 4>& storage,
+                msproject::viewstate::PartSet& parts,
+                std::string& error) {
+    const auto found = classes.find(klass);
+    if (found == classes.end()) {
+        error = "214/" + klass + " is missing";
+        return false;
+    }
+    static constexpr std::array<const char*, 4> kNames = {"FixedData", "FixedMeta", "VarMeta",
+                                                          "Var2Data"};
+    std::array<std::vector<std::uint8_t>*, 4> targets = {&storage[0], &storage[1], &storage[2],
+                                                          &storage[3]};
+    for (std::size_t i = 0; i < kNames.size(); ++i) {
+        const auto part = found->second.find(kNames[i]);
+        if (part == found->second.end()) {
+            error = "214/" + klass + " is missing part " + kNames[i];
+            return false;
+        }
+        if (!read_file(part->second, *targets[i])) {
+            error = "cannot read " + part->second.string();
+            return false;
+        }
+    }
+    parts.fixed_data = storage[0];
+    parts.fixed_meta = storage[1];
+    parts.var_meta = storage[2];
+    parts.var2_data = storage[3];
+    return true;
+}
+
+std::string derived_records(const msproject::viewstate::ViewState& state) {
+    std::ostringstream out;
+    for (const auto& embedded : state.embedded_props) {
+        out << "    props block=" << embedded.block_offset << "+" << embedded.payload_length
+            << " records=" << embedded.document.records.size();
+        if (embedded.view_name_decoded) {
+            out << " view=\"" << embedded.view_name << "\"";
+        }
+        if (embedded.table_name_decoded) {
+            out << " table=\"" << embedded.table_name << "\"";
+        }
+        if (embedded.field_list_decoded) {
+            out << " fields=" << embedded.field_ids.size()
+                << (embedded.field_list_terminated ? "+terminator" : "");
+        }
+        out << "\n";
+    }
+    return out.str();
+}
+
 void report_props(const std::vector<std::uint8_t>& bytes) {
     msproject::props::PropsDocument document;
     msproject::props::ParseError error;
@@ -95,6 +155,7 @@ int main(int argc, char** argv) {
     bool dump = false;
     bool inventory = false;
     bool roundtrip = false;
+    bool regenerate = false;
     std::string only_class;
     fs::path root;
     for (int i = 1; i < argc; ++i) {
@@ -105,6 +166,8 @@ int main(int argc, char** argv) {
             inventory = true;
         } else if (arg == "--roundtrip") {
             roundtrip = true;
+        } else if (arg == "--regenerate-edl") {
+            regenerate = true;
         } else if (arg == "--class") {
             if (i + 1 >= argc) {
                 std::fprintf(stderr, "viewstate_report: --class needs a name\n");
@@ -113,11 +176,13 @@ int main(int argc, char** argv) {
             only_class = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             std::printf("usage: viewstate_report [--dump] [--inventory] [--roundtrip]\n"
-                        "                       [--class NAME] <root>\n"
+                        "                       [--regenerate-edl] [--class NAME] <root>\n"
                         "  <root>       directory holding 214/<Class>/<Part> files\n"
                         "  --dump       print every column/block (default truncates at 6)\n"
                         "  --inventory  print sizes/FNV only, skip decoding\n"
                         "  --roundtrip  re-encode each class and require byte-identical parts\n"
+                        "  --regenerate-edl  link CTable/CV_iew/CEdl, run regenerate_edl()\n"
+                        "                    with no table edits and print the byte delta\n"
                         "  --class N    decode one class only\n");
             return 0;
         } else if (root.empty()) {
@@ -181,6 +246,82 @@ int main(int argc, char** argv) {
             relative.parent_path().generic_string().find('/') == std::string::npos) {
             classes[relative.parent_path().generic_string()][part_name(path)] = path;
         }
+    }
+
+    if (regenerate) {
+        std::array<std::vector<std::uint8_t>, 4> table_bytes;
+        std::array<std::vector<std::uint8_t>, 4> view_bytes;
+        std::array<std::vector<std::uint8_t>, 4> edl_bytes;
+        msproject::viewstate::PartSet table_parts;
+        msproject::viewstate::PartSet view_parts;
+        msproject::viewstate::PartSet edl_parts;
+        std::string load_error;
+        if (!load_class(classes, "CTable", table_bytes, table_parts, load_error) ||
+            !load_class(classes, "CV_iew", view_bytes, view_parts, load_error) ||
+            !load_class(classes, "CEdl", edl_bytes, edl_parts, load_error)) {
+            std::fprintf(stderr, "viewstate_report: %s\n", load_error.c_str());
+            return 1;
+        }
+        msproject::viewstate::ViewState table;
+        msproject::viewstate::ViewState views;
+        msproject::viewstate::ViewState edl;
+        msproject::viewstate::ParseError parse_error;
+        if (!msproject::viewstate::parse_view_state("CTable", table_parts, table, &parse_error) ||
+            !msproject::viewstate::parse_view_state("CV_iew", view_parts, views, &parse_error) ||
+            !msproject::viewstate::parse_view_state("CEdl", edl_parts, edl, &parse_error)) {
+            std::fprintf(stderr, "viewstate_report: parse error: %s at %zu\n",
+                         parse_error.message.c_str(), parse_error.offset);
+            return 1;
+        }
+        table.related = {&views, &edl};
+        msproject::viewstate::EncodedParts before;
+        msproject::viewstate::EncodedParts after;
+        msproject::viewstate::WriteError write_error;
+        if (!msproject::viewstate::encode_view_state(edl, before, &write_error)) {
+            std::fprintf(stderr, "viewstate_report: CEdl encode failed: %s\n",
+                         write_error.message.c_str());
+            return 1;
+        }
+        std::printf("regenerate-edl: CTable tables=%zu CV_iew views=%zu CEdl records=%zu\n",
+                    table.tables.size(), views.views.size(),
+                    edl.embedded_props.empty() ? 0u : edl.embedded_props[0].document.records.size());
+        std::printf("  before:\n%s", derived_records(edl).c_str());
+        if (!msproject::viewstate::regenerate_edl(edl, table, &write_error)) {
+            std::fprintf(stderr, "viewstate_report: regenerate_edl refused: %s\n",
+                         write_error.message.c_str());
+            return 1;
+        }
+        if (!msproject::viewstate::encode_view_state(edl, after, &write_error)) {
+            std::fprintf(stderr, "viewstate_report: CEdl re-encode failed: %s\n",
+                         write_error.message.c_str());
+            return 1;
+        }
+        std::printf("  after:\n%s", derived_records(edl).c_str());
+        std::size_t changed = 0;
+        std::size_t first = 0;
+        bool have_first = false;
+        const std::size_t common = std::min(before.var2_data.size(), after.var2_data.size());
+        for (std::size_t i = 0; i < common; ++i) {
+            if (before.var2_data[i] != after.var2_data[i]) {
+                ++changed;
+                if (!have_first) {
+                    first = i;
+                    have_first = true;
+                }
+            }
+        }
+        if (before.var2_data.size() != after.var2_data.size()) {
+            std::printf("  var2 size %zu -> %zu (delta %+lld)\n", before.var2_data.size(),
+                        after.var2_data.size(),
+                        static_cast<long long>(after.var2_data.size()) -
+                            static_cast<long long>(before.var2_data.size()));
+        }
+        if (changed == 0 && before.var2_data.size() == after.var2_data.size()) {
+            std::printf("  regenerate_edl is a no-op: CEdl already agrees with CTable/CV_iew\n");
+        } else {
+            std::printf("  regenerate_edl changed %zu byte(s); first at %zu\n", changed, first);
+        }
+        return g_exit;
     }
 
     for (const auto& [klass, parts] : classes) {

@@ -291,6 +291,165 @@ std::vector<std::uint8_t> make_view_notes() {
     return notes;
 }
 
+// ---------------------------------------------------------------------------
+// Wave 17 (F1) helpers: the 230-byte row record set, the CFilter/CGrouping
+// framing, the CEdl Props document and the CV_iew edit fixtures.
+// ---------------------------------------------------------------------------
+
+std::vector<std::uint8_t> field_list_bytes(const std::vector<std::uint32_t>& ids,
+                                           bool terminator) {
+    std::vector<std::uint8_t> out((ids.size() + (terminator ? 1u : 0u)) * 4, 0);
+    for (std::size_t i = 0; i < ids.size(); ++i) {
+        put_u32(out, i * 4, ids[i]);
+    }
+    if (terminator) {
+        put_u32(out, ids.size() * 4, 0xffffffffu);
+    }
+    return out;
+}
+
+// Writes the inline record set at row + 0x6e.  `records` are {id, payload} in
+// the measured order; the set ends where the last payload ends.
+void attach_row_records(Parts& parts,
+                        std::size_t row_index,
+                        std::size_t row_size,
+                        const std::vector<std::pair<std::uint32_t,
+                                                    std::vector<std::uint8_t>>>& records) {
+    const std::size_t base = row_index * row_size + 0x6e;
+    std::size_t size = 8 + records.size() * 8;
+    for (const auto& record : records) {
+        size += record.second.size();
+    }
+    check(base + size <= parts.fixed_data.size(), "row record set fits the row");
+    put_u32(parts.fixed_data, base, static_cast<std::uint32_t>(size));
+    put_u32(parts.fixed_data, base + 4, static_cast<std::uint32_t>(records.size()));
+    std::size_t at = 8 + records.size() * 8;
+    for (std::size_t i = 0; i < records.size(); ++i) {
+        put_u32(parts.fixed_data, base + 8 + i * 8, records[i].first);
+        put_u32(parts.fixed_data, base + 12 + i * 8, static_cast<std::uint32_t>(at));
+        for (std::size_t b = 0; b < records[i].second.size(); ++b) {
+            parts.fixed_data[base + at + b] = records[i].second[b];
+        }
+        at += records[i].second.size();
+    }
+}
+
+// The measured CFilter block: ordinal at +0, applies-to offset at +16, and the
+// UTF-16 "tasks"/"resources" string at that offset.
+std::vector<std::uint8_t> make_filter_block(std::uint32_t ordinal,
+                                            const std::string& applies_to) {
+    const std::size_t offset = 92;
+    std::vector<std::uint8_t> payload(offset, 0);
+    put_u32(payload, 0, ordinal);
+    put_u32(payload, 4, 0x100u);
+    put_u16(payload, 14, 2);
+    put_u32(payload, 16, static_cast<std::uint32_t>(offset));
+    const std::vector<std::uint8_t> text = utf16_item(applies_to);
+    payload.insert(payload.end(), text.begin(), text.end());
+    return payload;
+}
+
+// The measured CGrouping block: ordinal at +0, the rest opaque (83 bytes in the
+// synthetic family, and some blocks are only 12 bytes in the corpus file).
+std::vector<std::uint8_t> make_grouping_block(std::uint32_t ordinal) {
+    std::vector<std::uint8_t> payload(83, 0);
+    put_u32(payload, 0, ordinal);
+    put_u32(payload, 8, 0x100u);
+    return payload;
+}
+
+struct TestEdlRecord {
+    std::uint32_t id = 0;
+    std::vector<std::uint8_t> payload;
+};
+
+// A complete Props document as measured for CEdl: header size words are
+// stream_size - 4, then records back to back.
+std::vector<std::uint8_t> make_edl_document(const std::vector<TestEdlRecord>& records) {
+    std::size_t total = 16;
+    for (const auto& record : records) {
+        total += 12 + record.payload.size();
+    }
+    std::vector<std::uint8_t> document(total, 0);
+    put_u32(document, 0, static_cast<std::uint32_t>(total - 4));
+    put_u32(document, 4, static_cast<std::uint32_t>(total - 4));
+    put_u32(document, 8, 0x00010000u);
+    put_u32(document, 12, static_cast<std::uint32_t>(records.size()));
+    std::size_t at = 16;
+    for (const auto& record : records) {
+        put_u32(document, at, static_cast<std::uint32_t>(record.payload.size()));
+        put_u32(document, at + 4, record.id);
+        put_u32(document, at + 8, 1);
+        for (std::size_t b = 0; b < record.payload.size(); ++b) {
+            document[at + 12 + b] = record.payload[b];
+        }
+        at += 12 + record.payload.size();
+    }
+    return document;
+}
+
+// The synthetic CEdl collection: one 160-byte row, one Props block, plus an
+// opaque record that stands in for the measured host path (no real path here).
+Parts make_edl_parts(const std::string& view_name,
+                     const std::string& table_name,
+                     const std::vector<std::uint32_t>& field_ids,
+                     bool terminator) {
+    std::vector<TestEdlRecord> records;
+    std::vector<std::uint8_t> one(4, 0);
+    put_u32(one, 0, 1);
+    records.push_back({0x26400022u, one});
+    records.push_back({0x26400018u, utf16_item(view_name)});
+    records.push_back({0x26400019u, utf16_item(table_name)});
+    records.push_back({0x26400017u, field_list_bytes(field_ids, terminator)});
+    records.push_back({0x26400031u, utf16_item("opaque-host-record")});
+    const std::vector<std::uint8_t> document = make_edl_document(records);
+    return build_parts(160, {{"", ""}}, {{1, 0x20400006u, document}}, 11);
+}
+
+// Two CV_iew views.  View 0 is a single view whose main block carries a display
+// name, the applied table, the filter and the 970-byte options template; view 1
+// is a second view (a combination view naming view 0) so a block-offset shift
+// is observable.
+Parts make_view_parts(const std::string& view0_table = "&Entry",
+                      const std::string& view0_caption = "&Gantt Chart") {
+    std::vector<ViewItemSpec> items0;
+    items0.push_back({0x2240002Au, 1, utf16_item("Gantt Chart")});
+    items0.push_back({0x2240000Au, 1, utf16_item(view0_table)});
+    items0.push_back({0x2240000Bu, 1, utf16_item("&All Tasks")});
+    items0.push_back({0x22400018u, 1, utf16_item("No Group")});
+    items0.push_back({0x22400009u, 1, make_view_options()});
+    const std::vector<std::uint8_t> main0 = make_view_main_block(items0);
+
+    std::vector<ViewItemSpec> items1;
+    items1.push_back({0x2240002Au, 1, utf16_item("Gantt Chart with Timeline")});
+    items1.push_back({0x2240000Au, 1, utf16_item("&Gantt Chart")});
+    items1.push_back({0x2240000Bu, 1, utf16_item("Time&line")});
+    const std::vector<std::uint8_t> main1 = make_view_main_block(items1);
+
+    std::vector<BlockSpec> blocks;
+    blocks.push_back({1, 0x20400006u, main0});
+    blocks.push_back({2, 0x20400006u, main1});
+    return build_parts(138, {{view0_caption, ""}, {"Gantt &with Timeline", ""}}, blocks);
+}
+
+// Builds a CTable collection from explicit column payloads (used where the
+// committed wave-10 blob is not the right shape).
+Parts make_ctable_parts_from_payloads(
+    const std::vector<std::pair<std::string, std::vector<std::uint8_t>>>& tables) {
+    std::vector<BlockSpec> blocks;
+    std::vector<std::pair<std::string, std::string>> rows;
+    for (std::size_t i = 0; i < tables.size(); ++i) {
+        blocks.push_back({static_cast<std::uint32_t>(i + 1), 0x20400006u, tables[i].second});
+        const std::string caption = tables[i].first;
+        std::string display = caption;
+        if (!display.empty() && display.front() == '&') {
+            display.erase(display.begin());
+        }
+        rows.push_back({caption, display});
+    }
+    return build_parts(230, rows, blocks);
+}
+
 msproject::viewstate::ViewState parse_or_fail(const std::string& klass,
                                               const Parts& parts,
                                               bool expect_success = true) {
@@ -1467,6 +1626,811 @@ void test_writer_apply_edits() {
     check_same_parts(still_noop, parts, "input state is untouched by apply_table_edits");
 }
 
+// ---------------------------------------------------------------------------
+// Wave 17 (F1) tests: row record sets, CFilter/CGrouping framing, CEdl typed
+// records + regeneration, CV_iew editing and the regenerate_view_state seam.
+// ---------------------------------------------------------------------------
+
+void test_row_record_sets() {
+    // Task-shaped set (criteria + name): 8 + 2*8 entries then a 2-byte criteria
+    // payload and the name at relative offset 26 = row + 136.
+    Parts entry = build_parts(230, {{"&Entry", "Entry"}}, {}, 10);
+    attach_row_records(entry, 0, 230,
+                       {{0x20400007u, {0x00, 0x00}},
+                        {0x20400009u, utf16_item("Entry")}});
+    const auto entry_state = parse_or_fail("CTable", entry);
+    check_eq(entry_state.rows.size(), std::size_t{1}, "row set: one CTable row");
+    if (entry_state.rows.size() == 1) {
+        const auto& row = entry_state.rows[0];
+        check(row.definition.decoded, "row set: CTable row set decoded");
+        check_eq(row.definition.size, 38u, "row set: task-shaped size");
+        check_eq(row.definition.records.size(), std::size_t{2}, "row set: task-shaped count");
+        check_eq(row.definition.name, std::string("Entry"), "row set: decoded name");
+        check_eq(row.display_caption, std::string("Entry"), "row set: display caption from name");
+        const auto* criteria = row.definition.find(0x20400007u);
+        check(criteria != nullptr, "row set: criteria record exposed");
+        if (criteria != nullptr) {
+            check_eq(criteria->payload_offset, 24u, "row set: criteria offset");
+            check_eq(criteria->payload_length, 2u, "row set: criteria length");
+        }
+        const auto* name = row.definition.find(0x20400009u);
+        check(name != nullptr, "row set: name record exposed");
+        if (name != nullptr) {
+            check_eq(name->payload_offset, 26u, "row set: task-shaped name offset");
+        }
+    }
+
+    // Resource-shaped set (name only): the name starts at relative offset 16 =
+    // row + 126, so the legacy +136 read would produce "esources".  The record
+    // set is authoritative.
+    Parts resource = build_parts(230, {{"&All Resources", "esources"}}, {}, 10);
+    attach_row_records(resource, 0, 230,
+                       {{0x20400009u, utf16_item("All Resources")}});
+    const auto resource_state = parse_or_fail("CFilter", resource);
+    check_eq(resource_state.rows.size(), std::size_t{1}, "row set: one CFilter row");
+    if (resource_state.rows.size() == 1) {
+        check_eq(resource_state.rows[0].definition.name, std::string("All Resources"),
+                 "row set: resource-shaped name");
+        check_eq(resource_state.rows[0].display_caption, std::string("All Resources"),
+                 "row set: resource-shaped display caption overrides +136");
+        if (!resource_state.rows[0].definition.records.empty()) {
+            check_eq(resource_state.rows[0].definition.records[0].payload_offset, 16u,
+                     "row set: resource-shaped name offset");
+        }
+    }
+
+    msproject::viewstate::RowRecordSet set;
+    msproject::viewstate::ParseError error;
+    const std::vector<std::uint8_t> zero(230, 0);
+    check(msproject::viewstate::parse_row_record_set(zero, set, &error),
+          "row set: zero size/count is the measured no-set shape");
+    check(!set.decoded && set.records.empty(), "row set: no-set shape is not decoded");
+
+    std::vector<std::uint8_t> bad = zero;
+    put_u32(bad, 0x6e, 32);
+    put_u32(bad, 0x72, 1);
+    put_u32(bad, 0x76, 0x12345678u);
+    put_u32(bad, 0x7a, 16);
+    check(!msproject::viewstate::parse_row_record_set(bad, set, &error),
+          "row set: non-property id refused");
+    check(error.message.find("property id") != std::string::npos,
+          "row set: non-property id message");
+
+    bad = zero;
+    put_u32(bad, 0x6e, 32);
+    put_u32(bad, 0x72, 1);
+    put_u32(bad, 0x76, 0x20400009u);
+    put_u32(bad, 0x7a, 40);
+    check(!msproject::viewstate::parse_row_record_set(bad, set, &error),
+          "row set: payload offset outside the set refused");
+
+    bad = zero;
+    put_u32(bad, 0x6e, 40);
+    put_u32(bad, 0x72, 0);
+    check(!msproject::viewstate::parse_row_record_set(bad, set, &error),
+          "row set: size without records refused");
+}
+
+void test_filter_definitions() {
+    Parts parts = build_parts(230, {{"&All Tasks", "All Tasks"}},
+                              {{1, 0x20400006u, make_filter_block(1, "tasks")}});
+    attach_row_records(parts, 0, 230,
+                       {{0x20400007u, {0x00, 0x00}},
+                        {0x20400009u, utf16_item("All Tasks")}});
+    const auto state = parse_or_fail("CFilter", parts);
+    check_eq(state.filters.size(), std::size_t{1}, "filter defs: count");
+    if (state.filters.size() == 1) {
+        const auto& filter = state.filters[0];
+        check_eq(filter.caption, std::string("&All Tasks"), "filter defs: caption");
+        check_eq(filter.display_name, std::string("All Tasks"), "filter defs: display name");
+        check_eq(filter.definition.name, std::string("All Tasks"),
+                 "filter defs: record-set name");
+        check(filter.block_decoded, "filter defs: block decoded");
+        check_eq(filter.block_offset, 0u, "filter defs: block offset");
+        check_eq(filter.block_ordinal, 1u, "filter defs: block ordinal");
+        check(filter.applies_to_decoded, "filter defs: applies-to decoded");
+        check_eq(filter.applies_to, std::string("tasks"), "filter defs: applies-to text");
+        check_eq(filter.applies_to_offset, 92u, "filter defs: applies-to offset");
+    }
+    check_eq(state.block_refs.size(), std::size_t{1}, "filter defs: block refs");
+    if (!state.block_refs.empty()) {
+        check_eq(state.block_refs[0].kind, std::string("filter-definition"),
+                 "filter defs: block kind");
+    }
+    EncodedParts encoded;
+    check(encode_view_state(state, encoded, nullptr), "filter defs: encode");
+    check_same_parts(encoded, parts, "filter defs: no-op round-trip");
+
+    // The measured resources variant: same framing, a different applies-to.
+    Parts resources = build_parts(230, {{"&All Resources", "All Resources"}},
+                                  {{1, 0x20400006u, make_filter_block(1, "resources")}});
+    attach_row_records(resources, 0, 230,
+                       {{0x20400009u, utf16_item("All Resources")}});
+    const auto resource_state = parse_or_fail("CFilter", resources);
+    check_eq(resource_state.filters.size(), std::size_t{1}, "filter defs: resources count");
+    if (resource_state.filters.size() == 1) {
+        check_eq(resource_state.filters[0].applies_to, std::string("resources"),
+                 "filter defs: resources applies-to");
+        check_eq(resource_state.filters[0].block_length, 112u,
+                 "filter defs: resources block length");
+    }
+}
+
+void test_grouping_definitions() {
+    std::vector<BlockSpec> blocks;
+    blocks.push_back({1, 0x20400006u, make_grouping_block(1)});
+    blocks.push_back({2, 0x20400006u, make_grouping_block(2)});
+    Parts parts = build_parts(230, {{"&No Group", "No Task Group"}, {"&No Group", "No Resource Group"}},
+                              blocks);
+    attach_row_records(parts, 0, 230,
+                       {{0x2D400007u, {0x00, 0x00}},
+                        {0x2D400009u, utf16_item("No Task Group")}});
+    attach_row_records(parts, 1, 230,
+                       {{0x2D400009u, utf16_item("No Resource Group")}});
+    const auto state = parse_or_fail("CGrouping", parts);
+    check_eq(state.groupings.size(), std::size_t{2}, "grouping defs: count");
+    if (state.groupings.size() == 2) {
+        check_eq(state.groupings[0].caption, std::string("&No Group"),
+                 "grouping defs: first caption");
+        check_eq(state.groupings[0].display_name, std::string("No Task Group"),
+                 "grouping defs: first display name");
+        check_eq(state.groupings[0].definition.name, std::string("No Task Group"),
+                 "grouping defs: first record-set name");
+        check(state.groupings[0].block_decoded, "grouping defs: first block decoded");
+        check_eq(state.groupings[0].block_offset, 0u, "grouping defs: first block offset");
+        check_eq(state.groupings[1].display_name, std::string("No Resource Group"),
+                 "grouping defs: second display name (name-only set)");
+        check_eq(state.groupings[1].block_offset, 87u, "grouping defs: second block offset");
+        check_eq(state.groupings[1].block_length, 83u, "grouping defs: second block length");
+    }
+    EncodedParts encoded;
+    check(encode_view_state(state, encoded, nullptr), "grouping defs: encode");
+    check_same_parts(encoded, parts, "grouping defs: no-op round-trip");
+}
+
+void test_edl_typed() {
+    std::vector<std::uint32_t> ids(kEntryFieldIds.begin() + 1, kEntryFieldIds.end());
+    const Parts parts = make_edl_parts("&Gantt Chart", "Entry", ids, true);
+    const auto state = parse_or_fail("CEdl", parts);
+    check_eq(state.embedded_props.size(), std::size_t{1}, "CEdl typed: one Props block");
+    if (state.embedded_props.size() == 1) {
+        const auto& edl = state.embedded_props[0];
+        check(edl.view_name_decoded, "CEdl typed: view name decoded");
+        check_eq(edl.view_name, std::string("&Gantt Chart"), "CEdl typed: view name");
+        check(edl.table_name_decoded, "CEdl typed: table name decoded");
+        check_eq(edl.table_name, std::string("Entry"), "CEdl typed: table name");
+        check(edl.field_list_decoded, "CEdl typed: field list decoded");
+        check(edl.field_list_terminated, "CEdl typed: terminator seen");
+        check_eq(edl.field_ids.size(), ids.size(), "CEdl typed: field id count");
+        if (edl.field_ids.size() == ids.size()) {
+            for (std::size_t i = 0; i < ids.size(); ++i) {
+                check_eq(edl.field_ids[i], ids[i],
+                         "CEdl typed: field id " + std::to_string(i));
+            }
+        }
+        check_eq(edl.records.size(), std::size_t{5}, "CEdl typed: record set size");
+        const auto* host = edl.find(0x26400031u);
+        check(host != nullptr, "CEdl typed: opaque host-record exposed");
+        if (host != nullptr) {
+            check_eq(host->payload_length, 38u, "CEdl typed: opaque record length");
+        }
+    }
+    EncodedParts encoded;
+    check(encode_view_state(state, encoded, nullptr), "CEdl typed: encode");
+    check_same_parts(encoded, parts, "CEdl typed: no-op round-trip");
+
+    // A field list with no terminator (the measured flags-2 shape).
+    Parts plain = make_edl_parts("&Gantt Chart", "Entry", ids, false);
+    const auto plain_state = parse_or_fail("CEdl", plain);
+    check_eq(plain_state.embedded_props.size(), std::size_t{1}, "CEdl typed: plain block");
+    if (plain_state.embedded_props.size() == 1) {
+        check(plain_state.embedded_props[0].field_list_decoded,
+              "CEdl typed: plain field list decoded");
+        check(!plain_state.embedded_props[0].field_list_terminated,
+              "CEdl typed: plain field list has no terminator");
+        check_eq(plain_state.embedded_props[0].field_ids.size(), ids.size(),
+                 "CEdl typed: plain field id count");
+    }
+}
+
+void test_noop_five_classes() {
+    std::vector<std::uint32_t> ids(kEntryFieldIds.begin() + 1, kEntryFieldIds.end());
+
+    Parts ctable;
+    check(make_ctable_parts("synthetic-viewstate-ctable-base.bin", ctable),
+          "five-class no-op: CTable fixture");
+    const Parts views = make_view_parts();
+    const Parts edl = make_edl_parts("&Gantt Chart", "Entry", ids, true);
+    Parts filter = build_parts(230, {{"&All Tasks", "All Tasks"}},
+                               {{1, 0x20400006u, make_filter_block(1, "tasks")}});
+    attach_row_records(filter, 0, 230,
+                       {{0x20400007u, {0x00, 0x00}},
+                        {0x20400009u, utf16_item("All Tasks")}});
+    std::vector<BlockSpec> grouping_blocks;
+    grouping_blocks.push_back({1, 0x20400006u, make_grouping_block(1)});
+    Parts grouping = build_parts(230, {{"&No Group", "No Task Group"}}, grouping_blocks);
+    attach_row_records(grouping, 0, 230,
+                       {{0x2D400009u, utf16_item("No Task Group")}});
+
+    const std::pair<const char*, const Parts*> cases[] = {
+        {"CTable", &ctable},     {"CV_iew", &views},       {"CEdl", &edl},
+        {"CFilter", &filter},    {"CGrouping", &grouping},
+    };
+    for (const auto& [klass, parts] : cases) {
+        const auto state = parse_or_fail(klass, *parts);
+        EncodedParts encoded;
+        check(encode_view_state(state, encoded, nullptr),
+              std::string("five-class no-op: encode ") + klass);
+        check_same_parts(encoded, *parts, std::string("five-class no-op: ") + klass);
+    }
+}
+
+void test_view_name_edit() {
+    const Parts parts = make_view_parts();
+    auto state = parse_or_fail("CV_iew", parts);
+    EncodedParts before;
+    check(encode_view_state(state, before, nullptr), "view name: encode before");
+
+    WriteError error;
+    check(msproject::viewstate::set_view_name(state, 0, "Renamed &View", &error),
+          "view name: rename view 0");
+    if (!error.message.empty()) {
+        std::fprintf(stderr, "view-name error: %s\n", error.message.c_str());
+    }
+    check_eq(state.views[0].name, std::string("Renamed &View"), "view name: decoded name");
+    check_eq(state.rows[0].caption, std::string("Renamed &View"), "view name: row caption");
+    EncodedParts after;
+    check(encode_view_state(state, after, nullptr), "view name: encode after");
+
+    check(after.fixed_meta == before.fixed_meta, "view name: FixedMeta unchanged");
+    check(after.var_meta == before.var_meta, "view name: VarMeta unchanged");
+    check(after.var2_data == before.var2_data, "view name: Var2Data unchanged");
+    const std::size_t caption_begin = 4;
+    const std::size_t caption_end = 4 + 118;
+    const auto diffs = diff_positions(before.fixed_data, after.fixed_data);
+    check(!diffs.empty(), "view name: rename changes bytes");
+    bool confined = true;
+    for (const std::size_t at : diffs) {
+        if (at < caption_begin || at >= caption_end) {
+            confined = false;
+        }
+    }
+    check(confined, "view name: changes only the 118-byte caption area of row 0");
+    check_eq(msproject::viewstate::utf16_ascii(after.fixed_data, 4, 59),
+             std::string("Renamed &View"), "view name: caption reads back");
+
+    Parts edited;
+    edited.fixed_data = after.fixed_data;
+    edited.fixed_meta = after.fixed_meta;
+    edited.var_meta = after.var_meta;
+    edited.var2 = after.var2_data;
+    const auto reparsed = parse_or_fail("CV_iew", edited);
+    check_eq(reparsed.views.size(), std::size_t{2}, "view name: re-parsed views");
+    if (reparsed.views.size() == 2) {
+        check_eq(reparsed.views[0].name, std::string("Renamed &View"),
+                 "view name: re-parsed name");
+        check_eq(reparsed.views[0].display_name, std::string("Gantt Chart"),
+                 "view name: display name left byte-identical");
+        check(reparsed.views[1].main_decoded, "view name: other view still decodes");
+    }
+
+    // Refusals leave every part unchanged.
+    EncodedParts guard;
+    check(encode_view_state(state, guard, nullptr), "view name: encode before refusals");
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_name(state, 2, "x", &error),
+          "view name: bad index refused");
+    check(error.message.find("out of range") != std::string::npos,
+          "view name: bad index message");
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_name(state, 0, "", &error),
+          "view name: empty name refused");
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_name(state, 0, "caf\xe9", &error),
+          "view name: non-ASCII name refused");
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_name(state, 0, std::string(60, 'A'), &error),
+          "view name: 60-unit name refused");
+    check(error.message.find("capacity") != std::string::npos,
+          "view name: capacity message");
+    error = WriteError{};
+    check(msproject::viewstate::set_view_name(state, 0, std::string(59, 'A'), nullptr),
+          "view name: 59-unit name accepted");
+    EncodedParts full;
+    check(encode_view_state(state, full, nullptr), "view name: encode 59-unit name");
+    check_eq(msproject::viewstate::utf16_ascii(full.fixed_data, 4, 59),
+             std::string(59, 'A'), "view name: 59-unit name reads back");
+
+    auto ctable = parse_or_fail("CTable", [&] {
+        Parts parts;
+        make_ctable_parts("synthetic-viewstate-ctable-base.bin", parts);
+        return parts;
+    }());
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_name(ctable, 0, "x", &error),
+          "view name: CTable state refused");
+}
+
+void test_view_table_edit() {
+    const Parts parts = make_view_parts();
+    auto state = parse_or_fail("CV_iew", parts);
+    check_eq(state.views.size(), std::size_t{2}, "view table: views");
+    if (state.views.size() != 2) {
+        return;
+    }
+    const std::uint32_t old_block_offset = state.views[1].main_block_offset;
+    EncodedParts before;
+    check(encode_view_state(state, before, nullptr), "view table: encode before");
+
+    WriteError error;
+    check(msproject::viewstate::set_view_table(state, 0, "W14 Entry C", &error),
+          "view table: set table on view 0");
+    if (!error.message.empty()) {
+        std::fprintf(stderr, "view-table error: %s\n", error.message.c_str());
+    }
+    check_eq(state.views[0].table_or_top, std::string("W14 Entry C"),
+             "view table: decoded table name");
+    check_eq(state.views[1].main_block_offset, old_block_offset + 10u,
+             "view table: later view block offset shifted by +10");
+    check(state.views[1].main_decoded, "view table: later view still decodes");
+    check_eq(state.views[1].table_or_top, std::string("&Gantt Chart"),
+             "view table: later view item unchanged");
+
+    EncodedParts after;
+    check(encode_view_state(state, after, nullptr), "view table: encode after");
+    check(after.fixed_data == before.fixed_data, "view table: FixedData unchanged");
+    check(after.fixed_meta == before.fixed_meta, "view table: FixedMeta unchanged");
+    check(after.var_meta.size() == before.var_meta.size(), "view table: VarMeta size unchanged");
+    check_eq(after.var2_data.size(), before.var2_data.size() + 10,
+             "view table: Var2Data grows by the item delta");
+    check_eq(read_u32(after.var2_data, 0), read_u32(before.var2_data, 0) + 10u,
+             "view table: block length word updated");
+    // The target item payload starts after the 16-byte block header and the
+    // first item (12 + len); find it from the decoded view.
+    std::size_t item_record_start = 0;
+    std::size_t item_start = 0;
+    for (const auto& record : state.views[0].records) {
+        if (record.id == 0x2240000Au) {
+            item_record_start = 4 + record.record_offset;
+            item_start = item_record_start + 12;
+        }
+    }
+    check(item_start != 0, "view table: target item located");
+    if (item_start != 0) {
+        check_eq(msproject::viewstate::utf16_ascii(after.var2_data, item_start, 24),
+                 std::string("W14 Entry C"), "view table: new item payload written");
+        // Bytes after the block length word and the payload's two size words
+        // (payload +0/+4) are identical up to the target item's own header.
+        bool prefix_same = true;
+        for (std::size_t i = 4 + 16; i < item_record_start; ++i) {
+            if (before.var2_data[i] != after.var2_data[i]) {
+                prefix_same = false;
+            }
+        }
+        check(prefix_same, "view table: every item before the target is unchanged");
+    }
+
+    Parts edited;
+    edited.fixed_data = after.fixed_data;
+    edited.fixed_meta = after.fixed_meta;
+    edited.var_meta = after.var_meta;
+    edited.var2 = after.var2_data;
+    const auto reparsed = parse_or_fail("CV_iew", edited);
+    check_eq(reparsed.views.size(), std::size_t{2}, "view table: re-parsed views");
+    if (reparsed.views.size() == 2) {
+        check(reparsed.views[0].main_decoded, "view table: re-parsed main decoded");
+        check_eq(reparsed.views[0].table_or_top, std::string("W14 Entry C"),
+                 "view table: re-parsed table name");
+        check_eq(reparsed.views[0].display_name, std::string("Gantt Chart"),
+                 "view table: re-parsed display name");
+        check_eq(reparsed.views[1].table_or_top, std::string("&Gantt Chart"),
+                 "view table: re-parsed later view table");
+        check_eq(reparsed.views[0].options_decoded, true, "view table: options still decode");
+    }
+
+    // Writing the same name is a byte-identical no-op.
+    EncodedParts guard;
+    check(encode_view_state(state, guard, nullptr), "view table: encode before no-op");
+    check(msproject::viewstate::set_view_table(state, 0, "W14 Entry C", nullptr),
+          "view table: same name accepted");
+    EncodedParts same;
+    check(encode_view_state(state, same, nullptr), "view table: encode after same name");
+    check(same.var2_data == guard.var2_data, "view table: same name is a no-op");
+
+    // Refusals.
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_table(state, 7, "X", &error),
+          "view table: bad index refused");
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_table(state, 0, "", &error),
+          "view table: empty name refused");
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_table(state, 0, "caf\xe9", &error),
+          "view table: non-ASCII name refused");
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_table(state, 0, std::string(128, 'A'), &error),
+          "view table: 128-unit name refused");
+    // A view whose main block has no 0x2240000a item is refused: build one.
+    std::vector<ViewItemSpec> no_table;
+    no_table.push_back({0x2240002Au, 1, utf16_item("Only A Name")});
+    Parts no_table_parts = build_parts(138, {{"&No Table", ""}},
+                                       {{1, 0x20400006u, make_view_main_block(no_table)}});
+    auto no_table_state = parse_or_fail("CV_iew", no_table_parts);
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_table(no_table_state, 0, "Entry", &error),
+          "view table: view without 0x2240000a refused");
+    check(error.message.find("0x2240000a") != std::string::npos,
+          "view table: missing item message");
+    EncodedParts no_table_after;
+    check(encode_view_state(no_table_state, no_table_after, nullptr),
+          "view table: encode refused state");
+    check_same_parts(no_table_after, no_table_parts, "view table: refusal leaves parts unchanged");
+}
+
+void test_view_margin_edit() {
+    const Parts parts = make_view_parts();
+    auto state = parse_or_fail("CV_iew", parts);
+    EncodedParts before;
+    check(encode_view_state(state, before, nullptr), "view margins: encode before");
+
+    const std::array<std::uint32_t, 4> margins = {720, 720, 720, 720};
+    WriteError error;
+    check(msproject::viewstate::set_view_page_margins(state, 0, margins, &error),
+          "view margins: set margins");
+    check(state.views[0].page_margins_thousandths == margins, "view margins: decoded state");
+    EncodedParts after;
+    check(encode_view_state(state, after, nullptr), "view margins: encode after");
+
+    const auto diffs = diff_positions(before.var2_data, after.var2_data);
+    // 500 -> 720 changes two bytes per u32 (0x01f4 -> 0x02d0): eight bytes total.
+    check_eq(diffs.size(), std::size_t{8}, "view margins: eight bytes change");
+    check_eq(after.var2_data.size(), before.var2_data.size(), "view margins: size unchanged");
+    std::size_t margin_base = 0;
+    for (const auto& record : state.views[0].records) {
+        if (record.id == 0x22400009u) {
+            margin_base = static_cast<std::size_t>(state.views[0].main_block_offset) + 4 +
+                          record.record_offset + 12;
+        }
+    }
+    bool in_margin_words = !diffs.empty() && margin_base != 0;
+    for (const std::size_t at : diffs) {
+        if (at < margin_base || at >= margin_base + 16) {
+            in_margin_words = false;
+        }
+    }
+    check(in_margin_words, "view margins: every change is inside the four margin u32");
+
+    Parts edited;
+    edited.fixed_data = after.fixed_data;
+    edited.fixed_meta = after.fixed_meta;
+    edited.var_meta = after.var_meta;
+    edited.var2 = after.var2_data;
+    const auto reparsed = parse_or_fail("CV_iew", edited);
+    if (reparsed.views.size() == 2) {
+        check(reparsed.views[0].page_margins_thousandths == margins,
+              "view margins: re-parsed margins");
+        check_eq(reparsed.views[0].page_margin_extra, 2000u,
+                 "view margins: fifth word preserved");
+        check_eq(reparsed.views[0].table_or_top, std::string("&Entry"),
+                 "view margins: table item preserved");
+    }
+
+    error = WriteError{};
+    check(!msproject::viewstate::set_view_page_margins(state, 1, margins, &error),
+          "view margins: view without options refused");
+    check(error.message.find("0x22400009") != std::string::npos,
+          "view margins: missing options message");
+    error = WriteError{};
+    const std::array<std::uint32_t, 4> huge = {1, 2, 3, 100001};
+    check(!msproject::viewstate::set_view_page_margins(state, 0, huge, &error),
+          "view margins: over-bound value refused");
+    EncodedParts guard;
+    check(encode_view_state(state, guard, nullptr), "view margins: encode after refusals");
+    check(guard.var2_data == after.var2_data, "view margins: refusals leave parts unchanged");
+}
+
+void test_edl_regenerate() {
+    Parts ctable_parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", ctable_parts)) {
+        return;
+    }
+    const Parts view_parts = make_view_parts();
+    std::vector<std::uint32_t> ids(kEntryFieldIds.begin() + 1, kEntryFieldIds.end());
+    const Parts edl_parts = make_edl_parts("&Gantt Chart", "Entry", ids, true);
+
+    auto ctable = parse_or_fail("CTable", ctable_parts);
+    auto views = parse_or_fail("CV_iew", view_parts);
+    auto edl = parse_or_fail("CEdl", edl_parts);
+    ctable.related = {&views, &edl};
+    std::vector<std::uint8_t> host_before;
+    if (!edl.embedded_props.empty()) {
+        const auto* host = edl.embedded_props[0].document.find(0x26400031u);
+        if (host != nullptr) {
+            const auto payload = edl.embedded_props[0].document.payload(*host);
+            host_before.assign(payload.begin(), payload.end());
+        }
+    }
+
+    // A consistent CEdl regenerates to the same bytes.
+    EncodedParts edl_before;
+    check(encode_view_state(edl, edl_before, nullptr), "CEdl regen: encode before");
+    WriteError error;
+    check(msproject::viewstate::regenerate_edl(edl, ctable, &error),
+          "CEdl regen: consistent state");
+    if (!error.message.empty()) {
+        std::fprintf(stderr, "regenerate_edl error: %s\n", error.message.c_str());
+    }
+    EncodedParts edl_after_noop;
+    check(encode_view_state(edl, edl_after_noop, nullptr), "CEdl regen: encode no-op");
+    check_same_parts(edl_after_noop, edl_parts, "CEdl regen: consistent state is a no-op");
+
+    // Append a column: the field list grows by one id (and the terminator stays).
+    check(append_table_column(ctable, 0, 0x0b400057u, "Number1", nullptr),
+          "CEdl regen: append column");
+    error = WriteError{};
+    check(msproject::viewstate::regenerate_edl(edl, ctable, &error),
+          "CEdl regen: regenerate after append");
+    check_eq(edl.embedded_props.size(), std::size_t{1}, "CEdl regen: still one Props block");
+    if (edl.embedded_props.size() == 1) {
+        const auto& refreshed = edl.embedded_props[0];
+        check_eq(refreshed.field_ids.size(), std::size_t{9}, "CEdl regen: nine field ids");
+        check(refreshed.field_list_terminated, "CEdl regen: terminator preserved");
+        if (refreshed.field_ids.size() == 9) {
+            check_eq(refreshed.field_ids.back(), 0x0b400057u,
+                     "CEdl regen: appended column is last");
+        }
+        check_eq(refreshed.view_name, std::string("&Gantt Chart"),
+                 "CEdl regen: view name refreshed");
+        check_eq(refreshed.table_name, std::string("Entry"), "CEdl regen: table name");
+        check_eq(refreshed.records.size(), std::size_t{5}, "CEdl regen: record count preserved");
+        const auto* host = refreshed.find(0x26400031u);
+        check(host != nullptr, "CEdl regen: opaque host record preserved");
+        check(refreshed.document.find(0x26400031u) != nullptr,
+              "CEdl regen: typed accessor finds the host record");
+        if (host != nullptr) {
+            check_eq(host->payload_length, 38u, "CEdl regen: host record length preserved");
+            const auto payload = refreshed.document.payload(*refreshed.document.find(0x26400031u));
+            check_eq(payload.size(), host_before.size(),
+                     "CEdl regen: host record size preserved");
+            check(std::equal(host_before.begin(), host_before.end(), payload.begin(),
+                             payload.end()),
+                  "CEdl regen: host record bytes preserved");
+        }
+        // The 0x26400017 record payload after appending Number1 must be the
+        // exact 40-byte record Project wrote on its own re-save of the gate file
+        // (`dump-w15proj`): the base Entry columns 1..8, the appended Number1
+        // 0x0b400057, then the 0xffffffff terminator.
+        const auto* field_list = refreshed.document.find(0x26400017u);
+        check(field_list != nullptr, "CEdl regen: field-list record present");
+        const auto* typed_field_list = refreshed.find(0x26400017u);
+        check(typed_field_list != nullptr, "CEdl regen: typed field-list record present");
+        if (typed_field_list != nullptr) {
+            check_eq(typed_field_list->payload_length, 40u,
+                     "CEdl regen: typed field-list payload length");
+        }
+        if (field_list != nullptr) {
+            const std::array<std::uint8_t, 40> expected = {
+                0xcd, 0x00, 0x40, 0x0b, 0x00, 0x05, 0x40, 0x0b, 0x0e, 0x00,
+                0x40, 0x0b, 0x07, 0x05, 0x40, 0x0b, 0x05, 0x05, 0x40, 0x0b,
+                0x06, 0x05, 0x40, 0x0b, 0x2f, 0x00, 0x40, 0x0b, 0x31, 0x00,
+                0x40, 0x0b, 0x57, 0x00, 0x40, 0x0b, 0xff, 0xff, 0xff, 0xff};
+            const auto payload = refreshed.document.payload(*field_list);
+            check_eq(payload.size(), expected.size(),
+                     "CEdl regen: field-list payload length matches the Project re-save");
+            bool same = payload.size() == expected.size();
+            for (std::size_t i = 0; i < payload.size() && i < expected.size(); ++i) {
+                if (payload[i] != expected[i]) {
+                    same = false;
+                }
+            }
+            check(same, "CEdl regen: field-list bytes match Project's re-save exactly");
+        }
+    }
+    EncodedParts edl_after;
+    check(encode_view_state(edl, edl_after, nullptr), "CEdl regen: encode after");
+    check_eq(edl_after.var2_data.size(), edl_before.var2_data.size() + 4,
+             "CEdl regen: field list grew by one u32");
+    check_eq(read_u32(edl_after.var2_data, 0), read_u32(edl_before.var2_data, 0) + 4u,
+             "CEdl regen: block length word grew by 4");
+    Parts regenerated;
+    regenerated.fixed_data = edl_after.fixed_data;
+    regenerated.fixed_meta = edl_after.fixed_meta;
+    regenerated.var_meta = edl_after.var_meta;
+    regenerated.var2 = edl_after.var2_data;
+    const auto reparsed = parse_or_fail("CEdl", regenerated);
+    check_eq(reparsed.embedded_props.size(), std::size_t{1}, "CEdl regen: re-parsed CEdl");
+    if (reparsed.embedded_props.size() == 1) {
+        check_eq(reparsed.embedded_props[0].field_ids.size(), std::size_t{9},
+                 "CEdl regen: re-parsed field id count");
+        check_eq(reparsed.embedded_props[0].table_name, std::string("Entry"),
+                 "CEdl regen: re-parsed table name");
+    }
+
+    // Stale names are refreshed from the linked CV_iew.
+    auto stale = parse_or_fail("CEdl", make_edl_parts("Stale View", "Stale Table", ids, false));
+    stale.related = {&views};
+    error = WriteError{};
+    check(msproject::viewstate::regenerate_edl(stale, ctable, &error),
+          "CEdl regen: stale names resolved through the applied table");
+    if (stale.embedded_props.size() == 1) {
+        check_eq(stale.embedded_props[0].view_name, std::string("&Gantt Chart"),
+                 "CEdl regen: stale view name refreshed");
+        check_eq(stale.embedded_props[0].table_name, std::string("Entry"),
+                 "CEdl regen: stale table name refreshed");
+    }
+
+    // Table change via CV_iew: set_view_table("W14 Entry C") must move both the
+    // table reference and the field list to that table.
+    Parts two_table_parts = make_ctable_parts_from_payloads(
+        {{"&Entry", make_table_block(1, 0xff, 6, {{0x0b400017u, ""}, {0x0b40000eu, "Task Name"}})},
+         {"&W14 Entry C",
+          make_table_block(2, 0xff, 6,
+                           {{0x0b400017u, ""}, {0x0b400057u, "Number1"}, {0x0b400031u, "Text1"}})}});
+    auto two_tables = parse_or_fail("CTable", two_table_parts);
+    auto two_views = parse_or_fail("CV_iew", make_view_parts());
+    auto two_edl = parse_or_fail("CEdl", make_edl_parts("&Gantt Chart", "Entry",
+                                                        {0x0b40000eu, 0x0b400017u}, false));
+    two_tables.related = {&two_views, &two_edl};
+    check(msproject::viewstate::set_view_table(two_views, 0, "W14 Entry C", nullptr),
+          "CEdl regen: view switched to the second table");
+    error = WriteError{};
+    check(msproject::viewstate::regenerate_edl(two_edl, two_tables, &error),
+          "CEdl regen: regenerate against the second table");
+    if (two_edl.embedded_props.size() == 1) {
+        check_eq(two_edl.embedded_props[0].table_name, std::string("W14 Entry C"),
+                 "CEdl regen: switched table name");
+        check_eq(two_edl.embedded_props[0].field_ids.size(), std::size_t{2},
+                 "CEdl regen: switched table field ids");
+        if (two_edl.embedded_props[0].field_ids.size() == 2) {
+            check_eq(two_edl.embedded_props[0].field_ids[0], 0x0b400057u,
+                     "CEdl regen: switched table first field");
+            check_eq(two_edl.embedded_props[0].field_ids[1], 0x0b400031u,
+                     "CEdl regen: switched table second field");
+        }
+    }
+
+    // Refusals leave the state untouched.
+    EncodedParts guard;
+    check(encode_view_state(edl, guard, nullptr), "CEdl regen: encode before refusals");
+    error = WriteError{};
+    check(!msproject::viewstate::regenerate_edl(views, ctable, &error),
+          "CEdl regen: non-CEdl state refused");
+    check(error.message.find("CEdl") != std::string::npos, "CEdl regen: class message");
+    error = WriteError{};
+    check(!msproject::viewstate::regenerate_edl(edl, views, &error),
+          "CEdl regen: non-CTable source refused");
+    // A CEdl with no field-list record cannot be regenerated.
+    std::vector<TestEdlRecord> bare;
+    bare.push_back({0x26400018u, utf16_item("&Gantt Chart")});
+    bare.push_back({0x26400019u, utf16_item("Entry")});
+    Parts bare_parts = build_parts(160, {{"", ""}},
+                                   {{1, 0x20400006u, make_edl_document(bare)}}, 11);
+    auto bare_state = parse_or_fail("CEdl", bare_parts);
+    error = WriteError{};
+    check(!msproject::viewstate::regenerate_edl(bare_state, ctable, &error),
+          "CEdl regen: missing field-list record refused");
+    check(error.message.find("0x26400017") != std::string::npos,
+          "CEdl regen: missing record message names the id");
+    // Ambiguous table selector (two tables with the same name) refused.
+    Parts ambiguous = make_ctable_parts_from_payloads(
+        {{"&Entry", make_table_block(1, 0xff, 6, {{0x0b400017u, ""}, {0x0b40000eu, "Task Name"}})},
+         {"&Entry", make_table_block(2, 0xff, 6, {{0x0b400017u, ""}, {0x0b400031u, "Text1"}})}});
+    auto ambiguous_state = parse_or_fail("CTable", ambiguous);
+    auto ambiguous_edl = parse_or_fail("CEdl", make_edl_parts("&Gantt Chart", "Entry", ids, true));
+    error = WriteError{};
+    check(!msproject::viewstate::regenerate_edl(ambiguous_edl, ambiguous_state, &error),
+          "CEdl regen: ambiguous table refused");
+    check(error.message.find("exactly one") != std::string::npos,
+          "CEdl regen: ambiguity message");
+    EncodedParts guard_after;
+    check(encode_view_state(edl, guard_after, nullptr), "CEdl regen: encode after refusals");
+    check(guard_after.var2_data == guard.var2_data && guard_after.fixed_data == guard.fixed_data,
+          "CEdl regen: refusals leave the state untouched");
+}
+
+void test_regenerate_view_state() {
+    Parts ctable_parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", ctable_parts)) {
+        return;
+    }
+    const Parts view_parts = make_view_parts();
+    std::vector<std::uint32_t> ids(kEntryFieldIds.begin() + 1, kEntryFieldIds.end());
+    const Parts edl_parts = make_edl_parts("&Gantt Chart", "Entry", ids, true);
+
+    auto original_ctable = parse_or_fail("CTable", ctable_parts);
+    auto ctable = original_ctable;
+    auto views = parse_or_fail("CV_iew", view_parts);
+    auto edl = parse_or_fail("CEdl", edl_parts);
+    ctable.related = {&views, &edl};
+
+    EncodedParts views_before;
+    check(encode_view_state(views, views_before, nullptr), "seam: encode CV_iew before");
+    const std::vector<msproject::viewstate::TableEdit> edits = {
+        msproject::viewstate::table_column_append_edit(0, 0x0b400057u, "Number1")};
+    WriteError error;
+    check(msproject::viewstate::regenerate_view_state(ctable, edits, &error),
+          "seam: apply append through regenerate_view_state");
+    if (!error.message.empty()) {
+        std::fprintf(stderr, "seam error: %s\n", error.message.c_str());
+    }
+    check_eq(ctable.tables.size(), std::size_t{1}, "seam: CTable tables");
+    if (ctable.tables.size() == 1) {
+        check_eq(ctable.tables[0].columns.size(), std::size_t{10}, "seam: appended column");
+    }
+    check_eq(edl.embedded_props.size(), std::size_t{1}, "seam: CEdl block");
+    if (edl.embedded_props.size() == 1) {
+        check_eq(edl.embedded_props[0].field_ids.size(), std::size_t{9},
+                 "seam: CEdl field list refreshed");
+        if (edl.embedded_props[0].field_ids.size() == 9) {
+            check_eq(edl.embedded_props[0].field_ids.back(), 0x0b400057u,
+                     "seam: CEdl appended field id");
+        }
+    }
+    EncodedParts views_after;
+    check(encode_view_state(views, views_after, nullptr), "seam: encode CV_iew after");
+    check_same_parts(views_after, view_parts, "seam: CV_iew left byte-identical");
+
+    // The seam's table bytes equal apply_table_edits() on the same edits.
+    EncodedParts seam_table;
+    check(encode_view_state(ctable, seam_table, nullptr), "seam: encode CTable");
+    EncodedParts direct;
+    check(msproject::viewstate::apply_table_edits(original_ctable, edits, direct, nullptr),
+          "seam: apply_table_edits reference");
+    check(seam_table.var2_data == direct.var2_data,
+          "seam: table bytes match apply_table_edits");
+    check(seam_table.fixed_data == direct.fixed_data &&
+              seam_table.fixed_meta == direct.fixed_meta &&
+              seam_table.var_meta == direct.var_meta,
+          "seam: table framing matches apply_table_edits");
+
+    // Re-parse the regenerated CTable.
+    Parts seam_parts;
+    seam_parts.fixed_data = seam_table.fixed_data;
+    seam_parts.fixed_meta = seam_table.fixed_meta;
+    seam_parts.var_meta = seam_table.var_meta;
+    seam_parts.var2 = seam_table.var2_data;
+    const auto reparsed = parse_or_fail("CTable", seam_parts);
+    if (reparsed.tables.size() == 1) {
+        check_eq(reparsed.tables[0].columns.size(), std::size_t{10},
+                 "seam: re-parsed column count");
+    }
+
+    // A later failing edit leaves both states untouched.
+    auto guard_ctable = original_ctable;
+    auto guard_views = parse_or_fail("CV_iew", view_parts);
+    auto guard_edl = parse_or_fail("CEdl", edl_parts);
+    guard_ctable.related = {&guard_views, &guard_edl};
+    const std::vector<msproject::viewstate::TableEdit> failing = {
+        msproject::viewstate::table_column_append_edit(0, 0x0b400057u, "Number1"),
+        msproject::viewstate::table_date_format_edit(7, 0x05)};
+    error = WriteError{};
+    check(!msproject::viewstate::regenerate_view_state(guard_ctable, failing, &error),
+          "seam: failing edit refuses");
+    check(error.message.find("table edit 1") != std::string::npos,
+          "seam: failure names the edit");
+    EncodedParts guard_after;
+    check(encode_view_state(guard_ctable, guard_after, nullptr), "seam: encode guard CTable");
+    check(guard_after.var2_data == ctable_parts.var2, "seam: CTable untouched on failure");
+    EncodedParts guard_edl_out;
+    check(encode_view_state(guard_edl, guard_edl_out, nullptr), "seam: encode guard CEdl");
+    check_same_parts(guard_edl_out, edl_parts, "seam: CEdl untouched on failure");
+
+    // Without links the seam is an in-place table edit.
+    auto alone = parse_or_fail("CTable", ctable_parts);
+    check(msproject::viewstate::regenerate_view_state(alone, edits, nullptr),
+          "seam: works without links");
+    check_eq(alone.tables.size(), std::size_t{1}, "seam: unlinked table");
+    if (alone.tables.size() == 1) {
+        check_eq(alone.tables[0].columns.size(), std::size_t{10},
+                 "seam: unlinked table edited");
+    }
+    error = WriteError{};
+    auto not_ctable = parse_or_fail("CV_iew", view_parts);
+    check(!msproject::viewstate::regenerate_view_state(not_ctable, edits, &error),
+          "seam: non-CTable state refused");
+    check(error.message.find("CTable") != std::string::npos, "seam: CTable message");
+}
+
 void test_writer() {
     test_writer_roundtrip();
     test_writer_date_format();
@@ -1475,6 +2439,17 @@ void test_writer() {
     test_writer_append();
     test_writer_append_refusals();
     test_writer_apply_edits();
+    // Wave 17 (F1)
+    test_row_record_sets();
+    test_filter_definitions();
+    test_grouping_definitions();
+    test_edl_typed();
+    test_noop_five_classes();
+    test_view_name_edit();
+    test_view_table_edit();
+    test_view_margin_edit();
+    test_edl_regenerate();
+    test_regenerate_view_state();
 }
 
 }  // namespace
@@ -1502,6 +2477,17 @@ int main(int argc, char** argv) {
     run("writer-append", test_writer_append);
     run("writer-append-refusals", test_writer_append_refusals);
     run("writer-apply-edits", test_writer_apply_edits);
+    // Wave 17 (F1)
+    run("row-records", test_row_record_sets);
+    run("filters", test_filter_definitions);
+    run("groupings", test_grouping_definitions);
+    run("edl-typed", test_edl_typed);
+    run("noop-five", test_noop_five_classes);
+    run("view-name", test_view_name_edit);
+    run("view-table", test_view_table_edit);
+    run("view-margins", test_view_margin_edit);
+    run("edl-regenerate", test_edl_regenerate);
+    run("regenerate", test_regenerate_view_state);
     // The group name is for the separate ctest entries; the default run above
     // already covers every case individually.
     if (only == "writer") {
