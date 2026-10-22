@@ -1291,6 +1291,205 @@ defined semantics). M2 not run here (no plan changes).
   directories/runs. Compare per-stream (or task streams only) when checking
   "save_field_values behaviour intact", not the whole-file hash.
 
+## W54 (2026-10-22): resource row add, assignment row add/delete
+
+**Status: implemented, all local suites green; Project gate PENDING (coordinator).**
+This completes the structural writer: tasks, links, resources and assignments can
+now be appended, and tasks/links/assignments tombstoned. Measured target is the
+coordinator's `corpus/probe/w12-assignadd.mpp` (synthetic-base + one Work resource
+R1 100 % + T1/R1 100 %); every stream shape below was verified against it.
+
+### What landed (files)
+
+| path | what |
+|---|---|
+| `core/mppwrite/add_delete.h` | **W54 section**: `ResourceKind`, `ResourceSpec`, `AddedResource`, `AssignmentSpec`, `AddedAssignment`, `DeletedAssignment`, `add_resource_row`, `add_assignment_row`, `delete_assignment_row`. The header carries the measured stream maps, the defaults and the inference flags. |
+| `core/mppwrite/add_delete.cpp` | the implementation (appended section). Reuses the file's `save_and_verify`, `make_link_identity`, `task_identity`, `live_task_rows`, `validate_link_task_table`, tombstone helpers and CFB writer; no new dependency. |
+| `tests/roundtrip_assignments.cpp` | **new** (`mppwrite_roundtrip_assignments`): **679 checks, 0 failures**. Corpus-free core cases + a corpus-gated control that adds and deletes an assignment on `w12-assignadd.mpp`. Emits `w54-resource.mpp`, `w54-assignment.mpp`, `w54-assignment-deleted.mpp` and `w54-manifest.json`; refused cases assert the doc and the output path are untouched. |
+| `core/mppwrite/CMakeLists.txt` | new test target, reader link (`MPPWRITE_HAVE_READER`) when the top-level build provides `core_mpp`; fixture mirror moved `vs-w52` -> `vs-w54`. |
+
+### Measured shape implemented (do not re-derive)
+
+Resource add (`114/TBkndRsc`), from `w12-assignadd.mpp` vs `synthetic-base.mpp`:
+
+| stream | before -> after | shape |
+|---|---|---|
+| FixedData | 392 -> 564 (+172) | 48 + 172*rows; the new row is the last live row's clone with only +0 ID, +4 uid and +154 changed (+154 = template + 1) |
+| FixedMeta | 201 -> 238 (+37) | 16 + 37*(rows+3); **three descriptor entries**, row r is entry r+3; new entry +0=0, +2=5 (VarMeta count), +4=row offset |
+| Fixed2Data | 200 -> 240 (+40) | 40*(rows+3); record = 16-byte identity, f64 row+1 at +16, the same identity at +24 |
+| Fixed2Meta | 271 -> 322 (+51) | 16 + 51*(rows+3); entry i -> record i, +8 type byte |
+| VarMeta | 108 -> 168 (+60) | five entries for the new uid: 0x0c400001 Name, 0x0c400002 Initials, 0x0c400055 u32 2, 0x0c4002d6 date, 0x0c4002e3 16 zero bytes |
+| Var2Data | 86 -> 140 (+54 for "R1") | the five length-prefixed payload blocks, in that order |
+
+Type is W49's metadata rule: Work = FixedMeta entry +12 bit 0x10; Cost =
+Fixed2Meta +8 bit 0x10 (with the FixedMeta Work bit clear); Material = both
+clear. MaxUnits is f64 at +8, x100 (10000.0 = 100 %). Bit 0x40 in the FixedMeta
++12 byte is set on every row Project wrote (0x5c Work / 0x48 Material/Cost) but
+is clear on synthetic-base's untouched "Crew" row (0x1c); W54 sets it on the NEW
+row to match Project's own added-row byte and documents the bit as unmeasured.
+
+Assignment add (`114/TBkndAssn`):
+
+| stream | delta | shape |
+|---|---|---|
+| FixedData | +110 | 110-byte row, no header: uid, task uid, resource uid, units f64 x100, work f64 minutes x1000, +28 0, +36/+44 work copies, start/finish/resume at +52/+56/+60, +92 = 7, +104 = a second start copy |
+| FixedMeta | +34 | 16 + 34*rows, one entry per row, no descriptors; new entry `00 00 04 00 <off> f1 ff 23 f0 69 00 02 00` then zeros |
+| Fixed2Data | +48 | 3 identities: assignment, task (Task/Fixed2Data record task_row+3), resource (Rsc/Fixed2Data record res_row+3) |
+| Fixed2Meta | +53 | entry +4 = row*48, +8/+9 = cf 09, +36 = 0x10, +52 = 0x28 |
+| VarMeta | +48 | four entries in Project's order: 0x0f400031 (flat contour, 72 B), 0x0f40027a (Created), 0x0f400199 (16 zero B), 0x0f40019b (16 zero B) |
+| Var2Data | +124 | contour 76, created 8, two 20-byte internal blocks |
+
+**The VarMeta key order is NOT ascending** in Project's own assignment rows
+(0x031, 0x27a, 0x199, 0x19b), so the writer appends the 12-byte entries directly
+instead of using `insert_var_entry` (which sorts). It requires the new uid to be
+greater than every existing table uid, which keeps the append at the end of the
+uid group and sidesteps mid-group ordering.
+
+Assignment delete: FixedMeta entry +0 = 0x02, +2 = 0, header +4 |= 0x02; no
+stream changes size; FixedData/Fixed2Data/Fixed2Meta/VarMeta/Var2Data
+byte-identical (Project's W48 cascade writes the same two meta bytes only).
+
+### Byte-equality evidence against Project's own add (re-runnable)
+
+Compared stream-by-stream (olefile) with `corpus/probe/w12-assignadd.mpp`:
+
+- `w54-resource.mpp` row 2 == w12 row 2 **byte for byte**; its Resource
+  FixedMeta entry 5 == Project's entry 5 byte for byte (after 0x40 was set); its
+  Fixed2Meta entry 5 == Project's; its five VarMeta keys are in Project's order.
+- `w54-assignment.mpp` row 3 == w12 row 3 **byte for byte** (the 110 bytes,
+  including the work and start copies); its Assignment FixedMeta entry 3 and
+  Fixed2Meta entry 3 == Project's byte for byte; its four VarMeta keys are in
+  Project's order.
+- Deliberate differences: names ("R54" vs "R1"), the deterministic identities
+  (Project re-stamps a file-global GUID counter on every save; we take an unused
+  counter of the file's existing family), the 0x0c4002d6 / 0x0f40027a date
+  payloads (copied from the template row, Project writes its save time), and the
+  flat contour's **trailing 28 bytes**: ours matches assign1.mpp/w10-usage-flat
+  (zeros), while w12's row has a second work/constant/word section there. Those
+  28 bytes are the one unmeasured piece; the gate will say whether Project needs
+  them.
+
+### API semantics (documented in the header)
+
+- `add_resource_row(doc, ResourceSpec, path)`: name required; initials default to
+  the first character; MaxUnits finite in (0, 10000]; `kind` is Work by default.
+  Refuses a damaged Rsc geometry (any count/size word, a wrong entry offset, a
+  missing stream). Only the six Rsc streams change.
+- `add_assignment_row(doc, AssignmentSpec, path)`: task uid/resource uid required
+  and must be live; uid 0 = max uid + 1 (an explicit uid must be greater);
+  units 0 = 100 %; work 0 = task duration (+84) x units; dates default to the
+  task's effective +104/+108 and resume = start; refuses a duplicate live
+  (task, resource), a non-date date, start after finish, a damaged Assn geometry,
+  and (via the task check) a missing Task/Fixed2Data identity.
+- `delete_assignment_row(doc, uid, path)`: refuses uid 0, unknown uid, a
+  tombstone, a placeholder (task uid 0), and an assignment naming a task no live
+  row holds; leaves every other stream byte-identical.
+- All three are all-or-nothing: validate -> copy -> apply -> save -> re-open from
+  disk -> re-read every field/entry/identity/block -> require `check()` and
+  `check_table()` clean -> replace the caller's document. A refusal happens before
+  `doc` or the output path is touched.
+
+### Verification (exact, 2026-10-22, `build\vs-w54`)
+
+```
+cmd /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul && cmake -S . -B build\vs-w54 -G "Visual Studio 17 2022" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON'
+cmd /c '"...\vcvars64.bat" >nul && cmake --build build\vs-w54 --config Release --target mppwrite_roundtrip_assignments mppwrite_roundtrip_links mppwrite_roundtrip_add_delete mppwrite_roundtrip_field_values mpp_reader_tests mpp_tombstone_tests mppwrite_roundtrip_cfb mppwrite_inplace_patch mppwrite_roundtrip_stream mppwrite_roundtrip_row mppwrite_roundtrip_authority mppwrite_roundtrip_manual mppwrite_save_flow'
+cmd /c '"...\vcvars64.bat" >nul && ctest --test-dir build\vs-w54 -C Release --output-on-failure -R "mppwrite|mpp_reader|tombstone"'
+```
+
+| binary | result |
+|---|---|
+| `mppwrite_roundtrip_assignments` | **679 checks, 0 failures** |
+| `mppwrite_roundtrip_links` | 773 checks, 0 failures |
+| `mppwrite_roundtrip_add_delete` | 760 checks, 0 failures |
+| `mppwrite_roundtrip_field_values` | 477 checks, 0 failures |
+| `mpp_reader_tests` | PASS: 685 checks, PROJECT_A 83 / PROJECT_B 73 |
+| `mpp_tombstone_tests` | PASS: 47 checks |
+| filtered ctest | **13/13 passed** |
+
+`plan_recalc_tests` (M2 332/332) was NOT run: it rewrites
+`tests/data/project_a_recalc_golden.tsv`, and W54 touches no `core/plan` code. The
+coordinator's M2 gate is unaffected by this stream.
+
+### Fixtures (git-ignored, regenerated by the test binary)
+
+In `build\vs-w54\core\mppwrite\test-out\` and mirrored to
+`core\mppwrite\build\vs-w54\test-out\`; `w54-manifest.json` carries size + FNV-1a
+64.
+
+| file | bytes | FNV-1a 64 | meaning |
+|---|---|---|---|
+| `w54-resource.mpp` | 239,616 | `0x33d0da2c7e950c5f` | synthetic-base + resource uid 2 "R54", Work 100 % |
+| `w54-assignment.mpp` | 241,152 | `0xe96da46db25a2ac5` | + assignment uid 4, task 1 / resource 2, 100 %, 2400 min |
+| `w54-assignment-deleted.mpp` | 241,152 | `0x0e06100ec9959a5d` | the same file with assignment uid 4 tombstoned, header +4 = 6 |
+
+Also emitted (not in the manifest): `w54-corpus-assignment.mpp`,
+`w54-corpus-assignment-deleted.mpp` (the corpus-gated control on
+`w12-assignadd.mpp`), `w54-dup.mpp`, `w54-refused-delete.mpp`.
+
+### Verified vs inferred
+
+Verified locally and re-runnable: every stream size/count word; the new rows,
+FixedMeta/Fixed2Meta entries, identities, ordinals and variable entries byte for
+byte; only the six table streams change and every `214/` stream is
+byte-identical; the files re-emit byte-identically; `check()`/`check_table()`
+empty; the independent `core/mpp` reader returns the intended resources (2) and
+assignments (4, then 3 after the delete); refusals leave the doc and the path
+untouched; and the two fixtures' new rows/entries are byte-identical to
+Project's own add (`w12-assignadd.mpp`).
+
+Verified by Project: nothing yet for W54 -- the gate is
+`w54-resource.mpp` (2 resources, R54 Work 100 %), `w54-assignment.mpp`
+(4 assignments, T1/R1 2400 min) and `w54-assignment-deleted.mpp` (3 assignments).
+The underlying contracts W54 reuses (resource type bits, assignment row/stream
+layout, tombstone/header flag, link identity generator) were measured earlier
+(W11/W12/W37/W45/W48/W49/W52).
+
+Still inferred: the flat contour block's trailing 28 bytes (zeros here;
+`w12-assignadd` has a second section), Project's acceptance of the deterministic
+identities, the meaning of FixedMeta +12 bit 0x40, the assignment FixedMeta
++8..+33 and Fixed2Meta +8/+36/+52 cached bytes (copied from Project's own fresh
+row), MaxUnits other than 100 % on an add, and non-100 % units.
+
+### Open items / next actions
+
+1. **Project gate**: open the three fixtures read-only. Expected: resources
+   uid 1 "Crew" + uid 2 "R54" (Work, 100 %); assignments 4 rows including
+   T1/R54 100 % / 2400 min; the deleted file 3 rows. If Project rejects, attack
+   in this order: (a) the contour trailing section (write w12's shape), (b) the
+   assignment Fixed2Meta +8/+52 flags, (c) the resource 0x0c400055/0x2d6
+   payloads, (d) the 0x40 marker on the new resource's FixedMeta byte.
+2. `delete_task_row`'s cascade still tombstones assignment rows itself;
+   `delete_assignment_row` is the direct single-assignment API. They share the
+   header-bit contract.
+3. `clear_field_value` / custom fields have no assignment-side equivalent; an
+   assignment field write is not implemented (no measured storage rule).
+
+### Traps added this wave
+
+- **Resource Fixed2Meta is per Fixed2Data RECORD, i.e. row + 3**, not per row.
+  The first cut wrote `row * 40`; the writer's own re-read refused it. FixedMeta
+  and Fixed2Meta both have rows+3 entries (three descriptors), while the
+  Assignment table has rows entries and no descriptors.
+- **`insert_var_entry` sorts by key.** Project's assignment group order
+  (0x031, 0x27a, 0x199, 0x19b) is deliberately NOT ascending, so W54 appends raw
+  12-byte entries; using the helper silently reorders the group.
+- An assignment row has **three work copies (+20, +36, +44)** and **two start
+  copies (+52, +104)**. Cloning another task's row and overwriting only +20/+44
+  left task C's 960,000 in +36 (the test now asserts all three and +104).
+- Project's resource FixedMeta +12 byte on rows it wrote is 0x5c (Work) / 0x48
+  (Material/Cost) -- bit 0x40 is set, while synthetic-base's untouched "Crew" row
+  is 0x1c. Set the bit on the new row to match Project's added row; the meaning
+  is unmeasured.
+- The filtered ctest runs ALL `mppwrite` tests: build the eleven writer targets
+  (not just the changed one) in `build\vs-w54` or ctest reports "Not Run".
+- `w12-assignadd.mpp`'s VarMeta declares 10 entries and holds 10 (not Project's
+  usual stale count), so it validates cleanly for an add; its Assignment
+  FixedMeta header +4 is already 6 (Project tombstoned the T1 placeholder).
+  Our add leaves the placeholder live and the header at 4, which is why the
+  reader reports 4 rows there but 3 on Project's file -- deliberate, documented
+  in `add_delete.h`.
+
 
 
 

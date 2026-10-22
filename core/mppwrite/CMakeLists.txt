@@ -87,11 +87,11 @@ if(MPPWRITE_BUILD_TESTS)
     # The add/delete and custom-field tests mirror their fixtures here as well:
     # the coordinator's brief names this in-tree build path, while
     # ${CMAKE_CURRENT_BINARY_DIR}/test-out is where the top-level build puts
-    # them.  Both are git-ignored build output.  W52 moved the mirror to its own
-    # build directory; the W45/W48/W52 fixtures follow because the same test
+    # them.  Both are git-ignored build output.  W54 moved the mirror to its own
+    # build directory; the W45/W48/W52/W54 fixtures follow because the same test
     # binaries emit them.
     set(MPPWRITE_FIXTURE_MIRROR
-        "${MPPWRITE_REPO_ROOT}/core/mppwrite/build/vs-w52/test-out")
+        "${MPPWRITE_REPO_ROOT}/core/mppwrite/build/vs-w54/test-out")
     foreach(path_var
             MPPWRITE_PROBE_DIR MPPWRITE_PROJECT_A_PATH MPPWRITE_PROJECT_B_PATH
             MPPWRITE_TEST_DATA MPPWRITE_TEST_OUT MPPWRITE_FIXTURE_MIRROR)
@@ -128,10 +128,11 @@ if(MPPWRITE_BUILD_TESTS)
     mppwrite_add_test(mppwrite_roundtrip_add_delete roundtrip_add_delete.cpp)
     mppwrite_add_test(mppwrite_roundtrip_field_values roundtrip_field_values.cpp)
     mppwrite_add_test(mppwrite_roundtrip_links roundtrip_links.cpp)
-    # W45/W48/W52's tests also round-trip their own output through the independent
-    # core/mpp reader when the top-level build provides it.  The standalone
-    # core/mppwrite configure has no reader; the cross-check is then compiled out
-    # and the test still covers every byte-level claim.
+    mppwrite_add_test(mppwrite_roundtrip_assignments roundtrip_assignments.cpp)
+    # W45/W48/W52/W54's tests also round-trip their own output through the
+    # independent core/mpp reader when the top-level build provides it.  The
+    # standalone core/mppwrite configure has no reader; the cross-check is then
+    # compiled out and the test still covers every byte-level claim.
     if(TARGET core_mpp)
         target_link_libraries(mppwrite_roundtrip_add_delete PRIVATE core_mpp)
         target_compile_definitions(mppwrite_roundtrip_add_delete PRIVATE
@@ -141,6 +142,9 @@ if(MPPWRITE_BUILD_TESTS)
             MPPWRITE_HAVE_READER=1)
         target_link_libraries(mppwrite_roundtrip_links PRIVATE core_mpp)
         target_compile_definitions(mppwrite_roundtrip_links PRIVATE
+            MPPWRITE_HAVE_READER=1)
+        target_link_libraries(mppwrite_roundtrip_assignments PRIVATE core_mpp)
+        target_compile_definitions(mppwrite_roundtrip_assignments PRIVATE
             MPPWRITE_HAVE_READER=1)
     endif()
 endif()

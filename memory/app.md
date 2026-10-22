@@ -389,3 +389,136 @@ Next three concrete actions: (a) run `app-macos.yml` and fix any `main.mm` compi
 errors; (b) smoke-test the insert/delete/save/reload loop on a Mac; (c) wire an editable
 stored custom-field column through `save_field_values` once the app has a place to put an
 edit.
+
+## W55 (wave 13): write custom fields, edit links
+
+2026-10-22. Files: `app/field_link_edits.{h,cpp}` (new),
+`app/app_edits_fields_tests.cpp` (new), `app/app_edits_links_tests.cpp` (new), and
+edits to `app/edit_model.{h,cpp}`, `app/layout_model.h`, `app/reader_adapter.h`,
+`app/menu_model.{h,cpp}`, `app/menu_tests.cpp`, `app/main.mm`, `app/CMakeLists.txt`,
+`app/README.md`. No `core/**` file was touched.
+
+### What landed
+
+1. **One pending-edit stack, four more kinds.** `StructuralKind` now has `set_field`,
+   `clear_field`, `add_link`, `delete_link` beside `insert_task`/`delete_task`;
+   `StructuralEdit` carries the field id/kind/value and the link pred/uid/type/lag.
+   `StructuralEdits::apply()` also sets/clears the displayed custom field, drops a
+   pending-deleted link row by uid, and appends pending link adds (uid 0); the same
+   undo/redo/list applies. `push()` validates the writer's types (finite number, valid
+   packed date, duration != 0xffffffff, NUL-free text, measured field only), a
+   self-link, an out-of-range lag, duplicate pending adds/deletes. Pushing a
+   `delete_task` PRUNES the field edits and link adds naming that task (the save order
+   would make them unreachable or instantly cascaded).
+2. **`save_structural_edits` cascade.** Fixed order: link deletes
+   (`delete_task_link`), link adds (`add_task_link`), task deletes
+   (`delete_task_row`), task inserts (`add_task_row`), custom fields
+   (one `save_field_values` for all sets, one `clear_field_value` per clear), then
+   start dates (`save_date_edits`). Last-wins collapse per (uid, field id). Every
+   writer call but the LAST writes `<target>.w51-structural-tmp`; an earlier refusal
+   removes it and never writes the target. Result gained `links_added`,
+   `links_deleted`, `fields_written`, `added_link_uids`.
+3. **Dialog models (`app/field_link_edits.*`).** The six `TaskFieldSpec`s
+   (Text1/Number1/Number2/Date1/Duration1/Flag1, descriptor captions), initial text
+   through `format_value_text`, parsing through `parse_edit_text` + conversion to
+   `mpp::CustomFieldValue`; blank = clear, unchanged = no edit, one bad field refuses
+   the whole form. Predecessor list (id/name/type/lag/pending), `parse_link_lag`
+   (`0`, bare days, `d`, `h`, `m`, signed), `format_link_lag`,
+   `validate_link_add` (self/unknown/pending insert/pending delete/duplicate),
+   `make_link_add`, `make_link_delete`.
+4. **AppKit (unverified).** `Edit > Task Fields...` and `Edit > Predecessors...`
+   (no key equivalents), each an `NSAlert` with an accessory view; both only queue.
+   Status line/pending summary/close prompt name inserts, deletes, field edits and
+   link edits; save message reports links added/deleted and field values written.
+   `menu_model` enables both only in a task view with a selection and no open cell
+   edit; `menu_tests` 696 -> 744 checks.
+5. **LinkRow** gained `uid` and `lag_ticks`; `reader_adapter.h` fills them. Without
+   the uid the dialog cannot address a link row (the writer deletes by uid).
+
+### Invariants a successor must preserve
+
+- **The opened file is never written.** Every save path still refuses `target ==
+  source` unless the app itself wrote and reloaded it; structural/link/field saves
+  reload and adopt (`PlanState::owns_path`).
+- **Only the last writer call writes the target.** Do not reorder the cascade so a
+  later step writes the target before an earlier one can fail.
+- **Reader limitation on clear.** `clear_field_value` clears the FixedMeta presence
+  bits but keeps the VarMeta entry; `core/mpp` lists any decodable entry, so a
+  reloaded cleared Number/Duration reads 0 (Text "", Date 0xffffffff -> app Null).
+  No `core/**` edit was made; a reader presence-bit decode is a coordinator decision.
+- **A pending insert has no file row**, so field/link editing refuses it until saved.
+- **`main.mm` is AppKit and compile-unproven here**; keep its logic in the helpers.
+
+### Verification (2026-10-22, MSVC 19.44, Release, /W4 /WX /permissive-)
+
+```
+cmd /c '"...vcvars64.bat" >nul && cmake -S app -B build\vs-w55 -G "Visual Studio 17 2022" -A x64 -DAPP_BUILD_TESTS=ON -DCORE_WARNINGS_AS_ERRORS=ON'
+cmd /c '"...vcvars64.bat" >nul && cmake --build build\vs-w55 --config Release'
+cmd /c '"...vcvars64.bat" >nul && ctest --test-dir build\vs-w55 -C Release --output-on-failure'
+```
+
+`ctest` **12/12**, 0 failures. Checks: layout 253, selection 90, document 43, prefs 82,
+menu 744, filter 60, export 58, views 164, app_edit 120, app_fields 199,
+**app_edits_fields 160**, **app_edits_links 159** (**2,132 total**). Configure prints
+`core/mppwrite/save.h found -- saves use mppwrite::save_date_edits`. Build exit 0, no
+warnings (`/WX`). The new tests write only under `build\vs-w55\test-out`
+(`app-fields-*.mpp`, `app-links-*.mpp`) and assert the committed fixture's size is
+unchanged.
+
+### Verified vs unverified
+
+- **Verified**: dialog specs/initial text/parse/clear rules; field write of all six
+  through `save_field_values` and read-back from the file (Text1 "alpha", Number1
+  42.5, Number2 3.25, Date1 0x3d1812c0 = 2026-10-26 08:00, Duration1 4800 ticks =
+  480 COM minutes, Flag1 true); six clears through `clear_field_value` and the
+  reader's empty values; a field + insert + start-pin save (4 tasks, SNET 4, field
+  value) and its writer-call names; link 0 -> 2 adds (1->2 FS 0, 1->3 SS 4800),
+  delete -> 1 live link, delete+re-add of the same relation in one Save (deletes run
+  first), mixed delete+add (1->3 SS survives, 2->3 FF -4800 added); multi-op refusal
+  leaves no target and no intermediate; unknown-uid field refusal leaves a
+  pre-existing target byte-identical; target == source refusal; undo/redo and the
+  display plan for field and link edits; delete-prunes behaviour.
+- **Unverified: every line of `main.mm`** (no ObjC++ compiler on this box): the two
+  `NSAlert` accessory dialogs (`taskFields:`, `editPredecessors:`), the
+  `std::vector<NSTextField*>` under ARC, `[(NSTextFieldCell*)[list_label cell]
+  setWraps:YES]`, `[NSTextField labelWithString:]`, the new menu dispatch cases and
+  the four save/pending/close message changes. `.github/workflows/app-macos.yml`
+  (coordinator's lane) builds it with `-Werror`; its test-name grep still lists only
+  the wave-10/11 names, so it should be extended with `app_edits_fields` and
+  `app_edits_links` (the tests are registered in CMake, so plain `ctest` runs all 12).
+
+### Traps hit (W55)
+
+- **`core::gantt::LinkType`'s enumerators are `finish_to_finish` / `finish_to_start`
+  / `start_to_finish` / `start_to_start`** (order FS/SS/FF/SF), NOT
+  `finish_finish`. The file order is FF=0/FS=1/SF=2/SS=3, so the writer needs an
+  explicit mapping (`writer_link_type`), never a cast; the reader maps the other way.
+- **`mpp::FieldKind` and `mppwrite::FieldKind` are different enums** with the same
+  layout; `FieldValue::kind` needs `writer_field_kind()` (an explicit conversion, not
+  an assignment).
+- **`core/mpp` lists every decodable VarMeta custom-field entry** whether or not its
+  FixedMeta presence bit is set, so "cleared" at the reader level is the empty value,
+  not absence. Test the empty values, not `custom_field() == nullptr`.
+- **The edit/write tools race Dropbox's mtime churn on this folder** ("file changed
+  since it was read", repeatedly). Workarounds used: re-read the exact lines
+  immediately before each `edit`, and for multi-anchor changes a throwaway Python
+  script under `build\vs-w55\` that asserts every anchor's `count == 1` before writing
+  (`patch_enum_names.py`, `patch_readme.py`).
+- **`synthetic-base.mpp` has 0 link rows and 3 assignment rows.** The link round trip
+  starts from zero links (add 2, delete 1); do not "fix" the fixture.
+
+### Open, ranked
+
+1. **Run `app-macos.yml`** and fix `main.mm`: the two dialogs' accessory views are
+   the only new AppKit surface; the `NSTextField` multi-line list label and the
+   `std::vector<NSTextField*>` ARC use are the likely first failures.
+2. **Mac smoke test**: Task Fields on a stored row (set + clear a Text1/Flag1),
+   Predecessors add/remove, undo/redo across a queued link, Save (panel first time),
+   reopen, and the close prompt naming all four pending counts.
+3. **Reader presence-bit decode for cleared custom fields** would make the app match
+   Project's blank rendering; `core/**` is not this stream's lane.
+4. A `114/Props` formula writer stays deliberately absent (no oracle fixture).
+5. Row move/indent/outdent still blocked on the writer.
+
+Next three concrete actions: (a) run the macOS CI job; (b) smoke-test the two dialogs
+and the Save/reload loop; (c) add the two new test names to the workflow's grep.

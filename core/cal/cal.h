@@ -136,14 +136,22 @@ using WeekSpec = std::array<DaySpec, 7>;
 // 1..3 = second..fourth, 4 = last.  `DaysOfWeek` is a bitmap with bit 0 =
 // Sunday .. bit 6 = Saturday (mpxj's DAY_MASKS).
 //
-// One measured gap: for a MONTHLY positional exception Project stores 0 in the
-// MonthItem byte and COM reads MonthItem 0 / MonthPosition 0 back
-// (w12-exceptions.json, "FirstMonday"), so its weekday is not in the record --
-// expand_recurring_exception() derives it from the start day, which is why the
-// stored occurrence word still validates the result.  The +4 occurrence word is
-// Project's own count for the range: every one of the six recurring records in
-// the fixture agrees with the expansion (29/18/7/5/4/5/4 days), so it is kept as
-// a consistency CHECK, never as a source of truth.
+// A MONTHLY positional record has two measured shapes (wave 12, both fixtures):
+//   * MonthItem and MonthPosition are STORED when they differ from the start day.
+//     corpus/probe/w12-exceptions-monthpos.mpp ("ThirdMonday", COM JSON
+//     w12-monthpos.json) is a type-5 record with Start 2026-11-01 (a Sunday),
+//     +76 = 2 (third), +77 = 4 (Monday), +78 = 1, Occurrences 8 -- the weekday
+//     and the position are separate words, and the expansion is the third Monday
+//     of each month in range.
+//   * Both are 0 when the start day already is the rule (the first fixture's
+//     "FirstMonday": Start 2026-11-02 is itself the first Monday, and COM reads
+//     MonthItem 0 / MonthPosition 0 back).  The expansion then derives the
+//     weekday and the position from the start day, which is by definition a
+//     matching instance.
+// The +4 occurrence word is Project's own count for the range: every one of the
+// seven recurring records across the two fixtures agrees with the expansion
+// (29/18/7/5/4/5/4 and 8), so it is kept as a consistency CHECK, never as a
+// source of truth.
 struct DatedException {
     std::int32_t start_day = 0;
     std::int32_t end_day = 0;
@@ -154,9 +162,10 @@ struct DatedException {
     // the range and the parameters (the fixture asks for 0 and reads back 29),
     // so it is used only as a consistency check on an expansion.
     std::int32_t occurrences = 0;
-    // Decoded recurrence parameters (see the block comment above).  0 means "not
-    // stored by this type"; every one is read back from the record, nothing here
-    // is derived from the start day.
+    // Decoded recurrence parameters (see the block comment above): every one is
+    // read back from the record.  0 means "this type does not store it"; the one
+    // substitution the expansion makes for a 0 is a monthly-positional MonthItem,
+    // where the weekday comes from the start day (see above).
     std::int32_t period = 0;          // every N weeks / months / days
     std::int32_t days_of_week = 0;    // weekly bitmap, bit 0 = Sunday
     std::int32_t month = 0;           // 1..12 (stored as month - 1)
@@ -291,15 +300,20 @@ struct RecurrenceExpansion {
 //   7 day-count           -> every `period` days from the start day
 // A parameter the type does not store (0) falls back to the range's first day,
 // which is by definition a matching instance: the weekday for types 3/5/6, the
-// day-of-month for 2/4, the month for 2/3, and the period to 1.  Position is
-// never derived: 0 is the stored value for "first".
+// day-of-month for 2/4, the month for 2/3, and the period to 1.  Position is read
+// as stored: 0 is PjMonthPosition's "first" (mpxj reads the same byte as
+// dayNumber = value + 1).  When a monthly-positional record stores both words (the
+// measured non-zero case, w12-exceptions-monthpos.mpp) they are used exactly as
+// stored; when its MonthItem is 0 only the weekday is taken from the start day.
 // Every loop is bounded by the day range itself (a 16-bit day word), and the day
 // cap turns an over-long expansion into a refusal rather than a truncation.
 // The stored occurrence word (+4) is a check, never a source of truth: when it
 // is non-zero and disagrees with the expanded count, the expansion is refused.
-// The fixture validates the parameters exactly this way: all six recurring
-// records agree with Project's own count, including 2029-11-30 as the fourth
-// "last Friday of November" and the exclusion of 2030-11-29 (past the range).
+// The fixtures validate the parameters exactly this way: all seven recurring
+// records across the two files agree with Project's own count, including
+// 2029-11-30 as the fourth "last Friday of November" (2030-11-29 is past the
+// range) and the third Monday of each month for the 2026-11-01..2027-06-30
+// positional record (8 occurrences).
 RecurrenceExpansion expand_recurring_exception(
     DatedException const& exception, std::int32_t max_days = kMaxExpandedExceptionDays);
 

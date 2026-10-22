@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -2073,6 +2074,1386 @@ DeletedLink delete_task_link(CfbDocument& doc, std::uint32_t link_uid,
         "re-read from disk: link uid " + std::to_string(link_uid) +
         " is a tombstone (FixedMeta +0 0x02, +2 0) and TBkndCons/FixedMeta header "
         "+4 has bit 0x02; every stream size is unchanged");
+    doc = reread;
+    return result;
+}
+
+/* ---- resource rows: 114/TBkndRsc (W54) ---------------------------------- */
+
+namespace {
+
+constexpr std::size_t kRscHeaderSize = 48;
+constexpr std::size_t kRscRowSize = 172;
+constexpr std::size_t kRscMetaEntrySize = 37;
+constexpr std::size_t kRscF2RecordSize = 40;
+constexpr std::size_t kRscF2MetaEntrySize = 51;
+constexpr std::size_t kMetaMagicWord = 0;
+constexpr std::size_t kMetaCountWord = 8;
+constexpr std::size_t kMetaFixedSizeWord = 12;
+constexpr std::size_t kMetaStateByte = 0;
+constexpr std::size_t kMetaFieldCountWord = 2;
+constexpr std::size_t kMetaRowOffsetWord = 4;
+constexpr std::size_t kRscMetaTypeByte = 12;
+constexpr std::uint8_t kRscWorkTypeBit = 0x10;
+/* Set in every resource row Project itself wrote; meaning unmeasured (0x1c on
+ * synthetic-base's untouched row, 0x5c/0x48 on Project-written rows). */
+constexpr std::uint8_t kRscRowWrittenBit = 0x40;
+constexpr std::size_t kRscF2MetaRecordOffsetWord = 4;
+constexpr std::size_t kRscF2MetaTypeByte = 8;
+constexpr std::uint8_t kRscCostTypeBit = 0x10;
+[[maybe_unused]] constexpr std::size_t kRscF2OrdinalOffset = 16;
+constexpr std::size_t kRscRowId = 0;
+constexpr std::size_t kRscRowUid = 4;
+constexpr std::size_t kRscRowMaxUnits = 8;
+constexpr std::size_t kRscRowCounter = 154;
+constexpr std::size_t kRscMetaDescriptors = 3;
+
+constexpr std::uint32_t kRscNameFieldId = 0x0C400001u;
+constexpr std::uint32_t kRscInitialsFieldId = 0x0C400002u;
+constexpr std::uint32_t kRscRateFieldId = 0x0C400055u;
+constexpr std::uint32_t kRscDateFieldId = 0x0C4002D6u;
+constexpr std::uint32_t kRscBlobFieldId = 0x0C4002E3u;
+constexpr std::size_t kRscNewRowFieldCount = 5;
+
+/* Assignment table (W54). */
+constexpr std::size_t kAsnRowSize = 110;
+constexpr std::size_t kAsnMetaEntrySize = 34;
+constexpr std::size_t kAsnF2RecordSize = 48;
+constexpr std::size_t kAsnF2MetaEntrySize = 53;
+constexpr std::size_t kAsnF2MetaRecordOffsetWord = 4;
+constexpr std::size_t kAsnRowUid = 0;
+constexpr std::size_t kAsnRowTask = 4;
+constexpr std::size_t kAsnRowResource = 8;
+constexpr std::size_t kAsnRowUnits = 12;
+constexpr std::size_t kAsnRowWork = 20;
+constexpr std::size_t kAsnRowZeroWork = 28;
+constexpr std::size_t kAsnRowWorkCopy2 = 36;
+constexpr std::size_t kAsnRowWorkCopy = 44;
+constexpr std::size_t kAsnRowStart = 52;
+constexpr std::size_t kAsnRowFinish = 56;
+constexpr std::size_t kAsnRowResume = 60;
+constexpr std::size_t kAsnRowUnmapped = 92;
+constexpr std::uint32_t kAsnUnmappedValue = 7;
+constexpr std::size_t kAsnRowStartCopy = 104;
+constexpr std::size_t kAsnNewRowFieldCount = 4;
+
+constexpr std::uint32_t kAsnContourFieldId = 0x0F400031u;
+constexpr std::uint32_t kAsnCreatedFieldId = 0x0F40027Au;
+constexpr std::uint32_t kAsnInternalAFieldId = 0x0F400199u;
+constexpr std::uint32_t kAsnInternalBFieldId = 0x0F40019Bu;
+
+/* The measured fresh-add FixedMeta tail (w12-assignadd.mpp row 3): +8..+15 =
+ * f1 ff 23 f0 69 00 02 00, everything after +16 zero.  These bytes are per-row
+ * cached data whose meaning is not decoded; copying Project's own bytes is the
+ * measured choice. */
+constexpr std::array<std::uint8_t, 8> kAsnMetaTail = {0xF1, 0xFF, 0x23, 0xF0,
+                                                      0x69, 0x00, 0x02, 0x00};
+/* The measured fresh-add Fixed2Meta entry (same row): +8/+9 = cf 09,
+ * +36 = 0x10, +52 = 0x28. */
+constexpr std::size_t kAsnF2MetaFlagA = 8;
+constexpr std::size_t kAsnF2MetaFlagB = 9;
+constexpr std::size_t kAsnF2MetaMidByte = 36;
+constexpr std::size_t kAsnF2MetaLastByte = 52;
+
+/* Flat planned-work contour, measured on assign1.mpp, w10-usage-flat.mpp and
+ * w12-assignadd.mpp: 72 bytes, u32 0x00200000, u32 0x2c, f64 160000.0,
+ * f64 work (ticks x100), u32 work_ticks*8, u32 0, u32 1, zeros. */
+constexpr std::size_t kAsnContourSize = 72;
+constexpr std::uint32_t kAsnContourWord0 = 0x00200000u;
+constexpr std::uint32_t kAsnContourWord4 = 0x2Cu;
+constexpr double kAsnContourConstant = 160000.0;
+
+std::vector<MetaEntry> read_table_entries(std::vector<std::uint8_t> const& meta,
+                                          std::size_t entry_size) {
+    std::vector<MetaEntry> out;
+    if (meta.size() < kDependentMetaHeaderSize) {
+        return out;
+    }
+    std::size_t const count =
+        (meta.size() - kDependentMetaHeaderSize) / entry_size;
+    out.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        std::size_t const base = kDependentMetaHeaderSize + i * entry_size;
+        MetaEntry entry;
+        entry.index = i;
+        entry.offset = get_u32(meta, base + kMetaRowOffsetWord);
+        entry.state = meta[base + kMetaStateByte];
+        entry.field_count = get_u16(meta, base + kMetaFieldCountWord);
+        out.push_back(entry);
+    }
+    return out;
+}
+
+void require_stream(CfbDocument const& doc, std::string const& path,
+                    std::string const& function) {
+    if (!doc.has_stream(path)) {
+        throw Error(function + ": the file has no " + path +
+                    " stream; a structural write needs it");
+    }
+}
+
+std::vector<std::uint8_t> var_block_payload(std::vector<std::uint8_t> const& var_meta,
+                                            std::vector<std::uint8_t> const& var2,
+                                            std::uint32_t uid, std::uint32_t key) {
+    std::vector<std::uint32_t> const offsets = find_var_offsets(var_meta, key, uid);
+    if (offsets.empty()) {
+        return {};
+    }
+    return read_var_block(var2, offsets.front());
+}
+
+struct ResourceTable {
+    std::string fixed_path;
+    std::string meta_path;
+    std::string fixed2_path;
+    std::string fixed2_meta_path;
+    std::string var_meta_path;
+    std::string var2_path;
+    std::vector<std::uint8_t> fixed;
+    std::vector<std::uint8_t> meta;
+    std::vector<std::uint8_t> fixed2;
+    std::vector<std::uint8_t> fixed2_meta;
+    std::vector<std::uint8_t> var_meta;
+    std::vector<std::uint8_t> var2;
+    std::vector<MetaEntry> entries;
+    std::size_t rows = 0;
+};
+
+/*
+ * Read and strictly validate 114/TBkndRsc.  The shape is measured (see the
+ * header): FixedData 48 + 172*n, FixedMeta 16 + 37*(n+3) with three header
+ * descriptors, Fixed2Data 40*(n+3), Fixed2Meta 16 + 51*(n+3), VarMeta 24 + 12*k.
+ * Unlike the delete path, an add does arithmetic on every count/size word, so
+ * any disagreement is refused instead of tolerated.
+ */
+ResourceTable load_resource_table(CfbDocument const& doc,
+                                  std::string const& function) {
+    ResourceTable out;
+    out.fixed_path = "114/TBkndRsc/FixedData";
+    out.meta_path = "114/TBkndRsc/FixedMeta";
+    out.fixed2_path = "114/TBkndRsc/Fixed2Data";
+    out.fixed2_meta_path = "114/TBkndRsc/Fixed2Meta";
+    out.var_meta_path = "114/TBkndRsc/VarMeta";
+    out.var2_path = "114/TBkndRsc/Var2Data";
+    for (std::string const* path : {&out.fixed_path, &out.meta_path,
+                                    &out.fixed2_path, &out.fixed2_meta_path,
+                                    &out.var_meta_path, &out.var2_path}) {
+        require_stream(doc, *path, function);
+    }
+    out.fixed = doc.read_stream(out.fixed_path);
+    if (out.fixed.size() < kRscHeaderSize ||
+        (out.fixed.size() - kRscHeaderSize) % kRscRowSize != 0) {
+        throw Error(function + ": " + out.fixed_path + " is " +
+                    std::to_string(out.fixed.size()) + " bytes, not 48 + 172*n; "
+                    "refusing to change the resource table's geometry");
+    }
+    out.rows = (out.fixed.size() - kRscHeaderSize) / kRscRowSize;
+    out.meta = doc.read_stream(out.meta_path);
+    std::size_t const meta_entries = out.rows + kRscMetaDescriptors;
+    if (out.meta.size() != kDependentMetaHeaderSize +
+                                kRscMetaEntrySize * meta_entries) {
+        throw Error(function + ": " + out.meta_path + " is " +
+                    std::to_string(out.meta.size()) + " bytes, not 16 + 37*" +
+                    std::to_string(meta_entries) +
+                    "; refusing to append to a damaged resource table");
+    }
+    if (get_u32(out.meta, kMetaMagicWord) != kDependentMagic) {
+        throw Error(function + ": " + out.meta_path +
+                    " does not start with the measured table magic");
+    }
+    if (get_u32(out.meta, kMetaCountWord) != meta_entries ||
+        get_u32(out.meta, kMetaFixedSizeWord) != out.fixed.size()) {
+        throw Error(function + ": " + out.meta_path +
+                    " header count/size disagree with the resource table");
+    }
+    out.entries = read_table_entries(out.meta, kRscMetaEntrySize);
+    for (std::size_t index = kRscMetaDescriptors; index < out.entries.size();
+         ++index) {
+        std::size_t const want =
+            kRscHeaderSize + kRscRowSize * (index - kRscMetaDescriptors);
+        if (out.entries[index].offset != want) {
+            throw Error(function + ": " + out.meta_path + " entry " +
+                        std::to_string(index) + " names offset " +
+                        std::to_string(out.entries[index].offset) + ", expected " +
+                        std::to_string(want) +
+                        "; refusing to append to a damaged resource table");
+        }
+    }
+    out.fixed2 = doc.read_stream(out.fixed2_path);
+    out.fixed2_meta = doc.read_stream(out.fixed2_meta_path);
+    std::size_t const fixed2_records = out.rows + kRscMetaDescriptors;
+    if (out.fixed2.size() != fixed2_records * kRscF2RecordSize) {
+        throw Error(function + ": " + out.fixed2_path + " is " +
+                    std::to_string(out.fixed2.size()) + " bytes, not " +
+                    std::to_string(fixed2_records) + "*40");
+    }
+    if (out.fixed2_meta.size() !=
+        kDependentMetaHeaderSize + kRscF2MetaEntrySize * fixed2_records) {
+        throw Error(function + ": " + out.fixed2_meta_path + " is " +
+                    std::to_string(out.fixed2_meta.size()) + " bytes, not 16 + " +
+                    std::to_string(fixed2_records) + "*51");
+    }
+    if (get_u32(out.fixed2_meta, kMetaMagicWord) != kDependentMagic ||
+        get_u32(out.fixed2_meta, kMetaCountWord) != fixed2_records ||
+        get_u32(out.fixed2_meta, kMetaFixedSizeWord) != out.fixed2.size()) {
+        throw Error(function + ": " + out.fixed2_meta_path +
+                    " header count/size disagree with the resource table");
+    }
+    for (std::size_t index = 0; index < fixed2_records; ++index) {
+        std::size_t const base =
+            kDependentMetaHeaderSize + index * kRscF2MetaEntrySize;
+        if (get_u32(out.fixed2_meta, base + kRscF2MetaRecordOffsetWord) !=
+            index * kRscF2RecordSize) {
+            throw Error(function + ": " + out.fixed2_meta_path + " entry " +
+                        std::to_string(index) +
+                        " does not name its Fixed2Data record");
+        }
+    }
+    out.var_meta = doc.read_stream(out.var_meta_path);
+    out.var2 = doc.read_stream(out.var2_path);
+    if (out.var_meta.size() < kVarMetaHeaderSize ||
+        (out.var_meta.size() - kVarMetaHeaderSize) % kVarMetaEntrySize != 0) {
+        throw Error(function + ": " + out.var_meta_path + " is " +
+                    std::to_string(out.var_meta.size()) + " bytes, not 24 + 12*k");
+    }
+    if (get_u32(out.var_meta, 8) !=
+            (out.var_meta.size() - kVarMetaHeaderSize) / kVarMetaEntrySize ||
+        get_u32(out.var_meta, kVarMetaVar2SizeOffset) != out.var2.size()) {
+        throw Error(function + ": " + out.var_meta_path +
+                    " header count/size disagree with the resource table");
+    }
+    return out;
+}
+
+struct LiveResourceRow {
+    std::size_t row = 0;
+    std::uint32_t uid = 0;
+};
+
+/* Resource liveness: a FixedMeta entry with state 0 names the row.  Row 0 is the
+ * table's uid-0 placeholder and is never a resource. */
+std::vector<LiveResourceRow> live_resource_rows(ResourceTable const& table) {
+    std::vector<LiveResourceRow> out;
+    for (std::size_t row = 1; row < table.rows; ++row) {
+        std::uint32_t const offset =
+            static_cast<std::uint32_t>(kRscHeaderSize + row * kRscRowSize);
+        std::int32_t const index = entry_index_for_offset(table.entries, offset);
+        if (index < 0 ||
+            table.entries[static_cast<std::size_t>(index)].state != kStateLive) {
+            continue;
+        }
+        LiveResourceRow live;
+        live.row = row;
+        live.uid = get_u32(table.fixed, offset + kRscRowUid);
+        out.push_back(live);
+    }
+    return out;
+}
+
+std::string first_character(std::string const& text) {
+    return text.empty() ? std::string() : text.substr(0, 1);
+}
+
+std::string resource_kind_name(ResourceKind kind) {
+    switch (kind) {
+        case ResourceKind::work:
+            return "Work";
+        case ResourceKind::material:
+            return "Material";
+        case ResourceKind::cost:
+            return "Cost";
+    }
+    return "Work";
+}
+
+void apply_resource_type(std::vector<std::uint8_t>& meta_entry,
+                         std::vector<std::uint8_t>& fixed2_entry,
+                         ResourceKind kind) {
+    /* Bit 0x40 is set in the FixedMeta +12 byte of EVERY resource row Project
+     * itself wrote (w9-resourcetypes R1/R2/R3, assign1's R1/R2, w12-assignadd's
+     * R1: 0x5c Work / 0x48 Material/Cost), while synthetic-base's untouched
+     * "Crew" row carries 0x1c.  Project's own save sets it on the existing rows
+     * too, so it is a row-written marker, not a property of one kind.  Its exact
+     * meaning is unmeasured; setting it reproduces Project's measured new-row
+     * byte and the reader only needs bit 0x10 for Work. */
+    meta_entry[kRscMetaTypeByte] =
+        static_cast<std::uint8_t>(meta_entry[kRscMetaTypeByte] |
+                                  kRscRowWrittenBit);
+    if (kind == ResourceKind::work) {
+        meta_entry[kRscMetaTypeByte] =
+            static_cast<std::uint8_t>(meta_entry[kRscMetaTypeByte] |
+                                      kRscWorkTypeBit);
+    } else {
+        meta_entry[kRscMetaTypeByte] =
+            static_cast<std::uint8_t>(meta_entry[kRscMetaTypeByte] &
+                                      ~kRscWorkTypeBit);
+    }
+    if (kind == ResourceKind::cost) {
+        fixed2_entry[kRscF2MetaTypeByte] =
+            static_cast<std::uint8_t>(fixed2_entry[kRscF2MetaTypeByte] |
+                                      kRscCostTypeBit);
+    } else {
+        fixed2_entry[kRscF2MetaTypeByte] =
+            static_cast<std::uint8_t>(fixed2_entry[kRscF2MetaTypeByte] &
+                                      ~kRscCostTypeBit);
+    }
+}
+
+} /* namespace */
+
+AddedResource add_resource_row(CfbDocument& doc, ResourceSpec const& resource,
+                               std::string const& path) {
+    std::string const function = "add_resource_row";
+    check_output_path(path, function);
+    if (resource.name.empty()) {
+        throw Error(function + ": a resource name is required; Project stores it "
+                    "as the row's Name field (VarMeta key 0x0c400001)");
+    }
+    if (!std::isfinite(resource.max_units_percent) ||
+        resource.max_units_percent <= 0.0 ||
+        resource.max_units_percent > 10000.0) {
+        throw Error(function + ": MaxUnits " +
+                    std::to_string(resource.max_units_percent) +
+                    " % is outside the writer's (0, 10000] bound (100 % is the "
+                    "measured Project default; this is a policy bound)");
+    }
+
+    ResourceTable const table = load_resource_table(doc, function);
+    std::vector<LiveResourceRow> const live = live_resource_rows(table);
+
+    std::uint32_t max_uid = 0;
+    std::uint32_t max_live_id = 0;
+    for (std::size_t row = 1; row < table.rows; ++row) {
+        std::size_t const base = kRscHeaderSize + row * kRscRowSize;
+        max_uid = std::max(max_uid, get_u32(table.fixed, base + kRscRowUid));
+    }
+    for (LiveResourceRow const& row : live) {
+        std::size_t const base = kRscHeaderSize + row.row * kRscRowSize;
+        max_live_id = std::max(max_live_id, get_u32(table.fixed, base + kRscRowId));
+    }
+    if (max_uid == 0xFFFFFFFFu) {
+        throw Error(function + ": the resource table's largest uid is 0xffffffff, "
+                    "so a new uid would overflow");
+    }
+    std::uint32_t const uid = max_uid + 1;
+    std::uint32_t const id = max_live_id + 1;
+
+    /* Template: the last live resource row (row 0's placeholder when the table
+     * has no live resource).  Index 0..2 of Resource FixedMeta are descriptors,
+     * so the entry for row r is entry r + 3. */
+    std::size_t const template_row = live.empty() ? 0 : live.back().row;
+    std::size_t const template_index = template_row + kRscMetaDescriptors;
+    std::uint32_t const template_uid =
+        get_u32(table.fixed, kRscHeaderSize + template_row * kRscRowSize + kRscRowUid);
+    for (VarEntry const& entry : read_var_entries(table.var_meta)) {
+        if (entry.mid > uid) {
+            throw Error(function + ": the resource table already holds a uid (" +
+                        std::to_string(entry.mid) +
+                        ") larger than the allocated uid " + std::to_string(uid) +
+                        "; refusing to append a variable-entry group out of order");
+        }
+    }
+
+    std::size_t const new_row = table.rows;
+    std::size_t const new_offset = kRscHeaderSize + new_row * kRscRowSize;
+
+    std::vector<std::uint8_t> row(table.fixed.begin() +
+                                      static_cast<std::ptrdiff_t>(
+                                          kRscHeaderSize +
+                                          template_row * kRscRowSize),
+                                  table.fixed.begin() +
+                                      static_cast<std::ptrdiff_t>(
+                                          kRscHeaderSize +
+                                          (template_row + 1) * kRscRowSize));
+    put_u32(row, kRscRowId, id);
+    put_u32(row, kRscRowUid, uid);
+    put_f64(row, kRscRowMaxUnits, resource.max_units_percent * 100.0);
+    std::uint16_t const counter = get_u16(row, kRscRowCounter);
+    put_u16(row, kRscRowCounter,
+            counter == 0xFFFFu ? 1u : static_cast<std::uint16_t>(counter + 1u));
+
+    std::size_t const template_entry_base =
+        kDependentMetaHeaderSize + template_index * kRscMetaEntrySize;
+    std::vector<std::uint8_t> meta_entry(
+        table.meta.begin() + static_cast<std::ptrdiff_t>(template_entry_base),
+        table.meta.begin() +
+            static_cast<std::ptrdiff_t>(template_entry_base + kRscMetaEntrySize));
+    meta_entry[kMetaStateByte] = kStateLive;
+    put_u16(meta_entry, kMetaFieldCountWord,
+            static_cast<std::uint16_t>(kRscNewRowFieldCount));
+    put_u32(meta_entry, kMetaRowOffsetWord,
+            static_cast<std::uint32_t>(new_offset));
+
+    std::size_t const template_f2_base =
+        kDependentMetaHeaderSize + template_index * kRscF2MetaEntrySize;
+    std::vector<std::uint8_t> fixed2_entry(
+        table.fixed2_meta.begin() + static_cast<std::ptrdiff_t>(template_f2_base),
+        table.fixed2_meta.begin() + static_cast<std::ptrdiff_t>(
+                                         template_f2_base + kRscF2MetaEntrySize));
+    put_u32(fixed2_entry, kRscF2MetaRecordOffsetWord,
+            static_cast<std::uint32_t>(
+                (new_row + kRscMetaDescriptors) * kRscF2RecordSize));
+    apply_resource_type(meta_entry, fixed2_entry, resource.kind);
+
+    /* Name / Initials plus the three measured default blocks. */
+    std::string const initials = resource.initials.empty()
+                                     ? first_character(resource.name)
+                                     : resource.initials;
+    std::vector<std::vector<std::uint8_t>> payloads;
+    payloads.push_back(encode_utf16z(resource.name));
+    payloads.push_back(encode_utf16z(initials));
+    std::vector<std::uint8_t> rate =
+        var_block_payload(table.var_meta, table.var2, template_uid,
+                          kRscRateFieldId);
+    if (rate.size() != 4) {
+        rate.assign(4, 0);
+        put_u32(rate, 0, 2);
+    }
+    payloads.push_back(rate);
+    std::vector<std::uint8_t> date =
+        var_block_payload(table.var_meta, table.var2, template_uid,
+                          kRscDateFieldId);
+    if (date.size() != 4) {
+        date = var_block_payload(table.var_meta, table.var2, 0, kRscDateFieldId);
+    }
+    if (date.size() != 4) {
+        date.assign(4, 0xFF);
+    }
+    payloads.push_back(date);
+    std::vector<std::uint8_t> blob =
+        var_block_payload(table.var_meta, table.var2, template_uid,
+                          kRscBlobFieldId);
+    if (blob.size() != 16) {
+        blob.assign(16, 0);
+    }
+    payloads.push_back(blob);
+    std::array<std::uint32_t, 5> const keys = {
+        kRscNameFieldId, kRscInitialsFieldId, kRscRateFieldId, kRscDateFieldId,
+        kRscBlobFieldId};
+
+    std::vector<std::uint8_t> fixed = table.fixed;
+    fixed.insert(fixed.end(), row.begin(), row.end());
+    std::vector<std::uint8_t> meta = table.meta;
+    meta.insert(meta.end(), meta_entry.begin(), meta_entry.end());
+    put_u32(meta, kMetaCountWord,
+            static_cast<std::uint32_t>(table.rows + 1 + kRscMetaDescriptors));
+    put_u32(meta, kMetaFixedSizeWord, static_cast<std::uint32_t>(fixed.size()));
+
+    LinkIdentity const identity = make_link_identity(doc, function);
+    std::vector<std::uint8_t> fixed2 = table.fixed2;
+    fixed2.insert(fixed2.end(), identity.begin(), identity.end());
+    std::vector<std::uint8_t> ordinal(8, 0);
+    put_f64(ordinal, 0, static_cast<double>(new_row + 1));
+    fixed2.insert(fixed2.end(), ordinal.begin(), ordinal.end());
+    fixed2.insert(fixed2.end(), identity.begin(), identity.end());
+
+    std::vector<std::uint8_t> fixed2_meta = table.fixed2_meta;
+    fixed2_meta.insert(fixed2_meta.end(), fixed2_entry.begin(),
+                       fixed2_entry.end());
+    put_u32(fixed2_meta, kMetaCountWord,
+            static_cast<std::uint32_t>(table.rows + 1 + kRscMetaDescriptors));
+    put_u32(fixed2_meta, kMetaFixedSizeWord,
+            static_cast<std::uint32_t>(fixed2.size()));
+
+    std::vector<std::uint8_t> var_meta = table.var_meta;
+    std::vector<std::uint8_t> var2 = table.var2;
+    /* The new uid is strictly the largest (checked above), so appending the
+     * entries at the end keeps Project's measured uid grouping.  The key order
+     * is the table's measured order, not a sorted one (the Assignment keys are
+     * deliberately not ascending in Project's own file), so this does not go
+     * through insert_var_entry's sort. */
+    for (std::size_t i = 0; i < payloads.size(); ++i) {
+        std::size_t const offset = var2.size();
+        std::vector<std::uint8_t> const block = encode_block(payloads[i]);
+        var2.insert(var2.end(), block.begin(), block.end());
+        std::vector<std::uint8_t> entry(kVarMetaEntrySize, 0);
+        put_u32(entry, 0, uid);
+        put_u32(entry, 4, static_cast<std::uint32_t>(offset));
+        put_u32(entry, 8, keys[i]);
+        var_meta.insert(var_meta.end(), entry.begin(), entry.end());
+    }
+    put_u32(var_meta, 8,
+            static_cast<std::uint32_t>(
+                (var_meta.size() - kVarMetaHeaderSize) / kVarMetaEntrySize));
+    put_u32(var_meta, kVarMetaVar2SizeOffset,
+            static_cast<std::uint32_t>(var2.size()));
+
+    CfbDocument work = CfbDocument::from_bytes(doc.to_bytes());
+    work.replace_stream(table.fixed_path, fixed);
+    work.replace_stream(table.meta_path, meta);
+    work.replace_stream(table.fixed2_path, fixed2);
+    work.replace_stream(table.fixed2_meta_path, fixed2_meta);
+    work.replace_stream(table.var_meta_path, var_meta);
+    work.replace_stream(table.var2_path, var2);
+
+    CfbDocument const reread = save_and_verify(work, path, function,
+                                               "114/TBkndTask");
+
+    if (reread.read_stream(table.fixed_path) != fixed ||
+        reread.read_stream(table.meta_path) != meta ||
+        reread.read_stream(table.fixed2_path) != fixed2 ||
+        reread.read_stream(table.fixed2_meta_path) != fixed2_meta ||
+        reread.read_stream(table.var_meta_path) != var_meta ||
+        reread.read_stream(table.var2_path) != var2) {
+        throw Error(function + ": the six written resource streams do not read "
+                    "back with the bytes that were built");
+    }
+    for (std::string const& stream : doc.stream_paths()) {
+        if (stream == table.fixed_path || stream == table.meta_path ||
+            stream == table.fixed2_path || stream == table.fixed2_meta_path ||
+            stream == table.var_meta_path || stream == table.var2_path) {
+            continue;
+        }
+        if (!reread.has_stream(stream) ||
+            reread.read_stream(stream) != doc.read_stream(stream)) {
+            throw Error(function + ": " + stream +
+                        " changed; adding a resource may only touch the six "
+                        "TBkndRsc streams");
+        }
+    }
+    ResourceTable const after = load_resource_table(reread, function);
+    if (after.rows != table.rows + 1 || after.fixed.size() != fixed.size() ||
+        after.meta.size() != meta.size() ||
+        after.fixed2.size() != fixed2.size() ||
+        after.fixed2_meta.size() != fixed2_meta.size()) {
+        throw Error(function + ": the resource table's geometry does not read back "
+                    "as written");
+    }
+    std::vector<std::uint8_t> const row_after = reread.read_stream(table.fixed_path);
+    if (get_u32(row_after, new_offset + kRscRowUid) != uid ||
+        get_u32(row_after, new_offset + kRscRowId) != id ||
+        get_u16(row_after, new_offset + kRscRowCounter) !=
+            get_u16(row, kRscRowCounter)) {
+        throw Error(function + ": the new resource row does not read back as "
+                    "written");
+    }
+    std::uint64_t units_bits = 0;
+    double const units = resource.max_units_percent * 100.0;
+    std::memcpy(&units_bits, &units, sizeof units_bits);
+    std::uint64_t stored_bits = 0;
+    std::memcpy(&stored_bits, row_after.data() + new_offset + kRscRowMaxUnits,
+                sizeof stored_bits);
+    if (units_bits != stored_bits) {
+        throw Error(function + ": the new resource row's MaxUnits does not read "
+                    "back as written");
+    }
+    std::vector<std::uint8_t> const meta_after = reread.read_stream(table.meta_path);
+    std::size_t const new_entry_base =
+        kDependentMetaHeaderSize +
+        (table.rows + kRscMetaDescriptors) * kRscMetaEntrySize;
+    if (meta_after[new_entry_base + kMetaStateByte] != kStateLive ||
+        get_u16(meta_after, new_entry_base + kMetaFieldCountWord) !=
+            kRscNewRowFieldCount ||
+        get_u32(meta_after, new_entry_base + kMetaRowOffsetWord) !=
+            static_cast<std::uint32_t>(new_offset)) {
+        throw Error(function + ": the new resource FixedMeta entry does not read "
+                    "back as written");
+    }
+    std::vector<std::uint8_t> const fixed2_after =
+        reread.read_stream(table.fixed2_path);
+    std::size_t const new_record =
+        (new_row + kRscMetaDescriptors) * kRscF2RecordSize;
+    if (!std::equal(identity.begin(), identity.end(),
+                    fixed2_after.begin() +
+                        static_cast<std::ptrdiff_t>(new_record)) ||
+        !std::equal(identity.begin(), identity.end(),
+                    fixed2_after.begin() + static_cast<std::ptrdiff_t>(
+                                               new_record + 24))) {
+        throw Error(function + ": the new resource Fixed2Data record does not read "
+                    "back as written");
+    }
+    std::vector<std::uint8_t> const var_meta_after =
+        reread.read_stream(table.var_meta_path);
+    std::vector<std::uint8_t> const var2_after = reread.read_stream(table.var2_path);
+    for (std::size_t i = 0; i < payloads.size(); ++i) {
+        std::vector<std::uint32_t> const offsets =
+            find_var_offsets(var_meta_after, keys[i], uid);
+        if (offsets.size() != 1 ||
+            read_var_block(var2_after, offsets.front()) != payloads[i]) {
+            throw Error(function + ": the new resource variable entry 0x" +
+                        std::to_string(keys[i]) +
+                        " does not read back with the payload that was written");
+        }
+    }
+    if (get_u32(var_meta_after, 8) !=
+        (var_meta_after.size() - kVarMetaHeaderSize) / kVarMetaEntrySize) {
+        throw Error(function + ": the resource VarMeta entry count does not read "
+                    "back as written");
+    }
+
+    AddedResource result;
+    result.uid = uid;
+    result.id = id;
+    result.row = new_row;
+    result.name = resource.name;
+    result.initials = initials;
+    result.max_units_percent = resource.max_units_percent;
+    result.kind = resource.kind;
+    result.warnings.push_back(
+        "re-read from disk: resource uid " + std::to_string(uid) + " (row " +
+        std::to_string(new_row) + ", " + resource_kind_name(resource.kind) +
+        ", MaxUnits " + std::to_string(resource.max_units_percent) +
+        " %) matches the written row and its five variable entries");
+    if (resource.max_units_percent != 100.0) {
+        result.warnings.push_back(
+            "MaxUnits other than 100 % is not measured on a Project add; the row "
+            "is a clone of the last live resource with only ID/uid/MaxUnits "
+            "changed");
+    }
+    doc = reread;
+    return result;
+}
+
+/* ---- assignment rows: 114/TBkndAssn (W54) ------------------------------- */
+
+namespace {
+
+struct AssignmentTable {
+    std::string fixed_path;
+    std::string meta_path;
+    std::string fixed2_path;
+    std::string fixed2_meta_path;
+    std::string var_meta_path;
+    std::string var2_path;
+    std::vector<std::uint8_t> fixed;
+    std::vector<std::uint8_t> meta;
+    std::vector<std::uint8_t> fixed2;
+    std::vector<std::uint8_t> fixed2_meta;
+    std::vector<std::uint8_t> var_meta;
+    std::vector<std::uint8_t> var2;
+    std::vector<MetaEntry> entries;
+    std::size_t rows = 0;
+};
+
+/*
+ * Read and strictly validate 114/TBkndAssn: FixedData 110*n (no header),
+ * FixedMeta 16 + 34*n, Fixed2Data 48*n, Fixed2Meta 16 + 53*n, VarMeta 24 + 12*k.
+ * A row may lack a FixedMeta entry (PROJECT_A has 69 rows and 68 entries), which is
+ * how Project records a row it does not treat as an assignment; a duplicate
+ * entry offset is damage and is refused.
+ */
+AssignmentTable load_assignment_table(CfbDocument const& doc,
+                                      std::string const& function) {
+    AssignmentTable out;
+    out.fixed_path = "114/TBkndAssn/FixedData";
+    out.meta_path = "114/TBkndAssn/FixedMeta";
+    out.fixed2_path = "114/TBkndAssn/Fixed2Data";
+    out.fixed2_meta_path = "114/TBkndAssn/Fixed2Meta";
+    out.var_meta_path = "114/TBkndAssn/VarMeta";
+    out.var2_path = "114/TBkndAssn/Var2Data";
+    for (std::string const* path : {&out.fixed_path, &out.meta_path,
+                                    &out.fixed2_path, &out.fixed2_meta_path,
+                                    &out.var_meta_path, &out.var2_path}) {
+        require_stream(doc, *path, function);
+    }
+    out.fixed = doc.read_stream(out.fixed_path);
+    if (out.fixed.size() % kAsnRowSize != 0) {
+        throw Error(function + ": " + out.fixed_path + " is " +
+                    std::to_string(out.fixed.size()) + " bytes, not n*110; "
+                    "refusing to change the assignment table's geometry");
+    }
+    out.rows = out.fixed.size() / kAsnRowSize;
+    out.meta = doc.read_stream(out.meta_path);
+    if (out.meta.size() !=
+        kDependentMetaHeaderSize + kAsnMetaEntrySize * out.rows) {
+        throw Error(function + ": " + out.meta_path + " is " +
+                    std::to_string(out.meta.size()) + " bytes, not 16 + 34*" +
+                    std::to_string(out.rows) +
+                    "; refusing to change the assignment table's geometry");
+    }
+    if (get_u32(out.meta, kMetaMagicWord) != kDependentMagic ||
+        get_u32(out.meta, kMetaCountWord) != out.rows ||
+        get_u32(out.meta, kMetaFixedSizeWord) != out.fixed.size()) {
+        throw Error(function + ": " + out.meta_path +
+                    " header count/size disagree with the assignment table");
+    }
+    out.entries = read_table_entries(out.meta, kAsnMetaEntrySize);
+    std::vector<bool> covered(out.rows, false);
+    for (MetaEntry const& entry : out.entries) {
+        if (entry.offset % kAsnRowSize != 0) {
+            throw Error(function + ": " + out.meta_path + " entry " +
+                        std::to_string(entry.index) + " has offset " +
+                        std::to_string(entry.offset) + ", not a whole row");
+        }
+        std::size_t const row = entry.offset / kAsnRowSize;
+        if (row >= out.rows) {
+            throw Error(function + ": " + out.meta_path + " entry " +
+                        std::to_string(entry.index) + " names row " +
+                        std::to_string(row) + ", past the last row");
+        }
+        if (covered[row]) {
+            throw Error(function + ": " + out.meta_path + " has more than one "
+                        "entry for assignment row " + std::to_string(row) +
+                        "; refusing to change a damaged table");
+        }
+        covered[row] = true;
+    }
+    out.fixed2 = doc.read_stream(out.fixed2_path);
+    out.fixed2_meta = doc.read_stream(out.fixed2_meta_path);
+    if (out.fixed2.size() != out.rows * kAsnF2RecordSize) {
+        throw Error(function + ": " + out.fixed2_path + " is " +
+                    std::to_string(out.fixed2.size()) + " bytes, not " +
+                    std::to_string(out.rows) + "*48");
+    }
+    if (out.fixed2_meta.size() !=
+        kDependentMetaHeaderSize + kAsnF2MetaEntrySize * out.rows) {
+        throw Error(function + ": " + out.fixed2_meta_path + " is " +
+                    std::to_string(out.fixed2_meta.size()) + " bytes, not 16 + " +
+                    std::to_string(out.rows) + "*53");
+    }
+    if (get_u32(out.fixed2_meta, kMetaMagicWord) != kDependentMagic ||
+        get_u32(out.fixed2_meta, kMetaCountWord) != out.rows ||
+        get_u32(out.fixed2_meta, kMetaFixedSizeWord) != out.fixed2.size()) {
+        throw Error(function + ": " + out.fixed2_meta_path +
+                    " header count/size disagree with the assignment table");
+    }
+    for (std::size_t row = 0; row < out.rows; ++row) {
+        if (get_u32(out.fixed2_meta, kDependentMetaHeaderSize +
+                                        row * kAsnF2MetaEntrySize +
+                                        kAsnF2MetaRecordOffsetWord) !=
+            row * kAsnF2RecordSize) {
+            throw Error(function + ": " + out.fixed2_meta_path + " entry " +
+                        std::to_string(row) +
+                        " does not name its Fixed2Data record");
+        }
+    }
+    out.var_meta = doc.read_stream(out.var_meta_path);
+    out.var2 = doc.read_stream(out.var2_path);
+    if (out.var_meta.size() < kVarMetaHeaderSize ||
+        (out.var_meta.size() - kVarMetaHeaderSize) % kVarMetaEntrySize != 0) {
+        throw Error(function + ": " + out.var_meta_path + " is " +
+                    std::to_string(out.var_meta.size()) + " bytes, not 24 + 12*k");
+    }
+    if (get_u32(out.var_meta, 8) !=
+            (out.var_meta.size() - kVarMetaHeaderSize) / kVarMetaEntrySize ||
+        get_u32(out.var_meta, kVarMetaVar2SizeOffset) != out.var2.size()) {
+        throw Error(function + ": " + out.var_meta_path +
+                    " header count/size disagree with the assignment table");
+    }
+    return out;
+}
+
+std::size_t live_assignment_count(AssignmentTable const& table) {
+    std::size_t live = 0;
+    for (std::size_t row = 0; row < table.rows; ++row) {
+        std::uint32_t const offset = static_cast<std::uint32_t>(row * kAsnRowSize);
+        std::int32_t const index = entry_index_for_offset(table.entries, offset);
+        if (index < 0 ||
+            table.entries[static_cast<std::size_t>(index)].state != kStateLive) {
+            continue;
+        }
+        if (get_u32(table.fixed, offset + kAsnRowTask) == 0) {
+            continue; /* placeholder row */
+        }
+        ++live;
+    }
+    return live;
+}
+
+/* The Task table values an assignment needs: liveness, the duration and the
+ * effective date pair (+104/+108, W33's measured effective Start/Finish). */
+struct AssignmentTask {
+    std::size_t row = 0;
+    std::uint32_t uid = 0;
+    std::uint32_t duration_ticks = 0;
+    std::uint32_t start = kInvalidDate;
+    std::uint32_t finish = kInvalidDate;
+    LinkIdentity identity{};
+};
+
+AssignmentTask find_assignment_task(CfbDocument const& doc, std::uint32_t uid,
+                                    std::string const& function) {
+    validate_link_task_table(doc, function);
+    TaskTable const table = TaskTable::from_document(doc);
+    std::vector<LiveTaskRow> const live = live_task_rows(doc);
+    std::size_t row = 0;
+    for (LiveTaskRow const& candidate : live) {
+        if (candidate.uid == uid) {
+            row = candidate.row;
+            break;
+        }
+    }
+    if (row == 0) {
+        throw Error(function + ": task uid " + std::to_string(uid) +
+                    " has no live task row (unknown uid, a tombstone, or a row "
+                    "with no VarMeta group)");
+    }
+    AssignmentTask out;
+    out.row = row;
+    out.uid = uid;
+    out.duration_ticks = table.u32(row, task_row::kDuration);
+    out.start = table.u32(row, task_row::kStart2);
+    out.finish = table.u32(row, task_row::kFinish2);
+    out.identity = task_identity(doc, row, function);
+    return out;
+}
+
+AssignmentTask find_assignment_resource(CfbDocument const& doc,
+                                        std::uint32_t uid,
+                                        std::string const& function) {
+    ResourceTable const table = load_resource_table(doc, function);
+    std::vector<LiveResourceRow> const live = live_resource_rows(table);
+    std::size_t row = 0;
+    for (LiveResourceRow const& candidate : live) {
+        if (candidate.uid == uid) {
+            row = candidate.row;
+            break;
+        }
+    }
+    if (row == 0) {
+        throw Error(function + ": resource uid " + std::to_string(uid) +
+                    " has no live resource row");
+    }
+    AssignmentTask out;
+    out.row = row;
+    out.uid = uid;
+    std::size_t const base = (row + kRscMetaDescriptors) * kRscF2RecordSize;
+    if (base + kLinkIdentitySize > table.fixed2.size()) {
+        throw Error(function + ": Rsc/Fixed2Data is too short for resource row " +
+                    std::to_string(row) + "'s identity record");
+    }
+    std::copy(table.fixed2.begin() + static_cast<std::ptrdiff_t>(base),
+              table.fixed2.begin() +
+                  static_cast<std::ptrdiff_t>(base + kLinkIdentitySize),
+              out.identity.begin());
+    if (identity_is_zero(out.identity)) {
+        throw Error(function + ": resource row " + std::to_string(row) +
+                    " has an all-zero Rsc/Fixed2Data identity, so there is no "
+                    "measured identity to copy into the assignment record");
+    }
+    return out;
+}
+
+void require_valid_date(std::uint32_t date, std::string const& what,
+                        std::string const& function) {
+    if (!is_date(date)) {
+        throw Error(function + ": " + what + " is not a valid packed date (it is " +
+                    format_date(date) + ")");
+    }
+}
+
+/* Flat planned-work contour block (see the header comment). */
+std::vector<std::uint8_t> assignment_contour(std::uint32_t work_ticks) {
+    std::vector<std::uint8_t> block(kAsnContourSize, 0);
+    put_u32(block, 0, kAsnContourWord0);
+    put_u32(block, 4, kAsnContourWord4);
+    put_f64(block, 8, kAsnContourConstant);
+    put_f64(block, 16, static_cast<double>(work_ticks) * 100.0);
+    put_u32(block, 24,
+            static_cast<std::uint32_t>(
+                std::min<std::uint64_t>(0xFFFFFFFFu,
+                                        static_cast<std::uint64_t>(work_ticks) *
+                                            8u)));
+    put_u32(block, 32, 1);
+    return block;
+}
+
+} /* namespace */
+
+AddedAssignment add_assignment_row(CfbDocument& doc,
+                                   AssignmentSpec const& assignment,
+                                   std::string const& path) {
+    std::string const function = "add_assignment_row";
+    check_output_path(path, function);
+    if (assignment.task_uid == 0) {
+        throw Error(function + ": task uid 0 is the project row and cannot own an "
+                    "assignment");
+    }
+    if (assignment.resource_uid == 0) {
+        throw Error(function + ": resource uid 0 is the resource table's "
+                    "placeholder and cannot be assigned");
+    }
+    double units_percent =
+        assignment.units_percent == 0.0 ? 100.0 : assignment.units_percent;
+    if (!std::isfinite(units_percent) || units_percent <= 0.0 ||
+        units_percent > 10000.0) {
+        throw Error(function + ": assignment units " +
+                    std::to_string(assignment.units_percent) +
+                    " % are outside the writer's (0, 10000] bound");
+    }
+
+    AssignmentTable const table = load_assignment_table(doc, function);
+    AssignmentTask const task = find_assignment_task(doc, assignment.task_uid,
+                                                     function);
+    AssignmentTask const resource = find_assignment_resource(
+        doc, assignment.resource_uid, function);
+
+    std::uint32_t max_uid = 0;
+    for (std::size_t row = 0; row < table.rows; ++row) {
+        max_uid = std::max(
+            max_uid, get_u32(table.fixed, row * kAsnRowSize + kAsnRowUid));
+    }
+    if (max_uid == 0xFFFFFFFFu) {
+        throw Error(function + ": the assignment table's largest uid is "
+                    "0xffffffff, so a new uid would overflow");
+    }
+    std::uint32_t const uid =
+        assignment.uid == 0 ? max_uid + 1 : assignment.uid;
+    if (assignment.uid != 0 && assignment.uid <= max_uid) {
+        throw Error(function + ": uid " + std::to_string(assignment.uid) +
+                    " is not greater than the assignment table's largest uid " +
+                    std::to_string(max_uid) +
+                    "; this writer appends the new uid's VarMeta group at the end");
+    }
+    for (std::size_t row = 0; row < table.rows; ++row) {
+        std::uint32_t const offset = static_cast<std::uint32_t>(row * kAsnRowSize);
+        std::int32_t const index = entry_index_for_offset(table.entries, offset);
+        if (index < 0 ||
+            table.entries[static_cast<std::size_t>(index)].state != kStateLive) {
+            continue;
+        }
+        if (get_u32(table.fixed, offset + kAsnRowTask) == assignment.task_uid &&
+            get_u32(table.fixed, offset + kAsnRowResource) ==
+                assignment.resource_uid) {
+            throw Error(function + ": a live assignment already names task " +
+                        std::to_string(assignment.task_uid) + " and resource " +
+                        std::to_string(assignment.resource_uid) + " (row " +
+                        std::to_string(row) + ", uid " +
+                        std::to_string(get_u32(table.fixed, offset + kAsnRowUid)) +
+                        "); a duplicate assignment is refused");
+        }
+    }
+    for (VarEntry const& entry : read_var_entries(table.var_meta)) {
+        if (entry.mid > uid) {
+            throw Error(function + ": the assignment table already holds a uid (" +
+                        std::to_string(entry.mid) +
+                        ") larger than the new uid " + std::to_string(uid) +
+                        "; refusing to append a variable-entry group out of order");
+        }
+    }
+
+    std::uint32_t work_ticks = assignment.work_ticks;
+    if (work_ticks == 0) {
+        work_ticks = static_cast<std::uint32_t>(
+            std::lround(static_cast<double>(task.duration_ticks) * units_percent /
+                        100.0));
+    }
+    std::uint32_t start = assignment.start;
+    std::uint32_t finish = assignment.finish;
+    if (start == kInvalidDate) {
+        start = task.start;
+    }
+    if (finish == kInvalidDate) {
+        finish = task.finish;
+    }
+    std::uint32_t resume = assignment.resume;
+    if (resume == kInvalidDate) {
+        resume = start;
+    }
+    require_valid_date(start, "the assignment start", function);
+    require_valid_date(finish, "the assignment finish", function);
+    require_valid_date(resume, "the assignment resume", function);
+    if (start > finish) {
+        throw Error(function + ": the assignment start " + format_date(start) +
+                    " is after its finish " + format_date(finish));
+    }
+
+    for (VarEntry const& entry : read_var_entries(table.var_meta)) {
+        if (entry.field_id == kAsnContourFieldId && entry.mid == uid) {
+            throw Error(function + ": uid " + std::to_string(uid) +
+                        " already has a planned-work contour entry");
+        }
+    }
+
+    std::size_t const new_row = table.rows;
+    std::size_t const new_offset = new_row * kAsnRowSize;
+
+    /* Template: the last live non-placeholder assignment row (or a zero row when
+     * the table has none).  Only the measured row fields are overwritten. */
+    std::size_t template_row = table.rows;
+    for (std::size_t row = 0; row < table.rows; ++row) {
+        std::uint32_t const offset = static_cast<std::uint32_t>(row * kAsnRowSize);
+        std::int32_t const index = entry_index_for_offset(table.entries, offset);
+        if (index < 0 ||
+            table.entries[static_cast<std::size_t>(index)].state != kStateLive) {
+            continue;
+        }
+        if (get_u32(table.fixed, offset + kAsnRowTask) == 0) {
+            continue;
+        }
+        template_row = row;
+    }
+    std::vector<std::uint8_t> row(kAsnRowSize, 0);
+    if (template_row < table.rows) {
+        row.assign(table.fixed.begin() +
+                       static_cast<std::ptrdiff_t>(template_row * kAsnRowSize),
+                   table.fixed.begin() + static_cast<std::ptrdiff_t>(
+                                             (template_row + 1) * kAsnRowSize));
+    }
+    put_u32(row, kAsnRowUid, uid);
+    put_u32(row, kAsnRowTask, assignment.task_uid);
+    put_u32(row, kAsnRowResource, assignment.resource_uid);
+    put_f64(row, kAsnRowUnits, units_percent * 100.0);
+    put_f64(row, kAsnRowWork, static_cast<double>(work_ticks) * 100.0);
+    put_f64(row, kAsnRowZeroWork, 0.0);
+    put_f64(row, kAsnRowWorkCopy2, static_cast<double>(work_ticks) * 100.0);
+    put_f64(row, kAsnRowWorkCopy, static_cast<double>(work_ticks) * 100.0);
+    put_u32(row, kAsnRowStart, start);
+    put_u32(row, kAsnRowFinish, finish);
+    put_u32(row, kAsnRowResume, resume);
+    put_u32(row, kAsnRowUnmapped, kAsnUnmappedValue);
+    /* +104 is a second Start copy: measured on assign1.mpp's real rows
+     * (0x3d1112c0 = T1's +104) and on w12-assignadd.mpp's added row. */
+    put_u32(row, kAsnRowStartCopy, start);
+
+    std::vector<std::uint8_t> meta_entry(kAsnMetaEntrySize, 0);
+    meta_entry[kMetaStateByte] = kStateLive;
+    put_u16(meta_entry, kMetaFieldCountWord,
+            static_cast<std::uint16_t>(kAsnNewRowFieldCount));
+    put_u32(meta_entry, kMetaRowOffsetWord,
+            static_cast<std::uint32_t>(new_offset));
+    std::copy(kAsnMetaTail.begin(), kAsnMetaTail.end(),
+              meta_entry.begin() + 8);
+
+    LinkIdentity const assignment_identity = make_link_identity(doc, function);
+    std::vector<std::uint8_t> fixed2_record;
+    fixed2_record.insert(fixed2_record.end(), assignment_identity.begin(),
+                         assignment_identity.end());
+    fixed2_record.insert(fixed2_record.end(), task.identity.begin(),
+                         task.identity.end());
+    fixed2_record.insert(fixed2_record.end(), resource.identity.begin(),
+                         resource.identity.end());
+
+    std::vector<std::uint8_t> fixed2_entry(kAsnF2MetaEntrySize, 0);
+    put_u32(fixed2_entry, kAsnF2MetaRecordOffsetWord,
+            static_cast<std::uint32_t>(new_row * kAsnF2RecordSize));
+    fixed2_entry[kAsnF2MetaFlagA] = 0xCF;
+    fixed2_entry[kAsnF2MetaFlagB] = 0x09;
+    fixed2_entry[kAsnF2MetaMidByte] = 0x10;
+    fixed2_entry[kAsnF2MetaLastByte] = 0x28;
+
+    /* The four measured variable entries, in Project's own order. */
+    std::vector<std::uint8_t> created = var_block_payload(
+        table.var_meta, table.var2,
+        template_row < table.rows
+            ? get_u32(table.fixed, template_row * kAsnRowSize + kAsnRowUid)
+            : 0,
+        kAsnCreatedFieldId);
+    if (created.size() != 4) {
+        created.assign(4, 0xFF);
+    }
+    std::vector<std::vector<std::uint8_t>> payloads;
+    payloads.push_back(assignment_contour(work_ticks));
+    payloads.push_back(created);
+    payloads.push_back(std::vector<std::uint8_t>(16, 0));
+    payloads.push_back(std::vector<std::uint8_t>(16, 0));
+    std::array<std::uint32_t, 4> const keys = {
+        kAsnContourFieldId, kAsnCreatedFieldId, kAsnInternalAFieldId,
+        kAsnInternalBFieldId};
+
+    std::vector<std::uint8_t> fixed = table.fixed;
+    fixed.insert(fixed.end(), row.begin(), row.end());
+    std::vector<std::uint8_t> meta = table.meta;
+    meta.insert(meta.end(), meta_entry.begin(), meta_entry.end());
+    put_u32(meta, kMetaCountWord, static_cast<std::uint32_t>(table.rows + 1));
+    put_u32(meta, kMetaFixedSizeWord, static_cast<std::uint32_t>(fixed.size()));
+
+    std::vector<std::uint8_t> fixed2 = table.fixed2;
+    fixed2.insert(fixed2.end(), fixed2_record.begin(), fixed2_record.end());
+    std::vector<std::uint8_t> fixed2_meta = table.fixed2_meta;
+    fixed2_meta.insert(fixed2_meta.end(), fixed2_entry.begin(),
+                       fixed2_entry.end());
+    put_u32(fixed2_meta, kMetaCountWord,
+            static_cast<std::uint32_t>(table.rows + 1));
+    put_u32(fixed2_meta, kMetaFixedSizeWord,
+            static_cast<std::uint32_t>(fixed2.size()));
+
+    std::vector<std::uint8_t> var_meta = table.var_meta;
+    std::vector<std::uint8_t> var2 = table.var2;
+    /* The new uid is strictly the largest (checked above), so appending the
+     * entries at the end keeps Project's measured uid grouping.  The key order
+     * is the table's measured order, not a sorted one (the Assignment keys are
+     * deliberately not ascending in Project's own file), so this does not go
+     * through insert_var_entry's sort. */
+    for (std::size_t i = 0; i < payloads.size(); ++i) {
+        std::size_t const offset = var2.size();
+        std::vector<std::uint8_t> const block = encode_block(payloads[i]);
+        var2.insert(var2.end(), block.begin(), block.end());
+        std::vector<std::uint8_t> entry(kVarMetaEntrySize, 0);
+        put_u32(entry, 0, uid);
+        put_u32(entry, 4, static_cast<std::uint32_t>(offset));
+        put_u32(entry, 8, keys[i]);
+        var_meta.insert(var_meta.end(), entry.begin(), entry.end());
+    }
+    put_u32(var_meta, 8,
+            static_cast<std::uint32_t>(
+                (var_meta.size() - kVarMetaHeaderSize) / kVarMetaEntrySize));
+    put_u32(var_meta, kVarMetaVar2SizeOffset,
+            static_cast<std::uint32_t>(var2.size()));
+
+    CfbDocument work = CfbDocument::from_bytes(doc.to_bytes());
+    work.replace_stream(table.fixed_path, fixed);
+    work.replace_stream(table.meta_path, meta);
+    work.replace_stream(table.fixed2_path, fixed2);
+    work.replace_stream(table.fixed2_meta_path, fixed2_meta);
+    work.replace_stream(table.var_meta_path, var_meta);
+    work.replace_stream(table.var2_path, var2);
+
+    CfbDocument const reread = save_and_verify(work, path, function,
+                                               "114/TBkndTask");
+
+    if (reread.read_stream(table.fixed_path) != fixed ||
+        reread.read_stream(table.meta_path) != meta ||
+        reread.read_stream(table.fixed2_path) != fixed2 ||
+        reread.read_stream(table.fixed2_meta_path) != fixed2_meta ||
+        reread.read_stream(table.var_meta_path) != var_meta ||
+        reread.read_stream(table.var2_path) != var2) {
+        throw Error(function + ": the six written assignment streams do not read "
+                    "back with the bytes that were built");
+    }
+    for (std::string const& stream : doc.stream_paths()) {
+        if (stream == table.fixed_path || stream == table.meta_path ||
+            stream == table.fixed2_path || stream == table.fixed2_meta_path ||
+            stream == table.var_meta_path || stream == table.var2_path) {
+            continue;
+        }
+        if (!reread.has_stream(stream) ||
+            reread.read_stream(stream) != doc.read_stream(stream)) {
+            throw Error(function + ": " + stream +
+                        " changed; adding an assignment may only touch the six "
+                        "TBkndAssn streams");
+        }
+    }
+    AssignmentTable const after = load_assignment_table(reread, function);
+    if (after.rows != table.rows + 1) {
+        throw Error(function + ": the assignment table's row count does not read "
+                    "back as written");
+    }
+    std::vector<std::uint8_t> const fixed_after =
+        reread.read_stream(table.fixed_path);
+    if (get_u32(fixed_after, new_offset + kAsnRowUid) != uid ||
+        get_u32(fixed_after, new_offset + kAsnRowTask) != assignment.task_uid ||
+        get_u32(fixed_after, new_offset + kAsnRowResource) !=
+            assignment.resource_uid ||
+        get_u32(fixed_after, new_offset + kAsnRowStart) != start ||
+        get_u32(fixed_after, new_offset + kAsnRowFinish) != finish ||
+        get_u32(fixed_after, new_offset + kAsnRowResume) != resume) {
+        throw Error(function + ": the new assignment row does not read back as "
+                    "written");
+    }
+    std::vector<std::uint8_t> const meta_after = reread.read_stream(table.meta_path);
+    std::size_t const new_entry_base =
+        kDependentMetaHeaderSize + table.rows * kAsnMetaEntrySize;
+    if (meta_after[new_entry_base + kMetaStateByte] != kStateLive ||
+        get_u16(meta_after, new_entry_base + kMetaFieldCountWord) !=
+            kAsnNewRowFieldCount ||
+        get_u32(meta_after, new_entry_base + kMetaRowOffsetWord) !=
+            static_cast<std::uint32_t>(new_offset)) {
+        throw Error(function + ": the new assignment FixedMeta entry does not "
+                    "read back as written");
+    }
+    std::vector<std::uint8_t> const fixed2_after =
+        reread.read_stream(table.fixed2_path);
+    if (!std::equal(assignment_identity.begin(), assignment_identity.end(),
+                    fixed2_after.begin() + static_cast<std::ptrdiff_t>(
+                                               new_row * kAsnF2RecordSize)) ||
+        !std::equal(task.identity.begin(), task.identity.end(),
+                    fixed2_after.begin() + static_cast<std::ptrdiff_t>(
+                                               new_row * kAsnF2RecordSize + 16)) ||
+        !std::equal(resource.identity.begin(), resource.identity.end(),
+                    fixed2_after.begin() + static_cast<std::ptrdiff_t>(
+                                               new_row * kAsnF2RecordSize + 32))) {
+        throw Error(function + ": the new assignment Fixed2Data record does not "
+                    "read back as written");
+    }
+    std::vector<std::uint8_t> const fixed2_meta_after =
+        reread.read_stream(table.fixed2_meta_path);
+    if (get_u32(fixed2_meta_after,
+                kDependentMetaHeaderSize + table.rows * kAsnF2MetaEntrySize +
+                    kAsnF2MetaRecordOffsetWord) !=
+        static_cast<std::uint32_t>(new_row * kAsnF2RecordSize)) {
+        throw Error(function + ": the new assignment Fixed2Meta entry does not "
+                    "read back as written");
+    }
+    std::vector<std::uint8_t> const var_meta_after =
+        reread.read_stream(table.var_meta_path);
+    std::vector<std::uint8_t> const var2_after = reread.read_stream(table.var2_path);
+    for (std::size_t i = 0; i < payloads.size(); ++i) {
+        std::vector<std::uint32_t> const offsets =
+            find_var_offsets(var_meta_after, keys[i], uid);
+        if (offsets.size() != 1 ||
+            read_var_block(var2_after, offsets.front()) != payloads[i]) {
+            throw Error(function + ": the new assignment variable entry 0x" +
+                        std::to_string(keys[i]) +
+                        " does not read back with the payload that was written");
+        }
+    }
+
+    AddedAssignment result;
+    result.uid = uid;
+    result.task_uid = assignment.task_uid;
+    result.resource_uid = assignment.resource_uid;
+    result.row = new_row;
+    result.units_percent = units_percent;
+    result.work_ticks = work_ticks;
+    result.start = start;
+    result.finish = finish;
+    result.resume = resume;
+    result.warnings.push_back(
+        "re-read from disk: assignment uid " + std::to_string(uid) + " (task " +
+        std::to_string(assignment.task_uid) + " / resource " +
+        std::to_string(assignment.resource_uid) + ", row " +
+        std::to_string(new_row) + ", " + std::to_string(units_percent) +
+        " %, " + std::to_string(work_ticks) +
+        " ticks) matches the written row, FixedMeta entry, Fixed2Data record and "
+        "four variable entries");
+    if (assignment.work_ticks == 0 && work_ticks != 0) {
+        result.warnings.push_back(
+            "work was inferred from the task's stored duration (+84, " +
+            std::to_string(task.duration_ticks) + " ticks) x " +
+            std::to_string(units_percent) + " % = " + std::to_string(work_ticks) +
+            " ticks");
+    }
+    if (units_percent != 100.0) {
+        result.warnings.push_back(
+            "only 100 % assignment units are measured; the flat contour block's "
+            "constant +8 word is copied from the measured 100 % shape");
+    }
+    doc = reread;
+    return result;
+}
+
+DeletedAssignment delete_assignment_row(CfbDocument& doc, std::uint32_t uid,
+                                        std::string const& path) {
+    std::string const function = "delete_assignment_row";
+    check_output_path(path, function);
+    if (uid == 0) {
+        throw Error(function + ": uid 0 is the project row, not an assignment row");
+    }
+    AssignmentTable const table = load_assignment_table(doc, function);
+    std::size_t row = table.rows;
+    for (std::size_t candidate = 0; candidate < table.rows; ++candidate) {
+        if (get_u32(table.fixed, candidate * kAsnRowSize + kAsnRowUid) == uid) {
+            row = candidate;
+            break;
+        }
+    }
+    if (row == table.rows) {
+        throw Error(function + ": no assignment row holds uid " + std::to_string(uid));
+    }
+    std::size_t const offset = row * kAsnRowSize;
+    std::int32_t const index =
+        entry_index_for_offset(table.entries, static_cast<std::uint32_t>(offset));
+    if (index < 0) {
+        throw Error(function + ": assignment uid " + std::to_string(uid) +
+                    " (row " + std::to_string(row) +
+                    ") has no FixedMeta entry, so Project does not treat it as a "
+                    "row; there is nothing to tombstone");
+    }
+    std::size_t const entry_index = static_cast<std::size_t>(index);
+    if (table.entries[entry_index].state != kStateLive) {
+        throw Error(function + ": assignment uid " + std::to_string(uid) +
+                    " is already tombstoned (FixedMeta entry +0 = 0x" +
+                    std::to_string(table.entries[entry_index].state) + ")");
+    }
+    std::uint32_t const task_uid = get_u32(table.fixed, offset + kAsnRowTask);
+    if (task_uid == 0) {
+        throw Error(function + ": assignment row " + std::to_string(row) +
+                    " is a placeholder row (task uid 0); Project does not show "
+                    "it as an assignment, so a delete would be invisible");
+    }
+    std::vector<LiveTaskRow> const live_tasks = live_task_rows(doc);
+    bool task_live = false;
+    for (LiveTaskRow const& live : live_tasks) {
+        if (live.uid == task_uid) {
+            task_live = true;
+            break;
+        }
+    }
+    if (!task_live) {
+        throw Error(function + ": assignment uid " + std::to_string(uid) +
+                    " names task " + std::to_string(task_uid) +
+                    ", which no live task row holds; refusing to tombstone an "
+                    "assignment Project would already hide");
+    }
+
+    std::vector<std::uint8_t> meta = table.meta;
+    std::size_t const entry_base =
+        kDependentMetaHeaderSize + entry_index * kAsnMetaEntrySize;
+    meta[entry_base + kMetaStateByte] = kStateDeleted;
+    put_u16(meta, entry_base + kMetaFieldCountWord, 0);
+    put_u32(meta, kFixedMetaHeaderFlags,
+            get_u32(meta, kFixedMetaHeaderFlags) | kFixedMetaFlagHasDeleted);
+
+    CfbDocument work = CfbDocument::from_bytes(doc.to_bytes());
+    work.replace_stream(table.meta_path, meta);
+
+    CfbDocument const reread = save_and_verify(work, path, function,
+                                               "114/TBkndTask");
+
+    if (reread.read_stream(table.meta_path) != meta) {
+        throw Error(function + ": the written assignment FixedMeta does not read "
+                    "back as built");
+    }
+    if (reread.read_stream(table.fixed_path) != table.fixed ||
+        reread.read_stream(table.fixed2_path) != table.fixed2 ||
+        reread.read_stream(table.fixed2_meta_path) != table.fixed2_meta ||
+        reread.read_stream(table.var_meta_path) != table.var_meta ||
+        reread.read_stream(table.var2_path) != table.var2) {
+        throw Error(function + ": FixedData/Fixed2Data/Fixed2Meta/VarMeta/Var2Data "
+                    "changed; an assignment delete must tombstone the FixedMeta "
+                    "entry only");
+    }
+    for (std::string const& stream : doc.stream_paths()) {
+        if (stream == table.meta_path) {
+            continue;
+        }
+        if (!reread.has_stream(stream) ||
+            reread.read_stream(stream) != doc.read_stream(stream)) {
+            throw Error(function + ": " + stream +
+                        " changed; deleting an assignment may only tombstone its "
+                        "FixedMeta entry and set the table's header flag");
+        }
+    }
+    AssignmentTable const after = load_assignment_table(reread, function);
+    if (after.rows != table.rows || after.meta.size() != table.meta.size()) {
+        throw Error(function + ": the assignment table's geometry changed size; a "
+                    "delete must not shrink a stream");
+    }
+    std::uint32_t const flags_before =
+        get_u32(table.meta, kFixedMetaHeaderFlags);
+    std::uint32_t const flags_after = get_u32(after.meta, kFixedMetaHeaderFlags);
+    if ((flags_after & kFixedMetaFlagHasDeleted) == 0 ||
+        (flags_after & ~kFixedMetaFlagHasDeleted) !=
+            (flags_before & ~kFixedMetaFlagHasDeleted)) {
+        throw Error(function + ": TBkndAssn/FixedMeta header +4 does not read "
+                    "back with bit 0x02 added and no other bit changed");
+    }
+    if (after.meta[entry_base + kMetaStateByte] != kStateDeleted ||
+        get_u16(after.meta, entry_base + kMetaFieldCountWord) != 0) {
+        throw Error(function + ": assignment uid " + std::to_string(uid) +
+                    " does not read back as a tombstone (+0 0x02, +2 0)");
+    }
+    if (live_assignment_count(after) + 1 != live_assignment_count(table)) {
+        throw Error(function + ": the assignment table does not read back with "
+                    "exactly one fewer live assignment");
+    }
+
+    DeletedAssignment result;
+    result.uid = uid;
+    result.task_uid = task_uid;
+    result.resource_uid = get_u32(table.fixed, offset + kAsnRowResource);
+    result.units_percent =
+        [&table, offset]() {
+            double value = 0.0;
+            std::memcpy(&value, table.fixed.data() + offset + kAsnRowUnits,
+                        sizeof value);
+            return value / 100.0;
+        }();
+    result.work_ticks = static_cast<std::uint32_t>(
+        std::llround([&table, offset]() {
+            double value = 0.0;
+            std::memcpy(&value, table.fixed.data() + offset + kAsnRowWork,
+                        sizeof value);
+            return value;
+        }() /
+                     100.0));
+    result.row = row;
+    result.warnings.push_back(
+        "re-read from disk: assignment uid " + std::to_string(uid) + " (row " +
+        std::to_string(row) +
+        ") is a tombstone (FixedMeta +0 0x02, +2 0) and TBkndAssn/FixedMeta "
+        "header +4 has bit 0x02; every stream size is unchanged");
     doc = reread;
     return result;
 }

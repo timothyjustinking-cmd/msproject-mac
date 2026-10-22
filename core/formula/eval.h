@@ -106,7 +106,12 @@ struct EvalResult {
  */
 Value base_value_of_field(const RecordSet& records, std::size_t row, FieldId field) noexcept;
 
-/* Evaluates one AST node.  Never throws; an error is ok=false with a message. */
+/* Evaluates one AST node.  Never throws; an error is ok=false with a message.
+ *
+ * The evaluator enforces the same nesting bound as the parser, kMaxFormulaDepth
+ * (expr.h).  An AST deeper than that -- only reachable from a hand-built tree,
+ * since parse() refuses one -- is reported as ok=false with an
+ * "exceeds ... levels" error rather than recursing into a stack overflow. */
 EvalResult evaluate(const Expr& expr, const EvalContext& context);
 
 bool truthy(const Value& value) noexcept;

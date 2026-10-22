@@ -1,17 +1,20 @@
 // app/edit_model.cpp -- see edit_model.h for the contract, the display plan and
 // the undo/redo rules.
 //
-// No AppKit: this is the pure half of "Insert Task" / "Delete Task" so the whole
-// pending-edit model and the writer sequence can be proved on Windows
-// (app/app_edit_tests.cpp).
+// No AppKit: this is the pure half of the pending edits (Insert/Delete Task,
+// custom-field values, predecessor links) so the whole model and the writer
+// sequence can be proved on Windows (app/app_edit_tests.cpp,
+// app/app_edits_fields_tests.cpp, app/app_edits_links_tests.cpp).
 
 #include "edit_model.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <map>
 #include <set>
 #include <string>
 #include <system_error>
@@ -20,6 +23,7 @@
 
 #include "add_delete.h"
 #include "cfb_writer.h"
+#include "field_values.h"
 #include "save.h"
 #include "table.h"
 
@@ -50,6 +54,101 @@ std::filesystem::path normalised(const std::string& path) {
     return absolute.lexically_normal();
 }
 
+bool is_task_edit(StructuralKind kind) noexcept {
+    return kind == StructuralKind::insert_task || kind == StructuralKind::delete_task;
+}
+
+bool is_field_edit(StructuralKind kind) noexcept {
+    return kind == StructuralKind::set_field || kind == StructuralKind::clear_field;
+}
+
+bool is_link_edit(StructuralKind kind) noexcept {
+    return kind == StructuralKind::add_link || kind == StructuralKind::delete_link;
+}
+
+// core::gantt::LinkType orders FS/SS/FF/SF; the FILE orders FF=0, FS=1, SF=2,
+// SS=3 (add_delete.h).  The reader maps one way (reader_adapter.h); this is the
+// writer direction, and it must not be a cast.
+std::uint16_t writer_link_type(core::gantt::LinkType type) noexcept {
+    switch (type) {
+        case core::gantt::LinkType::finish_to_finish: return mppwrite::kLinkTypeFF;
+        case core::gantt::LinkType::finish_to_start: return mppwrite::kLinkTypeFS;
+        case core::gantt::LinkType::start_to_finish: return mppwrite::kLinkTypeSF;
+        case core::gantt::LinkType::start_to_start: return mppwrite::kLinkTypeSS;
+    }
+    return mppwrite::kLinkTypeFS;
+}
+
+// The app/reader value family (mpp::FieldKind) in the writer's own enum
+// (mppwrite::FieldKind, field_values.h).  The two are deliberately separate
+// types: core/mppwrite does not link the reader.
+mppwrite::FieldKind writer_field_kind(mpp::FieldKind kind) noexcept {
+    switch (kind) {
+        case mpp::FieldKind::text: return mppwrite::FieldKind::text;
+        case mpp::FieldKind::number: return mppwrite::FieldKind::number;
+        case mpp::FieldKind::duration: return mppwrite::FieldKind::duration;
+        case mpp::FieldKind::date: return mppwrite::FieldKind::date;
+        case mpp::FieldKind::flag: return mppwrite::FieldKind::flag;
+        case mpp::FieldKind::cost: return mppwrite::FieldKind::cost;
+        case mpp::FieldKind::unknown: return mppwrite::FieldKind::unknown;
+    }
+    return mppwrite::FieldKind::unknown;
+}
+
+// The value a set_field edit asks the writer to store, validated against the
+// writer's own types (field_values.h): finite f64 number, valid packed date,
+// duration ticks (0xffffffff is the writer's "not set" sentinel), NUL-free text.
+bool field_value_is_writable(const StructuralEdit& edit, std::string& error) {
+    const mpp::FieldKind kind = mpp::custom_field_kind(edit.field_id);
+    if (kind == mpp::FieldKind::unknown || !is_measured_task_field(edit.field_id)) {
+        error = "field id " + std::to_string(edit.field_id) +
+                " has no measured storage/registration; only Text1, Number1, Number2, "
+                "Date1, Duration1 and Flag1 can be written";
+        return false;
+    }
+    if (edit.field_kind != mpp::FieldKind::unknown && edit.field_kind != kind) {
+        error = "field kind does not match field id";
+        return false;
+    }
+    switch (kind) {
+        case mpp::FieldKind::text:
+            if (edit.field_value.text.find('\0') != std::string::npos) {
+                error = "text contains an embedded NUL";
+                return false;
+            }
+            if (edit.field_value.text.size() > 65535) {
+                error = "text is longer than 65535 bytes";
+                return false;
+            }
+            return true;
+        case mpp::FieldKind::number:
+            if (!std::isfinite(edit.field_value.number)) {
+                error = "number is not finite";
+                return false;
+            }
+            return true;
+        case mpp::FieldKind::date:
+            if (!mppwrite::is_date(edit.field_value.packed_date)) {
+                error = "date is not a valid packed date";
+                return false;
+            }
+            return true;
+        case mpp::FieldKind::duration:
+            if (edit.field_value.duration_ticks == mppwrite::kInvalidDate) {
+                error = "duration ticks 0xffffffff is the writer's not-set value";
+                return false;
+            }
+            return true;
+        case mpp::FieldKind::flag:
+            return true;
+        case mpp::FieldKind::cost:
+        case mpp::FieldKind::unknown:
+            break;
+    }
+    error = "field kind cannot be written";
+    return false;
+}
+
 // The placeholder's displayed fields: a copy of the last live task's duration and
 // dates, which is what `add_task_row` clones into the real row (its documented
 // shape: "the row is a clone of the LAST LIVE task row").  Identity, name,
@@ -69,7 +168,50 @@ TaskRow placeholder_row(const StructuralEdit& edit, const TaskRow* template_row)
     return row;
 }
 
+// Applies one field edit to the display row: a set replaces (or appends) the
+// stored value, a clear removes it so app::value_of_custom_field reads Null.
+void apply_field_to_row(TaskRow& row, const StructuralEdit& edit) {
+    auto found = std::find_if(row.custom_fields.begin(), row.custom_fields.end(),
+                              [&edit](const mpp::CustomFieldValue& value) {
+                                  return value.field_id == edit.field_id;
+                              });
+    if (edit.kind == StructuralKind::clear_field) {
+        if (found != row.custom_fields.end()) {
+            row.custom_fields.erase(found);
+        }
+        return;
+    }
+    mpp::CustomFieldValue value = edit.field_value;
+    value.field_id = edit.field_id;
+    value.kind = mpp::custom_field_kind(edit.field_id);
+    value.present = true;
+    value.storage_measured = true;
+    if (found != row.custom_fields.end()) {
+        *found = std::move(value);
+    } else {
+        row.custom_fields.push_back(std::move(value));
+    }
+}
+
+bool task_is_live(const std::vector<TaskRow>& tasks, std::uint32_t uid) {
+    for (const TaskRow& row : tasks) {
+        if (row.uid == uid) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
+
+bool is_measured_task_field(std::uint32_t field_id) noexcept {
+    return field_id == mpp::custom_field_id(mpp::FieldKind::text, 1) ||
+           field_id == mpp::custom_field_id(mpp::FieldKind::number, 1) ||
+           field_id == mpp::custom_field_id(mpp::FieldKind::number, 2) ||
+           field_id == mpp::custom_field_id(mpp::FieldKind::date, 1) ||
+           field_id == mpp::custom_field_id(mpp::FieldKind::duration, 1) ||
+           field_id == mpp::custom_field_id(mpp::FieldKind::flag, 1);
+}
 
 const StructuralEdit* StructuralEdits::next_undo() const noexcept {
     return applied_.empty() ? nullptr : &applied_.back();
@@ -80,27 +222,112 @@ const StructuralEdit* StructuralEdits::next_redo() const noexcept {
 }
 
 bool StructuralEdits::push(StructuralEdit edit) {
-    if (edit.kind == StructuralKind::insert_task) {
-        edit.name = trim_ascii(std::move(edit.name));
-        if (edit.name.empty() || edit.uid == 0) {
-            return false;
-        }
-        for (const StructuralEdit& existing : applied_) {
-            if (existing.uid == edit.uid) {
+    switch (edit.kind) {
+        case StructuralKind::insert_task: {
+            edit.name = trim_ascii(std::move(edit.name));
+            if (edit.name.empty() || edit.uid == 0) {
                 return false;
             }
+            for (const StructuralEdit& existing : applied_) {
+                if (existing.uid == edit.uid) {
+                    return false;
+                }
+            }
+            edit.dependants = 0;
+            break;
         }
-    } else {
-        if (edit.uid == 0) {
-            return false;
-        }
-        for (const StructuralEdit& existing : applied_) {
-            if (existing.kind == StructuralKind::delete_task && existing.uid == edit.uid) {
+        case StructuralKind::delete_task: {
+            if (edit.uid == 0) {
                 return false;
             }
+            for (const StructuralEdit& existing : applied_) {
+                if (existing.kind == StructuralKind::delete_task &&
+                    existing.uid == edit.uid) {
+                    return false;
+                }
+            }
+            // A field value or a link add for this task could never reach the
+            // file: the delete runs after them in the save sequence and the
+            // cascade tombstones the link again.  Drop those edits with it.
+            applied_.erase(
+                std::remove_if(applied_.begin(), applied_.end(),
+                               [&edit](const StructuralEdit& existing) {
+                                   if (existing.kind == StructuralKind::set_field ||
+                                       existing.kind == StructuralKind::clear_field) {
+                                       return existing.uid == edit.uid;
+                                   }
+                                   if (existing.kind == StructuralKind::add_link) {
+                                       return existing.uid == edit.uid ||
+                                              existing.predecessor_uid == edit.uid;
+                                   }
+                                   return false;
+                               }),
+                applied_.end());
+            break;
+        }
+        case StructuralKind::set_field:
+        case StructuralKind::clear_field: {
+            if (edit.uid == 0 || edit.field_id == 0) {
+                return false;
+            }
+            if (!is_measured_task_field(edit.field_id)) {
+                return false;
+            }
+            edit.field_kind = mpp::custom_field_kind(edit.field_id);
+            if (edit.kind == StructuralKind::set_field) {
+                std::string error;
+                if (!field_value_is_writable(edit, error)) {
+                    return false;
+                }
+            } else {
+                edit.field_value = mpp::CustomFieldValue{};
+            }
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::add_link: {
+            if (edit.predecessor_uid == 0 || edit.uid == 0 ||
+                edit.predecessor_uid == edit.uid) {
+                return false;
+            }
+            const std::uint16_t raw = static_cast<std::uint16_t>(edit.link_type);
+            if (raw > mppwrite::kLinkTypeSS) {
+                return false;
+            }
+            if (edit.lag_ticks > mppwrite::kMaxLinkLagTicks ||
+                edit.lag_ticks < -mppwrite::kMaxLinkLagTicks) {
+                return false;
+            }
+            for (const StructuralEdit& existing : applied_) {
+                if (existing.kind == StructuralKind::delete_task &&
+                    (existing.uid == edit.uid ||
+                     existing.uid == edit.predecessor_uid)) {
+                    return false;
+                }
+                if (existing.kind == StructuralKind::add_link &&
+                    existing.predecessor_uid == edit.predecessor_uid &&
+                    existing.uid == edit.uid && existing.link_type == edit.link_type) {
+                    return false;
+                }
+            }
+            edit.link_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::delete_link: {
+            if (edit.link_uid == 0 || edit.uid == 0) {
+                return false;
+            }
+            for (const StructuralEdit& existing : applied_) {
+                if (existing.kind == StructuralKind::delete_link &&
+                    existing.link_uid == edit.link_uid) {
+                    return false;
+                }
+            }
+            edit.dependants = 0;
+            break;
         }
     }
-    edit.dependants = edit.kind == StructuralKind::delete_task ? edit.dependants : 0;
     applied_.push_back(std::move(edit));
     undone_.clear();
     return true;
@@ -156,7 +383,33 @@ std::size_t StructuralEdits::inserted_count() const noexcept {
 }
 
 std::size_t StructuralEdits::deleted_count() const noexcept {
-    return applied_.size() - inserted_count();
+    std::size_t count = 0;
+    for (const StructuralEdit& edit : applied_) {
+        if (edit.kind == StructuralKind::delete_task) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::size_t StructuralEdits::field_edit_count() const noexcept {
+    std::size_t count = 0;
+    for (const StructuralEdit& edit : applied_) {
+        if (is_field_edit(edit.kind)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::size_t StructuralEdits::link_edit_count() const noexcept {
+    std::size_t count = 0;
+    for (const StructuralEdit& edit : applied_) {
+        if (is_link_edit(edit.kind)) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 std::uint32_t StructuralEdits::next_placeholder_uid(const PlanInput& plan) const noexcept {
@@ -183,15 +436,25 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
             deleted.insert(edit.uid);
         }
     }
+    std::set<std::uint32_t> removed_links;
+    for (const StructuralEdit& edit : applied_) {
+        if (edit.kind == StructuralKind::delete_link) {
+            removed_links.insert(edit.link_uid);
+        }
+    }
 
     // Links and assignments naming a deleted task go with it: the writer's delete
     // cascade tombstones exactly these dependent rows (w11-oracle section 2), so
     // the display plan must not keep a link or an assignment the saved file will
-    // not have.
+    // not have.  A pending link delete removes its file row by uid.
     std::vector<LinkRow> links;
     links.reserve(effective.links.size());
     std::size_t dropped_links = 0;
     for (const LinkRow& link : effective.links) {
+        if (link.uid != 0 && removed_links.count(link.uid) != 0) {
+            ++dropped_links;
+            continue;
+        }
         if (deleted.count(link.predecessor_uid) != 0 || deleted.count(link.successor_uid) != 0) {
             ++dropped_links;
             continue;
@@ -257,7 +520,40 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
         }
         tasks.push_back(placeholder_row(edit, template_row));
     }
+
+    // Field values are applied to the displayed rows in edit order, so a later
+    // edit for the same (task, field) wins (the save collapses the same way).
+    for (const StructuralEdit& edit : applied_) {
+        if (!is_field_edit(edit.kind)) {
+            continue;
+        }
+        for (TaskRow& row : tasks) {
+            if (row.uid == edit.uid) {
+                apply_field_to_row(row, edit);
+                break;
+            }
+        }
+    }
     effective.tasks = std::move(tasks);
+
+    // Link adds last, only between rows the display still shows: a link whose
+    // endpoint the plan does not have would be a bar-less link the Gantt drops.
+    for (const StructuralEdit& edit : applied_) {
+        if (edit.kind != StructuralKind::add_link) {
+            continue;
+        }
+        if (!task_is_live(effective.tasks, edit.predecessor_uid) ||
+            !task_is_live(effective.tasks, edit.uid)) {
+            continue;
+        }
+        LinkRow link;
+        link.uid = 0;  // the file's uid is allocated on Save
+        link.predecessor_uid = edit.predecessor_uid;
+        link.successor_uid = edit.uid;
+        link.type = edit.link_type;
+        link.lag_ticks = edit.lag_ticks;
+        effective.links.push_back(link);
+    }
     return effective;
 }
 
@@ -283,7 +579,7 @@ PlanInput StructuralEdits::without_structural_edits(const PlanInput& shown,
     edited.tasks = std::move(tasks);
     // Cell edits never touch links or assignments; the display plan dropped the
     // deleted tasks' dependants, so restore the file's rows and let apply() drop
-    // them again.
+    // them again.  Field/link additions are re-derived from the edit list.
     edited.links = loaded.links;
     edited.assignments = loaded.assignments;
     edited.resources = loaded.resources;
@@ -314,7 +610,7 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     StructuralSaveResult result;
     result.path = std::string(target_path);
     if (edits.empty()) {
-        result.error = "no structural edit to save";
+        result.error = "no pending edit to save";
         return result;
     }
     if (target_path.empty()) {
@@ -344,56 +640,184 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // Field edits: the last edit for a (task, field) wins, exactly as the display
+    // plan applies them.  A set is stored through one save_field_values call; a
+    // clear uses the measured empty-value shape, one clear_field_value call.
+    std::map<std::pair<std::uint32_t, std::uint32_t>, std::size_t> last_field;
+    for (std::size_t index = 0; index < edits.applied().size(); ++index) {
+        const StructuralEdit& edit = edits.applied()[index];
+        if (is_field_edit(edit.kind)) {
+            last_field[std::make_pair(edit.uid, edit.field_id)] = index;
+        }
+    }
+    std::vector<const StructuralEdit*> field_sets;
+    std::vector<const StructuralEdit*> field_clears;
+    for (const auto& entry : last_field) {
+        const StructuralEdit& edit = edits.applied()[entry.second];
+        if (edit.kind == StructuralKind::set_field) {
+            field_sets.push_back(&edit);
+        } else {
+            field_clears.push_back(&edit);
+        }
+    }
+    // Deterministic order: by the application order of the winning edit.
+    auto by_index = [&last_field](const StructuralEdit* left, const StructuralEdit* right) {
+        return last_field.at(std::make_pair(left->uid, left->field_id)) <
+               last_field.at(std::make_pair(right->uid, right->field_id));
+    };
+    std::sort(field_sets.begin(), field_sets.end(), by_index);
+    std::sort(field_clears.begin(), field_clears.end(), by_index);
+
+    // Count the writer calls first: every one writes a file, and only the LAST one
+    // may write the target (so an earlier refusal leaves the target untouched).
+    std::size_t write_ops = 0;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (is_task_edit(edit.kind) || is_link_edit(edit.kind)) {
+            ++write_ops;
+        }
+    }
+    if (!field_sets.empty()) {
+        ++write_ops;
+    }
+    write_ops += field_clears.size();
     const bool finish_with_start_edits = !writable.empty();
+    if (finish_with_start_edits) {
+        ++write_ops;
+    }
+
     const std::string intermediate = result.path + ".w51-structural-tmp";
     std::error_code erase_error;
     auto cleanup = [&intermediate, &erase_error]() {
         std::filesystem::remove(intermediate, erase_error);
+    };
+    std::size_t op = 0;
+    auto next_write_path = [&]() -> const std::string& {
+        ++op;
+        return op == write_ops ? result.path : intermediate;
     };
 
     try {
         mppwrite::CfbDocument document =
             mppwrite::CfbDocument::from_file(std::string(source_path));
         const std::vector<StructuralEdit>& applied = edits.applied();
-        for (std::size_t index = 0; index < applied.size(); ++index) {
-            const StructuralEdit& edit = applied[index];
-            // The LAST structural write goes straight to the target (so its own
-            // all-or-nothing check covers the file the user asked for); every
-            // earlier one, and all of them when a start-date write follows, use
-            // the intermediate path.
-            const std::string& write_path =
-                (finish_with_start_edits || index + 1 == applied.size()) ? result.path
-                                                                        : intermediate;
-            if (edit.kind == StructuralKind::delete_task) {
-                const mppwrite::DeletedRow deleted =
-                    mppwrite::delete_task_row(document, edit.uid, write_path);
-                ++result.deleted;
-                result.links_tombstoned += deleted.link_rows_tombstoned;
-                result.assignments_tombstoned += deleted.assignment_rows_tombstoned;
-                for (const std::string& warning : deleted.warnings) {
-                    result.warnings.push_back(warning);
-                }
-                result.notes.push_back("deleted task uid " + std::to_string(edit.uid) +
-                                       " and tombstoned " +
-                                       std::to_string(deleted.link_rows_tombstoned) +
-                                       " link(s), " +
-                                       std::to_string(deleted.assignment_rows_tombstoned) +
-                                       " assignment(s)");
-            } else {
-                mppwrite::NewTaskRow row;
-                row.name = edit.name;
-                row.uid = 0;  // the writer allocates; the app never patches a uid
-                const mppwrite::AddedRow added =
-                    mppwrite::add_task_row(document, row, write_path);
-                ++result.added;
-                result.added_uids.push_back(added.uid);
-                for (const std::string& warning : added.warnings) {
-                    result.warnings.push_back(warning);
-                }
-                result.notes.push_back("added task uid " + std::to_string(added.uid) +
-                                       " (id " + std::to_string(added.id) + ")");
+
+        // 1. link deletes: the row is tombstoned before any link add, so a
+        // delete-then-re-add of the same relation is a real re-add.
+        for (const StructuralEdit& edit : applied) {
+            if (edit.kind != StructuralKind::delete_link) {
+                continue;
             }
+            const mppwrite::DeletedLink deleted = mppwrite::delete_task_link(
+                document, edit.link_uid, next_write_path());
+            ++result.links_deleted;
+            for (const std::string& warning : deleted.warnings) {
+                result.warnings.push_back(warning);
+            }
+            result.notes.push_back(
+                "deleted link uid " + std::to_string(deleted.uid) + " (" +
+                std::to_string(deleted.predecessor_uid) + " -> " +
+                std::to_string(deleted.successor_uid) + ", type " +
+                std::to_string(deleted.type) + ", lag " +
+                std::to_string(deleted.lag_ticks) + " ticks)");
         }
+
+        // 2. link adds.
+        for (const StructuralEdit& edit : applied) {
+            if (edit.kind != StructuralKind::add_link) {
+                continue;
+            }
+            const mppwrite::AddedLink added = mppwrite::add_task_link(
+                document, edit.predecessor_uid, edit.uid,
+                writer_link_type(edit.link_type), edit.lag_ticks,
+                next_write_path());
+            ++result.links_added;
+            result.added_link_uids.push_back(added.uid);
+            for (const std::string& warning : added.warnings) {
+                result.warnings.push_back(warning);
+            }
+            result.notes.push_back("added link uid " + std::to_string(added.uid) + " (" +
+                                   std::to_string(edit.predecessor_uid) + " -> " +
+                                   std::to_string(edit.uid) + ")");
+        }
+
+        // 3. task deletes (the writer cascades into link/assignment rows).
+        for (const StructuralEdit& edit : applied) {
+            if (edit.kind != StructuralKind::delete_task) {
+                continue;
+            }
+            const mppwrite::DeletedRow deleted =
+                mppwrite::delete_task_row(document, edit.uid, next_write_path());
+            ++result.deleted;
+            result.links_tombstoned += deleted.link_rows_tombstoned;
+            result.assignments_tombstoned += deleted.assignment_rows_tombstoned;
+            for (const std::string& warning : deleted.warnings) {
+                result.warnings.push_back(warning);
+            }
+            result.notes.push_back("deleted task uid " + std::to_string(edit.uid) +
+                                   " and tombstoned " +
+                                   std::to_string(deleted.link_rows_tombstoned) +
+                                   " link(s), " +
+                                   std::to_string(deleted.assignment_rows_tombstoned) +
+                                   " assignment(s)");
+        }
+
+        // 4. task inserts (the writer allocates uid/id and appends).
+        for (const StructuralEdit& edit : applied) {
+            if (edit.kind != StructuralKind::insert_task) {
+                continue;
+            }
+            mppwrite::NewTaskRow row;
+            row.name = edit.name;
+            row.uid = 0;  // the writer allocates; the app never patches a uid
+            const mppwrite::AddedRow added =
+                mppwrite::add_task_row(document, row, next_write_path());
+            ++result.added;
+            result.added_uids.push_back(added.uid);
+            for (const std::string& warning : added.warnings) {
+                result.warnings.push_back(warning);
+            }
+            result.notes.push_back("added task uid " + std::to_string(added.uid) +
+                                   " (id " + std::to_string(added.id) + ")");
+        }
+
+        // 5. custom-field values.  All sets go through one save_field_values call
+        // (that is the writer's multi-field shape, one file).
+        if (!field_sets.empty()) {
+            std::vector<mppwrite::FieldEdit> writer_edits;
+            writer_edits.reserve(field_sets.size());
+            for (const StructuralEdit* edit : field_sets) {
+                mppwrite::FieldEdit writer_edit;
+                writer_edit.uid = edit->uid;
+                writer_edit.value.field_id = edit->field_id;
+                writer_edit.value.kind = writer_field_kind(mpp::custom_field_kind(edit->field_id));
+                writer_edit.value.text = edit->field_value.text;
+                writer_edit.value.number = edit->field_value.number;
+                writer_edit.value.packed_date = edit->field_value.packed_date;
+                writer_edit.value.duration_ticks = edit->field_value.duration_ticks;
+                writer_edit.value.flag = edit->field_value.flag;
+                writer_edits.push_back(std::move(writer_edit));
+            }
+            const mppwrite::FieldWriteResult written = mppwrite::save_field_values(
+                document, writer_edits, next_write_path());
+            result.fields_written += written.fields_written;
+            for (const std::string& warning : written.warnings) {
+                result.warnings.push_back(warning);
+            }
+            result.notes.push_back(std::to_string(written.fields_written) +
+                                   " custom-field value(s) written");
+        }
+        for (const StructuralEdit* edit : field_clears) {
+            const mppwrite::ClearedField cleared = mppwrite::clear_field_value(
+                document, edit->uid, edit->field_id, next_write_path());
+            ++result.fields_written;
+            for (const std::string& warning : cleared.warnings) {
+                result.warnings.push_back(warning);
+            }
+            result.notes.push_back("cleared field 0x" + std::to_string(edit->field_id) +
+                                   " of task uid " + std::to_string(edit->uid));
+        }
+
+        // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
             date_edits.reserve(writable.size());
@@ -404,7 +828,7 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 date_edits.push_back(date_edit);
             }
             const mppwrite::SaveResult saved =
-                mppwrite::save_date_edits(document, date_edits, result.path);
+                mppwrite::save_date_edits(document, date_edits, next_write_path());
             result.start_rows_written = saved.rows_written;
             for (const std::string& note : saved.warnings) {
                 result.notes.push_back(note);
@@ -412,9 +836,27 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         cleanup();
         result.ok = true;
-        result.api = "mppwrite::delete_task_row/add_task_row";
+        result.api = "mppwrite";
+        if (result.links_deleted != 0) {
+            result.api += " delete_task_link";
+        }
+        if (result.links_added != 0) {
+            result.api += " add_task_link";
+        }
+        if (result.deleted != 0) {
+            result.api += " delete_task_row";
+        }
+        if (result.added != 0) {
+            result.api += " add_task_row";
+        }
+        if (!field_sets.empty()) {
+            result.api += " save_field_values";
+        }
+        if (!field_clears.empty()) {
+            result.api += " clear_field_value";
+        }
         if (finish_with_start_edits) {
-            result.api += " + mppwrite::save_date_edits";
+            result.api += " save_date_edits";
         }
     } catch (const std::exception& error) {
         cleanup();

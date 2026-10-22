@@ -1,5 +1,6 @@
 #include "expr.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <string>
 #include <utility>
@@ -399,6 +400,20 @@ int function_arity(std::string_view name) noexcept {
 
 namespace {
 
+/* RAII nesting counter: one increment per nested production, undone on every
+ * exit path (including the early returns above), so a refusal cannot leave the
+ * counter inflated for the rest of the parse. */
+class DepthGuard {
+  public:
+    explicit DepthGuard(int& depth) noexcept : depth_(depth) { ++depth_; }
+    ~DepthGuard() { --depth_; }
+    DepthGuard(const DepthGuard&) = delete;
+    DepthGuard& operator=(const DepthGuard&) = delete;
+
+  private:
+    int& depth_;
+};
+
 class Parser {
   public:
     Parser(std::vector<Token> tokens, core::model::RecordType record_type, ParseResult& result)
@@ -452,10 +467,43 @@ class Parser {
         Expr expr;
         expr.kind = kind;
         expr.position = token.position;
+        expr.depth = 0;  /* a leaf is the root of a depth-0 subtree */
         return expr;
     }
 
+    /*
+     * Computes a freshly combined node's tree height, in EDGES, and refuses the
+     * node when it exceeds the shared bound.  This is what keeps a returned AST
+     * shallow: a long FLAT chain parses iteratively but builds a left-deep tree,
+     * and both its recursive destructor and the evaluator would otherwise
+     * overflow the stack (measured under ASan).  Refusing at construction means
+     * the deepest tree ever built has kMaxFormulaDepth edges, which is safe to
+     * destroy and matches the evaluator's own depth accounting exactly.
+     */
+    bool finish_node(Expr& node) {
+        int height = 0;
+        for (const Expr& child : node.children) {
+            height = std::max(height, child.depth);
+        }
+        node.depth = height + 1;
+        if (node.depth > kMaxFormulaDepth) {
+            fail(node.position, "formula nesting exceeds " +
+                                    std::to_string(kMaxFormulaDepth) + " levels");
+            return false;
+        }
+        return true;
+    }
+
     Expr parse_or() {
+        /* Every nested expression production re-enters here: a parenthesised
+         * group, a function argument, and the operand between binary tokens.
+         * Bounding it bounds the whole recursive-descent stack. */
+        if (expression_depth_ > kMaxFormulaDepth) {
+            fail(peek().position, "formula nesting exceeds " +
+                                      std::to_string(kMaxFormulaDepth) + " levels");
+            return Expr{};
+        }
+        DepthGuard guard(expression_depth_);
         Expr left = parse_and();
         while (!failed_) {
             BinaryOp op = BinaryOp::Or;
@@ -476,6 +524,9 @@ class Parser {
             node.position = position;
             node.children.push_back(std::move(left));
             node.children.push_back(std::move(right));
+            if (!finish_node(node)) {
+                return Expr{};
+            }
             left = std::move(node);
         }
         return left;
@@ -499,6 +550,9 @@ class Parser {
             node.position = position;
             node.children.push_back(std::move(left));
             node.children.push_back(std::move(right));
+            if (!finish_node(node)) {
+                return Expr{};
+            }
             left = std::move(node);
         }
         return left;
@@ -529,6 +583,9 @@ class Parser {
             node.position = position;
             node.children.push_back(std::move(left));
             node.children.push_back(std::move(right));
+            if (!finish_node(node)) {
+                return Expr{};
+            }
             left = std::move(node);
         }
         return left;
@@ -549,6 +606,9 @@ class Parser {
             node.position = position;
             node.children.push_back(std::move(left));
             node.children.push_back(std::move(right));
+            if (!finish_node(node)) {
+                return Expr{};
+            }
             left = std::move(node);
         }
         return left;
@@ -571,6 +631,9 @@ class Parser {
             node.position = position;
             node.children.push_back(std::move(left));
             node.children.push_back(std::move(right));
+            if (!finish_node(node)) {
+                return Expr{};
+            }
             left = std::move(node);
         }
         return left;
@@ -592,6 +655,9 @@ class Parser {
             node.position = position;
             node.children.push_back(std::move(left));
             node.children.push_back(std::move(right));
+            if (!finish_node(node)) {
+                return Expr{};
+            }
             left = std::move(node);
         }
         return left;
@@ -612,6 +678,16 @@ class Parser {
         if (!is_unary) {
             return parse_primary();
         }
+        /* A chain of "- - - ..." or "Not Not ..." recurses here without
+         * re-entering parse_or, so it needs its own bound.  The counter is
+         * read before this operator's own increment, hence '>=' gives the same
+         * boundary as parse_or's '>': 64 operators allowed, the 65th refused. */
+        if (unary_depth_ >= kMaxFormulaDepth) {
+            fail(peek().position, "formula nesting exceeds " +
+                                      std::to_string(kMaxFormulaDepth) + " levels");
+            return Expr{};
+        }
+        DepthGuard guard(unary_depth_);
         const std::size_t position = peek().position;
         ++index_;
         Expr operand = parse_unary();
@@ -623,6 +699,9 @@ class Parser {
         node.unary = op;
         node.position = position;
         node.children.push_back(std::move(operand));
+        if (!finish_node(node)) {
+            return Expr{};
+        }
         return node;
     }
 
@@ -743,6 +822,9 @@ class Parser {
         expr.position = position;
         expr.text = name;
         expr.children = std::move(args);
+        if (!finish_node(expr)) {
+            return Expr{};
+        }
         return expr;
     }
 
@@ -751,6 +833,8 @@ class Parser {
     ParseResult& result_;
     std::size_t index_ = 0;
     bool failed_ = false;
+    int expression_depth_ = 0;
+    int unary_depth_ = 0;
 };
 
 }  // namespace

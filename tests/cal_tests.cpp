@@ -1180,6 +1180,83 @@ void test_w12_exceptions(sched_test::TestContext& ctx, std::string const& path) 
                    "w12 derived: 2 d from Mon 2026-11-02 ends Thu 2026-12-03 17:00");
 }
 
+// --- corpus-gated: the non-zero monthly positional record -------------------
+//
+// corpus/probe/w12-exceptions-monthpos.mpp is the coordinator's sharper fixture:
+// ONE type-5 exception whose start day is not the target weekday, so Project
+// stores MonthItem/MonthPosition instead of leaving them 0.  COM read-back
+// (docs/analysis/oracle/w12-monthpos.json, identical before and after reopen):
+// Type 5, Start 2026-11-01 (a Sunday), Finish 2027-06-30, Occurrences 8,
+// Period 1, MonthPosition 2 (third), MonthItem 4 (Monday), Month 0, MonthDay 0.
+// The start weekday and the stored weekday differ, which is what the first
+// fixture could not show.
+void test_w12_monthpos(sched_test::TestContext& ctx, std::string const& path) {
+    const cal::CalendarTable table = cal::decode_file(path);
+    ctx.equal(table.calendars.size(), 2u, "monthpos: two calendar rows");
+    ctx.equal(table.exception_count(), 1u, "monthpos: one dated exception");
+    ctx.equal(table.recurring_exceptions, 1u, "monthpos: it is recurring");
+    ctx.equal(table.metadata_anomalies, 0u, "monthpos: TBkndCal metadata is consistent");
+
+    const cal::CalendarDefinition* project = cal::find_calendar_by_uid(table, 1);
+    ctx.check(project != nullptr, "monthpos: the project calendar row (uid 1) exists");
+    if (project == nullptr || project->exceptions.empty()) {
+        ctx.check(false, "monthpos: the exception record is present");
+        return;
+    }
+    const cal::DatedException& exception = project->exceptions.front();
+    const std::int32_t start_day = 15646;  // 2026-11-01, a Sunday
+    ctx.equal(exception.recurrence_type, std::int32_t{5}, "monthpos: PjExceptionType 5");
+    ctx.equal(exception.start_day, start_day, "monthpos: start day 2026-11-01");
+    ctx.equal(exception.end_day, std::int32_t{15887}, "monthpos: end day 2027-06-30");
+    ctx.equal(exception.occurrences, std::int32_t{8}, "monthpos: occurrence word 8 (COM)");
+    ctx.equal(exception.period, std::int32_t{1}, "monthpos: Period 1 (COM)");
+    ctx.equal(exception.month_position, std::int32_t{2}, "monthpos: MonthPosition 2 = third (COM)");
+    ctx.equal(exception.month_item, std::int32_t{4}, "monthpos: MonthItem 4 = Monday (COM)");
+    ctx.equal(exception.month, std::int32_t{0}, "monthpos: Month is not stored");
+    ctx.equal(exception.month_day, std::int32_t{0}, "monthpos: MonthDay is not stored");
+    ctx.equal(exception.days_of_week, std::int32_t{0}, "monthpos: DaysOfWeek is not stored");
+    // The two words are separate: +76 carries the position (2), +77 the month
+    // item (4), +78 the period (1), and +80 is the per-record ordinal (1).
+    ctx.equal(exception.raw_recurrence_words[1], std::uint16_t{1026},
+              "monthpos: +76 word is 0x0402 (position 2, month item 4)");
+    ctx.equal(exception.raw_recurrence_words[2], std::uint16_t{1}, "monthpos: +78 word is 1");
+    ctx.equal(exception.raw_recurrence_words[3], std::uint16_t{1}, "monthpos: +80 word is 1");
+    ctx.equal(cal::weekday_of_month_item(exception.month_item), std::int32_t{1},
+              "monthpos: MonthItem 4 is Monday (weekday 1)");
+    ctx.equal(sched::weekday_of_day(start_day), std::int32_t{0},
+              "monthpos: the start day is a Sunday, not the target Monday");
+    ctx.check(cal::weekday_of_month_item(exception.month_item) !=
+                  sched::weekday_of_day(start_day),
+              "monthpos: the stored weekday differs from the start day's weekday");
+
+    // Third Monday of each month, 2026-11 .. 2027-06: eight days, which is
+    // Project's own count (the +4 word), so the parameter decode is validated.
+    const std::int32_t expected_days[] = {15661, 15696, 15724, 15752,
+                                          15780, 15815, 15843, 15878};
+    const cal::RecurrenceExpansion expansion = cal::expand_recurring_exception(exception);
+    ctx.check(expansion.applied, "monthpos: expands from the stored parameters");
+    ctx.equal(expansion.days.size(), std::size_t{8}, "monthpos: eight third Mondays");
+    for (std::size_t i = 0; i < expansion.days.size() && i < 8; ++i) {
+        ctx.equal(expansion.days[i], expected_days[i],
+                  "monthpos: third Monday #" + std::to_string(i));
+    }
+
+    cal::RecurrenceReport report;
+    const sched::Calendar calendar = cal::build_project_calendar(table, "", &report);
+    ctx.equal(report.applied, std::size_t{1}, "monthpos: the builder applies the record");
+    ctx.equal(report.not_applied, std::size_t{0},
+              "monthpos: no refusal, so the expansion matches Project's count");
+    for (const std::int32_t day : expected_days) {
+        ctx.equal(calendar.day_total_ticks(day), 0, "monthpos: a third Monday is free");
+    }
+    ctx.equal(calendar.day_total_ticks(15662), kDay8h,
+              "monthpos: the Tuesday after the first third Monday still works");
+    ctx.equal(calendar.day_total_ticks(15879), kDay8h,
+              "monthpos: Tue 2027-06-22 works (past the last third Monday)");
+    ctx.equal_date(calendar.add_work(at(15658, 8, 0), 2 * kDay8h), at(15662, 17, 0),
+                   "monthpos: 2 d from Fri 2026-11-13 skips Mon 11-16 and ends Tue 11-17");
+}
+
 void test_project_a_counts(sched_test::TestContext& ctx, std::string const& path) {
     const cal::CalendarTable table = cal::decode_file(path);
     ctx.equal(table.calendars.size(), 33u, "PROJECT_A: 33 calendar rows");
@@ -1413,6 +1490,7 @@ int main() {
     const std::string holiday_path = join_path(probe_dir, "holiday1.mpp");
     const std::string w3o1_path = join_path(probe_dir, "w3-o1.mpp");
     const std::string w12_path = join_path(probe_dir, "w12-exceptions.mpp");
+    const std::string w12_monthpos_path = join_path(probe_dir, "w12-exceptions-monthpos.mpp");
     const std::string project_a_path = join_path(corpus_dir, "project_a.mpp");
 
     if (file_exists(base_path)) {
@@ -1438,6 +1516,12 @@ int main() {
         test_w12_exceptions(ctx, w12_path);
     } else {
         std::cout << "SKIP: " << w12_path << " is absent"
+                  << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
+    }
+    if (file_exists(w12_monthpos_path)) {
+        test_w12_monthpos(ctx, w12_monthpos_path);
+    } else {
+        std::cout << "SKIP: " << w12_monthpos_path << " is absent"
                   << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
     }
     if (file_exists(project_a_path)) {

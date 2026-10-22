@@ -84,6 +84,7 @@
 #include "date.h"
 #include "document.h"
 #include "edit_model.h"
+#include "field_link_edits.h"
 #include "fields_model.h"
 #include "export_pdf.h"
 #include "filter_model.h"
@@ -236,6 +237,26 @@ std::size_t name_column_of(const PlanState& plan);
 // them, so they need the declarations here.
 void build_editor(PlanState& plan);
 void apply_structural_change(PlanState& plan);
+
+// The TaskRow a pending edit/display plan holds for `uid`, or nullptr.  Used by
+// the two wave-13 dialogs to prefill from the plan the editor is built from.
+const app::TaskRow* plan_task_row(const app::PlanInput& plan, std::uint32_t uid) {
+    for (const app::TaskRow& row : plan.tasks) {
+        if (row.uid == uid) {
+            return &row;
+        }
+    }
+    return nullptr;
+}
+
+// One line naming every kind of pending edit, for the status line and the close
+// prompt: "1 insert(s), 0 delete(s), 2 field edit(s), 1 link edit(s)".
+std::string pending_edit_summary(const app::StructuralEdits& edits) {
+    return std::to_string(edits.inserted_count()) + " insert(s), " +
+           std::to_string(edits.deleted_count()) + " delete(s), " +
+           std::to_string(edits.field_edit_count()) + " field edit(s), " +
+           std::to_string(edits.link_edit_count()) + " link edit(s)";
+}
 
 // ---------------------------------------------------------------------------
 // Small AppKit helpers
@@ -401,8 +422,7 @@ std::string make_status_text(const PlanState& plan) {
                 std::to_string(plan.records.row_count()) + " shown)";
     }
     if (!plan.edits.empty()) {
-        text += "  |  pending: " + std::to_string(plan.edits.inserted_count()) + " insert(s), " +
-                std::to_string(plan.edits.deleted_count()) + " delete(s)";
+        text += "  |  pending: " + pending_edit_summary(plan.edits);
     }
     if (!plan.formula_set.columns.empty()) {
         text += "  |  " + std::to_string(plan.formula_set.columns.size()) + " formula column(s)";
@@ -2053,6 +2073,8 @@ void show_shortcuts() {
 - (void)performMenuAction:(id)sender;
 - (void)insertTask:(id)sender;
 - (void)deleteTask:(id)sender;
+- (void)taskFields:(id)sender;
+- (void)editPredecessors:(id)sender;
 - (void)rebuildColumnsMenu;
 - (BOOL)saveStructuralEdits:(const std::vector<app::StartEdit>&)edits
                      target:(const std::string&)target;
@@ -2348,6 +2370,12 @@ static PlanView* g_view = nil;
         case app::MenuAction::delete_task:
             [self deleteTask:nil];
             return;
+        case app::MenuAction::task_fields:
+            [self taskFields:nil];
+            return;
+        case app::MenuAction::predecessors:
+            [self editPredecessors:nil];
+            return;
         case app::MenuAction::insert_resource:
             show_alert(@"Insert Resource",
                        to_ns(std::string(
@@ -2481,6 +2509,351 @@ static PlanView* g_view = nil;
     note(plan, "deleted task uid " + std::to_string(selected.uid) + " (pending; Save writes it)",
          false);
     [g_view refreshAfterChange];
+}
+
+// Task Fields... (wave 13): one modal form for the six measured custom fields
+// (Text1, Number1, Number2, Date1, Duration1, Flag1).  The values are prefilled
+// from the plan's stored custom fields, parsed by app::make_task_field_edits
+// through the sheet's own parser (the writer's types are checked there) and
+// queued as pending edits; nothing is written until Save.  The grid columns stay
+// read-only, so this dialog is the one place a stored value is edited.
+- (void)taskFields:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr || g_plan->sheet == nullptr ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    const app::SelectedTask selected = app::selected_task(*plan.sheet, plan.row_map);
+    if (!selected.has_selection) {
+        note(plan, "select a task to edit its custom fields", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.edits.is_pending_insert(selected.uid)) {
+        show_alert(@"Task Fields",
+                   @"That task is a pending insert: save it before editing its fields.");
+        return;
+    }
+    const app::TaskRow* row = plan_task_row(plan.base, selected.uid);
+    if (row == nullptr) {
+        note(plan, "the selected task is not in the plan", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    const std::vector<app::TaskFieldSpec>& specs = app::task_field_specs();
+    for (;;) {
+        NSAlert* alert = [[NSAlert alloc] init];
+        [alert setMessageText:@"Task Fields"];
+        [alert setInformativeText:
+                   @"Values are queued and written to the .mpp when you save. "
+                   @"A blank field clears the stored value."];
+        [alert addButtonWithTitle:@"OK"];
+        [alert addButtonWithTitle:@"Cancel"];
+        const CGFloat row_height = 26.0;
+        const CGFloat label_width = 100.0;
+        const CGFloat field_width = 300.0;
+        NSView* accessory = [[NSView alloc]
+            initWithFrame:NSMakeRect(0.0, 0.0, label_width + field_width + 12.0,
+                                     row_height * static_cast<CGFloat>(specs.size()) +
+                                         8.0)];
+        std::vector<NSTextField*> fields;
+        fields.reserve(specs.size());
+        for (std::size_t index = 0; index < specs.size(); ++index) {
+            const CGFloat y = row_height * static_cast<CGFloat>(specs.size() - 1 - index) + 4.0;
+            NSTextField* label = [NSTextField labelWithString:to_ns(specs[index].title)];
+            [label setFrame:NSMakeRect(0.0, y, label_width, 20.0)];
+            [accessory addSubview:label];
+            NSTextField* field =
+                [[NSTextField alloc] initWithFrame:NSMakeRect(label_width + 6.0, y,
+                                                              field_width, 24.0)];
+            [field setStringValue:to_ns(
+                                      app::field_value_text(*row, specs[index].field_id,
+                                                            plan.format))];
+            [accessory addSubview:field];
+            fields.push_back(field);
+        }
+        [alert setAccessoryView:accessory];
+        if ([alert runModal] != NSAlertFirstButtonReturn) {
+            note(plan, "task fields cancelled", false);
+            [g_view setNeedsDisplay:YES];
+            return;
+        }
+        std::vector<app::TaskFieldInput> inputs;
+        inputs.reserve(specs.size());
+        for (std::size_t index = 0; index < specs.size(); ++index) {
+            app::TaskFieldInput input;
+            input.field_id = specs[index].field_id;
+            input.text = to_std([fields[index] stringValue]);
+            inputs.push_back(std::move(input));
+        }
+        std::vector<app::StructuralEdit> form;
+        std::string error;
+        if (!app::make_task_field_edits(*row, inputs, plan.format, form, error)) {
+            show_alert(@"Task Fields", to_ns(error));
+            continue;  // the form stays open so the value can be corrected
+        }
+        if (form.empty()) {
+            note(plan, "no custom-field value changed", false);
+            [g_view refreshAfterChange];
+            return;
+        }
+        std::size_t pushed = 0;
+        for (const app::StructuralEdit& edit : form) {
+            if (plan.edits.push(edit)) {
+                ++pushed;
+            }
+        }
+        if (pushed != form.size()) {
+            show_alert(@"Task Fields", @"The field edits could not all be queued.");
+            return;
+        }
+        apply_structural_change(plan);
+        std::string fields_named;
+        for (const app::StructuralEdit& edit : form) {
+            const app::TaskFieldSpec* spec = app::task_field_spec(edit.field_id);
+            if (!fields_named.empty()) {
+                fields_named += ", ";
+            }
+            fields_named += spec != nullptr ? spec->title
+                                            : std::to_string(edit.field_id);
+            if (edit.kind == app::StructuralKind::clear_field) {
+                fields_named += " (clear)";
+            }
+        }
+        note(plan, "queued " + std::to_string(pushed) + " custom-field edit(s) for task uid " +
+                       std::to_string(selected.uid) + ": " + fields_named +
+                       " (pending; Save writes them)",
+             false);
+        [g_view refreshAfterChange];
+        refresh_menu_bar();
+        return;
+    }
+}
+
+// Predecessors... (wave 13): list the selected task's incoming links and let the
+// user add one (predecessor ID, type, lag) and/or delete one from the file.  Add
+// and Delete in the same OK both queue; the save runs the deletes first, so
+// replacing a relation works.  All validation is app::validate_link_add /
+// app::make_link_add, so a bad entry keeps the form open with the reason.
+- (void)editPredecessors:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr || g_plan->sheet == nullptr ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    const app::SelectedTask selected = app::selected_task(*plan.sheet, plan.row_map);
+    if (!selected.has_selection) {
+        note(plan, "select a task to edit its predecessors", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.edits.is_pending_insert(selected.uid)) {
+        show_alert(@"Predecessors",
+                   @"That task is a pending insert: save it before adding links.");
+        return;
+    }
+    const std::uint32_t successor = selected.uid;
+    for (;;) {
+        const std::vector<app::PredecessorListItem> items =
+            app::predecessors_of(plan.base, plan.edits, successor);
+        std::string listing;
+        for (const app::PredecessorListItem& item : items) {
+            listing += item.predecessor_id + "  " + item.predecessor_name + "  " +
+                       item.type_name + "  lag " + item.lag_text;
+            if (item.pending) {
+                listing += "  (pending)";
+            }
+            listing += "\n";
+        }
+        if (listing.empty()) {
+            listing = "No predecessor links.\n";
+        }
+
+        NSAlert* alert = [[NSAlert alloc] init];
+        [alert setMessageText:@"Predecessors"];
+        [alert setInformativeText:
+                   @"Links are queued and written to the .mpp when you save. "
+                   @"Lag accepts 0, 2d, -1d, 4h."];
+        [alert addButtonWithTitle:@"OK"];
+        [alert addButtonWithTitle:@"Cancel"];
+
+        const CGFloat width = 520.0;
+        NSView* accessory = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, width, 200.0)];
+        NSTextField* list_label =
+            [[NSTextField alloc] initWithFrame:NSMakeRect(0.0, 128.0, width, 66.0)];
+        [list_label setEditable:NO];
+        [list_label setBezeled:NO];
+        [list_label setDrawsBackground:NO];
+        [list_label setSelectable:NO];
+        [(NSTextFieldCell*)[list_label cell] setWraps:YES];
+        [list_label setStringValue:to_ns(listing)];
+        [accessory addSubview:list_label];
+
+        NSTextField* predecessor_label = [NSTextField labelWithString:@"Predecessor ID:"];
+        [predecessor_label setFrame:NSMakeRect(0.0, 98.0, 110.0, 20.0)];
+        [accessory addSubview:predecessor_label];
+        NSTextField* predecessor_field =
+            [[NSTextField alloc] initWithFrame:NSMakeRect(112.0, 96.0, 70.0, 24.0)];
+        [predecessor_field setStringValue:@""];
+        [accessory addSubview:predecessor_field];
+
+        NSTextField* type_label = [NSTextField labelWithString:@"Type:"];
+        [type_label setFrame:NSMakeRect(200.0, 98.0, 44.0, 20.0)];
+        [accessory addSubview:type_label];
+        NSPopUpButton* type_popup =
+            [[NSPopUpButton alloc] initWithFrame:NSMakeRect(246.0, 94.0, 90.0, 26.0)
+                                       pullsDown:NO];
+        [type_popup addItemsWithTitles:@[ @"FS", @"SS", @"FF", @"SF" ]];
+        [type_popup selectItemAtIndex:0];
+        [accessory addSubview:type_popup];
+
+        NSTextField* lag_label = [NSTextField labelWithString:@"Lag:"];
+        [lag_label setFrame:NSMakeRect(354.0, 98.0, 36.0, 20.0)];
+        [accessory addSubview:lag_label];
+        NSTextField* lag_field =
+            [[NSTextField alloc] initWithFrame:NSMakeRect(392.0, 96.0, 110.0, 24.0)];
+        [lag_field setStringValue:@"0"];
+        [accessory addSubview:lag_field];
+
+        NSTextField* delete_label = [NSTextField labelWithString:@"Delete link:"];
+        [delete_label setFrame:NSMakeRect(0.0, 56.0, 90.0, 20.0)];
+        [accessory addSubview:delete_label];
+        NSPopUpButton* delete_popup =
+            [[NSPopUpButton alloc] initWithFrame:NSMakeRect(92.0, 52.0, 410.0, 26.0)
+                                       pullsDown:NO];
+        [delete_popup addItemWithTitle:@"Do not delete a link"];
+        std::vector<std::size_t> deletable;
+        for (std::size_t index = 0; index < items.size(); ++index) {
+            if (items[index].pending) {
+                continue;  // a pending add is removed by undo, not by the writer
+            }
+            deletable.push_back(index);
+            const std::string title = items[index].predecessor_id + " -> " +
+                                      items[index].type_name + " (lag " +
+                                      items[index].lag_text + ")";
+            [delete_popup addItemWithTitle:to_ns(title)];
+        }
+        [delete_popup selectItemAtIndex:0];
+        [accessory addSubview:delete_popup];
+
+        NSTextField* hint_label = [NSTextField
+            labelWithString:@"Blank predecessor ID adds nothing; Delete and Add may be set "
+                            @"together."];
+        [hint_label setFrame:NSMakeRect(0.0, 24.0, width, 20.0)];
+        [accessory addSubview:hint_label];
+        [alert setAccessoryView:accessory];
+
+        if ([alert runModal] != NSAlertFirstButtonReturn) {
+            note(plan, "predecessors cancelled", false);
+            [g_view setNeedsDisplay:YES];
+            return;
+        }
+
+        std::vector<app::StructuralEdit> queued;
+        std::string error;
+        app::StructuralEdits trial = plan.edits;
+        const NSInteger delete_index = [delete_popup indexOfSelectedItem];
+        if (delete_index > 0 &&
+            static_cast<std::size_t>(delete_index - 1) < deletable.size()) {
+            app::StructuralEdit edit;
+            if (!app::make_link_delete(items[deletable[static_cast<std::size_t>(
+                                              delete_index - 1)]],
+                                       successor, edit, error) ||
+                !trial.push(edit)) {
+                if (error.empty()) {
+                    error = "the link delete could not be queued";
+                }
+                show_alert(@"Predecessors", to_ns(error));
+                continue;
+            }
+            queued.push_back(edit);
+        }
+
+        std::string predecessor_text = to_std([predecessor_field stringValue]);
+        while (!predecessor_text.empty() &&
+               (predecessor_text.front() == ' ' || predecessor_text.front() == '\t')) {
+            predecessor_text.erase(predecessor_text.begin());
+        }
+        while (!predecessor_text.empty() &&
+               (predecessor_text.back() == ' ' || predecessor_text.back() == '\t')) {
+            predecessor_text.pop_back();
+        }
+        if (!predecessor_text.empty()) {
+            std::size_t consumed = 0;
+            unsigned long predecessor = 0;
+            bool parsed = true;
+            try {
+                predecessor = std::stoul(predecessor_text, &consumed, 10);
+            } catch (const std::exception&) {
+                parsed = false;
+            }
+            if (!parsed || consumed != predecessor_text.size() || predecessor == 0 ||
+                predecessor > 0xFFFFFFFFul) {
+                show_alert(@"Predecessors",
+                           @"The predecessor ID must be a positive whole number.");
+                continue;
+            }
+            const core::gantt::LinkType types[] = {
+                core::gantt::LinkType::finish_to_start,
+                core::gantt::LinkType::start_to_start,
+                core::gantt::LinkType::finish_to_finish,
+                core::gantt::LinkType::start_to_finish};
+            const NSInteger type_index = [type_popup indexOfSelectedItem];
+            const core::gantt::LinkType type =
+                (type_index >= 0 && type_index < 4) ? types[type_index]
+                                                    : types[0];
+            // Validate against the display plan with the pending delete already
+            // applied, so "delete this relation, then add it back" is accepted.
+            const app::PlanInput trial_plan = trial.apply(plan.loaded);
+            app::StructuralEdit edit;
+            if (!app::make_link_add(trial_plan, trial,
+                                    static_cast<std::uint32_t>(predecessor), successor, type,
+                                    to_std([lag_field stringValue]), edit, error) ||
+                !trial.push(edit)) {
+                if (error.empty()) {
+                    error = "the link add could not be queued";
+                }
+                show_alert(@"Predecessors", to_ns(error));
+                continue;
+            }
+            queued.push_back(edit);
+        }
+
+        if (queued.empty()) {
+            note(plan, "no predecessor change", false);
+            [g_view refreshAfterChange];
+            return;
+        }
+        for (const app::StructuralEdit& edit : queued) {
+            plan.edits.push(edit);
+        }
+        apply_structural_change(plan);
+        std::size_t link_adds = 0;
+        std::size_t link_deletes = 0;
+        for (const app::StructuralEdit& edit : queued) {
+            if (edit.kind == app::StructuralKind::delete_link) {
+                ++link_deletes;
+            } else {
+                ++link_adds;
+            }
+        }
+        note(plan, "queued " + std::to_string(queued.size()) + " link edit(s) for task uid " +
+                       std::to_string(successor) + ": " + std::to_string(link_adds) +
+                       " add(s), " + std::to_string(link_deletes) +
+                       " delete(s) (pending; Save writes them)",
+             false);
+        [g_view refreshAfterChange];
+        refresh_menu_bar();
+        return;
+    }
 }
 
 // The visible view switcher (wave 11): the same code path as the View menu.
@@ -2724,8 +3097,8 @@ static PlanView* g_view = nil;
         app::collect_start_edits(plan.records, plan.loaded);
     const bool structural = !plan.edits.empty();
     if (edits.empty() && !structural) {
-        note(plan, "nothing to save: no task start has been edited and no insert/delete "
-                   "is pending",
+        note(plan, "nothing to save: no task start has been edited and no insert, delete, "
+                   "custom-field or link edit is pending",
              false);
         [g_view refreshAfterChange];
         return YES;
@@ -2816,12 +3189,20 @@ static PlanView* g_view = nil;
     if (!outcome.ok) {
         note(plan, "save failed: " + outcome.error, true);
         [g_view refreshAfterChange];
-        show_alert(@"Could not save the task insert/delete",
+        show_alert(@"Could not save the pending edits",
                    to_ns(outcome.error + "\n\nThe opened file was not modified."));
         return NO;
     }
     std::string message = "saved " + std::to_string(outcome.added) + " new task(s), " +
                           std::to_string(outcome.deleted) + " deleted task(s)";
+    if (outcome.links_added != 0 || outcome.links_deleted != 0) {
+        message += ", " + std::to_string(outcome.links_added) + " link(s) added and " +
+                   std::to_string(outcome.links_deleted) + " deleted";
+    }
+    if (outcome.fields_written != 0) {
+        message += ", " + std::to_string(outcome.fields_written) +
+                   " custom-field value(s) written";
+    }
     if (outcome.start_rows_written != 0) {
         message += ", " + std::to_string(outcome.start_rows_written) + " start(s)";
     }
@@ -3243,8 +3624,11 @@ static PlanView* g_view = nil;
     }
     const std::vector<app::StartEdit> edits =
         app::collect_start_edits(g_plan->records, g_plan->loaded);
-    const std::size_t structural = g_plan->edits.size();
-    if (edits.empty() && structural == 0) {
+    const std::size_t structural =
+        g_plan->edits.inserted_count() + g_plan->edits.deleted_count();
+    const std::size_t fields = g_plan->edits.field_edit_count();
+    const std::size_t links = g_plan->edits.link_edit_count();
+    if (edits.empty() && structural == 0 && fields == 0 && links == 0) {
         g_close_confirmed = YES;
         return YES;
     }
@@ -3258,8 +3642,20 @@ static PlanView* g_view = nil;
         }
         details += std::to_string(structural) + " task insert/delete edit(s) are pending";
     }
+    if (fields != 0) {
+        if (!details.empty()) {
+            details += " and ";
+        }
+        details += std::to_string(fields) + " custom-field edit(s) are pending";
+    }
+    if (links != 0) {
+        if (!details.empty()) {
+            details += " and ";
+        }
+        details += std::to_string(links) + " link edit(s) are pending";
+    }
     details +=
-        ". Saving writes both to a .mpp; every other edit (name, finish, duration, "
+        ". Saving writes them to a .mpp; every other edit (name, finish, duration, "
         "percent) is view-only and will be lost.";
     NSAlert* alert = [[NSAlert alloc] init];
     [alert setMessageText:@"Save changes before closing?"];

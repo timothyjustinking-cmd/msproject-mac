@@ -164,6 +164,7 @@ add_library(app_layout STATIC
     view_model.cpp
     fields_model.cpp
     edit_model.cpp
+    field_link_edits.cpp
 )
 add_library(msproject::app_layout ALIAS app_layout)
 target_compile_features(app_layout PUBLIC cxx_std_20)
@@ -336,6 +337,38 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_fields COMMAND app_fields_tests)
     set_tests_properties(app_fields PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 13: writing custom fields through the Task Fields dialog model plus the
+    # real writer round trip (save_field_values / clear_field_value) on a copy of
+    # the committed synthetic fixture.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_fields_tests app_edits_fields_tests.cpp)
+    target_compile_features(app_edits_fields_tests PRIVATE cxx_std_20)
+    set_target_properties(app_edits_fields_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_fields_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_fields_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_fields_tests)
+
+    add_test(NAME app_edits_fields COMMAND app_edits_fields_tests)
+    set_tests_properties(app_edits_fields PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 13: link editing through the Predecessors dialog model plus the real
+    # writer round trip (add_task_link / delete_task_link) on a copy of the
+    # committed synthetic fixture.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_links_tests app_edits_links_tests.cpp)
+    target_compile_features(app_edits_links_tests PRIVATE cxx_std_20)
+    set_target_properties(app_edits_links_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_links_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_links_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_links_tests)
+
+    add_test(NAME app_edits_links COMMAND app_edits_links_tests)
+    set_tests_properties(app_edits_links PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 endif()
 
 # ---------------------------------------------------------------------------

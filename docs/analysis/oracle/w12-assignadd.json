@@ -1,0 +1,8 @@
+{
+  "case": "assign-add",
+  "source": "tests\\data\\synthetic-base.mpp",
+  "saved": "corpus\\probe\\w12-assignadd.mpp",
+  "bytes": 360448,
+  "resource": "R1 Work 100%",
+  "assignment": "T1/R1 100%"
+}

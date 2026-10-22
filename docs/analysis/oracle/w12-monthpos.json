@@ -1,0 +1,36 @@
+{
+  "case": "monthpos",
+  "saved": "corpus\\probe\\w12-exceptions-monthpos.mpp",
+  "added": "ThirdMonday",
+  "bytes": 245760,
+  "before": [
+    {
+      "Type": 5,
+      "Start": "2026-11-01 00:00:00",
+      "Finish": "2027-06-30 00:00:00",
+      "Occurrences": 8,
+      "Name": "ThirdMonday",
+      "Period": 1,
+      "DaysOfWeek": 0,
+      "MonthPosition": 2,
+      "MonthItem": 4,
+      "Month": 0,
+      "MonthDay": 0
+    }
+  ],
+  "reopened": [
+    {
+      "Type": 5,
+      "Start": "2026-11-01 00:00:00",
+      "Finish": "2027-06-30 00:00:00",
+      "Occurrences": 8,
+      "Name": "ThirdMonday",
+      "Period": 1,
+      "DaysOfWeek": 0,
+      "MonthPosition": 2,
+      "MonthItem": 4,
+      "Month": 0,
+      "MonthDay": 0
+    }
+  ]
+}

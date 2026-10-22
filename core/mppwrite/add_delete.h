@@ -445,6 +445,274 @@ AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
 DeletedLink delete_task_link(CfbDocument& doc, std::uint32_t link_uid,
                              std::string const& path);
 
+/* --- resource rows: 114/TBkndRsc (W54) ---------------------------------- */
+
+/*
+ * A resource row is 172 bytes after a 48-byte header (spec/mpp-records.md §9,
+ * core/mpp/reader.h "RESOURCES"):
+ *
+ *   +0   u32     ID (equals the UniqueID in every corpus file)
+ *   +4   u32     UniqueID
+ *   +8   f64     MaxUnits x100 (10000.0 = 100 %; w9-resourcetypes' 50 % stores
+ *                5000.0)
+ *   +80  u32     AccrueAt (3 = prorated, the Project default)
+ *   +154 u16     per-row counter (unmapped; Project writes last row + 1)
+ *
+ * The row's Type is NOT a row byte.  It is a metadata bit pair (W49's measured
+ * rule): Work <=> FixedMeta entry byte +12 bit 0x10; when that is clear, Cost
+ * <=> Fixed2Meta entry byte +8 bit 0x10 and Material <=> both clear.
+ *
+ * The table also has the rows+3 padding the Task table has, with its own
+ * strides (measured on synthetic-base.mpp, corpus/probe/assign1.mpp,
+ * corpus/probe/w9-resourcetypes.mpp and the coordinator's
+ * corpus/probe/w12-assignadd.mpp):
+ *
+ *   FixedData   48 + 172 * rows
+ *   FixedMeta   16 + 37 * (rows + 3)   entries: +0 state, +2 field count,
+ *                                      +4 row offset, +12 type flags;
+ *                                      the first three entries are descriptors
+ *   Fixed2Data  40 * (rows + 3)        records: 16-byte identity, f64 row + 1,
+ *                                      the same identity again
+ *   Fixed2Meta  16 + 51 * (rows + 3)   entries: +4 record offset (entry i ->
+ *                                      record i), +8 type flags
+ *   VarMeta     24 + 12 * n            (uid, Var2Data offset, field key)
+ *   Var2Data    concatenation of u32-length-prefixed blocks
+ *
+ * Project's own add of one Work resource (w12-assignadd.mpp, from
+ * tests/data/synthetic-base.mpp) grew exactly
+ *
+ *   FixedData +172, FixedMeta +37, Fixed2Data +40, Fixed2Meta +51,
+ *   VarMeta +5 entries, Var2Data +54 bytes
+ *
+ * and wrote five variable entries for the new uid, in this order and with these
+ * measured meanings:
+ *
+ *   0x0c400001 Name       UTF-16LE + NUL          (w12: "R1")
+ *   0x0c400002 Initials   UTF-16LE + NUL          (w12: "R")
+ *   0x0c400055 u32 2      a small integer (cost-rate table / calendar index?)
+ *   0x0c4002d6 4 bytes    a packed date (a save/creation stamp)
+ *   0x0c4002e3 16 bytes   all zero in every measured file
+ *
+ * The new row's FixedData was a byte-for-byte copy of the last live resource row
+ * with only ID, UniqueID and the +154 counter changed (MaxUnits stayed 100 %).
+ * `add_resource_row` does the same: it clones the last live row (row 0 when the
+ * table has no live resource), then writes ID, UniqueID, MaxUnits and the type
+ * bits.  For 0x0c400055 / 0x0c4002d6 / 0x0c4002e3 the payloads are copied from
+ * the same file (template row's block, else the first block with that key, else
+ * the measured defaults 2 / 0xffffffff / 16 zero bytes); this keeps the file's
+ * own conventions instead of inventing values.  Name and Initials come from the
+ * caller; an empty `initials` takes the first character of the name (Project's
+ * own "R1" -> "R").
+ *
+ * INFERRED, NOT MEASURED: that Project accepts a deterministic Fixed2Data
+ * identity for a resource (the writer uses the same generator as
+ * `add_task_link`: an existing file identity family with the lowest unused
+ * counter byte), and that a non-100 % MaxUnits is accepted with the cloned row
+ * (only 100 % is measured on an add).  The Project gate is the proof.
+ */
+enum class ResourceKind : std::uint8_t {
+    work = 0,     /* PjResourceType Work: FixedMeta +12 bit 0x10 set */
+    material = 1, /* both type bits clear */
+    cost = 2,     /* Fixed2Meta +8 bit 0x10 set, FixedMeta +12 bit 0x10 clear */
+};
+
+struct ResourceSpec {
+    /* Required, non-empty.  UTF-16LE + NUL under key 0x0c400001. */
+    std::string name;
+    /* Empty = the first character of `name`. */
+    std::string initials;
+    /* MaxUnits in percent: 100.0 is 100 % (the measured Project default and the
+     * only value measured on a Project add).  Must be finite and in (0, 10000]. */
+    double max_units_percent = 100.0;
+    ResourceKind kind = ResourceKind::work;
+};
+
+/* What `add_resource_row` proved from the file on disk. */
+struct AddedResource {
+    std::uint32_t uid = 0; /* FixedData +4 */
+    std::uint32_t id = 0;  /* FixedData +0 */
+    std::size_t row = 0;   /* FixedData row index (rows() - 1 after the call) */
+    std::string name;
+    std::string initials;
+    double max_units_percent = 0.0;
+    ResourceKind kind = ResourceKind::work;
+    std::vector<std::string> warnings;
+};
+
+/*
+ * Append one resource row (the six TBkndRsc streams above), write the package to
+ * `path`, re-open it and prove every fact from the bytes on disk.  Only those
+ * six streams change; every other stream, 214/ included, is required to be
+ * byte-identical.
+ *
+ * Refusals (exception before `doc` or the output path is touched):
+ *   - an empty/unusable output path; an empty name; a MaxUnits that is not
+ *     finite or outside (0, 10000];
+ *   - a table whose geometry is broken: FixedData not 48 + 172*n, FixedMeta not
+ *     16 + 37*(n+3), Fixed2Data not 40*(n+3), Fixed2Meta not 16 + 51*(n+3),
+ *     VarMeta not 24 + 12*k, a header count/size word that disagrees with the
+ *     streams, a FixedMeta/Fixed2Meta entry that does not name a whole record,
+ *     or a missing stream.
+ */
+AddedResource add_resource_row(CfbDocument& doc, ResourceSpec const& resource,
+                               std::string const& path);
+
+/* --- assignment rows: 114/TBkndAssn (W54) -------------------------------- */
+
+/*
+ * An assignment row is 110 bytes with NO header (spec/mpp-records.md §10.2):
+ *
+ *   +0   u32     assignment UniqueID
+ *   +4   u32     task UniqueID
+ *   +8   u32     resource UniqueID (0xFFFF0001 is the null-resource sentinel of
+ *                an unassigned placeholder row)
+ *   +12  f64     Units x100  (10000.0 = 100 %)
+ *   +20  f64     Work, minutes x1000 (2400000.0 = 2400 min = 5 days)
+ *   +28  f64     zero in every measured fresh row (unmapped)
+ *   +36  f64     the same value as +20 in every measured row (a work copy)
+ *   +44  f64     the same value as +20 in every measured row (a work copy)
+ *   +52  u32     Start (packed date; the task's effective +104)
+ *   +56  u32     Finish (packed date; the task's effective +108)
+ *   +60  u32     Resume (the measured default is Start)
+ *   +92  u32     7 in every measured live row
+ *   +104 u32     a second Start copy: assign1.mpp's real rows and
+ *                w12-assignadd.mpp's added row all repeat Start here
+ *
+ * FixedMeta = 16 + 34 * rows (one entry per row, no descriptors):
+ *   +0 state (0 live / 0x02 tombstone), +2 variable-field count,
+ *   +4 row offset (= row * 110), +8..+15 and +16..+33 = Project's per-row
+ *   cached data.  A fresh Project add wrote the entry bytes
+ *   `00 00 04 00 <off u32> f1 ff 23 f0 69 00 02 00` followed by zeros; the
+ *   bytes after +8 are coalesced/unmapped, so `add_assignment_row` writes that
+ *   measured fresh-add template verbatim (only +2 and +4 are computed).
+ *
+ * Fixed2Data = 48 * rows: three 16-byte identities per row
+ *   [assignment identity, task identity, resource identity].  The task identity
+ *   is Task/Fixed2Data record (task row + 3); the resource identity is
+ *   Rsc/Fixed2Data record (resource row + 3); the assignment identity is
+ *   generated deterministically (same helper as a link identity).
+ *
+ * Fixed2Meta = 16 + 53 * rows: entry +4 = record offset (= row * 48), +8/+9 =
+ *   0xcf/0x09 on a fresh Project add, +36 byte = 0x10, +52 = 0x28 (a fresh real
+ *   row) -- again written as the measured fresh-add template.
+ *
+ * VarMeta/Var2Data: Project's own add wrote FOUR entries for the new uid, in
+ * this order (w12-assignadd.mpp):
+ *
+ *   0x0f400031  planned-work contour step list, flat = 72 bytes.  Measured
+ *               contents: u32 0x00200000, u32 0x2c, f64 160000.0, f64 work
+ *               (ticks x100, the same scale as FixedData +20), u32 work_ticks*8,
+ *               u32 0, u32 1, then zeros.  Reproduced from that measured shape;
+ *               the constant 160000.0 was 100 % units in every measured row.
+ *   0x0f40027a  Created (4 bytes; copied from the template assignment row)
+ *   0x0f400199  16 zero bytes
+ *   0x0f40019b  16 zero bytes
+ *
+ * The assignment table is append-only in this implementation: a new row's uid
+ * must be greater than every uid in the table (tombstones included), which also
+ * keeps the VarMeta array's measured uid grouping intact.
+ *
+ * This is what Project's own `Task.Assignments.Add` did to
+ * tests/data/synthetic-base.mpp (measured diff, w12-assignadd.mpp): it appended
+ * the row (uid 4, row 3) rather than reusing a slot, tombstoned the live
+ * null-resource placeholder row of the SAME task (entry +0 00 -> 02), gave the
+ * other two surviving rows a third variable entry, and set the FixedMeta header
+ * +4 to 6 ("contains deleted rows").  The placeholder tombstone and the extra
+ * variable entry on OTHER rows are Project's model churn: `add_assignment_row`
+ * appends the new row and leaves every existing row byte-identical, so a file
+ * that had an unassigned placeholder for the task keeps it.  `core/mpp` reports
+ * the placeholder as an assignment with no resource, which is what it is.
+ */
+struct AssignmentSpec {
+    /* Required: a live task row's UniqueID. */
+    std::uint32_t task_uid = 0;
+    /* Required: a live resource row's UniqueID. */
+    std::uint32_t resource_uid = 0;
+    /* 0 = allocate (largest assignment uid in the table, tombstones included,
+     * + 1).  A non-zero value must be greater than every existing uid; the
+     * assignment table is append-only here. */
+    std::uint32_t uid = 0;
+    /* Units in percent: 0 = inherit (100.0).  Must be finite and in (0, 10000]. */
+    double units_percent = 0.0;
+    /* Work in 6-second ticks.  0 = infer: the task's stored duration (+84) times
+     * units_percent / 100, rounded.  FixedData +20 and +44 are written as
+     * work_ticks * 100 (minutes x1000). */
+    std::uint32_t work_ticks = 0;
+    /* Packed dates.  kInvalidDate = inherit: Start/Finish from the task's
+     * effective pair (+104/+108) and Resume = Start. */
+    std::uint32_t start = kInvalidDate;
+    std::uint32_t finish = kInvalidDate;
+    std::uint32_t resume = kInvalidDate;
+};
+
+/* What `add_assignment_row` proved from the file on disk. */
+struct AddedAssignment {
+    std::uint32_t uid = 0;
+    std::uint32_t task_uid = 0;
+    std::uint32_t resource_uid = 0;
+    std::size_t row = 0;
+    double units_percent = 0.0;
+    std::uint32_t work_ticks = 0;
+    std::uint32_t start = kInvalidDate;
+    std::uint32_t finish = kInvalidDate;
+    std::uint32_t resume = kInvalidDate;
+    std::vector<std::string> warnings;
+};
+
+/* What `delete_assignment_row` proved from the file on disk.  The row is still
+ * there (a tombstone never shrinks a stream); only its FixedMeta state changed. */
+struct DeletedAssignment {
+    std::uint32_t uid = 0;
+    std::uint32_t task_uid = 0;
+    std::uint32_t resource_uid = 0;
+    double units_percent = 0.0;
+    std::uint32_t work_ticks = 0;
+    std::size_t row = 0; /* the now-tombstoned FixedData row */
+    std::vector<std::string> warnings;
+};
+
+/*
+ * Append one assignment row (FixedData +110, FixedMeta +34, Fixed2Data +48,
+ * Fixed2Meta +53, VarMeta +4 entries, Var2Data + the four blocks), write the
+ * package to `path`, re-open it and prove every fact from the bytes on disk.
+ * Only those six TBkndAssn streams change; every other stream, 214/ included,
+ * is required to be byte-identical.
+ *
+ * Refusals (exception before `doc` or the output path is touched):
+ *   - an empty/unusable output path;
+ *   - task uid 0 or no live task row; resource uid 0 or no live resource row;
+ *   - a live assignment already naming the same (task, resource) -- Project
+ *     stores one row per resource per task;
+ *   - an explicit uid that is 0xffffffff or not greater than the largest uid in
+ *     the assignment table;
+ *   - units_percent outside (0, 10000] or a non-finite value; an inferred work
+ *     of 0 from a task with no stored duration is allowed (0 work) but a caller
+ *     work_ticks that is not a whole number of ticks cannot happen (u32);
+ *   - a damaged assignment table (see the geometry above), a missing
+ *     Task/Fixed2Data or Rsc/Fixed2Data identity for an endpoint, or a
+ *     Fixed2Data endpoint identity that is all zero;
+ *   - `start`/`finish`/`resume` that are not valid packed dates (0 or
+ *     0xffffffff) when supplied, or a start after the finish.
+ */
+AddedAssignment add_assignment_row(CfbDocument& doc, AssignmentSpec const& assignment,
+                                   std::string const& path);
+
+/*
+ * Tombstone the assignment row whose uid is `uid`: its FixedMeta entry
+ * `+0 = 0x02`, `+2 = 0`, and `TBkndAssn/FixedMeta` header `+4 |= 0x02` (the
+ * measured "this table contains deleted rows" contract -- the same one W48's
+ * task-delete cascade writes).  No stream changes size; FixedData, Fixed2Data,
+ * Fixed2Meta, VarMeta and Var2Data keep every byte, and `core/mpp` then reports
+ * one fewer live assignment.
+ *
+ * Refusals: an empty/unusable output path; a damaged assignment table; no row
+ * with that uid; a row with no FixedMeta entry, an entry already tombstoned, a
+ * placeholder row (task uid 0) or a row naming a task uid that no live task
+ * holds (Project would not show it as an assignment either).
+ */
+DeletedAssignment delete_assignment_row(CfbDocument& doc, std::uint32_t uid,
+                                        std::string const& path);
+
 } /* namespace mppwrite */
 
 #endif /* MPPWRITE_ADD_DELETE_H */

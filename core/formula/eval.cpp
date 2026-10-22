@@ -11,7 +11,7 @@
 namespace core::formula {
 namespace {
 
-Value eval_node(const Expr& expr, const EvalContext& context);
+Value eval_node(const Expr& expr, const EvalContext& context, int depth);
 
 constexpr std::int64_t kTicksPerDay = core::view::kTicksPerDay;
 constexpr std::int64_t kTicksPerMinute = core::view::kTicksPerMinute;
@@ -391,7 +391,7 @@ std::string lower_ascii(std::string_view text) {
     return out;
 }
 
-Value call_function(const Expr& expr, const EvalContext& context) {
+Value call_function(const Expr& expr, const EvalContext& context, int depth) {
     const std::string& name = expr.text;
     if (static_cast<int>(expr.children.size()) != function_arity(name)) {
         return Value::null();
@@ -399,7 +399,7 @@ Value call_function(const Expr& expr, const EvalContext& context) {
     std::vector<Value> args;
     args.reserve(expr.children.size());
     for (const Expr& child : expr.children) {
-        args.push_back(eval_node(child, context));
+        args.push_back(eval_node(child, context, depth + 1));
     }
     auto number_of = [](double value) { return Value::of_number(value); };
     if (name == "isnull") {
@@ -536,7 +536,12 @@ std::string to_text(const Value& value, const core::sheet::SheetFormat& format) 
 
 namespace {
 
-Value eval_node(const Expr& expr, const EvalContext& context) {
+Value eval_node(const Expr& expr, const EvalContext& context, int depth) {
+    /* Defensive: evaluate() refuses an AST deeper than kMaxFormulaDepth before
+     * calling here, so this only triggers for a caller that bypasses it. */
+    if (depth > kMaxFormulaDepth) {
+        return Value::null();
+    }
     switch (expr.kind) {
         case ExprKind::Number:
             return Value::of_number(expr.number);
@@ -559,24 +564,24 @@ Value eval_node(const Expr& expr, const EvalContext& context) {
             }
             return Value::null();
         case ExprKind::Unary:
-            return unary(expr.unary, eval_node(expr.children[0], context));
+            return unary(expr.unary, eval_node(expr.children[0], context, depth + 1));
         case ExprKind::Binary: {
             if (expr.binary == BinaryOp::And) {
-                const Value left = eval_node(expr.children[0], context);
+                const Value left = eval_node(expr.children[0], context, depth + 1);
                 if (!truthy(left)) {
                     return Value::of_bool(false);
                 }
-                return Value::of_bool(truthy(eval_node(expr.children[1], context)));
+                return Value::of_bool(truthy(eval_node(expr.children[1], context, depth + 1)));
             }
             if (expr.binary == BinaryOp::Or) {
-                const Value left = eval_node(expr.children[0], context);
+                const Value left = eval_node(expr.children[0], context, depth + 1);
                 if (truthy(left)) {
                     return Value::of_bool(true);
                 }
-                return Value::of_bool(truthy(eval_node(expr.children[1], context)));
+                return Value::of_bool(truthy(eval_node(expr.children[1], context, depth + 1)));
             }
-            const Value left = eval_node(expr.children[0], context);
-            const Value right = eval_node(expr.children[1], context);
+            const Value left = eval_node(expr.children[0], context, depth + 1);
+            const Value right = eval_node(expr.children[1], context, depth + 1);
             if (expr.binary == BinaryOp::Concat) {
                 return Value::of_text(to_text(left, context.format) + to_text(right, context.format));
             }
@@ -589,10 +594,11 @@ Value eval_node(const Expr& expr, const EvalContext& context) {
         }
         case ExprKind::Call:
             if (expr.text == "iif") {
-                const Value condition = eval_node(expr.children[0], context);
-                return eval_node(truthy(condition) ? expr.children[1] : expr.children[2], context);
+                const Value condition = eval_node(expr.children[0], context, depth + 1);
+                return eval_node(truthy(condition) ? expr.children[1] : expr.children[2], context,
+                                 depth + 1);
             }
-            return call_function(expr, context);
+            return call_function(expr, context, depth + 1);
     }
     return Value::null();
 }
@@ -606,7 +612,13 @@ namespace {
  * parser rejects it), but the evaluator indexes children[0]/[1] and must not
  * read past the end.  A formula that parses is always well formed.
  */
-bool check_structure(const Expr& expr, std::string& error) {
+bool check_structure(const Expr& expr, int depth, std::string& error) {
+    /* The same bound the parser enforces.  Checked before recursing, so a
+     * hand-built AST deeper than the limit is refused without walking it. */
+    if (depth > kMaxFormulaDepth) {
+        error = "formula nesting exceeds " + std::to_string(kMaxFormulaDepth) + " levels";
+        return false;
+    }
     switch (expr.kind) {
         case ExprKind::Unary:
             if (expr.children.size() != 1) {
@@ -647,7 +659,7 @@ bool check_structure(const Expr& expr, std::string& error) {
             return true;
     }
     for (const Expr& child : expr.children) {
-        if (!check_structure(child, error)) {
+        if (!check_structure(child, depth + 1, error)) {
             return false;
         }
     }
@@ -658,11 +670,11 @@ bool check_structure(const Expr& expr, std::string& error) {
 
 EvalResult evaluate(const Expr& expr, const EvalContext& context) {
     EvalResult result;
-    if (!check_structure(expr, result.error)) {
+    if (!check_structure(expr, 0, result.error)) {
         result.ok = false;
         return result;
     }
-    result.value = eval_node(expr, context);
+    result.value = eval_node(expr, context, 0);
     result.ok = true;
     return result;
 }

@@ -64,6 +64,39 @@ namespace core::formula {
 
 using core::view::FieldId;
 
+/*
+ * Hard bound on expression nesting, shared by the parser and the evaluator.
+ * Nesting UP TO AND INCLUDING kMaxFormulaDepth is accepted; kMaxFormulaDepth+1
+ * is the first refused level.
+ *
+ * WHY IT EXISTS (measured 2026-10-22, wave-13 fuzz stream): the parser is
+ * recursive descent, so deeply nested input consumes stack in proportion to
+ * depth.  On the MSVC Release build (1 MB stack) 256 nested IIf calls and 384
+ * nested parentheses died with 0xC00000FD (STATUS_STACK_OVERFLOW); 128 of each
+ * was fine.  Formula text comes from 114/Props, so a corrupt or adversarial
+ * .mpp could crash the app merely by being opened.  Parsing REFUSES input deeper
+ * than the bound with the usual positioned error, and the evaluator refuses an
+ * AST deeper than the same bound.  Nothing here relies on exceptions.
+ *
+ * WHY 64 (ASan follow-up, same day): 160 was safe in Release but NOT under
+ * AddressSanitizer, whose instrumented frames are much larger.  In
+ * `build\vs-w57-asan` (Debug, /fsanitize=address) 64 and 72-deep input parsed
+ * but 80/88/96/128/160 overflowed the stack before the guard fired.  64 is
+ * below the ASan-measured good depth (72), so it is safe on every build and
+ * thread, while real formulas are fewer than ten levels deep -- 160 bought
+ * nothing but risk.  If this is ever raised, re-measure under ASan first.
+ *
+ * TWO GUARDS, ONE CONSTANT.  A flat "1 And 1 And ..." or "1+2+3+..." chain is
+ * parsed iteratively, so long chains do not consume parser stack; but the tree
+ * it builds is left-deep, and a deep tree's recursive DESTRUCTOR would also
+ * overflow the stack (measured under ASan).  So the parser tracks each node's
+ * tree height (`Expr::depth`) and refuses a chain whose TREE grows past the
+ * bound as well -- parsed output is always shallow enough to destroy and to
+ * evaluate.  The evaluator separately refuses a hand-built AST deeper than the
+ * same bound (see eval.h).
+ */
+inline constexpr int kMaxFormulaDepth = 64;
+
 /* ------------------------------------------------------------------------- */
 /* Tokenizer                                                                  */
 /* ------------------------------------------------------------------------- */
@@ -185,6 +218,15 @@ struct Expr {
 
     std::string text;                  /* Text literal, field token, call name */
     FieldId field = 0;                 /* FieldRef: resolved PjField id */
+
+    /*
+     * Parse bookkeeping: the subtree height in EDGES (a leaf is 0), which is
+     * also the evaluator's recursion depth for that node.  The parser refuses
+     * to finish a node whose depth exceeds kMaxFormulaDepth, so a returned AST
+     * is shallow enough that its recursive destructor and the evaluator are safe
+     * under AddressSanitizer.  The evaluator ignores this field.
+     */
+    int depth = 0;
 
     std::vector<Expr> children;
 };

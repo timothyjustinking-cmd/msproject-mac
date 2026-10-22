@@ -179,14 +179,23 @@ void test_documented_menu_contents() {
     check(save_as_shift, "Save As is Cmd-Shift-S");
     check(exports, "File has both PDF exports");
 
-    // Edit: undo/redo, the clipboard, select all, and the wave-12 Delete Task.
+    // Edit: undo/redo, the clipboard, select all, wave-12 Delete Task and the
+    // two wave-13 pending-edit dialogs.
     bool undo = false;
     bool redo_shift = false;
     bool copy = false;
     bool paste = false;
     bool select_all = false;
     bool delete_task = false;
+    bool task_fields = false;
+    bool predecessors = false;
     for (const MenuItemSpec& item : menu_named("Edit").items) {
+        if (item.action == MenuAction::task_fields) {
+            task_fields = std::string(item.key).empty();
+        }
+        if (item.action == MenuAction::predecessors) {
+            predecessors = std::string(item.key).empty();
+        }
         if (item.action == MenuAction::undo) {
             undo = std::string(item.key) == "z" && !item.shift;
         }
@@ -214,6 +223,8 @@ void test_documented_menu_contents() {
     check(paste, "Paste is Cmd-V");
     check(select_all, "Select All is Cmd-A");
     check(delete_task, "Delete Task is Cmd-Backspace, after a separator");
+    check(task_fields && predecessors,
+          "Task Fields and Predecessors are in Edit with no key equivalent");
 
     // View: the four views (wave 11) with Cmd-Option-1..4, the usage periods,
     // and the three timescales, the shading toggle, the filter.
@@ -319,6 +330,8 @@ void test_enablement() {
           "Insert Resource is not supported");
     check(app::menu_item_supported(MenuAction::insert_task), "Insert Task is supported");
     check(app::menu_item_supported(MenuAction::delete_task), "Delete Task is supported");
+    check(app::menu_item_supported(MenuAction::task_fields), "Task Fields is supported");
+    check(app::menu_item_supported(MenuAction::predecessors), "Predecessors is supported");
 
     // The wave-12 structural commands: a document, the Task Sheet view and no open
     // edit; Delete also needs a selection.
@@ -348,6 +361,33 @@ void test_enablement() {
           "Insert Task is task-view only");
     check(!app::menu_item_enabled(MenuAction::delete_task, structural),
           "Delete Task is task-view only");
+    check(!app::menu_item_enabled(MenuAction::task_fields, structural),
+          "Task Fields is task-view only");
+    check(!app::menu_item_enabled(MenuAction::predecessors, structural),
+          "Predecessors is task-view only");
+
+    // The wave-13 dialogs act on the selected task: a selection is required, an
+    // open cell edit and an empty state both disable them.
+    check(app::menu_item_enabled(MenuAction::task_fields, everything_state()),
+          "Task Fields works with a selection");
+    check(app::menu_item_enabled(MenuAction::predecessors, everything_state()),
+          "Predecessors works with a selection");
+    check(!app::menu_item_enabled(MenuAction::task_fields, empty_state()),
+          "Task Fields needs a document");
+    check(!app::menu_item_enabled(MenuAction::predecessors, empty_state()),
+          "Predecessors needs a document");
+    MenuState dialogs = everything_state();
+    dialogs.has_selection = false;
+    check(!app::menu_item_enabled(MenuAction::task_fields, dialogs),
+          "Task Fields needs a selected task");
+    check(!app::menu_item_enabled(MenuAction::predecessors, dialogs),
+          "Predecessors needs a selected task");
+    dialogs = everything_state();
+    dialogs.editing = true;
+    check(!app::menu_item_enabled(MenuAction::task_fields, dialogs),
+          "Task Fields is off while a cell edit is open");
+    check(!app::menu_item_enabled(MenuAction::predecessors, dialogs),
+          "Predecessors is off while a cell edit is open");
 
     // Document-dependent commands are off with no document.
     check(!app::menu_item_enabled(MenuAction::save, empty), "Save needs a document");
@@ -416,6 +456,10 @@ void test_enablement() {
           "Filter is task-view only");
     check(!app::menu_item_enabled(MenuAction::collapse_all, non_task),
           "Collapse is task-view only");
+    check(!app::menu_item_enabled(MenuAction::task_fields, non_task),
+          "Task Fields is task-view only (again, from the non-task state)");
+    check(!app::menu_item_enabled(MenuAction::predecessors, non_task),
+          "Predecessors is task-view only (again, from the non-task state)");
     check(app::menu_item_enabled(MenuAction::view_task_sheet, non_task),
           "the Task Sheet switch works from the other views");
     check(app::menu_item_enabled(MenuAction::view_resource_usage, non_task),

@@ -758,7 +758,11 @@ RecurrenceExpansion expand_recurring_exception(DatedException const& exception,
 
     // Fallbacks: a parameter the type does not store is 0, and the range's first
     // day is by definition a matching instance, so it supplies the value.
-    // Position is never derived -- 0 is the stored value for "first".
+    // Position is read as stored -- 0 is PjMonthPosition's "first" (mpxj reads
+    // the same byte as dayNumber = value + 1).  Only a monthly-positional
+    // MonthItem of 0 is substituted (measured: the first fixture's record stores
+    // 0 there because the start day is itself the rule; the sharper
+    // w12-exceptions-monthpos fixture stores 2/4 and is used as stored).
     const std::int32_t month = exception.month > 0 ? exception.month : start.month;
     const std::int32_t month_day = exception.month_day > 0 ? exception.month_day : start.day;
     const std::int32_t stored_weekday = weekday_of_month_item(exception.month_item);

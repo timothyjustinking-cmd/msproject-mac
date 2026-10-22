@@ -240,7 +240,7 @@ views of those words):
 | 2 | yearly, month + day | Month-1 [2 -> March] | MonthDay [15] | 0 |
 | 3 | yearly, positional | Month-1 [10 -> November] | MonthPosition [4 = last] | MonthItem [8 = Friday] |
 | 4 | monthly, day | MonthDay [15] | 0 | Period [1] |
-| 5 | monthly, positional | MonthPosition [0 = first] | MonthItem [0] | Period [1] |
+| 5 | monthly, positional | MonthPosition [0 = first] | MonthItem [0 or 4] | Period [1] |
 | 6 | weekly | DaysOfWeek bitmap [10 = Mon\|Wed] | 0 | Period [1] |
 | 7 | every N days | Period (u16) [1] | - | - |
 
@@ -258,18 +258,27 @@ weekly frequency).  Fetched 2026-10-22 from
 <https://raw.githubusercontent.com/joniles/mpxj/master/src/main/java/org/mpxj/mpp/AbstractCalendarAndExceptionFactory.java>
 (the file was read, not vendored; nothing from it is compiled here).
 The measurement that makes this the format, not a guess, is
-the occurrence word at `+4`: Project recomputes it, and **all six recurring
-records in the fixture agree with the expansion** built from these words
-(18/7/5/4/5/4 days; the type-1 plain range is 29).  The yearly positional record
-is the sharpest: last Friday of November 2026..2030 gives 2026-11-27, 2027-11-26,
-2028-11-24, **2029-11-30**, and excludes 2030-11-29 (past the stored Finish).
+the occurrence word at `+4`: Project recomputes it, and **all seven recurring
+records across the two fixtures agree with the expansion** built from these words
+(18/7/5/4/5/4 days plus 8 in the second fixture; the type-1 plain range is 29).
+The yearly positional record is the sharpest: last Friday of November 2026..2030
+gives 2026-11-27, 2027-11-26, 2028-11-24, **2029-11-30**, and excludes 2030-11-29
+(past the stored Finish).
 
-**One measured gap:** for a *monthly* positional record Project stores 0 in the
-`MonthItem` byte and COM reads `MonthItem 0` / `MonthPosition 0` back
-(`FirstMonday` in the JSON).  Its weekday is therefore not in the file; the
-expansion derives it from the record's start day (2026-11-02 is a Monday) and the
-stored occurrence word (7) still agrees.  Types 2, 3, 4, 6 and 7 store every
-parameter they need.
+**Monthly positional has two measured shapes.**  The first fixture's record
+(`FirstMonday`) stores 0 in both the MonthPosition and MonthItem bytes, and COM
+reads `MonthPosition 0` / `MonthItem 0` back: that record's start day
+(2026-11-02) is itself the first Monday, so only the weekday (from the start day,
+which is a matching instance) is derived, and the stored count 7 agrees.  The
+second fixture (`corpus/probe/w12-exceptions-monthpos.mpp`, COM JSON
+`docs/analysis/oracle/w12-monthpos.json`) separates them: one type-5 record with
+Start **2026-11-01 (a Sunday)**, Finish 2027-06-30, Occurrences **8**,
+MonthPosition **2 (third)**, MonthItem **4 (Monday)**, Period 1.  Its words are
+`+76 = 0x0402` (position 2, month item 4) and `+78 = 1`; the expansion is the
+third Monday of each month (2026-11-16, 12-21, 2027-01-18, 02-15, 03-15, 04-19,
+05-17, 06-21) -- 8 days, which is Project's own count.  So MonthItem/MonthPosition
+are **stored and used as stored** whenever they are non-zero; only a zero
+MonthItem falls back to the start day's weekday.
 
 ### Work-week record
 
@@ -384,7 +393,7 @@ builds `core_cal` and `cal_tests` after adding `core/mpp` and `core/sched` with
 their tests off.
 
 `CAL_NO_CORPUS=1` forces the corpus-gated cases to skip (245 checks instead of
-509), the same convention as `MPP_NO_CORPUS` in the reader tests.
+553), the same convention as `MPP_NO_CORPUS` in the reader tests.
 
 To dump the raw streams without this code (read-only; prints no client names):
 

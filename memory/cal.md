@@ -355,8 +355,9 @@ the new code/tests/docs.  The only name added is the synthetic fixture label
 
 ## W53 addendum (wave 12, 2026-10-22 19:55) — recurring exception PARAMETERS decoded and applied
 
-Status: done for every PjExceptionType that stores its parameters.  One measured
-gap remains (monthly-positional weekday), stated below and in `core/cal/cal.h`.
+Status: done for every PjExceptionType.  The one gap this run opened
+(monthly-positional weekday) was **closed the same session** by the coordinator's
+second fixture; see "Monthly positional: both shapes now measured" below.
 Owned paths touched: `core/cal/cal.h`, `core/cal/cal.cpp`, `core/cal/README.md`,
 `tests/cal_tests.cpp`, `core/plan/CMakeLists.txt` (fixture path),
 `tests/plan_recalc_tests.cpp`, `tools/cal_exception_dump.py`, this file.  No
@@ -399,7 +400,7 @@ record.  Byte views of those words: `+76` (low byte and high byte), `+77`,
 | 2 yearly month+day | Month-1 (2 -> March) | MonthDay (15) | 0 |
 | 3 yearly positional | Month-1 (10 -> November) | MonthPosition (4 = last) | MonthItem (8 = Friday) |
 | 4 monthly day | MonthDay (15) | 0 | Period (1) |
-| 5 monthly positional | MonthPosition (0 = first) | MonthItem (0 here) | Period (1) |
+| 5 monthly positional | MonthPosition (0 = first) | MonthItem (0 or 4) | Period (1) |
 | 6 weekly | DaysOfWeek bitmap (10 = Mon\|Wed) | 0 | Period (1) |
 | 7 every N days | Period (u16) | — | — |
 
@@ -411,13 +412,15 @@ ordinal).  `+74`, `+82`, `+84`, `+86` are 0 in all seven.
 
 **The validation is the +4 occurrence word.**  Project recomputes it from the
 range and the parameters, so "our expansion reproduces Project's own count" is a
-measurement of the decode, not of our assumptions.  All six recurring records
-agree: 18 (weekly), 7 (monthly positional), 5 (monthly day 15), 4 (yearly
-positional), 5 (every-N-days), 4 (yearly month+day), plus 29 days for the type-1
-plain range.  The sharpest case is the yearly positional record: last Friday of
-November 2026..2030 = 2026-11-27, 2027-11-26, 2028-11-24, **2029-11-30**
-(excluding 2030-11-29, which is past the stored Finish) — exactly 4 occurrences,
-and only a correct Month=11/MonthItem=8/Position=4 decode produces that set.
+measurement of the decode, not of our assumptions.  All six recurring records of
+the first fixture agree: 18 (weekly), 7 (monthly positional), 5 (monthly day 15),
+4 (yearly positional), 5 (every-N-days), 4 (yearly month+day), plus 29 days for
+the type-1 plain range; the second fixture's monthly positional record adds
+**8** (third Monday).  The sharpest case is the yearly positional record: last
+Friday of November 2026..2030 = 2026-11-27, 2027-11-26, 2028-11-24,
+**2029-11-30** (excluding 2030-11-29, which is past the stored Finish) — exactly
+4 occurrences, and only a correct Month=11/MonthItem=8/Position=4 decode produces
+that set.
 
 ### What changed
 
@@ -451,40 +454,69 @@ and only a correct Month=11/MonthItem=8/Position=4 decode produces that set.
    accumulation the moment it is exceeded, so there is no unbounded loop even
    with the cap disabled.
 
-### The one gap (measured, not inferred)
+### Monthly positional: both shapes now measured (follow-up, 20:30)
 
-For the **monthly positional** record Project stores 0 in the MonthItem byte and
-COM reads `MonthItem 0` / `MonthPosition 0` back (`FirstMonday` in the JSON).
-The record has no weekday, so the expansion derives it from the start day
-(2026-11-02 is a Monday) — and the stored occurrence word (7) still agrees, which
-proves the derivation for this record.  A different monthly-positional exception
-whose start day is not its weekday cannot be distinguished from one that is; the
-occurrence word catches it (count disagreement -> refusal).  Everything else is
-read from the file.
+The first fixture's record stores 0 in the MonthPosition and MonthItem bytes and
+COM reads `MonthPosition 0` / `MonthItem 0` (`FirstMonday`); that record's start
+day (2026-11-02) is itself the first Monday, so only the weekday is taken from
+the start day and the stored count (7) agrees.
+
+The coordinator's sharper fixture **`corpus/probe/w12-exceptions-monthpos.mpp`**
+(COM JSON `docs/analysis/oracle/w12-monthpos.json`, identical before and after
+reopen) separates the two words: one type-5 exception, Start **2026-11-01 (a
+Sunday)**, Finish 2027-06-30, Occurrences **8**, Period 1, MonthPosition **2
+(third)**, MonthItem **4 (Monday)**, Month 0, MonthDay 0.  Decoded record words
+(block offset 424 in the single data block):
+
+```
++76 = 1026 = 0x0402   -> low byte 2 = MonthPosition (third), high byte 4 = MonthItem (Monday)
++78 = 1               -> Period
++80 = 1               -> the per-record ordinal, not a parameter
+```
+
+So `+76` = Position and `+77` (its high byte) = MonthItem is confirmed with
+non-zero values that differ from the start day's weekday (Sunday vs Monday), and
+the expansion is the third Monday of each month: 2026-11-16, 2026-12-21,
+2027-01-18, 2027-02-15, 2027-03-15, 2027-04-19, 2027-05-17, 2027-06-21 (day
+numbers 15661, 15696, 15724, 15752, 15780, 15815, 15843, 15878) = **8 days =
+Project's own +4 count**.  `tests/cal_tests.cpp::test_w12_monthpos` pins the
+decode, the eight days, `applied 1 / not_applied 0`, the day totals, and
+`add_work(Fri 2026-11-13 08:00, 2 d) = Tue 2026-11-17 17:00` (Mon 11-16 is the
+exception).
+
+Consequence for the decoder: MonthItem/MonthPosition are **used as stored**
+whenever non-zero; only a zero MonthItem falls back to the start day's weekday.
+The zero case is documented (it is Project's short form for a record whose start
+day already is the rule), and no part of the mapping is inferred any more.
 
 ### Counts (build\vs-w53, Release, /W4 /WX)
 
 | binary | before | now |
 |---|---|---|
-| `cal_tests` (corpus) | 217 | **509** |
+| `cal_tests` (corpus) | 217 | **553** |
 | `cal_tests` (`CAL_NO_CORPUS=1`) | 90 | **245** |
 | `plan_recalc_tests` | 277 | **291** |
-| `ctest -R "cal\|sched\|plan\|mpp"` | 21/21 | **24/24** |
+| `ctest -R "cal\|sched\|plan\|mpp"` | 21/21 | **24/24 at 20:05**; at 20:30 the concurrent writer stream's new `mppwrite_roundtrip_assignments` makes the tree 25 tests and fails in their lane (`add_resource_row: 114/TBkndRsc/Fixed2Meta entry 5 ...`), not in `cal`/`plan` |
 
 New tests: `test_recurrence_parameters` (CI-safe: decode round trip for all seven
 types in one hand-built block, every type's expansion reproduced, PjMonthItem
 mapping, leap day 2024-02-29..2028-02-29 = 2 days, month-end 31st Jan/Mar/May
 2027, absent fifth Monday Feb/Mar 2027, weekly period 2, monthly period 2 across
 a year boundary, zero-occurrence one-day range, empty-mask fallback, parameter
-guards) and `test_w12_exceptions` (corpus: the seven records' parameters equal
+guards), `test_w12_exceptions` (corpus: the seven records' parameters equal
 the JSON, 72 expanded days, builder applied 6 / refused 0, eleven spot dates from
 2026-11-02 to 2030-11-29, `add_work` Mon 11-02 + 2 d = Thu 12-03 17:00, and the
-derived calendar uid 2 inheriting all six).
+derived calendar uid 2 inheriting all six), and `test_w12_monthpos` (corpus:
+the second fixture's type-5 record words and COM values, the eight third Mondays,
+builder applied 1 / refused 0, `add_work` Fri 11-13 + 2 d = Tue 11-17 17:00).
 
 ### Traps added
 
 * `cal_tests`' `CAL_HOLIDAY` default name check is "Standard" — the w12 fixture's
   project default is also "Standard" (synthetic), so the two do not collide.
+* A monthly-positional record may store MonthItem 0 (short form, start day is the
+  rule) or a real PjMonthItem; do not assume either.  The second fixture is the
+  proof that the two words are separate (`+76 = 0x0402` = position 2, item 4).
 * The convention change: PjMonthPosition 0 is "first", so the old
   derive-the-position-from-the-start-day behaviour is gone.  A hand-built
   `DatedException` with position 0 expands to the FIRST such weekday, not to the
@@ -496,10 +528,13 @@ derived calendar uid 2 inheriting all six).
 
 ### Open
 
-1. A monthly-positional fixture whose start day is not the first matching
-   weekday would settle whether Project ever stores MonthItem for type 5 (it did
-   not here).  Coordinator-only (COM).
+1. ~~A monthly-positional fixture whose start day is not the first matching
+   weekday~~ **CLOSED 20:30**: `w12-exceptions-monthpos.mpp` stores
+   MonthPosition 2 / MonthItem 4 and the expansion matches Project's count 8.
+   The only remaining unmeasured branch is a monthly-positional record that
+   stores MonthItem 0 while its start day is NOT the first matching weekday (no
+   such file exists; the occurrence word would refuse a wrong expansion).
 2. Yearly recurrences store no period word, so "every N years" is unmeasurable
-   from this fixture; the decoder assumes every year, which is what all six
+   from these fixtures; the decoder assumes every year, which is what all seven
    records show.
 

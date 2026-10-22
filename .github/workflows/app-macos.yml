@@ -88,7 +88,7 @@ jobs:
 
       # The test names are part of the contract: a silently unregistered test is
       # as bad as a failing one.
-      - name: The ten headless tests are registered
+      - name: The twelve headless tests are registered
         shell: bash
         run: |
           set -euo pipefail
@@ -103,8 +103,10 @@ jobs:
           grep -q "app_views" tests.txt
           grep -q "app_edit" tests.txt
           grep -q "app_fields" tests.txt
+          grep -q "app_edits_fields" tests.txt
+          grep -q "app_edits_links" tests.txt
 
-      - name: Test (headless layout, selection, save, preferences, menu, filter, export, views, edit, fields)
+      - name: Test (headless layout, selection, save, preferences, menu, filter, export, views, edit, fields, field/link edits)
         shell: bash
         run: ctest --test-dir build-app -C Release --output-on-failure --timeout 120
 

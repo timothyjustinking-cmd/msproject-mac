@@ -103,9 +103,17 @@ struct TaskRow {
 };
 
 struct LinkRow {
+    // Wave 13: the file's link row uid (0 for a link a producer cannot name, and
+    // for a pending add the shell is only displaying).  The Predecessors dialog
+    // deletes by uid because (predecessor, successor, type) is what the writer
+    // treats as the relation's identity; the uid is what addresses one row.
+    std::uint32_t uid = 0;
     std::uint32_t predecessor_uid = 0;
     std::uint32_t successor_uid = 0;
     core::gantt::LinkType type = core::gantt::LinkType::finish_to_start;
+    // The stored lag in 6-second file ticks (4800 = one 8-hour working day,
+    // negative = lead).  The Predecessors dialog shows and edits it.
+    std::int32_t lag_ticks = 0;
     bool critical = false;
 };
 

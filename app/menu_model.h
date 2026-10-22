@@ -75,6 +75,11 @@ enum class MenuAction : std::uint8_t {
     // into its link/assignment rows (w11-oracle section 2); the shell confirms the
     // cascade size first.
     delete_task,
+    // Wave 13: the two pending-edit dialogs.  Both act on the selected task and
+    // both queue edits the Save path writes (app/edit_model.h): Task Fields edits
+    // the six measured custom fields, Predecessors adds/removes incoming links.
+    task_fields,
+    predecessors,
     insert_resource,
 };
 

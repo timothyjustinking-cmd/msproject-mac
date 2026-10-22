@@ -21,8 +21,8 @@ cmd /c "call `"$vc`" >nul && cmake --build build\audit-app --config Release"
 ctest --test-dir build\audit-app -C Release --output-on-failure
 ```
 
-Expected at the wave-12 gate: **40/40** core ctest and **10/10** app tests
-(1,765 app checks). The real corpus (`corpus/*.mpp`) is client data and is
+Expected at the wave-13 gate: **47/47** core ctest and **12/12** app tests
+(2,132 app checks). The real corpus (`corpus/*.mpp`) is client data and is
 git-ignored; `tests/data/` has committed synthetic fixtures. The two real files
 are PROJECT_A (83 tasks) and PROJECT_B (73 tasks, 70 live links / 63 assignments).
 
@@ -116,16 +116,16 @@ are PROJECT_A (83 tasks) and PROJECT_B (73 tasks, 70 live links / 63 assignments
 2. **Linked date pins clamp**: Project reopens at `max(pred finish, pin)`; the
    app does not yet warn when an edit cannot take effect.
 3. **`214/` is not regenerated**; view state is carried through byte-identically.
-4. **Assignment row creation/deletion is not implemented**; link add/delete is.
-   A task delete cascades over existing link/assignment rows.
-5. **Cost custom fields and Flag2–20** are refused (storage unmeasured);
-   field delete is only clear-to-empty.
+4. **Link and assignment editing is implemented**: task add/delete, link
+   add/delete, resource add, assignment add/delete, custom-field read/write and
+   clear; the app exposes insert/delete, Task Fields and Predecessors. Still
+   missing: assignment custom fields and `214/`/`114/Props` writing.
+5. **Cost custom fields and Flag2–20** are refused (storage unmeasured).
 6. **MPP12 and MPP14 resource Type** are not implemented.
-7. **Recurring calendar exceptions** are decoded and applied; the monthly
-   positional weekday is inferred from the start day (Project stores 0).
-8. **App**: save persists start dates, task add/delete; stored custom-field and
-   formula columns are read-only; no custom-field write UI, no link editing UI,
-   no multi-window/printing/drag.
+7. **Recurring calendar exceptions** are decoded and applied for every type;
+   both monthly-positional shapes are measured.
+8. **App**: save persists starts, task/link/field edits; no multi-window,
+   printing or drag; the manual Mac smoke test is still open.
 
 ## 5. Suggested debug build
 

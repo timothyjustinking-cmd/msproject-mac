@@ -57,6 +57,10 @@ std::vector<MenuSpec> build_menu_specs() {
         // Wave 12.  Cmd-Backspace is the Mac's "delete"; Delete Task is a
         // structural edit and asks for confirmation before it runs.
         item(MenuAction::delete_task, "Delete Task", "\b", false, false, true),
+        // Wave 13: the two pending-edit dialogs.  They act on the selected task;
+        // no key equivalents (they are forms, not blind commands).
+        item(MenuAction::task_fields, "Task Fields...", "", false, false, true),
+        item(MenuAction::predecessors, "Predecessors..."),
     };
     menus.push_back(std::move(edit));
 
@@ -149,6 +153,8 @@ const std::vector<MenuAction>& all_menu_actions() {
         MenuAction::usage_month,
         MenuAction::insert_task,
         MenuAction::delete_task,
+        MenuAction::task_fields,
+        MenuAction::predecessors,
         MenuAction::insert_resource,
     };
     return actions;
@@ -256,9 +262,12 @@ bool menu_item_enabled(MenuAction action, const MenuState& state) noexcept {
             return state.has_document;
         case MenuAction::insert_task:
         case MenuAction::delete_task:
+        case MenuAction::task_fields:
+        case MenuAction::predecessors:
             // A structural edit is a Task Sheet command: it needs a document, a
-            // row to work from and no open cell edit.  Delete also needs a
-            // selection.
+            // row to work from and no open cell edit.  The three selection
+            // commands also need a selected row; Insert Task can append at the
+            // end without one.
             if (!state.has_document || !state.task_view || state.editing) {
                 return false;
             }
@@ -309,6 +318,8 @@ const char* menu_action_name(MenuAction action) noexcept {
         case MenuAction::usage_month: return "usage_month";
         case MenuAction::insert_task: return "insert_task";
         case MenuAction::delete_task: return "delete_task";
+        case MenuAction::task_fields: return "task_fields";
+        case MenuAction::predecessors: return "predecessors";
         case MenuAction::insert_resource: return "insert_resource";
     }
     return "none";

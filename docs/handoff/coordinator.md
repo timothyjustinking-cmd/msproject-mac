@@ -559,3 +559,65 @@ comment).
 3. Run the audit: ASan/debug build, the `docs/audit-handoff.md` checklist, fix
    findings, then hand to a human.
 
+## Wave 13 final (2026-10-22 ~21:15)
+
+The build phase is complete; `docs/handoff/wave13-complete.md` is the successor
+gate. The adversarial lane now exists (`tests/fuzz`, `docs/audit-findings.md`).
+
+### Where main is
+
+`d60cd77` plus the docs commit. Wave-13 commits: `15f8ec3` W53b, `87f7659` W54,
+`1516b5b` W55, `dfb5fb0` W56, `41a85e4` app/fuzz wiring, `b35cd64` + `5743a79`
+W44, `ded8503` W57, `d60cd77` fuzz clang fix. Check CI on the docs tip.
+
+### The numbers
+
+* `build\vs-w13`: **47/47 ctest**; app `build\vs-w13-app`: **12/12**, **2,132
+  checks**.
+* **M2 332/332**; schedin 20/20 + 10/10; plan 291; cal 553; reader 685;
+  assignments 679; links 773; add_delete 760; field_values 477; formula 1,249;
+  viewstate 113; fuzz 5/5.
+* Project gates: W54 resources/assignments passed; W55 app-macos green; earlier
+  custom-field/cascade/link gates unchanged.
+
+### Per stream
+
+| # | Result | Evidence |
+|---|---|---|
+| W53b | type-5 monthly positional with non-matching start day: `+76 = pos | item<<8`, `+78 = period` | cal 553; 8 third-Mondays |
+| W54 | resource add, assignment add/delete; rows byte-identical to Project's | assignments 679; Project 2/1/0 |
+| W55 | Task Fields + Predecessors dialogs, one stack, fixed save order | app 12/12; app-macos |
+| W56 | 214 table/view decoder; DateFormat=5 at CTable payload +7 | viewstate 113; corrected column premise |
+| W57 | deterministic fuzz + ASan; **formula stack overflow found** | 5/5 fuzz; ASan clean after fix |
+| W44b | `kMaxFormulaDepth=64` + AST height/destructor guard | formula 1,249 Release + ASan |
+
+### Open before the human review
+
+1. `214/` writing (date-format word known; true column layout, CV_iew, CEdl).
+2. `114/Props` formula writing; assignment custom fields; Cost/Flag2–20.
+3. MPP12, MPP14 resource Type, summary-calendar rollup, elapsed mixes.
+4. App multi-window/printing; **manual Mac smoke test**; LeakSanitizer/UBSan
+   (MSVC has neither).
+
+### Traps added
+
+* **Dropbox mtime hides fixture edits from `git status`.** A modified
+  `synthetic-base.mpp` (same size, different hash) looked clean because Git's
+  stat cache matched. Force-restore by deleting then `git checkout HEAD --` and
+  verify SHA256 `55C109F2…`. Compare `git hash-object` with `HEAD`.
+* ASan exes need `vcvars64.bat` on PATH for the ASan runtime DLL.
+* Fuzz/test code still compiles under clang/gcc `-Werror` (unused, sign-compare);
+  MSVC misses both.
+* Formula text is attacker-controlled from `114/Props`: never recurse without a
+  depth bound (64), including the AST destructor.
+
+### Next three actions
+
+1. Run the **manual Mac smoke test** (insert/delete, Task Fields, Predecessors,
+   undo, save/reopen, filters, export) against the `app-macos` artifact.
+2. Decode/write the genuine `214/CTable` added-column layout with a corrected
+   `TableEdit(Create=True, OverwriteExisting=True)` fixture, then view-state
+   persistence.
+3. Hand `docs/audit-handoff.md`/`audit-findings.md` to the external audit, fix
+   what it finds, then the human review.
+

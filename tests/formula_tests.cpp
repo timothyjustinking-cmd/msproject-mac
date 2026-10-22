@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "columns.h"
@@ -197,6 +198,59 @@ void check_bytes(TestContext& ctx, const EncodedValue& encoded,
 FieldId custom_number(int index) {
     const CustomField* field = core::formula::find_custom_field(FieldKind::Number, index);
     return field == nullptr ? 0 : field->field;
+}
+
+/*
+ * Deep-nesting fixtures.  The shapes match the wave-13 fuzz harness
+ * (tests/fuzz/fuzz_parsers_main.cpp): `((((1))))` and
+ * `IIf(1,0,IIf(1,0,...))`, plus a right-nested arithmetic chain, a right-nested
+ * And chain and a unary chain.
+ */
+std::string nested_parens(int depth) {
+    std::string out(static_cast<std::size_t>(depth), '(');
+    out += "1";
+    out.append(static_cast<std::size_t>(depth), ')');
+    return out;
+}
+
+std::string nested_iif(int depth) {
+    std::string out;
+    for (int index = 0; index < depth; ++index) {
+        out += "IIf(1,0,";
+    }
+    out += "0";
+    out.append(static_cast<std::size_t>(depth), ')');
+    return out;
+}
+
+std::string nested_arithmetic(int depth) {
+    std::string out;
+    for (int index = 0; index < depth; ++index) {
+        out += "1+(";
+    }
+    out += "1";
+    out.append(static_cast<std::size_t>(depth), ')');
+    return out;
+}
+
+std::string nested_and(int depth) {
+    std::string out;
+    for (int index = 0; index < depth; ++index) {
+        out += "1 And (";
+    }
+    out += "1";
+    out.append(static_cast<std::size_t>(depth), ')');
+    return out;
+}
+
+std::string unary_chain(int depth, std::string_view op) {
+    std::string out;
+    for (int index = 0; index < depth; ++index) {
+        out += op;
+        out += ' ';
+    }
+    out += "True";
+    return out;
 }
 
 /*
@@ -490,6 +544,215 @@ void test_parse_errors(TestContext& ctx) {
     ctx.contains(r.error, "[Name]", "[inference] the message says how to write a field");
 
     ctx.contains(r.error, "offset 0", "[inference] parse errors carry an offset");
+}
+
+/* ------------------------------------------------------------------------- */
+/* Nesting/recursion guard (wave-13 fuzz follow-up; ASan follow-up)           */
+/*                                                                            */
+/* Before the guard, parse() on 256 nested IIf or 384 nested parentheses      */
+/* died with 0xC00000FD in MSVC Release (formula text comes from 114/Props).  */
+/* The bound is 64, not 128/160: under /fsanitize=address the larger frames   */
+/* overflow at ~80, so 64 is the depth that is safe on every build and thread */
+/* (real formulas are fewer than ten levels deep).  Nesting up to and         */
+/* including 64 is accepted; 65 is the first refused level.  The constant is  */
+/* shared with the evaluator.  Fixtures match tests/fuzz/fuzz_parsers_main.cpp. */
+/* ------------------------------------------------------------------------- */
+
+void test_nesting_limits(TestContext& ctx) {
+    ctx.equal(core::formula::kMaxFormulaDepth, 64,
+              "[measured] the shared nesting bound is 64 (ASan: 72 parsed, 80 overflowed)");
+    const std::string limit_text = std::to_string(core::formula::kMaxFormulaDepth);
+
+    /* ---- 48 and 64 deep are accepted; 64 is the last accepted level ---- */
+    for (int depth : {48, 64}) {
+        const std::string label = std::to_string(depth) + " nested parentheses";
+        const core::formula::ParseResult parsed = core::formula::parse(nested_parens(depth));
+        ctx.check(parsed.ok, "[measured] " + label + " parse (within the guard)");
+        if (parsed.ok) {
+            EvalContext context;
+            const core::formula::EvalResult result =
+                core::formula::evaluate(parsed.root, context);
+            ctx.check(result.ok && is_number(result.value, 1.0),
+                      "[inference] " + label + " still evaluate");
+        }
+    }
+    for (int depth : {48, 64}) {
+        const std::string label = std::to_string(depth) + " nested IIf calls";
+        const core::formula::ParseResult parsed = core::formula::parse(nested_iif(depth));
+        ctx.check(parsed.ok, "[measured] " + label + " parse (within the guard)");
+        if (parsed.ok) {
+            EvalContext context;
+            const core::formula::EvalResult result =
+                core::formula::evaluate(parsed.root, context);
+            ctx.check(result.ok && is_number(result.value, 0.0),
+                      "[inference] " + label + " evaluate (lazy false branch)");
+        }
+    }
+
+    /* ---- 65 is the first refused level ---- */
+    for (int depth : {65}) {
+        const std::string label = std::to_string(depth) + " nested parentheses";
+        const std::string text = nested_parens(depth);
+        const core::formula::ParseResult parsed = core::formula::parse(text);
+        ctx.check(!parsed.ok, "[measured] " + label + " are refused (first level past the bound)");
+        ctx.check(parsed.error_position <= text.size(),
+                  "[inference] the " + label + " refusal is positioned");
+        ctx.contains(parsed.error, "nesting exceeds " + limit_text + " levels",
+                     "[inference] the " + label + " error names the bound");
+        const core::formula::ParseResult parsed_iif =
+            core::formula::parse(nested_iif(depth));
+        ctx.check(!parsed_iif.ok,
+                  "[measured] 65 nested IIf calls are refused (first level past the bound)");
+    }
+
+    /* ---- deeper input is refused with a positioned error, never a crash ---- */
+    const int deep_depths[] = {65, 128, 256, 384, 1024, 4096};
+    for (int depth : deep_depths) {
+        const std::string text = nested_parens(depth);
+        const std::string label = std::to_string(depth) + " nested parentheses";
+        const core::formula::ParseResult parsed = core::formula::parse(text);
+        ctx.check(!parsed.ok, "[measured] " + label + " are refused, not parsed");
+        ctx.check(parsed.error_position <= text.size(),
+                  "[inference] the " + label + " refusal is positioned");
+        ctx.contains(parsed.error, "nesting exceeds " + limit_text + " levels",
+                     "[inference] the " + label + " error names the bound");
+        ctx.contains(parsed.error, "offset ",
+                     "[inference] the " + label + " error carries an offset");
+    }
+    for (int depth : {128, 256, 1024}) {
+        const std::string text = nested_iif(depth);
+        const std::string label = std::to_string(depth) + " nested IIf calls";
+        const core::formula::ParseResult parsed = core::formula::parse(text);
+        ctx.check(!parsed.ok, "[measured] " + label + " are refused, not parsed");
+        ctx.check(parsed.error_position <= text.size(),
+                  "[inference] the " + label + " refusal is positioned");
+        ctx.contains(parsed.error, "nesting exceeds " + limit_text + " levels",
+                     "[inference] the " + label + " error names the bound");
+    }
+
+    /* ---- unbalanced input still reports its own syntax error ---- */
+    const std::string unbalanced = std::string(48, '(') + "1";
+    const core::formula::ParseResult un = core::formula::parse(unbalanced);
+    ctx.check(!un.ok, "[inference] a deep but unbalanced formula is an error");
+    ctx.contains(un.error, "expected ')'",
+                 "[inference] the unbalanced error is the syntax error, not the guard");
+    ctx.check(un.error_position <= unbalanced.size(),
+              "[inference] the unbalanced error is positioned");
+
+    /* ---- right-nested arithmetic and And chains ---- */
+    const core::formula::ParseResult arithmetic_ok = core::formula::parse(nested_arithmetic(64));
+    ctx.check(arithmetic_ok.ok,
+              "[inference] a 64-deep right-nested arithmetic expression parses");
+    if (arithmetic_ok.ok) {
+        EvalContext context;
+        const core::formula::EvalResult result =
+            core::formula::evaluate(arithmetic_ok.root, context);
+        ctx.check(result.ok && is_number(result.value, 65.0),
+                  "[inference] the 64-deep arithmetic chain evaluates to 65");
+    }
+    const core::formula::ParseResult arithmetic_deep =
+        core::formula::parse(nested_arithmetic(128));
+    ctx.check(!arithmetic_deep.ok,
+              "[inference] a 128-deep right-nested arithmetic expression is refused");
+    ctx.contains(arithmetic_deep.error, "nesting exceeds", "[inference] with the depth error");
+
+    ctx.check(core::formula::parse(nested_and(64)).ok,
+              "[inference] a 64-deep right-nested And chain parses");
+    const core::formula::ParseResult and_deep = core::formula::parse(nested_and(128));
+    ctx.check(!and_deep.ok, "[inference] a 128-deep right-nested And chain is refused");
+    ctx.contains(and_deep.error, "nesting exceeds", "[inference] with the depth error");
+
+    /* ---- unary chains recurse without entering parse_or, so also bound ---- */
+    const core::formula::ParseResult unary_ok =
+        core::formula::parse(unary_chain(64, "Not"));
+    ctx.check(unary_ok.ok, "[inference] a 64-long unary chain parses");
+    if (unary_ok.ok) {
+        EvalContext context;
+        const core::formula::EvalResult result = core::formula::evaluate(unary_ok.root, context);
+        ctx.check(result.ok && is_bool(result.value, true),
+                  "[inference] the 64-long unary chain evaluates");
+    }
+    const core::formula::ParseResult unary_boundary =
+        core::formula::parse(unary_chain(65, "Not"));
+    ctx.check(!unary_boundary.ok,
+              "[inference] a 65-long unary chain is refused (same boundary as parens)");
+    const core::formula::ParseResult unary_deep =
+        core::formula::parse(unary_chain(128, "Not"));
+    ctx.check(!unary_deep.ok, "[inference] a 128-long unary chain is refused");
+    ctx.contains(unary_deep.error, "nesting exceeds", "[inference] with the depth error");
+
+    /* ---- flat chains: parsed iteratively, refused once the TREE gets deep ---- */
+    std::string flat = "1";
+    for (int index = 0; index < 32; ++index) {
+        flat += " And 1";
+    }
+    const core::formula::ParseResult short_flat = core::formula::parse(flat);
+    ctx.check(short_flat.ok, "[inference] a 32-term flat And chain parses");
+    if (short_flat.ok) {
+        EvalContext context;
+        const core::formula::EvalResult result =
+            core::formula::evaluate(short_flat.root, context);
+        ctx.check(result.ok && is_bool(result.value, true),
+                  "[inference] the 32-term flat chain evaluates");
+    }
+    flat = "1";
+    for (int index = 0; index < 4096; ++index) {
+        flat += " And 1";
+    }
+    const core::formula::ParseResult flat_parsed = core::formula::parse(flat);
+    ctx.check(!flat_parsed.ok,
+              "[measured] a 4096-term flat And chain is refused at parse time "
+              "(its left-deep AST would overflow on destruction/evaluation)");
+    ctx.check(flat_parsed.error_position <= flat.size(),
+              "[inference] the flat-chain refusal is positioned");
+    ctx.contains(flat_parsed.error, "nesting exceeds " + limit_text + " levels",
+                 "[inference] the flat-chain error names the bound");
+
+    /* ---- the evaluator refuses a deep hand-built AST (no parser involved) ---- */
+    core::formula::Expr deep_expr;
+    deep_expr.kind = core::formula::ExprKind::Bool;
+    deep_expr.boolean = true;
+    for (int index = 0; index < 80; ++index) {
+        core::formula::Expr parent;
+        parent.kind = core::formula::ExprKind::Unary;
+        parent.unary = core::formula::UnaryOp::Not;
+        parent.children.push_back(std::move(deep_expr));
+        deep_expr = std::move(parent);
+    }
+    EvalContext context;
+    const core::formula::EvalResult deep_result = core::formula::evaluate(deep_expr, context);
+    ctx.check(!deep_result.ok, "[inference] an 80-deep hand-built AST is refused");
+    ctx.contains(deep_result.error, "nesting exceeds " + limit_text + " levels",
+                 "[inference] the evaluator's depth error names the bound");
+
+    core::formula::Expr boundary_expr;
+    boundary_expr.kind = core::formula::ExprKind::Bool;
+    boundary_expr.boolean = true;
+    for (int index = 0; index < 65; ++index) {
+        core::formula::Expr parent;
+        parent.kind = core::formula::ExprKind::Unary;
+        parent.unary = core::formula::UnaryOp::Not;
+        parent.children.push_back(std::move(boundary_expr));
+        boundary_expr = std::move(parent);
+    }
+    const core::formula::EvalResult boundary_result =
+        core::formula::evaluate(boundary_expr, context);
+    ctx.check(!boundary_result.ok, "[inference] a 65-deep hand-built AST is refused");
+
+    core::formula::Expr shallow_expr;
+    shallow_expr.kind = core::formula::ExprKind::Bool;
+    shallow_expr.boolean = true;
+    for (int index = 0; index < 64; ++index) {
+        core::formula::Expr parent;
+        parent.kind = core::formula::ExprKind::Unary;
+        parent.unary = core::formula::UnaryOp::Not;
+        parent.children.push_back(std::move(shallow_expr));
+        shallow_expr = std::move(parent);
+    }
+    const core::formula::EvalResult shallow_result =
+        core::formula::evaluate(shallow_expr, context);
+    ctx.check(shallow_result.ok && is_bool(shallow_result.value, true),
+              "[inference] a 64-deep hand-built AST still evaluates");
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1144,6 +1407,7 @@ int main() {
     test_tokenizer(ctx);
     test_parser(ctx);
     test_parse_errors(ctx);
+    test_nesting_limits(ctx);
     test_arithmetic(ctx);
     test_dates_and_durations(ctx);
     test_encodings(ctx);

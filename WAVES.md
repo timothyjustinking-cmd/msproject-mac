@@ -520,6 +520,53 @@ exposed.
    `114/Props` writing.
 4. Manual Mac smoke test + adversarial/ASan audit (`docs/audit-handoff.md`).
 
+## Wave 13 — complete (2026-10-22)
+
+Goal: finish the structural writer, make the app edit everything the writer can
+write, decode the `214/` view state, and run the adversarial/fuzz pass.
+
+| # | Stream | Deliverable | Verified by |
+|---|---|---|---|
+| W53b | exceptions tail | type-5 monthly positional with a non-matching start day: `+76 = MonthPosition | (MonthItem << 8)`, `+78 = Period`; both shapes measured | cal 553; third-Monday expansion = Project's 8 occurrences |
+| W54 | writer resources/assignments | resource row add, assignment add/delete; rows byte-identical to Project's own | assignments 679; **Project: 2 resources, 1 assignment, 0 after delete** |
+| W55 | app field/link editing | Task Fields and Predecessors dialogs, one pending-edit stack, fixed save order | app 12/12, 2,132 checks; `app-macos` green |
+| W56 | `214/` view state | table/view decoder; **DateFormat=5 at CTable payload +7**; corrected the "added column" premise | viewstate 113 |
+| W57 | adversarial fuzz/ASan | deterministic reader/writer/parser fuzzers, ASan pass; **found a formula stack overflow** | 5/5 fuzz tests; ASan clean after the fix |
+| W44b | formula guard | `kMaxFormulaDepth = 64`, AST depth guard (destructor too), ASan-safe | formula 1,249 Release + ASan |
+
+**Gate:** clean `build\vs-w13`: **47/47 ctest** (wave 12: 40); app
+`build\vs-w13-app`: **12/12**, 2,132 checks; **M2 332/332**; schedin 20/20 +
+10/10.
+
+### New measured facts
+
+1. **Assignment add:** resource row 172 B / FixedMeta 37 / Fixed2Data 40 /
+   Fixed2Meta 51 / 5 VarMeta entries; assignment row 110 B / FixedMeta 34 /
+   Fixed2Data 48 / Fixed2Meta 53 / 4 VarMeta entries. Project reopens the
+   emitted files with the expected resources/assignments; delete leaves none.
+2. **214 view state:** `214/CTable` block payload `+7` is the table date format
+   (`0xff → 0x05`). The wave-10 "added Number1 column" call did **not** persist
+   a column (`Create=False`), so CTable still has its 9 original columns — the
+   true added-column layout remains unknown.
+3. **Formula robustness:** a 256-deep `IIf`/paren formula overflowed the stack;
+   the guard is now 64 with a parser/evaluator/AST-height check, refusing with a
+   positioned error. A long flat `And` chain is refused at parse (its destructor
+   was the ASan crash).
+4. **No reader/writer/Props bug** found by 240 reader mutations, 6×40 writer
+   ops, 600 parser cases and the longer ASan campaigns; every refusal left the
+   file byte-identical.
+
+### Open after wave 13
+
+1. **`214/` writing**: the date-format word is known; the genuine column layout,
+   `CV_iew` item encoding, and `CEdl`/Props semantics are not.
+2. `114/Props` formula writing; assignment custom fields; Cost custom fields.
+3. MPP12, MPP14 resource Type, elapsed-task mixed cases, summary-calendar
+   rollup.
+4. App multi-window/printing, manual Mac smoke, LeakSanitizer/UBSan (MSVC has
+   neither).
+
+
 
 
 

@@ -112,7 +112,7 @@ endif()
 # These are added after core_model so that a subdirectory may link
 # `core_model` (or the `msproject::core` alias) by target name.
 # ---------------------------------------------------------------------------
-foreach(stream_subdir mpp sched mppwrite view io cal plan sheet gantt session render usage formula props)
+foreach(stream_subdir mpp sched mppwrite view io cal plan sheet gantt session render usage formula props viewstate)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/core/${stream_subdir}/CMakeLists.txt")
         add_subdirectory("core/${stream_subdir}")
         message(STATUS "core/${stream_subdir}: CMakeLists.txt found, included")
@@ -176,4 +176,10 @@ if(CORE_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         )
     endif()
+endif()
+
+# The adversarial/fuzz lane (W57) is self-contained but wired here so the root
+# configure/build can run it like any other stream: `--target fuzz_reader` etc.
+if(CORE_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/CMakeLists.txt")
+    add_subdirectory(tests/fuzz)
 endif()

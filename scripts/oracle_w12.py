@@ -157,6 +157,67 @@ def linkadd():
     print(json.dumps(payload, indent=2))
 
 
+def assignadd():
+    """Project's own add-resource + assignment save on the same synthetic base."""
+    src = os.path.join(ROOT, "tests", "data", "synthetic-base.mpp")
+    out = os.path.join(PROBE, "w12-assignadd.mpp")
+    with oracle_session() as app:
+        with Guard(300):
+            app.FileOpen(Name=src, ReadOnly=False)
+            proj = app.ActiveProject
+            r = proj.Resources.Add("R1")
+            r.Type = 0
+            r.MaxUnits = 1.0
+            calc(app)
+            t = proj.Tasks(1)
+            t.Assignments.Add(TaskID=t.ID, ResourceID=r.ID)
+            calc(app)
+            if os.path.exists(out):
+                os.remove(out)
+            app.FileSaveAs(Name=out)
+            size = os.path.getsize(out)
+            app.FileClose(0)
+    payload = {"case": "assign-add", "source": os.path.relpath(src, ROOT),
+               "saved": os.path.relpath(out, ROOT), "bytes": size,
+               "resource": "R1 Work 100%", "assignment": "T1/R1 100%"}
+    save("w12-assignadd", payload)
+    print(json.dumps(payload, indent=2))
+
+
+def monthpos():
+    """A monthly-positional exception whose start day is NOT the target weekday:
+    third Monday, range starts Sunday 2026-11-01.  Settles whether Project stores
+    MonthItem for type 5."""
+    path = os.path.join(PROBE, "w12-exceptions-monthpos.mpp")
+    with oracle_session() as app:
+        with Guard(300):
+            proj = new_project(app, START)
+            cal = proj.Calendar
+            rec = {}
+            try:
+                e = cal.Exceptions.Add(
+                    Type=5, Start=utc(dt.datetime(2026, 11, 1)),
+                    Finish=utc(dt.datetime(2027, 6, 30)), Occurrences=0,
+                    Name="ThirdMonday", Period=1, MonthPosition=2,
+                    MonthItem=4)
+                rec["added"] = val(e.Name)
+            except Exception as exc:                          # noqa: BLE001
+                rec["error"] = f"{exc.__class__.__name__}: {exc}"
+            if os.path.exists(path):
+                os.remove(path)
+            app.FileSaveAs(Name=path)
+            rec["bytes"] = os.path.getsize(path)
+            rec["before"] = exception_rows(cal)
+            app.FileClose(0)
+            app.FileOpen(Name=path, ReadOnly=True)
+            rec["reopened"] = exception_rows(app.ActiveProject.Calendar)
+            app.FileClose(0)
+    payload = {"case": "monthpos", "saved": os.path.relpath(path, ROOT),
+               **rec}
+    save("w12-monthpos", payload)
+    print(json.dumps(payload, indent=2))
+
+
 def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
@@ -166,6 +227,10 @@ def main():
         apiprobe()
     elif sys.argv[1] == "linkadd":
         linkadd()
+    elif sys.argv[1] == "assignadd":
+        assignadd()
+    elif sys.argv[1] == "monthpos":
+        monthpos()
     else:
         raise SystemExit(f"unknown case {sys.argv[1]!r}")
 
