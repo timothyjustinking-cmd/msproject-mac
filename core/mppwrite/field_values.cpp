@@ -1,7 +1,9 @@
 /*
- * field_values.cpp -- write Task custom-field values, prove them from disk.
+ * field_values.cpp -- write custom-field values, prove them from disk.
  * See field_values.h for the measured encodings, the API contract and the
- * deliberate refusals.  W48 (2026-10-22).
+ * deliberate refusals.  W48 (2026-10-22) wrote Task fields; W60 (2026-10-22)
+ * adds Cost1..Cost10 in the Task table and Number1..20 / Text1..30 on
+ * assignments (114/TBkndAssn, keyed by the assignment property id).
  *
  * The shape is the same as the other writer entry points: validate everything
  * against the current document, apply on a copy, write, re-open from disk, and
@@ -26,6 +28,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -74,8 +77,10 @@ constexpr std::size_t kMaxTextBytes = 65535;
  *   Date1     0x0b400109  +29 |= 0x40
  *
  * The six-field OR is +21=0x20, +24=0x02, +25=0x18, +26=0x01, +27=0x20,
- * +29=0x40.  Clearing a flag clears only +24 bit 0x02; a value field's bits are
- * never cleared (there is no measured clear shape).
+ * +29=0x40.  W60 adds Cost1..Cost10 (Cost1 = +26 0x08 measured; the rest from
+ * the binary class-slot bitmap -- see field_values.h).  Clearing a flag clears
+ * only +24 bit 0x02; a value field's bits are never cleared (there is no
+ * measured clear shape).
  */
 struct TailBit {
     std::size_t offset = 0;
@@ -96,6 +101,30 @@ std::vector<TailBit> tail_bits_for(std::uint32_t field_id) {
             return {{26, 0x01}, {27, 0x20}};
         case 0x0B400109u:
             return {{29, 0x40}};
+        /* W60 Cost bits: the tail bitmap is indexed by the field's decompiled
+         * class slot (byte +21 + slot/8).  Cost1's +26 0x08 is MEASURED
+         * (w14-cost); Cost2..Cost10 continue the binary's slots
+         * 44,45,63..69 -- see field_values.h. */
+        case 0x0B40006Au:
+            return {{26, 0x08}};
+        case 0x0B40006Bu:
+            return {{26, 0x10}};
+        case 0x0B40006Cu:
+            return {{26, 0x20}};
+        case 0x0B400102u:
+            return {{28, 0x80}};
+        case 0x0B400103u:
+            return {{29, 0x01}};
+        case 0x0B400104u:
+            return {{29, 0x02}};
+        case 0x0B400105u:
+            return {{29, 0x04}};
+        case 0x0B400106u:
+            return {{29, 0x08}};
+        case 0x0B400107u:
+            return {{29, 0x10}};
+        case 0x0B400108u:
+            return {{29, 0x20}};
         default:
             return {};
     }
@@ -159,7 +188,7 @@ struct PropsTemplate {
  * at +32 are Project's own and are not understood.  A field without a record is
  * refused rather than invented: the record encodes the field's format.
  */
-constexpr std::array<PropsTemplate, 6> kPropsTemplates = {{
+constexpr std::array<PropsTemplate, 7> kPropsTemplates = {{
     {0x0B400033u,
      {0x33, 0x00, 0x40, 0x0b, 0x08, 0x00, 0x00, 0x00, 0x64, 0x40, 0x40, 0x0f,
       0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb7, 0x39, 0x00, 0x00,
@@ -214,7 +243,26 @@ constexpr std::array<PropsTemplate, 6> kPropsTemplates = {{
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       0x00, 0x00, 0x00, 0x00}},
+    /* Cost1 -- W60, copied byte-for-byte from corpus/probe/w14-cost.mpp's
+     * Task/Props at offset 86.  The assignment-property key at +8 is
+     * 0x0f40401e (Cost1); +16 is 0 and +20 is 14775 in this measured record. */
+    {0x0B40006Au,
+     {0x6a, 0x00, 0x40, 0x0b, 0x05, 0x00, 0x00, 0x00, 0x1e, 0x40, 0x40, 0x0f,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb7, 0x39, 0x00, 0x00,
+      0xbe, 0x8b, 0xeb, 0x4c, 0x82, 0xc4, 0xfa, 0x8c, 0x0b, 0x40, 0x00, 0x6a,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00}},
 }};
+
+/* Cost1's record is in the table above; Cost2..Cost10 use the same measured
+ * shape with their own field id and assignment property key (built below). */
+bool cost_task_props_record(std::uint32_t field_id,
+                            std::array<std::uint8_t, kPropsRecordSize>& out);
+bool cost_assn_props_record(std::uint32_t field_id,
+                            std::array<std::uint8_t, kPropsRecordSize>& out);
 
 bool props_template_for(std::uint32_t field_id,
                         std::array<std::uint8_t, kPropsRecordSize>& out) {
@@ -224,7 +272,7 @@ bool props_template_for(std::uint32_t field_id,
             return true;
         }
     }
-    return false;
+    return cost_task_props_record(field_id, out);
 }
 
 /*
@@ -237,7 +285,7 @@ struct AssnPropsTemplate {
     std::array<std::uint8_t, kPropsRecordSize> bytes;
 };
 
-constexpr std::array<AssnPropsTemplate, 6> kAssnPropsTemplates = {{
+constexpr std::array<AssnPropsTemplate, 7> kAssnPropsTemplates = {{
     {0x0B400109u,
      {0x00, 0x40, 0x40, 0x0f, 0x13, 0x00, 0x00, 0x00, 0x09, 0x01, 0x40, 0x0b,
       0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb7, 0x39, 0x00, 0x00,
@@ -292,7 +340,101 @@ constexpr std::array<AssnPropsTemplate, 6> kAssnPropsTemplates = {{
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       0x00, 0x00, 0x00, 0x00}},
+    /* Cost1 -- W60, copied byte-for-byte from corpus/probe/w14-cost.mpp's
+     * Assn/Props at offset 88: key 0x0f40401e at +0, PjTask Cost1 at +8. */
+    {0x0B40006Au,
+     {0x1e, 0x40, 0x40, 0x0f, 0x05, 0x00, 0x00, 0x00, 0x6a, 0x00, 0x40, 0x0b,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb7, 0x39, 0x00, 0x00,
+      0xbe, 0x8b, 0xeb, 0x4c, 0x82, 0xc4, 0xfa, 0x8c, 0x0f, 0x40, 0x40, 0x1e,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00}},
 }};
+
+/* One assignment-side Props record, assembled from the measured type words of
+ * the Text1/Number1 records (the four varying words are the field id, the
+ * assignment property key, and the two type words; +16 is 0, +20 is 14775 and
+ * +24/+28 are Project's two fixed stamps in every fresh-field record). */
+constexpr std::uint32_t kPropsOpaque20 = 0x000039B7u; /* 14775 */
+constexpr std::uint32_t kPropsOpaque24 = 0x4CEB8BBEu;
+constexpr std::uint32_t kPropsOpaque28 = 0x8CFAC482u;
+
+void put_be32(std::array<std::uint8_t, kPropsRecordSize>& record, std::size_t offset,
+              std::uint32_t value) {
+    record[offset] = static_cast<std::uint8_t>((value >> 24) & 0xFFu);
+    record[offset + 1] = static_cast<std::uint8_t>((value >> 16) & 0xFFu);
+    record[offset + 2] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
+    record[offset + 3] = static_cast<std::uint8_t>(value & 0xFFu);
+}
+
+template <std::size_t N>
+void put_u32(std::array<std::uint8_t, N>& b, std::size_t o, std::uint32_t v) {
+    b[o] = static_cast<std::uint8_t>(v & 0xFFu);
+    b[o + 1] = static_cast<std::uint8_t>((v >> 8) & 0xFFu);
+    b[o + 2] = static_cast<std::uint8_t>((v >> 16) & 0xFFu);
+    b[o + 3] = static_cast<std::uint8_t>((v >> 24) & 0xFFu);
+}
+
+struct AssignmentPropsShape {
+    std::uint32_t type_a = 0; /* record +4 */
+    std::uint32_t type_b = 0; /* record +12 */
+};
+
+bool assignment_props_shape(FieldKind kind, AssignmentPropsShape& out) {
+    switch (kind) {
+        case FieldKind::text:
+            out.type_a = 8;
+            out.type_b = 7;
+            return true;
+        case FieldKind::number:
+            out.type_a = 5;
+            out.type_b = 5;
+            return true;
+        case FieldKind::duration:
+        case FieldKind::date:
+        case FieldKind::flag:
+        case FieldKind::cost:
+        case FieldKind::unknown:
+            break;
+    }
+    return false;
+}
+
+/* Task/Props record for an assignment field: keyed by the PjTask field id,
+ * carrying the assignment key at +8 (measured w14-assignfield.mpp). */
+std::array<std::uint8_t, kPropsRecordSize> assignment_task_props_record(
+    std::uint32_t field_id, std::uint32_t property_id,
+    AssignmentPropsShape const& shape) {
+    std::array<std::uint8_t, kPropsRecordSize> record{};
+    put_u32(record, 0, field_id);
+    put_u32(record, 4, shape.type_a);
+    put_u32(record, 8, property_id);
+    put_u32(record, 12, shape.type_b);
+    put_u32(record, 20, kPropsOpaque20);
+    put_u32(record, 24, kPropsOpaque24);
+    put_u32(record, 28, kPropsOpaque28);
+    put_be32(record, 32, field_id);
+    return record;
+}
+
+/* Assn/Props record for an assignment field: keyed by the assignment property
+ * id, carrying the PjTask field id at +8 (measured w14-assignfield.mpp). */
+std::array<std::uint8_t, kPropsRecordSize> assignment_assn_props_record(
+    std::uint32_t field_id, std::uint32_t property_id,
+    AssignmentPropsShape const& shape) {
+    std::array<std::uint8_t, kPropsRecordSize> record{};
+    put_u32(record, 0, property_id);
+    put_u32(record, 4, shape.type_a);
+    put_u32(record, 8, field_id);
+    put_u32(record, 12, shape.type_b);
+    put_u32(record, 20, kPropsOpaque20);
+    put_u32(record, 24, kPropsOpaque24);
+    put_u32(record, 28, kPropsOpaque28);
+    put_be32(record, 32, property_id);
+    return record;
+}
 
 bool assn_props_template_for(std::uint32_t task_field_id,
                              std::array<std::uint8_t, kPropsRecordSize>& out) {
@@ -302,7 +444,57 @@ bool assn_props_template_for(std::uint32_t task_field_id,
             return true;
         }
     }
-    return false;
+    return cost_assn_props_record(task_field_id, out);
+}
+
+/* The assignment-side property key of a Cost field: Cost1's 0x0f40401e is
+ * measured (w14-cost's Assn/Props record); Cost2..Cost10 continue the stride-1
+ * sequence (the same family layout as Number/Text, whose keys are measured). */
+std::uint32_t cost_property_id(std::uint32_t field_id) {
+    if (field_kind_for_id(field_id) != FieldKind::cost) {
+        return 0;
+    }
+    unsigned const index = field_index_for_id(field_id);
+    if (index < 1 || index > 10) {
+        return 0;
+    }
+    return 0x0F40401Eu + (index - 1u);
+}
+
+bool cost_task_props_record(std::uint32_t field_id,
+                            std::array<std::uint8_t, kPropsRecordSize>& out) {
+    std::uint32_t const key = cost_property_id(field_id);
+    if (key == 0) {
+        return false;
+    }
+    out = {};
+    put_u32(out, 0, field_id);
+    put_u32(out, 4, 5);  /* the i64 cost type word, measured on Cost1 */
+    put_u32(out, 8, key);
+    put_u32(out, 12, 0); /* 0 in the measured Cost1 record (not Number's 5) */
+    put_u32(out, 20, kPropsOpaque20);
+    put_u32(out, 24, kPropsOpaque24);
+    put_u32(out, 28, kPropsOpaque28);
+    put_be32(out, 32, field_id);
+    return true;
+}
+
+bool cost_assn_props_record(std::uint32_t field_id,
+                            std::array<std::uint8_t, kPropsRecordSize>& out) {
+    std::uint32_t const key = cost_property_id(field_id);
+    if (key == 0) {
+        return false;
+    }
+    out = {};
+    put_u32(out, 0, key);
+    put_u32(out, 4, 5);
+    put_u32(out, 8, field_id);
+    put_u32(out, 12, 0);
+    put_u32(out, 20, kPropsOpaque20);
+    put_u32(out, 24, kPropsOpaque24);
+    put_u32(out, 28, kPropsOpaque28);
+    put_be32(out, 32, key);
+    return true;
 }
 
 std::string hex_id(std::uint32_t value) {
@@ -704,6 +896,21 @@ CfbDocument save_and_verify(CfbDocument& work, std::string const& path,
     return reread;
 }
 
+/* Project stores a Cost value as the f64 of its HUNDREDTHS, exactly rounded
+ * (measured: 123.45 -> 12345.0 in w14-cost; 0.07 -> 7.0 in w14-cost2, NOT the
+ * 7.000000000000001 that a raw 0.07 * 100.0 produces).  The caller supplies the
+ * currency value.  False when the value is not finite or not representable in
+ * hundredths, so a caller can refuse rather than silently round. */
+bool cost_stored_value(double cost, double& stored) {
+    double const scaled = cost * 100.0;
+    if (!std::isfinite(scaled) || std::fabs(scaled) > 9.0e15) {
+        return false;
+    }
+    long long const rounded = std::llround(scaled);
+    stored = static_cast<double>(rounded);
+    return stored / 100.0 == cost;
+}
+
 /* The measured payload encoding for a value field (text/number/date/duration).
  * Flags have no payload; the row's FixedMeta bit is the store. */
 std::vector<std::uint8_t> encode_payload(FieldValue const& value) {
@@ -721,6 +928,20 @@ std::vector<std::uint8_t> encode_payload(FieldValue const& value) {
             }
             return out;
         }
+        case FieldKind::cost: {
+            double stored = 0.0;
+            if (!cost_stored_value(value.cost, stored)) {
+                return {};
+            }
+            std::vector<std::uint8_t> out(8, 0);
+            std::uint64_t bits = 0;
+            static_assert(sizeof bits == sizeof stored, "IEEE-754 double expected");
+            std::memcpy(&bits, &stored, sizeof bits);
+            for (std::size_t i = 0; i < 8; ++i) {
+                out[i] = static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFFu);
+            }
+            return out;
+        }
         case FieldKind::date: {
             std::vector<std::uint8_t> out(4, 0);
             put_u32(out, 0, value.packed_date);
@@ -732,7 +953,6 @@ std::vector<std::uint8_t> encode_payload(FieldValue const& value) {
             return out;
         }
         case FieldKind::flag:
-        case FieldKind::cost:
         case FieldKind::unknown:
             break;
     }
@@ -771,8 +991,14 @@ FieldValue decode_payload(FieldKind kind, std::vector<std::uint8_t> const& paylo
                 out.duration_ticks = get_u32(payload, 0);
             }
             break;
-        case FieldKind::flag:
         case FieldKind::cost:
+            if (payload.size() != 8) {
+                out.storage_measured = false;
+            } else {
+                out.cost = f64_at(payload, 0) / 100.0;
+            }
+            break;
+        case FieldKind::flag:
         case FieldKind::unknown:
             out.storage_measured = false;
             break;
@@ -850,6 +1076,7 @@ bool same_value(FieldValue const& a, FieldValue const& b) {
         case FieldKind::flag:
             return a.flag == b.flag;
         case FieldKind::cost:
+            return a.cost == b.cost;
         case FieldKind::unknown:
             return true;
     }
@@ -978,10 +1205,10 @@ bool field_storage_measured(FieldKind kind, unsigned index) {
         case FieldKind::number:
         case FieldKind::duration:
         case FieldKind::date:
+        case FieldKind::cost:
             return index != 0;
         case FieldKind::flag:
             return index == 1;
-        case FieldKind::cost:
         case FieldKind::unknown:
             return false;
     }
@@ -1075,11 +1302,6 @@ FieldWriteResult save_field_values(CfbDocument& doc,
                         std::to_string(static_cast<int>(edit.value.kind)) +
                         "; the kind must match the id");
         }
-        if (item.kind == FieldKind::cost) {
-            throw Error(function + ": " + label +
-                        " is a Cost field and its storage is unmeasured (no oracle "
-                        "fixture stores a cost); refusing rather than guessing");
-        }
         if (!field_storage_measured(item.kind, item.index)) {
             throw Error(function + ": " + label +
                         " is not stored where it is measured (only Flag1's bit "
@@ -1089,10 +1311,11 @@ FieldWriteResult save_field_values(CfbDocument& doc,
         if (!props_template_for(field_id, props_template)) {
             throw Error(function + ": " + label +
                         " has no measured registration record in " + props_path +
-                        " (only Text1, Flag1, Number1, Number2, Duration1 and Date1 "
-                        "are measured); Project ignores a custom field that is not "
-                        "registered there, and the record encodes the field's "
-                        "format, so it cannot be guessed");
+                        " (only Text1, Flag1, Number1, Number2, Duration1, Date1 "
+                        "and Cost1..Cost10 are measured); Project ignores a custom "
+                        "field "
+                        "that is not registered there, and the record encodes the "
+                        "field's format, so it cannot be guessed");
         }
         if (edit.uid == 0) {
             throw Error(function + ": " + label +
@@ -1175,7 +1398,17 @@ FieldWriteResult save_field_values(CfbDocument& doc,
             case FieldKind::flag:
                 /* The value is the bool itself; nothing else to check. */
                 break;
-            case FieldKind::cost:
+            case FieldKind::cost: {
+                double stored = 0.0;
+                if (!cost_stored_value(edit.value.cost, stored)) {
+                    throw Error(function + ": " + label + ": cost " +
+                                std::to_string(edit.value.cost) +
+                                " is not finite or not representable in hundredths "
+                                "(Project stores cost * 100 as an f64, exactly "
+                                "rounded: 123.45 -> 12345, 0.07 -> 7)");
+                }
+                break;
+            }
             case FieldKind::unknown:
                 break; /* already refused above */
         }
@@ -1645,10 +1878,12 @@ FieldValue empty_value_for(std::uint32_t field_id, FieldKind kind) {
         case FieldKind::date:
             empty.packed_date = kInvalidDate; /* 0xffffffff = Project's no-date */
             break;
+        case FieldKind::cost:
+            empty.cost = 0.0; /* f64 hundredths 0.0 */
+            break;
         case FieldKind::flag:
             empty.flag = false;
             break;
-        case FieldKind::cost:
         case FieldKind::unknown:
             break;
     }
@@ -1680,11 +1915,6 @@ ClearedField clear_field_value(CfbDocument& doc, std::uint32_t uid,
         throw Error(function + ": " + label +
                     " is not a task custom field in the measured id ranges");
     }
-    if (kind == FieldKind::cost) {
-        throw Error(function + ": " + label +
-                    " is a Cost field and its storage is unmeasured; refusing to "
-                    "guess an empty encoding");
-    }
     if (!field_storage_measured(kind, index)) {
         throw Error(function + ": " + label +
                     " is not stored where it is measured (only Flag1's bit "
@@ -1694,7 +1924,7 @@ ClearedField clear_field_value(CfbDocument& doc, std::uint32_t uid,
         throw Error(function + ": " + label +
                     " has no measured FixedMeta tail-presence bit, so a cleared "
                     "value cannot be made blank; only Text1, Flag1, Number1, "
-                    "Number2, Duration1 and Date1 are measured");
+                    "Number2, Duration1, Date1 and Cost1..Cost10 are measured");
     }
     if (uid == 0) {
         throw Error(function + ": " + label +
@@ -2002,6 +2232,1029 @@ ClearedField clear_field_value(CfbDocument& doc, std::uint32_t uid,
         "registration kept)");
     doc = reread;
     return result;
+}
+
+/* ---- W60: assignment custom fields (114/TBkndAssn) ---------------------- */
+
+std::uint32_t assignment_property_id(FieldKind kind, unsigned index) {
+    if (kind == FieldKind::number && index >= 1 && index <= 20) {
+        return 0x0F40403Cu + (index - 1u);
+    }
+    if (kind == FieldKind::text && index >= 1 && index <= 30) {
+        return 0x0F404064u + (index - 1u);
+    }
+    return 0;
+}
+
+namespace {
+
+/* 114/TBkndAssn geometry (measured W54/W60; see add_delete.h and
+ * docs/analysis/oracle/w14-oracle.md §3):
+ *   FixedData    110 * rows, no header
+ *   FixedMeta    16 + 34 * rows (one entry per row, +4 = row*110)
+ *   Fixed2Data   48 * rows (three 16-byte identities)
+ *   Fixed2Meta   16 + 53 * rows (+4 = row*48)
+ *   VarMeta      24 + 12 * entries
+ *   Var2Data     length-prefixed blocks. */
+constexpr std::size_t kAssignmentRowSize = 110;
+constexpr std::size_t kAssignmentMetaEntrySize = 34;
+constexpr std::size_t kAssignmentFixed2RecordSize = 48;
+constexpr std::size_t kAssignmentFixed2MetaEntrySize = 53;
+constexpr std::size_t kDependentMetaHeaderSize = 16;
+constexpr std::uint32_t kDependentMetaMagic = 0xFADFADBAu;
+constexpr std::size_t kAssignmentMetaStateByte = 0;
+constexpr std::size_t kAssignmentMetaFieldCount = 2;
+constexpr std::size_t kAssignmentMetaRowOffset = 4;
+constexpr std::size_t kAssignmentFixed2MetaRecordOffset = 4;
+constexpr std::size_t kAssignmentUidWord = 0;
+constexpr std::size_t kAssignmentTaskUidWord = 4;
+
+struct AssignmentTable {
+    std::string fixed_path;
+    std::string meta_path;
+    std::string fixed2_path;
+    std::string fixed2_meta_path;
+    std::string var_meta_path;
+    std::string var2_path;
+    std::vector<std::uint8_t> fixed;
+    std::vector<std::uint8_t> meta;
+    std::vector<std::uint8_t> fixed2;
+    std::vector<std::uint8_t> fixed2_meta;
+    std::vector<std::uint8_t> var_meta;
+    std::vector<std::uint8_t> var2;
+    std::vector<MetaEntry> entries;
+    std::size_t rows = 0;
+};
+
+std::vector<MetaEntry> read_meta_entries_of(std::vector<std::uint8_t> const& meta,
+                                            std::size_t entry_size) {
+    std::vector<MetaEntry> out;
+    if (meta.size() < kFixedMetaHeaderSize) {
+        return out;
+    }
+    std::size_t const count = (meta.size() - kFixedMetaHeaderSize) / entry_size;
+    out.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        std::size_t const base = kFixedMetaHeaderSize + i * entry_size;
+        MetaEntry entry;
+        entry.index = i;
+        entry.offset = get_u32(meta, base + kAssignmentMetaRowOffset);
+        entry.state = meta[base + kAssignmentMetaStateByte];
+        entry.field_count = get_u16(meta, base + kAssignmentMetaFieldCount);
+        out.push_back(entry);
+    }
+    return out;
+}
+
+/* The measured assignment table, strictly validated like add_delete.cpp does
+ * (W54): every size/count word must agree, entries must cover whole rows, and
+ * the VarMeta array must be grouped by ascending uid. */
+AssignmentTable load_assignment_table(CfbDocument const& doc,
+                                      std::string const& function) {
+    AssignmentTable out;
+    out.fixed_path = "114/TBkndAssn/FixedData";
+    out.meta_path = "114/TBkndAssn/FixedMeta";
+    out.fixed2_path = "114/TBkndAssn/Fixed2Data";
+    out.fixed2_meta_path = "114/TBkndAssn/Fixed2Meta";
+    out.var_meta_path = "114/TBkndAssn/VarMeta";
+    out.var2_path = "114/TBkndAssn/Var2Data";
+    for (std::string const* path :
+         {&out.fixed_path, &out.meta_path, &out.fixed2_path, &out.fixed2_meta_path,
+          &out.var_meta_path, &out.var2_path}) {
+        if (!doc.has_stream(*path)) {
+            throw Error(function + ": the assignment table has no " + *path +
+                        " stream; an assignment custom-field write needs all six "
+                        "TBkndAssn streams");
+        }
+    }
+    out.fixed = doc.read_stream(out.fixed_path);
+    if (out.fixed.size() % kAssignmentRowSize != 0) {
+        throw Error(function + ": " + out.fixed_path + " is " +
+                    std::to_string(out.fixed.size()) + " bytes, not n*110; "
+                    "refusing to change the assignment table's geometry");
+    }
+    out.rows = out.fixed.size() / kAssignmentRowSize;
+    out.meta = doc.read_stream(out.meta_path);
+    if (out.meta.size() !=
+        kDependentMetaHeaderSize + kAssignmentMetaEntrySize * out.rows) {
+        throw Error(function + ": " + out.meta_path + " is " +
+                    std::to_string(out.meta.size()) + " bytes, not 16 + 34*" +
+                    std::to_string(out.rows) +
+                    "; refusing to change the assignment table's geometry");
+    }
+    if (get_u32(out.meta, 0) != kDependentMetaMagic ||
+        get_u32(out.meta, 8) != out.rows ||
+        get_u32(out.meta, 12) != out.fixed.size()) {
+        throw Error(function + ": " + out.meta_path +
+                    " header count/size disagree with the assignment table");
+    }
+    out.entries = read_meta_entries_of(out.meta, kAssignmentMetaEntrySize);
+    std::vector<bool> covered(out.rows, false);
+    for (MetaEntry const& entry : out.entries) {
+        if (entry.offset % kAssignmentRowSize != 0) {
+            throw Error(function + ": " + out.meta_path + " entry " +
+                        std::to_string(entry.index) + " has offset " +
+                        std::to_string(entry.offset) + ", not a whole row");
+        }
+        std::size_t const row = entry.offset / kAssignmentRowSize;
+        if (row >= out.rows) {
+            throw Error(function + ": " + out.meta_path + " entry " +
+                        std::to_string(entry.index) + " names row " +
+                        std::to_string(row) + ", past the last row");
+        }
+        if (covered[row]) {
+            throw Error(function + ": " + out.meta_path +
+                        " has more than one entry for assignment row " +
+                        std::to_string(row) + "; refusing a damaged table");
+        }
+        covered[row] = true;
+    }
+    out.fixed2 = doc.read_stream(out.fixed2_path);
+    out.fixed2_meta = doc.read_stream(out.fixed2_meta_path);
+    if (out.fixed2.size() != out.rows * kAssignmentFixed2RecordSize) {
+        throw Error(function + ": " + out.fixed2_path + " is " +
+                    std::to_string(out.fixed2.size()) + " bytes, not " +
+                    std::to_string(out.rows) + "*48");
+    }
+    if (out.fixed2_meta.size() !=
+        kDependentMetaHeaderSize + kAssignmentFixed2MetaEntrySize * out.rows) {
+        throw Error(function + ": " + out.fixed2_meta_path + " is " +
+                    std::to_string(out.fixed2_meta.size()) + " bytes, not 16 + " +
+                    std::to_string(out.rows) + "*53");
+    }
+    if (get_u32(out.fixed2_meta, 0) != kDependentMetaMagic ||
+        get_u32(out.fixed2_meta, 8) != out.rows ||
+        get_u32(out.fixed2_meta, 12) != out.fixed2.size()) {
+        throw Error(function + ": " + out.fixed2_meta_path +
+                    " header count/size disagree with the assignment table");
+    }
+    for (std::size_t row = 0; row < out.rows; ++row) {
+        if (get_u32(out.fixed2_meta, kDependentMetaHeaderSize +
+                                        row * kAssignmentFixed2MetaEntrySize +
+                                        kAssignmentFixed2MetaRecordOffset) !=
+            row * kAssignmentFixed2RecordSize) {
+            throw Error(function + ": " + out.fixed2_meta_path + " entry " +
+                        std::to_string(row) +
+                        " does not name its Fixed2Data record");
+        }
+    }
+    out.var_meta = doc.read_stream(out.var_meta_path);
+    out.var2 = doc.read_stream(out.var2_path);
+    if (out.var_meta.size() < kVarMetaHeaderSize ||
+        (out.var_meta.size() - kVarMetaHeaderSize) % kVarMetaEntrySize != 0) {
+        throw Error(function + ": " + out.var_meta_path + " is " +
+                    std::to_string(out.var_meta.size()) + " bytes, not 24 + 12*k");
+    }
+    std::vector<VarEntry> const entries = read_var_entries(out.var_meta);
+    if (get_u32(out.var_meta, 8) != entries.size() ||
+        get_u32(out.var_meta, kVarMetaVar2SizeOffset) != out.var2.size()) {
+        throw Error(function + ": " + out.var_meta_path +
+                    " header count/size disagree with the assignment table");
+    }
+    bool first = true;
+    std::uint32_t previous_uid = 0;
+    for (VarEntry const& entry : entries) {
+        std::uint32_t const uid = entry.mid & 0x7FFFFFFFu;
+        if (!first && uid < previous_uid) {
+            throw Error(function + ": " + out.var_meta_path +
+                        " is not grouped by ascending uid; refusing to append an "
+                        "entry to a damaged array");
+        }
+        previous_uid = uid;
+        first = false;
+    }
+    return out;
+}
+
+/* Where a new assignment VarMeta entry belongs: after the LAST entry of the
+ * uid's contiguous group.  MEASURED (w14-assignfield): Project appends the new
+ * custom entries after the assignment's existing entries and does NOT sort
+ * them by key (the group is 0x0f400010 .. 0x0f40029b, then 0x0f40403c,
+ * 0x0f404064).  A uid with no group is placed before the first larger uid. */
+std::size_t assignment_var_insert_offset(
+    std::vector<std::uint8_t> const& var_meta, std::uint32_t uid) {
+    std::vector<VarEntry> const entries = read_var_entries(var_meta);
+    std::size_t at = var_meta.size();
+    bool found_group = false;
+    for (VarEntry const& entry : entries) {
+        std::uint32_t const base = entry.mid & 0x7FFFFFFFu;
+        if (base == uid) {
+            at = kVarMetaHeaderSize + (entry.index + 1) * kVarMetaEntrySize;
+            found_group = true;
+        } else if (!found_group && base > uid) {
+            return kVarMetaHeaderSize + entry.index * kVarMetaEntrySize;
+        }
+    }
+    return at;
+}
+
+void insert_assignment_var_entry(std::vector<std::uint8_t>& var_meta,
+                                 std::uint32_t uid, std::uint32_t key,
+                                 std::uint32_t offset) {
+    std::size_t const at = assignment_var_insert_offset(var_meta, uid);
+    std::vector<std::uint8_t> entry(kVarMetaEntrySize, 0);
+    put_u32(entry, 0, uid);
+    put_u32(entry, 4, offset);
+    put_u32(entry, 8, key);
+    var_meta.insert(var_meta.begin() + static_cast<std::ptrdiff_t>(at),
+                    entry.begin(), entry.end());
+}
+
+struct AssignmentRow {
+    std::size_t row = 0;
+    std::size_t entry_index = 0;
+    std::uint32_t task_uid = 0;
+};
+
+AssignmentRow find_assignment_row(AssignmentTable const& table,
+                                  std::uint32_t uid, std::string const& label,
+                                  std::string const& function) {
+    std::vector<std::size_t> matches;
+    for (std::size_t row = 0; row < table.rows; ++row) {
+        if (get_u32(table.fixed, row * kAssignmentRowSize + kAssignmentUidWord) ==
+            uid) {
+            matches.push_back(row);
+        }
+    }
+    if (matches.empty()) {
+        throw Error(function + ": " + label +
+                    ": no assignment row has that UniqueID");
+    }
+    if (matches.size() > 1) {
+        throw Error(function + ": " + label +
+                    ": the assignment table holds that UniqueID more than once; "
+                    "refusing a damaged table");
+    }
+    AssignmentRow out;
+    out.row = matches.front();
+    std::int32_t const index = entry_index_for_offset(
+        table.entries, static_cast<std::uint32_t>(out.row * kAssignmentRowSize));
+    if (index < 0) {
+        throw Error(function + ": " + label +
+                    ": the row has no FixedMeta entry, so Project does not treat "
+                    "it as an assignment");
+    }
+    out.entry_index = static_cast<std::size_t>(index);
+    if (table.entries[out.entry_index].state != kStateLive) {
+        throw Error(function + ": " + label +
+                    ": the row's FixedMeta entry is a tombstone (deleted)");
+    }
+    out.task_uid =
+        get_u32(table.fixed, out.row * kAssignmentRowSize + kAssignmentTaskUidWord);
+    if (out.task_uid == 0) {
+        throw Error(function + ": " + label +
+                    ": the row is an unassigned placeholder (task uid 0); Project "
+                    "does not read custom fields from it");
+    }
+    return out;
+}
+
+/* Best-effort liveness of the task an assignment names: false only when the
+ * Task table is readable and positively says the uid is dead (missing row, no
+ * FixedMeta entry or a tombstone).  A Task table this writer cannot parse does
+ * not block an assignment-only write (that table is not touched). */
+bool task_uid_is_live(CfbDocument const& doc, std::uint32_t uid) {
+    if (!doc.has_stream("114/TBkndTask/FixedData") ||
+        !doc.has_stream("114/TBkndTask/FixedMeta")) {
+        return true;
+    }
+    std::vector<std::uint8_t> const fixed =
+        doc.read_stream("114/TBkndTask/FixedData");
+    std::vector<std::uint8_t> const meta =
+        doc.read_stream("114/TBkndTask/FixedMeta");
+    if (fixed.size() < 48 || (fixed.size() - 48) % 202 != 0 ||
+        meta.size() < 16 || (meta.size() - 16) % 47 != 0) {
+        return true;
+    }
+    std::size_t const rows = (fixed.size() - 48) / 202;
+    std::vector<MetaEntry> const entries = read_meta_entries(meta);
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::size_t const base = 48 + row * 202;
+        if (get_u32(fixed, base + 4) != uid) {
+            continue;
+        }
+        std::int32_t const index = entry_index_for_offset(
+            entries, static_cast<std::uint32_t>(base));
+        return index >= 0 && entries[static_cast<std::size_t>(index)].state ==
+                                 kStateLive;
+    }
+    return false;
+}
+
+FieldValue read_assignment_field(AssignmentTable const& table, std::uint32_t uid,
+                                 std::uint32_t field_id) {
+    FieldKind const kind = field_kind_for_id(field_id);
+    FieldValue out;
+    out.field_id = field_id;
+    out.kind = kind;
+    std::uint32_t const key =
+        assignment_property_id(kind, field_index_for_id(field_id));
+    if (key == 0) {
+        return out; /* no measured assignment storage for this field */
+    }
+    for (VarEntry const& entry : read_var_entries(table.var_meta)) {
+        if (entry.mid != uid && entry.mid != (uid | kSecondaryUidFamily)) {
+            continue;
+        }
+        if (entry.field_id != key) {
+            continue;
+        }
+        if (entry.offset == 0xFFFFFFFFu ||
+            static_cast<std::size_t>(entry.offset) + 4 > table.var2.size()) {
+            continue;
+        }
+        FieldValue decoded = decode_payload(kind, read_var_block(table.var2, entry.offset));
+        decoded.field_id = field_id;
+        return decoded;
+    }
+    return out;
+}
+
+CfbDocument save_assignment_and_verify(CfbDocument& work, std::string const& path,
+                                       std::string const& function) {
+    std::vector<std::uint8_t> const intended = work.to_bytes();
+    work.save(path);
+    std::vector<std::uint8_t> const on_disk = read_file_bytes(path);
+    if (on_disk != intended) {
+        throw Error(function + ": " + path + " holds " +
+                    std::to_string(on_disk.size()) +
+                    " bytes, but the document built " +
+                    std::to_string(intended.size()) + "; the write did not land");
+    }
+    CfbDocument reread = CfbDocument::from_file(path);
+    if (reread.to_bytes() != on_disk) {
+        throw Error(function + ": the written file does not re-emit "
+                    "byte-identically");
+    }
+    if (!reread.check().empty()) {
+        throw Error(function + ": the written container is inconsistent: " +
+                    reread.check());
+    }
+    return reread;
+}
+
+bool props_has_record(std::vector<std::uint8_t> const& props, std::size_t preamble,
+                      std::uint32_t key) {
+    if (props.size() < preamble) {
+        return false;
+    }
+    for (std::size_t offset = preamble;
+         offset + kPropsRecordSize <= props.size();
+         offset += kPropsRecordSize) {
+        if (get_u32(props, offset) == key) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} /* namespace */
+
+FieldValue read_assignment_field_value(CfbDocument const& doc,
+                                       std::uint32_t assignment_uid,
+                                       std::uint32_t field_id) {
+    std::string const function = "read_assignment_field_value";
+    AssignmentTable const table = load_assignment_table(doc, function);
+    return read_assignment_field(table, assignment_uid, field_id);
+}
+
+AssignmentFieldWriteResult save_assignment_field_values(
+    CfbDocument& doc, std::vector<AssignmentFieldEdit> const& edits,
+    std::string const& path) {
+    std::string const function = "save_assignment_field_values";
+    if (edits.empty()) {
+        throw Error(function + ": the edit list is empty; there is nothing to save");
+    }
+    check_output_path(path, function);
+    AssignmentTable const table = load_assignment_table(doc, function);
+
+    std::string const task_props_path = "114/TBkndTask/Props";
+    std::string const assn_props_path = "114/TBkndAssn/Props";
+    for (std::string const& stream : {task_props_path, assn_props_path}) {
+        if (!doc.has_stream(stream)) {
+            throw Error(function + ": the file has no " + stream +
+                        " stream; Project's assignment-side field registration "
+                        "lives there and the writer cannot create a stream");
+        }
+    }
+    std::vector<std::uint8_t> task_props = doc.read_stream(task_props_path);
+    std::vector<std::uint8_t> assn_props = doc.read_stream(assn_props_path);
+    validate_props_stream(task_props, kTaskPropsLayout, task_props_path, function);
+    validate_props_stream(assn_props, kAssnPropsLayout, assn_props_path, function);
+
+    /* ---- Validate every edit before touching anything. */
+    struct Prepared {
+        AssignmentFieldEdit edit;
+        FieldKind kind = FieldKind::unknown;
+        unsigned index = 0;
+        std::uint32_t key = 0;
+        std::size_t row = 0;
+        std::size_t entry_index = 0;
+        std::uint32_t task_uid = 0;
+        std::vector<std::uint8_t> payload;
+    };
+    std::vector<Prepared> prepared;
+    prepared.reserve(edits.size());
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> seen;
+    for (AssignmentFieldEdit const& edit : edits) {
+        Prepared item;
+        item.edit = edit;
+        std::uint32_t const field_id = edit.value.field_id;
+        std::string const label = "assignment " +
+                                  std::to_string(edit.assignment_uid) + " field " +
+                                  hex_id(field_id);
+        item.kind = field_kind_for_id(field_id);
+        item.index = field_index_for_id(field_id);
+        item.key = assignment_property_id(item.kind, item.index);
+        if (item.kind == FieldKind::unknown) {
+            throw Error(function + ": " + label +
+                        " is not a task/assignment custom field in the measured "
+                        "id ranges (see field_value.h / analysis/field_id_map.tsv)");
+        }
+        if (item.key == 0) {
+            throw Error(function + ": " + label +
+                        " has no measured storage on an assignment (only "
+                        "Number1..Number20 and Text1..Text30 are measured there; "
+                        "Cost, Flag, Date and Duration assignment fields are not)");
+        }
+        if (edit.value.kind != item.kind) {
+            throw Error(function + ": " + label + " is a " + kind_name(item.kind) +
+                        " field but the value says kind " +
+                        std::to_string(static_cast<int>(edit.value.kind)) +
+                        "; the kind must match the id");
+        }
+        if (edit.assignment_uid == 0) {
+            throw Error(function + ": " + label +
+                        ": the assignment uid is 0; no assignment row has it");
+        }
+        AssignmentRow const row =
+            find_assignment_row(table, edit.assignment_uid, label, function);
+        if (!task_uid_is_live(doc, row.task_uid)) {
+            throw Error(function + ": " + label + ": the row's task uid " +
+                        std::to_string(row.task_uid) +
+                        " has no live task row; Project would not show the "
+                        "assignment");
+        }
+        for (auto const& key : seen) {
+            if (key.first == edit.assignment_uid && key.second == field_id) {
+                throw Error(function + ": " + label +
+                            " appears twice; one value per field");
+            }
+        }
+        seen.emplace_back(edit.assignment_uid, field_id);
+        switch (item.kind) {
+            case FieldKind::text:
+                if (edit.value.text.find('\0') != std::string::npos) {
+                    throw Error(function + ": " + label +
+                                ": the text contains an embedded NUL, which the "
+                                "UTF-16+NUL block cannot represent");
+                }
+                if (edit.value.text.size() > kMaxTextBytes) {
+                    throw Error(function + ": " + label + ": the text is " +
+                                std::to_string(edit.value.text.size()) +
+                                " bytes, longer than the " +
+                                std::to_string(kMaxTextBytes) +
+                                "-byte limit for one value");
+                }
+                break;
+            case FieldKind::number:
+                if (!std::isfinite(edit.value.number)) {
+                    throw Error(function + ": " + label +
+                                ": the number is not finite");
+                }
+                break;
+            case FieldKind::cost:
+            case FieldKind::date:
+            case FieldKind::duration:
+            case FieldKind::flag:
+            case FieldKind::unknown:
+                break; /* already refused above */
+        }
+        item.row = row.row;
+        item.entry_index = row.entry_index;
+        item.task_uid = row.task_uid;
+        item.payload = encode_payload(item.edit.value);
+        prepared.push_back(std::move(item));
+    }
+
+    /* ---- Register every written field once, in both Props streams. */
+    std::vector<std::uint32_t> fields_to_register;
+    for (Prepared const& item : prepared) {
+        bool known = false;
+        for (std::uint32_t const id : fields_to_register) {
+            known = known || id == item.edit.value.field_id;
+        }
+        if (!known) {
+            fields_to_register.push_back(item.edit.value.field_id);
+        }
+    }
+    std::vector<std::array<std::uint8_t, kPropsRecordSize>> task_records;
+    std::vector<std::array<std::uint8_t, kPropsRecordSize>> assn_records;
+    for (std::uint32_t const field_id : fields_to_register) {
+        FieldKind const kind = field_kind_for_id(field_id);
+        unsigned const index = field_index_for_id(field_id);
+        std::uint32_t const key = assignment_property_id(kind, index);
+        AssignmentPropsShape shape;
+        if (!assignment_props_shape(kind, shape)) {
+            throw Error(function + ": internal error: no Props shape for field " +
+                        hex_id(field_id));
+        }
+        task_records.push_back(
+            assignment_task_props_record(field_id, key, shape));
+        assn_records.push_back(
+            assignment_assn_props_record(field_id, key, shape));
+    }
+    std::size_t const task_registered =
+        register_props_records(task_props, kTaskPropsLayout, task_records);
+    std::size_t const assn_registered =
+        register_props_records(assn_props, kAssnPropsLayout, assn_records);
+    if (task_registered > 0) {
+        write_props_words(task_props, kTaskPropsLayout, task_props_path, function);
+    }
+    if (assn_registered > 0) {
+        write_props_words(assn_props, kAssnPropsLayout, assn_props_path, function);
+    }
+
+    /* ---- Apply. */
+    std::vector<std::uint8_t> meta = table.meta;
+    std::vector<std::uint8_t> var_meta = table.var_meta;
+    std::vector<std::uint8_t> var2 = table.var2;
+    std::vector<bool> allowed_meta(meta.size(), false);
+    std::vector<bool> const allowed_var2(var2.size(), false);
+    struct WrittenField {
+        std::uint32_t uid = 0;
+        std::uint32_t field_id = 0;
+        std::uint32_t key = 0;
+        std::uint32_t offset = 0;
+        std::size_t row = 0;
+        bool added_entry = false;
+    };
+    std::vector<WrittenField> written;
+    written.reserve(prepared.size());
+    std::size_t added_entries = 0;
+    std::map<std::uint32_t, std::size_t> touched_row; /* assignment uid -> row */
+    for (Prepared const& item : prepared) {
+        touched_row[item.edit.assignment_uid] = item.row;
+        std::uint32_t const offset = static_cast<std::uint32_t>(var2.size());
+        std::vector<std::uint8_t> const block = encode_block(item.payload);
+        var2.insert(var2.end(), block.begin(), block.end());
+        bool repointed = false;
+        for (VarEntry const& entry : read_var_entries(var_meta)) {
+            if (entry.field_id != item.key) {
+                continue;
+            }
+            if (entry.mid != item.edit.assignment_uid &&
+                entry.mid != (item.edit.assignment_uid | kSecondaryUidFamily)) {
+                continue;
+            }
+            std::size_t const base =
+                kVarMetaHeaderSize + entry.index * kVarMetaEntrySize;
+            put_u32(var_meta, base + 4, offset);
+            repointed = true;
+        }
+        if (!repointed) {
+            insert_assignment_var_entry(var_meta, item.edit.assignment_uid,
+                                        item.key, offset);
+            ++added_entries;
+        }
+        WrittenField record;
+        record.uid = item.edit.assignment_uid;
+        record.field_id = item.edit.value.field_id;
+        record.key = item.key;
+        record.offset = offset;
+        record.row = item.row;
+        record.added_entry = !repointed;
+        written.push_back(record);
+    }
+    /* FixedMeta +2 is the row's exact VarMeta entry count; assignments have no
+     * tail presence bit (measured: Project's own write changes only +2). */
+    for (auto const& touched : touched_row) {
+        std::size_t count = 0;
+        for (VarEntry const& entry : read_var_entries(var_meta)) {
+            if ((entry.mid & 0x7FFFFFFFu) == touched.first) {
+                ++count;
+            }
+        }
+        if (count > 0xFFFFu) {
+            throw Error(function + ": assignment " +
+                        std::to_string(touched.first) + " has " +
+                        std::to_string(count) +
+                        " VarMeta entries, too many for FixedMeta +2; refusing");
+        }
+        std::int32_t const index = entry_index_for_offset(
+            table.entries,
+            static_cast<std::uint32_t>(touched.second * kAssignmentRowSize));
+        if (index < 0) {
+            throw Error(function + ": internal error: assignment " +
+                        std::to_string(touched.first) + " lost its FixedMeta entry");
+        }
+        std::size_t const base = kFixedMetaHeaderSize +
+                                 static_cast<std::size_t>(index) *
+                                     kAssignmentMetaEntrySize;
+        put_u16(meta, base + kAssignmentMetaFieldCount,
+                static_cast<std::uint16_t>(count));
+        allowed_meta[base + kAssignmentMetaFieldCount] = true;
+        allowed_meta[base + kAssignmentMetaFieldCount + 1] = true;
+    }
+    put_u32(var_meta, 8,
+            static_cast<std::uint32_t>(read_var_entries(var_meta).size()));
+    put_u32(var_meta, kVarMetaVar2SizeOffset,
+            static_cast<std::uint32_t>(var2.size()));
+
+    CfbDocument work = CfbDocument::from_bytes(doc.to_bytes());
+    work.replace_stream(table.meta_path, meta);
+    work.replace_stream(table.var_meta_path, var_meta);
+    work.replace_stream(table.var2_path, var2);
+    if (task_registered > 0) {
+        work.replace_stream(task_props_path, task_props);
+    }
+    if (assn_registered > 0) {
+        work.replace_stream(assn_props_path, assn_props);
+    }
+
+    CfbDocument const reread =
+        save_assignment_and_verify(work, path, function);
+    AssignmentTable const after = load_assignment_table(reread, function);
+    if (after.rows != table.rows) {
+        throw Error(function + ": the written file has " +
+                    std::to_string(after.rows) + " assignment rows, expected " +
+                    std::to_string(table.rows) +
+                    "; a field write must not add or remove rows");
+    }
+
+    /* ---- Prove the intended bytes are the only ones that moved. */
+    if (reread.read_stream(table.fixed_path) != table.fixed ||
+        reread.read_stream(table.fixed2_path) != table.fixed2 ||
+        reread.read_stream(table.fixed2_meta_path) != table.fixed2_meta) {
+        throw Error(function + ": FixedData/Fixed2Data/Fixed2Meta changed; an "
+                    "assignment custom-field write must not rewrite the rows");
+    }
+    check_changed_bytes(table.meta, reread.read_stream(table.meta_path),
+                        allowed_meta, "TBkndAssn/FixedMeta", function);
+    check_changed_bytes(table.var2, reread.read_stream(table.var2_path),
+                        allowed_var2, "TBkndAssn/Var2Data", function);
+
+    std::vector<std::uint8_t> const var_meta_after =
+        reread.read_stream(table.var_meta_path);
+    std::vector<std::uint8_t> const var2_after = reread.read_stream(table.var2_path);
+    std::vector<VarEntry> const entries_before = read_var_entries(table.var_meta);
+    std::vector<VarEntry> const entries_after = read_var_entries(var_meta_after);
+    if (entries_after.size() != entries_before.size() + added_entries) {
+        throw Error(function + ": VarMeta holds " +
+                    std::to_string(entries_after.size()) + " entries, expected " +
+                    std::to_string(entries_before.size() + added_entries));
+    }
+    for (std::size_t i = 0; i < kVarMetaHeaderSize; ++i) {
+        bool const may_move =
+            (i >= 8 && i < 12) ||
+            (i >= kVarMetaVar2SizeOffset && i < kVarMetaVar2SizeOffset + 4);
+        if (!may_move && var_meta_after[i] != table.var_meta[i]) {
+            throw Error(function + ": VarMeta header byte +" + std::to_string(i) +
+                        " changed; only the entry count and the Var2Data size may "
+                        "be updated");
+        }
+    }
+    if (get_u32(var_meta_after, 8) != entries_after.size() ||
+        get_u32(var_meta_after, kVarMetaVar2SizeOffset) != var2_after.size()) {
+        throw Error(function + ": VarMeta's header counts do not read back as the "
+                    "written streams");
+    }
+    if (var2_after != var2) {
+        throw Error(function + ": Var2Data is " + std::to_string(var2_after.size()) +
+                    " bytes, expected " + std::to_string(var2.size()));
+    }
+    /* The exact entry multiset must be: every original entry (repointed to the
+     * new block for an edited field) plus every added entry.  A repoint changes
+     * every matching entry of the uid family, so the expectation is built from
+     * the before array. */
+    auto is_edited = [&written](VarEntry const& entry) {
+        for (WrittenField const& w : written) {
+            if (entry.field_id != w.key) {
+                continue;
+            }
+            if (entry.mid == w.uid ||
+                entry.mid == (w.uid | kSecondaryUidFamily)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    std::multiset<std::tuple<std::uint32_t, std::uint32_t, std::uint32_t>>
+        expected;
+    for (VarEntry const& entry : entries_before) {
+        std::uint32_t offset = entry.offset;
+        if (is_edited(entry)) {
+            for (WrittenField const& w : written) {
+                if (entry.field_id == w.key &&
+                    (entry.mid == w.uid ||
+                     entry.mid == (w.uid | kSecondaryUidFamily))) {
+                    offset = w.offset;
+                }
+            }
+        }
+        expected.emplace(entry.mid, entry.field_id, offset);
+    }
+    for (WrittenField const& w : written) {
+        if (w.added_entry) {
+            expected.emplace(w.uid, w.key, w.offset);
+        }
+    }
+    std::multiset<std::tuple<std::uint32_t, std::uint32_t, std::uint32_t>>
+        actual;
+    for (VarEntry const& entry : entries_after) {
+        actual.emplace(entry.mid, entry.field_id, entry.offset);
+    }
+    if (actual != expected) {
+        throw Error(function + ": the VarMeta entry set after the write is not "
+                    "(the original entries with the edited reps' offsets) + (the "
+                    "new entries); an unrelated entry appeared, disappeared or "
+                    "moved");
+    }
+    /* Every ADDED entry must be the tail of its uid's group (Project appends the
+     * assignment custom entries; it does not key-sort them), and the added
+     * entries of one uid must keep the edit order. */
+    std::map<std::uint32_t, std::size_t> last_added_position;
+    for (WrittenField const& w : written) {
+        if (!w.added_entry) {
+            continue;
+        }
+        std::int32_t found = -1;
+        for (std::size_t i = 0; i < entries_after.size(); ++i) {
+            if (entries_after[i].field_id == w.key &&
+                (entries_after[i].mid == w.uid ||
+                 entries_after[i].mid == (w.uid | kSecondaryUidFamily)) &&
+                entries_after[i].offset == w.offset) {
+                found = static_cast<std::int32_t>(i);
+                break;
+            }
+        }
+        if (found < 0) {
+            throw Error(function + ": assignment " + std::to_string(w.uid) +
+                        " field " + hex_id(w.field_id) +
+                        " has no VarMeta entry pointing at the written block");
+        }
+        std::size_t const position = static_cast<std::size_t>(found);
+        auto const last = last_added_position.find(w.uid);
+        if (last != last_added_position.end() && position <= last->second) {
+            throw Error(function + ": the new assignment entries are not in edit "
+                        "order; refusing an array Project would reorder");
+        }
+        last_added_position[w.uid] = position;
+        for (std::size_t i = position + 1; i < entries_after.size(); ++i) {
+            if ((entries_after[i].mid & 0x7FFFFFFFu) != w.uid) {
+                continue;
+            }
+            bool written_entry = false;
+            for (WrittenField const& other : written) {
+                if (other.added_entry && other.uid == w.uid &&
+                    entries_after[i].field_id == other.key &&
+                    entries_after[i].offset == other.offset) {
+                    written_entry = true;
+                    break;
+                }
+            }
+            if (!written_entry) {
+                throw Error(function + ": a new assignment entry was inserted "
+                            "before an existing entry of the same uid; Project "
+                            "appends assignment custom entries, so this is refused");
+            }
+        }
+    }
+    /* Group contiguity: entries with the same base uid are consecutive. */
+    std::set<std::uint32_t> closed;
+    std::uint32_t previous_uid = 0;
+    bool first_entry = true;
+    for (VarEntry const& entry : entries_after) {
+        std::uint32_t const uid = entry.mid & 0x7FFFFFFFu;
+        if (!first_entry && uid != previous_uid) {
+            closed.insert(previous_uid);
+            if (closed.count(uid) != 0) {
+                throw Error(function + ": VarMeta is not grouped by uid after the "
+                            "write; Project would not read the assignment value");
+            }
+        }
+        previous_uid = uid;
+        first_entry = false;
+    }
+    /* FixedMeta +2 and the tail bytes read back as written (no tail bit). */
+    std::vector<std::uint8_t> const meta_after = reread.read_stream(table.meta_path);
+    for (auto const& touched : touched_row) {
+        std::size_t count = 0;
+        for (VarEntry const& entry : entries_after) {
+            if ((entry.mid & 0x7FFFFFFF) == touched.first) {
+                ++count;
+            }
+        }
+        std::int32_t const index = entry_index_for_offset(
+            after.entries,
+            static_cast<std::uint32_t>(touched.second * kAssignmentRowSize));
+        if (index < 0) {
+            throw Error(function + ": the written file lost the FixedMeta entry "
+                        "for assignment " + std::to_string(touched.first));
+        }
+        std::size_t const base = kFixedMetaHeaderSize +
+                                 static_cast<std::size_t>(index) *
+                                     kAssignmentMetaEntrySize;
+        if (get_u16(meta_after, base + kAssignmentMetaFieldCount) != count) {
+            throw Error(function + ": assignment " +
+                        std::to_string(touched.first) + " FixedMeta +2 reads " +
+                        std::to_string(
+                            get_u16(meta_after, base + kAssignmentMetaFieldCount)) +
+                        ", expected its " + std::to_string(count) +
+                        " VarMeta entries");
+        }
+        if (meta_after.size() != table.meta.size()) {
+            throw Error(function + ": TBkndAssn/FixedMeta changed size; an "
+                        "assignment field write must not add an entry");
+        }
+    }
+
+    verify_props_stream(reread, task_props_path, kTaskPropsLayout,
+                        doc.read_stream(task_props_path), task_records,
+                        task_registered, function);
+    verify_props_stream(reread, assn_props_path, kAssnPropsLayout,
+                        doc.read_stream(assn_props_path), assn_records,
+                        assn_registered, function);
+
+    /* ---- Re-read every edit through the measured encoding. */
+    AssignmentFieldWriteResult result;
+    result.fields_written = prepared.size();
+    for (Prepared const& item : prepared) {
+        FieldValue const stored = read_assignment_field(
+            after, item.edit.assignment_uid, item.edit.value.field_id);
+        if (!stored.present || !stored.storage_measured ||
+            !same_value(stored, item.edit.value)) {
+            throw Error(function + ": assignment " +
+                        std::to_string(item.edit.assignment_uid) + " field " +
+                        hex_id(item.edit.value.field_id) +
+                        " does not read back as written (present " +
+                        (stored.present ? "true" : "false") +
+                        ", storage_measured " +
+                        (stored.storage_measured ? "true" : "false") + ", text '" +
+                        stored.text + "', number " +
+                        std::to_string(stored.number) + ")");
+        }
+        AssignmentFieldWrite write;
+        write.assignment_uid = item.edit.assignment_uid;
+        write.value = stored;
+        result.fields.push_back(std::move(write));
+    }
+    result.warnings.push_back(
+        "re-read from disk: " + std::to_string(prepared.size()) +
+        " assignment custom-field value(s) match what was written");
+    if (task_registered > 0 || assn_registered > 0) {
+        result.warnings.push_back(
+            "registered " + std::to_string(task_registered) +
+            " field definition(s) in " + task_props_path + " and " +
+            std::to_string(assn_registered) + " in " + assn_props_path +
+            " so Project displays the assignment values");
+    }
+    result.warnings.push_back(
+        "an assignment custom field has no FixedMeta tail presence bit (measured: "
+        "Project's own write changes only the row entry's +2 count)");
+    doc = reread;
+    return result;
+}
+
+/* ---- W60: the store-completeness diagnostics --------------------------- */
+
+FieldStores field_stores(CfbDocument const& doc, std::uint32_t uid,
+                         std::uint32_t field_id, std::string_view table) {
+    FieldStores out;
+    FieldKind const kind = field_kind_for_id(field_id);
+    if (kind == FieldKind::unknown) {
+        return out;
+    }
+    std::string const fixed_path = table_stream(table, "FixedData");
+    std::string const meta_path = table_stream(table, "FixedMeta");
+    std::string const props_path = table_stream(table, "Props");
+    if (!doc.has_stream(fixed_path) || !doc.has_stream(meta_path)) {
+        return out;
+    }
+    std::vector<std::uint8_t> const fixed = doc.read_stream(fixed_path);
+    std::vector<std::uint8_t> const meta = doc.read_stream(meta_path);
+    if (fixed.size() < 48 || (fixed.size() - 48) % 202 != 0) {
+        return out;
+    }
+    std::size_t const rows = (fixed.size() - 48) / 202;
+    std::size_t row = rows;
+    for (std::size_t candidate = 0; candidate < rows; ++candidate) {
+        if (get_u32(fixed, 48 + candidate * 202 + 4) == uid) {
+            row = candidate;
+            break;
+        }
+    }
+    if (row >= rows) {
+        return out;
+    }
+    std::vector<MetaEntry> const entries = read_meta_entries(meta);
+    std::int32_t const entry_index = entry_index_for_offset(
+        entries, static_cast<std::uint32_t>(task_row_offset(row)));
+    if (entry_index < 0) {
+        return out;
+    }
+    std::size_t const base =
+        kFixedMetaHeaderSize + static_cast<std::size_t>(entry_index) *
+                                   kFixedMetaEntrySize;
+    if (kind == FieldKind::flag) {
+        out.flag_field = true;
+        out.presence = true; /* the row entry exists; a clear bit means False */
+    } else {
+        std::string const var_meta_path = table_stream(table, "VarMeta");
+        std::string const var2_path = table_stream(table, "Var2Data");
+        if (doc.has_stream(var_meta_path) && doc.has_stream(var2_path)) {
+            std::vector<std::uint8_t> const var_meta =
+                doc.read_stream(var_meta_path);
+            std::vector<std::uint8_t> const var2 = doc.read_stream(var2_path);
+            for (VarEntry const& entry : read_var_entries(var_meta)) {
+                if (entry.field_id != field_id ||
+                    (entry.mid != uid &&
+                     entry.mid != (uid | kSecondaryUidFamily))) {
+                    continue;
+                }
+                out.var_meta = true;
+                if (entry.offset != 0xFFFFFFFFu &&
+                    static_cast<std::size_t>(entry.offset) + 4 <= var2.size()) {
+                    try {
+                        FieldValue const decoded =
+                            decode_payload(kind, read_var_block(var2, entry.offset));
+                        out.var2_block = decoded.storage_measured;
+                    } catch (Error const&) {
+                        out.var2_block = false;
+                    }
+                }
+                break;
+            }
+        }
+        std::vector<TailBit> const bits = tail_bits_for(field_id);
+        if (!bits.empty()) {
+            out.presence = true;
+            for (TailBit const& bit : bits) {
+                if (base + bit.offset >= meta.size() ||
+                    (meta[base + bit.offset] & bit.mask) == 0) {
+                    out.presence = false;
+                }
+            }
+        }
+    }
+    if (doc.has_stream(props_path)) {
+        out.registered =
+            props_has_record(doc.read_stream(props_path), kTaskPropsLayout.preamble,
+                             field_id);
+    }
+    return out;
+}
+
+FieldStores assignment_field_stores(CfbDocument const& doc,
+                                    std::uint32_t assignment_uid,
+                                    std::uint32_t field_id) {
+    FieldStores out;
+    FieldKind const kind = field_kind_for_id(field_id);
+    std::uint32_t const key =
+        assignment_property_id(kind, field_index_for_id(field_id));
+    if (key == 0) {
+        return out;
+    }
+    AssignmentTable table;
+    try {
+        table = load_assignment_table(doc, "assignment_field_stores");
+    } catch (Error const&) {
+        return out;
+    }
+    for (VarEntry const& entry : read_var_entries(table.var_meta)) {
+        if (entry.field_id != key ||
+            (entry.mid != assignment_uid &&
+             entry.mid != (assignment_uid | kSecondaryUidFamily))) {
+            continue;
+        }
+        out.var_meta = true;
+        if (entry.offset != 0xFFFFFFFFu &&
+            static_cast<std::size_t>(entry.offset) + 4 <= table.var2.size()) {
+            try {
+                FieldValue const decoded =
+                    decode_payload(kind, read_var_block(table.var2, entry.offset));
+                out.var2_block = decoded.storage_measured;
+            } catch (Error const&) {
+                out.var2_block = false;
+            }
+        }
+        break;
+    }
+    /* Measured: Project writes no FixedMeta tail bit for an assignment field,
+     * so its presence store does not exist and is trivially satisfied. */
+    out.presence = true;
+    std::string const task_props_path = "114/TBkndTask/Props";
+    std::string const assn_props_path = "114/TBkndAssn/Props";
+    bool const task_registered =
+        doc.has_stream(task_props_path) &&
+        props_has_record(doc.read_stream(task_props_path),
+                         kTaskPropsLayout.preamble, field_id);
+    bool const assn_registered =
+        doc.has_stream(assn_props_path) &&
+        props_has_record(doc.read_stream(assn_props_path),
+                         kAssnPropsLayout.preamble, key);
+    out.registered = task_registered && assn_registered;
+    return out;
 }
 
 } /* namespace mppwrite */

@@ -1,0 +1,19 @@
+{
+  "case": "assignment-fields",
+  "control": "corpus\\probe\\w14-assignfield-control.mpp",
+  "saved": "corpus\\probe\\w14-assignfield.mpp",
+  "values": {
+    "Number1 0x0f40006c": 7.5,
+    "Text1 0x0f400058": "assign-text"
+  },
+  "control_bytes": 245760,
+  "before": {
+    "Number1": 0.0,
+    "Text1": ""
+  },
+  "after": {
+    "Number1": 7.5,
+    "Text1": "assign-text"
+  },
+  "bytes": 344064
+}

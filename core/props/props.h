@@ -29,9 +29,12 @@
 // UTF-16 text with field references rewritten by Project to `[MSPJ<decimal>]`.
 // extract_formulas() recovers {field_id, formula, offsets}.  Measured on
 // corpus/probe/w10-formulas{,2,3}.mpp; the six formulas are the wave-10 oracle
-// set.  This module only READS.  There is deliberately no writer: a stray byte
-// at 114/Props+510 is enough for Project to refuse the file (spec/mpp-writer
-// section 10.4).
+// set.  The decoder is the primary product; the writer added in wave 14 (W59)
+// is deliberately NARROW: it replaces that ONE measured record plus the measured
+// 2-byte "custom-field data in use" flag (0x02401392), and refuses any layout
+// it does not understand.  There is still no general Props writer -- a stray
+// byte at 114/Props+510 is enough for Project to refuse the file
+// (spec/mpp-writer section 10.4).
 //
 // The C++ code below never maps a decimal token to a field NAME; field ids are
 // the 0x0b40xxxx numbers.  That keeps client task/calendar names out of code.
@@ -149,6 +152,59 @@ struct FormulaBlock {
 // Returns an empty vector if no such record exists.  Malformed blocks are
 // skipped, never guessed.
 [[nodiscard]] std::vector<FormulaBlock> extract_formulas(const PropsDocument& document);
+
+/* ------------------------------------------------------------------------- */
+/* Writing the formula table (W59, wave 14)                                   */
+/* ------------------------------------------------------------------------- */
+
+// The measured formula-table record: id 0x02401390, kind 0.  The empty table
+// is the 8-byte payload `08 00 00 00 00 00 00 00`; a table holding two formulas
+// was measured at 168 bytes (wave-14 fixture pair, see docs/handoff/w59.md).
+inline constexpr std::uint32_t kFormulaRecordId = 0x02401390u;
+inline constexpr std::size_t kEmptyFormulaPayloadSize = 8u;
+
+// The measured "custom-field data in use" flag: id 0x02401392, kind 2, a u16
+// payload.  It reads 0 in files without custom-field data (synthetic base and
+// the wave-14 control) and 1 in files with custom-field VALUES or formulas
+// (w10-fieldvalues has 1 with an empty formula table; all w10/w14 formula
+// fixtures have 1).  `set_custom_field_formula` writes 1;
+// `clear_custom_field_formula` writes 0 only when it actually removes formulas
+// (a no-op clear leaves it).  The flag is shared with custom-field values, so a
+// caller that clears formulas from a project that still stores custom-field
+// values must restore it -- core/props cannot see those other streams.
+inline constexpr std::uint32_t kCustomFieldFlagRecordId = 0x02401392u;
+
+// Replaces the payload of the formula record, changing nothing else.  Every
+// other record (including the project-name record 0x02400008) and the opaque
+// tail are copied byte-for-byte; the two header size words are recomputed with
+// the same variant delta the input used (114/Props: stream_size - 4) and the
+// record's own payload length is written.  `new_payload` must be a structurally
+// valid formula table (the empty 8-byte form is valid).  On any failure `out`
+// is untouched and `false` is returned with a message in `*error`.
+[[nodiscard]] bool replace_formula_record(std::span<const std::uint8_t> props,
+                                          std::span<const std::uint8_t> new_payload,
+                                          std::vector<std::uint8_t>& out,
+                                          std::string* error = nullptr);
+
+// Sets (or replaces) the formula of one Task custom field and re-serialises the
+// stream.  The formula is written exactly as Project stores it: field
+// references become `[MSPJ<decimal field id>]`, and `[Duration]` is stored as
+// 188744967 (Task.DurationText), the measured Project rewrite, not 188743709.
+// `formula` must parse with core::formula::parse (same depth guard as the app).
+// On failure `out` is untouched.
+[[nodiscard]] bool set_custom_field_formula(std::span<const std::uint8_t> props,
+                                            std::uint32_t field_id,
+                                            std::string_view formula,
+                                            std::vector<std::uint8_t>& out,
+                                            std::string* error = nullptr);
+
+// Removes every formula from the table (there is no per-field clear): the
+// record becomes the measured 8-byte empty form and the stream shrinks by the
+// table's size.  Clearing an already-empty table succeeds and returns the input
+// unchanged.  On failure `out` is untouched.
+[[nodiscard]] bool clear_custom_field_formula(std::span<const std::uint8_t> props,
+                                              std::vector<std::uint8_t>& out,
+                                              std::string* error = nullptr);
 
 // Parses one `MSPJ` field token, with or without brackets, to its decimal value.
 [[nodiscard]] bool parse_mspj_field(std::string_view token, std::uint32_t& field_id);

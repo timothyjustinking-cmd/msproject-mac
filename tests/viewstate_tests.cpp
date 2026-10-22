@@ -611,6 +611,329 @@ void test_text_helpers() {
              "preview falls back to hex");
 }
 
+// ---------------------------------------------------------------------------
+// Writer tests (wave 14, W58)
+//
+// The base/col/date blobs are the wave-10 prefs fixtures Project itself wrote.
+// The strongest proofs here are:
+//   * parse -> encode is byte-identical for a collection that was not mutated;
+//   * setting the date format on the *col* fixture reproduces the *date*
+//     fixture blob byte-for-byte (the oracle's single-variable save);
+//   * a column edit changes only the targeted 115-byte record.
+// ---------------------------------------------------------------------------
+
+using msproject::viewstate::EncodedParts;
+using msproject::viewstate::ViewState;
+using msproject::viewstate::WriteError;
+
+std::vector<std::size_t> diff_positions(const std::vector<std::uint8_t>& before,
+                                        const std::vector<std::uint8_t>& after) {
+    std::vector<std::size_t> out;
+    const std::size_t common = before.size() < after.size() ? before.size() : after.size();
+    for (std::size_t i = 0; i < common; ++i) {
+        if (before[i] != after[i]) {
+            out.push_back(i);
+        }
+    }
+    if (before.size() != after.size()) {
+        out.push_back(common);  // the sizes differ; this is not a byte offset
+    }
+    return out;
+}
+
+void check_same_parts(const EncodedParts& actual,
+                      const Parts& expected,
+                      const std::string& what) {
+    check(actual.fixed_data == expected.fixed_data, what + ": FixedData byte-identical");
+    check(actual.fixed_meta == expected.fixed_meta, what + ": FixedMeta byte-identical");
+    check(actual.var_meta == expected.var_meta, what + ": VarMeta byte-identical");
+    check(actual.var2_data == expected.var2, what + ": Var2Data byte-identical");
+}
+
+// Builds the wave-10 CTable collection around one raw Var2Data blob.
+bool make_ctable_parts(const std::string& blob_name, Parts& parts) {
+    const std::vector<std::uint8_t> blob = read_file(VIEWSTATE_TEST_DATA "/" + blob_name);
+    check(!blob.empty(), "read " + blob_name);
+    if (blob.empty()) {
+        return false;
+    }
+    parts = build_parts(230, {{"&Entry", "Entry"}}, {}, 10);
+    attach_column_blob(parts, blob);
+    return true;
+}
+
+void test_writer_roundtrip() {
+    Parts parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", parts)) {
+        return;
+    }
+    const auto state = parse_or_fail("CTable", parts);
+    check(state.parsed, "parsed flag set by parse_view_state");
+
+    EncodedParts encoded;
+    WriteError error;
+    check(encode_view_state(state, encoded, &error), "encode_view_state on an unmutated state");
+    if (!error.message.empty()) {
+        std::fprintf(stderr, "encode error: %s\n", error.message.c_str());
+    }
+    check_same_parts(encoded, parts, "no-op round-trip");
+
+    // The encoded parts must parse back to the same table definition.
+    const msproject::viewstate::PartSet encoded_parts = encoded.parts();
+    ViewState again;
+    msproject::viewstate::ParseError parse_error;
+    check(msproject::viewstate::parse_view_state("CTable", encoded_parts, again, &parse_error),
+          "re-parse encoded CTable");
+    check(again.parsed, "re-parsed state has the parsed flag");
+    check_eq(again.tables.size(), std::size_t{1}, "re-parsed tables");
+    if (again.tables.size() == 1) {
+        check_eq(again.tables[0].column_count(), 9u, "re-parsed column count");
+        check_eq(again.tables[0].date_format, static_cast<std::uint8_t>(0xff),
+                 "re-parsed date format");
+        check_eq(again.tables[0].flags, 6u, "re-parsed flags");
+        for (std::size_t i = 0; i < again.tables[0].columns.size() && i < kEntryFieldIds.size();
+             ++i) {
+            check_eq(again.tables[0].columns[i].field_id, kEntryFieldIds[i],
+                     "re-parsed column " + std::to_string(i) + " field id");
+        }
+    }
+
+    // An empty collection exercises the 0-entry FixedMeta / 0-block VarMeta
+    // path (CDrawing/CMap/CReport are exactly this in the fixtures).
+    Parts empty;
+    empty.fixed_meta.assign(16, 0);
+    put_u32(empty.fixed_meta, 0, 0xFADFADBAu);
+    put_u32(empty.fixed_meta, 4, 4);
+    empty.var_meta.assign(24, 0);
+    put_u32(empty.var_meta, 0, 0xFADFADBAu);
+    const auto empty_state = parse_or_fail("CMap", empty);
+    EncodedParts empty_encoded;
+    check(encode_view_state(empty_state, empty_encoded, nullptr), "encode empty CMap");
+    check_same_parts(empty_encoded, empty, "empty collection round-trip");
+
+    // A state that did not come from parse_view_state is refused.
+    ViewState unparsed;
+    EncodedParts refused;
+    WriteError refuse_error;
+    check(!encode_view_state(unparsed, refused, &refuse_error), "encode refuses an unparsed state");
+    check(!refuse_error.message.empty(), "unparsed encode has a message");
+    check(refused.fixed_data.empty() && refused.var2_data.empty(),
+          "refused encode leaves the output empty");
+}
+
+void test_writer_date_format() {
+    // base (flags 6) -> set 0x05: exactly one byte changes, at payload +7.
+    Parts base_parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", base_parts)) {
+        return;
+    }
+    auto base_state = parse_or_fail("CTable", base_parts);
+    EncodedParts before;
+    check(encode_view_state(base_state, before, nullptr), "encode base before date mutation");
+    WriteError error;
+    check(msproject::viewstate::set_table_date_format(base_state, 0, 0x05, &error),
+          "set_table_date_format(0, 0x05)");
+    if (!error.message.empty()) {
+        std::fprintf(stderr, "date-format error: %s\n", error.message.c_str());
+    }
+    EncodedParts after;
+    check(encode_view_state(base_state, after, nullptr), "encode base after date mutation");
+
+    check(after.fixed_data == before.fixed_data, "date format: FixedData unchanged");
+    check(after.fixed_meta == before.fixed_meta, "date format: FixedMeta unchanged");
+    check(after.var_meta == before.var_meta, "date format: VarMeta unchanged");
+    const auto diffs = diff_positions(before.var2_data, after.var2_data);
+    check_eq(diffs.size(), std::size_t{1}, "date format changes exactly one Var2Data byte");
+    if (diffs.size() == 1) {
+        check_eq(diffs[0], std::size_t{11}, "date format byte is block payload +7 (stream 11)");
+        check_eq(static_cast<int>(after.var2_data[11]), 0x05, "written date format is 0x05");
+    }
+    const auto reparsed = parse_or_fail("CTable", [&after] {
+        Parts parts;
+        parts.fixed_data = after.fixed_data;
+        parts.fixed_meta = after.fixed_meta;
+        parts.var_meta = after.var_meta;
+        parts.var2 = after.var2_data;
+        return parts;
+    }());
+    check_eq(reparsed.tables.size(), std::size_t{1}, "date mutation re-parsed tables");
+    if (reparsed.tables.size() == 1) {
+        check_eq(reparsed.tables[0].date_format, static_cast<std::uint8_t>(0x05),
+                 "re-parsed date format is 0x05");
+        check_eq(reparsed.tables[0].column_count(), 9u, "date mutation keeps 9 columns");
+    }
+
+    // The oracle proof: col (0xff) -> date (0x05) was Project's only semantic
+    // change, so setting 0x05 on the committed col blob must equal the
+    // committed date blob byte-for-byte.
+    Parts col_parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-col.bin", col_parts)) {
+        return;
+    }
+    auto col_state = parse_or_fail("CTable", col_parts);
+    check(msproject::viewstate::set_table_date_format(col_state, 0, 0x05, nullptr),
+          "set date format on col fixture");
+    EncodedParts col_edited;
+    check(encode_view_state(col_state, col_edited, nullptr), "encode col fixture after edit");
+    const std::vector<std::uint8_t> date_blob =
+        read_file(VIEWSTATE_TEST_DATA "/synthetic-viewstate-ctable-date.bin");
+    check(!date_blob.empty(), "read date blob");
+    check(col_edited.var2_data == date_blob,
+          "col + set_table_date_format(0x05) reproduces the date fixture blob");
+}
+
+void test_writer_column() {
+    Parts parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", parts)) {
+        return;
+    }
+    auto state = parse_or_fail("CTable", parts);
+    check_eq(state.tables.size(), std::size_t{1}, "column edit tables");
+    if (state.tables.size() != 1 || state.tables[0].columns.size() < 2) {
+        return;
+    }
+    const std::array<std::uint8_t, 9> original_header = state.tables[0].columns[1].opaque_header;
+    check_eq(state.tables[0].columns[1].field_id, 0x0b4000cdu,
+             "record 1 starts with the stock Entry field id");
+    check_eq(state.tables[0].columns[1].title, std::string(""), "record 1 starts untitled");
+
+    EncodedParts before;
+    check(encode_view_state(state, before, nullptr), "encode before column edit");
+
+    // The oracle replaced index 1 with Number1 (field 0x0b400057, title
+    // "Number1"); Text1 is 0x0b400033.
+    WriteError error;
+    check(msproject::viewstate::set_table_column(state, 0, 1, 0x0b400057u, "Number1", &error),
+          "set_table_column(0, 1, Number1)");
+    if (!error.message.empty()) {
+        std::fprintf(stderr, "column error: %s\n", error.message.c_str());
+    }
+    EncodedParts after;
+    check(encode_view_state(state, after, nullptr), "encode after column edit");
+
+    check(after.fixed_data == before.fixed_data, "column edit: FixedData unchanged");
+    check(after.fixed_meta == before.fixed_meta, "column edit: FixedMeta unchanged");
+    check(after.var_meta == before.var_meta, "column edit: VarMeta unchanged");
+    check_eq(after.var2_data.size(), before.var2_data.size(), "column edit keeps block size");
+    // Absolute position in Var2Data: 4-byte block length + 12-byte payload
+    // header + one 115-byte record.
+    const std::size_t record = 4 + 12 + 1 * 115;
+    const auto diffs = diff_positions(before.var2_data, after.var2_data);
+    check(!diffs.empty(), "column edit changes bytes");
+    bool confined = true;
+    for (const std::size_t at : diffs) {
+        if (at < record || at >= record + 115) {
+            confined = false;
+        }
+    }
+    check(confined, "column edit changes only the 115-byte record at index 1");
+
+    // Field id at +0, 9 opaque bytes preserved, zero-filled UTF-16 title.
+    if (after.var2_data.size() > record + 115) {
+        std::uint32_t field = 0;
+        for (std::size_t b = 0; b < 4; ++b) {
+            field |= static_cast<std::uint32_t>(after.var2_data[record + b]) << (8u * b);
+        }
+        check_eq(field, 0x0b400057u, "column record field id written");
+        bool header_kept = true;
+        for (std::size_t b = 0; b < 9; ++b) {
+            if (after.var2_data[record + 4 + b] != original_header[b]) {
+                header_kept = false;
+            }
+        }
+        check(header_kept, "9 opaque column bytes preserved");
+        check_eq(msproject::viewstate::utf16_ascii(after.var2_data, record + 13, 51),
+                 std::string("Number1"), "column record title written");
+        bool tail_zero = true;
+        for (std::size_t at = record + 13 + 7 * 2; at < record + 115; ++at) {
+            if (after.var2_data[at] != 0) {
+                tail_zero = false;
+            }
+        }
+        check(tail_zero, "title tail is zero-filled after the NUL");
+    }
+
+    Parts edited_parts;
+    edited_parts.fixed_data = after.fixed_data;
+    edited_parts.fixed_meta = after.fixed_meta;
+    edited_parts.var_meta = after.var_meta;
+    edited_parts.var2 = after.var2_data;
+    const auto reparsed = parse_or_fail("CTable", edited_parts);
+    check_eq(reparsed.tables.size(), std::size_t{1}, "column edit re-parsed tables");
+    if (reparsed.tables.size() == 1 && reparsed.tables[0].columns.size() == 9) {
+        check_eq(reparsed.tables[0].columns[1].field_id, 0x0b400057u,
+                 "re-parsed column field id");
+        check_eq(reparsed.tables[0].columns[1].title, std::string("Number1"),
+                 "re-parsed column title");
+        check(reparsed.tables[0].columns[1].opaque_header == original_header,
+              "re-parsed opaque header preserved");
+    }
+
+    // The full 51-code-unit capacity is accepted (no NUL fits; the decoder
+    // reads 51 units), and 52 is refused.
+    const std::string full_title(51, 'A');
+    check(msproject::viewstate::set_table_column(state, 0, 1, 0x0b400033u, full_title, nullptr),
+          "51-code-unit title accepted");
+    EncodedParts full;
+    check(encode_view_state(state, full, nullptr), "encode 51-unit title");
+    check_eq(msproject::viewstate::utf16_ascii(full.var2_data, record + 13, 51), full_title,
+             "51-code-unit title reads back");
+}
+
+void test_writer_refusals() {
+    Parts parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", parts)) {
+        return;
+    }
+    auto state = parse_or_fail("CTable", parts);
+    EncodedParts before;
+    check(encode_view_state(state, before, nullptr), "encode before refused edits");
+
+    WriteError error;
+    check(!msproject::viewstate::set_table_date_format(state, 1, 0x05, &error),
+          "date format: table index 1 refused");
+    check(error.message.find("out of range") != std::string::npos,
+          "date format refusal message names the range");
+    error = WriteError{};
+    check(!msproject::viewstate::set_table_column(state, 0, 9, 0x0b400057u, "x", &error),
+          "column: index 9 refused");
+    check(error.message.find("out of range") != std::string::npos,
+          "column index refusal message names the range");
+    error = WriteError{};
+    check(!msproject::viewstate::set_table_column(state, 0, 1, 0u, "x", &error),
+          "column: field id 0 refused");
+    check(error.message.find("field id 0") != std::string::npos, "field id refusal message");
+    error = WriteError{};
+    check(!msproject::viewstate::set_table_column(state, 0, 1, 0x0b400057u,
+                                                  std::string(52, 'A'), &error),
+          "column: 52-code-unit title refused");
+    check(error.message.find("capacity") != std::string::npos, "title length refusal message");
+    error = WriteError{};
+    check(!msproject::viewstate::set_table_column(state, 0, 1, 0x0b400057u, "caf\xe9", &error),
+          "column: non-ASCII title refused");
+    error = WriteError{};
+
+    // No refused call may have changed anything.
+    EncodedParts after;
+    check(encode_view_state(state, after, nullptr), "encode after refused edits");
+    check_same_parts(after, parts, "refused edits leave every part unchanged");
+
+    // A collection whose table block did not decode is refused too.
+    Parts undecoded = parts;
+    put_u16(undecoded.var2, 8, 9);
+    auto opaque_state = parse_or_fail("CTable", undecoded);
+    error = WriteError{};
+    check(!msproject::viewstate::set_table_date_format(opaque_state, 0, 0x05, &error),
+          "date format: undecoded table refused");    check(error.message.find("decoded") != std::string::npos, "undecoded refusal message");
+}
+
+void test_writer() {
+    test_writer_roundtrip();
+    test_writer_date_format();
+    test_writer_column();
+    test_writer_refusals();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -628,6 +951,15 @@ int main(int argc, char** argv) {
     run("empty", test_empty_class);
     run("errors", test_errors_and_warnings);
     run("text", test_text_helpers);
+    run("writer-roundtrip", test_writer_roundtrip);
+    run("writer-date-format", test_writer_date_format);
+    run("writer-column", test_writer_column);
+    run("writer-refusals", test_writer_refusals);
+    // The group name is for the separate ctest entry; the default run above
+    // already covers the four writer cases individually.
+    if (only == "writer") {
+        test_writer();
+    }
 
     if (g_failures == 0) {
         std::printf("PASS: %d checks, 0 failures\n", g_checks);

@@ -1,0 +1,18 @@
+{
+  "case": "cost-field",
+  "base": "corpus\\probe\\base.mpp",
+  "control": "corpus\\probe\\w14-cost-control.mpp",
+  "saved": "corpus\\probe\\w14-cost.mpp",
+  "cost1": 123.45,
+  "field": "Task.Cost1 0x0b40006a",
+  "control_bytes": 344064,
+  "before": {
+    "Cost1": 0.0
+  },
+  "set_returns": null,
+  "after": {
+    "Cost1": 123.45,
+    "GetField": "$123.45"
+  },
+  "bytes": 344064
+}

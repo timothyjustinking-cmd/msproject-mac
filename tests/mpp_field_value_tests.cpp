@@ -134,13 +134,16 @@ void test_id_table(TestContext& t) {
     t.check(mpp::custom_field_kind(0x0B400505u) == FieldKind::unknown,
             "StartText is not a custom field");
 
-    /* Storage-measured predicate: Cost and Flag2..20 are not measured. */
+    /* Storage-measured predicate: Cost1..Cost10 are measured (W60); Flag2..20
+     * are not. */
     t.check(mpp::custom_field_storage_measured(FieldKind::flag, 1),
             "Flag1's bit is measured");
     t.check(!mpp::custom_field_storage_measured(FieldKind::flag, 2),
             "Flag2's bit is unmeasured");
-    t.check(!mpp::custom_field_storage_measured(FieldKind::cost, 1),
-            "Cost1's storage is unmeasured");
+    t.check(mpp::custom_field_storage_measured(FieldKind::cost, 1),
+            "Cost1's storage is measured (W60)");
+    t.check(mpp::custom_field_storage_measured(FieldKind::cost, 10),
+            "Cost10's storage is measured (W60)");
     t.check(mpp::custom_field_storage_measured(FieldKind::number, 20),
             "Number20's storage is measured");
 }
@@ -174,10 +177,12 @@ void test_synthetic_control(TestContext& t) {
         t.equal(text.field_id, 0x0B400033u, "Document::custom_field echoes the id");
         t.check(text.kind == mpp::FieldKind::text, "Document::custom_field kind Text");
     }
-    /* A Cost lookup is known but unmeasured: the caller can tell the two apart. */
+    /* A Cost lookup is known, its storage is measured (W60), but this file
+     * stores no value. */
     mpp::CustomFieldValue const cost = document.custom_field(1, 0x0B40006Au);
     t.check(!cost.present, "synthetic: Cost1 not present");
-    t.check(!cost.storage_measured, "synthetic: Cost1 storage is unmeasured");
+    t.check(cost.storage_measured,
+            "synthetic: Cost1's storage encoding is measured (absent value)");
     t.check(cost.kind == mpp::FieldKind::cost, "synthetic: Cost1 kind Cost");
 }
 
@@ -253,8 +258,41 @@ void test_field_values(TestContext& t) {
     t.check(absent.kind == mpp::FieldKind::unknown, "an unknown id has kind unknown");
 }
 
-/* ---- (d) the Flag1 discriminator: Flag1 False vs True, nothing else ------ */
+/* ---- (d) the W60 cost fixtures: the byte is seen, the reader lane --------- */
 
+void test_cost_fixtures(TestContext& t) {
+    std::string const path = join(MPP_PROBE_DIR, "w14-cost.mpp");
+    if (!file_exists(path)) {
+        std::cout << "SKIP: " << path << " is missing (corpus/ is git-ignored)\n";
+        return;
+    }
+    mpp::Document const doc = mpp::load_file(path);
+    mpp::CustomFieldValue const cost = doc.custom_field(1, 0x0B40006Au);
+    t.check(cost.present, "w14-cost: Cost1's VarMeta block is present");
+    t.check(cost.kind == mpp::FieldKind::cost, "w14-cost: Cost1 kind Cost");
+    if (cost.storage_measured) {
+        t.check(cost.cost == 123.45, "w14-cost: Cost1 decodes as 123.45");
+    } else {
+        std::cout << "NOTE: core/mpp does not decode a Cost block yet (the "
+                     "reader lane); the writer proves the encoding\n";
+    }
+
+    std::string const path2 = join(MPP_PROBE_DIR, "w14-cost2.mpp");
+    if (!file_exists(path2)) {
+        return;
+    }
+    mpp::Document const doc2 = mpp::load_file(path2);
+    mpp::CustomFieldValue const first = doc2.custom_field(1, 0x0B40006Au);
+    mpp::CustomFieldValue const second = doc2.custom_field(2, 0x0B40006Au);
+    t.check(first.present && second.present,
+            "w14-cost2: Cost1 present on uids 1 and 2");
+    if (first.storage_measured && second.storage_measured) {
+        t.check(first.cost == 1.23, "w14-cost2: uid 1 Cost1 is 1.23");
+        t.check(second.cost == 0.07, "w14-cost2: uid 2 Cost1 is 0.07");
+    }
+}
+
+/* ---- (e) the Flag1 discriminator: Flag1 False vs True, nothing else ------ */
 void test_flag_pair(TestContext& t) {
     std::string const off = join(MPP_PROBE_DIR, "w10-flag-off.mpp");
     std::string const on = join(MPP_PROBE_DIR, "w10-flag-on.mpp");
@@ -286,6 +324,7 @@ int main() {
     test_id_table(t);
     test_synthetic_control(t);
     test_field_values(t);
+    test_cost_fixtures(t);
     test_flag_pair(t);
     return t.report();
 }

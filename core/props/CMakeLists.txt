@@ -51,6 +51,21 @@ target_include_directories(core_props PUBLIC
 )
 props_set_warnings(core_props)
 
+# The formula writer validates every formula with core/formula's own parser, so
+# a formula Project (and the app) cannot parse is never stored.  The top-level
+# build adds `formula` before `props`; a standalone configure pulls it in here.
+if(NOT TARGET core_formula)
+    if(EXISTS "${PROPS_REPO_ROOT}/core/formula/CMakeLists.txt")
+        set(FORMULA_BUILD_TESTS OFF CACHE BOOL
+            "core/props standalone: skip core/formula tests" FORCE)
+        add_subdirectory("${PROPS_REPO_ROOT}/core/formula"
+                         "${CMAKE_CURRENT_BINARY_DIR}/core_formula")
+    else()
+        message(FATAL_ERROR "core/props needs core/formula (expr.h, fields.h)")
+    endif()
+endif()
+target_link_libraries(core_props PRIVATE core_formula)
+
 add_executable(props_report report_main.cpp)
 target_link_libraries(props_report PRIVATE core_props)
 target_compile_features(props_report PRIVATE cxx_std_20)
@@ -69,6 +84,26 @@ if(PROPS_BUILD_TESTS)
     target_compile_definitions(props_tests PRIVATE
         PROPS_TEST_DATA="${PROPS_REPO_ROOT}/tests/data/synthetic-props.bin"
     )
+
+    # The writer test reads 114/Props out of the committed synthetic .mpp
+    # fixture, which has the measured 8-byte empty formula table.  core/mpp is
+    # the read-only CFB layer; in the top-level build it already exists.
+    if(NOT TARGET core_mpp AND EXISTS "${PROPS_REPO_ROOT}/core/mpp/CMakeLists.txt")
+        set(MPP_BUILD_TESTS OFF CACHE BOOL
+            "core/props standalone: skip core/mpp tests" FORCE)
+        add_subdirectory("${PROPS_REPO_ROOT}/core/mpp"
+                         "${CMAKE_CURRENT_BINARY_DIR}/core_mpp")
+    endif()
+    if(TARGET core_mpp)
+        set(PROPS_BASE_MPP "${PROPS_REPO_ROOT}/tests/data/synthetic-base.mpp")
+        file(TO_CMAKE_PATH "${PROPS_BASE_MPP}" PROPS_BASE_MPP)
+        target_link_libraries(props_tests PRIVATE core_mpp)
+        target_compile_definitions(props_tests PRIVATE
+            PROPS_HAVE_MPP_CFB=1
+            PROPS_BASE_MPP="${PROPS_BASE_MPP}"
+        )
+    endif()
+
     props_set_warnings(props_tests)
 
     add_test(NAME props COMMAND props_tests)

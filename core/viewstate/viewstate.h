@@ -1,4 +1,5 @@
-// core/viewstate -- read-only decoder for the MPP `214/` view-state streams.
+// core/viewstate -- decoder and targeted writer for the MPP `214/` view-state
+// streams.
 //
 // WHAT THIS IS
 //
@@ -78,20 +79,40 @@
 //   `214/Props` is a normal Props stream and is decoded by core/props directly;
 //   this module does not duplicate that.
 //
-// WHAT IS NOT HERE
+// THE WRITER (wave 14, W58)
 //
-// There is deliberately no writer and no claim about a write layout.  `214/` is
-// Project's own view cache: Project rewrites most of it on every save, the
-// identity values churn per save, and the wave-10 prefs fixture pair shows that
-// the one oracle "add a column" call did not persist a column at all (no
-// Number1 field id exists anywhere under 214/, and the Entry column list keeps
-// 9 records).  A writer would need a fresh single-variable oracle run; this
-// module only reads.
+// encode_view_state() re-serialises all four parts from a parsed ViewState:
+// FixedData verbatim (Project's per-save identity bytes are preserved, never
+// regenerated), FixedMeta and VarMeta rebuilt from their parsed headers and
+// entries with declared_count, fixed_data_size, var2_size and every VarMeta
+// offset recomputed from the byte streams, and Var2Data rebuilt from the block
+// walk.  With no mutation the output is byte-identical to the input; the tests
+// prove that and `viewstate_report --roundtrip` re-checks it on extracted
+// fixture trees.
 //
-// The wave-10 date-format result IS proved by the same fixture pair.  Excluding
-// the per-save identity values and the CEdl path record, col -> date differs in
-// exactly one byte under 214/: the date-format byte at CTable block payload
-// offset +7 (0xff -> 0x05).
+// Two targeted mutators are proved by the wave-14 oracle
+// (docs/analysis/oracle/w14-oracle.md section 1):
+//
+//   set_table_date_format  writes CTable block payload +7.  0xff is the
+//                          default in every measured file; 0x05 is what
+//                          Project wrote for DateFormat=5.
+//   set_table_column       replaces the 115-byte record at an existing column
+//                          index: u32 field id at record +0 and a zero-filled
+//                          UTF-16 title at record +13 (51 code-unit capacity).
+//                          The nine opaque bytes at +4 are preserved.  The
+//                          oracle's TableEdit with ColumnPosition=0 replaced
+//                          the record at index 1 and left the 1047-byte block
+//                          unchanged.  The measured replacement also zero-filled
+//                          the rest of the title area after its NUL.
+//
+// Not provided, because not measured:
+//
+//   * appending a column.  Project rejects ColumnPosition 8 and 9, and the
+//     append layout (block +4, block length, VarMeta/Var2 growth) is unproved.
+//   * editing CV_iew, CFilter, CGrouping, CEdl, CDrawing, CMap or CReport
+//     payload bodies.  Those stay opaque; only the generic framing is written.
+//   * generating Project identity/GUID values.  Every row/entry identity is
+//     preserved verbatim because Project regenerates it on each save.
 
 #pragma once
 
@@ -249,6 +270,11 @@ struct EmbeddedProps {
 struct ViewState {
     std::string klass;
 
+    // True only when parse_view_state() returned true.  The writer refuses a
+    // hand-built or partially parsed state, because the four raw byte copies
+    // below are what it round-trips.
+    bool parsed = false;
+
     std::vector<std::uint8_t> fixed_data;
     std::vector<std::uint8_t> fixed_meta_bytes;
     std::vector<std::uint8_t> var_meta_bytes;
@@ -278,6 +304,64 @@ struct PartSet {
     std::span<const std::uint8_t> var_meta;
     std::span<const std::uint8_t> var2_data;
 };
+
+// ---------------------------------------------------------------------------
+// Writer (wave 14, W58).  See the file header for what is and is not proved.
+// ---------------------------------------------------------------------------
+
+struct WriteError {
+    std::string message;
+};
+
+// Owning output of encode_view_state().  PartSet is non-owning, so the writer
+// needs somewhere to put the bytes; parts() exposes them in the decoder's form
+// and the individual vectors stay available for tests and callers.
+//
+// The four parts are independent top-level streams.  The caller is responsible
+// for putting them back into a .mpp (this module does not open CFB files).
+struct EncodedParts {
+    std::vector<std::uint8_t> fixed_data;
+    std::vector<std::uint8_t> fixed_meta;
+    std::vector<std::uint8_t> var_meta;
+    std::vector<std::uint8_t> var2_data;
+
+    [[nodiscard]] PartSet parts() const;
+};
+
+// Re-serialises all four parts from a parsed ViewState, recomputing the
+// FixedMeta/VarMeta header words and every VarMeta offset from the byte
+// streams.  FixedData and the 16-byte per-row identities are copied verbatim;
+// no identity is synthesised.  With no mutation the output is byte-identical to
+// the input that produced `state`.  Returns false (and leaves `out` empty) if
+// the state did not come from a successful parse_view_state() or if the parsed
+// structure cannot be re-serialised consistently.
+[[nodiscard]] bool encode_view_state(const ViewState& state,
+                                     EncodedParts& out,
+                                     WriteError* error = nullptr);
+
+// Replaces the CTable date-format byte at block payload +7 (0xff = default;
+// 0x05 is the value Project wrote for DateFormat=5).  Refuses a table index
+// that is out of range or whose column block was not decoded, and leaves the
+// ViewState untouched on failure.
+[[nodiscard]] bool set_table_date_format(ViewState& state,
+                                         std::size_t table_index,
+                                         std::uint8_t date_format,
+                                         WriteError* error = nullptr);
+
+// Replaces the 115-byte column record at `column_index` in `table_index`:
+// the u32 field id at record +0 and the UTF-16 title at record +13.  The nine
+// opaque bytes at +4 are preserved.  `title` must be printable ASCII and at
+// most 51 code units; the title is zero-filled to the end of the record, which
+// is what the measured TableEdit replacement wrote.  This edits an existing
+// column only; appending is not supported (it is not measured).  Refuses a bad
+// index, field id 0, a too-long title or a table whose column block was not
+// decoded, and leaves the ViewState untouched on failure.
+[[nodiscard]] bool set_table_column(ViewState& state,
+                                    std::size_t table_index,
+                                    std::size_t column_index,
+                                    std::uint32_t field_id,
+                                    std::string_view title,
+                                    WriteError* error = nullptr);
 
 // The class names measured under 214/.  Unknown classes still parse with the
 // generic framing and every block stays opaque.

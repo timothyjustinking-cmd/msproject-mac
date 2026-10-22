@@ -571,3 +571,64 @@ write, decode the `214/` view state, and run the adversarial/fuzz pass.
 
 
 
+
+## Wave 14 — complete (2026-10-22)
+
+Goal: measure the four remaining write layouts with the oracle first, then close
+them in four streams: `214/` view state, `114/Props` formulas, assignment + Cost
+custom fields, app printing.
+
+| # | Stream | Deliverable | Verified by |
+|---|---|---|---|
+| W58 | `214/` view-state writer | `encode_view_state` rebuilds all four parts (identity bytes preserved, header words/VarMeta offsets recomputed); `set_table_date_format`, `set_table_column` (115-byte record replace). No-op encode is byte-identical on **72** extracted `214/` collections | viewstate 212 checks; new ctest `viewstate_writer` |
+| W59 | `114/Props` formula writer | inverted block grammar; the 168-byte two-formula record our writer emits is **byte-identical to Project's**; `set/clear_custom_field_formula`; maintains the custom-field-in-use record `0x02401392` | props **720** checks (was 520) |
+| W60 | assignment + Cost fields | assignment Number1..20 / Text1..30 (keys `0x0f40403c`/`0x0f404064` + stride), Cost1..10 (key = field id, f64 hundredths, presence bits, both Props registries); emitted streams byte-identical to Project's own fixture pairs | field_values **802** checks; `mpp_field_value` 290; **Project displays all five fixtures** |
+| W61 | app output/UX | `File > Print…` and `File > Save as PDF…` share one `PrintJob`/`NSPrintOperation` path with Export PDF's page geometry (wave-13 PDFs byte-identical); `warning_for_start_edit` + one save-time alert for clamped/manual/no-effect start edits | app **14/14**, **2,289** checks (was 12 / 2,132) |
+
+**Gate:** clean `build\vs-w14` — **48/48 ctest** (wave 13: 47, the extra is
+`viewstate_writer`); app `build\vs-w14-app` — **14/14 tests, 2,289 checks**
+(`app_print` 66, `app_start_warning` 41); **M2 332/332** (83/83 x 4, 0
+unexplained); schedin 20/20 + 10/10 unchanged. `app-macos` compiles the print
+path after one fix (`NSClipPagination` is deprecated since macOS 11 under
+`-Werror`; now `NSPrintingPaginationModeClip`).
+
+### New measured facts
+
+1. **A table column is replaced, not appended.** `TableEdit` coerces `FieldName`
+   to a string (a Long raises "The field \"188743767\" does not exist"); a column
+   is written only when a field NAME **and** `ColumnPosition` are given, and
+   `ColumnPosition=0` overwrites the column at index 1. `ColumnPosition` 8/9 is
+   rejected, so the append layout stays unmeasured and unwritten.
+2. **Formulas are one `114/Props` record, id `0x2401390`**: 8 bytes when empty,
+   168 with two formulas (payload `u32 size, u32 count, {u32 field_id, u32
+   rel_offset}...`, then blocks whose 7 span words equal their own span; field
+   references are `[MSPJ<u32>]` tokens). The net stream delta was **+144**, not
+   +160: the name record shrinks 42 -> 26. A second record, `0x02401392` (u16),
+   is a "custom-field data in use" flag, not formula-specific.
+3. **Assignment custom fields use a different key family**: `Number1` stores
+   under `0x0f40403c` and `Text1` under `0x0f404064` (the PjField ids
+   `0x0f40006c`/`0x0f400058` are **not** the keys). Only `FixedMeta +2` changes —
+   assignments have no presence bit. Task `Cost1` is the opposite: key = field id
+   `0x0b40006a`, payload f64 in hundredths (`0.07 -> 7.0` exactly, so decimal
+   rounding not a raw multiply), presence bit at the entry's `+26` bit `0x08`.
+   Both families register an **88-byte** record in their table's Props stream.
+4. **A manual start move is not a stored pin**: it *removes* the explicit
+   Start/Finish VarMeta blocks (`0x0b400505`/`0x0b400506`) and carries the dates
+   in FixedData, so the app must warn on the edit rather than store a pin.
+5. **Project displays everything the writer stores**: `w60-cost` $123.45,
+   `w60-cost-all` 1.11..11.10 (the inferred Cost2..10 bits), `w60-cost2`
+   1.23/0.07, `w60-assignments` Number1 7.5 / Text1 "assign-text",
+   `w60-assignment-range` Number20 2.5 / Text30 "t30".
+
+### Open after wave 14
+
+1. **`214/` append** and `CV_iew` item encoding, `CEdl`/Props semantics; wiring
+   the view-state writer into the app's save path (the encoder exists, nothing
+   calls it yet).
+2. **Formula writes are not wired into the app save** — `core/props` can set a
+   formula, nothing in `app/` calls it yet; the flag-clearing case (clear all
+   formulas while custom-field *values* remain) needs the app to preserve the
+   flag.
+3. MPP12, MPP14 resource Type, summary-calendar rollup, elapsed mixes.
+4. App multi-window, the **manual Mac smoke test**, LeakSanitizer/UBSan (MSVC has
+   neither), and the visual print oracle.

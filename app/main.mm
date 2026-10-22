@@ -40,6 +40,8 @@
 //   * Cmd-1/2/3 and Cmd-=/Cmd-- set the Gantt timescale; Cmd-Shift-D toggles the
 //     working-day shading; both persist in NSUserDefaults (app/prefs.h)
 //   * Cmd-Shift-E / Cmd-Option-E export a PDF sheet / Gantt report
+//   * Cmd-P prints the table + Gantt through app/page_layout.h; Cmd-Shift-P
+//     saves that same print job as a PDF (both routes share build_print_job)
 //   * Preferences (Cmd-,) sets the date format, duration format, timescale and
 //     shading, applied live
 //
@@ -91,10 +93,12 @@
 #include "gantt.h"
 #include "layout_model.h"
 #include "menu_model.h"
+#include "page_layout.h"
 #include "prefs.h"
 #include "reader_adapter.h"
 #include "selection_model.h"
 #include "sheet.h"
+#include "start_edit_warning.h"
 #include "usage.h"
 #include "view_model.h"
 
@@ -1737,6 +1741,39 @@ void run_export_panel(PlanState& plan, app::ReportKind kind) {
     std::fflush(stdout);
 }
 
+// Printing (wave 14): the request is the report the window is showing.  The
+// Gantt report is the combined table + chart, which is also what File > Export
+// PDF (Gantt) writes; a filter restricts the rows exactly as it does for the
+// screen and the export.  The date is formatted here (once) and the page
+// geometry comes from app/page_layout.h, so this function never reads a clock
+// after it returns and the layout stays pure.
+app::PrintRequest make_print_request(const PlanState& plan) {
+    app::PrintRequest request;
+    request.kind = app::PrintKind::gantt;
+    request.project_name = plan.loaded.title;
+    if (request.project_name.empty()) {
+        request.project_name = plan.loaded.source_name;
+    }
+    request.report_title = "Gantt report";
+    const std::size_t total = plan.records.row_count();
+    const std::size_t shown = plan.filter_active ? plan.filter_rows.size() : total;
+    request.subtitle = app::export_subtitle(
+        app::ReportKind::gantt,
+        plan.filter_active ? plan.filter_description : std::string(), shown, total);
+    request.date_text = core::sheet::format_date_text(
+        app::date_value_from_date32(app::today_date32()), plan.format);
+    request.spec = app::PageSpec::a4_landscape();
+    if (plan.filter_active) {
+        request.rows = plan.filter_rows;
+    } else {
+        request.rows.reserve(total);
+        for (std::size_t row = 0; row < total; ++row) {
+            request.rows.push_back(row);
+        }
+    }
+    return request;
+}
+
 void show_about() {
     show_alert(@"About MS Project Shell",
                @"A native macOS shell over the portable MS Project core.\n\n"
@@ -1766,7 +1803,8 @@ void show_shortcuts() {
                 @"Cmd-Option-1..4: Task Sheet / Resource Sheet / Task Usage / Resource Usage\n"
                 @"Cmd-= / Cmd--: zoom in / out\n"
                 @"Cmd-S / Cmd-Shift-S: save / save as\n"
-                @"Cmd-Shift-E / Cmd-Option-E: export PDF (sheet / Gantt)");
+                @"Cmd-Shift-E / Cmd-Option-E: export PDF (sheet / Gantt)\n"
+                @"Cmd-P / Cmd-Shift-P: print / save the printout as PDF");
 }
 
 }  // namespace
@@ -2050,6 +2088,396 @@ void show_shortcuts() {
 @end
 
 // ---------------------------------------------------------------------------
+// Wave 14: printing.  One offscreen view draws one page per -rectForPage:, and
+// every band (title, rules, body top/bottom, footer, rows per page) comes from
+// app/page_layout.h -- the AppKit code drives that model, never the reverse.
+// Print... and Save as PDF... both build the same app::PrintJob and run it
+// through this view, so the two routes cannot paginate differently.
+// ---------------------------------------------------------------------------
+
+struct PrintViewState {
+    PlanState* plan = nullptr;
+    app::PrintJob job;
+    core::gantt::GanttLayout gantt;
+    double table_width = 0.0;
+};
+
+struct PrintTableColumn {
+    std::size_t model_column = core::sheet::kNoIndex;
+    double x = 0.0;
+    double width = 0.0;
+};
+
+namespace {
+
+std::size_t print_model_column(const PlanState& plan, std::string_view field_name) {
+    const core::view::FieldId field = app::task_field_id(field_name);
+    if (field == 0 || plan.sheet == nullptr) {
+        return core::sheet::kNoIndex;
+    }
+    for (std::size_t index = 0; index < plan.sheet->column_count(); ++index) {
+        if (plan.sheet->column(index).field == field) {
+            return index;
+        }
+    }
+    return core::sheet::kNoIndex;
+}
+
+// The five columns a printed table shows, in order: identity, name, the two
+// dates and the duration.  Widths fit the printable width; Name takes the rest.
+std::vector<PrintTableColumn> print_table_columns(const PlanState& plan, double width) {
+    struct Spec {
+        const char* name;
+        double width;
+    };
+    const Spec specs[] = {
+        {"ID", 34.0}, {"Name", 0.0}, {"Start", 78.0}, {"Finish", 78.0}, {"Duration", 62.0},
+    };
+    double fixed = 0.0;
+    for (const Spec& spec : specs) {
+        if (spec.width > 0.0) {
+            fixed += spec.width;
+        }
+    }
+    const double name_width = std::max(60.0, width - fixed);
+    std::vector<PrintTableColumn> columns;
+    double x = 0.0;
+    for (const Spec& spec : specs) {
+        const std::size_t model = print_model_column(plan, spec.name);
+        if (model == core::sheet::kNoIndex) {
+            continue;
+        }
+        PrintTableColumn column;
+        column.model_column = model;
+        column.x = x;
+        column.width = spec.width > 0.0 ? spec.width : name_width;
+        columns.push_back(column);
+        x += column.width;
+    }
+    return columns;
+}
+
+}  // namespace
+
+@interface PrintView : NSView {
+@public
+    PrintViewState* state;
+}
+- (instancetype)initWithPlan:(PlanState*)plan job:(const app::PrintJob&)job;
+- (void)drawPage:(std::size_t)page origin:(NSPoint)origin;
+@end
+
+@implementation PrintView
+
+- (BOOL)isFlipped {
+    return YES;
+}
+
+- (instancetype)initWithPlan:(PlanState*)plan job:(const app::PrintJob&)job {
+    const double page_height = job.spec.height;
+    const double view_height =
+        std::max(page_height, page_height * static_cast<double>(job.pages.size()));
+    self = [super initWithFrame:NSMakeRect(0.0, 0.0, job.spec.width, view_height)];
+    if (self == nil) {
+        return nil;
+    }
+    state = new PrintViewState();
+    state->plan = plan;
+    state->job = job;
+    const double printable = job.spec.printable_width();
+    if (job.kind == app::PrintKind::gantt) {
+        state->table_width = std::min(340.0, printable * 0.55);
+        app::PlanInput printed;
+        printed.title = plan->loaded.title;
+        printed.project_start = plan->view.project_start;
+        printed.project_finish = plan->view.project_finish;
+        for (const std::size_t row : job.rows) {
+            if (row < plan->view.tasks.size()) {
+                printed.tasks.push_back(plan->view.tasks[row]);
+            }
+        }
+        printed.links = plan->view.links;
+        core::gantt::GanttStyle style = app::default_gantt_style();
+        style.row_height = job.spec.row_height;
+        style.bar_height = std::max(6.0, job.spec.row_height - 4.0);
+        style.summary_height = std::max(4.0, job.spec.row_height - 7.0);
+        style.milestone_size = std::max(6.0, job.spec.row_height - 4.0);
+        state->gantt = core::gantt::build_gantt(
+            app::make_gantt_source(printed), style,
+            app::timescale_for_zoom(printed, app::gantt_zoom(g_prefs.zoom)));
+    } else {
+        state->table_width = printable;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    delete state;
+}
+
+- (void)drawPage:(std::size_t)page_index origin:(NSPoint)origin {
+    PrintViewState& s = *state;
+    const app::PrintJob& job = s.job;
+    const app::PageLayout& layout = job.layout;
+    const app::PageSpec& spec = job.spec;
+    const app::PrintPage& page = job.pages[page_index];
+    const double left = origin.x + spec.margin;
+    const double right = origin.x + spec.width - spec.margin;
+    const double page_top = origin.y;
+
+    NSFont* title_font = [NSFont boldSystemFontOfSize:11.0];
+    NSFont* body_font = [NSFont systemFontOfSize:8.0];
+    NSFont* bold_font = [NSFont boldSystemFontOfSize:8.0];
+    NSFont* small_font = [NSFont systemFontOfSize:7.0];
+    NSColor* ink = [NSColor blackColor];
+    NSColor* dim = [NSColor grayColor];
+    NSColor* rule = [NSColor lightGrayColor];
+    NSColor* band = [NSColor colorWithCalibratedWhite:0.93 alpha:1.0];
+    NSColor* weekend = [NSColor colorWithCalibratedWhite:0.94 alpha:1.0];
+    NSColor* critical_color = [NSColor redColor];
+    NSColor* bar_color =
+        [NSColor colorWithCalibratedRed:0.25 green:0.38 blue:0.70 alpha:1.0];
+    NSColor* done_color =
+        [NSColor colorWithCalibratedRed:0.16 green:0.26 blue:0.52 alpha:1.0];
+
+    draw_label(to_ns(page.header),
+               NSMakeRect(left, page_top + spec.margin - 10.0,
+                          std::max(40.0, right - left - 100.0), 14.0),
+               make_attributes(title_font, ink, NSTextAlignmentLeft));
+    draw_label(@"MS Project Shell",
+               NSMakeRect(right - 100.0, page_top + spec.margin - 8.0, 100.0, 11.0),
+               make_attributes(small_font, dim, NSTextAlignmentRight));
+    stroke_line(NSMakePoint(left, page_top + layout.rule_y),
+                NSMakePoint(right, page_top + layout.rule_y), rule, 0.6);
+    if (!job.subtitle.empty()) {
+        draw_label(to_ns(job.subtitle),
+                   NSMakeRect(left, page_top + layout.subtitle_baseline - 8.0,
+                              std::max(40.0, right - left), 11.0),
+                   make_attributes(small_font, dim, NSTextAlignmentLeft));
+    }
+
+    stroke_line(NSMakePoint(left, page_top + layout.footer_rule_y),
+                NSMakePoint(right, page_top + layout.footer_rule_y), rule, 0.5);
+    draw_label(to_ns(page.footer),
+               NSMakeRect(left, page_top + layout.footer_top,
+                          std::max(40.0, right - left), 11.0),
+               make_attributes(small_font, dim, NSTextAlignmentRight));
+
+    const double body_top = page_top + layout.body_top;
+    const std::vector<PrintTableColumn> columns =
+        print_table_columns(*s.plan, s.table_width);
+
+    fill_rect(NSMakeRect(left, body_top, s.table_width, spec.header_height), band);
+    for (const PrintTableColumn& column : columns) {
+        const core::sheet::SheetColumn& model = s.plan->sheet->column(column.model_column);
+        draw_label(to_ns(s.plan->sheet->column_title(column.model_column)),
+                   NSMakeRect(left + column.x + 2.0, body_top + 3.0,
+                              std::max(4.0, column.width - 4.0), 11.0),
+                   make_attributes(bold_font, ink, alignment_for(model.kind)));
+    }
+    const double table_bottom =
+        body_top + spec.header_height + spec.row_height * static_cast<double>(page.row_count);
+    stroke_line(NSMakePoint(left, body_top + spec.header_height),
+                NSMakePoint(left + s.table_width, body_top + spec.header_height), rule, 0.6);
+    for (const PrintTableColumn& column : columns) {
+        stroke_line(NSMakePoint(left + column.x, body_top),
+                    NSMakePoint(left + column.x, table_bottom), rule, 0.4);
+    }
+
+    const double rows_top = body_top + spec.header_height;
+    for (std::size_t ordinal = 0; ordinal < page.row_count; ++ordinal) {
+        const std::size_t row = job.rows[page.first_row + ordinal];
+        if (row >= s.plan->records.row_count()) {
+            continue;
+        }
+        const double y = rows_top + static_cast<double>(ordinal) * spec.row_height;
+        for (const PrintTableColumn& column : columns) {
+            const std::string text =
+                app::cell_text(*s.plan->sheet, row, column.model_column, g_prefs);
+            if (text.empty()) {
+                continue;
+            }
+            const core::sheet::CellStyle cell_style =
+                s.plan->sheet->cell_style(row, column.model_column);
+            draw_label(to_ns(text),
+                       NSMakeRect(left + column.x + 2.0, y + 2.0,
+                                  std::max(4.0, column.width - 4.0),
+                                  std::max(6.0, spec.row_height - 3.0)),
+                       make_attributes(cell_style.bold ? bold_font : body_font,
+                                       cell_style.red ? critical_color : ink,
+                                       alignment_for(cell_style.align)));
+        }
+        stroke_line(NSMakePoint(left, y + spec.row_height),
+                    NSMakePoint(left + s.table_width, y + spec.row_height), rule, 0.3);
+    }
+
+    if (job.kind != app::PrintKind::gantt) {
+        return;
+    }
+
+    const double chart_x = left + s.table_width + 6.0;
+    const double chart_width = std::max(20.0, right - chart_x);
+    const double chart_bottom = page_top + layout.body_bottom;
+    const double header_bottom = body_top + spec.gantt_header_height;
+    const std::vector<core::gantt::HeaderCell> major =
+        s.gantt.header(core::gantt::HeaderTier::major, 0.0, chart_width);
+    const std::vector<core::gantt::HeaderCell> minor =
+        s.gantt.header(core::gantt::HeaderTier::minor, 0.0, chart_width);
+
+    fill_rect(NSMakeRect(chart_x, body_top, chart_width,
+                         std::max(2.0, spec.gantt_header_height)),
+              band);
+    for (const core::gantt::HeaderCell& cell : major) {
+        draw_label(to_ns(cell.label),
+                   NSMakeRect(chart_x + cell.x + 2.0, body_top + 1.0,
+                              std::max(4.0, cell.width - 4.0), 11.0),
+                   make_attributes(small_font, dim, NSTextAlignmentCenter));
+    }
+    for (const core::gantt::HeaderCell& cell : minor) {
+        draw_label(to_ns(cell.label),
+                   NSMakeRect(chart_x + cell.x, body_top + 12.0,
+                              std::max(4.0, cell.width), 11.0),
+                   make_attributes(small_font, ink, NSTextAlignmentCenter));
+    }
+    stroke_line(NSMakePoint(chart_x, header_bottom),
+                NSMakePoint(chart_x + chart_width, header_bottom), rule, 0.6);
+
+    const double row_top = static_cast<double>(page.first_row) * spec.row_height;
+    const double row_bottom = row_top + static_cast<double>(page.row_count) * spec.row_height;
+    [NSGraphicsContext saveGraphicsState];
+    [[NSBezierPath bezierPathWithRect:NSMakeRect(chart_x, body_top, chart_width,
+                                                 std::max(2.0, chart_bottom - body_top))]
+        addClip];
+    if (g_prefs.working_day_shading) {
+        for (const core::gantt::NonworkingSpan& span :
+             s.gantt.nonworking_spans(0.0, chart_width)) {
+            if (span.partial) {
+                continue;
+            }
+            fill_rect(NSMakeRect(chart_x + span.x, body_top, span.width,
+                                 std::max(2.0, chart_bottom - body_top)),
+                      weekend);
+        }
+    }
+    for (const core::gantt::HeaderCell& cell : minor) {
+        stroke_line(NSMakePoint(chart_x + cell.x, body_top),
+                    NSMakePoint(chart_x + cell.x, chart_bottom), rule, 0.3);
+    }
+    const double content_top = header_bottom;
+    const double offset = content_top - row_top;
+    for (const core::gantt::LinkRoute& route : s.gantt.links) {
+        if (route.points.size() < 2 || route.bounds.bottom() < row_top ||
+            route.bounds.y > row_bottom) {
+            continue;
+        }
+        NSBezierPath* path = [NSBezierPath bezierPath];
+        [path moveToPoint:NSMakePoint(chart_x + route.points.front().x,
+                                      offset + route.points.front().y)];
+        for (std::size_t index = 1; index < route.points.size(); ++index) {
+            [path lineToPoint:NSMakePoint(chart_x + route.points[index].x,
+                                          offset + route.points[index].y)];
+        }
+        [path setLineWidth:0.7];
+        [(route.critical ? critical_color : dim) setStroke];
+        [path stroke];
+    }
+    for (const core::gantt::Bar& bar : s.gantt.bars) {
+        if (bar.row < static_cast<int>(page.first_row) ||
+            bar.row >= static_cast<int>(page.first_row + page.row_count)) {
+            continue;
+        }
+        const double x = chart_x + bar.rect.x;
+        const double y = offset + bar.rect.y;
+        const double width = std::max(1.0, bar.rect.w);
+        const double height = std::max(1.0, bar.rect.h);
+        if (bar.kind == core::gantt::BarKind::milestone) {
+            NSBezierPath* diamond = [NSBezierPath bezierPath];
+            [diamond moveToPoint:NSMakePoint(x + width / 2.0, y)];
+            [diamond lineToPoint:NSMakePoint(x + width, y + height / 2.0)];
+            [diamond lineToPoint:NSMakePoint(x + width / 2.0, y + height)];
+            [diamond lineToPoint:NSMakePoint(x, y + height / 2.0)];
+            [diamond closePath];
+            [(bar.critical ? critical_color : ink) setFill];
+            [diamond fill];
+        } else if (bar.kind == core::gantt::BarKind::summary) {
+            fill_rect(NSMakeRect(x, y, width, height), ink);
+            fill_rect(NSMakeRect(x, y + height, 2.0, 4.0), ink);
+            fill_rect(NSMakeRect(x + width - 2.0, y + height, 2.0, 4.0), ink);
+        } else {
+            fill_rect(NSMakeRect(x, y, width, height),
+                      bar.critical ? critical_color : bar_color);
+            if (bar.fill.w > 0.0) {
+                fill_rect(NSMakeRect(x, y, bar.fill.w, height),
+                          bar.critical ? bar_color : done_color);
+            }
+            stroke_rect(NSMakeRect(x, y, width, height),
+                        bar.critical ? critical_color : bar_color, 0.8);
+        }
+    }
+    [NSGraphicsContext restoreGraphicsState];
+}
+
+- (BOOL)knowsPageRange:(NSRangePointer)range {
+    range->location = 1;
+    range->length = state->job.pages.size();
+    return YES;
+}
+
+- (NSRect)rectForPage:(NSInteger)page {
+    const double page_height = state->job.spec.height;
+    return NSMakeRect(0.0, static_cast<double>(page - 1) * page_height,
+                      state->job.spec.width, page_height);
+}
+
+- (void)drawRect:(NSRect)dirtyRect {
+    if (state == nullptr || state->job.pages.empty() || state->job.spec.height <= 0.0) {
+        return;
+    }
+    const double page_height = state->job.spec.height;
+    const double first_y = std::max(0.0, dirtyRect.origin.y);
+    const double last_y = std::max(0.0, dirtyRect.origin.y + dirtyRect.size.height - 0.5);
+    const std::size_t first =
+        static_cast<std::size_t>(std::floor(first_y / page_height));
+    const std::size_t last = static_cast<std::size_t>(std::floor(last_y / page_height));
+    for (std::size_t page = first; page <= last && page < state->job.pages.size(); ++page) {
+        [self drawPage:page
+                origin:NSMakePoint(0.0, static_cast<double>(page) * page_height)];
+    }
+}
+
+@end
+
+// Both print routes land here; the only difference is the route tag on the job
+// and whether NSPrintOperation shows the panel or saves to `save_url`.
+BOOL run_print_view(PlanState& plan, const app::PrintJob& job, NSURL* save_url) {
+    if (job.pages.empty()) {
+        return NO;
+    }
+    PrintView* view = [[PrintView alloc] initWithPlan:&plan job:job];
+    NSPrintInfo* info = [[NSPrintInfo sharedPrintInfo] copy];
+    [info setPaperSize:NSMakeSize(job.spec.width, job.spec.height)];
+    [info setTopMargin:0.0];
+    [info setBottomMargin:0.0];
+    [info setLeftMargin:0.0];
+    [info setRightMargin:0.0];
+    [info setHorizontallyCentered:NO];
+    [info setVerticallyCentered:NO];
+    // NSPrintingPaginationModeClip, not the NSClipPagination constant: the old
+    // spelling is deprecated since macOS 11 and this target builds -Werror.
+    [info setHorizontalPagination:NSPrintingPaginationModeClip];
+    [info setVerticalPagination:NSPrintingPaginationModeClip];
+    if (save_url != nil) {
+        [info setJobDisposition:NSPrintSaveJob];
+        [[info dictionary] setObject:save_url forKey:NSPrintJobSavingURL];
+    }
+    NSPrintOperation* operation = [NSPrintOperation printOperationWithView:view
+                                                                 printInfo:info];
+    [operation setShowsPrintPanel:(save_url == nil)];
+    [operation setShowsProgressPanel:NO];
+    return [operation runOperation] ? YES : NO;
+}
+
+// ---------------------------------------------------------------------------
 // Application
 // ---------------------------------------------------------------------------
 
@@ -2088,6 +2516,8 @@ void show_shortcuts() {
 - (void)clearFilterAction:(id)sender;
 - (void)exportSheetReport:(id)sender;
 - (void)exportGanttReport:(id)sender;
+- (void)printDocument:(id)sender;
+- (void)saveAsPDF:(id)sender;
 - (void)cut:(id)sender;
 - (BOOL)confirmClose;
 @end
@@ -2248,6 +2678,12 @@ static PlanView* g_view = nil;
             return;
         case app::MenuAction::export_pdf_gantt:
             [self exportGanttReport:nil];
+            return;
+        case app::MenuAction::print:
+            [self printDocument:nil];
+            return;
+        case app::MenuAction::save_as_pdf:
+            [self saveAsPDF:nil];
             return;
         case app::MenuAction::close_window:
             [g_window performClose:nil];
@@ -3096,6 +3532,33 @@ static PlanView* g_view = nil;
     const std::vector<app::StartEdit> edits =
         app::collect_start_edits(plan.records, plan.loaded);
     const bool structural = !plan.edits.empty();
+
+    // Wave 14: warn BEFORE the write when a start edit cannot take effect (a
+    // linked pin behind the predecessor's finish, or a manual task that the
+    // writer converts to an auto-scheduled SNET pin).  Once per save: this is
+    // the single place every save passes through.  The writer still stores the
+    // exact dates -- the warning is about what Project will reopen, not about
+    // changing the write (docs/audit-handoff.md sections 3 and 4.2).
+    if (!edits.empty()) {
+        const app::StartEditWarningReport warning =
+            app::warn_start_edits(edits, plan.view, plan.format);
+        if (warning.warnings != 0) {
+            NSAlert* alert = [[NSAlert alloc] init];
+            [alert setMessageText:@"Some start edits may not take effect"];
+            [alert setInformativeText:to_ns(
+                warning.text +
+                "\n\nThe writer still stores the exact dates, but Project may reopen a "
+                "linked task at a later date or reschedule a manual task.\n\nSave "
+                "anyway?")];
+            [alert addButtonWithTitle:@"Save Anyway"];
+            [alert addButtonWithTitle:@"Cancel"];
+            if ([alert runModal] != NSAlertFirstButtonReturn) {
+                note(plan, "save cancelled at the start-edit warning", false);
+                [g_view setNeedsDisplay:YES];
+                return NO;
+            }
+        }
+    }
     if (edits.empty() && !structural) {
         note(plan, "nothing to save: no task start has been edited and no insert, delete, "
                    "custom-field or link edit is pending",
@@ -3367,6 +3830,77 @@ static PlanView* g_view = nil;
     }
     run_export_panel(*g_plan, app::ReportKind::gantt);
     [g_view setNeedsDisplay:YES];
+}
+
+// File > Print... (wave 14).  The standard print panel, fed by the portable
+// page layout; the view draws the same table + chart the window does.
+- (void)printDocument:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr || g_plan->sheet == nullptr ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    const app::PrintJob job =
+        app::build_print_job(make_print_request(plan), app::PrintRoute::printer);
+    if (!run_print_view(plan, job, nil)) {
+        note(plan, "print cancelled or failed", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    note(plan, "printed " + std::to_string(job.pages.size()) + " page(s)", false);
+    [g_view setNeedsDisplay:YES];
+}
+
+// File > Save as PDF... (wave 14).  The SAME PrintJob and PrintView as Print...,
+// run as an NSPrintSaveJob, so the PDF paginates exactly like the printout and
+// the shared app::page_layout.h governs both.  File > Export PDF still exists and
+// uses the same PageSpec through core/render.
+- (void)saveAsPDF:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr || g_plan->sheet == nullptr ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    const app::PrintRequest request = make_print_request(plan);
+    NSSavePanel* panel = [NSSavePanel savePanel];
+    [panel setCanCreateDirectories:YES];
+    [panel setNameFieldStringValue:to_ns(
+        app::export_default_name(plan.path, app::ReportKind::gantt))];
+    if (!plan.path.empty()) {
+        [panel setDirectoryURL:[NSURL
+                                  fileURLWithPath:to_ns(std::filesystem::path(plan.path)
+                                                            .parent_path()
+                                                            .string())]];
+    }
+    if (@available(macOS 11.0, *)) {
+        UTType* pdf_type = [UTType typeWithIdentifier:@"com.adobe.pdf"];
+        if (pdf_type != nil) {
+            [panel setAllowedContentTypes:@[ pdf_type ]];
+        }
+    }
+    if ([panel runModal] != NSModalResponseOK) {
+        note(plan, "save as PDF cancelled", false);
+        return;
+    }
+    NSURL* url = [panel URL];
+    if (url == nil) {
+        return;
+    }
+    const app::PrintJob job = app::build_print_job(request, app::PrintRoute::pdf);
+    if (!run_print_view(plan, job, url)) {
+        note(plan, "could not write the PDF", true);
+        show_alert(@"Could not save the PDF",
+                   @"The print operation's save job did not complete. The plan was not "
+                    "modified.");
+        return;
+    }
+    note(plan, "wrote " + to_std([url path]) + " (" +
+                   std::to_string(job.pages.size()) + " page(s))",
+         false);
+    std::printf("msproject-app: saved PDF %s\n", to_std([url path]).c_str());
+    std::fflush(stdout);
 }
 
 // The Preferences panel: four controls, one change handler, applied live and

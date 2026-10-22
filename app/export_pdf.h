@@ -43,6 +43,7 @@
 #include "calendar.h"
 #include "gantt.h"
 #include "layout_model.h"
+#include "page_layout.h"
 #include "prefs.h"
 #include "record_set.h"
 #include "pdf_writer.h"
@@ -72,6 +73,11 @@ struct ExportRequest {
     std::vector<core::sheet::SheetColumn> columns;
     core::sheet::SheetFormat format{};
     core::sheet::SheetMetrics metrics{};
+    // Wave 14: the page geometry the report is laid out on.  The SAME PageSpec
+    // drives printing (app/page_layout.h build_print_job), so Export PDF and Print
+    // cannot drift.  The defaults are core/render::ReportStyle's own, so the PDF
+    // bytes are unchanged for every existing request.
+    PageSpec page{};
     Preferences preferences{};
     std::string title;
     std::string subtitle;

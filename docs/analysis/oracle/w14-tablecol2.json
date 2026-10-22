@@ -1,0 +1,55 @@
+{
+  "case": "table-column-probe-2",
+  "variants": [
+    {
+      "variant": "I-pos0-number",
+      "args": {
+        "Name": "Entry",
+        "TaskTable": "True",
+        "Create": "False",
+        "OverwriteExisting": "True",
+        "FieldName": "Number1",
+        "NewFieldName": "Number1",
+        "Title": "Number1",
+        "Width": "12",
+        "ColumnPosition": "0"
+      },
+      "ok": true,
+      "bytes": 344064,
+      "saved": "corpus\\probe\\w14-tablecol2-I.mpp"
+    },
+    {
+      "variant": "J-pos0-text",
+      "args": {
+        "Name": "Entry",
+        "TaskTable": "True",
+        "Create": "False",
+        "OverwriteExisting": "True",
+        "FieldName": "Text1",
+        "NewFieldName": "Text1",
+        "Title": "Text1",
+        "Width": "12",
+        "ColumnPosition": "0"
+      },
+      "ok": true,
+      "bytes": 344064,
+      "saved": "corpus\\probe\\w14-tablecol2-J.mpp"
+    },
+    {
+      "variant": "K-nopos-text",
+      "args": {
+        "Name": "Entry",
+        "TaskTable": "True",
+        "Create": "False",
+        "OverwriteExisting": "True",
+        "FieldName": "Text1",
+        "NewFieldName": "Text1",
+        "Title": "Text1",
+        "Width": "12"
+      },
+      "ok": true,
+      "bytes": 344064,
+      "saved": "corpus\\probe\\w14-tablecol2-K.mpp"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "case": "formula-write",
+  "base": "corpus\\probe\\base.mpp",
+  "control": "corpus\\probe\\w14-formula-control.mpp",
+  "saved": "corpus\\probe\\w14-formula.mpp",
+  "formulas": {
+    "Number2": "[Duration]/240",
+    "Text2": "[Name]"
+  },
+  "field_ids": {
+    "Number2": "0xb400058",
+    "Text2": "0xb400036"
+  },
+  "control_bytes": 344064,
+  "before": {
+    "Number2": "",
+    "Text2": ""
+  },
+  "set_returns": {
+    "Number2": true,
+    "Text2": true
+  },
+  "after": {
+    "Number2": "[Duration]/240",
+    "Text2": "[Name]"
+  },
+  "bytes": 344064
+}

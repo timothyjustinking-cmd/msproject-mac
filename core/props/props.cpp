@@ -3,8 +3,12 @@
 #include <algorithm>
 #include <cstdio>
 #include <iterator>
+#include <optional>
 #include <sstream>
 #include <utility>
+
+#include "expr.h"
+#include "fields.h"
 
 namespace msproject::props {
 namespace {
@@ -30,13 +34,18 @@ constexpr std::uint32_t kSentinel = 0xffffffffu;
     return read_u32(std::span<const std::uint8_t>(bytes), offset);
 }
 
-[[nodiscard]] std::uint32_t read_u16(const std::vector<std::uint8_t>& bytes,
+[[nodiscard]] std::uint32_t read_u16(std::span<const std::uint8_t> bytes,
                                      std::size_t offset) {
-    if (offset + 2 > bytes.size()) {
+    if (offset + 2u > bytes.size()) {
         return 0u;
     }
     return static_cast<std::uint32_t>(bytes[offset]) |
-           (static_cast<std::uint32_t>(bytes[offset + 1]) << 8u);
+           (static_cast<std::uint32_t>(bytes[offset + 1u]) << 8u);
+}
+
+[[nodiscard]] std::uint32_t read_u16(const std::vector<std::uint8_t>& bytes,
+                                     std::size_t offset) {
+    return read_u16(std::span<const std::uint8_t>(bytes), offset);
 }
 
 [[nodiscard]] bool contains_mspj(std::span<const std::uint8_t> bytes) {
@@ -85,6 +94,486 @@ void append_utf8(std::string& out, std::uint32_t code_point) {
         out += " ...";
     }
     return out;
+}
+
+void append_u32(std::vector<std::uint8_t>& bytes, std::uint32_t value) {
+    bytes.push_back(static_cast<std::uint8_t>(value & 0xffu));
+    bytes.push_back(static_cast<std::uint8_t>((value >> 8u) & 0xffu));
+    bytes.push_back(static_cast<std::uint8_t>((value >> 16u) & 0xffu));
+    bytes.push_back(static_cast<std::uint8_t>((value >> 24u) & 0xffu));
+}
+
+void write_u32(std::vector<std::uint8_t>& bytes, std::size_t offset,
+               std::uint32_t value) {
+    bytes[offset] = static_cast<std::uint8_t>(value & 0xffu);
+    bytes[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xffu);
+    bytes[offset + 2u] = static_cast<std::uint8_t>((value >> 16u) & 0xffu);
+    bytes[offset + 3u] = static_cast<std::uint8_t>((value >> 24u) & 0xffu);
+}
+
+void write_u16(std::vector<std::uint8_t>& bytes, std::size_t offset,
+               std::uint16_t value) {
+    bytes[offset] = static_cast<std::uint8_t>(value & 0xffu);
+    bytes[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xffu);
+}
+
+[[nodiscard]] std::string hex_u32(std::uint32_t value) {
+    std::ostringstream out;
+    out << "0x" << std::hex << value;
+    return out.str();
+}
+
+// One raw formula block, copied or generated.  Keeping the block bytes opaque
+// is what lets an existing trailer survive a set/clear of a DIFFERENT field.
+struct FormulaTableEntry {
+    std::uint32_t field_id = 0;
+    std::vector<std::uint8_t> block;
+};
+
+// Validates and splits a formula-table payload.  The measured layout is strict:
+// the table is contiguous and tiles the payload exactly, so anything else is
+// refused rather than guessed at.  Blocks are returned verbatim.
+[[nodiscard]] bool parse_formula_table(std::span<const std::uint8_t> payload,
+                                       std::vector<FormulaTableEntry>& entries,
+                                       std::string* error) {
+    auto fail = [&](std::string message) {
+        if (error != nullptr) {
+            *error = std::move(message);
+        }
+        return false;
+    };
+    entries.clear();
+    if (payload.size() < kEmptyFormulaPayloadSize) {
+        return fail("formula payload is shorter than the 8-byte empty table");
+    }
+    const std::uint32_t inner_size = read_u32(payload, 0);
+    if (static_cast<std::size_t>(inner_size) != payload.size()) {
+        return fail("formula payload inner size word is " + std::to_string(inner_size) +
+                    " but the payload is " + std::to_string(payload.size()) + " bytes");
+    }
+    const std::uint32_t count = read_u32(payload, 4);
+    if (count == 0) {
+        if (payload.size() != kEmptyFormulaPayloadSize) {
+            return fail("formula table has count 0 but is " +
+                        std::to_string(payload.size()) + " bytes, not the measured 8");
+        }
+        return true;
+    }
+    const std::size_t entry_count = static_cast<std::size_t>(count);
+    if ((payload.size() - kEmptyFormulaPayloadSize) / 8u < entry_count) {
+        return fail("formula table count " + std::to_string(count) +
+                    " does not fit in the payload");
+    }
+    const std::size_t table_size = kEmptyFormulaPayloadSize + entry_count * 8u;
+    std::vector<std::size_t> block_starts(entry_count, 0u);
+    for (std::size_t i = 0; i < entry_count; ++i) {
+        const std::uint32_t field_id = read_u32(payload, 8u + i * 8u);
+        const std::uint32_t relative = read_u32(payload, 8u + i * 8u + 4u);
+        if (field_id == 0u) {
+            return fail("formula entry " + std::to_string(i) + " has field id 0");
+        }
+        for (std::size_t j = 0; j < i; ++j) {
+            if (read_u32(payload, 8u + j * 8u) == field_id) {
+                return fail("formula table repeats field id " + hex_u32(field_id));
+            }
+        }
+        block_starts[i] = static_cast<std::size_t>(relative);
+    }
+    if (block_starts.front() != table_size) {
+        return fail("first formula block starts at " +
+                    std::to_string(block_starts.front()) + ", expected " +
+                    std::to_string(table_size));
+    }
+    for (std::size_t i = 0; i < entry_count; ++i) {
+        const std::size_t start = block_starts[i];
+        const std::size_t end =
+            i + 1u < entry_count ? block_starts[i + 1u] : payload.size();
+        if (end <= start || end > payload.size()) {
+            return fail("formula block " + std::to_string(i) + " has an invalid span");
+        }
+        const std::size_t span = end - start;
+        if (span < 38u) {
+            return fail("formula block " + std::to_string(i) +
+                        " is shorter than a header plus an empty NUL");
+        }
+        if (read_u32(payload, start) != kFormulaHeader ||
+            read_u32(payload, start + 4u) != kSentinel) {
+            return fail("formula block " + std::to_string(i) +
+                        " does not start with the measured 13/0xffffffff header");
+        }
+        // The measured reader trusts the UTF-16 NUL, not a fixed stride.
+        bool terminated = false;
+        std::size_t units = 0;
+        for (std::size_t pos = start + 36u; pos + 2u <= end; pos += 2u) {
+            const std::uint32_t unit = static_cast<std::uint32_t>(payload[pos]) |
+                                       (static_cast<std::uint32_t>(payload[pos + 1u]) << 8u);
+            if (unit == 0u) {
+                terminated = true;
+                break;
+            }
+            ++units;
+        }
+        if (!terminated) {
+            return fail("formula block " + std::to_string(i) +
+                        " has no UTF-16 NUL inside its span");
+        }
+        if (units == 0u) {
+            return fail("formula block " + std::to_string(i) + " has empty formula text");
+        }
+        FormulaTableEntry entry;
+        entry.field_id = read_u32(payload, 8u + i * 8u);
+        entry.block.assign(payload.begin() + static_cast<std::ptrdiff_t>(start),
+                           payload.begin() + static_cast<std::ptrdiff_t>(end));
+        entries.push_back(std::move(entry));
+    }
+    return true;
+}
+
+// Rebuilds a formula-table payload from entries: table, then blocks, with the
+// relative offsets recomputed.  `inner_size` is patched to the payload length.
+[[nodiscard]] bool build_formula_payload(const std::vector<FormulaTableEntry>& entries,
+                                         std::vector<std::uint8_t>& payload,
+                                         std::string* error) {
+    auto fail = [&](std::string message) {
+        if (error != nullptr) {
+            *error = std::move(message);
+        }
+        return false;
+    };
+    if (entries.size() > (0xffffffffull - kEmptyFormulaPayloadSize) / 8u) {
+        return fail("too many formula entries");
+    }
+    std::uint64_t offset = kEmptyFormulaPayloadSize + entries.size() * 8u;
+    for (const auto& entry : entries) {
+        if (entry.block.size() < 38u) {
+            return fail("a generated formula block is too short");
+        }
+        offset += entry.block.size();
+        if (offset > 0xffffffffull) {
+            return fail("formula table does not fit a 32-bit payload size");
+        }
+    }
+    std::vector<std::uint8_t> built;
+    built.reserve(static_cast<std::size_t>(offset));
+    append_u32(built, 0u);  // patched below
+    append_u32(built, static_cast<std::uint32_t>(entries.size()));
+    std::uint64_t relative = kEmptyFormulaPayloadSize + entries.size() * 8u;
+    for (const auto& entry : entries) {
+        append_u32(built, entry.field_id);
+        append_u32(built, static_cast<std::uint32_t>(relative));
+        relative += entry.block.size();
+    }
+    for (const auto& entry : entries) {
+        built.insert(built.end(), entry.block.begin(), entry.block.end());
+    }
+    write_u32(built, 0u, static_cast<std::uint32_t>(built.size()));
+    payload = std::move(built);
+    return true;
+}
+
+// One generated block: 13, 0xffffffff, 7 * span, UTF-16LE text, u16 NUL.  All
+// seven span words equal the block's own byte span on every measured block; a
+// generated block carries no trailer (both formulas Project wrote in the
+// wave-14 pair have none).
+[[nodiscard]] bool build_formula_block(std::string_view encoded,
+                                       std::vector<std::uint8_t>& block,
+                                       std::string* error) {
+    auto fail = [&](std::string message) {
+        if (error != nullptr) {
+            *error = std::move(message);
+        }
+        return false;
+    };
+    const std::string text = core::formula::encode_text_utf16le(encoded);
+    if (text.empty() || text.size() > 0xffffffffull - 36u) {
+        return fail("formula text is too long to store");
+    }
+    const std::uint32_t span = 36u + static_cast<std::uint32_t>(text.size());
+    block.clear();
+    append_u32(block, kFormulaHeader);
+    append_u32(block, kSentinel);
+    for (int word = 0; word < 7; ++word) {
+        append_u32(block, span);
+    }
+    block.insert(block.end(), text.begin(), text.end());
+    return true;
+}
+
+// The inverse of extract_formulas()'s text handling: parse the caller's
+// formula, then rewrite every resolved field reference to the decimal MSPJ
+// token Project stores.  `[Duration]` is the one measured mismatch between the
+// parser's resolved id and the stored id (188744967, not 188743709).
+[[nodiscard]] bool encode_formula_text(std::string_view formula, std::string& encoded,
+                                       std::string* error) {
+    auto fail = [&](std::string message) {
+        if (error != nullptr) {
+            *error = std::move(message);
+        }
+        return false;
+    };
+    const core::formula::ParseResult parsed = core::formula::parse(formula);
+    if (!parsed.ok) {
+        return fail("formula does not parse: " + parsed.error);
+    }
+    std::string out;
+    out.reserve(formula.size() + 32u);
+    std::size_t pos = 0;
+    for (const auto& reference : parsed.field_refs) {
+        if (reference.position < pos || reference.position >= formula.size() ||
+            formula[reference.position] != '[') {
+            return fail("internal error: field-reference position does not point at '['");
+        }
+        const std::size_t close = formula.find(']', reference.position + 1u);
+        if (close == std::string_view::npos) {
+            return fail("internal error: field reference is not closed");
+        }
+        std::uint32_t stored = reference.field;
+        if (stored == core::formula::kTaskDurationField) {
+            stored = core::formula::kTaskDurationTextField;
+        }
+        out.append(formula.substr(pos, reference.position - pos));
+        out += "[MSPJ";
+        out += std::to_string(stored);
+        out.push_back(']');
+        pos = close + 1u;
+    }
+    out.append(formula.substr(pos));
+    const core::formula::ParseResult stored_parse = core::formula::parse(out);
+    if (!stored_parse.ok) {
+        return fail("stored formula does not parse: " + stored_parse.error);
+    }
+    encoded = std::move(out);
+    return true;
+}
+
+// Finds the single measured formula record.
+[[nodiscard]] const PropsRecord* find_formula_record(const PropsDocument& document,
+                                                     std::string* error) {
+    const PropsRecord* found = nullptr;
+    std::size_t matches = 0;
+    for (const auto& record : document.records) {
+        if (record.id == kFormulaRecordId) {
+            found = &record;
+            ++matches;
+        }
+    }
+    if (matches == 0u) {
+        if (error != nullptr) {
+            *error = "no formula record (0x02401390) in this Props stream";
+        }
+        return nullptr;
+    }
+    if (matches > 1u) {
+        if (error != nullptr) {
+            *error = "more than one formula record (0x02401390); refusing the layout";
+        }
+        return nullptr;
+    }
+    if (found->kind != 0u) {
+        if (error != nullptr) {
+            *error = "formula record has kind " + std::to_string(found->kind) +
+                     ", expected 0";
+        }
+        return nullptr;
+    }
+    return found;
+}
+
+// The second record the writer must touch: a u16 "custom fields in use" flag.
+// Measured: 0 in files with no custom-field data (synthetic base, the wave-14
+// control); 1 in every file that has custom-field values OR formulas
+// (w10-fieldvalues, w10-flag-on, w14-cost, w14-assignfield, w10-formulas1..3,
+// the wave-14 edited file).  It is 1 with an EMPTY formula table when only
+// values are set, so it is not a formula count; it means "custom-field data is
+// in use".  The writer sets it to 1 when a formula is added and to 0 only when
+// it actually removes formulas -- a no-op clear leaves it alone, and a project
+// that still has custom-field VALUES elsewhere must keep it at 1 (core/props
+// cannot see those other streams; see docs/handoff/w59.md).
+[[nodiscard]] const PropsRecord* find_custom_field_flag_record(
+    const PropsDocument& document, std::string* error) {
+    const PropsRecord* found = nullptr;
+    std::size_t matches = 0;
+    for (const auto& record : document.records) {
+        if (record.id == kCustomFieldFlagRecordId) {
+            found = &record;
+            ++matches;
+        }
+    }
+    if (matches == 0u) {
+        if (error != nullptr) {
+            *error = "no custom-field flag record (0x02401392) in this Props stream";
+        }
+        return nullptr;
+    }
+    if (matches > 1u) {
+        if (error != nullptr) {
+            *error = "more than one custom-field flag record (0x02401392); refusing the layout";
+        }
+        return nullptr;
+    }
+    if (found->kind != 2u || found->payload_length != 2u) {
+        if (error != nullptr) {
+            *error = "custom-field flag record has kind " + std::to_string(found->kind) +
+                     " and length " + std::to_string(found->payload_length) +
+                     ", expected kind 2 and length 2";
+        }
+        return nullptr;
+    }
+    return found;
+}
+
+// Replaces one record payload and re-checks the result structurally.  `out` is
+// assigned only after every check passes.  The header size words keep the
+// input's own delta (114/Props: stream_size - 4; Props14 differs), so the same
+// helper works for both variants without asserting an unmeasured relation.
+// `flag_value` optionally rewrites the u16 custom-field flag record (the only
+// other record this module ever changes; its length never changes).
+[[nodiscard]] bool write_formula_table(std::span<const std::uint8_t> props,
+                                       const PropsDocument& document,
+                                       const PropsRecord& record,
+                                       std::span<const std::uint8_t> payload,
+                                       std::optional<std::uint16_t> flag_value,
+                                       std::vector<std::uint8_t>& out,
+                                       std::string* error) {
+    auto fail = [&](std::string message) {
+        if (error != nullptr) {
+            *error = std::move(message);
+        }
+        return false;
+    };
+    if (payload.size() > 0xffffffffull) {
+        return fail("formula payload does not fit a 32-bit record length");
+    }
+    const PropsRecord* flag = find_custom_field_flag_record(document, error);
+    if (flag == nullptr) {
+        return false;
+    }
+    const std::size_t old_size = props.size();
+    const std::size_t record_end =
+        static_cast<std::size_t>(record.offset) + 12u +
+        static_cast<std::size_t>(record.payload_length);
+    if (record_end > old_size) {
+        return fail("internal error: formula record ends outside the stream");
+    }
+    const std::int64_t shift = static_cast<std::int64_t>(payload.size()) -
+                               static_cast<std::int64_t>(record.payload_length);
+    const std::int64_t flag_offset =
+        static_cast<std::int64_t>(flag->offset) + shift;
+
+    std::vector<std::uint8_t> built;
+    built.reserve(old_size + payload.size());
+    built.insert(built.end(), props.begin(),
+                 props.begin() + static_cast<std::ptrdiff_t>(record.offset));
+    append_u32(built, static_cast<std::uint32_t>(payload.size()));
+    append_u32(built, record.id);
+    append_u32(built, record.kind);
+    built.insert(built.end(), payload.begin(), payload.end());
+    built.insert(built.end(), props.begin() + static_cast<std::ptrdiff_t>(record_end),
+                 props.end());
+
+    if (flag_offset < 0 ||
+        static_cast<std::size_t>(flag_offset) + 14u > built.size()) {
+        return fail("internal error: custom-field flag record moved outside the stream");
+    }
+    if (flag_value.has_value()) {
+        write_u16(built, static_cast<std::size_t>(flag_offset) + 12u, *flag_value);
+    }
+
+    const std::size_t delta = old_size - document.header.size_word;
+    if (built.size() < delta + 16u) {
+        return fail("rebuilt stream is too short for the header size relation");
+    }
+    const std::uint64_t new_word64 = built.size() - delta;
+    if (new_word64 > 0xffffffffull) {
+        return fail("rebuilt stream does not fit a 32-bit header size word");
+    }
+    const std::uint32_t new_word = static_cast<std::uint32_t>(new_word64);
+    write_u32(built, 0u, new_word);
+    write_u32(built, 4u, new_word);
+
+    // Re-parse and prove that only the intended records moved.
+    PropsDocument check;
+    ParseError parse_error;
+    if (!parse_props(built, check, &parse_error)) {
+        return fail("rebuilt Props stream does not re-parse: " + parse_error.message);
+    }
+    if (check.records.size() != document.records.size()) {
+        return fail("rebuilt stream re-parses to " +
+                    std::to_string(check.records.size()) + " records, expected " +
+                    std::to_string(document.records.size()));
+    }
+    if (check.header.size_word != new_word || check.header.size_repeat != new_word) {
+        return fail("rebuilt header size words do not match the new stream size");
+    }
+    const PropsRecord* rebuilt_formula = find_formula_record(check, error);
+    if (rebuilt_formula == nullptr) {
+        return false;
+    }
+    if (rebuilt_formula->offset != record.offset ||
+        rebuilt_formula->payload_length != payload.size() ||
+        rebuilt_formula->kind != record.kind) {
+        return fail("rebuilt formula record is not where the new payload was written");
+    }
+    const PropsRecord* rebuilt_flag = find_custom_field_flag_record(check, error);
+    if (rebuilt_flag == nullptr) {
+        return false;
+    }
+    if (rebuilt_flag->offset != static_cast<std::uint32_t>(flag_offset)) {
+        return fail("rebuilt custom-field flag record moved unexpectedly");
+    }
+    const std::uint16_t expected_flag =
+        flag_value.has_value() ? *flag_value : static_cast<std::uint16_t>(
+                                                   read_u16(document.payload(*flag), 0u));
+    if (read_u16(check.payload(*rebuilt_flag), 0u) != expected_flag) {
+        return fail("rebuilt custom-field flag value is not what was requested");
+    }
+    const std::int64_t expected_tail =
+        static_cast<std::int64_t>(document.tail_offset) + shift;
+    if (expected_tail < 0 ||
+        static_cast<std::size_t>(expected_tail) != check.tail_offset) {
+        return fail("rebuilt tail offset was not shifted by the record size change");
+    }
+    if (props.size() - document.tail_offset != built.size() - check.tail_offset) {
+        return fail("rebuilt tail changed size");
+    }
+    if (!std::equal(props.begin() +
+                        static_cast<std::ptrdiff_t>(document.tail_offset),
+                    props.end(),
+                    built.begin() + static_cast<std::ptrdiff_t>(check.tail_offset))) {
+        return fail("rebuilt opaque tail is not byte-identical");
+    }
+    for (std::size_t i = 0; i < document.records.size(); ++i) {
+        const auto& before = document.records[i];
+        const auto& after = check.records[i];
+        if (before.id == kFormulaRecordId) {
+            continue;
+        }
+        if (before.id != after.id || before.kind != after.kind ||
+            before.payload_length != after.payload_length) {
+            return fail("rebuilt stream changed a record other than the formula table");
+        }
+        const auto before_begin =
+            props.begin() + static_cast<std::ptrdiff_t>(before.offset);
+        const auto after_begin =
+            built.begin() + static_cast<std::ptrdiff_t>(after.offset);
+        if (before.id == kCustomFieldFlagRecordId) {
+            // Length/kind checked above; the 2-byte payload may be rewritten.
+            if (before.payload_length != 2u ||
+                read_u16(check.payload(after), 0u) != expected_flag) {
+                return fail("rebuilt custom-field flag record is not as requested");
+            }
+            continue;
+        }
+        const std::size_t record_size =
+            12u + static_cast<std::size_t>(before.payload_length);
+        if (!std::equal(before_begin,
+                        before_begin + static_cast<std::ptrdiff_t>(record_size),
+                        after_begin)) {
+            return fail("rebuilt stream changed a record other than the formula table");
+        }
+    }
+    out = std::move(built);
+    return true;
 }
 
 }  // namespace
@@ -367,6 +856,176 @@ std::vector<FormulaBlock> extract_formulas(const PropsDocument& document) {
         }
     }
     return out;
+}
+
+bool replace_formula_record(std::span<const std::uint8_t> props,
+                            std::span<const std::uint8_t> new_payload,
+                            std::vector<std::uint8_t>& out, std::string* error) {
+    auto fail = [&](std::string message) {
+        if (error != nullptr) {
+            *error = std::move(message);
+        }
+        return false;
+    };
+    PropsDocument document;
+    ParseError parse_error;
+    if (!parse_props(props, document, &parse_error)) {
+        return fail("input Props stream does not parse: " + parse_error.message);
+    }
+    const PropsRecord* record = find_formula_record(document, error);
+    if (record == nullptr) {
+        return false;
+    }
+    std::vector<FormulaTableEntry> entries;
+    if (!parse_formula_table(new_payload, entries, error)) {
+        return false;
+    }
+    return write_formula_table(props, document, *record, new_payload, std::nullopt, out,
+                               error);
+}
+
+bool set_custom_field_formula(std::span<const std::uint8_t> props,
+                              std::uint32_t field_id, std::string_view formula,
+                              std::vector<std::uint8_t>& out, std::string* error) {
+    auto fail = [&](std::string message) {
+        if (error != nullptr) {
+            *error = std::move(message);
+        }
+        return false;
+    };
+    if (field_id == 0u) {
+        return fail("field id 0 is not a Task custom field");
+    }
+    if (core::formula::find_custom_field(field_id) == nullptr) {
+        if (core::model::find_field_by_id(field_id) == nullptr) {
+            return fail("unknown field id " + hex_u32(field_id));
+        }
+        return fail("field id " + hex_u32(field_id) + " is not a Task custom field");
+    }
+    std::string encoded;
+    if (!encode_formula_text(formula, encoded, error)) {
+        return false;
+    }
+    PropsDocument document;
+    ParseError parse_error;
+    if (!parse_props(props, document, &parse_error)) {
+        return fail("input Props stream does not parse: " + parse_error.message);
+    }
+    const PropsRecord* record = find_formula_record(document, error);
+    if (record == nullptr) {
+        return false;
+    }
+    std::vector<FormulaTableEntry> entries;
+    if (!parse_formula_table(document.payload(*record), entries, error)) {
+        return false;
+    }
+    std::vector<std::uint8_t> block;
+    if (!build_formula_block(encoded, block, error)) {
+        return false;
+    }
+    bool replaced = false;
+    for (auto& entry : entries) {
+        if (entry.field_id == field_id) {
+            entry.block = block;
+            replaced = true;
+            break;
+        }
+    }
+    if (!replaced) {
+        FormulaTableEntry entry;
+        entry.field_id = field_id;
+        entry.block = std::move(block);
+        entries.push_back(std::move(entry));
+    }
+    // Project writes the entries in ascending field-id order (measured: the
+    // wave-14 pair is Text2 0x0b400036 then Number2 0x0b400058; the six
+    // wave-10 entries are ascending too).
+    std::stable_sort(entries.begin(), entries.end(),
+                     [](const FormulaTableEntry& lhs, const FormulaTableEntry& rhs) {
+                         return lhs.field_id < rhs.field_id;
+                     });
+    std::vector<std::uint8_t> payload;
+    if (!build_formula_payload(entries, payload, error)) {
+        return false;
+    }
+    std::vector<std::uint8_t> built;
+    if (!write_formula_table(props, document, *record, payload,
+                             std::optional<std::uint16_t>(std::uint16_t{1u}), built,
+                             error)) {
+        return false;
+    }
+    // Prove the decoder reads back exactly what was written.  extract_formulas
+    // only scans payloads containing the `MSPJ` token, so a formula with no
+    // field reference is refused here rather than written unreadably.
+    PropsDocument check;
+    if (!parse_props(built, check, &parse_error)) {
+        return fail("rebuilt Props stream does not re-parse: " + parse_error.message);
+    }
+    const auto formulas = extract_formulas(check);
+    if (formulas.size() != entries.size()) {
+        return fail("rebuilt formula table does not round-trip: extract_formulas found " +
+                    std::to_string(formulas.size()) + " of " +
+                    std::to_string(entries.size()) +
+                    " formulas (a formula with no field reference cannot be recovered)");
+    }
+    const FormulaBlock* stored = nullptr;
+    for (const auto& candidate : formulas) {
+        if (candidate.field_id == field_id) {
+            stored = &candidate;
+        }
+    }
+    if (stored == nullptr || stored->formula != encoded) {
+        return fail("rebuilt formula text does not read back as written");
+    }
+    out = std::move(built);
+    return true;
+}
+
+bool clear_custom_field_formula(std::span<const std::uint8_t> props,
+                                std::vector<std::uint8_t>& out, std::string* error) {
+    auto fail = [&](std::string message) {
+        if (error != nullptr) {
+            *error = std::move(message);
+        }
+        return false;
+    };
+    PropsDocument document;
+    ParseError parse_error;
+    if (!parse_props(props, document, &parse_error)) {
+        return fail("input Props stream does not parse: " + parse_error.message);
+    }
+    const PropsRecord* record = find_formula_record(document, error);
+    if (record == nullptr) {
+        return false;
+    }
+    std::vector<FormulaTableEntry> entries;
+    if (!parse_formula_table(document.payload(*record), entries, error)) {
+        return false;
+    }
+    std::vector<std::uint8_t> payload(kEmptyFormulaPayloadSize, 0u);
+    write_u32(payload, 0u, static_cast<std::uint32_t>(kEmptyFormulaPayloadSize));
+    // Only clear the "custom fields in use" flag when formulas were actually
+    // removed.  A project may still have custom-field VALUES stored elsewhere
+    // (measured: w10-fieldvalues has flag 1 and an empty formula table), and
+    // this module cannot see those streams; a no-op clear must not guess.
+    std::optional<std::uint16_t> flag_value;
+    if (!entries.empty()) {
+        flag_value = static_cast<std::uint16_t>(0u);
+    }
+    std::vector<std::uint8_t> built;
+    if (!write_formula_table(props, document, *record, payload, flag_value, built,
+                             error)) {
+        return false;
+    }
+    PropsDocument check;
+    if (!parse_props(built, check, &parse_error)) {
+        return fail("rebuilt Props stream does not re-parse: " + parse_error.message);
+    }
+    if (!extract_formulas(check).empty()) {
+        return fail("rebuilt stream still reads back formulas after clear");
+    }
+    out = std::move(built);
+    return true;
 }
 
 bool parse_mspj_field(std::string_view token, std::uint32_t& field_id) {

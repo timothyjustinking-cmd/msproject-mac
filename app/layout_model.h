@@ -83,6 +83,11 @@ struct TaskRow {
     bool summary = false;
     bool milestone = false;
     bool critical = false;
+    // Wave 14: the reader's MEASURED manually-scheduled bit (Fixed2Meta 0x80;
+    // core/mpp/reader.h Task::manually_scheduled).  A pending inserted row has no
+    // file row and is false.  app/start_edit_warning.h uses it to warn that a date
+    // save cannot keep a manual task manual.
+    bool manually_scheduled = false;
     // Wave 12: the stored custom-field values the reader decoded (W48's measured
     // encodings; see core/mpp/field_value.h).  Only values the file actually
     // stores are listed, plus Flag1 for every live row (a clear bit is a stored

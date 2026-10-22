@@ -13,8 +13,13 @@ columns** the reader decodes (Text1/Number1/Number2/Date1/Duration1/Flag1) and t
 fields and the links editable through two dialogs: **Task Fields…** queues the six
 measured field values (`save_field_values` / `clear_field_value`) and
 **Predecessors…** queues link adds/deletes (`add_task_link` / `delete_task_link`);
-both are applied by the one Save path, then the file is reloaded. Everything below
-`main.mm` is portable C++ that is built and tested on Windows too.
+both are applied by the one Save path, then the file is reloaded. Wave 14 adds
+**printing**: File > Print… (Cmd-P) opens the standard print panel and File > Save as
+PDF… (Cmd-Shift-P) runs the same `NSPrintOperation` as a save job, so the two use one
+page layout (`app/page_layout.h`) and Export PDF uses the same page geometry. It also
+warns before a Start save that Project will clamp a linked pin or reschedule a manual
+task. Everything below `main.mm` is portable C++ that is built and tested on Windows
+too.
 
 This directory is a **standalone CMake project**. It is deliberately *not* added to
 the repository's top-level `CMakeLists.txt` (owned by the build stream), it edits no
@@ -24,7 +29,7 @@ same way).
 
 | file | what it is |
 |---|---|
-| `CMakeLists.txt` | standalone project: options, core libraries with their tests off (including `core/props`), `app_layout`, twelve headless tests, AppKit target on `APPLE` only |
+| `CMakeLists.txt` | standalone project: options, core libraries with their tests off (including `core/props`), `app_layout`, fourteen headless tests, AppKit target on `APPLE` only |
 | `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link/resource/assignment rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, `timescale_for_zoom`, plan summary, `sync_plan_from_records`, `make_gantt_source_for_rows`, `apply_edit_policy` |
 | `view_model.h` / `.cpp` | **pure C++ (wave 11)**: the four view modes, the stock Mon-Fri calendar, `PlanInput` → `core::view::ResourceRecord`s, the registry-backed resource-sheet columns, the usage grid (labels, period columns, a TOTAL row and a Total column), the two demo formula columns, and the read-only policy |
 | `fields_model.h` / `.cpp` | **pure C++ (wave 12)**: the six stored custom-field columns from the field registry, `114/Props` → the file's formulas (`core/props` → `core/formula`), the sheet's complete column set (default + stored + formula, one column per field), read-only enforcement and the per-column visibility the preferences own |
@@ -35,7 +40,9 @@ same way).
 | `prefs.h` / `.cpp` | **pure C++**: the preference model, its persisted one-line string + tolerant parser, the date format applied to `SheetFormat`, the app-side duration rendering, `cell_text` |
 | `menu_model.h` / `.cpp` | **pure C++**: the whole menu bar as data — items, key equivalents, `MenuAction` ids, enablement rules, and the reasons the unsupported items are greyed out |
 | `filter_model.h` / `.cpp` | **pure C++**: filter fields/operators from the sheet, a criterion → `core::view::FilterDefinition` with an error message, matching rows, the displayed-row restriction, the printed subset |
-| `export_pdf.h` / `.cpp` | **pure C++**: Export PDF through `core/render` — sheet and Gantt, the filtered rows, the preference formats, the shading-off calendar |
+| `export_pdf.h` / `.cpp` | **pure C++**: Export PDF through `core/render` — sheet and Gantt, the filtered rows, the preference formats, the shading-off calendar; `ExportRequest::page` is the same `PageSpec` printing uses |
+| `page_layout.h` / `.cpp` | **new (wave 14), pure C++**: page size/margins, the page's vertical bands, rows per page (sheet and Gantt), page count, and the header/footer text; `build_print_job()` paginates once for both the printer and the PDF route |
+| `start_edit_warning.h` / `.cpp` | **new (wave 14), pure C++**: `warning_for_start_edit()` — none / clamped_to_predecessor / manual_task_will_be_rescheduled / no_effect, with the clamped date — and the per-save report the shell shows as one `NSAlert` |
 | `reader_adapter.h` | the one header that includes `core/mpp/reader.h`; `mpp::Document` → `app::PlanInput` (tasks, links, resources, assignments) and the measured `core::usage::usage_input_from_mpp` bridge |
 | `layout_model_tests.cpp` | mapping, date identity (including two dates pinned by the spec), row texts, Gantt geometry, zoom; `corpus/probe` counts when present |
 | `selection_model_tests.cpp` | two-way selection, Gantt clicks (bar and dependency), collapse, editing/undo/redo through `SheetModel`, the read-only policy |
@@ -48,9 +55,11 @@ same way).
 | `app_edit_tests.cpp` | **new (wave 12)**: the pending edit model (placement, dependants, undo/redo, the display-plan inverse) and the real writer sequence on a copy of `synthetic-base.mpp` under the build tree: insert/delete counts, the uid the writer allocated, tombstoned dependants, a combined start+structural save, and the refusals with no target / same file / unknown uid |
 | `app_fields_tests.cpp` | **wave 12**: the stored custom-field ids from the registry, decoded values → `RecordSet`, the cell formatting (dates/durations honour the preference, flags Yes/No), the column set and its read-only rule, `114/Props` → the six formulas of `tests/data/synthetic-props.bin`, their evaluation, and the per-column preference round trip |
 | `app_edits_fields_tests.cpp` | **new (wave 13)**: the Task Fields dialog model (specs, initial text, parse/clear rules, push validation, display plan, undo/redo) and the real field round trip on a copy of `synthetic-base.mpp`: six values written via `save_field_values`, re-read; six clears via `clear_field_value`; a field + insert + start-pin save; refusals leaving the target untouched |
+| `page_layout_tests.cpp` | **new (wave 14)**: rows per page for a 3-row and an 83-row plan (sheet and Gantt), page count, header/footer strings, the printer/PDF seam (`build_print_job` returns identical pages for both routes), and a cross-check that Export PDF's `core/render` page count equals the shared layout |
+| `start_edit_warning_tests.cpp` | **new (wave 14)**: predecessor-finish clamp, pin-later no-warning, manual-task warning, unlinked none, unknown/cleared/unchanged/summary no-effect, FS-only and lag, the message text and the per-save report |
 | `app_edits_links_tests.cpp` | **new (wave 13)**: the Predecessors dialog model (lag syntax, type names, listing, validation, display plan, undo/redo) and the real link round trip on a copy of `synthetic-base.mpp`: two adds (0 → 2 links), one delete (2 → 1), delete+re-add in one save (deletes run first), a mixed delete+add, and a two-op refusal that leaves no target |
 | `main.mm` | Objective-C++ / AppKit: window, control bar (view switcher + usage period), menu bar built from `menu_model`, Preferences panel, filter dialog, save/export panels, dirty prompts, clipboard, keyboard, drawing (task sheet + Gantt, or a flat resource/usage grid) |
-| `../.github/workflows/app-macos.yml` | the macOS CI job: configure `app/`, build everything with `-Werror`, run the tests (`ctest` runs all ten; the workflow still greps the wave-10/11 names), prove the bundle exists and links AppKit + UniformTypeIdentifiers |
+| `../.github/workflows/app-macos.yml` | the macOS CI job: configure `app/`, build everything with `-Werror`, run the tests (`ctest` runs all fourteen; the workflow still greps the wave-10/11 names), prove the bundle exists and links AppKit + UniformTypeIdentifiers |
 
 ## Build and run
 
@@ -71,10 +80,10 @@ configure skips the app target and must still succeed):
 ```bat
 set vc=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat
 call "%vc%"
-cmake -S app -B build\vs-w47 -G "Visual Studio 17 2022" -A x64 \
+cmake -S app -B build\w61-app -G "Visual Studio 17 2022" -A x64 \
       -DCMAKE_BUILD_TYPE=Release -DAPP_BUILD_TESTS=ON -DCORE_WARNINGS_AS_ERRORS=ON
-cmake --build build\vs-w47 --config Release
-ctest --test-dir build\vs-w47 -C Release --output-on-failure
+cmake --build build\w61-app --config Release
+ctest --test-dir build\w61-app -C Release --output-on-failure
 ```
 
 Never `--parallel` on this box (see `docs/build.md`). A transient
@@ -95,7 +104,7 @@ every enablement rule, which is the only way to test a menu bar without a window
 | menu | items |
 |---|---|
 | MS Project Shell | Preferences… (Cmd-,), Hide (Cmd-H), Quit (Cmd-Q) |
-| File | Open… (Cmd-O), Save (Cmd-S), Save As… (Cmd-Shift-S), Export PDF (Sheet)… (Cmd-Shift-E), Export PDF (Gantt)… (Cmd-Option-E), Close (Cmd-W) |
+| File | Open… (Cmd-O), Save (Cmd-S), Save As… (Cmd-Shift-S), Print… (Cmd-P, **wave 14**), Save as PDF… (Cmd-Shift-P, **wave 14**), Export PDF (Sheet)… (Cmd-Shift-E), Export PDF (Gantt)… (Cmd-Option-E), Close (Cmd-W) |
 | Edit | Undo (Cmd-Z), Redo (Cmd-Shift-Z), Cut (Cmd-X, **disabled**), Copy (Cmd-C), Paste (Cmd-V), Select All (Cmd-A), Delete Task (Cmd-Backspace, **wave 12**), Task Fields… (**wave 13**), Predecessors… (**wave 13**) |
 | View | Task Sheet (Cmd-Option-1), Resource Sheet (Cmd-Option-2), Task Usage (Cmd-Option-3), Resource Usage (Cmd-Option-4), Usage Period: Day/Week/Month, Zoom In (Cmd-=), Zoom Out (Cmd--), Day/Week/Month Timescale (Cmd-1/2/3), Working-Day Shading (Cmd-Shift-D), Filter… (Cmd-F), Clear Filter (Cmd-Shift-F), Collapse All, Expand All, Columns ▸ (rebuilt per load: the seven default columns, the stored custom fields and the file's formula columns) |
 | Insert | Task… (Cmd-I, **wave 12**), Resource… — Resource is permanently disabled |
@@ -302,12 +311,26 @@ authors one criterion, and the model's multi-rule path is tested.
 suggestion `<name>-sheet.pdf` / `<name>-gantt.pdf`). The report is built from the
 window's own state: the **filtered rows**, the **visible columns**, the **preference
 date format**, and — for the Gantt — the timescale level and the working-day shading
-preference. The current **selection** is named in the report footer; `core/render`
+preference. The page geometry (`ExportRequest::page`, an `app::PageSpec`) is the
+same one `app/page_layout.h` uses for printing, so the two cannot drift: the defaults
+are `core/render::ReportStyle`'s own, so wave-13 PDFs are byte-identical. The current
+**selection** is named in the report footer; `core/render`
 has no selection concept and this wave does not edit `core/`, so the selected row is
 *not* highlighted on the page, and the README says so rather than implying otherwise.
 Shading off is implemented by handing the renderer an all-working calendar (every day
 00:00–24:00, so no non-working span exists) with the week anchor pinned, which
 changes nothing else: shading never moves a bar.
+
+**Printing.** `File > Print…` (Cmd-P) builds an `app::PrintJob` with
+`app::build_print_job()` (A4 landscape, 24 pt margins, 36 sheet rows / 35 Gantt rows
+per page) and runs an offscreen `PrintView` through `NSPrintOperation`. The view draws
+the same table + Gantt chart the window shows, one page per `-rectForPage:`, with the
+project name in the header and the date plus "Page i of n" in the footer.
+`File > Save as PDF…` (Cmd-Shift-P) is the same job and the same view with an
+`NSPrintSaveJob`, so the PDF paginates exactly like the printout. `File > Export PDF`
+stays: it writes through `core/render` on the same `PageSpec`, and
+`page_layout_tests.cpp` proves the page counts agree. Printing is available in the Task
+Sheet view only (the resource/usage grids have no report layout yet).
 
 **Preferences.** Cmd-, (or the app menu) opens a panel with four controls:
 
@@ -438,29 +461,31 @@ The one unrepresentable instant is 1983-12-31 00:00, which packs to 0, the file'
 
 Local, Windows MSVC 19.44, Release, `/W4 /permissive- /utf-8 /WX`
 (`-DCORE_WARNINGS_AS_ERRORS=ON`), 2026-10-22. Full standalone CMake build of `app/`
-(configure + `cmake --build build\vs-w47 --config Release`, no `--parallel`), then
-`ctest`:
+(configure + `cmake --build build\w61-app --config Release`, no `--parallel`), then
+`ctest` (14 tests):
 
 ```
- 1/12 Test #1:  app_layout .......   Passed
- 2/12 Test #2:  app_selection ....   Passed
- 3/12 Test #3:  app_document .....   Passed
- 4/12 Test #4:  app_prefs ........   Passed
- 5/12 Test #5:  app_menu .........   Passed
- 6/12 Test #6:  app_filter .......   Passed
- 7/12 Test #7:  app_export .......   Passed
- 8/12 Test #8:  app_views ........   Passed
- 9/12 Test #9:  app_edit .........   Passed
-10/12 Test #10: app_fields .......   Passed
-11/12 Test #11: app_edits_fields .   Passed
-12/12 Test #12: app_edits_links ..   Passed
-100% tests passed, 0 tests failed out of 12
+ 1/14 Test #1:  app_layout .......   Passed
+ 2/14 Test #2:  app_selection ....   Passed
+ 3/14 Test #3:  app_document .....   Passed
+ 4/14 Test #4:  app_prefs ........   Passed
+ 5/14 Test #5:  app_menu .........   Passed
+ 6/14 Test #6:  app_filter .......   Passed
+ 7/14 Test #7:  app_export .......   Passed
+ 8/14 Test #8:  app_views ........   Passed
+ 9/14 Test #9:  app_edit .........   Passed
+10/14 Test #10: app_fields .......   Passed
+11/14 Test #11: app_edits_fields .   Passed
+12/14 Test #12: app_edits_links ..   Passed
+13/14 Test #13: app_print ........   Passed
+14/14 Test #14: app_start_warning    Passed
+100% tests passed, 0 tests failed out of 14
 
 layout_model_tests:      253 checks passed
 selection_model_tests:    90 checks passed
 document_tests:           43 checks passed
 prefs_tests:              82 checks passed
-menu_tests:              744 checks passed
+menu_tests:              794 checks passed
 filter_tests:             60 checks passed
 export_tests:             58 checks passed
 views_tests:             164 checks passed
@@ -468,7 +493,9 @@ app_edit_tests:          120 checks passed
 app_fields_tests:        199 checks passed
 app_edits_fields_tests:  160 checks passed
 app_edits_links_tests:   159 checks passed
-                                                 (2,132 checks in total)
+page_layout_tests:        66 checks passed
+start_edit_warning_tests: 41 checks passed
+                                                 (2,289 checks in total)
 ```
 
 The build took the **W37 path** (`core/mppwrite/save.h` is present, so
@@ -480,7 +507,7 @@ checks the task count, that the source fixture's size is unchanged (its SHA-256 
 matches `tests/data/README.md`), that target == source is refused, that a cleared
 start writes nothing, and that an unknown uid fails without leaving a file.
 
-`export_tests` writes real PDFs under `build\vs-w51\test-out` (sheet, Gantt, filtered,
+`export_tests` writes real PDFs under `build\w61-app\test-out` (sheet, Gantt, filtered,
 hours-style) and checks the `%PDF-` header, the `%%EOF` trailer, the page count, the
 printed row count, that two identical exports are byte-identical, that the hours
 rendering reaches the page, that the shading-off calendar makes Saturday and Sunday
@@ -496,18 +523,26 @@ custom-field decoding/formatting and the file's formulas (extraction and evaluat
 the pending Insert/Delete Task model and the real writer sequence; the Task Fields
 and Predecessors dialog models; the real field write/clear round trip (six values, six
 clears) and the real link round trip (0→2→1 links, delete+re-add and mixed delete+add
-in one save); every refusal leaving the target/source untouched; `app/`'s C++ compiles
-and links with the CI warning flags; `ctest` 12/12 (2,132 checks).
+in one save); every refusal leaving the target/source untouched; the printed page
+arithmetic (3/83 rows, both report kinds), the header/footer strings, the printer/PDF
+seam and the Export-PDF page-count cross-check; the four start-edit warning outcomes,
+the FS/lag rule and the per-save report; `app/`'s C++ compiles and links with the CI
+warning flags; `ctest` 14/14 (2,289 checks). Wave-13 export PDFs were compared
+byte-for-byte with the wave-13 build and are identical (`page_layout`'s defaults are
+`core/render`'s defaults).
 
 **Inferred / to be proved by macOS CI**: that `main.mm` compiles, links and behaves.
 There is no Objective-C++ compiler on the development box. `app-macos.yml` is that
 gate: configure `app/`, build `msproject_app.app` with `-Werror`, run the tests (all
-twelve; the registration step still greps the wave-10/11 names, so the coordinator
-should add `app_edits_fields` and `app_edits_links` there),
-and assert the bundle executable exists and links AppKit + UniformTypeIdentifiers.
-No runner ever opens a window, so the actual interaction (a click, a keystroke, a
-panel, a menu) is verified by construction and by the pure helpers it calls — not by
-an automated UI test.
+fourteen; the registration step still greps the wave-10/11 names, so the coordinator
+should add `app_edits_fields`, `app_edits_links`, `app_print` and `app_start_warning`
+there), and assert the bundle executable exists and links AppKit +
+UniformTypeIdentifiers. Wave 14's print path — `NSPrintOperation`, `PrintView`'s
+`-knowsPageRange:`/`-rectForPage:`, the `NSPrintInfo` paper/margin/job settings and
+`NSPrintSaveJob` — has never been compiled, so it is the largest unproven surface in
+the tree. No runner ever opens a window, so the actual interaction (a click, a
+keystroke, a panel, a menu) is verified by construction and by the pure helpers it
+calls — not by an automated UI test.
 
 ## What the window does not do
 
@@ -530,8 +565,10 @@ an automated UI test.
   `|`. There is no selection within the cell and no cursor movement beyond backspace.
 - **No real project calendar**: shading is Saturday/Sunday only. `core/cal` can build
   the file's calendar and `GanttSource::calendar` accepts it; that join is not wired.
-- **No print dialog / paper settings**: Export PDF writes a report; there is no
-  `NSPrintOperation` and no page-setup UI.
+- **Printing is fixed to A4 landscape** at 24 pt margins (the `app::PageSpec` default)
+  and is offered in the Task Sheet view only: there is no page-setup UI, no paper-size
+  preference and no report layout for the resource/usage grids. Save as PDF… uses the
+  print layout, not the Export PDF report settings, but both take the same page spec.
 - **No multiple windows or multiple open files**; one document at a time.
 - **No selection highlight in the PDF**: the selected task is named in the footer,
   not marked on the page (see Export PDF).
@@ -559,9 +596,13 @@ an automated UI test.
 
 1. **Prove `main.mm` on macOS CI** — the whole AppKit surface (menus, control bar,
    view switching, Preferences panel, filter dialog, export panel, dirty prompts,
-   clipboard) is compile-unproven here. The wave-11 additions to watch: the
-   `NSSegmentedControl`/`NSPopUpButton` control bar and its container view, the
-   `syncViewControls` target/action path, and the per-view drawing branch.
+   clipboard) is compile-unproven here. Wave 14's additions are the riskiest yet:
+   `PrintView` (`-knowsPageRange:`/`-rectForPage:`/`-drawRect:`), the `NSPrintInfo`
+   paper-margin-job settings, `NSPrintSaveJob` + `NSPrintJobSavingURL`, and the
+   per-save start-edit `NSAlert`. A manual Mac print (Cmd-P to a printer and to PDF)
+   is still the only end-to-end proof.
+1. **Printing is A4 landscape only** and Task-Sheet only, with no page-setup UI; a
+   paper-size preference and a resource/usage report layout are the next steps.
 1. **Wire the file calendar into the usage views** (`core::cal` →
    `app::standard_calendar()`'s one call site) once a fixture proves the decoded
    calendar matches Project's buckets; today the stock Mon-Fri week is a documented

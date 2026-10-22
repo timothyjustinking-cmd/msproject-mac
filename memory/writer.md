@@ -1490,6 +1490,123 @@ row), MaxUnits other than 100 % on an add, and non-100 % units.
   reader reports 4 rows there but 3 on Project's file -- deliberate, documented
   in `add_delete.h`.
 
+## W60 (2026-10-22): assignment custom fields + task Cost fields
+
+**Status: implemented, all local suites green, emitted streams byte-identical to
+Project's own fixtures; Project re-open PENDING (coordinator).** W60 completes the
+last two custom-field families the wave-13 handoff listed as unmeasured. Details
+are in `docs/handoff/w60.md`; this is the durable summary.
+
+### Measured layouts (do not re-derive)
+
+**Task Cost1..Cost10** (`docs/analysis/oracle/w14-oracle.md` §4, plus the
+coordinator's `w14-cost2` run): VarMeta key **is the PjField id**
+(`Cost1 0x0b40006a .. Cost3 0x0b40006c`, `Cost4 0x0b400102 .. Cost10 0x0b400108`).
+The Var2Data block is `u32 len 8` + **f64 of the value in hundredths**, exactly
+rounded: `123.45 -> 12345.0`, `1.23 -> 123.0`, `0.07 -> 7.0` (NOT the raw
+`0.07*100 = 7.000000000000001`). A value that is not representable in hundredths
+is refused. FixedMeta `+2` +1 and a tail presence bit; Props records in
+Task/Props (keyed by field id) and Assn/Props (keyed by the assignment property
+id `0x0f40401e + n-1`).
+
+**Task tail presence bitmap**: the 27 bytes at FixedMeta entry `+21..+47` are a
+bitmap indexed by the field's **class slot** from
+`analysis/field_definitive_map.tsv` (storage class 5): `byte = +21 + slot/8`,
+`mask = 1 << (slot%8)`. Measured slots/bit anchors: Text1 5/+21 0x20, Flag1
+25/+24 0x02, Number1 35/+25 0x08, Number2 36/+25 0x10, Duration1 40/+26 0x01
+(+ the 0x0b4000b7 marker at slot 53/+27 0x20), Cost1 43/+26 0x08, Date1
+70/+29 0x40. Cost2..10's slots are 44,45,63..69 -> Cost2 +26 0x10, Cost3 +26
+0x20, Cost4 +28 0x80, Cost5..10 +29 0x01..0x20. **Cost1 is measured; the other
+nine bits are the inference.** (The rule reproduces all seven measured bits.)
+
+**Assignment Number1..20 / Text1..30** (`w14-oracle.md` §3): they live in
+`114/TBkndAssn`; the VarMeta key is the **assignment property id**, not the
+PjField id: `NumberN = 0x0f40403c + (N-1)`, `TextN = 0x0f404064 + (N-1)`
+(Number1/2/15 and Text1/2/4/6/10/11/20 measured from Project's own Assn/Props
+records; the rest is the stride-1 continuation). Number stores a **plain f64**
+(7.5, not x100), Text stores UTF-16LE + NUL. New entries are **appended** after
+the assignment uid group (assignments are not key-sorted). Only the row
+FixedMeta entry's `+2` changes -- **no tail presence bit exists for assignment
+fields** (measured). New rows also register the definition in **both**
+Task/Props (keyed by the PjField id, assignment key at +8) and Assn/Props (keyed
+by the assignment key, PjField id at +8): 88-byte records
+`{id|key, typeA, key|id, typeB, 0, 0, 14775, 0x4ceb8bbe, 0x8cfac482, id|key BE
+at +32, zeros}`, `typeA/typeB = 8/7` Text, `5/5` Number. The stamps are measured
+opaque words.
+
+### What landed
+
+- `core/mppwrite/field_values.{h,cpp}`: cost encode/decode + presence bits +
+  Props records + clear; `save_assignment_field_values` (validation, append,
+  +2, both registries, save/re-open/re-read proof), `read_assignment_field_value`,
+  `FieldStores`/`field_stores`/`assignment_field_stores` (the store-completeness
+  diagnostic), `assignment_property_id`. Task/Assn props records for Cost2..10
+  are synthesised from the measured Cost1 record.
+- `core/mpp/field_value.h`: `custom_field_storage_measured(cost)` true for
+  1..10; `CustomFieldValue::cost`. **The reader does not decode Cost yet** --
+  `core/mpp/reader.cpp`'s custom-field switch is another lane and has no cost
+  case, so a Cost block reads `present && !storage_measured` until that lane
+  adds it. Do not "fix" it here.
+- `tests/roundtrip_field_values.cpp` 477 -> **802 checks**; new tests
+  `test_cost_write`, `test_cost_range`, `test_assignment_write`,
+  `test_assignment_refusals`, `test_store_controls`. `tests/mpp_field_value_tests.cpp`
+  283 -> **287 checks** (`test_cost_fixtures`).
+- Full `ctest --test-dir build\w60 -C Release`: **48/48 passed** (wave-13 gate was
+  47/47; the extra test is another lane's). Build dir `build\w60`, MSVC vcvars64,
+  never `--parallel`.
+
+### Strongest evidence
+
+The corpus-gated tests re-run Project's own fixture pairs and require our output
+to match: `w14-cost-control -> w14-cost` (VarMeta, FixedMeta, Task/Props,
+Assn/Props byte-identical; the appended Var2Data block identical),
+`w14-cost2-control -> w14-cost2` (same), and
+`w14-assignfield-control -> w14-assignfield` (Assn FixedMeta, Assn VarMeta,
+Assn Var2Data, Task/Props, Assn/Props all byte-identical; the Task table's
+VarMeta/Var2Data untouched). The Task Var2Data of the pair differs only in the
+project-title block (FileSaveAs churn), so compare per stream.
+
+### Fixtures (git-ignored, build tree)
+
+`w60-cost.mpp` (238,080, FNV `0xc92635819db96d5c`), `w60-cost-all.mpp` (241,664,
+`0xb2efedf6d1b59eab`, all ten costs + all ten presence bits), `w60-cost2.mpp`
+(238,080, `0x1ce854f8a2020832`), `w60-assignments.mpp` (241,664,
+`0x7e94c46d5bf73d94`), `w60-assignment-range.mpp` (243,200,
+`0xc391c6b95dbb3cb2`, Number20 2.5 / Text30 "t30"), plus the three
+`*-oracle.mpp` reproductions and the three partial-store controls
+(`w60-cost-missing-bit`, `w60-assign-missing-var-meta`,
+`w60-assign-missing-props`). The manifest is still `w48-manifest.json` (the test
+file name did not change); the CMake mirror is still `vs-w54` because this
+stream does not own `core/mppwrite/CMakeLists.txt`.
+
+### Remaining refusals / open
+
+- Task Flag2..20 (bit positions unknown), Task Text2..30 / Number3..20 (no
+  measured Props record), assignment Cost/Flag/Date/Duration (unmeasured there).
+- A damaged assignment table is refused by the same strict W54 geometry policy
+  (PROJECT_A's 69-row/68-entry table therefore cannot take an assignment field write).
+- No field delete, no assignment clear.
+- **Project gate**: open `w60-cost`, `w60-cost-all`, `w60-cost2`,
+  `w60-assignments`, `w60-assignment-range`. If the all-ten file shows only
+  Cost1 correctly, the Cost2..10 bitmap inference is wrong and the class-slot
+  rule needs revisiting; Cost4 is the discriminating field (first byte +28).
+- Reader parity: add the Cost case to `core/mpp/reader.cpp` (another lane).
+
+### Traps added
+
+- Assignment VarMeta keys are the assignment property ids, not PjField ids; the
+  same field has three different numbers (PjField, assignment property id,
+  FixedMeta class slot). Keep them straight.
+- Assignment entries are appended, Task entries are key-sorted; a shared helper
+  would be wrong.
+- Assignment FixedMeta has no tail presence bit; touching one would be invented.
+- The hundredths conversion must use `llround`/`lround`-style decimal rounding.
+- `save_and_verify`'s `check_table` is Task-specific; use
+  `save_assignment_and_verify` for `114/TBkndAssn`.
+- `/W4 /WX` C4456 (shadowed local) and clang's unused-lambda-capture are easy to
+  trip in the long test file.
+
+
 
 
 

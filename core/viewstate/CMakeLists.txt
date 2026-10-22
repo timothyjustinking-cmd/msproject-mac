@@ -1,4 +1,5 @@
-# core/viewstate -- read-only decoder for the MPP `214/` view-state streams.
+# core/viewstate -- decoder and targeted writer for the MPP `214/` view-state
+# streams.
 #
 # The top-level CMakeLists.txt already lists `viewstate` in its
 # stream-subdirectory foreach, so this file is picked up automatically when it
@@ -81,6 +82,13 @@ if(VIEWSTATE_BUILD_TESTS)
 
     add_test(NAME viewstate COMMAND viewstate_tests)
     set_tests_properties(viewstate PROPERTIES
+        WORKING_DIRECTORY "${VIEWSTATE_REPO_ROOT}"
+    )
+
+    # The writer cases are also registered separately, so a failure names the
+    # writer without losing the decoder test above (wave 14, W58).
+    add_test(NAME viewstate_writer COMMAND viewstate_tests writer)
+    set_tests_properties(viewstate_writer PROPERTIES
         WORKING_DIRECTORY "${VIEWSTATE_REPO_ROOT}"
     )
 endif()

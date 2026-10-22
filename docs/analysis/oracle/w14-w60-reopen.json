@@ -1,0 +1,68 @@
+{
+  "w60-cost.mpp": {
+    "bytes": 238080,
+    "rows": [
+      {
+        "index": 1,
+        "kind": "task",
+        "Cost1": 123.45
+      }
+    ]
+  },
+  "w60-cost-all.mpp": {
+    "bytes": 241664,
+    "rows": [
+      {
+        "index": 1,
+        "kind": "task",
+        "Cost1": 1.11,
+        "Cost2": 2.22,
+        "Cost3": 3.33,
+        "Cost4": 4.44,
+        "Cost5": 5.55,
+        "Cost6": 6.66,
+        "Cost7": 7.77,
+        "Cost8": 8.88,
+        "Cost9": 9.99,
+        "Cost10": 11.1
+      }
+    ]
+  },
+  "w60-cost2.mpp": {
+    "bytes": 238080,
+    "rows": [
+      {
+        "index": 1,
+        "kind": "task",
+        "Cost1": 1.23
+      },
+      {
+        "index": 2,
+        "kind": "task",
+        "Cost1": 0.07
+      }
+    ]
+  },
+  "w60-assignments.mpp": {
+    "bytes": 241664,
+    "rows": [
+      {
+        "index": 1,
+        "kind": "assignment",
+        "Number1": 7.5,
+        "Text1": "assign-text"
+      }
+    ]
+  },
+  "w60-assignment-range.mpp": {
+    "bytes": 243200,
+    "rows": [
+      {
+        "index": 1,
+        "kind": "assignment",
+        "Number20": 2.5,
+        "Text30": "t30"
+      }
+    ]
+  }
+}

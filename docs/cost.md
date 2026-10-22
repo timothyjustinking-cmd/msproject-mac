@@ -37,13 +37,22 @@ context is much longer-lived and its per-turn cost is higher.
 | 11 | 2026-10-22 | W47–W50 | **7** | four streams + three W48 resumes: the custom-field display contract needed three measured gates (VarMeta position, both Props registries, FixedMeta tail bitmap) |
 | 12 | 2026-10-22 | W51–W53 | **3** | app editing/stored fields/formulas, writer link add + field clear, recurring calendar exceptions; no restarts, two coordinator oracle runs |
 | 13 | 2026-10-22 | W53b–W57 | **7** | resource/assignment writer, app field/link dialogs, 214 decoder, fuzz/ASan, two W44 resumes (guard 160 then ASan-safe 64) |
-| — | — | coordinator | 9 (ongoing) | the predecessor's chats and this one |
+| 14 | 2026-10-22 | W58–W61 | **4** | measured-layout oracle first (five cases, coordinator-only), then four streams: the `214/` encoder, the `114/Props` formula writer, assignment/Cost fields, app printing; no restarts and one CI iteration (an AppKit deprecation) |
+| — | — | coordinator | 10 (ongoing) | the predecessor's chats and this one |
 
-**To date (end of wave 13): 95 agent sessions + 9 coordinator sessions.**
+**To date (end of wave 14): 99 agent sessions + 10 coordinator sessions.**
 Measured spend at the wave-7 start was **~$3.90**, **~390M tokens** (51 agent
 sessions); waves 7–8 added 15 sessions, wave 9 added 7, wave 10 added 5, wave 11
-added 7, wave 12 added 3, and wave 13 adds 7 at ~$0.08 → **~$7.32**, **~730M
-tokens**, about **$0.077 per agent session**, flat for the tenth wave running.
+added 7, wave 12 added 3, wave 13 added 7, and wave 14 adds 4 at ~$0.08 →
+**~$7.63**, **~760M tokens**, about **$0.077 per agent session**, flat for the
+eleventh wave running.
+
+Wave 14 was the measurement wave: five oracle cases produced control/edited
+fixture pairs for the layouts the writer had been refusing, and four short streams
+consumed them. The cheapest session of the wave was W59, which corrected the
+coordinator's own byte arithmetic (+144, not +160) and found the `0x02401392`
+flag record the brief had missed — either error would have produced a writer that
+Project silently ignores.
 
 Wave 13 was deliberately audit-heavy: the last two sessions were resumes of W44
 driven by ASan rather than by a feature. That is the cheapest place to find a

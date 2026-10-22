@@ -405,3 +405,24 @@ build\vs-w57\tests\fuzz\Release\fuzz_parsers.exe --cases 5000 --seed 0xABCD
 
 `fuzz_reader --case N` replays one case after a failure; the failing invocation
 prints the exact case seed and mutation list.
+
+## Resolution note (wave 14, 2026-10-22)
+
+The tree moved after this report was written; the three open items are closed:
+
+* **F1 (formula recursion)** — closed. `kMaxFormulaDepth` was lowered to **64**
+  in `5743a79` with a parser AST-height check and a destructor guard, so the
+  guard is reachable *below* the ASan/small-stack crash depth (72 parses, 80
+  overflowed). Release and ASan runs of `formula` (1,249 checks) and the two
+  `fuzz_deep_nesting_guard_*` tests are green; the `DISABLED` flags are gone.
+* **F2 (ASan configure command)** — the working configure line recorded here is
+  the one to use: `-DCMAKE_CXX_FLAGS="/DWIN32 /D_WINDOWS /W3 /GR /EHsc /fsanitize=address"`.
+* **F3 (fixture hash)** — closed. `tests/data/synthetic-base.mpp` is back to
+  **237,568 B, SHA256 `55C109F2F62FD6B9F05789AB002C35991A424AAB18C78F92E4200DF7B3FC6069`**
+  (verified 2026-10-22 after wave 14; a crashed oracle run had left Project
+  holding the file, and a synced copy had replaced it with a 238,080-byte save).
+* **F4 (fuzz not wired)** — fixed during the audit and still wired.
+
+Wave 14 added no new product defects: its finding is the opposite kind —
+`TableEdit` cannot append a table column, so the wave-13 "corrected table-add"
+premise is retired rather than fixed (see `docs/analysis/oracle/w14-oracle.md` §1).

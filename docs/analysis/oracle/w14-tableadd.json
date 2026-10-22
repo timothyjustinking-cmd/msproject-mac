@@ -1,0 +1,8 @@
+{
+  "case": "table-add",
+  "bytes": 360448,
+  "edit_returns": true,
+  "table": "W14 Entry",
+  "column": "Number1 0x0b400057",
+  "saved": "corpus\\probe\\w14-tableadd.mpp"
+}

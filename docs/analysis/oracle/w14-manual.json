@@ -1,0 +1,24 @@
+{
+  "case": "manual-start",
+  "base": "corpus\\probe\\base.mpp",
+  "control": "corpus\\probe\\w14-manual-control.mpp",
+  "saved": "corpus\\probe\\w14-manual.mpp",
+  "task": "uid 1",
+  "start": "2026-01-07 09:00",
+  "control_bytes": 344064,
+  "before": {
+    "Manual": true,
+    "Start": "2026-01-04 13:00:00",
+    "ConstraintType": 0,
+    "ConstraintDate": "NA",
+    "Type": 0
+  },
+  "after": {
+    "Manual": true,
+    "Start": "2026-01-07 09:00:00",
+    "ConstraintType": 0,
+    "ConstraintDate": "NA",
+    "Type": 0
+  },
+  "bytes": 344064
+}

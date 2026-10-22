@@ -1,6 +1,6 @@
 # app/ -- the macOS shell (v4): a native AppKit application over the portable
-# core -- menu bar, Preferences panel, filter dialog, PDF export, dirty prompts,
-# resource/usage views and computed columns.
+# core -- menu bar, Preferences panel, filter dialog, PDF export, printing (wave
+# 14), dirty prompts, resource/usage views and computed columns.
 #
 # STANDALONE PROJECT.  This file is NOT added to the repository's top-level
 # CMakeLists.txt (that file is owned by the build stream) and it does not edit
@@ -12,21 +12,24 @@
 #            cmake --build build-app
 #            ctest --test-dir build-app -C Release
 #            -> msproject_app.app (main.mm: NSApplication + PlanView + menus +
-#               Preferences + export) and the eight headless tests
+#               Preferences + export + print) and the fourteen headless tests
 #
 #   Windows: cmake -S app -B build\vs-w47 -G "Visual Studio 17 2022" -A x64
 #            cmake --build build\vs-w47 --config Release
 #            ctest --test-dir build\vs-w47 -C Release
 #            -> layout_model_tests.exe, selection_model_tests.exe,
 #               document_tests.exe, prefs_tests.exe, menu_tests.exe,
-#               filter_tests.exe, export_tests.exe, views_tests.exe; ObjC++/AppKit
+#               filter_tests.exe, export_tests.exe, views_tests.exe,
+#               app_edit_tests.exe, app_fields_tests.exe,
+#               app_edits_fields_tests.exe, app_edits_links_tests.exe,
+#               page_layout_tests.exe, start_edit_warning_tests.exe; ObjC++/AppKit
 #               does not exist here, so the AppKit target is skipped and the
 #               headless tests are the gate.
 #
 #   Linux:   same as Windows (headless tests only).
 #
 # Options:
-#   APP_BUILD_TESTS         build + register the eight headless tests (default ON)
+#   APP_BUILD_TESTS         build + register the fourteen headless tests (default ON)
 #   CORE_WARNINGS_AS_ERRORS same meaning as the top-level build (default OFF;
 #                           the macOS workflow passes ON).  It also reaches the
 #                           core subdirectories, which read this variable.
@@ -165,6 +168,8 @@ add_library(app_layout STATIC
     fields_model.cpp
     edit_model.cpp
     field_link_edits.cpp
+    page_layout.cpp
+    start_edit_warning.cpp
 )
 add_library(msproject::app_layout ALIAS app_layout)
 target_compile_features(app_layout PUBLIC cxx_std_20)
@@ -369,6 +374,34 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_edits_links COMMAND app_edits_links_tests)
     set_tests_properties(app_edits_links PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 14: printing.  The page arithmetic (rows per page for a 3-row and an
+    # 83-row plan, page count, header/footer text) and the seam: the printer and
+    # the PDF routes produce identical pages, and core/render's Export PDF page
+    # count agrees with the same layout.  Writes its two PDFs under
+    # APP_TEST_OUT_DIR, never into tests/data/ or corpus/.
+    add_executable(page_layout_tests page_layout_tests.cpp)
+    target_compile_features(page_layout_tests PRIVATE cxx_std_20)
+    set_target_properties(page_layout_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(page_layout_tests PRIVATE app_layout)
+    target_compile_definitions(page_layout_tests PRIVATE
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(page_layout_tests)
+
+    add_test(NAME app_print COMMAND page_layout_tests)
+    set_tests_properties(app_print PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 14: the start-edit warning (linked pin clamp / manual reschedule /
+    # no effect).  Pure PlanInput rows, no fixture and no writer.
+    add_executable(start_edit_warning_tests start_edit_warning_tests.cpp)
+    target_compile_features(start_edit_warning_tests PRIVATE cxx_std_20)
+    set_target_properties(start_edit_warning_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(start_edit_warning_tests PRIVATE app_layout)
+    app_set_warnings(start_edit_warning_tests)
+
+    add_test(NAME app_start_warning COMMAND start_edit_warning_tests)
+    set_tests_properties(app_start_warning PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 endif()
 
 # ---------------------------------------------------------------------------

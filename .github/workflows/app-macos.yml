@@ -18,8 +18,7 @@
 #     core_model) built from this tree, with every core stream test switched off by
 #     app/CMakeLists.txt.  core_render is new in v3: File > Export PDF writes
 #     through it.
-#   * the seven headless test binaries build and pass on macOS as well as on
-#     Windows:
+#   * the fourteen headless tests build and pass on macOS as well as on Windows:
 #       app_layout    (layout_model_tests)   mapping + the packed-date identity
 #       app_selection (selection_model_tests) sheet<->Gantt selection, collapse,
 #                                            edit/undo through SheetModel
@@ -32,6 +31,15 @@
 #                                            the displayed-row restriction
 #       app_export    (export_tests)         real PDFs (sheet + Gantt, filtered),
 #                                            written under build-app/test-out
+#       app_views / app_edit / app_fields / app_edits_fields / app_edits_links
+#                                            views, insert/delete + undo, stored and
+#                                            formula columns, Task Fields and
+#                                            Predecessors dialogs
+#       app_print     (page_layout_tests)    page geometry shared by printing and
+#                                            Export PDF (wave 14)
+#       app_start_warning (start_edit_warning_tests)
+#                                            linked-pin / manual-task save warning
+#                                            model (wave 14)
 #     The corpus probes inside app_layout print SKIP on a runner (no corpus/), as
 #     they must; app_document writes only under build-app/test-out and app_export
 #     writes only its own synthetic PDFs there.
@@ -88,7 +96,7 @@ jobs:
 
       # The test names are part of the contract: a silently unregistered test is
       # as bad as a failing one.
-      - name: The twelve headless tests are registered
+      - name: The fourteen headless tests are registered
         shell: bash
         run: |
           set -euo pipefail
@@ -105,8 +113,10 @@ jobs:
           grep -q "app_fields" tests.txt
           grep -q "app_edits_fields" tests.txt
           grep -q "app_edits_links" tests.txt
+          grep -q "app_print" tests.txt
+          grep -q "app_start_warning" tests.txt
 
-      - name: Test (headless layout, selection, save, preferences, menu, filter, export, views, edit, fields, field/link edits)
+      - name: Test (headless layout, selection, save, preferences, menu, filter, export, views, edit, fields, field/link edits, print, start warning)
         shell: bash
         run: ctest --test-dir build-app -C Release --output-on-failure --timeout 120
 

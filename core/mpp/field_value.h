@@ -43,15 +43,18 @@
  *             (measured by `oracle_w10.py flagdiff`: 0x00 -> 0x02; the
  *             Fixed2Meta entry's +31/+61 bit 0x80 mirrors it in Project's own
  *             write, but that is the writer's business).
- *   Cost      ID range known, **storage NOT measured**: no oracle fixture stores
- *             a Cost value.  `custom_field_storage_measured()` is false for it
- *             and the writer refuses it; a reader may report that a block exists
- *             but must not decode it.
+ *   Cost      Cost1..Cost10; the VarMeta key IS the field id and the block is
+ *             8 B little-endian f64 of the value in HUNDREDTHS (123.45 stored as
+ *             12345.0).  Measured by the wave-14 oracle
+ *             (`docs/analysis/oracle/w14-oracle.md` §4, w14-cost/w14-cost2).
+ *             The writer implements all ten ids
+ *             (`core/mppwrite/field_values.h`); this predicate reports the
+ *             storage as measured.
  *
  * What is NOT measured: Flag2..Flag20's bit positions (only Flag1 = 0x02), and
- * any per-kind presence flag in the FixedMeta entry tail beyond +24 bit 0x02.
- * The reader therefore exposes only the values it can decode and reports
- * storage_measured = false where it cannot.  See memory/writer.md W48.
+ * any per-kind presence flag in the FixedMeta entry tail beyond the W48/W60
+ * measured bits.  The reader therefore exposes only the values it can decode
+ * and reports storage_measured = false where it cannot.
  */
 
 #ifndef MPP_FIELD_VALUE_H
@@ -186,9 +189,9 @@ constexpr unsigned custom_field_index(std::uint32_t field_id) {
 
 /*
  * True when the file storage of this field is MEASURED and may be decoded or
- * written.  Cost is the one refused family (no oracle fixture); only Flag1's bit
- * position is measured, so Flag2..Flag20 are refused too.  Everything else here
- * has a measured encoding from w10-oracle §2.
+ * written.  Cost1..Cost10 are measured and written by W60; only Flag1's bit
+ * position is measured, so Flag2..Flag20 are refused.  Everything else here has
+ * a measured encoding from w10-oracle §2 / w14-oracle §4.
  */
 constexpr bool custom_field_storage_measured(FieldKind kind, unsigned index) {
     switch (kind) {
@@ -196,10 +199,10 @@ constexpr bool custom_field_storage_measured(FieldKind kind, unsigned index) {
         case FieldKind::number:
         case FieldKind::duration:
         case FieldKind::date:
+        case FieldKind::cost:
             return index != 0;
         case FieldKind::flag:
             return index == 1;
-        case FieldKind::cost:
         case FieldKind::unknown:
             return false;
     }
@@ -211,9 +214,10 @@ constexpr bool custom_field_storage_measured(FieldKind kind, unsigned index) {
  * field for the row: a VarMeta block for text/number/date/duration/cost, the
  * FixedMeta tail bit for a flag (a clear bit is a stored False).  `value` members
  * are meaningful only when `present && storage_measured`; the others stay at
- * their default.  `storage_measured` is false for Cost (and for Flag2..20), so a
- * caller cannot mistake "the block is there" for "this is the value Project
- * would show".
+ * their default.  (core/mpp/reader.cpp decodes every family above as of wave 14,
+ * including the Cost block it previously reported as unmeasured; the writer's own
+ * decoder in core/mppwrite/field_values.cpp remains the second opinion.
+ * Flag2..20 stay unmeasured.)
  */
 struct CustomFieldValue {
     std::uint32_t field_id = 0;
@@ -224,6 +228,7 @@ struct CustomFieldValue {
     double number = 0.0;                 /* number */
     std::uint32_t packed_date = 0;       /* date: the raw u32 packed word */
     std::uint32_t duration_ticks = 0;    /* duration: file ticks (6 s each) */
+    double cost = 0.0;                   /* cost: currency (stored f64 / 100) */
     bool flag = false;                   /* flag */
 
     /* The COM-facing duration unit: file ticks / 10. */

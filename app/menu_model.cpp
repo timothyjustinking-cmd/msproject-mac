@@ -39,6 +39,12 @@ std::vector<MenuSpec> build_menu_specs() {
         item(MenuAction::open, "Open...", "o"),
         item(MenuAction::save, "Save", "s"),
         item(MenuAction::save_as, "Save As...", "s", true),
+        // Wave 14: printing.  Print... opens the standard print panel; Save as
+        // PDF... runs the SAME NSPrintOperation with a save job, so the two
+        // cannot lay the page out differently.  The wave-10 Export PDF commands
+        // stay (they go through core/render with the same PageSpec).
+        item(MenuAction::print, "Print...", "p", false, false, true),
+        item(MenuAction::save_as_pdf, "Save as PDF...", "p", true),
         item(MenuAction::export_pdf_sheet, "Export PDF (Sheet)...", "e", true, false, true),
         item(MenuAction::export_pdf_gantt, "Export PDF (Gantt)...", "e", false, true),
         item(MenuAction::close_window, "Close", "w", false, false, true),
@@ -156,6 +162,8 @@ const std::vector<MenuAction>& all_menu_actions() {
         MenuAction::task_fields,
         MenuAction::predecessors,
         MenuAction::insert_resource,
+        MenuAction::print,
+        MenuAction::save_as_pdf,
     };
     return actions;
 }
@@ -220,8 +228,10 @@ bool menu_item_enabled(MenuAction action, const MenuState& state) noexcept {
             return state.has_document;
         case MenuAction::export_pdf_sheet:
         case MenuAction::export_pdf_gantt:
-            // Both reports are built from the task sheet and the Gantt, which do
-            // not exist in the resource/usage views.
+        case MenuAction::print:
+        case MenuAction::save_as_pdf:
+            // All four reports are built from the task sheet and the Gantt,
+            // which do not exist in the resource/usage views.
             return state.has_document && state.task_view;
         case MenuAction::undo:
             return state.task_view && state.can_undo;
@@ -321,6 +331,8 @@ const char* menu_action_name(MenuAction action) noexcept {
         case MenuAction::task_fields: return "task_fields";
         case MenuAction::predecessors: return "predecessors";
         case MenuAction::insert_resource: return "insert_resource";
+        case MenuAction::print: return "print";
+        case MenuAction::save_as_pdf: return "save_as_pdf";
     }
     return "none";
 }

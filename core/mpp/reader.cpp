@@ -1469,9 +1469,10 @@ Document parse_document(const CompoundFile& cfb) {
             task.name = trim_ascii_spaces(task.name_raw);
         }
         /* ---- Custom fields (W48; encodings in field_value.h).  A text/number/
-         * date/duration value is a VarMeta block under the field's PjTask id;
+         * date/duration/cost value is a VarMeta block under the field's PjTask id
+         * (Cost's key is the PjTask id itself and the f64 is hundredths, W60);
          * Flag1 is the FixedMeta entry's +24 bit 0x02.  Only stored values are
-         * listed, and an unmeasured family (Cost, Flag2..20) is listed with
+         * listed, and an unmeasured family (Flag2..20) is listed with
          * storage_measured == false rather than decoded as if it were known. */
         {
             std::unordered_set<std::uint32_t> seen_field_ids;
@@ -1498,7 +1499,7 @@ Document parse_document(const CompoundFile& cfb) {
                     std::vector<std::uint8_t> payload;
                     bool decoded = read_block(var2, entry.offset, payload);
                     std::size_t const expected =
-                        kind == FieldKind::number
+                        kind == FieldKind::number || kind == FieldKind::cost
                             ? 8u
                             : (kind == FieldKind::date ||
                                        kind == FieldKind::duration
@@ -1522,6 +1523,11 @@ Document parse_document(const CompoundFile& cfb) {
                                 break;
                             case FieldKind::duration:
                                 field.duration_ticks = u32_at(payload, 0);
+                                break;
+                            case FieldKind::cost:
+                                /* Stored as an f64 in hundredths (123.45 ->
+                                 * 12345.0); expose currency units. */
+                                field.cost = f64_at(payload, 0) / 100.0;
                                 break;
                             default:
                                 field.storage_measured = false;

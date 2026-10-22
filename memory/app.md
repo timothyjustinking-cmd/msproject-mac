@@ -522,3 +522,125 @@ unchanged.
 
 Next three concrete actions: (a) run the macOS CI job; (b) smoke-test the two dialogs
 and the Save/reload loop; (c) add the two new test names to the workflow's grep.
+
+## W61 (wave 14): printing + the linked-pin warning
+
+_2026-10-22. Owner paths used: `app/**`, `memory/app.md`, `docs/handoff/w61.md`.
+Build tree: `build\w61-app` only, configured with `cmake -S app -B build\w61-app`.
+No git commands were run and no `core/**` file was edited._
+
+### What landed
+
+1. **`app/page_layout.{h,cpp}` (new, pure C++).** `PrintKind` (sheet/gantt),
+   `PrintRoute` (printer/pdf), `PageSpec` (A4 landscape 842x595, 24 pt margins, 13 pt
+   rows, 16 pt sheet header, 26 pt Gantt header, 24 pt footer, 14/8 pt title/subtitle,
+   5 pt gap), `page_layout()` (the same band arithmetic as `core/render/report.cpp`
+   `plan_page()`), `page_count()`, `print_header_text()`, `print_footer_text()`,
+   `PrintRequest`/`PrintPage`/`PrintJob` and **`build_print_job(request, route)` -- the
+   one pagination seam both print routes call.** With the defaults: **36 sheet rows per
+   page, 35 Gantt rows per page**; 3 rows -> 1 page, 83 rows -> 3 pages either kind.
+2. **`app/export_pdf.cpp` uses the same page.** `ExportRequest` gained `PageSpec page;`
+   and `export_report()` builds `core/render::ReportStyle` from it (page size, margin,
+   row height, header/footer bands, title sizes). The defaults are exactly
+   `core/render`'s defaults, so the wave-13 PDFs are **byte-identical** (verified by
+   SHA-256 against `build\vs-w55\test-out\app-export-sheet.pdf`:
+   `EF816567...FA9FC` both). `page_layout_tests.cpp` also exports 83 synthetic rows
+   through core/render and asserts its page count equals `build_print_job()`'s.
+3. **`app/start_edit_warning.{h,cpp}` (new, pure C++).**
+   `warning_for_start_edit(const PlanInput&, uid, new_start)` returns
+   `StartEditWarningKind` (`none` / `clamped_to_predecessor` /
+   `manual_task_will_be_rescheduled` / `no_effect`) with `requested_start`,
+   `effective_start` (the clamped date), `predecessor_uid` and a `detail` string.
+   Rules: only **finish-to-start** predecessors are a start barrier (the audit's
+   `max(pred finish, pin)` sentence); lag is added (4800 ticks = 8 working hours);
+   manual wins over clamped; no_effect covers unknown uid, cleared date, summary row
+   and an unchanged date. `start_edit_warning_text()` formats with the project's date
+   style; `warn_start_edits()` builds the once-per-save report. **The writer was not
+   changed**: `save_date_edits` still stores the exact SNET constraint.
+4. **Reader side (app only).** `TaskRow::manually_scheduled` added (filled in
+   `reader_adapter.h` from the measured `mpp::Task::manually_scheduled`), so the
+   warning can tell a manual row from an auto one. `placeholder_row()` leaves it false.
+5. **`app/menu_model.{h,cpp}`.** Two actions appended to `MenuAction`:
+   `print` (File > Print..., Cmd-P) and `save_as_pdf` (File > Save as PDF...,
+   Cmd-Shift-P), both enabled only for a document in the task view (same rule as the
+   two Export PDF commands). File now has 8 items; `menu_tests` 744 -> 794 checks.
+6. **`app/main.mm` (unverified AppKit).** `make_print_request(plan)` (kind = gantt:
+   table + chart, filtered rows, formatted date, subtitle); `PrintView : NSView`
+   (`-knowsPageRange:` 1..N, `-rectForPage:` one page tall, `-drawRect:` draws one page
+   per page rect) drawing the table through `SheetModel`/`app::cell_text` and the chart
+   from a `build_gantt()` built for the print width; `run_print_view(plan, job, url)`
+   (`NSPrintInfo` paper size = PageSpec, zero margins, `NSClipPagination`, panel for
+   printer / `NSPrintSaveJob` + `NSPrintJobSavingURL` for PDF); delegate
+   `-printDocument:` and `-saveAsPDF:`; the two dispatch cases; and a **once-per-save
+   `NSAlert`** ("Some start edits may not take effect") from `warn_start_edits()` that
+   can cancel the save before anything is written.
+7. **Tests.** New `app/page_layout_tests.cpp` (`app_print`, 66 checks) and
+   `app/start_edit_warning_tests.cpp` (`app_start_warning`, 41 checks). Registered in
+   `app/CMakeLists.txt`; the new sources are in `app_layout`.
+
+### Verification (2026-10-22, MSVC 19.44, Release, /W4 /WX /permissive-)
+
+```
+cmd /c '"...vcvars64.bat" >nul && cmake -S app -B build\w61-app -G "Visual Studio 17 2022" -A x64 -DAPP_BUILD_TESTS=ON -DCORE_WARNINGS_AS_ERRORS=ON'
+cmd /c '"...vcvars64.bat" >nul && cmake --build build\w61-app --config Release'
+cmd /c '"...vcvars64.bat" >nul && ctest --test-dir build\w61-app -C Release --output-on-failure'
+```
+
+`ctest` **14/14**, 0 failures. Checks: layout 253, selection 90, document 43, prefs 82,
+menu 794, filter 60, export 58, views 164, app_edit 120, app_fields 199,
+app_edits_fields 160, app_edits_links 159, **app_print 66**, **app_start_warning 41**
+(**2,289 total**, up from 2,132). Build exit 0, no warnings (`/WX`).
+`tests/data/synthetic-base.mpp` SHA-256 still
+`55C109F2F62FD6B9F05789AB002C35991A424AAB18C78F92E4200DF7B3FC6069`; the new test writes
+only `build\w61-app\test-out\app-print-{sheet,gantt}.pdf`.
+
+### Verified vs unverified
+
+- **Verified on Windows**: the page arithmetic and exact page breaks for 3/83 rows on
+  both kinds; header/footer strings; the route seam (`build_print_job` with printer and
+  pdf returns identical pages); core/render's Export PDF page count agreeing with the
+  shared layout; the four warning outcomes, the FS/lag rule, the no-effect cases, the
+  message text and the report; all existing 12 tests still pass; export PDF bytes are
+  unchanged from wave 13.
+- **Unverified: every new line of `main.mm`** (no ObjC++ compiler here). Specifically
+  `PrintView`'s overrides, `NSPrintInfo` `setHorizontalPagination:`/
+  `setVerticalPagination:`/`setJobDisposition:`/`dictionary`+`NSPrintJobSavingURL`,
+  `NSPrintOperation` `setShowsPrintPanel:`/`setShowsProgressPanel:`/`runOperation`,
+  the per-save `NSAlert`, and the two new menu dispatch cases. `.github/workflows/
+  app-macos.yml` still greps only the wave-10/11 test names; add `app_print` and
+  `app_start_warning` (plain `ctest` runs all 14).
+
+### Traps hit (W61)
+
+- **The Dropbox folder's mtime churn broke the `edit` tool again** ("file changed since
+  it was read") even immediately after a read, including on files created in this
+  session. Workaround: `python -c` here-string scripts that read the file, assert each
+  anchor's `count == 1`, replace and write; also normalise CRLF for `app/README.md`
+  (that file is CRLF, the C++/mm files are LF).
+- **A concurrent core stream was mid-edit in `core/props`** (`props.cpp` started
+  including `expr.h` while its CMakeLists was being updated). The first build failed
+  with `C1083: expr.h`; a retry after CMake regenerated succeeded. If it recurs, it is
+  not this stream's file.
+- **Printing and Export PDF share geometry only because the defaults match
+  `core/render` exactly.** If core/render's `plan_page()`/`ReportStyle` defaults ever
+  move, change `PageSpec` with them; `app_print`'s export cross-check will fail loudly.
+- **`NSPrintInfo` paper must be the PageSpec and the margins must be zero**: the page
+  layout already contains the margins, so AppKit must not add its own.
+- **A page cannot be zero rows**: `page_count(0, n)` is 1 and `page_layout` clamps
+  `rows_per_page` to >= 1, matching core/render's "(no rows)" page.
+- **A CONCURRENT `core/props` edit briefly broke the full build** (W60's new
+  formula-writer code, C4244 under `/WX`). The app was relinked meanwhile with
+  `/p:BuildProjectReferences=false`; after the other stream landed, the plain full
+  build succeeded again (exit 0, no warnings) and 14/14 passed. Do not "fix"
+  core/props; it is another stream's lane.
+
+### Open, ranked
+
+1. **Run `app-macos.yml`** and fix the print path: `PrintView`'s pagination overrides,
+   the `NSPrintInfo` job settings and the `NSPrintSaveJob` write are the likely first
+   failures. Add `app_print`/`app_start_warning` to the workflow's name grep.
+2. **Manual Mac print test**: Cmd-P to a printer and to PDF, 3-row and 83-row plans,
+   then compare the PDF's page count with File > Export PDF.
+3. **Paper-size/page-setup preference** (PageSpec already has `letter_landscape()`).
+4. **A report layout for the resource/usage grids**; printing is task-view only today.
+5. **Reader presence-bit decode for cleared custom fields** (unchanged from W55).

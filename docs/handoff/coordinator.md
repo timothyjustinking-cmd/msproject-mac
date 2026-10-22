@@ -621,3 +621,85 @@ W44, `ded8503` W57, `d60cd77` fuzz clang fix. Check CI on the docs tip.
 3. Hand `docs/audit-handoff.md`/`audit-findings.md` to the external audit, fix
    what it finds, then the human review.
 
+
+## Wave 14 final (2026-10-22 ~22:40)
+
+The measurement wave: the oracle owned the first half, the streams consumed it.
+`docs/handoff/wave14-complete.md` is the successor gate.
+
+### Where main is
+
+`1684718` (the `NSPrintingPaginationModeClip` fix) is the code tip; the wave-14
+docs commit is its child. Wave-14 commits: `eb607b7` + `b873535` oracle
+tooling/results, `d111531` W58, `3158b3f` W59, `4a24326` W61, `bd5ee46` W60 +
+reader Cost decode, `569c58e` docs corrections, `1684718` the AppKit fix.
+`app-macos` was green on `1684718`; check `gh run list` for the core `ci` tip.
+
+### The numbers
+
+* `build\vs-w14`: **48/48 ctest** (wave 13: 47; new `viewstate_writer`).
+* app `build\vs-w14-app`: **14/14 tests, 2,289 checks** (was 12 / 2,132);
+  `app_print` 66, `app_start_warning` 41, menu 744 -> 794.
+* **M2 332/332** (83/83 x 4, 0 unexplained); schedin 20/20 + 10/10.
+* Units: viewstate **212**, props **720** (was 520), field_values **802** (was
+  477), `mpp_field_value` **290**.
+* Project reopens five W60 fixtures with the stored values shown below.
+
+### Per stream
+
+| # | Result | Evidence |
+|---|---|---|
+| W58 | `214/` encoder: all four parts rebuilt, no-op byte-identical on 72 collections; date format + 115-byte column replace | viewstate 212; `viewstate_report --roundtrip` |
+| W59 | `114/Props` formula writer; the 168-byte two-formula record is byte-identical to Project's | props 720; `props_tests` literal |
+| W60 | assignment Number1..20 / Text1..30 and Cost1..10; emitted streams byte-identical to Project's pairs; **Project displays all five fixtures** | field_values 802; `w14-w60-reopen.json` |
+| W61 | Print + Save as PDF sharing Export PDF's page geometry (wave-13 PDFs byte-identical); save-time clamp/manual warning | app 14/14, 2,289 checks; `app-macos` green |
+
+### Measured layouts (the oracle's five cases)
+
+1. **Table column = replace, not append.** `FieldName` is coerced to a string (a
+   Long raises "The field \"188743767\" does not exist."); `ColumnPosition=0`
+   overwrites the column at index 1, 9 columns stay, block length unchanged.
+   `ColumnPosition` 8/9 is rejected, so append is unmeasured.
+2. **Formula table** = `114/Props` record `0x2401390`; empty 8 B, two formulas
+   168 B; plus the custom-field-in-use record `0x02401392` (0 -> 1, not
+   formula-specific). Net stream delta +144 (record +160, project-name -16).
+3. **Assignment keys** `0x0f40403c` (Number1) / `0x0f404064` (Text1), stride 1 —
+   not the PjField ids; only `FixedMeta +2` changes. **Cost** key = field id, f64
+   hundredths (decimal-rounded), presence bit entry `+26` bit `0x08`; 88-byte
+   Props records in both registries.
+4. **Manual start move** removes the Start/Finish VarMeta blocks (dates live in
+   FixedData): the app warns, it cannot store a pin.
+5. The wave-13 "TableEdit added a column" premise is corrected in
+   `docs/analysis/oracle/w14-oracle.md` §1 and `memory/viewstate.md`.
+
+### Open before the human review
+
+1. `214/` append, `CV_iew` item encoding, `CEdl`/Props semantics; wire the
+   view-state encoder into the app save (nothing calls it yet).
+2. Wire the formula writer into the app save; preserve `0x02401392` when values
+   remain but formulas were cleared.
+3. MPP12, MPP14 resource Type, summary-calendar rollup, elapsed mixes.
+4. App multi-window, the **manual Mac smoke test**, LeakSanitizer/UBSan (MSVC has
+   neither), visual print oracle.
+
+### Traps added
+
+* **A crashed oracle run poisons the tree**: `python` blocked in COM holds
+  `.oracle.lock`, and **WINPROJ holds `tests/data/synthetic-base.mpp` open**, so
+  the fixture reads 238,080 B and every delete/write fails. Kill both pids,
+  remove the lock, delete + `git checkout HEAD --` the fixture, verify SHA256.
+  `\\?\D:\...` reads where the plain path does not.
+* **`FileSaveAs` reports a padded size** (344,064 / 360,448); Project compacts on
+  close (239,104). Only the post-close file is evidence.
+* **AppKit deprecations are errors** on `app-macos`: `NSClipPagination` ->
+  `NSPrintingPaginationModeClip`. One CI iteration per `main.mm` touch is normal.
+* PowerShell backticks: `` `0 `` is NUL, `$7` interpolates — build doc edits from
+  single-quoted here-strings or the file becomes binary (cost.md paid for this).
+
+### Next three actions
+
+1. The **manual Mac smoke test** of the v4 app: print, Save as PDF, the clamp
+   warning, insert/delete, fields, predecessors, undo, save/reopen, filters.
+2. `214/` append probe + `CV_iew` decode, then wire view-state and formula writes
+   into the app save.
+3. Hand `docs/audit-handoff.md` to the external audit, fix findings, human review.

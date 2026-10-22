@@ -113,8 +113,13 @@ are PROJECT_A (83 tasks) and PROJECT_B (73 tasks, 70 live links / 63 assignments
 1. **Manual scheduling is not preserved on a date edit**: `save_date_edits`
    writes a real SNET pin and clears the manual-mode bit, so the row becomes
    auto-scheduled. Documented, warned per row.
-2. **Linked date pins clamp**: Project reopens at `max(pred finish, pin)`; the
-   app does not yet warn when an edit cannot take effect.
+2. **Linked date pins clamp**: Project reopens at `max(pred finish, pin)`. The
+   app now warns before saving when an edit will be clamped, rescheduled from a
+   manual task, or have no effect (`app/start_edit_warning.cpp`,
+   `warning_for_start_edit`; one `NSAlert` per save, Cancel aborts). The
+   writer still stores the exact constraint — the warning does not change bytes.
+   The warning model is headless-tested; the alert path itself compiles only on
+   `app-macos`.
 3. **`214/` is not regenerated**; view state is carried through byte-identically.
 4. **Link and assignment editing is implemented**: task add/delete, link
    add/delete, resource add, assignment add/delete, custom-field read/write and
@@ -124,8 +129,13 @@ are PROJECT_A (83 tasks) and PROJECT_B (73 tasks, 70 live links / 63 assignments
 6. **MPP12 and MPP14 resource Type** are not implemented.
 7. **Recurring calendar exceptions** are decoded and applied for every type;
    both monthly-positional shapes are measured.
-8. **App**: save persists starts, task/link/field edits; no multi-window,
-   printing or drag; the manual Mac smoke test is still open.
+8. **App**: save persists starts, task/link/field edits. Printing exists in wave
+   14 — File > Print… (Cmd-P) and File > Save as PDF… (Cmd-Shift-P) share one
+   `app::PrintJob`/`NSPrintOperation` path with Export PDF's page geometry
+   (`app/page_layout.cpp`), and the wave-13 PDFs are byte-identical after the
+   refactor. No multi-window or drag; the manual Mac smoke test is still open, and
+   every new `main.mm` line (the whole print path) is proved by `app-macos`
+   only.
 
 ## 5. Suggested debug build
 

@@ -1,0 +1,63 @@
+{
+  "case": "table-column-probe",
+  "variants": [
+    {
+      "variant": "A-create-false-string",
+      "args": {
+        "name": "Entry",
+        "task_table": "True",
+        "create": "False",
+        "overwrite": "False",
+        "new_name": "",
+        "field": "Number1",
+        "new_field": "Number1"
+      },
+      "ok": true,
+      "bytes": 344064,
+      "saved": "corpus\\probe\\w14-tablecol-A.mpp"
+    },
+    {
+      "variant": "B-overwrite-string",
+      "args": {
+        "name": "Entry",
+        "task_table": "True",
+        "create": "False",
+        "overwrite": "True",
+        "new_name": "",
+        "field": "Number1",
+        "new_field": "Number1"
+      },
+      "ok": true,
+      "bytes": 344064,
+      "saved": "corpus\\probe\\w14-tablecol-B.mpp"
+    },
+    {
+      "variant": "C-newtable-field",
+      "args": {
+        "name": "Entry",
+        "task_table": "True",
+        "create": "True",
+        "overwrite": "True",
+        "new_name": "W14 Entry C",
+        "field": "Number1",
+        "new_field": "Number1"
+      },
+      "ok": true,
+      "bytes": 360448,
+      "saved": "corpus\\probe\\w14-tablecol-C.mpp"
+    },
+    {
+      "variant": "D-numeric-overwrite",
+      "args": {
+        "name": "Entry",
+        "task_table": "True",
+        "create": "False",
+        "overwrite": "True",
+        "new_name": "",
+        "field": "188743767",
+        "new_field": "Number1"
+      },
+      "error": "com_error: (-2147352567, 'Exception occurred.', (1004, 'Microsoft Project', 'The field \"188743767\" does not exist.', 'C:\\\\Program Files\\\\Microsoft Office\\\\root\\\\Office16\\\\VBAPJ.CHM\\x00', 131072, 0), None)"
+    }
+  ]
+}

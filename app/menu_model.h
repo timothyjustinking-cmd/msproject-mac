@@ -81,6 +81,11 @@ enum class MenuAction : std::uint8_t {
     task_fields,
     predecessors,
     insert_resource,
+    // Wave 14: the two print commands.  `print` opens the standard print panel;
+    // `save_as_pdf` runs the same print operation with a save-to-PDF job, so the
+    // two share app::build_print_job()'s layout (app/page_layout.h).
+    print,
+    save_as_pdf,
 };
 
 // Every action, for tests and for the shell's exhaustive dispatch check.

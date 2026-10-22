@@ -151,11 +151,14 @@ void test_key_equivalents_unique() {
 }
 
 void test_documented_menu_contents() {
-    // File: Open, Save, Save As, two exports, Close -- with the standard keys.
+    // File: Open, Save, Save As, Print, Save as PDF, two exports, Close -- with
+    // the standard keys.
     int file_items = 0;
     bool open_cmd_o = false;
     bool save_cmd_s = false;
     bool save_as_shift = false;
+    bool print_cmd_p = false;
+    bool save_pdf_shift = false;
     bool exports = false;
     for (const MenuItemSpec& item : menu_named("File").items) {
         ++file_items;
@@ -168,15 +171,23 @@ void test_documented_menu_contents() {
         if (item.action == MenuAction::save_as) {
             save_as_shift = std::string(item.key) == "s" && item.shift && item.command_key;
         }
+        if (item.action == MenuAction::print) {
+            print_cmd_p = std::string(item.key) == "p" && item.command_key && !item.shift;
+        }
+        if (item.action == MenuAction::save_as_pdf) {
+            save_pdf_shift = std::string(item.key) == "p" && item.command_key && item.shift;
+        }
         if (item.action == MenuAction::export_pdf_sheet ||
             item.action == MenuAction::export_pdf_gantt) {
             exports = true;
         }
     }
-    check(file_items == 6, "File has six items");
+    check(file_items == 8, "File has eight items");
     check(open_cmd_o, "Open is Cmd-O");
     check(save_cmd_s, "Save is Cmd-S");
     check(save_as_shift, "Save As is Cmd-Shift-S");
+    check(print_cmd_p, "Print is Cmd-P");
+    check(save_pdf_shift, "Save as PDF is Cmd-Shift-P");
     check(exports, "File has both PDF exports");
 
     // Edit: undo/redo, the clipboard, select all, wave-12 Delete Task and the
@@ -394,6 +405,9 @@ void test_enablement() {
     check(!app::menu_item_enabled(MenuAction::save_as, empty), "Save As needs a document");
     check(!app::menu_item_enabled(MenuAction::export_pdf_sheet, empty),
           "Export needs a document");
+    check(!app::menu_item_enabled(MenuAction::print, empty), "Print needs a document");
+    check(!app::menu_item_enabled(MenuAction::save_as_pdf, empty),
+          "Save as PDF needs a document");
     check(!app::menu_item_enabled(MenuAction::select_all, empty), "Select All needs a document");
     check(app::menu_item_enabled(MenuAction::open, empty), "Open always works");
     check(app::menu_item_enabled(MenuAction::preferences, empty),
@@ -444,6 +458,10 @@ void test_enablement() {
           "Sheet export is task-view only");
     check(!app::menu_item_enabled(MenuAction::export_pdf_gantt, non_task),
           "Gantt export is task-view only");
+    check(!app::menu_item_enabled(MenuAction::print, non_task),
+          "Print is task-view only");
+    check(!app::menu_item_enabled(MenuAction::save_as_pdf, non_task),
+          "Save as PDF is task-view only");
     check(!app::menu_item_enabled(MenuAction::undo, non_task), "Undo is task-view only");
     check(!app::menu_item_enabled(MenuAction::redo, non_task), "Redo is task-view only");
     check(!app::menu_item_enabled(MenuAction::copy, non_task), "Copy is task-view only");

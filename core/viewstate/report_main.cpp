@@ -13,8 +13,10 @@
 // <root>/214 is used when it exists; otherwise <root> itself is treated as the
 // 214 root.  A ".bin" suffix on a part file is accepted (FixedData.bin).
 //
-// This tool reads; it has no writer and no write-layout claim.  See
-// docs/handoff/w56.md for the measured layouts and the differential results.
+// This tool reads by default; --roundtrip additionally re-encodes each class
+// with encode_view_state() and checks the result against the extracted
+// streams, which is the writer's no-op proof on real fixture bytes.  See
+// docs/handoff/w58.md for the writer's measured scope.
 
 #include "viewstate.h"
 
@@ -92,6 +94,7 @@ void report_props(const std::vector<std::uint8_t>& bytes) {
 int main(int argc, char** argv) {
     bool dump = false;
     bool inventory = false;
+    bool roundtrip = false;
     std::string only_class;
     fs::path root;
     for (int i = 1; i < argc; ++i) {
@@ -100,6 +103,8 @@ int main(int argc, char** argv) {
             dump = true;
         } else if (arg == "--inventory") {
             inventory = true;
+        } else if (arg == "--roundtrip") {
+            roundtrip = true;
         } else if (arg == "--class") {
             if (i + 1 >= argc) {
                 std::fprintf(stderr, "viewstate_report: --class needs a name\n");
@@ -107,10 +112,12 @@ int main(int argc, char** argv) {
             }
             only_class = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
-            std::printf("usage: viewstate_report [--dump] [--inventory] [--class NAME] <root>\n"
+            std::printf("usage: viewstate_report [--dump] [--inventory] [--roundtrip]\n"
+                        "                       [--class NAME] <root>\n"
                         "  <root>       directory holding 214/<Class>/<Part> files\n"
                         "  --dump       print every column/block (default truncates at 6)\n"
                         "  --inventory  print sizes/FNV only, skip decoding\n"
+                        "  --roundtrip  re-encode each class and require byte-identical parts\n"
                         "  --class N    decode one class only\n");
             return 0;
         } else if (root.empty()) {
@@ -223,6 +230,30 @@ int main(int argc, char** argv) {
                          parse_error.message.c_str(), parse_error.offset);
             g_exit = 1;
             continue;
+        }
+        if (roundtrip) {
+            msproject::viewstate::EncodedParts encoded;
+            msproject::viewstate::WriteError write_error;
+            if (!msproject::viewstate::encode_view_state(state, encoded, &write_error)) {
+                std::fprintf(stderr, "viewstate_report: 214/%s: encode failed: %s\n",
+                             klass.c_str(), write_error.message.c_str());
+                g_exit = 1;
+            } else {
+                const bool same =
+                    encoded.fixed_data == fixed_data && encoded.fixed_meta == fixed_meta &&
+                    encoded.var_meta == var_meta && encoded.var2_data == var2;
+                std::printf("  roundtrip: %s fixed_data=%zu fixed_meta=%zu var_meta=%zu "
+                            "var2=%zu\n",
+                            same ? "byte-identical" : "DIFFERS", encoded.fixed_data.size(),
+                            encoded.fixed_meta.size(), encoded.var_meta.size(),
+                            encoded.var2_data.size());
+                if (!same) {
+                    std::fprintf(stderr,
+                                 "viewstate_report: 214/%s: re-encode is not byte-identical\n",
+                                 klass.c_str());
+                    g_exit = 1;
+                }
+            }
         }
         const std::size_t max_columns = dump ? 0 : 6;
         const std::size_t max_blocks = dump ? 0 : 6;

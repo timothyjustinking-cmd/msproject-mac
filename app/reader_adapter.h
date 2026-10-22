@@ -117,6 +117,9 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     row.summary = task.summary;
     row.milestone = task.is_milestone() && !task.summary;
     row.critical = task.critical;
+    // Wave 14: the manually-scheduled bit, so the app can warn that save_date_edits
+    // writes an auto-scheduled pin (docs/audit-handoff.md section 4.1/4.2).
+    row.manually_scheduled = task.manually_scheduled;
     // Wave 12: the stored custom fields (W48's measured decodings, in the
     // reader's order).  Absent values are absent here too; app::make_record_set
     // turns each into a RecordSet value.

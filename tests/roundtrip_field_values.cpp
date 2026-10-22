@@ -18,6 +18,22 @@
  * presence bits + the Flag1 mirror.  The VarMeta entry is KEPT and the Props
  * registries are byte-identical: there is no measured field-delete shape.
  *
+ * W60 (docs/analysis/oracle/w14-oracle.md §3/§4):
+ *   Cost1..Cost10  the VarMeta key IS the field id; the payload is the 8-byte
+ *                  f64 of the HUNDREDTHS (123.45 -> 12345.0, 0.07 -> 7.0,
+ *                  decimal-exact); the FixedMeta tail bit comes from the
+ *                  class-slot bitmap (+26 0x08 for Cost1, measured); Task and
+ *                  Assn Props records.
+ *   Assignment Number1..20 / Text1..30 live in 114/TBkndAssn; the VarMeta key is
+ *                  the assignment property id (Number1 0x0f40403c, Text1
+ *                  0x0f404064, stride 1), Number stores a plain f64 and Text
+ *                  UTF-16+NUL, only FixedMeta +2 changes and both Props
+ *                  registries grow.  `save_assignment_field_values` is the new
+ *                  API.
+ * The corpus-gated cases re-run Project's own fixtures (w14-cost, w14-cost2 and
+ * w14-assignfield-control -> w14-assignfield) and require the emitted streams to
+ * be byte-identical to Project's.
+ *
  * For every write/clear the test asserts, from the written file:
  *   1. the value reads back through the writer's own re-read AND (when the
  *      top-level build provides core/mpp) through the independent reader;
@@ -27,10 +43,13 @@
  *   4. only FixedMeta / Fixed2Meta / VarMeta / Var2Data changed -- FixedData and
  *      Fixed2Data are byte-identical, every other stream (214/ included) too;
  *   5. the file re-emits byte-identically, `check()` and `check_table()` pass;
- *   6. the refusals fire (unknown id, Cost (unmeasured), Flag2 (bit unmeasured),
- *      a field without a measured tail bit, wrong kind, uid 0, unknown uid,
- *      duplicate edit, invalid date, NaN number, embedded NUL, missing output
- *      directory).
+ *   6. the refusals fire (unknown id, an unsupported Cost index, a Cost with
+ *      more precision than hundredths, Flag2 (bit unmeasured), a field without
+ *      a measured tail bit, wrong kind, uid 0, unknown uid, duplicate edit,
+ *      invalid date, NaN number, embedded NUL, missing output directory; and
+ *      for an assignment: uid 0, unknown uid, an unmeasured assignment family
+ *      (Cost/Flag/Date/Duration), a mismatched kind, NaN, embedded NUL,
+ *      duplicate, empty path).
  *
  * NO CORPUS NEEDED for the write cases: tests/data/synthetic-base.mpp is the
  * committed synthetic source.  Project's measured w10-fieldvalues.mpp is read
@@ -58,6 +77,7 @@
 #include <string_view>
 #include <vector>
 
+#include "add_delete.h"
 #include "cfb_writer.h"
 #include "field_values.h"
 #include "save.h"
@@ -187,6 +207,13 @@ std::uint32_t u32_at(std::vector<std::uint8_t> const& b, std::size_t o) {
            (static_cast<std::uint32_t>(b[o + 1]) << 8) |
            (static_cast<std::uint32_t>(b[o + 2]) << 16) |
            (static_cast<std::uint32_t>(b[o + 3]) << 24);
+}
+
+void put_u32(std::vector<std::uint8_t>& b, std::size_t o, std::uint32_t v) {
+    b[o] = static_cast<std::uint8_t>(v & 0xFFu);
+    b[o + 1] = static_cast<std::uint8_t>((v >> 8) & 0xFFu);
+    b[o + 2] = static_cast<std::uint8_t>((v >> 16) & 0xFFu);
+    b[o + 3] = static_cast<std::uint8_t>((v >> 24) & 0xFFu);
 }
 
 std::vector<std::string> changed_streams(mppwrite::CfbDocument const& a,
@@ -736,6 +763,10 @@ void test_flag_only(TestContext& t) {
 void test_refusals(TestContext& t) {
     std::string const source = join(MPPWRITE_TEST_DATA, "synthetic-base.mpp");
     mppwrite::CfbDocument const pristine = mppwrite::CfbDocument::from_file(source);
+    {
+        std::error_code ignored;
+        std::filesystem::remove(out_path("w48-refused.mpp"), ignored);
+    }
 
     auto refuses = [&](std::string_view needle, std::string const& what,
                        auto&& build) {
@@ -762,12 +793,33 @@ void test_refusals(TestContext& t) {
         edits.push_back(edit);
         return edits;
     });
-    refuses("storage is unmeasured", "Cost1 is refused (unmeasured)", [] {
+    refuses("not a task custom field",
+            "an unsupported Cost index (0x0b40006d is outside Cost1..Cost10)",
+            [] {
+                std::vector<FieldEdit> edits;
+                FieldEdit edit;
+                edit.uid = 1;
+                edit.value = value_for(FieldKind::cost, 0x0B40006Du);
+                edit.value.cost = 1.0;
+                edits.push_back(edit);
+                return edits;
+            });
+    refuses("not representable in hundredths",
+            "a Cost with more precision than hundredths is refused", [] {
+                std::vector<FieldEdit> edits;
+                FieldEdit edit;
+                edit.uid = 1;
+                edit.value = value_for(FieldKind::cost, mppwrite::kCost1FieldId);
+                edit.value.cost = 123.456;
+                edits.push_back(edit);
+                return edits;
+            });
+    refuses("not finite", "a NaN Cost is refused", [] {
         std::vector<FieldEdit> edits;
         FieldEdit edit;
         edit.uid = 1;
         edit.value = value_for(FieldKind::cost, mppwrite::kCost1FieldId);
-        edit.value.number = 12.5;
+        edit.value.cost = std::numeric_limits<double>::quiet_NaN();
         edits.push_back(edit);
         return edits;
     });
@@ -1129,8 +1181,9 @@ void test_clear(TestContext& t) {
     t.check(absent.to_bytes() == absent_before.to_bytes(),
             "clear absent: the document is unchanged");
 
-    /* Refusals: unknown id, Cost, Flag2, Text2 (no measured tail bit), uid 0,
-     * unknown uid and a bad output path. */
+    /* Refusals: unknown id, Flag2, Text2 (no measured tail bit), uid 0,
+     * unknown uid and a bad output path.  (Cost is writable and clearable since
+     * W60; the cost clear case lives in test_cost_write.) */
     mppwrite::CfbDocument refusals = mppwrite::CfbDocument::from_file(source);
     std::string const missing = out_path("w52-clear-should-not-exist.mpp");
     std::error_code ignored;
@@ -1152,7 +1205,6 @@ void test_clear(TestContext& t) {
     };
     expect_clear_refusal(1, 0x0B4000FFu, "not a task custom field",
                          "unknown field id refused");
-    expect_clear_refusal(1, mppwrite::kCost1FieldId, "Cost", "Cost refused");
     expect_clear_refusal(1, 0x0B400049u, "not stored where it is measured",
                          "Flag2 refused");
     expect_clear_refusal(1, 0x0B400036u, "no measured FixedMeta tail-presence bit",
@@ -1194,6 +1246,885 @@ void test_clear(TestContext& t) {
 #endif
 }
 
+/* ---- (g) W60: Cost1..Cost10 --------------------------------------------- */
+
+std::vector<std::uint8_t> f64_bytes(double value) {
+    std::uint64_t bits = 0;
+    static_assert(sizeof bits == sizeof value, "IEEE-754 double expected");
+    std::memcpy(&bits, &value, sizeof bits);
+    std::vector<std::uint8_t> out(8, 0);
+    for (std::size_t i = 0; i < 8; ++i) {
+        out[i] = static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFFu);
+    }
+    return out;
+}
+
+double cost_hundredths(double cost) {
+    return static_cast<double>(std::llround(cost * 100.0));
+}
+
+void test_cost_write(TestContext& t) {
+    std::string const source = join(MPPWRITE_TEST_DATA, "synthetic-base.mpp");
+    mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+    mppwrite::CfbDocument const before = doc;
+    std::vector<std::uint8_t> const meta_before = doc.read_stream(kMeta);
+    int const entry = meta_entry_for_row(meta_before, 1);
+    t.check(entry >= 0, "cost: row 1 has a FixedMeta entry");
+    if (entry < 0) {
+        return;
+    }
+    std::size_t const meta_base = 16 + static_cast<std::size_t>(entry) * 47;
+    std::size_t const entries_before = var_entry_count(doc);
+    std::size_t const var2_before = doc.read_stream(kVar2).size();
+
+    std::vector<FieldEdit> edits;
+    FieldEdit edit;
+    edit.uid = 1;
+    edit.value = value_for(FieldKind::cost, mppwrite::kCost1FieldId);
+    edit.value.cost = 123.45;
+    edits.push_back(edit);
+    mppwrite::FieldWriteResult const result = mppwrite::save_field_values(
+        doc, edits, out_path("w60-cost.mpp"));
+    t.equal(result.fields_written, std::size_t{1}, "cost: one field written");
+    t.check(result.fields.size() == 1 && result.fields[0].value.cost == 123.45,
+            "cost: the receipt is 123.45");
+
+    Block block;
+    t.check(block_for(doc, 1, mppwrite::kCost1FieldId, block),
+            "cost: a VarMeta entry for Cost1 exists");
+    t.check(block.payload == f64_bytes(12345.0),
+            "cost: the payload is the f64 12345.0 (the value x100)");
+    t.equal(block.offset, static_cast<std::uint32_t>(var2_before),
+            "cost: the block is appended at the old Var2Data size");
+
+    std::vector<std::uint8_t> const meta = doc.read_stream(kMeta);
+    int const entry_after = meta_entry_for_row(meta, 1);
+    t.check(entry_after >= 0, "cost: row 1 keeps its FixedMeta entry");
+    if (entry_after >= 0) {
+        std::size_t const base = 16 + static_cast<std::size_t>(entry_after) * 47;
+        t.equal(u16_at(meta, base + 2), 12, "cost: FixedMeta +2 is 11 + 1");
+        t.equal(meta[base + 26], 0x08, "cost: FixedMeta +26 has bit 0x08");
+        bool others_unchanged = true;
+        for (std::size_t i = 0; i < 47; ++i) {
+            if (i == 2 || i == 26) {
+                continue;
+            }
+            if (base + i >= meta.size() || meta[base + i] != meta_before[meta_base + i]) {
+                others_unchanged = false;
+            }
+        }
+        t.check(others_unchanged,
+                "cost: only the +2 count and the +26 presence bit changed");
+    }
+    t.equal(var_entry_count(doc), entries_before + 1,
+            "cost: VarMeta grew by one entry");
+    std::vector<mppwrite::VarEntry> const entries =
+        mppwrite::read_var_entries(doc.read_stream(kVarMeta));
+    t.check(entries.size() > 10 && entries[10].field_id == mppwrite::kCost1FieldId &&
+                entries[10].mid == 1u,
+            "cost: the entry is inserted in key order after Name");
+    t.check(doc.read_stream(kVarMeta).size() ==
+                mppwrite::CfbDocument::from_file(source).read_stream(kVarMeta).size() + 12,
+            "cost: VarMeta grew by exactly 12 bytes");
+
+    /* The two Props registries: the measured Cost1 record in both. */
+    std::vector<std::uint8_t> const props = doc.read_stream(kProps);
+    t.equal(props.size(), std::size_t{86 + 88},
+            "cost: Task/Props is 86 + one 88-byte record");
+    if (props.size() == 86 + 88) {
+        t.equal(u32_at(props, 86), mppwrite::kCost1FieldId,
+                "cost: the Task record is keyed by the Cost1 field id");
+        t.equal(u32_at(props, 86 + 4), 5u, "cost: Task record +4 is the type word 5");
+        t.equal(u32_at(props, 86 + 8), 0x0F40401Eu,
+                "cost: Task record +8 is the assignment key 0x0f40401e");
+        t.equal(u32_at(props, 86 + 12), 0u, "cost: Task record +12 is 0");
+        t.equal(u32_at(props, 86 + 20), 14775u, "cost: Task record +20 is 14775");
+        t.equal(u32_at(props, 86 + 24), 0x4CEB8BBEu, "cost: Task record +24 stamp");
+        t.equal(u32_at(props, 86 + 28), 0x8CFAC482u, "cost: Task record +28 stamp");
+        t.equal(u32_at(props, 86 + 32), 0x6A00400Bu,
+                "cost: Task record +32 is the field id big-endian (0b 40 00 6a)");
+    }
+    std::vector<std::uint8_t> const assn_props = doc.read_stream(kAssnProps);
+    t.equal(assn_props.size(), std::size_t{88 + 88},
+            "cost: Assn/Props is 88 + one 88-byte record");
+    if (assn_props.size() == 88 + 88) {
+        t.equal(u32_at(assn_props, 88), 0x0F40401Eu,
+                "cost: Assn record is keyed by 0x0f40401e");
+        t.equal(u32_at(assn_props, 88 + 8), mppwrite::kCost1FieldId,
+                "cost: Assn record +8 is the Cost1 field id");
+        t.equal(u32_at(assn_props, 88 + 32), 0x1E40400Fu,
+                "cost: Assn record +32 is the key big-endian (0f 40 40 1e)");
+    }
+
+    t.check(doc.read_stream(kFixed) == before.read_stream(kFixed),
+            "cost: FixedData is byte-identical");
+    t.check(doc.read_stream(kFixed2) == before.read_stream(kFixed2),
+            "cost: Fixed2Data is byte-identical");
+    check_214_untouched(t, before, doc, "w60-cost.mpp");
+    t.check(mppwrite::check_table(doc).empty(),
+            "cost: check_table: " + mppwrite::check_table(doc));
+    t.check(doc.check().empty(), "cost: container check: " + doc.check());
+    t.check(doc.to_bytes() == read_file(out_path("w60-cost.mpp")),
+            "cost: the document equals the file on disk");
+    emit(t, doc, "w60-cost.mpp", "synthetic-base uid 1: Cost1 = 123.45");
+
+    /* core/mpp sees the VarMeta block.  Its reader lane does not decode Cost
+     * yet, so assert the value only when it reports the storage as measured. */
+#ifdef MPPWRITE_HAVE_READER
+    mpp::Document const written = mpp::load_file(out_path("w60-cost.mpp"));
+    mpp::CustomFieldValue const cost =
+        written.custom_field(1, mppwrite::kCost1FieldId);
+    t.check(cost.present, "cost: core/mpp sees the Cost1 VarMeta block");
+    if (cost.storage_measured) {
+        t.check(cost.cost == 123.45, "cost: core/mpp decodes Cost1 as 123.45");
+    }
+#endif
+
+    /* Clearing a cost stores the measured empty value (f64 0.0) and clears the
+     * presence bit, like the other value families. */
+    mppwrite::CfbDocument cleared_doc = doc;
+    mppwrite::ClearedField const cleared = mppwrite::clear_field_value(
+        cleared_doc, 1, mppwrite::kCost1FieldId, out_path("w60-cost-cleared.mpp"));
+    t.check(cleared.was_present, "cost clear: was_present");
+    t.check(cleared.entry_kept, "cost clear: the VarMeta entry is kept");
+    t.check(cleared.value.present && cleared.value.storage_measured &&
+                cleared.value.cost == 0.0,
+            "cost clear: the empty value is the f64 0.0 (currency 0.00)");
+    Block cleared_block;
+    t.check(block_for(cleared_doc, 1, mppwrite::kCost1FieldId, cleared_block) &&
+                cleared_block.payload == f64_bytes(0.0),
+            "cost clear: the payload is eight zero bytes");
+    std::vector<std::uint8_t> const cleared_meta = cleared_doc.read_stream(kMeta);
+    int const cleared_entry = meta_entry_for_row(cleared_meta, 1);
+    if (cleared_entry >= 0) {
+        std::size_t const base = 16 + static_cast<std::size_t>(cleared_entry) * 47;
+        t.equal(cleared_meta[base + 26], 0x00, "cost clear: +26 bit is clear");
+    }
+
+    /* Project's own cost fixture: writing the same value to the control must
+     * reproduce the target's VarMeta/FixedMeta/Props byte for byte. */
+    std::string const control = join(MPPWRITE_PROBE_DIR, "w14-cost-control.mpp");
+    std::string const target = join(MPPWRITE_PROBE_DIR, "w14-cost.mpp");
+    if (file_exists(control) && file_exists(target)) {
+        mppwrite::CfbDocument oracle = mppwrite::CfbDocument::from_file(control);
+        std::vector<std::uint8_t> const control_var2 = oracle.read_stream(kVar2);
+        std::vector<FieldEdit> oracle_edits;
+        FieldEdit oracle_edit;
+        oracle_edit.uid = 1;
+        oracle_edit.value = value_for(FieldKind::cost, mppwrite::kCost1FieldId);
+        oracle_edit.value.cost = 123.45;
+        oracle_edits.push_back(oracle_edit);
+        (void)mppwrite::save_field_values(oracle, oracle_edits,
+                                          out_path("w60-cost-oracle.mpp"));
+        mppwrite::CfbDocument const project = mppwrite::CfbDocument::from_file(target);
+        t.check(oracle.read_stream(kVarMeta) == project.read_stream(kVarMeta),
+                "cost oracle: VarMeta equals Project's own w14-cost.mpp");
+        t.check(oracle.read_stream(kMeta) == project.read_stream(kMeta),
+                "cost oracle: FixedMeta equals Project's own");
+        t.check(oracle.read_stream(kProps) == project.read_stream(kProps),
+                "cost oracle: Task/Props equals Project's own");
+        t.check(oracle.read_stream(kAssnProps) == project.read_stream(kAssnProps),
+                "cost oracle: Assn/Props equals Project's own");
+        std::vector<std::uint8_t> const oracle_var2 = oracle.read_stream(kVar2);
+        t.equal(oracle_var2.size(), control_var2.size() + 12,
+                "cost oracle: Var2Data grew by one 12-byte block");
+        t.check(oracle_var2.size() >= control_var2.size() &&
+                    std::equal(control_var2.begin(), control_var2.end(),
+                               oracle_var2.begin()),
+                "cost oracle: the control's Var2Data prefix is unchanged");
+        std::vector<std::uint8_t> const project_var2 = project.read_stream(kVar2);
+        if (oracle_var2.size() >= control_var2.size() + 12 &&
+            project_var2.size() >= control_var2.size() + 12) {
+            t.check(mppwrite::read_var_block(oracle_var2,
+                                             static_cast<std::uint32_t>(
+                                                 control_var2.size())) ==
+                        mppwrite::read_var_block(
+                            project_var2,
+                            static_cast<std::uint32_t>(control_var2.size())),
+                    "cost oracle: the appended block equals Project's f64 12345.0");
+        }
+    } else {
+        std::cout << "SKIP: " << control << " / " << target
+                  << " are missing (corpus/ is git-ignored)\n";
+    }
+}
+
+void test_cost_range(TestContext& t) {
+    std::string const source = join(MPPWRITE_TEST_DATA, "synthetic-base.mpp");
+    mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+    std::vector<std::uint8_t> const meta_before = doc.read_stream(kMeta);
+    int const entry = meta_entry_for_row(meta_before, 1);
+    t.check(entry >= 0, "cost range: row 1 has a FixedMeta entry");
+    if (entry < 0) {
+        return;
+    }
+    std::size_t const meta_base = 16 + static_cast<std::size_t>(entry) * 47;
+    std::vector<FieldEdit> edits;
+    std::array<double, 10> values{};
+    for (unsigned index = 1; index <= 10; ++index) {
+        FieldEdit edit;
+        edit.uid = 1;
+        edit.value = value_for(FieldKind::cost, mppwrite::field_id_for(
+                                                   FieldKind::cost, index));
+        double const value = static_cast<double>(index * 111) / 100.0;
+        values[index - 1] = value;
+        edit.value.cost = value;
+        edits.push_back(edit);
+    }
+    mppwrite::FieldWriteResult const result =
+        mppwrite::save_field_values(doc, edits, out_path("w60-cost-all.mpp"));
+    t.equal(result.fields_written, std::size_t{10},
+            "cost range: ten fields written");
+    t.equal(result.fields.size(), std::size_t{10}, "cost range: ten receipts");
+
+    std::vector<std::uint8_t> const meta = doc.read_stream(kMeta);
+    int const entry_after = meta_entry_for_row(meta, 1);
+    if (entry_after >= 0) {
+        std::size_t const base = 16 + static_cast<std::size_t>(entry_after) * 47;
+        t.equal(u16_at(meta, base + 2), 21, "cost range: +2 is 11 + 10");
+        /* The class-slot bitmap: Cost1..3 at +26 0x08/0x10/0x20, Cost4 at +28
+         * 0x80, Cost5..10 at +29 0x01..0x20. */
+        t.equal(meta[base + 26], 0x38, "cost range: +26 has Cost1..Cost3's bits");
+        t.equal(meta[base + 28], 0x80, "cost range: +28 has Cost4's bit");
+        t.equal(meta[base + 29], 0x3F, "cost range: +29 has Cost5..Cost10's bits");
+        t.equal(meta[base + 27], meta_before[meta_base + 27],
+                "cost range: +27 (Duration1's second bit) is untouched");
+    }
+    for (unsigned index = 1; index <= 10; ++index) {
+        std::uint32_t const field_id =
+            mppwrite::field_id_for(FieldKind::cost, index);
+        Block block;
+        t.check(block_for(doc, 1, field_id, block) &&
+                    block.payload == f64_bytes(cost_hundredths(values[index - 1])),
+                "cost range: Cost" + std::to_string(index) +
+                    " stores the exact hundredths f64");
+    }
+    std::vector<std::uint8_t> const props = doc.read_stream(kProps);
+    t.equal(props.size(), std::size_t{86 + 10 * 88},
+            "cost range: Task/Props is 86 + 10 records");
+    std::vector<std::uint8_t> const assn_props = doc.read_stream(kAssnProps);
+    t.equal(assn_props.size(), std::size_t{88 + 10 * 88},
+            "cost range: Assn/Props is 88 + 10 records");
+    for (unsigned index = 1; index <= 10; ++index) {
+        std::uint32_t const field_id =
+            mppwrite::field_id_for(FieldKind::cost, index);
+        std::uint32_t const key = 0x0F40401Eu + (index - 1u);
+        bool found_task = false;
+        for (std::size_t offset = 86; offset + 88 <= props.size(); offset += 88) {
+            found_task = found_task || u32_at(props, offset) == field_id;
+        }
+        t.check(found_task, "cost range: Task/Props registers Cost" +
+                                std::to_string(index));
+        bool found_assn = false;
+        for (std::size_t offset = 88; offset + 88 <= assn_props.size();
+             offset += 88) {
+            found_assn = found_assn || u32_at(assn_props, offset) == key;
+        }
+        t.check(found_assn, "cost range: Assn/Props registers Cost" +
+                                std::to_string(index) + "'s key");
+    }
+    t.check(mppwrite::check_table(doc).empty(),
+            "cost range: check_table: " + mppwrite::check_table(doc));
+    emit(t, doc, "w60-cost-all.mpp",
+         "synthetic-base uid 1: Cost1..Cost10 = 1.11 .. 11.10");
+
+    /* The decimal-safe conversion: 0.07 must store 7.0, not the raw
+     * 0.07*100 = 7.000000000000001; 1.23 must store 123.0. */
+    mppwrite::CfbDocument decimals = mppwrite::CfbDocument::from_file(source);
+    std::vector<FieldEdit> decimal_edits;
+    FieldEdit first;
+    first.uid = 1;
+    first.value = value_for(FieldKind::cost, mppwrite::kCost1FieldId);
+    first.value.cost = 1.23;
+    decimal_edits.push_back(first);
+    FieldEdit second;
+    second.uid = 2;
+    second.value = value_for(FieldKind::cost, mppwrite::kCost1FieldId);
+    second.value.cost = 0.07;
+    decimal_edits.push_back(second);
+    (void)mppwrite::save_field_values(decimals, decimal_edits,
+                                      out_path("w60-cost2.mpp"));
+    Block first_block;
+    Block second_block;
+    t.check(block_for(decimals, 1, mppwrite::kCost1FieldId, first_block) &&
+                first_block.payload == f64_bytes(123.0),
+            "cost2: 1.23 stores the exact f64 123.0");
+    t.check(block_for(decimals, 2, mppwrite::kCost1FieldId, second_block) &&
+                second_block.payload == f64_bytes(7.0),
+            "cost2: 0.07 stores the exact f64 7.0 (decimal-rounded)");
+    t.check(f64_bytes(0.07 * 100.0) != f64_bytes(7.0),
+            "cost2: a raw 0.07*100.0 would not be 7.0 (the trap this avoids)");
+    std::vector<std::uint8_t> const decimal_meta = decimals.read_stream(kMeta);
+    for (std::size_t uid = 1; uid <= 2; ++uid) {
+        int const decimal_entry = meta_entry_for_row(decimal_meta, uid);
+        if (decimal_entry >= 0) {
+            std::size_t const base =
+                16 + static_cast<std::size_t>(decimal_entry) * 47;
+            t.equal(decimal_meta[base + 26], 0x08,
+                    "cost2: uid " + std::to_string(uid) + " has the +26 bit");
+            t.equal(u16_at(decimal_meta, base + 2), 12,
+                    "cost2: uid " + std::to_string(uid) + " has 12 fields");
+        }
+    }
+    emit(t, decimals, "w60-cost2.mpp",
+         "synthetic-base uid 1 Cost1 = 1.23, uid 2 Cost1 = 0.07");
+
+    /* The measured second Project fixture: same block bytes (123.0 / 7.0). */
+    std::string const control = join(MPPWRITE_PROBE_DIR, "w14-cost2-control.mpp");
+    std::string const target = join(MPPWRITE_PROBE_DIR, "w14-cost2.mpp");
+    if (file_exists(control) && file_exists(target)) {
+        mppwrite::CfbDocument oracle = mppwrite::CfbDocument::from_file(control);
+        (void)mppwrite::save_field_values(oracle, decimal_edits,
+                                          out_path("w60-cost2-oracle.mpp"));
+        mppwrite::CfbDocument const project = mppwrite::CfbDocument::from_file(target);
+        t.check(oracle.read_stream(kVarMeta) == project.read_stream(kVarMeta),
+                "cost2 oracle: VarMeta equals Project's own w14-cost2.mpp");
+        t.check(oracle.read_stream(kMeta) == project.read_stream(kMeta),
+                "cost2 oracle: FixedMeta equals Project's own");
+        t.check(oracle.read_stream(kProps) == project.read_stream(kProps),
+                "cost2 oracle: Task/Props equals Project's own");
+        t.check(oracle.read_stream(kAssnProps) == project.read_stream(kAssnProps),
+                "cost2 oracle: Assn/Props equals Project's own");
+    } else {
+        std::cout << "SKIP: " << control << " / " << target
+                  << " are missing (corpus/ is git-ignored)\n";
+    }
+}
+
+/* ---- (h) W60: assignment Number/Text ------------------------------------ */
+
+char const* kAssnFixed = "114/TBkndAssn/FixedData";
+char const* kAssnMeta = "114/TBkndAssn/FixedMeta";
+char const* kAssnFixed2 = "114/TBkndAssn/Fixed2Data";
+char const* kAssnFixed2Meta = "114/TBkndAssn/Fixed2Meta";
+char const* kAssnVarMeta = "114/TBkndAssn/VarMeta";
+char const* kAssnVar2 = "114/TBkndAssn/Var2Data";
+
+int assn_meta_entry_for_row(std::vector<std::uint8_t> const& meta,
+                            std::size_t row) {
+    std::uint32_t const wanted = static_cast<std::uint32_t>(row * 110);
+    if (meta.size() < 16) {
+        return -1;
+    }
+    std::size_t const entries = (meta.size() - 16) / 34;
+    for (std::size_t i = 0; i < entries; ++i) {
+        if (u32_at(meta, 16 + i * 34 + 4) == wanted) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+std::size_t assn_row_for_uid(mppwrite::CfbDocument const& doc, std::uint32_t uid) {
+    std::vector<std::uint8_t> const fixed = doc.read_stream(kAssnFixed);
+    std::size_t const rows = fixed.size() / 110;
+    for (std::size_t row = 0; row < rows; ++row) {
+        if (u32_at(fixed, row * 110) == uid) {
+            return row;
+        }
+    }
+    return rows;
+}
+
+bool assn_block_for(mppwrite::CfbDocument const& doc, std::uint32_t uid,
+                    std::uint32_t key, Block& out) {
+    std::vector<mppwrite::VarEntry> const entries =
+        mppwrite::read_var_entries(doc.read_stream(kAssnVarMeta));
+    std::vector<std::uint8_t> const var2 = doc.read_stream(kAssnVar2);
+    for (mppwrite::VarEntry const& entry : entries) {
+        if (entry.field_id == key && entry.mid == uid) {
+            out.offset = entry.offset;
+            out.payload = mppwrite::read_var_block(var2, entry.offset);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* synthetic-base has no live assignment; build one through the tested W54 API
+ * (add a resource, then assign it to task 1). */
+std::uint32_t make_assignment(mppwrite::CfbDocument& doc, TestContext& t,
+                              std::string const& label) {
+    mppwrite::ResourceSpec resource;
+    resource.name = label;
+    mppwrite::AddedResource const added_resource = mppwrite::add_resource_row(
+        doc, resource, out_path("w60-resource.mpp"));
+    mppwrite::AssignmentSpec spec;
+    spec.task_uid = 1;
+    spec.resource_uid = added_resource.uid;
+    mppwrite::AddedAssignment const added = mppwrite::add_assignment_row(
+        doc, spec, out_path("w60-assignment-base.mpp"));
+    t.check(added.uid != 0, "assignment: the W54 add produced a live row");
+    t.equal(added.task_uid, 1u, "assignment: it names task 1");
+    return added.uid;
+}
+
+void test_assignment_write(TestContext& t) {
+    mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(
+        join(MPPWRITE_TEST_DATA, "synthetic-base.mpp"));
+    std::uint32_t const asn_uid = make_assignment(doc, t, "W60 R");
+    std::size_t const row = assn_row_for_uid(doc, asn_uid);
+    t.check(row * 110 < doc.read_stream(kAssnFixed).size(),
+            "assignment: the row is in FixedData");
+    std::vector<std::uint8_t> const fixed_before = doc.read_stream(kAssnFixed);
+    std::vector<std::uint8_t> const fixed2_before = doc.read_stream(kAssnFixed2);
+    std::vector<std::uint8_t> const fixed2_meta_before =
+        doc.read_stream(kAssnFixed2Meta);
+    std::vector<std::uint8_t> const meta_before = doc.read_stream(kAssnMeta);
+    int const entry = assn_meta_entry_for_row(meta_before, row);
+    t.check(entry >= 0, "assignment: its FixedMeta entry exists");
+    if (entry < 0) {
+        return;
+    }
+    std::size_t const meta_base = 16 + static_cast<std::size_t>(entry) * 34;
+    std::uint16_t const count_before = u16_at(meta_before, meta_base + 2);
+    std::size_t const entries_before =
+        mppwrite::read_var_entries(doc.read_stream(kAssnVarMeta)).size();
+    std::size_t const var2_before = doc.read_stream(kAssnVar2).size();
+
+    std::vector<mppwrite::AssignmentFieldEdit> edits;
+    mppwrite::AssignmentFieldEdit number;
+    number.assignment_uid = asn_uid;
+    number.value = value_for(FieldKind::number, mppwrite::kNumber1FieldId);
+    number.value.number = 7.5;
+    edits.push_back(number);
+    mppwrite::AssignmentFieldEdit text;
+    text.assignment_uid = asn_uid;
+    text.value = value_for(FieldKind::text, mppwrite::kText1FieldId);
+    text.value.text = "assign-text";
+    edits.push_back(text);
+    mppwrite::AssignmentFieldWriteResult const result =
+        mppwrite::save_assignment_field_values(doc, edits,
+                                                out_path("w60-assignments.mpp"));
+    t.equal(result.fields_written, std::size_t{2},
+            "assignment: two values written");
+    t.check(result.fields.size() == 2 && result.fields[0].value.number == 7.5 &&
+                result.fields[1].value.text == "assign-text",
+            "assignment: both receipts read back");
+    t.check(warns(result.warnings, "no FixedMeta tail presence bit"),
+            "assignment: the warning names the missing tail bit");
+
+    t.check(doc.read_stream(kAssnFixed) == fixed_before,
+            "assignment: FixedData is byte-identical");
+    t.check(doc.read_stream(kAssnFixed2) == fixed2_before,
+            "assignment: Fixed2Data is byte-identical");
+    t.check(doc.read_stream(kAssnFixed2Meta) == fixed2_meta_before,
+            "assignment: Fixed2Meta is byte-identical");
+    std::vector<std::uint8_t> const meta = doc.read_stream(kAssnMeta);
+    int const entry_after = assn_meta_entry_for_row(meta, row);
+    if (entry_after >= 0) {
+        std::size_t const base = 16 + static_cast<std::size_t>(entry_after) * 34;
+        t.equal(u16_at(meta, base + 2),
+                static_cast<std::uint16_t>(count_before + 2),
+                "assignment: FixedMeta +2 grew by two");
+        bool others_unchanged = true;
+        for (std::size_t i = 0; i < 34; ++i) {
+            if (i == 2) {
+                continue;
+            }
+            if (meta[base + i] != meta_before[meta_base + i]) {
+                others_unchanged = false;
+            }
+        }
+        t.check(others_unchanged,
+                "assignment: no tail presence bit or other entry byte changed");
+    }
+    std::vector<std::uint8_t> const var_meta = doc.read_stream(kAssnVarMeta);
+    t.equal(mppwrite::read_var_entries(var_meta).size(), entries_before + 2,
+            "assignment: VarMeta grew by two entries");
+    t.equal(u32_at(var_meta, 8),
+            static_cast<std::uint32_t>(entries_before + 2),
+            "assignment: VarMeta +8 declares the new count");
+    t.equal(u32_at(var_meta, 0x14), doc.read_stream(kAssnVar2).size(),
+            "assignment: VarMeta +0x14 is the new Var2Data size");
+    std::vector<mppwrite::VarEntry> const entries =
+        mppwrite::read_var_entries(var_meta);
+    if (entries.size() >= entries_before + 2) {
+        t.equal(entries[entries_before].field_id, 0x0F40403Cu,
+                "assignment: Number1's key is 0x0f40403c");
+        t.equal(entries[entries_before + 1].field_id, 0x0F404064u,
+                "assignment: Text1's key is 0x0f404064");
+        t.equal(entries[entries_before].mid, asn_uid,
+                "assignment: the entries carry the assignment uid");
+    }
+    Block number_block;
+    Block text_block;
+    t.check(assn_block_for(doc, asn_uid, 0x0F40403Cu, number_block) &&
+                number_block.payload == f64_bytes(7.5),
+            "assignment: Number1 stores the plain f64 7.5 (not x100)");
+    t.check(assn_block_for(doc, asn_uid, 0x0F404064u, text_block) &&
+                text_block.payload == mppwrite::encode_utf16z("assign-text"),
+            "assignment: Text1 stores UTF-16LE + NUL (24-byte payload)");
+    t.equal(number_block.offset, static_cast<std::uint32_t>(var2_before),
+            "assignment: the first block is appended at the old Var2Data end");
+
+    std::vector<std::uint8_t> const props = doc.read_stream(kProps);
+    t.equal(props.size(), std::size_t{86 + 2 * 88},
+            "assignment: Task/Props gained two records");
+    std::vector<std::uint8_t> const assn_props = doc.read_stream(kAssnProps);
+    t.equal(assn_props.size(), std::size_t{88 + 2 * 88},
+            "assignment: Assn/Props gained two records");
+    t.equal(u32_at(assn_props, 88), 0x0F40403Cu,
+            "assignment: the first Assn record is Number1's key");
+    t.equal(u32_at(assn_props, 88 + 88), 0x0F404064u,
+            "assignment: the second Assn record is Text1's key");
+    t.equal(u32_at(assn_props, 88 + 8), mppwrite::kNumber1FieldId,
+            "assignment: its +8 is the PjTask Number1 id");
+    t.equal(u32_at(props, 86), mppwrite::kText1FieldId,
+            "assignment: Task/Props is sorted by field id (Text1 first)");
+    t.equal(u32_at(props, 86 + 88), mppwrite::kNumber1FieldId,
+            "assignment: then Number1");
+
+    mppwrite::FieldValue const read_number =
+        mppwrite::read_assignment_field_value(doc, asn_uid,
+                                              mppwrite::kNumber1FieldId);
+    mppwrite::FieldValue const read_text =
+        mppwrite::read_assignment_field_value(doc, asn_uid,
+                                              mppwrite::kText1FieldId);
+    t.check(read_number.present && read_number.storage_measured &&
+                read_number.number == 7.5,
+            "assignment: read_assignment_field_value Number1 is 7.5");
+    t.check(read_text.present && read_text.storage_measured &&
+                read_text.text == "assign-text",
+            "assignment: read_assignment_field_value Text1 is 'assign-text'");
+    mppwrite::FieldStores const stores = mppwrite::assignment_field_stores(
+        doc, asn_uid, mppwrite::kNumber1FieldId);
+    t.check(stores.var_meta && stores.var2_block && stores.presence &&
+                stores.registered && stores.complete(),
+            "assignment: all measured stores are present and complete");
+
+    check_214_untouched(t, mppwrite::CfbDocument::from_file(
+                                 out_path("w60-assignment-base.mpp")),
+                        doc, "w60-assignments.mpp");
+    t.check(doc.check().empty(), "assignment: container check: " + doc.check());
+    t.check(doc.to_bytes() == read_file(out_path("w60-assignments.mpp")),
+            "assignment: the document equals the file on disk");
+    emit(t, doc, "w60-assignments.mpp",
+         "synthetic-base + W60 R + assignment; Number1 7.5, Text1 'assign-text'");
+
+    /* The rest of the measured key ranges: Number20 = 0x0f40404f,
+     * Text30 = 0x0f404081. */
+    std::vector<mppwrite::AssignmentFieldEdit> range_edits;
+    mppwrite::AssignmentFieldEdit number20;
+    number20.assignment_uid = asn_uid;
+    number20.value = value_for(FieldKind::number,
+                              mppwrite::field_id_for(FieldKind::number, 20));
+    number20.value.number = 2.5;
+    range_edits.push_back(number20);
+    mppwrite::AssignmentFieldEdit text30;
+    text30.assignment_uid = asn_uid;
+    text30.value = value_for(FieldKind::text,
+                             mppwrite::field_id_for(FieldKind::text, 30));
+    text30.value.text = "t30";
+    range_edits.push_back(text30);
+    (void)mppwrite::save_assignment_field_values(
+        doc, range_edits, out_path("w60-assignment-range.mpp"));
+    Block number20_block;
+    Block text30_block;
+    t.check(assn_block_for(doc, asn_uid, 0x0F40404Fu, number20_block) &&
+                number20_block.payload == f64_bytes(2.5),
+            "assignment range: Number20 stores under 0x0f40404f");
+    t.check(assn_block_for(doc, asn_uid, 0x0F404081u, text30_block) &&
+                text30_block.payload == mppwrite::encode_utf16z("t30"),
+            "assignment range: Text30 stores under 0x0f404081");
+    emit(t, doc, "w60-assignment-range.mpp",
+         "w60-assignments + Number20 2.5 (0x0f40404f), Text30 't30' (0x0f404081)");
+
+    /* Project's own assignment-field fixture: the same two edits on the control
+     * must reproduce the target's six changed streams byte for byte. */
+    std::string const control = join(MPPWRITE_PROBE_DIR,
+                                     "w14-assignfield-control.mpp");
+    std::string const target = join(MPPWRITE_PROBE_DIR, "w14-assignfield.mpp");
+    if (file_exists(control) && file_exists(target)) {
+        mppwrite::CfbDocument oracle = mppwrite::CfbDocument::from_file(control);
+        std::vector<std::uint8_t> const oracle_fixed = oracle.read_stream(kAssnFixed);
+        std::vector<std::uint8_t> const oracle_var2 = oracle.read_stream(kAssnVar2);
+        std::vector<mppwrite::AssignmentFieldEdit> oracle_edits;
+        for (mppwrite::AssignmentFieldEdit const& edit : edits) {
+            mppwrite::AssignmentFieldEdit copy = edit;
+            copy.assignment_uid = 2; /* the fixture's assignment uid */
+            oracle_edits.push_back(copy);
+        }
+        (void)mppwrite::save_assignment_field_values(
+            oracle, oracle_edits, out_path("w60-assignfield-oracle.mpp"));
+        mppwrite::CfbDocument const project = mppwrite::CfbDocument::from_file(target);
+        t.check(oracle.read_stream(kAssnFixed) == oracle_fixed,
+                "assignment oracle: FixedData is byte-identical");
+        t.check(oracle.read_stream(kAssnMeta) == project.read_stream(kAssnMeta),
+                "assignment oracle: Assn FixedMeta equals Project's own");
+        t.check(oracle.read_stream(kAssnVarMeta) == project.read_stream(kAssnVarMeta),
+                "assignment oracle: Assn VarMeta equals Project's own");
+        t.check(oracle.read_stream(kAssnVar2) == project.read_stream(kAssnVar2),
+                "assignment oracle: Assn Var2Data equals Project's own");
+        t.check(oracle.read_stream(kProps) == project.read_stream(kProps),
+                "assignment oracle: Task/Props equals Project's own");
+        t.check(oracle.read_stream(kAssnProps) == project.read_stream(kAssnProps),
+                "assignment oracle: Assn/Props equals Project's own");
+        t.check(oracle.read_stream(kVarMeta) == project.read_stream(kVarMeta),
+                "assignment oracle: the Task table's VarMeta equals Project's");
+        std::vector<std::uint8_t> const control_var2 =
+            mppwrite::CfbDocument::from_file(control).read_stream(kVar2);
+        t.check(oracle.read_stream(kVar2) == control_var2,
+                "assignment oracle: the Task table's Var2Data is untouched (the "
+                "fixture pair differs only in the project-title block)");
+        t.check(oracle_var2.size() + 40 == project.read_stream(kAssnVar2).size(),
+                "assignment oracle: Assn Var2Data grew by 40 bytes (measured)");
+    } else {
+        std::cout << "SKIP: " << control << " / " << target
+                  << " are missing (corpus/ is git-ignored)\n";
+    }
+}
+
+void test_assignment_refusals(TestContext& t) {
+    mppwrite::CfbDocument const pristine = mppwrite::CfbDocument::from_file(
+        out_path("w60-assignment-base.mpp"));
+    std::uint32_t asn_uid = 0;
+    {
+        std::vector<std::uint8_t> const fixed = pristine.read_stream(kAssnFixed);
+        std::size_t const rows = fixed.size() / 110;
+        for (std::size_t row = 0; row < rows; ++row) {
+            if (u32_at(fixed, row * 110 + 4) != 0) {
+                asn_uid = u32_at(fixed, row * 110);
+                break;
+            }
+        }
+    }
+    t.check(asn_uid != 0, "assignment refusals: found a live assignment");
+    std::string const missing = out_path("w60-assign-refused.mpp");
+    {
+        std::error_code ignored;
+        std::filesystem::remove(missing, ignored);
+    }
+    auto refuses = [&](std::string_view needle, std::string const& what,
+                       auto&& build) {
+        mppwrite::CfbDocument doc = pristine;
+        std::vector<std::uint8_t> const before = doc.to_bytes();
+        std::vector<mppwrite::AssignmentFieldEdit> const edits = build();
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_assignment_field_values(
+                             doc, edits, missing);
+                     },
+                     needle, what);
+        t.check(doc.to_bytes() == before, what + ": the document changed");
+        t.check(!file_exists(missing), what + ": an output file was written");
+    };
+    refuses("empty", "assignment: an empty edit list is refused", [] {
+        return std::vector<mppwrite::AssignmentFieldEdit>{};
+    });
+    refuses("assignment uid is 0", "assignment: uid 0 is refused", [] {
+        std::vector<mppwrite::AssignmentFieldEdit> edits;
+        mppwrite::AssignmentFieldEdit edit;
+        edit.assignment_uid = 0;
+        edit.value = value_for(FieldKind::number, mppwrite::kNumber1FieldId);
+        edit.value.number = 1.0;
+        edits.push_back(edit);
+        return edits;
+    });
+    refuses("no assignment row", "assignment: an unknown uid is refused",
+            [asn_uid] {
+                std::vector<mppwrite::AssignmentFieldEdit> edits;
+                mppwrite::AssignmentFieldEdit edit;
+                edit.assignment_uid = asn_uid + 1000;
+                edit.value = value_for(FieldKind::number,
+                                       mppwrite::kNumber1FieldId);
+                edit.value.number = 1.0;
+                edits.push_back(edit);
+                return edits;
+            });
+    refuses("no measured storage on an assignment",
+            "assignment: Cost1 is refused (unmeasured there)", [asn_uid] {
+                std::vector<mppwrite::AssignmentFieldEdit> edits;
+                mppwrite::AssignmentFieldEdit edit;
+                edit.assignment_uid = asn_uid;
+                edit.value = value_for(FieldKind::cost, mppwrite::kCost1FieldId);
+                edit.value.cost = 1.0;
+                edits.push_back(edit);
+                return edits;
+            });
+    refuses("no measured storage on an assignment",
+            "assignment: Flag1 is refused (unmeasured there)", [asn_uid] {
+                std::vector<mppwrite::AssignmentFieldEdit> edits;
+                mppwrite::AssignmentFieldEdit edit;
+                edit.assignment_uid = asn_uid;
+                edit.value = value_for(FieldKind::flag, mppwrite::kFlag1FieldId);
+                edit.value.flag = true;
+                edits.push_back(edit);
+                return edits;
+            });
+    refuses("kind must match", "assignment: a mismatched kind is refused",
+            [asn_uid] {
+                std::vector<mppwrite::AssignmentFieldEdit> edits;
+                mppwrite::AssignmentFieldEdit edit;
+                edit.assignment_uid = asn_uid;
+                edit.value.field_id = mppwrite::kText1FieldId;
+                edit.value.kind = FieldKind::number;
+                edits.push_back(edit);
+                return edits;
+            });
+    refuses("not finite", "assignment: a NaN number is refused", [asn_uid] {
+        std::vector<mppwrite::AssignmentFieldEdit> edits;
+        mppwrite::AssignmentFieldEdit edit;
+        edit.assignment_uid = asn_uid;
+        edit.value = value_for(FieldKind::number, mppwrite::kNumber1FieldId);
+        edit.value.number = std::numeric_limits<double>::quiet_NaN();
+        edits.push_back(edit);
+        return edits;
+    });
+    refuses("embedded NUL", "assignment: text with an embedded NUL is refused",
+            [asn_uid] {
+                std::vector<mppwrite::AssignmentFieldEdit> edits;
+                mppwrite::AssignmentFieldEdit edit;
+                edit.assignment_uid = asn_uid;
+                edit.value = value_for(FieldKind::text, mppwrite::kText1FieldId);
+                edit.value.text = std::string("a\0b", 3);
+                edits.push_back(edit);
+                return edits;
+            });
+    refuses("appears twice", "assignment: a duplicate edit is refused", [asn_uid] {
+        std::vector<mppwrite::AssignmentFieldEdit> edits;
+        mppwrite::AssignmentFieldEdit first;
+        first.assignment_uid = asn_uid;
+        first.value = value_for(FieldKind::number, mppwrite::kNumber1FieldId);
+        first.value.number = 1.0;
+        edits.push_back(first);
+        mppwrite::AssignmentFieldEdit second = first;
+        second.value.number = 2.0;
+        edits.push_back(second);
+        return edits;
+    });
+    expect_error(
+        t,
+        [&] {
+            mppwrite::CfbDocument doc = pristine;
+            std::vector<mppwrite::AssignmentFieldEdit> edits;
+            mppwrite::AssignmentFieldEdit edit;
+            edit.assignment_uid = asn_uid;
+            edit.value = value_for(FieldKind::number, mppwrite::kNumber1FieldId);
+            edits.push_back(edit);
+            (void)mppwrite::save_assignment_field_values(doc, edits, "");
+        },
+        "output path", "assignment: an empty output path is refused");
+}
+
+void test_store_controls(TestContext& t) {
+    /* The known failure mode: a file with only SOME of the measured stores
+     * still re-reads cleanly, so the value must be reported absent. */
+    mppwrite::CfbDocument const written =
+        mppwrite::CfbDocument::from_file(out_path("w60-assignments.mpp"));
+    std::uint32_t asn_uid = 0;
+    {
+        /* The written assignment is the one whose VarMeta group holds the
+         * Number1 assignment key (synthetic-base has other live placeholder
+         * rows). */
+        for (mppwrite::VarEntry const& entry :
+             mppwrite::read_var_entries(written.read_stream(kAssnVarMeta))) {
+            if (entry.field_id == 0x0F40403Cu) {
+                asn_uid = entry.mid;
+                break;
+            }
+        }
+    }
+    t.check(asn_uid != 0, "stores: found the written assignment");
+    t.check(mppwrite::assignment_field_stores(written, asn_uid,
+                                              mppwrite::kNumber1FieldId)
+                .complete(),
+            "stores: the written assignment value is complete");
+
+    /* (a) VarMeta entry removed: the block stays, the value is absent. */
+    std::vector<std::uint8_t> var_meta = written.read_stream(kAssnVarMeta);
+    std::vector<mppwrite::VarEntry> const entries =
+        mppwrite::read_var_entries(var_meta);
+    bool removed = false;
+    for (mppwrite::VarEntry const& entry : entries) {
+        if (entry.field_id == 0x0F40403Cu && entry.mid == asn_uid) {
+            std::size_t const at = 24 + entry.index * 12;
+            var_meta.erase(var_meta.begin() + static_cast<std::ptrdiff_t>(at),
+                           var_meta.begin() + static_cast<std::ptrdiff_t>(at + 12));
+            put_u32(var_meta, 8, static_cast<std::uint32_t>(entries.size() - 1));
+            removed = true;
+            break;
+        }
+    }
+    t.check(removed, "stores: the Number1 VarMeta entry was found");
+    mppwrite::CfbDocument work = mppwrite::CfbDocument::from_bytes(
+        written.to_bytes());
+    work.replace_stream(kAssnVarMeta, var_meta);
+    std::string const path = out_path("w60-assign-missing-var-meta.mpp");
+    work.save(path);
+    std::vector<std::uint8_t> const on_disk = read_file(path);
+    mppwrite::CfbDocument const reread = mppwrite::CfbDocument::from_file(path);
+    t.check(reread.to_bytes() == on_disk,
+            "stores: the VarMeta-less file still re-reads byte-identically");
+    t.check(reread.check().empty(),
+            "stores: the VarMeta-less container is consistent");
+    mppwrite::FieldValue const absent =
+        mppwrite::read_assignment_field_value(reread, asn_uid,
+                                              mppwrite::kNumber1FieldId);
+    t.check(!absent.present, "stores: the value is absent without its entry");
+    mppwrite::FieldStores const no_entry =
+        mppwrite::assignment_field_stores(reread, asn_uid,
+                                          mppwrite::kNumber1FieldId);
+    t.check(!no_entry.var_meta && !no_entry.complete(),
+            "stores: the store predicate reports the missing entry");
+
+    /* (b) Props registrations restored to the pre-write file: VarMeta and
+     * Var2Data are intact, but Project would not display the field. */
+    mppwrite::CfbDocument pre_write = mppwrite::CfbDocument::from_file(
+        out_path("w60-assignment-base.mpp"));
+    mppwrite::CfbDocument props_work =
+        mppwrite::CfbDocument::from_bytes(written.to_bytes());
+    props_work.replace_stream(kProps, pre_write.read_stream(kProps));
+    props_work.replace_stream(kAssnProps, pre_write.read_stream(kAssnProps));
+    std::string const props_path = out_path("w60-assign-missing-props.mpp");
+    props_work.save(props_path);
+    std::vector<std::uint8_t> const props_on_disk = read_file(props_path);
+    mppwrite::CfbDocument const props_reread =
+        mppwrite::CfbDocument::from_file(props_path);
+    t.check(props_reread.to_bytes() == props_on_disk,
+            "stores: the unregistered file still re-reads byte-identically");
+    t.check(props_reread.check().empty(),
+            "stores: the unregistered container is consistent");
+    mppwrite::FieldValue const still_decodable =
+        mppwrite::read_assignment_field_value(props_reread, asn_uid,
+                                              mppwrite::kNumber1FieldId);
+    t.check(still_decodable.present && still_decodable.number == 7.5,
+            "stores: the decoder can still read the block");
+    mppwrite::FieldStores const no_props =
+        mppwrite::assignment_field_stores(props_reread, asn_uid,
+                                          mppwrite::kNumber1FieldId);
+    t.check(!no_props.registered && !no_props.complete(),
+            "stores: without Props the field is not displayable (incomplete)");
+
+    /* (c) Cost: the +26 presence bit cleared while the block stays. */
+    mppwrite::CfbDocument const cost =
+        mppwrite::CfbDocument::from_file(out_path("w60-cost.mpp"));
+    std::vector<std::uint8_t> cost_meta = cost.read_stream(kMeta);
+    int const cost_entry = meta_entry_for_row(cost_meta, 1);
+    if (cost_entry >= 0) {
+        std::size_t const base = 16 + static_cast<std::size_t>(cost_entry) * 47;
+        cost_meta[base + 26] = 0x00;
+    }
+    mppwrite::CfbDocument cost_work =
+        mppwrite::CfbDocument::from_bytes(cost.to_bytes());
+    cost_work.replace_stream(kMeta, cost_meta);
+    std::string const cost_path = out_path("w60-cost-missing-bit.mpp");
+    cost_work.save(cost_path);
+    std::vector<std::uint8_t> const cost_on_disk = read_file(cost_path);
+    mppwrite::CfbDocument const cost_reread =
+        mppwrite::CfbDocument::from_file(cost_path);
+    t.check(cost_reread.to_bytes() == cost_on_disk,
+            "stores: the bit-less cost file still re-reads byte-identically");
+    t.check(cost_reread.check().empty(),
+            "stores: the bit-less cost container is consistent");
+    mppwrite::FieldStores const cost_stores = mppwrite::field_stores(
+        cost_reread, 1, mppwrite::kCost1FieldId);
+    t.check(cost_stores.var_meta && cost_stores.var2_block &&
+                cost_stores.registered && !cost_stores.presence &&
+                !cost_stores.complete(),
+            "stores: without the presence bit the cost value is incomplete");
+}
+
 /* ---- (f) the linked-pin predicate (w11-oracle §1) ----------------------- */
 
 void test_pin_predicate(TestContext& t) {
@@ -1225,6 +2156,11 @@ int main() {
         test_reader_cross_check(t);
         test_measured_fixture(t);
         test_clear(t);
+        test_cost_write(t);
+        test_cost_range(t);
+        test_assignment_write(t);
+        test_assignment_refusals(t);
+        test_store_controls(t);
         test_pin_predicate(t);
         write_manifest(t);
         return t.report();

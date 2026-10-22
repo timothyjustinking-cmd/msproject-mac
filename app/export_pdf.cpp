@@ -30,6 +30,22 @@ std::vector<std::size_t> every_row(const core::view::RecordSet& records) {
     return rows;
 }
 
+core::render::ReportStyle report_style(const PageSpec& page) {
+    core::render::ReportStyle style;
+    if (!page.valid()) {
+        return style;  // the renderer's own defaults
+    }
+    style.page = core::render::PdfPageFormat{page.width, page.height};
+    style.margin = page.margin;
+    style.row_height = page.row_height;
+    style.header_height = page.header_height;
+    style.footer_height = page.footer_height;
+    style.title_size = page.title_size;
+    style.subtitle_size = page.subtitle_size;
+    style.title_gap = page.title_gap;
+    return style;
+}
+
 std::int64_t ticks_of(const Value* value) noexcept {
     if (value == nullptr) {
         return 0;
@@ -55,6 +71,9 @@ void fill_base(core::render::ReportRequestBase& base, core::view::RecordSet& rec
     base.title = request.title;
     base.subtitle = request.subtitle;
     base.footer = request.footer;
+    // app/page_layout.h owns the page geometry; core/render paginates with the
+    // same bands (report.cpp plan_page), so the page count matches PrintJob.
+    base.style = report_style(request.page);
 }
 
 }  // namespace

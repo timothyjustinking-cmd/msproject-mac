@@ -26,9 +26,20 @@
  *             positions are unknown and refused.  `flag = true` sets the bit,
  *             `false` clears it (Project's own False file has the whole tail
  *             byte zero).
- *   Cost      ID range known (Cost1 0x0b40006a .. Cost10 0x0b400108) but
- *             storage is UNMEASURED: no oracle fixture stores a cost.  Refused
- *             with that reason; not guessed.
+ *   Cost      VarMeta key IS the field id (Cost1 = 0x0b40006a measured,
+ *             w14-cost; Cost1..Cost10 ids per `field_id_for` below).  Payload =
+ *             8-byte little-endian f64 of the value in HUNDREDTHS, exactly
+ *             rounded: 123.45 -> 12345.0 (w14-cost) and 0.07 -> 7.0, not
+ *             7.000000000000001 (w14-cost2, coordinator measurement
+ *             2026-10-22).  A Cost also has a FixedMeta tail presence bit (see
+ *             the tail table below) and its own Props records.
+ *
+ * W60 (2026-10-22) added Cost and ASSIGNMENT custom fields.  Assignment
+ * Number/Text fields do NOT live in the Task table and their VarMeta keys are
+ * NOT the PjField ids: `Assignment.Number1` (PjField 0x0f40006c) stores under
+ * key 0x0f40403c, `Assignment.Text1` (0x0f400058) under 0x0f404064 (measured,
+ * w14-assignfield).  `assignment_property_id` below is that key table; see
+ * `save_assignment_field_values` for the measured layout.
  *
  * REGISTRATION IN 114/TBkndTask/Props (measured, W48 Project gate).  A VarMeta
  * block is necessary but NOT sufficient: Project only displays a custom field
@@ -42,10 +53,12 @@
  * = 44+88n, u32 +78 = count, u32 +82 = count*88.  Assignment: u32 +0/+4 =
  * size-4, u32 +32 = 44+88n, u32 +80 = count, u32 +84 = count*88.  The records
  * are copied byte-for-byte from Project's synthetic fixture; the writer has
- * templates for exactly SIX fields -- Text1, Flag1, Number1, Number2, Duration1
- * and Date1 -- and refuses every other field with "no measured registration
- * record", because the record encodes the field's format and a template from
- * another family would be a guess.
+ * templates for SEVEN fields -- Text1, Flag1, Number1, Number2, Duration1, Date1
+ * and Cost1 -- and Cost2..Cost10 reuse the measured Cost1 record with their own
+ * id/key (the same shape, inferred).  Every other field is refused with "no
+ * measured registration record", because the record encodes the field's format
+ * and a template from another family would be a guess.  (Assignment Number/Text
+ * records are built from the measured type words; see the assignment section.)
  *
  * FIXEDMETA TAIL PRESENCE BITS + DURATION MARKER (measured, W48 third Project
  * pass on w11-fields-base.mpp and the single-field probes).  A third store is
@@ -61,6 +74,28 @@
  *               (2-byte payload 07 00, inserted in ascending-key order after
  *               the overtime entries)
  *     Date1     entry +29 |= 0x40
+ *     Cost1     entry +26 |= 0x08   (measured, w14-cost)
+ *     Cost2     entry +26 |= 0x10
+ *     Cost3     entry +26 |= 0x20
+ *     Cost4     entry +28 |= 0x80
+ *     Cost5     entry +29 |= 0x01
+ *     Cost6     entry +29 |= 0x02
+ *     Cost7     entry +29 |= 0x04
+ *     Cost8     entry +29 |= 0x08
+ *     Cost9     entry +29 |= 0x10
+ *     Cost10    entry +29 |= 0x20
+ *
+ * THE COST BITS ARE AN INFERENCE FROM THE BINARY'S CLASS-SLOT TABLE, except
+ * Cost1 which is oracle-measured.  The 27-byte tail (entry +21..+47) is a
+ * presence bitmap indexed by the field's class slot: byte = +21 + slot/8, mask
+ * = 1 << (slot%8).  The decompiled descriptors
+ * (`analysis/field_definitive_map.tsv`, storage class 5) give the slots
+ * Text1=5, Flag1=25, Number1=35, Number2=36, Duration1=40, Cost1=43, Date1=70
+ * and the bitmap rule reproduces all seven measured bits exactly; Cost2..10's
+ * slots are 44,45,63,64,65,66,67,68,69, which is where the bits above come
+ * from.  A single oracle fixture with Cost4 (the first field in the +28 byte)
+ * would turn the inference into a measurement; until then Cost2..Cost10 are
+ * written with the derived bits and the tests pin them.
  *
  * The entry's `+2` u16 is the row's exact VarMeta entry count INCLUDING the
  * duration marker (base 11 -> 17 for the six fields).  The writer recomputes it
@@ -178,8 +213,9 @@ std::uint32_t field_id_for(FieldKind kind, unsigned index);
 FieldKind field_kind_for_id(std::uint32_t field_id);
 /* The 1-based index of an id inside its family, or 0. */
 unsigned field_index_for_id(std::uint32_t field_id);
-/* True when the file storage of this field is measured (all but Cost and
- * Flag2..Flag20, whose bit positions are unknown). */
+/* True when the file storage of this field is measured (all but Flag2..Flag20,
+ * whose bit positions are unknown).  Cost1..Cost10 are written; Cost1's
+ * presence bit and the whole Cost family encoding are measured. */
 bool field_storage_measured(FieldKind kind, unsigned index);
 
 /*
@@ -197,6 +233,7 @@ struct FieldValue {
     double number = 0.0;              /* number, finite */
     std::uint32_t packed_date = 0;    /* date, a valid packed word (table.h) */
     std::uint32_t duration_ticks = 0; /* duration, file ticks (4800 = 1 day) */
+    double cost = 0.0;                /* cost, currency units (stored * 100) */
     bool flag = false;                /* flag */
     bool present = false;             /* read-back: the file stores the field */
     bool storage_measured = false;    /* read-back: the value above is decoded */
@@ -233,12 +270,15 @@ struct FieldWriteResult {
  *   - a uid of 0 (the project row), a uid that has no live task row (no FixedMeta
  *     entry, a tombstone, or no VarMeta group), or a uid that appears twice for
  *     the same field;
- *   - a field id outside the measured families (Cost, Flag2..Flag20 and every
- *     unknown id), a field without one of the six measured
+ *   - a field id outside the measured families (Flag2..Flag20 and every unknown
+ *     id), a field without one of the measured
  *     `114/TBkndTask/Props` registration records (Text1, Flag1, Number1,
- *     Number2, Duration1, Date1), or a `kind` that does not match the id;
+ *     Number2, Duration1, Date1, Cost1..Cost10), or a `kind` that does not match
+ *     the id;
  *   - text with an embedded NUL or longer than 65,535 bytes, a non-finite
- *     number, an invalid packed date, or duration_ticks == 0xffffffff;
+ *     number, an invalid packed date, duration_ticks == 0xffffffff, or a cost
+ *     that is not finite / not representable in hundredths (Project stores
+ *     cost * 100 as an f64);
  *   - a task table whose size identity is broken (`check_table`, the FixedMeta /
  *     VarMeta geometry checks), or a Props stream that is missing or does not
  *     carry the measured 86-byte preamble and size words.
@@ -273,6 +313,7 @@ struct ClearedField {
  *   Duration  VarMeta block = u32 0 file ticks
  *   Date      VarMeta block = u32 0xffffffff (table.h's kInvalidDate, Project's
  *             "no date"; the same word an ASAP constraint stores)
+ *   Cost      VarMeta block = 8-byte little-endian f64 0.0 (W60)
  *   Flag1     Task FixedMeta entry byte +24 bit 0x02 cleared, plus the measured
  *             Fixed2Meta mirror (+31/+61 bit 0x80) cleared
  *
@@ -298,16 +339,157 @@ struct ClearedField {
  *   - an empty/unusable output path;
  *   - a uid of 0 or a uid with no live task row (no FixedMeta entry, a
  *     tombstone, or no VarMeta group);
- *   - a field outside the six measured ids (Text1, Flag1, Number1, Number2,
- *     Duration1, Date1): Cost, Flag2..Flag20, unknown ids, and every field whose
- *     FixedMeta tail-presence bit is not measured are refused rather than
- *     guessed;
+ *   - a field outside the measured ids (Text1, Flag1, Number1, Number2,
+ *     Duration1, Date1, Cost1..Cost10): Flag2..Flag20 and unknown ids, and every
+ *     field whose FixedMeta tail-presence bit is not measured, are refused rather
+ *     than guessed;
  *   - a task table whose size identity is broken (`check_table` and the
  *     FixedMeta/VarMeta geometry checks).
  */
 ClearedField clear_field_value(CfbDocument& doc, std::uint32_t uid,
                                std::uint32_t field_id, std::string const& path,
                                std::string_view table = "114/TBkndTask");
+
+/* ---- W60: assignment custom fields (114/TBkndAssn) ----------------------- */
+
+/*
+ * ASSIGNMENT CUSTOM FIELDS (measured, W60: docs/analysis/oracle/w14-oracle.md
+ * §3, corpus/probe/w14-assignfield-control.mpp -> w14-assignfield.mpp).
+ *
+ * The Task-table writer does not apply: an assignment's custom value lives in
+ * `114/TBkndAssn` and its VarMeta key is the field's ASSIGNMENT PROPERTY ID,
+ * not the PjField id.  Measured:
+ *
+ *   Assignment.Number1 (PjField 0x0f40006c)  VarMeta key 0x0f40403c
+ *   Assignment.Text1   (PjField 0x0f400058)  VarMeta key 0x0f404064
+ *
+ * `assignment_property_id` is the full key table.  Its stride-1 bases are
+ * measured in Project's own files: the assignment-side Props records carry the
+ * key at +0 and the PjTask field id at +8, which pins Number1 (0x3c), Number2
+ * (0x3d), Number15 (0x4a) and Text1 (0x64), Text2 (0x65), Text4 (0x67), Text6
+ * (0x69), Text10 (0x6d), Text11 (0x6e), Text20 (0x77) exactly (same-key
+ * records also in w10-fieldvalues.mpp, w14-assignfield.mpp,
+ * project_b.mpp and project_a.mpp).  Number3..20 and Text2..30
+ * here are the stride-1 continuation of those measured bases.
+ *
+ * WHAT ONE ASSIGNMENT VALUE WRITE CHANGES (measured, w14-assignfield):
+ *   - `114/TBkndAssn/VarMeta`: one new 12-byte (assignment uid, Var2Data
+ *     offset, property key) entry, APPENDED after the uid's existing entries --
+ *     unlike a Task field, the assignment group is NOT key-sorted (Project's own
+ *     group runs 0x0f400010, 0x0f400020, ..., 0x0f40029b, then the two custom
+ *     entries), so the writer appends after the group's last entry.  Header +8
+ *     (entry count) and +0x14 (Var2Data size) are updated.
+ *   - `114/TBkndAssn/Var2Data`: the block appended at the end: Number = u32
+ *     length 8 + the f64 value (7.5 stored as 7.5, NOT x100); Text = u32 length
+ *     + UTF-16LE + NUL ("assign-text" = 24-byte payload).
+ *   - `114/TBkndAssn/FixedMeta`: ONLY the row entry's +2 u16 (its exact VarMeta
+ *     entry count, 9 -> 11).  NO tail presence bit changes for an assignment
+ *     (measured).
+ *   - `114/TBkndTask/Props` and `114/TBkndAssn/Props`: one new 88-byte record
+ *     per field.  The Task record is keyed by the PjTask field id (0x0b400033
+ *     for Text1) and carries the assignment key at +8; the Assn record is keyed
+ *     by the assignment key and carries the PjTask id at +8.  Both are the
+ *     measured type shape: text = {id/key, 8, key/id, 7, 0, 0, 0x39b7,
+ *     0x4ceb8bbe, 0x8cfac482, id/key big-endian at +32, zeros}; number = the
+ *     same with {5, 5}.  The two opaque 32-bit stamps are Project's measured
+ *     bytes, not explained.
+ *
+ * FixedData/Fixed2Data/Fixed2Meta are never touched, and neither is the Task
+ * table (only its Props registry grows).
+ */
+
+/* The assignment-side VarMeta key (the "assignment property id") for a
+ * Number1..Number20 / Text1..Text30 field, or 0 when the family/index has no
+ * measured assignment storage.  Other families are refused for assignments. */
+std::uint32_t assignment_property_id(FieldKind kind, unsigned index);
+
+/* One assignment field edit.  `assignment_uid` is the assignment row's
+ * FixedData +0 UniqueID (not the task uid, not the row index). */
+struct AssignmentFieldEdit {
+    std::uint32_t assignment_uid = 0;
+    FieldValue value;
+};
+
+struct AssignmentFieldWrite {
+    std::uint32_t assignment_uid = 0;
+    FieldValue value;
+};
+
+struct AssignmentFieldWriteResult {
+    std::size_t fields_written = 0;
+    std::vector<AssignmentFieldWrite> fields; /* one per edit, in edit order */
+    std::vector<std::string> warnings;
+};
+
+/*
+ * Validate `edits`, write the assignment custom values, save to `path`, re-open
+ * from disk and prove the result.  Refusals (before `doc` or the output path is
+ * touched):
+ *   - an empty edit list or an unusable output path;
+ *   - an assignment uid of 0, a uid with no assignment row, a row whose
+ *     FixedMeta entry is a tombstone, or a placeholder row (task uid 0);
+ *   - a field outside Number1..Number20 / Text1..Text30: assignment Cost, Flag,
+ *     Date, Duration, unknown ids and every other family are refused (their
+ *     assignment storage is unmeasured);
+ *   - text with an embedded NUL / over 65,535 bytes, a non-finite number, or a
+ *     duplicate (assignment uid, field) edit;
+ *   - a damaged assignment table (any of the six stream geometries, a header
+ *     count/size word, a duplicate FixedMeta entry, or the Task/Assn Props
+ *     preamble and size words), or a missing Props stream (the writer cannot
+ *     create one).
+ *
+ * Only the three Assn streams plus the two Props registries change; every other
+ * stream, `214/` included, is required to be byte-identical.
+ */
+AssignmentFieldWriteResult save_assignment_field_values(
+    CfbDocument& doc, std::vector<AssignmentFieldEdit> const& edits,
+    std::string const& path);
+
+/*
+ * Read one assignment custom field from the file's measured stores.  `present`
+ * is true when its VarMeta entry exists and its block decodes; `text`/`number`
+ * carry the value.  For a field whose assignment storage is unmeasured this
+ * returns present=false with storage_measured=false rather than guessing.
+ */
+FieldValue read_assignment_field_value(CfbDocument const& doc,
+                                       std::uint32_t assignment_uid,
+                                       std::uint32_t field_id);
+
+/*
+ * WHICH STORES HOLD A VALUE (diagnostic; the W48/W60 Project gates).  Project
+ * displays a custom value only when every measured store agrees:
+ *
+ *   task field       VarMeta entry + decodable Var2Data block + its FixedMeta
+ *                    tail presence bit + the Props registration;
+ *   assignment field VarMeta entry + decodable Var2Data block + the Props
+ *                    registrations (no FixedMeta tail bit exists for these);
+ *   Flag1            the row's FixedMeta entry (the bit IS the value, so either
+ *                    state is stored) + the Props registration.
+ *
+ * A partially written value still re-reads cleanly, so this predicate is how a
+ * caller detects the known failure mode.  `complete()` is our defined rule; it
+ * is not a decode.
+ */
+struct FieldStores {
+    bool var_meta = false;   /* a VarMeta entry for (uid, key) exists */
+    bool var2_block = false; /* its block is present and decodes */
+    bool presence = false;   /* the tail bits are set (values) / the entry exists
+                              * (Flag1, whose bit carries the value) */
+    bool registered = false; /* a Props record for the field exists */
+    bool flag_field = false; /* Flag1: the bit IS the value, no VarMeta block */
+    bool complete() const {
+        return registered && presence &&
+               (flag_field || (var_meta && var2_block));
+    }
+};
+
+FieldStores field_stores(CfbDocument const& doc, std::uint32_t uid,
+                         std::uint32_t field_id,
+                         std::string_view table = "114/TBkndTask");
+
+FieldStores assignment_field_stores(CfbDocument const& doc,
+                                    std::uint32_t assignment_uid,
+                                    std::uint32_t field_id);
 
 } /* namespace mppwrite */
 

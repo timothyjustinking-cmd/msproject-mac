@@ -4,7 +4,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <sstream>
+#include <utility>
 
 namespace msproject::viewstate {
 namespace {
@@ -65,6 +67,32 @@ bool meta_header_ok(std::span<const std::uint8_t> data,
         return false;
     }
     return true;
+}
+
+bool write_fail(WriteError* error, std::string message) {
+    if (error != nullptr) {
+        error->message = std::move(message);
+    }
+    return false;
+}
+
+void put_u16(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint16_t value) {
+    bytes[offset] = static_cast<std::uint8_t>(value & 0xffu);
+    bytes[offset + 1] = static_cast<std::uint8_t>((value >> 8u) & 0xffu);
+}
+
+void put_u32(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint32_t value) {
+    bytes[offset] = static_cast<std::uint8_t>(value & 0xffu);
+    bytes[offset + 1] = static_cast<std::uint8_t>((value >> 8u) & 0xffu);
+    bytes[offset + 2] = static_cast<std::uint8_t>((value >> 16u) & 0xffu);
+    bytes[offset + 3] = static_cast<std::uint8_t>((value >> 24u) & 0xffu);
+}
+
+void append_u32(std::vector<std::uint8_t>& bytes, std::uint32_t value) {
+    bytes.push_back(static_cast<std::uint8_t>(value & 0xffu));
+    bytes.push_back(static_cast<std::uint8_t>((value >> 8u) & 0xffu));
+    bytes.push_back(static_cast<std::uint8_t>((value >> 16u) & 0xffu));
+    bytes.push_back(static_cast<std::uint8_t>((value >> 24u) & 0xffu));
 }
 
 }  // namespace
@@ -574,6 +602,7 @@ bool parse_view_state(std::string_view klass,
             }
         }
     }
+    out.parsed = true;
     return true;
 }
 
@@ -643,6 +672,294 @@ std::string describe_view_state(const ViewState& state,
             << " tail=" << embedded.document.tail_size() << "\n";
     }
     return out.str();
+}
+
+namespace {
+
+// Validates that `table_index` names a decoded CTable whose column block is
+// wholly inside Var2Data, and returns it with the block payload's stream
+// offset.  Shared by both mutators so they cannot disagree about the target.
+const TableDef* writable_table(const ViewState& state,
+                               std::size_t table_index,
+                               WriteError* error,
+                               std::size_t& payload_start) {
+    if (!state.parsed) {
+        write_fail(error,
+                   "view state did not parse: parse_view_state() must succeed before an edit");
+        return nullptr;
+    }
+    if (table_index >= state.tables.size()) {
+        write_fail(error, "table index " + std::to_string(table_index) + " is out of range (" +
+                              std::to_string(state.tables.size()) + " table(s))");
+        return nullptr;
+    }
+    const TableDef& table = state.tables[table_index];
+    if (!table.decoded) {
+        write_fail(error, "table " + std::to_string(table_index) +
+                              " has no decoded 0x20400006 column block");
+        return nullptr;
+    }
+    const std::size_t start = static_cast<std::size_t>(table.block_offset) + 4;
+    if (start > state.var2_data.size() ||
+        static_cast<std::size_t>(table.block_length) < kTableBlockHeaderSize ||
+        static_cast<std::size_t>(table.block_length) > state.var2_data.size() - start) {
+        write_fail(error, "table " + std::to_string(table_index) +
+                              " column block lies outside Var2Data");
+        return nullptr;
+    }
+    const std::size_t declared = static_cast<std::size_t>(table.last_column_index) + 1;
+    if (declared != table.columns.size() ||
+        static_cast<std::size_t>(table.block_length) !=
+            kTableBlockHeaderSize + declared * kColumnRecordSize) {
+        write_fail(error, "table " + std::to_string(table_index) +
+                              " column block does not match its decoded column list");
+        return nullptr;
+    }
+    payload_start = start;
+    return &table;
+}
+
+}  // namespace
+
+PartSet EncodedParts::parts() const {
+    PartSet out;
+    out.fixed_data = fixed_data;
+    out.fixed_meta = fixed_meta;
+    out.var_meta = var_meta;
+    out.var2_data = var2_data;
+    return out;
+}
+
+bool encode_view_state(const ViewState& state, EncodedParts& out, WriteError* error) {
+    out = EncodedParts{};
+    if (!state.parsed) {
+        return write_fail(error,
+                          "view state did not parse: encode_view_state() only writes a "
+                          "ViewState produced by a successful parse_view_state()");
+    }
+
+    constexpr std::size_t kMaxU32 = 0xffffffffu;
+
+    // FixedData is copied verbatim.  Its 16-byte identity values belong to
+    // Project and change on every save; regenerating them would invent data.
+    if (state.fixed_data.size() > kMaxU32) {
+        return write_fail(error, "FixedData is too large to describe with a u32 size");
+    }
+    std::vector<std::uint8_t> fixed_data = state.fixed_data;
+
+    // FixedMeta: 16-byte header + one entry per parsed entry.
+    const std::size_t fixed_entry_count = state.fixed_meta.entries.size();
+    std::uint32_t fixed_entry_size = 0;
+    if (fixed_entry_count != 0) {
+        if (state.fixed_meta.entry_size < 8) {
+            return write_fail(error, "FixedMeta entry size " +
+                                         std::to_string(state.fixed_meta.entry_size) +
+                                         " is too small to hold state/var_count/fixed_offset");
+        }
+        fixed_entry_size = state.fixed_meta.entry_size;
+    }
+    if (fixed_entry_count > kMaxU32) {
+        return write_fail(error, "FixedMeta has too many entries to describe with a u32 count");
+    }
+    std::vector<std::uint8_t> fixed_meta(
+        kFixedMetaHeaderSize + fixed_entry_count * fixed_entry_size, 0);
+    put_u32(fixed_meta, 0, kMetaMagic);
+    put_u32(fixed_meta, 4, state.fixed_meta.flags);
+    put_u32(fixed_meta, 8, static_cast<std::uint32_t>(fixed_entry_count));
+    put_u32(fixed_meta, 12, static_cast<std::uint32_t>(fixed_data.size()));
+    for (std::size_t i = 0; i < fixed_entry_count; ++i) {
+        const FixedMetaEntry& entry = state.fixed_meta.entries[i];
+        const std::size_t base = kFixedMetaHeaderSize + i * fixed_entry_size;
+        const std::size_t opaque = fixed_entry_size - 8;
+        if (entry.opaque_tail.size() != opaque) {
+            return write_fail(error, "FixedMeta entry " + std::to_string(i) + " has " +
+                                         std::to_string(entry.opaque_tail.size()) +
+                                         " opaque byte(s) but entry size " +
+                                         std::to_string(fixed_entry_size) + " needs " +
+                                         std::to_string(opaque));
+        }
+        put_u16(fixed_meta, base, entry.state);
+        put_u16(fixed_meta, base + 2, entry.var_count);
+        put_u32(fixed_meta, base + 4, entry.fixed_offset);
+        std::copy(entry.opaque_tail.begin(), entry.opaque_tail.end(),
+                  fixed_meta.begin() + static_cast<std::ptrdiff_t>(base + 8));
+    }
+
+    // Var2Data: re-frame every block in stream order.  The new offsets are the
+    // positions the length words land at, so VarMeta offsets below are derived
+    // from the bytes rather than trusted from the input.
+    if (state.block_refs.size() != state.blocks.size()) {
+        return write_fail(error, "ViewState block_refs do not match its Var2Data blocks");
+    }
+    std::vector<std::uint8_t> var2_data;
+    var2_data.reserve(state.var2_data.size());
+    std::vector<std::uint32_t> new_offsets(state.blocks.size(), 0);
+    for (std::size_t i = 0; i < state.blocks.size(); ++i) {
+        const VarBlock& block = state.blocks[i];
+        const std::size_t start = static_cast<std::size_t>(block.offset) + 4;
+        if (start > state.var2_data.size() ||
+            static_cast<std::size_t>(block.payload_length) >
+                state.var2_data.size() - start) {
+            return write_fail(error, "Var2Data block " + std::to_string(i) + " at offset " +
+                                         std::to_string(block.offset) +
+                                         " runs past the stream");
+        }
+        if (var2_data.size() > kMaxU32) {
+            return write_fail(error, "Var2Data is too large to describe with a u32 size");
+        }
+        new_offsets[i] = static_cast<std::uint32_t>(var2_data.size());
+        append_u32(var2_data, block.payload_length);
+        var2_data.insert(
+            var2_data.end(),
+            state.var2_data.begin() + static_cast<std::ptrdiff_t>(start),
+            state.var2_data.begin() +
+                static_cast<std::ptrdiff_t>(start + block.payload_length));
+    }
+    if (var2_data.size() > kMaxU32) {
+        return write_fail(error, "Var2Data is too large to describe with a u32 size");
+    }
+
+    // VarMeta: preserve the three reserved header words and any trailing bytes
+    // the parser found, but recompute the count, offsets and var2_size.
+    if (state.var_meta_bytes.size() < kVarMetaHeaderSize) {
+        return write_fail(error, "VarMeta is shorter than its 24-byte header");
+    }
+    const std::size_t var_entry_count = state.var_meta.entries.size();
+    const std::size_t var_entries_size = kVarMetaHeaderSize + var_entry_count * 12;
+    if (state.var_meta_bytes.size() < var_entries_size) {
+        return write_fail(error, "VarMeta is shorter than its decoded entry list");
+    }
+    if (var_entry_count > kMaxU32) {
+        return write_fail(error, "VarMeta has too many entries to describe with a u32 count");
+    }
+    const std::size_t trailing = state.var_meta_bytes.size() - var_entries_size;
+    std::vector<std::uint8_t> var_meta(var_entries_size + trailing, 0);
+    put_u32(var_meta, 0, kMetaMagic);
+    put_u32(var_meta, 4, read_u32(state.var_meta_bytes, 4));
+    put_u32(var_meta, 8, static_cast<std::uint32_t>(var_entry_count));
+    put_u32(var_meta, 12, read_u32(state.var_meta_bytes, 12));
+    put_u32(var_meta, 16, read_u32(state.var_meta_bytes, 16));
+    put_u32(var_meta, 20, static_cast<std::uint32_t>(var2_data.size()));
+    std::vector<bool> claimed(state.blocks.size(), false);
+    for (std::size_t i = 0; i < var_entry_count; ++i) {
+        const VarMetaEntry& entry = state.var_meta.entries[i];
+        std::size_t matched = state.blocks.size();
+        // Prefer the block the entry originally named: two blocks can share a
+        // (uid, key) pair, and then only the old offset distinguishes them.
+        for (std::size_t j = 0; j < state.blocks.size(); ++j) {
+            if (!claimed[j] && state.blocks[j].offset == entry.offset &&
+                state.block_refs[j].uid == entry.uid &&
+                state.block_refs[j].key == entry.key) {
+                matched = j;
+                break;
+            }
+        }
+        if (matched == state.blocks.size()) {
+            for (std::size_t j = 0; j < state.blocks.size(); ++j) {
+                if (!claimed[j] && state.block_refs[j].uid == entry.uid &&
+                    state.block_refs[j].key == entry.key) {
+                    matched = j;
+                    break;
+                }
+            }
+        }
+        if (matched == state.blocks.size()) {
+            return write_fail(error, "VarMeta entry " + std::to_string(i) + " (uid " +
+                                         std::to_string(entry.uid) + ", key " +
+                                         hex32(entry.key) + ") has no matching Var2Data block");
+        }
+        claimed[matched] = true;
+        const std::size_t base = kVarMetaHeaderSize + i * 12;
+        put_u32(var_meta, base, entry.uid);
+        put_u32(var_meta, base + 4, new_offsets[matched]);
+        put_u32(var_meta, base + 8, entry.key);
+    }
+    if (trailing != 0) {
+        std::copy(state.var_meta_bytes.end() - static_cast<std::ptrdiff_t>(trailing),
+                  state.var_meta_bytes.end(),
+                  var_meta.begin() + static_cast<std::ptrdiff_t>(var_entries_size));
+    }
+
+    out.fixed_data = std::move(fixed_data);
+    out.fixed_meta = std::move(fixed_meta);
+    out.var_meta = std::move(var_meta);
+    out.var2_data = std::move(var2_data);
+    return true;
+}
+
+bool set_table_date_format(ViewState& state,
+                           std::size_t table_index,
+                           std::uint8_t date_format,
+                           WriteError* error) {
+    std::size_t payload_start = 0;
+    const TableDef* table = writable_table(state, table_index, error, payload_start);
+    if (table == nullptr) {
+        return false;
+    }
+    const std::size_t at = payload_start + 7;
+    if (at >= state.var2_data.size()) {
+        return write_fail(error, "table " + std::to_string(table_index) +
+                                     " date-format byte lies outside Var2Data");
+    }
+    state.var2_data[at] = date_format;
+    state.tables[table_index].date_format = date_format;
+    return true;
+}
+
+bool set_table_column(ViewState& state,
+                      std::size_t table_index,
+                      std::size_t column_index,
+                      std::uint32_t field_id,
+                      std::string_view title,
+                      WriteError* error) {
+    std::size_t payload_start = 0;
+    const TableDef* table = writable_table(state, table_index, error, payload_start);
+    if (table == nullptr) {
+        return false;
+    }
+    if (column_index >= table->columns.size()) {
+        return write_fail(error, "column index " + std::to_string(column_index) +
+                                     " is out of range (" +
+                                     std::to_string(table->columns.size()) + " column(s))");
+    }
+    if (field_id == 0) {
+        return write_fail(error, "field id 0 is not a valid column field");
+    }
+    if (title.size() > kColumnTitleCapacity) {
+        return write_fail(error, "title is " + std::to_string(title.size()) +
+                                     " code units; the CTable column title capacity is " +
+                                     std::to_string(kColumnTitleCapacity));
+    }
+    for (const char ch : title) {
+        const unsigned char byte = static_cast<unsigned char>(ch);
+        if (byte < 0x20 || byte > 0x7e) {
+            return write_fail(error,
+                              "title must be printable ASCII (the decoder reads ASCII titles only)");
+        }
+    }
+    const ColumnDef& column = table->columns[column_index];
+    const std::size_t record = payload_start + column.record_offset;
+    if (record > state.var2_data.size() ||
+        kColumnRecordSize > state.var2_data.size() - record) {
+        return write_fail(error, "table " + std::to_string(table_index) + " column " +
+                                     std::to_string(column_index) +
+                                     " record lies outside Var2Data");
+    }
+    put_u32(state.var2_data, record, field_id);
+    // Project zero-filled the rest of the title area after the replacement's
+    // NUL (measured on the w14 tablecol2-I/J fixture pair), so do the same.
+    std::fill(
+        state.var2_data.begin() + static_cast<std::ptrdiff_t>(record + kColumnTitleOffset),
+        state.var2_data.begin() + static_cast<std::ptrdiff_t>(record + kColumnRecordSize),
+        std::uint8_t{0});
+    for (std::size_t i = 0; i < title.size(); ++i) {
+        state.var2_data[record + kColumnTitleOffset + i * 2] =
+            static_cast<std::uint8_t>(title[i]);
+    }
+    ColumnDef& target = state.tables[table_index].columns[column_index];
+    target.field_id = field_id;
+    target.title = std::string(title);
+    return true;
 }
 
 }  // namespace msproject::viewstate
