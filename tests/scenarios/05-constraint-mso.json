@@ -1,0 +1,11 @@
+{
+  "name": "constraint-mso",
+  "base": "synthetic-base",
+  "operations": [
+    {"op": "set_task_field", "uid": 3, "field": 188743697, "value": 2},
+    {"op": "set_task_field", "uid": 3, "field": 188743698, "value": "2026-01-20 08:00"},
+    {"op": "recalculate"},
+    {"op": "save"}
+  ],
+  "compare": "all"
+}

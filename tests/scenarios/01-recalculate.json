@@ -1,0 +1,9 @@
+{
+  "name": "recalculate",
+  "base": "synthetic-base",
+  "operations": [
+    {"op": "recalculate"},
+    {"op": "save"}
+  ],
+  "compare": "all"
+}

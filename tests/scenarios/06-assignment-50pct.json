@@ -1,0 +1,10 @@
+{
+  "name": "assignment-50pct",
+  "base": "synthetic-base",
+  "operations": [
+    {"op": "add_assignment", "task_uid": 1, "resource_uid": 1, "units_percent": 50},
+    {"op": "recalculate"},
+    {"op": "save"}
+  ],
+  "compare": "all"
+}

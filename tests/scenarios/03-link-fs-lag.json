@@ -1,0 +1,10 @@
+{
+  "name": "link-fs-lag",
+  "base": "synthetic-base",
+  "operations": [
+    {"op": "add_link", "predecessor_uid": 1, "successor_uid": 2, "type": "FS", "lag_ticks": 4800},
+    {"op": "recalculate"},
+    {"op": "save"}
+  ],
+  "compare": "all"
+}

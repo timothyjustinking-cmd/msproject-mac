@@ -1,0 +1,12 @@
+{
+  "name": "delete-task-with-successor",
+  "base": "synthetic-base",
+  "operations": [
+    {"op": "add_link", "predecessor_uid": 1, "successor_uid": 2, "type": "FS", "lag_ticks": 0},
+    {"op": "add_link", "predecessor_uid": 2, "successor_uid": 3, "type": "FS", "lag_ticks": 0},
+    {"op": "delete_task", "uid": 2},
+    {"op": "recalculate"},
+    {"op": "save"}
+  ],
+  "compare": "all"
+}

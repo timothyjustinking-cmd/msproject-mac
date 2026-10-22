@@ -176,6 +176,57 @@ if(CORE_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         )
     endif()
+
+    # -----------------------------------------------------------------------
+    # E1 (wave 17): the differential engine/backend harness.
+    #
+    # tests/engine_diff_tests.cpp is both the ctest self-test and the C++ half
+    # of scripts/engine_diff.py (--apply / --dump).  The self-test applies a
+    # built-in operation list to a COPY of tests/data/synthetic-base.mpp and
+    # asserts the documented values; scripts/engine_diff.py --selftest then
+    # proves the canonical dump and the field-by-field diff end to end without
+    # MS Project (a self-recorded oracle passes, a tampered one fails naming
+    # the field).  No COM runs here: recording an oracle is coordinator-only.
+    # -----------------------------------------------------------------------
+    if(TARGET core_mpp AND TARGET core_mppwrite AND TARGET core_plan AND
+       TARGET core_cal)
+        add_executable(engine_diff_tests tests/engine_diff_tests.cpp)
+        target_link_libraries(engine_diff_tests PRIVATE
+            core_mpp core_mppwrite core_plan core_cal)
+        target_compile_features(engine_diff_tests PRIVATE cxx_std_20)
+        set_target_properties(engine_diff_tests PROPERTIES CXX_EXTENSIONS OFF)
+        core_set_warnings(engine_diff_tests)
+
+        set(ENGINE_DIFF_TEST_DATA "${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+        set(ENGINE_DIFF_TEST_OUT "${CMAKE_CURRENT_BINARY_DIR}/engine-diff")
+        file(TO_CMAKE_PATH "${ENGINE_DIFF_TEST_DATA}" ENGINE_DIFF_TEST_DATA)
+        file(TO_CMAKE_PATH "${ENGINE_DIFF_TEST_OUT}" ENGINE_DIFF_TEST_OUT)
+        target_compile_definitions(engine_diff_tests PRIVATE
+            ENGINE_DIFF_TEST_DATA="${ENGINE_DIFF_TEST_DATA}"
+            ENGINE_DIFF_TEST_OUT="${ENGINE_DIFF_TEST_OUT}"
+        )
+
+        add_test(NAME engine_diff_apply COMMAND engine_diff_tests)
+        set_tests_properties(engine_diff_apply PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        )
+
+        if(Python3_Interpreter_FOUND AND EXISTS "${Python3_EXECUTABLE}")
+            add_test(NAME engine_diff_harness
+                COMMAND "${Python3_EXECUTABLE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/engine_diff.py"
+                        --selftest
+                        --apply-bin "$<TARGET_FILE:engine_diff_tests>"
+                        --workdir "${CMAKE_CURRENT_BINARY_DIR}/engine-diff/harness"
+            )
+            set_tests_properties(engine_diff_harness PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            )
+        else()
+            message(STATUS
+                "Python3 not found: engine_diff_harness test not registered")
+        endif()
+    endif()
 endif()
 
 # The adversarial/fuzz lane (W57) is self-contained but wired here so the root

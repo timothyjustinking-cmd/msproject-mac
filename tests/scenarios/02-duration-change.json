@@ -1,0 +1,10 @@
+{
+  "name": "duration-change",
+  "base": "synthetic-base",
+  "operations": [
+    {"op": "set_task_field", "uid": 1, "field": 188743709, "value": 14400},
+    {"op": "recalculate"},
+    {"op": "save"}
+  ],
+  "compare": "all"
+}

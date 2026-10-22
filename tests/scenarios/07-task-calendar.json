@@ -1,0 +1,10 @@
+{
+  "name": "task-calendar",
+  "base": "synthetic-base",
+  "operations": [
+    {"op": "set_calendar", "task_uid": 1, "calendar_uid": 2},
+    {"op": "recalculate"},
+    {"op": "save"}
+  ],
+  "compare": "all"
+}

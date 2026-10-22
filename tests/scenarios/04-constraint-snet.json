@@ -1,0 +1,11 @@
+{
+  "name": "constraint-snet",
+  "base": "synthetic-base",
+  "operations": [
+    {"op": "set_task_field", "uid": 2, "field": 188743697, "value": 4},
+    {"op": "set_task_field", "uid": 2, "field": 188743698, "value": "2026-02-02 08:00"},
+    {"op": "recalculate"},
+    {"op": "save"}
+  ],
+  "compare": "all"
+}

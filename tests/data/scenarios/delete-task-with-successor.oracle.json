@@ -1,0 +1,710 @@
+{
+  "schema": "engine-diff/1",
+  "project": {
+    "uid": 0,
+    "id": 0,
+    "start": "2026-01-04 13:00:00+00:00",
+    "finish": "2026-01-16 12:00:00+00:00",
+    "duration_ticks": 45600,
+    "priority": 500,
+    "percent_complete": 0
+  },
+  "tasks": [
+    {
+      "uid": 1,
+      "id": 1,
+      "outline_number": "1",
+      "outline_level": 1,
+      "summary": false,
+      "milestone": false,
+      "milestone_stored": true,
+      "manually_scheduled": true,
+      "critical": false,
+      "duration_ticks": 24000,
+      "duration_format": 7,
+      "start": "2026-01-04 13:00:00+00:00",
+      "finish": "2026-01-09 12:00:00+00:00",
+      "calculated_start": "2026-01-05 08:00:00+00:00",
+      "calculated_finish": "2026-01-09 17:00:00+00:00",
+      "priority": 500,
+      "percent_complete": 0,
+      "free_slack_ticks": 24000,
+      "start_slack_ticks": 24000,
+      "total_slack_ticks": 24000,
+      "start_anchor": "2026-01-04 13:00:00+00:00",
+      "calendar_uid": -1,
+      "constraint_type": 0,
+      "constraint_date": "",
+      "deadline": "",
+      "actual_start": "",
+      "actual_finish": "",
+      "actual_duration_ticks": 0,
+      "child_count": 0,
+      "custom": {
+        "0x0b400048": {
+          "kind": "flag",
+          "present": true,
+          "measured": true,
+          "value": false
+        }
+      }
+    },
+    {
+      "uid": 3,
+      "id": 2,
+      "outline_number": "2",
+      "outline_level": 1,
+      "summary": false,
+      "milestone": false,
+      "milestone_stored": true,
+      "manually_scheduled": true,
+      "critical": false,
+      "duration_ticks": 9600,
+      "duration_format": 7,
+      "start": "2026-01-14 13:00:00+00:00",
+      "finish": "2026-01-16 12:00:00+00:00",
+      "calculated_start": "2026-01-05 08:00:00+00:00",
+      "calculated_finish": "2026-01-06 17:00:00+00:00",
+      "priority": 500,
+      "percent_complete": 0,
+      "free_slack_ticks": 0,
+      "start_slack_ticks": 0,
+      "total_slack_ticks": 0,
+      "start_anchor": "2026-01-14 13:00:00+00:00",
+      "calendar_uid": -1,
+      "constraint_type": 0,
+      "constraint_date": "",
+      "deadline": "",
+      "actual_start": "",
+      "actual_finish": "",
+      "actual_duration_ticks": 0,
+      "child_count": 0,
+      "custom": {
+        "0x0b400048": {
+          "kind": "flag",
+          "present": true,
+          "measured": true,
+          "value": false
+        }
+      }
+    }
+  ],
+  "links": [],
+  "assignments": [
+    {
+      "uid": 1,
+      "task_uid": 1,
+      "resource_uid": 0,
+      "units_x100": 10000,
+      "work_ticks": 24000,
+      "start": "2026-01-04 13:00:00+00:00",
+      "finish": "2026-01-09 12:00:00+00:00",
+      "resume": "2026-01-04 13:00:00+00:00"
+    },
+    {
+      "uid": 3,
+      "task_uid": 3,
+      "resource_uid": 0,
+      "units_x100": 10000,
+      "work_ticks": 9600,
+      "start": "2026-01-14 13:00:00+00:00",
+      "finish": "2026-01-16 12:00:00+00:00",
+      "resume": "2026-01-14 13:00:00+00:00"
+    }
+  ],
+  "resources": [
+    {
+      "uid": 1,
+      "id": 1,
+      "type": 0,
+      "type_stored": true,
+      "max_units_x100": 10000
+    }
+  ],
+  "calendar_table": {
+    "decoded": true,
+    "default_week": [
+      {
+        "use_base": false,
+        "intervals": []
+      },
+      {
+        "use_base": false,
+        "intervals": [
+          [
+            4800,
+            2400
+          ],
+          [
+            7800,
+            2400
+          ]
+        ]
+      },
+      {
+        "use_base": false,
+        "intervals": [
+          [
+            4800,
+            2400
+          ],
+          [
+            7800,
+            2400
+          ]
+        ]
+      },
+      {
+        "use_base": false,
+        "intervals": [
+          [
+            4800,
+            2400
+          ],
+          [
+            7800,
+            2400
+          ]
+        ]
+      },
+      {
+        "use_base": false,
+        "intervals": [
+          [
+            4800,
+            2400
+          ],
+          [
+            7800,
+            2400
+          ]
+        ]
+      },
+      {
+        "use_base": false,
+        "intervals": [
+          [
+            4800,
+            2400
+          ],
+          [
+            7800,
+            2400
+          ]
+        ]
+      },
+      {
+        "use_base": false,
+        "intervals": []
+      }
+    ],
+    "metadata_anomalies": 0,
+    "recurring_exceptions": 0,
+    "sub_minute_intervals": 0,
+    "calendars": [
+      {
+        "uid": 1,
+        "base_uid": 0,
+        "resource_uid": -1,
+        "has_week_data": false,
+        "week": [
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          }
+        ],
+        "exceptions": [],
+        "work_weeks": []
+      },
+      {
+        "uid": 2,
+        "base_uid": 1,
+        "resource_uid": 0,
+        "has_week_data": false,
+        "week": [
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          }
+        ],
+        "exceptions": [],
+        "work_weeks": []
+      },
+      {
+        "uid": 3,
+        "base_uid": 1,
+        "resource_uid": 1,
+        "has_week_data": false,
+        "week": [
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          },
+          {
+            "use_base": true,
+            "intervals": []
+          }
+        ],
+        "exceptions": [],
+        "work_weeks": []
+      }
+    ]
+  },
+  "file": {
+    "stream_count": 96,
+    "streams": [
+      {
+        "path": "?CompObj",
+        "size": 115
+      },
+      {
+        "path": "?DocumentSummaryInformation",
+        "size": 1080
+      },
+      {
+        "path": "?SummaryInformation",
+        "size": 264
+      },
+      {
+        "path": "114/Props",
+        "size": 88690
+      },
+      {
+        "path": "114/TBkndAssn/Fixed2Data",
+        "size": 144
+      },
+      {
+        "path": "114/TBkndAssn/Fixed2Meta",
+        "size": 175
+      },
+      {
+        "path": "114/TBkndAssn/FixedData",
+        "size": 330
+      },
+      {
+        "path": "114/TBkndAssn/FixedMeta",
+        "size": 118
+      },
+      {
+        "path": "114/TBkndAssn/Props",
+        "size": 88
+      },
+      {
+        "path": "114/TBkndAssn/Var2Data",
+        "size": 376
+      },
+      {
+        "path": "114/TBkndAssn/VarMeta",
+        "size": 96
+      },
+      {
+        "path": "114/TBkndAttachment/FixedData",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndAttachment/FixedMeta",
+        "size": 16
+      },
+      {
+        "path": "114/TBkndAttachment/Var2Data",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndAttachment/VarMeta",
+        "size": 24
+      },
+      {
+        "path": "114/TBkndCal/Fixed2Data",
+        "size": 336
+      },
+      {
+        "path": "114/TBkndCal/Fixed2Meta",
+        "size": 86
+      },
+      {
+        "path": "114/TBkndCal/FixedData",
+        "size": 100
+      },
+      {
+        "path": "114/TBkndCal/FixedMeta",
+        "size": 86
+      },
+      {
+        "path": "114/TBkndCal/Var2Data",
+        "size": 22
+      },
+      {
+        "path": "114/TBkndCal/VarMeta",
+        "size": 36
+      },
+      {
+        "path": "114/TBkndChecklistItem/FixedData",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndChecklistItem/FixedMeta",
+        "size": 16
+      },
+      {
+        "path": "114/TBkndChecklistItem/Var2Data",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndChecklistItem/VarMeta",
+        "size": 24
+      },
+      {
+        "path": "114/TBkndCons/Fixed2Data",
+        "size": 96
+      },
+      {
+        "path": "114/TBkndCons/Fixed2Meta",
+        "size": 34
+      },
+      {
+        "path": "114/TBkndCons/FixedData",
+        "size": 40
+      },
+      {
+        "path": "114/TBkndCons/FixedMeta",
+        "size": 36
+      },
+      {
+        "path": "114/TBkndCons/Var2Data",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndCons/VarMeta",
+        "size": 24
+      },
+      {
+        "path": "114/TBkndConversation/FixedData",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndConversation/FixedMeta",
+        "size": 16
+      },
+      {
+        "path": "114/TBkndConversation/Var2Data",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndConversation/VarMeta",
+        "size": 24
+      },
+      {
+        "path": "114/TBkndLabel/FixedData",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndLabel/FixedMeta",
+        "size": 16
+      },
+      {
+        "path": "114/TBkndLabel/Var2Data",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndLabel/VarMeta",
+        "size": 24
+      },
+      {
+        "path": "114/TBkndLabelAssociation/FixedData",
+        "size": 0
+      },
+      {
+        "path": "114/TBkndLabelAssociation/FixedMeta",
+        "size": 16
+      },
+      {
+        "path": "114/TBkndLabelAssociation/VarMeta",
+        "size": 24
+      },
+      {
+        "path": "114/TBkndOutlCode/Fixed2Data",
+        "size": 136
+      },
+      {
+        "path": "114/TBkndOutlCode/Fixed2Meta",
+        "size": 56
+      },
+      {
+        "path": "114/TBkndOutlCode/FixedData",
+        "size": 62
+      },
+      {
+        "path": "114/TBkndOutlCode/FixedMeta",
+        "size": 56
+      },
+      {
+        "path": "114/TBkndOutlCode/Var2Data",
+        "size": 12
+      },
+      {
+        "path": "114/TBkndOutlCode/VarMeta",
+        "size": 36
+      },
+      {
+        "path": "114/TBkndRsc/Fixed2Data",
+        "size": 200
+      },
+      {
+        "path": "114/TBkndRsc/Fixed2Meta",
+        "size": 271
+      },
+      {
+        "path": "114/TBkndRsc/FixedData",
+        "size": 392
+      },
+      {
+        "path": "114/TBkndRsc/FixedMeta",
+        "size": 201
+      },
+      {
+        "path": "114/TBkndRsc/Props",
+        "size": 72
+      },
+      {
+        "path": "114/TBkndRsc/Var2Data",
+        "size": 86
+      },
+      {
+        "path": "114/TBkndRsc/VarMeta",
+        "size": 108
+      },
+      {
+        "path": "114/TBkndTask/Fixed2Data",
+        "size": 448
+      },
+      {
+        "path": "114/TBkndTask/Fixed2Meta",
+        "size": 688
+      },
+      {
+        "path": "114/TBkndTask/FixedData",
+        "size": 856
+      },
+      {
+        "path": "114/TBkndTask/FixedMeta",
+        "size": 345
+      },
+      {
+        "path": "114/TBkndTask/Props",
+        "size": 86
+      },
+      {
+        "path": "114/TBkndTask/Var2Data",
+        "size": 464
+      },
+      {
+        "path": "114/TBkndTask/VarMeta",
+        "size": 528
+      },
+      {
+        "path": "214/CDrawing/FixedData",
+        "size": 0
+      },
+      {
+        "path": "214/CDrawing/FixedMeta",
+        "size": 16
+      },
+      {
+        "path": "214/CDrawing/Var2Data",
+        "size": 0
+      },
+      {
+        "path": "214/CDrawing/VarMeta",
+        "size": 24
+      },
+      {
+        "path": "214/CEdl/FixedData",
+        "size": 160
+      },
+      {
+        "path": "214/CEdl/FixedMeta",
+        "size": 27
+      },
+      {
+        "path": "214/CEdl/Var2Data",
+        "size": 746
+      },
+      {
+        "path": "214/CEdl/VarMeta",
+        "size": 36
+      },
+      {
+        "path": "214/CFilter/FixedData",
+        "size": 460
+      },
+      {
+        "path": "214/CFilter/FixedMeta",
+        "size": 36
+      },
+      {
+        "path": "214/CFilter/Var2Data",
+        "size": 224
+      },
+      {
+        "path": "214/CFilter/VarMeta",
+        "size": 48
+      },
+      {
+        "path": "214/CGrouping/FixedData",
+        "size": 460
+      },
+      {
+        "path": "214/CGrouping/FixedMeta",
+        "size": 36
+      },
+      {
+        "path": "214/CGrouping/Var2Data",
+        "size": 174
+      },
+      {
+        "path": "214/CGrouping/VarMeta",
+        "size": 48
+      },
+      {
+        "path": "214/CMap/FixedData",
+        "size": 0
+      },
+      {
+        "path": "214/CMap/FixedMeta",
+        "size": 16
+      },
+      {
+        "path": "214/CMap/Var2Data",
+        "size": 0
+      },
+      {
+        "path": "214/CMap/VarMeta",
+        "size": 24
+      },
+      {
+        "path": "214/CReport/FixedData",
+        "size": 0
+      },
+      {
+        "path": "214/CReport/FixedMeta",
+        "size": 16
+      },
+      {
+        "path": "214/CReport/Var2Data",
+        "size": 0
+      },
+      {
+        "path": "214/CReport/VarMeta",
+        "size": 24
+      },
+      {
+        "path": "214/CTable/FixedData",
+        "size": 230
+      },
+      {
+        "path": "214/CTable/FixedMeta",
+        "size": 26
+      },
+      {
+        "path": "214/CTable/Var2Data",
+        "size": 1051
+      },
+      {
+        "path": "214/CTable/VarMeta",
+        "size": 36
+      },
+      {
+        "path": "214/CV_iew/FixedData",
+        "size": 414
+      },
+      {
+        "path": "214/CV_iew/FixedMeta",
+        "size": 46
+      },
+      {
+        "path": "214/CV_iew/Var2Data",
+        "size": 100178
+      },
+      {
+        "path": "214/CV_iew/VarMeta",
+        "size": 108
+      },
+      {
+        "path": "214/Props",
+        "size": 13102
+      },
+      {
+        "path": "Props14",
+        "size": 690
+      }
+    ]
+  }
+}
