@@ -100,6 +100,43 @@ bool parse_bool(std::string_view text, bool& out) noexcept {
     return false;
 }
 
+// Wave 12: a field id in the stored column list.  Hex with an optional 0x
+// prefix; decimal is deliberately not accepted so the two cannot be confused.
+bool parse_field_key(std::string_view text, std::uint32_t& out) noexcept {
+    if (text.size() > 2 && (text[0] == '0') && (text[1] == 'x' || text[1] == 'X')) {
+        text.remove_prefix(2);
+    }
+    if (text.empty() || text.size() > 8) {
+        return false;
+    }
+    std::uint32_t value = 0;
+    for (const char character : text) {
+        std::uint32_t digit = 0;
+        if (character >= '0' && character <= '9') {
+            digit = static_cast<std::uint32_t>(character - '0');
+        } else if (character >= 'a' && character <= 'f') {
+            digit = static_cast<std::uint32_t>(character - 'a') + 10u;
+        } else if (character >= 'A' && character <= 'F') {
+            digit = static_cast<std::uint32_t>(character - 'A') + 10u;
+        } else {
+            return false;
+        }
+        value = (value << 4) | digit;
+    }
+    out = value;
+    return value != 0;
+}
+
+// "0x0b400033" -- the stored form of a field id.
+std::string field_key(std::uint32_t field) {
+    static const char digits[] = "0123456789abcdef";
+    std::string text = "0x";
+    for (int shift = 28; shift >= 0; shift -= 4) {
+        text.push_back(digits[(field >> static_cast<unsigned>(shift)) & 0x0fu]);
+    }
+    return text;
+}
+
 bool parse_int(std::string_view text, int& out) noexcept {
     if (text.empty()) {
         return false;
@@ -222,27 +259,92 @@ void apply_preferences(const Preferences& preferences,
     format.date = date_format_for(preferences);
 }
 
-bool formula_column_visible(const Preferences& preferences, std::size_t index) noexcept {
-    if (index == 0) {
-        return preferences.formula_duration_column;
+bool column_visible(const Preferences& preferences, core::view::FieldId field,
+                    bool default_visible) noexcept {
+    if (field == 0) {
+        return default_visible;
     }
-    if (index == 1) {
-        return preferences.formula_date_column;
+    for (const ColumnVisibility& column : preferences.column_visibility) {
+        if (column.field == field) {
+            return column.visible;
+        }
     }
+    return default_visible;
+}
+
+bool set_column_visible(Preferences& preferences, core::view::FieldId field, bool visible,
+                        bool default_visible) noexcept {
+    if (field == 0) {
+        return false;
+    }
+    for (ColumnVisibility& column : preferences.column_visibility) {
+        if (column.field != field) {
+            continue;
+        }
+        if (visible == default_visible) {
+            // A choice equal to the default is not a preference: dropping it
+            // keeps the stored line (and the parser) honest and short.
+            for (std::size_t index = 0; index < preferences.column_visibility.size();
+                 ++index) {
+                if (preferences.column_visibility[index].field == field) {
+                    preferences.column_visibility.erase(
+                        preferences.column_visibility.begin() +
+                        static_cast<std::ptrdiff_t>(index));
+                    break;
+                }
+            }
+        } else {
+            column.visible = visible;
+        }
+        return true;
+    }
+    if (visible == default_visible) {
+        return true;  // nothing recorded, and nothing needs to be
+    }
+    if (preferences.column_visibility.size() >= kMaxColumnVisibility) {
+        return false;
+    }
+    ColumnVisibility entry;
+    entry.field = field;
+    entry.visible = visible;
+    preferences.column_visibility.push_back(entry);
     return true;
+}
+
+bool formula_column_visible(const Preferences& preferences, std::size_t index) noexcept {
+    bool fallback = true;
+    if (index == 0) {
+        fallback = preferences.formula_duration_column;
+    } else if (index == 1) {
+        fallback = preferences.formula_date_column;
+    } else {
+        return true;
+    }
+    const std::vector<FormulaColumnSpec>& specs = formula_column_specs();
+    if (index >= specs.size() || specs[index].field == 0) {
+        return fallback;
+    }
+    return column_visible(preferences, specs[index].field, fallback);
 }
 
 bool set_formula_column_visible(Preferences& preferences, std::size_t index,
                                 bool visible) noexcept {
+    bool fallback = true;
     if (index == 0) {
         preferences.formula_duration_column = visible;
-        return true;
-    }
-    if (index == 1) {
+    } else if (index == 1) {
         preferences.formula_date_column = visible;
-        return true;
+    } else {
+        return false;
     }
-    return false;
+    // The demo column's field id may be unresolved in a table-less build; the
+    // flag above still carries the choice, so this is only the per-column
+    // override on top of it.
+    const std::vector<FormulaColumnSpec>& specs = formula_column_specs();
+    if (index < specs.size() && specs[index].field != 0) {
+        (void)set_column_visible(preferences, specs[index].field, visible, fallback);
+    }
+    return true;
 }
 
 core::gantt::GanttZoom gantt_zoom(ZoomLevel level) noexcept {
@@ -288,6 +390,21 @@ std::string serialize_preferences(const Preferences& preferences) {
     text += preferences.formula_date_column ? "1" : "0";
     text += ";custom=";
     text += preferences.stored_custom_fields ? "1" : "0";
+    // Wave 12: the per-column overrides (stored custom fields and formula
+    // columns), as field id:visibility pairs.  Only deviations are listed.
+    text += ";columns=";
+    bool first_column = true;
+    for (const ColumnVisibility& column : preferences.column_visibility) {
+        if (column.field == 0) {
+            continue;
+        }
+        if (!first_column) {
+            text.push_back(',');
+        }
+        first_column = false;
+        text += field_key(column.field);
+        text += column.visible ? ":1" : ":0";
+    }
     return text;
 }
 
@@ -363,6 +480,37 @@ bool parse_preferences(std::string_view text, Preferences& out) {
                 if (parse_bool(value, shown)) {
                     parsed.stored_custom_fields = shown;
                     read_any = true;
+                }
+            } else if (key == "columns") {
+                // "0x0b400033:1,0x0b400057:0".  A malformed entry is skipped,
+                // never fatal; an empty value clears the list.
+                parsed.column_visibility.clear();
+                std::size_t entry_position = 0;
+                while (entry_position <= value.size()) {
+                    const std::size_t comma = value.find(',', entry_position);
+                    const std::string_view entry = trim(value.substr(
+                        entry_position, comma == std::string_view::npos
+                                            ? value.size() - entry_position
+                                            : comma - entry_position));
+                    if (!entry.empty()) {
+                        const std::size_t colon = entry.find(':');
+                        std::uint32_t field = 0;
+                        bool shown = true;
+                        if (colon != std::string_view::npos &&
+                            parse_field_key(trim(entry.substr(0, colon)), field) &&
+                            parse_bool(trim(entry.substr(colon + 1)), shown) &&
+                            parsed.column_visibility.size() < kMaxColumnVisibility) {
+                            ColumnVisibility column;
+                            column.field = field;
+                            column.visible = shown;
+                            parsed.column_visibility.push_back(column);
+                            read_any = true;
+                        }
+                    }
+                    if (comma == std::string_view::npos) {
+                        break;
+                    }
+                    entry_position = comma + 1;
                 }
             }
         }

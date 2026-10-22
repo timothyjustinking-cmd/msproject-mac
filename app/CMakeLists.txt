@@ -111,10 +111,14 @@ set(CORE_PLAN_BUILD_TESTS OFF CACHE BOOL "core/plan tests (off: app configure)" 
 set(CAL_BUILD_TESTS OFF CACHE BOOL "core/cal tests (off: app configure)" FORCE)
 set(IO_BUILD_TESTS OFF CACHE BOOL "core/io tests (off: app configure)" FORCE)
 set(MPPWRITE_BUILD_TESTS OFF CACHE BOOL "core/mppwrite tests (off: app configure)" FORCE)
+# Wave 12: core/props decodes 114/Props -- the stored formula text the task sheet
+# shows as computed columns.  Its test binary is a stream test, so it stays off.
+set(PROPS_BUILD_TESTS OFF CACHE BOOL "core/props tests (off: app configure)" FORCE)
 
 # Order matters: view needs model, sheet needs view, gantt needs sched, render
-# needs sheet + gantt, usage needs sched, formula needs sheet.
-foreach(app_core_dep mpp sched view sheet gantt usage formula mppwrite render)
+# needs sheet + gantt, usage needs sched, formula needs sheet.  props (W50) has no
+# core dependency of its own: it parses an already-extracted stream blob.
+foreach(app_core_dep mpp sched view sheet gantt usage formula mppwrite render props)
     if(NOT EXISTS "${APP_REPO_ROOT}/core/${app_core_dep}/CMakeLists.txt")
         message(FATAL_ERROR
             "app: core/${app_core_dep}/CMakeLists.txt is missing. The shell links the "
@@ -158,6 +162,8 @@ add_library(app_layout STATIC
     filter_model.cpp
     export_pdf.cpp
     view_model.cpp
+    fields_model.cpp
+    edit_model.cpp
 )
 add_library(msproject::app_layout ALIAS app_layout)
 target_compile_features(app_layout PUBLIC cxx_std_20)
@@ -171,7 +177,7 @@ target_include_directories(app_layout PUBLIC
 # and core_formula are the wave-11 views (view_model.cpp) and also carry
 # core/usage's own use of core_sched.
 target_link_libraries(app_layout PUBLIC core_sheet core_gantt core_mpp core_mppwrite
-                                     core_render core_usage core_formula)
+                                     core_render core_usage core_formula core_props)
 # PUBLIC so the tests see the same branch of app/document.cpp the shell compiles.
 target_compile_definitions(app_layout PUBLIC
     APP_MPPWRITE_SAVE_HEADER=${APP_MPPWRITE_SAVE_HEADER}
@@ -297,6 +303,39 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_views COMMAND views_tests)
     set_tests_properties(app_views PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 12: Insert/Delete Task.  The pending-edit model, its undo/redo, the
+    # display plan, and the real writer sequence on a copy of the committed
+    # synthetic fixture under APP_TEST_OUT_DIR (counts, uids, tombstoned
+    # dependants, refusal with no target).  Never writes tests/data or corpus/.
+    add_executable(app_edit_tests app_edit_tests.cpp)
+    target_compile_features(app_edit_tests PRIVATE cxx_std_20)
+    set_target_properties(app_edit_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edit_tests PRIVATE app_layout)
+    target_compile_definitions(app_edit_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edit_tests)
+
+    add_test(NAME app_edit COMMAND app_edit_tests)
+    set_tests_properties(app_edit PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 12: stored custom-field values and the file's own formulas.  Reads the
+    # W48 storage values from a synthetic row set, the column set/formatting, and
+    # the committed 114/Props blob (tests/data/synthetic-props.bin) through
+    # core::props -> core::formula.
+    add_executable(app_fields_tests app_fields_tests.cpp)
+    target_compile_features(app_fields_tests PRIVATE cxx_std_20)
+    set_target_properties(app_fields_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_fields_tests PRIVATE app_layout)
+    target_compile_definitions(app_fields_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+    )
+    app_set_warnings(app_fields_tests)
+
+    add_test(NAME app_fields COMMAND app_fields_tests)
+    set_tests_properties(app_fields PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 endif()
 
 # ---------------------------------------------------------------------------

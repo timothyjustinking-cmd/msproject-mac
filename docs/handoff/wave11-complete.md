@@ -8,9 +8,10 @@ wave-11 stream is merged, and a successor may work.
   is its child. Wave-11 commits: `8a34c14` W47, `c2acbe4` W50, `b233f78`
   wave-11 oracle, `3f11019` W48+W49 core, `c4e885e` custom-field oracle,
   `f7c1279` crosscheck fix + wave-12 exception fixture.
-* **CI:** runs `39748803937` (ci) and `39748803465` (app-macos) on `f7c1279`.
-  Check `gh run list` before quoting them; the local gates below are already
-  green. If a leg is red, `gh run view <id> --log-failed` names the line.
+* **CI:** the first three-platform runs on `f7c1279` were red on clang/gcc-only
+  checks (an unused test helper, then a backslash-continued `//` comment). Both
+  were fixed in `b71e2a3` / `1639d80`, which are **green on all three legs**;
+  `app-macos` was green throughout. Check `gh run list` before quoting any id.
 * **Full local suite:** `build\vs-w11` (clean MSVC `/W4 /WX`) — **39/39 ctest
   tests passed** (wave 10: 36). New: `props`, `mpp_field_value`,
   `mppwrite_roundtrip_field_values`.

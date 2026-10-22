@@ -960,6 +960,95 @@ void test_task_calendars(TestContext& context) {
               << std::flush;
 }
 
+/* ---- 5. a recurring calendar exception on the task-calendar path --------- */
+//
+// corpus/probe/w12-exceptions.mpp carries one exception of every PjExceptionType
+// on its project calendar (docs/analysis/oracle/w12-exceptions.json is the COM
+// read-back) and a derived calendar uid 2 with no week data of its own.  It has
+// no tasks, so this builds two synthetic rows on the bridge's own PlanTask: one
+// pinned to uid 2, and a control with no task calendar.
+//
+// The fixture's project-calendar exceptions cover 2026-11-02 .. 2026-11-30
+// completely (the daily record) and every Monday and Wednesday to 2026-12-31
+// (the weekly record).  So on uid 2 the first working day on or after Mon
+// 2026-11-02 08:00 is Tue 2026-12-01, and a 2 d task finishes Thu 2026-12-03
+// 17:00 (Wed 12-02 is a weekly exception).  On the stock week the same row
+// finishes Tue 2026-11-03 17:00.  The difference is the expanded recurrence.
+void test_recurring_task_calendar(TestContext& context) {
+    if (corpus_hidden()) {
+        std::cout << "SKIP: w12 exception fixture (MPP_NO_CORPUS is set)\n";
+        return;
+    }
+    const std::string path = PLAN_W12_PATH;
+    if (!file_exists(path)) {
+        std::cout << "SKIP: " << PLAN_W12_PATH << " is not present (corpus is git-ignored)\n";
+        return;
+    }
+
+    const mpp::Document document = mpp::load_file(path);
+    const core::cal::CalendarTable table = core::cal::decode_file(path);
+    context.equal(table.exception_count(), std::size_t{7},
+                  "w12: the seven PjExceptionType records are decoded");
+    context.equal(table.recurring_exceptions, std::size_t{6}, "w12: six are recurring");
+
+    plan::PlanInput input = plan::from_mpp(document);
+    input.tasks.clear();  // the fixture carries calendar data only
+    input.project_start = sched::from_ymd(2026, 11, 2, 8, 0);
+    plan::PlanTask task;
+    task.uid = 1;
+    task.duration = 2 * 4800;  // two 8 h days
+    task.calendar_uid = 2;     // the derived calendar, base uid 1
+    input.tasks.push_back(task);
+    plan::attach_task_calendars(input, table);
+    context.equal(input.task_calendars.size(), std::size_t{1},
+                  "w12: the bridge builds the one referenced task calendar");
+    if (!input.task_calendars.empty()) {
+        context.equal(input.task_calendars.front().uid, std::int32_t{2},
+                      "w12: the built task calendar is uid 2");
+        context.check(input.task_calendars.front().calendar.day_total_ticks(15647) == 0,
+                      "w12: the task calendar carries the base calendar's exceptions");
+    }
+
+    const plan::PlanResult result = plan::recalculate(input);
+    context.check(result.ok(), "w12 recalculation succeeds (" + describe(result) + ")");
+    if (!result.ok()) {
+        return;
+    }
+    const plan::PlanTaskResult* actual = find_result(result, 1);
+    context.check(actual != nullptr, "w12 uid 1 is in the recalculation");
+    if (actual != nullptr) {
+        context.equal(actual->calendar_uid, std::int32_t{2},
+                      "w12 uid 1 kept its +178 calendar uid");
+        context.equal_date(actual->start, sched::from_ymd(2026, 12, 1, 8, 0),
+                           "w12 uid 1 starts Tue 2026-12-01 (November is all non-working)");
+        context.equal_date(actual->finish, sched::from_ymd(2026, 12, 3, 17, 0),
+                           "w12 uid 1 finishes Thu 2026-12-03 (Wed is a weekly exception)");
+    }
+
+    // Control: the same row with no task calendar, on the stock week.
+    plan::PlanInput control = input;
+    control.task_calendars.clear();
+    control.tasks[0].calendar_uid = -1;
+    const plan::PlanResult stock = plan::recalculate(control);
+    context.check(stock.ok(), "w12 control recalculation succeeds");
+    if (!stock.ok()) {
+        return;
+    }
+    const plan::PlanTaskResult* plain = find_result(stock, 1);
+    context.check(plain != nullptr, "w12 control uid 1 is in the recalculation");
+    if (plain != nullptr) {
+        context.equal_date(plain->start, sched::from_ymd(2026, 11, 2, 8, 0),
+                           "w12 control uid 1 starts Mon 2026-11-02");
+        context.equal_date(plain->finish, sched::from_ymd(2026, 11, 3, 17, 0),
+                           "w12 control uid 1 finishes Tue 2026-11-03");
+    }
+    std::cout << "w12 recurring task calendar: " << plan::format_date(result.tasks.at(0).start)
+              << " .. " << plan::format_date(result.tasks.at(0).finish)
+              << " vs control " << plan::format_date(stock.tasks.at(0).start) << " .. "
+              << plan::format_date(stock.tasks.at(0).finish) << '\n'
+              << std::flush;
+}
+
 }  // namespace
 
 int main() {
@@ -971,6 +1060,7 @@ int main() {
         test_schedin(context);
         test_elapsed_lag(context);
         test_task_calendars(context);
+        test_recurring_task_calendar(context);
     } catch (const std::exception& error) {
         std::cerr << "FAIL: unhandled exception: " << error.what() << '\n';
         return 2;

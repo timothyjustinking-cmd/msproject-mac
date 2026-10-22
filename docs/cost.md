@@ -35,22 +35,21 @@ context is much longer-lived and its per-turn cost is higher.
 | 9 | 2026-10-22 | W36–W42 | **7** | five streams launched together, then W41/W42 while the first five were still landing; **no restarts** (the first wave with none) |
 | 10 | 2026-10-22 | W43–W46 | **5** | four streams (usage, formula, writer add/delete, app v3) + one W45 resume to add the `FixedMeta +4` tombstone gate after the Project oracle rejected the first delete fixtures |
 | 11 | 2026-10-22 | W47–W50 | **7** | four streams + three W48 resumes: the custom-field display contract needed three measured gates (VarMeta position, both Props registries, FixedMeta tail bitmap) |
-| — | — | coordinator | 7 (ongoing) | the predecessor's chats and this one |
+| 12 | 2026-10-22 | W51–W53 | **3** | app editing/stored fields/formulas, writer link add + field clear, recurring calendar exceptions; no restarts, two coordinator oracle runs |
+| — | — | coordinator | 8 (ongoing) | the predecessor's chats and this one |
 
-**To date (end of wave 11): 85 agent sessions + 7 coordinator sessions.**
+**To date (end of wave 12): 88 agent sessions + 8 coordinator sessions.**
 Measured spend at the wave-7 start was **~$3.90**, **~390M tokens** (51 agent
-sessions); waves 7–8 added 15 sessions, wave 9 added 7, wave 10 added 5, and
-wave 11 adds 7 at ~$0.08 → **~$6.55**, **~655M tokens**, about **$0.077 per
-agent session**, flat for the eighth wave running.
+sessions); waves 7–8 added 15 sessions, wave 9 added 7, wave 10 added 5, wave 11
+added 7, and wave 12 adds 3 at ~$0.08 → **~$6.78**, **~680M tokens**, about
+**$0.077 per agent session**, flat for the ninth wave running.
 
-Wave 11 was the most oracle-expensive wave per agent session: seven agent
-sessions (~$0.54) bought resource/usage UI, custom fields that Project actually
-displays, reader/engine parity and a Props decoder, but three of the seven were
-W48 resumes driven by coordinator measurements. The lesson is not that the
-agents were slow; it is that a "write a value" feature crossing VarMeta,
-per-table Props and the FixedMeta tail cannot be designed from the writer side
-alone. The oracle found each missing store in one diff; guessing it would have
-cost more.
+Wave 12 was the cheapest per feature since the streams were deep and the oracle
+work was short (an exception fixture and a link-add diff). The custom-field
+lesson from wave 11 paid off: W52's link work needed one coordinator diff (four
+Cons streams), not three, because the writer already had the measured template
+habit. The remaining cost risk is the audit, which is coordinator/agent attention
+more than tokens.
 
 ## Calibration
 

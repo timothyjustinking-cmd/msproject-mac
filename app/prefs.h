@@ -35,28 +35,41 @@
 //                     (core::usage::Period).  It is view state, exactly as the
 //                     Gantt timescale is; nothing is written to a .mpp.
 //   formula_duration_column / formula_date_column
-//                     the visible computed columns of the task sheet.  They can
+//                     the default visibility of the two demo computed columns of
+//                     the task sheet (app::formula_column_specs()).  They can
 //                     only be shown/hidden, never edited: the columns are
 //                     read-only and the save path writes task starts only.
 //   stored_custom_fields
-//                     persisted and parsed, but pending: the .mpp reader exposes
-//                     no stored custom-field values yet, so the chooser says so
-//                     instead of showing invented numbers.
+//                     the DEFAULT visibility of the six stored custom-field
+//                     columns (Text1/Number1/Number2/Date1/Duration1/Flag1).
+//                     Off by default: the reader decodes the values (wave 12),
+//                     but six more columns would crowd the sheet, so the
+//                     View > Columns chooser shows them hidden.
+//   column_visibility (wave 12)
+//                     a per-column override list keyed by field id, so a stored
+//                     custom field or a formula column can be shown/hidden
+//                     individually and the choice survives a relaunch.  Only
+//                     columns whose state differs from their default are stored,
+//                     which keeps the line short and lets a new column arrive
+//                     visible.
 //
 // PERSISTENCE FORMAT
 //   One line: "version=1;date=day_month_year;duration=auto_units;zoom=day;
-//   shading=1;view=task_sheet;usage=day;formula1=1;formula2=1;custom=0".
+//   shading=1;view=task_sheet;usage=day;formula1=1;formula2=1;custom=0;
+//   columns=0x0b400033:1,0x0b400057:0".
 //   parse_preferences() is deliberately tolerant: an unknown key is ignored, a
 //   malformed value keeps the default, and missing keys keep the default, so an
 //   old or hand-edited defaults string can never stop the app from launching.
-//   It returns true when at least one known key was read.  The wave-11 keys are
-//   additive: a wave-10 string without them parses and keeps the new defaults.
+//   It returns true when at least one known key was read.  The wave-11 and
+//   wave-12 keys are additive: an older string without them parses and keeps the
+//   new defaults.
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "gantt.h"
 #include "sheet.h"
@@ -87,6 +100,15 @@ enum class ZoomLevel : std::uint8_t {
     month,
 };
 
+// One persisted "this column is shown/hidden" decision, keyed by the PjField id
+// the column addresses.  Only the columns a preference owns (the stored custom
+// fields and the formula columns) are ever recorded; the identity columns stay
+// in the column set.
+struct ColumnVisibility {
+    core::view::FieldId field = 0;
+    bool visible = true;
+};
+
 struct Preferences {
     DateStyle date_style = DateStyle::day_month_year;
     DurationStyle duration_style = DurationStyle::auto_units;
@@ -94,22 +116,28 @@ struct Preferences {
     bool working_day_shading = true;
     // Wave 11 view state.  `view` is the mode the window opens in; `usage_period`
     // is the day/week/month bucket width of the two usage grids; the formula
-    // flags are the visible computed columns of the task sheet (the two formula
-    // columns app::task_sheet_columns() appends).  `stored_custom_fields` is
-    // parsed and persisted but drives nothing yet: mpp::Task exposes no stored
-    // custom-field values, so the chooser marks that column pending instead of
-    // showing invented zeroes (app/README.md).
+    // flags are the default visibility of the two demo formula columns (app::
+    // formula_column_specs()).  `stored_custom_fields` is the default visibility
+    // of the six stored custom-field columns: the reader decodes the values
+    // (wave 12), but the columns start hidden so the sheet stays narrow.
     ViewMode view = ViewMode::task_sheet;
     core::usage::Period usage_period = core::usage::Period::day;
     bool formula_duration_column = true;
     bool formula_date_column = true;
     bool stored_custom_fields = false;
+    // Wave 12: per-column overrides for the stored/formula columns, in the order
+    // they were first changed.  Bounded by kMaxColumnVisibility.
+    std::vector<ColumnVisibility> column_visibility;
     // Stamped into the stored string so a later change of meaning is
     // detectable.  parse_preferences() accepts any version it knows.
     int version = 1;
 };
 
 inline constexpr int kPreferencesVersion = 1;
+
+// The most overrides the stored line keeps; a longer list drops the tail (a
+// hand-edited defaults string cannot make the line unbounded).
+inline constexpr std::size_t kMaxColumnVisibility = 64;
 
 // Stable identifiers, used in the stored string and in the status line.  They
 // are part of the on-disk contract: do not rename one without a migration.
@@ -126,14 +154,25 @@ core::sheet::DateFormat date_format_for(const Preferences& preferences) noexcept
 
 // Whether the formula column at `index` (into app::formula_column_specs(): 0 is
 // Duration x2, 1 is Start +7) is visible.  An index past the two formula columns
-// is always visible: this helper only owns the computed columns.  The pair is
-// what the shell's View > Columns chooser and load path use, so the pref keys
-// ("formula1"/"formula2") and the column order live in one place.
+// is always visible: this helper only owns the computed columns.  A per-column
+// override (see below) wins over the two flags.
 bool formula_column_visible(const Preferences& preferences, std::size_t index) noexcept;
 // Stores one formula column's visibility; false (changing nothing) when the
 // index is not one of the two formula columns.
 bool set_formula_column_visible(Preferences& preferences, std::size_t index,
                                 bool visible) noexcept;
+
+// The visibility of one stored/formula column: the override when one is
+// recorded, else `default_visible`.  The shell passes the stored columns'
+// default as Preferences::stored_custom_fields and a formula column's as true.
+bool column_visible(const Preferences& preferences, core::view::FieldId field,
+                    bool default_visible) noexcept;
+
+// Records one column's visibility.  A choice equal to the default removes the
+// override, so the stored line only carries real deviations.  False (changing
+// nothing) for field 0 or when the override list is full.
+bool set_column_visible(Preferences& preferences, core::view::FieldId field, bool visible,
+                        bool default_visible) noexcept;
 
 // Writes the preference's presentation choices into `format`.  Today that is the
 // date format (every date cell, the status line and the PDF report read

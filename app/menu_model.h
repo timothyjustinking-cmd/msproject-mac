@@ -14,11 +14,12 @@
 //   are permanently disabled rather than faked.
 //
 // "ONLY WHAT THE MODEL SUPPORTS"
-//   Insert > Task and Insert > Resource need the shell's add/delete editing,
-//   which wave 12 owns; wave 11's resource/usage views are read-only.  Cut needs
-//   a SheetModel operation that does not exist (copy_selection and paste do).
-//   All three are in the menu and permanently disabled with a reason in
-//   menu_disabled_reason(): greyed out, never faked.
+//   Wave 12 enables Insert > Task and adds Edit > Delete Task: the shell keeps the
+//   pending structural edit (app/edit_model.h) and the writer can append/tombstone
+//   a Task row.  Insert > Resource still needs a resource writer (the resource
+//   sheet is read-only), and Cut needs a SheetModel operation that does not exist
+//   (copy_selection and paste do).  Both are in the menu and permanently disabled
+//   with a reason in menu_disabled_reason(): greyed out, never faked.
 #pragma once
 
 #include <cstddef>
@@ -70,6 +71,10 @@ enum class MenuAction : std::uint8_t {
     usage_week,
     usage_month,
     insert_task,
+    // Wave 12: delete the selected task.  The writer tombstones it and cascades
+    // into its link/assignment rows (w11-oracle section 2); the shell confirms the
+    // cascade size first.
+    delete_task,
     insert_resource,
 };
 

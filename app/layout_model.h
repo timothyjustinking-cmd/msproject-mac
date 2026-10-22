@@ -9,9 +9,9 @@
 //
 // WHAT IT DOES NOT DO
 //   * It does not read a file.  app/reader_adapter.h is the one place that knows
-//     about mpp::Document; this header only knows date32 and RecordSet.  That
-//     keeps the mapping testable with synthetic rows and keeps core/mpp's types
-//     out of the model.
+//     about mpp::Document; this header only knows date32, mpp::CustomFieldValue
+//     (a plain data struct from core/mpp/field_value.h, no reader) and
+//     RecordSet, which keeps the mapping testable with synthetic rows.
 //   * It does not draw and it does not choose fonts or colours.
 //   * It does not schedule, roll up or recompute.  Start/Finish/Summary/
 //     Milestone/Critical are the reader's values (documented derivations in
@@ -45,6 +45,7 @@
 #include <vector>
 
 #include "date.h"
+#include "field_value.h"  // mpp::CustomFieldValue: plain data, no reader
 #include "gantt.h"
 #include "record_set.h"
 #include "resource_tables.h"  // core::view::ResourceType for ResourceRow
@@ -82,6 +83,23 @@ struct TaskRow {
     bool summary = false;
     bool milestone = false;
     bool critical = false;
+    // Wave 12: the stored custom-field values the reader decoded (W48's measured
+    // encodings; see core/mpp/field_value.h).  Only values the file actually
+    // stores are listed, plus Flag1 for every live row (a clear bit is a stored
+    // False).  Empty for a producer that has none and for a pending inserted row.
+    std::vector<mpp::CustomFieldValue> custom_fields;
+
+    // The stored value of one custom field, or nullptr when the row does not
+    // carry it.  A null pointer is "not stored"; a present value with
+    // `storage_measured == false` is "stored but not decodable".
+    const mpp::CustomFieldValue* custom_field(std::uint32_t field_id) const noexcept {
+        for (const mpp::CustomFieldValue& field : custom_fields) {
+            if (field.field_id == field_id) {
+                return &field;
+            }
+        }
+        return nullptr;
+    }
 };
 
 struct LinkRow {
@@ -191,8 +209,18 @@ core::view::FieldId name_field_id();
 core::view::FieldId task_field_id(std::string_view field_name);
 
 // Fields: UID (kUidField), ID, OutlineNumber, Name, Start, Finish, Duration,
-// PercentComplete, Summary, Milestone, Critical, OutlineLevel (0-based).
+// PercentComplete, Summary, Milestone, Critical, OutlineLevel (0-based), plus
+// every stored custom field the task rows carry (wave 12).  A custom field is
+// added to the schema even when no row stores it, so a column never disappears
+// because a value is missing.
 core::view::RecordSet make_record_set(const PlanInput& input);
+
+// The RecordSet value of one stored custom field: Text/Number/Date/Duration/Flag
+// map to the matching core::view kind, and a value the file stores but the reader
+// could not decode (or a Cost) becomes Null rather than a guess.  Declared here
+// (not only used inside make_record_set) so the stored-column tests can pin the
+// conversion without a RecordSet round trip.
+core::view::Value value_of_custom_field(const mpp::CustomFieldValue& field);
 
 // The reverse mapping: reads the editable task fields back out of `records` into
 // a copy of `base` (uid, name, start, finish, duration, percent complete,

@@ -57,8 +57,12 @@ struct StartEdit {
 };
 
 // Every task whose Start in `records` differs from the same task's start in
-// `loaded` (row order is the RecordSet's, which is the loaded order).  Rows that
-// only exist on one side are ignored.  An empty result means "nothing to save".
+// `loaded`.  Rows are matched by UniqueID, not by index: since wave 12 the app can
+// have a pending insert (a RecordSet row with no file row) or a pending delete (a
+// file row no longer displayed), and an index diff would then blame the wrong
+// task.  A RecordSet row whose uid is not in `loaded` is a pending insert: its
+// start is not written by the start path (the writer's add clones the row) and it
+// is therefore skipped.  An empty result means "nothing to save".
 std::vector<StartEdit> collect_start_edits(const core::view::RecordSet& records,
                                            const PlanInput& loaded);
 
@@ -85,15 +89,28 @@ struct SaveOutcome {
     std::string api;    // which writer path ran, for the report
 };
 
+// How a save treats the opened file.
+struct SaveOptions {
+    // False (the default, and the only value document_tests pins): writing
+    // `target == source` is refused, so a viewer can never destroy the file it
+    // opened.  True is for the one case where the app KNOWS the file is its own:
+    // a structural save (Insert/Delete Task) writes a new file and then reloads
+    // it, so the app's document becomes that file and saving again must be able
+    // to update it in place.
+    bool allow_source_overwrite = false;
+};
+
 // Writes the edit set through the .mpp writer to `target_path`.
 //
 // Failure is reported, never thrown: a bad source, a uid that is not in the
 // table, a writer refusal (mppwrite::Error) or an unwritable target all come
 // back as ok=false with `error` set.  Nothing is written unless the whole set
 // succeeded (the fallback path saves once, at the end; the W37 path owns its own
-// atomicity).  `target_path` equal to `source_path` is refused.
+// atomicity).  `target_path` equal to `source_path` is refused unless
+// `options.allow_source_overwrite` is true (see SaveOptions).
 SaveOutcome save_start_edits(const std::vector<StartEdit>& edits,
-                             std::string_view source_path, std::string_view target_path);
+                             std::string_view source_path, std::string_view target_path,
+                             const SaveOptions& options = {});
 
 // After a successful save the loaded plan is the new baseline, otherwise the
 // next Cmd-S would offer to write the same dates again.

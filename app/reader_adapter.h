@@ -18,13 +18,36 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <string>
 #include <utility>
+#include <vector>
 
+#include "cfb.h"
 #include "layout_model.h"
 #include "reader.h"
 #include "usage_mpp.h"
 
 namespace app {
+
+// Wave 12: the `114/Props` stream of an already-written .mpp, for the formula
+// decoder (core/props).  Returns an empty vector when the file has no such
+// stream or the container cannot be re-read: a file without a Props stream simply
+// has no stored formulas, which is not an error.  The bytes are the raw stream,
+// exactly as core/props::parse_props expects them.
+inline std::vector<std::uint8_t> props_stream_from_file(const std::string& path) {
+    try {
+        const mpp::CompoundFile file = mpp::CompoundFile::from_file(path);
+        if (file.has_stream("114/Props")) {
+            return file.read_stream("114/Props");
+        }
+    } catch (const std::exception&) {
+        // A container the CFB reader refuses is reported by load_file(), which
+        // runs first; there is nothing to add here.
+    }
+    return {};
+}
 
 // Wave 11: the measured assignment -> usage bridge lives in core/usage
 // (usage_mpp.h).  Re-exported here so main.mm still touches the reader in one
@@ -94,6 +117,10 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     row.summary = task.summary;
     row.milestone = task.is_milestone() && !task.summary;
     row.critical = task.critical;
+    // Wave 12: the stored custom fields (W48's measured decodings, in the
+    // reader's order).  Absent values are absent here too; app::make_record_set
+    // turns each into a RecordSet value.
+    row.custom_fields = task.custom_fields;
     return row;
 }
 

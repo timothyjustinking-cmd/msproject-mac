@@ -52,20 +52,31 @@ std::vector<StartEdit> collect_start_edits(const core::view::RecordSet& records,
     if (start_field == 0) {
         return edits;  // the descriptor table lost Start: nothing can be diffed
     }
-    const std::size_t rows = std::min(records.row_count(), loaded.tasks.size());
+    const std::size_t rows = records.row_count();
     edits.reserve(rows);
     for (std::size_t row = 0; row < rows; ++row) {
         const Value* value = records.get(row, start_field);
         if (value == nullptr) {
             continue;
         }
+        const std::uint32_t uid = records.uid(row);
+        const TaskRow* loaded_row = nullptr;
+        for (const TaskRow& candidate : loaded.tasks) {
+            if (candidate.uid == uid) {
+                loaded_row = &candidate;
+                break;
+            }
+        }
+        if (loaded_row == nullptr) {
+            continue;  // a pending insert: not a file row, nothing to write here
+        }
         const date32 current =
             value->kind == ValueKind::Date ? date32_from_date_value(value->date) : kDateNa;
-        if (current == loaded.tasks[row].start) {
+        if (current == loaded_row->start) {
             continue;
         }
         StartEdit edit;
-        edit.uid = records.uid(row);
+        edit.uid = uid;
         edit.start = current;
         edits.push_back(edit);
     }
@@ -81,7 +92,8 @@ std::string default_save_name(std::string_view source_path) {
 }
 
 SaveOutcome save_start_edits(const std::vector<StartEdit>& edits,
-                             std::string_view source_path, std::string_view target_path) {
+                             std::string_view source_path, std::string_view target_path,
+                             const SaveOptions& options) {
     SaveOutcome outcome;
     outcome.path = std::string(target_path);
     outcome.requested = edits.size();
@@ -90,7 +102,8 @@ SaveOutcome save_start_edits(const std::vector<StartEdit>& edits,
         outcome.error = "no target path";
         return outcome;
     }
-    if (normalised(std::string(source_path)) == normalised(outcome.path)) {
+    if (!options.allow_source_overwrite &&
+        normalised(std::string(source_path)) == normalised(outcome.path)) {
         outcome.error =
             "refusing to overwrite the opened file; save to a new name (the opened .mpp is "
             "never modified)";

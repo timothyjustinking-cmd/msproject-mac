@@ -34,6 +34,12 @@ struct TaskFields {
     FieldId milestone = 0;
     FieldId critical = 0;
     FieldId outline_level = 0;
+    // The *text* variants Project rewrites a formula's [Start]/[Finish] reference
+    // to (StartText 0x0b400505, FinishText 0x0b400506; measured in
+    // docs/analysis/oracle/w10-oracle.md section 2 / memory/props.md).  The app
+    // fills them from Start/Finish so a stored formula sees the date.
+    FieldId start_text = 0;
+    FieldId finish_text = 0;
 
     TaskFields() {
         resolve("ID", id);
@@ -47,6 +53,8 @@ struct TaskFields {
         resolve("Milestone", milestone);
         resolve("Critical", critical);
         resolve("OutlineLevel", outline_level);
+        resolve("StartText", start_text);
+        resolve("FinishText", finish_text);
     }
 
     static FieldId resolve_id(std::string_view field_name) {
@@ -215,16 +223,70 @@ core::sheet::SheetMetrics default_sheet_metrics() {
 
 core::view::FieldId name_field_id() { return task_fields().name; }
 
+namespace {
+
+// The custom-field families the reader decodes into a core::view::Value.  A
+// present-but-unmeasured value (Cost, Flag2..20) and an undecodable one are
+// deliberately NOT guessed at: the cell stays blank.
+core::view::Value custom_field_value(const mpp::CustomFieldValue& field) {
+    if (!field.present || !field.storage_measured) {
+        return Value::null();
+    }
+    switch (field.kind) {
+        case mpp::FieldKind::text:
+            return Value::of_text(field.text);
+        case mpp::FieldKind::number:
+            return Value::of_number(field.number);
+        case mpp::FieldKind::date: {
+            // The file stores the same packed word as Task.Start: day<<16|ticks,
+            // and 0/0xffffffff mean "not set".
+            const date32 day = date32_from_packed(field.packed_date);
+            if (core::sched::is_na(day)) {
+                return Value::null();
+            }
+            return Value::of_date(date_value_from_date32(day));
+        }
+        case mpp::FieldKind::duration:
+            // File ticks already are core::view ticks (6 seconds each).
+            return Value::of_duration(static_cast<std::int64_t>(field.duration_ticks));
+        case mpp::FieldKind::flag:
+            return Value::of_bool(field.flag);
+        case mpp::FieldKind::cost:
+        case mpp::FieldKind::unknown:
+            return Value::null();
+    }
+    return Value::null();
+}
+
+}  // namespace
+
+core::view::Value value_of_custom_field(const mpp::CustomFieldValue& field) {
+    return custom_field_value(field);
+}
+
 core::view::RecordSet make_record_set(const PlanInput& input) {
     const TaskFields& field = task_fields();
     core::view::RecordSet records(core::model::RecordType::Task);
 
-    const FieldId columns[] = {field.uid,    field.id,       field.outline_number, field.name,
-                               field.start,  field.finish,   field.duration,       field.percent_complete,
-                               field.summary, field.milestone, field.critical,     field.outline_level};
+    const FieldId columns[] = {field.uid,      field.id,
+                               field.outline_number, field.name,
+                               field.start,    field.finish,
+                               field.duration, field.percent_complete,
+                               field.summary,  field.milestone,
+                               field.critical, field.outline_level,
+                               field.start_text, field.finish_text};
     for (const FieldId id : columns) {
         if (id != 0) {
             records.add_field(id);
+        }
+    }
+    // Wave 12: every stored custom field any row carries becomes a column, so the
+    // schema is stable whether or not a particular row stores a value.
+    for (const TaskRow& row : input.tasks) {
+        for (const mpp::CustomFieldValue& custom : row.custom_fields) {
+            if (custom.field_id != 0) {
+                records.add_field(custom.field_id);
+            }
         }
     }
 
@@ -247,12 +309,29 @@ core::view::RecordSet make_record_set(const PlanInput& input) {
         if (!core::sched::is_na(row.finish)) {
             put(field.finish, Value::of_date(date_value_from_date32(row.finish)));
         }
+        // The formula alias fields, so `[Start]+7` (stored as
+        // `[MSPJ188744965]+7`, StartText) evaluates like Project's formula view.
+        // Inference: the stored token is measured; the mapping mirrors
+        // core/formula's measured DurationText -> Duration fallback, which has no
+        // StartText twin.
+        if (!core::sched::is_na(row.start)) {
+            put(field.start_text, Value::of_date(date_value_from_date32(row.start)));
+        }
+        if (!core::sched::is_na(row.finish)) {
+            put(field.finish_text, Value::of_date(date_value_from_date32(row.finish)));
+        }
         put(field.duration, Value::of_duration(row.duration_ticks));
         put(field.percent_complete, Value::of_int(static_cast<std::int64_t>(row.percent_complete)));
         put(field.summary, Value::of_bool(row.summary));
         put(field.milestone, Value::of_bool(row.milestone));
         put(field.critical, Value::of_bool(row.critical));
         put(field.outline_level, Value::of_int(static_cast<std::int64_t>(row.outline_level)));
+        for (const mpp::CustomFieldValue& custom : row.custom_fields) {
+            Value value = custom_field_value(custom);
+            if (!value.is_null()) {
+                put(custom.field_id, std::move(value));
+            }
+        }
     }
     return records;
 }

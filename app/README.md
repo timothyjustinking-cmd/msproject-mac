@@ -5,7 +5,11 @@ the left and the Gantt on the right, and lets you select, edit, undo, filter,
 collapse, export to PDF and save task start dates — behind a real menu bar and a
 Preferences panel. Wave 11 adds a **resource sheet**, two **usage grids**
 (task/resource, day/week/month) and read-only **computed formula columns**, all
-switchable from the View menu and from a visible control bar. Everything below
+switchable from the View menu and from a visible control bar. Wave 12 makes it a
+real editor: **Insert Task / Delete Task** (pending structural edits the writer
+applies on Save, then the app reloads the file), the **stored custom-field
+columns** the reader decodes (Text1/Number1/Number2/Date1/Duration1/Flag1) and the
+**formula columns defined by the file's own `114/Props`**. Everything below
 `main.mm` is portable C++ that is built and tested on Windows too.
 
 This directory is a **standalone CMake project**. It is deliberately *not* added to
@@ -16,9 +20,11 @@ same way).
 
 | file | what it is |
 |---|---|
-| `CMakeLists.txt` | standalone project: options, core libraries with their tests off, `app_layout`, eight headless tests, AppKit target on `APPLE` only |
+| `CMakeLists.txt` | standalone project: options, core libraries with their tests off (including `core/props`), `app_layout`, ten headless tests, AppKit target on `APPLE` only |
 | `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link/resource/assignment rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, `timescale_for_zoom`, plan summary, `sync_plan_from_records`, `make_gantt_source_for_rows`, `apply_edit_policy` |
-| `view_model.h` / `.cpp` | **pure C++ (wave 11)**: the four view modes, the stock Mon-Fri calendar, `PlanInput` → `core::view::ResourceRecord`s, the registry-backed resource-sheet columns, the usage grid (labels, period columns, a TOTAL row and a Total column), the two computed formula columns, and the read-only policy |
+| `view_model.h` / `.cpp` | **pure C++ (wave 11)**: the four view modes, the stock Mon-Fri calendar, `PlanInput` → `core::view::ResourceRecord`s, the registry-backed resource-sheet columns, the usage grid (labels, period columns, a TOTAL row and a Total column), the two demo formula columns, and the read-only policy |
+| `fields_model.h` / `.cpp` | **pure C++ (wave 12)**: the six stored custom-field columns from the field registry, `114/Props` → the file's formulas (`core/props` → `core/formula`), the sheet's complete column set (default + stored + formula, one column per field), read-only enforcement and the per-column visibility the preferences own |
+| `edit_model.h` / `.cpp` | **pure C++ (wave 12)**: the pending Insert/Delete Task edits, their undo/redo, the display plan and its inverse (so a rebuild keeps a cell edit), the dependant count the delete confirmation names, and the writer sequence (`add_task_row` / `delete_task_row` + `save_date_edits`) that a Save runs |
 | `selection_model.h` / `.cpp` | **pure C++**: `RowMap` (display ordinal ↔ RecordSet row ↔ uid), `selected_task`, Gantt hit-test → sheet row, arrow-key navigation, `toggle_row_selection` (Space), `toggle_row`, `scroll_target` |
 | `document.h` / `.cpp` | **pure C++ save helper**: diff the RecordSet against the loaded plan, then write the edited starts through `core/mppwrite` to a **new** file |
 | `prefs.h` / `.cpp` | **pure C++**: the preference model, its persisted one-line string + tolerant parser, the date format applied to `SheetFormat`, the app-side duration rendering, `cell_text` |
@@ -33,9 +39,11 @@ same way).
 | `menu_tests.cpp` | six menus, every action present once per menu, unique key equivalents, the documented shortcuts, enablement rules, the three permanently disabled items |
 | `filter_tests.cpp` | the field/operator lists, name/duration/date/blank criteria, two-rule All/Any, every error path, the row-list restriction, the printed subset |
 | `export_tests.cpp` | real PDFs: sheet + Gantt, filtered, duration preference, determinism, the shading-off calendar, the name/subtitle/footer helpers, failures |
-| `views_tests.cpp` | **new (wave 11)**: resource rows/fields from a synthetic plan, usage day/week/month buckets + totals row/column, formula evaluation, computed columns read-only + never a save edit, view-mode and preference round trip |
+| `views_tests.cpp` | **wave 11**: resource rows/fields from a synthetic plan, usage day/week/month buckets + totals row/column, formula evaluation, computed columns read-only + never a save edit, view-mode and preference round trip |
+| `app_edit_tests.cpp` | **new (wave 12)**: the pending edit model (placement, dependants, undo/redo, the display-plan inverse) and the real writer sequence on a copy of `synthetic-base.mpp` under the build tree: insert/delete counts, the uid the writer allocated, tombstoned dependants, a combined start+structural save, and the refusals with no target / same file / unknown uid |
+| `app_fields_tests.cpp` | **new (wave 12)**: the stored custom-field ids from the registry, decoded values → `RecordSet`, the cell formatting (dates/durations honour the preference, flags Yes/No), the column set and its read-only rule, `114/Props` → the six formulas of `tests/data/synthetic-props.bin`, their evaluation, and the per-column preference round trip |
 | `main.mm` | Objective-C++ / AppKit: window, control bar (view switcher + usage period), menu bar built from `menu_model`, Preferences panel, filter dialog, save/export panels, dirty prompts, clipboard, keyboard, drawing (task sheet + Gantt, or a flat resource/usage grid) |
-| `../.github/workflows/app-macos.yml` | the macOS CI job: configure `app/`, build everything with `-Werror`, run the tests (the job greps the seven wave-10 names and `ctest` runs all eight), prove the bundle exists and links AppKit + UniformTypeIdentifiers |
+| `../.github/workflows/app-macos.yml` | the macOS CI job: configure `app/`, build everything with `-Werror`, run the tests (`ctest` runs all ten; the workflow still greps the wave-10/11 names), prove the bundle exists and links AppKit + UniformTypeIdentifiers |
 
 ## Build and run
 
@@ -81,17 +89,18 @@ every enablement rule, which is the only way to test a menu bar without a window
 |---|---|
 | MS Project Shell | Preferences… (Cmd-,), Hide (Cmd-H), Quit (Cmd-Q) |
 | File | Open… (Cmd-O), Save (Cmd-S), Save As… (Cmd-Shift-S), Export PDF (Sheet)… (Cmd-Shift-E), Export PDF (Gantt)… (Cmd-Option-E), Close (Cmd-W) |
-| Edit | Undo (Cmd-Z), Redo (Cmd-Shift-Z), Cut (Cmd-X, **disabled**), Copy (Cmd-C), Paste (Cmd-V), Select All (Cmd-A) |
-| View | Task Sheet (Cmd-Option-1), Resource Sheet (Cmd-Option-2), Task Usage (Cmd-Option-3), Resource Usage (Cmd-Option-4), Usage Period: Day/Week/Month, Zoom In (Cmd-=), Zoom Out (Cmd--), Day/Week/Month Timescale (Cmd-1/2/3), Working-Day Shading (Cmd-Shift-D), Filter… (Cmd-F), Clear Filter (Cmd-Shift-F), Collapse All, Expand All, Columns ▸ (per-column check marks plus the pending stored-custom-field entry) |
-| Insert | Task…, Resource… — **both permanently disabled** |
+| Edit | Undo (Cmd-Z), Redo (Cmd-Shift-Z), Cut (Cmd-X, **disabled**), Copy (Cmd-C), Paste (Cmd-V), Select All (Cmd-A), Delete Task (Cmd-Backspace, **wave 12**) |
+| View | Task Sheet (Cmd-Option-1), Resource Sheet (Cmd-Option-2), Task Usage (Cmd-Option-3), Resource Usage (Cmd-Option-4), Usage Period: Day/Week/Month, Zoom In (Cmd-=), Zoom Out (Cmd--), Day/Week/Month Timescale (Cmd-1/2/3), Working-Day Shading (Cmd-Shift-D), Filter… (Cmd-F), Clear Filter (Cmd-Shift-F), Collapse All, Expand All, Columns ▸ (rebuilt per load: the seven default columns, the stored custom fields and the file's formula columns) |
+| Insert | Task… (Cmd-I, **wave 12**), Resource… — Resource is permanently disabled |
 | Help | Keyboard Shortcuts, About MS Project Shell |
 
-**Greyed out rather than faked.** `Insert > Task` and `Insert > Resource` need the
-shell's add/delete editing, which wave 12 owns; wave 11's new views are read-only, so
-a resources/usage grid must not pretend it can add a row. `Cut` needs a `SheetModel`
-operation that does not exist — copy and paste do. All three are in the menu, disabled
-in every state, with `menu_disabled_reason()` as their tooltip and the reason pinned in
-`menu_tests.cpp`.
+**Greyed out rather than faked.** Wave 12 enabled `Insert > Task` (it records a
+pending row; the writer appends it on Save) and added `Edit > Delete Task` (the
+writer tombstones the row and cascades into its link/assignment rows). What is still
+disabled is `Insert > Resource` — the resource sheet is read-only and there is no
+resource writer — and `Cut`, which needs a `SheetModel` operation that does not exist
+(copy and paste do). Both are in the menu, disabled in every state, with
+`menu_disabled_reason()` as their tooltip and the reason pinned in `menu_tests.cpp`.
 
 ## What the window does
 
@@ -140,9 +149,10 @@ disabled.
 gutter; clicking it (or Cmd-Left / Cmd-Right on a selected summary) calls
 `SheetModel::toggle_collapsed`. The visible-row list is then re-read and the Gantt is
 **rebuilt** from exactly those rows. View ▸ Columns toggles each column's visibility
-through `SheetModel::set_column_visible`. The task sheet's column set is FIXED — the
-seven task columns plus the two computed columns — on every load, so the submenu's
-`tag` is the model column index.
+through `SheetModel::set_column_visible`. The column set is the seven task columns, then
+the stored custom fields and the file's formula columns; the View ▸ Columns submenu is
+rebuilt per load (`rebuildColumnsMenu`) because the file's formulas change the set, so
+its `tag` is the current model column index.
 
 **Views (wave 11).** A segmented control and a Usage period popup sit in a control bar
 above the scrolling document; the View menu has the same commands (Cmd-Option-1..4 for
@@ -177,21 +187,62 @@ and table totals and is counted in the status line, exactly as `core/usage` docu
 wave (see Open), because it re-opens the `.mpp` and a wrong calendar would silently
 change every bucket.
 
-**Computed columns (wave 11).** The task sheet has two read-only formula columns,
-registered through `core::formula::ComputedColumns`:
+**Custom-field columns (wave 12).** The task sheet shows the custom fields the reader
+actually decodes, all read-only:
 
-| column | field | formula |
-|---|---|---|
-| Duration x2 | `Number1` | `[Duration]*2` |
-| Start +7 Days | `Date1` | `[Start]+7` |
+| column | field | where the value comes from | formats as |
+|---|---|---|---|
+| Text1 / Number1 / Number2 / Date1 / Duration1 / Flag1 | the registry ids `mpp::custom_field_id(kind, n)` (Text1 `0x0b400033`, Flag1 `0x0b400048`, …) | `mpp::Task::custom_fields` (W48's measured storage) → `RecordSet` | text / number / number / the date preference / the duration preference / `Yes`-`No` |
+| the file's own formulas | the field each formula is defined for | `114/Props` → `core/props` (W50) → `core/formula` | the computed value's kind |
+| Duration x2, Start +7 Days | `Number1`, `Date1` | the app's two demo formulas, used only for a field the file does not define | Duration, Date |
 
-They are re-evaluated after every edit and rendered by the sheet like any other column
-(a Duration and a Date). Their columns are declared read-only and `begin_edit` refuses
-them; they are also outside the save diff (`collect_start_edits` reads task starts
-only), so **Save can never write them**. View ▸ Columns toggles them like any column and
-the choice persists. **Stored custom fields are pending**: `mpp::Task` exposes no stored
-custom-field values, so the Columns chooser shows a disabled "Stored custom fields
-(pending)" entry rather than a column of invented zeroes.
+Six stored columns would crowd the sheet, so they start **hidden** and are toggled
+from View ▸ Columns (the choice is per column and persists). A formula column replaces
+the stored column for the same field — one column per field, and the value shown is the
+one Project's own formula would compute.
+
+The **file's formulas** are read on load through `core/props` (the six blocks the
+wave-10 oracle measured), mapped to their PjField ids and registered in
+`core::formula::ComputedColumns`; a formula that does not parse or names a non-Task
+field is reported in the status line and skipped, never evaluated as a partial guess.
+`[Duration]` is stored as `[MSPJ188744967]` (DurationText) and `[Start]` as
+`[MSPJ188744965]` (StartText); `core/formula` falls DurationText back to the Duration
+value, and the app fills StartText/FinishText from Start/Finish, so `[Start]+7` evaluates
+against the date. Both mappings are documented as inference: the *tokens* are measured,
+the fallback semantics are not.
+
+Every custom/formula column is declared read-only (`begin_edit` refuses it) and is
+outside the save diff (`collect_start_edits` reads task starts only), so **Save can never
+write a stored or computed value**.
+
+**Insert and Delete Task (wave 12).** `Insert ▸ Task…` (Cmd-I) asks for a name and
+records a **pending insert** anchored on the selected row (or at the end); `Edit ▸
+Delete Task` (Cmd-Backspace) records a **pending delete** after a confirmation that
+names how many dependent link/assignment rows the writer's cascade will tombstone (the
+count is `app::count_delete_dependants`, links plus assignments). Neither touches the
+file until Save: the sheet and Gantt are rebuilt from `PlanState::base`, the loaded plan
+with the pending edits applied (`app::StructuralEdits::apply`), so a new row appears at
+once (a placeholder carrying the name and a copy of the file's last row's dates — the
+writer's documented add shape) and a deleted row disappears together with its links and
+assignments. Deleting a row that is still a pending insert simply drops the insert.
+
+The two undo stacks are kept chronological: **a structural edit ends the sheet's
+cell-edit history** (the rebuild replaces the `SheetModel`), and Cmd-Z first undoes
+whatever the sheet still has, otherwise the last structural edit; a cell edit clears the
+structural redo list. The trade-off is documented rather than hidden: cell edits made
+before a structural edit are no longer undoable afterwards (their *values* survive — the
+rebuild folds the current cell values back through
+`StructuralEdits::without_structural_edits`, so a pending Start edit is not lost).
+
+On Save the writer applies the whole set: each delete through
+`mppwrite::delete_task_row` (the task plus its link/assignment cascade), each insert
+through `mppwrite::add_task_row` (the writer allocates the uid and clones the last live
+row), and then any pending start dates through the normal
+`mppwrite::save_date_edits` path — one Save, one file. The app then **reloads the target
+and adopts it** (`plan.owns_path`), because the added rows' real uids and ids are the
+file's; a uid is never patched by hand. The source file is still never modified: the
+structural save refuses `target == source` unless this app wrote the target itself (the
+reload case), and a failure leaves the opened file untouched.
 
 In the resource/usage views the task-only commands (undo/redo, clipboard, Select All,
 zoom, filter, collapse, PDF export) are disabled rather than acting on the hidden task
@@ -246,9 +297,11 @@ Applying a preference repaints immediately; closing the app is not needed.
 They are stored **app-side**, in `NSUserDefaults` under
 `com.msprojectdecompile.shell.preferences`, as one string produced by
 `app::serialize_preferences`
-(`version=1;date=...;duration=...;zoom=...;shading=...;view=...;usage=...;formula1=0|1;formula2=0|1;custom=0|1`).
-The wave-11 keys are additive: a wave-10 string without them parses and keeps the new
-defaults.
+(`version=1;date=...;duration=...;zoom=...;shading=...;view=...;usage=...;formula1=0|1;formula2=0|1;custom=0|1;columns=0x0b400033:1,0x0b400057:0`).
+The wave-11/12 keys are additive: an older string without them parses and keeps the new
+defaults. `custom` is the default visibility of the six stored custom-field columns and
+`columns` records a per-column override (only a choice that differs from its default, so
+the line stays short); a malformed entry is skipped, never fatal.
 `app::parse_preferences` is deliberately tolerant: an unknown key is ignored, a bad
 value keeps the default, and a missing key keeps the default, so an old or
 hand-edited defaults string can never stop the app from launching.
@@ -267,35 +320,42 @@ the duration rendering is the shell's own.
 ## Dirty state, save and close prompts
 
 The document is **dirty exactly when a save would write something**: when a task's
-Start in the RecordSet differs from the file as loaded (`app::collect_start_edits`).
-That is the only edit `core/mppwrite` can persist, so it is the only edit that lights
-the window's edited dot — a renamed task or a changed Finish does not claim unsaved
-file changes. Clicking the close box (or Quit) with pending start edits asks **Save /
-Don't Save / Cancel**: Save goes through the normal save path (a cancelled panel or a
-writer failure keeps the window open), Don't Save discards, Cancel aborts the close.
-The prompt text says that only start dates are written and that the other edits are
-view-only.
+Start in the RecordSet differs from the file as loaded
+(`app::collect_start_edits`, matched by UniqueID since wave 12) **or** when an
+Insert/Delete Task edit is pending. Those are the edits `core/mppwrite` can persist, so
+they are what lights the window's edited dot — a renamed task or a changed Finish does
+not claim unsaved file changes. Clicking the close box (or Quit) with either asks
+**Save / Don't Save / Cancel**: Save goes through the normal save path (a cancelled
+panel or a writer failure keeps the window open), Don't Save discards, Cancel aborts the
+close. The prompt names how many start edits and how many structural edits are pending
+and says the other edits are view-only.
 
-`File > Save` (Cmd-S) writes the edited starts to the **last save target**
-(`<name>-edited.mpp` until you choose another path); the first Save, and every
-`Save As…` (Cmd-Shift-S), shows an `NSSavePanel`. `app::save_start_edits` refuses
-`target == source` and reports rows written, the writer path, its notes and the
-target path in the status bar; a failure raises an alert and leaves the opened file
-untouched.
+`File > Save` (Cmd-S) writes to the **last save target** (`<name>-edited.mpp` until
+you choose another path); the first Save, and every `Save As…` (Cmd-Shift-S), shows an
+`NSSavePanel`. With pending structural edits it runs `app::save_structural_edits`
+(insert/delete, then the start dates) and reloads the written file; otherwise
+`app::save_start_edits` writes the starts. Both refuse `target == source` (except for a
+file this app itself saved and reloaded) and report what was written, the writer path,
+its notes and the target in the status bar; a failure raises an alert and leaves the
+opened file untouched.
 
 ### What persists on save, and what does not
 
-Persists: **task start dates only**, written as a real **Start No Earlier Than
-constraint** (`PjConstraint` 4 at row `+64`, date at `+66`) — the one date store MS
-Project was measured to honour on open (`memory/writer.md`, W29; W37 extended it to
-manual rows by clearing the row's manual bit). Because Project recalculates on open,
-the task's Start follows the pin and the rest of the schedule can move with it.
+Persists: **task start dates** (written as a real **Start No Earlier Than** constraint,
+`PjConstraint` 4 at row `+64`, date at `+66` — the one date store MS Project was measured
+to honour on open; `memory/writer.md`, W29; W37 extended it to manual rows by clearing
+the row's manual bit) and, since wave 12, **Insert/Delete Task**. Because Project
+recalculates on open, a pinned task's Start follows the constraint and the rest of the
+schedule can move with it; a deleted task's dependants are tombstoned by the cascade and
+a new task is appended with the name the dialog was given (the writer clones the file's
+last live row for everything else).
 
 Does **not** persist: every other edit the sheet accepts — Name, Finish, Duration,
-percent complete, and the undo history itself — is **view-only in memory**. Saving a
-name does not change the file; the app never claims it does. The opened file is
-never modified: the helper refuses `target == source`, and a failure leaves no output
-file behind.
+percent complete, the **stored custom-field** values and the computed columns (whose
+columns are read-only anyway), and the undo history itself — is **view-only in memory**.
+Saving a name does not change the file; the app never claims it does. The file the user
+opened is never modified: the helpers refuse `target == source`, and a failure leaves no
+output file behind.
 
 One behaviour to know: **saving a start for a manually scheduled task converts that
 task to auto-scheduled**, because the SNET pin is only honoured for an auto task and
@@ -343,25 +403,29 @@ Local, Windows MSVC 19.44, Release, `/W4 /permissive- /utf-8 /WX`
 `ctest`:
 
 ```
-1/8 Test #1: app_layout .....   Passed
-2/8 Test #2: app_selection ..   Passed
-3/8 Test #3: app_document ...   Passed
-4/8 Test #4: app_prefs ......   Passed
-5/8 Test #5: app_menu .......   Passed
-6/8 Test #6: app_filter .....   Passed
-7/8 Test #7: app_export .....   Passed
-8/8 Test #8: app_views ......   Passed
-100% tests passed, 0 tests failed out of 8
+ 1/10 Test #1: app_layout .....   Passed
+ 2/10 Test #2: app_selection ..   Passed
+ 3/10 Test #3: app_document ...   Passed
+ 4/10 Test #4: app_prefs ......   Passed
+ 5/10 Test #5: app_menu .......   Passed
+ 6/10 Test #6: app_filter .....   Passed
+ 7/10 Test #7: app_export .....   Passed
+ 8/10 Test #8: app_views ......   Passed
+ 9/10 Test #9: app_edit .......   Passed
+10/10 Test #10: app_fields ....   Passed
+100% tests passed, 0 tests failed out of 10
 
 layout_model_tests:     253 checks passed
 selection_model_tests:   90 checks passed
 document_tests:          43 checks passed
 prefs_tests:             82 checks passed
-menu_tests:             664 checks passed
+menu_tests:             696 checks passed
 filter_tests:            60 checks passed
 export_tests:            58 checks passed
 views_tests:            164 checks passed
-                                                 (1,414 checks in total)
+app_edit_tests:         111 checks passed
+app_fields_tests:       199 checks passed
+                                                 (1,756 checks in total)
 ```
 
 The build took the **W37 path** (`core/mppwrite/save.h` is present, so
@@ -373,7 +437,7 @@ checks the task count, that the source fixture's size is unchanged (its SHA-256 
 matches `tests/data/README.md`), that target == source is refused, that a cleared
 start writes nothing, and that an unknown uid fails without leaving a file.
 
-`export_tests` writes real PDFs under `build\vs-w47\test-out` (sheet, Gantt, filtered,
+`export_tests` writes real PDFs under `build\vs-w51\test-out` (sheet, Gantt, filtered,
 hours-style) and checks the `%PDF-` header, the `%%EOF` trailer, the page count, the
 printed row count, that two identical exports are byte-identical, that the hours
 rendering reaches the page, that the shading-off calendar makes Saturday and Sunday
@@ -384,13 +448,15 @@ selection/collapse/edit/undo mapping; the save helper end to end on the syntheti
 fixture; the preference model and parser (including the wave-11 keys); the menu bar's
 structure, enablement and task-view gating; the filter model end to end; PDF export end
 to end; the resource sheet's rows/fields and columns; the usage day/week/month buckets,
-totals and labels; the computed columns' values and read-only rule; `app/`'s C++
-compiles and links with the CI warning flags; `ctest` 8/8.
+totals and labels; the computed columns' values and read-only rule; the stored
+custom-field decoding/formatting and the file's formulas (extraction and evaluation);
+the pending Insert/Delete Task model and the real writer sequence; `app/`'s C++
+compiles and links with the CI warning flags; `ctest` 10/10.
 
 **Inferred / to be proved by macOS CI**: that `main.mm` compiles, links and behaves.
 There is no Objective-C++ compiler on the development box. `app-macos.yml` is that
 gate: configure `app/`, build `msproject_app.app` with `-Werror`, run the tests (all
-eight; the registration step greps the seven wave-10 names),
+ten; the registration step greps the wave-10/11 names),
 and assert the bundle executable exists and links AppKit + UniformTypeIdentifiers.
 No runner ever opens a window, so the actual interaction (a click, a keystroke, a
 panel, a menu) is verified by construction and by the pure helpers it calls — not by
@@ -398,16 +464,18 @@ an automated UI test.
 
 ## What the window does not do
 
-- **No Cut** (the sheet has copy/paste, not cut), **no row insert/delete/move, no
-  indent/outdent** (blocked on `RecordSet` having no insert/erase/reorder — see
+- **No Cut** (the sheet has copy/paste, not cut), **no row move and no
+  indent/outdent** (blocked on `RecordSet` having no erase/reorder — see
   `memory/sheet.md`), **no column resize/reorder** (only visibility), no fill handle.
+  Insert/Delete Task ARE wired (wave 12) as pending structural edits.
 - **The resource sheet and usage grids are read-only**: no cell editing, no resource
   insert/delete, no assignment editing, no units/contour editing. Pay rates and Cost
-  are not decoded or shown. This is deliberate for wave 11; wave 12 owns view editing.
+  are not decoded or shown. The stored custom-field columns and the file's formula columns (wave 12) are read-only.
 - **The usage views use the stock Mon-Fri calendar**, not the file's own project
   calendar (`core::cal` is not wired; see Open).
-- **Stored custom-field values are not read**: `mpp::Task` does not expose them yet, so
-  only the two formula columns exist and the chooser marks the stored ones pending.
+- **Stored custom-field values are read but never written**: the six columns are
+  read-only, and editing a stored value or a formula's definition is not a wave-12
+  feature (the writer has `save_field_values`, but no UI calls it).
 - **No Chart/graph views**, no Team Planner, no multiple tables per view: the four views
   are the only modes.
 - **No IME/composition** in the in-cell editor: it is drawn by the view from
@@ -451,9 +519,10 @@ an automated UI test.
    `app::standard_calendar()`'s one call site) once a fixture proves the decoded
    calendar matches Project's buckets; today the stock Mon-Fri week is a documented
    choice.
-1. **Stored custom-field values**: read `Text1`/`Number1`/`Date1`/`Flag1` through the
-   reader (the oracle measured the storage keys) and add the third chooser column; the
-   formula columns are the read-only substitute until then.
+1. **Writing custom fields**: the reader decodes the six families and the writer has
+   `mppwrite::save_field_values`, but no UI edits them. Wiring an editable stored column
+   (and writing a formula definition back into `114/Props`) is the next custom-field
+   step; the `114/Props` writer is deliberately absent.
 1. **Resource cost/rates** if the reader ever decodes them: the Resource Sheet has a
    Work column, not a Cost column, because inventing rates would be worse.
 2. **Selection fidelity on macOS** is unmeasured against the product: row band vs
@@ -465,7 +534,8 @@ an automated UI test.
    per-task calendar once the reader exposes it usefully.
 6. **Multi-rule filter UI** over the All/Any path that `filter_model` already builds
    and tests.
-7. **Row insert/delete** when W45 lands a writer that can grow a table (then Insert ▸
-   Task can be enabled, and the reason it was greyed out goes away).
+7. **Row move / indent / outdent**: the writer can append and tombstone a Task row, but
+   not reorder one or change its outline position; a moved row would need both.
 8. **Non-date edits and saving**: Name/Finish/Duration persist nowhere. Only a writer
    API for those fields would change that.
+

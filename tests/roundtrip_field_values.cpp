@@ -1,6 +1,6 @@
 /*
  * roundtrip_field_values.cpp -- W48: write Task custom-field values and prove
- * them from the bytes on disk.
+ * them from the bytes on disk.  W52 adds the CLEAR (empty-value) cases.
  *
  * CLAIM UNDER TEST (measured encodings: docs/analysis/oracle/w10-oracle.md §2):
  *
@@ -12,7 +12,13 @@
  *   Flag1     0x0b400048  Task FixedMeta entry +24 bit 0x02 (NOT VarMeta), with
  *                         Project's own Fixed2Meta mirror (+31/+61 bit 0x80)
  *
- * For every write the test asserts, from the written file:
+ * W52 CLEAR (core/mppwrite/field_values.h: clear_field_value): store the
+ * measured EMPTY value (Text = 2-byte UTF-16 NUL, Number = f64 0.0, Duration =
+ * u32 0, Date = 0xffffffff, Flag1 = bit clear) and clear the FixedMeta tail
+ * presence bits + the Flag1 mirror.  The VarMeta entry is KEPT and the Props
+ * registries are byte-identical: there is no measured field-delete shape.
+ *
+ * For every write/clear the test asserts, from the written file:
  *   1. the value reads back through the writer's own re-read AND (when the
  *      top-level build provides core/mpp) through the independent reader;
  *   2. the exact payload bytes and VarMeta entry offsets;
@@ -22,8 +28,9 @@
  *      Fixed2Data are byte-identical, every other stream (214/ included) too;
  *   5. the file re-emits byte-identically, `check()` and `check_table()` pass;
  *   6. the refusals fire (unknown id, Cost (unmeasured), Flag2 (bit unmeasured),
- *      wrong kind, uid 0, unknown uid, duplicate edit, invalid date, NaN number,
- *      embedded NUL, missing output directory).
+ *      a field without a measured tail bit, wrong kind, uid 0, unknown uid,
+ *      duplicate edit, invalid date, NaN number, embedded NUL, missing output
+ *      directory).
  *
  * NO CORPUS NEEDED for the write cases: tests/data/synthetic-base.mpp is the
  * committed synthetic source.  Project's measured w10-fieldvalues.mpp is read
@@ -31,8 +38,10 @@
  * fixture that defined the encodings.
  *
  * OUTPUT (build tree, git-ignored): w48-fields.mpp, w48-fields-rewrite.mpp,
- * w48-flag-on.mpp, w48-flag-off.mpp and w48-manifest.json (size + FNV-1a 64),
- * written to ${MPPWRITE_TEST_OUT} and mirrored to ${MPPWRITE_FIXTURE_MIRROR}.
+ * w48-flag-on.mpp, w48-flag-off.mpp, w52-fields-cleared.mpp (W52: the six-field
+ * file with every measured value cleared) and w48-manifest.json (size + FNV-1a
+ * 64), written to ${MPPWRITE_TEST_OUT} and mirrored to
+ * ${MPPWRITE_FIXTURE_MIRROR}.
  */
 
 #include <algorithm>
@@ -69,7 +78,7 @@
 #define MPPWRITE_TEST_OUT "core/mppwrite/build/test-out"
 #endif
 #ifndef MPPWRITE_FIXTURE_MIRROR
-#define MPPWRITE_FIXTURE_MIRROR "core/mppwrite/build/vs-w48/test-out"
+#define MPPWRITE_FIXTURE_MIRROR "core/mppwrite/build/vs-w52/test-out"
 #endif
 
 namespace {
@@ -948,6 +957,243 @@ void test_reader_cross_check(TestContext&) {}
 void test_measured_fixture(TestContext&) {}
 #endif
 
+/* ---- (e2) W52: clear every measured field ------------------------------- */
+
+bool warns(std::vector<std::string> const& warnings, std::string_view needle) {
+    for (std::string const& warning : warnings) {
+        if (warning.find(needle) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void test_clear(TestContext& t) {
+    std::string const source = out_path("w48-fields.mpp");
+    mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+    mppwrite::CfbDocument const before = doc;
+    std::vector<std::uint8_t> const props_before = doc.read_stream(kProps);
+    std::vector<std::uint8_t> const assn_props_before = doc.read_stream(kAssnProps);
+    std::vector<std::uint8_t> const fixed_before = doc.read_stream(kFixed);
+    std::vector<std::uint8_t> const fixed2_before = doc.read_stream(kFixed2);
+    std::vector<std::uint8_t> const meta_before = doc.read_stream(kMeta);
+    std::size_t const entries_before = var_entry_count(doc);
+    std::size_t const var2_before = doc.read_stream(kVar2).size();
+    int const entry = meta_entry_for_row(meta_before, 1);
+    t.check(entry >= 0, "clear: row 1 has a FixedMeta entry");
+    if (entry < 0) {
+        return;
+    }
+    std::size_t const meta_base = 16 + static_cast<std::size_t>(entry) * 47;
+    std::size_t const fixed2_base = 16 + static_cast<std::size_t>(entry) * 96;
+    t.equal(u16_at(meta_before, meta_base + 2), 17,
+            "clear: the source row has 17 variable fields");
+
+    struct Step {
+        std::uint32_t field_id;
+        char const* name;
+        char const* file;
+    };
+    std::array<Step, 6> const steps = {{
+        {mppwrite::kText1FieldId, "Text1", "w52-clear-text.mpp"},
+        {mppwrite::kNumber1FieldId, "Number1", "w52-clear-number1.mpp"},
+        {0x0B400058u, "Number2", "w52-clear-number2.mpp"},
+        {mppwrite::kDuration1FieldId, "Duration1", "w52-clear-duration1.mpp"},
+        {mppwrite::kDate1FieldId, "Date1", "w52-clear-date1.mpp"},
+        {mppwrite::kFlag1FieldId, "Flag1", "w52-fields-cleared.mpp"},
+    }};
+    for (Step const& step : steps) {
+        std::string const label = std::string("clear ") + step.name;
+        mppwrite::ClearedField const cleared = mppwrite::clear_field_value(
+            doc, 1, step.field_id, out_path(step.file));
+        t.equal(cleared.uid, 1, label + ": uid");
+        t.equal(cleared.field_id, step.field_id, label + ": field id");
+        t.check(cleared.was_present, label + ": the value was present");
+        if (step.field_id == mppwrite::kFlag1FieldId) {
+            t.check(!cleared.flag, label + ": the flag reads back false");
+            t.check(!cleared.entry_kept, label + ": a flag has no VarMeta entry");
+        } else {
+            t.check(cleared.entry_kept, label + ": the VarMeta entry is kept");
+            t.check(cleared.value.present && cleared.value.storage_measured,
+                    label + ": the empty value is stored and decodable");
+            switch (cleared.kind) {
+                case mppwrite::FieldKind::text:
+                    t.check(cleared.value.text.empty(), label + ": text is empty");
+                    break;
+                case mppwrite::FieldKind::number:
+                    t.check(cleared.value.number == 0.0, label + ": number is 0.0");
+                    break;
+                case mppwrite::FieldKind::duration:
+                    t.check(cleared.value.duration_ticks == 0,
+                            label + ": duration is 0 ticks");
+                    break;
+                case mppwrite::FieldKind::date:
+                    t.check(cleared.value.packed_date == mppwrite::kInvalidDate,
+                            label + ": date is 0xffffffff (NA)");
+                    break;
+                case mppwrite::FieldKind::flag:
+                case mppwrite::FieldKind::cost:
+                case mppwrite::FieldKind::unknown:
+                    break;
+            }
+        }
+    }
+
+    /* Exact empty payloads, read straight from Var2Data. */
+    Block block;
+    t.check(block_for(doc, 1, mppwrite::kText1FieldId, block) &&
+                block.payload == std::vector<std::uint8_t>({0x00, 0x00}),
+            "clear: Text1 payload is the 2-byte empty UTF-16 string");
+    t.check(block_for(doc, 1, mppwrite::kNumber1FieldId, block) &&
+                block.payload == std::vector<std::uint8_t>(8, 0x00),
+            "clear: Number1 payload is f64 0.0");
+    t.check(block_for(doc, 1, 0x0B400058u, block) &&
+                block.payload == std::vector<std::uint8_t>(8, 0x00),
+            "clear: Number2 payload is f64 0.0");
+    t.check(block_for(doc, 1, mppwrite::kDuration1FieldId, block) &&
+                block.payload == std::vector<std::uint8_t>(4, 0x00),
+            "clear: Duration1 payload is u32 0");
+    t.check(block_for(doc, 1, mppwrite::kDate1FieldId, block) &&
+                block.payload == std::vector<std::uint8_t>({0xFF, 0xFF, 0xFF, 0xFF}),
+            "clear: Date1 payload is 0xffffffff");
+
+    /* The presence bits and the flag mirror are clear, the entry count is not. */
+    std::vector<std::uint8_t> const meta = doc.read_stream(kMeta);
+    t.equal(u16_at(meta, meta_base + 2), 17,
+            "clear: FixedMeta +2 is unchanged (entries kept)");
+    t.equal(meta[meta_base + 21], 0x00, "clear: Text1 tail bit cleared");
+    t.equal(meta[meta_base + 24], 0x00, "clear: Flag1 tail bit cleared");
+    t.equal(meta[meta_base + 25], 0x00,
+            "clear: Number1/Number2 tail bits cleared");
+    t.equal(meta[meta_base + 26], 0x00, "clear: Duration1 first tail bit cleared");
+    t.equal(meta[meta_base + 27], 0x00,
+            "clear: Duration1 second tail bit cleared");
+    t.equal(meta[meta_base + 29], 0x00, "clear: Date1 tail bit cleared");
+    std::vector<std::uint8_t> const fixed2_meta = doc.read_stream(kFixed2Meta);
+    t.equal(fixed2_meta[fixed2_base + 31], 0x00,
+            "clear: Flag1 Fixed2Meta +31 mirror cleared");
+    t.equal(fixed2_meta[fixed2_base + 61], 0x00,
+            "clear: Flag1 Fixed2Meta +61 mirror cleared");
+
+    /* Streams: FixedData/Fixed2Data/FixedMeta sizes and the registries are
+     * untouched; VarMeta keeps its entry count; Var2Data only grew. */
+    t.check(doc.read_stream(kFixed) == fixed_before,
+            "clear: FixedData is byte-identical");
+    t.check(doc.read_stream(kFixed2) == fixed2_before,
+            "clear: Fixed2Data is byte-identical");
+    t.check(doc.read_stream(kProps) == props_before,
+            "clear: Task/Props is byte-identical (field stays registered)");
+    t.check(doc.read_stream(kAssnProps) == assn_props_before,
+            "clear: Assn/Props is byte-identical");
+    t.equal(var_entry_count(doc), entries_before,
+            "clear: the VarMeta entry count is unchanged");
+    t.check(doc.read_stream(kVar2).size() == var2_before + 46,
+            "clear: Var2Data grew by the five empty blocks (46 bytes)");
+    t.check(doc.read_stream(kMeta).size() == meta_before.size(),
+            "clear: FixedMeta size is unchanged");
+    std::vector<std::string> const changed = changed_streams(before, doc);
+    t.check(changed.size() == 4 && contains(changed, kMeta) &&
+                contains(changed, kFixed2Meta) && contains(changed, kVarMeta) &&
+                contains(changed, kVar2),
+            "clear: only FixedMeta/Fixed2Meta/VarMeta/Var2Data changed");
+    check_214_untouched(t, before, doc, "clear");
+    t.check(mppwrite::check_table(doc).empty(),
+            "clear: check_table: " + mppwrite::check_table(doc));
+    t.check(doc.check().empty(), "clear: container check: " + doc.check());
+    t.check(doc.to_bytes() == read_file(out_path("w52-fields-cleared.mpp")),
+            "clear: the document equals the file on disk");
+    emit(t, doc, "w52-fields-cleared.mpp",
+         "w48-fields.mpp with Text1/Number1/Number2/Duration1/Date1/Flag1 "
+         "cleared to the measured empty encodings; Props untouched");
+
+    /* Idempotent: clearing the same field again writes the same bytes. */
+    mppwrite::CfbDocument const cleared = doc;
+    mppwrite::ClearedField const again = mppwrite::clear_field_value(
+        doc, 1, mppwrite::kText1FieldId, out_path("w52-clear-again.mpp"));
+    t.check(warns(again.warnings, "already empty"),
+            "clear again: the call reports the no-op");
+    t.check(doc.to_bytes() == cleared.to_bytes(),
+            "clear again: the file is byte-identical");
+
+    /* Clearing a field the row never stored adds no entry and changes nothing. */
+    mppwrite::CfbDocument absent =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA,
+                                              "synthetic-base.mpp"));
+    mppwrite::CfbDocument const absent_before = absent;
+    mppwrite::ClearedField const absent_clear = mppwrite::clear_field_value(
+        absent, 2, mppwrite::kText1FieldId, out_path("w52-clear-absent.mpp"));
+    t.check(!absent_clear.was_present, "clear absent: was_present is false");
+    t.check(!absent_clear.entry_kept, "clear absent: no entry was inserted");
+    t.check(warns(absent_clear.warnings, "no VarMeta entry"),
+            "clear absent: the warning says the entry stays absent");
+    t.check(absent.to_bytes() == absent_before.to_bytes(),
+            "clear absent: the document is unchanged");
+
+    /* Refusals: unknown id, Cost, Flag2, Text2 (no measured tail bit), uid 0,
+     * unknown uid and a bad output path. */
+    mppwrite::CfbDocument refusals = mppwrite::CfbDocument::from_file(source);
+    std::string const missing = out_path("w52-clear-should-not-exist.mpp");
+    std::error_code ignored;
+    std::filesystem::remove(missing, ignored);
+    auto expect_clear_refusal = [&](std::uint32_t uid, std::uint32_t field_id,
+                                    std::string_view needle,
+                                    std::string const& what) {
+        mppwrite::CfbDocument const unchanged = refusals;
+        expect_error(
+            t,
+            [&] {
+                (void)mppwrite::clear_field_value(refusals, uid, field_id,
+                                                  missing);
+            },
+            needle, what);
+        t.check(refusals.to_bytes() == unchanged.to_bytes(),
+                what + ": the document changed on refusal");
+        t.check(!file_exists(missing), what + ": the output file was created");
+    };
+    expect_clear_refusal(1, 0x0B4000FFu, "not a task custom field",
+                         "unknown field id refused");
+    expect_clear_refusal(1, mppwrite::kCost1FieldId, "Cost", "Cost refused");
+    expect_clear_refusal(1, 0x0B400049u, "not stored where it is measured",
+                         "Flag2 refused");
+    expect_clear_refusal(1, 0x0B400036u, "no measured FixedMeta tail-presence bit",
+                         "Text2 refused (no measured tail bit)");
+    expect_clear_refusal(0, mppwrite::kText1FieldId, "project row",
+                         "uid 0 refused");
+    expect_clear_refusal(99, mppwrite::kText1FieldId, "no task row",
+                         "unknown uid refused");
+    expect_error(
+        t,
+        [&] {
+            (void)mppwrite::clear_field_value(refusals, 1,
+                                              mppwrite::kText1FieldId, "");
+        },
+        "output path", "an empty output path is refused");
+
+#ifdef MPPWRITE_HAVE_READER
+    mpp::Document const cleared_file =
+        mpp::load_file(out_path("w52-fields-cleared.mpp"));
+    mpp::CustomFieldValue const text =
+        cleared_file.custom_field(1, mppwrite::kText1FieldId);
+    t.check(text.present && text.text.empty(),
+            "reader: cleared Text1 is present-and-empty");
+    mpp::CustomFieldValue const number =
+        cleared_file.custom_field(1, mppwrite::kNumber1FieldId);
+    t.check(number.present && number.number == 0.0,
+            "reader: cleared Number1 is 0.0");
+    mpp::CustomFieldValue const duration =
+        cleared_file.custom_field(1, mppwrite::kDuration1FieldId);
+    t.check(duration.present && duration.duration_ticks == 0,
+            "reader: cleared Duration1 is 0 ticks");
+    mpp::CustomFieldValue const date =
+        cleared_file.custom_field(1, mppwrite::kDate1FieldId);
+    t.check(date.present && date.packed_date == 0xFFFFFFFFu,
+            "reader: cleared Date1 is 0xffffffff");
+    mpp::CustomFieldValue const flag =
+        cleared_file.custom_field(1, mppwrite::kFlag1FieldId);
+    t.check(flag.present && !flag.flag, "reader: cleared Flag1 is false");
+#endif
+}
+
 /* ---- (f) the linked-pin predicate (w11-oracle §1) ----------------------- */
 
 void test_pin_predicate(TestContext& t) {
@@ -978,6 +1224,7 @@ int main() {
         test_refusals(t);
         test_reader_cross_check(t);
         test_measured_fixture(t);
+        test_clear(t);
         test_pin_predicate(t);
         write_manifest(t);
         return t.report();

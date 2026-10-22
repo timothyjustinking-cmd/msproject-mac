@@ -54,6 +54,9 @@ std::vector<MenuSpec> build_menu_specs() {
         item(MenuAction::copy, "Copy", "c"),
         item(MenuAction::paste, "Paste", "v"),
         item(MenuAction::select_all, "Select All", "a"),
+        // Wave 12.  Cmd-Backspace is the Mac's "delete"; Delete Task is a
+        // structural edit and asks for confirmation before it runs.
+        item(MenuAction::delete_task, "Delete Task", "\b", false, false, true),
     };
     menus.push_back(std::move(edit));
 
@@ -88,8 +91,9 @@ std::vector<MenuSpec> build_menu_specs() {
     MenuSpec insert;
     insert.title = "Insert";
     insert.items = {
-        // Disabled, not faked: see menu_disabled_reason().
-        item(MenuAction::insert_task, "Task..."),
+        // Wave 12: Task asks for a name and records a pending insert.  Resource
+        // stays disabled, not faked: see menu_disabled_reason().
+        item(MenuAction::insert_task, "Task...", "i"),
         item(MenuAction::insert_resource, "Resource..."),
     };
     menus.push_back(std::move(insert));
@@ -144,6 +148,7 @@ const std::vector<MenuAction>& all_menu_actions() {
         MenuAction::usage_week,
         MenuAction::usage_month,
         MenuAction::insert_task,
+        MenuAction::delete_task,
         MenuAction::insert_resource,
     };
     return actions;
@@ -168,7 +173,6 @@ const MenuItemSpec* find_menu_item(MenuAction action) {
 bool menu_item_supported(MenuAction action) noexcept {
     switch (action) {
         case MenuAction::cut:
-        case MenuAction::insert_task:
         case MenuAction::insert_resource:
             return false;
         default:
@@ -180,9 +184,6 @@ const char* menu_disabled_reason(MenuAction action) noexcept {
     switch (action) {
         case MenuAction::cut:
             return "the sheet model has no cut operation; Copy and Paste are wired";
-        case MenuAction::insert_task:
-            return "the shell has no task-insert UI yet; wave 12 owns add/delete editing "
-                   "(the writer API exists)";
         case MenuAction::insert_resource:
             return "adding a resource needs a resource writer; the resource sheet is read-only "
                    "(wave 11), insert/delete is wave 12";
@@ -253,8 +254,16 @@ bool menu_item_enabled(MenuAction action, const MenuState& state) noexcept {
         case MenuAction::usage_week:
         case MenuAction::usage_month:
             return state.has_document;
-        case MenuAction::cut:
         case MenuAction::insert_task:
+        case MenuAction::delete_task:
+            // A structural edit is a Task Sheet command: it needs a document, a
+            // row to work from and no open cell edit.  Delete also needs a
+            // selection.
+            if (!state.has_document || !state.task_view || state.editing) {
+                return false;
+            }
+            return action == MenuAction::insert_task ? true : state.has_selection;
+        case MenuAction::cut:
         case MenuAction::insert_resource:
             return false;
     }
@@ -299,6 +308,7 @@ const char* menu_action_name(MenuAction action) noexcept {
         case MenuAction::usage_week: return "usage_week";
         case MenuAction::usage_month: return "usage_month";
         case MenuAction::insert_task: return "insert_task";
+        case MenuAction::delete_task: return "delete_task";
         case MenuAction::insert_resource: return "insert_resource";
     }
     return "none";

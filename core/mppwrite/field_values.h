@@ -248,6 +248,67 @@ FieldWriteResult save_field_values(CfbDocument& doc,
                                    std::string const& path,
                                    std::string_view table = "114/TBkndTask");
 
+/* What `clear_field_value` proved from the file on disk. */
+struct ClearedField {
+    std::uint32_t uid = 0;
+    std::uint32_t field_id = 0;
+    FieldKind kind = FieldKind::unknown;
+    bool was_present = false; /* the field had a value before the call */
+    bool entry_kept = false;  /* a VarMeta entry now points at the empty block */
+    bool flag = false;        /* Flag1 after the call (always false) */
+    FieldValue value;         /* exactly what the file now holds (the empty value) */
+    std::vector<std::string> warnings;
+};
+
+/*
+ * Store the measured EMPTY value for one custom field of one task, write the
+ * package to `path`, re-open it and prove the result from the bytes on disk.
+ * W52 (2026-10-22).
+ *
+ * WHAT "CLEAR" MEANS HERE.  Project has no measured field-delete encoding, so
+ * this is the empty-VALUE shape, not entry removal:
+ *
+ *   Text      VarMeta block = empty UTF-16LE string + NUL (2 bytes)
+ *   Number    VarMeta block = 8-byte little-endian f64 0.0
+ *   Duration  VarMeta block = u32 0 file ticks
+ *   Date      VarMeta block = u32 0xffffffff (table.h's kInvalidDate, Project's
+ *             "no date"; the same word an ASAP constraint stores)
+ *   Flag1     Task FixedMeta entry byte +24 bit 0x02 cleared, plus the measured
+ *             Fixed2Meta mirror (+31/+61 bit 0x80) cleared
+ *
+ * and the field's FixedMeta TAIL PRESENCE bits are CLEARED.  Those tail bits are
+ * what make Project display a value at all (measured, W48 third gate), so a
+ * cleared field reads as blank even though its VarMeta entry still exists.
+ *
+ * The VarMeta entry is KEPT and repointed at the empty block (a new block is
+ * appended only when the stored value was not already empty).  FixedMeta +2 is
+ * therefore the row's VarMeta entry count, unchanged, and
+ * `114/TBkndTask/Props` / `114/TBkndAssn/Props` are not rewritten: the field
+ * stays registered exactly as Project keeps it.  Removing the entry (and
+ * decrementing +2) is deliberately NOT implemented; there is no measured
+ * encoding for it.
+ *
+ * A field that was never stored gets no new VarMeta entry (clearing an absent
+ * field must not register one); only its presence bits are cleared.  Clearing a
+ * field that is already empty is a byte-identical no-op (the stream is written
+ * and re-read anyway, so the all-or-nothing proof still runs).
+ *
+ * Refusals (an exception leaves `doc` and any pre-existing output file
+ * untouched):
+ *   - an empty/unusable output path;
+ *   - a uid of 0 or a uid with no live task row (no FixedMeta entry, a
+ *     tombstone, or no VarMeta group);
+ *   - a field outside the six measured ids (Text1, Flag1, Number1, Number2,
+ *     Duration1, Date1): Cost, Flag2..Flag20, unknown ids, and every field whose
+ *     FixedMeta tail-presence bit is not measured are refused rather than
+ *     guessed;
+ *   - a task table whose size identity is broken (`check_table` and the
+ *     FixedMeta/VarMeta geometry checks).
+ */
+ClearedField clear_field_value(CfbDocument& doc, std::uint32_t uid,
+                               std::uint32_t field_id, std::string const& path,
+                               std::string_view table = "114/TBkndTask");
+
 } /* namespace mppwrite */
 
 #endif /* MPPWRITE_FIELD_VALUES_H */

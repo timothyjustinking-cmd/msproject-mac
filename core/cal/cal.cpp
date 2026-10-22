@@ -36,6 +36,8 @@ constexpr std::size_t kExceptionFixedBytes = 92;
 constexpr std::size_t kExceptionNameOffset = 88;             // u32 name byte length
 constexpr std::size_t kExceptionRecurrenceOffset = 72;       // u16 PjExceptionType
 constexpr std::size_t kExceptionOccurrencesOffset = 4;       // u16, recurring only
+constexpr std::size_t kExceptionParameterOffset = 74;        // first of 7 u16 words
+constexpr std::size_t kExceptionParameterWords = 7;          // +74 .. +86
 constexpr std::size_t kExceptionPeriodCountOffset = 14;      // u16
 constexpr std::size_t kExceptionStartOffset = 20;            // u16 start[i]
 constexpr std::size_t kExceptionLengthOffset = 32;           // u32 length[i]
@@ -313,6 +315,49 @@ std::int32_t nth_weekday_of_month(std::int32_t year, std::int32_t month, std::in
     return 0;
 }
 
+// Decode the recurrence parameter words (+74..+86) of one exception record into
+// DatedException's named fields.  The word layout is per type and is measured on
+// corpus/probe/w12-exceptions.mpp; see the block comment on DatedException in
+// cal.h for the offset-by-type table and the oracle JSON that agrees with it.
+// Nothing is defaulted here: a type that leaves a word at 0 gets 0, and the
+// expansion treats 0 as "not stored".
+void decode_recurrence_parameters(DatedException& exception) noexcept {
+    // Byte views of the words: [1] is +76, [2] is +78.
+    const std::int32_t low76 = exception.raw_recurrence_words[1] & 0xFF;
+    const std::int32_t high77 = (exception.raw_recurrence_words[1] >> 8) & 0xFF;
+    const std::int32_t word78 = exception.raw_recurrence_words[2];
+    const std::int32_t low78 = word78 & 0xFF;
+    switch (exception.recurrence_type) {
+        case 2:  // yearly, month + day-of-month
+            exception.month = low76 + 1;
+            exception.month_day = high77;
+            break;
+        case 3:  // yearly, positional
+            exception.month = low76 + 1;
+            exception.month_position = high77;
+            exception.month_item = low78;
+            break;
+        case 4:  // monthly, day-of-month (mpxj reads the frequency as a byte)
+            exception.month_day = low76;
+            exception.period = low78;
+            break;
+        case 5:  // monthly, positional
+            exception.month_position = low76;
+            exception.month_item = high77;
+            exception.period = word78;
+            break;
+        case 6:  // weekly
+            exception.days_of_week = low76;
+            exception.period = word78;
+            break;
+        case 7:  // every N days
+            exception.period = exception.raw_recurrence_words[1];
+            break;
+        default:  // 0/1: a plain dated range carries no parameter word
+            break;
+    }
+}
+
 }  // namespace
 
 // --- public decoders --------------------------------------------------------
@@ -415,6 +460,12 @@ CalendarData decode_calendar_data(std::vector<std::uint8_t> const& data) {
                 read_u16(data, offset + kExceptionRecurrenceOffset, "calendar exception recurrence");
             exception.occurrences =
                 read_u16(data, offset + kExceptionOccurrencesOffset, "calendar exception occurrences");
+            for (std::size_t word = 0; word < kExceptionParameterWords; ++word) {
+                exception.raw_recurrence_words[word] =
+                    read_u16(data, offset + kExceptionParameterOffset + word * 2,
+                             "calendar exception recurrence parameter");
+            }
+            decode_recurrence_parameters(exception);
             std::int32_t periods =
                 read_u16(data, offset + kExceptionPeriodCountOffset, "calendar exception periods");
             periods = std::min(periods, kMaxStoredIntervals);
@@ -659,6 +710,14 @@ CalendarDefinition const* find_calendar_by_uid(CalendarTable const& table, std::
     return nullptr;
 }
 
+std::int32_t weekday_of_month_item(std::int32_t month_item) noexcept {
+    if (month_item < kMonthItemSunday || month_item > kMonthItemSaturday) {
+        return -1;
+    }
+    // PjMonthItem counts Sunday first: 3 = Sunday (weekday 0) .. 9 = Saturday.
+    return month_item - kMonthItemSunday;
+}
+
 RecurrenceExpansion expand_recurring_exception(DatedException const& exception,
                                                std::int32_t max_days) {
     RecurrenceExpansion out;
@@ -671,10 +730,6 @@ RecurrenceExpansion expand_recurring_exception(DatedException const& exception,
         out.why = "PjExceptionType is outside 0..7";
         return out;
     }
-    if (type == 7) {
-        out.why = "day-count recurrence: the 'every N days' period is not decoded";
-        return out;
-    }
     if (exception.start_day <= 0) {
         out.why = "no recurrence start day";
         return out;
@@ -684,50 +739,96 @@ RecurrenceExpansion expand_recurring_exception(DatedException const& exception,
     const std::int32_t last = std::max(first, exception.end_day);
     const core::sched::CivilDate start = civil_of_day(first);
     const core::sched::CivilDate end = civil_of_day(last);
-    const std::int32_t weekday = core::sched::weekday_of_day(first);
-    // The start day is a matching instance, so it carries the rule: its
-    // day-of-month for types 2/4, and its position inside its own month for the
-    // positional types 3/5 (1..4, or "last" when a further same-weekday day
-    // would leave the month).
-    const std::int32_t position =
-        (start.day + core::sched::kDaysPerWeek > days_in_month(start.year, start.month))
-            ? 0
-            : ((start.day - 1) / core::sched::kDaysPerWeek + 1);
+    const std::int32_t start_weekday = core::sched::weekday_of_day(first);
 
-    const auto add = [&out, first, last](std::int32_t day) {
-        if (day >= first && day <= last) {
-            out.days.push_back(day);
+    // Accumulate inside [first, last] and stop the moment the caller's cap is
+    // exceeded: every loop below is additionally bounded by the day range, so
+    // this cannot run away even when the cap is disabled.
+    bool too_long = false;
+    const auto add = [&out, first, last, max_days, &too_long](std::int32_t day) {
+        if (too_long || day < first || day > last) {
+            return;
         }
+        if (max_days > 0 && static_cast<std::int32_t>(out.days.size()) >= max_days) {
+            too_long = true;
+            return;
+        }
+        out.days.push_back(day);
     };
 
+    // Fallbacks: a parameter the type does not store is 0, and the range's first
+    // day is by definition a matching instance, so it supplies the value.
+    // Position is never derived -- 0 is the stored value for "first".
+    const std::int32_t month = exception.month > 0 ? exception.month : start.month;
+    const std::int32_t month_day = exception.month_day > 0 ? exception.month_day : start.day;
+    const std::int32_t stored_weekday = weekday_of_month_item(exception.month_item);
+    if (exception.month_item != 0 && stored_weekday < 0) {
+        out.why = "the stored MonthItem is not a weekday (PjMonthItem 3..9)";
+        return out;
+    }
+    if (exception.month_position < 0 || exception.month_position > kMonthPositionLast) {
+        out.why = "the stored MonthPosition is outside PjMonthPosition 0..4";
+        return out;
+    }
+    const std::int32_t weekday = stored_weekday >= 0 ? stored_weekday : start_weekday;
+    // PjMonthPosition 0..3 -> the 1st..4th such weekday; 4 (pjLast) -> the last
+    // one, which nth_weekday_of_month() spells as position 0.
+    const std::int32_t ordinal =
+        exception.month_position >= kMonthPositionLast ? 0 : exception.month_position + 1;
+    const std::int32_t period = std::max(1, exception.period);
+
     switch (type) {
-        case 2:  // yearly: month + day-of-month
-            for (std::int32_t year = start.year; year <= end.year; ++year) {
-                add(day_of_civil(year, start.month, start.day));
+        case 2:  // yearly: a fixed month + day-of-month
+            for (std::int32_t year = start.year; year <= end.year && !too_long; ++year) {
+                // day_of_civil returns 0 for a day the month does not have, so a
+                // 29 February is skipped in a common year and a 31st in a short
+                // month, exactly as Project's own count shows.
+                add(day_of_civil(year, month, month_day));
             }
             break;
-        case 3:  // yearly: month + position + weekday
-            for (std::int32_t year = start.year; year <= end.year; ++year) {
-                add(day_of_civil(year, start.month,
-                                 nth_weekday_of_month(year, start.month, weekday, position)));
+        case 3:  // yearly: the position-th weekday of a fixed month
+            for (std::int32_t year = start.year; year <= end.year && !too_long; ++year) {
+                add(day_of_civil(
+                    year, month, nth_weekday_of_month(year, month, weekday, ordinal)));
             }
             break;
-        case 4:  // monthly: day-of-month
-        case 5:  // monthly: position + weekday
-            for (std::int32_t year = start.year; year <= end.year; ++year) {
-                const std::int32_t first_month = year == start.year ? start.month : 1;
-                const std::int32_t last_month = year == end.year ? end.month : 12;
-                for (std::int32_t month = first_month; month <= last_month; ++month) {
-                    const std::int32_t day =
-                        type == 4 ? day_of_civil(year, month, start.day)
-                                  : day_of_civil(year, month,
-                                                 nth_weekday_of_month(year, month, weekday, position));
-                    add(day);
+        case 4:  // monthly: day-of-month, every `period` months
+        case 5:  // monthly: position-th weekday, every `period` months
+        {
+            const std::int32_t first_index = start.year * 12 + (start.month - 1);
+            const std::int32_t last_index = end.year * 12 + (end.month - 1);
+            for (std::int32_t index = first_index; index <= last_index && !too_long;
+                 index += period) {
+                const std::int32_t year = index / 12;
+                const std::int32_t month_of_index = index % 12 + 1;
+                add(type == 4
+                        ? day_of_civil(year, month_of_index, month_day)
+                        : day_of_civil(year, month_of_index,
+                                       nth_weekday_of_month(year, month_of_index, weekday,
+                                                            ordinal)));
+            }
+            break;
+        }
+        case 6:  // weekly: every `period`th week, on every weekday in the mask
+        {
+            // Bit 0 is Sunday, so the week's first day is the Sunday on or before
+            // the start day.
+            const std::int32_t mask = (exception.days_of_week & 0x7F) != 0
+                                          ? (exception.days_of_week & 0x7F)
+                                          : (1 << start_weekday);
+            const std::int32_t week_start = first - start_weekday;
+            for (std::int32_t week = week_start; week <= last && !too_long;
+                 week += core::sched::kDaysPerWeek * period) {
+                for (std::int32_t bit = 0; bit < core::sched::kDaysPerWeek; ++bit) {
+                    if ((mask & (1 << bit)) != 0) {
+                        add(week + bit);
+                    }
                 }
             }
             break;
-        case 6:  // weekly: the start day's weekday, every week
-            for (std::int32_t day = first; day <= last; day += core::sched::kDaysPerWeek) {
+        }
+        case 7:  // every `period` days from the start day
+            for (std::int32_t day = first; day <= last && !too_long; day += period) {
                 add(day);
             }
             break;
@@ -735,20 +836,19 @@ RecurrenceExpansion expand_recurring_exception(DatedException const& exception,
             break;
     }
 
-    if (out.days.empty()) {
-        out.days.clear();
-        out.why = "the expansion produced no day inside the recurrence range";
-        return out;
-    }
-    if (max_days > 0 && static_cast<std::int32_t>(out.days.size()) > max_days) {
+    if (too_long) {
         out.days.clear();
         out.why = "the expansion is longer than the caller's day cap";
         return out;
     }
-    // The occurrence word (+4) is a check, never a source of truth: it must agree
-    // with the expansion or the expansion is refused (this is what catches a
-    // period other than one week/month/year, which the decoded record cannot
-    // express yet).
+    if (out.days.empty()) {
+        out.why = "the expansion produced no day inside the recurrence range";
+        return out;
+    }
+    // The occurrence word (+4) is a check, never a source of truth: Project
+    // recomputes it from the range and the parameters, so it must agree with the
+    // expansion or the expansion is refused.  On the wave-12 fixture all six
+    // recurring records agree, which is what validates the parameter decode.
     if (exception.occurrences > 0 &&
         out.days.size() != static_cast<std::size_t>(exception.occurrences)) {
         out.days.clear();

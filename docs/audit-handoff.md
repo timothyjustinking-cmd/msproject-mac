@@ -21,8 +21,8 @@ cmd /c "call `"$vc`" >nul && cmake --build build\audit-app --config Release"
 ctest --test-dir build\audit-app -C Release --output-on-failure
 ```
 
-Expected at the wave-11 gate: **39/39** core ctest and **8/8** app tests
-(1,414 app checks). The real corpus (`corpus/*.mpp`) is client data and is
+Expected at the wave-12 gate: **40/40** core ctest and **10/10** app tests
+(1,765 app checks). The real corpus (`corpus/*.mpp`) is client data and is
 git-ignored; `tests/data/` has committed synthetic fixtures. The two real files
 are PROJECT_A (83 tasks) and PROJECT_B (73 tasks, 70 live links / 63 assignments).
 
@@ -89,10 +89,12 @@ are PROJECT_A (83 tasks) and PROJECT_B (73 tasks, 70 live links / 63 assignments
 - Day/week/month bucket boundaries; Sunday-start weeks are a **decision**, not a
   measured Project rule.
 
-### Calendar (`core/cal`) — wave 12 in flight
+### Calendar (`core/cal`) — wave 12
 - Recurring exceptions: leap day, month-end, a fifth weekday that does not
   exist, yearly/monthly positionals, daily every-N, day-count spans; expansion
-  must terminate and not blow memory.
+  must terminate and not blow memory. The parameters are decoded
+  (`w12-oracle.md` §1); monthly-positional stores MonthItem 0, so its weekday is
+  derived from the start day — try to falsify that.
 - Holiday/dated exception application on project and per-task calendars.
 
 ### App (`app/`)
@@ -103,6 +105,8 @@ are PROJECT_A (83 tasks) and PROJECT_B (73 tasks, 70 live links / 63 assignments
 - Filter/selection/export interactions across views; PDF determinism.
 - `main.mm` is only compiled by `app-macos` CI; the headless tests cover models,
   not AppKit. Treat every new selector/control as suspect until the macOS run.
+  A wave-12 patch dropped `load_plan`'s signature and clang reported 20 cascading
+  errors — a reminder that MSVC never parses this file.
 
 ## 4. Known limitations to state, not hide
 
@@ -112,15 +116,16 @@ are PROJECT_A (83 tasks) and PROJECT_B (73 tasks, 70 live links / 63 assignments
 2. **Linked date pins clamp**: Project reopens at `max(pred finish, pin)`; the
    app does not yet warn when an edit cannot take effect.
 3. **`214/` is not regenerated**; view state is carried through byte-identically.
-4. **Assignment/link creation** is being added in wave 12; a task delete
-   cascades over existing rows.
+4. **Assignment row creation/deletion is not implemented**; link add/delete is.
+   A task delete cascades over existing link/assignment rows.
 5. **Cost custom fields and Flag2–20** are refused (storage unmeasured);
    field delete is only clear-to-empty.
 6. **MPP12 and MPP14 resource Type** are not implemented.
-7. **Recurring calendar exceptions** are wave 12; until it lands, only dated
-   ranges expand.
-8. **App**: save persists start dates, task add/delete and (wave 12) custom-field
-   columns are read-only; no multi-window/printing/drag.
+7. **Recurring calendar exceptions** are decoded and applied; the monthly
+   positional weekday is inferred from the start day (Project stores 0).
+8. **App**: save persists start dates, task add/delete; stored custom-field and
+   formula columns are read-only; no custom-field write UI, no link editing UI,
+   no multi-window/printing/drag.
 
 ## 5. Suggested debug build
 

@@ -1,87 +1,80 @@
-# memory — coordinator (wave 11 end / wave 12 in flight, 2026-10-22)
+# memory — coordinator (wave 12 end, 2026-10-22)
 
-Successor: read `docs/handoff/wave11-complete.md` (the gate) first, then
-`docs/handoff/coordinator.md` "Wave 11 final", then this. Wave 12 is in flight
-(W51 app editing, W52 writer links/clear, W53 calendar exceptions); check
-`WAVES.md` and the stream handoffs before touching their areas.
+Successor: read `docs/handoff/wave12-complete.md` (the gate), then
+`docs/handoff/coordinator.md` "Wave 12 final", then this. The build phase before
+the human/adversarial audit is complete; `docs/audit-handoff.md` is the audit
+brief.
 
 ## Where main is
 
-`f7c1279` plus the docs commit, pushed. Wave-11 commits: `8a34c14` W47, `c2acbe4`
-W50, `b233f78` oracle, `3f11019` W48+W49, `c4e885e` custom-field oracle,
-`f7c1279` crosscheck fix + `w12-exceptions` fixture. CI runs `39748803937`
-(ci) / `39748803465` (app-macos) were queued at handoff; check them.
+`6498a07` plus the docs commit, pushed. Wave-12 commits: `a5a05f8` W52+W53,
+`6498a07` W51. Wave-11 CI debt paid at `1639d80` (two clang/gcc-only fixes).
 
 ## The number
 
-* Clean `build\vs-w11`: **39/39 ctest**; app `build\vs-w11-app`: **8/8**, 1,414
+* `build\vs-w12`: **40/40 ctest**; app `build\vs-w12-app`: **10/10**, 1,765
   checks.
-* **M2 332/332** (83/83 × 4); schedin 20/20 + 10/10; plan_recalc 277; reader
-  685; add_delete 760; field_values 317; cpm 1,321; props 520.
-* Project gates: cascade reopens 2 tasks; **all six custom-field values and the
-  rewrite display correctly**.
+* **M2 332/332** (83/83 × 4); schedin 20/20 + 10/10; plan_recalc 291; cal 509;
+  reader 685; links 773; add_delete 760; field_values 477; cpm 1,321; props 520.
 
-## The five findings that matter
+## The six findings that matter
 
-1. **Custom-field display needs THREE stores.** (a) VarMeta entries inside the
-   uid group after Name, field-id order (+ `0x0b4000b7` = `07 00` for Duration);
-   (b) 88-byte records in both `TBkndTask/Props` and `TBkndAssn/Props`; (c) the
-   FixedMeta entry tail bitmap and `+2` = the uid's VarMeta count (Text1
-   +21|0x20, Number1 +25|0x08, Number2 +25|0x10, Duration1 +26|0x01/+27|0x20,
-   Date1 +29|0x40, Flag1 +24|0x02). Skipping any one leaves Project showing 0.
-2. **Linked pin clamp confirmed:** SNET is no-earlier-than; an earlier pin
+1. **Custom-field display needs three stores** (wave 11): VarMeta entries after
+   Name inside the uid group; 88-byte records in both `TBkndTask/Props` and
+   `TBkndAssn/Props`; FixedMeta tail bitmap + `+2` count. Project now displays
+   all six values and their rewrite.
+2. **Delete is a tombstone** with `FixedMeta` header +4 bit 0x02 in every
+   affected table; a task delete cascades over links (either endpoint) and
+   assignments. No stream shrinks.
+3. **Cons add writes four streams**: FixedData 20·n, FixedMeta 16+10·n,
+   Fixed2Data 48·n, Fixed2Meta 16+9·n (+8 0x0f/0x07). Link delete tombstones the
+   FixedMeta entry only.
+4. **Recurring exceptions**: seven u16 words at record +74..+86; expansion
+   validated against Project's occurrence counts (18/7/5/4/5/4). Monthly
+   positional stores MonthItem 0; weekday derived from the start day.
+5. **Linked pin clamp**: SNET is no-earlier-than; a pin before the dependency
    reopens at `max(pred finish, pin)` with the constraint stored exactly.
-3. **Task-delete cascade:** tombstone the task, its `TBkndCons` rows (either
-   endpoint) and its `TBkndAssn` rows, each table's FixedMeta header +4 |= 2.
-   No stream shrinks. Project's own post file is reproduced.
-4. **Tombstone liveness** now applies to links/assignments too: PROJECT_B reads 70
-   links / 63 assignments (0 dead endpoints), matching Project's export; PROJECT_A
-   unchanged 88/67.
-5. **Reader/engine gains:** resource Type/MaxUnits from metadata bits, per-task
-   calendars in CPM (`holiday1` proven), elapsed lag/duration (T8 exact,
-   DurationFormat u16 at +164), all M2-neutral.
+6. **App**: Insert/Delete Task with two undo stacks, Save = delete → insert →
+   dates → reload; stored custom-field and file-formula columns are read-only.
 
 ## Open, ranked
 
-1. App Insert/Delete Task, stored custom-field columns, file formulas (W51, in
-   flight).
-2. Writer link add/delete + custom-field clear (W52, in flight); assignment add
-   needs an oracle fixture.
-3. Recurring calendar exception parameters (W53, in flight; fixture
-   `corpus/probe/w12-exceptions.mpp` + `docs/analysis/oracle/w12-exceptions.json`).
-4. `214/CTable`/`214/CV_iew` view state, MPP12, elapsed-task mixes, MPP14
-   resource Type, custom-field delete/Cost storage.
-5. Manual Mac smoke test; adversarial audit.
+1. **Assignment row add/delete** — last structural writer gap; needs the
+   add-assignment oracle (resource row + assignment row + VarMeta/Props +
+   Fixed2Data).
+2. App UI for **writing custom fields** and editing links/assignments.
+3. `214/CTable`/`214/CV_iew` view state, MPP12, MPP14 resource Type,
+   `114/Props` writes.
+4. Manual Mac smoke test; ASan/debug + adversarial audit.
+5. `tests/data/synthetic-base.mpp` must stay **237,568 B**; an agent grew it and
+   the coordinator restored it. Check `git status tests/data` at handoff.
 
 ## Traps (do not relearn)
 
-* **Three custom-field stores** above — a VarMeta-only write silently shows 0.
+* **Three custom-field stores** — a VarMeta-only write silently shows 0.
 * **Project recomputes task IDs on open**; stored IDs are cosmetic.
-* `core/mpp/reader.*` is shared; only one stream may edit it at a time (a
-  half-applied reader change segfaulted W49's tests). Coordinate via the
-  coordinator.
-* A liveness change moves test pins: `io_mspdi_crosscheck` moved from PROJECT_B
-  72/73 to 70/63.
-* **Only `app-macos` compiles `main.mm`.** Two clang-only failures in wave 10
-  (unused static, call arity). Keep the ObjC++ delta small; grep call sites.
+* `core/mpp/reader.*` is shared; one writer stream at a time (a half-applied
+  reader change segfaulted a concurrent stream's tests).
+* Liveness changes move test pins (`io_mspdi_crosscheck` PROJECT_B 72/73 → 70/63).
+* **Only `app-macos` compiles `main.mm`.** Keep the ObjC++ delta small; grep
+  call sites; budget one CI iteration.
+* GCC flags backslash-continued `//` comments (`-Wcomment`) and unused static
+  helpers; MSVC does not.
 * `FileSaveAs(Name="x.xml", FormatID="MSProject.xml")` can silently write a
-  binary `.mpp`; check first bytes.
-* `dir()` on pywin32 COM objects raises "Not implemented" on this build; probe a
-  static list.
+  binary `.mpp`; check the first bytes.
+* `dir()` on pywin32 COM objects raises "Not implemented"; probe a static list.
 * `plan_recalc_tests` rewrites `tests/data/project_a_recalc_golden.tsv` whenever corpus
-  is present; only the coordinator re-pins (it has been unchanged).
+  is present; only the coordinator re-pins (unchanged so far).
 * Dropbox mtime churn: re-read immediately before every edit.
-* `git push` works with danger-full-access (the sandbox credential failure only
-  appears under the restricted mode).
+* `git push` works with danger-full-access.
 
-## Counters (wave-11 end)
+## Counters (wave-12 end)
 
-85 agent sessions (78 + W47 + W48×4 + W49 + W50), 7 coordinator sessions;
-**~$6.55** at ~$0.077/session; ~655M tokens. Roadmap **~67%**.
+88 agent sessions (85 + W51 + W52 + W53), 8 coordinator sessions; **~$6.78** at
+~$0.077/session; ~680M tokens. Roadmap **~71%**.
 
 ## Next three actions
 
-1. Finish wave 12, run its Project gates (link add fixture; exception fixture)
-   and the full clean suite.
-2. Wire/polish the app editing + stored fields, then a manual-Mac smoke test.
-3. Build the audit package: ASan/debug pass, `docs/audit-handoff.md`, clean tree.
+1. Add-assignment oracle, then `add_assignment`/`delete_assignment`.
+2. App custom-field write UI + link editing, then the manual-Mac smoke test.
+3. ASan/debug + `docs/audit-handoff.md` checklist; fix findings; hand to a human.

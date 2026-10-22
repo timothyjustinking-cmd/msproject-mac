@@ -1624,4 +1624,384 @@ FieldWriteResult save_field_values(CfbDocument& doc,
     return result;
 }
 
+/* ---- W52: clear one custom-field value --------------------------------- */
+
+namespace {
+
+FieldValue empty_value_for(std::uint32_t field_id, FieldKind kind) {
+    FieldValue empty;
+    empty.field_id = field_id;
+    empty.kind = kind;
+    switch (kind) {
+        case FieldKind::text:
+            empty.text.clear(); /* UTF-16LE NUL only, 2 bytes */
+            break;
+        case FieldKind::number:
+            empty.number = 0.0;
+            break;
+        case FieldKind::duration:
+            empty.duration_ticks = 0;
+            break;
+        case FieldKind::date:
+            empty.packed_date = kInvalidDate; /* 0xffffffff = Project's no-date */
+            break;
+        case FieldKind::flag:
+            empty.flag = false;
+            break;
+        case FieldKind::cost:
+        case FieldKind::unknown:
+            break;
+    }
+    return empty;
+}
+
+bool tail_bits_are_clear(std::vector<std::uint8_t> const& meta,
+                         std::size_t entry_base, std::uint32_t field_id) {
+    for (TailBit const& bit : tail_bits_for(field_id)) {
+        if ((meta[entry_base + bit.offset] & bit.mask) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} /* namespace */
+
+ClearedField clear_field_value(CfbDocument& doc, std::uint32_t uid,
+                               std::uint32_t field_id, std::string const& path,
+                               std::string_view table) {
+    std::string const function = "clear_field_value";
+    check_output_path(path, function);
+    FieldKind const kind = field_kind_for_id(field_id);
+    unsigned const index = field_index_for_id(field_id);
+    std::string const label =
+        "uid " + std::to_string(uid) + " field " + hex_id(field_id);
+    if (kind == FieldKind::unknown) {
+        throw Error(function + ": " + label +
+                    " is not a task custom field in the measured id ranges");
+    }
+    if (kind == FieldKind::cost) {
+        throw Error(function + ": " + label +
+                    " is a Cost field and its storage is unmeasured; refusing to "
+                    "guess an empty encoding");
+    }
+    if (!field_storage_measured(kind, index)) {
+        throw Error(function + ": " + label +
+                    " is not stored where it is measured (only Flag1's bit "
+                    "position is known; Flag2..Flag20 are unmeasured)");
+    }
+    if (tail_bits_for(field_id).empty()) {
+        throw Error(function + ": " + label +
+                    " has no measured FixedMeta tail-presence bit, so a cleared "
+                    "value cannot be made blank; only Text1, Flag1, Number1, "
+                    "Number2, Duration1 and Date1 are measured");
+    }
+    if (uid == 0) {
+        throw Error(function + ": " + label +
+                    " is the project row (uid 0); project custom fields have no "
+                    "measured storage in the Task table");
+    }
+    validate_table(doc, table, function);
+
+    std::string const fixed_path = table_stream(table, "FixedData");
+    std::string const meta_path = table_stream(table, "FixedMeta");
+    std::string const fixed2_path = table_stream(table, "Fixed2Data");
+    std::string const fixed2_meta_path = table_stream(table, "Fixed2Meta");
+    std::string const var_meta_path = table_stream(table, "VarMeta");
+    std::string const var2_path = table_stream(table, "Var2Data");
+    std::string const props_path = table_stream(table, "Props");
+    std::string const assn_props_path = "114/TBkndAssn/Props";
+
+    TaskTable const before_table = TaskTable::from_document(doc, table);
+    std::size_t const rows = before_table.rows();
+    std::size_t row = rows;
+    for (std::size_t candidate = 0; candidate < rows; ++candidate) {
+        if (before_table.uid(candidate) == uid) {
+            row = candidate;
+            break;
+        }
+    }
+    if (row >= rows || row == 0) {
+        throw Error(function + ": " + label + ": no task row has that UniqueID");
+    }
+    std::vector<std::uint8_t> const fixed_before = doc.read_stream(fixed_path);
+    std::vector<std::uint8_t> const fixed2_before = doc.read_stream(fixed2_path);
+    std::vector<std::uint8_t> meta = doc.read_stream(meta_path);
+    std::vector<std::uint8_t> fixed2_meta = doc.read_stream(fixed2_meta_path);
+    std::vector<std::uint8_t> var_meta = doc.read_stream(var_meta_path);
+    std::vector<std::uint8_t> var2 = doc.read_stream(var2_path);
+    std::vector<std::uint8_t> const var_meta_before = var_meta;
+    std::vector<std::uint8_t> const var2_before = var2;
+    std::vector<std::uint8_t> const meta_before = meta;
+
+    std::vector<MetaEntry> const meta_entries = read_meta_entries(meta);
+    std::int32_t const entry_index = entry_index_for_offset(
+        meta_entries, static_cast<std::uint32_t>(task_row_offset(row)));
+    if (entry_index < 0) {
+        throw Error(function + ": " + label +
+                    ": the row has no FixedMeta entry, so Project treats it as "
+                    "deleted");
+    }
+    MetaEntry const& entry = meta_entries[static_cast<std::size_t>(entry_index)];
+    if (entry.state != kStateLive) {
+        throw Error(function + ": " + label +
+                    ": the row's FixedMeta entry is a tombstone (deleted row)");
+    }
+    std::vector<VarEntry> const var_entries = read_var_entries(var_meta);
+    if (!uid_has_var_group(var_entries, uid)) {
+        throw Error(function + ": " + label +
+                    ": the row has no VarMeta group, so Project does not read it "
+                    "as a live task");
+    }
+
+    FieldValue const empty = empty_value_for(field_id, kind);
+    FieldValue const stored = read_field(doc, table, uid, row, field_id);
+    std::size_t const meta_base =
+        kFixedMetaHeaderSize + static_cast<std::size_t>(entry_index) * kFixedMetaEntrySize;
+    std::vector<bool> allowed_meta(meta.size(), false);
+    std::vector<bool> allowed_fixed2_meta(fixed2_meta.size(), false);
+    std::vector<bool> const allowed_var2(var2.size(), false);
+    std::vector<bool> allowed_var_meta(var_meta.size(), false);
+    std::vector<std::string> warnings;
+    bool changed = false;
+    bool entry_kept = false;
+    bool was_present = false;
+
+    if (kind == FieldKind::flag) {
+        was_present = (meta[meta_base + kFixedMetaFlag1Byte] & kFixedMetaFlag1Bit) != 0;
+        std::size_t const flag_byte = meta_base + kFixedMetaFlag1Byte;
+        allowed_meta[flag_byte] = true;
+        if ((meta[flag_byte] & kFixedMetaFlag1Bit) != 0) {
+            meta[flag_byte] = static_cast<std::uint8_t>(meta[flag_byte] &
+                                                        ~kFixedMetaFlag1Bit);
+            changed = true;
+        }
+        std::size_t const fixed2_base =
+            kFixed2MetaHeaderSize + static_cast<std::size_t>(entry_index) *
+                                        kFixed2MetaEntrySize;
+        if (fixed2_base + kFixed2MetaEntrySize <= fixed2_meta.size()) {
+            for (std::size_t const offset :
+                 {fixed2_base + kFixed2MetaFlag1ByteA,
+                  fixed2_base + kFixed2MetaFlag1ByteB}) {
+                allowed_fixed2_meta[offset] = true;
+                if ((fixed2_meta[offset] & kFixed2MetaFlag1Bit) != 0) {
+                    fixed2_meta[offset] = static_cast<std::uint8_t>(
+                        fixed2_meta[offset] & ~kFixed2MetaFlag1Bit);
+                    changed = true;
+                }
+            }
+        } else {
+            warnings.push_back("uid " + std::to_string(uid) + " field " +
+                               hex_id(field_id) +
+                               ": the row has no Fixed2Meta entry, so Project's "
+                               "Flag1 mirror (+31/+61 bit 0x80) was not cleared; "
+                               "the Task FixedMeta bit is cleared and verified");
+        }
+    } else {
+        bool const stored_empty =
+            stored.present && stored.storage_measured && same_value(stored, empty);
+        was_present = !tail_bits_are_clear(meta, meta_base, field_id) ||
+                      (stored.present && !stored_empty);
+        for (TailBit const& bit : tail_bits_for(field_id)) {
+            allowed_meta[meta_base + bit.offset] = true;
+            if ((meta[meta_base + bit.offset] & bit.mask) != 0) {
+                meta[meta_base + bit.offset] = static_cast<std::uint8_t>(
+                    meta[meta_base + bit.offset] &
+                    static_cast<std::uint8_t>(~bit.mask));
+                changed = true;
+            }
+        }
+        std::vector<std::size_t> matching;
+        for (VarEntry const& var_entry : var_entries) {
+            if (var_entry.field_id == field_id &&
+                (var_entry.mid == uid ||
+                 var_entry.mid == (uid | kSecondaryUidFamily))) {
+                matching.push_back(var_entry.index);
+            }
+        }
+        entry_kept = !matching.empty();
+        bool const already_empty = stored_empty;
+        if (entry_kept && !already_empty) {
+            /* Append the empty payload as a new block and repoint every matching
+             * entry; the old block stays behind as unreferenced bytes (the same
+             * append-only scheme save_field_values uses). */
+            std::uint32_t const offset = static_cast<std::uint32_t>(var2.size());
+            std::vector<std::uint8_t> const block =
+                encode_block(encode_payload(empty));
+            var2.insert(var2.end(), block.begin(), block.end());
+            for (std::size_t const matching_index : matching) {
+                std::size_t const base =
+                    kVarMetaHeaderSize + matching_index * kVarMetaEntrySize;
+                for (std::size_t byte = 0; byte < 4; ++byte) {
+                    allowed_var_meta[base + 4 + byte] = true;
+                }
+                put_u32(var_meta, base + 4, offset);
+            }
+            for (std::size_t const byte : {kVarMetaVar2SizeOffset,
+                                           kVarMetaVar2SizeOffset + 1,
+                                           kVarMetaVar2SizeOffset + 2,
+                                           kVarMetaVar2SizeOffset + 3}) {
+                allowed_var_meta[byte] = true;
+            }
+            put_u32(var_meta, kVarMetaVar2SizeOffset,
+                    static_cast<std::uint32_t>(var2.size()));
+            changed = true;
+        }
+        if (!entry_kept) {
+            warnings.push_back(
+                "uid " + std::to_string(uid) + " field " + hex_id(field_id) +
+                ": the row has no VarMeta entry for this field, so no block was "
+                "written or repointed; the presence bits were cleared and the "
+                "field stays absent");
+        }
+    }
+
+    /* Nothing to change: still prove the file is the same all-or-nothing way. */
+    if (!changed) {
+        warnings.push_back("uid " + std::to_string(uid) + " field " +
+                           hex_id(field_id) +
+                           " was already empty; the file is unchanged");
+    }
+
+    CfbDocument work = CfbDocument::from_bytes(doc.to_bytes());
+    if (meta != meta_before) {
+        work.replace_stream(meta_path, meta);
+    }
+    if (var_meta != var_meta_before) {
+        work.replace_stream(var_meta_path, var_meta);
+        work.replace_stream(var2_path, var2);
+    }
+    if (fixed2_meta != doc.read_stream(fixed2_meta_path)) {
+        work.replace_stream(fixed2_meta_path, fixed2_meta);
+    }
+
+    CfbDocument const reread = save_and_verify(work, path, function, table);
+    TaskTable const after_table = TaskTable::from_document(reread, table);
+    if (after_table.rows() != rows) {
+        throw Error(function + ": the written file has " +
+                    std::to_string(after_table.rows()) + " rows, expected " +
+                    std::to_string(rows) + "; a field clear must not change rows");
+    }
+
+    /* ---- Prove only the intended bytes moved. */
+    if (reread.read_stream(fixed_path) != fixed_before ||
+        reread.read_stream(fixed2_path) != fixed2_before) {
+        throw Error(function + ": FixedData/Fixed2Data changed; a custom-field "
+                    "clear must not rewrite the fixed rows");
+    }
+    std::vector<std::uint8_t> const meta_after = reread.read_stream(meta_path);
+    std::vector<std::uint8_t> const var_meta_after = reread.read_stream(var_meta_path);
+    std::vector<std::uint8_t> const var2_after = reread.read_stream(var2_path);
+    std::vector<std::uint8_t> const fixed2_meta_after =
+        reread.read_stream(fixed2_meta_path);
+    check_changed_bytes(meta_before, meta_after, allowed_meta, "FixedMeta", function);
+    check_changed_bytes(var_meta_before, var_meta_after, allowed_var_meta, "VarMeta",
+                        function);
+    check_changed_bytes(var2_before, var2_after, allowed_var2, "Var2Data", function);
+    check_changed_bytes(doc.read_stream(fixed2_meta_path), fixed2_meta_after,
+                        allowed_fixed2_meta, "Fixed2Meta", function);
+    if (var_meta_after.size() != var_meta_before.size()) {
+        throw Error(function + ": VarMeta changed size; a clear must not add or "
+                    "remove entries");
+    }
+    if (get_u32(var_meta_after, 8) != get_u32(var_meta_before, 8) ||
+        get_u32(var_meta_after, kVarMetaVar2SizeOffset) != var2_after.size()) {
+        throw Error(function + ": VarMeta's header counts do not read back as the "
+                    "written streams");
+    }
+    if (get_u16(meta_after, meta_base + kFixedMetaFieldCount) !=
+        get_u16(meta_before, meta_base + kFixedMetaFieldCount)) {
+        throw Error(function + ": FixedMeta +2 changed; the VarMeta entry was kept, "
+                    "so the row's field count must not change");
+    }
+    std::vector<VarEntry> const entries_after = read_var_entries(var_meta_after);
+    if (entries_after.size() != var_entries.size()) {
+        throw Error(function + ": VarMeta holds " +
+                    std::to_string(entries_after.size()) + " entries after the "
+                    "clear, expected " + std::to_string(var_entries.size()));
+    }
+    for (std::size_t i = 0; i < entries_after.size(); ++i) {
+        if (entries_after[i].mid != var_entries[i].mid ||
+            entries_after[i].field_id != var_entries[i].field_id) {
+            throw Error(function + ": VarMeta entry " + std::to_string(i) +
+                        " changed identity; a clear must not reorder entries");
+        }
+        bool const is_cleared =
+            entries_after[i].field_id == field_id &&
+            (entries_after[i].mid == uid ||
+             entries_after[i].mid == (uid | kSecondaryUidFamily));
+        if (!is_cleared && entries_after[i].offset != var_entries[i].offset) {
+            throw Error(function + ": an untouched VarMeta entry moved; a clear "
+                        "may only repoint the cleared field's entries");
+        }
+    }
+
+    /* The registries are not ours to touch (Project keeps the field registered). */
+    bool const has_props = doc.has_stream(props_path);
+    if (has_props && reread.read_stream(props_path) != doc.read_stream(props_path)) {
+        throw Error(function + ": " + props_path + " changed; clearing a value "
+                    "must leave the field registration byte-identical");
+    }
+    bool const has_assn_props = doc.has_stream(assn_props_path);
+    if (has_assn_props &&
+        reread.read_stream(assn_props_path) != doc.read_stream(assn_props_path)) {
+        throw Error(function + ": " + assn_props_path + " changed; clearing a "
+                    "value must leave the assignment-side registration "
+                    "byte-identical");
+    }
+    for (std::string const& path_name : doc.stream_paths()) {
+        if (path_name == meta_path || path_name == var_meta_path ||
+            path_name == var2_path || path_name == fixed2_meta_path ||
+            path_name == props_path || path_name == assn_props_path) {
+            continue;
+        }
+        if (!reread.has_stream(path_name) ||
+            reread.read_stream(path_name) != doc.read_stream(path_name)) {
+            throw Error(function + ": " + path_name +
+                        " changed; clearing a custom-field value may only touch "
+                        "FixedMeta, Fixed2Meta, VarMeta and Var2Data");
+        }
+    }
+
+    /* ---- Re-read the value through the measured encoding. */
+    FieldValue const after = read_field(reread, table, uid, row, field_id);
+    if (kind == FieldKind::flag) {
+        if (!after.present || !after.storage_measured || after.flag) {
+            throw Error(function + ": " + label +
+                        " does not read back as a cleared Flag1");
+        }
+    } else if (entry_kept) {
+        if (!after.present || !after.storage_measured ||
+            !same_value(after, empty)) {
+            throw Error(function + ": " + label +
+                        " does not read back as the empty value");
+        }
+    } else if (after.present) {
+        throw Error(function + ": " + label +
+                    " grew a VarMeta entry while being cleared");
+    }
+    if (!tail_bits_are_clear(meta_after, meta_base, field_id) &&
+        kind != FieldKind::flag) {
+        throw Error(function + ": " + label +
+                    " still has a FixedMeta tail-presence bit set after the clear");
+    }
+
+    ClearedField result;
+    result.uid = uid;
+    result.field_id = field_id;
+    result.kind = kind;
+    result.was_present = was_present;
+    result.entry_kept = entry_kept;
+    result.flag = false;
+    result.value = after;
+    result.warnings = std::move(warnings);
+    result.warnings.push_back(
+        "re-read from disk: uid " + std::to_string(uid) + " field " +
+        hex_id(field_id) +
+        " is cleared (empty encoding stored, FixedMeta presence bits clear, field "
+        "registration kept)");
+    doc = reread;
+    return result;
+}
+
 } /* namespace mppwrite */

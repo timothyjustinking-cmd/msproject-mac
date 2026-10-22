@@ -1095,6 +1095,202 @@ mirror is *required* is still unmeasured, though Flag1 passed with it.
   Assignment registration (harmless) -- the test now compiles both against
   Project's own streams.
 
+## W52 (2026-10-22): link row add/delete and custom-field clear
+
+**Status: implemented, all local suites green; Project gate PENDING.** W52 adds
+`add_task_link` / `delete_task_link` and `clear_field_value`. The coordinator's
+own measurement (`corpus/probe/w12-linkadd.mpp`, synthetic-base + two links) is
+the authoritative four-stream shape; the byte design below is measured, not
+inferred except where explicitly flagged.
+
+### What landed (files)
+
+| path | what |
+|---|---|
+| `core/mppwrite/add_delete.h/.cpp` | `add_task_link`, `delete_task_link`, `AddedLink`, `DeletedLink`, the link constants. `load_dependent_table` changed only so a 0-row table still exposes its 16-byte FixedMeta header (needed to append the first row); cascade behaviour is unchanged. |
+| `core/mppwrite/field_values.h/.cpp` | `clear_field_value`, `ClearedField`. Reuses the static encoders/validators/`save_and_verify`; `save_field_values` is untouched. |
+| `tests/roundtrip_links.cpp` | **new** (`mppwrite_roundtrip_links`): **773 checks, 0 failures**. |
+| `tests/roundtrip_field_values.cpp` | extended with `test_clear`; **477 checks, 0 failures** (was 317). Emits `w52-fields-cleared.mpp`. |
+| `core/mppwrite/CMakeLists.txt` | new test target + reader link; the fixture mirror moved to `core/mppwrite/build/vs-w52/test-out`. |
+
+### Measured link-table shape (do not re-derive)
+
+`corpus/probe/link1.mpp` (5 links), `w11-linkdelete-pre/-post.mpp` (2 links) and
+`w12-linkadd.mpp` (2 links) agree:
+
+| stream | size | per row |
+|---|---|---|
+| `TBkndCons/FixedData` | `20*n` (no header) | uid +0, pred +4, succ +8, u16 type +12, i32 lag ticks +14, u16 lag format +18 (7) |
+| `TBkndCons/FixedMeta` | `16 + 10*n` | one entry: +0 state, +2 count (0), +4 row byte offset, +8/+9 = `dd 00` |
+| `TBkndCons/Fixed2Data` | `48*n` | three 16-byte identities: link, predecessor task, successor task |
+| `TBkndCons/Fixed2Meta` | `16 + 9*n` | one entry: +0..3 = 0, +4 record offset (row*48), +8 = 0x0f first link into that successor / 0x07 later ones |
+
+`VarMeta` (24-byte empty header) and `Var2Data` (0 B) exist and never change.
+Header magic is `0xfa df ad ba` (LE `ba ad df fa`) for both FixedMeta and
+Fixed2Meta; header +4 = 4 (no tombstones) and +8/+12 are count/size.
+
+**Identities.** All 16-byte ids in one file share bytes 4..15; byte +3 is the
+varying part (link1: `63 ac ca XX`, task ids 0x41/0x50/0x52/0x54/0x56, link ids
+0x58..0x5c; w12-linkadd: `13 67 bc XX`, task ids 0x09..0x0c, link ids 0x12/0x13).
+Project uses a file-global counter we have not identified. W52 therefore:
+* copies the predecessor/successor identities byte-for-byte from their
+  Task/Fixed2Data records (`row + 3`, bytes 0..15);
+* derives the link identity from the first non-zero task identity, setting byte
+  +3 to the lowest value in 1..255 not used by any identity of the same GUID
+  family anywhere in the file (all `*/Fixed2Data`, every 16-byte slot), so it is
+  deterministic and collision-free. **INFERRED acceptable to Project; the gate is
+  the proof.** A link identity is NOT Project's number (ours are 0x01, 0x02 in
+  `w52-links.mpp`; Project's own would be 0x12, 0x13 on that base).
+* `Fixed2Meta +8` = 0x0f for the first LIVE link naming that successor, 0x07 for
+  a later one. **INFERRED rule** from link1 (rows 0/1/2 first, rows 3/4 second
+  links into successors 3/4) and w12-linkadd (both first, both 0x0f).
+
+**Delete** is the same tombstone contract as W48's cascade: FixedMeta entry
+`+0 = 0x02`, `+2 = 0`, header `+4 |= 0x02`; no size changes and
+FixedData/Fixed2Data/Fixed2Meta stay byte-identical. Verified against Project's
+own `w11-linkdelete-post.mpp`: pre/post have identical FixedData/Fixed2Data/
+Fixed2Meta and FixedMeta differs only at the two entries' +0 and header +4.
+
+### API semantics (documented in the headers)
+
+* `add_task_link(doc, pred, succ, type, lag_ticks, path)`:
+  uid = largest uid in the whole table (tombstones included) + 1, table empty ->
+  1; row appended at the end. Refuses: path problems, uid 0 endpoint, self-link,
+  non-live endpoint (unknown/tombstoned/no VarMeta group), type outside 0..3,
+  `|lag| > kMaxLinkLagTicks` (175,200,000 ticks; a writer policy bound, NOT a
+  measured Project limit), a live duplicate `(pred, succ, type)` (lag ignored;
+  a tombstoned row does not block re-add), and a damaged Cons table (wrong
+  FixedData/FixedMeta/Fixed2Data/Fixed2Meta size, stale +8 count or +12 size,
+  magic mismatch, a row with != 1 FixedMeta entry, an entry state other than
+  0/2). Only the four Cons streams change; every other stream, 214/ included, is
+  byte-identical.
+* `delete_task_link(doc, link_uid, path)`: refuses uid 0, an unknown uid, an
+  already-tombstoned row and a damaged table. Result reports the row's uid/pred/
+  succ/type/lag read back from FixedData.
+* `clear_field_value(doc, uid, field_id, path)` — **our defined semantics, no
+  measured Project field-delete encoding exists**:
+  * Text -> VarMeta block `00 00` (empty UTF-16 + NUL);
+    Number -> 8 zero bytes (f64 0.0); Duration -> 4 zero bytes; Date -> `ff ff ff ff`;
+    Flag1 -> clear FixedMeta +24 bit 0x02 and the Fixed2Meta +31/+61 0x80 mirror.
+  * The FixedMeta TAIL PRESENCE BITS are cleared (that is what makes Project
+    display the field as blank). The VarMeta entry is KEPT and repointed at the
+    empty block, so FixedMeta +2 is unchanged; the old block is left orphaned.
+    `Task/Props` and `Assn/Props` are never written (the field stays registered).
+  * A never-stored field gets no new entry (only the presence bits are cleared);
+    clearing an already-empty field is a byte-identical no-op. All-or-nothing,
+    re-read from disk.
+  * Refuses the same non-live uids as `save_field_values` and every field whose
+    tail-presence bit is unmeasured (only Text1, Flag1, Number1, Number2,
+    Duration1, Date1 are measured), plus Cost/Flag2..Flag20/unknown ids.
+
+**Task-table validation for a link add is deliberately narrower than
+`validate_table`.** Project's own `w12-linkadd.mpp` declares 38 VarMeta entries
+while the array holds 42 (Project's normal stale-count save shape, also seen on
+its add/delete files). A link write never touches VarMeta, so `add_task_link`
+validates only Task FixedData `48+202*n`, FixedMeta `16+47*(n+3)`, Fixed2Data
+`64*(n+3)` and VarMeta's 24+12*n geometry -- not its declared count. This lets an
+add run on Project's own file: the test appends a third link to
+`w12-linkadd.mpp` (uid 3, row 2) and deletes link uid 3 from `link1.mpp`
+(4 live links remain), both re-read from disk. Genuinely broken geometry is still
+refused (three damaged-table cases in the test).
+
+### Verification (exact, 2026-10-22, `build\vs-w52`)
+
+```
+cmd /c '"...\vcvars64.bat" >nul && cmake -S . -B build\vs-w52 -G "Visual Studio 17 2022" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON'
+cmd /c '"...\vcvars64.bat" >nul && cmake --build build\vs-w52 --config Release --target mppwrite_roundtrip_links mppwrite_roundtrip_add_delete mppwrite_roundtrip_field_values mpp_reader_tests mpp_tombstone_tests'
+# plus the seven pre-existing writer targets so the filtered ctest has every exe:
+#   mppwrite_roundtrip_cfb mppwrite_inplace_patch mppwrite_roundtrip_stream
+#   mppwrite_roundtrip_row mppwrite_roundtrip_authority mppwrite_roundtrip_manual
+#   mppwrite_save_flow
+ctest --test-dir build\vs-w52 -C Release --output-on-failure -R "mppwrite|mpp_reader|tombstone"
+```
+
+| binary | result |
+|---|---|
+| `mppwrite_roundtrip_links` | **773 checks, 0 failures** |
+| `mppwrite_roundtrip_field_values` | **477 checks, 0 failures** |
+| `mppwrite_roundtrip_add_delete` | **760 checks, 0 failures** |
+| `mpp_reader_tests` | **PASS: 685 checks**, PROJECT_A 83 / PROJECT_B 73 |
+| `mpp_tombstone_tests` | **PASS: 47 checks** |
+| filtered ctest | **12/12 passed** |
+
+`plan_recalc_tests` was NOT run: it rewrites `tests/data/project_a_recalc_golden.tsv`
+(forbidden here) and W52 touches no `core/plan` code, so M2 is unaffected.
+
+### Fixtures (git-ignored, regenerated by the test binaries)
+
+In `build\vs-w52\core\mppwrite\test-out\` and mirrored to
+`core\mppwrite\build\vs-w52\test-out\`; `w52-manifest.json` and
+`w48-manifest.json` carry size + FNV-1a 64.
+
+| file | bytes | FNV-1a 64 | meaning |
+|---|---|---|---|
+| `w52-links.mpp` | 238,080 | `0x170fba4c478d7275` | synthetic-base + 1->2 FS+0, 1->3 SS+4800; Cons streams 40/36/96/34 |
+| `w52-links-deleted.mpp` | 238,080 | `0xe2e50d6053e12a05` | w52-links with link uid 2 tombstoned; only FixedMeta differs (header +4 = 6) |
+| `w52-fields-cleared.mpp` | 241,664 | `0x8e8e7afb5cbc4f55` | w48-fields with all six measured values cleared; Props byte-identical |
+
+`w48-fields.mpp` is re-emitted each run; its task streams are unchanged from
+W48, but the whole-file hash now differs from the W48 memory value
+(`0x55667f...` -> `0x8d7a...`) because `Props14` (save metadata, 5 bytes at 400
+and 548..551) differs between the two runs. Not a writer-behaviour change.
+
+### Verified vs inferred
+
+Verified locally and re-runnable: the four sizes/headers/entries; the new row,
+FixedMeta entry, three identities and Fixed2Meta entry byte for byte; delete
+leaves all four sizes and three streams byte-identical; only the intended
+streams change, 214/ untouched; re-emission is idempotent; `check_table`,
+`check()` clean; `core/mpp` returns 2 -> 1 live links across the delete and
+reports the tombstone as a skipped row; the measured Project fixtures
+(link1 5 links, w12-linkadd 2 links, w11 pre/post) match the implemented shape,
+and a third link appended to `w12-linkadd.mpp` plus a delete on `link1.mpp` both
+re-read correctly; olefile independently reproduces the four-stream sizes and the
+one-entry FixedMeta diff of the deleted fixture; clear leaves
+FixedData/Fixed2Data/Props byte-identical and Var2Data only grew by the five
+empty blocks (46 B).
+
+Verified by Project: the four-stream add shape and 48/9 strides (coordinator's
+`w12-linkadd.mpp`); the delete tombstone/header contract (W48 cascade); the
+field-tail presence bits (W48 gate). NOT yet verified by Project: acceptance of
+our deterministic link identity values and the 0x0f/0x07 rule; that a cleared
+value displays blank (the empty encodings and cleared presence bits are our
+defined semantics). M2 not run here (no plan changes).
+
+### Open items / next actions
+
+1. Project gate: open `w52-links.mpp` (2 links), `w52-links-deleted.mpp`
+   (1 link), `w52-fields-cleared.mpp` (uid 1 values blank, fields still listed).
+   If Project rejects the link add, attack in this order: (a) the link identity
+   values (try copying Project's own counter style), (b) Fixed2Meta +8 flags,
+   (c) the endpoint identities. Do not guess further without the gate.
+2. `delete_task_row` still cascades link rows by tombstones and does not shrink;
+   `delete_task_link` is the direct single-link API. Both share the header-bit
+   contract. A future save path can use `delete_task_link` for link edits.
+3. `clear_field_value` keeps the VarMeta entry; what a real Project "clear"
+   writes is unmeasured. A fixture where Project clears a previously-set Text1
+   would settle whether entry removal (and FixedMeta +2 decrement) is the real
+   shape. Until then the documented empty-value semantics stands.
+4. Link `lag_format` is fixed at 7; elapsed-day links (format 8) are read by
+   `core/mpp` but cannot be written. No API for it yet.
+
+### Traps added this wave
+
+- The filtered ctest runs ALL `mppwrite` tests, so the seven pre-existing writer
+  targets must be built in `build\vs-w52` too; otherwise ctest reports them
+  "Not Run" even though the five requested targets built.
+- `TBkndCons/FixedMeta` is `16 + 10*n`, where n is the ROW count, not rows+3.
+  Its entries are one per row; `TBkndCons` has no 48-byte header.
+- `TBkndCons/Fixed2Meta` entries are 9 bytes (not 10); the 16-byte header plus
+  9*n is the only measured shape.
+- The link table's own Fixed2Data/Fixed2Meta are required for an add even though
+  an empty table's streams are 0 B and 16 B. `load_dependent_table` originally
+  returned early for 0 rows and hid the FixedMeta header; W52 reads it before the
+  early return.
+- The field-values test's whole-file FNV changes with `Props14` across build
+  directories/runs. Compare per-stream (or task streams only) when checking
+  "save_field_values behaviour intact", not the whole-file hash.
+
 
 
 

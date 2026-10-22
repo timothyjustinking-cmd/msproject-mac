@@ -485,3 +485,77 @@ most expensive lesson of the wave; it is in `w11-oracle.md` §4 and `add_delete`
    into the save path (W51) and run a manual-Mac smoke test.
 3. Prepare the adversarial audit: ASan/debug build, the audit brief, and a clean
    tree; only then hand to a human.
+
+## Wave 12 final (2026-10-22 ~20:10)
+
+Gate file: `docs/handoff/wave12-complete.md`. This closes the build phase before
+the adversarial/human audit.
+
+### Where main is
+
+`6498a07` plus the docs commit. Wave-12 commits: `a5a05f8` W52+W53, `6498a07`
+W51. The wave-11 CI debt is paid: `1639d80` is green on all three legs and
+`app-macos` (two clang/gcc-only fixes: unused helper, backslash-continued `//`
+comment).
+
+### The number
+
+* `build\vs-w12`: **40/40 ctest**; app `build\vs-w12-app`: **10/10**, **1,765
+  checks** (app_edit 120, app_fields 199).
+* **M2 332/332**; schedin 20/20 + 10/10; plan_recalc 291; cal 509; reader 685;
+  links 773; add_delete 760; field_values 477; cpm 1,321; props 520.
+
+### Per stream
+
+| # | Result | Evidence |
+|---|---|---|
+| W51 | Insert/Delete Task with pending-edit undo/redo, one Save then reload; stored custom-field columns; formula columns from the file | app 10/10, 1,765 checks; writer sequence on a fixture copy |
+| W52 | `add_task_link`/`delete_task_link` over four Cons streams; `clear_field_value` | links 773, field 477; Project: 2 links / 1 link / cleared values |
+| W53 | recurring exceptions decoded (seven u16 at record +74..+86) and expanded for every type | cal 509, plan 291; Project occurrence counts 18/7/5/4/5/4 |
+
+### New measured facts
+
+1. **Cons add writes four streams:** `FixedData` 20·n, `FixedMeta` 16+10·n,
+   `Fixed2Data` **48·n**, `Fixed2Meta` **16+9·n** (+8 = 0x0f/0x07). Delete
+   tombstones the FixedMeta entry only and sets header +4.
+2. **Recurring exception words** at record `+74..+86`; per-type mapping in
+   `docs/analysis/oracle/w12-oracle.md` §1. Monthly-positional stores
+   MonthItem 0 (weekday derived from the start day, count-validated).
+3. **Field clear** keeps the VarMeta entries and both Props registrations,
+   writes the empty encoding, and clears the FixedMeta presence bit; Project
+   shows blank/0/NA/No and still lists the fields.
+
+### Open before the human review
+
+1. **Assignment row add/delete** (resource assignment) — the last structural
+   writer gap; needs an add-assignment oracle (resource row + assignment row +
+   VarMeta/Props + Fixed2Data).
+2. App UI for writing custom fields and editing links/assignments (APIs exist;
+   columns are read-only).
+3. `214/CTable`/`214/CV_iew` view-state persistence, MPP12, MPP14 resource Type,
+   `114/Props` writes.
+4. Manual Mac smoke test; ASan/debug pass; `docs/audit-handoff.md` is the brief.
+5. The committed `tests/data/synthetic-base.mpp` must stay at **237,568 B**
+   (an agent grew it to 238,080 and the coordinator restored it). Check
+   `git status tests/data` at every handoff.
+
+### Traps added
+
+* App save order is delete → insert → date edits, then **reload**; never patch
+  uids.
+* `Task::custom_fields` always carries Flag1 for a live row, so "No" is the
+  file's value, not a missing column.
+* A structural edit ends the sheet cell-edit history (two undo stacks); a cell
+  edit clears structural redo.
+* Wave-11 CI required two more clang/gcc-only fixes after the local MSVC suite
+  was green; budget one CI iteration even for "docs-only" waves.
+
+### Next three actions
+
+1. Build the **add-assignment oracle** (resource + assignment on
+   `synthetic-base.mpp`), then implement `add_assignment`/`delete_assignment`.
+2. Add the app's custom-field write UI and link editing (uses the new APIs), then
+   a manual-Mac smoke test.
+3. Run the audit: ASan/debug build, the `docs/audit-handoff.md` checklist, fix
+   findings, then hand to a human.
+

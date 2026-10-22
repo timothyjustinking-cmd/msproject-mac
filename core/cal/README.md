@@ -198,8 +198,9 @@ meaningful.  Arithmetic cross-check on `project_a.mpp` uid 102 day 2
 ```
 +0  u16 start day (inclusive)        +14 u16 interval count
 +2  u16 end day (inclusive)          +20 u16 start[i], tenths
-+4  u16 occurrences (recurring)      +32 u32 length[i], tenths
-+72 u16 PjExceptionType              +88 u32 name byte length (4-byte aligned)
++4  u16 occurrences                  +32 u32 length[i], tenths
++72 u16 PjExceptionType              +74 u16 recurrence parameter words 0..6
++88 u32 name byte length (4-byte aligned)
 +92     UTF-16LE name
 ```
 
@@ -214,10 +215,61 @@ meaningful.  Arithmetic cross-check on `project_a.mpp` uid 102 day 2
 day carries intervals there and is stored the same way.  `PjExceptionType`
 **0 and 1 are a plain dated range** (measured: all 1331 exceptions in PROJECT_A and the
 one in holiday1 are type 1); 2..7 are genuinely recurring and this decoder
-reports them (`CalendarTable::recurring_exceptions`) and expands the derivable
-ones (wave 9b: `expand_recurring_exception`, see the W41 note at the end).
+reports them (`CalendarTable::recurring_exceptions`) and expands them (wave 9b
+`expand_recurring_exception`, parameters measured in wave 12 -- next section).
 Exception names are **skipped on purpose**: only the padded length is used, so
 no client label can reach a caller, a tool or a test.
+
+### Recurrence parameter words (wave 12, measured)
+
+The seven `u16` words at **+74 .. +86** carry the recurrence parameters.  The
+fixture is `corpus/probe/w12-exceptions.mpp` (synthetic, one exception of every
+`PjExceptionType` on the project calendar) and the COM read-back of the same
+seven records is `docs/analysis/oracle/w12-exceptions.json`.  Dump them with
+
+```
+python tools/cal_exception_dump.py corpus/probe/w12-exceptions.mpp --words
+```
+
+Layout, per type (the fixture's value in brackets; `+76`/`+77`/`+78` are byte
+views of those words):
+
+| type | meaning | +76 | +77 | +78 |
+|---|---|---|---|---|
+| 1 | daily, every day | 0 | 0 | 0 |
+| 2 | yearly, month + day | Month-1 [2 -> March] | MonthDay [15] | 0 |
+| 3 | yearly, positional | Month-1 [10 -> November] | MonthPosition [4 = last] | MonthItem [8 = Friday] |
+| 4 | monthly, day | MonthDay [15] | 0 | Period [1] |
+| 5 | monthly, positional | MonthPosition [0 = first] | MonthItem [0] | Period [1] |
+| 6 | weekly | DaysOfWeek bitmap [10 = Mon\|Wed] | 0 | Period [1] |
+| 7 | every N days | Period (u16) [1] | - | - |
+
+`MonthItem` is PjMonthItem, Sunday-first (`3` = Sunday .. `9` = Saturday, so
+`8` = Friday); `MonthPosition` is PjMonthPosition (`0` = first .. `3` = fourth,
+`4` = last); `DaysOfWeek` is a bitmap with bit 0 = Sunday.  The `+80` word is
+**not** a parameter: it is a per-record ordinal and was 1..7 across the seven
+records in creation order; `+74`, `+82`, `+84` and `+86` are 0 in all seven.
+`DatedException::raw_recurrence_words` keeps all seven words verbatim.
+
+Cross-check, not source: mpxj's `AbstractCalendarAndExceptionFactory.
+readRecurringData` reads the same words with the same meanings (`+76`/`+77`/
+`+78`, `getInstance(value - 2)` for the Sunday-first `MonthItem`, `+78` for the
+weekly frequency).  Fetched 2026-10-22 from
+<https://raw.githubusercontent.com/joniles/mpxj/master/src/main/java/org/mpxj/mpp/AbstractCalendarAndExceptionFactory.java>
+(the file was read, not vendored; nothing from it is compiled here).
+The measurement that makes this the format, not a guess, is
+the occurrence word at `+4`: Project recomputes it, and **all six recurring
+records in the fixture agree with the expansion** built from these words
+(18/7/5/4/5/4 days; the type-1 plain range is 29).  The yearly positional record
+is the sharpest: last Friday of November 2026..2030 gives 2026-11-27, 2027-11-26,
+2028-11-24, **2029-11-30**, and excludes 2030-11-29 (past the stored Finish).
+
+**One measured gap:** for a *monthly* positional record Project stores 0 in the
+`MonthItem` byte and COM reads `MonthItem 0` / `MonthPosition 0` back
+(`FirstMonday` in the JSON).  Its weekday is therefore not in the file; the
+expansion derives it from the record's start day (2026-11-02 is a Monday) and the
+stored occurrence word (7) still agrees.  Types 2, 3, 4, 6 and 7 store every
+parameter they need.
 
 ### Work-week record
 
@@ -331,8 +383,8 @@ Standalone: `cmake -S core\cal -B <dir> -G "Visual Studio 17 2022" -A x64`
 builds `core_cal` and `cal_tests` after adding `core/mpp` and `core/sched` with
 their tests off.
 
-`CAL_NO_CORPUS=1` forces the corpus-gated cases to skip (38 checks instead of
-165), the same convention as `MPP_NO_CORPUS` in the reader tests.
+`CAL_NO_CORPUS=1` forces the corpus-gated cases to skip (245 checks instead of
+509), the same convention as `MPP_NO_CORPUS` in the reader tests.
 
 To dump the raw streams without this code (read-only; prints no client names):
 
@@ -346,9 +398,10 @@ python -c "import olefile,struct;ole=olefile.OleFileIO('corpus/probe/holiday1.mp
 
 * MPP14 only (this is the format of every file in the corpus).  MPP12 uses
   different FixedMeta entry sizes and a different id-offset order.
-* Recurring exceptions (types 2..7): the recurrence PARAMETER words are not
-decoded, so a derivable type (2..6) is expanded at period 1 and checked against
-the +4 occurrence word, while type 7 is refused.  See the W41 note at the end.
+* Recurring exceptions (types 2..7): every parameter word is decoded and applied
+  (wave 12, "Recurrence parameter words" above).  The one gap is the weekday of a
+  *monthly* positional record, which Project does not store; it is derived from
+  the start day and checked against the +4 occurrence word.
 * `core::sched::DayPattern` stores minutes, so a sub-minute interval would be
   rounded; `CalendarTable::sub_minute_intervals` counts any (0 in every file).
 * Calendar names are decoded because lookup needs them; nothing here writes a
@@ -356,22 +409,16 @@ the +4 occurrence word, while type 7 is refused.  See the W41 note at the end.
 
 ## W41 note (wave 9b): recurring exceptions
 
-The record's recurrence PARAMETERS are still not decoded (weekday mask, "every
-N", position, month/day); what is now implemented is the derivable half:
-
-* `DatedException::occurrences` decodes the +4 word (a check, never a source of
-  truth — its identity is [I]: no file on disk has a recurring exception).
-* `expand_recurring_exception()` expands PjExceptionType 2..6 from the range's
-  first day at the shortest period (every week/month/year): yearly month+day,
-  yearly positional, monthly month+day, monthly positional, weekly.  Type 7
-  (every N days) is refused because N is not derivable.  The expansion is refused
-  (with a stable `why`) when the type is not recurring, the range is empty, the
-  expansion exceeds the caller's day cap, or the +4 occurrence word disagrees
-  with the expanded count.
-* `build_calendar(table, calendar, RecurrenceReport*)` applies an expansion
-  exactly like a plain dated range and counts `applied` / `not_applied`.
+Superseded by the wave-12 section above for everything except the history: W41
+decoded the +4 occurrence word as a check and expanded types 2..6 from the
+range's first day at the shortest period (`every week/month/year`), refusing type
+7 because the "every N days" period was not decoded then.  The refusals it
+introduced -- not recurring, empty range, day cap exceeded, occurrence word
+disagreement -- are all still there; the parameter guards (a MonthItem that is
+not a weekday, a MonthPosition outside 0..4) are new in wave 12.
 
 `tests/cal_tests.cpp` pins the expansion (weekly/monthly/yearly/positional/
-month-existence), every refusal, and the builder application on synthetic
-records — no file on disk has a recurring exception, so the parameter words are
-the named wave-10 inference (`memory/cal.md`: the `w9-r-*` fixture set).
+month-existence, plus leap day, month-end, an absent fifth weekday and a
+zero-occurrence range in wave 12), every refusal, the builder application, and
+the fixture `corpus/probe/w12-exceptions.mpp` against the COM values in
+`docs/analysis/oracle/w12-exceptions.json`.

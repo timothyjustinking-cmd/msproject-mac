@@ -381,3 +381,43 @@ tests/data/project_a_recalc_golden.tsv SHA256 unchanged
   caller that only calls `from_mpp` keeps the pre-W49 project-calendar
   behaviour (deliberate, and tested by the control run).
 
+
+## W53 addendum (wave 12, 2026-10-22 19:55) — recurring exceptions on the per-task calendar path
+
+Scope: one test added, no engine or bridge change.  `core/cal` now decodes and
+applies the recurring-exception parameter words (see memory/cal.md), so the
+question for this stream was whether an expanded recurrence reaches CPM through
+both calendar paths.  It does, with no code change, because
+`attach_task_calendars` builds every per-task Calendar with `core::cal::
+build_calendar` and `recalculate` hands that pointer to the CPM node.
+
+Measured proof (`tests/plan_recalc_tests.cpp`, `test_recurring_task_calendar`,
+corpus-gated on `corpus/probe/w12-exceptions.mpp`): the fixture has no tasks, so
+the test builds one `PlanTask` (2 d) with `calendar_uid = 2` (a derived calendar
+whose base uid 1 carries the seven exceptions) and calls the real
+`attach_task_calendars` + `recalculate` path:
+
+* task calendar: start **Tue 2026-12-01 08:00**, finish **Thu 2026-12-03 17:00**
+  (all of November is non-working from the daily exception, and Wednesdays are
+  non-working from the weekly one);
+* control (same row, `calendar_uid = -1`, stock week): Mon 2026-11-02 08:00 ..
+  Tue 2026-11-03 17:00.
+
+`plan_recalc_tests` 277 -> **291 checks**.  M2 unchanged: **332/332** (start,
+finish, slack, critical 83/83 each, no DIFF); schedin **20/20 dates, 10/10
+slack**; `tests/data/project_a_recalc_golden.tsv` SHA256 unchanged
+`DB81218ECCC9219B2DA9864D5F3A0387FBB16BC5D8F027089E826B7BEFC46A0A` (the test
+rewrites the file with identical content).  PROJECT_A/PROJECT_B store +178 = -1 on every
+row, so `input.task_calendars` stays empty and no recurrence can move M2.
+
+### Item 5: should summary rollup use the summary's own calendar?
+
+Still **inference**, no test added.  `PlanInput::calendar` (the project calendar)
+is what `rollup_tasks` sees; no file on disk has a summary row with a task
+calendar (+178 is -1 on every PROJECT_A/PROJECT_B summary), so there is nothing to
+measure.  MS Project's own rule is that a summary's dates are the rolled-up
+children, not a calendar walk, so using the project calendar for the summary's
+own slack recomputation is defensible; if a client file ever stores a summary
++178, the provable check would be a summary whose children all sit on a
+different calendar and whose stored Start/Finish differ from the project-calendar
+rollup.  Nothing in the corpus does that.

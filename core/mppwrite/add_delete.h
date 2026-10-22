@@ -272,6 +272,179 @@ DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
                            DeleteOptions const& options = {},
                            std::string_view table = "114/TBkndTask");
 
+/* --- link rows: 114/TBkndCons (W52) ------------------------------------- */
+
+/*
+ * A link row is 20 bytes (spec/mpp-records.md §10.1, measured on Project's own
+ * corpus/probe/link1.mpp, five links created over COM):
+ *
+ *   +0  u32  link uid (dense, 1..N)
+ *   +4  u32  predecessor task UniqueID
+ *   +8  u32  successor task UniqueID
+ *   +12 u16  link type: 0 = FF, 1 = FS, 2 = SF, 3 = SS
+ *   +14 i32  lag in 6-second ticks (4800 = one 8-hour working day)
+ *   +18 u16  lag format unit: 7 in every live row of link1.mpp
+ *
+ * Unlike the Task table, TBkndCons has NO 48-byte FixedData header and NO
+ * rows+3 padding (measured, link1.mpp and w11-linkdelete-pre/-post.mpp):
+ *
+ *   FixedData = 20 * rows
+ *   FixedMeta = 16 + 10 * rows          ONE entry per row
+ *
+ * and every live FixedMeta entry is `00 00 00 00 <row offset u32> dd 00`:
+ * +0 state 0 (live), +2 field count 0 (the table has no variable values), +4 the
+ * row's byte offset, +8/+9 the measured tail bytes 0xdd 0x00.  A Project
+ * tombstone is `02 00 00 00 <offset u32> dd 00` -- only state +0 changes; the
+ * tail bytes and the row offset stay.  There is no VarMeta/Var2Data content:
+ * both streams exist (24-byte empty header + empty data) and stay untouched.
+ *
+ * The link table has its own Fixed2Data/Fixed2Meta pair, and Project's own COM
+ * add grows all four streams (measured twice: corpus/probe/link1.mpp and the
+ * coordinator's corpus/probe/w12-linkadd.mpp, built from synthetic-base.mpp with
+ * two links 1->2 FS+0 and 1->3 SS+1d):
+ *
+ *   Fixed2Data = 48 * rows          three 16-byte identities per link row:
+ *                                   [link identity, predecessor task identity,
+ *                                    successor task identity]
+ *   Fixed2Meta = 16 + 9 * rows      one 9-byte entry per row:
+ *                                   +0..3 = 0, +4 = record offset (row * 48),
+ *                                   +8 = 0x0f / 0x07 (see below)
+ *
+ * The identities are 16 bytes that share a per-file suffix; only byte +3 varies
+ * in both measured files (link1: `63 ac ca XX ...` with task ids 0x41/0x50/0x52/
+ * 0x54/0x56 and link ids 0x58..0x5c; w12-linkadd: `13 67 bc XX ...` with task
+ * ids 0x09/0x0a/0x0b/0x0c and link ids 0x12/0x13).  Project allocates them from a
+ * file-global counter we have not identified, so `add_task_link` does NOT copy
+ * its numbers: the two endpoint identities are the predecessor/successor task
+ * rows' measured Task/Fixed2Data identities (copied byte for byte), and the link
+ * identity is generated deterministically -- the same 16-byte template with its
+ * counter byte set to the lowest value not used by any identity of the same GUID
+ * family anywhere in this file.  That guarantees uniqueness (which is what the
+ * identity is for) without inventing Project's counter.  The Project gate is the
+ * proof that Project accepts this.
+ *
+ * Fixed2Meta entry byte +8 is 0x0f for the FIRST link row naming a successor and
+ * 0x07 for later ones (in link1 rows 0..2 are 0x0f, rows 3..4 -- the second
+ * links into successors 3 and 4 -- are 0x07; w12-linkadd's two rows both name
+ * distinct successors and are both 0x0f).  That rule is an inference from those
+ * two measured files; the writer applies it over LIVE rows and documents it.
+ *
+ * A delete changes only FixedMeta: the entry's +0 becomes 0x02, +2 stays 0, the
+ * table header +4 gets bit 0x02, and FixedData/Fixed2Data/Fixed2Meta keep every
+ * byte (measured on Project's own w11-linkdelete-post.mpp and required by the
+ * W48 task-delete cascade).
+ */
+
+inline constexpr std::size_t kLinkRowSize = 20;
+inline constexpr std::size_t kLinkMetaEntrySize = 10;
+
+inline constexpr std::uint16_t kLinkTypeFF = 0; /* finish-to-finish */
+inline constexpr std::uint16_t kLinkTypeFS = 1; /* finish-to-start  */
+inline constexpr std::uint16_t kLinkTypeSF = 2; /* start-to-finish  */
+inline constexpr std::uint16_t kLinkTypeSS = 3; /* start-to-start   */
+
+/* The lag format unit every live row of Project's link1.mpp stores.  The spec
+ * calls it the likely PjFormatUnit (7 = working days), but LagFormat is not
+ * proven; add_task_link writes this constant and takes no format argument. */
+inline constexpr std::uint16_t kLinkLagFormatWorkingDays = 7;
+
+/* WRITER POLICY, not a measured Project limit: the file field is a signed i32 of
+ * 6-second ticks, so every int32 is representable, but a lag beyond ~100 years is
+ * a caller bug rather than a schedule.  Larger magnitudes are refused. */
+inline constexpr std::int32_t kMaxLinkLagTicks = 175200000;
+
+/* Link Fixed2Data: 48 bytes per row, three 16-byte identities. */
+inline constexpr std::size_t kLinkFixed2RecordSize = 48;
+inline constexpr std::size_t kLinkIdentitySize = 16;
+/* Link Fixed2Meta: a 16-byte header plus one 9-byte entry per row. */
+inline constexpr std::size_t kLinkFixed2MetaEntrySize = 9;
+/* Entry byte +8 values measured in Project's own files: the first link into a
+ * successor stores 0x0f, later links into it store 0x07. */
+inline constexpr std::uint8_t kLinkFixed2FirstLinkFlag = 0x0F;
+inline constexpr std::uint8_t kLinkFixed2LaterLinkFlag = 0x07;
+
+/* What `add_task_link` proved from the file on disk. */
+struct AddedLink {
+    std::uint32_t uid = 0;             /* FixedData +0 of the new row */
+    std::uint32_t predecessor_uid = 0; /* +4, equals the argument */
+    std::uint32_t successor_uid = 0;   /* +8, equals the argument */
+    std::uint16_t type = 0;            /* +12, equals the argument */
+    std::int32_t lag_ticks = 0;        /* +14, equals the argument */
+    std::uint16_t lag_format = 0;      /* +18, kLinkLagFormatWorkingDays */
+    std::size_t row = 0;               /* FixedData row index (rows() - 1) */
+    std::vector<std::string> warnings;
+};
+
+/* What `delete_task_link` proved from the file on disk.  The row itself is still
+ * there (a tombstone never shrinks a stream); only its FixedMeta state changed. */
+struct DeletedLink {
+    std::uint32_t uid = 0;
+    std::uint32_t predecessor_uid = 0;
+    std::uint32_t successor_uid = 0;
+    std::uint16_t type = 0;
+    std::int32_t lag_ticks = 0;
+    std::uint16_t lag_format = 0;
+    std::size_t row = 0; /* the now-tombstoned FixedData row */
+    std::vector<std::string> warnings;
+};
+
+/*
+ * Append one link row -- `114/TBkndCons/FixedData` + `FixedMeta` and the
+ * link table's own `Fixed2Data` + `Fixed2Meta` -- write the package to `path`,
+ * re-open it and prove every fact from the bytes on disk.
+ *
+ * - Link uid = largest uid in the whole link table (tombstones included) + 1,
+ *   so a uid is never reused.  A table with no rows gets uid 1.
+ * - FixedMeta entry: +0 = 0 live, +2 = 0 (the measured per-row count; the link
+ *   table has no variable fields), +4 = the new row's byte offset, +8/+9 =
+ *   the measured tail bytes 0xdd 0x00.  Header +8 (entry count) + 1 and header
+ *   +12 = the new FixedData byte size.  Header +4 keeps its value (the
+ *   "contains deleted rows" bit is only ever added by a delete).
+ * - Fixed2Data gains 48 bytes: [link identity, predecessor task identity,
+ *   successor task identity].  The endpoint identities are copied from the two
+ *   task rows' Task/Fixed2Data identities; the link identity is deterministic
+ *   and unique (see the identity paragraph above).  Fixed2Meta gains one 9-byte
+ *   entry (+4 = the new record offset, +8 = 0x0f/0x07), and its header +8 count
+ *   and +12 size are bumped.
+ * - Only those four TBkndCons streams change; every other stream (Task, Assn,
+ *   the link table's VarMeta/Var2Data, 214/) is required to be byte-identical.
+ *   No VarMeta/Var2Data row is written.
+ *
+ * Refusals (exception before `doc` or the output path is touched):
+ *   - an empty/unusable output path;
+ *   - predecessor or successor uid 0, equal uids (a self-link), or a uid with no
+ *     LIVE task row (fixed-meta entry tombstoned/missing or no VarMeta group);
+ *   - a task row whose Task/Fixed2Data identity is all zero (no measured
+ *     identity to copy into the link record);
+ *   - a link type outside 0..3;
+ *   - |lag_ticks| > kMaxLinkLagTicks;
+ *   - a live link row already carrying the same (predecessor, successor, type)
+ *     -- the lag is not part of the identity, so a second FS 1->2 with a
+ *     different lag is the same relation and is refused.  A tombstoned row with
+ *     that triple does not block a re-add;
+ *   - a damaged link table: FixedData not 20*n, FixedMeta not 16 + 10*n,
+ *     Fixed2Data not 48*n, Fixed2Meta not 16 + 9*n, a declared entry count
+ *     (+8) that disagrees with the entries present, a declared size (+12) that
+ *     disagrees, a row with zero or more than one FixedMeta entry, an entry
+ *     whose +4 word is not a whole row offset, or an unknown entry state byte.
+ */
+AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
+                        std::uint32_t successor_uid, std::uint16_t type,
+                        std::int32_t lag_ticks, std::string const& path);
+
+/*
+ * Tombstone the link row whose uid is `link_uid`: its FixedMeta entry
+ * `+0 = 0x02`, `+2 = 0`, and `TBkndCons/FixedMeta` header `+4 |= 0x02` (the
+ * measured "this table contains deleted rows" gate -- the same contract as a
+ * task delete).  No stream changes size and the FixedData row keeps every byte,
+ * so `core/mpp` reads one fewer LIVE link.
+ *
+ * Refusals: an empty/unusable output path; a damaged link table (see
+ * add_task_link); no row with that uid; a row already tombstoned.
+ */
+DeletedLink delete_task_link(CfbDocument& doc, std::uint32_t link_uid,
+                             std::string const& path);
+
 } /* namespace mppwrite */
 
 #endif /* MPPWRITE_ADD_DELETE_H */

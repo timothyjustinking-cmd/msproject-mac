@@ -483,10 +483,14 @@ DependentTable load_dependent_table(CfbDocument const& doc, std::string_view tab
                     "broken");
     }
     std::size_t const rows = out.fixed.size() / row_size;
-    if (rows == 0) {
-        return out;
-    }
+    /* An EMPTY table still has a FixedMeta header (synthetic-base.mpp's Cons
+     * table is 0 bytes of FixedData + the 16-byte FixedMeta header).  Read it so
+     * a caller that appends the first row can validate and update the header
+     * words; a table with rows but no FixedMeta stays damage. */
     if (!doc.has_stream(out.meta_path)) {
+        if (rows == 0) {
+            return out;
+        }
         throw Error(function + ": " + out.fixed_path + " holds " +
                     std::to_string(rows) + " rows but the table has no " +
                     out.meta_path +
@@ -500,6 +504,9 @@ DependentTable load_dependent_table(CfbDocument const& doc, std::string_view tab
                     std::to_string(out.meta.size()) + " bytes, not 16 + n*" +
                     std::to_string(entry_size) +
                     "; refusing to tombstone rows in a damaged dependent table");
+    }
+    if (rows == 0) {
+        return out;
     }
     out.rows.resize(rows);
     for (std::size_t row = 0; row < rows; ++row) {
@@ -1373,6 +1380,699 @@ DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
     result.link_rows_tombstoned = cons_tombstones.size();
     result.assignment_rows_tombstoned = assn_tombstones.size();
     result.warnings = std::move(warnings);
+    doc = reread;
+    return result;
+}
+
+/* ---- link rows: 114/TBkndCons (W52) ------------------------------------ */
+
+namespace {
+
+constexpr std::size_t kLinkMetaMagicOffset = 0;
+constexpr std::size_t kLinkMetaCount = 8;
+constexpr std::size_t kLinkMetaFixedSize = 12;
+constexpr std::size_t kLinkMetaHeaderFlags = 4;
+constexpr std::size_t kLinkEntryState = 0;
+constexpr std::size_t kLinkEntryFieldCount = 2;
+constexpr std::size_t kLinkEntryRowOffset = 4;
+constexpr std::size_t kLinkEntryTailA = 8;
+constexpr std::size_t kLinkEntryTailB = 9;
+constexpr std::uint8_t kLinkTailByteA = 0xDD;
+constexpr std::uint8_t kLinkTailByteB = 0x00;
+
+constexpr std::size_t kLinkRowUid = 0;
+constexpr std::size_t kLinkRowType = 12;
+constexpr std::size_t kLinkRowLag = 14;
+constexpr std::size_t kLinkRowLagUnits = 18;
+
+constexpr std::size_t kLinkF2MetaHeaderSize = 16;
+constexpr std::size_t kLinkF2MetaMagicOffset = 0;
+constexpr std::size_t kLinkF2MetaCount = 8;
+constexpr std::size_t kLinkF2MetaFixedSize = 12;
+constexpr std::size_t kLinkF2MetaRecordOffset = 4;
+constexpr std::size_t kLinkF2MetaFlag = 8;
+
+constexpr std::uint32_t kDependentMagic = 0xFADFADBAu;
+
+using LinkIdentity = std::array<std::uint8_t, kLinkIdentitySize>;
+
+bool identity_is_zero(LinkIdentity const& identity) {
+    return std::all_of(identity.begin(), identity.end(),
+                       [](std::uint8_t byte) { return byte == 0; });
+}
+
+bool identity_family_matches(std::uint8_t const* bytes,
+                             LinkIdentity const& templ) {
+    for (std::size_t i = 0; i < kLinkIdentitySize; ++i) {
+        if (i == 3) {
+            continue; /* byte +3 is the varying counter in the measured files */
+        }
+        if (bytes[i] != templ[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*
+ * The 16-byte identity of a Task row: Task/Fixed2Data record `row + 3`, bytes
+ * +0..+15 (spec/mpp-records.md §7; the same identity Project's link
+ * Fixed2Data copies for its two endpoints).
+ */
+LinkIdentity task_identity(CfbDocument const& doc, std::size_t row,
+                           std::string const& function) {
+    std::vector<std::uint8_t> const fixed2 = doc.read_stream("114/TBkndTask/Fixed2Data");
+    std::size_t const base = (row + 3) * kFixed2RecordSize;
+    if (base + kLinkIdentitySize > fixed2.size()) {
+        throw Error(function + ": Task/Fixed2Data is " +
+                    std::to_string(fixed2.size()) + " bytes, too short for row " +
+                    std::to_string(row) + "'s identity record");
+    }
+    LinkIdentity identity{};
+    std::copy(fixed2.begin() + static_cast<std::ptrdiff_t>(base),
+              fixed2.begin() + static_cast<std::ptrdiff_t>(base + kLinkIdentitySize),
+              identity.begin());
+    if (identity_is_zero(identity)) {
+        throw Error(function + ": task row " + std::to_string(row) +
+                    " has an all-zero Task/Fixed2Data identity, so there is no "
+                    "measured identity to copy into the link's Fixed2Data record");
+    }
+    return identity;
+}
+
+/* The first non-zero task identity: the template for a new link identity. */
+LinkIdentity first_task_identity(CfbDocument const& doc,
+                                 std::string const& function) {
+    std::vector<std::uint8_t> const fixed2 = doc.read_stream("114/TBkndTask/Fixed2Data");
+    for (std::size_t record = 3; record * kFixed2RecordSize + kLinkIdentitySize <=
+                                     fixed2.size();
+         ++record) {
+        LinkIdentity identity{};
+        std::size_t const base = record * kFixed2RecordSize;
+        std::copy(fixed2.begin() + static_cast<std::ptrdiff_t>(base),
+                  fixed2.begin() +
+                      static_cast<std::ptrdiff_t>(base + kLinkIdentitySize),
+                  identity.begin());
+        if (!identity_is_zero(identity)) {
+            return identity;
+        }
+    }
+    throw Error(function + ": the Task table has no non-zero Fixed2Data identity "
+                "to derive a link identity from; refusing to invent one");
+}
+
+/*
+ * Every identity of the same GUID family anywhere in the file (every Fixed2Data
+ * stream, every 16-byte slot), so the generated link identity cannot collide
+ * with a task, resource, assignment, calendar or already-written link identity.
+ */
+void collect_used_identity_counters(CfbDocument const& doc,
+                                    LinkIdentity const& templ,
+                                    std::array<bool, 256>& used) {
+    constexpr std::string_view suffix = "/Fixed2Data";
+    for (std::string const& path : doc.stream_paths()) {
+        if (path.size() < suffix.size() ||
+            path.compare(path.size() - suffix.size(), suffix.size(), suffix) != 0) {
+            continue;
+        }
+        std::vector<std::uint8_t> const data = doc.read_stream(path);
+        for (std::size_t offset = 0; offset + kLinkIdentitySize <= data.size();
+             offset += kLinkIdentitySize) {
+            if (identity_family_matches(data.data() + offset, templ)) {
+                used[data[offset + 3]] = true;
+            }
+        }
+    }
+}
+
+LinkIdentity make_link_identity(CfbDocument const& doc,
+                                std::string const& function) {
+    LinkIdentity identity = first_task_identity(doc, function);
+    std::array<bool, 256> used{};
+    collect_used_identity_counters(doc, identity, used);
+    for (unsigned value = 1; value < 256; ++value) {
+        if (!used[value]) {
+            identity[3] = static_cast<std::uint8_t>(value);
+            return identity;
+        }
+    }
+    throw Error(function + ": every identity counter value (1..255) of this "
+                "file's GUID family is already used; the link table has no room "
+                "for a new unique identity");
+}
+
+/* The four link-table streams plus the strictly validated geometry. */
+struct LinkTable {
+    DependentTable rows;
+    std::string fixed2_path;
+    std::string fixed2_meta_path;
+    std::vector<std::uint8_t> fixed2;
+    std::vector<std::uint8_t> fixed2_meta;
+};
+
+/*
+ * Read and strictly validate the link table.  Unlike the delete cascade (which
+ * only rewrites entry bytes and therefore tolerates a stale declared count),
+ * a link ADD does arithmetic on every count/size word, so this refuses any
+ * disagreement instead of guessing.  Measured shapes: FixedData 20*n,
+ * FixedMeta 16+10*n, Fixed2Data 48*n, Fixed2Meta 16+9*n (link1.mpp, w12-linkadd
+ * and w11-linkdelete-pre/-post.mpp).
+ */
+LinkTable load_link_table(CfbDocument const& doc, std::string const& function) {
+    LinkTable out;
+    out.rows = load_dependent_table(doc, "114/TBkndCons", kLinkRowSize,
+                                    kLinkMetaEntrySize, function);
+    if (!doc.has_stream(out.rows.fixed_path)) {
+        throw Error(function + ": the file has no " + out.rows.fixed_path +
+                    " stream; refusing to add a row to a missing link table");
+    }
+    if (out.rows.meta.empty()) {
+        throw Error(function + ": the file has no " + out.rows.meta_path +
+                    " stream; a link table without FixedMeta is damaged");
+    }
+    std::vector<std::uint8_t> const& fixed = out.rows.fixed;
+    std::vector<std::uint8_t> const& meta = out.rows.meta;
+    std::size_t const rows = fixed.size() / kLinkRowSize;
+    std::size_t const entries =
+        (meta.size() - kDependentMetaHeaderSize) / kLinkMetaEntrySize;
+    if (entries != rows) {
+        throw Error(function + ": " + out.rows.meta_path + " holds " +
+                    std::to_string(entries) + " entries for " +
+                    std::to_string(rows) +
+                    " rows; the link table has exactly one entry per row, so this "
+                    "table is damaged");
+    }
+    if (get_u32(meta, kLinkMetaMagicOffset) != kDependentMagic) {
+        throw Error(function + ": " + out.rows.meta_path +
+                    " does not start with the measured table magic");
+    }
+    if (get_u32(meta, kLinkMetaCount) != rows) {
+        throw Error(function + ": " + out.rows.meta_path + " declares " +
+                    std::to_string(get_u32(meta, kLinkMetaCount)) + " entries but "
+                    "the table has " + std::to_string(rows) +
+                    "; refusing to append to a damaged link table");
+    }
+    if (get_u32(meta, kLinkMetaFixedSize) != fixed.size()) {
+        throw Error(function + ": " + out.rows.meta_path + " declares a " +
+                    std::to_string(get_u32(meta, kLinkMetaFixedSize)) +
+                    "-byte FixedData but the stream is " +
+                    std::to_string(fixed.size()) +
+                    " bytes; refusing to append to a damaged link table");
+    }
+    for (std::size_t row = 0; row < rows; ++row) {
+        if (out.rows.rows[row].entries.size() != 1) {
+            throw Error(function + ": link row " + std::to_string(row) + " has " +
+                        std::to_string(out.rows.rows[row].entries.size()) +
+                        " FixedMeta entries; the link table has exactly one per row");
+        }
+        std::size_t const index = out.rows.rows[row].entries.front();
+        std::uint8_t const state =
+            meta[kDependentMetaHeaderSize + index * kLinkMetaEntrySize];
+        if (state != kStateLive && state != kStateDeleted) {
+            throw Error(function + ": link row " + std::to_string(row) +
+                        " has FixedMeta state 0x" + std::to_string(state) +
+                        "; only 0x00 (live) and 0x02 (tombstone) are measured");
+        }
+    }
+
+    out.fixed2_path = "114/TBkndCons/Fixed2Data";
+    out.fixed2_meta_path = "114/TBkndCons/Fixed2Meta";
+    if (!doc.has_stream(out.fixed2_path) ||
+        !doc.has_stream(out.fixed2_meta_path)) {
+        throw Error(function + ": the link table is missing " +
+                    out.fixed2_path + " or " + out.fixed2_meta_path +
+                    "; Project's own link tables always carry both");
+    }
+    out.fixed2 = doc.read_stream(out.fixed2_path);
+    out.fixed2_meta = doc.read_stream(out.fixed2_meta_path);
+    if (out.fixed2.size() != rows * kLinkFixed2RecordSize) {
+        throw Error(function + ": " + out.fixed2_path + " is " +
+                    std::to_string(out.fixed2.size()) + " bytes, not " +
+                    std::to_string(rows) + "*48; refusing to append to a damaged "
+                    "link table");
+    }
+    if (out.fixed2_meta.size() !=
+        kLinkF2MetaHeaderSize + rows * kLinkFixed2MetaEntrySize) {
+        throw Error(function + ": " + out.fixed2_meta_path + " is " +
+                    std::to_string(out.fixed2_meta.size()) + " bytes, not 16 + " +
+                    std::to_string(rows) + "*9; refusing to append to a damaged "
+                    "link table");
+    }
+    if (get_u32(out.fixed2_meta, kLinkF2MetaMagicOffset) != kDependentMagic ||
+        get_u32(out.fixed2_meta, kLinkF2MetaCount) != rows ||
+        get_u32(out.fixed2_meta, kLinkF2MetaFixedSize) != out.fixed2.size()) {
+        throw Error(function + ": " + out.fixed2_meta_path +
+                    " header counts do not match the link table; refusing to "
+                    "append to a damaged link table");
+    }
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::size_t const base =
+            kLinkF2MetaHeaderSize + row * kLinkFixed2MetaEntrySize;
+        if (get_u32(out.fixed2_meta, base + kLinkF2MetaRecordOffset) !=
+            row * kLinkFixed2RecordSize) {
+            throw Error(function + ": " + out.fixed2_meta_path + " entry " +
+                        std::to_string(row) + " does not name Fixed2Data record " +
+                        std::to_string(row) +
+                        "; refusing to append to a damaged link table");
+        }
+    }
+    return out;
+}
+
+/* A live task row, as the link endpoint check needs it. */
+struct LiveTaskRow {
+    std::uint32_t uid = 0;
+    std::size_t row = 0;
+};
+
+/*
+ * The link add only READS the Task table (endpoint liveness and two identities),
+ * so it validates only the geometry it touches.  It deliberately does NOT run the
+ * full `validate_table`: Project's own corpus/probe/w12-linkadd.mpp declares 38
+ * VarMeta entries while the array holds 42 (Project's normal stale-count save
+ * shape, also seen on its add/delete files).  A write that never touches VarMeta
+ * is safe on such a file; genuinely broken geometry is still refused.
+ */
+void validate_link_task_table(CfbDocument const& doc,
+                              std::string const& function) {
+    TaskTable const table = TaskTable::from_document(doc);
+    std::size_t const rows = table.rows();
+    for (char const* name : {"FixedData", "FixedMeta", "Fixed2Data"}) {
+        std::string const path = std::string("114/TBkndTask/") + name;
+        if (!doc.has_stream(path)) {
+            throw Error(function + ": the Task table has no " + path +
+                        " stream; the link endpoint identities and liveness "
+                        "cannot be read");
+        }
+    }
+    std::vector<std::uint8_t> const meta =
+        doc.read_stream("114/TBkndTask/FixedMeta");
+    if (meta.size() < kFixedMetaHeaderSize ||
+        meta.size() != kFixedMetaHeaderSize + kFixedMetaEntrySize * (rows + 3)) {
+        throw Error(function + ": Task/FixedMeta is " +
+                    std::to_string(meta.size()) + " bytes, not 16 + 47*" +
+                    std::to_string(rows + 3) +
+                    "; refusing to add a link to a damaged Task table");
+    }
+    std::vector<std::uint8_t> const var_meta =
+        doc.read_stream("114/TBkndTask/VarMeta");
+    if (var_meta.size() < kVarMetaHeaderSize ||
+        (var_meta.size() - kVarMetaHeaderSize) % kVarMetaEntrySize != 0) {
+        throw Error(function + ": Task/VarMeta is " +
+                    std::to_string(var_meta.size()) +
+                    " bytes, not 24 + 12*n; refusing to add a link to a damaged "
+                    "Task table");
+    }
+    (void)read_var_entries(var_meta);
+    std::vector<std::uint8_t> const fixed2 =
+        doc.read_stream("114/TBkndTask/Fixed2Data");
+    if (fixed2.size() != kFixed2RecordSize * (rows + 3)) {
+        throw Error(function + ": Task/Fixed2Data is " +
+                    std::to_string(fixed2.size()) + " bytes, not 64*" +
+                    std::to_string(rows + 3) +
+                    "; refusing to add a link to a damaged Task table");
+    }
+}
+
+std::vector<LiveTaskRow> live_task_rows(CfbDocument const& doc) {
+    TaskTable const table = TaskTable::from_document(doc);
+    std::vector<MetaEntry> const meta_entries =
+        read_meta_entries(doc.read_stream("114/TBkndTask/FixedMeta"));
+    std::vector<VarEntry> const var_entries =
+        read_var_entries(doc.read_stream("114/TBkndTask/VarMeta"));
+    std::vector<LiveTaskRow> out;
+    for (std::size_t row = 1; row < table.rows(); ++row) {
+        std::int32_t const index = entry_index_for_offset(
+            meta_entries, static_cast<std::uint32_t>(task_row_offset(row)));
+        if (index < 0 ||
+            meta_entries[static_cast<std::size_t>(index)].state != kStateLive) {
+            continue;
+        }
+        std::uint32_t const uid = table.uid(row);
+        if (!uid_has_var_group(var_entries, uid)) {
+            continue;
+        }
+        LiveTaskRow live;
+        live.uid = uid;
+        live.row = row;
+        out.push_back(live);
+    }
+    return out;
+}
+
+std::string link_type_name(std::uint16_t type) {
+    switch (type) {
+        case kLinkTypeFF:
+            return "FF";
+        case kLinkTypeFS:
+            return "FS";
+        case kLinkTypeSF:
+            return "SF";
+        case kLinkTypeSS:
+            return "SS";
+        default:
+            return "?";
+    }
+}
+
+} /* namespace */
+
+AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
+                        std::uint32_t successor_uid, std::uint16_t type,
+                        std::int32_t lag_ticks, std::string const& path) {
+    std::string const function = "add_task_link";
+    check_output_path(path, function);
+    if (type > kLinkTypeSS) {
+        throw Error(function + ": link type " + std::to_string(type) +
+                    " is not one of the measured values 0 (FF), 1 (FS), 2 (SF), "
+                    "3 (SS)");
+    }
+    if (lag_ticks < -kMaxLinkLagTicks || lag_ticks > kMaxLinkLagTicks) {
+        throw Error(function + ": lag " + std::to_string(lag_ticks) +
+                    " ticks is outside the writer's +/-" +
+                    std::to_string(kMaxLinkLagTicks) +
+                    "-tick bound (a policy guard for an implausible lag, not a "
+                    "measured Project limit)");
+    }
+    if (predecessor_uid == 0 || successor_uid == 0) {
+        throw Error(function + ": uid 0 is the project row and cannot be a link "
+                    "endpoint");
+    }
+    if (predecessor_uid == successor_uid) {
+        throw Error(function + ": uid " + std::to_string(predecessor_uid) +
+                    " cannot be its own predecessor and successor (a self-link)");
+    }
+    validate_link_task_table(doc, function);
+    LinkTable links = load_link_table(doc, function);
+
+    std::vector<LiveTaskRow> const live_tasks = live_task_rows(doc);
+    auto find_row = [&live_tasks](std::uint32_t uid) {
+        for (LiveTaskRow const& live : live_tasks) {
+            if (live.uid == uid) {
+                return live.row;
+            }
+        }
+        return std::size_t{0};
+    };
+    std::size_t const predecessor_row = find_row(predecessor_uid);
+    if (predecessor_row == 0) {
+        throw Error(function + ": predecessor uid " + std::to_string(predecessor_uid) +
+                    " has no live task row (unknown uid, a tombstone, or a row "
+                    "with no VarMeta group)");
+    }
+    std::size_t const successor_row = find_row(successor_uid);
+    if (successor_row == 0) {
+        throw Error(function + ": successor uid " + std::to_string(successor_uid) +
+                    " has no live task row (unknown uid, a tombstone, or a row "
+                    "with no VarMeta group)");
+    }
+
+    std::size_t const rows = links.rows.rows.size();
+    for (std::size_t row = 0; row < rows; ++row) {
+        if (!links.rows.rows[row].live) {
+            continue;
+        }
+        std::size_t const base = row * kLinkRowSize;
+        if (get_u32(links.rows.fixed, base + kConsPredecessor) != predecessor_uid ||
+            get_u32(links.rows.fixed, base + kConsSuccessor) != successor_uid) {
+            continue;
+        }
+        if (get_u16(links.rows.fixed, base + kLinkRowType) == type) {
+            throw Error(function + ": a live link row already carries " +
+                        std::to_string(predecessor_uid) + " -> " +
+                        std::to_string(successor_uid) + " " + link_type_name(type) +
+                        " (row " + std::to_string(row) + ", uid " +
+                        std::to_string(get_u32(links.rows.fixed, base + kLinkRowUid)) +
+                        "); a duplicate relation is refused");
+        }
+    }
+
+    std::uint32_t max_uid = 0;
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::uint32_t const uid =
+            get_u32(links.rows.fixed, row * kLinkRowSize + kLinkRowUid);
+        max_uid = std::max(max_uid, uid);
+    }
+    if (max_uid == 0xFFFFFFFFu) {
+        throw Error(function + ": the link table's largest uid is 0xffffffff, so "
+                    "a new link uid would overflow");
+    }
+    std::uint32_t const uid = max_uid + 1;
+
+    LinkIdentity const predecessor_identity =
+        task_identity(doc, predecessor_row, function);
+    LinkIdentity const successor_identity =
+        task_identity(doc, successor_row, function);
+    LinkIdentity const link_identity = make_link_identity(doc, function);
+
+    /* Fixed2Meta +8: 0x0f for the first live link naming this successor, 0x07
+     * for a later one (measured rule, see add_delete.h). */
+    std::uint8_t flag = kLinkFixed2FirstLinkFlag;
+    for (std::size_t row = 0; row < rows; ++row) {
+        if (!links.rows.rows[row].live) {
+            continue;
+        }
+        if (get_u32(links.rows.fixed, row * kLinkRowSize + kConsSuccessor) ==
+            successor_uid) {
+            flag = kLinkFixed2LaterLinkFlag;
+            break;
+        }
+    }
+
+    std::vector<std::uint8_t> fixed = links.rows.fixed;
+    std::vector<std::uint8_t> meta = links.rows.meta;
+    std::vector<std::uint8_t> fixed2 = links.fixed2;
+    std::vector<std::uint8_t> fixed2_meta = links.fixed2_meta;
+
+    std::vector<std::uint8_t> row_bytes(kLinkRowSize, 0);
+    put_u32(row_bytes, kLinkRowUid, uid);
+    put_u32(row_bytes, kConsPredecessor, predecessor_uid);
+    put_u32(row_bytes, kConsSuccessor, successor_uid);
+    put_u16(row_bytes, kLinkRowType, type);
+    put_u32(row_bytes, kLinkRowLag, static_cast<std::uint32_t>(lag_ticks));
+    put_u16(row_bytes, kLinkRowLagUnits, kLinkLagFormatWorkingDays);
+    fixed.insert(fixed.end(), row_bytes.begin(), row_bytes.end());
+
+    std::vector<std::uint8_t> entry(kLinkMetaEntrySize, 0);
+    entry[kLinkEntryState] = kStateLive;
+    put_u16(entry, kLinkEntryFieldCount, 0);
+    put_u32(entry, kLinkEntryRowOffset,
+            static_cast<std::uint32_t>(rows * kLinkRowSize));
+    entry[kLinkEntryTailA] = kLinkTailByteA;
+    entry[kLinkEntryTailB] = kLinkTailByteB;
+    meta.insert(meta.end(), entry.begin(), entry.end());
+    put_u32(meta, kLinkMetaCount, static_cast<std::uint32_t>(rows + 1));
+    put_u32(meta, kLinkMetaFixedSize, static_cast<std::uint32_t>(fixed.size()));
+
+    LinkIdentity const* identities[3] = {&link_identity, &predecessor_identity,
+                                         &successor_identity};
+    for (LinkIdentity const* identity : identities) {
+        fixed2.insert(fixed2.end(), identity->begin(), identity->end());
+    }
+    std::vector<std::uint8_t> fixed2_entry(kLinkFixed2MetaEntrySize, 0);
+    put_u32(fixed2_entry, kLinkF2MetaRecordOffset,
+            static_cast<std::uint32_t>(rows * kLinkFixed2RecordSize));
+    fixed2_entry[kLinkF2MetaFlag] = flag;
+    fixed2_meta.insert(fixed2_meta.end(), fixed2_entry.begin(), fixed2_entry.end());
+    put_u32(fixed2_meta, kLinkF2MetaCount, static_cast<std::uint32_t>(rows + 1));
+    put_u32(fixed2_meta, kLinkF2MetaFixedSize,
+            static_cast<std::uint32_t>(fixed2.size()));
+
+    CfbDocument work = CfbDocument::from_bytes(doc.to_bytes());
+    work.replace_stream(links.rows.fixed_path, fixed);
+    work.replace_stream(links.rows.meta_path, meta);
+    work.replace_stream(links.fixed2_path, fixed2);
+    work.replace_stream(links.fixed2_meta_path, fixed2_meta);
+
+    CfbDocument const reread = save_and_verify(work, path, function, "114/TBkndTask");
+
+    /* Prove the four written streams byte for byte, and that nothing else moved. */
+    if (reread.read_stream(links.rows.fixed_path) != fixed ||
+        reread.read_stream(links.rows.meta_path) != meta ||
+        reread.read_stream(links.fixed2_path) != fixed2 ||
+        reread.read_stream(links.fixed2_meta_path) != fixed2_meta) {
+        throw Error(function + ": the written link streams do not read back with "
+                    "the bytes that were built");
+    }
+    for (std::string const& path_name : doc.stream_paths()) {
+        if (path_name == links.rows.fixed_path || path_name == links.rows.meta_path ||
+            path_name == links.fixed2_path ||
+            path_name == links.fixed2_meta_path) {
+            continue;
+        }
+        if (!reread.has_stream(path_name) ||
+            reread.read_stream(path_name) != doc.read_stream(path_name)) {
+            throw Error(function + ": " + path_name +
+                        " changed; adding a link may only touch the four "
+                        "TBkndCons streams");
+        }
+    }
+
+    std::vector<std::uint8_t> const fixed_after = reread.read_stream(links.rows.fixed_path);
+    std::vector<std::uint8_t> const meta_after = reread.read_stream(links.rows.meta_path);
+    std::vector<std::uint8_t> const fixed2_after =
+        reread.read_stream(links.fixed2_path);
+    std::vector<std::uint8_t> const fixed2_meta_after =
+        reread.read_stream(links.fixed2_meta_path);
+    std::size_t const new_row = fixed_after.size() / kLinkRowSize - 1;
+    if (get_u32(meta_after, kLinkMetaCount) != rows + 1 ||
+        get_u32(meta_after, kLinkMetaFixedSize) != fixed_after.size() ||
+        get_u32(fixed2_meta_after, kLinkF2MetaCount) != rows + 1 ||
+        get_u32(fixed2_meta_after, kLinkF2MetaFixedSize) != fixed2_after.size()) {
+        throw Error(function + ": a link-table header count/size word does not "
+                    "read back as written");
+    }
+    std::size_t const new_base = new_row * kLinkRowSize;
+    std::size_t const new_entry_base =
+        kDependentMetaHeaderSize + new_row * kLinkMetaEntrySize;
+    if (get_u32(fixed_after, new_base + kLinkRowUid) != uid ||
+        get_u32(fixed_after, new_base + kConsPredecessor) != predecessor_uid ||
+        get_u32(fixed_after, new_base + kConsSuccessor) != successor_uid ||
+        get_u16(fixed_after, new_base + kLinkRowType) != type ||
+        static_cast<std::int32_t>(get_u32(fixed_after, new_base + kLinkRowLag)) !=
+            lag_ticks ||
+        get_u16(fixed_after, new_base + kLinkRowLagUnits) !=
+            kLinkLagFormatWorkingDays) {
+        throw Error(function + ": the new link row does not read back as written");
+    }
+    if (meta_after[new_entry_base + kLinkEntryState] != kStateLive ||
+        get_u16(meta_after, new_entry_base + kLinkEntryFieldCount) != 0 ||
+        get_u32(meta_after, new_entry_base + kLinkEntryRowOffset) !=
+            static_cast<std::uint32_t>(new_base) ||
+        meta_after[new_entry_base + kLinkEntryTailA] != kLinkTailByteA ||
+        meta_after[new_entry_base + kLinkEntryTailB] != kLinkTailByteB) {
+        throw Error(function + ": the new link FixedMeta entry does not read back "
+                    "as written");
+    }
+    if (!std::equal(link_identity.begin(), link_identity.end(),
+                    fixed2_after.begin() +
+                        static_cast<std::ptrdiff_t>(new_row * kLinkFixed2RecordSize)) ||
+        !std::equal(predecessor_identity.begin(), predecessor_identity.end(),
+                    fixed2_after.begin() + static_cast<std::ptrdiff_t>(
+                                               new_row * kLinkFixed2RecordSize + 16)) ||
+        !std::equal(successor_identity.begin(), successor_identity.end(),
+                    fixed2_after.begin() + static_cast<std::ptrdiff_t>(
+                                               new_row * kLinkFixed2RecordSize + 32))) {
+        throw Error(function + ": the new link Fixed2Data record does not read back "
+                    "as written");
+    }
+    std::size_t const new_f2_entry_base =
+        kLinkF2MetaHeaderSize + new_row * kLinkFixed2MetaEntrySize;
+    if (get_u32(fixed2_meta_after, new_f2_entry_base + kLinkF2MetaRecordOffset) !=
+            static_cast<std::uint32_t>(new_row * kLinkFixed2RecordSize) ||
+        fixed2_meta_after[new_f2_entry_base + kLinkF2MetaFlag] != flag) {
+        throw Error(function + ": the new link Fixed2Meta entry does not read back "
+                    "as written");
+    }
+
+    AddedLink result;
+    result.uid = uid;
+    result.predecessor_uid = predecessor_uid;
+    result.successor_uid = successor_uid;
+    result.type = type;
+    result.lag_ticks = lag_ticks;
+    result.lag_format = kLinkLagFormatWorkingDays;
+    result.row = new_row;
+    result.warnings.push_back(
+        "re-read from disk: link uid " + std::to_string(uid) + " (" +
+        std::to_string(predecessor_uid) + " -> " + std::to_string(successor_uid) +
+        " " + link_type_name(type) + ", lag " + std::to_string(lag_ticks) +
+        " ticks) matches the written row, FixedMeta entry and Fixed2Data record");
+    doc = reread;
+    return result;
+}
+
+DeletedLink delete_task_link(CfbDocument& doc, std::uint32_t link_uid,
+                             std::string const& path) {
+    std::string const function = "delete_task_link";
+    check_output_path(path, function);
+    if (link_uid == 0) {
+        throw Error(function + ": uid 0 is the project row, not a link row");
+    }
+    LinkTable const links = load_link_table(doc, function);
+    std::size_t const rows = links.rows.rows.size();
+    std::size_t row = rows;
+    for (std::size_t candidate = 0; candidate < rows; ++candidate) {
+        if (get_u32(links.rows.fixed, candidate * kLinkRowSize + kLinkRowUid) ==
+            link_uid) {
+            row = candidate;
+            break;
+        }
+    }
+    if (row >= rows) {
+        throw Error(function + ": no link row has uid " + std::to_string(link_uid));
+    }
+    std::size_t const entry_index = links.rows.rows[row].entries.front();
+    std::size_t const entry_base =
+        kDependentMetaHeaderSize + entry_index * kLinkMetaEntrySize;
+    if (links.rows.meta[entry_base] != kStateLive) {
+        throw Error(function + ": link uid " + std::to_string(link_uid) +
+                    " is already a tombstone (FixedMeta +0 = 0x02)");
+    }
+
+    std::vector<std::uint8_t> meta = links.rows.meta;
+    meta[entry_base] = kStateDeleted;
+    put_u16(meta, entry_base + kLinkEntryFieldCount, 0);
+    put_u32(meta, kLinkMetaHeaderFlags,
+            get_u32(meta, kLinkMetaHeaderFlags) | kFixedMetaFlagHasDeleted);
+
+    CfbDocument work = CfbDocument::from_bytes(doc.to_bytes());
+    work.replace_stream(links.rows.meta_path, meta);
+
+    CfbDocument const reread = save_and_verify(work, path, function, "114/TBkndTask");
+
+    /* A delete is a tombstone: the other three streams and every other stream in
+     * the file keep every byte, and every size word stays put. */
+    if (reread.read_stream(links.rows.fixed_path) != links.rows.fixed ||
+        reread.read_stream(links.fixed2_path) != links.fixed2 ||
+        reread.read_stream(links.fixed2_meta_path) != links.fixed2_meta) {
+        throw Error(function + ": FixedData/Fixed2Data/Fixed2Meta changed; a link "
+                    "delete must tombstone the FixedMeta entry only");
+    }
+    std::vector<std::uint8_t> const meta_after = reread.read_stream(links.rows.meta_path);
+    if (meta_after != meta) {
+        throw Error(function + ": the written link FixedMeta does not read back as "
+                    "built");
+    }
+    for (std::string const& path_name : doc.stream_paths()) {
+        if (path_name == links.rows.meta_path) {
+            continue;
+        }
+        if (!reread.has_stream(path_name) ||
+            reread.read_stream(path_name) != doc.read_stream(path_name)) {
+            throw Error(function + ": " + path_name +
+                        " changed; deleting a link may only tombstone its "
+                        "FixedMeta entry and set the table's header flag");
+        }
+    }
+    if (get_u32(meta_after, kLinkMetaCount) != rows ||
+        get_u32(meta_after, kLinkMetaFixedSize) != links.rows.fixed.size() ||
+        get_u32(meta_after, kLinkMetaHeaderFlags) !=
+            (get_u32(links.rows.meta, kLinkMetaHeaderFlags) |
+             kFixedMetaFlagHasDeleted)) {
+        throw Error(function + ": the link FixedMeta header does not read back as "
+                    "written");
+    }
+    std::size_t const base = row * kLinkRowSize;
+    if (meta_after[entry_base] != kStateDeleted ||
+        get_u16(meta_after, entry_base + kLinkEntryFieldCount) != 0) {
+        throw Error(function + ": link uid " + std::to_string(link_uid) +
+                    " does not read back as a tombstone (+0 0x02, +2 0)");
+    }
+
+    DeletedLink result;
+    result.uid = link_uid;
+    result.predecessor_uid = get_u32(links.rows.fixed, base + kConsPredecessor);
+    result.successor_uid = get_u32(links.rows.fixed, base + kConsSuccessor);
+    result.type = get_u16(links.rows.fixed, base + kLinkRowType);
+    result.lag_ticks =
+        static_cast<std::int32_t>(get_u32(links.rows.fixed, base + kLinkRowLag));
+    result.lag_format = get_u16(links.rows.fixed, base + kLinkRowLagUnits);
+    result.row = row;
+    result.warnings.push_back(
+        "re-read from disk: link uid " + std::to_string(link_uid) +
+        " is a tombstone (FixedMeta +0 0x02, +2 0) and TBkndCons/FixedMeta header "
+        "+4 has bit 0x02; every stream size is unchanged");
     doc = reread;
     return result;
 }

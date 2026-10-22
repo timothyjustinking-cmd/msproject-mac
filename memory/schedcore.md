@@ -628,7 +628,27 @@ Schedin: **20/20 dates, 10/10 slack**.  Reader: **PROJECT_A 83 tasks, PROJECT_B 
 * `attach_task_calendars` is a separate call: `from_mpp` has no path and cannot
   decode the calendar.  A caller that forgets it silently gets the old
   project-calendar behaviour (tools/recalc and plan_recalc_tests call it).
-* Recurring exception parameters are still NOT decoded; W49 did not change
-  `core/cal`'s expansion.  Do not claim the weekday mask / every-N / position /
-  month-day words are measured.
+* Recurring exception parameters were not decoded by W49; W49 did not change
+  `core/cal`'s expansion.  SUPERSEDED by the W53 addendum at the end of this
+  file: the weekday mask / every-N / position / month-day words are measured
+  since wave 12.
 
+
+## W53 addendum (wave 12, 2026-10-22 20:00) — the W49 trap below is stale
+
+The last trap of the W49 section ("Recurring exception parameters are still NOT
+decoded") is superseded: `core/cal` now decodes and applies the recurrence
+parameter words (+74..+86) and every PjExceptionType expands from them; see
+`memory/cal.md` W53 and `core/cal/README.md` "Recurrence parameter words".  No
+`core/sched` file changed in W53, and nothing in the CPM engine reads a calendar
+exception directly (the builder turns them into per-week overrides before the
+engine sees them).
+
+Verified on this stream's tree (`build\vs-w53`, Release, /W4 /WX):
+`core_sched_cpm_tests` **1321** (unchanged), `core_sched_calendar` and the other
+sched tests pass, M2 **332/332**, schedin **20/20 dates + 10/10 slack**
+(unchanged).  The only scheduling-visible new evidence is
+`tests/plan_recalc_tests.cpp::test_recurring_task_calendar`: on
+`corpus/probe/w12-exceptions.mpp` a 2 d task pinned to calendar uid 2 runs Tue
+2026-12-01 08:00 -> Thu 2026-12-03 17:00 while the same row on the stock week (no
+task calendar) runs Mon 2026-11-02 08:00 -> Tue 2026-11-03 17:00.

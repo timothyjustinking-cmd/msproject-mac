@@ -56,8 +56,10 @@
 //          action (red when it was a rejected edit or a failed save/open).
 //
 // WHAT IT STILL DOES NOT DO (see app/README.md)
-//   No cut, no row insert/delete, no indent/outdent, no column resize/reorder, no
-//   multiple windows, no IME/composition in the in-cell editor (see README).
+//   No cut, no indent/outdent, no row move, no column resize/reorder, no multiple
+//   windows, no IME/composition in the in-cell editor (see README).  Wave 12 adds
+//   Insert Task / Delete Task (pending structural edits applied by the writer on
+//   Save), the stored custom-field columns and the file's own formula columns.
 //
 // BUILD.  This file is compiled only on APPLE (app/CMakeLists.txt).  It is
 // Objective-C++20 under ARC.  AppKit APIs used here are non-deprecated as of the
@@ -81,6 +83,8 @@
 #include "columns.h"
 #include "date.h"
 #include "document.h"
+#include "edit_model.h"
+#include "fields_model.h"
 #include "export_pdf.h"
 #include "filter_model.h"
 #include "gantt.h"
@@ -171,6 +175,22 @@ struct PlanState {
     // a formula failed to parse.
     core::formula::ComputedColumns computed;
     std::string computed_error;
+
+    // --- wave 12: the editor and the file's own custom fields ---------------
+    // The plan the editor is built from: `loaded` with the pending structural
+    // edits applied (app/edit_model.h).  `records` is rebuilt from it whenever an
+    // edit is pushed, undone or redone.
+    app::PlanInput base;
+    // Pending Insert/Delete Task edits.  They reach a file only on Save.
+    app::StructuralEdits edits;
+    // The formulas the file's `114/Props` stores (core/props W50) and the sheet's
+    // formula column set (app/fields_model.h).  Both are rebuilt per load.
+    app::FormulaColumnSet file_formulas;
+    app::FormulaColumnSet formula_set;
+    // True when this app itself wrote `path` (a structural save reloads the
+    // target and adopts it), so saving over it again is allowed.  False for a file
+    // the user opened: that one is never overwritten (app/document.h).
+    bool owns_path = false;
 };
 
 PlanState* g_plan = nullptr;
@@ -212,9 +232,10 @@ NSPopUpButton* g_usage_period_popup = nil;
 // Defined further down (with the rest of the sheet geometry); ensure_selection_visible
 // below runs before that point, so it needs the declaration here.
 std::size_t name_column_of(const PlanState& plan);
-// Defined with rebuild_view(); load_plan applies the preference's computed-column
-// visibility before that point, so it needs the declaration here.
-void apply_formula_column_visibility(PlanState& plan);
+// Defined with the load path below; the delegate's Insert/Delete handlers use
+// them, so they need the declarations here.
+void build_editor(PlanState& plan);
+void apply_structural_change(PlanState& plan);
 
 // ---------------------------------------------------------------------------
 // Small AppKit helpers
@@ -379,6 +400,13 @@ std::string make_status_text(const PlanState& plan) {
                 std::to_string(plan.filter_rows.size()) + " of " +
                 std::to_string(plan.records.row_count()) + " shown)";
     }
+    if (!plan.edits.empty()) {
+        text += "  |  pending: " + std::to_string(plan.edits.inserted_count()) + " insert(s), " +
+                std::to_string(plan.edits.deleted_count()) + " delete(s)";
+    }
+    if (!plan.formula_set.columns.empty()) {
+        text += "  |  " + std::to_string(plan.formula_set.columns.size()) + " formula column(s)";
+    }
     text += "  |  " + app::preferences_summary(g_prefs);
     text += "  |  " + std::to_string(plan.warnings) + " reader warnings";
     if (!plan.path.empty()) {
@@ -408,7 +436,7 @@ void ensure_selection_visible(PlanState& plan) {
 // refreshes the sheet's cached per-row/column facts.  Read-only: nothing here
 // can become a save edit (document.h diffs task starts only).
 void refresh_computed_columns(PlanState& plan) {
-    if (plan.sheet == nullptr || app::formula_column_specs().empty()) {
+    if (plan.sheet == nullptr || plan.formula_set.columns.empty()) {
         return;
     }
     plan.computed.set_format(plan.format);
@@ -416,19 +444,50 @@ void refresh_computed_columns(PlanState& plan) {
     plan.sheet->refresh();
 }
 
-// Copies the preference's visible formula columns onto the sheet.  The column
-// set itself is fixed (app::task_sheet_columns()), so this only hides or shows.
-void apply_formula_column_visibility(PlanState& plan) {
-    if (plan.sheet == nullptr) {
-        return;
-    }
-    for (std::size_t column = 0; column < plan.sheet->column_count(); ++column) {
-        const int formula = app::formula_column_index(plan.sheet->column(column).field);
-        if (formula < 0) {
-            continue;
+// Builds the editor -- the RecordSet, the file's computed columns and the
+// SheetModel -- from `plan.base`.  Called by the load path and, after a pending
+// structural edit, by apply_structural_change(): core::sheet::SheetModel has no
+// row insert/delete, so a structural change is a rebuild.
+//
+// The old sheet's column visibility is carried over by FIELD id for the ordinary
+// columns (the custom fields and formula columns are preference state and are
+// applied from g_prefs).  A structural edit therefore does not reset which
+// identity columns the user hid.
+void build_editor(PlanState& plan) {
+    std::vector<std::pair<core::view::FieldId, bool>> visibility;
+    if (plan.sheet != nullptr) {
+        visibility.reserve(plan.sheet->column_count());
+        for (std::size_t index = 0; index < plan.sheet->column_count(); ++index) {
+            visibility.emplace_back(plan.sheet->column(index).field,
+                                    plan.sheet->column_visible(index));
         }
-        plan.sheet->set_column_visible(
-            column, app::formula_column_visible(g_prefs, static_cast<std::size_t>(formula)));
+    }
+
+    plan.records = app::make_record_set(plan.base);
+    plan.computed = core::formula::ComputedColumns{};
+    plan.computed_error.clear();
+    if (!app::build_computed_columns(plan.computed, plan.formula_set.columns,
+                                     plan.computed_error)) {
+        // The error is reported in the status line; the columns that registered
+        // still work, exactly as a parse failure did in wave 11.
+    }
+    plan.computed.set_format(plan.format);
+    plan.computed.evaluate(plan.records);
+
+    plan.sheet = std::make_unique<core::sheet::SheetModel>(
+        plan.records, app::task_editor_columns(plan.formula_set));
+    plan.sheet->set_format(plan.format);
+    app::apply_edit_policy(*plan.sheet);
+    app::apply_formula_read_only(*plan.sheet, plan.formula_set.columns);
+    app::apply_column_visibility(*plan.sheet, plan.formula_set, g_prefs);
+    for (const std::pair<core::view::FieldId, bool>& entry : visibility) {
+        if (app::is_custom_column(plan.formula_set, entry.first)) {
+            continue;  // preference state, applied above
+        }
+        const std::size_t column = plan.sheet->column_of_field(entry.first);
+        if (column != core::sheet::kNoIndex) {
+            plan.sheet->set_column_visible(column, entry.second);
+        }
     }
 }
 
@@ -447,12 +506,12 @@ void rebuild_secondary_view(PlanState& plan) {
     plan.usage = core::usage::project_usage(plan.usage_input, plan.calendar, plan.usage_period);
     if (plan.view_mode == app::ViewMode::resource_sheet) {
         plan.secondary_records =
-            app::make_resource_view_records(plan.loaded, &plan.usage.resources);
+            app::make_resource_view_records(plan.base, &plan.usage.resources);
         plan.secondary_sheet = std::make_unique<core::sheet::SheetModel>(
             plan.secondary_records, app::resource_sheet_columns());
     } else {
         const bool resource = plan.view_mode == app::ViewMode::resource_usage;
-        plan.usage_view = app::make_usage_view(plan.usage, resource, plan.loaded, plan.format);
+        plan.usage_view = app::make_usage_view(plan.usage, resource, plan.base, plan.format);
         plan.secondary_records = app::make_usage_record_set(plan.usage_view);
         plan.secondary_sheet = std::make_unique<core::sheet::SheetModel>(
             plan.secondary_records, app::usage_sheet_columns(plan.usage_view));
@@ -477,7 +536,7 @@ void rebuild_view(PlanState& plan) {
         return;
     }
     refresh_computed_columns(plan);
-    plan.view = app::sync_plan_from_records(plan.loaded, plan.records);
+    plan.view = app::sync_plan_from_records(plan.base, plan.records);
     if (!showing_task_view(plan)) {
         // Selection applies to task views only: the resource/usage grids are
         // read-only and have no outline or Gantt.
@@ -529,6 +588,25 @@ void rebuild_view(PlanState& plan) {
     plan.status_text = make_status_text(plan);
 }
 
+// Rebuilds the editor and the views after a structural edit changed `base`.  The
+// sheet's cell-edit history is cleared with the rebuild (a new SheetModel), which
+// is what keeps the two undo stacks chronological: this wave's rule is that a
+// structural edit ends the cell-edit history, so Cmd-Z can never undo a cell edit
+// "past" a later structural change.
+void apply_structural_change(PlanState& plan) {
+    // Fold the CURRENT cell values back into the plan before the rebuild: the
+    // sheet's edits (a Start, say) are still pending file changes, and building
+    // from `loaded` alone would silently drop them.  without_structural_edits()
+    // recovers "the file plus those edits", so apply() then re-applies this edit
+    // list on top without double-counting the earlier ones.
+    const app::PlanInput edited =
+        plan.edits.without_structural_edits(plan.view, plan.loaded);
+    plan.base = plan.edits.apply(edited);
+    plan.usage_input = app::usage_input_from_plan(plan.base);
+    build_editor(plan);
+    rebuild_view(plan);
+}
+
 bool load_plan(PlanState& plan, const std::string& path) {
     plan = PlanState{};
     plan.path = path;
@@ -549,23 +627,14 @@ bool load_plan(PlanState& plan, const std::string& path) {
         plan.view_mode = g_prefs.view;
         plan.usage_period = g_prefs.usage_period;
         plan.usage_input = app::usage_input_from_document(document);
-        plan.records = app::make_record_set(plan.loaded);
-        // Computed columns: build the formulas, evaluate them into the RecordSet
-        // and hand the sheet the fixed 9-column list, so the View > Columns tags
-        // are stable across loads.  A parse failure is kept for the status line;
-        // the app keeps working with the columns that did register.
-        std::string computed_error;
-        if (!app::build_computed_columns(plan.computed, computed_error)) {
-            plan.computed_error = computed_error;
-        }
-        plan.computed.set_format(plan.format);
-        plan.computed.evaluate(plan.records);
-        plan.sheet = std::make_unique<core::sheet::SheetModel>(plan.records,
-                                                               app::task_sheet_columns());
-        plan.sheet->set_format(plan.format);
-        app::apply_edit_policy(*plan.sheet);
-        app::apply_computed_read_only(*plan.sheet);
-        apply_formula_column_visibility(plan);
+        // Wave 12: the file's own formulas (`114/Props` through core/props and
+        // core/formula) and its stored custom fields.  A file without a Props
+        // stream simply has none; a formula that does not parse is reported and
+        // skipped, never evaluated as a partial guess.
+        plan.file_formulas = app::read_file_formulas(app::props_stream_from_file(path));
+        plan.formula_set = app::formula_columns(plan.file_formulas);
+        plan.base = plan.edits.apply(plan.loaded);
+        build_editor(plan);
 
         // Start with the first row selected: the Gantt opens with a bar
         // highlighted and the keyboard has somewhere to go.
@@ -588,6 +657,15 @@ bool load_plan(PlanState& plan, const std::string& path) {
         plan.message_is_error = false;
         if (!plan.computed_error.empty()) {
             plan.message += "  |  computed columns: " + plan.computed_error;
+            plan.message_is_error = true;
+        }
+        if (!plan.formula_set.columns.empty()) {
+            plan.message += "  |  " + std::to_string(plan.formula_set.columns.size()) +
+                            " formula column(s) from the file";
+        }
+        if (!plan.formula_set.warnings.empty()) {
+            plan.message += "  |  " + std::to_string(plan.formula_set.warnings.size()) +
+                            " formula warning(s)";
             plan.message_is_error = true;
         }
         return true;
@@ -1152,6 +1230,9 @@ bool commit_open_edit(PlanState& plan) {
         note(plan, "value unchanged", false);
         return true;
     }
+    // A cell edit is chronologically after every pending structural edit, so a
+    // redo of one of those must not survive it.
+    plan.edits.clear_redo();
     note(plan, "edited " + column_title, false);
     return true;
 }
@@ -1262,7 +1343,11 @@ std::string printable_text(NSEvent* event) {
 // ---------------------------------------------------------------------------
 
 bool plan_is_dirty(const PlanState& plan) {
-    return plan.sheet != nullptr &&
+    if (plan.sheet == nullptr) {
+        return false;
+    }
+    // Wave 12: a pending Insert/Delete Task is a pending file change too.
+    return !plan.edits.empty() ||
            !app::collect_start_edits(plan.records, plan.loaded).empty();
 }
 
@@ -1303,8 +1388,10 @@ app::MenuState current_menu_state() {
     state.task_view = app::view_mode_is_task(g_plan->view_mode);
     state.editing = g_plan->sheet->editing();
     state.has_selection = g_plan->sheet->has_selection();
-    state.can_undo = g_plan->sheet->can_undo();
-    state.can_redo = g_plan->sheet->can_redo();
+    // Either stack may hold the next step: a structural edit clears the sheet's
+    // history, so the sheet's stack only ever holds steps made after it.
+    state.can_undo = g_plan->sheet->can_undo() || g_plan->edits.can_undo();
+    state.can_redo = g_plan->sheet->can_redo() || g_plan->edits.can_redo();
     state.can_copy = state.has_selection;
     state.can_paste = state.has_selection;
     state.dirty = plan_is_dirty(*g_plan);
@@ -1472,12 +1559,13 @@ void toggle_column_visibility(PlanState& plan, std::size_t column) {
     const bool visible = plan.sheet->column_visible(column);
     const std::string title = plan.sheet->column_title(column);
     plan.sheet->set_column_visible(column, !visible);
-    const int formula = app::formula_column_index(plan.sheet->column(column).field);
-    if (formula >= 0) {
-        // Persist the visible computed columns (the wave-11 preference); ordinary
-        // columns are not preference state.
-        if (app::set_formula_column_visible(g_prefs, static_cast<std::size_t>(formula),
-                                            !visible)) {
+    const core::view::FieldId field = plan.sheet->column(column).field;
+    if (app::is_custom_column(plan.formula_set, field)) {
+        // Wave 12: a stored custom-field column or a formula column is preference
+        // state, per column (app/prefs.h ColumnVisibility).  Ordinary columns are
+        // not.
+        if (app::set_column_visible(g_prefs, field, !visible,
+                                    app::custom_column_default_visible(field, g_prefs))) {
             save_preferences_to_defaults();
         }
     }
@@ -1539,6 +1627,7 @@ void paste_from_pasteboard(PlanState& plan) {
         note(plan, "paste refused: " + result.error, true);
         return;
     }
+    plan.edits.clear_redo();
     note(plan, "pasted " + std::to_string(result.cells) + " cell(s), " +
                    std::to_string(result.changed) + " changed",
          false);
@@ -1962,6 +2051,11 @@ void show_shortcuts() {
 - (void)paste:(id)sender;
 - (void)selectAll:(id)sender;
 - (void)performMenuAction:(id)sender;
+- (void)insertTask:(id)sender;
+- (void)deleteTask:(id)sender;
+- (void)rebuildColumnsMenu;
+- (BOOL)saveStructuralEdits:(const std::vector<app::StartEdit>&)edits
+                     target:(const std::string&)target;
 - (void)viewModeChanged:(id)sender;
 - (void)usagePeriodChanged:(id)sender;
 - (void)syncViewControls;
@@ -2021,42 +2115,15 @@ static PlanView* g_view = nil;
             [submenu addItem:item];
         }
         if (std::string(spec.title) == "View") {
-            // The Columns submenu is document-shaped, so it is built here rather
-            // than in the static menu model.  Every load uses the same default
-            // columns, so the model column index is a stable tag.
+            // The Columns submenu is document-shaped: wave 12's column set depends
+            // on the file's own formulas, so it is rebuilt per load by
+            // rebuildColumnsMenu() rather than filled from a static list here.
             [submenu addItem:[NSMenuItem separatorItem]];
             NSMenuItem* columns_item = [[NSMenuItem alloc] initWithTitle:@"Columns"
                                                                   action:nil
                                                            keyEquivalent:@""];
             g_columns_menu = [[NSMenu alloc] initWithTitle:@"Columns"];
             [g_columns_menu setAutoenablesItems:NO];
-            // The FIXED task-sheet column set: the seven default columns plus the
-            // two computed formula columns (app/view_model.h).  A tag is the
-            // model column index, so it must not depend on the data.
-            const std::vector<core::sheet::SheetColumn> columns = app::task_sheet_columns();
-            for (std::size_t index = 0; index < columns.size(); ++index) {
-                NSMenuItem* column_item =
-                    [[NSMenuItem alloc] initWithTitle:to_ns(columns[index].title)
-                                               action:@selector(toggleColumn:)
-                                        keyEquivalent:@""];
-                [column_item setTarget:self];
-                [column_item setTag:static_cast<NSInteger>(index)];
-                [g_columns_menu addItem:column_item];
-            }
-            // Stored custom fields are pending: the .mpp reader exposes no stored
-            // custom-field values, so the chooser says so instead of showing a
-            // column of invented zeroes.  Tag -1 keeps refresh_menu_bar from
-            // treating it as a column.
-            [g_columns_menu addItem:[NSMenuItem separatorItem]];
-            NSMenuItem* pending_fields =
-                [[NSMenuItem alloc] initWithTitle:@"Stored custom fields (pending)"
-                                           action:nil
-                                    keyEquivalent:@""];
-            [pending_fields setTag:-1];
-            [pending_fields setEnabled:NO];
-            [pending_fields setToolTip:@"The .mpp reader exposes no stored custom-field values yet; "
-                                       @"the formula columns are the read-only substitute."];
-            [g_columns_menu addItem:pending_fields];
             [columns_item setSubmenu:g_columns_menu];
             [submenu addItem:columns_item];
         }
@@ -2065,7 +2132,38 @@ static PlanView* g_view = nil;
     }
 
     [NSApp setMainMenu:mainMenu];
+    [self rebuildColumnsMenu];
     refresh_menu_bar();
+}
+
+// Rebuilds the View > Columns submenu from the sheet's CURRENT column set.  Each
+// item's tag is the model column index, so a load whose formula set adds or
+// removes columns must rebuild rather than reuse the previous tags.
+- (void)rebuildColumnsMenu {
+    if (g_columns_menu == nil) {
+        return;
+    }
+    [g_columns_menu removeAllItems];
+    std::vector<core::sheet::SheetColumn> columns;
+    if (g_plan != nullptr && g_plan->sheet != nullptr) {
+        columns.reserve(g_plan->sheet->column_count());
+        for (std::size_t index = 0; index < g_plan->sheet->column_count(); ++index) {
+            core::sheet::SheetColumn column;
+            column.field = g_plan->sheet->column(index).field;
+            column.title = g_plan->sheet->column_title(index);
+            columns.push_back(std::move(column));
+        }
+    } else {
+        columns = app::task_editor_columns(app::FormulaColumnSet{});
+    }
+    for (std::size_t index = 0; index < columns.size(); ++index) {
+        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:to_ns(columns[index].title)
+                                                      action:@selector(toggleColumn:)
+                                               keyEquivalent:@""];
+        [item setTarget:self];
+        [item setTag:static_cast<NSInteger>(index)];
+        [g_columns_menu addItem:item];
+    }
 }
 
 - (void)refreshMenus {
@@ -2245,8 +2343,10 @@ static PlanView* g_view = nil;
             [g_view refreshAfterChange];
             return;
         case app::MenuAction::insert_task:
-            show_alert(@"Insert Task",
-                       to_ns(std::string(app::menu_disabled_reason(app::MenuAction::insert_task))));
+            [self insertTask:nil];
+            return;
+        case app::MenuAction::delete_task:
+            [self deleteTask:nil];
             return;
         case app::MenuAction::insert_resource:
             show_alert(@"Insert Resource",
@@ -2254,6 +2354,133 @@ static PlanView* g_view = nil;
                            app::menu_disabled_reason(app::MenuAction::insert_resource))));
             return;
     }
+}
+
+// Insert Task (wave 12): ask for a name, record a pending insert anchored on the
+// selected row, and rebuild the sheet/Gantt from the display plan.  Nothing is
+// written until Save; the writer appends the row at the end of the Task table, so
+// a reopened file lists it last (the save message says so).
+- (void)insertTask:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr || g_plan->sheet == nullptr ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+
+    NSAlert* alert = [[NSAlert alloc] init];
+    [alert setMessageText:@"Insert Task"];
+    [alert setInformativeText:@"The task is shown in the sheet now and written to the .mpp "
+                              @"when you save."];
+    [alert addButtonWithTitle:@"Insert"];
+    [alert addButtonWithTitle:@"Cancel"];
+    NSTextField* name_field =
+        [[NSTextField alloc] initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 24.0)];
+    [name_field setStringValue:@"New Task"];
+    [alert setAccessoryView:name_field];
+    if ([alert runModal] != NSAlertFirstButtonReturn) {
+        note(plan, "insert cancelled", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    std::string name = to_std([name_field stringValue]);
+    std::size_t begin = 0;
+    while (begin < name.size() && (name[begin] == ' ' || name[begin] == '\t')) {
+        ++begin;
+    }
+    std::size_t end = name.size();
+    while (end > begin && (name[end - 1] == ' ' || name[end - 1] == '\t')) {
+        --end;
+    }
+    name = name.substr(begin, end - begin);
+    if (name.empty()) {
+        show_alert(@"Insert Task", @"A task needs a name.");
+        return;
+    }
+
+    const app::SelectedTask selected = app::selected_task(*plan.sheet, plan.row_map);
+    app::StructuralEdit edit;
+    edit.kind = app::StructuralKind::insert_task;
+    edit.name = name;
+    edit.uid = plan.edits.next_placeholder_uid(plan.base);
+    edit.anchor_uid = selected.has_selection ? selected.uid : 0;
+    if (edit.uid == 0 || !plan.edits.push(edit)) {
+        show_alert(@"Insert Task", @"The task could not be added.");
+        return;
+    }
+    apply_structural_change(plan);
+    // Select the new row so the user can type a Start at once.
+    const int row = plan.records.row_of_uid(edit.uid);
+    if (row >= 0) {
+        plan.sheet->select_cell(static_cast<std::size_t>(row), name_column_of(plan));
+    }
+    note(plan, "inserted \"" + name + "\" (pending; Save writes it)", false);
+    [g_view refreshAfterChange];
+    refresh_menu_bar();
+}
+
+// Delete Task (wave 12): confirm first, naming how many dependent rows the
+// writer's cascade will tombstone.  A pending insert is simply dropped.
+- (void)deleteTask:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr || g_plan->sheet == nullptr ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    const app::SelectedTask selected = app::selected_task(*plan.sheet, plan.row_map);
+    if (!selected.has_selection) {
+        note(plan, "select a task to delete", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.edits.is_pending_insert(selected.uid)) {
+        if (plan.edits.drop_insert(selected.uid)) {
+            apply_structural_change(plan);
+            note(plan, "removed the pending inserted task", false);
+            [g_view refreshAfterChange];
+        }
+        return;
+    }
+    const std::size_t dependants = app::count_delete_dependants(plan.base, selected.uid);
+    const std::string name = plan.sheet->cell_text(selected.row, name_column_of(plan));
+    std::string details = "Delete \"" +
+                          (name.empty() ? "task uid " + std::to_string(selected.uid) : name) +
+                          "\"?";
+    if (dependants != 0) {
+        details += "\n\nThe delete cascades: " + std::to_string(dependants) +
+                   " dependent link/assignment row(s) will be tombstoned in the saved file.";
+    }
+    details += "\n\nThe change is pending until you save; Cmd-Z undoes it before then.";
+    NSAlert* alert = [[NSAlert alloc] init];
+    [alert setMessageText:@"Delete Task"];
+    [alert setInformativeText:to_ns(details)];
+    [alert setAlertStyle:NSAlertStyleWarning];
+    [alert addButtonWithTitle:@"Delete"];
+    [alert addButtonWithTitle:@"Cancel"];
+    if ([alert runModal] != NSAlertFirstButtonReturn) {
+        note(plan, "delete cancelled", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    app::StructuralEdit edit;
+    edit.kind = app::StructuralKind::delete_task;
+    edit.uid = selected.uid;
+    edit.dependants = dependants;
+    if (!plan.edits.push(edit)) {
+        note(plan, "that task already has a pending delete", true);
+        return;
+    }
+    apply_structural_change(plan);
+    note(plan, "deleted task uid " + std::to_string(selected.uid) + " (pending; Save writes it)",
+         false);
+    [g_view refreshAfterChange];
 }
 
 // The visible view switcher (wave 11): the same code path as the View menu.
@@ -2340,6 +2567,7 @@ static PlanView* g_view = nil;
                                             std::min(content_height(*g_plan), 920.0))];
         [[g_view window] makeFirstResponder:g_view];
         [self syncViewControls];
+        [self rebuildColumnsMenu];
         std::printf("msproject-app: %s: %zu tasks, %zu resources, %zu assignments, "
                     "%zu rows, %zu links, %zu bars, %zu warnings\n",
                     path.c_str(), g_plan->loaded.tasks.size(),
@@ -2494,8 +2722,11 @@ static PlanView* g_view = nil;
     }
     const std::vector<app::StartEdit> edits =
         app::collect_start_edits(plan.records, plan.loaded);
-    if (edits.empty()) {
-        note(plan, "nothing to save: no task start has been edited", false);
+    const bool structural = !plan.edits.empty();
+    if (edits.empty() && !structural) {
+        note(plan, "nothing to save: no task start has been edited and no insert/delete "
+                   "is pending",
+             false);
         [g_view refreshAfterChange];
         return YES;
     }
@@ -2521,7 +2752,15 @@ static PlanView* g_view = nil;
         target = to_std([url path]);
     }
 
-    const app::SaveOutcome outcome = app::save_start_edits(edits, plan.path, target);
+    if (structural) {
+        return [self saveStructuralEdits:edits target:target];
+    }
+
+    app::SaveOptions options;
+    // Saving over a file THIS APP wrote is allowed (a structural save reloads the
+    // target and adopts it); the file the user opened is never overwritten.
+    options.allow_source_overwrite = plan.owns_path;
+    const app::SaveOutcome outcome = app::save_start_edits(edits, plan.path, target, options);
     if (!outcome.ok) {
         note(plan, "save failed: " + outcome.error, true);
         [g_view refreshAfterChange];
@@ -2565,6 +2804,65 @@ static PlanView* g_view = nil;
     return YES;
 }
 
+// The structural save path (wave 12).  The writer applies the pending edits to
+// the current document and writes the target; the app then RELOADS the target,
+// because the added rows' real uids and ids are the file's: never patch a uid by
+// hand after a write.
+- (BOOL)saveStructuralEdits:(const std::vector<app::StartEdit>&)edits
+                     target:(const std::string&)target {
+    PlanState& plan = *g_plan;
+    const app::StructuralSaveResult outcome =
+        app::save_structural_edits(plan.edits, edits, plan.path, target, plan.owns_path);
+    if (!outcome.ok) {
+        note(plan, "save failed: " + outcome.error, true);
+        [g_view refreshAfterChange];
+        show_alert(@"Could not save the task insert/delete",
+                   to_ns(outcome.error + "\n\nThe opened file was not modified."));
+        return NO;
+    }
+    std::string message = "saved " + std::to_string(outcome.added) + " new task(s), " +
+                          std::to_string(outcome.deleted) + " deleted task(s)";
+    if (outcome.start_rows_written != 0) {
+        message += ", " + std::to_string(outcome.start_rows_written) + " start(s)";
+    }
+    if (outcome.links_tombstoned != 0 || outcome.assignments_tombstoned != 0) {
+        message += ", tombstoned " + std::to_string(outcome.links_tombstoned) + " link(s) and " +
+                   std::to_string(outcome.assignments_tombstoned) + " assignment(s)";
+    }
+    message += " to " + outcome.path + " (" + outcome.api + ")";
+    if (outcome.added != 0) {
+        // The writer's add clones the file's LAST live row and clears its
+        // constraint; the app passes only the name.  Say so rather than implying
+        // that a cell typed on the placeholder row was written.
+        message += " (a new task copies the file's last row; only its name is written)";
+    }
+    for (const std::string& entry : outcome.notes) {
+        std::printf("msproject-app: save note: %s\n", entry.c_str());
+    }
+    for (const std::string& warning : outcome.warnings) {
+        std::fprintf(stderr, "msproject-app: save warning: %s\n", warning.c_str());
+    }
+    std::fflush(stdout);
+
+    if (load_plan(plan, outcome.path)) {
+        plan.owns_path = true;
+        g_target_path = outcome.path;
+        [self updateWindowTitle:outcome.path title:plan.loaded.title];
+        [self rebuildColumnsMenu];
+        [g_view refreshAfterChange];
+        [g_window setContentSize:NSMakeSize(std::min(content_width(plan), 1500.0),
+                                            std::min(content_height(plan), 920.0))];
+        note(plan, message + "  |  reloaded the file", false);
+        return YES;
+    }
+    const std::string reload_error = plan.error;
+    note(plan, message + "  |  but the saved file could not be re-read: " + reload_error, true);
+    [g_view refreshAfterChange];
+    show_alert(@"Saved, but the file could not be re-read",
+               to_ns(reload_error + "\n\nThe file was written. Reopen it with File > Open."));
+    return YES;
+}
+
 - (BOOL)saveDocument:(id)sender {
     (void)sender;
     return [self saveDocumentWithPanel:NO];
@@ -2588,10 +2886,19 @@ static PlanView* g_view = nil;
     if (g_plan->sheet->editing()) {
         g_plan->sheet->cancel_edit();
     }
-    if (g_plan->sheet->undo()) {
-        note(*g_plan, "undo", false);
+    PlanState& plan = *g_plan;
+    if (plan.sheet->can_undo()) {
+        if (plan.sheet->undo()) {
+            note(plan, "undo", false);
+        }
+    } else if (plan.edits.can_undo()) {
+        // A structural edit is undone by rebuilding the display plan without it;
+        // the sheet's own history was cleared when the edit was pushed.
+        plan.edits.undo();
+        apply_structural_change(plan);
+        note(plan, "undo: task insert/delete", false);
     } else {
-        note(*g_plan, "nothing to undo", false);
+        note(plan, "nothing to undo", false);
     }
     [g_view refreshAfterChange];
 }
@@ -2605,10 +2912,17 @@ static PlanView* g_view = nil;
     if (g_plan->sheet->editing()) {
         g_plan->sheet->cancel_edit();
     }
-    if (g_plan->sheet->redo()) {
-        note(*g_plan, "redo", false);
+    PlanState& plan = *g_plan;
+    if (plan.sheet->can_redo()) {
+        if (plan.sheet->redo()) {
+            note(plan, "redo", false);
+        }
+    } else if (plan.edits.can_redo()) {
+        plan.edits.redo();
+        apply_structural_change(plan);
+        note(plan, "redo: task insert/delete", false);
     } else {
-        note(*g_plan, "nothing to redo", false);
+        note(plan, "nothing to redo", false);
     }
     [g_view refreshAfterChange];
 }
@@ -2916,9 +3230,9 @@ static PlanView* g_view = nil;
     [g_view refreshAfterChange];
 }
 
-// The dirty-state prompt.  Only START-DATE edits are persistable, so only they
-// make the document dirty; the prompt says so rather than implying that the
-// view-only edits could be saved.
+// The dirty-state prompt.  Start-date edits and pending Insert/Delete Task edits
+// are what a save writes; the prompt names both and says the view-only edits will
+// be lost rather than implying they could be saved.
 - (BOOL)confirmClose {
     if (g_plan == nullptr || g_plan->sheet == nullptr) {
         g_close_confirmed = YES;
@@ -2929,17 +3243,27 @@ static PlanView* g_view = nil;
     }
     const std::vector<app::StartEdit> edits =
         app::collect_start_edits(g_plan->records, g_plan->loaded);
-    if (edits.empty()) {
+    const std::size_t structural = g_plan->edits.size();
+    if (edits.empty() && structural == 0) {
         g_close_confirmed = YES;
         return YES;
     }
+    std::string details;
+    if (!edits.empty()) {
+        details += std::to_string(edits.size()) + " task start date(s) were edited";
+    }
+    if (structural != 0) {
+        if (!details.empty()) {
+            details += " and ";
+        }
+        details += std::to_string(structural) + " task insert/delete edit(s) are pending";
+    }
+    details +=
+        ". Saving writes both to a .mpp; every other edit (name, finish, duration, "
+        "percent) is view-only and will be lost.";
     NSAlert* alert = [[NSAlert alloc] init];
     [alert setMessageText:@"Save changes before closing?"];
-    [alert setInformativeText:to_ns(
-        std::to_string(edits.size()) +
-        " task start date(s) were edited. Only start dates are written to a .mpp; "
-        "every other edit (name, finish, duration, percent) is view-only and will be "
-        "lost.")];
+    [alert setInformativeText:to_ns(details)];
     [alert setAlertStyle:NSAlertStyleWarning];
     [alert addButtonWithTitle:@"Save"];
     [alert addButtonWithTitle:@"Don't Save"];

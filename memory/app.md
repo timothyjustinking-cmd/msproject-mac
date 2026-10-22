@@ -241,3 +241,151 @@ Result: configure OK (prints `core/mppwrite/save.h found`), build exit 0 with
 Next three concrete actions: (a) run `app-macos.yml` and fix compile warnings in
 `main.mm`; (b) manually exercise the control bar and view switching on a Mac; (c) pick
 up the `core::cal` calendar wiring with a fixture.
+
+## W51 (wave 12): Insert/Delete Task, stored custom fields, the file's formulas
+
+2026-10-22. Files: `app/edit_model.{h,cpp}` (new), `app/fields_model.{h,cpp}` (new),
+`app/app_edit_tests.cpp` (new), `app/app_fields_tests.cpp` (new), and edits to
+`app/layout_model.{h,cpp}`, `app/reader_adapter.h`, `app/prefs.{h,cpp}`,
+`app/document.{h,cpp}`, `app/menu_model.{h,cpp}`, `app/menu_tests.cpp`, `app/main.mm`,
+`app/CMakeLists.txt`, `app/README.md`. No `core/**` file was touched.
+
+### What landed
+
+1. **Insert/Delete Task.** `app::StructuralEdits` keeps the pending edits (insert: name +
+   anchor uid + placeholder uid; delete: uid + the dependant count the dialog names) with
+   its own undo/redo. `apply(loaded)` is the display plan (deleted tasks gone, dependent
+   links/assignments gone like the writer's cascade, inserts placed after their anchor or
+   at the end). `without_structural_edits(shown, loaded)` is its inverse for a rebuild, so
+   a Start edit made before an insert is not lost. `save_structural_edits()` applies the
+   list through `mppwrite::delete_task_row` / `add_task_row` and then the pending starts
+   through `mppwrite::save_date_edits`; the app then RELOADS the target and adopts it
+   (`PlanState::owns_path`), never patching a uid by hand. `add_task_row` appends, so the
+   saved file lists the new row last (the save message says so).
+   Undo rule: a structural edit ends the sheet's cell-edit history (the rebuild makes a
+   new `SheetModel`), Cmd-Z prefers the sheet stack and falls back to the structural one,
+   and a cell edit clears the structural redo list.
+   Confirmation: `count_delete_dependants` = links naming the uid + assignments for it.
+   Delete of a *pending insert* drops the insert instead of writing anything.
+2. **Stored custom-field columns.** `TaskRow::custom_fields` carries
+   `mpp::CustomFieldValue` (W48); `app::value_of_custom_field` maps Text/Number/Date/
+   Duration/Flag, unmeasured (Cost, Flag2..20) and absent values are Null, never guessed.
+   `make_record_set` adds every stored field to the schema and writes the values. Six
+   columns (Text1/Number1/Number2/Date1/Duration1/Flag1) come from
+   `mpp::custom_field_id(kind, index)` with descriptor captions, are read-only, start
+   hidden (`Preferences::stored_custom_fields`) and format through the same
+   `app::cell_text` the plan columns use (date/duration prefs, flags Yes/No).
+3. **Formulas from the file.** `props_stream_from_file()` (`reader_adapter.h`, a second
+   CFB read) -> `read_file_formulas()` (`core/props` W50, `[MSPJ<decimal>]` tokens
+   kept) -> `formula_columns()` (file formulas first, the two demo columns only fill
+   gaps) -> `core::formula::ComputedColumns`. A formula that does not parse or targets a
+   non-Task field is reported and skipped. `[Start]` is stored as StartText
+   (`0x0b400505`), which `core/formula` has no fallback for (only DurationText has one),
+   so `make_record_set` fills StartText/FinishText from Start/Finish — inference, the
+   token ids are measured.
+4. **Preferences.** New `columns=0x0b400033:1,...` key: per-column overrides for the
+   stored/formula columns (`ColumnVisibility`), only deviations from the default are
+   stored; `custom=0|1` is the stored columns' default. Malformed entries are skipped.
+5. **Menus.** `insert_task` is supported and enabled (Cmd-I); `Edit > Delete Task`
+   (Cmd-Backspace) is new; `insert_resource` and `cut` stay permanently disabled.
+
+### Invariants a successor must preserve
+
+- **The opened file is never written.** `save_structural_edits` refuses
+  `target == source` unless `allow_source_overwrite` (true only for a file this app saved
+  and reloaded). `document_tests` still pins the refusal.
+- **Reload, never patch.** After a structural save the plan/records/views come from the
+  written file; no uid is edited in memory.
+- **The start diff is by UniqueID** (`collect_start_edits`), not row index: a pending
+  insert has no file row (skipped) and a pending delete is not displayed.
+- **A structural edit is a rebuild.** Do not try to insert/erase RecordSet rows; the
+  SheetModel is replaced (`build_editor`), which is why its history is cleared.
+- **Computed/stored columns never reach a save.** `collect_start_edits` reads Start only;
+  every custom/formula column is read-only.
+- **`main.mm` is AppKit and compile-unproven here** — keep its addition calls behind the
+  plain-C++ helpers, as the wave did.
+
+### Verification (2026-10-22, MSVC 19.44, Release, /W4 /WX /permissive-)
+
+```
+cmd /c '"...vcvars64.bat" >nul && cmake -S app -B build\vs-w51 -G "Visual Studio 17 2022" -A x64 -DAPP_BUILD_TESTS=ON -DCORE_WARNINGS_AS_ERRORS=ON'
+cmd /c '"...vcvars64.bat" >nul && cmake --build build\vs-w51 --config Release'
+cmd /c '"...vcvars64.bat" >nul && ctest --test-dir build\vs-w51 -C Release --output-on-failure'
+```
+
+`ctest` **10/10**, 0 failures. Checks: layout 253, selection 90, document 43, prefs 82,
+menu 696, filter 60, export 58, views 164, **app_edit 120**, **app_fields 199**
+(**1,765 total**). Configure prints `core/mppwrite/save.h found -- saves use
+mppwrite::save_date_edits`; the build took the W37 path. `app_edit_tests` copies
+`synthetic-base.mpp` into `build\vs-w51\test-out` and asserts the committed fixture's
+size is unchanged; `app_fields_tests` reads `tests/data/synthetic-props.bin`.
+
+### Verified vs unverified
+
+- **Verified**: the pending-edit model and its undo/redo; `apply`/`without_structural_edits`
+  placement and restoration; the dependant count; the real writer sequence on the fixture
+  (insert -> 4 tasks, the writer's uid read back from the file and appended last; delete
+  -> 3 tasks, the dependent assignment tombstoned, no dependants left naming the uid); a
+  combined structural+start save (SNET constraint verified on re-read); refusals (empty
+  edit list, empty target, source==target, unknown uid leave no file); in-place save of
+  the app's own file; the stored-field conversion/formatting and the six columns; the six
+  file formulas extracted from `synthetic-props.bin` and evaluated ([Duration]*2,
+  [Duration]/480, [Duration]/2, [Start]+7, Name & "-" & Duration, IIf(%>50,1,0)); the
+  column set/read-only rules; the per-column preference round trip.
+- **Unverified: every line of `main.mm`** (no ObjC++ compiler on this box). New AppKit
+  surface: `insertTask:` (NSAlert + NSTextField accessory), `deleteTask:` (NSAlert with
+  the dependant count), `saveStructuralEdits:target:` (reload + window resize),
+  `rebuildColumnsMenu`, `build_editor`/`apply_structural_change` call sites, the two undo
+  handlers, and the `View > Columns` rebuild on load. `app-macos.yml` is the gate: it
+  builds `main.mm` with `-Werror` and runs `ctest` (10 tests now). No runner opens a
+  window.
+
+### Traps hit / learned (W51)
+
+- **The `edit`/`write` tools race Dropbox's mtime churn** ("file changed since it was
+  read", even right after a read). Workaround: throwaway Python patch scripts under
+  `build\vs-w51\` doing exact `str.replace(old, new, 1)` with a `count == 1` assertion and
+  an all-or-nothing write; the scripts live only in the build tree. A multi-anchor script
+  that reports misses must not write before checking every anchor (patch17 did; patch18
+  fixed it by splicing two blocks between start/end markers).
+- **`synthetic-base.mpp` has three ASSIGNMENT rows and ZERO link rows** (measured through
+  this wave's test). The delete-cascade test therefore proves the assignment half on the
+  file and the link half in the pure model (`make_plan()` with two links).
+- **`mpp::Task::custom_fields` always carries Flag1** for a live row (a clear bit is a
+  stored False), so a Flag1 column reads "No" on every row that has no flag set — that is
+  the file's value, not a bug.
+- **`[Start]` in `114/Props` is StartText (`0x0b400505`)**, not Task.Start
+  (`0x0b400023`). `core/formula` has only a DurationText fallback; the app fills
+  StartText/FinishText in `make_record_set`. A future core fix would make the app's two
+  extra fields unnecessary (for now they are harmless aliases).
+- **`add_task_row` appends and clones the file's last live row** (documented shape). The
+  placeholder mirrors that (dates/duration copied from the last live task) but a cell the
+  user types on the placeholder other than the name is not written; the save message says
+  so.
+- **The old `apply_formula_column_visibility` is gone**; `build_editor` applies
+  `app::apply_column_visibility` and carries the ordinary columns' visibility over by
+  field id, so a structural rebuild does not unhide a column the user hid.
+- **`core/props` builds a `props_report` executable** when added to `app/CMakeLists.txt`
+  (`PROPS_BUILD_TESTS=OFF` only skips its tests). Harmless, but it appears in the app
+  build.
+
+### Open, ranked
+
+1. **Prove `main.mm` on macOS CI** — highest risk: `insertTask:`/`deleteTask:`/
+   `saveStructuralEdits:target:`/`rebuildColumnsMenu` and the reload-after-save path.
+2. **A Mac smoke test**: Insert Task with no selection and with a selection, Delete a task
+   with dependants (count in the alert), undo/redo across a structural edit, Save (panel
+   first time), reopen the saved file, View > Columns for the stored/formula columns, and
+   the close prompt with both kinds of pending edit.
+3. **Write custom fields** (`mppwrite::save_field_values` exists; no UI calls it) and,
+   separately, a `114/Props` formula writer (deliberately absent).
+4. **Row move / indent / outdent**: the writer can append and tombstone a row but cannot
+   reorder or re-level one.
+5. **`[Start]`-style text-token fallbacks in `core/formula`** would remove the app's
+   StartText/FinishText aliases; `core/` is another stream's lane, so message the
+   coordinator first.
+
+Next three concrete actions: (a) run `app-macos.yml` and fix any `main.mm` compile
+errors; (b) smoke-test the insert/delete/save/reload loop on a Mac; (c) wire an editable
+stored custom-field column through `save_field_values` once the app has a place to put an
+edit.

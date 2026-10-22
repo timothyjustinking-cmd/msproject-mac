@@ -95,9 +95,10 @@ if(CORE_PLAN_BUILD_TESTS)
     set(PLAN_SCHEDIN_PATH "${CORE_PLAN_REPO_ROOT}/corpus/probe/schedin.mpp")
     set(PLAN_ELAPSED_PATH "${CORE_PLAN_REPO_ROOT}/corpus/probe/w9-elapsedlag.mpp")
     set(PLAN_HOLIDAY_PATH "${CORE_PLAN_REPO_ROOT}/corpus/probe/holiday1.mpp")
+    set(PLAN_W12_PATH "${CORE_PLAN_REPO_ROOT}/corpus/probe/w12-exceptions.mpp")
     set(PLAN_GOLDEN_PATH "${CORE_PLAN_REPO_ROOT}/tests/data/project_a_recalc_golden.tsv")
     foreach(path_var PLAN_BASE_PATH PLAN_PROJECT_A_PATH PLAN_RECALC_PATH PLAN_SCHEDIN_PATH PLAN_ELAPSED_PATH
-                     PLAN_HOLIDAY_PATH PLAN_GOLDEN_PATH)
+                     PLAN_HOLIDAY_PATH PLAN_W12_PATH PLAN_GOLDEN_PATH)
         file(TO_CMAKE_PATH "${${path_var}}" ${path_var})
     endforeach()
 
@@ -113,6 +114,7 @@ if(CORE_PLAN_BUILD_TESTS)
         PLAN_SCHEDIN_PATH="${PLAN_SCHEDIN_PATH}"
         PLAN_ELAPSED_PATH="${PLAN_ELAPSED_PATH}"
         PLAN_HOLIDAY_PATH="${PLAN_HOLIDAY_PATH}"
+        PLAN_W12_PATH="${PLAN_W12_PATH}"
         PLAN_GOLDEN_PATH="${PLAN_GOLDEN_PATH}"
     )
 

@@ -484,6 +484,43 @@ schedin 20/20 dates, 10/10 slack.
 4. `214/CTable`/`214/CV_iew` view-state decoding; MPP12; elapsed-task mixed with
    link/constraint; resource Type on MPP14.
 
+## Wave 12 — complete (2026-10-22)
+
+Goal: make the app a real editor and finish the writer/engine items wave 11
+exposed.
+
+| # | Stream | Deliverable | Verified by |
+|---|---|---|---|
+| W51 | app editing | Insert/Delete Task with pending-edit undo/redo and one Save (writer then reload), stored custom-field columns (Text1/Number1/Number2/Date1/Duration1/Flag1), formula columns recovered from the file's `114/Props` | app **10/10**, 1,765 checks (app_edit 120, app_fields 199) |
+| W52 | writer links + clear | `add_task_link`/`delete_task_link` over all four Cons streams, `clear_field_value` | links 773, field_values 477; **Project reopens 2 links / 1 link / cleared values** |
+| W53 | recurring exceptions | seven u16 parameter words at record +74..+86 decoded for every type, expansion applied | cal 509, plan_recalc 291; M2 332/332 |
+
+**Gate:** clean `build\vs-w12`: **40/40 ctest** (wave 11: 39); app
+`build\vs-w12-app`: **10/10**, 1,765 checks; **M2 332/332**; schedin 20/20 +
+10/10.
+
+### New measured facts
+
+1. **Cons add writes four streams**, not two: `FixedData` 20·n, `FixedMeta`
+   16+10·n, `Fixed2Data` **48·n**, `Fixed2Meta` **16+9·n** (`+8 = 0x0f`/`0x07`).
+   Link delete tombstones only the FixedMeta entry and sets header +4.
+2. **Recurring exceptions** are the seven u16 words at record `+74..+86`; the
+   mapping per type is in `w12-oracle.md`. Project's own occurrence word
+   validates the expansion for every type (18/7/5/4/5/4).
+3. **Field clear** = empty encoding + clear the FixedMeta tail presence bit,
+   keeping the VarMeta entries and both Props registrations; Project shows
+   blank/0/NA/No and still lists the fields.
+
+### Open after wave 12
+
+1. **Assignment row add/delete** (resource assignment) and its oracle; the task
+   delete cascade already tombstones assignments.
+2. App UI for writing custom fields and editing links/assignments.
+3. `214/CTable`/`214/CV_iew` view state, MPP12, MPP14 resource Type,
+   `114/Props` writing.
+4. Manual Mac smoke test + adversarial/ASan audit (`docs/audit-handoff.md`).
+
+
 
 
 

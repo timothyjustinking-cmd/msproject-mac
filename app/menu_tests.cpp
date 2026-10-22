@@ -7,9 +7,10 @@
 //
 // What is pinned: the six menus and their order; every action present; no two
 // items in one menu sharing a key equivalent; the documented key equivalents for
-// Open/Save/Save As/Undo/Redo/Copy/Paste/Select All/Zoom/Filter; and --
-// importantly -- that the three things the model cannot do (Insert > Task,
-// Insert > Resource, Cut) are PRESENT, permanently disabled, and carry a reason.
+// Open/Save/Save As/Undo/Redo/Copy/Paste/Select All/Zoom/Filter; the wave-12
+// Insert > Task (Cmd-I) and Edit > Delete Task (Cmd-Backspace) items and their
+// enablement; and -- importantly -- that the two things the model cannot do
+// (Insert > Resource, Cut) are PRESENT, permanently disabled, and carry a reason.
 
 #include <cstddef>
 #include <cstdio>
@@ -178,12 +179,13 @@ void test_documented_menu_contents() {
     check(save_as_shift, "Save As is Cmd-Shift-S");
     check(exports, "File has both PDF exports");
 
-    // Edit: undo/redo, the clipboard, select all.
+    // Edit: undo/redo, the clipboard, select all, and the wave-12 Delete Task.
     bool undo = false;
     bool redo_shift = false;
     bool copy = false;
     bool paste = false;
     bool select_all = false;
+    bool delete_task = false;
     for (const MenuItemSpec& item : menu_named("Edit").items) {
         if (item.action == MenuAction::undo) {
             undo = std::string(item.key) == "z" && !item.shift;
@@ -200,12 +202,18 @@ void test_documented_menu_contents() {
         if (item.action == MenuAction::select_all) {
             select_all = std::string(item.key) == "a";
         }
+        if (item.action == MenuAction::delete_task) {
+            // Cmd-Backspace: the Mac's Delete key (0x08 as a key equivalent).
+            delete_task = std::string(item.key) == "\b" && item.command_key &&
+                          !item.shift && !item.option && item.separator_before;
+        }
     }
     check(undo, "Undo is Cmd-Z");
     check(redo_shift, "Redo is Cmd-Shift-Z");
     check(copy, "Copy is Cmd-C");
     check(paste, "Paste is Cmd-V");
     check(select_all, "Select All is Cmd-A");
+    check(delete_task, "Delete Task is Cmd-Backspace, after a separator");
 
     // View: the four views (wave 11) with Cmd-Option-1..4, the usage periods,
     // and the three timescales, the shading toggle, the filter.
@@ -253,13 +261,21 @@ void test_documented_menu_contents() {
     check(filter, "View offers the filter dialog");
     check(clear_filter, "View offers Clear Filter");
 
-    // Insert: exactly the two entries this wave cannot support.
+    // Insert: Task (wave 12, Cmd-I) and Resource (still unsupported).
     const MenuSpec& insert = menu_named("Insert");
-    check(insert.items.size() == 2, "Insert has two items");
-    if (insert.items.size() == 2) {
-        check(insert.items[0].action == MenuAction::insert_task, "Insert has Task");
-        check(insert.items[1].action == MenuAction::insert_resource, "Insert has Resource");
+    bool insert_task = false;
+    bool insert_resource = false;
+    for (const MenuItemSpec& item : insert.items) {
+        if (item.action == MenuAction::insert_task) {
+            insert_task = std::string(item.key) == "i" && item.command_key;
+        }
+        if (item.action == MenuAction::insert_resource) {
+            insert_resource = true;
+        }
     }
+    check(insert.items.size() == 2, "Insert has two items");
+    check(insert_task, "Insert Task is Cmd-I");
+    check(insert_resource, "Insert Resource is still offered");
 
     // The application menu and Help.
     bool preferences = false;
@@ -296,12 +312,42 @@ void test_enablement() {
         }
     }
 
-    // The unsupported three, named: this is the brief's "grey out the rest
-    // rather than fake it".
+    // The unsupported two, named: this is the brief's "grey out the rest rather
+    // than fake it".  Insert Task and Delete Task became real in wave 12.
     check(!app::menu_item_supported(MenuAction::cut), "Cut is not supported");
-    check(!app::menu_item_supported(MenuAction::insert_task), "Insert Task is not supported");
     check(!app::menu_item_supported(MenuAction::insert_resource),
           "Insert Resource is not supported");
+    check(app::menu_item_supported(MenuAction::insert_task), "Insert Task is supported");
+    check(app::menu_item_supported(MenuAction::delete_task), "Delete Task is supported");
+
+    // The wave-12 structural commands: a document, the Task Sheet view and no open
+    // edit; Delete also needs a selection.
+    check(app::menu_item_enabled(MenuAction::insert_task, everything_state()),
+          "Insert Task works in the task sheet");
+    check(app::menu_item_enabled(MenuAction::delete_task, everything_state()),
+          "Delete Task works with a selection");
+    check(!app::menu_item_enabled(MenuAction::insert_task, empty_state()),
+          "Insert Task needs a document");
+    check(!app::menu_item_enabled(MenuAction::delete_task, empty_state()),
+          "Delete Task needs a document");
+    MenuState structural = everything_state();
+    structural.editing = true;
+    check(!app::menu_item_enabled(MenuAction::insert_task, structural),
+          "Insert Task is off while a cell edit is open");
+    check(!app::menu_item_enabled(MenuAction::delete_task, structural),
+          "Delete Task is off while a cell edit is open");
+    structural = everything_state();
+    structural.has_selection = false;
+    check(app::menu_item_enabled(MenuAction::insert_task, structural),
+          "Insert Task works without a selection (it appends at the end)");
+    check(!app::menu_item_enabled(MenuAction::delete_task, structural),
+          "Delete Task needs a selected row");
+    structural = everything_state();
+    structural.task_view = false;
+    check(!app::menu_item_enabled(MenuAction::insert_task, structural),
+          "Insert Task is task-view only");
+    check(!app::menu_item_enabled(MenuAction::delete_task, structural),
+          "Delete Task is task-view only");
 
     // Document-dependent commands are off with no document.
     check(!app::menu_item_enabled(MenuAction::save, empty), "Save needs a document");
