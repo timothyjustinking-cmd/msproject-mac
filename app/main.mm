@@ -73,12 +73,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -98,6 +101,7 @@
 #include "reader_adapter.h"
 #include "selection_model.h"
 #include "sheet.h"
+#include "smoke.h"
 #include "start_edit_warning.h"
 #include "usage.h"
 #include "view_model.h"
@@ -215,6 +219,17 @@ std::string g_target_path;
 // Set when the user has already answered the "save changes before closing?"
 // prompt, so applicationShouldTerminate does not ask a second time.
 bool g_close_confirmed = false;
+
+// --- wave 15: `--smoke` ---------------------------------------------------
+// The self-smoke mode.  main() sets these from `--smoke <fixture.mpp> --out <dir>`;
+// when g_smoke is true the delegate runs app::smoke_plan() plus the AppKit steps
+// and exits with the report's verdict instead of opening the interactive shell
+// (see app/smoke.h and docs/handoff/w63.md).  g_smoke also makes show_alert() a
+// no-op, because a modal dialog on a CI runner would hang the job instead of
+// failing it.
+bool g_smoke = false;
+std::string g_smoke_fixture;
+std::string g_smoke_out;
 
 // The Preferences panel and its controls, built lazily and kept for the life of
 // the process (one window, like the main window).
@@ -340,12 +355,28 @@ NSTextAlignment alignment_for(core::sheet::CellAlign align) {
 }
 
 void show_alert(NSString* title, NSString* information) {
+    // --smoke must never block on a modal dialog: a CI runner has nobody to click
+    // it, and the run has to fail (non-zero) rather than hang.  The text still
+    // reaches the job log, and whichever check caused it is recorded as a failure.
+    if (g_smoke) {
+        std::fprintf(stderr, "msproject-app: smoke: alert suppressed: %s -- %s\n",
+                     to_std(title).c_str(), to_std(information).c_str());
+        return;
+    }
     NSAlert* alert = [[NSAlert alloc] init];
     [alert setMessageText:title];
     [alert setInformativeText:information];
     [alert setAlertStyle:NSAlertStyleWarning];
     [alert addButtonWithTitle:@"OK"];
     [alert runModal];
+}
+
+// --smoke: an artifact's size on disk, 0 when it is missing (so "the PDF is not
+// empty" is one check instead of a crash).
+std::size_t path_size(const std::filesystem::path& path) {
+    std::error_code error;
+    const std::uintmax_t size = std::filesystem::file_size(path, error);
+    return error ? 0 : static_cast<std::size_t>(size);
 }
 
 // ---------------------------------------------------------------------------
@@ -2518,6 +2549,8 @@ BOOL run_print_view(PlanState& plan, const app::PrintJob& job, NSURL* save_url) 
 - (void)exportGanttReport:(id)sender;
 - (void)printDocument:(id)sender;
 - (void)saveAsPDF:(id)sender;
+// Wave 15: the `--smoke` sequence; returns the process exit code (0 = pass).
+- (int)runSmoke;
 - (void)cut:(id)sender;
 - (BOOL)confirmClose;
 @end
@@ -3481,6 +3514,19 @@ static PlanView* g_view = nil;
     [g_window makeFirstResponder:g_view];
     [self syncViewControls];
 
+    // Wave 15: `--smoke` replaces the interactive session with the self-smoke, on
+    // the window that now exists (app/smoke.h).  The sequence loads the plan
+    // through -loadPath:, prints, snapshots, writes the artifacts and exits with
+    // the report's verdict -- so a failed check is a red job, not a log nobody
+    // reads.  No run loop, no panels, no user.
+    if (g_smoke) {
+        const int code = [self runSmoke];
+        std::printf("msproject-app: smoke exit %d\n", code);
+        std::fflush(stdout);
+        std::fflush(stderr);
+        std::exit(code);
+    }
+
     const std::string path = choose_fixture();
     if (path.empty()) {
         g_plan->error =
@@ -3903,6 +3949,202 @@ static PlanView* g_view = nil;
     std::fflush(stdout);
 }
 
+// ---------------------------------------------------------------------------
+// Wave 15: the self-smoke (`--smoke <fixture.mpp> --out <dir>`).
+//
+// The window and the plan view already exist: -applicationDidFinishLaunching built
+// them, and this runs in its place, before choose_fixture().  The portable
+// sequence runs first (app/smoke.cpp, also unit-tested on Windows as `app_smoke`);
+// then the AppKit paths a human would exercise:
+//
+//   * load the plan through the REAL load path (-loadPath:), from the COPY the
+//     portable half made -- never the committed fixture;
+//   * print through the REAL print path (make_print_request + build_print_job +
+//     run_print_view) with a save URL instead of the print panel: the Gantt job
+//     File > Print... builds, and the sheet job, so both app::PrintKind values are
+//     exercised;
+//   * snapshot the document view with -dataWithPDFInsideRect: to smoke-window.pdf
+//     and through an NSBitmapImageRep to smoke-window.png.
+//
+// No panels, no dialogs (show_alert is a no-op in this mode), no interaction.  The
+// return value is the process exit code: 0 only when every check passed.
+// ---------------------------------------------------------------------------
+- (int)runSmoke {
+    // Deterministic view state: the persisted preferences belong to a human's last
+    // session (a runner has none, a developer's Mac may).  This does NOT write to
+    // NSUserDefaults; it only makes this run's sheet/Gantt the defaults, which is
+    // what app::smoke_plan() also uses.
+    g_prefs = app::Preferences{};
+
+    app::SmokeOptions options;
+    options.fixture_path = g_smoke_fixture;
+    options.out_dir = g_smoke_out;
+    app::SmokeReport report = app::smoke_plan(options);
+    std::printf("msproject-app: %s\n", app::smoke_summary(report).c_str());
+    std::fflush(stdout);
+
+    const std::filesystem::path out(g_smoke_out);
+    std::error_code file_error;
+    std::filesystem::create_directories(out, file_error);
+    const std::string input_path = (out / app::kSmokeInputFile).string();
+
+    @try {
+        // ---- the window the smoke runs in -------------------------------
+        app::smoke_begin_step(report, "appkit.window");
+        app::smoke_add_check(report, "appkit.window", "the window was created",
+                             g_window != nil);
+        app::smoke_add_check(report, "appkit.window", "the window has a content view",
+                             g_window != nil && [g_window contentView] != nil);
+        app::smoke_add_check(report, "appkit.window",
+                             "the plan view is the window's document view",
+                             g_view != nil && [g_view window] == g_window);
+
+        // The real load path: reader, RecordSet, SheetModel, RowMap, Gantt, window
+        // resize, the columns menu.
+        if (report.error.empty() &&
+            std::filesystem::is_regular_file(input_path, file_error)) {
+            [self loadPath:input_path];
+        } else {
+            app::smoke_add_check(report, "appkit.window",
+                                 "the smoke copy exists to load", false,
+                                 input_path + " (" + report.error + ")");
+        }
+        const bool plan_ready = g_plan != nullptr && g_plan->sheet != nullptr;
+        app::smoke_add_check(report, "appkit.window", "the real load path opened the plan",
+                             plan_ready,
+                             g_plan != nullptr ? g_plan->error : std::string("no plan state"));
+        if (plan_ready) {
+            const PlanState& plan = *g_plan;
+            app::smoke_add_check(report, "appkit.window", "the loaded plan has three tasks",
+                                 plan.loaded.tasks.size() == 3,
+                                 "tasks=" + std::to_string(plan.loaded.tasks.size()));
+            app::smoke_add_check(report, "appkit.window", "the sheet has three rows",
+                                 plan.sheet->row_count() == 3,
+                                 "rows=" + std::to_string(plan.sheet->row_count()));
+            app::smoke_add_check(report, "appkit.window",
+                                 "the displayed row list has three rows",
+                                 plan.row_map.size() == 3,
+                                 "rows=" + std::to_string(plan.row_map.size()));
+            app::smoke_add_check(report, "appkit.window",
+                                 "the Gantt has a bar for each task",
+                                 plan.gantt.bars.size() == plan.loaded.tasks.size(),
+                                 "bars=" + std::to_string(plan.gantt.bars.size()));
+            app::smoke_add_check(report, "appkit.window",
+                                 "the sheet has laid-out columns", plan.columns.size() >= 5,
+                                 "columns=" + std::to_string(plan.columns.size()));
+            app::smoke_add_check(report, "appkit.window",
+                                 "the document view has a non-empty frame",
+                                 [g_view bounds].size.width > 0.0 &&
+                                     [g_view bounds].size.height > 0.0);
+            app::smoke_add_check(
+                report, "appkit.window",
+                "the loaded path is the smoke copy, not the committed fixture",
+                plan.path == input_path, plan.path);
+        }
+
+        // ---- print through the real print path --------------------------
+        if (plan_ready) {
+            PlanState& plan = *g_plan;
+            app::smoke_begin_step(report, "appkit.print");
+
+            const app::PrintJob gantt_job = app::build_print_job(
+                make_print_request(plan), app::PrintRoute::pdf);
+            const std::filesystem::path gantt_pdf = out / app::kSmokePrintGanttPdf;
+            std::filesystem::remove(gantt_pdf, file_error);
+            NSURL* gantt_url = [NSURL fileURLWithPath:to_ns(gantt_pdf.string())];
+            const BOOL gantt_saved = run_print_view(plan, gantt_job, gantt_url);
+            app::smoke_add_check(report, "appkit.print",
+                                 "run_print_view writes the Gantt print job as a PDF",
+                                 gantt_saved == YES, "run_print_view returned NO");
+            app::smoke_add_check(report, "appkit.print",
+                                 "the Gantt print PDF exists and is not empty",
+                                 path_size(gantt_pdf) > 0,
+                                 "bytes=" + std::to_string(path_size(gantt_pdf)));
+            app::smoke_add_artifact(report, "print-gantt-pdf", gantt_pdf.string());
+
+            app::PrintRequest sheet_request = make_print_request(plan);
+            sheet_request.kind = app::PrintKind::sheet;
+            sheet_request.report_title = "Sheet report";
+            const app::PrintJob sheet_job =
+                app::build_print_job(sheet_request, app::PrintRoute::pdf);
+            const std::filesystem::path sheet_pdf = out / app::kSmokePrintSheetPdf;
+            std::filesystem::remove(sheet_pdf, file_error);
+            NSURL* sheet_url = [NSURL fileURLWithPath:to_ns(sheet_pdf.string())];
+            const BOOL sheet_saved = run_print_view(plan, sheet_job, sheet_url);
+            app::smoke_add_check(report, "appkit.print",
+                                 "run_print_view writes the sheet print job as a PDF",
+                                 sheet_saved == YES, "run_print_view returned NO");
+            app::smoke_add_check(report, "appkit.print",
+                                 "the sheet print PDF exists and is not empty",
+                                 path_size(sheet_pdf) > 0,
+                                 "bytes=" + std::to_string(path_size(sheet_pdf)));
+            app::smoke_add_artifact(report, "print-sheet-pdf", sheet_pdf.string());
+        }
+
+        // ---- the window snapshot ----------------------------------------
+        if (plan_ready) {
+            app::smoke_begin_step(report, "appkit.snapshot");
+            const NSRect bounds = [g_view bounds];
+
+            NSData* window_pdf = [g_view dataWithPDFInsideRect:bounds];
+            const std::filesystem::path window_pdf_path = out / app::kSmokeWindowPdf;
+            const BOOL pdf_written =
+                window_pdf != nil && [window_pdf length] > 0 &&
+                [window_pdf writeToFile:to_ns(window_pdf_path.string()) atomically:YES];
+            app::smoke_add_check(report, "appkit.snapshot",
+                                 "the window snapshot writes smoke-window.pdf",
+                                 pdf_written == YES,
+                                 "bytes=" + std::to_string(
+                                               static_cast<unsigned long long>(
+                                                   window_pdf != nil ? [window_pdf length] : 0)));
+            app::smoke_add_check(report, "appkit.snapshot",
+                                 "smoke-window.pdf exists and is not empty",
+                                 path_size(window_pdf_path) > 0,
+                                 "bytes=" + std::to_string(path_size(window_pdf_path)));
+            app::smoke_add_artifact(report, "window-pdf", window_pdf_path.string());
+
+            NSBitmapImageRep* snapshot =
+                [g_view bitmapImageRepForCachingDisplayInRect:bounds];
+            NSData* window_png = nil;
+            if (snapshot != nil) {
+                [g_view cacheDisplayInRect:bounds toBitmapImageRep:snapshot];
+                window_png = [snapshot representationUsingType:NSBitmapImageFileTypePNG
+                                                    properties:@{}];
+            }
+            const std::filesystem::path window_png_path = out / app::kSmokeWindowPng;
+            const BOOL png_written =
+                window_png != nil && [window_png length] > 0 &&
+                [window_png writeToFile:to_ns(window_png_path.string()) atomically:YES];
+            app::smoke_add_check(report, "appkit.snapshot",
+                                 "the window snapshot writes smoke-window.png",
+                                 png_written == YES,
+                                 "bitmap rep is nil or the PNG is empty");
+            app::smoke_add_check(report, "appkit.snapshot",
+                                 "smoke-window.png exists and is not empty",
+                                 path_size(window_png_path) > 0,
+                                 "bytes=" + std::to_string(path_size(window_png_path)));
+            app::smoke_add_artifact(report, "window-png", window_png_path.string());
+        }
+    } @catch (NSException* exception) {
+        app::smoke_add_check(report, "appkit", "no Objective-C exception in the AppKit steps",
+                             false, to_std([exception reason]));
+    }
+
+    // ---- the report the CI artifact upload picks up ----------------------
+    std::string json_error;
+    const bool json_written = app::smoke_write_json(report, g_smoke_out, json_error);
+    app::smoke_add_check(report, "appkit.report", "smoke.json is written", json_written,
+                         json_error);
+    for (const app::SmokeArtifact& artifact : report.artifacts) {
+        std::printf("msproject-app: artifact %s: %s\n", artifact.name.c_str(),
+                    artifact.path.c_str());
+    }
+    std::printf("msproject-app: %s\n", app::smoke_summary(report).c_str());
+    std::fflush(stdout);
+
+    return report.ok() ? 0 : 1;
+}
+
 // The Preferences panel: four controls, one change handler, applied live and
 // written to NSUserDefaults (app/prefs.h explains why they are app-side).
 - (void)showPreferences:(id)sender {
@@ -4239,6 +4481,27 @@ int main(int argc, char** argv) {
     @autoreleasepool {
         g_argc = argc;
         g_argv = argv;
+
+        // Wave 15: `--smoke <fixture.mpp> --out <dir>`.  Parsed here, before the
+        // application starts, so every later code path can see g_smoke.  Only the
+        // two flags are interpreted; anything else is left to the existing argv[1]
+        // fixture rule (choose_fixture()).
+        for (int index = 1; index < argc; ++index) {
+            const std::string argument = argv[index] != nullptr ? argv[index] : "";
+            if (argument == "--smoke" && index + 1 < argc && argv[index + 1] != nullptr) {
+                g_smoke = true;
+                g_smoke_fixture = argv[++index];
+            } else if (argument == "--out" && index + 1 < argc && argv[index + 1] != nullptr) {
+                g_smoke_out = argv[++index];
+            }
+        }
+        if (g_smoke && (g_smoke_fixture.empty() || g_smoke_out.empty())) {
+            std::fprintf(stderr,
+                         "msproject-app: --smoke needs a fixture and an output directory\n"
+                         "  usage: msproject_app --smoke <fixture.mpp> --out <dir>\n");
+            return 2;
+        }
+
         NSApplication* application = [NSApplication sharedApplication];
         [application setActivationPolicy:NSApplicationActivationPolicyRegular];
         load_preferences_from_defaults();

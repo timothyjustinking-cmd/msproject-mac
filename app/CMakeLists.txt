@@ -12,7 +12,8 @@
 #            cmake --build build-app
 #            ctest --test-dir build-app -C Release
 #            -> msproject_app.app (main.mm: NSApplication + PlanView + menus +
-#               Preferences + export + print) and the fourteen headless tests
+#               Preferences + export + print + `--smoke`) and the fifteen headless
+#               tests
 #
 #   Windows: cmake -S app -B build\vs-w47 -G "Visual Studio 17 2022" -A x64
 #            cmake --build build\vs-w47 --config Release
@@ -22,14 +23,14 @@
 #               filter_tests.exe, export_tests.exe, views_tests.exe,
 #               app_edit_tests.exe, app_fields_tests.exe,
 #               app_edits_fields_tests.exe, app_edits_links_tests.exe,
-#               page_layout_tests.exe, start_edit_warning_tests.exe; ObjC++/AppKit
-#               does not exist here, so the AppKit target is skipped and the
-#               headless tests are the gate.
+#               page_layout_tests.exe, start_edit_warning_tests.exe,
+#               smoke_tests.exe; ObjC++/AppKit does not exist here, so the AppKit
+#               target is skipped and the headless tests are the gate.
 #
 #   Linux:   same as Windows (headless tests only).
 #
 # Options:
-#   APP_BUILD_TESTS         build + register the fourteen headless tests (default ON)
+#   APP_BUILD_TESTS         build + register the fifteen headless tests (default ON)
 #   CORE_WARNINGS_AS_ERRORS same meaning as the top-level build (default OFF;
 #                           the macOS workflow passes ON).  It also reaches the
 #                           core subdirectories, which read this variable.
@@ -117,11 +118,12 @@ set(MPPWRITE_BUILD_TESTS OFF CACHE BOOL "core/mppwrite tests (off: app configure
 # Wave 12: core/props decodes 114/Props -- the stored formula text the task sheet
 # shows as computed columns.  Its test binary is a stream test, so it stays off.
 set(PROPS_BUILD_TESTS OFF CACHE BOOL "core/props tests (off: app configure)" FORCE)
+set(VIEWSTATE_BUILD_TESTS OFF CACHE BOOL "core/viewstate tests (off: app configure)" FORCE)
 
 # Order matters: view needs model, sheet needs view, gantt needs sched, render
 # needs sheet + gantt, usage needs sched, formula needs sheet.  props (W50) has no
 # core dependency of its own: it parses an already-extracted stream blob.
-foreach(app_core_dep mpp sched view sheet gantt usage formula mppwrite render props)
+foreach(app_core_dep mpp sched view sheet gantt usage formula mppwrite render props viewstate)
     if(NOT EXISTS "${APP_REPO_ROOT}/core/${app_core_dep}/CMakeLists.txt")
         message(FATAL_ERROR
             "app: core/${app_core_dep}/CMakeLists.txt is missing. The shell links the "
@@ -153,8 +155,9 @@ endif()
 # mapping (selection_model), the save helper (document), the preferences
 # (prefs), the menu-bar data (menu_model), the filter dialog model
 # (filter_model), the PDF export (export_pdf) and the wave-11 views
-# (view_model: resource sheet, task/resource usage, computed columns).  No
-# AppKit, so it builds and is tested on every platform.
+# (view_model: resource sheet, task/resource usage, computed columns), plus the
+# wave-15 self-smoke sequence (smoke).  No AppKit, so it builds and is tested on
+# every platform.
 # ---------------------------------------------------------------------------
 add_library(app_layout STATIC
     layout_model.cpp
@@ -170,6 +173,7 @@ add_library(app_layout STATIC
     field_link_edits.cpp
     page_layout.cpp
     start_edit_warning.cpp
+    smoke.cpp
 )
 add_library(msproject::app_layout ALIAS app_layout)
 target_compile_features(app_layout PUBLIC cxx_std_20)
@@ -183,7 +187,8 @@ target_include_directories(app_layout PUBLIC
 # and core_formula are the wave-11 views (view_model.cpp) and also carry
 # core/usage's own use of core_sched.
 target_link_libraries(app_layout PUBLIC core_sheet core_gantt core_mpp core_mppwrite
-                                     core_render core_usage core_formula core_props)
+                                     core_render core_usage core_formula core_props
+                                     core_viewstate)
 # PUBLIC so the tests see the same branch of app/document.cpp the shell compiles.
 target_compile_definitions(app_layout PUBLIC
     APP_MPPWRITE_SAVE_HEADER=${APP_MPPWRITE_SAVE_HEADER}
@@ -208,6 +213,11 @@ if(APP_BUILD_TESTS)
     set(APP_TEST_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test-out")
     file(TO_CMAKE_PATH "${APP_TEST_OUT_DIR}" APP_TEST_OUT_DIR_CMAKE)
     file(MAKE_DIRECTORY "${APP_TEST_OUT_DIR}")
+    # Wave 15 (W63): app_smoke's own directory, so a smoke run's artifacts (the
+    # fixture copy, the edited file, smoke.json) are never mixed with the other
+    # tests' outputs and can be reviewed or deleted as a set.
+    set(APP_SMOKE_OUT_DIR "${APP_TEST_OUT_DIR}/smoke")
+    file(TO_CMAKE_PATH "${APP_SMOKE_OUT_DIR}" APP_SMOKE_OUT_DIR_CMAKE)
 
     add_executable(layout_model_tests layout_model_tests.cpp)
     target_compile_features(layout_model_tests PRIVATE cxx_std_20)
@@ -402,6 +412,27 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_start_warning COMMAND start_edit_warning_tests)
     set_tests_properties(app_start_warning PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 15 (W63): the portable half of `msproject_app --smoke`.  Loads a copy of
+    # the committed synthetic fixture (never the fixture itself), drives the filter
+    # dialog model, the Task Fields / Predecessors dialog models, a Start edit
+    # through core::sheet, the save-time warning, the real writer, a reopen and the
+    # shared print layout, then writes smoke.json under APP_SMOKE_OUT_DIR.  The
+    # AppKit half (window, print-to-PDF, window snapshot) is app/main.mm and is
+    # compiled only by the macOS workflow; this test is what proves the sequence on
+    # the development box.
+    add_executable(smoke_tests smoke_tests.cpp)
+    target_compile_features(smoke_tests PRIVATE cxx_std_20)
+    set_target_properties(smoke_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(smoke_tests PRIVATE app_layout)
+    target_compile_definitions(smoke_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_SMOKE_OUT_DIR="${APP_SMOKE_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(smoke_tests)
+
+    add_test(NAME app_smoke COMMAND smoke_tests)
+    set_tests_properties(app_smoke PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 endif()
 
 # ---------------------------------------------------------------------------

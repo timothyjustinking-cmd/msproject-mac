@@ -18,10 +18,12 @@
 
 #include "viewstate.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <initializer_list>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -80,6 +82,13 @@ void put_u32(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint32_t
     bytes[offset + 1] = static_cast<std::uint8_t>((value >> 8u) & 0xffu);
     bytes[offset + 2] = static_cast<std::uint8_t>((value >> 16u) & 0xffu);
     bytes[offset + 3] = static_cast<std::uint8_t>((value >> 24u) & 0xffu);
+}
+
+std::uint32_t read_u32(const std::vector<std::uint8_t>& bytes, std::size_t offset) {
+    return static_cast<std::uint32_t>(bytes[offset]) |
+           (static_cast<std::uint32_t>(bytes[offset + 1]) << 8u) |
+           (static_cast<std::uint32_t>(bytes[offset + 2]) << 16u) |
+           (static_cast<std::uint32_t>(bytes[offset + 3]) << 24u);
 }
 
 void put_utf16(std::vector<std::uint8_t>& bytes, std::size_t offset, const std::string& text) {
@@ -207,6 +216,79 @@ void attach_column_blob(Parts& parts, const std::vector<std::uint8_t>& blob) {
     put_u32(parts.var_meta, 24, 1);
     put_u32(parts.var_meta, 28, 0);
     put_u32(parts.var_meta, 32, 0x20400006u);
+}
+
+// ---------------------------------------------------------------------------
+// CV_iew main-block helpers (wave 15, W62).  The item framing measured on the
+// synthetic and corpus views: 16-byte header, then {u32 length, u32 id,
+// u32 kind, payload}, padded to an even total.
+// ---------------------------------------------------------------------------
+
+struct ViewItemSpec {
+    std::uint32_t id = 0;
+    std::uint32_t kind = 1;
+    std::vector<std::uint8_t> payload;
+};
+
+std::vector<std::uint8_t> utf16_item(const std::string& text) {
+    std::vector<std::uint8_t> out(text.size() * 2 + 2, 0);
+    put_utf16(out, 0, text);
+    return out;
+}
+
+std::vector<std::uint8_t> make_view_main_block(const std::vector<ViewItemSpec>& items) {
+    std::size_t total = 16;
+    for (const auto& item : items) {
+        std::size_t stride = 12 + item.payload.size();
+        if ((stride & 1u) != 0) {
+            ++stride;
+        }
+        total += stride;
+    }
+    std::vector<std::uint8_t> block(total, 0);
+    put_u32(block, 0, static_cast<std::uint32_t>(total - 4));
+    put_u32(block, 4, static_cast<std::uint32_t>(total - 4));
+    put_u32(block, 8, 0x00010000u);
+    put_u32(block, 12, static_cast<std::uint32_t>(items.size()));
+    std::size_t at = 16;
+    for (const auto& item : items) {
+        put_u32(block, at, static_cast<std::uint32_t>(item.payload.size()));
+        put_u32(block, at + 4, item.id);
+        put_u32(block, at + 8, item.kind);
+        std::copy(item.payload.begin(), item.payload.end(),
+                  block.begin() + static_cast<std::ptrdiff_t>(at + 12));
+        std::size_t stride = 12 + item.payload.size();
+        if ((stride & 1u) != 0) {
+            ++stride;
+        }
+        at += stride;
+    }
+    return block;
+}
+
+// The measured 970-byte view-format template: four page margins (1/1000 inch)
+// then a fifth word (2000 in every synthetic view); the rest stays zero.
+std::vector<std::uint8_t> make_view_options() {
+    std::vector<std::uint8_t> options(970, 0);
+    for (std::size_t i = 0; i < 4; ++i) {
+        put_u32(options, i * 4, 500);
+    }
+    put_u32(options, 16, 2000);
+    return options;
+}
+
+// The measured notes record: nine u32 chunk lengths followed by the chunks.
+std::vector<std::uint8_t> make_view_notes() {
+    const std::string first = "{\\rtf1 top}";
+    const std::string last = "{\\rtf1 bottom}";
+    std::vector<std::uint8_t> notes(36 + first.size() + last.size(), 0);
+    put_u32(notes, 0, static_cast<std::uint32_t>(first.size()));
+    put_u32(notes, 32, static_cast<std::uint32_t>(last.size()));
+    std::copy(first.begin(), first.end(),
+              notes.begin() + static_cast<std::ptrdiff_t>(36));
+    std::copy(last.begin(), last.end(),
+              notes.begin() + static_cast<std::ptrdiff_t>(36 + first.size()));
+    return notes;
 }
 
 msproject::viewstate::ViewState parse_or_fail(const std::string& klass,
@@ -453,6 +535,113 @@ void test_generated_views() {
     }
     const std::string summary = msproject::viewstate::describe_view_state(state);
     check(summary.find("view 1") != std::string::npos, "describe shows views");
+}
+
+void test_view_main_decode() {
+    // View 1 is a single view: table/filter/group names, a display name, the
+    // measured 970-byte options template and the notes grid.  One item is the
+    // measured 37-byte odd size, which is what forces the two-byte padding.
+    std::vector<std::uint8_t> odd(37, 0);
+    put_u32(odd, 0, 0x00000100u);
+    put_u32(odd, 8, 0x00000017u);
+    std::vector<ViewItemSpec> view1_items;
+    view1_items.push_back({0x22400007u, 23, odd});
+    view1_items.push_back({0x2240000Au, 1, utf16_item("&Entry")});
+    view1_items.push_back({0x2240000Bu, 1, utf16_item("&All Tasks")});
+    view1_items.push_back({0x22400018u, 1, utf16_item("No Group")});
+    view1_items.push_back({0x2240002Au, 1, utf16_item("Gantt Chart")});
+    view1_items.push_back({0x22400009u, 1, make_view_options()});
+    view1_items.push_back({0x22400014u, 1, make_view_notes()});
+    const std::vector<std::uint8_t> main1 = make_view_main_block(view1_items);
+
+    // View 2 is the measured combination shape: 0x2240000a/0x2240000b hold
+    // view names (one of them matches view 1's caption), not a table/filter.
+    std::vector<ViewItemSpec> view2_items;
+    view2_items.push_back({0x2240000Au, 1, utf16_item("&Gantt Chart")});
+    view2_items.push_back({0x2240000Bu, 1, utf16_item("Time&line")});
+    view2_items.push_back({0x2240002Au, 1, utf16_item("Gantt Chart with Timeline")});
+    const std::vector<std::uint8_t> main2 = make_view_main_block(view2_items);
+
+    std::vector<BlockSpec> blocks;
+    blocks.push_back({1, 0x20400006u, main1});
+    blocks.push_back({1, 0x22400014u, make_view_notes()});
+    blocks.push_back({2, 0x20400006u, main2});
+    const Parts parts = build_parts(138, {{"&Gantt Chart", ""}, {"Gantt &with Timeline", ""}},
+                                    blocks);
+    const auto state = parse_or_fail("CV_iew", parts);
+    check_eq(state.views.size(), std::size_t{2}, "main decode views");
+    if (state.views.size() != 2) {
+        return;
+    }
+    const auto& view1 = state.views[0];
+    check(view1.main_decoded, "view 1 main block decoded");
+    check_eq(view1.records.size(), std::size_t{7}, "view 1 item count");
+    check_eq(view1.main_payload_length, static_cast<std::uint32_t>(main1.size()),
+             "view 1 main payload length");
+    check_eq(view1.table_or_top, std::string("&Entry"), "view 1 table name");
+    check_eq(view1.filter_or_bottom, std::string("&All Tasks"), "view 1 filter name");
+    check_eq(view1.group_name, std::string("No Group"), "view 1 group name");
+    check_eq(view1.display_name, std::string("Gantt Chart"), "view 1 display name");
+    check(!view1.looks_like_combination, "view 1 is not a combination view");
+    check(view1.options_decoded, "view 1 options decoded");
+    check_eq(view1.page_margins_thousandths[0], 500u, "view 1 left page margin");
+    check_eq(view1.page_margins_thousandths[3], 500u, "view 1 bottom page margin");
+    check_eq(view1.page_margin_extra, 2000u, "view 1 options fifth word");
+    check(view1.notes_decoded, "view 1 notes decoded");
+    check_eq(view1.notes_chunk_lengths[0], 11u, "view 1 notes first chunk length");
+    check_eq(view1.notes_chunk_lengths[8], 14u, "view 1 notes last chunk length");
+    check(view1.notes_previews[0].find("rtf") != std::string::npos,
+          "view 1 notes preview finds rtf");
+
+    const auto& view2 = state.views[1];
+    check(view2.main_decoded, "view 2 main block decoded");
+    check_eq(view2.records.size(), std::size_t{3}, "view 2 item count");
+    check_eq(view2.table_or_top, std::string("&Gantt Chart"), "view 2 top view name");
+    check_eq(view2.filter_or_bottom, std::string("Time&line"), "view 2 bottom view name");
+    check(view2.looks_like_combination, "view 2 is a combination view (inference)");
+    const std::string summary = msproject::viewstate::describe_view_state(state);
+    check(summary.find("table-or-top=\"&Entry\"") != std::string::npos,
+          "describe shows the decoded table name");
+
+    // Ordinals are not row indices: the corpus fixtures skip ordinals (13 and 22
+    // in `project_a`).  A view row whose ordinal is 3 (not 2) must
+    // still find its uid-3 block.
+    Parts gap = parts;
+    put_u32(gap.fixed_data, 138, 3);        // second row's ordinal 2 -> 3
+    put_u32(gap.var_meta, 24 + 2 * 12, 3);  // third VarMeta entry uid 2 -> 3
+    const auto gap_state = parse_or_fail("CV_iew", gap);
+    check_eq(gap_state.views.size(), std::size_t{2}, "gapped-ordinal views");
+    if (gap_state.views.size() == 2) {
+        check_eq(gap_state.views[1].ordinal, 3u, "gapped-ordinal second view ordinal");
+        check(gap_state.views[1].main_decoded, "gapped-ordinal view finds its main block");
+        check_eq(gap_state.views[1].table_or_top, std::string("&Gantt Chart"),
+                 "gapped-ordinal view decodes its table/top name");
+    }
+
+    // Every item of the walk must land exactly on the block end; a wrong size
+    // word or id is refused rather than guessed.
+    std::vector<msproject::viewstate::ViewRecord> records;
+    msproject::viewstate::ParseError error;
+    check(msproject::viewstate::parse_view_records(main1, records, &error),
+          "parse_view_records accepts the measured framing");
+    check_eq(records.size(), std::size_t{7}, "parse_view_records item count");
+    std::vector<std::uint8_t> bad_size = main1;
+    put_u32(bad_size, 0, 1);
+    check(!msproject::viewstate::parse_view_records(bad_size, records, &error),
+          "parse_view_records refuses a bad size word");
+    std::vector<std::uint8_t> bad_id = main1;
+    put_u32(bad_id, 20, 0x12345678u);
+    check(!msproject::viewstate::parse_view_records(bad_id, records, &error),
+          "parse_view_records refuses a non-view id");
+
+    // Decoding must not perturb the bytes: encode is still a no-op.
+    msproject::viewstate::EncodedParts encoded;
+    check(msproject::viewstate::encode_view_state(state, encoded, nullptr),
+          "encode a decoded CV_iew");
+    check(encoded.fixed_data == parts.fixed_data, "CV_iew main decode: FixedData unchanged");
+    check(encoded.fixed_meta == parts.fixed_meta, "CV_iew main decode: FixedMeta unchanged");
+    check(encoded.var_meta == parts.var_meta, "CV_iew main decode: VarMeta unchanged");
+    check(encoded.var2_data == parts.var2, "CV_iew main decode: Var2Data unchanged");
 }
 
 void test_ceDL_props_document() {
@@ -927,11 +1116,365 @@ void test_writer_refusals() {
           "date format: undecoded table refused");    check(error.message.find("decoded") != std::string::npos, "undecoded refusal message");
 }
 
+void test_writer_append() {
+    Parts parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", parts)) {
+        return;
+    }
+    auto state = parse_or_fail("CTable", parts);
+    EncodedParts before;
+    check(encode_view_state(state, before, nullptr), "encode base before append");
+    check_eq(state.tables.size(), std::size_t{1}, "append tables");
+    if (state.tables.size() != 1) {
+        return;
+    }
+
+    // Append one column: 10 columns, last index 9, block +115, and every byte of
+    // the old payload still identical (the record is inserted after the last
+    // column, which is the end of the only block).
+    WriteError error;
+    check(msproject::viewstate::append_table_column(state, 0, 0x0b400057u, "Number1", &error),
+          "append_table_column(0, Number1)");
+    if (!error.message.empty()) {
+        std::fprintf(stderr, "append error: %s\n", error.message.c_str());
+    }
+    EncodedParts after;
+    check(encode_view_state(state, after, nullptr), "encode after append");
+    check(after.fixed_data == before.fixed_data, "append: FixedData unchanged");
+    check(after.fixed_meta == before.fixed_meta, "append: FixedMeta unchanged");
+    check_eq(after.var2_data.size(), before.var2_data.size() + 115, "append: block +115 bytes");
+    check_eq(after.var_meta.size(), before.var_meta.size(), "append: VarMeta size unchanged");
+    if (after.var2_data.size() == before.var2_data.size() + 115) {
+        // The new record is appended after the last column, so in the old bytes
+        // only the u32 frame length word (0..3) and the u16 last-column index
+        // (payload +4 = stream 8..9) may differ.
+        check(std::equal(before.var2_data.begin() + 4, before.var2_data.begin() + 8,
+                         after.var2_data.begin() + 4),
+              "append: payload ordinal unchanged");
+        check(std::equal(before.var2_data.begin() + 10, before.var2_data.end(),
+                         after.var2_data.begin() + 10),
+              "append: old payload bytes after the index are unchanged");
+        bool only_frame = true;
+        for (std::size_t i = 0; i < before.var2_data.size(); ++i) {
+            if (before.var2_data[i] != after.var2_data[i] && i >= 4 && i != 8 && i != 9) {
+                only_frame = false;
+            }
+        }
+        check(only_frame, "append: only the length word and last-column index differ");
+        check_eq(static_cast<int>(after.var2_data[8]), 9, "append: written last-column index low");
+        check_eq(static_cast<int>(after.var2_data[9]), 0, "append: written last-column index high");
+        check_eq(after.var2_data.size() - 4,
+                 static_cast<std::size_t>(1047 + 115), "append: new block length");
+        check_eq(read_u32(after.var2_data, 0), 1047u + 115u,
+                 "append: written block length word");
+        const std::size_t record = after.var2_data.size() - 115;
+        std::uint32_t field = 0;
+        for (std::size_t b = 0; b < 4; ++b) {
+            field |= static_cast<std::uint32_t>(after.var2_data[record + b]) << (8u * b);
+        }
+        check_eq(field, 0x0b400057u, "append: field id at record +0");
+        bool header_ok = true;
+        for (std::size_t b = 0; b < 9; ++b) {
+            if (after.var2_data[record + 4 + b] != msproject::viewstate::kFreshColumnHeader[b]) {
+                header_ok = false;
+            }
+        }
+        check(header_ok, "append: measured fresh-column nine bytes at +4");
+        check_eq(msproject::viewstate::utf16_ascii(after.var2_data, record + 13, 51),
+                 std::string("Number1"), "append: title at +13");
+        bool tail_zero = true;
+        for (std::size_t at = record + 13 + 7 * 2; at < record + 115; ++at) {
+            if (after.var2_data[at] != 0) {
+                tail_zero = false;
+            }
+        }
+        check(tail_zero, "append: title tail zero-filled");
+    }
+    // VarMeta changed only in its var2_size word (+20).
+    check_eq(read_u32(after.var_meta, 20),
+             static_cast<std::uint32_t>(after.var2_data.size()),
+             "append: VarMeta var2_size recomputed");
+    bool only_var2_size = true;
+    for (std::size_t i = 0; i < before.var_meta.size(); ++i) {
+        if (i >= 20 && i < 24) {
+            continue;
+        }
+        if (before.var_meta[i] != after.var_meta[i]) {
+            only_var2_size = false;
+        }
+    }
+    check(only_var2_size, "append: VarMeta differs only at var2_size");
+
+    // Decode back: 10 columns and last_column_index 9.
+    Parts appended;
+    appended.fixed_data = after.fixed_data;
+    appended.fixed_meta = after.fixed_meta;
+    appended.var_meta = after.var_meta;
+    appended.var2 = after.var2_data;
+    const auto reparsed = parse_or_fail("CTable", appended);
+    check_eq(reparsed.tables.size(), std::size_t{1}, "append re-parsed tables");
+    if (reparsed.tables.size() == 1) {
+        check_eq(reparsed.tables[0].columns.size(), std::size_t{10},
+                 "append re-parsed column count");
+        check_eq(reparsed.tables[0].last_column_index, static_cast<std::uint16_t>(9),
+                 "append re-parsed last column index");
+        if (reparsed.tables[0].columns.size() == 10) {
+            check_eq(reparsed.tables[0].columns[9].field_id, 0x0b400057u,
+                     "append re-parsed field id");
+            check_eq(reparsed.tables[0].columns[9].title, std::string("Number1"),
+                     "append re-parsed title");
+            check(reparsed.tables[0].columns[9].opaque_header ==
+                      msproject::viewstate::kFreshColumnHeader,
+                  "append re-parsed nine bytes");
+        }
+    }
+
+    // Twice: 11 columns, last index 10, block +230.
+    check(msproject::viewstate::append_table_column(state, 0, 0x0b400033u, "Text1", nullptr),
+          "append the second column");
+    EncodedParts twice;
+    check(encode_view_state(state, twice, nullptr), "encode after two appends");
+    check_eq(twice.var2_data.size(), before.var2_data.size() + 230,
+             "two appends: block +230 bytes");
+    Parts appended2;
+    appended2.fixed_data = twice.fixed_data;
+    appended2.fixed_meta = twice.fixed_meta;
+    appended2.var_meta = twice.var_meta;
+    appended2.var2 = twice.var2_data;
+    const auto reparsed2 = parse_or_fail("CTable", appended2);
+    if (reparsed2.tables.size() == 1) {
+        check_eq(reparsed2.tables[0].columns.size(), std::size_t{11},
+                 "two appends re-parsed column count");
+        check_eq(reparsed2.tables[0].last_column_index, static_cast<std::uint16_t>(10),
+                 "two appends re-parsed last index");
+        if (reparsed2.tables[0].columns.size() == 11) {
+            check_eq(reparsed2.tables[0].columns[10].title, std::string("Text1"),
+                     "two appends re-parsed second title");
+        }
+    }
+
+    // Two tables: appending to the first must shift the second block's stream
+    // offset and its VarMeta entry, and a second append to the (now shifted)
+    // second table must still find it.
+    const auto payload_one =
+        make_table_block(1, 0xff, 6, {{0x0b400017u, ""}, {0x0b400500u, ""}});
+    const auto payload_two = make_table_block(
+        2, 0xff, 6, {{0x0b400017u, ""}, {0x0b4000cdu, ""}, {0x0b40000eu, "Task Name"}});
+    std::vector<BlockSpec> two_blocks;
+    two_blocks.push_back({1, 0x20400006u, payload_one});
+    two_blocks.push_back({2, 0x20400006u, payload_two});
+    Parts two = build_parts(230, {{"&One", "One"}, {"&Two", "Two"}}, two_blocks);
+    auto two_state = parse_or_fail("CTable", two);
+    EncodedParts two_before;
+    check(encode_view_state(two_state, two_before, nullptr), "encode two-table CTable");
+    check_eq(two_state.tables.size(), std::size_t{2}, "two-table tables");
+    if (two_state.tables.size() == 2) {
+        check_eq(two_state.tables[1].block_offset, 246u, "two-table second block offset");
+        check(msproject::viewstate::append_table_column(two_state, 0, 0x0b400057u, "Number1",
+                                                        nullptr),
+              "append to the first of two tables");
+        check_eq(two_state.tables[1].block_offset, 246u + 115u,
+                 "append shifts the second table's decoded block offset");
+        EncodedParts two_after;
+        check(encode_view_state(two_state, two_after, nullptr), "encode two-table after append");
+        check_eq(two_after.var2_data.size(), two_before.var2_data.size() + 115,
+                 "two-table append: Var2Data +115");
+        check_eq(read_u32(two_after.var2_data, 361), 357u,
+                 "two-table append: second block length word still 357");
+        // Appending to the shifted second table exercises the repaired offset.
+        check(msproject::viewstate::append_table_column(two_state, 1, 0x0b400033u, "Text1",
+                                                        nullptr),
+              "append to the shifted second table");
+        EncodedParts both;
+        check(encode_view_state(two_state, both, nullptr), "encode after both appends");
+        Parts both_parts;
+        both_parts.fixed_data = both.fixed_data;
+        both_parts.fixed_meta = both.fixed_meta;
+        both_parts.var_meta = both.var_meta;
+        both_parts.var2 = both.var2_data;
+        const auto both_state = parse_or_fail("CTable", both_parts);
+        check_eq(both_state.tables.size(), std::size_t{2}, "two-table re-parsed tables");
+        if (both_state.tables.size() == 2) {
+            check_eq(both_state.tables[0].columns.size(), std::size_t{3},
+                     "two-table first table 3 columns");
+            check_eq(both_state.tables[1].columns.size(), std::size_t{4},
+                     "two-table second table 4 columns");
+            check_eq(both_state.tables[0].columns[2].title, std::string("Number1"),
+                     "two-table first table appended title");
+            check_eq(both_state.tables[1].columns[3].title, std::string("Text1"),
+                     "two-table second table appended title");
+        }
+    }
+}
+
+void test_writer_append_refusals() {
+    Parts parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", parts)) {
+        return;
+    }
+    auto state = parse_or_fail("CTable", parts);
+    EncodedParts before;
+    check(encode_view_state(state, before, nullptr), "encode before refused appends");
+
+    WriteError error;
+    check(!msproject::viewstate::append_table_column(state, 0, 0x0b400057u,
+                                                     std::string(52, 'A'), &error),
+          "append: 52-code-unit title refused");
+    check(error.message.find("capacity") != std::string::npos, "append title refusal message");
+    error = WriteError{};
+    check(!msproject::viewstate::append_table_column(state, 0, 0u, "x", &error),
+          "append: field id 0 refused");
+    check(error.message.find("field id 0") != std::string::npos, "append field id message");
+    error = WriteError{};
+    check(!msproject::viewstate::append_table_column(state, 3, 0x0b400057u, "x", &error),
+          "append: bad table index refused");
+    check(error.message.find("out of range") != std::string::npos,
+          "append bad table refusal message");
+    error = WriteError{};
+    check(!msproject::viewstate::append_table_column(state, 0, 0x0b400057u, "caf\xe9", &error),
+          "append: non-ASCII title refused");
+
+    // Unparsed state and undecoded table are refused too.
+    msproject::viewstate::ViewState unparsed;
+    error = WriteError{};
+    check(!msproject::viewstate::append_table_column(unparsed, 0, 0x0b400057u, "x", &error),
+          "append: unparsed state refused");
+    check(error.message.find("did not parse") != std::string::npos,
+          "append unparsed refusal message");
+    Parts undecoded = parts;
+    put_u16(undecoded.var2, 8, 9);
+    auto opaque_state = parse_or_fail("CTable", undecoded);
+    error = WriteError{};
+    check(!msproject::viewstate::append_table_column(opaque_state, 0, 0x0b400057u, "x", &error),
+          "append: undecoded table refused");
+    check(error.message.find("decoded") != std::string::npos,
+          "append undecoded refusal message");
+
+    EncodedParts after;
+    check(encode_view_state(state, after, nullptr), "encode after refused appends");
+    check_same_parts(after, parts, "refused appends leave every part unchanged");
+
+    // A full table (0x10000 columns, last_column_index 0xffff) cannot grow: the
+    // u16 index has no next value.
+    std::vector<std::uint8_t> payload(12 + 65536 * 115, 0);
+    put_u32(payload, 0, 1);
+    put_u16(payload, 4, 0xffff);
+    payload[6] = 1;
+    payload[7] = 0xff;
+    put_u32(payload, 8, 6);
+    std::vector<std::uint8_t> blob;
+    append_block(blob, payload);
+    Parts big = build_parts(230, {{"&Big", "Big"}}, {}, 10);
+    attach_column_blob(big, blob);
+    auto big_state = parse_or_fail("CTable", big);
+    check_eq(big_state.tables.size(), std::size_t{1}, "over-capacity table parsed");
+    if (big_state.tables.size() == 1) {
+        check_eq(big_state.tables[0].columns.size(), std::size_t{65536},
+                 "over-capacity table column count");
+        check(big_state.tables[0].decoded, "over-capacity table decoded");
+    }
+    error = WriteError{};
+    EncodedParts big_before;
+    check(encode_view_state(big_state, big_before, nullptr), "encode before over-capacity append");
+    check(!msproject::viewstate::append_table_column(big_state, 0, 0x0b400057u, "x", &error),
+          "append: over-capacity table refused");
+    check(error.message.find("cannot grow") != std::string::npos,
+          "over-capacity refusal message");
+    EncodedParts big_after;
+    check(encode_view_state(big_state, big_after, nullptr), "encode after over-capacity append");
+    check(big_after.fixed_data == big_before.fixed_data &&
+              big_after.fixed_meta == big_before.fixed_meta &&
+              big_after.var_meta == big_before.var_meta &&
+              big_after.var2_data == big_before.var2_data,
+          "over-capacity refusal leaves every part unchanged");
+}
+
+void test_writer_apply_edits() {
+    Parts parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", parts)) {
+        return;
+    }
+    const auto state = parse_or_fail("CTable", parts);
+    EncodedParts noop;
+    check(encode_view_state(state, noop, nullptr), "encode before apply_table_edits");
+
+    // An empty edit list is the no-op encode.
+    EncodedParts empty_out;
+    WriteError error;
+    check(msproject::viewstate::apply_table_edits(
+              state, std::span<const msproject::viewstate::TableEdit>(), empty_out, &error),
+          "apply_table_edits with no edits");
+    check_same_parts(empty_out, parts, "no edits is a no-op encode");
+
+    // One edit agrees with calling the mutator directly.
+    const std::vector<msproject::viewstate::TableEdit> date_edits = {
+        msproject::viewstate::table_date_format_edit(0, 0x05)};
+    EncodedParts date_out;
+    check(msproject::viewstate::apply_table_edits(state, date_edits, date_out, &error),
+          "apply_table_edits date format");
+    auto direct = state;
+    check(msproject::viewstate::set_table_date_format(direct, 0, 0x05, nullptr),
+          "direct date format");
+    EncodedParts direct_out;
+    check(encode_view_state(direct, direct_out, nullptr), "encode direct date format");
+    check(date_out.var2_data == direct_out.var2_data, "apply_table_edits matches the mutator");
+
+    // A mixed list: append, replace and date format, in order.
+    const std::vector<msproject::viewstate::TableEdit> edits = {
+        msproject::viewstate::table_column_append_edit(0, 0x0b400057u, "Number1"),
+        msproject::viewstate::table_column_replace_edit(0, 1, 0x0b400033u, "Text1"),
+        msproject::viewstate::table_date_format_edit(0, 0x05)};
+    EncodedParts mixed;
+    check(msproject::viewstate::apply_table_edits(state, edits, mixed, &error),
+          "apply_table_edits mixed list");
+    Parts mixed_parts;
+    mixed_parts.fixed_data = mixed.fixed_data;
+    mixed_parts.fixed_meta = mixed.fixed_meta;
+    mixed_parts.var_meta = mixed.var_meta;
+    mixed_parts.var2 = mixed.var2_data;
+    const auto mixed_state = parse_or_fail("CTable", mixed_parts);
+    check_eq(mixed_state.tables.size(), std::size_t{1}, "mixed edits re-parsed tables");
+    if (mixed_state.tables.size() == 1) {
+        check_eq(mixed_state.tables[0].columns.size(), std::size_t{10},
+                 "mixed edits column count");
+        check_eq(mixed_state.tables[0].last_column_index, static_cast<std::uint16_t>(9),
+                 "mixed edits last index");
+        if (mixed_state.tables[0].columns.size() == 10) {
+            check_eq(mixed_state.tables[0].columns[1].field_id, 0x0b400033u,
+                     "mixed edits replaced field");
+            check_eq(mixed_state.tables[0].columns[1].title, std::string("Text1"),
+                     "mixed edits replaced title");
+        }
+        check_eq(mixed_state.tables[0].date_format, static_cast<std::uint8_t>(0x05),
+                 "mixed edits date format");
+    }
+
+    // A failing edit after a valid one: the output is empty and the input state
+    // is untouched.
+    const std::vector<msproject::viewstate::TableEdit> failing = {
+        msproject::viewstate::table_column_append_edit(0, 0x0b400057u, "Number1"),
+        msproject::viewstate::table_date_format_edit(7, 0x05)};
+    EncodedParts refused;
+    error = WriteError{};
+    check(!msproject::viewstate::apply_table_edits(state, failing, refused, &error),
+          "apply_table_edits refuses a bad table index");
+    check(refused.fixed_data.empty() && refused.var2_data.empty(),
+          "failed apply_table_edits leaves the output empty");
+    check(error.message.find("table edit 1") != std::string::npos,
+          "failed apply_table_edits names the edit index");
+    EncodedParts still_noop;
+    check(encode_view_state(state, still_noop, nullptr), "encode after failed apply_table_edits");
+    check_same_parts(still_noop, parts, "input state is untouched by apply_table_edits");
+}
+
 void test_writer() {
     test_writer_roundtrip();
     test_writer_date_format();
     test_writer_column();
     test_writer_refusals();
+    test_writer_append();
+    test_writer_append_refusals();
+    test_writer_apply_edits();
 }
 
 }  // namespace
@@ -947,6 +1490,7 @@ int main(int argc, char** argv) {
     run("real", test_real_ctable_blobs);
     run("ctable", test_generated_ctable);
     run("views", test_generated_views);
+    run("views-main", test_view_main_decode);
     run("edl", test_ceDL_props_document);
     run("empty", test_empty_class);
     run("errors", test_errors_and_warnings);
@@ -955,8 +1499,11 @@ int main(int argc, char** argv) {
     run("writer-date-format", test_writer_date_format);
     run("writer-column", test_writer_column);
     run("writer-refusals", test_writer_refusals);
-    // The group name is for the separate ctest entry; the default run above
-    // already covers the four writer cases individually.
+    run("writer-append", test_writer_append);
+    run("writer-append-refusals", test_writer_append_refusals);
+    run("writer-apply-edits", test_writer_apply_edits);
+    // The group name is for the separate ctest entries; the default run above
+    // already covers every case individually.
     if (only == "writer") {
         test_writer();
     }

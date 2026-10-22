@@ -29,7 +29,7 @@ same way).
 
 | file | what it is |
 |---|---|
-| `CMakeLists.txt` | standalone project: options, core libraries with their tests off (including `core/props`), `app_layout`, fourteen headless tests, AppKit target on `APPLE` only |
+| `CMakeLists.txt` | standalone project: options, core libraries with their tests off (including `core/props`), `app_layout`, fifteen headless tests, AppKit target on `APPLE` only |
 | `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link/resource/assignment rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, `timescale_for_zoom`, plan summary, `sync_plan_from_records`, `make_gantt_source_for_rows`, `apply_edit_policy` |
 | `view_model.h` / `.cpp` | **pure C++ (wave 11)**: the four view modes, the stock Mon-Fri calendar, `PlanInput` → `core::view::ResourceRecord`s, the registry-backed resource-sheet columns, the usage grid (labels, period columns, a TOTAL row and a Total column), the two demo formula columns, and the read-only policy |
 | `fields_model.h` / `.cpp` | **pure C++ (wave 12)**: the six stored custom-field columns from the field registry, `114/Props` → the file's formulas (`core/props` → `core/formula`), the sheet's complete column set (default + stored + formula, one column per field), read-only enforcement and the per-column visibility the preferences own |
@@ -534,7 +534,7 @@ byte-for-byte with the wave-13 build and are identical (`page_layout`'s defaults
 **Inferred / to be proved by macOS CI**: that `main.mm` compiles, links and behaves.
 There is no Objective-C++ compiler on the development box. `app-macos.yml` is that
 gate: configure `app/`, build `msproject_app.app` with `-Werror`, run the tests (all
-fourteen; the registration step still greps the wave-10/11 names, so the coordinator
+fifteen; the registration step still greps the wave-10/11 names, so the coordinator
 should add `app_edits_fields`, `app_edits_links`, `app_print` and `app_start_warning`
 there), and assert the bundle executable exists and links AppKit +
 UniformTypeIdentifiers. Wave 14's print path — `NSPrintOperation`, `PrintView`'s
@@ -543,6 +543,36 @@ UniformTypeIdentifiers. Wave 14's print path — `NSPrintOperation`, `PrintView`
 the tree. No runner ever opens a window, so the actual interaction (a click, a
 keystroke, a panel, a menu) is verified by construction and by the pure helpers it
 calls — not by an automated UI test.
+
+## The self-smoke (`--smoke`)
+
+The manual Mac smoke test this project never had is replaced by an automated one, in
+two halves:
+
+* `app/smoke.{h,cpp}` (plain C++, no AppKit) runs the sequences the shell runs for a
+  user -- load, filter, the Task Fields / Predecessors dialog models, a Start edit with
+  undo/redo, the save-time warning, the real writer, a reopen that checks the SNET
+  constraint, `build_print_job` for both report kinds and File > Export PDF -- and
+  records a named check for every step.  It is unit-tested on Windows as `app_smoke`.
+* `app/main.mm` runs that report, then the AppKit paths: it loads the copy through the
+  real load path, prints both print jobs through `run_print_view` with a save URL
+  instead of the print panel, and snapshots the document view with
+  `-dataWithPDFInsideRect:` (PDF) and `NSBitmapImageRep` (PNG).
+
+```
+msproject_app --smoke tests/data/synthetic-base.mpp --out build-app/smoke
+```
+
+The fixture is read-only: the app copies it to `<out>/smoke-input.mpp` and saves
+`<out>/smoke-edited.mpp`; `tests/data/synthetic-base.mpp` is never opened for writing
+(the run checks its bytes are unchanged).  Artifacts: `smoke.json` (every check with
+its step), `smoke-window.pdf`, `smoke-window.png`, `smoke-print-gantt.pdf`,
+`smoke-print-sheet.pdf` (macOS only) and `smoke-report-export.pdf` (written on every
+platform).  Exit code 0 means every check passed; anything else is a red job.
+
+The portable half is proved on Windows (`app_smoke`, 98 checks).  The AppKit half --
+and every line of `main.mm` -- compiles only on `app-macos`, which has not run since
+2026-10-22 because the Actions minutes are exhausted; see `docs/handoff/w63.md`.
 
 ## What the window does not do
 

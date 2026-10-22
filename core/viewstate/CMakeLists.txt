@@ -86,9 +86,15 @@ if(VIEWSTATE_BUILD_TESTS)
     )
 
     # The writer cases are also registered separately, so a failure names the
-    # writer without losing the decoder test above (wave 14, W58).
+    # writer without losing the decoder test above (wave 14, W58; the append
+    # entry is wave 15, W62).
     add_test(NAME viewstate_writer COMMAND viewstate_tests writer)
     set_tests_properties(viewstate_writer PROPERTIES
+        WORKING_DIRECTORY "${VIEWSTATE_REPO_ROOT}"
+    )
+
+    add_test(NAME viewstate_append COMMAND viewstate_tests writer-append)
+    set_tests_properties(viewstate_append PROPERTIES
         WORKING_DIRECTORY "${VIEWSTATE_REPO_ROOT}"
     )
 endif()

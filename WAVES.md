@@ -632,3 +632,48 @@ path after one fix (`NSClipPagination` is deprecated since macOS 11 under
 3. MPP12, MPP14 resource Type, summary-calendar rollup, elapsed mixes.
 4. App multi-window, the **manual Mac smoke test**, LeakSanitizer/UBSan (MSVC has
    neither), and the visual print oracle.
+
+## Wave 15 — complete (2026-10-23)
+
+Goal: make the writers reachable and give the operator a macOS proof without a
+Mac. Three streams.
+
+| # | Stream | Deliverable | Verified by |
+|---|---|---|---|
+| W62 | `214/` append + `CV_iew` | `append_table_column` (Project's automation **cannot** append — `ColumnPosition` 0 replaces, 8/9 rejected, `ColumnInsert` hangs, `Tables()` wedges), `apply_table_edits` seam; `CV_iew` main block item-framed and decoded (name/table/filter/group/notes/margins), plus a real decoder fix: VarMeta uid is the row **ordinal**, so corpus views 13/22 no longer shift later views | viewstate **361** checks; 49 tests |
+| W63 | app self-smoke | `--smoke <fixture> --out <dir>`: window, real load, both print jobs to PDF, window PDF+PNG, `smoke.json`, exit 0/1; portable `smoke_plan` (136 checks) covers the whole sequence on Windows; CI step + artifact upload | app_smoke **98** checks; app 15 tests |
+| W64 | save-path wiring | `Document::save` applies view-state edits (date format / column replace) and custom-field formulas through `mppwrite::CfbDocument::replace_stream`; repairs the `0x02401392` flag when values remain; no pending edit ⇒ whole file byte-identical | document **169** checks (was 43); app **2,513** checks |
+
+**Gate:** `build\vs-w15` — **49/49 ctest** (wave 14: 48); app
+`build\vs-w15-app` — **15/15 tests, 2,513 checks** (wave 14: 14 / 2,289);
+**M2 332/332**; fixtures `55C109F2…` / `DB81218E…` verified.
+
+### New measured facts
+
+1. **A column append is ours to write.** No COM path appends: `ColumnPosition`
+   0 replaces index 1, 8/9 is rejected, `Application.ColumnInsert` hangs the
+   build, `Application.Tables()` wedges it. The 115-byte record, block length and
+   `last_column_index` are written by `append_table_column`; the appended record
+   for Number1 is `5700400b 0c1008000801000000` + UTF-16 title + zero tail.
+2. **`214/CV_iew` main block is item-framed, not Props-framed**: u16 count at
+   +12, items `{u32 len, u32 id, u32 kind, payload}` with a 2-byte pad after odd
+   lengths. View name `0x2240002a`, table `0x2240000a`, filter `0x2240000b`,
+   group `0x22400018`, notes `0x22400014`, format/margins `0x22400009`. Column
+   widths are **not** here — they are the first of the nine bytes in the CTable
+   column record.
+3. **The decoder had a real bug**: VarMeta `uid` is the row *ordinal*, not the
+   row index, so corpus views that skip ordinals 13/22 used to shift every later
+   view. All 22 corpus view blocks now decode.
+4. **The save path now carries both writers**: a view-state or formula edit is a
+   targeted byte delta; with nothing requested the whole file is byte-identical.
+
+### Open after wave 15
+
+1. **Project has never opened a file we wrote with a `214/` edit or a formula.**
+   The byte-level proof is complete; the oracle gate is not. Procedure is in
+   `docs/handoff/w62.md` §8 (write the four parts, let Project re-save, decode).
+2. `CV_iew` editing (decode only), row height / splitter location, a controlled
+   column-width oracle save.
+3. `main.mm` does not call `Document::save`'s new options yet (shell wiring), and
+   the AppKit half of W63 has never been compiled (CI minutes were exhausted).
+4. The three-platform Qt shell (waves 16-17), MPP12/MPP14, the manual Mac smoke.

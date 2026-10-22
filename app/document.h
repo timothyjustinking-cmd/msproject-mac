@@ -7,11 +7,16 @@
 //      sheet's RecordSet with the plan as it was loaded;
 //   2. writing those dates back through the .mpp writer, into a NEW file.
 //
+// Wave 15 adds a third: the two non-table save operations the shell can carry on
+// the same document -- a `214/CTable` view-state edit (core/viewstate) and a
+// custom-field formula edit in `114/Props` (core/props).  See the block at the
+// bottom of this file.
+//
 // WHERE THE WRITE GOES -- AND WHERE IT MUST NOT
 //   The source file is never modified.  Cmd-S in the shell asks the user for a
 //   target path (NSSavePanel); this helper writes `target_path` and refuses
-//   target_path == source_path.  Two reasons: the app is a viewer of files it
-//   did not create (the repository's corpus/ is read-only client data), and a
+//   target_path == source_path.  Two reasons: the app is a viewer of files it did
+//   not create (the repository's corpus/ is read-only client data), and a
 //   failed write must not be able to destroy the only copy.
 //
 // WHAT PERSISTS, AND WHAT DOES NOT (the honest version; see also app/README.md)
@@ -45,6 +50,12 @@
 
 #include "layout_model.h"
 #include "record_set.h"
+
+// Forward-declared so this header stays free of the writer's headers; only
+// app/document.cpp includes "cfb_writer.h" and the stream modules.
+namespace mppwrite {
+class CfbDocument;
+}
 
 namespace app {
 
@@ -87,6 +98,12 @@ struct SaveOutcome {
     std::string error;  // non-empty exactly when ok == false
     std::string path;   // the target that was written
     std::string api;    // which writer path ran, for the report
+
+    // Wave 15: the two non-table operations Document::save performs.  A plain
+    // save leaves all three false.
+    bool view_state_written = false;          // 214/CTable was re-encoded
+    bool formula_written = false;             // 114/Props was rewritten
+    bool custom_field_flag_restored = false;  // 0x02401392 forced back to 1
 };
 
 // How a save treats the opened file.
@@ -115,5 +132,156 @@ SaveOutcome save_start_edits(const std::vector<StartEdit>& edits,
 // After a successful save the loaded plan is the new baseline, otherwise the
 // next Cmd-S would offer to write the same dates again.
 void accept_start_edits(PlanInput& loaded, const std::vector<StartEdit>& edits);
+
+// ===========================================================================
+// Wave 15: view-state edits and custom-field formulas
+// ===========================================================================
+//
+// WHERE THESE SIT IN THE SAVE PIPELINE
+//   The shell's existing save applies, in order: link deletes, link adds, task
+//   deletes, task inserts, custom-field values, then start pins -- all on the
+//   same in-memory `mppwrite::CfbDocument`.  These two operations belong AFTER
+//   every table writer and BEFORE the single container save, because:
+//     * the formula step must see any custom-field VALUE a table writer just
+//       wrote (the 0x02401392 flag is shared by values and formulas); and
+//     * neither operation can invalidate a row/table index, so running last
+//       keeps every earlier writer's own re-read proof valid.
+//   `apply_document_edits()` is that seam: a caller that already owns a
+//   CfbDocument -- the one the field/link/structural writers have already
+//   updated -- applies both operations to it and then calls
+//   `save_date_edits()` / `save()` exactly as before.  That is the only place
+//   the shared 0x02401392 flag can see a custom-field value written earlier in
+//   the same save.
+//
+//   A caller that has no CfbDocument loaded can use `Document` below, which opens
+//   the source, applies the pending operations and saves.  `Document::save` with
+//   no start-edit list performs only these two operations, and with nothing
+//   pending it writes the container back unchanged.  Its overload that takes
+//   start edits adds the date pins in the same write; the date streams and these
+//   two stream sets are disjoint, so applying the date writer after them produces
+//   the same file as applying it first.  Document does NOT write field, link or
+//   structural edits -- use `apply_document_edits()` for those.
+
+// One `214/CTable` edit request.  `table_index` is the index into the parsed
+// CTable collection (0 = the first table; the measured fixture has one, the
+// Entry table).  Both operations are optional; `any()` says whether the request
+// asks for a write.
+struct ViewStateEdits {
+    bool set_date_format = false;
+    std::uint8_t date_format = 0;  // 0xff = default; 0x05 = DateFormat 5 (measured)
+    bool replace_column = false;
+    std::uint32_t column_index = 0;  // an EXISTING column; appending is not measured
+    std::uint32_t field_id = 0;      // PjTask field id, e.g. 0x0b400033 Text1
+    std::string title;               // printable ASCII, <= 51 code units
+    std::uint32_t table_index = 0;
+
+    [[nodiscard]] bool any() const noexcept { return set_date_format || replace_column; }
+};
+
+// One `114/Props` formula request.  `set` stores/replaces the formula of one
+// Task custom field; `clear` removes the whole formula table (core/props has no
+// per-field clear; the measured empty form is one 8-byte record).
+struct CustomFormulaEdit {
+    enum class Operation { none, set, clear };
+    Operation operation = Operation::none;
+    std::uint32_t field_id = 0;
+    std::string formula;  // Project formula text, e.g. "[Duration]/240"
+
+    [[nodiscard]] bool any() const noexcept { return operation != Operation::none; }
+};
+
+// What applying the two operations to an in-memory container did.
+//
+// `ok == false` means a FORMULA operation was refused: the container is
+// untouched and the caller must not save (a formula the user asked for must
+// never be silently dropped).  A refused VIEW-STATE edit is a warning, not a
+// failure: the request is a presentation preference, the file is still valid, and
+// the container's `214/` tree is left byte-identical.  `warnings` always explains
+// a refusal in either case.
+struct DocumentEditOutcome {
+    bool ok = true;
+    bool view_state_written = false;
+    bool formula_written = false;
+    bool custom_field_flag_restored = false;
+    std::vector<std::string> warnings;
+    std::string error;
+};
+
+// Applies the formula operation and then the view-state operation to
+// `document`, with no file I/O.  Formula first, deliberately: a formula refusal
+// (ok == false) must not leave a view-state edit behind in a document the caller
+// then refuses to save.  Nothing is written to `document` unless an operation
+// fully succeeds; a refused view-state request only appends a warning.
+DocumentEditOutcome apply_document_edits(mppwrite::CfbDocument& document,
+                                         const ViewStateEdits& view,
+                                         const CustomFormulaEdit& formula);
+
+// Holds the pending general-save operations for one source file.  Open it with
+// the path the shell loaded; accumulate requests; `save()` them into a new file.
+//
+//   app::Document document(source_path);
+//   document.request_view_state_edits(view);              // optional
+//   document.apply_custom_formula(0x0b400036, "[Name]");  // optional
+//   app::SaveOutcome saved = document.save(target_path);
+//
+// `save()` refuses target == source unless SaveOptions::allow_source_overwrite,
+// writes nothing when it reports ok == false, and verifies the written container
+// by re-opening it and requiring it to re-emit byte-identically.  With no
+// pending operation it writes the source container back unchanged: `214/` and
+// `114/Props` are byte-identical to the source.
+class Document {
+  public:
+    explicit Document(std::string source_path);
+
+    [[nodiscard]] const std::string& source_path() const noexcept { return source_path_; }
+
+    // Replaces the pending view-state request (there is at most one per save).
+    void request_view_state_edits(const ViewStateEdits& edits);
+    void discard_view_state_edits();
+    [[nodiscard]] const ViewStateEdits& view_state_edits() const noexcept {
+        return view_state_edits_;
+    }
+
+    // Queues a formula for one Task custom field.  Rejects an empty formula or a
+    // field id of 0 here (the writer validates the rest at save time against the
+    // file's actual formula table) and leaves any previous request alone.
+    [[nodiscard]] bool apply_custom_formula(std::uint32_t field_id, std::string_view formula,
+                                            std::string* error = nullptr);
+
+    // Queues "remove every stored formula".  Always succeeds; the writer refuses
+    // at save time only if the stream is not a layout it understands.
+    void clear_custom_formula();
+
+    void discard_custom_formula();
+    [[nodiscard]] const CustomFormulaEdit& custom_formula() const noexcept {
+        return custom_formula_;
+    }
+
+    [[nodiscard]] bool has_pending_edits() const noexcept {
+        return view_state_edits_.any() || custom_formula_.any();
+    }
+
+    // Applies the pending operations and writes `target_path`.
+    [[nodiscard]] SaveOutcome save(std::string_view target_path,
+                                   const SaveOptions& options = {}) const;
+
+    // The start-date save PLUS the same two operations, applied to ONE
+    // CfbDocument and written once.  The dates go through
+    // `mppwrite::save_date_edits` exactly as `save_start_edits` does (a manual
+    // row is converted and warned about the same way), on the document that
+    // already holds the formula/view-state replacements.  The two operations and
+    // the date writer touch disjoint streams, so this is the same file as running
+    // the date pins first -- but it costs one container save instead of two.
+    // Field/link/structural edits are NOT part of this overload; a save that has
+    // them should call `apply_document_edits()` on its own CfbDocument instead.
+    [[nodiscard]] SaveOutcome save(const std::vector<StartEdit>& start_edits,
+                                   std::string_view target_path,
+                                   const SaveOptions& options = {}) const;
+
+  private:
+    std::string source_path_;
+    ViewStateEdits view_state_edits_;
+    CustomFormulaEdit custom_formula_;
+};
 
 }  // namespace app

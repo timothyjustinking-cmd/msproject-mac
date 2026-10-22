@@ -38,14 +38,15 @@ context is much longer-lived and its per-turn cost is higher.
 | 12 | 2026-10-22 | W51–W53 | **3** | app editing/stored fields/formulas, writer link add + field clear, recurring calendar exceptions; no restarts, two coordinator oracle runs |
 | 13 | 2026-10-22 | W53b–W57 | **7** | resource/assignment writer, app field/link dialogs, 214 decoder, fuzz/ASan, two W44 resumes (guard 160 then ASan-safe 64) |
 | 14 | 2026-10-22 | W58–W61 | **4** | measured-layout oracle first (five cases, coordinator-only), then four streams: the `214/` encoder, the `114/Props` formula writer, assignment/Cost fields, app printing; no restarts and one CI iteration (an AppKit deprecation) |
-| — | — | coordinator | 10 (ongoing) | the predecessor's chats and this one |
+| 15 | 2026-10-23 | W62–W64 | **3** | 214 append (written by us; Project cannot append) + CV_iew decode, app self-smoke, save-path wiring; no restarts, CI paused mid-wave when the Actions minutes ran out |
+| — | — | coordinator | 11 (ongoing) | the predecessor's chats and this one |
 
-**To date (end of wave 14): 99 agent sessions + 10 coordinator sessions.**
+**To date (end of wave 15): 102 agent sessions + 11 coordinator sessions.**
 Measured spend at the wave-7 start was **~$3.90**, **~390M tokens** (51 agent
 sessions); waves 7–8 added 15 sessions, wave 9 added 7, wave 10 added 5, wave 11
-added 7, wave 12 added 3, wave 13 added 7, and wave 14 adds 4 at ~$0.08 →
-**~$7.63**, **~760M tokens**, about **$0.077 per agent session**, flat for the
-eleventh wave running.
+added 7, wave 12 added 3, wave 13 added 7, wave 14 added 4, and wave 15 adds 3
+at ~$0.08 → **~$7.86**, **~780M tokens**, about **$0.077 per agent session**,
+flat for the twelfth wave running.
 
 Wave 14 was the measurement wave: five oracle cases produced control/edited
 fixture pairs for the layouts the writer had been refusing, and four short streams

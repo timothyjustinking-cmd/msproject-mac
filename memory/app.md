@@ -644,3 +644,120 @@ only `build\w61-app\test-out\app-print-{sheet,gantt}.pdf`.
 3. **Paper-size/page-setup preference** (PageSpec already has `letter_landscape()`).
 4. **A report layout for the resource/usage grids**; printing is task-view only today.
 5. **Reader presence-bit decode for cleared custom fields** (unchanged from W55).
+
+## W63 (wave 15): `--smoke`, the automated self-smoke (replaces the manual Mac smoke)
+
+_2026-10-23. Owner paths used: `app/**`, `memory/app.md`, `docs/handoff/w63.md`. Build
+tree: `build\w63-app` only. No git commands, no `.github/**`, no `core/**`, no
+`tests/data/*` write, no `corpus/`._
+
+### Why
+
+The "manual Mac smoke test" every earlier wave deferred could never be run (nobody here
+has a Mac), and the Actions minutes are now exhausted so `app-macos` only runs on manual
+dispatch/tags. The replacement: the app drives its own AppKit code in CI, writes PNG/PDF
+artifacts a human reviews on Windows, and exits non-zero on failure — with the *portable*
+half of the sequence unit-tested on this box so the deliverable does not depend on a CI
+run.
+
+### What landed
+
+1. **`app/smoke.{h,cpp}` (new, plain C++, no AppKit).** `SmokeReport` (steps, checks
+   passed/failed, artifact paths, error, `ok()`), `SmokeCheck` (step + name + ok +
+   detail), `smoke_plan()`, `smoke_json()`, `smoke_write_json()`, `smoke_summary()`, and
+   the artifact name constants (`kSmokeInputFile`, `kSmokeEditedFile`, `kSmokeJsonFile`,
+   `kSmokeWindowPdf/Png`, `kSmokePrintGanttPdf/PrintSheetPdf`, `kSmokeReportPdf`).
+   `smoke_plan()` runs **ten steps**: fixture (copy) → load (reader/RecordSet/SheetModel +
+   Gantt) → filter (dialog model) → task_fields (dialog model) → predecessors (dialog
+   model + queued link) → start_edit (sheet edit + undo/redo) → warning (save-time
+   warning, clamped + manual + no-effect) → save (real writer) → reopen (SNET + values)
+   → print (`build_print_job` for both kinds + `export_report` on the same PageSpec).
+   **136 checks**, each stamped with its step.
+2. **`app/smoke_tests.cpp` (new, `app_smoke`, 98 checks).** Report bookkeeping, JSON
+   escaping, the missing-fixture failure path (must name the step and still write JSON),
+   and the whole sequence on the committed fixture including "the fixture is
+   byte-identical afterwards" and the JSON's content. Writes only under
+   `build\w63-app\test-out\smoke`.
+3. **`app/main.mm` (AppKit half, unverified — no ObjC++ compiler here).** `--smoke
+   <fixture> --out <dir>` parsed in `main()` (bad args exit 2 before AppKit);
+   `applicationDidFinishLaunching` runs `- (int)runSmoke` after the window/plan view exist
+   and `std::exit`s with its code (0/1). `runSmoke` calls `app::smoke_plan()`, then:
+   `[self loadPath:<the copy>]` (the REAL load path), `build_print_job` +
+   `run_print_view` for the Gantt and sheet jobs writing `smoke-print-gantt.pdf` /
+   `smoke-print-sheet.pdf`, and `-dataWithPDFInsideRect:` + `NSBitmapImageRep` for
+   `smoke-window.pdf` / `smoke-window.png`; then `smoke_write_json`. `show_alert()` is a
+   **no-op in smoke mode** (a modal dialog would hang a runner), and `g_prefs` is reset to
+   the defaults in memory (deterministic view state, nothing written to NSUserDefaults).
+   **22 AppKit checks on a good run** (window 11, print 4, snapshot 6, report 1), counted
+   from the source, not observed.
+4. **`app/CMakeLists.txt`.** `smoke.cpp` in `app_layout`; `APP_SMOKE_OUT_DIR`
+   (`test-out/smoke`) with `APP_SMOKE_OUT_DIR_CMAKE`; `smoke_tests` + `app_smoke`
+   registered after `app_start_warning`; counts 14 → 15 in the comments. W64's
+   `viewstate`/`core_viewstate` lines were preserved (re-read before each edit).
+5. **`app/README.md`.** New "The self-smoke (`--smoke`)" section.
+
+### Verification (2026-10-23, MSVC 19.44.35229, Release, /W4 /WX /permissive-)
+
+```
+cmd /c '"...vcvars64.bat" >nul && cmake -S app -B build\w63-app -G "Visual Studio 17 2022" -A x64 -DAPP_BUILD_TESTS=ON -DCORE_WARNINGS_AS_ERRORS=ON'
+cmd /c '"...vcvars64.bat" >nul && cmake --build build\w63-app --config Release'
+cmd /c '"...vcvars64.bat" >nul && ctest --test-dir build\w63-app -C Release --output-on-failure'
+```
+
+`ctest` **15/15**, 0 failures, build exit 0 with no warnings (`/WX`). Checks: layout 253,
+selection 90, **document 152**, prefs 82, menu 794, filter 60, export 58, views 164,
+app_edit 120, app_fields 199, app_edits_fields 160, app_edits_links 159, app_print 66,
+app_start_warning 41, **app_smoke 98** → **2,496 total**. `tests/data/synthetic-base.mpp`
+SHA-256 still `55C109F2F62FD6B9F05789AB002C35991A424AAB18C78F92E4200DF7B3FC6069`.
+`app_smoke` writes `build\w63-app\test-out\smoke\run\{smoke-input.mpp,smoke-edited.mpp,
+smoke-report-export.pdf,smoke.json}` and `...\smoke\missing\smoke.json`.
+
+**Count caveat:** `document_tests` was 43 checks in `w61.md` and is 152 here because the
+**concurrent** W64 stream added 109 checks to it in this shared tree. W63 adds one test /
+98 checks; excluding `app_smoke` the 14-test tree is 2,398 checks today. Do not attribute
+W64's additions to W63.
+
+### Verified vs unverified
+
+- **Verified on Windows**: all ten portable steps and their 136 checks; the new
+  `app_smoke`'s 98 checks (bookkeeping, JSON escaping, failure path, real sequence,
+  artifacts, fixture untouched, JSON content); every pre-existing test still passes.
+- **Unverified: every new line of `main.mm`** — `-dataWithPDFInsideRect:`,
+  `bitmapImageRepForCachingDisplayInRect:`, `cacheDisplayInRect:toBitmapImageRep:`,
+  `representationUsingType:properties:` + `NSBitmapImageFileTypePNG`, the
+  `@catch (NSException*)`, `NSURL fileURLWithPath:`, and whether `NSPrintOperation`'s
+  save job runs with **no event loop** (the smoke runs inside
+  `applicationDidFinishLaunching` and exits). `app-macos` has not run since 2026-10-22
+  (Actions minutes exhausted), so none of this has ever been compiled.
+
+### Invariants a successor must preserve
+
+- **The committed fixture is read-only.** `smoke_plan()` copies it, loads the copy, saves
+  beside the copy, and asserts both are byte-identical afterwards. Never point
+  `SmokeOptions::fixture_path` at something writable and never let a smoke save use the
+  fixture as the target.
+- **`show_alert()` must stay a no-op in smoke mode**, or a failed step hangs a runner
+  instead of failing it.
+- **One report, one exit code.** The AppKit half appends to the SAME `SmokeReport` and
+  `smoke_write_json` is the last step; do not write a second JSON.
+- **Do not fork the print path.** The smoke calls `make_print_request` /
+  `build_print_job` / `run_print_view`; a second print implementation in the smoke would
+  stop proving the real one.
+- **`app_smoke` must not need AppKit.** It is the Windows gate and the cheap `ci` job's
+  proof.
+
+### Open, ranked
+
+1. **One `app-macos` run when the minutes are back**: compile `runSmoke`, then add
+   `app_smoke` to the workflow's name grep and the two smoke/upload steps (exact YAML in
+   `docs/handoff/w63.md`).
+2. **Decide the smoke's CI cadence** (tag-only vs manual dispatch vs every push); the
+   portable half runs everywhere for free.
+3. **Extend the portable half** (structural save cascade; resource/usage grids) if the
+   AppKit half stays unbuilt for long.
+4. Reader presence-bit decode for cleared custom fields (unchanged from W55).
+
+Next three concrete actions: (a) run `app-macos` once and fix the AppKit compile; (b) add
+the smoke steps + `app_smoke` grep to the workflow; (c) review the first run's
+`smoke-window.png` and print PDFs and tighten the checks.
+

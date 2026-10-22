@@ -54,10 +54,15 @@
 
 name: app-macos
 
+# COST CONTROL (2026-10-23): the included Actions minutes are exhausted and
+# macOS runners bill at 10x.  Do NOT trigger on every push -- a manual dispatch
+# or a version tag is a deliberate spend.  Run locally where possible:
+#   build\vs-w14 (Windows MSVC) proves the core suite; only ObjC++/AppKit needs
+#   the macos-appkit job, so push a tag (or dispatch) once per wave, not per commit.
 on:
-  push:
-  pull_request:
   workflow_dispatch:
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -96,7 +101,7 @@ jobs:
 
       # The test names are part of the contract: a silently unregistered test is
       # as bad as a failing one.
-      - name: The fourteen headless tests are registered
+      - name: The fifteen headless tests are registered
         shell: bash
         run: |
           set -euo pipefail
@@ -115,8 +120,9 @@ jobs:
           grep -q "app_edits_links" tests.txt
           grep -q "app_print" tests.txt
           grep -q "app_start_warning" tests.txt
+          grep -q "app_smoke" tests.txt
 
-      - name: Test (headless layout, selection, save, preferences, menu, filter, export, views, edit, fields, field/link edits, print, start warning)
+      - name: Test (headless layout, selection, save, preferences, menu, filter, export, views, edit, fields, field/link edits, print, start warning, smoke)
         shell: bash
         run: ctest --test-dir build-app -C Release --output-on-failure --timeout 120
 
@@ -136,3 +142,49 @@ jobs:
           # its own framework; prove it is linked rather than assumed.
           otool -L "$app" | grep -q "UniformTypeIdentifiers"
           echo "OK: $app exists and links AppKit + UniformTypeIdentifiers"
+
+      # Wave 15 (W63): the self-smoke.  The app builds its own window, loads a COPY of
+      # the committed fixture, prints both print jobs to PDF through run_print_view,
+      # snapshots the window to PDF + PNG and writes smoke.json; it exits non-zero when
+      # any check failed.  No panels, no dialogs, no interaction, so it is safe on a
+      # runner.  `if: always()` so the artifacts survive a failure -- a failed smoke is
+      # exactly when its artifacts matter.
+      - name: Self-smoke (window, print to PDF, snapshot)
+        if: always()
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p smoke-out
+          app="build-app/msproject_app.app/Contents/MacOS/msproject_app"
+          test -x "$app"
+          "$app" --smoke tests/data/synthetic-base.mpp --out "$PWD/smoke-out" 2>&1 | tee smoke.log
+
+      # The operator has no Mac.  A zipped .app is the only way a borrowed
+      # machine can run the real thing, so upload it (and any PDFs the exporter
+      # wrote) on every run, pass or fail.
+      #   To run it: unzip, then `xattr -dr com.apple.quarantine msproject_app.app`
+      #   (the bundle is unsigned), then open it.
+      - name: Package the app bundle for a borrowed Mac
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d build-app/msproject_app.app ]; then
+            ditto -c -k --sequesterRsrc --keepParent \
+              build-app/msproject_app.app "msproject_app-${GITHUB_SHA::7}-macos.zip"
+            ls -l msproject_app-*.zip
+          else
+            echo "no app bundle to package"
+          fi
+
+      - name: Upload the app bundle and test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msproject-app-macos-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            msproject_app-*-macos.zip
+            build-app/test-out/**
+            smoke-out/**
+            smoke.log

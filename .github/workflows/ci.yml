@@ -1,9 +1,9 @@
 # CI is the portability oracle: the project targets macOS but is developed on
-# Windows, so these macos-latest runs are the only proof the core is portable.
+# Windows, so the Linux run is the cheap portability proof (macOS core coverage comes from app-macos, which builds every core library there).
 #
 # Deliberately small: one job per platform, no caching, no packaging, no code
-# signing.  Windows proves the MSVC build, macOS proves AppleClang (arm64),
-# Linux proves GCC.  Warnings are errors everywhere, so a warning on one
+# signing.  Windows proves the MSVC build,
+# Linux proves GCC (macOS AppleClang is proved by the app-macos job).  Warnings are errors everywhere, so a warning on one
 # compiler is a red build rather than a line nobody reads.
 #
 # Windows uses Ninja, not the "Visual Studio 17 2022" generator: windows-latest
@@ -24,10 +24,15 @@
 
 name: ci
 
+# COST CONTROL (2026-10-23): the included Actions minutes are exhausted and
+# macOS runners bill at 10x.  Do NOT trigger on every push -- a manual dispatch
+# or a version tag is a deliberate spend.  Run locally where possible:
+#   build\vs-w14 (Windows MSVC) proves the core suite; only ObjC++/AppKit needs
+#   the macos-appkit job, so push a tag (or dispatch) once per wave, not per commit.
 on:
-  push:
-  pull_request:
   workflow_dispatch:
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -46,9 +51,9 @@ jobs:
           - name: windows-msvc
             os: windows-latest
             generator: Ninja
-          - name: macos-appleclang
-            os: macos-latest
-            generator: Unix Makefiles
+          # macOS core coverage comes from the app-macos job, which builds every
+          # core library on macOS anyway; keeping a second macOS job here cost
+          # 10x-points per push for very little extra signal (2026-10-23).
           - name: ubuntu-gcc
             os: ubuntu-latest
             generator: Unix Makefiles

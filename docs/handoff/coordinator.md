@@ -703,3 +703,57 @@ reader Cost decode, `569c58e` docs corrections, `1684718` the AppKit fix.
 2. `214/` append probe + `CV_iew` decode, then wire view-state and formula writes
    into the app save.
 3. Hand `docs/audit-handoff.md` to the external audit, fix findings, human review.
+
+## Wave 15 final (2026-10-23 ~07:15)
+
+The wave that made the writers reachable — and the wave the repository went
+public, with a scrubbed, condensed history.
+
+### Where main is
+
+The history was rewritten for publication: one commit per wave, client project
+names replaced by `project-a`/`project-b`, the private history kept in
+`build/pre-public-history.bundle`. The tip is the wave-15 commit. `app-macos` runs
+only on dispatch or a `v*` tag now (public repo: free runners, but keep it
+deliberate).
+
+### The numbers
+
+* `build\vs-w15`: **49/49 ctest** (wave 14: 48); app `build\vs-w15-app`:
+  **15/15 tests, 2,513 checks** (wave 14: 14 / 2,289).
+* **M2 332/332** (83/83 x 4, 0 unexplained); fixtures verified
+  (`55C109F2…`, `DB81218E…`).
+* Units: viewstate **361** (was 212), document **169** (was 43), app_smoke 98.
+
+### Per stream
+
+| # | Result | Evidence |
+|---|---|---|
+| W62 | `214/` append written by our encoder (Project cannot append), `CV_iew` main block decoded, ordinal fix | viewstate 361; 49 tests |
+| W63 | `--smoke` runs the real window, both print jobs, PDF/PNG snapshots, `smoke.json`, exit code; portable half covers the sequence | app_smoke 98; app 15 tests |
+| W64 | view-state + formula edits ride `Document::save`, flag repair, byte-identical no-op save | document 169; app 2,513 |
+
+### Open before the human review
+
+1. **Project has never opened a file we wrote with a `214/` edit or a formula.**
+   The procedure is `docs/handoff/w62.md` §8; this is the top gap.
+2. `main.mm` does not call the new save options; the AppKit smoke half has never
+   been compiled (CI minutes ran out).
+3. `CV_iew` editing, row height/splitter, column-width oracle save.
+4. The Qt shell (waves 16-17) — the three-platform decision is in
+   `docs/ui-qt-port.md`.
+
+### Traps added
+
+* GitHub Actions minutes: macOS 10x; the repo is public now, and both workflows
+  are dispatch/tag-only so a future private flip cannot silently burn minutes.
+* The Dropbox folder resurrected the damaged fixture twice; only
+  `scripts/check_fixtures.py` catches it.
+* A history rewrite leaves commit hashes cited in older handoffs dangling;
+  `docs/history-note.md` says so and the bundle holds the history.
+
+### Next three actions
+
+1. The oracle gate on written `214/`/formula bytes.
+2. Wire the new save options into `main.mm`, prove on `app-macos`.
+3. Start the Qt shell (Q1 shell skeleton + golden-image harness).

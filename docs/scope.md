@@ -7,6 +7,15 @@ files. Everything else is deferred and labelled.
 
 Legend: **have** = analysis already answers it · **partial** · **none** · **out** = deliberate non-goal.
 
+## 0. Platforms (decided 2026-10-23)
+
+Windows, macOS and Linux ship from **one Qt 6 shell** with an identical client
+area (same pixels, same commands, same PDF bytes), enforced by cross-OS
+golden-image tests — see `docs/ui-qt-port.md`. The AppKit shell used through
+wave 15 is replaced once the Qt shell is green on macOS; the `app/` models and
+`core/` are unchanged. The tables below are the original scope analysis and
+predate the implementation: for what is actually done see `docs/roadmap.md`.
+
 ## 1. Documents
 
 | Feature | State | Notes |
@@ -66,7 +75,7 @@ Legend: **have** = analysis already answers it · **partial** · **none** · **o
 | Filters, auto-filters, highlighting | none | |
 | Groups, sorts, outline | none | |
 | Formatting: bar styles, text, gridlines, fonts | none | |
-| Zoom/scroll performance on 10k+ tasks | none | drives the AppKit-vs-SwiftUI choice |
+| Zoom/scroll performance on 10k+ tasks | none | drives the Qt shell's model/view choice |
 
 ## 5. Output
 
