@@ -820,11 +820,23 @@ def _apply_com_operation(app, proj, operation, calc, utc, mpp_out, state):
         return
     if kind == "set_calendar":
         task = _task_by_uid(proj, operation["task_uid"])
-        # INFERENCE, stated as such: Project's Calendars collection is indexed
-        # 1..N and the file stores the calendar's UniqueID at task +178.  The
-        # fixture's rows are dense, so the index and the uid coincide; a file
-        # where they do not would make this line pick the wrong calendar.
-        calendar = proj.Calendars(operation["calendar_uid"])
+        # This Project build has no `Project.Calendars`; the base-calendar
+        # collection is `proj.BaseCalendars` when present.  Task.Calendar is a
+        # NAME (get/put), so the name comes from the collection entry.
+        calendar = None
+        for accessor in ("BaseCalendars", "Calendars"):
+            collection = getattr(proj, accessor, None)
+            if collection is None:
+                continue
+            try:
+                calendar = collection(operation["calendar_uid"])
+                break
+            except Exception:                       # noqa: BLE001
+                continue
+        if calendar is None:
+            raise HarnessError(
+                "set_calendar: this Project build exposes no calendar collection "
+                "on Project (needs Task.Calendar by name); scenario left unrecorded")
         task.Calendar = calendar.Name
         calc(app)
         return

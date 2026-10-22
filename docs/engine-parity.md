@@ -322,3 +322,34 @@ the committed file actually contains one Work resource (`Crew`) and three
 placeholder assignment rows — `06-assignment-50pct.json` relies on that
 resource. The coordinator should fix the README wording; the harness records
 the base hash on every recording so this can never pass unnoticed.
+
+
+## First recording (2026-10-23) — 7 of 8, 0 pass
+
+The coordinator ran `--record` for all eight scenarios against MS Project on this
+machine. Two harness bugs surfaced and are fixed:
+
+1. **The recorder opened the committed fixture in place.** MS Project rewrites a
+   file it opens, and the fixture hash changed mid-run; the harness refused the
+   measurement on its own hash guard. Recording now copies the base into
+   `build/` first and only ever opens that copy. `check_fixtures.py` verified
+   `55C109F2…6069` after every run.
+2. **`Project.Calendars` does not exist in this build** (and neither does
+   `Project.BaseCalendars`), so `07-task-calendar` cannot be recorded through a
+   uid-to-calendar lookup. `Task.Calendar` is a *name* get/put. That scenario
+   needs a fixture that already carries a second named base calendar (or a
+   scenario op that creates one), which is a coordinator fixture job.
+
+**Score: 0 passed, 7 recorded, 1 unrecorded.** The failures group into three
+causes, not seven:
+
+| group | example | kind |
+|---|---|---|
+| manual scheduling | `task 1 start: 2026-01-05 08:00 vs 2026-01-04 13:00`; project finish `01-09 vs 01-16` | family gap: Project does not reschedule manual tasks, our planner applies CPM to every row |
+| slack word | `task 1 free/total_slack: 0 vs 24000`; `task 3: 14400 vs 0` | probable bug: free-vs-total slack, the same `+74` disagreement W60 noted |
+| start anchor | `task 3 start_anchor: 2026-01-04 13:00 vs 2026-01-14 13:00` | manual pin + calendar boundary (time-of-day anchor) |
+
+M2 remains 332/332 against the auto-scheduled corpus file, so the CPM path is
+sound; this fixture's manual tasks are what expose the family gap. The next
+recording should use an **auto-scheduled** base so the score measures the engine
+rather than manual-mode semantics.
