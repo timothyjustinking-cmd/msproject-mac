@@ -44,4 +44,5 @@ jobs:
           name: qt-window-${{ github.sha }}
           if-no-files-found: warn
           path: |
-            build-qt/qt-render-smoke.png
+            build-qt/*.png
+            build-qt/test-out/*.png
