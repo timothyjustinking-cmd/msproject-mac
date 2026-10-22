@@ -761,3 +761,42 @@ Next three concrete actions: (a) run `app-macos` once and fix the AppKit compile
 the smoke steps + `app_smoke` grep to the workflow; (c) review the first run's
 `smoke-window.png` and print PDFs and tighten the checks.
 
+
+## Wave 16 (A1) -- the AppKit save path writes the W64 operations
+
+_2026-10-23. No git commands were run. Build tree: `build\a1-app`. Owner paths:
+`app/main.mm`, `app/menu_model.{h,cpp}`, `app/menu_tests.cpp`, this file,
+`docs/handoff/a1.md`. No CMake change; no `app/document.*` change._
+
+The shell can now save a table date format and a custom-field formula, and they
+ride the SAME `app::Document::save(start_edits, target)` write as the start pins.
+
+- `PlanState` owns one `std::unique_ptr<app::Document> document`, created in
+  `load_plan()` with the opened path. It must be a pointer: `load_plan` does
+  `plan = PlanState{}`, and `app::Document` has no default constructor.
+- `-[AppDelegate saveDocumentWithPanel:]` builds the start edits as before, then
+  `plan.document->save(edits, target, options)` (was `app::save_start_edits`).
+  On success it `discard_view_state_edits()` + `discard_custom_formula()`.
+- The structural path (`save_structural_edits`, `app/edit_model.cpp`) has no
+  seam for `apply_document_edits()`, so it applies the pending document edits in
+  a SECOND stream-disjoint write on the file the cascade just wrote (re-reading
+  it keeps the field-value -> formula order). If that write fails, the structural
+  file is kept and the failure is surfaced, never silently dropped.
+- `plan_is_dirty()`, the status line's `pending:` fragment and the close prompt
+  now include the pending document edits.
+- Menu: View > `Table Date Format...`, Edit > `Custom Field Formula...` (there is
+  no Task/Field menu; the task commands live in Edit). Both are forms with no key
+  equivalent. Date format offers 4 (`pjDate_mmm_dd_hh_mmAM`, enum name only) and
+  5 (`pjDate_mmm_dd_yyy`, the only code measured as a written byte, w56.md 8.2).
+  Formula command: popup of 7 Task custom fields + text field; Set ->
+  `Document::apply_custom_formula`, Clear -> `clear_custom_formula` (whole table).
+
+Counts: app ctest **15/15, 2,571 checks** (was 2,513); `menu_tests` **852** (was
+794, +58: 14 explicit incl. the two exact labels + the per-menu pair loops and
+per-action loops). Fixture SHA-256 unchanged (`55C109F2...6069`).
+
+Still unproved: every new line of `main.mm` (no ObjC++ compiler here); one
+`app-macos` run is required. Unreachable from the shell: one write for
+structural + document edits (needs the seam in `app/edit_model.cpp`), and the
+in-cascade "custom-field values first, then formula" order (no value writer runs
+on the non-structural path). Details and exact line ranges: `docs/handoff/a1.md`.

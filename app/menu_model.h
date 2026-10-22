@@ -80,6 +80,10 @@ enum class MenuAction : std::uint8_t {
     // the six measured custom fields, Predecessors adds/removes incoming links.
     task_fields,
     predecessors,
+    // Wave 16: the two pending document edits app::Document::save() writes -- a
+    // `214/CTable` table date format and a `114/Props` custom-field formula.
+    table_date_format,
+    custom_field_formula,
     insert_resource,
     // Wave 14: the two print commands.  `print` opens the standard print panel;
     // `save_as_pdf` runs the same print operation with a save-to-PDF job, so the

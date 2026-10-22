@@ -67,6 +67,11 @@ std::vector<MenuSpec> build_menu_specs() {
         // no key equivalents (they are forms, not blind commands).
         item(MenuAction::task_fields, "Task Fields...", "", false, false, true),
         item(MenuAction::predecessors, "Predecessors..."),
+        // Wave 16: set/clear a `114/Props` custom-field formula.  There is no
+        // Task/Field menu in this shell; this and Task Fields are its two
+        // custom-field commands, so it lives here.
+        item(MenuAction::custom_field_formula, "Custom Field Formula...", "", false,
+             false, true),
     };
     menus.push_back(std::move(edit));
 
@@ -95,6 +100,11 @@ std::vector<MenuSpec> build_menu_specs() {
         item(MenuAction::clear_filter, "Clear Filter", "f", true),
         item(MenuAction::collapse_all, "Collapse All", "", false, false, true),
         item(MenuAction::expand_all, "Expand All", ""),
+        // Wave 16: set the active table's `214/CTable` date-format byte.  It is a
+        // pending document edit Save writes with the start pins; a form, so no key
+        // equivalent.
+        item(MenuAction::table_date_format, "Table Date Format...", "", false, false,
+             true),
     };
     menus.push_back(std::move(view));
 
@@ -161,6 +171,8 @@ const std::vector<MenuAction>& all_menu_actions() {
         MenuAction::delete_task,
         MenuAction::task_fields,
         MenuAction::predecessors,
+        MenuAction::table_date_format,
+        MenuAction::custom_field_formula,
         MenuAction::insert_resource,
         MenuAction::print,
         MenuAction::save_as_pdf,
@@ -282,6 +294,15 @@ bool menu_item_enabled(MenuAction action, const MenuState& state) noexcept {
                 return false;
             }
             return action == MenuAction::insert_task ? true : state.has_selection;
+        case MenuAction::table_date_format:
+            // A table definition is a document property (`214/CTable`), not the
+            // view on screen, so it stays enabled in the resource/usage views too.
+            return state.has_document;
+        case MenuAction::custom_field_formula:
+            // `114/Props` is project-level and the field is chosen in the dialog, so
+            // no selected row is needed; an open cell edit and a non-task view still
+            // disable it (the command edits Task custom-field formulas).
+            return state.has_document && state.task_view && !state.editing;
         case MenuAction::cut:
         case MenuAction::insert_resource:
             return false;
@@ -330,6 +351,8 @@ const char* menu_action_name(MenuAction action) noexcept {
         case MenuAction::delete_task: return "delete_task";
         case MenuAction::task_fields: return "task_fields";
         case MenuAction::predecessors: return "predecessors";
+        case MenuAction::table_date_format: return "table_date_format";
+        case MenuAction::custom_field_formula: return "custom_field_formula";
         case MenuAction::insert_resource: return "insert_resource";
         case MenuAction::print: return "print";
         case MenuAction::save_as_pdf: return "save_as_pdf";

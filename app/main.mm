@@ -34,8 +34,10 @@
 //   * Cmd-C / Cmd-V copy/paste through the general pasteboard; Cut is greyed out
 //     (SheetModel has no cut operation)
 //   * Cmd-S writes the edited task starts (document.h) to the last save target,
-//     asking for a path the first time; Cmd-Shift-S always asks.  Closing or
-//     quitting with pending start edits prompts Save / Don't Save / Cancel.
+//     asking for a path the first time; Cmd-Shift-S always asks.  A pending
+//     View > Table Date Format or Edit > Custom Field Formula edit rides the same
+//     container write (app::Document::save, wave 16).  Closing or quitting with
+//     pending edits prompts Save / Don't Save / Cancel.
 //   * Cmd-F filters the displayed rows (app/filter_model.h); Cmd-Shift-F clears it
 //   * Cmd-1/2/3 and Cmd-=/Cmd-- set the Gantt timescale; Cmd-Shift-D toggles the
 //     working-day shading; both persist in NSUserDefaults (app/prefs.h)
@@ -90,6 +92,7 @@
 #include "document.h"
 #include "edit_model.h"
 #include "field_link_edits.h"
+#include "field_value.h"
 #include "fields_model.h"
 #include "export_pdf.h"
 #include "filter_model.h"
@@ -200,6 +203,13 @@ struct PlanState {
     // target and adopts it), so saving over it again is allowed.  False for a file
     // the user opened: that one is never overwritten (app/document.h).
     bool owns_path = false;
+
+    // --- wave 16: the pending non-table save operations ---------------------
+    // One app::Document per load holds the two operations W64 added: a
+    // `214/CTable` table date-format edit and a `114/Props` custom-field formula.
+    // Save applies them through Document::save() in the SAME container write as
+    // the start pins.  Recreated by load_plan(), so a load drops them.
+    std::unique_ptr<app::Document> document;
 };
 
 PlanState* g_plan = nullptr;
@@ -459,6 +469,27 @@ std::string make_status_text(const PlanState& plan) {
     if (!plan.edits.empty()) {
         text += "  |  pending: " + pending_edit_summary(plan.edits);
     }
+    if (plan.document != nullptr) {
+        // Wave 16: the two document-level edits have no row, so they get their own
+        // fragment (a date-format byte and a formula are not a StructuralEdit).
+        std::string pending;
+        if (plan.document->view_state_edits().set_date_format) {
+            pending = "table date format " + std::to_string(static_cast<unsigned>(
+                                                 plan.document->view_state_edits().date_format));
+        }
+        if (plan.document->custom_formula().any()) {
+            if (!pending.empty()) {
+                pending += ", ";
+            }
+            pending += plan.document->custom_formula().operation ==
+                               app::CustomFormulaEdit::Operation::clear
+                           ? "clear custom-field formulas"
+                           : "custom-field formula";
+        }
+        if (!pending.empty()) {
+            text += "  |  pending: " + pending;
+        }
+    }
     if (!plan.formula_set.columns.empty()) {
         text += "  |  " + std::to_string(plan.formula_set.columns.size()) + " formula column(s)";
     }
@@ -665,6 +696,8 @@ void apply_structural_change(PlanState& plan) {
 bool load_plan(PlanState& plan, const std::string& path) {
     plan = PlanState{};
     plan.path = path;
+    // Wave 16: the pending table date-format / formula holder for this file.
+    plan.document = std::make_unique<app::Document>(path);
     g_target_path.clear();
     g_close_confirmed = false;
     try {
@@ -1402,7 +1435,9 @@ bool plan_is_dirty(const PlanState& plan) {
         return false;
     }
     // Wave 12: a pending Insert/Delete Task is a pending file change too.
+    // Wave 16: so is a pending table date-format or custom-field formula edit.
     return !plan.edits.empty() ||
+           (plan.document != nullptr && plan.document->has_pending_edits()) ||
            !app::collect_start_edits(plan.records, plan.loaded).empty();
 }
 
@@ -2534,6 +2569,8 @@ BOOL run_print_view(PlanState& plan, const app::PrintJob& job, NSURL* save_url) 
 - (void)deleteTask:(id)sender;
 - (void)taskFields:(id)sender;
 - (void)editPredecessors:(id)sender;
+- (void)tableDateFormat:(id)sender;
+- (void)customFieldFormula:(id)sender;
 - (void)rebuildColumnsMenu;
 - (BOOL)saveStructuralEdits:(const std::vector<app::StartEdit>&)edits
                      target:(const std::string&)target;
@@ -2844,6 +2881,12 @@ static PlanView* g_view = nil;
             return;
         case app::MenuAction::predecessors:
             [self editPredecessors:nil];
+            return;
+        case app::MenuAction::table_date_format:
+            [self tableDateFormat:nil];
+            return;
+        case app::MenuAction::custom_field_formula:
+            [self customFieldFormula:nil];
             return;
         case app::MenuAction::insert_resource:
             show_alert(@"Insert Resource",
@@ -3325,6 +3368,173 @@ static PlanView* g_view = nil;
     }
 }
 
+// View > Table Date Format... (wave 16).  The table's date-format byte lives in
+// `214/CTable` (table payload +7).  The two codes offered are the PjDateFormat
+// values this project has evidence for: 5 is the code Project wrote for
+// `DateFormat=5` (w56.md 8.2, the only one measured as a written byte); 4's
+// meaning comes from the type library's PjDateFormat enum, not from a reopened
+// save.  The edit reaches the file only when Save runs.
+- (void)tableDateFormat:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr || g_plan->sheet == nullptr) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    if (plan.document == nullptr) {
+        return;
+    }
+    NSAlert* alert = [[NSAlert alloc] init];
+    [alert setMessageText:@"Table Date Format"];
+    [alert setInformativeText:
+               @"Sets the active table's date-format byte in the .mpp. It is written "
+               @"when you save, in the same write as the task start dates."];
+    [alert addButtonWithTitle:@"Set Format"];
+    [alert addButtonWithTitle:@"Cancel"];
+    NSPopUpButton* popup =
+        [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 25.0) pullsDown:NO];
+    struct FormatChoice {
+        const char* title;
+        std::uint8_t code;
+    };
+    const FormatChoice choices[] = {
+        {"4 - mmm dd hh:mm AM", 4},
+        {"5 - mmm dd 'yy (measured)", 5},
+    };
+    for (const FormatChoice& choice : choices) {
+        [popup addItemWithTitle:to_ns(std::string(choice.title))];
+        [[popup lastItem] setTag:static_cast<NSInteger>(choice.code)];
+    }
+    [alert setAccessoryView:popup];
+    if ([alert runModal] != NSAlertFirstButtonReturn) {
+        note(plan, "table date format cancelled", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    NSMenuItem* selected = [popup selectedItem];
+    if (selected == nil) {
+        return;
+    }
+    // Keep any other pending view-state operation (a column replacement) and set
+    // only the byte this command owns.
+    app::ViewStateEdits edits = plan.document->view_state_edits();
+    edits.set_date_format = true;
+    edits.date_format = static_cast<std::uint8_t>([selected tag]);
+    edits.table_index = 0;  // the measured fixture's only table (the Entry table)
+    plan.document->request_view_state_edits(edits);
+    note(plan, "table date format " +
+                   std::to_string(static_cast<unsigned>(edits.date_format)) +
+                   " is pending; Save writes it",
+         false);
+    [g_view refreshAfterChange];
+}
+
+// Edit > Custom Field Formula... (wave 16).  Sets one Task custom field's formula
+// or clears the whole formula table through the W64 API
+// (Document::apply_custom_formula / clear_custom_formula); Save writes it.  An
+// empty formula is refused exactly as the writer refuses it; "Clear Formulas" is
+// the measured empty-table form (core/props has no per-field clear).
+- (void)customFieldFormula:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr || g_plan->sheet == nullptr ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    if (plan.document == nullptr) {
+        return;
+    }
+    // The Task custom fields this shell already names, through the shared registry
+    // (core/mpp/field_value.h), not hand-copied ids.
+    struct FieldChoice {
+        const char* title;
+        std::uint32_t field;
+    };
+    const FieldChoice choices[] = {
+        {"Text1", mpp::custom_field_id(mpp::FieldKind::text, 1)},
+        {"Text2", mpp::custom_field_id(mpp::FieldKind::text, 2)},
+        {"Number1", mpp::custom_field_id(mpp::FieldKind::number, 1)},
+        {"Number2", mpp::custom_field_id(mpp::FieldKind::number, 2)},
+        {"Duration1", mpp::custom_field_id(mpp::FieldKind::duration, 1)},
+        {"Date1", mpp::custom_field_id(mpp::FieldKind::date, 1)},
+        {"Flag1", mpp::custom_field_id(mpp::FieldKind::flag, 1)},
+    };
+    NSAlert* alert = [[NSAlert alloc] init];
+    [alert setMessageText:@"Custom Field Formula"];
+    [alert setInformativeText:
+               @"Sets or clears a formula stored in the project's 114/Props stream. "
+               @"It is written when you save. An empty formula is refused; use Clear "
+               @"Formulas to remove every stored formula."];
+    [alert addButtonWithTitle:@"Set Formula"];
+    [alert addButtonWithTitle:@"Clear Formulas"];
+    [alert addButtonWithTitle:@"Cancel"];
+    const CGFloat width = 360.0;
+    NSView* accessory = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, width, 62.0)];
+    NSTextField* field_label = [NSTextField labelWithString:@"Field:"];
+    [field_label setFrame:NSMakeRect(0.0, 36.0, 60.0, 20.0)];
+    [accessory addSubview:field_label];
+    NSPopUpButton* field_popup = [[NSPopUpButton alloc]
+        initWithFrame:NSMakeRect(64.0, 32.0, width - 64.0, 25.0) pullsDown:NO];
+    for (const FieldChoice& choice : choices) {
+        [field_popup addItemWithTitle:to_ns(std::string(choice.title))];
+        [[field_popup lastItem] setTag:static_cast<NSInteger>(choice.field)];
+    }
+    [accessory addSubview:field_popup];
+    NSTextField* formula_label = [NSTextField labelWithString:@"Formula:"];
+    [formula_label setFrame:NSMakeRect(0.0, 4.0, 60.0, 20.0)];
+    [accessory addSubview:formula_label];
+    NSTextField* formula_field =
+        [[NSTextField alloc] initWithFrame:NSMakeRect(64.0, 2.0, width - 64.0, 24.0)];
+    [formula_field setPlaceholderString:@"e.g. [Duration]/240"];
+    [accessory addSubview:formula_field];
+    const app::CustomFormulaEdit pending = plan.document->custom_formula();
+    if (pending.operation == app::CustomFormulaEdit::Operation::set) {
+        [formula_field setStringValue:to_ns(pending.formula)];
+        for (NSMenuItem* item in [field_popup itemArray]) {
+            if (static_cast<std::uint32_t>([item tag]) == pending.field_id) {
+                [field_popup selectItem:item];
+                break;
+            }
+        }
+    }
+    [alert setAccessoryView:accessory];
+    const NSModalResponse response = [alert runModal];
+    if (response == NSAlertThirdButtonReturn) {
+        note(plan, "custom field formula cancelled", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (response == NSAlertSecondButtonReturn) {
+        plan.document->clear_custom_formula();
+        note(plan,
+             "clearing every stored custom-field formula is pending; Save writes it",
+             false);
+        [g_view refreshAfterChange];
+        return;
+    }
+    NSMenuItem* selected = [field_popup selectedItem];
+    if (selected == nil) {
+        return;
+    }
+    const std::uint32_t field_id = static_cast<std::uint32_t>([selected tag]);
+    std::string error;
+    if (!plan.document->apply_custom_formula(field_id, to_std([formula_field stringValue]),
+                                             &error)) {
+        show_alert(@"Custom Field Formula", to_ns(error));
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    note(plan, "custom-field formula for field " + std::to_string(field_id) +
+                   " is pending; Save writes it",
+         false);
+    [g_view refreshAfterChange];
+}
+
 // The visible view switcher (wave 11): the same code path as the View menu.
 - (void)viewModeChanged:(id)sender {
     (void)sender;
@@ -3578,6 +3788,11 @@ static PlanView* g_view = nil;
     const std::vector<app::StartEdit> edits =
         app::collect_start_edits(plan.records, plan.loaded);
     const bool structural = !plan.edits.empty();
+    // Wave 16: a pending View > Table Date Format / Edit > Custom Field Formula
+    // edit lives in the Document, not in the start-edit diff, so it is work to
+    // save as well.
+    const bool document_edits =
+        plan.document != nullptr && plan.document->has_pending_edits();
 
     // Wave 14: warn BEFORE the write when a start edit cannot take effect (a
     // linked pin behind the predecessor's finish, or a manual task that the
@@ -3605,9 +3820,9 @@ static PlanView* g_view = nil;
             }
         }
     }
-    if (edits.empty() && !structural) {
+    if (edits.empty() && !structural && !document_edits) {
         note(plan, "nothing to save: no task start has been edited and no insert, delete, "
-                   "custom-field or link edit is pending",
+                   "custom-field, link, table-format or formula edit is pending",
              false);
         [g_view refreshAfterChange];
         return YES;
@@ -3642,19 +3857,49 @@ static PlanView* g_view = nil;
     // Saving over a file THIS APP wrote is allowed (a structural save reloads the
     // target and adopts it); the file the user opened is never overwritten.
     options.allow_source_overwrite = plan.owns_path;
-    const app::SaveOutcome outcome = app::save_start_edits(edits, plan.path, target, options);
+    if (plan.document == nullptr) {
+        plan.document = std::make_unique<app::Document>(plan.path);
+    }
+    // Wave 16: ONE write.  Document applies the pending `214/CTable` and
+    // `114/Props` operations to the container the date writer then edits, so a
+    // start pin, a table date format and a formula land in one file (w64.md 5).
+    // The two stream sets are disjoint, which is why the date writer's "every
+    // other stream unchanged" proof still holds; Document::save runs it that way.
+    const app::SaveOutcome outcome = plan.document->save(edits, target, options);
     if (!outcome.ok) {
         note(plan, "save failed: " + outcome.error, true);
         [g_view refreshAfterChange];
-        show_alert(@"Could not save the edited starts",
+        show_alert(@"Could not save the pending edits",
                    to_ns(outcome.error + "\n\nThe opened file was not modified."));
         return NO;
     }
 
     app::accept_start_edits(plan.loaded, edits);
+    // The write carried them, so they are no longer pending.
+    plan.document->discard_view_state_edits();
+    plan.document->discard_custom_formula();
     g_target_path = outcome.path;
-    std::string message = "saved " + std::to_string(outcome.rows_written) + " start(s) to " +
-                          outcome.path + " (" + outcome.api + ")";
+    std::string saved_parts;
+    if (outcome.rows_written != 0) {
+        saved_parts = std::to_string(outcome.rows_written) + " start(s)";
+    }
+    if (outcome.view_state_written) {
+        if (!saved_parts.empty()) {
+            saved_parts += " + ";
+        }
+        saved_parts += "the table date format";
+    }
+    if (outcome.formula_written) {
+        if (!saved_parts.empty()) {
+            saved_parts += " + ";
+        }
+        saved_parts += "the custom-field formula";
+    }
+    if (saved_parts.empty()) {
+        saved_parts = "the file";
+    }
+    std::string message =
+        "saved " + saved_parts + " to " + outcome.path + " (" + outcome.api + ")";
     if (!outcome.warnings.empty()) {
         message += ", " + std::to_string(outcome.warnings.size()) + " warning(s)";
     }
@@ -3734,6 +3979,48 @@ static PlanView* g_view = nil;
     }
     std::fflush(stdout);
 
+    // Wave 16: save_structural_edits()'s cascade (app/edit_model.cpp) has no seam
+    // for W64's two non-table operations, and that file is not this stream's lane,
+    // so they cannot ride the structural container write.  Apply them in a SECOND,
+    // stream-disjoint write on the file the cascade just wrote: re-reading it means
+    // a custom-field VALUE the cascade wrote is visible to the 0x02401392 decision,
+    // so w64.md section 5's ORDER is preserved even though the single write is not
+    // (docs/handoff/a1.md names this as the unreachable case).
+    std::string document_edit_error;
+    if (plan.document != nullptr && plan.document->has_pending_edits()) {
+        app::Document document(outcome.path);
+        document.request_view_state_edits(plan.document->view_state_edits());
+        const app::CustomFormulaEdit formula = plan.document->custom_formula();
+        bool queued = true;
+        if (formula.operation == app::CustomFormulaEdit::Operation::set) {
+            queued = document.apply_custom_formula(formula.field_id, formula.formula,
+                                                   &document_edit_error);
+        } else if (formula.operation == app::CustomFormulaEdit::Operation::clear) {
+            document.clear_custom_formula();
+        }
+        if (queued) {
+            app::SaveOptions document_options;
+            // The file is OURS: the structural cascade wrote it moments ago.
+            document_options.allow_source_overwrite = true;
+            const app::SaveOutcome document_outcome =
+                document.save(outcome.path, document_options);
+            if (!document_outcome.ok) {
+                document_edit_error = document_outcome.error;
+            } else {
+                message += "  |  the table format / formula was written in a second write";
+            }
+        }
+        if (!document_edit_error.empty()) {
+            message += "  |  BUT the pending table format / formula could not be written: " +
+                       document_edit_error;
+            std::fprintf(stderr,
+                         "msproject-app: save warning: pending document edit not written: "
+                         "%s\n",
+                         document_edit_error.c_str());
+            std::fflush(stderr);
+        }
+    }
+
     if (load_plan(plan, outcome.path)) {
         plan.owns_path = true;
         g_target_path = outcome.path;
@@ -3742,7 +4029,11 @@ static PlanView* g_view = nil;
         [g_view refreshAfterChange];
         [g_window setContentSize:NSMakeSize(std::min(content_width(plan), 1500.0),
                                             std::min(content_height(plan), 920.0))];
-        note(plan, message + "  |  reloaded the file", false);
+        note(plan, message + "  |  reloaded the file", !document_edit_error.empty());
+        if (!document_edit_error.empty()) {
+            show_alert(@"Saved, but the table format/formula was not written",
+                       to_ns(document_edit_error));
+        }
         return YES;
     }
     const std::string reload_error = plan.error;
@@ -4404,7 +4695,12 @@ static PlanView* g_view = nil;
         g_plan->edits.inserted_count() + g_plan->edits.deleted_count();
     const std::size_t fields = g_plan->edits.field_edit_count();
     const std::size_t links = g_plan->edits.link_edit_count();
-    if (edits.empty() && structural == 0 && fields == 0 && links == 0) {
+    // Wave 16: the pending table date format and custom-field formula are file
+    // changes too, so the prompt must mention them instead of implying Save would
+    // only write the start dates.
+    const bool document_edits =
+        g_plan->document != nullptr && g_plan->document->has_pending_edits();
+    if (edits.empty() && structural == 0 && fields == 0 && links == 0 && !document_edits) {
         g_close_confirmed = YES;
         return YES;
     }
@@ -4429,6 +4725,12 @@ static PlanView* g_view = nil;
             details += " and ";
         }
         details += std::to_string(links) + " link edit(s) are pending";
+    }
+    if (document_edits) {
+        if (!details.empty()) {
+            details += " and ";
+        }
+        details += "a table date-format or custom-field formula edit is pending";
     }
     details +=
         ". Saving writes them to a .mpp; every other edit (name, finish, duration, "

@@ -200,12 +200,18 @@ void test_documented_menu_contents() {
     bool delete_task = false;
     bool task_fields = false;
     bool predecessors = false;
+    bool custom_field_formula = false;
+    std::string custom_field_formula_title;
     for (const MenuItemSpec& item : menu_named("Edit").items) {
         if (item.action == MenuAction::task_fields) {
             task_fields = std::string(item.key).empty();
         }
         if (item.action == MenuAction::predecessors) {
             predecessors = std::string(item.key).empty();
+        }
+        if (item.action == MenuAction::custom_field_formula) {
+            custom_field_formula = std::string(item.key).empty();
+            custom_field_formula_title = item.title;
         }
         if (item.action == MenuAction::undo) {
             undo = std::string(item.key) == "z" && !item.shift;
@@ -236,6 +242,10 @@ void test_documented_menu_contents() {
     check(delete_task, "Delete Task is Cmd-Backspace, after a separator");
     check(task_fields && predecessors,
           "Task Fields and Predecessors are in Edit with no key equivalent");
+    check(custom_field_formula,
+          "Custom Field Formula is in Edit with no key equivalent");
+    check_text(custom_field_formula_title, "Custom Field Formula...",
+               "Custom Field Formula has its documented label");
 
     // View: the four views (wave 11) with Cmd-Option-1..4, the usage periods,
     // and the three timescales, the shading toggle, the filter.
@@ -252,6 +262,8 @@ void test_documented_menu_contents() {
     bool shading = false;
     bool filter = false;
     bool clear_filter = false;
+    bool table_date_format = false;
+    std::string table_date_format_title;
     for (const MenuItemSpec& item : menu_named("View").items) {
         zoom_day = zoom_day || item.action == MenuAction::zoom_day;
         zoom_week = zoom_week || item.action == MenuAction::zoom_week;
@@ -259,6 +271,10 @@ void test_documented_menu_contents() {
         shading = shading || item.action == MenuAction::toggle_shading;
         filter = filter || item.action == MenuAction::show_filter;
         clear_filter = clear_filter || item.action == MenuAction::clear_filter;
+        if (item.action == MenuAction::table_date_format) {
+            table_date_format = std::string(item.key).empty();
+            table_date_format_title = item.title;
+        }
         usage_day = usage_day || item.action == MenuAction::usage_day;
         usage_week = usage_week || item.action == MenuAction::usage_week;
         usage_month = usage_month || item.action == MenuAction::usage_month;
@@ -282,6 +298,9 @@ void test_documented_menu_contents() {
     check(shading, "View offers the working-day shading toggle");
     check(filter, "View offers the filter dialog");
     check(clear_filter, "View offers Clear Filter");
+    check(table_date_format, "View offers Table Date Format with no key equivalent");
+    check_text(table_date_format_title, "Table Date Format...",
+               "Table Date Format has its documented label");
 
     // Insert: Task (wave 12, Cmd-I) and Resource (still unsupported).
     const MenuSpec& insert = menu_named("Insert");
@@ -343,6 +362,34 @@ void test_enablement() {
     check(app::menu_item_supported(MenuAction::delete_task), "Delete Task is supported");
     check(app::menu_item_supported(MenuAction::task_fields), "Task Fields is supported");
     check(app::menu_item_supported(MenuAction::predecessors), "Predecessors is supported");
+    check(app::menu_item_supported(MenuAction::table_date_format),
+          "Table Date Format is supported");
+    check(app::menu_item_supported(MenuAction::custom_field_formula),
+          "Custom Field Formula is supported");
+
+    // Wave 16: the two pending document edits app::Document::save() writes.  The
+    // date format is a document property (214/CTable), so every view keeps it
+    // enabled; a Task custom-field formula needs the task view and no open edit.
+    check(app::menu_item_enabled(MenuAction::table_date_format, everything_state()),
+          "Table Date Format works with a document");
+    check(app::menu_item_enabled(MenuAction::custom_field_formula, everything_state()),
+          "Custom Field Formula works with a document");
+    check(!app::menu_item_enabled(MenuAction::table_date_format, empty_state()),
+          "Table Date Format needs a document");
+    check(!app::menu_item_enabled(MenuAction::custom_field_formula, empty_state()),
+          "Custom Field Formula needs a document");
+    MenuState document_commands = everything_state();
+    document_commands.editing = true;
+    check(app::menu_item_enabled(MenuAction::table_date_format, document_commands),
+          "Table Date Format does not depend on the cell editor");
+    check(!app::menu_item_enabled(MenuAction::custom_field_formula, document_commands),
+          "Custom Field Formula is off while a cell edit is open");
+    document_commands = everything_state();
+    document_commands.task_view = false;
+    check(app::menu_item_enabled(MenuAction::table_date_format, document_commands),
+          "Table Date Format is available in every view");
+    check(!app::menu_item_enabled(MenuAction::custom_field_formula, document_commands),
+          "Custom Field Formula is task-view only");
 
     // The wave-12 structural commands: a document, the Task Sheet view and no open
     // edit; Delete also needs a selection.
