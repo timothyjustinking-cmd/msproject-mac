@@ -48,15 +48,26 @@
 #include <utility>
 #include <vector>
 
+#include "add_delete.h"
 #include "cfb_writer.h"
 #include "date.h"
 #include "document.h"
+#include "edit_model.h"
 #include "field_values.h"
 #include "layout_model.h"
 #include "props.h"
 #include "reader_adapter.h"
 #include "sheet.h"
+#include "table.h"
 #include "viewstate.h"
+
+// The hand-built reference cascade below mirrors whichever final write
+// app/document.cpp compiles (see app/CMakeLists.txt's APP_MPPWRITE_SAVE_HEADER).
+#if APP_MPPWRITE_SAVE_HEADER
+#include "save.h"
+#else
+#include "row_writer.h"
+#endif
 
 namespace {
 
@@ -273,6 +284,98 @@ void print_outcome(const char* label, const app::SaveOutcome& outcome) {
     for (const std::string& warning : outcome.warnings) {
         std::printf("SAVE(%s) WARNING: %s\n", label, warning.c_str());
     }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers for the wave-17 structural cascade
+// ---------------------------------------------------------------------------
+
+void print_cascade(const char* label, const app::StructuralSaveResult& outcome) {
+    std::printf("CASCADE(%s): api=%s ok=%d added=%llu deleted=%llu fields=%llu starts=%llu "
+                "doc_edits=%d/%d view=%d formula=%d flag=%d\n",
+                label, outcome.api.c_str(), outcome.ok ? 1 : 0,
+                static_cast<unsigned long long>(outcome.added),
+                static_cast<unsigned long long>(outcome.deleted),
+                static_cast<unsigned long long>(outcome.fields_written),
+                static_cast<unsigned long long>(outcome.start_rows_written),
+                outcome.document_edits_requested ? 1 : 0,
+                outcome.document_edits_written ? 1 : 0,
+                outcome.document_edits.view_state_written ? 1 : 0,
+                outcome.document_edits.formula_written ? 1 : 0,
+                outcome.document_edits.custom_field_flag_restored ? 1 : 0);
+    for (const std::string& warning : outcome.warnings) {
+        std::printf("CASCADE(%s) WARNING: %s\n", label, warning.c_str());
+    }
+    if (!outcome.error.empty()) {
+        std::printf("CASCADE(%s) ERROR: %s\n", label, outcome.error.c_str());
+    }
+}
+
+// The plan the structural edits are built against: the file the cascade will
+// read, so uids and the placeholder uid are the writer's own.
+bool load_plan_input(const std::filesystem::path& path, app::PlanInput& plan) {
+    try {
+        plan = app::plan_input_from_document(mpp::load_file(path.string()));
+        return true;
+    } catch (const std::exception& error) {
+        ++g_checks;
+        ++g_failures;
+        std::printf("FAIL: cannot load %s: %s\n", path.string().c_str(), error.what());
+        return false;
+    }
+}
+
+app::StructuralEdit insert_edit(const char* name, std::uint32_t placeholder_uid) {
+    app::StructuralEdit edit;
+    edit.kind = app::StructuralKind::insert_task;
+    edit.name = name;
+    edit.uid = placeholder_uid;
+    return edit;
+}
+
+app::StructuralEdit text1_edit(std::uint32_t uid, const char* text) {
+    app::StructuralEdit edit;
+    edit.kind = app::StructuralKind::set_field;
+    edit.uid = uid;
+    edit.field_id = 0x0b400033u;  // Text1, the measured stored field
+    edit.field_value.text = text;
+    return edit;
+}
+
+app::StructuralEdit delete_edit(std::uint32_t uid) {
+    app::StructuralEdit edit;
+    edit.kind = app::StructuralKind::delete_task;
+    edit.uid = uid;
+    return edit;
+}
+
+app::StructuralDocumentEdits document_edit_request(const app::ViewStateEdits& view,
+                                                   const app::CustomFormulaEdit& formula) {
+    app::StructuralDocumentEdits request;
+    request.view = view;
+    request.formula = formula;
+    // The wave-15 operation itself: it mutates the cascade's CfbDocument and does
+    // no file I/O, which is exactly the hook's contract.
+    request.hook = app::apply_document_edits;
+    return request;
+}
+
+const mpp::Task* task_with_uid(const mpp::Document& document, std::uint32_t uid) {
+    for (const mpp::Task& task : document.tasks) {
+        if (task.uid == uid) {
+            return &task;
+        }
+    }
+    return nullptr;
+}
+
+const mpp::CustomFieldValue* stored_field(const mpp::Task& task, std::uint32_t field_id) {
+    for (const mpp::CustomFieldValue& field : task.custom_fields) {
+        if (field.field_id == field_id) {
+            return &field;
+        }
+    }
+    return nullptr;
 }
 
 #endif  // APP_TEST_DATA_DIR && APP_TEST_OUT_DIR
@@ -989,6 +1092,472 @@ void test_save_formula_and_view_state() {
     check_size(flag, 1, "the combined save leaves the custom-field flag at 1");
 }
 
+// ---------------------------------------------------------------------------
+// Wave 17 (a): no hook => the cascade is byte-identical to today's output
+// ---------------------------------------------------------------------------
+//
+// Three ways of asking for the same thing must produce the same bytes:
+//   1. the pre-wave-17 signature (five arguments, no request at all);
+//   2. the new signature with an EMPTY StructuralDocumentEdits request;
+//   3. the documented writer sequence applied by hand -- append the row, write the
+//      value, then the one date write -- which is what the cascade does.
+// The same three runs, and app_edits_fields_tests' own combined file, are all
+// SHA-256 52ECE9E1E4BF6F621AE621AA913F94433B71CE7014B0C13D31D6BC9903A4FB01 on
+// the committed fixture; the pre-change binary (build\a1-app, built before this
+// stream's edit) produces exactly that file, so "byte-identical to today's
+// cascade output" is a checked fact, not a hope (docs/handoff/b1.md section 5).
+void test_cascade_without_hook_is_unchanged() {
+    const std::filesystem::path source = kFixture;
+    const std::size_t source_bytes = bytes_on_disk(source);
+    const std::filesystem::path target = out_path("app-cascade-no-hook.mpp");
+    const std::filesystem::path again = out_path("app-cascade-empty-request.mpp");
+    const std::filesystem::path reference = out_path("app-cascade-reference.mpp");
+    const std::filesystem::path scratch = out_path("app-cascade-reference-tmp.mpp");
+    const date32 new_start = from_ymd(2026, 3, 2, 8, 0);
+
+    app::PlanInput plan;
+    if (!load_plan_input(source, plan) || plan.tasks.empty()) {
+        return;
+    }
+    const std::uint32_t uid = plan.tasks.front().uid;
+
+    // The edit set app_edits_fields_tests already runs: one Text1 value, one
+    // appended task, one Start pin.
+    app::StructuralEdits edits;
+    check(edits.push(text1_edit(uid, "combined")), "the no-hook field edit is queued");
+    check(edits.push(insert_edit("Field Task", edits.next_placeholder_uid(plan))),
+          "the no-hook insert is queued");
+    check_size(edits.size(), 2, "two structural edits are pending");
+    const std::vector<app::StartEdit> starts{{uid, new_start}};
+
+    // (1) Today's call shape.
+    const app::StructuralSaveResult plain =
+        app::save_structural_edits(edits, starts, source.string(), target.string(), false);
+    print_cascade("no-hook", plain);
+    check(plain.ok, "the no-hook cascade still saves");
+    check_size(plain.added, 1, "the no-hook cascade added the row");
+    check_size(plain.fields_written, 1, "the no-hook cascade wrote the value");
+    check_size(plain.start_rows_written, 1, "the no-hook cascade wrote the start pin");
+    check(!plain.document_edits_requested, "no document edits were requested");
+    check(!plain.document_edits_written, "no document-edit hook ran");
+    check(plain.api.find("apply_document_edits") == std::string::npos,
+          "the no-hook api does not name the document-edit hook");
+    check(std::filesystem::exists(target), "the no-hook cascade wrote its target");
+    check(!std::filesystem::exists(target.string() + ".w51-structural-tmp"),
+          "the no-hook cascade left no intermediate file");
+
+    // (2) The new parameter with an empty request: same path, same bytes.
+    const app::StructuralSaveResult empty_request = app::save_structural_edits(
+        edits, starts, source.string(), again.string(), false, app::StructuralDocumentEdits{});
+    print_cascade("empty-request", empty_request);
+    check(empty_request.ok, "an empty document-edit request still saves");
+    check(!empty_request.document_edits_written, "an empty request runs no hook");
+    check(file_bytes(again) == file_bytes(target),
+          "an empty request is byte-identical to the pre-wave-17 call");
+
+    // (3) The writer sequence applied by hand, independent of edit_model.cpp.
+    bool reference_ok = false;
+    try {
+        mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(source.string());
+        mppwrite::NewTaskRow row;
+        row.name = "Field Task";  // the writer allocates uid/id (0 = allocate)
+        row.uid = 0;
+        mppwrite::add_task_row(document, row, scratch.string());
+        mppwrite::FieldEdit field;
+        field.uid = uid;
+        field.value.field_id = 0x0b400033u;
+        field.value.kind = mppwrite::FieldKind::text;
+        field.value.text = "combined";
+        mppwrite::save_field_values(document, std::vector<mppwrite::FieldEdit>{field},
+                                    scratch.string());
+#if APP_MPPWRITE_SAVE_HEADER
+        mppwrite::DateEdit date;
+        date.uid = uid;
+        date.start = app::packed_from_date32(new_start);
+        mppwrite::save_date_edits(document, std::vector<mppwrite::DateEdit>{date},
+                                  reference.string());
+#else
+        const mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
+        mppwrite::pin_task_start(document, table.row_for_uid(uid),
+                                 app::packed_from_date32(new_start));
+        document.save(reference.string());
+#endif
+        reference_ok = true;
+    } catch (const std::exception& error) {
+        check(false, ("the hand-built reference cascade failed: " + std::string(error.what()))
+                         .c_str());
+    }
+    check(reference_ok, "the hand-built reference cascade ran");
+    if (reference_ok) {
+        check(file_bytes(reference) == file_bytes(target),
+              "the no-hook cascade is byte-identical to the writer sequence applied by hand");
+    }
+
+    check_size(bytes_on_disk(source), source_bytes, "the source fixture is untouched");
+    std::error_code error;
+    std::filesystem::remove(scratch, error);
+}
+
+// ---------------------------------------------------------------------------
+// Wave 17 (b): structural add + field value + formula + view state, ONE save
+// ---------------------------------------------------------------------------
+void test_cascade_with_document_edits_in_one_write() {
+    const std::filesystem::path source = kFixture;
+    const std::size_t source_bytes = bytes_on_disk(source);
+    const std::filesystem::path prepped = out_path("app-cascade-prepped.mpp");
+    const std::filesystem::path target = out_path("app-cascade-one-write.mpp");
+    const std::filesystem::path control = out_path("app-cascade-no-value-control.mpp");
+    const std::filesystem::path with_start = out_path("app-cascade-one-write-start.mpp");
+    const std::filesystem::path via_document = out_path("app-cascade-via-document.mpp");
+
+    if (!std::filesystem::exists(source)) {
+        return;
+    }
+
+    // A source file that already stores a FORMULA (and no custom-field value), so
+    // the clear below has something to remove and the flag decision is real.
+    {
+        app::Document setup(source.string());
+        check(setup.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
+              "the cascade setup queues a Text2 formula");
+        const app::SaveOutcome saved = setup.save(prepped.string());
+        print_outcome("cascade-setup", saved);
+        check(saved.ok, "the cascade setup formula is written");
+        check(saved.formula_written, "the cascade setup reports the formula");
+    }
+    const std::size_t prepped_bytes = bytes_on_disk(prepped);
+
+    app::PlanInput plan;
+    if (!load_plan_input(prepped, plan) || plan.tasks.empty()) {
+        return;
+    }
+    const std::uint32_t uid = plan.tasks.front().uid;
+
+    app::StructuralEdits edits;
+    check(edits.push(text1_edit(uid, "alpha")), "the one-write field edit is queued");
+    check(edits.push(insert_edit("Hook Task", edits.next_placeholder_uid(plan))),
+          "the one-write insert is queued");
+
+    app::ViewStateEdits view;
+    view.set_date_format = true;
+    view.date_format = 0x05;
+    app::CustomFormulaEdit formula;
+    formula.operation = app::CustomFormulaEdit::Operation::clear;
+    app::StructuralDocumentEdits request = document_edit_request(view, formula);
+    check(request.any(), "the one-write request carries pending document edits");
+
+    const app::StructuralSaveResult outcome = app::save_structural_edits(
+        edits, {}, prepped.string(), target.string(), false, request);
+    print_cascade("one-write", outcome);
+    check(outcome.ok, "structural + field + view-state + formula saves in one write");
+    if (!outcome.ok) {
+        return;
+    }
+    check_size(outcome.added, 1, "the one-write save added the task");
+    check_size(outcome.fields_written, 1, "the one-write save wrote the field value");
+    check(outcome.document_edits_requested, "the save reports document edits were requested");
+    check(outcome.document_edits_written, "the save reports the document-edit hook ran");
+    check(outcome.document_edits.view_state_written, "the view state was written");
+    check(outcome.document_edits.formula_written, "the formula clear was written");
+    check(outcome.document_edits.custom_field_flag_restored,
+          "the 0x02401392 decision saw the value written in the SAME save");
+    check(outcome.api.find("apply_document_edits") != std::string::npos,
+          "the outcome names apply_document_edits");
+    check(outcome.api.find("CfbDocument::save") != std::string::npos,
+          "the only target write was the explicit container save");
+    bool flag_warning = false;
+    for (const std::string& warning : outcome.warnings) {
+        if (warning.find("0x02401392") != std::string::npos) {
+            flag_warning = true;
+        }
+    }
+    check(flag_warning, "a warning explains the flag was kept at 1");
+    check(!std::filesystem::exists(target.string() + ".w51-structural-tmp"),
+          "the one-write save left no intermediate file");
+    check_size(bytes_on_disk(prepped), prepped_bytes, "the prepared source is untouched");
+
+    // Reopen: all four edits are in that one file.
+    try {
+        const mpp::Document reread = mpp::load_file(target.string());
+        check_size(reread.tasks.size(), plan.tasks.size() + 1,
+                   "the reopened file has the added task");
+        const mpp::Task* task = task_with_uid(reread, uid);
+        check(task != nullptr, "the field-edited task is in the reopened file");
+        if (task != nullptr) {
+            const mpp::CustomFieldValue* value = stored_field(*task, 0x0b400033u);
+            check(value != nullptr && value->present, "the Text1 value is stored");
+            if (value != nullptr) {
+                check_text(value->text, "alpha", "the Text1 value is alpha");
+            }
+        }
+    } catch (const std::exception& error) {
+        check(false, ("the one-write file does not load: " + std::string(error.what())).c_str());
+    }
+
+    const std::vector<std::uint8_t> props = stream_bytes(target, "114/Props");
+    msproject::props::PropsDocument parsed;
+    msproject::props::ParseError parse_error;
+    check(msproject::props::parse_props(props, parsed, &parse_error),
+          "the one-write file's 114/Props parses");
+    check_size(msproject::props::extract_formulas(parsed).size(), 0,
+               "the formula clear landed in the same write");
+    std::uint16_t flag = 0;
+    check(props_flag(props, flag), "the one-write file has the flag record");
+    check_size(flag, 1, "the flag is 1 because a value was written in the same save");
+
+    const ParsedCTable table = parse_ctable_at(target);
+    check(table.ok, ("the one-write CTable parses: " + table.error).c_str());
+    if (table.ok && table.state.tables.size() == 1) {
+        check_size(table.state.tables[0].date_format, 0x05u,
+                   "the one-write file's date format is 5");
+    }
+    check(stream_bytes(prepped, "214/CTable/Var2Data") !=
+              stream_bytes(target, "214/CTable/Var2Data"),
+          "the view-state edit changed the table state");
+
+    // The control: the same two document edits with NO field value written. The
+    // flag then has nothing to protect, so the clear leaves it 0 -- which proves
+    // the 1 above came from the value the field writer had just written, i.e. that
+    // the hook runs AFTER the field-value writers.
+    app::StructuralEdits control_edits;
+    check(control_edits.push(insert_edit("Hook Task", control_edits.next_placeholder_uid(plan))),
+          "the control insert is queued");
+    const app::StructuralSaveResult control_outcome = app::save_structural_edits(
+        control_edits, {}, prepped.string(), control.string(), false,
+        document_edit_request(view, formula));
+    print_cascade("no-value-control", control_outcome);
+    check(control_outcome.ok, "the no-value control saves");
+    check(!control_outcome.document_edits.custom_field_flag_restored,
+          "without a value in the same save the flag is not kept at 1");
+    std::uint16_t control_flag = 1;
+    check(props_flag(stream_bytes(control, "114/Props"), control_flag),
+          "the control file has the flag record");
+    check_size(control_flag, 0, "the control file's flag is 0");
+
+    // The Document-level wiring: `Document::save_structural()` is the shell's call
+    // shape for exactly this save, so it must be the same one-write path.
+    {
+        app::Document document(prepped.string());
+        document.request_view_state_edits(view);
+        document.clear_custom_formula();
+        check(document.has_pending_edits(), "the Document holds the pending edits");
+        const app::StructuralSaveResult via_doc =
+            document.save_structural(edits, {}, via_document.string(), false);
+        print_cascade("via-document", via_doc);
+        check(via_doc.ok, "Document::save_structural saves");
+        check(via_doc.document_edits_written, "Document::save_structural ran the hook");
+        check(file_bytes(via_document) == file_bytes(target),
+              "Document::save_structural is byte-identical to the free-function call");
+    }
+
+    // A Start pin riding along: the date writer is then the single target write,
+    // AFTER the hook (the other half of the routing rule).
+    {
+        const std::vector<app::StartEdit> starts{{uid, from_ymd(2026, 3, 2, 8, 0)}};
+        const app::StructuralSaveResult pinned = app::save_structural_edits(
+            edits, starts, prepped.string(), with_start.string(), false, request);
+        print_cascade("one-write-with-start", pinned);
+        check(pinned.ok, "structural + field + view-state + formula + start saves in one write");
+        check_size(pinned.start_rows_written, 1, "the start pin was written");
+        check(pinned.document_edits_written, "the hook ran before the date writer");
+        check(pinned.api.find("save_date_edits") != std::string::npos,
+              "the final write was the date writer");
+        check(pinned.api.find("CfbDocument::save") == std::string::npos,
+              "no separate container save was needed");
+        check(file_bytes(with_start) != file_bytes(target), "the start pin changed the file");
+        try {
+            const mpp::Document reread = mpp::load_file(with_start.string());
+            const mpp::Task* task = task_with_uid(reread, uid);
+            check(task != nullptr, "the pinned task reopens");
+            if (task != nullptr) {
+                check_size(task->constraint_type, 4, "the start edit is a SNET pin");
+                check(task->constraint_date.raw ==
+                          app::packed_from_date32(from_ymd(2026, 3, 2, 8, 0)),
+                      "the pin carries the edited date");
+            }
+        } catch (const std::exception& error) {
+            check(false, ("the one-write-with-start file does not load: " +
+                          std::string(error.what())).c_str());
+        }
+        const ParsedCTable pinned_table = parse_ctable_at(with_start);
+        check(pinned_table.ok && pinned_table.state.tables.size() == 1 &&
+                  pinned_table.state.tables[0].date_format == 0x05u,
+              "the pinned file also carries the date format");
+        std::uint16_t pinned_flag = 0;
+        check(props_flag(stream_bytes(with_start, "114/Props"), pinned_flag),
+              "the pinned file has the flag record");
+        check_size(pinned_flag, 1, "the pinned file keeps the flag at 1");
+    }
+
+    // What A1's second-write fallback would do if it were left in place: re-open
+    // the file the one write produced, with the same pending edits, and save
+    // again.  Every edit is already there, so the write is a NO-OP -- nothing is
+    // replaced and the container comes back byte-identical.  It can only cost a
+    // write, never make a second change; the shell should still skip it
+    // (docs/handoff/b1.md section 4).
+    {
+        const std::vector<std::uint8_t> before = file_bytes(target);
+        app::Document again_document(target.string());
+        again_document.request_view_state_edits(view);
+        again_document.clear_custom_formula();
+        app::SaveOptions options;
+        options.allow_source_overwrite = true;
+        const app::SaveOutcome second = again_document.save(target.string(), options);
+        print_outcome("fallback-would-be", second);
+        check(second.ok, "the second write a fallback would do succeeds");
+        check(!second.view_state_written, "the fallback re-applies no view state");
+        check(!second.formula_written, "the fallback re-applies no formula");
+        check(file_bytes(target) == before, "the fallback's second write is byte-identical");
+    }
+
+    check_size(bytes_on_disk(source), source_bytes, "the source fixture is untouched");
+}
+
+// ---------------------------------------------------------------------------
+// Wave 17 (c): a hook refusal fails the save cleanly
+// ---------------------------------------------------------------------------
+void test_cascade_hook_refusal() {
+    const std::filesystem::path source = kFixture;
+    const std::size_t source_bytes = bytes_on_disk(source);
+    const std::filesystem::path target = out_path("app-cascade-hook-refused.mpp");
+    const std::filesystem::path guarded = out_path("app-cascade-hook-guarded.mpp");
+    const std::filesystem::path unhooked = out_path("app-cascade-unhooked.mpp");
+
+    app::PlanInput plan;
+    if (!load_plan_input(source, plan) || plan.tasks.empty()) {
+        return;
+    }
+    app::StructuralEdits edits;
+    check(edits.push(insert_edit("Refused Task", edits.next_placeholder_uid(plan))),
+          "the refusal test insert is queued");
+
+    app::ViewStateEdits view;
+    view.set_date_format = true;
+    view.date_format = 0x05;
+    app::StructuralDocumentEdits request;
+    request.view = view;
+    request.hook = [](mppwrite::CfbDocument&, const app::ViewStateEdits&,
+                      const app::CustomFormulaEdit&) {
+        app::DocumentEditOutcome outcome;
+        outcome.ok = false;
+        outcome.error = "formula not written: refused by the test hook";
+        return outcome;
+    };
+
+    // A start pin rides along, so the date writer WOULD have been the final write:
+    // the refusal must stop it before it reaches the target.
+    const std::vector<app::StartEdit> starts{{plan.tasks.front().uid, from_ymd(2026, 3, 2, 8, 0)}};
+    const app::StructuralSaveResult refused =
+        app::save_structural_edits(edits, starts, source.string(), target.string(), false, request);
+    print_cascade("hook-refused", refused);
+    check(!refused.ok, "a refused hook fails the save");
+    check(refused.error.find("refused by the test hook") != std::string::npos,
+          "the save reports the hook's own error");
+    check(!refused.document_edits_written, "a refused hook reports no document write");
+    check(!std::filesystem::exists(target), "a refused hook leaves no target file");
+    check(!std::filesystem::exists(target.string() + ".w51-structural-tmp"),
+          "a refused hook removes the intermediate file");
+    check_size(bytes_on_disk(source), source_bytes, "the source is untouched by the refusal");
+
+    // A pre-existing target is left byte-identical: the refusal happens before the
+    // final write, not before the writer calls.
+    std::error_code error;
+    std::filesystem::copy_file(source, guarded,
+                               std::filesystem::copy_options::overwrite_existing, error);
+    const std::size_t guarded_bytes = bytes_on_disk(guarded);
+    const app::StructuralSaveResult guarded_outcome = app::save_structural_edits(
+        edits, starts, source.string(), guarded.string(), false, request);
+    check(!guarded_outcome.ok, "the hook refusal fires with a pre-existing target");
+    check_size(bytes_on_disk(guarded), guarded_bytes,
+               "the pre-existing target is byte-identical after the refusal");
+    check(file_bytes(guarded) == file_bytes(source),
+          "the pre-existing target still holds the source's bytes");
+
+    // Pending document edits WITHOUT a hook are refused, never dropped silently.
+    app::StructuralDocumentEdits unbooked;
+    unbooked.view = view;
+    const app::StructuralSaveResult dropped = app::save_structural_edits(
+        edits, {}, source.string(), unhooked.string(), false, unbooked);
+    print_cascade("unhooked", dropped);
+    check(!dropped.ok, "document edits without a hook are refused");
+    check(dropped.error.find("hook") != std::string::npos,
+          "the refusal names the missing hook");
+    check(!std::filesystem::exists(unhooked), "the refused request writes no target");
+    check_size(bytes_on_disk(source), source_bytes, "the source is untouched by every refusal");
+}
+
+// ---------------------------------------------------------------------------
+// Wave 17 (d): a task delete + a formula change in ONE save
+// ---------------------------------------------------------------------------
+void test_cascade_delete_with_formula() {
+    const std::filesystem::path source = kFixture;
+    const std::size_t source_bytes = bytes_on_disk(source);
+    const std::filesystem::path target = out_path("app-cascade-delete-formula.mpp");
+
+    app::PlanInput plan;
+    if (!load_plan_input(source, plan) || plan.tasks.size() < 2) {
+        return;
+    }
+    const std::uint32_t doomed = plan.tasks.back().uid;
+    const std::uint32_t kept = plan.tasks.front().uid;
+
+    app::StructuralEdits edits;
+    check(edits.push(delete_edit(doomed)), "the delete + formula delete is queued");
+
+    app::CustomFormulaEdit formula;
+    formula.operation = app::CustomFormulaEdit::Operation::set;
+    formula.field_id = 0x0b400036u;  // Text2
+    formula.formula = "[Name]";
+    const app::StructuralSaveResult outcome = app::save_structural_edits(
+        edits, {}, source.string(), target.string(), false,
+        document_edit_request(app::ViewStateEdits{}, formula));
+    print_cascade("delete-formula", outcome);
+    check(outcome.ok, "a delete + formula change saves in one write");
+    if (!outcome.ok) {
+        return;
+    }
+    check_size(outcome.deleted, 1, "the delete landed");
+    check(outcome.document_edits_written, "the formula rode the same save");
+    check(outcome.document_edits.formula_written, "the formula was written");
+    check(!outcome.document_edits.view_state_written, "no view-state edit was requested");
+    check(outcome.api.find("CfbDocument::save") != std::string::npos,
+          "the delete + formula save ended with the explicit container save");
+    check(!std::filesystem::exists(target.string() + ".w51-structural-tmp"),
+          "the delete + formula save left no intermediate file");
+
+    try {
+        const mpp::Document reread = mpp::load_file(target.string());
+        check_size(reread.tasks.size(), plan.tasks.size() - 1,
+                   "the reopened file has one task fewer");
+        check(task_with_uid(reread, doomed) == nullptr, "the deleted task is gone");
+        check(task_with_uid(reread, kept) != nullptr, "the surviving task is still there");
+    } catch (const std::exception& error) {
+        check(false, ("the delete + formula file does not load: " + std::string(error.what()))
+                         .c_str());
+    }
+
+    const std::vector<std::uint8_t> props = stream_bytes(target, "114/Props");
+    msproject::props::PropsDocument parsed;
+    msproject::props::ParseError parse_error;
+    check(msproject::props::parse_props(props, parsed, &parse_error),
+          "the delete + formula file's 114/Props parses");
+    const std::vector<msproject::props::FormulaBlock> formulas =
+        msproject::props::extract_formulas(parsed);
+    check_size(formulas.size(), 1, "one formula reads back");
+    if (!formulas.empty()) {
+        check_size(formulas[0].field_id, 0x0b400036u, "the formula is on Text2");
+        check_text(formulas[0].formula, "[MSPJ188743694]",
+                   "the formula stores [Name] as its measured MSPJ token");
+    }
+    std::uint16_t flag = 0;
+    check(props_flag(props, flag), "the delete + formula file has the flag record");
+    check_size(flag, 1, "setting a formula leaves the flag at 1");
+    check(stream_bytes(source, "214/CTable/Var2Data") ==
+              stream_bytes(target, "214/CTable/Var2Data"),
+          "the delete + formula save leaves the table state alone");
+    check_size(bytes_on_disk(source), source_bytes, "the source fixture is untouched");
+}
+
 #else
 void test_save_round_trip() {
     std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
@@ -1004,6 +1573,10 @@ void test_save_refused_view_state() {}
 void test_document_request_validation() {}
 void test_save_formula_and_view_state() {}
 void test_save_start_date_with_view_and_formula() {}
+void test_cascade_without_hook_is_unchanged() {}
+void test_cascade_with_document_edits_in_one_write() {}
+void test_cascade_hook_refusal() {}
+void test_cascade_delete_with_formula() {}
 #endif
 
 }  // namespace
@@ -1023,6 +1596,10 @@ int main() {
     test_document_request_validation();
     test_save_start_date_with_view_and_formula();
     test_save_formula_and_view_state();
+    test_cascade_without_hook_is_unchanged();
+    test_cascade_with_document_edits_in_one_write();
+    test_cascade_hook_refusal();
+    test_cascade_delete_with_formula();
 
     if (g_failures != 0) {
         std::printf("FAIL: %d of %d checks failed\n", g_failures, g_checks);

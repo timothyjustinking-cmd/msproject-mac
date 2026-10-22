@@ -606,9 +606,11 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                            const std::vector<StartEdit>& start_edits,
                                            std::string_view source_path,
                                            std::string_view target_path,
-                                           bool allow_source_overwrite) {
+                                           bool allow_source_overwrite,
+                                           const StructuralDocumentEdits& document_edits) {
     StructuralSaveResult result;
     result.path = std::string(target_path);
+    result.document_edits_requested = document_edits.any();
     if (edits.empty()) {
         result.error = "no pending edit to save";
         return result;
@@ -622,6 +624,17 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         result.error =
             "refusing to overwrite the opened file; save to a new name (the opened .mpp is "
             "never modified)";
+        return result;
+    }
+
+    // Wave 17: the document-edit seam.  A request with pending view-state/formula
+    // edits but no hook could only end by dropping them silently, so it is
+    // refused before anything is written.
+    const bool has_hook = static_cast<bool>(document_edits.hook);
+    if (document_edits.any() && !has_hook) {
+        result.error =
+            "pending table format / formula edits were passed in without a document-edit "
+            "hook; refusing to drop them";
         return result;
     }
 
@@ -682,6 +695,14 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     write_ops += field_clears.size();
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
+        ++write_ops;
+    }
+    // Wave 17: with a hook the final write must come AFTER it, so the hook's
+    // streams are in the container that write emits.  When start pins ride along
+    // the date writer already IS that final write; otherwise the cascade ends with
+    // one explicit CfbDocument::save of the document the hook just changed.
+    const bool finish_with_container_save = has_hook && !finish_with_start_edits;
+    if (finish_with_container_save) {
         ++write_ops;
     }
 
@@ -817,6 +838,32 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                    " of task uid " + std::to_string(edit->uid));
         }
 
+        // 5b (wave 17).  The document-edit seam: the `214/CTable` view state and
+        // the `114/Props` formula, applied to THIS document -- after the
+        // field-value writers (so the shared 0x02401392 flag decision sees a value
+        // written moments ago) and before the one final write.  The hook does no
+        // file I/O; the cascade owns the write below.
+        if (has_hook) {
+            const DocumentEditOutcome edits_outcome =
+                document_edits.hook(document, document_edits.view, document_edits.formula);
+            result.document_edits = edits_outcome;
+            for (const std::string& warning : edits_outcome.warnings) {
+                result.warnings.push_back(warning);
+            }
+            if (!edits_outcome.ok) {
+                // A refused formula must never be dropped silently, and nothing has
+                // been written to the target yet: fail the whole save, remove the
+                // intermediate file, leave every real file as it was.
+                cleanup();
+                result.ok = false;
+                result.error = edits_outcome.error.empty()
+                                   ? "the document-edit hook refused the save"
+                                   : edits_outcome.error;
+                return result;
+            }
+            result.document_edits_written = true;
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -832,6 +879,24 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             result.start_rows_written = saved.rows_written;
             for (const std::string& note : saved.warnings) {
                 result.notes.push_back(note);
+            }
+        } else if (finish_with_container_save) {
+            // 6b (wave 17).  No start pin to write, but the hook changed the
+            // document: emit it once, to the target, and prove the container from
+            // disk exactly as the other save paths do.
+            const std::vector<std::uint8_t> written = document.to_bytes();
+            document.save(next_write_path());
+            const mppwrite::CfbDocument reread =
+                mppwrite::CfbDocument::from_file(result.path);
+            if (reread.to_bytes() != written) {
+                cleanup();
+                result.ok = false;
+                result.error = "the written file does not re-emit byte-identically";
+                return result;
+            }
+            const std::string report = mppwrite::check_table(document);
+            if (!report.empty()) {
+                result.warnings.push_back("table check: " + report);
             }
         }
         cleanup();
@@ -857,6 +922,12 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";
+        }
+        if (result.document_edits_written) {
+            result.api += " apply_document_edits";
+        }
+        if (finish_with_container_save) {
+            result.api += " CfbDocument::save";
         }
     } catch (const std::exception& error) {
         cleanup();

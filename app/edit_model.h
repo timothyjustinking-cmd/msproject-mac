@@ -56,6 +56,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -224,11 +225,72 @@ struct StructuralSaveResult {
     std::size_t links_tombstoned = 0;
     std::size_t assignments_tombstoned = 0;
     std::size_t start_rows_written = 0;
+
+    // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
+    // at their defaults when no hook was supplied -- that is exactly the
+    // pre-wave-17 result.
+    bool document_edits_requested = false;  // view/formula edits were passed in
+    bool document_edits_written = false;    // the hook ran and reported ok
+    DocumentEditOutcome document_edits;     // exactly what the hook reported
+
     std::vector<std::string> warnings;  // writer + app warnings worth showing
     std::vector<std::string> notes;     // informational re-read receipts
     std::string error;                  // non-empty exactly when ok == false
     std::string path;                   // the target that was written
     std::string api;                    // which writer calls ran
+};
+
+// ===========================================================================
+// Wave 17: the document-edit seam -- structural + field + view state + formula
+// in ONE container write
+// ===========================================================================
+//
+// `save_structural_edits` applies one `core/mppwrite` writer per step and only
+// the LAST call writes the target; every earlier one writes (and then deletes)
+// an intermediate file beside it.  The two document-level operations of wave 15
+// -- the `214/CTable` view state and the `114/Props` custom-field formula, applied
+// by `app::apply_document_edits` in app/document.cpp -- belong on the
+// `CfbDocument` that sequence already owns, AFTER the field-value writers and
+// BEFORE that one final write:
+//
+//   * the formula step is the only one that can decide the shared 0x02401392
+//     "custom-field data in use" flag, and it must see any custom-field VALUE
+//     the field writers just wrote to the same document (docs/handoff/w64.md
+//     section 5); and
+//   * neither operation can invalidate a row/table index, so running last keeps
+//     every earlier writer's own post-save re-read proof valid.
+//
+// `DocumentEditHook` is that seam.  It mutates `document` in memory only (the
+// cascade owns every file write) and reports what it did; a refusal
+// (`ok == false`) fails the save before the target is written.
+// `app::apply_document_edits` has exactly this signature, so it is passed
+// directly:
+//
+//   app::StructuralDocumentEdits request;
+//   request.view = document.view_state_edits();
+//   request.formula = document.custom_formula();
+//   request.hook = app::apply_document_edits;
+//   app::save_structural_edits(edits, start_edits, source, target, false, request);
+//
+// `app::Document::save_structural()` (document.h) is the one-call form of this
+// for a shell that already owns a Document.
+using DocumentEditHook =
+    std::function<DocumentEditOutcome(mppwrite::CfbDocument& document,
+                                      const ViewStateEdits& view,
+                                      const CustomFormulaEdit& formula)>;
+
+// The pending document-level edits plus the hook that applies them inside the
+// cascade.  The default (an empty request) means "no document edits" and leaves
+// the cascade exactly as it was before wave 17: same writer calls, same write
+// routing, byte-identical output.
+struct StructuralDocumentEdits {
+    ViewStateEdits view;
+    CustomFormulaEdit formula;
+    // Null means "not supplied".  Supplying edits WITHOUT a hook is refused
+    // rather than silently dropped (see `result.error`).
+    DocumentEditHook hook;
+
+    [[nodiscard]] bool any() const noexcept { return view.any() || formula.any(); }
 };
 
 // Applies every pending edit to `source_path` and writes `target_path`, in this
@@ -243,9 +305,16 @@ struct StructuralSaveResult {
 //                        value (one file);
 //      clear_field    -> one mppwrite::clear_field_value call per field, because
 //                        clearing is the measured empty-value shape;
-//   6. start dates    -> the normal mppwrite::save_date_edits path.
+//   5b. document edits-> only when `document_edits.hook` is set: the hook runs on
+//                        the SAME CfbDocument, after step 5 and before the final
+//                        write (this is the wave-17 seam);
+//   6. start dates    -> the normal mppwrite::save_date_edits path; when no start
+//                        edit is writable but a hook ran, the final write is an
+//                        explicit mppwrite::CfbDocument::save instead.
 // Every writer call writes a file, so all but the LAST one write an intermediate
 // file beside the target and it is removed afterwards (a refusal removes it too).
+// With a hook the LAST write is always the one after it -- step 6, or that
+// explicit container save -- so the target is written once, hook included.
 // If an earlier step fails, no later step runs and the target is not written at
 // all: the original file is never touched (the app also refuses target ==
 // source unless `allow_source_overwrite`, the shell passes true only for a file
@@ -258,6 +327,7 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                            const std::vector<StartEdit>& start_edits,
                                            std::string_view source_path,
                                            std::string_view target_path,
-                                           bool allow_source_overwrite);
+                                           bool allow_source_overwrite,
+                                           const StructuralDocumentEdits& document_edits = {});
 
 }  // namespace app

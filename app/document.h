@@ -12,6 +12,10 @@
 // custom-field formula edit in `114/Props` (core/props).  See the block at the
 // bottom of this file.
 //
+// Wave 17 adds the structural sibling of that: `Document::save_structural` runs
+// the Insert/Delete/field/link cascade (app/edit_model.h) with those same two
+// operations inside the SAME container write, after the field-value writers.
+//
 // WHERE THE WRITE GOES -- AND WHERE IT MUST NOT
 //   The source file is never modified.  Cmd-S in the shell asks the user for a
 //   target path (NSSavePanel); this helper writes `target_path` and refuses
@@ -58,6 +62,13 @@ class CfbDocument;
 }
 
 namespace app {
+
+// The pending-edit model and its save result (app/edit_model.h, which includes
+// THIS header).  Only `save_structural()` below names them, and a declaration
+// needs no definition, so the include graph stays acyclic: document.cpp includes
+// edit_model.h, never the other way round.
+class StructuralEdits;
+struct StructuralSaveResult;
 
 // One changed task start.  `uid` is the task's UniqueID (identity, not a display
 // field); `start` may be kDateNa, meaning the sheet's cell was cleared -- there
@@ -159,8 +170,9 @@ void accept_start_edits(PlanInput& loaded, const std::vector<StartEdit>& edits);
 //   pending it writes the container back unchanged.  Its overload that takes
 //   start edits adds the date pins in the same write; the date streams and these
 //   two stream sets are disjoint, so applying the date writer after them produces
-//   the same file as applying it first.  Document does NOT write field, link or
-//   structural edits -- use `apply_document_edits()` for those.
+//   the same file as applying it first.  `save()`/`save(start_edits, ...)` do NOT
+//   write field, link or structural edits: `save_structural()` below is the
+//   overload for those, with these two operations riding the same write.
 
 // One `214/CTable` edit request.  `table_index` is the index into the parsed
 // CTable collection (0 = the first table; the measured fixture has one, the
@@ -277,6 +289,30 @@ class Document {
     [[nodiscard]] SaveOutcome save(const std::vector<StartEdit>& start_edits,
                                    std::string_view target_path,
                                    const SaveOptions& options = {}) const;
+
+    // =======================================================================
+    // Wave 17: structural + field + view state + formula in ONE container write
+    // =======================================================================
+    // Runs `save_structural_edits()` (app/edit_model.h) on `source_path()` and
+    // gives that cascade's `CfbDocument` -- after its field-value writers and
+    // before its one final write -- the pending view-state/formula edits through
+    // `apply_document_edits()`.  This is the structural sibling of the
+    // `save(start_edits, ...)` overload above: one container write for the task/
+    // link/field edits AND the two wave-15 operations, keeping w64.md section 5's
+    // "field values first, then formula" order -- so the shared 0x02401392
+    // "custom-field data in use" decision sees a value written in the SAME save.
+    //
+    // With nothing pending it is exactly `save_structural_edits(edits,
+    // start_edits, source_path(), target_path, allow_source_overwrite)`: the same
+    // writer calls, the same write routing, byte-identical output.
+    //
+    // `allow_source_overwrite` is the structural save's own rule (true only for a
+    // file this app itself wrote).  The result carries the cascade counters plus
+    // `document_edits` / `document_edits_written`; a hook refusal (a formula the
+    // file cannot take) fails the whole save with no target written.
+    [[nodiscard]] StructuralSaveResult save_structural(
+        const StructuralEdits& edits, const std::vector<StartEdit>& start_edits,
+        std::string_view target_path, bool allow_source_overwrite) const;
 
   private:
     std::string source_path_;

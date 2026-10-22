@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "edit_model.h"
 #include "field_value.h"
 #include "props.h"
 #include "row_writer.h"
@@ -631,6 +632,24 @@ SaveOutcome Document::save(const std::vector<StartEdit>& start_edits,
         outcome.error = error.what();
     }
     return outcome;
+}
+
+StructuralSaveResult Document::save_structural(const StructuralEdits& edits,
+                                               const std::vector<StartEdit>& start_edits,
+                                               std::string_view target_path,
+                                               bool allow_source_overwrite) const {
+    StructuralDocumentEdits request;
+    if (has_pending_edits()) {
+        request.view = view_state_edits_;
+        request.formula = custom_formula_;
+        // `apply_document_edits` has exactly the hook's signature: it mutates the
+        // cascade's CfbDocument and does no file I/O.  The cascade writes once,
+        // after it.  Nothing pending leaves the hook null, so the cascade takes
+        // its pre-wave-17 path.
+        request.hook = apply_document_edits;
+    }
+    return save_structural_edits(edits, start_edits, source_path_, target_path,
+                                 allow_source_overwrite, request);
 }
 
 }  // namespace app

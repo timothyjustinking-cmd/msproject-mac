@@ -132,3 +132,42 @@ after the runs.
 - `save_date_edits` proves only its own streams changed relative to the
   `CfbDocument` it receives -- replacing `114/Props`/`214/` first is safe and is
   what the combined overload does.
+
+## Wave 17 addendum (stream B1, 2026-10-23): the structural cascade has the seam
+
+`app::save_structural_edits` now takes a defaulted `const StructuralDocumentEdits&`:
+
+```cpp
+struct StructuralDocumentEdits {
+    ViewStateEdits view;
+    CustomFormulaEdit formula;
+    DocumentEditHook hook;   // app::apply_document_edits fits the signature exactly
+};
+using DocumentEditHook =
+    std::function<DocumentEditOutcome(mppwrite::CfbDocument&, const ViewStateEdits&,
+                                      const CustomFormulaEdit&)>;
+```
+
+- The hook runs **after step 5 (field VALUES) and before the one target write**
+  (step 5b), on the same `CfbDocument`. That is the ordering w64.md section 5
+  could not reach from the non-structural path: the `0x02401392` decision now sees
+  a value written in the SAME save. Proved by
+  `test_cascade_with_document_edits_in_one_write` (flag 1 with a value written in
+  the same save; flag 0 in the no-value control run).
+- Final write: `save_date_edits` when a start pin rides along, otherwise an
+  explicit `CfbDocument::save` (`finish_with_container_save`, counted into
+  `write_ops`). Every earlier writer writes the `.w51-structural-tmp`
+  intermediate, so a hook refusal leaves no target file.
+- An empty request is the old path, byte-identical
+  (`test_cascade_without_hook_is_unchanged`): the fixture's combined cascade file
+  hashes to `52ECE9E1E4BF6F621AE621AA913F94433B71CE7014B0C13D31D6BC9903A4FB01`
+  from the pre-change binary (`build\a1-app`), the post-change binary, the
+  five-argument call, the empty-request call and the hand-built writer sequence.
+- `Document::save_structural(edits, start_edits, target, allow_overwrite)` in
+  document.cpp is the shell's one-call form;
+  `StructuralSaveResult::document_edits` / `document_edits_written` carry the
+  hook's outcome.
+- A1's second write in `main.mm` (3982-4022, 4032, 4033-4036) is dead: if left in
+  place it re-applies nothing and rewrites the file byte-identically.
+- `app/edit_model.cpp` is CRLF (the other app files are LF); anchor patches must
+  not assume one ending.

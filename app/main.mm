@@ -3938,8 +3938,16 @@ static PlanView* g_view = nil;
 - (BOOL)saveStructuralEdits:(const std::vector<app::StartEdit>&)edits
                      target:(const std::string&)target {
     PlanState& plan = *g_plan;
-    const app::StructuralSaveResult outcome =
-        app::save_structural_edits(plan.edits, edits, plan.path, target, plan.owns_path);
+    // Wave 17/B1: the pending table-format/formula edits now ride the SAME
+    // container write as the structural cascade (a DocumentEditHook inside
+    // save_structural_edits), so the wave-16 second-write fallback is gone.
+    app::StructuralSaveResult outcome;
+    if (plan.document != nullptr) {
+        outcome = plan.document->save_structural(plan.edits, edits, target, plan.owns_path);
+    } else {
+        outcome = app::save_structural_edits(plan.edits, edits, plan.path, target,
+                                             plan.owns_path);
+    }
     if (!outcome.ok) {
         note(plan, "save failed: " + outcome.error, true);
         [g_view refreshAfterChange];
@@ -3979,48 +3987,6 @@ static PlanView* g_view = nil;
     }
     std::fflush(stdout);
 
-    // Wave 16: save_structural_edits()'s cascade (app/edit_model.cpp) has no seam
-    // for W64's two non-table operations, and that file is not this stream's lane,
-    // so they cannot ride the structural container write.  Apply them in a SECOND,
-    // stream-disjoint write on the file the cascade just wrote: re-reading it means
-    // a custom-field VALUE the cascade wrote is visible to the 0x02401392 decision,
-    // so w64.md section 5's ORDER is preserved even though the single write is not
-    // (docs/handoff/a1.md names this as the unreachable case).
-    std::string document_edit_error;
-    if (plan.document != nullptr && plan.document->has_pending_edits()) {
-        app::Document document(outcome.path);
-        document.request_view_state_edits(plan.document->view_state_edits());
-        const app::CustomFormulaEdit formula = plan.document->custom_formula();
-        bool queued = true;
-        if (formula.operation == app::CustomFormulaEdit::Operation::set) {
-            queued = document.apply_custom_formula(formula.field_id, formula.formula,
-                                                   &document_edit_error);
-        } else if (formula.operation == app::CustomFormulaEdit::Operation::clear) {
-            document.clear_custom_formula();
-        }
-        if (queued) {
-            app::SaveOptions document_options;
-            // The file is OURS: the structural cascade wrote it moments ago.
-            document_options.allow_source_overwrite = true;
-            const app::SaveOutcome document_outcome =
-                document.save(outcome.path, document_options);
-            if (!document_outcome.ok) {
-                document_edit_error = document_outcome.error;
-            } else {
-                message += "  |  the table format / formula was written in a second write";
-            }
-        }
-        if (!document_edit_error.empty()) {
-            message += "  |  BUT the pending table format / formula could not be written: " +
-                       document_edit_error;
-            std::fprintf(stderr,
-                         "msproject-app: save warning: pending document edit not written: "
-                         "%s\n",
-                         document_edit_error.c_str());
-            std::fflush(stderr);
-        }
-    }
-
     if (load_plan(plan, outcome.path)) {
         plan.owns_path = true;
         g_target_path = outcome.path;
@@ -4029,11 +3995,7 @@ static PlanView* g_view = nil;
         [g_view refreshAfterChange];
         [g_window setContentSize:NSMakeSize(std::min(content_width(plan), 1500.0),
                                             std::min(content_height(plan), 920.0))];
-        note(plan, message + "  |  reloaded the file", !document_edit_error.empty());
-        if (!document_edit_error.empty()) {
-            show_alert(@"Saved, but the table format/formula was not written",
-                       to_ns(document_edit_error));
-        }
+        note(plan, message + "  |  reloaded the file", false);
         return YES;
     }
     const std::string reload_error = plan.error;
