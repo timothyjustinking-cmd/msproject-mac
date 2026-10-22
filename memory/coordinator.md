@@ -77,3 +77,12 @@ plus the CI cost-control changes and the three-platform decision.
 2. Wire `Document::save`'s options into `main.mm` and confirm on `app-macos`.
 3. Start the **Qt shell** (Q1/Q2 in `docs/ui-qt-port.md`) so all three platforms
    share one UI.
+
+## Post-close (same day)
+
+The repo is **public** and `app-macos` ran green on `5747da0` (run 39849231444):
+the self-smoke executed on macOS — 136 portable + 156 AppKit checks, 0 failed —
+and its artifacts (window PNG/PDF, both print PDFs, `smoke.json`, the zipped
+`.app`) were downloaded to `build/macos-smoke/`. The "AppKit never compiled" gap
+in the wave-15 record is closed. The oracle gap (Project opening written `214/`
+or formula bytes) remains the top item.

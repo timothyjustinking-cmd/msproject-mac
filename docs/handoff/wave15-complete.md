@@ -58,3 +58,22 @@ exhausted mid-wave. Do not treat the print/snapshot path as proved until
   bytes, old mtimes). `scripts/check_fixtures.py` is the gate.
 * **History rewrite**: hashes quoted in older handoffs no longer resolve; the
   bundle holds the private history.
+
+
+## Post-close verification (same day)
+
+The repository was made **public** and the macOS job dispatched once
+(`app-macos` run 39849231444 on `5747da0`): **success**. That run is the first
+compile of `app/main.mm` with both the wave-14 print path and the wave-15
+self-smoke adapter, and it executed the smoke for real:
+
+* portable half: **10 steps, 136 checks, 0 failed**;
+* AppKit half: **14 steps, 156 checks, 0 failed**, writing `smoke-window.png`,
+  `smoke-window.pdf`, `smoke-print-gantt.pdf`, `smoke-print-sheet.pdf`,
+  `smoke-report-export.pdf` and `smoke.json` (artifact
+  `msproject-app-macos-5747da0…`, 1.8 MB, also containing the zipped `.app`).
+
+So the AppKit gap recorded above is **closed**: the print path and the smoke
+adapter compile on macOS and the smoke exits 0. The oracle gap (Project opening
+a file we wrote with a `214/` edit or a formula) is still open — CI cannot close
+it.
