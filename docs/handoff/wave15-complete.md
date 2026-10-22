@@ -77,3 +77,15 @@ So the AppKit gap recorded above is **closed**: the print path and the smoke
 adapter compile on macOS and the smoke exits 0. The oracle gap (Project opening
 a file we wrote with a `214/` edit or a formula) is still open — CI cannot close
 it.
+
+
+## The oracle gate is closed (same day)
+
+`tools/oracle_gate` wrote a 10-column `214/CTable` (Number1 appended at index 9)
+and a `[Name]` formula into `corpus/probe/w15-gate.mpp`. MS Project opened it
+(3 tasks, no error) and re-saved it; the re-saved file still has **10 columns,
+column 9 = `0x0b400057` "Number1"**, and the formula record. Project accepts the
+bytes we write. The one caveat: the formula field reads back empty in Project —
+but so does Project's *own* `w14-formula.mpp`, so that is a readback behaviour,
+not a difference caused by our writer. Full detail:
+`docs/analysis/oracle/w15-oracle.md`.

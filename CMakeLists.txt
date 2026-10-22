@@ -182,4 +182,12 @@ endif()
 # configure/build can run it like any other stream: `--target fuzz_reader` etc.
 if(CORE_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/CMakeLists.txt")
     add_subdirectory(tests/fuzz)
+
+# Coordinator tools.  tools/oracle_gate writes our own 214/CTable append and a
+# formula into a real .mpp so MS Project can be asked to re-save it (the wave-15
+# oracle gate); it is opt-in so a plain build stays as fast as before.
+option(BUILD_ORACLE_GATE "Build tools/oracle_gate (oracle gate fixture writer)" OFF)
+if(BUILD_ORACLE_GATE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/oracle_gate/CMakeLists.txt")
+    add_subdirectory(tools/oracle_gate)
+endif()
 endif()

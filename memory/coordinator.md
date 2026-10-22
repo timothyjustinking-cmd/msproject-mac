@@ -86,3 +86,12 @@ and its artifacts (window PNG/PDF, both print PDFs, `smoke.json`, the zipped
 `.app`) were downloaded to `build/macos-smoke/`. The "AppKit never compiled" gap
 in the wave-15 record is closed. The oracle gap (Project opening written `214/`
 or formula bytes) remains the top item.
+
+## Oracle gate closed (same day)
+
+`tools/oracle_gate` (`-DBUILD_ORACLE_GATE=ON`) appends a column + writes a formula
+into a real `.mpp`; Project opened `w15-gate.mpp` and re-saved it with **10
+columns** (Number1 at index 9) and the formula record intact. Project accepts what
+we write. The formula *value* reads back empty in Project for both our file and
+Project's own `w14-formula.mpp` — a readback behaviour, not our bug. See
+`docs/analysis/oracle/w15-oracle.md`.
