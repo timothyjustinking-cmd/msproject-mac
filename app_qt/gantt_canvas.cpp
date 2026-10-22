@@ -29,7 +29,7 @@ namespace {
 
 const QColor kHeaderMajor(0xfb, 0xfb, 0xfb);
 const QColor kHeaderMinor(0xff, 0xff, 0xff);
-const QColor kHeaderText(0x33, 0x33, 0x33);
+const QColor kGanttHeaderText(0x33, 0x33, 0x33);  // distinct from shell_style's kHeaderText
 const QColor kMonthRule(0x9a, 0x9a, 0x9a);
 
 constexpr int kLabelInset = 3;
@@ -385,7 +385,7 @@ void GanttCanvas::paint_header(QPainter& painter, const std::vector<DayCell>& da
         }
         const QString text = metrics.elidedText(QString::fromStdString(label), Qt::ElideRight,
                                                 available);
-        painter.setPen(kHeaderText);
+        painter.setPen(kGanttHeaderText);
         painter.drawText(QRect(text_x, 0, available, tier),
                          static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter), text);
     }
@@ -406,7 +406,7 @@ void GanttCanvas::paint_header(QPainter& painter, const std::vector<DayCell>& da
         }
         painter.drawLine(x, tier, x, tier * 2);
         if (day.weekday >= 0 && w >= 4) {
-            painter.setPen(kHeaderText);
+            painter.setPen(kGanttHeaderText);
             painter.drawText(QRect(x, tier, w, tier), Qt::AlignCenter,
                              QString::fromUtf8(kDayLetter[day.weekday % 7]));
         }
