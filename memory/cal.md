@@ -318,3 +318,38 @@ and under `CAL_NO_CORPUS=1` (the new tests are CI-safe; no fixture needed).
   applied count.
 * The exception's name bytes are still skipped (client-data rule); nothing here
   prints an exception name.
+
+## W49 addendum (wave 11, 2026-10-22 18:55) — task calendars reach the CPM bridge
+
+`core/cal` itself did not need a decoder change for W49.  The pieces the earlier
+addendum asked for are now consumed:
+
+* `core::plan::attach_task_calendars(PlanInput&, CalendarTable const&)` builds
+  exactly ONE `core::sched::Calendar` per distinct `Task::calendar_uid` (task
+  row +178) with `find_calendar_by_uid` + `build_calendar`, and appends one note
+  with the counts (named rows / built / missing / failed).  It never throws; a
+  missing uid or a build failure leaves those tasks on the project calendar.
+* `PlanInput::task_calendars` owns the Calendar objects and `recalculate()`
+  points each CPM node at its task calendar; entries with uid <= 0 keep the
+  project calendar.
+
+Proof through the bridge: `corpus/probe/holiday1.mpp` (project calendar
+Standard, all three tasks store +178 = 3 = SiteCal).  With the task calendars
+T2 is Thu 2026-10-22 08:00 -> Thu 10-29 12:00 and T3 is Fri 10-23 08:00 ->
+Mon 10-26 12:00; with every +178 reset to -1 the same rows are T2 Wed 10-21
+08:00 -> Tue 10-27 17:00 and T3 Fri 10-23 08:00 -> Fri 17:00.
+`tests/plan_recalc_tests.cpp` `test_task_calendars` pins both runs (277 checks
+total).  PROJECT_A and PROJECT_B store -1 on every task row, so M2 is unchanged
+(332/332) and `PlanInput::task_calendars` is empty there.
+
+Counts unchanged: `cal_tests` 217 with corpus / 90 with `CAL_NO_CORPUS=1`
+(the difference from the W25 note is the W41 recurring-exception checks).
+Recurring-exception PARAMETERS were not attempted in W49: still no fixture, and
+the brief made item 4 conditional.  The existing expansion remains the
+shortest-period inference documented above; do not claim the weekday mask,
+every-N, position or month/day words are decoded.
+
+Client-data rule: no calendar or exception name from a client file appears in
+the new code/tests/docs.  The only name added is the synthetic fixture label
+"metre", which is in `corpus/probe` (COM-built), not client data.
+

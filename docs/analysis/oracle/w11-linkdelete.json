@@ -1,0 +1,119 @@
+{
+  "case": "link-delete",
+  "sizes": {
+    "pre": 245760,
+    "post": 344064
+  },
+  "pre": [
+    {
+      "ID": 1,
+      "uid": 1,
+      "start": "2026-10-19 08:00:00",
+      "finish": "2026-10-20 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    },
+    {
+      "ID": 2,
+      "uid": 2,
+      "start": "2026-10-21 08:00:00",
+      "finish": "2026-10-22 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    },
+    {
+      "ID": 3,
+      "uid": 3,
+      "start": "2026-10-23 08:00:00",
+      "finish": "2026-10-26 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    }
+  ],
+  "post": [
+    {
+      "ID": 1,
+      "uid": 1,
+      "start": "2026-10-19 08:00:00",
+      "finish": "2026-10-20 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    },
+    {
+      "ID": 2,
+      "uid": 3,
+      "start": "2026-10-19 08:00:00",
+      "finish": "2026-10-20 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    }
+  ],
+  "pre_rows": [
+    {
+      "ID": 1,
+      "uid": 1,
+      "start": "2026-10-19 08:00:00",
+      "finish": "2026-10-20 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    },
+    {
+      "ID": 2,
+      "uid": 2,
+      "start": "2026-10-21 08:00:00",
+      "finish": "2026-10-22 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    },
+    {
+      "ID": 3,
+      "uid": 3,
+      "start": "2026-10-23 08:00:00",
+      "finish": "2026-10-26 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    }
+  ],
+  "post_rows": [
+    {
+      "ID": 1,
+      "uid": 1,
+      "start": "2026-10-19 08:00:00",
+      "finish": "2026-10-20 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    },
+    {
+      "ID": 2,
+      "uid": 3,
+      "start": "2026-10-19 08:00:00",
+      "finish": "2026-10-20 17:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    }
+  ],
+  "fixtures": {
+    "pre": "corpus\\probe\\w11-linkdelete-pre.mpp",
+    "post": "corpus\\probe\\w11-linkdelete-post.mpp"
+  }
+}

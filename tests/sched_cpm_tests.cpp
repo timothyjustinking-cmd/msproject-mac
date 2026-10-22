@@ -1040,6 +1040,65 @@ int main() {
                   "ELAPSED: a 3 edays lag is not scheduled as 3 working days");
     }
 
+    // --- ELAPSED duration: measured on w9-elapsedlag.mpp T8 ------------------
+    // ORACLE: docs/analysis/oracle/w9-elapsedlag.json.  T8 is "2 edays": the row
+    // stores 28800 ticks (48 h) and DurationFormat (task row +0xa4) = 8, while
+    // the working-day tasks in the same file store 7.  Project schedules it Mon
+    // 2026-10-19 08:00 -> Wed 2026-10-21 08:00 (wall-clock, not six working
+    // days) and stores TotalSlack = 106200 ticks = 10620 min, which is the
+    // wall-clock LateFinish - EarlyFinish.
+    {
+        sched::CpmOptions options;
+        options.project_start = kProjectStart;
+        sched::CpmTask elapsed;
+        elapsed.id = 8;
+        elapsed.duration = mins(2880);  // 2 edays = 48 h = 28800 ticks
+        elapsed.elapsed_duration = true;
+        // A normal task that fixes the project finish at Wed 10-28 17:00, the
+        // fixture's finish (T7).
+        sched::CpmTask anchor;
+        anchor.id = 9;
+        anchor.duration = mins(480);
+        anchor.constraint = sched::ConstraintType::start_no_earlier_than;
+        anchor.constraint_date = at(kWed2810, 8, 0);
+        const std::vector<sched::CpmTask> tasks{elapsed, anchor};
+        const sched::CpmResult result = sched::schedule_tasks(tasks, {}, calendar, options);
+        check_ok(ctx, result, "ELAPSED DURATION");
+        const sched::CpmTaskResult* row = find(result, 8);
+        ctx.check(row != nullptr, "ELAPSED DURATION: T8 is present");
+        if (row != nullptr) {
+            ctx.check(row->elapsed_duration, "ELAPSED DURATION: the row is flagged elapsed");
+            ctx.equal_date(row->early_start, at(kMon1910, 8, 0),
+                           "ELAPSED DURATION: 2 edays starts Mon 10-19 08:00");
+            ctx.equal_date(row->early_finish, at(kWed2110, 8, 0),
+                           "ELAPSED DURATION: 2 edays finishes Wed 10-21 08:00 (48 h)");
+            ctx.equal_date(row->late_finish, at(kWed2810, 17, 0),
+                           "ELAPSED DURATION: late finish is the project finish");
+            ctx.equal_date(row->late_start, at(kMon2610, 17, 0),
+                           "ELAPSED DURATION: late start is 48 wall-clock hours earlier");
+            ctx.equal(row->total_slack, mins(10620),
+                      "ELAPSED DURATION: TotalSlack is 10620 wall-clock minutes");
+            ctx.equal(row->start_slack, mins(10620),
+                      "ELAPSED DURATION: StartSlack is wall-clock too");
+            ctx.equal(row->free_slack, mins(10620),
+                      "ELAPSED DURATION: no successors, so free slack equals total");
+        }
+        // Control: the same 28800 ticks WITHOUT the elapsed flag is six working
+        // days (Mon 10-19 08:00 -> Mon 10-26 17:00), which is the old answer.
+        sched::CpmTask working = elapsed;
+        working.elapsed_duration = false;
+        const sched::CpmResult working_result =
+            sched::schedule_tasks({working, anchor}, {}, calendar, options);
+        check_ok(ctx, working_result, "ELAPSED DURATION control");
+        const sched::CpmTaskResult* control = find(working_result, 8);
+        ctx.check(control != nullptr, "ELAPSED DURATION control: T8 is present");
+        if (control != nullptr) {
+            ctx.equal_date(control->early_finish, at(kMon2610, 17, 0),
+                           "ELAPSED DURATION control: without the flag 28800 ticks is "
+                           "six working days");
+        }
+    }
+
     // --- a chain: slack is 0 all the way down -------------------------------
     // INFERENCE (spec §3.5 W3-P5, unmeasured): A 2 d Mon-Tue -> B 3 d.
     {

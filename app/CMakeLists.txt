@@ -1,5 +1,6 @@
-# app/ -- the macOS shell (v3): a native AppKit application over the portable
-# core -- menu bar, Preferences panel, filter dialog, PDF export, dirty prompts.
+# app/ -- the macOS shell (v4): a native AppKit application over the portable
+# core -- menu bar, Preferences panel, filter dialog, PDF export, dirty prompts,
+# resource/usage views and computed columns.
 #
 # STANDALONE PROJECT.  This file is NOT added to the repository's top-level
 # CMakeLists.txt (that file is owned by the build stream) and it does not edit
@@ -11,21 +12,21 @@
 #            cmake --build build-app
 #            ctest --test-dir build-app -C Release
 #            -> msproject_app.app (main.mm: NSApplication + PlanView + menus +
-#               Preferences + export) and the seven headless tests
+#               Preferences + export) and the eight headless tests
 #
-#   Windows: cmake -S app -B build\vs-w46 -G "Visual Studio 17 2022" -A x64
-#            cmake --build build\vs-w46 --config Release
-#            ctest --test-dir build\vs-w46 -C Release
+#   Windows: cmake -S app -B build\vs-w47 -G "Visual Studio 17 2022" -A x64
+#            cmake --build build\vs-w47 --config Release
+#            ctest --test-dir build\vs-w47 -C Release
 #            -> layout_model_tests.exe, selection_model_tests.exe,
 #               document_tests.exe, prefs_tests.exe, menu_tests.exe,
-#               filter_tests.exe, export_tests.exe; ObjC++/AppKit does not exist
-#               here, so the AppKit target is skipped and the headless tests are
-#               the gate.
+#               filter_tests.exe, export_tests.exe, views_tests.exe; ObjC++/AppKit
+#               does not exist here, so the AppKit target is skipped and the
+#               headless tests are the gate.
 #
 #   Linux:   same as Windows (headless tests only).
 #
 # Options:
-#   APP_BUILD_TESTS         build + register the seven headless tests (default ON)
+#   APP_BUILD_TESTS         build + register the eight headless tests (default ON)
 #   CORE_WARNINGS_AS_ERRORS same meaning as the top-level build (default OFF;
 #                           the macOS workflow passes ON).  It also reaches the
 #                           core subdirectories, which read this variable.
@@ -34,7 +35,7 @@
 
 cmake_minimum_required(VERSION 3.20)
 
-project(msproject_app VERSION 0.3.0 LANGUAGES CXX)
+project(msproject_app VERSION 0.4.0 LANGUAGES CXX)
 
 option(APP_BUILD_TESTS "Build the headless app tests" ON)
 option(CORE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
@@ -100,6 +101,10 @@ set(GANTT_BUILD_TESTS OFF CACHE BOOL "core/gantt tests (off: app configure)" FOR
 # core/render (W39) is what File > Export PDF writes through.  Its test binary
 # and the corpus-render fixture are stream tests, so they stay off here.
 set(RENDER_BUILD_TESTS OFF CACHE BOOL "core/render tests (off: app configure)" FORCE)
+# Wave 11: the resource sheet, the usage grids and the computed columns link
+# core/view's resource tables and W43/W44's usage/formula libraries.
+set(USAGE_BUILD_TESTS OFF CACHE BOOL "core/usage tests (off: app configure)" FORCE)
+set(FORMULA_BUILD_TESTS OFF CACHE BOOL "core/formula tests (off: app configure)" FORCE)
 # Not added below, but pinned OFF so a future edit that adds them cannot drag a
 # stream test (or the mspdi_cmp tool chain) into the app build.
 set(CORE_PLAN_BUILD_TESTS OFF CACHE BOOL "core/plan tests (off: app configure)" FORCE)
@@ -108,8 +113,8 @@ set(IO_BUILD_TESTS OFF CACHE BOOL "core/io tests (off: app configure)" FORCE)
 set(MPPWRITE_BUILD_TESTS OFF CACHE BOOL "core/mppwrite tests (off: app configure)" FORCE)
 
 # Order matters: view needs model, sheet needs view, gantt needs sched, render
-# needs sheet + gantt.
-foreach(app_core_dep mpp sched view sheet gantt mppwrite render)
+# needs sheet + gantt, usage needs sched, formula needs sheet.
+foreach(app_core_dep mpp sched view sheet gantt usage formula mppwrite render)
     if(NOT EXISTS "${APP_REPO_ROOT}/core/${app_core_dep}/CMakeLists.txt")
         message(FATAL_ERROR
             "app: core/${app_core_dep}/CMakeLists.txt is missing. The shell links the "
@@ -140,8 +145,9 @@ endif()
 # mapping, sheet row strings, GanttSource/GanttStyle, the sheet<->Gantt selection
 # mapping (selection_model), the save helper (document), the preferences
 # (prefs), the menu-bar data (menu_model), the filter dialog model
-# (filter_model) and the PDF export (export_pdf).  No AppKit, so it builds and is
-# tested on every platform.
+# (filter_model), the PDF export (export_pdf) and the wave-11 views
+# (view_model: resource sheet, task/resource usage, computed columns).  No
+# AppKit, so it builds and is tested on every platform.
 # ---------------------------------------------------------------------------
 add_library(app_layout STATIC
     layout_model.cpp
@@ -151,6 +157,7 @@ add_library(app_layout STATIC
     menu_model.cpp
     filter_model.cpp
     export_pdf.cpp
+    view_model.cpp
 )
 add_library(msproject::app_layout ALIAS app_layout)
 target_compile_features(app_layout PUBLIC cxx_std_20)
@@ -160,9 +167,11 @@ target_include_directories(app_layout PUBLIC
 )
 # core_mpp is needed by reader_adapter.h's include of "reader.h"; the layout
 # model itself never includes it.  core_mppwrite is the save path in
-# document.cpp; core_render is the PDF writer behind export_pdf.cpp.
+# document.cpp; core_render is the PDF writer behind export_pdf.cpp; core_usage
+# and core_formula are the wave-11 views (view_model.cpp) and also carry
+# core/usage's own use of core_sched.
 target_link_libraries(app_layout PUBLIC core_sheet core_gantt core_mpp core_mppwrite
-                                     core_render)
+                                     core_render core_usage core_formula)
 # PUBLIC so the tests see the same branch of app/document.cpp the shell compiles.
 target_compile_definitions(app_layout PUBLIC
     APP_MPPWRITE_SAVE_HEADER=${APP_MPPWRITE_SAVE_HEADER}
@@ -228,8 +237,8 @@ if(APP_BUILD_TESTS)
     set_tests_properties(app_document PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
     # The preferences: identifiers, the tolerant persisted-string parser, the
-    # date/duration renderings, and cell_text() choosing the app rendering only
-    # for the Duration column.  Synthetic rows only.
+    # date/duration renderings, and cell_text() choosing the app rendering.
+    # Synthetic rows only.
     add_executable(prefs_tests prefs_tests.cpp)
     target_compile_features(prefs_tests PRIVATE cxx_std_20)
     set_target_properties(prefs_tests PROPERTIES CXX_EXTENSIONS OFF)
@@ -276,6 +285,18 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_export COMMAND export_tests)
     set_tests_properties(app_export PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 11: the resource sheet's rows/fields, the usage buckets (day/week),
+    # the computed formula columns and their read-only rule, the view-mode and
+    # preference round trip, and the view-mode menu gating.  Synthetic rows only.
+    add_executable(views_tests views_tests.cpp)
+    target_compile_features(views_tests PRIVATE cxx_std_20)
+    set_target_properties(views_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(views_tests PRIVATE app_layout)
+    app_set_warnings(views_tests)
+
+    add_test(NAME app_views COMMAND views_tests)
+    set_tests_properties(app_views PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -300,8 +321,8 @@ if(APPLE)
         CXX_EXTENSIONS OFF
         MACOSX_BUNDLE_BUNDLE_NAME "MS Project Shell"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.msprojectdecompile.shell"
-        MACOSX_BUNDLE_BUNDLE_VERSION "0.3"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.3"
+        MACOSX_BUNDLE_BUNDLE_VERSION "0.4"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.4"
     )
     # ARC for the one Objective-C++ translation unit; the core and app_layout stay
     # plain C++.

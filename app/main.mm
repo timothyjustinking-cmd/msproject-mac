@@ -78,6 +78,7 @@
 #include <utility>
 #include <vector>
 
+#include "columns.h"
 #include "date.h"
 #include "document.h"
 #include "export_pdf.h"
@@ -89,6 +90,8 @@
 #include "reader_adapter.h"
 #include "selection_model.h"
 #include "sheet.h"
+#include "usage.h"
+#include "view_model.h"
 
 namespace {
 
@@ -145,6 +148,29 @@ struct PlanState {
     core::view::FilterDefinition filter{};
     std::string filter_description;
     std::vector<std::size_t> filter_rows;  // RecordSet rows that pass
+
+    // --- wave 11: the resource/usage views and the computed columns --------
+    app::ViewMode view_mode = app::ViewMode::task_sheet;
+    core::usage::Period usage_period = core::usage::Period::day;
+    // Built once per load from the reader's assignment table through
+    // core::usage::usage_input_from_mpp (see reader_adapter.h); the calendar is
+    // the documented stock week (app/view_model.h), not the file's calendar.
+    core::usage::UsageInput usage_input;
+    core::sched::Calendar calendar = app::standard_calendar();
+    core::usage::UsageProjection usage;  // projected for `usage_period`
+    app::UsageView usage_view;           // labels + the copied table
+    // The non-task grid (resource sheet or usage table).  It owns its RecordSet
+    // because core::sheet::SheetModel holds a reference to one.  Rebuilt when
+    // the view mode or usage period changes; empty in the task views.
+    core::view::RecordSet secondary_records{core::model::RecordType::Unknown};
+    std::unique_ptr<core::sheet::SheetModel> secondary_sheet;
+    std::vector<core::sheet::ColumnSegment> secondary_columns;
+    double secondary_width = 0.0;
+    // The task sheet's computed columns, owned per load so a formula can never
+    // carry a field id from a previous document.  `computed_error` is "" unless
+    // a formula failed to parse.
+    core::formula::ComputedColumns computed;
+    std::string computed_error;
 };
 
 PlanState* g_plan = nullptr;
@@ -177,9 +203,18 @@ NSButton* g_shading_checkbox = nil;
 // columns, so it is the one part of the menu bar that is not in menu_specs()).
 NSMenu* g_columns_menu = nil;
 
+// Wave 11: the visible view switcher and usage-period control above the
+// document view (built in applicationDidFinishLaunching; target = the
+// delegate).  They are the "visible control" beside the View menu items.
+NSSegmentedControl* g_view_control = nil;
+NSPopUpButton* g_usage_period_popup = nil;
+
 // Defined further down (with the rest of the sheet geometry); ensure_selection_visible
 // below runs before that point, so it needs the declaration here.
 std::size_t name_column_of(const PlanState& plan);
+// Defined with rebuild_view(); load_plan applies the preference's computed-column
+// visibility before that point, so it needs the declaration here.
+void apply_formula_column_visibility(PlanState& plan);
 
 // ---------------------------------------------------------------------------
 // Small AppKit helpers
@@ -271,7 +306,52 @@ void show_alert(NSString* title, NSString* information) {
 // Load and rebuild: .mpp -> PlanState -> the two views
 // ---------------------------------------------------------------------------
 
+// --- wave-11 view helpers -------------------------------------------------
+
+bool showing_task_view(const PlanState& plan) {
+    return plan.view_mode == app::ViewMode::task_sheet;
+}
+
+// Rows the document view draws, whichever grid is showing.
+std::size_t active_row_count(const PlanState& plan) {
+    if (showing_task_view(plan)) {
+        return plan.row_map.size();
+    }
+    return plan.secondary_sheet != nullptr ? plan.secondary_sheet->row_count() : 0;
+}
+
 std::string make_status_text(const PlanState& plan) {
+    if (!showing_task_view(plan)) {
+        std::string text;
+        if (plan.view_mode == app::ViewMode::resource_sheet) {
+            text = std::to_string(plan.loaded.resources.size()) + " resources, " +
+                   std::to_string(plan.loaded.assignments.size()) + " assignments";
+            if (plan.secondary_sheet != nullptr) {
+                text += "  |  " + std::to_string(plan.secondary_sheet->row_count()) + " row(s)";
+            }
+        } else {
+            text = std::to_string(plan.usage_view.table.rows.size()) + " rows, " +
+                   std::to_string(plan.usage_view.table.periods.size()) + " " +
+                   core::usage::period_name(plan.usage_period) + " period(s)";
+            text += "  |  total " +
+                    app::format_duration(plan.usage_view.grand_total_minutes *
+                                             core::view::kTicksPerMinute,
+                                         plan.format, g_prefs.duration_style);
+            if (plan.usage.unplaced_assignments != 0) {
+                text += ", " + std::to_string(plan.usage.unplaced_assignments) +
+                        " unplaced assignment(s)";
+            }
+        }
+        text += "  |  view: ";
+        text += app::view_mode_title(plan.view_mode);
+        text += "  |  " + app::preferences_summary(g_prefs);
+        text += "  |  " + std::to_string(plan.warnings) + " reader warnings";
+        if (!plan.path.empty()) {
+            text += "  |  " + plan.path;
+        }
+        return text;
+    }
+
     const app::PlanSummary summary = app::summarize(plan.view);
     std::string text = std::to_string(summary.tasks) + " tasks, " +
                        std::to_string(summary.links) + " links";
@@ -324,14 +404,92 @@ void ensure_selection_visible(PlanState& plan) {
     plan.sheet->select_cell(plan.row_map.rows.front(), name_column_of(plan));
 }
 
-// Rebuilds everything derived from the RecordSet: the visible-row map (which a
-// filter restricts), the sheet geometry, the Gantt (from the VISIBLE rows, which
-// is how collapse and filtering work), the status line and the window title.
+// Re-evaluates the task sheet's computed columns into the RecordSet and
+// refreshes the sheet's cached per-row/column facts.  Read-only: nothing here
+// can become a save edit (document.h diffs task starts only).
+void refresh_computed_columns(PlanState& plan) {
+    if (plan.sheet == nullptr || app::formula_column_specs().empty()) {
+        return;
+    }
+    plan.computed.set_format(plan.format);
+    plan.computed.evaluate(plan.records);
+    plan.sheet->refresh();
+}
+
+// Copies the preference's visible formula columns onto the sheet.  The column
+// set itself is fixed (app::task_sheet_columns()), so this only hides or shows.
+void apply_formula_column_visibility(PlanState& plan) {
+    if (plan.sheet == nullptr) {
+        return;
+    }
+    for (std::size_t column = 0; column < plan.sheet->column_count(); ++column) {
+        const int formula = app::formula_column_index(plan.sheet->column(column).field);
+        if (formula < 0) {
+            continue;
+        }
+        plan.sheet->set_column_visible(
+            column, app::formula_column_visible(g_prefs, static_cast<std::size_t>(formula)));
+    }
+}
+
+// Rebuilds the resource sheet or the usage grid for the current mode and usage
+// period.  A no-op in the Task Sheet view, whose sheet stays live.
+void rebuild_secondary_view(PlanState& plan) {
+    plan.secondary_records.clear();
+    plan.secondary_sheet.reset();
+    plan.secondary_columns.clear();
+    plan.secondary_width = 0.0;
+    plan.usage = core::usage::UsageProjection{};
+    plan.usage_view = app::UsageView{};
+    if (showing_task_view(plan)) {
+        return;
+    }
+    plan.usage = core::usage::project_usage(plan.usage_input, plan.calendar, plan.usage_period);
+    if (plan.view_mode == app::ViewMode::resource_sheet) {
+        plan.secondary_records =
+            app::make_resource_view_records(plan.loaded, &plan.usage.resources);
+        plan.secondary_sheet = std::make_unique<core::sheet::SheetModel>(
+            plan.secondary_records, app::resource_sheet_columns());
+    } else {
+        const bool resource = plan.view_mode == app::ViewMode::resource_usage;
+        plan.usage_view = app::make_usage_view(plan.usage, resource, plan.loaded, plan.format);
+        plan.secondary_records = app::make_usage_record_set(plan.usage_view);
+        plan.secondary_sheet = std::make_unique<core::sheet::SheetModel>(
+            plan.secondary_records, app::usage_sheet_columns(plan.usage_view));
+    }
+    plan.secondary_sheet->set_format(plan.format);
+    // These views are read-only this wave: no column may start an edit.
+    for (std::size_t column = 0; column < plan.secondary_sheet->column_count(); ++column) {
+        plan.secondary_sheet->set_column_read_only(column, true);
+    }
+    plan.secondary_columns = plan.secondary_sheet->layout_columns(plan.metrics, 0);
+    plan.secondary_width =
+        static_cast<double>(plan.secondary_sheet->sheet_width_points(plan.metrics, 0));
+}
+
+// Rebuilds everything derived from the RecordSet: the computed columns, the
+// visible-row map (which a filter restricts), the sheet geometry, the Gantt
+// (from the VISIBLE rows, which is how collapse and filtering work), the
+// resource/usage grid when that view is showing, the status line and the window
+// title.
 void rebuild_view(PlanState& plan) {
     if (plan.sheet == nullptr) {
         return;
     }
+    refresh_computed_columns(plan);
     plan.view = app::sync_plan_from_records(plan.loaded, plan.records);
+    if (!showing_task_view(plan)) {
+        // Selection applies to task views only: the resource/usage grids are
+        // read-only and have no outline or Gantt.
+        plan.row_map = app::RowMap{};
+        plan.columns.clear();
+        plan.sheet_width = 0.0;
+        plan.gantt = core::gantt::GanttLayout{};
+        plan.gantt_width = 0.0;
+        rebuild_secondary_view(plan);
+        plan.status_text = make_status_text(plan);
+        return;
+    }
     plan.row_map = app::build_row_map(*plan.sheet);
     if (plan.filter_active) {
         // A filter is a restriction of the displayed row list, never of the
@@ -386,11 +544,28 @@ bool load_plan(PlanState& plan, const std::string& path) {
         plan.format = core::sheet::SheetFormat{};
         app::apply_preferences(g_prefs, plan.format);
         plan.metrics = app::default_sheet_metrics();
+        // Wave-11 view state comes from the preferences; the usage input comes
+        // straight from the reader's measured assignment bridge.
+        plan.view_mode = g_prefs.view;
+        plan.usage_period = g_prefs.usage_period;
+        plan.usage_input = app::usage_input_from_document(document);
         plan.records = app::make_record_set(plan.loaded);
+        // Computed columns: build the formulas, evaluate them into the RecordSet
+        // and hand the sheet the fixed 9-column list, so the View > Columns tags
+        // are stable across loads.  A parse failure is kept for the status line;
+        // the app keeps working with the columns that did register.
+        std::string computed_error;
+        if (!app::build_computed_columns(plan.computed, computed_error)) {
+            plan.computed_error = computed_error;
+        }
+        plan.computed.set_format(plan.format);
+        plan.computed.evaluate(plan.records);
         plan.sheet = std::make_unique<core::sheet::SheetModel>(plan.records,
-                                                               app::default_sheet_columns());
+                                                               app::task_sheet_columns());
         plan.sheet->set_format(plan.format);
         app::apply_edit_policy(*plan.sheet);
+        app::apply_computed_read_only(*plan.sheet);
+        apply_formula_column_visibility(plan);
 
         // Start with the first row selected: the Gantt opens with a bar
         // highlighted and the keyboard has somewhere to go.
@@ -407,8 +582,14 @@ bool load_plan(PlanState& plan, const std::string& path) {
         }
 
         rebuild_view(plan);
-        plan.message = "loaded " + std::to_string(plan.loaded.tasks.size()) + " task(s)";
+        plan.message = "loaded " + std::to_string(plan.loaded.tasks.size()) + " task(s), " +
+                       std::to_string(plan.loaded.resources.size()) + " resource(s), " +
+                       std::to_string(plan.loaded.assignments.size()) + " assignment(s)";
         plan.message_is_error = false;
+        if (!plan.computed_error.empty()) {
+            plan.message += "  |  computed columns: " + plan.computed_error;
+            plan.message_is_error = true;
+        }
         return true;
     } catch (const std::exception& error) {
         plan.error = error.what();
@@ -451,12 +632,15 @@ double content_width(const PlanState& plan) {
     if (plan.sheet == nullptr) {
         return 900.0;
     }
+    if (!showing_task_view(plan)) {
+        return std::max(plan.secondary_width + kGanttLeftPad + kRightMargin, 800.0);
+    }
     return std::max(plan.sheet_width + kSheetDivider + kGanttLeftPad + plan.gantt_width, 800.0);
 }
 
 double content_height(const PlanState& plan) {
-    const std::size_t rows = plan.sheet != nullptr ? plan.row_map.size() : 0;
-    const double body = static_cast<double>(rows) * kRowHeight;
+    const double body =
+        plan.sheet != nullptr ? static_cast<double>(active_row_count(plan)) * kRowHeight : 0.0;
     return std::max(kHeaderHeight + body + kFooterHeight + kBottomPadding, 360.0);
 }
 
@@ -815,7 +999,7 @@ void draw_gantt(PlanState& plan, NSRect bounds, NSFont* header_font, NSFont* lab
 
 void draw_footer(const PlanState& plan, NSRect bounds, NSFont* font, NSColor* dim_text,
                  NSColor* red, NSColor* grid) {
-    const double row_count = static_cast<double>(plan.row_map.size());
+    const double row_count = static_cast<double>(active_row_count(plan));
     const double y = kHeaderHeight + row_count * kRowHeight;
     stroke_line(NSMakePoint(0.0, y + 0.5), NSMakePoint(bounds.size.width, y + 0.5), grid, 1.0);
     draw_label(to_ns(plan.status_text), NSMakeRect(8.0, y + 5.0, bounds.size.width - 16.0, 14.0),
@@ -825,6 +1009,66 @@ void draw_footer(const PlanState& plan, NSRect bounds, NSFont* font, NSColor* di
                    NSMakeRect(8.0, y + 23.0, bounds.size.width - 16.0, 14.0),
                    make_attributes(font, plan.message_is_error ? red : dim_text,
                                    NSTextAlignmentLeft));
+    }
+}
+
+// The resource sheet and the two usage grids: one flat grid across the whole
+// window, no Gantt, no selection and no outline.  A usage grid's last row is its
+// totals row and is drawn bold on the summary band.
+void draw_plain_grid(PlanState& plan, NSRect bounds, NSFont* body, NSFont* bold,
+                     NSFont* header_font, NSColor* text_color, NSColor* grid,
+                     NSColor* header_bg, NSColor* summary_bg, NSColor* dim_text) {
+    if (plan.secondary_sheet == nullptr) {
+        return;
+    }
+    core::sheet::SheetModel& sheet = *plan.secondary_sheet;
+    const double width = plan.secondary_width;
+    const std::size_t rows = sheet.row_count();
+    const bool usage = app::view_mode_is_usage(plan.view_mode);
+    const double body_top = kHeaderHeight;
+    const double body_bottom = body_top + static_cast<double>(rows) * kRowHeight;
+
+    if (usage && rows > 0) {
+        fill_rect(NSMakeRect(0.0,
+                             body_top + static_cast<double>(rows - 1) * kRowHeight,
+                             width, kRowHeight),
+                  summary_bg);
+    }
+    fill_rect(NSMakeRect(0.0, 0.0, width, kHeaderHeight), header_bg);
+    stroke_line(NSMakePoint(0.0, kHeaderHeight - 0.5),
+                NSMakePoint(width, kHeaderHeight - 0.5), grid, 1.0);
+
+    for (const core::sheet::ColumnSegment& segment : plan.secondary_columns) {
+        const double x = static_cast<double>(segment.x);
+        const double column_width = static_cast<double>(segment.width);
+        stroke_line(NSMakePoint(x, 0.0), NSMakePoint(x, body_bottom), grid, 1.0);
+        const core::sheet::SheetColumn& column = sheet.column(segment.column);
+        draw_label(to_ns(sheet.column_title(segment.column)),
+                   NSMakeRect(x + kTextInset, kHeaderHeight / 2.0 - 8.0,
+                              column_width - 2.0 * kTextInset, 16.0),
+                   make_attributes(header_font, dim_text, alignment_for(column.kind)));
+    }
+
+    for (std::size_t row = 0; row <= rows; ++row) {
+        const double y = body_top + static_cast<double>(row) * kRowHeight;
+        stroke_line(NSMakePoint(0.0, y), NSMakePoint(bounds.size.width, y), grid, 1.0);
+    }
+
+    for (std::size_t row = 0; row < rows; ++row) {
+        const bool total_row = usage && rows > 0 && row + 1 == rows;
+        const double y = body_top + static_cast<double>(row) * kRowHeight;
+        for (const core::sheet::ColumnSegment& segment : plan.secondary_columns) {
+            const std::string text = app::cell_text(sheet, row, segment.column, g_prefs);
+            if (text.empty()) {
+                continue;
+            }
+            const core::sheet::CellStyle style = sheet.cell_style(row, segment.column);
+            draw_label(to_ns(text),
+                       NSMakeRect(static_cast<double>(segment.x) + kTextInset, y + 3.0,
+                                  static_cast<double>(segment.width) - 2.0 * kTextInset, 15.0),
+                       make_attributes(total_row || style.bold ? bold : body, text_color,
+                                       alignment_for(style.align)));
+        }
     }
 }
 
@@ -862,6 +1106,13 @@ void draw_plan(PlanState& plan, NSRect bounds) {
                                                : to_ns(plan.error);
         draw_label(message, NSMakeRect(12.0, 12.0, bounds.size.width - 24.0, 18.0),
                    make_attributes(bold, red, NSTextAlignmentLeft));
+        return;
+    }
+
+    if (!showing_task_view(plan)) {
+        draw_plain_grid(plan, bounds, body, bold, header_font, text_color, grid, header_bg,
+                        summary_bg, dim_text);
+        draw_footer(plan, bounds, footer_font, dim_text, red, grid);
         return;
     }
 
@@ -1049,6 +1300,7 @@ app::MenuState current_menu_state() {
         return state;
     }
     state.has_document = true;
+    state.task_view = app::view_mode_is_task(g_plan->view_mode);
     state.editing = g_plan->sheet->editing();
     state.has_selection = g_plan->sheet->has_selection();
     state.can_undo = g_plan->sheet->can_undo();
@@ -1085,24 +1337,61 @@ void refresh_menu_bar() {
             continue;
         }
         for (NSMenuItem* item in [submenu itemArray]) {
-            if ([item action] == @selector(performMenuAction:)) {
-                [item setEnabled:app::menu_item_enabled(
-                                     static_cast<app::MenuAction>([item tag]), state)];
+            if ([item action] != @selector(performMenuAction:)) {
+                continue;
             }
+            const app::MenuAction action = static_cast<app::MenuAction>([item tag]);
+            [item setEnabled:app::menu_item_enabled(action, state)];
+            // Check marks are view state: the four views, the usage period and
+            // the two display toggles (shading, Gantt zoom).  if/else rather than
+            // a switch so a new MenuAction cannot silently get a stale mark.
+            BOOL checked = NO;
+            if (g_plan != nullptr) {
+                if (action == app::MenuAction::view_task_sheet) {
+                    checked = g_plan->view_mode == app::ViewMode::task_sheet;
+                } else if (action == app::MenuAction::view_resource_sheet) {
+                    checked = g_plan->view_mode == app::ViewMode::resource_sheet;
+                } else if (action == app::MenuAction::view_task_usage) {
+                    checked = g_plan->view_mode == app::ViewMode::task_usage;
+                } else if (action == app::MenuAction::view_resource_usage) {
+                    checked = g_plan->view_mode == app::ViewMode::resource_usage;
+                } else if (action == app::MenuAction::usage_day) {
+                    checked = g_plan->usage_period == core::usage::Period::day;
+                } else if (action == app::MenuAction::usage_week) {
+                    checked = g_plan->usage_period == core::usage::Period::week;
+                } else if (action == app::MenuAction::usage_month) {
+                    checked = g_plan->usage_period == core::usage::Period::month;
+                }
+            }
+            if (action == app::MenuAction::toggle_shading) {
+                checked = g_prefs.working_day_shading;
+            } else if (action == app::MenuAction::zoom_day) {
+                checked = g_prefs.zoom == app::ZoomLevel::day;
+            } else if (action == app::MenuAction::zoom_week) {
+                checked = g_prefs.zoom == app::ZoomLevel::week;
+            } else if (action == app::MenuAction::zoom_month) {
+                checked = g_prefs.zoom == app::ZoomLevel::month;
+            }
+            [item setState:checked ? NSControlStateValueOn : NSControlStateValueOff];
         }
     }
     if (g_columns_menu != nil) {
         for (NSMenuItem* item in [g_columns_menu itemArray]) {
+            if ([item isSeparatorItem] || [item tag] < 0) {
+                continue;
+            }
             const NSInteger column = [item tag];
             bool known = false;
             bool visible = false;
-            if (g_plan != nullptr && g_plan->sheet != nullptr && column >= 0 &&
+            if (g_plan != nullptr && g_plan->sheet != nullptr &&
                 static_cast<std::size_t>(column) < g_plan->sheet->column_count()) {
                 visible = g_plan->sheet->column_visible(static_cast<std::size_t>(column));
                 known = true;
             }
             [item setState:(known && visible) ? NSControlStateValueOn : NSControlStateValueOff];
-            [item setEnabled:known];
+            // Column visibility describes the task sheet; the resource/usage
+            // views have their own fixed column sets.
+            [item setEnabled:(known && state.task_view)];
         }
     }
 }
@@ -1131,6 +1420,38 @@ void step_zoom(PlanState& plan, int delta) {
     set_zoom_level(plan, static_cast<app::ZoomLevel>(next));
 }
 
+// Wave 11: switch the window between the four views.  The choice persists and
+// the derived state (row map / Gantt / secondary grid) is rebuilt.
+void set_view_mode(PlanState& plan, app::ViewMode mode) {
+    if (plan.view_mode == mode) {
+        note(plan, std::string("already showing the ") + app::view_mode_title(mode), false);
+        return;
+    }
+    if (plan.sheet != nullptr && plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    plan.view_mode = mode;
+    g_prefs.view = mode;
+    save_preferences_to_defaults();
+    rebuild_view(plan);
+    note(plan, std::string("view: ") + app::view_mode_title(mode), false);
+}
+
+void set_usage_period(PlanState& plan, core::usage::Period period) {
+    if (plan.usage_period == period) {
+        note(plan, std::string("usage period is already ") + core::usage::period_name(period),
+             false);
+        return;
+    }
+    plan.usage_period = period;
+    g_prefs.usage_period = period;
+    save_preferences_to_defaults();
+    if (app::view_mode_is_usage(plan.view_mode)) {
+        rebuild_view(plan);
+    }
+    note(plan, std::string("usage period: ") + core::usage::period_name(period), false);
+}
+
 void clear_filter(PlanState& plan) {
     if (!plan.filter_active) {
         note(plan, "no filter is active", false);
@@ -1151,6 +1472,15 @@ void toggle_column_visibility(PlanState& plan, std::size_t column) {
     const bool visible = plan.sheet->column_visible(column);
     const std::string title = plan.sheet->column_title(column);
     plan.sheet->set_column_visible(column, !visible);
+    const int formula = app::formula_column_index(plan.sheet->column(column).field);
+    if (formula >= 0) {
+        // Persist the visible computed columns (the wave-11 preference); ordinary
+        // columns are not preference state.
+        if (app::set_formula_column_visible(g_prefs, static_cast<std::size_t>(formula),
+                                            !visible)) {
+            save_preferences_to_defaults();
+        }
+    }
     note(plan, (visible ? "hid " : "showed ") + title, false);
 }
 
@@ -1220,6 +1550,12 @@ void paste_from_pasteboard(PlanState& plan) {
 void run_export_panel(PlanState& plan, app::ReportKind kind) {
     if (plan.sheet == nullptr) {
         note(plan, "no project to export", true);
+        return;
+    }
+    if (!app::view_mode_is_task(plan.view_mode)) {
+        // Both reports are built from the task sheet and the Gantt; the
+        // resource/usage grids are not render sources this wave.
+        note(plan, "PDF export is available in the Task Sheet view", true);
         return;
     }
     NSSavePanel* panel = [NSSavePanel savePanel];
@@ -1299,7 +1635,9 @@ void show_about() {
                 @"task list, and save edited task start dates with File > Save. "
                 @"Start dates are the only edit the file writer persists; every "
                 @"other edit stays in memory (see the README).\n\n"
-                @"Version 0.3 (wave 10, stream W46).");
+                @"Version 0.4 (wave 11, stream W47).  The View menu and the "
+                 @"control bar switch between the task sheet, the resource sheet and "
+                 @"the task/resource usage grids; the computed columns are read-only.");
 }
 
 void show_shortcuts() {
@@ -1316,6 +1654,7 @@ void show_shortcuts() {
                 @"Cmd-F / Cmd-Shift-F: filter / clear filter\n"
                 @"Cmd-Shift-D: working-day shading\n"
                 @"Cmd-1 / Cmd-2 / Cmd-3: day / week / month timescale\n"
+                @"Cmd-Option-1..4: Task Sheet / Resource Sheet / Task Usage / Resource Usage\n"
                 @"Cmd-= / Cmd--: zoom in / out\n"
                 @"Cmd-S / Cmd-Shift-S: save / save as\n"
                 @"Cmd-Shift-E / Cmd-Option-E: export PDF (sheet / Gantt)");
@@ -1392,6 +1731,12 @@ void show_shortcuts() {
         return;
     }
     PlanState& plan = *g_plan;
+    if (!app::view_mode_has_selection(plan.view_mode)) {
+        // The resource and usage grids are read-only and have no cell selection
+        // (wave 11): a click is not an edit.  The view switch is the control bar.
+        [self setNeedsDisplay:YES];
+        return;
+    }
     const NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
     const bool shift = ([event modifierFlags] & NSEventModifierFlagShift) != 0;
 
@@ -1454,6 +1799,12 @@ void show_shortcuts() {
         return;
     }
     PlanState& plan = *g_plan;
+    if (!app::view_mode_has_selection(plan.view_mode)) {
+        // Navigation and editing belong to the task sheet; in the read-only
+        // grids the arrow keys do nothing (the scroll view still scrolls).
+        [super keyDown:event];
+        return;
+    }
     core::sheet::SheetModel& sheet = *plan.sheet;
     const unsigned short code = [event keyCode];
     const NSEventModifierFlags flags = [event modifierFlags];
@@ -1611,6 +1962,9 @@ void show_shortcuts() {
 - (void)paste:(id)sender;
 - (void)selectAll:(id)sender;
 - (void)performMenuAction:(id)sender;
+- (void)viewModeChanged:(id)sender;
+- (void)usagePeriodChanged:(id)sender;
+- (void)syncViewControls;
 - (void)toggleColumn:(id)sender;
 - (void)showPreferences:(id)sender;
 - (void)preferencesChanged:(id)sender;
@@ -1676,7 +2030,10 @@ static PlanView* g_view = nil;
                                                            keyEquivalent:@""];
             g_columns_menu = [[NSMenu alloc] initWithTitle:@"Columns"];
             [g_columns_menu setAutoenablesItems:NO];
-            const std::vector<core::sheet::SheetColumn> columns = app::default_sheet_columns();
+            // The FIXED task-sheet column set: the seven default columns plus the
+            // two computed formula columns (app/view_model.h).  A tag is the
+            // model column index, so it must not depend on the data.
+            const std::vector<core::sheet::SheetColumn> columns = app::task_sheet_columns();
             for (std::size_t index = 0; index < columns.size(); ++index) {
                 NSMenuItem* column_item =
                     [[NSMenuItem alloc] initWithTitle:to_ns(columns[index].title)
@@ -1686,6 +2043,20 @@ static PlanView* g_view = nil;
                 [column_item setTag:static_cast<NSInteger>(index)];
                 [g_columns_menu addItem:column_item];
             }
+            // Stored custom fields are pending: the .mpp reader exposes no stored
+            // custom-field values, so the chooser says so instead of showing a
+            // column of invented zeroes.  Tag -1 keeps refresh_menu_bar from
+            // treating it as a column.
+            [g_columns_menu addItem:[NSMenuItem separatorItem]];
+            NSMenuItem* pending_fields =
+                [[NSMenuItem alloc] initWithTitle:@"Stored custom fields (pending)"
+                                           action:nil
+                                    keyEquivalent:@""];
+            [pending_fields setTag:-1];
+            [pending_fields setEnabled:NO];
+            [pending_fields setToolTip:@"The .mpp reader exposes no stored custom-field values yet; "
+                                       @"the formula columns are the read-only substitute."];
+            [g_columns_menu addItem:pending_fields];
             [columns_item setSubmenu:g_columns_menu];
             [submenu addItem:columns_item];
         }
@@ -1838,6 +2209,41 @@ static PlanView* g_view = nil;
                 [g_view refreshAfterChange];
             }
             return;
+        case app::MenuAction::view_task_sheet:
+            set_view_mode(*g_plan, app::ViewMode::task_sheet);
+            [self syncViewControls];
+            [g_view refreshAfterChange];
+            return;
+        case app::MenuAction::view_resource_sheet:
+            set_view_mode(*g_plan, app::ViewMode::resource_sheet);
+            [self syncViewControls];
+            [g_view refreshAfterChange];
+            return;
+        case app::MenuAction::view_task_usage:
+            set_view_mode(*g_plan, app::ViewMode::task_usage);
+            [self syncViewControls];
+            [g_view refreshAfterChange];
+            return;
+        case app::MenuAction::view_resource_usage:
+            set_view_mode(*g_plan, app::ViewMode::resource_usage);
+            [self syncViewControls];
+            [g_view refreshAfterChange];
+            return;
+        case app::MenuAction::usage_day:
+            set_usage_period(*g_plan, core::usage::Period::day);
+            [self syncViewControls];
+            [g_view refreshAfterChange];
+            return;
+        case app::MenuAction::usage_week:
+            set_usage_period(*g_plan, core::usage::Period::week);
+            [self syncViewControls];
+            [g_view refreshAfterChange];
+            return;
+        case app::MenuAction::usage_month:
+            set_usage_period(*g_plan, core::usage::Period::month);
+            [self syncViewControls];
+            [g_view refreshAfterChange];
+            return;
         case app::MenuAction::insert_task:
             show_alert(@"Insert Task",
                        to_ns(std::string(app::menu_disabled_reason(app::MenuAction::insert_task))));
@@ -1847,6 +2253,51 @@ static PlanView* g_view = nil;
                        to_ns(std::string(
                            app::menu_disabled_reason(app::MenuAction::insert_resource))));
             return;
+    }
+}
+
+// The visible view switcher (wave 11): the same code path as the View menu.
+- (void)viewModeChanged:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    const NSInteger index = [g_view_control selectedSegment];
+    if (index < 0 || index >= static_cast<NSInteger>(app::kViewModeCount)) {
+        return;
+    }
+    set_view_mode(*g_plan, static_cast<app::ViewMode>(index));
+    [self syncViewControls];
+    [g_view refreshAfterChange];
+}
+
+- (void)usagePeriodChanged:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    const NSInteger index = [g_usage_period_popup indexOfSelectedItem];
+    if (index < 0 || index > 2) {
+        return;
+    }
+    set_usage_period(*g_plan, static_cast<core::usage::Period>(index));
+    [self syncViewControls];
+    [g_view refreshAfterChange];
+}
+
+// Keeps the control bar and the persisted preferences showing the same state.
+- (void)syncViewControls {
+    const app::ViewMode mode =
+        (g_plan != nullptr && g_plan->sheet != nullptr) ? g_plan->view_mode : g_prefs.view;
+    if (g_view_control != nil) {
+        [g_view_control setSelectedSegment:static_cast<NSInteger>(mode)];
+    }
+    if (g_usage_period_popup != nil) {
+        const core::usage::Period period =
+            (g_plan != nullptr && g_plan->sheet != nullptr) ? g_plan->usage_period
+                                                            : g_prefs.usage_period;
+        [g_usage_period_popup selectItemAtIndex:static_cast<NSInteger>(period)];
+        [g_usage_period_popup setEnabled:app::view_mode_is_usage(mode) ? YES : NO];
     }
 }
 
@@ -1888,9 +2339,13 @@ static PlanView* g_view = nil;
         [g_window setContentSize:NSMakeSize(std::min(content_width(*g_plan), 1500.0),
                                             std::min(content_height(*g_plan), 920.0))];
         [[g_view window] makeFirstResponder:g_view];
-        std::printf("msproject-app: %s: %zu tasks, %zu rows, %zu links, %zu bars, %zu warnings\n",
-                    path.c_str(), g_plan->loaded.tasks.size(), g_plan->sheet->row_count(),
-                    g_plan->loaded.links.size(), g_plan->gantt.bars.size(), g_plan->warnings);
+        [self syncViewControls];
+        std::printf("msproject-app: %s: %zu tasks, %zu resources, %zu assignments, "
+                    "%zu rows, %zu links, %zu bars, %zu warnings\n",
+                    path.c_str(), g_plan->loaded.tasks.size(),
+                    g_plan->loaded.resources.size(), g_plan->loaded.assignments.size(),
+                    g_plan->sheet->row_count(), g_plan->loaded.links.size(),
+                    g_plan->gantt.bars.size(), g_plan->warnings);
         std::fflush(stdout);
         return;
     }
@@ -1927,17 +2382,67 @@ static PlanView* g_view = nil;
     // and a document view that keeps its own size (we scroll, we do not resize
     // the plan).  Keeping the API surface small keeps the AppKit deprecation
     // surface small, which matters because warnings are errors in CI.
-    NSScrollView* scroll = [[NSScrollView alloc] initWithFrame:frame];
+    const CGFloat control_bar_height = 30.0;
+    NSView* container = [[NSView alloc]
+        initWithFrame:NSMakeRect(0.0, 0.0, frame.size.width, frame.size.height)];
+
+    // Wave 11's visible control: the four views and the usage period, in a bar
+    // above the scrolling document.  NSViewMinYMargin pins the bar to the top of
+    // the window while the plan scrolls.
+    NSView* control_bar = [[NSView alloc]
+        initWithFrame:NSMakeRect(0.0, frame.size.height - control_bar_height,
+                                 frame.size.width, control_bar_height)];
+    [control_bar setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
+
+    g_view_control = [[NSSegmentedControl alloc]
+        initWithFrame:NSMakeRect(8.0, 3.0, 360.0, 24.0)];
+    [g_view_control setSegmentCount:static_cast<NSInteger>(app::kViewModeCount)];
+    for (NSInteger index = 0; index < static_cast<NSInteger>(app::kViewModeCount); ++index) {
+        [g_view_control setLabel:to_ns(app::view_mode_title(static_cast<app::ViewMode>(index)))
+                      forSegment:index];
+        [g_view_control setWidth:88.0 forSegment:index];
+    }
+    [g_view_control setSelectedSegment:static_cast<NSInteger>(g_prefs.view)];
+    [g_view_control setTarget:self];
+    [g_view_control setAction:@selector(viewModeChanged:)];
+    [control_bar addSubview:g_view_control];
+
+    NSTextField* period_label =
+        [[NSTextField alloc] initWithFrame:NSMakeRect(382.0, 5.0, 90.0, 20.0)];
+    [period_label setStringValue:@"Usage period"];
+    [period_label setBezeled:NO];
+    [period_label setDrawsBackground:NO];
+    [period_label setEditable:NO];
+    [period_label setSelectable:NO];
+    [period_label setFont:[NSFont systemFontOfSize:11.0]];
+    [control_bar addSubview:period_label];
+
+    g_usage_period_popup = [[NSPopUpButton alloc]
+        initWithFrame:NSMakeRect(474.0, 2.0, 110.0, 26.0)
+            pullsDown:NO];
+    [g_usage_period_popup addItemsWithTitles:@[ @"Day", @"Week", @"Month" ]];
+    [g_usage_period_popup selectItemAtIndex:static_cast<NSInteger>(g_prefs.usage_period)];
+    [g_usage_period_popup setTarget:self];
+    [g_usage_period_popup setAction:@selector(usagePeriodChanged:)];
+    [control_bar addSubview:g_usage_period_popup];
+
+    NSScrollView* scroll = [[NSScrollView alloc]
+        initWithFrame:NSMakeRect(0.0, 0.0, frame.size.width,
+                                 frame.size.height - control_bar_height)];
     [scroll setHasVerticalScroller:YES];
     [scroll setHasHorizontalScroller:YES];
     [scroll setAutohidesScrollers:YES];
+    [scroll setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 
     g_view = [[PlanView alloc] initWithFrame:NSMakeRect(0.0, 0.0, width, height)];
     [scroll setDocumentView:g_view];
 
-    [g_window setContentView:scroll];
+    [container addSubview:scroll];
+    [container addSubview:control_bar];
+    [g_window setContentView:container];
     [g_window makeKeyAndOrderFront:nil];
     [g_window makeFirstResponder:g_view];
+    [self syncViewControls];
 
     const std::string path = choose_fixture();
     if (path.empty()) {
@@ -2076,7 +2581,8 @@ static PlanView* g_view = nil;
 
 - (void)undo:(id)sender {
     (void)sender;
-    if (g_plan == nullptr || g_plan->sheet == nullptr) {
+    if (g_plan == nullptr || g_plan->sheet == nullptr ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
         return;
     }
     if (g_plan->sheet->editing()) {
@@ -2092,7 +2598,8 @@ static PlanView* g_view = nil;
 
 - (void)redo:(id)sender {
     (void)sender;
-    if (g_plan == nullptr || g_plan->sheet == nullptr) {
+    if (g_plan == nullptr || g_plan->sheet == nullptr ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
         return;
     }
     if (g_plan->sheet->editing()) {
@@ -2108,7 +2615,7 @@ static PlanView* g_view = nil;
 
 - (void)copy:(id)sender {
     (void)sender;
-    if (g_plan == nullptr) {
+    if (g_plan == nullptr || !app::view_mode_is_task(g_plan->view_mode)) {
         return;
     }
     copy_selection(*g_plan);
@@ -2117,7 +2624,7 @@ static PlanView* g_view = nil;
 
 - (void)paste:(id)sender {
     (void)sender;
-    if (g_plan == nullptr) {
+    if (g_plan == nullptr || !app::view_mode_is_task(g_plan->view_mode)) {
         return;
     }
     paste_from_pasteboard(*g_plan);
@@ -2126,7 +2633,8 @@ static PlanView* g_view = nil;
 
 - (void)selectAll:(id)sender {
     (void)sender;
-    if (g_plan == nullptr || g_plan->sheet == nullptr || g_plan->sheet->editing()) {
+    if (g_plan == nullptr || g_plan->sheet == nullptr || g_plan->sheet->editing() ||
+        !app::view_mode_is_task(g_plan->view_mode)) {
         return;
     }
     g_plan->sheet->select_all();

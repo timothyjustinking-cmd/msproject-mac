@@ -222,6 +222,29 @@ void apply_preferences(const Preferences& preferences,
     format.date = date_format_for(preferences);
 }
 
+bool formula_column_visible(const Preferences& preferences, std::size_t index) noexcept {
+    if (index == 0) {
+        return preferences.formula_duration_column;
+    }
+    if (index == 1) {
+        return preferences.formula_date_column;
+    }
+    return true;
+}
+
+bool set_formula_column_visible(Preferences& preferences, std::size_t index,
+                                bool visible) noexcept {
+    if (index == 0) {
+        preferences.formula_duration_column = visible;
+        return true;
+    }
+    if (index == 1) {
+        preferences.formula_date_column = visible;
+        return true;
+    }
+    return false;
+}
+
 core::gantt::GanttZoom gantt_zoom(ZoomLevel level) noexcept {
     switch (level) {
         case ZoomLevel::day: return core::gantt::GanttZoom::day;
@@ -254,6 +277,17 @@ std::string serialize_preferences(const Preferences& preferences) {
     text += zoom_level_name(preferences.zoom);
     text += ";shading=";
     text += preferences.working_day_shading ? "1" : "0";
+    // Wave-11 keys: additive, so a string written before this wave still parses.
+    text += ";view=";
+    text += view_mode_name(preferences.view);
+    text += ";usage=";
+    text += core::usage::period_name(preferences.usage_period);
+    text += ";formula1=";
+    text += preferences.formula_duration_column ? "1" : "0";
+    text += ";formula2=";
+    text += preferences.formula_date_column ? "1" : "0";
+    text += ";custom=";
+    text += preferences.stored_custom_fields ? "1" : "0";
     return text;
 }
 
@@ -300,6 +334,36 @@ bool parse_preferences(std::string_view text, Preferences& out) {
                     parsed.working_day_shading = shading;
                     read_any = true;
                 }
+            } else if (key == "view") {
+                ViewMode mode = parsed.view;
+                if (view_mode_from_name(value, mode)) {
+                    parsed.view = mode;
+                    read_any = true;
+                }
+            } else if (key == "usage") {
+                core::usage::Period period = parsed.usage_period;
+                if (core::usage::period_from_name(value, period)) {
+                    parsed.usage_period = period;
+                    read_any = true;
+                }
+            } else if (key == "formula1") {
+                bool shown = parsed.formula_duration_column;
+                if (parse_bool(value, shown)) {
+                    parsed.formula_duration_column = shown;
+                    read_any = true;
+                }
+            } else if (key == "formula2") {
+                bool shown = parsed.formula_date_column;
+                if (parse_bool(value, shown)) {
+                    parsed.formula_date_column = shown;
+                    read_any = true;
+                }
+            } else if (key == "custom") {
+                bool shown = parsed.stored_custom_fields;
+                if (parse_bool(value, shown)) {
+                    parsed.stored_custom_fields = shown;
+                    read_any = true;
+                }
             }
         }
         if (end == std::string_view::npos) {
@@ -328,6 +392,13 @@ std::string preferences_summary(const Preferences& preferences) {
     text += zoom_level_name(preferences.zoom);
     text += ", working-day shading ";
     text += preferences.working_day_shading ? "on" : "off";
+    text += ", view ";
+    text += view_mode_name(preferences.view);
+    text += ", usage ";
+    text += core::usage::period_name(preferences.usage_period);
+    text += ", formula columns ";
+    text += std::to_string((preferences.formula_duration_column ? 1 : 0) +
+                           (preferences.formula_date_column ? 1 : 0));
     return text;
 }
 
@@ -355,20 +426,16 @@ std::string format_duration(std::int64_t ticks, const core::sheet::SheetFormat& 
 
 std::string cell_text(const core::sheet::SheetModel& sheet, std::size_t row,
                       std::size_t column, const Preferences& preferences) {
+    // Any Duration cell goes through the app-side rendering when the preference
+    // asks for hours or days.  In the task sheet that is the Duration column; in
+    // the usage grids it is every period and Total cell, which is exactly where
+    // "8 hrs" rather than "1 day" reads best.  A non-Duration value (text, date,
+    // number) is never touched -- the sheet's own text is returned.
     if (preferences.duration_style != DurationStyle::auto_units &&
         column < sheet.column_count()) {
-        const core::view::FieldId duration_field = task_field_id("Duration");
-        if (duration_field != 0 && sheet.column(column).field == duration_field) {
-            const Value* value = sheet.cell_value(row, column);
-            if (value != nullptr && (value->kind == ValueKind::Duration ||
-                                     value->kind == ValueKind::Integer ||
-                                     value->kind == ValueKind::Number)) {
-                const std::int64_t ticks =
-                    value->kind == ValueKind::Number
-                        ? static_cast<std::int64_t>(value->number)
-                        : value->integer;
-                return format_duration(ticks, sheet.format(), preferences.duration_style);
-            }
+        const Value* value = sheet.cell_value(row, column);
+        if (value != nullptr && value->kind == ValueKind::Duration) {
+            return format_duration(value->integer, sheet.format(), preferences.duration_style);
         }
     }
     return sheet.cell_text(row, column);

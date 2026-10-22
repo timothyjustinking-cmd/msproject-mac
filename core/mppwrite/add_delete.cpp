@@ -418,63 +418,261 @@ RowId make_row_identity(RowId const& template_id, std::vector<RowId> const& used
     throw Error(function + ": could not derive an unused Fixed2Data row identity");
 }
 
-/* ---- dependent rows (the delete policy) ---- */
+/* ---- dependent rows: the delete cascade (w11-oracle §2) ---- */
 
-/* Live rows of a table without a FixedData header (Link, Assignment) that name
- * `uid`.  Liveness is the same rule the reader uses: a FixedMeta entry's +4 word
- * points at the row's byte offset. */
-std::size_t count_live_references(CfbDocument const& doc, std::string_view table,
-                                  std::size_t row_size, std::size_t entry_size,
-                                  std::size_t uid_offset, bool link_table,
-                                  std::uint32_t uid) {
-    std::string const fixed_path = table_stream(table, "FixedData");
-    if (!doc.has_stream(fixed_path)) {
-        return 0;
+constexpr std::size_t kDependentMetaHeaderSize = 16;
+constexpr std::size_t kConsRowSize = 20;
+constexpr std::size_t kConsMetaEntrySize = 10;
+constexpr std::size_t kConsPredecessor = 4;
+constexpr std::size_t kConsSuccessor = 8;
+constexpr std::size_t kAssnRowSize = 110;
+constexpr std::size_t kAssnMetaEntrySize = 34;
+constexpr std::size_t kAssnTaskUid = 4;
+
+/* One FixedData row of a dependent table (Link = 20 B, Assignment = 110 B) plus
+ * the FixedMeta entries that name it.  Project's own delete leaves the row in
+ * place and tombstones its entry, so this file does the same. */
+struct DependentRow {
+    std::size_t row = 0;
+    std::uint32_t uid = 0;
+    std::uint32_t predecessor = 0; /* Link +4, 0 for an assignment row */
+    std::uint32_t successor = 0;   /* Link +8, 0 for an assignment row */
+    std::uint32_t task = 0;        /* Assignment +4, 0 for a link row */
+    std::vector<std::size_t> entries; /* every FixedMeta entry naming this row */
+    bool live = false; /* some naming entry has state +0 == 0 */
+};
+
+struct DependentTable {
+    std::string fixed_path;
+    std::string meta_path;
+    std::size_t row_size = 0;
+    std::size_t entry_size = 0;
+    std::vector<std::uint8_t> fixed;
+    std::vector<std::uint8_t> meta;
+    std::vector<DependentRow> rows;
+};
+
+/*
+ * Read and check one dependent table.  A missing FixedData stream means the
+ * table has no rows (base.mpp has an empty TBkndCons); a missing FixedMeta next
+ * to rows is damage, because without it there is no way to tell which rows
+ * Project considers live.  The geometry checks mirror the ones the writer runs
+ * on the Task table: FixedData must be a whole number of rows and every
+ * FixedMeta entry's +4 word must name a row.  Declared entry counts are NOT
+ * checked here: the cascade only rewrites entry bytes, so a project file whose
+ * count word is stale (PROJECT_A's link table says 88 and holds 91) can still be
+ * tombstoned safely -- unlike an append, which does arithmetic on the count.
+ */
+DependentTable load_dependent_table(CfbDocument const& doc, std::string_view table,
+                                    std::size_t row_size, std::size_t entry_size,
+                                    std::string const& function) {
+    DependentTable out;
+    out.row_size = row_size;
+    out.entry_size = entry_size;
+    out.fixed_path = table_stream(table, "FixedData");
+    out.meta_path = table_stream(table, "FixedMeta");
+    if (!doc.has_stream(out.fixed_path)) {
+        return out;
     }
-    std::vector<std::uint8_t> const fixed = doc.read_stream(fixed_path);
-    std::size_t const rows = fixed.size() / row_size;
-    std::vector<bool> covered(rows, false);
-    std::string const meta_path = table_stream(table, "FixedMeta");
-    if (doc.has_stream(meta_path)) {
-        std::vector<std::uint8_t> const meta = doc.read_stream(meta_path);
-        if (meta.size() >= 16) {
-            std::size_t const entries = (meta.size() - 16) / entry_size;
-            for (std::size_t i = 0; i < entries; ++i) {
-                std::size_t const base = 16 + i * entry_size;
-                if (base + 4 > meta.size()) {
-                    break;
-                }
-                std::uint32_t const offset = get_u32(meta, base + 4);
-                if (offset % row_size == 0) {
-                    std::size_t const row = offset / row_size;
-                    if (row < rows) {
-                        covered[row] = true;
-                    }
-                }
+    out.fixed = doc.read_stream(out.fixed_path);
+    if (out.fixed.size() % row_size != 0) {
+        throw Error(function + ": " + out.fixed_path + " is " +
+                    std::to_string(out.fixed.size()) + " bytes, not n*" +
+                    std::to_string(row_size) +
+                    "; refusing to tombstone rows in a table whose geometry is "
+                    "broken");
+    }
+    std::size_t const rows = out.fixed.size() / row_size;
+    if (rows == 0) {
+        return out;
+    }
+    if (!doc.has_stream(out.meta_path)) {
+        throw Error(function + ": " + out.fixed_path + " holds " +
+                    std::to_string(rows) + " rows but the table has no " +
+                    out.meta_path +
+                    "; without FixedMeta there is no way to tell which rows are "
+                    "live, so the delete cascade cannot run");
+    }
+    out.meta = doc.read_stream(out.meta_path);
+    if (out.meta.size() < kDependentMetaHeaderSize ||
+        (out.meta.size() - kDependentMetaHeaderSize) % entry_size != 0) {
+        throw Error(function + ": " + out.meta_path + " is " +
+                    std::to_string(out.meta.size()) + " bytes, not 16 + n*" +
+                    std::to_string(entry_size) +
+                    "; refusing to tombstone rows in a damaged dependent table");
+    }
+    out.rows.resize(rows);
+    for (std::size_t row = 0; row < rows; ++row) {
+        DependentRow& entry_row = out.rows[row];
+        entry_row.row = row;
+        std::size_t const base = row * row_size;
+        entry_row.uid = get_u32(out.fixed, base);
+        if (row_size == kConsRowSize) {
+            entry_row.predecessor = get_u32(out.fixed, base + kConsPredecessor);
+            entry_row.successor = get_u32(out.fixed, base + kConsSuccessor);
+        } else {
+            entry_row.task = get_u32(out.fixed, base + kAssnTaskUid);
+        }
+    }
+    std::size_t const entries =
+        (out.meta.size() - kDependentMetaHeaderSize) / entry_size;
+    for (std::size_t index = 0; index < entries; ++index) {
+        std::size_t const base = kDependentMetaHeaderSize + index * entry_size;
+        std::uint32_t const offset = get_u32(out.meta, base + 4);
+        if (offset % row_size != 0) {
+            throw Error(function + ": " + out.meta_path + " entry " +
+                        std::to_string(index) + " has offset " +
+                        std::to_string(offset) + ", not a multiple of the " +
+                        std::to_string(row_size) + "-byte row size; refusing to "
+                        "guess which row it tombstones");
+        }
+        std::size_t const row = offset / row_size;
+        if (row >= rows) {
+            throw Error(function + ": " + out.meta_path + " entry " +
+                        std::to_string(index) + " names row " +
+                        std::to_string(row) + ", past the last row " +
+                        std::to_string(rows - 1) +
+                        "; refusing to tombstone rows in a damaged dependent "
+                        "table");
+        }
+        out.rows[row].entries.push_back(index);
+        if (out.meta[base] == kStateLive) {
+            out.rows[row].live = true;
+        }
+    }
+    return out;
+}
+
+/* Rows the cascade must tombstone: a link whose predecessor OR successor is
+ * `uid`, an assignment whose task uid is `uid`.  Rows whose entry is already a
+ * tombstone are left exactly as they are (Project does the same: the deleted
+ * task's stale assignment slot in w11-linkdelete-pre.mpp stays state 2). */
+std::vector<std::size_t> dependent_entries_naming(DependentTable const& table,
+                                                  std::uint32_t uid,
+                                                  bool link_table) {
+    std::vector<std::size_t> entries;
+    for (DependentRow const& row : table.rows) {
+        if (!row.live) {
+            continue;
+        }
+        bool const named = link_table ? (row.predecessor == uid || row.successor == uid)
+                                      : (row.task == uid);
+        if (named) {
+            entries.insert(entries.end(), row.entries.begin(), row.entries.end());
+        }
+    }
+    return entries;
+}
+
+/* Tombstone FixedMeta entries and set the table's "contains deleted rows" flag.
+ * Same contract as the Task table: entry +0 = 0x02, +2 = 0, header +4 |= 0x02.
+ * The header bit is only ever set, never cleared (Project's own files carry
+ * 0x04 with no tombstone and 0x06 as soon as one row is deleted); a table with
+ * nothing to tombstone is not written at all, so it stays byte-identical. */
+void apply_entry_tombstones(DependentTable& table,
+                            std::vector<std::size_t> const& entries) {
+    if (entries.empty()) {
+        return;
+    }
+    for (std::size_t const index : entries) {
+        std::size_t const base = kDependentMetaHeaderSize + index * table.entry_size;
+        table.meta[base] = kStateDeleted;
+        put_u16(table.meta, base + kFixedMetaFieldCount, 0);
+    }
+    put_u32(table.meta, kFixedMetaHeaderFlags,
+            get_u32(table.meta, kFixedMetaHeaderFlags) | kFixedMetaFlagHasDeleted);
+}
+
+/*
+ * Prove the cascade from the file on disk: the dependent FixedData is
+ * byte-identical (no row was removed), every targeted FixedMeta entry reads
+ * back 0x02 / field count 0, every other entry is byte-identical, and the
+ * table's header gets bit 0x02 at +4 and nothing else.
+ */
+void verify_dependent_tombstones(CfbDocument const& reread,
+                                 DependentTable const& before,
+                                 std::vector<std::size_t> const& entries,
+                                 std::string const& function) {
+    if (before.fixed.empty() && before.meta.empty()) {
+        return; /* the table has no rows (or no stream): nothing to prove */
+    }
+    if (!reread.has_stream(before.fixed_path)) {
+        throw Error(function + ": " + before.fixed_path +
+                    " vanished; the delete cascade must not remove a dependent "
+                    "table");
+    }
+    std::vector<std::uint8_t> const fixed_after = reread.read_stream(before.fixed_path);
+    if (fixed_after != before.fixed) {
+        throw Error(function + ": " + before.fixed_path +
+                    " changed; the delete cascade must tombstone metadata only, "
+                    "never rewrite or remove a dependent row");
+    }
+    if (entries.empty()) {
+        if (reread.read_stream(before.meta_path) != before.meta) {
+            throw Error(function + ": " + before.meta_path +
+                        " changed but nothing in it named the deleted uid");
+        }
+        return;
+    }
+    std::vector<std::uint8_t> const meta_after = reread.read_stream(before.meta_path);
+    if (meta_after.size() != before.meta.size()) {
+        throw Error(function + ": " + before.meta_path + " changed size (" +
+                    std::to_string(meta_after.size()) + " vs " +
+                    std::to_string(before.meta.size()) + ")");
+    }
+    std::size_t const count =
+        (before.meta.size() - kDependentMetaHeaderSize) / before.entry_size;
+    std::vector<bool> targeted(count, false);
+    for (std::size_t const index : entries) {
+        if (index >= count) {
+            throw Error(function + ": internal error: tombstone entry " +
+                        std::to_string(index) + " is outside " + before.meta_path);
+        }
+        targeted[index] = true;
+    }
+    for (std::size_t index = 0; index < count; ++index) {
+        std::size_t const base = kDependentMetaHeaderSize + index * before.entry_size;
+        if (targeted[index]) {
+            if (meta_after[base] != kStateDeleted ||
+                get_u16(meta_after, base + kFixedMetaFieldCount) != 0) {
+                throw Error(function + ": " + before.meta_path + " entry " +
+                            std::to_string(index) +
+                            " does not read back as a tombstone (+0 0x02, +2 0)");
+            }
+            continue;
+        }
+        for (std::size_t byte = 0; byte < before.entry_size; ++byte) {
+            if (meta_after[base + byte] != before.meta[base + byte]) {
+                throw Error(function + ": " + before.meta_path + " entry " +
+                            std::to_string(index) +
+                            " changed but its row did not name the deleted uid");
             }
         }
-    } else {
-        std::fill(covered.begin(), covered.end(), true);
     }
-    std::size_t matches = 0;
-    for (std::size_t row = 0; row < rows; ++row) {
-        if (!covered[row]) {
+    for (std::size_t offset = 0; offset < kDependentMetaHeaderSize; ++offset) {
+        if (offset == kFixedMetaHeaderFlags) {
             continue;
         }
-        std::size_t const base = row * row_size;
-        if (base + uid_offset + 4 > fixed.size()) {
-            continue;
-        }
-        bool const named =
-            link_table ? (get_u32(fixed, base + 4) == uid ||
-                          get_u32(fixed, base + 8) == uid)
-                       : (get_u32(fixed, base + uid_offset) == uid);
-        if (named) {
-            ++matches;
+        if (meta_after[offset] != before.meta[offset]) {
+            throw Error(function + ": " + before.meta_path + " header byte +" +
+                        std::to_string(offset) +
+                        " changed; only the +4 flags word may be updated");
         }
     }
-    return matches;
+    std::uint32_t const flags_before = get_u32(before.meta, kFixedMetaHeaderFlags);
+    std::uint32_t const flags_after = get_u32(meta_after, kFixedMetaHeaderFlags);
+    if ((flags_after & kFixedMetaFlagHasDeleted) == 0) {
+        throw Error(function + ": " + before.meta_path +
+                    " header +4 does not have the \"contains deleted rows\" bit "
+                    "(0x02); Project would ignore the tombstones");
+    }
+    if ((flags_after & ~kFixedMetaFlagHasDeleted) !=
+        (flags_before & ~kFixedMetaFlagHasDeleted)) {
+        throw Error(function + ": " + before.meta_path +
+                    " header +4 changed a bit other than 0x02");
+    }
 }
+
 
 } /* namespace */
 
@@ -662,7 +860,13 @@ AddedRow add_task_row(CfbDocument& doc, NewTaskRow const& task,
     put_u32(fixed2_meta, 8, get_u32(fixed2_meta, 8) + 1);
     put_u32(fixed2_meta, 12, static_cast<std::uint32_t>(fixed2.size()));
 
-    /* ---- VarMeta/Var2Data: append the 8 payload blocks and the 8 entries. */
+    /* ---- VarMeta/Var2Data: append the 8 payload blocks and insert the 8
+     * entries inside the new uid's group (key-ascending).  Project only honours
+     * entries inside a uid's contiguous group (W48, measured: a custom-field
+     * write that appended at the end reopened with empty values).  For the
+     * usual new highest uid that is the end of the array; for a caller-supplied
+     * mid-range uid the entries are inserted in uid order, which is exactly the
+     * same rule table.h's insert_var_entry implements for field values. */
     for (std::uint32_t const key : kNewRowKeys) {
         std::vector<std::uint8_t> payload;
         if (key == kTaskNameFieldId) {
@@ -677,14 +881,10 @@ AddedRow add_task_row(CfbDocument& doc, NewTaskRow const& task,
         std::uint32_t const offset = static_cast<std::uint32_t>(var2.size());
         std::vector<std::uint8_t> const block = encode_block(payload);
         var2.insert(var2.end(), block.begin(), block.end());
-        std::vector<std::uint8_t> entry(kVarMetaEntrySize, 0);
-        put_u32(entry, 0, new_uid);
-        put_u32(entry, 4, offset);
-        put_u32(entry, 8, key);
-        var_meta.insert(var_meta.end(), entry.begin(), entry.end());
+        insert_var_entry(var_meta, new_uid, key, offset);
     }
-    put_u32(var_meta, 8, get_u32(var_meta, 8) +
-                             static_cast<std::uint32_t>(kNewRowKeys.size()));
+    put_u32(var_meta, 8,
+            static_cast<std::uint32_t>(read_var_entries(var_meta).size()));
     put_u32(var_meta, kVarMetaVar2SizeOffset,
             static_cast<std::uint32_t>(var2.size()));
 
@@ -880,38 +1080,9 @@ DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
                     "task; there is nothing to tombstone");
     }
 
-    /* Dependent rows the writer cannot remove.  A link is scheduling-visible, so
-     * the default is a refusal for either kind (add_delete.h). */
-    std::size_t const live_links =
-        count_live_references(doc, "114/TBkndCons", 20, 10, 0, true, uid);
-    std::size_t const live_assignments =
-        count_live_references(doc, "114/TBkndAssn", 110, 34, 4, false, uid);
-    if ((live_links > 0 || live_assignments > 0) && !options.allow_dangling) {
-        throw Error(function + ": uid " + std::to_string(uid) + " is named by " +
-                    std::to_string(live_links) + " live link(s) and " +
-                    std::to_string(live_assignments) +
-                    " live assignment(s); deleting it would leave them dangling. "
-                    "Set DeleteOptions::allow_dangling to proceed and warn instead "
-                    "(the writer cannot delete link/assignment rows)");
-    }
-
-    std::vector<std::string> warnings;
-    if (live_links > 0) {
-        warnings.push_back("uid " + std::to_string(uid) + ": " +
-                           std::to_string(live_links) +
-                           " live link row(s) still name this task; Project will not "
-                           "schedule a link with a dead endpoint (PROJECT_B is the "
-                           "measured precedent)");
-    }
-    if (live_assignments > 0) {
-        warnings.push_back("uid " + std::to_string(uid) + ": " +
-                           std::to_string(live_assignments) +
-                           " live assignment row(s) still name this task; they are "
-                           "left in place (PROJECT_B stores 10 assignments naming deleted "
-                           "task uids)");
-    }
-
-    /* ---- Renumber later live rows' ID down by one (Project: uid 5's 5 -> 4). */
+    /* ---- Liveness, computed once: the same two facts the reader uses -- a
+     * live FixedMeta entry and a VarMeta group.  Both the cascade and the ID
+     * renumbering below need it. */
     std::vector<bool> live(rows, false);
     live[0] = true;
     for (std::size_t candidate = 1; candidate < rows; ++candidate) {
@@ -922,6 +1093,105 @@ DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
             meta_entries[static_cast<std::size_t>(index)].state == kStateLive &&
             uid_has_var_group(var_entries, before.uid(candidate));
     }
+    std::vector<std::uint32_t> live_uids;
+    live_uids.reserve(rows);
+    for (std::size_t candidate = 1; candidate < rows; ++candidate) {
+        if (live[candidate] && candidate != row) {
+            live_uids.push_back(before.uid(candidate));
+        }
+    }
+    auto is_live_task = [&live_uids](std::uint32_t value) {
+        return std::find(live_uids.begin(), live_uids.end(), value) !=
+               live_uids.end();
+    };
+
+    /* ---- The delete cascade (measured, w11-oracle §2).  Project tombstones
+     * every link row whose predecessor OR successor is the deleted uid and every
+     * assignment row whose task uid is, sets each table's FixedMeta header +4
+     * bit 0x02, and leaves every row and every FixedData byte in place. */
+    DependentTable cons = load_dependent_table(
+        doc, "114/TBkndCons", kConsRowSize, kConsMetaEntrySize, function);
+    DependentTable assn = load_dependent_table(
+        doc, "114/TBkndAssn", kAssnRowSize, kAssnMetaEntrySize, function);
+    std::vector<std::size_t> const cons_tombstones =
+        dependent_entries_naming(cons, uid, true);
+    std::vector<std::size_t> const assn_tombstones =
+        dependent_entries_naming(assn, uid, false);
+
+    std::vector<std::string> warnings;
+
+    /* A surviving live link whose OTHER endpoint already names a dead uid is
+     * damage that predates this delete.  The writer cannot repair it, so the
+     * default refuses; allow_dangling accepts the orphan and reports it.  Links
+     * naming the uid being deleted were selected by the cascade above. */
+    std::size_t dangling_links = 0;
+    std::string first_dangling_link;
+    for (DependentRow const& link : cons.rows) {
+        if (!link.live || link.predecessor == uid || link.successor == uid) {
+            continue;
+        }
+        bool const predecessor_dead =
+            link.predecessor == 0 || !is_live_task(link.predecessor);
+        bool const successor_dead =
+            link.successor == 0 || !is_live_task(link.successor);
+        if (!predecessor_dead && !successor_dead) {
+            continue;
+        }
+        ++dangling_links;
+        if (first_dangling_link.empty()) {
+            first_dangling_link =
+                "link row " + std::to_string(link.row) + " (uid " +
+                std::to_string(link.uid) + ", " +
+                std::to_string(link.predecessor) + " -> " +
+                std::to_string(link.successor) + ")";
+        }
+    }
+    if (dangling_links > 0 && !options.allow_dangling) {
+        throw Error(function + ": deleting uid " + std::to_string(uid) +
+                    " would leave " + std::to_string(dangling_links) +
+                    " live link row(s) whose other endpoint already names a uid "
+                    "no live task holds (the first is " + first_dangling_link +
+                    "); the file was damaged before this delete. Set "
+                    "DeleteOptions::allow_dangling to proceed and warn instead "
+                    "(the writer cannot repair a dead link endpoint)");
+    }
+    if (dangling_links > 0) {
+        warnings.push_back("uid " + std::to_string(uid) + ": " +
+                           std::to_string(dangling_links) +
+                           " live link row(s) name an endpoint that no live task "
+                           "holds (the first is " + first_dangling_link +
+                           "); they are left in place because the damaged endpoint "
+                           "predates this delete");
+    }
+
+    /* Live assignments naming an already-dead task uid are tolerated, not
+     * refused: PROJECT_B stores 10 of 73 that way and Project reopens it. */
+    std::size_t orphan_assignments = 0;
+    for (DependentRow const& assignment : assn.rows) {
+        if (!assignment.live || assignment.task == uid || assignment.task == 0) {
+            continue;
+        }
+        if (!is_live_task(assignment.task)) {
+            ++orphan_assignments;
+        }
+    }
+    if (orphan_assignments > 0) {
+        warnings.push_back("uid " + std::to_string(uid) + ": " +
+                           std::to_string(orphan_assignments) +
+                           " other live assignment row(s) name a task uid no live "
+                           "task holds; they are left in place (PROJECT_B stores 10 of "
+                           "73 that way and Project reopens it)");
+    }
+    if (!cons_tombstones.empty() || !assn_tombstones.empty()) {
+        warnings.push_back(
+            "uid " + std::to_string(uid) + ": cascade tombstoned " +
+            std::to_string(cons_tombstones.size()) + " link entry(ies) and " +
+            std::to_string(assn_tombstones.size()) +
+            " assignment entry(ies) that named this task (FixedMeta entry +0 = "
+            "0x02, +2 = 0; header +4 |= 0x02 in each table; no row removed)");
+    }
+
+    /* ---- Renumber later live rows' ID down by one (Project: uid 5's 5 -> 4). */
     std::uint32_t const old_id = before.row_id(row);
     for (std::size_t candidate = row + 1; candidate < rows; ++candidate) {
         if (!live[candidate]) {
@@ -1003,6 +1273,14 @@ DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
     work.replace_stream(fixed_path, fixed);
     work.replace_stream(meta_path, meta);
     work.replace_stream(var_meta_path, rebuilt);
+    apply_entry_tombstones(cons, cons_tombstones);
+    apply_entry_tombstones(assn, assn_tombstones);
+    if (!cons_tombstones.empty()) {
+        work.replace_stream(cons.meta_path, cons.meta);
+    }
+    if (!assn_tombstones.empty()) {
+        work.replace_stream(assn.meta_path, assn.meta);
+    }
 
     CfbDocument const reread = save_and_verify(work, path, function, table);
     TaskTable const after = TaskTable::from_document(reread, table);
@@ -1082,11 +1360,18 @@ DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
                     "must not rewrite them");
     }
 
+    /* The cascade, proved from the written file: dependent rows untouched,
+     * targeted entries tombstoned, header flags set, nothing else moved. */
+    verify_dependent_tombstones(reread, cons, cons_tombstones, function);
+    verify_dependent_tombstones(reread, assn, assn_tombstones, function);
+
     DeletedRow result;
     result.uid = uid;
     result.id = old_id;
     result.row = row;
     result.var_entries_removed = removed;
+    result.link_rows_tombstoned = cons_tombstones.size();
+    result.assignment_rows_tombstoned = assn_tombstones.size();
     result.warnings = std::move(warnings);
     doc = reread;
     return result;

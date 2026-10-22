@@ -1,0 +1,23 @@
+{
+  "case": "field-probes",
+  "runs": {
+    "number2": {
+      "bytes": 344064
+    },
+    "duration1": {
+      "bytes": 344064
+    },
+    "date1": {
+      "bytes": 344064
+    },
+    "flag1": {
+      "bytes": 344064
+    }
+  },
+  "fixtures": {
+    "number2": "corpus\\probe\\w11-field-number2.mpp",
+    "duration1": "corpus\\probe\\w11-field-duration1.mpp",
+    "date1": "corpus\\probe\\w11-field-date1.mpp",
+    "flag1": "corpus\\probe\\w11-field-flag1.mpp"
+  }
+}

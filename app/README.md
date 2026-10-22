@@ -3,8 +3,10 @@
 A native macOS application that opens a real `.mpp`, shows the tasks in a sheet on
 the left and the Gantt on the right, and lets you select, edit, undo, filter,
 collapse, export to PDF and save task start dates — behind a real menu bar and a
-Preferences panel. Everything below `main.mm` is portable C++ that is built and
-tested on Windows too.
+Preferences panel. Wave 11 adds a **resource sheet**, two **usage grids**
+(task/resource, day/week/month) and read-only **computed formula columns**, all
+switchable from the View menu and from a visible control bar. Everything below
+`main.mm` is portable C++ that is built and tested on Windows too.
 
 This directory is a **standalone CMake project**. It is deliberately *not* added to
 the repository's top-level `CMakeLists.txt` (owned by the build stream), it edits no
@@ -14,15 +16,16 @@ same way).
 
 | file | what it is |
 |---|---|
-| `CMakeLists.txt` | standalone project: options, core libraries with their tests off, `app_layout`, seven headless tests, AppKit target on `APPLE` only |
-| `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, `timescale_for_zoom`, plan summary, `sync_plan_from_records`, `make_gantt_source_for_rows`, `apply_edit_policy` |
+| `CMakeLists.txt` | standalone project: options, core libraries with their tests off, `app_layout`, eight headless tests, AppKit target on `APPLE` only |
+| `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link/resource/assignment rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, `timescale_for_zoom`, plan summary, `sync_plan_from_records`, `make_gantt_source_for_rows`, `apply_edit_policy` |
+| `view_model.h` / `.cpp` | **pure C++ (wave 11)**: the four view modes, the stock Mon-Fri calendar, `PlanInput` → `core::view::ResourceRecord`s, the registry-backed resource-sheet columns, the usage grid (labels, period columns, a TOTAL row and a Total column), the two computed formula columns, and the read-only policy |
 | `selection_model.h` / `.cpp` | **pure C++**: `RowMap` (display ordinal ↔ RecordSet row ↔ uid), `selected_task`, Gantt hit-test → sheet row, arrow-key navigation, `toggle_row_selection` (Space), `toggle_row`, `scroll_target` |
 | `document.h` / `.cpp` | **pure C++ save helper**: diff the RecordSet against the loaded plan, then write the edited starts through `core/mppwrite` to a **new** file |
 | `prefs.h` / `.cpp` | **pure C++**: the preference model, its persisted one-line string + tolerant parser, the date format applied to `SheetFormat`, the app-side duration rendering, `cell_text` |
 | `menu_model.h` / `.cpp` | **pure C++**: the whole menu bar as data — items, key equivalents, `MenuAction` ids, enablement rules, and the reasons the unsupported items are greyed out |
 | `filter_model.h` / `.cpp` | **pure C++**: filter fields/operators from the sheet, a criterion → `core::view::FilterDefinition` with an error message, matching rows, the displayed-row restriction, the printed subset |
 | `export_pdf.h` / `.cpp` | **pure C++**: Export PDF through `core/render` — sheet and Gantt, the filtered rows, the preference formats, the shading-off calendar |
-| `reader_adapter.h` | the one header that includes `core/mpp/reader.h`; `mpp::Document` → `app::PlanInput` |
+| `reader_adapter.h` | the one header that includes `core/mpp/reader.h`; `mpp::Document` → `app::PlanInput` (tasks, links, resources, assignments) and the measured `core::usage::usage_input_from_mpp` bridge |
 | `layout_model_tests.cpp` | mapping, date identity (including two dates pinned by the spec), row texts, Gantt geometry, zoom; `corpus/probe` counts when present |
 | `selection_model_tests.cpp` | two-way selection, Gantt clicks (bar and dependency), collapse, editing/undo/redo through `SheetModel`, the read-only policy |
 | `document_tests.cpp` | `default_save_name`, the start-date diff, the **real save round trip** on `tests/data/synthetic-base.mpp` |
@@ -30,8 +33,9 @@ same way).
 | `menu_tests.cpp` | six menus, every action present once per menu, unique key equivalents, the documented shortcuts, enablement rules, the three permanently disabled items |
 | `filter_tests.cpp` | the field/operator lists, name/duration/date/blank criteria, two-rule All/Any, every error path, the row-list restriction, the printed subset |
 | `export_tests.cpp` | real PDFs: sheet + Gantt, filtered, duration preference, determinism, the shading-off calendar, the name/subtitle/footer helpers, failures |
-| `main.mm` | Objective-C++ / AppKit: window, menu bar built from `menu_model`, Preferences panel, filter dialog, save/export panels, dirty prompts, clipboard, keyboard, drawing |
-| `../.github/workflows/app-macos.yml` | the macOS CI job: configure `app/`, build everything with `-Werror`, run the seven tests, prove the bundle exists and links AppKit + UniformTypeIdentifiers |
+| `views_tests.cpp` | **new (wave 11)**: resource rows/fields from a synthetic plan, usage day/week/month buckets + totals row/column, formula evaluation, computed columns read-only + never a save edit, view-mode and preference round trip |
+| `main.mm` | Objective-C++ / AppKit: window, control bar (view switcher + usage period), menu bar built from `menu_model`, Preferences panel, filter dialog, save/export panels, dirty prompts, clipboard, keyboard, drawing (task sheet + Gantt, or a flat resource/usage grid) |
+| `../.github/workflows/app-macos.yml` | the macOS CI job: configure `app/`, build everything with `-Werror`, run the tests (the job greps the seven wave-10 names and `ctest` runs all eight), prove the bundle exists and links AppKit + UniformTypeIdentifiers |
 
 ## Build and run
 
@@ -52,10 +56,10 @@ configure skips the app target and must still succeed):
 ```bat
 set vc=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat
 call "%vc%"
-cmake -S app -B build\vs-w46 -G "Visual Studio 17 2022" -A x64 ^
+cmake -S app -B build\vs-w47 -G "Visual Studio 17 2022" -A x64 \
       -DCMAKE_BUILD_TYPE=Release -DAPP_BUILD_TESTS=ON -DCORE_WARNINGS_AS_ERRORS=ON
-cmake --build build\vs-w46 --config Release
-ctest --test-dir build\vs-w46 -C Release --output-on-failure
+cmake --build build\vs-w47 --config Release
+ctest --test-dir build\vs-w47 -C Release --output-on-failure
 ```
 
 Never `--parallel` on this box (see `docs/build.md`). A transient
@@ -78,17 +82,16 @@ every enablement rule, which is the only way to test a menu bar without a window
 | MS Project Shell | Preferences… (Cmd-,), Hide (Cmd-H), Quit (Cmd-Q) |
 | File | Open… (Cmd-O), Save (Cmd-S), Save As… (Cmd-Shift-S), Export PDF (Sheet)… (Cmd-Shift-E), Export PDF (Gantt)… (Cmd-Option-E), Close (Cmd-W) |
 | Edit | Undo (Cmd-Z), Redo (Cmd-Shift-Z), Cut (Cmd-X, **disabled**), Copy (Cmd-C), Paste (Cmd-V), Select All (Cmd-A) |
-| View | Zoom In (Cmd-=), Zoom Out (Cmd--), Day/Week/Month Timescale (Cmd-1/2/3), Working-Day Shading (Cmd-Shift-D), Filter… (Cmd-F), Clear Filter (Cmd-Shift-F), Collapse All, Expand All, Columns ▸ (per-column check marks) |
+| View | Task Sheet (Cmd-Option-1), Resource Sheet (Cmd-Option-2), Task Usage (Cmd-Option-3), Resource Usage (Cmd-Option-4), Usage Period: Day/Week/Month, Zoom In (Cmd-=), Zoom Out (Cmd--), Day/Week/Month Timescale (Cmd-1/2/3), Working-Day Shading (Cmd-Shift-D), Filter… (Cmd-F), Clear Filter (Cmd-Shift-F), Collapse All, Expand All, Columns ▸ (per-column check marks plus the pending stored-custom-field entry) |
 | Insert | Task…, Resource… — **both permanently disabled** |
 | Help | Keyboard Shortcuts, About MS Project Shell |
 
-**Greyed out rather than faked.** `Insert > Task` needs a writer that can *grow* a
-table: `RecordSet` has no insert/erase and `core/mppwrite` cannot add a directory
-entry or a table row (spec/mpp-writer.md §5, §10.4; wave 10 stream W45 owns that).
-`Insert > Resource` needs a resource table (wave 10 stream W43). `Cut` needs a
-`SheetModel` operation that does not exist — copy and paste do. All three are in the
-menu, disabled in every state, with `menu_disabled_reason()` as their tooltip and the
-reason pinned in `menu_tests.cpp`.
+**Greyed out rather than faked.** `Insert > Task` and `Insert > Resource` need the
+shell's add/delete editing, which wave 12 owns; wave 11's new views are read-only, so
+a resources/usage grid must not pretend it can add a row. `Cut` needs a `SheetModel`
+operation that does not exist — copy and paste do. All three are in the menu, disabled
+in every state, with `menu_disabled_reason()` as their tooltip and the reason pinned in
+`menu_tests.cpp`.
 
 ## What the window does
 
@@ -137,8 +140,62 @@ disabled.
 gutter; clicking it (or Cmd-Left / Cmd-Right on a selected summary) calls
 `SheetModel::toggle_collapsed`. The visible-row list is then re-read and the Gantt is
 **rebuilt** from exactly those rows. View ▸ Columns toggles each column's visibility
-through `SheetModel::set_column_visible` (the same default columns every load, so the
-submenu's tags are the model column indices).
+through `SheetModel::set_column_visible`. The task sheet's column set is FIXED — the
+seven task columns plus the two computed columns — on every load, so the submenu's
+`tag` is the model column index.
+
+**Views (wave 11).** A segmented control and a Usage period popup sit in a control bar
+above the scrolling document; the View menu has the same commands (Cmd-Option-1..4 for
+the views). The choice and the period are remembered in the preferences and selected
+again on the next load.
+
+| view | what it shows | selection/editing |
+|---|---|---|
+| Task Sheet | the task sheet + Gantt, as before | yes (the only view with a Gantt) |
+| Resource Sheet | one row per live resource: ID, Name, Type, Initials, Max. Units, Work | none (read-only) |
+| Task Usage | one row per task, one column per day/week/month period, a Total column and a TOTAL row | none (read-only) |
+| Resource Usage | the same grid per resource | none (read-only) |
+
+The resource rows and columns come from `core/view/resource_tables.h`:
+`build_resource_record_set()` supplies ID/Name/Type/Initials/MaxUnits, the shell shows
+the Type as its display name and adds **Work** (the resource's assignment total, in
+duration ticks, from `core::usage`). **Cost is not shown** — the reader decodes no
+resource rates, so a cost column would be invented. The Entry table's captions and
+widths are read from the registry (`find_resource_table("resource-entry")`), so a
+registry change moves this view with it.
+
+The two usage grids are `core::usage::project_usage()` rows rendered as a sheet:
+one label column, one column per period (day, week or month), a **Total** column and a
+final **TOTAL** row of period totals. Values are stored as duration ticks, so the
+Duration-format preference applies ("8 hrs" in hours mode, "1 day" in auto mode).
+Period labels are `Mon 19/10/26`, `Wk Mon 19/10/26` and `Oct 2026`; a week period is a
+clipped run of days (core/usage decision 1: weeks start on Sunday). The period list
+covers the assignments that can be phased; work that cannot be placed stays in the row
+and table totals and is counted in the status line, exactly as `core/usage` documents.
+**The calendar is the stock Monday-Friday 08:00-12:00/13:00-17:00 week**
+(`app::standard_calendar()`), not the file's own calendar: `core::cal` is not wired this
+wave (see Open), because it re-opens the `.mpp` and a wrong calendar would silently
+change every bucket.
+
+**Computed columns (wave 11).** The task sheet has two read-only formula columns,
+registered through `core::formula::ComputedColumns`:
+
+| column | field | formula |
+|---|---|---|
+| Duration x2 | `Number1` | `[Duration]*2` |
+| Start +7 Days | `Date1` | `[Start]+7` |
+
+They are re-evaluated after every edit and rendered by the sheet like any other column
+(a Duration and a Date). Their columns are declared read-only and `begin_edit` refuses
+them; they are also outside the save diff (`collect_start_edits` reads task starts
+only), so **Save can never write them**. View ▸ Columns toggles them like any column and
+the choice persists. **Stored custom fields are pending**: `mpp::Task` exposes no stored
+custom-field values, so the Columns chooser shows a disabled "Stored custom fields
+(pending)" entry rather than a column of invented zeroes.
+
+In the resource/usage views the task-only commands (undo/redo, clipboard, Select All,
+zoom, filter, collapse, PDF export) are disabled rather than acting on the hidden task
+sheet; Save stays available because it still writes task starts.
 
 **Zoom.** View ▸ Zoom In/Out steps through the three core zoom levels (day → week →
 month) and View ▸ Day/Week/Month sets one; the Gantt is rebuilt through
@@ -177,13 +234,21 @@ changes nothing else: shading never moves a bar.
 | Timescale | Days (default), Weeks, Months | the Gantt's timescale unit/width |
 | Working-day shading | on (default), off | whether the Gantt draws non-working spans and weekend header tints; the PDF Gantt uses the all-working calendar when off |
 
+The **view** and the **usage period** are set from the control bar / View menu, not
+from this panel; they persist the same way (below) and the next load opens in the
+chosen view. The two visible computed columns are toggled from View ▸ Columns and also
+persist.
+
 Applying a preference repaints immediately; closing the app is not needed.
 
 ### Where the preferences persist — and why not in the file
 
 They are stored **app-side**, in `NSUserDefaults` under
 `com.msprojectdecompile.shell.preferences`, as one string produced by
-`app::serialize_preferences` (`version=1;date=...;duration=...;zoom=...;shading=...`).
+`app::serialize_preferences`
+(`version=1;date=...;duration=...;zoom=...;shading=...;view=...;usage=...;formula1=0|1;formula2=0|1;custom=0|1`).
+The wave-11 keys are additive: a wave-10 string without them parses and keeps the new
+defaults.
 `app::parse_preferences` is deliberately tolerant: an unknown key is ignored, a bad
 value keeps the default, and a missing key keeps the default, so an old or
 hand-edited defaults string can never stop the app from launching.
@@ -274,27 +339,29 @@ The one unrepresentable instant is 1983-12-31 00:00, which packs to 0, the file'
 
 Local, Windows MSVC 19.44, Release, `/W4 /permissive- /utf-8 /WX`
 (`-DCORE_WARNINGS_AS_ERRORS=ON`), 2026-10-22. Full standalone CMake build of `app/`
-(configure + `cmake --build build\vs-w46 --config Release`, no `--parallel`), then
+(configure + `cmake --build build\vs-w47 --config Release`, no `--parallel`), then
 `ctest`:
 
 ```
-1/7 Test #1: app_layout .....   Passed
-2/7 Test #2: app_selection ..   Passed
-3/7 Test #3: app_document ...   Passed
-4/7 Test #4: app_prefs ......   Passed
-5/7 Test #5: app_menu .......   Passed
-6/7 Test #6: app_filter .....   Passed
-7/7 Test #7: app_export .....   Passed
-100% tests passed, 0 tests failed out of 7
+1/8 Test #1: app_layout .....   Passed
+2/8 Test #2: app_selection ..   Passed
+3/8 Test #3: app_document ...   Passed
+4/8 Test #4: app_prefs ......   Passed
+5/8 Test #5: app_menu .......   Passed
+6/8 Test #6: app_filter .....   Passed
+7/8 Test #7: app_export .....   Passed
+8/8 Test #8: app_views ......   Passed
+100% tests passed, 0 tests failed out of 8
 
 layout_model_tests:     253 checks passed
 selection_model_tests:   90 checks passed
 document_tests:          43 checks passed
 prefs_tests:             82 checks passed
-menu_tests:             457 checks passed
+menu_tests:             664 checks passed
 filter_tests:            60 checks passed
 export_tests:            58 checks passed
-                                                 (1,043 checks in total)
+views_tests:            164 checks passed
+                                                 (1,414 checks in total)
 ```
 
 The build took the **W37 path** (`core/mppwrite/save.h` is present, so
@@ -306,7 +373,7 @@ checks the task count, that the source fixture's size is unchanged (its SHA-256 
 matches `tests/data/README.md`), that target == source is refused, that a cleared
 start writes nothing, and that an unknown uid fails without leaving a file.
 
-`export_tests` writes real PDFs under `build\vs-w46\test-out` (sheet, Gantt, filtered,
+`export_tests` writes real PDFs under `build\vs-w47\test-out` (sheet, Gantt, filtered,
 hours-style) and checks the `%PDF-` header, the `%%EOF` trailer, the page count, the
 printed row count, that two identical exports are byte-identical, that the hours
 rendering reaches the page, that the shading-off calendar makes Saturday and Sunday
@@ -314,13 +381,16 @@ working days, and every failure path.
 
 **Verified** (on the Windows box): the date identity and its corpus round trip; the
 selection/collapse/edit/undo mapping; the save helper end to end on the synthetic
-fixture; the preference model and parser; the menu bar's structure and enablement;
-the filter model end to end; PDF export end to end; `app/`'s C++ compiles and links
-with the CI warning flags; `ctest` 7/7.
+fixture; the preference model and parser (including the wave-11 keys); the menu bar's
+structure, enablement and task-view gating; the filter model end to end; PDF export end
+to end; the resource sheet's rows/fields and columns; the usage day/week/month buckets,
+totals and labels; the computed columns' values and read-only rule; `app/`'s C++
+compiles and links with the CI warning flags; `ctest` 8/8.
 
 **Inferred / to be proved by macOS CI**: that `main.mm` compiles, links and behaves.
 There is no Objective-C++ compiler on the development box. `app-macos.yml` is that
-gate: configure `app/`, build `msproject_app.app` with `-Werror`, run the seven tests,
+gate: configure `app/`, build `msproject_app.app` with `-Werror`, run the tests (all
+eight; the registration step greps the seven wave-10 names),
 and assert the bundle executable exists and links AppKit + UniformTypeIdentifiers.
 No runner ever opens a window, so the actual interaction (a click, a keystroke, a
 panel, a menu) is verified by construction and by the pure helpers it calls — not by
@@ -331,6 +401,15 @@ an automated UI test.
 - **No Cut** (the sheet has copy/paste, not cut), **no row insert/delete/move, no
   indent/outdent** (blocked on `RecordSet` having no insert/erase/reorder — see
   `memory/sheet.md`), **no column resize/reorder** (only visibility), no fill handle.
+- **The resource sheet and usage grids are read-only**: no cell editing, no resource
+  insert/delete, no assignment editing, no units/contour editing. Pay rates and Cost
+  are not decoded or shown. This is deliberate for wave 11; wave 12 owns view editing.
+- **The usage views use the stock Mon-Fri calendar**, not the file's own project
+  calendar (`core::cal` is not wired; see Open).
+- **Stored custom-field values are not read**: `mpp::Task` does not expose them yet, so
+  only the two formula columns exist and the chooser marks the stored ones pending.
+- **No Chart/graph views**, no Team Planner, no multiple tables per view: the four views
+  are the only modes.
 - **No IME/composition** in the in-cell editor: it is drawn by the view from
   `SheetModel::edit_text()` and fed by `NSEvent` characters, with a caret drawn as
   `|`. There is no selection within the cell and no cursor movement beyond backspace.
@@ -363,9 +442,20 @@ an automated UI test.
 
 ## Open, ranked
 
-1. **Prove `main.mm` on macOS CI** — the whole AppKit surface (menus, Preferences
-   panel, filter dialog, export panel, dirty prompts, clipboard) is compile-unproven
-   here.
+1. **Prove `main.mm` on macOS CI** — the whole AppKit surface (menus, control bar,
+   view switching, Preferences panel, filter dialog, export panel, dirty prompts,
+   clipboard) is compile-unproven here. The wave-11 additions to watch: the
+   `NSSegmentedControl`/`NSPopUpButton` control bar and its container view, the
+   `syncViewControls` target/action path, and the per-view drawing branch.
+1. **Wire the file calendar into the usage views** (`core::cal` →
+   `app::standard_calendar()`'s one call site) once a fixture proves the decoded
+   calendar matches Project's buckets; today the stock Mon-Fri week is a documented
+   choice.
+1. **Stored custom-field values**: read `Text1`/`Number1`/`Date1`/`Flag1` through the
+   reader (the oracle measured the storage keys) and add the third chooser column; the
+   formula columns are the read-only substitute until then.
+1. **Resource cost/rates** if the reader ever decodes them: the Resource Sheet has a
+   Work column, not a Cost column, because inventing rates would be worse.
 2. **Selection fidelity on macOS** is unmeasured against the product: row band vs
    cell-only selection, and the disclosure box's exact look, are our choices.
 3. **A real in-cell text editor** (IME, cursor movement, selection) if the

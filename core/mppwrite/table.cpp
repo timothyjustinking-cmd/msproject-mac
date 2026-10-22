@@ -365,6 +365,59 @@ std::vector<std::uint8_t> encode_utf16z(std::string_view utf8) {
     return out;
 }
 
+namespace {
+
+/* The uid a VarMeta `mid` belongs to: real files use `uid` and the
+ * `0x80000000|uid` family, which Project keeps together for one row. */
+std::uint32_t base_uid(std::uint32_t mid) { return mid & 0x7FFFFFFFu; }
+bool is_secondary_uid(std::uint32_t mid) { return (mid & 0x80000000u) != 0; }
+
+} /* namespace */
+
+std::size_t var_entry_insert_offset(std::vector<std::uint8_t> const& var_meta,
+                                    std::uint32_t mid, std::uint32_t field_id) {
+    std::vector<VarEntry> const entries = read_var_entries(var_meta);
+    std::uint32_t const wanted_uid = base_uid(mid);
+    bool const wanted_secondary = is_secondary_uid(mid);
+    /* The array is sorted by (uid, secondary family, field key) in Project's own
+     * files, so the new entry goes before the first entry that sorts after it.
+     * That keeps a uid's entries contiguous (the property Project needs) and
+     * key-ascending inside the group. */
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        VarEntry const& entry = entries[i];
+        std::uint32_t const uid = base_uid(entry.mid);
+        bool const secondary = is_secondary_uid(entry.mid);
+        bool const after = uid > wanted_uid ||
+                           (uid == wanted_uid && secondary > wanted_secondary) ||
+                           (uid == wanted_uid && secondary == wanted_secondary &&
+                            entry.field_id > field_id);
+        if (after) {
+            return kVarMetaHeaderSize + i * kVarMetaEntrySize;
+        }
+    }
+    return var_meta.size();
+}
+
+void insert_var_entry(std::vector<std::uint8_t>& var_meta, std::uint32_t mid,
+                      std::uint32_t field_id, std::uint32_t offset) {
+    std::size_t const at = var_entry_insert_offset(var_meta, mid, field_id);
+    std::vector<std::uint8_t> entry(kVarMetaEntrySize, 0);
+    entry[0] = static_cast<std::uint8_t>(mid & 0xFFu);
+    entry[1] = static_cast<std::uint8_t>((mid >> 8) & 0xFFu);
+    entry[2] = static_cast<std::uint8_t>((mid >> 16) & 0xFFu);
+    entry[3] = static_cast<std::uint8_t>((mid >> 24) & 0xFFu);
+    entry[4] = static_cast<std::uint8_t>(offset & 0xFFu);
+    entry[5] = static_cast<std::uint8_t>((offset >> 8) & 0xFFu);
+    entry[6] = static_cast<std::uint8_t>((offset >> 16) & 0xFFu);
+    entry[7] = static_cast<std::uint8_t>((offset >> 24) & 0xFFu);
+    entry[8] = static_cast<std::uint8_t>(field_id & 0xFFu);
+    entry[9] = static_cast<std::uint8_t>((field_id >> 8) & 0xFFu);
+    entry[10] = static_cast<std::uint8_t>((field_id >> 16) & 0xFFu);
+    entry[11] = static_cast<std::uint8_t>((field_id >> 24) & 0xFFu);
+    var_meta.insert(var_meta.begin() + static_cast<std::ptrdiff_t>(at), entry.begin(),
+                    entry.end());
+}
+
 std::string decode_utf16z(std::vector<std::uint8_t> const& payload) {
     std::string out;
     for (std::size_t i = 0; i + 1 < payload.size(); i += 2) {

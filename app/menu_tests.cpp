@@ -207,7 +207,15 @@ void test_documented_menu_contents() {
     check(paste, "Paste is Cmd-V");
     check(select_all, "Select All is Cmd-A");
 
-    // View: the three timescales, the shading toggle, the filter.
+    // View: the four views (wave 11) with Cmd-Option-1..4, the usage periods,
+    // and the three timescales, the shading toggle, the filter.
+    bool view_task = false;
+    bool view_resource = false;
+    bool view_task_usage = false;
+    bool view_resource_usage = false;
+    bool usage_day = false;
+    bool usage_week = false;
+    bool usage_month = false;
     bool zoom_day = false;
     bool zoom_week = false;
     bool zoom_month = false;
@@ -221,7 +229,25 @@ void test_documented_menu_contents() {
         shading = shading || item.action == MenuAction::toggle_shading;
         filter = filter || item.action == MenuAction::show_filter;
         clear_filter = clear_filter || item.action == MenuAction::clear_filter;
+        usage_day = usage_day || item.action == MenuAction::usage_day;
+        usage_week = usage_week || item.action == MenuAction::usage_week;
+        usage_month = usage_month || item.action == MenuAction::usage_month;
+        if (item.action == MenuAction::view_task_sheet) {
+            view_task = std::string(item.key) == "1" && item.command_key && item.option;
+        }
+        if (item.action == MenuAction::view_resource_sheet) {
+            view_resource = std::string(item.key) == "2" && item.command_key && item.option;
+        }
+        if (item.action == MenuAction::view_task_usage) {
+            view_task_usage = std::string(item.key) == "3" && item.command_key && item.option;
+        }
+        if (item.action == MenuAction::view_resource_usage) {
+            view_resource_usage = std::string(item.key) == "4" && item.command_key && item.option;
+        }
     }
+    check(view_task && view_resource && view_task_usage && view_resource_usage,
+          "View offers the four views as Cmd-Option-1..4");
+    check(usage_day && usage_week && usage_month, "View offers the three usage periods");
     check(zoom_day && zoom_week && zoom_month, "View offers day/week/month timescales");
     check(shading, "View offers the working-day shading toggle");
     check(filter, "View offers the filter dialog");
@@ -323,6 +349,33 @@ void test_enablement() {
     state.any_collapsed = false;
     check(!app::menu_item_enabled(MenuAction::expand_all, state),
           "Expand All needs something collapsed");
+
+    // Wave 11: in the resource/usage views the task-only commands degrade to
+    // disabled while the view and usage-period switches stay available.
+    MenuState non_task = everything_state();
+    non_task.task_view = false;
+    check(!app::menu_item_enabled(MenuAction::export_pdf_sheet, non_task),
+          "Sheet export is task-view only");
+    check(!app::menu_item_enabled(MenuAction::export_pdf_gantt, non_task),
+          "Gantt export is task-view only");
+    check(!app::menu_item_enabled(MenuAction::undo, non_task), "Undo is task-view only");
+    check(!app::menu_item_enabled(MenuAction::redo, non_task), "Redo is task-view only");
+    check(!app::menu_item_enabled(MenuAction::copy, non_task), "Copy is task-view only");
+    check(!app::menu_item_enabled(MenuAction::paste, non_task), "Paste is task-view only");
+    check(!app::menu_item_enabled(MenuAction::select_all, non_task),
+          "Select All is task-view only");
+    check(!app::menu_item_enabled(MenuAction::zoom_day, non_task),
+          "The Gantt timescale is task-view only");
+    check(!app::menu_item_enabled(MenuAction::show_filter, non_task),
+          "Filter is task-view only");
+    check(!app::menu_item_enabled(MenuAction::collapse_all, non_task),
+          "Collapse is task-view only");
+    check(app::menu_item_enabled(MenuAction::view_task_sheet, non_task),
+          "the Task Sheet switch works from the other views");
+    check(app::menu_item_enabled(MenuAction::view_resource_usage, non_task),
+          "the Resource Usage switch works from the other views");
+    check(app::menu_item_enabled(MenuAction::usage_week, non_task),
+          "the usage period is available from the other views");
 }
 
 }  // namespace

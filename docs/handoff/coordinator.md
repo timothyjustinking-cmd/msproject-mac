@@ -413,3 +413,75 @@ Both were invisible to MSVC and only `app-macos` (clang) caught them:
    read and (with a writer change) persisted.
 3. Build and open `w37-snet-link.mpp`; then add link/assignment row support to
    `add_delete` so a task delete can cascade cleanly.
+
+## Wave 11 final (2026-10-22 ~19:35)
+
+Wave-11 gate file: `docs/handoff/wave11-complete.md`. Wave 12 (W51 app editing,
+W52 writer links/clear, W53 calendar exceptions) was launched after this section
+was written; check `WAVES.md` for its state.
+
+### Where main is
+
+`f7c1279` plus the docs commit. Wave-11 commits: `8a34c14` W47, `c2acbe4` W50,
+`b233f78` oracle, `3f11019` W48+W49, `c4e885e` custom-field oracle, `f7c1279`
+crosscheck fix + wave-12 exception fixture.
+
+### The numbers
+
+* Clean `build\vs-w11`: **39/39 ctest**; app `build\vs-w11-app`: **8/8**,
+  **1,414 checks** (`app_layout` 253, `app_selection` 90, `app_document` 43,
+  `app_prefs` 82, `app_menu` 664, `app_filter` 60, `app_export` 58,
+  `app_views` 164).
+* **M2 332/332**; schedin 20/20 + 10/10; `plan_recalc` 277; reader 685;
+  add_delete 760; field_values 317; mpp_field_value 283; cpm 1,321; props 520.
+* Project gates: cascade 2 tasks; all six custom-field values and the rewrite
+  display correctly.
+
+### Per stream
+
+| # | Result | Owns/evidence |
+|---|---|---|
+| W47 | Resource Sheet, Task/Resource Usage, computed columns, view prefs | app 8/8, 1,414 checks |
+| W48 | delete cascade (links/assignments), custom-field read/write, linked-pin clamp | add_delete 760, field 317, mpp_field 283; Project-verified |
+| W49 | resource Type/MaxUnits, per-task calendars in CPM, elapsed lag/duration, tombstone liveness | reader 685, cpm 1321, plan 277; PROJECT_B 70/63 |
+| W50 | `114/Props` framing + all six formulas | props 520 |
+
+### The custom-field contract (three stores, all measured)
+
+1. VarMeta entries in the uid group **after Name**, field-id order; Duration
+   adds `0x0b4000b7` = `07 00` after the overtime entries.
+2. 88-byte records in **both** `114/TBkndTask/Props` and
+   `114/TBkndAssn/Props` (with their count/byte preamble words).
+3. FixedMeta entry tail bitmap + `+2` = the uid's VarMeta count
+   (Text1 +21|0x20, Number1 +25|0x08, Number2 +25|0x10, Duration1
+   +26|0x01/+27|0x20, Date1 +29|0x40, Flag1 +24|0x02).
+
+Skipping any one of the three leaves Project showing zeros. This is the single
+most expensive lesson of the wave; it is in `w11-oracle.md` §4 and `add_delete`
+/`field_values` comments.
+
+### Open (wave 12 owns 1-3)
+
+1. App Insert/Delete Task, stored custom-field columns, file formulas.
+2. Writer link add/delete, custom-field clear/delete; assignment add needs an
+   oracle fixture.
+3. Recurring calendar exception parameters (`w12-exceptions.mpp` exists).
+4. `214/CTable`/`214/CV_iew` view state, MPP12, elapsed-task mixes, MPP14
+   resource Type.
+
+### Traps added
+
+* The three custom-field stores above; a VarMeta-only write silently shows zero.
+* A liveness change moves test pins: `io_mspdi_crosscheck` had to move from
+  PROJECT_B 72/73 to 70/63 with zero dead endpoints.
+* `core/mpp/reader.*` is shared by streams; coordinate one writer at a time
+  (a half-applied reader change segfaulted W49's tests until it settled).
+* `app-macos` remains the only compiler for `main.mm`.
+
+### Next three actions
+
+1. Finish wave 12 and its Project gates (link add fixture; exception fixture).
+2. Then wire the app's new stored-field/formula columns and structural editing
+   into the save path (W51) and run a manual-Mac smoke test.
+3. Prepare the adversarial audit: ASan/debug build, the audit brief, and a clean
+   tree; only then hand to a human.

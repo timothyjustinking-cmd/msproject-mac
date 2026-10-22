@@ -380,3 +380,103 @@ build\vs-w40\tools\mspdi_cmp\Release\mspdi_cmp.exe corpus\probe\assign1.mpp corp
     with w37-snet-auto/w37-snet-save; the W18/W31 "inference" wording is
     withdrawn). Resource Type remains unlocated and MaxUnits is still only
     value-proven — see "Still open".
+
+## W49 addendum (wave 11, 2026-10-22 18:55) — Resource Type, task DurationFormat, link LagFormat
+
+Owned files touched: `core/mpp/reader.h`, `core/mpp/reader.cpp`,
+`tests/mpp_reader_tests.cpp`, this file.  `core/mpp/field_value.{h,cpp}` and W48's
+`Task::custom_fields` were left alone.  No client name is used below (uids and
+counts only).
+
+### Resource Type is per-row METADATA, not a byte in the 172-byte row (MEASURED)
+
+`corpus/probe/w9-resourcetypes.mpp` is the fixture W40 asked for: COM built R1
+Work with MaxUnits 50 %, R2 Material with a MaterialLabel, R3 Cost, then saved
+the .mpp and an MSPDI export.  Decoding the metadata words gives all three:
+
+| condition | type |
+|---|---|
+| `TBkndRsc/FixedMeta` entry (37-byte rows) byte **+12 bit 0x10** set | Work |
+| that bit clear and `TBkndRsc/Fixed2Meta` entry byte **+8 bit 0x10** set | Cost |
+| both clear | Material |
+
+The two streams pair by ENTRY INDEX (the Fixed2Meta entry's +4 is a Fixed2Data
+record offset, not the FixedMeta row offset), exactly like the Task outline.
+Measured results: w9-resourcetypes = Work / Material / Cost; PROJECT_A 22/22 and
+PROJECT_B 22/22 = Work, matching their MSPDI exports.  `Resource::type` uses MS
+Project's COM PjResourceType order (Work=0, Material=1, Cost=2);
+`Resource::type_stored` is true when the metadata supplied the value.
+`material_label` is VarMeta key **0x0c40012b** (R2 = the synthetic label
+"metre").  W49 also added `is_material()` / `is_cost()`.
+
+**MaxUnits scale is now measured, not inference**: R1 is COM MaxUnits 50 % and
+the +8 double holds **5000.0**, so +8 is x100 (10000.0 = 100 %), not x10000.
+`max_units_percent()` returns 50 for that row.
+
+[I]/open: the Project-2010 MPP14 variant puts the Work bit at FixedMeta entry
++9 bit 0x02 (mpxj MPP14ResourceReader); no file on disk is that variant, so the
+reader implements the 2013+ rule only.  MSPDI's `<Type>` is a DIFFERENT enum
+(1 = Work, 0 = Material, cost marked by `IsCostResource`); do not compare it
+numerically with `ResourceType`.  `tools/mspdi_cmp` still only understands
+Work/Type=1 and is therefore not used on w9-resourcetypes.
+
+### Task DurationFormat is task row +164 (0xa4) (MEASURED)
+
+`Task::duration_format` is the u16 at row offset **+0xa4**, PjFormatUnit
+numbering: 7 = days, 8 = elapsed days, 9 = weeks, 11 = months, 21 = none, the
+even values 4..12 elapsed, and 35..44 the estimated variants.
+`format_unit_is_elapsed()` and `Task::duration_is_elapsed()` expose the elapsed
+rule.
+
+Evidence: every task row's +a4 (the project row included) equals its `<DurationFormat>` in Project's
+own MSPDI export — **84 PROJECT_A + 74 PROJECT_B + 4 w9-resourcetypes rows, 0
+mismatches** (the count includes the project row).  In
+`corpus/probe/w9-elapsedlag.mpp`, T8 ("2 edays") stores 8 and its 28800 ticks
+while T1..T7 store 7.
+
+### Link LagFormat is link row +18 (W41 measured; W49 exposed)
+
+`Link::lag_units` was already decoded.  W49 added `Link::lag_is_elapsed()` and
+`core/plan` now maps it through that method instead of a local duplicate.
+MEASURED on w9-elapsedlag: 3 links store 8 ("2 edays"/"3 edays"), 2 store 7
+("2 days"); see `recalc --links` (the `elapsed` column).
+
+### Counts / commands (W49)
+
+```
+mpp_reader_tests         685 checks with corpus (was 663), 324 with MPP_NO_CORPUS=1
+PROJECT_A 83 tasks / PROJECT_B 73 tasks / resource counts unchanged
+ctest -R "mpp|cal|sched|plan"   23/23 passed
+build\vs-w49\tools\recalc\Release\recalc.exe corpus\probe\w9-elapsedlag.mpp --fields
+  -> uid 8: dur_ticks 28800, dur_fmt 8; uid 1..7: dur_fmt 7
+```
+
+### Link/assignment liveness now honours the W45/W48 tombstone (MEASURED, W49)
+
+Before W49, link and assignment liveness was FixedMeta **coverage** only.  W48's
+delete cascade keeps the dependent FixedData bytes and only sets the entry's
++0 state byte to 0x02, so the reader returned rows Project has deleted:
+
+| table | before | after (coverage AND state +0 == 0) | Project export |
+|---|---|---|---|
+| PROJECT_B links | 72 (70 live endpoints, 2 dead) | **70, all 70 live, 2 skipped** | 70 |
+| PROJECT_B assignments | 73 (63 resolving to a live task) | **63, all 63 resolve, 10 skipped** | 63 |
+| PROJECT_A links | 88 | **88** | 88 |
+| PROJECT_A assignments | 67 | **67** | 67 |
+| W48 `w48-del-cascade.mpp` | 2 links (0 live), 3 assignments (2 live-task) | **0 links, 2 assignments (both live-task), 2+2 skipped** | Project delete cascade |
+
+The predicate is exactly the Task one: `covered && (state == kStateNoMetaStream
+|| state == 0)`.  A missing FixedMeta stream keeps the old all-live assumption
+(state == kStateNoMetaStream).  Tombstoned link rows and non-placeholder
+tombstoned assignment rows are counted in `skipped_links` /
+`skipped_assignments` with reason "FixedMeta entry is a tombstone (+0 = 0x02)";
+a tombstoned assignment placeholder (task uid 0) is skipped silently, as before.
+The table warning says how many rows were tombstoned.
+
+This SUPERSEDES the W31/W40 counts above: PROJECT_B is 70 links (0 dead-endpoint)
+and 63 assignments, not 72/70/2 and 73.  PROJECT_A is unchanged.  The W48 fixture path
+is `build\vs-w48\core\mppwrite\test-out\w48-del-cascade.mpp` (build output, not
+committed); W48's `tests/roundtrip_add_delete.cpp` owns its own expectations.
+The reader test pins the PROJECT_B/PROJECT_A counts; `mpp_reader_tests` is 685 checks
+after this change.
+

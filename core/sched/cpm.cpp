@@ -32,6 +32,17 @@ ticks work_delta(const Calendar& calendar, date32 from, date32 to) {
     return -calendar.work_time_between(to, from);
 }
 
+// Signed WALL-CLOCK difference in the same ticks (tenths of a minute).  Used for
+// an elapsed-duration task, whose duration and slack count all time, not just
+// working time (MEASURED, wave 11: w9-elapsedlag.mpp T8 stores 106200 ticks of
+// TotalSlack = the wall-clock gap Wed 10-21 08:00 -> Wed 10-28 17:00).
+ticks elapsed_delta(date32 from, date32 to) {
+    if (!is_set(from) || !is_set(to)) {
+        return 0;
+    }
+    return (to_seconds(to) - to_seconds(from)) / kSecondsPerTenth;
+}
+
 // §4.2 forward lag: working lag on the successor's calendar; negative = lead.
 date32 add_lag(const Calendar& calendar, date32 t, ticks lag) {
     if (!is_set(t)) {
@@ -154,6 +165,7 @@ bool constraint_needs_date(ConstraintType type) noexcept {
 struct Node {
     std::int32_t id = 0;
     ticks duration = 0;
+    bool elapsed_duration = false;
     const Calendar* calendar = nullptr;
     ConstraintType constraint = ConstraintType::as_soon_as_possible;
     date32 constraint_date = kDateNa;
@@ -177,6 +189,31 @@ struct Node {
     ticks total_slack = 0;
     bool critical = false;
 };
+
+// Task-duration arithmetic.  A working duration walks the task's calendar; an
+// elapsed duration is plain wall-clock arithmetic (the same add_elapsed() the
+// measured elapsed lag uses).  MEASURED for the elapsed case on w9-elapsedlag.mpp
+// T8 ("2 edays" = 28800 ticks): Mon 10-19 08:00 -> Wed 10-21 08:00, and its
+// late dates/slack are wall-clock too.
+date32 add_duration(const Calendar& calendar, date32 t, const Node& node) {
+    if (node.elapsed_duration) {
+        return add_elapsed(t, node.duration);
+    }
+    return calendar.add_work(t, node.duration);
+}
+
+date32 sub_duration(const Calendar& calendar, date32 t, const Node& node) {
+    if (node.elapsed_duration) {
+        return add_elapsed(t, -node.duration);
+    }
+    return calendar.sub_work(t, node.duration);
+}
+
+ticks duration_delta(const Calendar& calendar, date32 from, date32 to,
+                     const Node& node) {
+    return node.elapsed_duration ? elapsed_delta(from, to)
+                                 : work_delta(calendar, from, to);
+}
 
 CpmResult make_error(CpmError error, std::string message) {
     CpmResult result;
@@ -274,6 +311,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
         Node node;
         node.id = task.id;
         node.duration = task.duration;
+        node.elapsed_duration = task.elapsed_duration;
         node.calendar = task.calendar != nullptr ? task.calendar : &project_calendar;
         node.constraint = normalise_constraint(task.constraint, task.constraint_date);
         node.constraint_date = task.constraint_date;
@@ -500,7 +538,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             // add_work(floor, 0) is the floor instant itself -- has no oracle row.
             // Do not claim it; it is listed as open in core/sched/README.md.
             if (has_ff_link) {
-                const date32 earliest_finish = cal.add_work(floor, node.duration);
+                const date32 earliest_finish = add_duration(cal, floor, node);
                 if (!is_set(earliest_finish)) {
                     return fail_overflow(node.id);
                 }
@@ -516,7 +554,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             if (is_set(start_bound)) {
                 es = start_bound;
             } else if (is_set(finish_bound)) {
-                es = cal.sub_work(finish_bound, node.duration);
+                es = sub_duration(cal, finish_bound, node);
                 if (!is_set(es)) {
                     return fail_overflow(node.id);
                 }
@@ -555,21 +593,21 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                     break;
                 case ConstraintType::must_finish_on:
                     ef = node.constraint_date;
-                    es = cal.sub_work(ef, node.duration);
+                    es = sub_duration(cal, ef, node);
                     break;
                 case ConstraintType::finish_no_earlier_than: {
-                    const date32 natural = cal.add_work(es, node.duration);
+                    const date32 natural = add_duration(cal, es, node);
                     if (!is_set(natural)) {
                         return fail_overflow(node.id);
                     }
                     if (natural < node.constraint_date) {
                         ef = node.constraint_date;
-                        es = cal.sub_work(ef, node.duration);
+                        es = sub_duration(cal, ef, node);
                     }
                     break;
                 }
                 case ConstraintType::finish_no_later_than: {
-                    const date32 natural = cal.add_work(es, node.duration);
+                    const date32 natural = add_duration(cal, es, node);
                     if (!is_set(natural)) {
                         return fail_overflow(node.id);
                     }
@@ -577,7 +615,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                     // forward pass, exactly like SNLT on the finish side.
                     if (node.constraint_date < natural) {
                         ef = node.constraint_date;
-                        es = cal.sub_work(ef, node.duration);
+                        es = sub_duration(cal, ef, node);
                     }
                     break;
                 }
@@ -591,10 +629,10 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                 // even though T2 starts Fri 16 08:00, so the bound must not be
                 // max'ed with the natural early finish (which is Mon 19 17:00
                 // from the project-start floor and used to win).
-                ef = is_set(finish_bound) ? finish_bound : cal.add_work(es, node.duration);
+                ef = is_set(finish_bound) ? finish_bound : add_duration(cal, es, node);
             } else if (is_set(finish_bound) && finish_bound > ef) {
                 ef = finish_bound;
-                es = cal.sub_work(ef, node.duration);
+                es = sub_duration(cal, ef, node);
                 if (!is_set(es)) {
                     return fail_overflow(node.id);
                 }
@@ -602,7 +640,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             if (is_set(finish_bound)) {
                 // A finish bound is a floor: when a start bound or a constraint
                 // pushed the start later, the finish follows the start.
-                const date32 from_start = cal.add_work(es, node.duration);
+                const date32 from_start = add_duration(cal, es, node);
                 if (!is_set(from_start)) {
                     return fail_overflow(node.id);
                 }
@@ -621,14 +659,14 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             // successor-derived -- the backward pin below touches only the start.
             if (is_set(node.actual_start)) {
                 es = node.actual_start;
-                ef = cal.add_work(es, node.duration);
+                ef = add_duration(cal, es, node);
                 if (!is_set(ef)) {
                     return fail_overflow(node.id);
                 }
             }
             node.es = es;
             node.ef = ef;
-            node.link_ef = std::max(node.link_es, cal.add_work(node.link_es, node.duration));
+            node.link_ef = std::max(node.link_es, add_duration(cal, node.link_es, node));
             if (!is_set(node.link_ef)) {
                 return fail_overflow(node.id);
             }
@@ -717,7 +755,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                 }
             }
             if (is_set(ls_bound)) {
-                take_min_finish(cal.add_work(ls_bound, node.duration));
+                take_min_finish(add_duration(cal, ls_bound, node));
             }
 
             bool pinned = false;
@@ -733,7 +771,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                     // dates -- LF = AddWork(date, duration) = Mon 26 17:00, even
                     // when that is beyond the project finish.  A successor bound,
                     // where present, still wins.
-                    const date32 bound = cal.add_work(node.constraint_date, node.duration);
+                    const date32 bound = add_duration(cal, node.constraint_date, node);
                     if (!is_set(bound)) {
                         return fail_overflow(node.id);
                     }
@@ -783,7 +821,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             if (pinned && lf == node.ef) {
                 ls = node.es;
             } else {
-                ls = cal.sub_work(lf, node.duration);
+                ls = sub_duration(cal, lf, node);
             }
             if (!is_set(ls)) {
                 return fail_overflow(node.id);
@@ -830,8 +868,8 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
         options.duration.minutes_per_day() * kTicksPerMinute;
     for (Node& node : nodes) {
         const Calendar& cal = *node.calendar;
-        const ticks start_raw = work_delta(cal, node.es, node.ls);
-        const ticks finish_raw = work_delta(cal, node.ef, node.lf);
+        const ticks start_raw = duration_delta(cal, node.es, node.ls, node);
+        const ticks finish_raw = duration_delta(cal, node.ef, node.lf, node);
         // MEASURED RULE (project_a-recalc.mpp rows +190, uids 10849/10851; summary
         // 8141/10720/10761): TotalSlack is the FINISH slack LF - EF.  It is not
         // min(LS-ES, LF-EF): a started task stores StartSlack 0 (LS pinned to the
@@ -855,12 +893,12 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             switch (node.constraint) {
                 case ConstraintType::must_start_on:
                 case ConstraintType::start_no_later_than:
-                    constraint_slack = work_delta(cal, node.link_es, node.constraint_date);
+                    constraint_slack = duration_delta(cal, node.link_es, node.constraint_date, node);
                     have = true;
                     break;
                 case ConstraintType::must_finish_on:
                 case ConstraintType::finish_no_later_than:
-                    constraint_slack = work_delta(cal, node.link_ef, node.constraint_date);
+                    constraint_slack = duration_delta(cal, node.link_ef, node.constraint_date, node);
                     have = true;
                     break;
                 default:
@@ -910,16 +948,16 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                 ticks slip = 0;
                 switch (link.type) {
                     case LinkType::finish_to_start:
-                        slip = work_delta(cal, node.ef, succ.es) - link.lag;
+                        slip = duration_delta(cal, node.ef, succ.es, node) - link.lag;
                         break;
                     case LinkType::start_to_start:
-                        slip = work_delta(cal, node.es, succ.es) - link.lag;
+                        slip = duration_delta(cal, node.es, succ.es, node) - link.lag;
                         break;
                     case LinkType::finish_to_finish:
-                        slip = work_delta(cal, node.ef, succ.ef) - link.lag;
+                        slip = duration_delta(cal, node.ef, succ.ef, node) - link.lag;
                         break;
                     case LinkType::start_to_finish:
-                        slip = work_delta(cal, node.es, succ.ef) - link.lag;
+                        slip = duration_delta(cal, node.es, succ.ef, node) - link.lag;
                         break;
                 }
                 free = first ? slip : std::min(free, slip);
@@ -969,6 +1007,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
         out.free_slack = node.free_slack;
         out.total_slack = node.total_slack;
         out.critical = node.critical;
+        out.elapsed_duration = task.elapsed_duration;
         out.constraint = node.constraint;
         result.tasks.push_back(out);
     }

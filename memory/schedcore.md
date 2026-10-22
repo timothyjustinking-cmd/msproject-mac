@@ -540,3 +540,95 @@ restored to its pinned content after every `plan_recalc_tests` run (sha256
    successor with FF-6d, and the same with FF+0) separates "floor to the first
    working instant" from "floor to the raw project start".  Until then the
    behaviour in `cpm.cpp` (`has_ff_link` block) stays flagged as inference.
+
+## W49 addendum (wave 11, 2026-10-22 18:55) — elapsed DURATION closed; task calendars reach CPM
+
+Owned files touched by this stream: `core/sched/cpm.h`, `core/sched/cpm.cpp`,
+`tests/sched_cpm_tests.cpp`, `core/plan/plan.{h,cpp}`, `core/plan/CMakeLists.txt`,
+`tests/plan_recalc_tests.cpp`, `core/mpp/reader.{h,cpp}` (W49 fields only; W48's
+`field_value.{h,cpp}` untouched), `tools/recalc/main.cpp`, plus memory/handoff.
+No client name is used below (uids/dates/counts only).
+
+### (1) Elapsed DURATION is now reproduced — the W41 open item is CLOSED
+
+The reader now exposes the task row's **+164 (0xa4) DurationFormat** (see
+`memory/reader.md`): 8 = elapsed days.  `CpmTask::elapsed_duration` is set by
+`core::plan::from_mpp` from `Task::duration_is_elapsed()`, and `cpm.cpp` routes
+all task-duration arithmetic through three helpers:
+
+* `add_duration` / `sub_duration` — `add_elapsed` for an elapsed task, otherwise
+  `Calendar::add_work` / `sub_work`;
+* `duration_delta` — `elapsed_delta` (wall clock, seconds/6) for an elapsed task,
+  otherwise `work_delta` (working time).
+
+MEASURED, `corpus/probe/w9-elapsedlag.mpp` T8 (oracle
+`docs/analysis/oracle/w9-elapsedlag.json`): duration 28800 ticks, duration
+format 8, scheduled **Mon 2026-10-19 08:00 -> Wed 2026-10-21 08:00** (48 wall
+clock hours, not six working days), LateFinish Wed 10-28 17:00, LateStart Mon
+10-26 17:00, and Start/Finish/Total/Free slack all **106200 ticks = 10620
+min** (wall-clock LF-EF).  All 16 date fields and all 10 slack values of the
+fixture now match; `plan_recalc_tests` changed from 15/16 to 16/16 dates and the
+T8-diverges assertion is gone.  `tests/sched_cpm_tests.cpp` adds the same row
+plus a no-flag control (28800 ticks = six working days -> Mon 10-26 17:00).
+
+[I] scope: the measured row has no links and no constraints.  The engine applies
+the elapsed rule to MFO/FNET/FNLT constraint arithmetic and to the task's own slack;
+a link that mixes an elapsed-duration task with a working-time successor, and
+an elapsed task with a START/FINISH constraint, are unmeasured.
+
+### (2) Per-task calendars in CPM — engine side was already present, bridge wired
+
+`CpmTask::calendar` existed since W12; W49's new work is
+`core::plan::attach_task_calendars` (one `Calendar` per distinct
+`Task::calendar_uid`, built by `core::cal`) and `recalculate()` selecting
+`task.calendar_uid`'s calendar or the project calendar.  `PlanInput::calendar`
+is unchanged as the project/default calendar; `PlanInput::task_calendars` is the
+new owned vector.
+
+MEASURED (wave 11, `corpus/probe/holiday1.mpp`, oracle
+`docs/analysis/oracle/holiday-probe.json`): all three tasks store +178 = 3
+(SiteCal with a Wednesday exception and a 4 h Friday).  The engine now produces
+T1 Mon 10-19 08:00 -> Tue 10-20 17:00, T2 Thu 10-22 08:00 -> Thu 10-29 12:00,
+T3 Fri 10-23 08:00 -> Mon 10-26 12:00, project finish Thu 10-29 12:00, with
+T3 total slack 1440 min.  The control run (same rows, every +178 reset to -1)
+gives T2 Wed 10-21 08:00 -> Tue 10-27 17:00 and T3 Fri 10-23 08:00 -> Fri
+10-23 17:00, proving the calendar (not the dates) moved the two tasks.
+`test_task_calendars` in `tests/plan_recalc_tests.cpp` pins both runs.
+
+PROJECT_A and PROJECT_B store +178 = -1 on every task row, so `input.task_calendars` is
+empty and M2 remains **332/332** (83/83 start, finish, slack, critical; no DIFF
+lines; attribution matrix all zero).  Summary rollup still uses the project
+calendar (spec §1.6 [I]); no measured summary has a task calendar.
+
+### Counts (W49, build\vs-w49, Release)
+
+| binary | before W49 | now |
+|---|---|---|
+| `core_sched_cpm_tests` | 1308 | **1321** |
+| `plan_recalc_tests` | 231 | **277** |
+| `mpp_reader_tests` (corpus / no corpus) | 663 / 316 | **685 / 324** |
+| `cal_tests` (corpus / no corpus) | 217 / 90 | 217 / 90 |
+| `ctest -R "mpp|cal|sched|plan"` | 21/21 | **23/23** |
+
+M2 command: `build\vs-w49\tools\recalc\Release\recalc.exe corpus\project_a.mpp --compare corpus\probe\project_a-recalc.mpp`
+-> **332/332**, `tests/data/project_a_recalc_golden.tsv` SHA256 unchanged
+`DB81218ECCC9219B2DA9864D5F3A0387FBB16BC5D8F027089E826B7BEFC46A0A`.
+Schedin: **20/20 dates, 10/10 slack**.  Reader: **PROJECT_A 83 tasks, PROJECT_B 73**.
+`mspdi_cmp` PROJECT_A and PROJECT_B still **MATCH** (resources 22/22 each).
+
+### Traps added
+
+* Elapsed duration is a FORMAT flag, not a different tick scale: 2 edays is
+  stored as 28800 ticks and is scheduled with `add_elapsed`, not `add_work`.
+  A 28800-tick task without the flag is six working days.
+* Do not put core_cal behind core_plan only for tests: `core_plan` now links
+  `core_cal` PUBLIC because plan.cpp calls `build_calendar`.
+* `Task::calendar_uid` is an i32; -1 must keep the project calendar.  Do not
+  build a calendar for uid <= 0.
+* `attach_task_calendars` is a separate call: `from_mpp` has no path and cannot
+  decode the calendar.  A caller that forgets it silently gets the old
+  project-calendar behaviour (tools/recalc and plan_recalc_tests call it).
+* Recurring exception parameters are still NOT decoded; W49 did not change
+  `core/cal`'s expansion.  Do not claim the weekday mask / every-N / position /
+  month-day words are measured.
+

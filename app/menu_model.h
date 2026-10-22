@@ -14,11 +14,9 @@
 //   are permanently disabled rather than faked.
 //
 // "ONLY WHAT THE MODEL SUPPORTS"
-//   Insert > Task needs a writer that can GROW a table: RecordSet has no
-//   insert/erase and core/mppwrite cannot add a directory entry or a table row
-//   (spec/mpp-writer.md sections 5 and 10.4; wave 10 stream W45 owns it).
-//   Insert > Resource needs a resource table (wave 10 stream W43).  Cut needs a
-//   SheetModel operation that does not exist (copy_selection and paste do).
+//   Insert > Task and Insert > Resource need the shell's add/delete editing,
+//   which wave 12 owns; wave 11's resource/usage views are read-only.  Cut needs
+//   a SheetModel operation that does not exist (copy_selection and paste do).
 //   All three are in the menu and permanently disabled with a reason in
 //   menu_disabled_reason(): greyed out, never faked.
 #pragma once
@@ -61,6 +59,16 @@ enum class MenuAction : std::uint8_t {
     clear_filter,
     collapse_all,
     expand_all,
+    // Wave 11: the four view modes and the usage grid's period width.  They are
+    // view state, so they are enabled whenever a document is open; the shell
+    // applies them through app/view_model.h and app/Preferences.
+    view_task_sheet,
+    view_resource_sheet,
+    view_task_usage,
+    view_resource_usage,
+    usage_day,
+    usage_week,
+    usage_month,
     insert_task,
     insert_resource,
 };
@@ -106,6 +114,12 @@ struct MenuState {
     bool filter_active = false;
     bool any_collapsed = false;
     bool any_expanded = false;
+    // Wave 11: true only in the Task Sheet view.  The resource sheet and the two
+    // usage grids have no selection, no cell editing, no Gantt and no filter, so
+    // the task-only commands (undo/redo, clipboard, Select All, zoom, filter,
+    // collapse, PDF export) degrade cleanly to disabled rather than acting on a
+    // hidden task sheet.  The view and usage-period switches stay enabled.
+    bool task_view = true;
 };
 
 // True when `action` may run in `state`.  An action the model cannot support is

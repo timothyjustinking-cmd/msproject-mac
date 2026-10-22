@@ -11,23 +11,31 @@
 //
 // ---------------------------------------------------------------- CALENDAR --
 // `core::cal` decodes the file's calendar table (114/TBkndCal plus the Standard
-// week in 114/Props) and builds a core::sched::Calendar.  `from_mpp` does NOT
-// take a path, so it still fills PlanInput::calendar with a HARD-CODED standard
-// week:
+// week in 114/Props) and builds core::sched::Calendar objects.  `from_mpp` does
+// NOT take a path, so it starts with a HARD-CODED standard week:
 //
 //     Monday .. Friday, 08:00-12:00 and 13:00-17:00  (480 working minutes/day)
 //     every other day non-working, NO holidays and NO dated exceptions.
 //
-// Callers that have the path replace it after mapping, which is what
-// tools/recalc and tests/plan_recalc_tests.cpp do:
+// and it copies every task's +178 calendar uid into PlanTask::calendar_uid.  A
+// caller with the path replaces the project week and builds the task calendars:
 //
 //     PlanInput input = from_mpp(document);
-//     input.calendar  = core::cal::load_project_calendar(path);
+//     core::cal::CalendarTable table = core::cal::decode_file(path);
+//     input.calendar = core::cal::build_project_calendar(table);
+//     attach_task_calendars(input, table);
 //
-// A file whose default calendar is Standard therefore schedules identically
-// either way; a file with holidays or a different work week does not.  PROJECT_A's
-// 1331 dated exceptions all fall between 2002 and 2024, so its 2026 dates are
-// unchanged by the decoded calendar, but the decoded table is what proves it.
+// attach_task_calendars builds ONE Calendar per distinct referenced uid (spec
+// §1.6: the task calendar when one is set, the project calendar otherwise), and
+// recalculate() points each CPM node at its task's calendar.  Without that call
+// every task uses PlanInput::calendar, which is the pre-wave-11 behaviour.
+// MEASURED (wave 11, corpus/probe/holiday1.mpp): T1/T2/T3 store +178 = 3
+// (SiteCal: a Wednesday exception and a 4 h Friday).  With it T2 starts Thu
+// 2026-10-22 08:00 (not Wed 10-21) and T3's 1 d from Fri 10-23 08:00 ends Mon
+// 10-26 12:00; on the project calendar the same rows start 10-21 and finish
+// Fri 17:00.  PROJECT_A and PROJECT_B store -1 on every task row, so their M2 dates
+// cannot move.  A summary is still rolled up on the project calendar (spec §1.6
+// [I]); no file on disk has a summary with a task calendar.
 //
 // ------------------------------------------------------------- CONSTRAINTS --
 // mpp::Task exposes ConstraintType (PjConstraint 0=ASAP .. 7=FNLT),
@@ -146,6 +154,10 @@
 #include "reader.h"
 #include "rollup.h"
 
+namespace core::cal {
+struct CalendarTable;
+}
+
 namespace core::plan {
 
 // One schedulable task, in reader terms.  `uid` is the .mpp UniqueID and is the
@@ -153,6 +165,14 @@ namespace core::plan {
 struct PlanTask {
     std::int32_t uid = 0;
     core::sched::ticks duration = 0;  // tenths of a minute (reader +84)
+    // Reader +178: task calendar uid, -1 when the task uses the project calendar.
+    // attach_task_calendars() resolves it; recalculate() gives the CPM node the
+    // matching Calendar.
+    std::int32_t calendar_uid = -1;
+    // True when the reader's DurationFormat (+0xa4) is an elapsed format (8 =
+    // elapsed days).  MEASURED on w9-elapsedlag.mpp T8 ("2 edays"); the engine
+    // then counts wall-clock time instead of walking the calendar.
+    bool elapsed_duration = false;
     // Derived from the outline numbers: true when another task names this one as
     // its parent.  Only those are excluded from the CPM graph and rolled up.
     bool summary = false;
@@ -179,9 +199,18 @@ struct PlanLink {
     std::int32_t successor = 0;
     core::sched::LinkType type = core::sched::LinkType::finish_to_start;
     core::sched::ticks lag = 0;
-    // Elapsed lag ignores calendars; the reader's lag format word (+18) is not
-    // decoded, so every lag from a file is treated as working-time lag.
+    // True when the reader's link +18 LagFormat is an elapsed format (8 =
+    // elapsed days; MEASURED wave 9b on w9-elapsedlag.mpp).  Elapsed lag is
+    // wall-clock time and ignores calendars.
     bool elapsed_lag = false;
+};
+
+// One decoded task calendar, keyed by the uid a task stores at +178.  The
+// vector of these in PlanInput owns the Calendar objects, so recalculate() can
+// hand stable pointers to the CPM engine.
+struct TaskCalendar {
+    std::int32_t uid = -1;
+    core::sched::Calendar calendar;
 };
 
 // Everything the engine needs, already in engine terms.
@@ -191,6 +220,9 @@ struct PlanInput {
     std::vector<PlanLink> links;
     // THE HARD-CODED STANDARD CALENDAR described at the top of this header.
     core::sched::Calendar calendar;
+    // One entry per distinct task-calendar uid built by attach_task_calendars().
+    // Empty means every task uses PlanInput::calendar.
+    std::vector<TaskCalendar> task_calendars;
     // Project options the reader cannot see; MS Project's defaults are used.
     std::int32_t critical_slack_limit_days = 0;
     core::sched::DurationOptions duration;
@@ -221,6 +253,9 @@ struct PlanTaskResult {
     bool summary = false;
     std::int32_t parent = 0;
     core::sched::ticks duration = 0;
+    // Copied from the reader/PlanTask: +178 and the elapsed-duration flag.
+    std::int32_t calendar_uid = -1;
+    bool elapsed_duration = false;
     core::sched::date32 start = core::sched::kDateNa;
     core::sched::date32 finish = core::sched::kDateNa;
     core::sched::date32 early_start = core::sched::kDateNa;
@@ -277,6 +312,13 @@ core::sched::Calendar standard_calendar();
 // standard calendar.  Never throws; a missing project start is reported by
 // recalculate() as CpmError::missing_project_start.
 PlanInput from_mpp(const mpp::Document& document);
+
+// Build one core::sched::Calendar for every distinct PlanTask::calendar_uid > 0
+// in `input`, using the file's decoded 114/TBkndCal table.  Never throws: a uid
+// that is absent from the table or a calendar that fails to build is counted in
+// the appended PlanInput::notes and the affected tasks keep the project
+// calendar.  Does not touch PlanInput::calendar itself (the caller sets it).
+void attach_task_calendars(PlanInput& input, core::cal::CalendarTable const& table);
 
 // Run the CPM engine on the leaves, then roll the summaries up.  Deterministic
 // and idempotent (spec §5.3); an error is returned, never thrown, and no partial

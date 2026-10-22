@@ -2,8 +2,11 @@
 // summary rollup that follows it.
 #include "plan.h"
 
+#include "cal.h"
+
 #include <algorithm>
 #include <cstdio>
+#include <exception>
 #include <limits>
 #include <string>
 #include <unordered_map>
@@ -26,18 +29,6 @@ using core::sched::ticks;
 // and never a task.
 bool fits_int32(std::uint32_t value) {
     return value <= static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max());
-}
-
-// The link row's +18 word is PjFormatUnit (reader.h "LINKS"; spec §0.4 [B],
-// typelib line 3194: 3 min, 5 hour, 7 day, 9 week, 11 month, +1 = elapsed).
-// MEASURED (wave 9b, corpus/probe/w9-elapsedlag.mpp): two single-variable pairs
-// store 7 for a "2 days" lag and 8 for the same 2-day lag written "2 edays",
-// and the stored tick value of an elapsed lag is already elapsed time
-// ("2 edays" = 28800 ticks = 48 h, "3 edays" = 43200).  So 7 = working and
-// 8 = elapsed days, and the enum's +1 = elapsed rule covers the rest: every even
-// value in 4..12 is an elapsed format.  Every other corpus row stores 7.
-bool lag_is_elapsed(std::uint16_t lag_units) noexcept {
-    return lag_units >= 4 && lag_units <= 12 && (lag_units % 2 == 0);
 }
 
 // PjConstraint 0..7 is the same enum as core::sched::ConstraintType (spec §0.4).
@@ -148,6 +139,7 @@ PlanInput from_mpp(const mpp::Document& document) {
     std::size_t stored_actuals = 0;
     std::size_t derived_started = 0;
     std::size_t derived_finished = 0;
+    std::size_t elapsed_duration_rows = 0;
 
     for (const mpp::Task& task : document.tasks) {
         if (!fits_int32(task.uid)) {
@@ -159,6 +151,14 @@ PlanInput from_mpp(const mpp::Document& document) {
         mapped.uid = static_cast<std::int32_t>(task.uid);
         // Both sides count tenths of a minute (4800 ticks = one 8 h day).
         mapped.duration = static_cast<ticks>(task.duration_ticks);
+        // +178 task calendar and +0xa4 DurationFormat: MEASURED fields (see
+        // reader.h).  attach_task_calendars() turns the uid into a Calendar;
+        // an elapsed duration makes the engine count wall-clock time.
+        mapped.calendar_uid = task.calendar_uid;
+        mapped.elapsed_duration = task.duration_is_elapsed();
+        if (mapped.elapsed_duration) {
+            ++elapsed_duration_rows;
+        }
 
         // ---- constraints, deadline (reader fields; see reader.h) ----------
         ConstraintType constraint = ConstraintType::as_soon_as_possible;
@@ -289,6 +289,11 @@ PlanInput from_mpp(const mpp::Document& document) {
     }
 
     input.notes.emplace_back(
+        "duration format: " + std::to_string(elapsed_duration_rows) + " of " +
+        std::to_string(input.tasks.size()) +
+        " task rows store an elapsed DurationFormat (PjFormatUnit 8 etc); the engine "
+        "schedules those as wall-clock time (MEASURED, wave 11)");
+    input.notes.emplace_back(
         "constraints: " + std::to_string(constraint_rows) + " of " +
         std::to_string(input.tasks.size()) + " tasks carry a stored constraint, " +
         std::to_string(constraint_date_rows) + " with a constraint date, " +
@@ -352,7 +357,8 @@ PlanInput from_mpp(const mpp::Document& document) {
         mapped.type = static_cast<LinkType>(static_cast<unsigned>(link.type_raw) & 3u);
         // The reader's lag is signed 6-second ticks -- the engine's unit exactly.
         mapped.lag = static_cast<ticks>(link.lag_ticks);
-        mapped.elapsed_lag = lag_is_elapsed(link.lag_units);
+        // +18 is LagFormat: 7 = working days, 8 = elapsed (MEASURED wave 9b).
+        mapped.elapsed_lag = link.lag_is_elapsed();
         input.links.push_back(mapped);
     }
 
@@ -363,6 +369,48 @@ PlanInput from_mpp(const mpp::Document& document) {
                              std::to_string(input.summary_links) +
                              " links skipped (summary endpoint)");
     return input;
+}
+
+void attach_task_calendars(PlanInput& input, core::cal::CalendarTable const& table) {
+    std::size_t named_rows = 0;
+    std::size_t built = 0;
+    std::size_t missing = 0;
+    std::size_t failed = 0;
+    for (const PlanTask& task : input.tasks) {
+        if (task.calendar_uid <= 0) {
+            continue;
+        }
+        ++named_rows;
+        const bool already_built =
+            std::any_of(input.task_calendars.begin(), input.task_calendars.end(),
+                        [&task](const TaskCalendar& entry) {
+                            return entry.uid == task.calendar_uid;
+                        });
+        if (already_built) {
+            continue;
+        }
+        const core::cal::CalendarDefinition* definition =
+            core::cal::find_calendar_by_uid(table, task.calendar_uid);
+        if (definition == nullptr) {
+            ++missing;
+            continue;
+        }
+        try {
+            TaskCalendar entry;
+            entry.uid = task.calendar_uid;
+            entry.calendar = core::cal::build_calendar(table, *definition);
+            input.task_calendars.push_back(std::move(entry));
+            ++built;
+        } catch (const std::exception&) {
+            ++failed;
+        }
+    }
+    input.notes.emplace_back(
+        "task calendars: " + std::to_string(named_rows) +
+        " task rows name a +178 calendar uid; " + std::to_string(built) +
+        " distinct calendars built; " + std::to_string(missing) +
+        " uids are absent from 114/TBkndCal and " + std::to_string(failed) +
+        " failed to build (those rows use the project calendar)");
 }
 
 PlanResult recalculate(const PlanInput& input) {
@@ -420,6 +468,14 @@ PlanResult recalculate(const PlanInput& input) {
         }
     }
 
+    // Task calendars, from attach_task_calendars().  The entries live in the
+    // caller-owned PlanInput, so the pointers stay valid for this call.
+    std::unordered_map<std::int32_t, const core::sched::Calendar*> calendar_by_uid;
+    calendar_by_uid.reserve(input.task_calendars.size() * 2);
+    for (const TaskCalendar& entry : input.task_calendars) {
+        calendar_by_uid.emplace(entry.uid, &entry.calendar);
+    }
+
     // ---- CPM on the leaves ------------------------------------------------
     std::vector<core::sched::CpmTask> cpm_tasks;
     std::vector<std::size_t> cpm_input_index;
@@ -433,7 +489,14 @@ PlanResult recalculate(const PlanInput& input) {
         core::sched::CpmTask mapped;
         mapped.id = task.uid;
         mapped.duration = task.duration;
-        mapped.calendar = nullptr;  // every task uses PlanInput::calendar
+        mapped.elapsed_duration = task.elapsed_duration;
+        mapped.calendar = nullptr;  // task.calendar_uid == -1: project calendar
+        if (task.calendar_uid > 0) {
+            const auto found = calendar_by_uid.find(task.calendar_uid);
+            if (found != calendar_by_uid.end()) {
+                mapped.calendar = found->second;
+            }
+        }
         mapped.constraint = task.constraint;
         mapped.constraint_date = task.constraint_date;
         mapped.deadline = task.deadline;
@@ -570,6 +633,8 @@ PlanResult recalculate(const PlanInput& input) {
         out.summary = is_summary[index] != 0;
         out.parent = task.parent;
         out.duration = row.duration;
+        out.calendar_uid = task.calendar_uid;
+        out.elapsed_duration = task.elapsed_duration;
         out.start = row.start;
         out.finish = row.finish;
         out.late_start = row.late_start;

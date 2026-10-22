@@ -53,6 +53,19 @@ enum class LinkType : std::uint8_t {
 struct CpmTask {
     std::int32_t id = 0;
     ticks duration = 0;  // tenths of a minute; 0 = milestone; must be >= 0
+    // True when `duration` is an ELAPSED duration (Project's PjFormatUnit 8 /
+    // "2 edays"), so it counts wall-clock time and the calendar is not walked.
+    // MEASURED (wave 11, corpus/probe/w9-elapsedlag.mpp T8): the task row's
+    // DurationFormat word (task row +0xa4) is 8 for "2 edays" and 7 for every
+    // working-day task in the same file; Project schedules the 28800-tick task
+    // Mon 2026-10-19 08:00 -> Wed 2026-10-21 08:00 and stores 106200 ticks
+    // (10620 min) of TotalSlack, which is the wall-clock LF-EF, not the working
+    // time between the dates.  `false` is the normal working-time duration.
+    // [I] scope: the one measured row has no links and no constraints; the
+    // engine applies the elapsed rule to its duration/constraint arithmetic and
+    // to its slack, and a link bound that mixes an elapsed task with a working
+    // task is unmeasured.
+    bool elapsed_duration = false;
     const Calendar* calendar = nullptr;
     ConstraintType constraint = ConstraintType::as_soon_as_possible;
     date32 constraint_date = kDateNa;
@@ -180,6 +193,10 @@ struct CpmTaskResult {
     ticks free_slack = 0;
     ticks total_slack = 0;
     bool critical = false;
+    // True when this row's duration was scheduled as elapsed time (see
+    // CpmTask::elapsed_duration).  Reporting only; the dates/slack already
+    // reflect it.
+    bool elapsed_duration = false;
     // The constraint type the engine actually applied.  Measured: assigning
     // ConstraintDate to an ASAP task silently changes its type to SNET(4), so
     // this can differ from CpmTask::constraint.

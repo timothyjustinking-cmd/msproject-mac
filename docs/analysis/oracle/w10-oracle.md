@@ -195,18 +195,30 @@ Measured diffs (all 96 streams, only these changed):
 | base → column added | `114/Props` −2 B, `214/Props`, `Props14` +192 B |
 | column → date format 5 | `114/Props` +2 B, `214/Props`, `Props14` +2 B |
 
-So **the table's date format is a property of the table definition and is
-written into `114/Props`** (with Project's own `214/`/`Props14` churn). It is
-not a global option. There is no exposed setter for the *global* date format,
-duration format or Gantt timescale: `Application.DateFormat`/`DurationFormat`
-are conversion functions, `Application.Timescale`/`Options*` are dialog
-methods, and `Application.Tables` is a method returning a bool on this build
-(`pywin32` quirk; `dir()` on the COM object raises "Not implemented").
+So the table's date format is a property of the table definition and the
+file's `114/Props` bytes move when it changes (with Project's own
+`214/`/`Props14` churn). It is not a global option. There is no exposed setter
+for the *global* date format, duration format or Gantt timescale:
+`Application.DateFormat`/`DurationFormat` are conversion functions,
+`Application.Timescale`/`Options*` are dialog methods, and `Application.Tables`
+is a method returning a bool on this build (`pywin32` quirk; `dir()` on the COM
+object raises "Not implemented").
+
+**W50 correction (wave 11).** `114/Props` contains **no table names or column
+lists**. The −2/+2 B deltas above are the project-name record length changing
+with the save, not a table definition; `Props14`'s +192 B is a recent-file path
+string. W50's decoder (`core/props`) parsed the real record framing
+(`[u32 len][u32 id][u32 kind][payload]`, no padding, opaque tail) and recovered
+all six formula blocks; the only date-format-correlated `114/Props` word is tail
+key `0x00010001` (298→332 for `DateFormat=5`, so not a literal format code).
+**Real table/view state likely lives in `214/CTable` and `214/CV_iew`, not
+`114/Props`** — a wave-12+ oracle should isolate those streams before claiming
+per-project view persistence.
 
 **W46 conclusion:** persist app preferences app-side (NSUserDefaults / a
-plist). A per-project table date format could be written through `114/Props`
-only after W43/W45 own a Props decoder — do not fake it this wave. Working-day
-shading is purely ours. Timescale is our view state.
+plist). Working-day shading is purely ours. Timescale is our view state. Any
+per-project table date format needs `214/CTable`/`214/CV_iew` decoding, not a
+`114/Props` patch.
 
 ### Trap for anyone re-running these
 

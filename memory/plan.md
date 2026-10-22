@@ -315,3 +315,69 @@ all zero.  Golden TSV untouched (sha256 `DB81218E…C46A0A`).
    (`core/cal`, see `memory/cal.md`); PROJECT_A/PROJECT_B have none, so M2 cannot move.
 3. The `plan_recalc_tests` "fully matching uids" count is still 83 for PROJECT_A; the
    schedin ALAP row is not part of that golden file.
+
+## W49 addendum (wave 11, 2026-10-22 18:55) — per-task calendars and elapsed durations through the bridge
+
+Owned files touched: `core/plan/plan.h`, `core/plan/plan.cpp`,
+`core/plan/CMakeLists.txt`, `tests/plan_recalc_tests.cpp`, `tools/recalc/main.cpp`,
+plus `core/mpp/reader.{h,cpp}` and `core/sched/cpm.{h,cpp}` for the fields/engine
+this bridge consumes.  No client task/calendar name is printed or committed.
+
+### What changed in the mapping
+
+* **Task calendars.** `PlanTask::calendar_uid` copies the reader's task row +178;
+  `PlanInput::task_calendars` (vector of `TaskCalendar{uid, Calendar}`) owns one
+  `core::sched::Calendar` per distinct uid, built by the new
+  `attach_task_calendars(input, CalendarTable const&)` with
+  `core::cal::find_calendar_by_uid` + `build_calendar`.  `recalculate()` points
+  each CPM node at its task's calendar; uid -1 (or an unattached uid) keeps the
+  project calendar.  `--fields` now prints `calendar_uid`.
+* **Elapsed durations.** `PlanTask::elapsed_duration` is set from the reader's
+  +0xa4 DurationFormat; `CpmTask::elapsed_duration` is passed through.  The
+  engine does wall-clock duration/slack arithmetic for that row.
+* **LagFormat.** `PlanLink::elapsed_lag` now calls `Link::lag_is_elapsed()`
+  instead of the bridge's local duplicate; the semantics are unchanged from W41.
+
+`tools/recalc` now decodes `114/TBkndCal` once
+(`decode_file` -> `build_project_calendar` -> `attach_task_calendars`) and prints
+the project week-override count and task-calendar count.  If the decode fails it
+still falls back to the stock week and schedules with no task calendars.
+
+### Measurements (through the bridge, not just the engine)
+
+* `corpus/probe/holiday1.mpp`: 3 tasks, all +178 = 3; `input.task_calendars`
+  size 1 (uid 3).  Recalculated dates match Project: T1 10-19 08:00 ->
+  10-20 17:00, T2 10-22 08:00 -> 10-29 12:00 (Wednesday holiday skipped, 4 h
+  Friday), T3 10-23 08:00 -> 10-26 12:00, T3 total slack 1440 min, project
+  finish 10-29 12:00.  The control run with every +178 reset to -1 gives T2
+  10-21 08:00 -> 10-27 17:00 and T3 10-23 08:00 -> 10-23 17:00, so the calendar
+  is the cause.  `test_task_calendars` pins both runs.
+* `corpus/probe/w9-elapsedlag.mpp`: T8 now matches all 16/16 dates and all 10
+  slack values; T8 total slack = 106200 ticks (10620 min), elapsed flag true.
+  The other 7 tasks and 5 links are unchanged from W41.
+* PROJECT_A: 83/83 start, finish, slack, critical = **332/332**; no task calendars
+  (every +178 is -1), no elapsed durations.  PROJECT_B remains 73 live tasks in the
+  reader and `mspdi_cmp` MATCH.
+* schedin: **20/20 dates, 10/10 slack** (unchanged).
+
+### Counts / command
+
+```
+plan_recalc_tests        231 -> 277 checks
+plan_attribution_tests    54 (unchanged)
+recalc corpus\project_a.mpp --compare corpus\probe\project_a-recalc.mpp
+  -> 332/332, attribution matrix all zero
+tests/data/project_a_recalc_golden.tsv SHA256 unchanged
+  DB81218ECCC9219B2DA9864D5F3A0387FBB16BC5D8F027089E826B7BEFC46A0A
+```
+
+### Open / inference
+
+* Summary rollup still uses `PlanInput::calendar` (project calendar), which is
+  spec §1.6 [I]; no measured summary has a task calendar.
+* A link that mixes an elapsed-duration task with a working-time task, and an
+  elapsed task carrying a START/FINISH constraint, are unmeasured ([I]).
+* `attach_task_calendars` must be called by every path-bearing consumer; a
+  caller that only calls `from_mpp` keeps the pre-W49 project-calendar
+  behaviour (deliberate, and tested by the control run).
+

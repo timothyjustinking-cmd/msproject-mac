@@ -1,0 +1,20 @@
+{
+  "case": "link-add",
+  "source": "tests\\data\\synthetic-base.mpp",
+  "saved": "corpus\\probe\\w12-linkadd.mpp",
+  "bytes": 344064,
+  "links": [
+    {
+      "pred": 1,
+      "succ": 2,
+      "type": 1,
+      "lag": "0"
+    },
+    {
+      "pred": 1,
+      "succ": 3,
+      "type": 3,
+      "lag": "1d"
+    }
+  ]
+}

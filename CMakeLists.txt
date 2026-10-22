@@ -112,7 +112,7 @@ endif()
 # These are added after core_model so that a subdirectory may link
 # `core_model` (or the `msproject::core` alias) by target name.
 # ---------------------------------------------------------------------------
-foreach(stream_subdir mpp sched mppwrite view io cal plan sheet gantt session render usage formula)
+foreach(stream_subdir mpp sched mppwrite view io cal plan sheet gantt session render usage formula props)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/core/${stream_subdir}/CMakeLists.txt")
         add_subdirectory("core/${stream_subdir}")
         message(STATUS "core/${stream_subdir}: CMakeLists.txt found, included")

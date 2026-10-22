@@ -194,23 +194,33 @@
  *                   resource uids out sequentially, so the two cannot be told
  *                   apart from these bytes)
  *     +4    u32     UniqueID
- *     +8    double  MaxUnits, x100: 10000.0 is 100 %.  Same x10000 encoding
- *                   the COM-validated in-memory assignment Units uses
- *                   (memory/assignment-flat-buffer.md).  MEASURED value: every
- *                   resource in PROJECT_A/PROJECT_B/assign1 exports reports
- *                   `<MaxUnits>1.00</MaxUnits>` and the row double is 10000.0 on
- *                   every one (46 resources + the assign1 pair); no fixture
- *                   varies MaxUnits, so the *scale* (+8 is x100) is still
- *                   inference even though the stored value is measured.
+ *     +8    double  MaxUnits, x100: 10000.0 is 100 % and 5000.0 is 50 %.
+ *                   MEASURED (wave 11) on corpus/probe/w9-resourcetypes.mpp:
+ *                   COM set R1 to MaxUnits 50 % and the row holds 5000.0, so the
+ *                   scale is x100, not x10000.  PROJECT_A/PROJECT_B/assign1 are all
+ *                   100 %; the same fixture carries the Material/Cost resources.
  *     +80   u32     AccrueAt (3 = prorated, the Project default; not exposed)
  *     +154  u16     per-row counter (unmapped; not exposed)
  * Name = VarMeta key 0x0c400001 (UTF-16LE, raw and display forms), Initials =
- * 0x0c400002.  Resource Type: NOT located.  All 46 resources in the three
- * exports are `<Type>1</Type>` (Work) and no fixture stores a material or cost
- * resource, so neither a fixed-row word nor a VarMeta key can be correlated
- * with the value; `Resource::type` is reported as Work and `type_stored` is
- * false.  A material/cost + MaxUnits-under-100% oracle fixture is the missing
- * discriminator (memory/reader.md, "Still open").
+ * 0x0c400002, MaterialLabel = 0x0c40012b.
+ *
+ * Resource Type is NOT a byte in the 172-byte row.  It is a bit in the per-row
+ * metadata, measured on corpus/probe/w9-resourcetypes.mpp (COM-built Work 50 %,
+ * Material with a label, Cost):
+ *     Work     <=> the Resource FixedMeta entry (37-byte rows) byte +12 bit 0x10
+ *                 is set.  w9-resourcetypes R1 has it set; R2/R3 clear it.
+ *     Cost     <=> that bit is clear AND the Resource Fixed2Meta entry byte +8
+ *                 bit 0x10 is set.
+ *     Material <=> both bits are clear.
+ * w9-resourcetypes decodes as Work / Material / Cost, and every one of PROJECT_A's
+ * and PROJECT_B's 22 resources decodes as Work, matching their MSPDI exports.
+ * (MSPDI's <Type> uses 1 for Work and 0 for Material and marks a cost resource
+ * with IsCostResource; the COM/PjResourceType values this struct exposes are
+ * Work=0, Material=1, Cost=2.  They are different enums.)  The layout is
+ * mpxj's MPP14ResourceReader rule for Project 2013+; the Project-2010 MPP14
+ * variant puts the Work bit at entry +9 bit 0x02 and is not on disk, so it is
+ * unimplemented.  `type_stored` is true when the file metadata supplied the
+ * value.
  *
  * LINKS (TBkndCons, Project's "relationship" table).  FixedData = 20 bytes per
  * row, NO header; FixedMeta = 16 + 10 bytes per entry.  There is no VarMeta
@@ -227,7 +237,10 @@
  *               PROJECT_A's live rows hold 96000 = 20 d, 139200 = 29 d and
  *               240000 = 50 d; fixture link1.mpp stores 4800 and -4800 in the
  *               same field.
- *     +18  u16  7 in every live corpus row; lag units/format, meaning unproven.
+ *     +18  u16  LagFormat (PjFormatUnit): 7 = working days, 8 = elapsed days.
+ *               MEASURED (wave 9b, corpus/probe/w9-elapsedlag.mpp): the two
+ *               "2 edays"/"3 edays" links store 8 while the matching "2 days"
+ *               links store 7.  Link::lag_is_elapsed() decodes it.
  * LIVENESS: a row is a link only when a FixedMeta entry names it (the entry's +4
  * offset).  PROJECT_A has 99 rows, 91 entries and 88 distinct covered rows; the 11
  * rows without an entry (including the all-zero 85/86) go to
@@ -316,7 +329,8 @@
 #include <string_view>
 #include <vector>
 
-#include "cfb.h"  /* mpp::Error */
+#include "cfb.h"         /* mpp::Error */
+#include "field_value.h" /* mpp::CustomFieldValue, the measured custom-field ids */
 
 namespace mpp {
 
@@ -330,6 +344,20 @@ constexpr std::uint32_t kTickSeconds = 6;
  * treated as not-a-date by PackedDate::valid().)  It is the initial value of
  * every optional PackedDate member, e.g. Task::start_anchor. */
 constexpr std::uint32_t kDateNa = 0xFFFFFFFFu;
+
+/*
+ * PjFormatUnit's elapsed rule, spec/scheduling.md §0.4 [B]: 3/5/7/9/11 are
+ * minutes/hours/days/weeks/months, the even value one higher is the elapsed
+ * form, and +32 marks the estimated variants.  Used by Task::duration_format
+ * (task row +0xa4) and Link::lag_units (link row +18).  MEASURED for
+ * 7/8 (wave 9b/11): w9-elapsedlag.mpp stores 8 for an elapsed lag and for the
+ * "2 edays" duration, 7 for the working-day controls.
+ */
+inline constexpr bool format_unit_is_elapsed(std::uint16_t format) noexcept {
+    const std::uint16_t unit =
+        format >= 32 ? static_cast<std::uint16_t>(format - 32) : format;
+    return unit >= 4 && unit <= 12 && (unit % 2u) == 0;
+}
 
 /*
  * A date/time as stored in the fixed row: one u32, `(day << 16) | secs/6`,
@@ -354,6 +382,14 @@ struct Task {
     std::string name;
     std::string name_raw;
     std::uint32_t duration_ticks = 0;   /* +84 */
+    /* +164 (0xa4): DurationFormat in PjFormatUnit numbering.  7 = days, 8 =
+     * elapsed days, 9 = weeks, 11 = months, 21 = no format; 35..44 are the
+     * estimated variants and 4/6/8/10/12 the elapsed ones.  MEASURED: every
+     * task's +a4 equals its <DurationFormat> in Project's MSPDI export (84 PROJECT_A
+     * + 74 PROJECT_B + 4 w9-resourcetypes rows, 0 mismatches), and
+     * w9-elapsedlag.mpp's "2 edays" control (uid 8) stores 8 while that file's
+     * working-day tasks store 7. */
+    std::uint16_t duration_format = 0;
     std::uint16_t priority = 0;         /* +78 */
     std::uint16_t percent_complete = 0; /* +92 (u16; see note 3 above) */
     /* start/finish are the EFFECTIVE pair (+104/+108, W33): what Project's own
@@ -430,6 +466,31 @@ struct Task {
     bool milestone = false;
     bool milestone_stored = false;
 
+    /* ---- Custom fields (W48).  The values the file stores, decoded with the
+     * measured ids/encodings in `field_value.h`: Text (UTF-16LE+NUL in
+     * VarMeta), Number (f64), Date (packed u32), Duration (u32 file ticks,
+     * COM minutes * 10) and Flag1 (bit 0x02 of the Task FixedMeta entry's +24
+     * byte -- a flag is NOT a VarMeta block).  Only stored fields are listed;
+     * `present` is always true here.  Cost and Flag2..20 are listed only when a
+     * block exists and carry `storage_measured == false`, because their storage
+     * is not measured (w10-oracle §2) and must not be decoded as if it were.
+     * Lookups: `custom_field(id)` returns nullptr when the file does not store
+     * that field for this row.  See field_value.h for the evidence. */
+    std::vector<CustomFieldValue> custom_fields;
+
+    CustomFieldValue const* custom_field(std::uint32_t field_id) const {
+        for (CustomFieldValue const& field : custom_fields) {
+            if (field.field_id == field_id) {
+                return &field;
+            }
+        }
+        return nullptr;
+    }
+    bool has_custom_field(std::uint32_t field_id) const {
+        return custom_field(field_id) != nullptr;
+    }
+
+    bool duration_is_elapsed() const { return format_unit_is_elapsed(duration_format); }
     double duration_days() const {
         return static_cast<double>(duration_ticks) / static_cast<double>(kTicksPerDay);
     }
@@ -452,9 +513,10 @@ struct Task {
 };
 
 /*
- * Resource type.  MS Project's Material/Cost encoding is not proved from the
- * corpus (all resources are Work), so the reader reports Work.  The enum names
- * match Project's Resource.Type values so a later stream can fill it in.
+ * Resource type, MS Project's COM PjResourceType order (Work=0, Material=1,
+ * Cost=2).  This is NOT MSPDI's <Type> numbering (that XML writes Work as 1 and
+ * Material as 0, and marks a cost resource with IsCostResource).  MEASURED on
+ * corpus/probe/w9-resourcetypes.mpp; see "Resource Type" in the file comment.
  */
 enum class ResourceType : std::uint8_t { work = 0, material = 1, cost = 2 };
 
@@ -465,11 +527,16 @@ struct Resource {
     std::string name;          /* VarMeta 0x0c400001, display form (trimmed) */
     std::string name_raw;      /* the same block verbatim */
     std::string initials;      /* VarMeta 0x0c400002 */
-    /* MaxUnits as stored: double at +8, x100 (10000.0 = 100 %). */
+    /* VarMeta 0x0c40012b; display form trimmed like name, raw form verbatim.
+     * Only a Material resource carries one (w9-resourcetypes R2 = "metre"). */
+    std::string material_label;
+    std::string material_label_raw;
+    /* MaxUnits as stored: double at +8, x100 (10000.0 = 100 %, 5000.0 = 50 %;
+     * the 50 % row is the wave-11 measurement of the scale). */
     double max_units_x100 = 0.0;
-    /* Unproven: see the header comment.  Work unless a future fixture says
-     * otherwise.  `type_stored` is false because no fixture distinguishes the
-     * Work default from a stored value, so callers can tell the two apart. */
+    /* MEASURED on w9-resourcetypes (Work / Material / Cost); see "Resource
+     * Type" in the file comment.  `type_stored` is false only when the file's
+     * per-row metadata did not supply the value. */
     ResourceType type = ResourceType::work;
     bool type_stored = false;
 
@@ -482,6 +549,8 @@ struct Resource {
         return static_cast<std::uint32_t>(max_units_x100 / 100.0 + 0.5);
     }
     bool is_work() const { return type == ResourceType::work; }
+    bool is_material() const { return type == ResourceType::material; }
+    bool is_cost() const { return type == ResourceType::cost; }
 };
 
 /* Project's relation type values (PjRelationType order). */
@@ -501,7 +570,9 @@ struct Link {
     /* +14: signed 6-second ticks, 4800 = one working day; negative = lead.
      * fixture link1.mpp stores both 4800 and -4800 here. */
     std::int32_t lag_ticks = 0;
-    std::uint16_t lag_units = 0;        /* +18: 7 in every live corpus row */
+    /* +18: PjFormatUnit.  7 = working days, 8 = elapsed days (MEASURED on
+     * w9-elapsedlag.mpp's two single-variable pairs); 4/6/8/10/12 are elapsed. */
+    std::uint16_t lag_units = 0;
     /* Set after the task table is known: the endpoint names one of the live
      * tasks this reader returns (PROJECT_A has links to its deleted task 10856,
      * PROJECT_B to its deleted slots 10722..10724). */
@@ -515,6 +586,7 @@ struct Link {
      * Project; they are the difference between the reader's 72 and the 70
      * <PredecessorLink> elements in Project's export. */
     bool endpoints_live() const { return predecessor_known && successor_known; }
+    bool lag_is_elapsed() const { return format_unit_is_elapsed(lag_units); }
     double lag_days() const {
         return static_cast<double>(lag_ticks) / static_cast<double>(kTicksPerDay);
     }
@@ -621,6 +693,33 @@ struct Document {
      * 2 dead-endpoint (Project's export has 70).  PROJECT_A: 88/88.  link1: 5/5. */
     std::size_t link_count_with_live_endpoints() const;
     std::size_t link_count_with_dead_endpoints() const;
+
+    /*
+     * One task's custom-field value by PjTask field id (e.g. 0x0b400033 Text1).
+     * `present` is false when the row does not store the field, and the whole
+     * struct is default except field_id/kind/storage_measured, so a caller can
+     * tell "not stored" from "stored as 0".  `uid` unknown is the same
+     * not-present answer.  This is the W48 read side of `save_field_values`
+     * (core/mppwrite/field_values.h); the encodings are field_value.h's.
+     */
+    CustomFieldValue custom_field(std::uint32_t uid,
+                                  std::uint32_t field_id) const {
+        CustomFieldValue absent;
+        absent.field_id = field_id;
+        absent.kind = custom_field_kind(field_id);
+        absent.storage_measured = custom_field_storage_measured(
+            absent.kind, custom_field_index(field_id));
+        for (Task const& task : tasks) {
+            if (task.uid != uid) {
+                continue;
+            }
+            if (CustomFieldValue const* const found = task.custom_field(field_id)) {
+                return *found;
+            }
+            return absent;
+        }
+        return absent;
+    }
 };
 
 /* Both throw mpp::Error on anything fatal; non-fatal anomalies are warnings. */

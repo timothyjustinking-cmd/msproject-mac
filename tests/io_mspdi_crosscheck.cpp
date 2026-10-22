@@ -473,11 +473,12 @@ void test_project_b(view_test::TestContext& ctx) {
     ctx.equal(result.xml_assignments, std::size_t{63},
               "PROJECT_B export has 63 Assignment elements");
 
-    /* The reader returns 2 links and 10 assignments whose task slots were
-     * deleted.  They are named exclusions, not parity failures, so the LIVE
-     * sets must agree exactly. */
-    ctx.equal(result.dead_endpoint_links.size(), std::size_t{2},
-              "PROJECT_B's 2 dead-endpoint links are excluded");
+    /* Wave 11: the reader applies the FixedMeta tombstone state to link and
+     * assignment liveness.  PROJECT_B's 2 deleted-slot links and 10 assignments
+     * are now SKIPPED rows, not dead endpoints, so there is nothing left to
+     * exclude; the live sets still agree with Project's export exactly. */
+    ctx.equal(result.dead_endpoint_links.size(), std::size_t{0},
+              "PROJECT_B has no dead-endpoint links after the tombstone fix");
     ctx.equal(result.live_reader_links, std::size_t{70},
               "PROJECT_B has 70 live reader links");
     ctx.equal(result.matched_links, std::size_t{70},
@@ -485,24 +486,12 @@ void test_project_b(view_test::TestContext& ctx) {
     ctx.equal(result.link_differences(), std::size_t{0},
               "PROJECT_B: no live link difference");
 
-    /* The two excluded links are the known deleted-slot chain (uids only). */
-    const auto has_link = [&result](std::uint32_t predecessor, std::uint32_t successor) {
-        return std::any_of(result.dead_endpoint_links.begin(),
-                           result.dead_endpoint_links.end(),
-                           [predecessor, successor](const mspdi_cmp::LinkRow& link) {
-                               return link.predecessor_uid == predecessor &&
-                                      link.successor_uid == successor;
-                           });
-    };
-    ctx.check(has_link(10722, 10723), "PROJECT_B excluded link 10722->10723");
-    ctx.check(has_link(10723, 10724), "PROJECT_B excluded link 10723->10724");
-
-    ctx.equal(result.reader_assignments, std::size_t{73},
-              "PROJECT_B reader assignment count");
-    ctx.equal(result.dead_endpoint_assignments.size(), std::size_t{10},
-              "PROJECT_B's 10 dead-endpoint assignments are excluded");
+    ctx.equal(result.reader_assignments, std::size_t{63},
+              "PROJECT_B reader assignment count (tombstoned rows skipped)");
+    ctx.equal(result.dead_endpoint_assignments.size(), std::size_t{0},
+              "PROJECT_B has no dead-endpoint assignments after the tombstone fix");
     ctx.equal(result.compared_assignments, std::size_t{63},
-              "PROJECT_B has 63 live assignments compared (73 - 10 deleted-task rows)");
+              "PROJECT_B has 63 live assignments compared");
     ctx.equal(result.compared_assignment_units, std::size_t{63},
               "PROJECT_B assignment units compared");
     ctx.equal(result.compared_assignment_work, std::size_t{63},

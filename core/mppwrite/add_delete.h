@@ -105,6 +105,42 @@
  * on success `doc` is replaced by the re-read document, so `doc` and the file on
  * disk agree.  A refusal leaves both `doc` and the output file untouched.
  *
+ * DEPENDENT ROWS: THE DELETE CASCADE (measured, w11-oracle §2).  A task delete
+ * in Project does not stop at the Task table.  `w11-linkdelete-pre.mpp` (T1 ->
+ * T2 -> T3, one assignment on T2) was saved after deleting T2 and every
+ * dependent row is still in place with a tombstone in its own table:
+ *
+ *   TBkndCons/FixedMeta   header +4 4 -> 6; BOTH link entries (1->2 and 2->3)
+ *                         +0 00 -> 02 and +2 -> 0; FixedData byte-identical
+ *   TBkndAssn/FixedMeta   header +4 4 -> 6; the T2/R1 entry +0 -> 02, +2 -> 0;
+ *                         FixedData byte-identical (the surviving rows' cached
+ *                         values were recalculated, which we do not copy)
+ *   TBkndTask/FixedMeta   header +4 4 -> 6; the task's own entry +0 -> 02,
+ *                         +2 -> 0
+ *
+ * So the cascade is the SAME 16-byte-header contract as the task tombstone:
+ * every FixedMeta entry whose row names the deleted uid gets +0 = 0x02 and
+ * +2 = 0, and that table's FixedMeta header +4 gets bit 0x02.  No stream
+ * shrinks.  A link row is selected when its predecessor (+4) OR successor (+8)
+ * is the deleted uid; an assignment row is selected when its task uid (+4) is.
+ * Project then reopens with those rows gone from its model (2 tasks, no link or
+ * assignment naming the deleted uid).
+ *
+ * `DeleteOptions::allow_dangling` therefore no longer covers the normal case --
+ * the cascade handles a live link/assignment naming the deleted uid by itself.
+ * It is kept for ONE damaged-file case: a surviving live link row whose OTHER
+ * endpoint already names a uid that no live task holds (a file that was already
+ * inconsistent before this delete).  The default refuses that, because the
+ * writer cannot tell whether the orphan endpoint is intentional; with the flag
+ * the delete proceeds and the orphan rows are reported in `warnings`.  Live
+ * assignment rows naming an already-dead task uid are tolerated and warned
+ * about, not refused: PROJECT_B stores 10 of 73 that way and Project reopens it
+ * (w10-oracle §1).  The cascade writes only the two dependent FixedMeta
+ * streams; their FixedData, Fixed2Data, Fixed2Meta, VarMeta and Var2Data are
+ * required to read back byte-identically (Project's own save also rewrites the
+ * dead assignment's VarMeta blocks and the survivors' cached values -- that is
+ * save churn, not part of the contract).
+ *
  * REFUSALS (all exceptions with a message naming the reason):
  *   - uid 0 (reserved for the project row), a duplicate uid, a uid that would
  *     overflow, an empty task name;
@@ -116,15 +152,17 @@
  *     REFUSED, because its FixedMeta header declares 87 entries and holds 88;
  *     repairing that damage is out of scope (spec/mpp-writer.md §5.3) and is
  *     exactly the kind of guess that must not be made in a structural write;
- *   - a delete that would leave a live link or a live assignment naming the
- *     deleted uid.  The writer cannot delete link/assignment rows, and a link is
- *     scheduling-visible.  `DeleteOptions::allow_dangling` opts in: the delete
- *     then proceeds and `DeletedRow::warnings` says how many rows were left
- *     behind.  The default refusal is deliberate; pass the flag from the app
- *     only when it has decided to repair (or accept) the orphan rows.  Real
- *     files already contain assignments naming deleted task uids (PROJECT_B: 10 of
- *     73), so Project tolerates the orphan; a link whose endpoint is gone is not
- *     scheduled, which is why the two are reported separately.
+ *   - a link or assignment table whose geometry is broken (FixedData not a
+ *     whole number of rows, FixedMeta not 16 + n*entry, a FixedMeta entry whose
+ *     +4 word does not name a row, or a missing FixedMeta next to a non-empty
+ *     FixedData).  The cascade needs trustworthy entry offsets, so it refuses
+ *     rather than guessing which entries to tombstone;
+ *   - a delete that would leave a live link whose OTHER endpoint already names
+ *     a uid no live task holds (a file that was damaged before the delete).
+ *     `DeleteOptions::allow_dangling` opts in; the delete then proceeds and
+ *     `DeletedRow::warnings` names the orphan rows.  This is the flag's only
+ *     remaining use -- a link or assignment naming the uid being deleted is
+ *     cascade-tombstoned by default.
  *
  * WHAT THIS FILE DOES NOT DO.  It does not write `214/` (decision and evidence:
  * spec/mpp-writer.md §10.4); the view state is carried through byte-identically
@@ -181,10 +219,14 @@ struct AddedRow {
     std::vector<std::string> warnings; /* write_task_row's warnings */
 };
 
-/* Policy for a delete, because the writer cannot remove dependent rows. */
+/* Policy for a delete.  The normal case -- live links or assignments naming the
+ * uid -- is handled by the cascade (see the file comment) and needs no flag. */
 struct DeleteOptions {
-    /* false (default): a live link or assignment naming the uid refuses the
-     * delete.  true: proceed and report the orphaned rows in `warnings`. */
+    /* false (default): a surviving live link whose other endpoint already names
+     * a uid no live task holds refuses the delete (a file that was damaged
+     * before it).  true: proceed and report those orphan rows in `warnings`.
+     * This does not affect rows naming the deleted uid: those are always
+     * cascade-tombstoned. */
     bool allow_dangling = false;
 };
 
@@ -194,7 +236,12 @@ struct DeletedRow {
     std::uint32_t id = 0;  /* the ID the row had before the delete */
     std::size_t row = 0;   /* the FixedData row that is now a tombstone */
     std::size_t var_entries_removed = 0;
-    std::vector<std::string> warnings; /* dangling rows left behind, if allowed */
+    /* Cascade receipts: dependent FixedData rows whose FixedMeta entries are now
+     * tombstones because they named this uid (w11-oracle §2).  Rows already
+     * tombstoned before the delete are not counted again. */
+    std::size_t link_rows_tombstoned = 0;       /* TBkndCons predecessor or successor */
+    std::size_t assignment_rows_tombstoned = 0; /* TBkndAssn task uid */
+    std::vector<std::string> warnings; /* cascade receipt + damaged-file rows */
 };
 
 /*
@@ -210,11 +257,15 @@ AddedRow add_task_row(CfbDocument& doc, NewTaskRow const& task,
                       std::string_view table = "114/TBkndTask");
 
 /*
- * Tombstone the task row whose UniqueID is `uid`, write the package to `path`,
- * re-open it and prove the tombstone and the renumbering from the bytes on disk.
- * No stream changes size; FixedData (later live rows' ID), FixedMeta (the
- * entry's +0/+2) and VarMeta (the uid's entries removed) are the only streams
- * written, and Fixed2Data/Fixed2Meta/Var2Data are required to be byte-identical.
+ * Tombstone the task row whose UniqueID is `uid` AND cascade the delete into the
+ * dependent tables, write the package to `path`, re-open it and prove the
+ * tombstones and the renumbering from the bytes on disk.  No stream changes
+ * size.  The written streams are FixedData (later live rows' ID), FixedMeta (the
+ * task entry's +0/+2 and the header +4 flag), VarMeta (the uid's entries
+ * removed) and -- when the uid is named -- TBkndCons/FixedMeta and
+ * TBkndAssn/FixedMeta (the dependent entries' +0/+2 and their header +4 flags).
+ * Everything else, including the dependent tables' FixedData and the Task
+ * table's Fixed2Data/Fixed2Meta/Var2Data, is required to be byte-identical.
  */
 DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
                            std::string const& path,

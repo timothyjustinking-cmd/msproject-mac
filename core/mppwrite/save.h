@@ -25,13 +25,20 @@
  * date sticks, manual scheduling is NOT preserved.  A row whose flag byte cannot
  * be read is pinned without conversion and warned about, never silently.
  *
- * HONEST LIMIT (inference, unmeasured).  SNET means "start no earlier than", so
- * on a row with an FS predecessor Project places it at max(predecessor finish,
- * pin).  If links push the row later than the pinned date, opening the file will
- * not reproduce the exact date.  Exact-date writes for linked rows are
- * UNMEASURED; do not claim them.  A fixture that pins a successor before its
- * predecessor's finish (`w37-snet-link.mpp`, not built this wave) would settle
- * it.
+ * LINKED ROWS: SNET IS A CLAMP (MEASURED 2026-10-22, w11-oracle §1).  The old
+ * "unmeasured" note is closed by `corpus/probe/w11-snet-link.mpp`: P1 is a
+ * 5-day auto task (Mon 10-19 08:00 -> Fri 10-23 17:00), S1 its 1-day FS
+ * successor (Mon 10-26 08:00).  S1 was then given a real SNET at Wed 10-21
+ * 08:00, two days BEFORE its predecessor's finish.  Before and after
+ * CalculateProject AND after a fresh read from disk, S1 Start stays
+ * 2026-10-26 08:00 while ConstraintType/Date read back 4 / 2026-10-21 08:00.
+ * So SNET is "start no earlier than": a linked successor reopens at
+ * max(predecessor finish, pin), and the stored type/date are still exact.
+ * Exact-date writes on a linked row are therefore NOT a writer bug to fix; the
+ * pin is stored faithfully and scheduling clamps it.  `pin_would_be_clamped`
+ * below is the cheap predicate an app can use to warn BEFORE the edit is
+ * written (the app knows the dependency-allowed start; the writer does not
+ * recalculate links).  Scheduling semantics are unchanged.
  *
  * Earlier measured history that led here: writing a task's date words does not
  * make Project show the date (spec/mpp-writer.md §8.1, W26/W29).  For a
@@ -168,6 +175,26 @@ SaveResult save_date_edits(CfbDocument& doc, std::vector<DateEdit> const& edits,
 SaveResult save_plan(CfbDocument& doc, std::vector<PlannedRow> const& rows,
                      std::string const& path,
                      std::string_view table = "114/TBkndTask");
+
+/*
+ * True when writing `pinned_start` as an SNET pin would not reproduce that start
+ * on reopen, because a dependency pushes the row later: SNET is "start no earlier
+ * than", so Project schedules the row at max(earliest_dependency_start, pin)
+ * (measured 2026-10-22, w11-oracle §1; see the file comment).
+ *
+ * `earliest_dependency_start` is the CALLER's dependency-allowed start -- the
+ * latest predecessor finish plus lag, snapped to the calendar.  The writer does
+ * not recalculate links, so a caller with a plan/engine result passes it in.
+ * Both values are packed dates (table.h); an invalid one (0 or 0xffffffff) makes
+ * the predicate false, meaning "not enough information to warn", never "the pin
+ * will stick".
+ *
+ * This is a pure predicate and changes no scheduling behaviour: it lets the app
+ * warn before a Start edit is written instead of reporting an exact-date write
+ * that Project will clamp.
+ */
+bool pin_would_be_clamped(std::uint32_t pinned_start,
+                          std::uint32_t earliest_dependency_start);
 
 } /* namespace mppwrite */
 

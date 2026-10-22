@@ -632,4 +632,17 @@ SaveResult save_plan(CfbDocument& doc, std::vector<PlannedRow> const& rows,
     return result;
 }
 
+/*
+ * SNET is "no earlier than" (measured, w11-oracle §1): a linked successor
+ * reopens at max(predecessor finish, pin).  Both arguments are packed dates;
+ * an invalid one means the caller cannot say, so no warning is claimed.
+ */
+bool pin_would_be_clamped(std::uint32_t pinned_start,
+                          std::uint32_t earliest_dependency_start) {
+    if (!is_date(pinned_start) || !is_date(earliest_dependency_start)) {
+        return false;
+    }
+    return pinned_start < earliest_dependency_start;
+}
+
 } /* namespace mppwrite */

@@ -126,6 +126,26 @@ if(MPP_BUILD_TESTS)
         WORKING_DIRECTORY "${MPP_REPO_ROOT}"
     )
 
+    # ---- W48: the custom-field read API (CustomFieldValue, field_value.h).
+    # Project's own w10-fieldvalues.mpp / w10-flag-on.mpp / w10-flag-off.mpp are
+    # the measured sources and are skipped when corpus/ is absent; the field-id
+    # range checks and the "no custom fields" control run from the committed
+    # synthetic fixture on a clean checkout.  Additive: reads files, writes none.
+    add_executable(mpp_field_value_tests
+        "${MPP_REPO_ROOT}/tests/mpp_field_value_tests.cpp")
+    target_link_libraries(mpp_field_value_tests PRIVATE core_mpp)
+    target_compile_features(mpp_field_value_tests PRIVATE cxx_std_20)
+    set_target_properties(mpp_field_value_tests PROPERTIES CXX_EXTENSIONS OFF)
+    mpp_set_warnings(mpp_field_value_tests)
+    target_compile_definitions(mpp_field_value_tests PRIVATE
+        MPP_PROBE_DIR="${MPP_PROBE_DIR}"
+        MPP_TEST_DATA_DIR="${MPP_TEST_DATA_DIR}"
+    )
+    add_test(NAME mpp_field_value COMMAND mpp_field_value_tests)
+    set_tests_properties(mpp_field_value PROPERTIES
+        WORKING_DIRECTORY "${MPP_REPO_ROOT}"
+    )
+
     # ---- W40: performance harness on a synthetic 4,000-task programme.  It
     # links the later stream libraries (core/sched, core/plan, core/view,
     # core/io, core/sheet, core/gantt), which only the repository's top-level

@@ -47,6 +47,7 @@
 #include "date.h"
 #include "gantt.h"
 #include "record_set.h"
+#include "resource_tables.h"  // core::view::ResourceType for ResourceRow
 #include "sheet.h"
 
 namespace app {
@@ -90,11 +91,45 @@ struct LinkRow {
     bool critical = false;
 };
 
+// One resource, as the reader exposes it (wave 11).  `type` is Project's
+// PjResourceTypes order (0 Work, 1 Material, 2 Cost) -- the reader reports Work
+// because no corpus file proves the other encodings, and the field exists here
+// so a later reader change needs no model change.  `max_units_percent` is the
+// view convention (100.0 == 100 %), the same one core/view/resource_tables.h
+// documents for its builder.
+struct ResourceRow {
+    std::uint32_t uid = 0;
+    std::uint32_t id = 0;
+    std::string name;      // display form; an in-memory value, never written out
+    std::string initials;
+    core::view::ResourceType type = core::view::ResourceType::work;
+    double max_units_percent = 100.0;
+};
+
+// One assignment, as the reader exposes it (wave 11).  Work is carried in
+// 6-second ticks (the file unit); the usage model wants minutes and divides by
+// core::view::kTicksPerMinute when it builds its input (app/view_model.h).
+// `units_percent` is 100.0 == 100 %, matching ResourceRow.
+struct AssignmentRow {
+    std::uint32_t uid = 0;
+    std::uint32_t task_uid = 0;
+    std::uint32_t resource_uid = 0;  // 0 = no resource
+    std::int64_t work_ticks = 0;
+    double units_percent = 100.0;
+    date32 start = kDateNa;
+    date32 finish = kDateNa;
+};
+
 struct PlanInput {
     std::string title;
     std::string source_name;  // file name only; diagnostics, never a committed value
     std::vector<TaskRow> tasks;
     std::vector<LinkRow> links;
+    // Wave 11: resource and assignment rows for the resource sheet and the usage
+    // views.  Both are empty for a producer that has none (the task views and
+    // the Gantt do not read them).
+    std::vector<ResourceRow> resources;
+    std::vector<AssignmentRow> assignments;
     date32 project_start = kDateNa;
     date32 project_finish = kDateNa;
     std::size_t skipped_links = 0;  // links whose endpoint the reader did not know

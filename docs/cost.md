@@ -34,20 +34,23 @@ context is much longer-lived and its per-turn cost is higher.
 | 8 | 2026-10-22 | W29–W35 | **8** | seven streams + one resume; the balancing figure to the 66-session total recorded at the wave-8 handoff |
 | 9 | 2026-10-22 | W36–W42 | **7** | five streams launched together, then W41/W42 while the first five were still landing; **no restarts** (the first wave with none) |
 | 10 | 2026-10-22 | W43–W46 | **5** | four streams (usage, formula, writer add/delete, app v3) + one W45 resume to add the `FixedMeta +4` tombstone gate after the Project oracle rejected the first delete fixtures |
-| — | — | coordinator | 6 (ongoing) | the predecessor's chats and this one |
+| 11 | 2026-10-22 | W47–W50 | **7** | four streams + three W48 resumes: the custom-field display contract needed three measured gates (VarMeta position, both Props registries, FixedMeta tail bitmap) |
+| — | — | coordinator | 7 (ongoing) | the predecessor's chats and this one |
 
-**To date (end of wave 10): 78 agent sessions + 6 coordinator sessions.**
+**To date (end of wave 11): 85 agent sessions + 7 coordinator sessions.**
 Measured spend at the wave-7 start was **~$3.90**, **~390M tokens** (51 agent
-sessions); waves 7–8 added 15 sessions, wave 9 added 7, and wave 10 adds 5 at
-~$0.08 → **~$6.00**, **~605M tokens**, about **$0.077 per agent session**, flat
-for the seventh wave running.
+sessions); waves 7–8 added 15 sessions, wave 9 added 7, wave 10 added 5, and
+wave 11 adds 7 at ~$0.08 → **~$6.55**, **~655M tokens**, about **$0.077 per
+agent session**, flat for the eighth wave running.
 
-The wave-10 number is the cheapest wide wave yet: five sessions (~$0.39 of
-agent spend) for two new model modules, row add/delete and an app shell v3. The
-coordinator cost was again the oracle: four COM experiments, one rejected
-delete design, then a targeted Project open of nine fixtures that found the
-`FixedMeta +4` bit. That is the value of the oracle — it turned a plausible
-tombstone write into a measured one for the price of one extra agent resume.
+Wave 11 was the most oracle-expensive wave per agent session: seven agent
+sessions (~$0.54) bought resource/usage UI, custom fields that Project actually
+displays, reader/engine parity and a Props decoder, but three of the seven were
+W48 resumes driven by coordinator measurements. The lesson is not that the
+agents were slow; it is that a "write a value" feature crossing VarMeta,
+per-table Props and the FixedMeta tail cannot be designed from the writer side
+alone. The oracle found each missing store in one diff; guessing it would have
+cost more.
 
 ## Calibration
 

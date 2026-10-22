@@ -160,11 +160,15 @@
  *             (entries 0..2 are the 48-byte header's three 16-byte slots, then
  *             one entry per row at offsets 48, 220, 392, ...).  Row 0 is a uid-0
  *             placeholder; resources are rows 1..n-1.  Name = VarMeta
- *             0x0c400001, Initials = 0x0c400002.  The row's only work-value is
- *             the double at +8: 10000.0 = MaxUnits 100 % (the x10000 encoding
- *             COM-validated for the in-memory assignment record).  No fixture
- *             varies MaxUnits, so the *value* is measured and the *identity* is
- *             inference.  Resource type is not in the row; reported as Work.
+ *             0x0c400001, Initials = 0x0c400002, MaterialLabel = 0x0c40012b.
+ *             MaxUnits is the double at +8, x100: 10000.0 = 100 % and, measured
+ *             in wave 11 on w9-resourcetypes.mpp, 5000.0 = 50 % (that fixture
+ *             also pins the x100 scale; the old x10000 guess is withdrawn).
+ *             Resource Type is a metadata bit, not a row byte: Resource
+ *             FixedMeta entry +12 bit 0x10 = Work; when clear, Fixed2Meta entry
+ *             +8 bit 0x10 = Cost and clear = Material (w9-resourcetypes gives
+ *             Work/Material/Cost; every PROJECT_A/PROJECT_B resource is Work).  See
+ *             reader.h's "Resource Type" block.
  *
  *   TBkndCons FixedData = 20*rows, no header.  FixedMeta = 16 + 10*entries,
  *             and the entry count is NOT the row count on PROJECT_A (99 rows, 91
@@ -277,9 +281,21 @@ constexpr std::size_t kRscRowSize = 172;
 constexpr std::size_t kRscFixedMetaEntrySize = 37;
 constexpr std::uint32_t kFieldRscName = 0x0C400001u;
 constexpr std::uint32_t kFieldRscInitials = 0x0C400002u;
+/* MaterialLabel is VarMeta key 0x0c40012b (a Material resource only; measured
+ * on corpus/probe/w9-resourcetypes.mpp, COM-built R2 with "metre"). */
+constexpr std::uint32_t kFieldRscMaterialLabel = 0x0C40012Bu;
 constexpr std::size_t kRscRowId = 0;
 constexpr std::size_t kRscRowUid = 4;
-constexpr std::size_t kRscRowMaxUnits = 8; /* double, x100 */
+constexpr std::size_t kRscRowMaxUnits = 8; /* double, x100: 5000.0 = 50 % */
+/* Resource Type is not a row byte: FixedMeta entry +12 bit 0x10 = Work, and
+ * when that is clear Fixed2Meta entry +8 bit 0x10 = Cost (clear = Material).
+ * Both words are measured on w9-resourcetypes.mpp (Work/Material/Cost).  The
+ * Fixed2Meta entry is 51 bytes in every file on disk (16 + (rows+3)*51). */
+constexpr std::size_t kRscFixedMetaTypeByte = 12;
+constexpr std::uint8_t kRscFixedMetaWorkFlag = 0x10;
+constexpr std::size_t kRscFixed2MetaEntrySize = 51;
+constexpr std::size_t kRscFixed2MetaCostByte = 8;
+constexpr std::uint8_t kRscFixed2MetaCostFlag = 0x10;
 
 constexpr std::size_t kConsRowSize = 20;
 /* Measured: PROJECT_B 736 = 16 + 10*72; PROJECT_A 926 = 16 + 91*10.  Link liveness is
@@ -329,6 +345,11 @@ constexpr std::size_t kRowPriority = 78; /* u16 */
 constexpr std::size_t kRowActualDuration = 80; /* u32: 6-second ticks */
 constexpr std::size_t kRowDuration = 84; /* u32: 6-second ticks */
 constexpr std::size_t kRowPercent = 92;  /* u16 */
+/* +164 (0xa4): DurationFormat in PjFormatUnit numbering; 7 = days, 8 = elapsed
+ * days.  Measured against Project's MSPDI <DurationFormat> on every live task
+ * row of PROJECT_A (84), PROJECT_B (74) and w9-resourcetypes (4), and against
+ * w9-elapsedlag.mpp's "2 edays" control (8 vs 7 on its working tasks). */
+constexpr std::size_t kRowDurationFormat = 164; /* u16 */
 /* Two Start/Finish pairs.  +96/+100 is the calculated pair; +104/+108 is the
  * EFFECTIVE pair Project's own UI/COM surface reports (W33).  PROJECT_B uid 10805
  * is the one row on disk where they differ -- +96/+100 = 2026-10-15 17:00,
@@ -373,6 +394,14 @@ constexpr std::uint8_t kF2MetaFlagManual = 0x80;
  * only the fallback. */
 constexpr std::size_t kFixedMetaMilestoneByte = 10;
 constexpr std::uint8_t kFixedMetaFlagMilestone = 0x02;
+/* FixedMeta entry byte +24 bit 0x02 is Task Flag1 (W48, measured by
+ * `oracle_w10.py flagdiff`): corpus/probe/w10-flag-off.mpp -> w10-flag-on.mpp
+ * changes exactly that bit (0x00 -> 0x02) in row 1's entry, and the
+ * w10-fieldvalues.mpp entry holds it for the same row whose Flag1 COM reports
+ * "Yes".  Flags are NOT VarMeta blocks; Flag2..Flag20's bit positions are
+ * unmeasured, so only Flag1 is decoded.  See core/mpp/field_value.h. */
+constexpr std::size_t kFixedMetaCustomFlagByte = 24;
+constexpr std::uint8_t kFixedMetaFlag1Bit = 0x02;
 /* FixedMeta entry byte +0 is the row's state: 0x00 for a live row, 0x02 for a
  * tombstone.  MEASURED 2026-10-22 (W45): corpus/probe/w10-adddel-back.mpp is
  * Project's own file after Tasks.Add and then a delete; the deleted row keeps
@@ -717,10 +746,19 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
                                       std::vector<std::string>& warnings,
                                       std::vector<std::uint32_t>* entry_offsets = nullptr,
                                       std::vector<std::uint8_t>* row_flag_byte = nullptr,
-                                      std::vector<std::int16_t>* row_state = nullptr) {
+                                      std::vector<std::int16_t>* row_state = nullptr,
+                                      std::vector<std::uint8_t>* row_custom_flag_byte =
+                                          nullptr,
+                                      std::vector<std::uint8_t>* row_type_flag = nullptr) {
     std::vector<bool> covered(rows, false);
     if (row_flag_byte != nullptr) {
         row_flag_byte->assign(rows, 0);
+    }
+    if (row_custom_flag_byte != nullptr) {
+        row_custom_flag_byte->assign(rows, 0);
+    }
+    if (row_type_flag != nullptr) {
+        row_type_flag->assign(rows, 0);
     }
     if (row_state != nullptr) {
         row_state->assign(rows, kStateNoMetaEntry);
@@ -820,6 +858,13 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
         }
         if (row_flag_byte != nullptr && base + kFixedMetaMilestoneByte < meta.size()) {
             (*row_flag_byte)[row] = meta[base + kFixedMetaMilestoneByte];
+        }
+        if (row_type_flag != nullptr && base + kRscFixedMetaTypeByte < meta.size()) {
+            (*row_type_flag)[row] = meta[base + kRscFixedMetaTypeByte];
+        }
+        if (row_custom_flag_byte != nullptr &&
+            base + kFixedMetaCustomFlagByte < meta.size()) {
+            (*row_custom_flag_byte)[row] = meta[base + kFixedMetaCustomFlagByte];
         }
         const auto previous = offset_owner.find(offset);
         if (previous != offset_owner.end()) {
@@ -1242,12 +1287,13 @@ Document parse_document(const CompoundFile& cfb) {
     std::vector<std::uint32_t> task_meta_offsets;
     std::vector<std::uint8_t> task_meta_flag_bytes;
     std::vector<std::int16_t> task_meta_state;
+    std::vector<std::uint8_t> task_meta_custom_flag_bytes;
     const bool task_has_fixed_meta = cfb.has_stream("114/TBkndTask/FixedMeta");
     const std::vector<bool> fixed_meta_live =
         fixed_meta_coverage(cfb, "TBkndTask", "Task", kFixedHeaderSize, kFixedRowSize,
                             kFixedMetaEntrySize, kFixedMetaDescriptors, rows, uid_by_row,
                             document.warnings, &task_meta_offsets, &task_meta_flag_bytes,
-                            &task_meta_state);
+                            &task_meta_state, &task_meta_custom_flag_bytes);
 
     /* Liveness, computed once.  Two facts must both hold for a task row:
      *
@@ -1355,6 +1401,7 @@ Document parse_document(const CompoundFile& cfb) {
         task.row_id = u32_at(fixed, base + kRowId);
         task.uid = uid;
         task.duration_ticks = u32_at(fixed, base + kRowDuration);
+        task.duration_format = u16_at(fixed, base + kRowDurationFormat);
         task.priority = u16_at(fixed, base + kRowPriority);
         task.percent_complete = u16_at(fixed, base + kRowPercent);
         task.start.raw = u32_at(fixed, base + kRowStart);
@@ -1421,6 +1468,81 @@ Document parse_document(const CompoundFile& cfb) {
             read_text_field(table, var2, uid, kFieldTaskName, task.name_raw)) {
             task.name = trim_ascii_spaces(task.name_raw);
         }
+        /* ---- Custom fields (W48; encodings in field_value.h).  A text/number/
+         * date/duration value is a VarMeta block under the field's PjTask id;
+         * Flag1 is the FixedMeta entry's +24 bit 0x02.  Only stored values are
+         * listed, and an unmeasured family (Cost, Flag2..20) is listed with
+         * storage_measured == false rather than decoded as if it were known. */
+        {
+            std::unordered_set<std::uint32_t> seen_field_ids;
+            for (const VarEntry& entry : table.entries) {
+                if (entry.uid != uid &&
+                    entry.uid != (uid | kSecondaryUidFamily)) {
+                    continue;
+                }
+                const FieldKind kind = custom_field_kind(entry.key);
+                if (kind == FieldKind::unknown) {
+                    continue;
+                }
+                /* A repeated (uid, key) pair reads its first entry, as Name does. */
+                if (!seen_field_ids.insert(entry.key).second) {
+                    continue;
+                }
+                CustomFieldValue field;
+                field.field_id = entry.key;
+                field.kind = kind;
+                field.present = true;
+                field.storage_measured = custom_field_storage_measured(
+                    kind, custom_field_index(entry.key));
+                if (field.storage_measured) {
+                    std::vector<std::uint8_t> payload;
+                    bool decoded = read_block(var2, entry.offset, payload);
+                    std::size_t const expected =
+                        kind == FieldKind::number
+                            ? 8u
+                            : (kind == FieldKind::date ||
+                                       kind == FieldKind::duration
+                                   ? 4u
+                                   : 0u);
+                    if (decoded && expected != 0 && payload.size() != expected) {
+                        decoded = false;
+                    }
+                    if (!decoded) {
+                        field.storage_measured = false;
+                    } else {
+                        switch (kind) {
+                            case FieldKind::text:
+                                field.text = decode_utf16_block(payload);
+                                break;
+                            case FieldKind::number:
+                                field.number = f64_at(payload, 0);
+                                break;
+                            case FieldKind::date:
+                                field.packed_date = u32_at(payload, 0);
+                                break;
+                            case FieldKind::duration:
+                                field.duration_ticks = u32_at(payload, 0);
+                                break;
+                            default:
+                                field.storage_measured = false;
+                                break;
+                        }
+                    }
+                }
+                task.custom_fields.push_back(std::move(field));
+            }
+            if (task_has_fixed_meta && fixed_meta_live[row]) {
+                CustomFieldValue flag;
+                flag.field_id = kTaskFlag1FieldId;
+                flag.kind = FieldKind::flag;
+                flag.present = true;
+                flag.storage_measured = true;
+                flag.flag =
+                    row < task_meta_custom_flag_bytes.size() &&
+                    (task_meta_custom_flag_bytes[row] & kFixedMetaFlag1Bit) != 0;
+                task.custom_fields.push_back(std::move(flag));
+            }
+        }
         document.tasks.push_back(std::move(task));
     }
 
@@ -1453,11 +1575,57 @@ Document parse_document(const CompoundFile& cfb) {
                 read_optional_stream(cfb, "TBkndRsc", "Var2Data", document.warnings);
             const VarTable rsc_table =
                 parse_var_meta(rsc_var_meta, rsc_var2, "Resource", document.warnings);
+            const bool rsc_meta_stream = cfb.has_stream("114/TBkndRsc/FixedMeta");
+            std::vector<std::uint32_t> rsc_meta_offsets;
+            std::vector<std::uint8_t> rsc_meta_type;
             const std::vector<bool> rsc_live =
                 fixed_meta_coverage(cfb, "TBkndRsc", "Resource", kRscHeaderSize,
                                     kRscRowSize, kRscFixedMetaEntrySize,
                                     kFixedMetaDescriptors, rsc_rows, rsc_uid_by_row,
-                                    document.warnings);
+                                    document.warnings, &rsc_meta_offsets, nullptr,
+                                    nullptr, nullptr, &rsc_meta_type);
+            /* W49: the Cost/Material half of the type is the Fixed2Meta entry's
+             * +8 bit 0x10 (measured, see reader.h "Resource Type").  The two
+             * metadata streams pair by ENTRY INDEX, as the Task outline does. */
+            std::vector<std::uint8_t> rsc_fixed2_type(rsc_rows, 0);
+            std::vector<bool> rsc_fixed2_known(rsc_rows, false);
+            const std::vector<std::uint8_t> rsc_fixed2_meta =
+                read_optional_stream(cfb, "TBkndRsc", "Fixed2Meta", document.warnings);
+            if (rsc_fixed2_meta.size() >= kFixedMetaHeaderSize &&
+                u32_at(rsc_fixed2_meta, 0) == kMetaMagic) {
+                const std::uint32_t declared = u32_at(rsc_fixed2_meta, 8);
+                const std::size_t available =
+                    rsc_fixed2_meta.size() - kFixedMetaHeaderSize;
+                const std::size_t count =
+                    declared != 0 ? declared : available / kRscFixed2MetaEntrySize;
+                if (count != 0 && available % count == 0) {
+                    const std::size_t stride = available / count;
+                    for (std::size_t i = kFixedMetaDescriptors; i < count; ++i) {
+                        if (i >= rsc_meta_offsets.size() ||
+                            rsc_meta_offsets[i] == kNoOffset) {
+                            continue;
+                        }
+                        const std::uint32_t offset = rsc_meta_offsets[i];
+                        if (offset < kRscHeaderSize ||
+                            (offset - kRscHeaderSize) % kRscRowSize != 0) {
+                            continue;
+                        }
+                        const std::uint32_t row =
+                            (offset - static_cast<std::uint32_t>(kRscHeaderSize)) /
+                            static_cast<std::uint32_t>(kRscRowSize);
+                        if (row >= rsc_rows) {
+                            continue;
+                        }
+                        const std::size_t entry = kFixedMetaHeaderSize + i * stride;
+                        if (entry + kRscFixed2MetaCostByte >= rsc_fixed2_meta.size()) {
+                            continue;
+                        }
+                        rsc_fixed2_type[row] =
+                            rsc_fixed2_meta[entry + kRscFixed2MetaCostByte];
+                        rsc_fixed2_known[row] = true;
+                    }
+                }
+            }
             for (std::uint32_t row = 1; row < rsc_rows; ++row) {
                 const std::uint32_t uid = rsc_uid_by_row[row];
                 const std::size_t base = kRscHeaderSize + row * kRscRowSize;
@@ -1479,6 +1647,30 @@ Document parse_document(const CompoundFile& cfb) {
                 resource.row_id = u32_at(rsc_fixed, base + kRscRowId);
                 resource.uid = uid;
                 resource.max_units_x100 = f64_at(rsc_fixed, base + kRscRowMaxUnits);
+                const bool work_bit =
+                    row < rsc_meta_type.size() &&
+                    (rsc_meta_type[row] & kRscFixedMetaWorkFlag) != 0;
+                if (!rsc_meta_stream) {
+                    resource.type = ResourceType::work;
+                    resource.type_stored = false;
+                } else if (work_bit) {
+                    resource.type = ResourceType::work;
+                    resource.type_stored = true;
+                } else if (rsc_fixed2_known[row]) {
+                    resource.type =
+                        (rsc_fixed2_type[row] & kRscFixed2MetaCostFlag) != 0
+                            ? ResourceType::cost
+                            : ResourceType::material;
+                    resource.type_stored = true;
+                } else {
+                    resource.type = ResourceType::work;
+                    resource.type_stored = false;
+                    document.warnings.emplace_back(
+                        "Resource row " + std::to_string(row) + " (uid " +
+                        std::to_string(uid) + ") is non-Work in FixedMeta but has no "
+                        "Fixed2Meta type word; its type is reported as Work with "
+                        "type_stored=false");
+                }
                 if (rsc_table.usable &&
                     read_text_field(rsc_table, rsc_var2, uid, kFieldRscName,
                                     resource.name_raw)) {
@@ -1489,6 +1681,11 @@ Document parse_document(const CompoundFile& cfb) {
                     read_text_field(rsc_table, rsc_var2, uid, kFieldRscInitials,
                                     initials_raw)) {
                     resource.initials = trim_ascii_spaces(initials_raw);
+                }
+                if (rsc_table.usable &&
+                    read_text_field(rsc_table, rsc_var2, uid, kFieldRscMaterialLabel,
+                                    resource.material_label_raw)) {
+                    resource.material_label = trim_ascii_spaces(resource.material_label_raw);
                 }
                 document.resources.push_back(std::move(resource));
             }
@@ -1511,12 +1708,15 @@ Document parse_document(const CompoundFile& cfb) {
             const std::vector<std::uint32_t> cons_uid_by_row =
                 uids_by_row(cons_fixed, 0, kConsRowSize, cons_rows, kConsRowUid);
             warn_duplicate_uids(cons_uid_by_row, "Link", false, document.warnings);
+            std::vector<std::int16_t> cons_state;
             const std::vector<bool> cons_live =
                 fixed_meta_coverage(cfb, "TBkndCons", "Link", 0, kConsRowSize,
                                     kConsFixedMetaEntrySize, 0, cons_rows,
-                                    cons_uid_by_row, document.warnings);
+                                    cons_uid_by_row, document.warnings, nullptr,
+                                    nullptr, &cons_state);
             std::size_t zero_rows = 0;
             std::size_t uncovered_rows = 0;
+            std::size_t tombstoned_rows = 0;
             for (std::uint32_t row = 0; row < cons_rows; ++row) {
                 const std::size_t base = row * kConsRowSize;
                 const std::uint32_t predecessor =
@@ -1532,16 +1732,30 @@ Document parse_document(const CompoundFile& cfb) {
                     document.skipped_links.push_back(std::move(skipped));
                     continue;
                 }
-                if (!cons_live[row]) {
+                const std::int16_t state =
+                    row < cons_state.size() ? cons_state[row] : kStateNoMetaEntry;
+                const bool state_live = state == kStateNoMetaStream || state == 0;
+                if (!cons_live[row] || !state_live) {
                     /* A non-zero row that no FixedMeta entry names is a deleted
-                     * link slot.  Returning it would invent a dependency that
-                     * MS Project does not schedule. */
-                    ++uncovered_rows;
+                     * link slot.  So is a row whose entry carries the W45
+                     * tombstone (+0 = 0x02): the delete cascade keeps the row's
+                     * bytes and only marks its metadata.  Returning either would
+                     * invent a dependency that MS Project does not schedule.
+                     * PROJECT_B is the measured case (2 tombstoned link rows; its
+                     * export has 70 links, not 72). */
+                    if (cons_live[row]) {
+                        ++tombstoned_rows;
+                    } else {
+                        ++uncovered_rows;
+                    }
                     SkippedRow skipped;
                     skipped.row = row;
                     skipped.uid = cons_uid_by_row[row];
                     skipped.reason =
-                        "no FixedMeta entry: MS Project does not schedule this row";
+                        cons_live[row]
+                            ? "FixedMeta entry is a tombstone (+0 = 0x02): deleted "
+                              "link row"
+                            : "no FixedMeta entry: MS Project does not schedule this row";
                     document.skipped_links.push_back(std::move(skipped));
                     continue;
                 }
@@ -1568,6 +1782,12 @@ Document parse_document(const CompoundFile& cfb) {
                     "TBkndCons/FixedData holds " + std::to_string(uncovered_rows) +
                     " non-zero rows that no FixedMeta entry names; they are "
                     "treated as deleted link slots, not links");
+            }
+            if (tombstoned_rows > 0) {
+                document.warnings.emplace_back(
+                    "TBkndCons/FixedData holds " + std::to_string(tombstoned_rows) +
+                    " rows whose FixedMeta entry is a tombstone (+0 = 0x02); they "
+                    "are treated as deleted link slots, not links");
             }
             for (const Link& link : document.links) {
                 if (live_task_uids.count(link.predecessor_uid) == 0) {
@@ -1607,24 +1827,44 @@ Document parse_document(const CompoundFile& cfb) {
             const std::vector<std::uint32_t> assn_uid_by_row =
                 uids_by_row(assn_fixed, 0, kAssnRowSize, assn_rows, kAssnRowUid);
             warn_duplicate_uids(assn_uid_by_row, "Assignment", false, document.warnings);
+            std::vector<std::int16_t> assn_state;
             const std::vector<bool> assn_live =
                 fixed_meta_coverage(cfb, "TBkndAssn", "Assignment", 0, kAssnRowSize,
                                     kAssnFixedMetaEntrySize, 0, assn_rows,
-                                    assn_uid_by_row, document.warnings);
+                                    assn_uid_by_row, document.warnings, nullptr,
+                                    nullptr, &assn_state);
+            std::size_t assn_tombstoned = 0;
             for (std::uint32_t row = 0; row < assn_rows; ++row) {
                 const std::size_t base = row * kAssnRowSize;
-                if (!assn_live[row]) {
+                const std::uint32_t task_uid = u32_at(assn_fixed, base + kAssnRowTaskUid);
+                const std::int16_t state =
+                    row < assn_state.size() ? assn_state[row] : kStateNoMetaEntry;
+                const bool state_live = state == kStateNoMetaStream || state == 0;
+                if (!assn_live[row] || !state_live) {
+                    /* W48's delete cascade tombstones the assignment row's
+                     * FixedMeta entry (+0 = 0x02) and leaves its FixedData bytes
+                     * behind.  PROJECT_B has 10 such rows; Project exports 63
+                     * assignments, not 73.  A placeholder row (task uid 0) is
+                     * also tombstoned in some fixtures; it is skipped silently,
+                     * exactly as the placeholder path below always did. */
+                    if (assn_live[row] && task_uid != 0) {
+                        ++assn_tombstoned;
+                    }
                     SkippedRow skipped;
                     skipped.row = row;
                     skipped.uid = assn_uid_by_row[row];
-                    skipped.reason = "no FixedMeta entry";
+                    skipped.reason =
+                        assn_live[row]
+                            ? "FixedMeta entry is a tombstone (+0 = 0x02): deleted "
+                              "assignment row"
+                            : "no FixedMeta entry";
                     document.skipped_assignments.push_back(std::move(skipped));
                     continue;
                 }
                 Assignment assignment;
                 assignment.row = row;
                 assignment.uid = assn_uid_by_row[row];
-                assignment.task_uid = u32_at(assn_fixed, base + kAssnRowTaskUid);
+                assignment.task_uid = task_uid;
                 assignment.resource_uid_raw =
                     u32_at(assn_fixed, base + kAssnRowResourceUid);
                 assignment.units_x100 = f64_at(assn_fixed, base + kAssnRowUnits);
@@ -1653,6 +1893,12 @@ Document parse_document(const CompoundFile& cfb) {
                              : ""));
                 }
                 document.assignments.push_back(assignment);
+            }
+            if (assn_tombstoned > 0) {
+                document.warnings.emplace_back(
+                    "TBkndAssn/FixedData holds " + std::to_string(assn_tombstoned) +
+                    " rows whose FixedMeta entry is a tombstone (+0 = 0x02); they "
+                    "are treated as deleted assignment slots, not assignments");
             }
         }
     }

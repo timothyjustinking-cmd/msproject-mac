@@ -1,0 +1,38 @@
+{
+  "case": "field-base",
+  "source": "tests\\data\\synthetic-base.mpp",
+  "saved": "corpus\\probe\\w11-fields-base.mpp",
+  "bytes": 360448,
+  "rows": [
+    {
+      "ID": 1,
+      "uid": 1,
+      "start": "2026-01-04 13:00:00",
+      "finish": "2026-01-09 12:00:00",
+      "duration": 2400,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": true
+    },
+    {
+      "ID": 2,
+      "uid": 2,
+      "start": "2026-01-04 13:00:00",
+      "finish": "2026-01-07 12:00:00",
+      "duration": 1440,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": true
+    },
+    {
+      "ID": 3,
+      "uid": 3,
+      "start": "2026-01-04 13:00:00",
+      "finish": "2026-01-06 12:00:00",
+      "duration": 960,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": true
+    }
+  ]
+}

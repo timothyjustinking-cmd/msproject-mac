@@ -1,0 +1,71 @@
+{
+  "case": "snet-link",
+  "saved": "corpus\\probe\\w11-snet-link.mpp",
+  "bytes": 245760,
+  "before": [
+    {
+      "ID": 1,
+      "uid": 1,
+      "start": "2026-10-19 08:00:00",
+      "finish": "2026-10-23 17:00:00",
+      "duration": 2400,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    },
+    {
+      "ID": 2,
+      "uid": 2,
+      "start": "2026-10-26 08:00:00",
+      "finish": "2026-10-26 17:00:00",
+      "duration": 480,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    }
+  ],
+  "after_calc": [
+    {
+      "ID": 1,
+      "uid": 1,
+      "start": "2026-10-19 08:00:00",
+      "finish": "2026-10-23 17:00:00",
+      "duration": 2400,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    },
+    {
+      "ID": 2,
+      "uid": 2,
+      "start": "2026-10-26 08:00:00",
+      "finish": "2026-10-26 17:00:00",
+      "duration": 480,
+      "constraint": 4,
+      "constraint_date": "2026-10-21 08:00:00",
+      "manual": false
+    }
+  ],
+  "reopened": [
+    {
+      "ID": 1,
+      "uid": 1,
+      "start": "2026-10-19 08:00:00",
+      "finish": "2026-10-23 17:00:00",
+      "duration": 2400,
+      "constraint": 0,
+      "constraint_date": "NA",
+      "manual": false
+    },
+    {
+      "ID": 2,
+      "uid": 2,
+      "start": "2026-10-26 08:00:00",
+      "finish": "2026-10-26 17:00:00",
+      "duration": 480,
+      "constraint": 4,
+      "constraint_date": "2026-10-21 08:00:00",
+      "manual": false
+    }
+  ]
+}

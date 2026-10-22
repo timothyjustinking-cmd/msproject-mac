@@ -1,0 +1,11 @@
+{
+  "case": "field-one-two",
+  "sizes": {
+    "one": 344064,
+    "two": 344064
+  },
+  "fixtures": {
+    "one": "corpus\\probe\\w11-fields-number1.mpp",
+    "two": "corpus\\probe\\w11-fields-number1-text1.mpp"
+  }
+}

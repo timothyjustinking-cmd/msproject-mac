@@ -815,3 +815,286 @@ our deterministic Fixed2Data identity and cloned FixedMeta blob are accepted
   (83/73), not the check total.
 
 
+## W48 (2026-10-22): the delete cascade, custom-field values, linked-pin contract
+
+**Status: cascade and Flag1 PASS the Project gate; custom-field values are
+byte-identical to Project's own definition tables but the confirming re-open is
+pending (two earlier opens showed zeros).** The writer tombstones dependent
+link/assignment rows on a task delete, and writes Text/Number/Date/Duration/Flag1
+custom-field values together with their `Props` field registrations. The
+linked-pin clamp is documented and exposed as a predicate; scheduling semantics
+are unchanged. `core/mpp` gained one additive read API (custom fields) and was
+otherwise frozen for W48.
+
+**Project gate so far (coordinator, read-only):**
+- `w48-del-cascade.mpp` **PASS** — 2 tasks (uids 1,3), uid 1 unchanged, uid 3 at
+  project start, no link/assignment naming uid 2.
+- `w48-flag-on/off` **PASS** — uid 2 Flag1 Yes / all No; only the FixedMeta
+  bit + Fixed2Meta mirror matter for the flag.
+- Text1/Number1/Number2/Duration1/Date1: **FAILED twice** — first because the
+  VarMeta entries were appended outside uid 1's group, then because the field
+  definitions were not registered in `TBkndTask/Props`.  Both causes are fixed
+  and both Props streams match Project's own file byte-for-byte.  The third
+  measured difference (FixedMeta tail presence bits + the internal Duration
+  marker, below) is also implemented, and `w48-fields.mpp`'s uid 1 row now matches
+  Project's own six-field save (`corpus/probe/w11-fields-base.mpp`) entry for
+  entry and byte for byte on VarMeta order, tail bytes and `+2`; re-open pending.
+
+
+### Measured rules implemented (do not re-derive)
+
+**Delete cascade** (`docs/analysis/oracle/w11-oracle.md` §2, fixture
+`w11-linkdelete-post.mpp`). Project's own delete of T2 in a T1->T2->T3 file with
+one T2 assignment leaves every dependent row in place and tombstones it:
+
+| table | what Project writes |
+|---|---|
+| `TBkndCons/FixedMeta` | header `+4 4->6`; BOTH links (1->2 and 2->3) entry `+0 00->02`, `+2 ->0`; FixedData byte-identical |
+| `TBkndAssn/FixedMeta` | header `+4 4->6`; the T2/R1 entry `+0->02`, `+2->0`; FixedData byte-identical (survivors' cached values recalculated, not copied) |
+| `TBkndTask/FixedMeta` | header `+4 4->6`; the task's entry `+0->02`, `+2->0` |
+
+Selection: a Link row is selected when predecessor (+4) OR successor (+8) is the
+uid; an Assignment row when task uid (+4) is. Rows whose entry is already a
+tombstone are left alone. No stream shrinks. Our `w48-del-cascade.mpp` has
+**byte-identical `TBkndCons/FixedData` and `TBkndCons/FixedMeta` to Project's
+`w11-linkdelete-post.mpp`** (checked directly); `TBkndAssn/FixedMeta` differs
+only at the two surviving entries' `+2` field-count byte (Project's 2->3 save
+churn), and `TBkndAssn/FixedData` differs only in Project's recalculated cached
+values.
+
+**Custom-field storage** (`w10-oracle.md` §2, `w10-fieldvalues.mpp`):
+Text = VarMeta block UTF-16LE+NUL; Number = 8-byte f64; Date = 4-byte packed u32;
+Duration = 4-byte u32 file ticks (COM minutes x 10); Flag1 = Task FixedMeta entry
+byte **+24 bit 0x02** (not VarMeta), with Project's own Fixed2Meta mirror at entry
+bytes **+31/+61 bit 0x80** (flag-off -> flag-on diff). FixedMeta entry `+2` is the
+row's exact VarMeta entry count (verified on synthetic-base: 11 entries/11, and
+on w10-fieldvalues: 14/14), so adding a field entry increments `+2` by one; a flag
+write does not.
+
+**Field ids** (PjTask, `analysis/field_id_map.tsv`; one table duplicated in
+`core/mpp/field_value.h` and `core/mppwrite/field_values.{h,cpp}` because the
+writer does not link the reader; the field-values test cross-checks all 100 ids):
+
+```
+Text1..6  0x0b400033 + 3*(n-1)      Text7..10  0x0b400042 + (n-6)
+Text11..30 0x0b40013d + (n-11)
+Flag1..10 0x0b400048 + (n-1)        Flag11..20 0x0b400124 + (n-11)
+Number1..5 0x0b400057 + (n-1)       Number6..20 0x0b40012e + (n-6)
+Duration1..3 0x0b400067 + (n-1)     Duration4..10 0x0b400113 + (n-4)
+Cost1..3 0x0b40006a + (n-1)         Cost4..10 0x0b400102 + (n-4)
+Date1..10 0x0b400109 + (n-1)
+```
+
+Watch the Text family: **Text1..6 stride 3, then Text7..10 contiguous** (0x43,
+0x44, 0x45, 0x46) because Flag1 starts at 0x48. The first cut assumed stride 3
+through Text10 and collided with Flag1/2/3; the id round-trip test caught it.
+
+**VarMeta group placement (measured, W48 gate #1).** Project only honours a
+custom-field entry that sits inside its uid's CONTIGUOUS group; entries appended
+after other uids' groups are ignored (the file reopened with every value empty).
+The array is sorted by (uid, secondary family, **field key ascending**), and our
+`table.h::var_entry_insert_offset`/`insert_var_entry` already produce that order
+(verified against `w11-fields-base.mpp`): uid 1 becomes Name, Text1(0x33),
+Number1(0x57), Number2(0x58), Duration1(0x67), a4..aa, 0xb7, Date1(0x109), 4e5,
+StartText, FinishText, 563, 564.  `add_task_row` uses the same helper, so a
+mid-range caller-supplied uid is inserted in uid order rather than at the end.
+
+**The field registry: `114/TBkndTask/Props` + `114/TBkndAssn/Props` (measured,
+W48 gate #2).** A VarMeta value is not enough: Project shows a custom field only
+when its definition is registered in the Task table's Props, mirrored in the
+Assignment table's Props. Project's own file has Task/Props 614 B = 86 + 6*88
+and Assn/Props 616 = 88 + 6*88; committed synthetic-base has the preambles
+(86 / 88) only. Records are 88 bytes copied from that file (Task offsets
+86,174,262,350,438,526; Assn 88,176,264,352,440,528). The preamble words differ
+per table and are the whole trick:
+
+| word | Task/Props (86 B preamble) | Assn/Props (88 B preamble) |
+|---|---|---|
+| +0, +4 | u32 size-4 | u32 size-4 |
+| total 44+88n | u16 **+30** (high half of u32 +28) | u32 **+32** |
+| record count | u32 **+78** | u32 **+80** |
+| count*88 | u32 **+82** | u32 **+84** |
+
+Everything else in the preamble is unchanged. The coordinator's first recipe
+(+78/+82 for both, +28 u32 for both) is the Task layout only; Assn differs, and
+using it leaves Project ignoring the definitions. Both of our emitted Props
+streams are now **byte-identical** to Project's own file, which the field test
+asserts directly when corpus/ is present.
+
+**FixedMeta tail presence bits + the Duration marker (measured, W48 gate #3, on
+`w11-fields-base.mpp` and the single-field probes).** Even with VarMeta and Props
+byte-perfect, Project shows a custom field as empty unless the row's FixedMeta
+entry tail says the field has a value:
+
+| field | entry tail |
+|---|---|
+| Text1 0x0b400033 | `+21 |= 0x20` |
+| Flag1 0x0b400048 | `+24 |= 0x02` (the bool itself; False clears it) |
+| Number1 0x0b400057 | `+25 |= 0x08` |
+| Number2 0x0b400058 | `+25 |= 0x10` |
+| Duration1 0x0b400067 | `+26 |= 0x01`, `+27 |= 0x20`, plus VarMeta key 0x0b4000b7 |
+| Date1 0x0b400109 | `+29 |= 0x40` |
+
+The six-field tail is `+21=0x20, +24=0x02, +25=0x18, +26=0x01, +27=0x20,
++29=0x40`.  The Duration marker's block is 2 bytes `07 00`; it is a normal
+VarMeta entry at key 0x0b4000b7, inserted in the same ascending-key order (it
+lands after the overtime entries, before Date1/4e5).  The entry's `+2` u16 is the
+row's exact VarMeta entry count INCLUDING the marker (base 11 -> 17 with the six
+fields) and is recomputed from the array after the write.  `w48-fields.mpp`'s uid
+1 VarMeta order, tail bytes and `+2` all equal `w11-fields-base.mpp`'s.
+
+
+### What landed (files)
+
+| path | what |
+|---|---|
+| `core/mppwrite/add_delete.h/.cpp` | the cascade: `DeletedRow::link_rows_tombstoned` / `assignment_rows_tombstoned`, per-table entry tombstoning, header flag in each table, byte-level verification from the re-read file. `DeleteOptions::allow_dangling` now only covers a **pre-existing** dead link endpoint. |
+| `core/mppwrite/field_values.h/.cpp` | **new**: `FieldKind`, `FieldValue`, `FieldEdit`, `FieldWriteResult`, `save_field_values`, `field_id_for`, `field_kind_for_id`. Inserts/repoints VarMeta entries inside the uid group, sets each field's FixedMeta tail presence bit (+ `+2` = entry count), adds the Duration marker 0x0b4000b7 (07 00), writes the six-field `TBkndTask/Props` + `TBkndAssn/Props` registrations, sets Flag1 + mirror, refuses Cost/Flag2..20 and any field without a measured Props record. |
+| `core/mppwrite/table.h/.cpp` | `var_entry_insert_offset` / `insert_var_entry`: Project's measured VarMeta order (uid ascending, key ascending inside a uid, secondary family after the plain uid). Used by `save_field_values` AND `add_task_row`. |
+| `core/mppwrite/save.h/.cpp` | linked-pin contract measured (w11 §1) replacing the old "unmeasured" note; `bool pin_would_be_clamped(pinned, dependency_allowed_start)` (pure predicate, no scheduling change). |
+| `core/mpp/field_value.h` | **new**, header-only read side: `FieldKind`, `CustomFieldValue`, id table, `custom_field_storage_measured`. |
+| `core/mpp/reader.h/.cpp` | additive: `Task::custom_fields` + `custom_field()`/`has_custom_field()`, `Document::custom_field(uid,id)`; `fixed_meta_coverage` gained one optional `row_custom_flag_byte` out-param (Flag1's +24 byte). Liveness untouched; PROJECT_A 83 / PROJECT_B 73 / synthetic 3 unchanged. |
+| `tests/roundtrip_add_delete.cpp` | updated to the default cascade (no `allow_dangling` for normal deletes), new corpus-free `make_link_source` (synthetic-base's Cons table is empty), cascade cases + `w48-del-cascade*.mpp`. |
+| `tests/roundtrip_field_values.cpp` | **new** (`mppwrite_roundtrip_field_values`): encode -> write -> re-read for every measured kind, rewrite with repointed entries, flag set/clear, 12 refusals, id-table cross-check with core/mpp, `pin_would_be_clamped` cases. |
+| `tests/mpp_field_value_tests.cpp` | **new** (`mpp_field_value`): the read API against `w10-fieldvalues.mpp`, `w10-flag-off/on` and the committed synthetic control; 100-id round trip. |
+| `core/mpp/CMakeLists.txt`, `core/mppwrite/CMakeLists.txt` | additive test targets; the fixture mirror moved to `core/mppwrite/build/vs-w48/test-out`. |
+
+### API semantics (ours, documented in the headers)
+
+- `delete_task_row(doc, uid, path)` now cascades by default; no options needed for
+  a normal file. `allow_dangling` is only for a surviving live link whose OTHER
+  endpoint already names a dead uid (damaged file); accepted orphan assignments
+  (PROJECT_B's 10) are warned about, never refused.
+- Verification after a delete: dependent FixedData byte-identical, targeted
+  entries read back `+0=0x02 / +2=0`, non-targeted entries byte-identical, header
+  `+4` gets bit 0x02 and no other bit moves, table sizes unchanged.
+- `save_field_values` rewrites the file and requires: FixedData/Fixed2Data
+  byte-identical; only FixedMeta (target entry `+2`/`+24`), Fixed2Meta (Flag1
+  mirror `+31/+61`), VarMeta (header `+8`/`+0x14`, repointed entry `+4`, inserted
+  entries), Var2Data (appended blocks), and the two Props registries (added 88-byte
+  records + their five preamble words) may move. It re-reads every value.
+- New field entries are INSERTED inside the uid's contiguous group, key-ascending
+  (`insert_var_entry`) -- appending at the end is what made Project ignore the
+  values. Overwriting an existing field appends a new block and repoints the
+  entry, leaving the old block orphaned -- the same append-only scheme table.h
+  uses.
+- A field is registered once per table in Props; a rewrite adds nothing. Clearing
+  a flag does NOT remove its registration (the flag-off fixture keeps Flag1's
+  record, so it is no longer byte-identical to synthetic-base).
+- **The Fixed2Meta Flag1 mirror is written** because it is Project's own measured
+  write shape; whether Project *needs* it on a fresh open is **unmeasured** (the
+  Flag1 gate passed, so it is harmless). If the row has no Fixed2Meta entry the
+  mirror is skipped and warned about.
+- **Cost is refused** with "storage is unmeasured"; **Flag2..Flag20 are refused**
+  (only Flag1's bit position is known); and every field without a measured Props
+  record is refused (only the six measured fields are writable).
+  `mpp::CustomFieldValue` reports Cost / Flag2..20 blocks with
+  `storage_measured == false` instead of decoding them.
+
+### Verification (exact, 2026-10-22, `build\vs-w48`)
+
+```
+cmd /c '"...\vcvars64.bat" >nul && cmake -S . -B build\vs-w48 -G "Visual Studio 17 2022" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON'
+cmd /c '"...\vcvars64.bat" >nul && cmake --build build\vs-w48 --config Release --target <targets>'
+```
+
+| binary | result |
+|---|---|
+| `mppwrite_roundtrip_add_delete` | **760 checks, 0 failures** |
+| `mppwrite_roundtrip_field_values` | **317 checks, 0 failures** |
+| `mpp_field_value_tests` | **283 checks, 0 failures** |
+| `mpp_reader_tests` | **PASS: 685 checks** (W49's added link/assignment tombstone cases), PROJECT_A 83 / PROJECT_B 73 |
+| `mpp_tombstone_tests` | **PASS: 47 checks** |
+| `mppwrite_save_flow` | 101 checks, 0 failures |
+| `mppwrite_roundtrip_authority` | 1045 checks, 0 failures |
+| `ctest -R "mppwrite|mpp_reader|tombstone|field_value"` | **12/12 passed** |
+
+`plan_recalc_tests` was built but **not run**: it rewrites
+`tests/data/project_a_recalc_golden.tsv`, which W48 must not edit; W48 touches no
+`core/plan`/`core/sched` code, so M2 is unaffected.
+
+### Fixtures (git-ignored, regenerated by the test binaries)
+
+In `build\vs-w48\core\mppwrite\test-out\` and mirrored to
+`core\mppwrite\build\vs-w48\test-out\`; `w45-manifest.json` and
+`w48-manifest.json` carry size + FNV-1a 64.
+
+| file | bytes | FNV-1a 64 | meaning |
+|---|---|---|---|
+| `w48-del-cascade.mpp` | 238,080 | `0xd195f93950e27c4b` | **Project gate**: `w11-linkdelete-pre.mpp` + delete uid 2; Cons bytes identical to Project's post file |
+| `w48-del-cascade-synthetic.mpp` | 237,568 | `0xf9a3451c8a273cf8` | corpus-free: synthetic + links 1->2, 2->3; delete uid 2 |
+| `w48-fields.mpp` | 240,640 | `0x55667f0769a5258b` | uid 1 Text1 "W48 alpha", Number1 42.5, Number2 3.25, Duration1 4800, Date1 2026-10-26 08:00, Flag1 true; **Task/Props 614 B and Assn/Props 616 B byte-identical to Project's w10-fieldvalues.mpp** |
+| `w48-fields-rewrite.mpp` | 240,640 | `0xa02cf6e1b0ea3b5d` | the same fields overwritten (entries repointed, counts unchanged), Flag1 false; registries untouched |
+| `w48-flag-on.mpp` | 238,080 | `0x437905da564d2d2d` | synthetic + uid 2 Flag1 true; both Props gain the Flag1 record |
+| `w48-flag-off.mpp` | 238,080 | `0xca57ec93adbefd3f` | the same with Flag1 cleared; the registration stays, so this is NO LONGER byte-identical to `synthetic-base.mpp` |
+
+W45 delete fixtures changed because of the cascade (the add fixtures are
+unchanged): `w45-del-middle.mpp` and `-a` `0xb4af6315546d0a0f`,
+`w45-del-middle-b.mpp` `0xa11b5abdc9df5824`, `w45-del-last.mpp`
+`0x35706ef995c09644`, `w45-del-probe-middle.mpp` `0xb9d3ab265daa8544`.
+
+### Verified vs inferred
+
+Verified locally and re-runnable: the cascade selects and tombstones exactly the
+rows naming the uid (both link endpoints, assignment task uid), sets all three
+header flags, leaves every dependent FixedData byte and every other stream
+byte-identical, and the emitted cascade fixture's link table is byte-identical to
+Project's own post-delete file. Field values round-trip through the writer's
+re-read and through `core/mpp`; the VarMeta array is uid-grouped and key-sorted
+after every write; **both Props registries are byte-identical to Project's own
+`w10-fieldvalues.mpp` streams**; the uid 1 VarMeta order, FixedMeta tail bytes and
+`+2` equal Project's own six-field save `w11-fields-base.mpp`; the field test
+asserts all of that directly. Refusals do not touch the document or the output
+path.
+
+Verified by Project: the W10 oracle encodings/ids; the delete cascade and the
+Flag1 pair (W48 gate); the tombstone/header-bit contract. NOT yet verified: the
+custom-field VALUES on a fresh Project open after the group + Props fixes (two
+earlier opens showed zeros; both diagnosed causes are now fixed and the
+definitions match Project's file byte-for-byte). Whether the Fixed2Meta Flag1
+mirror is *required* is still unmeasured, though Flag1 passed with it.
+
+### Open items / next actions
+
+1. **Confirm the field values in Project**: `w48-fields.mpp` / `-rewrite`. The
+   third pass adds the last measured store (tail bits + duration marker) and the
+   uid 1 row now matches Project's own six-field save; if zeros somehow persist,
+   send the file back rather than guessing (the definitions and the row already
+   match Project's own bytes).
+2. **Reader parity (W49, now landed):** W49 added the tombstone-state predicate to
+   link/assignment liveness; `w48-del-cascade.mpp` now reads 0 links / 0
+   dead-endpoint links / 2 assignments, so W48's cascade test expectations were
+   updated to match. PROJECT_A 83 / PROJECT_B 73 unchanged.
+3. `save_field_values` cannot delete a field; clearing Text to "" is the only
+   "clear" shape, and clearing a flag leaves its Props registration. A measured
+   field-delete encoding is the missing oracle case.
+4. Cost storage stays unmeasured; one oracle fixture with Cost1..Cost3 set would
+   turn the refusal into an implementation. Fields other than the six measured
+   ones are refused for lack of a Props record.
+
+### Traps added this wave
+
+- The W48 CMake mirror was still `build/vs-w45`; changed to `vs-w48`. ctest runs
+  with the repo root as cwd, so the relative probe paths work, but reading the
+  emitted fixtures from `core/mppwrite/build/vs-w48/test-out` needs the new path.
+- `tests/data/synthetic-base.mpp`'s `TBkndCons` table is EMPTY; the cascade's
+  link half needs `make_link_source` (W48 test helper) or a corpus fixture.
+- The drop-in `#include "field_value.h"` in `reader.h` means editing the id table
+  rebuilds `core_mpp`; that is expected, not a CMake problem.
+- `field_values.cpp` must set `field_id` on the value `decode_payload` returns,
+  or the read-back comparison fails on `field_id` while printing the right text
+  (cost a build cycle).
+- **Never rewrite a multi-line file with `Get-Content` (array) + `Set-Content
+  -NoNewline`.** It concatenates every line into one; `field_values.cpp` was
+  flattened that way and had to be reconstructed. Use `Get-Content -Raw` for
+  literal replacements, or the write/edit tools, and check the line count after.
+- The Task and Assignment Props preambles are NOT interchangeable: Task stores
+  `44+88n` in the high half of u32 +28 (u16 +30) and its count/length at
+  +78/+82; Assignment stores the total at u32 +32 and count/length at +80/+84.
+  The first implementation used the Task layout for both and Project ignored the
+  Assignment registration (harmless) -- the test now compiles both against
+  Project's own streams.
+
+
+
+

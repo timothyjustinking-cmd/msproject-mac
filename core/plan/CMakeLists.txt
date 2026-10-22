@@ -77,7 +77,7 @@ set_target_properties(core_plan PROPERTIES
 target_include_directories(core_plan PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
-target_link_libraries(core_plan PUBLIC core_sched core_mpp)
+target_link_libraries(core_plan PUBLIC core_sched core_mpp core_cal)
 core_plan_apply_warnings(core_plan)
 
 # ---------------------------------------------------------------------------
@@ -94,9 +94,10 @@ if(CORE_PLAN_BUILD_TESTS)
     set(PLAN_RECALC_PATH "${CORE_PLAN_REPO_ROOT}/corpus/probe/project_a-recalc.mpp")
     set(PLAN_SCHEDIN_PATH "${CORE_PLAN_REPO_ROOT}/corpus/probe/schedin.mpp")
     set(PLAN_ELAPSED_PATH "${CORE_PLAN_REPO_ROOT}/corpus/probe/w9-elapsedlag.mpp")
+    set(PLAN_HOLIDAY_PATH "${CORE_PLAN_REPO_ROOT}/corpus/probe/holiday1.mpp")
     set(PLAN_GOLDEN_PATH "${CORE_PLAN_REPO_ROOT}/tests/data/project_a_recalc_golden.tsv")
     foreach(path_var PLAN_BASE_PATH PLAN_PROJECT_A_PATH PLAN_RECALC_PATH PLAN_SCHEDIN_PATH PLAN_ELAPSED_PATH
-                     PLAN_GOLDEN_PATH)
+                     PLAN_HOLIDAY_PATH PLAN_GOLDEN_PATH)
         file(TO_CMAKE_PATH "${${path_var}}" ${path_var})
     endforeach()
 
@@ -111,6 +112,7 @@ if(CORE_PLAN_BUILD_TESTS)
         PLAN_RECALC_PATH="${PLAN_RECALC_PATH}"
         PLAN_SCHEDIN_PATH="${PLAN_SCHEDIN_PATH}"
         PLAN_ELAPSED_PATH="${PLAN_ELAPSED_PATH}"
+        PLAN_HOLIDAY_PATH="${PLAN_HOLIDAY_PATH}"
         PLAN_GOLDEN_PATH="${PLAN_GOLDEN_PATH}"
     )
 

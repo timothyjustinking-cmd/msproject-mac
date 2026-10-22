@@ -22,8 +22,16 @@
 
 #include "layout_model.h"
 #include "reader.h"
+#include "usage_mpp.h"
 
 namespace app {
+
+// Wave 11: the measured assignment -> usage bridge lives in core/usage
+// (usage_mpp.h).  Re-exported here so main.mm still touches the reader in one
+// place and app/view_model.cpp stays reader-free.
+inline core::usage::UsageInput usage_input_from_document(const mpp::Document& document) {
+    return core::usage::usage_input_from_mpp(document);
+}
 
 inline core::gantt::LinkType gantt_link_type(mpp::LinkType type) noexcept {
     switch (type) {
@@ -33,6 +41,43 @@ inline core::gantt::LinkType gantt_link_type(mpp::LinkType type) noexcept {
         case mpp::LinkType::start_start: return core::gantt::LinkType::start_to_start;
     }
     return core::gantt::LinkType::finish_to_start;
+}
+
+// Wave 11: the reader's resource type uses the same PjResourceTypes order, so
+// this is a straight mapping (the reader reports Work for every corpus row
+// today and marks that with Resource::type_stored == false).
+inline core::view::ResourceType resource_type_from_mpp(mpp::ResourceType type) noexcept {
+    switch (type) {
+        case mpp::ResourceType::work: return core::view::ResourceType::work;
+        case mpp::ResourceType::material: return core::view::ResourceType::material;
+        case mpp::ResourceType::cost: return core::view::ResourceType::cost;
+    }
+    return core::view::ResourceType::work;
+}
+
+inline ResourceRow resource_row_from_mpp(const mpp::Resource& resource) {
+    ResourceRow row;
+    row.uid = resource.uid;
+    row.id = resource.row_id;
+    row.name = resource.name;
+    row.initials = resource.initials;
+    row.type = resource_type_from_mpp(resource.type);
+    // Resource::max_units() is already the view convention (100.0 == 100 %,
+    // from the stored x100 value); the builder wants the same quantity.
+    row.max_units_percent = resource.max_units();
+    return row;
+}
+
+inline AssignmentRow assignment_row_from_mpp(const mpp::Assignment& assignment) {
+    AssignmentRow row;
+    row.uid = assignment.uid;
+    row.task_uid = assignment.task_uid;
+    row.resource_uid = assignment.resource_uid();  // 0 when the row has no resource
+    row.work_ticks = static_cast<std::int64_t>(assignment.work_ticks());
+    row.units_percent = assignment.units();
+    row.start = date32_from_packed(assignment.start.raw);
+    row.finish = date32_from_packed(assignment.finish.raw);
+    return row;
 }
 
 inline TaskRow task_row_from_mpp(const mpp::Task& task) {
@@ -77,6 +122,18 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
         // "critical hint" stays false rather than being guessed from slack.
         row.critical = false;
         input.links.push_back(std::move(row));
+    }
+
+    // Wave 11: the resource and assignment rows the resource sheet and the usage
+    // views consume.  A dead assignment endpoint is kept: core/usage totals it
+    // but invents no row for an unknown task/resource uid (usage.h decision 5).
+    input.resources.reserve(document.resources.size());
+    for (const mpp::Resource& resource : document.resources) {
+        input.resources.push_back(resource_row_from_mpp(resource));
+    }
+    input.assignments.reserve(document.assignments.size());
+    for (const mpp::Assignment& assignment : document.assignments) {
+        input.assignments.push_back(assignment_row_from_mpp(assignment));
     }
     return input;
 }

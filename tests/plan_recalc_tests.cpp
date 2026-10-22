@@ -74,7 +74,9 @@ plan::PlanInput from_mpp_with_calendar(const mpp::Document& document,
                                        const std::string& path) {
     plan::PlanInput input = plan::from_mpp(document);
     try {
-        input.calendar = core::cal::load_project_calendar(path);
+        const core::cal::CalendarTable table = core::cal::decode_file(path);
+        input.calendar = core::cal::build_project_calendar(table);
+        plan::attach_task_calendars(input, table);
     } catch (const std::exception& error) {
         std::cout << "  note: calendar decode failed for " << path << ": "
                   << error.what() << '\n';
@@ -339,6 +341,14 @@ void test_project_a(TestContext& context) {
                   "PROJECT_A's outline chain yields 16 summaries");
     context.equal(input.summary_links, std::size_t{0},
                   "no link touches a PROJECT_A summary, so the rollup moves no leaf date");
+    context.equal(input.task_calendars.size(), std::size_t{0},
+                  "PROJECT_A names no task calendar (+178 is -1 on every row)");
+    std::size_t project_a_elapsed = 0;
+    for (const plan::PlanTask& task : input.tasks) {
+        project_a_elapsed += task.elapsed_duration ? 1u : 0u;
+    }
+    context.equal(project_a_elapsed, std::size_t{0},
+                  "PROJECT_A has no elapsed-duration task, so its M2 dates cannot move");
 
     const plan::PlanResult result = plan::recalculate(input);
     context.check(result.ok(), "PROJECT_A recalculation succeeds (" + describe(result) + ")");
@@ -720,12 +730,12 @@ void test_schedin(TestContext& context) {
  * successors) are compared exactly; the FS+3-edays row is the discriminator,
  * because 3 WORKING days from Wed 17:00 would start Tue 10-27 08:00.
  *
- * T8 is the elapsed-DURATION control (2 edays = 28800 ticks) and is NOT
- * reproduced: core/mpp exposes no duration-format word, so 28800 ticks is
- * indistinguishable from a six-working-day duration and the engine schedules it
- * as working time.  That is recorded as an open item in memory/schedcore.md,
- * not hidden here: T8's stored start still matches, its stored finish is the
- * documented divergence. */
+ * T8 is the elapsed-DURATION control (2 edays = 28800 ticks).  Wave 11 made it
+ * reproducible: the reader exposes the task row's +0xa4 DurationFormat (8 =
+ * elapsed days on this row, 7 on T1..T7), the bridge sets
+ * PlanTask::elapsed_duration, and the engine counts wall-clock time, giving
+ * Mon 10-19 08:00 -> Wed 10-21 08:00 and 106200 ticks of slack.  All 16 date
+ * fields and all 8 slack values are compared now. */
 void test_elapsed_lag(TestContext& context) {
     if (corpus_hidden()) {
         std::cout << "SKIP: elapsed-lag fixture (MPP_NO_CORPUS is set)\n";
@@ -794,28 +804,159 @@ void test_elapsed_lag(TestContext& context) {
         if (actual->finish == task.finish.raw) {
             ++date_matches;
         }
-        if (task.uid == 8) {
-            // The elapsed-duration control: start matches, finish is the open
-            // item.  Assert both halves so a fix shows up as a failure here.
-            context.equal_date(actual->start, task.start.raw,
-                               label + " elapsed-duration start (Mon 10-19 08:00)");
-            context.check(actual->finish != task.finish.raw,
-                          "elapsed uid 8 finish is the documented divergence "
-                          "(no duration-format word in the reader)");
-            continue;
-        }
         context.equal_date(actual->start, task.start.raw, label + " recalculated start");
         context.equal_date(actual->finish, task.finish.raw, label + " recalculated finish");
         context.equal(actual->total_slack, static_cast<sched::ticks>(task.total_slack_ticks),
                       label + " recalculated total slack");
+        if (task.uid == 8) {
+            context.check(actual->elapsed_duration,
+                          "elapsed uid 8 is flagged elapsed by the bridge");
+            context.equal(actual->total_slack, sched::ticks{106200},
+                          "elapsed uid 8 total slack is the stored 10620 min");
+        }
     }
-    // 7 supported tasks x 2 dates match; T8's start matches and its finish is
-    // counted as the one diverging field.
     context.equal(date_fields, std::size_t{16}, "16 date fields were compared");
-    context.equal(date_matches, std::size_t{15},
-                  "15 of the 16 date fields match (only the elapsed-duration finish diverges)");
+    context.equal(date_matches, std::size_t{16},
+                  "all 16 date fields match, including the elapsed-duration control");
     std::cout << "elapsed: " << date_matches << " / " << date_fields
               << " date fields match, " << elapsed_links << " of 5 links are elapsed\n"
+              << std::flush;
+}
+
+/* ---- 5. holiday1.mpp: the per-task calendar in the CPM bridge ------------
+ * MEASURED (docs/analysis/oracle/holiday-probe.json): the project calendar is
+ * Standard, but T1/T2/T3 store task-calendar uid 3 (SiteCal) at task row +178.
+ * SiteCal makes Wednesday 2026-10-21 non-working and Friday a 4 h day (08:00-
+ * 12:00).  Project's saved dates are the proof: T2 (5 d, FS after T1) starts
+ * Thu 10-22 08:00 and ends Thu 10-29 12:00; T3 (1 d, SNET Fri 10-23 08:00)
+ * ends Mon 10-26 12:00.  Neither happens on the project calendar.
+ *
+ * This test runs the same file twice: once with the task calendars attached and
+ * once with every task's +178 reset to -1.  The second run is the "no task
+ * calendar" control on exactly the same rows/dates, so the difference is the
+ * calendar and nothing else. */
+void test_task_calendars(TestContext& context) {
+    if (corpus_hidden()) {
+        std::cout << "SKIP: per-task calendar fixture (MPP_NO_CORPUS is set)\n";
+        return;
+    }
+    const std::string path = PLAN_HOLIDAY_PATH;
+    if (!file_exists(path)) {
+        std::cout << "SKIP: " << PLAN_HOLIDAY_PATH
+                  << " is not present (corpus is git-ignored)\n";
+        return;
+    }
+
+    const mpp::Document document = mpp::load_file(path);
+    context.equal(document.tasks.size(), std::size_t{3}, "holiday1.mpp has 3 tasks");
+    std::size_t named = 0;
+    for (const mpp::Task& task : document.tasks) {
+        named += task.calendar_uid == 3 ? 1u : 0u;
+    }
+    context.equal(named, std::size_t{3},
+                  "all three holiday1 tasks store task-calendar uid 3");
+
+    const plan::PlanInput input = from_mpp_with_calendar(document, path);
+    context.equal(input.task_calendars.size(), std::size_t{1},
+                  "the bridge builds one calendar for the one referenced uid");
+    if (!input.task_calendars.empty()) {
+        context.equal(input.task_calendars.front().uid, std::int32_t{3},
+                      "the built task calendar is uid 3");
+    }
+
+    const plan::PlanResult result = plan::recalculate(input);
+    context.check(result.ok(), "holiday1.mpp recalculation succeeds (" +
+                                   describe(result) + ")");
+    if (!result.ok()) {
+        return;
+    }
+    struct Expected {
+        std::int32_t uid;
+        sched::date32 start;
+        sched::date32 finish;
+        sched::ticks total_slack;
+        bool critical;
+    };
+    const Expected expected[] = {
+        {1, sched::from_ymd(2026, 10, 19, 8, 0), sched::from_ymd(2026, 10, 20, 17, 0), 0,
+         true},
+        {2, sched::from_ymd(2026, 10, 22, 8, 0), sched::from_ymd(2026, 10, 29, 12, 0), 0,
+         true},
+        {3, sched::from_ymd(2026, 10, 23, 8, 0), sched::from_ymd(2026, 10, 26, 12, 0),
+         14400, false},
+    };
+    for (const Expected& row : expected) {
+        const std::string label = "holiday uid " + std::to_string(row.uid);
+        const plan::PlanTaskResult* actual = find_result(result, row.uid);
+        context.check(actual != nullptr, label + " is in the recalculation");
+        if (actual == nullptr) {
+            continue;
+        }
+        context.equal(actual->calendar_uid, std::int32_t{3},
+                      label + " kept its +178 calendar uid");
+        context.equal_date(actual->start, row.start, label + " start");
+        context.equal_date(actual->finish, row.finish, label + " finish");
+        context.equal(actual->total_slack, row.total_slack, label + " total slack");
+        context.equal(actual->critical, row.critical, label + " critical");
+        /* The same values are the ones Project stored in the file. */
+        const mpp::Task* stored =
+            find_task(document, static_cast<std::uint32_t>(row.uid));
+        context.check(stored != nullptr, label + " is in the stored task table");
+        if (stored != nullptr) {
+            context.equal_date(actual->finish, stored->finish.raw,
+                               label + " finish equals the stored effective date");
+        }
+    }
+    context.equal_date(result.project_finish, sched::from_ymd(2026, 10, 29, 12, 0),
+                       "holiday1 project finish is T2's Thu 10-29 12:00");
+
+    /* Control: same tasks and constraints, every +178 reset to -1.  This is the
+     * project-calendar answer, and it differs exactly where the task calendar
+     * has the Wednesday holiday / 4 h Friday. */
+    plan::PlanInput control = input;
+    control.task_calendars.clear();
+    for (plan::PlanTask& task : control.tasks) {
+        task.calendar_uid = -1;
+    }
+    const plan::PlanResult project_only = plan::recalculate(control);
+    context.check(project_only.ok(), "holiday1 project-calendar control succeeds");
+    if (!project_only.ok()) {
+        return;
+    }
+    struct ControlExpected {
+        std::int32_t uid;
+        sched::date32 start;
+        sched::date32 finish;
+    };
+    const ControlExpected control_expected[] = {
+        {1, sched::from_ymd(2026, 10, 19, 8, 0), sched::from_ymd(2026, 10, 20, 17, 0)},
+        {2, sched::from_ymd(2026, 10, 21, 8, 0), sched::from_ymd(2026, 10, 27, 17, 0)},
+        {3, sched::from_ymd(2026, 10, 23, 8, 0), sched::from_ymd(2026, 10, 23, 17, 0)},
+    };
+    for (const ControlExpected& row : control_expected) {
+        const std::string label = "holiday control uid " + std::to_string(row.uid);
+        const plan::PlanTaskResult* actual = find_result(project_only, row.uid);
+        context.check(actual != nullptr, label + " is in the control recalculation");
+        if (actual == nullptr) {
+            continue;
+        }
+        context.equal_date(actual->start, row.start, label + " start");
+        context.equal_date(actual->finish, row.finish, label + " finish");
+    }
+    /* The discriminating rows: T3 has the same start and constraint in both runs
+     * but a different finish, so the task calendar (not the dates) moved it. */
+    const plan::PlanTaskResult* with_calendar = find_result(result, 3);
+    const plan::PlanTaskResult* without_calendar = find_result(project_only, 3);
+    context.check(with_calendar != nullptr && without_calendar != nullptr &&
+                      with_calendar->start == without_calendar->start &&
+                      with_calendar->finish != without_calendar->finish,
+                  "holiday T3: same start, different finish with vs without its "
+                  "task calendar");
+    std::cout << "task calendar: T2 " << plan::format_date(result.tasks.at(1).start)
+              << " vs control " << plan::format_date(project_only.tasks.at(1).start)
+              << "; T3 finish " << plan::format_date(result.tasks.at(2).finish)
+              << " vs control " << plan::format_date(project_only.tasks.at(2).finish)
+              << '\n'
               << std::flush;
 }
 
@@ -829,6 +970,7 @@ int main() {
         test_project_a(context);
         test_schedin(context);
         test_elapsed_lag(context);
+        test_task_calendars(context);
     } catch (const std::exception& error) {
         std::cerr << "FAIL: unhandled exception: " << error.what() << '\n';
         return 2;

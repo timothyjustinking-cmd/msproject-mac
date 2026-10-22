@@ -40,8 +40,10 @@
  *      (10 d) and 10799 (1 d), so duration == 0 is not the milestone test;
  *      holiday1.mpp's three tasks store task-calendar uid 3;
  *      manual-start-edited.mpp stores COM's new Start for uid 1 at +174 while
- *      +96 is stale; PROJECT_B has 72 links but Project exports 70 because two
- *      have dead endpoints.  All checks use uids/dates/counts only.
+ *      +96 is stale.  PROJECT_B's 72 link rows and 73 assignment rows include 2 and
+ *      10 W45/W48 tombstone entries, so the reader returns 70 links and 63
+ *      assignments -- exactly Project's export.  All checks use uids/dates/
+ *      counts only.
  *  11. W33: Task::start/finish are the EFFECTIVE +104/+108 pair.  PROJECT_B uid
  *      10805 is the one row where they differ from the calculated +96/+100;
  *      its effective dates equal Project's export and the calculated pair is
@@ -1457,6 +1459,99 @@ void test_w31_fixed_fields(TestContext& context) {
  * 50 % (ActualDuration 4800 ticks) and DL has Deadline 2026-10-21 17:00.
  * The constraint type/date live at +64 (u16) and +66 (u32) of the fixed row;
  * the deadline at +182, not in VarMeta. */
+/* ---- 8c. W49: the two format words (duration +0xa4, link +18) ------------
+ *
+ * DurationFormat is the u16 at task row +0xa4 and uses PjFormatUnit's numbering
+ * (7 = days, 8 = elapsed days, 9 = weeks, 11 = months, 21 = none).  MEASURED
+ * against Project's own MSPDI export: every live task row of PROJECT_A (84), PROJECT_B
+ * (74) and w9-resourcetypes (4) has +a4 equal to its <DurationFormat> (0
+ * mismatches; the project row is included in those counts).
+ * corpus/probe/w9-elapsedlag.mpp's T8 is "2 edays": it stores 28800 ticks and
+ * +a4 = 8, while T1..T7 store 7.
+ *
+ * LagFormat is the u16 at link row +18: 7 = working days, 8 = elapsed days.  On
+ * the same fixture the two "2 edays"/"3 edays" links store 8 and the matching
+ * "2 days" links store 7.  No task name or calendar name is used here. */
+void test_w49_fields(TestContext& context) {
+    if (corpus_hidden()) {
+        std::cout << "SKIP: W49 format-word checks (MPP_NO_CORPUS is set)\n";
+        return;
+    }
+    const std::string directory = MPP_PROBE_DIR;
+
+    const std::string elapsed_path = directory + "/w9-elapsedlag.mpp";
+    if (!file_exists(elapsed_path)) {
+        std::cout << "SKIP: " << elapsed_path << " is not present\n";
+    } else {
+        const mpp::Document document = mpp::load_file(elapsed_path);
+        const mpp::Task* t8 = find_task(document, 8);
+        context.check(t8 != nullptr, "w9-elapsedlag has uid 8");
+        if (t8 != nullptr) {
+            context.equal(t8->duration_format, std::uint16_t{8},
+                          "w9-elapsedlag uid 8 stores DurationFormat 8 (elapsed days)");
+            context.check(t8->duration_is_elapsed(),
+                          "uid 8's duration format decodes as elapsed");
+            context.equal(t8->duration_ticks, std::uint32_t{28800},
+                          "uid 8's 2-eday duration is 28800 elapsed ticks");
+        }
+        std::size_t working_format = 0;
+        std::size_t elapsed_format = 0;
+        for (const mpp::Task& task : document.tasks) {
+            working_format += task.duration_format == 7 ? 1u : 0u;
+            elapsed_format += task.duration_is_elapsed() ? 1u : 0u;
+        }
+        context.equal(working_format, std::size_t{7},
+                      "the seven working-day tasks store DurationFormat 7");
+        context.equal(elapsed_format, std::size_t{1},
+                      "exactly one task stores an elapsed DurationFormat");
+
+        std::size_t elapsed_links = 0;
+        std::size_t working_links = 0;
+        for (const mpp::Link& link : document.links) {
+            if (!link.endpoints_live()) {
+                continue;
+            }
+            elapsed_links += link.lag_is_elapsed() ? 1u : 0u;
+            working_links += link.lag_units == 7 ? 1u : 0u;
+        }
+        context.equal(elapsed_links, std::size_t{3},
+                      "three LagFormat-8 links decode as elapsed");
+        context.equal(working_links, std::size_t{2},
+                      "two LagFormat-7 links decode as working days");
+    }
+
+    const std::string types_path = directory + "/w9-resourcetypes.mpp";
+    if (file_exists(types_path)) {
+        const mpp::Document document = mpp::load_file(types_path);
+        std::size_t elapsed_tasks = 0;
+        for (const mpp::Task& task : document.tasks) {
+            elapsed_tasks += task.duration_is_elapsed() ? 1u : 0u;
+            context.equal(task.duration_format, std::uint16_t{7},
+                          "w9-resourcetypes task " + std::to_string(task.uid) +
+                              " stores DurationFormat 7");
+        }
+        context.equal(elapsed_tasks, std::size_t{0},
+                      "w9-resourcetypes has no elapsed-duration task");
+    } else {
+        std::cout << "SKIP: " << types_path << " is not present\n";
+    }
+
+    /* The regression guard for M2: no PROJECT_A/PROJECT_B task may be flagged elapsed,
+     * or the engine's dates would move.  All of their rows store 7/9/11/21. */
+    if (file_exists(MPP_PROJECT_A_PATH) && file_exists(MPP_PROJECT_B_PATH)) {
+        for (const std::string& path : {std::string(MPP_PROJECT_A_PATH),
+                                        std::string(MPP_PROJECT_B_PATH)}) {
+            const mpp::Document document = mpp::load_file(path);
+            std::size_t elapsed_rows = 0;
+            for (const mpp::Task& task : document.tasks) {
+                elapsed_rows += task.duration_is_elapsed() ? 1u : 0u;
+            }
+            context.equal(elapsed_rows, std::size_t{0},
+                          path + " has no elapsed-duration task (M2 unchanged)");
+        }
+    }
+}
+
 void test_schedin_fixture(TestContext& context) {
     const std::string directory = MPP_PROBE_DIR;
     if (corpus_hidden()) {
@@ -1756,7 +1851,8 @@ void test_resources(TestContext& context) {
                       "MaxUnits is the double at +8 (x100: 10000.0 = 100 %)");
         context.equal(crew->max_units_percent(), std::uint32_t{100},
                       "MaxUnits reports as 100 %");
-        context.check(crew->is_work(), "resource type defaults to Work (not stored in the row)");
+        context.check(crew->is_work() && crew->type_stored,
+                      "resource type is the stored Work bit in the Resource FixedMeta entry");
     }
 
     const mpp::Document n1 = mpp::load_file(probe + "/n1.mpp");
@@ -1769,6 +1865,39 @@ void test_resources(TestContext& context) {
     context.check(plant != nullptr, "var-rsc2.mpp resource uid 2 is present");
     if (plant != nullptr) {
         context.equal(plant->name, std::string("Plant"), "var-rsc2.mpp second resource is Plant");
+    }
+
+    /* ---- W49: the COM-built Work 50 % / Material / Cost fixture.  Type is
+     * not a row byte: Work is FixedMeta entry +12 bit 0x10, and when that is
+     * clear the Fixed2Meta entry +8 bit 0x10 selects Cost vs Material.  The 50 %
+     * MaxUnits row measures the +8 double's x100 scale (5000.0). */
+    const std::string type_fixture = probe + "/w9-resourcetypes.mpp";
+    if (file_exists(type_fixture)) {
+        const mpp::Document types = mpp::load_file(type_fixture);
+        context.equal(types.resources.size(), std::size_t{3},
+                      "w9-resourcetypes has three live resources (Work/Material/Cost)");
+        const mpp::Resource* r1 = find_resource(types, 1);
+        const mpp::Resource* r2 = find_resource(types, 2);
+        const mpp::Resource* r3 = find_resource(types, 3);
+        context.check(r1 != nullptr && r1->is_work() && r1->type_stored,
+                      "w9-resourcetypes R1 is stored Work (COM Type 0)");
+        context.check(r2 != nullptr && r2->is_material() && r2->type_stored,
+                      "w9-resourcetypes R2 is stored Material (COM Type 1)");
+        context.check(r3 != nullptr && r3->is_cost() && r3->type_stored,
+                      "w9-resourcetypes R3 is stored Cost (COM Type 2)");
+        if (r1 != nullptr) {
+            context.equal(r1->max_units_x100, 5000.0,
+                          "R1 MaxUnits is 5000.0 in the +8 double (x100 = 50 %)");
+            context.equal(r1->max_units_percent(), std::uint32_t{50},
+                          "R1 MaxUnits reports as 50 % (so the scale is x100)");
+        }
+        if (r2 != nullptr) {
+            context.equal(r2->material_label, std::string("metre"),
+                          "R2 carries MaterialLabel via VarMeta 0x0c40012b");
+        }
+    } else {
+        std::cout << "SKIP: " << type_fixture
+                  << " is not present (resource-type oracle fixture absent)\n";
     }
 
     const std::string assign1 = probe + "/assign1.mpp";
@@ -1846,45 +1975,45 @@ void test_links(TestContext& context) {
     mpx_link_case(4, "SS", 4800);  /* 1 working day */
 
     const mpp::Document project_b = mpp::load_file(MPP_PROJECT_B_PATH);
-    context.equal(project_b.links.size(), std::size_t{72},
-                  "PROJECT_B has 72 links (1440 = 20 x 72)");
+    /* W49: liveness is FixedMeta coverage AND state +0 == 0 (not the 0x02
+     * tombstone).  PROJECT_B's first two link rows (uids 7371/7372, the 10722 ->
+     * 10723 and 10723 -> 10724 links into deleted task slots) are tombstoned,
+     * so they are not returned; Project's export has exactly 70 links. */
+    context.equal(project_b.links.size(), std::size_t{70},
+                  "PROJECT_B returns 70 links (72 FixedData rows - 2 tombstones)");
+    context.equal(project_b.skipped_links.size(), std::size_t{2},
+                  "PROJECT_B's two tombstoned link rows are skipped");
     if (!project_b.links.empty()) {
-        context.equal(project_b.links.front().uid, std::uint32_t{7371}, "PROJECT_B first link uid");
-        context.equal(project_b.links.front().predecessor_uid, std::uint32_t{10722},
-                      "PROJECT_B first link predecessor");
-        context.equal(project_b.links.front().successor_uid, std::uint32_t{10723},
-                      "PROJECT_B first link successor");
+        context.equal(project_b.links.front().uid, std::uint32_t{7373},
+                      "PROJECT_B first live link uid is 7373 (7371/7372 are tombstones)");
+        context.equal(project_b.links.front().predecessor_uid, std::uint32_t{10734},
+                      "PROJECT_B first live link predecessor");
+        context.equal(project_b.links.front().successor_uid, std::uint32_t{10735},
+                      "PROJECT_B first live link successor");
         context.equal(project_b.links.front().type_name(), std::string("FS"),
                       "PROJECT_B links are Finish-to-Start");
+        context.check(project_b.links.front().endpoints_live(),
+                      "the first returned PROJECT_B link has two live endpoints");
     }
     const std::ptrdiff_t non_fs = std::count_if(
         project_b.links.begin(), project_b.links.end(),
         [](const mpp::Link& link) { return link.type_raw != 1; });
-    context.equal(non_fs, std::ptrdiff_t{0}, "all 72 PROJECT_B links have type 1 (FS)");
-
-    /* ---- W31: PROJECT_B is the case where row liveness and endpoint liveness
-     * differ.  All 72 rows are named by FixedMeta, but the first two links
-     * (10722 -> 10723 and 10723 -> 10724) name uids that exist only in deleted
-     * task slots, and Project's MSPDI export has only 70 <PredecessorLink>
-     * elements.  The reader keeps the 72 but reports the split. */
+    context.equal(non_fs, std::ptrdiff_t{0}, "all 70 returned PROJECT_B links are type 1 (FS)");
     context.equal(project_b.link_count_with_live_endpoints(), std::size_t{70},
-                  "PROJECT_B has 70 links with both endpoints live "
+                  "all 70 returned PROJECT_B links have both endpoints live "
                   "(Project exports 70)");
-    context.equal(project_b.link_count_with_dead_endpoints(), std::size_t{2},
-                  "PROJECT_B's other 2 links have dead endpoints");
-    const auto dead_link = [&project_b](std::uint32_t pred, std::uint32_t succ) {
-        return std::any_of(
-            project_b.links.begin(), project_b.links.end(),
-            [pred, succ](const mpp::Link& link) {
-                return link.predecessor_uid == pred && link.successor_uid == succ &&
-                       !link.endpoints_live();
-            });
+    context.equal(project_b.link_count_with_dead_endpoints(), std::size_t{0},
+                  "the tombstoned links are gone, so no returned link has a dead endpoint");
+    const auto has_this_link = [&project_b](std::uint32_t pred, std::uint32_t succ) {
+        return std::any_of(project_b.links.begin(), project_b.links.end(),
+                           [pred, succ](const mpp::Link& link) {
+                               return link.predecessor_uid == pred &&
+                                      link.successor_uid == succ;
+                           });
     };
-    context.check(dead_link(10722, 10723) && dead_link(10723, 10724),
-                  "PROJECT_B's two dead-endpoint links are 10722 -> 10723 and "
-                  "10723 -> 10724");
-    context.check(!project_b.links.empty() && !project_b.links.front().endpoints_live(),
-                  "the first PROJECT_B link has no live endpoint");
+    context.check(!has_this_link(10722, 10723) && !has_this_link(10723, 10724),
+                  "the two deleted-slot links 10722 -> 10723 and 10723 -> 10724 "
+                  "are not returned");
 
     const mpp::Document project_a = mpp::load_file(MPP_PROJECT_A_PATH);
     context.equal(project_a.links.size(), std::size_t{88},
@@ -2108,17 +2237,19 @@ void test_assignments(TestContext& context) {
     }
 
     const mpp::Document project_b = mpp::load_file(MPP_PROJECT_B_PATH);
-    context.equal(project_b.assignments.size(), std::size_t{73},
-                  "PROJECT_B has 73 assignments (8030 = 110 x 73)");
-    context.equal(project_b.skipped_assignments.size(), std::size_t{0},
-                  "PROJECT_B has no skipped assignment rows");
+    /* W49: 10 of PROJECT_B's 73 assignment rows have a tombstoned FixedMeta entry
+     * (the W48 cascade leaves the row bytes behind).  Project exports 63. */
+    context.equal(project_b.assignments.size(), std::size_t{63},
+                  "PROJECT_B returns 63 assignments (73 rows - 10 tombstones)");
+    context.equal(project_b.skipped_assignments.size(), std::size_t{10},
+                  "PROJECT_B's ten tombstoned assignment rows are skipped");
     const std::ptrdiff_t project_b_null = std::count_if(
         project_b.assignments.begin(), project_b.assignments.end(),
         [](const mpp::Assignment& assignment) {
             return assignment.resource_uid_raw == mpp::kNullResourceUid;
         });
-    context.equal(project_b_null, std::ptrdiff_t{73},
-                  "every PROJECT_B assignment carries the null-resource sentinel");
+    context.equal(project_b_null, std::ptrdiff_t{63},
+                  "every returned PROJECT_B assignment carries the null-resource sentinel");
 
     const mpp::Document project_a = mpp::load_file(MPP_PROJECT_A_PATH);
     context.equal(project_a.assignments.size(), std::size_t{67},
@@ -2197,11 +2328,11 @@ void test_assignments(TestContext& context) {
                   "all 67 live PROJECT_A assignments resolve to a live task");
 
     const DateCounts project_b_dates = count_dates(project_b);
-    /* PROJECT_B's assignment table is stale in the same way as its links: 10 of
-     * its 73 rows name task uids that only exist in deleted task slots (8141,
-     * 8142, 10637, 10722..10727, 10732), so only 63 resolve to a live task. */
+    /* W49: the 10 assignment rows whose task uids only exist in deleted task
+     * slots are tombstoned and are no longer returned; the remaining 63 all
+     * resolve to a live task. */
     context.equal(project_b_dates.assignments, std::size_t{63},
-                  "63 of PROJECT_B's 73 live assignment rows resolve to a live task");
+                  "all 63 returned PROJECT_B assignments resolve to a live task");
     context.equal(project_b_dates.start_matches, std::size_t{63},
                   "all 63 resolved PROJECT_B +52 dates equal their task's effective Start");
     context.equal(project_b_dates.finish_matches, std::size_t{63},
@@ -2343,6 +2474,7 @@ int run_tests() {
     test_outline_fixture(context);
     test_status_fixture(context);
     test_w31_fixed_fields(context);
+    test_w49_fields(context);
     test_schedin_fixture(context);
     test_probe_fixtures(context);
     test_bad_input(context);

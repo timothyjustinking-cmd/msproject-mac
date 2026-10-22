@@ -38,11 +38,12 @@
  * readers must tolerate it — and they do, because offsets are what address the
  * stream.
  *
- * Adding a *new* VarMeta entry is not offered here.  `replace_var_block` keeps
- * the entry count fixed; growing the entry array belongs to the structural
- * writer, which must keep VarMeta's header count and every FixedMeta
- * field-count word in step.  That is `add_delete.h` (W45): one appended task row
- * adds 8 entries at the END of the stream, so no existing entry moves.
+ * Adding a *new* VarMeta entry is offered only through
+ * `var_entry_insert_offset` / `insert_var_entry` below, because Project keeps
+ * every uid's entries CONTIGUOUS (measured, W48): a new entry must go inside its
+ * uid's group, not at the end of the array.  `add_delete.h` (W45) and
+ * `field_values.h` (W48) both use those two functions; the caller still owns the
+ * header count and every FixedMeta field-count word.
  *
  * Offsets are from spec/mpp-records.md §2, re-verified by
  * tests/roundtrip_cfb.cpp (check_base_fixture) and the one-change fixtures.
@@ -215,6 +216,42 @@ std::vector<std::uint32_t> find_var_offsets(std::vector<std::uint8_t> const& var
 /* Payload of the block at `offset` in Var2Data (length prefix stripped). */
 std::vector<std::uint8_t> read_var_block(std::vector<std::uint8_t> const& var2_data,
                                          std::uint32_t offset);
+
+/*
+ * Where a new VarMeta entry for (mid, field_id) belongs, as a BYTE offset into
+ * the stream (in [24, size], always a multiple of 12 past the header).
+ *
+ * MEASURED GROUPING (W48, Project's own corpus/probe/w10-fieldvalues.mpp): the
+ * entry array is grouped by uid in ASCENDING order, and inside a uid group the
+ * field keys are ASCENDING too.  w10-fieldvalues uid 1's keys run 0x0b40000e
+ * (Name), 0x0b400033 (Text1), 0x57, 0x58, 0x67, 0xa4, 0xa5, 0xa8, 0xa9, 0xaa,
+ * 0xb7, 0x109, 0x563, 0x564 -- and the same shape holds for uid 0 and uid 2 of
+ * that file and for every uid of tests/data/synthetic-base.mpp.  The uid
+ * sequence there is contiguous ([0]*9, [1]*14, [2]*8).
+ *
+ * THIS IS NOT COSMETIC.  W48 shipped a custom-field write that APPENDED the new
+ * entries at the end of the array (after every other uid's group).  Project
+ * reopened the file with Text1/Number1/Number2/Duration1/Date1 all empty while
+ * our writer and core/mpp read the values correctly -- Project only honours the
+ * contiguous uid group.  The fix is to insert into the group.
+ *
+ * A uid with no group is inserted at its ascending-uid position; a uid that has
+ * one is inserted at its key's ascending position inside that group.  The
+ * 0x80000000|uid family counts as the same base uid and sorts after the plain
+ * uid entries.  Existing entries never change their bytes or relative order.
+ */
+std::size_t var_entry_insert_offset(std::vector<std::uint8_t> const& var_meta,
+                                    std::uint32_t mid, std::uint32_t field_id);
+
+/*
+ * Insert one 12-byte (mid, Var2Data offset, field key) entry at
+ * `var_entry_insert_offset`.  Does NOT update the header's declared count
+ * (header +8) or Var2Data size (+0x14): the caller owns those words because it
+ * knows how many entries it is adding in total.  Throws Error if the stream is
+ * not a 24-byte header plus a whole number of entries.
+ */
+void insert_var_entry(std::vector<std::uint8_t>& var_meta, std::uint32_t mid,
+                      std::uint32_t field_id, std::uint32_t offset);
 
 /* UTF-16LE, NUL-terminated: the encoding Task.Name uses in Var2Data. */
 std::vector<std::uint8_t> encode_utf16z(std::string_view utf8);

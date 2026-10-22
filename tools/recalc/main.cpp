@@ -34,10 +34,13 @@
 // matrix is always printed after the --compare tables (uids and values only, no
 // names).  --attrib-json without --compare is a usage error.
 //
-// CALENDAR, CONSTRAINTS, ACTUALS, SUMMARIES.  Dates are computed on the
-// hard-coded standard Mon-Fri 08:00-12:00/13:00-17:00 calendar -- the reader does
-// not decode the file's calendar table.  Constraints and deadlines are taken
-// from mpp::Task; actual dates pin a started or completed task
+// CALENDAR, CONSTRAINTS, ACTUALS, SUMMARIES.  The project calendar is decoded
+// from 114/TBkndCal (+ the Standard week in 114/Props) and every task that stores
+// a +178 calendar uid gets its own core::sched::Calendar through
+// core::plan::attach_task_calendars.  A file that cannot be decoded falls back to
+// the stock Mon-Fri 08:00-12:00/13:00-17:00 week with a visible note.
+// Constraints and deadlines are taken from mpp::Task; actual dates pin a started
+// or completed task
 // (spec/scheduling.md §2.4) and summaries are rolled up from their children after
 // the CPM passes (spec §3.7).  The notes from the mapping are printed on stderr,
 // so a divergence caused by an assumption is visible rather than mistaken for an
@@ -115,7 +118,8 @@ std::string date_text(std::uint32_t raw) {
 void print_fields(const mpp::Document& document) {
     std::cout << "fields: " << document.tasks.size()
               << " live tasks (reader values; no names)\n";
-    std::cout << "uid\trow\toutline\tsummary\tchildren\tlevel\tmanual\tdur_ticks\tpct\tstart\t"
+    std::cout << "uid\trow\toutline\tsummary\tchildren\tlevel\tmanual\tdur_ticks\t"
+                 "dur_fmt\tcalendar_uid\tpct\tstart\t"
                  "finish\tslack_ticks\tcritical\tconstraint_type\tconstraint_date\t"
                  "deadline\tactual_start\tactual_finish\tactual_dur_ticks\n";
     for (const mpp::Task& task : document.tasks) {
@@ -123,7 +127,8 @@ void print_fields(const mpp::Document& document) {
                   << (task.outline_number.empty() ? "-" : task.outline_number) << '\t'
                   << (task.summary ? 1 : 0) << '\t' << task.child_count << '\t'
                   << task.outline_level << '\t' << (task.manually_scheduled ? 1 : 0) << '\t'
-                  << task.duration_ticks << '\t'
+                  << task.duration_ticks << '\t' << task.duration_format << '\t'
+                  << task.calendar_uid << '\t'
                   << task.percent_complete << '\t' << date_text(task.start.raw) << '\t'
                   << date_text(task.finish.raw) << '\t' << task.total_slack_ticks << '\t'
                   << (task.critical ? 1 : 0) << '\t' << task.constraint_type << '\t'
@@ -140,11 +145,12 @@ void print_links(const core::plan::PlanInput& input) {
     std::cout << "links: " << input.links.size() << " mapped, " << input.skipped_links
               << " skipped (deleted/unknown/self), " << input.summary_links
               << " skipped (summary endpoint)\n";
-    std::cout << "pred\tsucc\ttype\tlag_days\tlag_ticks\n";
+    std::cout << "pred\tsucc\ttype\tlag_days\tlag_ticks\telapsed\n";
     for (const core::plan::PlanLink& link : input.links) {
         std::cout << link.predecessor << '\t' << link.successor << '\t'
                   << static_cast<int>(link.type) << '\t'
-                  << (static_cast<double>(link.lag) / 4800.0) << '\t' << link.lag << '\n';
+                  << (static_cast<double>(link.lag) / 4800.0) << '\t' << link.lag << '\t'
+                  << (link.elapsed_lag ? 1 : 0) << '\n';
     }
     std::cout << std::flush;
 }
@@ -316,9 +322,12 @@ int run(const std::string& path, const std::string& compare_path, const std::str
     // table decodes, and say so on stderr.  A damaged calendar must not stop the
     // recalculation: fall back to the standard week with a visible note.
     try {
-        input.calendar = core::cal::load_project_calendar(path);
+        const core::cal::CalendarTable table = core::cal::decode_file(path);
+        input.calendar = core::cal::build_project_calendar(table);
+        core::plan::attach_task_calendars(input, table);
         std::cerr << "  calendar: decoded from the file ("
-                  << input.calendar.work_week_count() << " week overrides)\n";
+                  << input.calendar.work_week_count() << " project week overrides, "
+                  << input.task_calendars.size() << " task calendars)\n";
     } catch (const std::exception& error) {
         std::cerr << "  note: calendar decode failed, using the standard week: "
                   << error.what() << '\n';

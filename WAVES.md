@@ -433,4 +433,57 @@ evidence: `docs/analysis/oracle/w10-oracle.md` + six JSONs; tools
    elapsed-DURATION format, resource Type in the reader (W40 landed the
    fixture; reader exposure still open).
 
+## Wave 11 — complete (2026-10-22)
+
+Goal: turn the wave-10 models into product surface, and close the writer/reader
+gaps they exposed. Coordinator oracle first (`docs/analysis/oracle/w11-oracle.md`):
+a linked successor pinned before its predecessor's finish reopens at
+`max(pred finish, pin)` (the SNET clamp is confirmed), and deleting a task
+tombstones its link rows and assignment rows with the same `FixedMeta` header
++4 bit as the task row.
+
+| # | Stream | Deliverable | Verified by |
+|---|---|---|---|
+| W47 | app views | Resource Sheet, Task/Resource Usage, computed formula columns, view/period persistence | app **8/8**, 1,414 checks (`app_views` 164) |
+| W48 | writer cascade + fields | delete cascade, custom-field read/write (Text/Number/Date/Duration/Flag1), linked-pin contract | add_delete 760, field_values 317, mpp_field_value 283; **Project displays all six fields and the rewrite** |
+| W49 | reader/engine parity | resource Type/MaxUnits, per-task calendars in CPM, elapsed lag/duration, link/assignment tombstones | reader 685 (PROJECT_A 83 / PROJECT_B 70/63), cpm 1,321, plan_recalc 277; elapsed 16/16, task calendars proven |
+| W50 | `114/Props` decoder | record/tail framing, all six formula texts recovered, prefs correction | props 520 |
+
+**Gate:** clean MSVC `/W4 /WX` `build\vs-w11`: **39/39 ctest** (wave 10: 36);
+app `build\vs-w11-app`: **8/8**, 1,414 checks; **M2 332/332** (83/83 × 4);
+schedin 20/20 dates, 10/10 slack.
+
+### Oracle results that drove wave 11
+
+1. **Linked pin clamp (measured):** SNET is no-earlier-than, so a successor
+   pinned before its predecessor's finish reopens at `max(pred finish, pin)`
+   with the constraint/date stored exactly (`w11-snet-link.mpp`).
+2. **Delete cascade (measured):** a task delete tombstones its `TBkndCons` and
+   `TBkndAssn` rows and sets those tables' `FixedMeta` header +4 bit; no stream
+   shrinks (`w11-linkdelete-*`). W48 reproduces Project's own post file.
+3. **Custom-field display contract (measured in three gates):** VarMeta values
+   need (a) entries inside the uid group *after Name*, sorted by field id,
+   (b) 88-byte records in `TBkndTask/Props` **and** `TBkndAssn/Props`, (c) the
+   `FixedMeta` entry tail bitmap (Text1 +21|0x20, Number1 +25|0x08, Number2
+   +25|0x10, Duration1 +26|0x01/+27|0x20 + `0x0b4000b7` entry, Date1 +29|0x40,
+   Flag1 +24|0x02) and `+2` = the uid's VarMeta count. Project now reopens
+   `w48-fields.mpp` with `"W48 alpha"`, 42.5, 3.25, "1 day", "Mon 26/10/26",
+   Yes, and the rewrite with "beta", -7.25, "2 days", "Mon 2/11/26", No.
+4. **`114/Props` correction:** it has no table definitions; it carries the
+   formula table and record framing. Table/view state is likely under
+   `214/CTable`/`214/CV_iew` (wave-12+ work).
+
+### Open after wave 11
+
+1. App-level Insert/Delete Task, stored custom-field columns and file formulas
+   (wave 12, W51).
+2. Link/assignment row create/delete in the writer (wave 12, W52) and
+   custom-field clear/delete.
+3. Recurring calendar exception parameters (fixture `w12-exceptions.mpp` built;
+   wave 12, W53).
+4. `214/CTable`/`214/CV_iew` view-state decoding; MPP12; elapsed-task mixed with
+   link/constraint; resource Type on MPP14.
+
+
+
 
