@@ -250,9 +250,11 @@ recalculation only.
 - `0x0b400564` (4 bytes, `ff ff ff ff` per row) is unidentified.
 - `scripts/oracle_patch_variants.py` writes `DATE_0302 = 0x3C2E12C0` = 2026-03-06,
   not 2026-03-02. Not mine to change; the `pv-start-*` fixtures carry 03-06.
-- Not implemented, deliberately: adding/removing directory entries, adding a row,
-  adding a VarMeta entry, repairing PROJECT_A's damaged metadata, free-sector reuse,
-  regenerating `214/`. Reasons in spec §5 and §10.4.
+- Not implemented, deliberately: adding/removing directory entries, repairing
+  PROJECT_A's damaged metadata, free-sector reuse, regenerating `214/`. Reasons in spec
+  §5 and §10.4. Row add and delete DID land in W45 (`core/mppwrite/add_delete.h`,
+  section at the end of this file); growing VarMeta's entry array is now part of
+  `add_task_row`, not of `table.cpp`.
 
 ## Traps that cost time here
 
@@ -638,4 +640,178 @@ Nobody needs that for the app's save path anymore.
 - Two fixture modes, two purposes: `--write-fixture` (negative control, direct
   `pin_task_start`) must NOT be switched to `save_date_edits`, or the evidence
   for "SNET alone is ignored on a manual row" stops being regenerable.
+
+## W45 (2026-10-22): row add and delete, plus the reader's tombstone fix
+
+**Status: ORACLE-CONFIRMED 2026-10-22 (coordinator, read-only Project open).**
+Add is accepted (4 / 5 / 4 tasks for add / add2 / add-values; priority 600
+survived, percent re-read as 0 and dates recalculated because the new row is auto
+— expected). Delete was NOT honoured by the first fixture set; the gate was found
+and fixed: **FixedMeta header word +4 must be OR-ed with 0x02** ("this table
+contains deleted rows"). Both delete variants re-opened with Project as 2 tasks
+(durations 2400 + 960), so the per-entry tombstone alone is not enough and the
+retained-VarMeta churn is not needed. The shipped delete path sets the header bit
+and keeps the cleaner VarMeta-removal shape (variant A).
+
+### What landed (files)
+
+| path | what |
+|---|---|
+| `core/mppwrite/add_delete.h` | **new**: `NewTaskRow`, `AddedRow`, `DeleteOptions`, `DeletedRow`, `add_task_row`, `delete_task_row`. The header carries the measured design, the clone semantics and every policy. |
+| `core/mppwrite/add_delete.cpp` | **new**: validation, append/tombstone, save, re-open from disk, re-read every written fact. |
+| `tests/roundtrip_add_delete.cpp` | **new** (`mppwrite_roundtrip_add_delete`): **493 checks, 0 failures** with the corpus present; synthetic-only cases always run. Emits 11 fixtures (9 behaviours + the two delete variants) + `w45-manifest.json` (see below). |
+| `core/mpp/reader.cpp` | **liveness fix** (the one permitted cross-lane change): the Task predicate now requires a FixedMeta entry with `+0 == 0` AND a VarMeta group. PROJECT_A/PROJECT_B stay 83/73 (`mpp_reader_tests`: 663 checks). |
+| `tests/mpp_tombstone_tests.cpp` | **new** (`mpp_tombstone`): 47 checks. Control = committed `tests/data/synthetic-base.mpp`; Project's `w10-adddel-back/del` and the writer's own fixtures are used when present. |
+| `core/mpp/CMakeLists.txt` | additive: the `mpp_tombstone_tests` target and ctest registration. |
+| `core/mppwrite/CMakeLists.txt` | `add_delete.cpp`; the new test; links `core_mpp` and defines `MPPWRITE_HAVE_READER` only when the top-level build provides the reader; `MPPWRITE_FIXTURE_MIRROR`. |
+
+### Measured design actually written (do not re-derive)
+
+Add appends one row: FixedData +202 at `48+202*n` with `id = uid = new`; FixedMeta
++47 with `+0=0`, `+2=8` (the row's variable-field count), `+4` = new row offset,
+header `+8` count +1 and `+12` = new FixedData size; Fixed2Data +64 at record
+`row+3` with `+16` f64 = `row+1`, a fresh 16-byte identity and `+24` = the project
+row's identity; Fixed2Meta +96 with `+4` = record offset, `+8` = `0x7f` (auto) or
+`0xff` (manual), header counts/sizes bumped; VarMeta +96 = 8 entries in the order
+Name, `0x0b4000a4/a5/a8/a9/aa`, `0x0b400563`, `0x0b400564`, with header `+8`
+declared count +8 and `+0x14` = new Var2Data size; Var2Data gets the 8 payload
+blocks appended at the end. Project compacts Var2Data on its own add; we do not.
+
+Correction to the oracle prose, found by dumping `w10-adddel-add.mpp`: the new
+Fixed2Data record's `+24` is the **project row's** identity (record 3), not "the
+previous record's id0" -- the two are the same only when the previous record is
+the project row, which it is not for a 6-row file. Implemented as "parent =
+project row", which is also what the reader's outline walk expects for a
+top-level task.
+
+Delete sets FixedMeta entry `+0 = 0x02`, `+2 = 0` AND the FixedMeta HEADER word
+`+4 |= 0x02`; keeps every stream's byte size; renumbers later live rows'
+`FixedData +0` down by one; removes the deleted uid's VarMeta entries (both `uid`
+and `0x80000000|uid`) and leaves its Var2Data blocks orphaned;
+Fixed2Data/Fixed2Meta/Var2Data must read back byte-identical.
+
+The header word is the gate, measured twice: Project's own files carry
+`+4 = 0x00000004` with no tombstone (base, w10-adddel-base/add, PROJECT_A,
+synthetic-base) and `0x00000006` as soon as a row is deleted (w10-adddel-back/-del,
+and PROJECT_B with its 12 deleted slots); and the coordinator's read-only open of the
+first W45 delete fixtures showed Project **still listing the deleted task** until
+the bit was set. Project's own delete also keeps the deleted uid's VarMeta entries
+and only decrements the declared count at VarMeta `+8` (back: 59 entries, declared
+51; del: 59 entries, declared 43). That retention is NOT needed: both
+`w45-del-middle-a.mpp` (+4=6, entries removed, declared 31) and
+`w45-del-middle-b.mpp` (+4=6, all 42 entries kept, declared 31) reopen as 2 tasks.
+The shipped path is A (removal) because it leaves VarMeta internally consistent.
+
+### API semantics (ours, documented in add_delete.h)
+
+- `NewTaskRow::name` is required; everything else is optional and merged onto the
+  cloned last-live-task row through `TaskValues`' `kInherit` sentinels.
+- uid: 0 = allocate `(largest uid in the table, tombstones included) + 1`; an
+  explicit uid must be non-zero and unused. A tombstoned uid is never reused.
+- ID: `(largest live task ID) + 1`. In an append-after-delete file this can equal
+  the tombstone's raw ID; Project's own `-del` file does exactly that (uid 4
+  tombstone and uid 5 both carry raw ID 4), so it is deliberate.
+- The new row clones the last live task's 202 bytes, then clears the constraint
+  (`+64=0`, `+66=NA`) and start anchor (`+174=NA`). Progress/duration/dates are
+  cloned; supply `TaskValues` to override. Scheduling mode defaults to auto
+  (`0x7f`), which is what Project's measured `Tasks.Add` row was even in a file
+  whose other rows were manual.
+- `TaskValues` overrides go through `write_task_row`, so moving a date means
+  supplying all six date copies; one-member changes are refused by that function.
+- The new Fixed2Data record's has-children flag (byte +42 bit 0x40) is cleared;
+  the rest of the template's flags byte is kept.
+- Delete refuses uid 0, an unknown uid, a row with no FixedMeta entry, an
+  already-tombstoned row, a row with no VarMeta group, and a broken table size
+  identity. By default it also refuses a delete that leaves a live link or
+  assignment naming the uid; `DeleteOptions::allow_dangling = true` proceeds and
+  reports the orphaned rows in `DeletedRow::warnings`. Rationale: the writer
+  cannot remove link/assignment rows and a link is scheduling-visible. Real files
+  tolerate orphan assignments (PROJECT_B: 10 of 73 name deleted task uids).
+
+### Verification (exact, re-runnable)
+
+```
+cmd /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul && cmake -S . -B build\vs-w45 -G "Visual Studio 17 2022" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON'
+cmd /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul && cmake --build build\vs-w45 --config Release --target mppwrite_roundtrip_add_delete mpp_tombstone_tests mpp_reader_tests mppwrite_save_flow plan_recalc_tests'
+.\build\vs-w45\core\mppwrite\Release\mppwrite_roundtrip_add_delete.exe   # 493 checks, 0 failures
+.\build\vs-w45\core\mpp\Release\mpp_tombstone_tests.exe                  # PASS: 47 checks
+.\build\vs-w45\core\mpp\Release\mpp_reader_tests.exe                     # PASS: 663 checks, PROJECT_A 83 / PROJECT_B 73
+.\build\vs-w45\core\plan\Release\plan_recalc_tests.exe                   # M2 332/332, 231 checks
+ctest --test-dir build\vs-w45 -C Release --output-on-failure -R "mppwrite|mpp_reader|tombstone|plan_recalc"   # 11/11
+```
+
+`plan_recalc_tests` rewrites `tests/data/project_a_recalc_golden.tsv` on every run (its
+own design); it produced the same 332/332 all-match table.
+
+### Fixtures (git-ignored; regenerated by the test binary)
+
+| file | bytes | FNV-1a 64 | meaning |
+|---|---|---|---|
+| `w45-add.mpp` | 242,176 | `0xd8229d8a0434b41d` | synthetic-base + uid 4 (clone of uid 3), auto — Project: 4 tasks |
+| `w45-add2.mpp` | 246,272 | `0x657a6a8ebab4a82a` | + uid 4 and uid 5 — Project: 5 tasks |
+| `w45-add-values.mpp` | 242,176 | `0x7d04658a9660c4ca` | + uid 4 with all six date copies +7 d, priority 600, 25 % — Project: 4 tasks, priority kept, percent re-read 0 (auto row) |
+| `w45-del-middle.mpp` | 237,568 | `0x36f46490082c5f3d` | tombstone uid 2 (middle), +4=6, 11 VarMeta entries removed, uid 3 ID 3->2 — Project: 2 tasks |
+| `w45-del-middle-a.mpp` | 237,568 | `0x36f46490082c5f3d` | variant A (byte-identical to `w45-del-middle.mpp`) — Project: 2 tasks |
+| `w45-del-middle-b.mpp` | 238,080 | `0x0694ff478c8d124e` | variant B: +4=6, all 42 VarMeta entries kept, declared 31 — Project: 2 tasks |
+| `w45-del-last.mpp` | 237,568 | `0x12aa98789821ce9e` | tombstone uid 3 (last), +4=6 — Project: 2 tasks |
+| `w45-add-before-delete.mpp` | 242,176 | `0x7657ad730b3d5bd8` | intermediate: add uid 4 |
+| `w45-add-back.mpp` | 242,176 | `0x2f0e78a63d20e533` | add uid 4 then delete it, +4=6 — Project: 3 tasks |
+| `w45-append-after-delete.mpp` | 246,272 | `0xa6810cdae03347a1` | add 4, delete 4, append 5, +4=6 — Project: 4 tasks (uids 1,2,3,5) |
+| `w45-del-probe-middle.mpp` | 240,128 | `0xb1c267c5d1a09b5f` | from `corpus/probe/w10-adddel-base.mpp`: delete uid 2, +4=6, `allow_dangling` — Project: 4 tasks |
+
+Paths: emitted to `build\vs-w45\core\mppwrite\test-out\` and mirrored to
+`core\mppwrite\build\vs-w45\test-out\` (the brief's path). A `w45-manifest.json`
+in both lists size + FNV per file.
+
+### Verified vs inferred
+
+Verified locally/independently: the emitted fixtures' only differing streams are
+the six Task table streams (add) or FixedData/FixedMeta/VarMeta (delete); every
+`214/` stream is byte-identical; all size/count words agree (`FixedMeta +4` is
+asserted: 4 untouched on add, 6 after every delete); `check()` and
+`check_table()` are clean; the file re-emits byte-identically; the writer's own
+re-open and the independent `core/mpp` reader both return the intended
+counts/uids/IDs; `olefile` 0.47 reproduces the stream diff and the tombstones.
+
+Verified by the oracle (coordinator, read-only Project open, 2026-10-22):
+add / add2 / add-values reopen as 4 / 5 / 4 tasks (priority 600 survived; the
+auto row's percent re-reads as 0 and the dates recalculate, as expected);
+`w45-del-middle-a` and `w45-del-middle-b` both reopen as 2 tasks with durations
+2400 + 960; all five delete fixtures now carry `FixedMeta +4 = 6`.
+
+Still inferred: the clone semantics for a row added to a non-fresh file
+(progress, milestone blob, whether the new row should be auto) and the fact that
+our deterministic Fixed2Data identity and cloned FixedMeta blob are accepted
+(measured only insofar as Project reopened the fixtures without complaint).
+
+### Open items / next actions
+
+1. **Re-open the five regenerated delete fixtures** (`w45-del-middle`,
+   `w45-del-last`, `w45-add-back`, `w45-append-after-delete`,
+   `w45-del-probe-middle`): they now carry `FixedMeta +4 = 6`; expected Project
+   counts are 2, 2, 3, 4, 4. `w45-del-middle-b.mpp` is the retained-entry control
+   and is not needed by the ship path.
+2. Add-side discriminators are no longer needed (accepted). If a future file is
+   rejected, attack it in this order: the deterministic Fixed2Data identity at
+   +0, the +24 parent identity, the cloned FixedMeta blob, then the uncompacted
+   Var2Data layout.
+3. Spec refresh is the coordinator's: `spec/mpp-writer.md` §5 item 2 ("adding a
+   table row") and §10.4 item 3 now describe W45's `add_delete.h` instead of a
+   non-feature; this file and `docs/handoff/w45.md` carry the design meanwhile.
+4. `delete_task_row` does not remove link/assignment rows; a future stream that
+   can tombstone those should take over the `allow_dangling` policy.
+
+### Traps added this wave
+
+- **Dropbox mtime churn on every edit.** The file-observation policy rejected a
+  second `edit` on the same file almost every time ("file changed since it was
+  read") even with no other writer. Workaround: re-read immediately before each
+  edit, one edit per read.
+- A built `release` exe path from an older wave is not reused: W45's targets live
+  under `build\vs-w45`, and ctest fails "Not Run" for any writer test target not
+  built in that directory. Build all six writer targets before running the
+  filtered ctest.
+- `mpp_reader_tests` prints PROJECT_A/PROJECT_B counts first; use them as the gate
+  (83/73), not the check total.
+
 

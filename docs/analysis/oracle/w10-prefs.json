@@ -1,0 +1,41 @@
+{
+  "case": "prefs",
+  "run_at": "2026-10-22T17:40:04",
+  "sizes": {
+    "base": 245760,
+    "col": 344064,
+    "date": 344064
+  },
+  "members": {
+    "Tables": "method",
+    "Views": "method",
+    "OptionsView": "method",
+    "OptionsGeneral": "method",
+    "OptionsSchedule": "method",
+    "OptionsPreferences": "method",
+    "OptionsCalculation": "method",
+    "Timescale": "method",
+    "DateFormat": "method",
+    "DurationFormat": "method",
+    "TableApply": "method",
+    "TableEdit": "method",
+    "ViewApply": "method",
+    "ViewsSingle": "<err AttributeError: MSProject.Application.ViewsSingle>"
+  },
+  "attempts": [
+    {
+      "TableApply(Entry)": "ok"
+    },
+    {
+      "add Number1": "ok (True)"
+    },
+    {
+      "date format 5": "ok (True)"
+    }
+  ],
+  "fixtures": {
+    "base": "corpus\\probe\\w10-prefs-base.mpp",
+    "col": "corpus\\probe\\w10-prefs-col.mpp",
+    "date": "corpus\\probe\\w10-prefs-date.mpp"
+  }
+}

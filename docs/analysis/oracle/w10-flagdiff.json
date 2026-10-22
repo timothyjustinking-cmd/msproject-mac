@@ -1,0 +1,13 @@
+{
+  "case": "flag-diff",
+  "sizes": {
+    "off": 245760,
+    "on": 344064
+  },
+  "getfield": "Yes",
+  "attr": true,
+  "fixtures": {
+    "off": "corpus\\probe\\w10-flag-off.mpp",
+    "on": "corpus\\probe\\w10-flag-on.mpp"
+  }
+}

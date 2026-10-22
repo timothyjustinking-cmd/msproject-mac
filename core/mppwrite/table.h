@@ -38,10 +38,11 @@
  * readers must tolerate it — and they do, because offsets are what address the
  * stream.
  *
- * Adding a *new* VarMeta entry is deliberately not offered: it changes the
- * entry count, and the entries end the stream, so a new one would have to be
- * inserted and every later offset re-based.  That is the next milestone, not
- * this one.
+ * Adding a *new* VarMeta entry is not offered here.  `replace_var_block` keeps
+ * the entry count fixed; growing the entry array belongs to the structural
+ * writer, which must keep VarMeta's header count and every FixedMeta
+ * field-count word in step.  That is `add_delete.h` (W45): one appended task row
+ * adds 8 entries at the END of the stream, so no existing entry moves.
  *
  * Offsets are from spec/mpp-records.md §2, re-verified by
  * tests/roundtrip_cfb.cpp (check_base_fixture) and the one-change fixtures.

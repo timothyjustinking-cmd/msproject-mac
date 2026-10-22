@@ -1,4 +1,4 @@
-# macOS verification for the AppKit shell in app/ (app shell v2, W38).
+# macOS verification for the AppKit shell in app/ (app shell v3, W46).
 #
 # WHY A SEPARATE WORKFLOW.  ci.yml owns the portable core's portability matrix and
 # must not grow an app job; app/ is a standalone CMake project (it is not added to
@@ -8,23 +8,33 @@
 # WHAT THIS PROVES, AND WHY IT IS THE ONLY PROOF:
 #   * main.mm is Objective-C++ against AppKit, which cannot be compiled on the
 #     Windows development box.  This job is where the shell is compiled at all:
-#     NSOpenPanel/NSSavePanel, the mouse/keyboard handling, the undo/redo menu and
-#     the drawing code all get their first compiler here, with
+#     the menu bar built from app::menu_specs(), the Preferences panel, the filter
+#     dialog, the PDF export panels, NSOpenPanel/NSSavePanel, the mouse/keyboard
+#     handling and the drawing code all get their first compiler here, with
 #     -Wall -Wextra -Wpedantic -Werror, so an AppKit deprecation, a misspelt
 #     selector or an ARC slip is a red build rather than a warning nobody reads.
 #   * the app target links the real core libraries (core_mpp, core_sched,
-#     core_view, core_sheet, core_gantt, core_mppwrite, plus core_model) built
-#     from this tree, with every core stream test switched off by
-#     app/CMakeLists.txt.  core_mppwrite is new in v2: Cmd-S writes through it.
-#   * the three headless test binaries build and pass on macOS as well as on
+#     core_view, core_sheet, core_gantt, core_mppwrite, core_render, plus
+#     core_model) built from this tree, with every core stream test switched off by
+#     app/CMakeLists.txt.  core_render is new in v3: File > Export PDF writes
+#     through it.
+#   * the seven headless test binaries build and pass on macOS as well as on
 #     Windows:
 #       app_layout    (layout_model_tests)   mapping + the packed-date identity
 #       app_selection (selection_model_tests) sheet<->Gantt selection, collapse,
 #                                            edit/undo through SheetModel
 #       app_document  (document_tests)       the real save round trip, on the
 #                                            committed synthetic fixture
+#       app_prefs     (prefs_tests)          the preference model + its parser
+#       app_menu      (menu_tests)           the menu bar as data: every menu,
+#                                            action, key equivalent, enablement
+#       app_filter    (filter_tests)         rule -> FilterDefinition, matching,
+#                                            the displayed-row restriction
+#       app_export    (export_tests)         real PDFs (sheet + Gantt, filtered),
+#                                            written under build-app/test-out
 #     The corpus probes inside app_layout print SKIP on a runner (no corpus/), as
-#     they must; app_document writes only under build-app/test-out.
+#     they must; app_document writes only under build-app/test-out and app_export
+#     writes only its own synthetic PDFs there.
 #
 # The configure log says which save path app/document.cpp compiled: "found --
 # saves use mppwrite::save_date_edits" when core/mppwrite/save.h is present, or
@@ -78,7 +88,7 @@ jobs:
 
       # The test names are part of the contract: a silently unregistered test is
       # as bad as a failing one.
-      - name: The three headless tests are registered
+      - name: The seven headless tests are registered
         shell: bash
         run: |
           set -euo pipefail
@@ -86,8 +96,12 @@ jobs:
           grep -q "app_layout" tests.txt
           grep -q "app_selection" tests.txt
           grep -q "app_document" tests.txt
+          grep -q "app_prefs" tests.txt
+          grep -q "app_menu" tests.txt
+          grep -q "app_filter" tests.txt
+          grep -q "app_export" tests.txt
 
-      - name: Test (headless layout, selection, save round trip)
+      - name: Test (headless layout, selection, save, preferences, menu, filter, export)
         shell: bash
         run: ctest --test-dir build-app -C Release --output-on-failure --timeout 120
 
@@ -103,7 +117,7 @@ jobs:
           test -x "$app"
           file "$app"
           otool -L "$app" | grep -q "AppKit"
-          # v2 uses UTType for the open panel's content filter, which lives in
+          # v3 uses UTType for the open/export panels' content filters, which lives in
           # its own framework; prove it is linked rather than assumed.
           otool -L "$app" | grep -q "UniformTypeIdentifiers"
           echo "OK: $app exists and links AppKit + UniformTypeIdentifiers"

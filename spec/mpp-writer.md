@@ -359,11 +359,16 @@ file opens in Project.
 1. **Adding or deleting a directory entry** (creating/removing a stream). Needs
    a red-black tree insert (colour, left/right/child links), possibly a new
    directory sector, and a new FAT allocation for it.
-2. **Adding a table row** (§4.2) or a new variable field.
+2. **Adding or deleting a link, assignment or resource row**, or a new variable
+   field. Task rows are implemented (§11); the other tables are not, so a delete
+   that would orphan a link/assignment is refused by default
+   (`DeleteOptions::allow_dangling`).
 3. **Repairing damage.** PROJECT_A's `FixedMeta` declares 87 entries but has 88, its
    `VarMeta` declares 1,076 but has 1,080, and row 67 (uid 10856) has no
    metadata at all. The writer carries all of that through unchanged; repairing
-   it is a separate decision with oracle consequences.
+   it is a separate decision with oracle consequences. One consequence: the
+   structural writer refuses PROJECT_A (`add_task_row`/`delete_task_row`) because its
+   size identity is broken.
 4. **Recomputing derived fields.** Writing Duration does not update Finish or
    the project summary row; writing PercentComplete does not update
    ActualDuration. The scheduling engine owns that, and MS Project recalculates
@@ -912,3 +917,55 @@ earlier than the dependency allows will not be reproduced exactly. The
 last-writer-wins assumption also applies to any `214/` cache (see §10.4). What
 would prove or disprove the linked case: one fixture with an FS pair whose
 successor start is pinned before its predecessor's finish, opened read-only.
+
+## 11. Task row add and delete (wave 10, measured and Project-confirmed)
+
+API: `core/mppwrite/add_delete.h` — `add_task_row` / `delete_task_row`. Full
+measurements and the fixture diff: `docs/analysis/oracle/w10-oracle.md` §1.
+
+### Add
+
+A task add appends, it does not insert: `FixedData` +202 B (row at
+`48 + 202*n`, `id = uid = new`), `FixedMeta` +47 B (new entry `+0 = 0`,
+`+2 = 8`, `+4` = the row's FixedData offset) with header `entry_count` and
+`fixed_data_size` updated, `Fixed2Data` +64 B (record at index `row + 3`,
+`+16` double = record ordinal + 1, `+0` a fresh identity, `+24` the project
+row's identity for a top-level task), `Fixed2Meta` +96 B (new entry, flags byte
+`+8 = 0x7f` auto / `0xff` manual) with its header count/size, `VarMeta` +8
+entries (`0x0b40000e` Name, `0x0b4000a4/a5/a8/a9/aa`, `0x0b400563/564`) with
+header count and `var2_size`, and the eight Var2Data blocks. Project compacts
+Var2Data on its own save and re-lays out block offsets; our writer appends the
+blocks and points the new entries at them, which is self-consistent because
+every block is length-prefixed and every VarMeta entry carries its offset.
+
+The emitted row is a clone of the last live task row so every byte is a legal
+value for this file; the writer clears the constraint (`+64/+66`) and start
+anchor (`+174`), and `TaskValues` merges caller values through
+`write_task_row` (all six date copies must be supplied together). A new task is
+auto-scheduled by default, so stored dates alone do not survive Project's open
+recalculation — the SNET path in §10.7 still governs date edits.
+
+### Delete
+
+Delete is a tombstone; no stream changes size:
+
+1. `FixedMeta` entry `+0 = 0x02`, `+2 = 0`;
+2. **`FixedMeta` header word +4 |= 0x02** (Project's own saves write 4 → 6).
+   This is the gate: with the entry byte alone Project reopens the deleted row
+   as a live task (measured on the first W45 fixtures); with the header bit,
+   Project honours it. PROJECT_B's real file also carries `+4 = 6`;
+3. later live rows' ID (`FixedData +0`) renumber down; Project recomputes IDs on
+   open anyway;
+4. the dead uid's VarMeta entries are removed and its Var2Data blocks are left
+   orphaned. Project instead keeps the entries and re-keys them onto the next
+   uid; both shapes reopen correctly — the cleaner removal is ours.
+
+### Proof and limits
+
+`mppwrite_roundtrip_add_delete` 493 checks and `mpp_tombstone_tests` 47 checks;
+the coordinator opened every emitted fixture in Project read-only: adds reopen
+as 4/5/4 tasks (priority preserved, percent/dates recalculated because the row
+is auto-scheduled) and deletes as 2/2/3/4/4. `214/` is never written; link and
+assignment rows cannot be added or removed, so a delete naming a live link or
+assignment is refused unless `DeleteOptions::allow_dangling`; PROJECT_A cannot be
+edited structurally because its `FixedMeta` size identity is already broken.

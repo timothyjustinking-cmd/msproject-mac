@@ -426,6 +426,14 @@ core::gantt::Timescale timescale_for_plan(const PlanInput& input, double pixels_
     return timescale;
 }
 
+core::gantt::Timescale timescale_for_zoom(const PlanInput& input, core::gantt::GanttZoom zoom) {
+    const core::gantt::ZoomSpec spec = core::gantt::zoom_spec(zoom);
+    core::gantt::Timescale timescale = timescale_for_plan(input, spec.pixels_per_unit);
+    timescale.unit = spec.unit;
+    timescale.pixels_per_unit = spec.pixels_per_unit;
+    return timescale;
+}
+
 core::gantt::GanttStyle default_gantt_style() {
     core::gantt::GanttStyle style;
     style.row_height = static_cast<double>(default_sheet_metrics().row_height);

@@ -216,6 +216,12 @@ core::gantt::Timescale default_timescale(double pixels_per_day);
 // before the first bar (gantt.h: "the caller sets origin to the project start").
 core::gantt::Timescale timescale_for_plan(const PlanInput& input, double pixels_per_day);
 
+// The same seeding, for one of the three zoom levels the View menu offers
+// (core/gantt's own zoom_spec() names the unit and the pixels per unit, so the
+// shell does not invent a fourth scale).  This is what the timescale preference
+// in app/prefs.h applies through.
+core::gantt::Timescale timescale_for_zoom(const PlanInput& input, core::gantt::GanttZoom zoom);
+
 // GanttStyle defaults with row_height taken from default_sheet_metrics() so the
 // two halves of the window stay aligned.  The app sets measure_text to a real
 // font metric; the model falls back to 7 px per code point.

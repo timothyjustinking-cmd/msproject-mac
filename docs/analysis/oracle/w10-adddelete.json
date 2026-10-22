@@ -1,0 +1,408 @@
+{
+  "case": "add-delete",
+  "run_at": "2026-10-22T17:30:49",
+  "sizes": {
+    "base": 245760,
+    "add": 360448,
+    "back": 360448,
+    "del": 360448
+  },
+  "stages": {
+    "base": [
+      {
+        "ID": 1,
+        "uid": 1,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 2,
+        "uid": 2,
+        "start": "2026-10-21 08:00:00",
+        "finish": "2026-10-22 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 3,
+        "uid": 3,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 4,
+        "uid": 4,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 5,
+        "uid": 5,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      }
+    ],
+    "add": [
+      {
+        "ID": 1,
+        "uid": 1,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 2,
+        "uid": 2,
+        "start": "2026-10-21 08:00:00",
+        "finish": "2026-10-22 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 3,
+        "uid": 3,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 4,
+        "uid": 4,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 5,
+        "uid": 5,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 6,
+        "uid": 6,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      }
+    ],
+    "back": [
+      {
+        "ID": 1,
+        "uid": 1,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 2,
+        "uid": 2,
+        "start": "2026-10-21 08:00:00",
+        "finish": "2026-10-22 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 3,
+        "uid": 3,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 4,
+        "uid": 4,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 5,
+        "uid": 5,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      }
+    ],
+    "del": [
+      {
+        "ID": 1,
+        "uid": 1,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 2,
+        "uid": 2,
+        "start": "2026-10-21 08:00:00",
+        "finish": "2026-10-22 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 3,
+        "uid": 3,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      },
+      {
+        "ID": 4,
+        "uid": 5,
+        "start": "2026-10-19 08:00:00",
+        "finish": "2026-10-20 17:00:00",
+        "duration": 960,
+        "manual": false,
+        "summary": false
+      }
+    ]
+  },
+  "reopen": {
+    "base": {
+      "bytes": 240128,
+      "tasks": [
+        {
+          "ID": 1,
+          "uid": 1,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 2,
+          "uid": 2,
+          "start": "2026-10-21 08:00:00",
+          "finish": "2026-10-22 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 3,
+          "uid": 3,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 4,
+          "uid": 4,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 5,
+          "uid": 5,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        }
+      ]
+    },
+    "add": {
+      "bytes": 241664,
+      "tasks": [
+        {
+          "ID": 1,
+          "uid": 1,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 2,
+          "uid": 2,
+          "start": "2026-10-21 08:00:00",
+          "finish": "2026-10-22 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 3,
+          "uid": 3,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 4,
+          "uid": 4,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 5,
+          "uid": 5,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 6,
+          "uid": 6,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        }
+      ]
+    },
+    "back": {
+      "bytes": 242176,
+      "tasks": [
+        {
+          "ID": 1,
+          "uid": 1,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 2,
+          "uid": 2,
+          "start": "2026-10-21 08:00:00",
+          "finish": "2026-10-22 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 3,
+          "uid": 3,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 4,
+          "uid": 4,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 5,
+          "uid": 5,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        }
+      ]
+    },
+    "del": {
+      "bytes": 242176,
+      "tasks": [
+        {
+          "ID": 1,
+          "uid": 1,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 2,
+          "uid": 2,
+          "start": "2026-10-21 08:00:00",
+          "finish": "2026-10-22 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 3,
+          "uid": 3,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        },
+        {
+          "ID": 4,
+          "uid": 5,
+          "start": "2026-10-19 08:00:00",
+          "finish": "2026-10-20 17:00:00",
+          "duration": 960,
+          "manual": false,
+          "summary": false
+        }
+      ]
+    }
+  },
+  "fixtures": {
+    "base": "corpus\\probe\\w10-adddel-base.mpp",
+    "add": "corpus\\probe\\w10-adddel-add.mpp",
+    "back": "corpus\\probe\\w10-adddel-back.mpp",
+    "del": "corpus\\probe\\w10-adddel-del.mpp"
+  }
+}

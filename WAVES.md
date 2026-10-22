@@ -307,22 +307,27 @@ repeated here.
 | W34 | sheet | editing transactions, undo/redo, ranges, copy/paste (1,052 checks) |
 | W35 | gantt | real-calendar shading, holiday probes, week anchor, routing (644 checks) |
 
-## Wave 9 — 2026-10-22 (in flight)
+## Wave 9 — 2026-10-22 (complete)
 
 Five streams launched together (W36-W40), plus two overflow streams (W41, W42)
 launched while those were still landing because their modules were untouched.
-Results and the merge log are appended at the end of the wave; the oracle work
-is the coordinator's (`scripts/oracle_task_fields.py` is new this wave).
+Merged by the coordinator; the gate file is `docs/handoff/wave9-complete.md`.
 
-| # | Stream | Deliverable | Build dir |
+**Results:** 31/31 ctest tests in a clean MSVC build; M2 **332/332** with
+"unexplained: none"; schedin (ALAP) 20/20 dates; CI green on all three platforms
+and `app-macos` green at `2159a6a`. Two CI fixes were needed after the first
+push, both in the class MSVC does not warn about (`/*` inside a comment, and a
+missing member in a braced initializer).
+
+| # | Stream | Result | Verified by |
 |---|---|---|---|
-| W36 | session | `core/session`: load -> reader -> plan -> sheet/Gantt rows + status, no AppKit (821 checks) | `build\vs-w36` |
-| W37 | writer | `core/mppwrite/save.h`: `save_date_edits` = SNET pin + clear the manual mode bit, `save_plan`; disk re-read proof | `build\vs-w37` |
-| W38 | app | shell v2: open dialog, selection sync, edit/undo, save through W37; app-macos CI gate | `build\vs-w38` |
-| W39 | render | `core/render`: dependency-free PDF writer + sheet/Gantt report renderer | `build\vs-w39` |
-| W40 | robustness | `core/mpp`/`core/io`: assignment Stop, resource Type/MaxUnits, error paths, large-programme perf harness | `build\vs-w40` |
-| W41 | engine tail | ALAP display dates, recurring calendar exceptions, elapsed lag, FF floor for a 0-d successor | `build\vs-w41` |
-| W42 | views | real task tables, filters/groups/multi-key sorts, Gantt zoom + bar labels | `build\vs-w42` |
+| W36 | session | `core/session` document model | 821 checks (121 without corpus) |
+| W37 | writer | `save_date_edits` = SNET pin + manual-mode bit; oracle-confirmed reopen | 7/7 writer tests, 101 checks |
+| W38 | app | shell v2 + the one-day date fix | 3/3 app tests, `app-macos` green |
+| W39 | render | dependency-free PDF + sheet/Gantt reports | 169 checks, pypdf-validated |
+| W40 | robustness | `+60` is Resume (21/21), error paths, perf harness | 16/16 `mpp\|io_\|plan_recalc` |
+| W41 | engine tail | ALAP was a stored-word misread; elapsed lag measured (LagFormat 7/8) | cpm 1308, cal 217, plan_recalc 231 |
+| W42 | views | real tables from RCDATA 330/311, filters/groups/sorts, Gantt zoom | view 1339, gantt 733 |
 
 ## Wave 10 — planned (launch only after wave 9/9b is committed and CI is green)
 
@@ -377,5 +382,55 @@ it in the same wave as W44 unless the oracle diff is already in hand. If wave 9'
 W41 lands ALAP and the recurring-exception work, M2 stays the regression gate for
 every wave-10 stream: any movement is a stop-and-report, never a re-pin by a
 stream.
+
+## Wave 10 results (2026-10-22, complete)
+
+Four streams launched together after the coordinator's oracle agenda. Oracle
+evidence: `docs/analysis/oracle/w10-oracle.md` + six JSONs; tools
+`scripts/oracle_w10.py`, `scripts/mpp_diff.py`.
+
+**Gate:** clean MSVC `/W4 /WX` build `build\vs-w10`: **36/36 ctest tests passed**
+(wave 9: 31). Standalone app `build\vs-w10-app`: **7/7** (`app_layout` 253,
+`app_selection` 90, `app_document` 43, `app_prefs` 82, `app_menu` 457,
+`app_filter` 60, `app_export` 58 = 1,043 checks). **M2 332/332** (83/83 × 4,
+"unexplained: none"), schedin 20/20 dates and 10/10 slack.
+
+| # | Stream | Result | Verified by |
+|---|---|---|---|
+| W43 | resource + usage views | `core/usage` day/week/month buckets, task/resource projections, calendar-aware flat spread; `core/view/resource_tables` (nine resource tables, 86 columns) | `usage_tests` 164 (149 without corpus); `resource_view_tests` 386 |
+| W44 | custom fields + formulas | `core/formula`: tokenizer/parser/evaluator (`IIf`, comparisons, date/duration arithmetic, `&`), 100-field registry, measured storage encodings, computed columns through one `value_of_field` | `formula_tests` 1,179 |
+| W45 | writer add/delete | `add_task_row` / `delete_task_row`, all-or-nothing and re-read from disk; tombstone liveness reader fix | `mppwrite_roundtrip_add_delete` 493; `mpp_tombstone` 47; **Project reopens 4/5/4 add and 2/2/3/4/4 delete** |
+| W46 | app shell v3 | menus, preferences, filter dialog, Export PDF, dirty-state prompts, clipboard, keyboard nav; `main.mm` v3 | app 7/7, 1,043 checks; `app-macos` CI (ObjC++) |
+
+### Oracle results that drove the streams
+
+1. **Add/delete:** add appends one row + 47/64/96-byte metadata records and
+   eight VarMeta entries; delete is a tombstone, never a shrink. The gate is
+   `FixedMeta` **header +4 bit 0x02** (4→6) in addition to entry `+0=0x02`,
+   `+2=0`. The first W45 delete fixtures omitted it and Project reopened the
+   deleted task; with it, both VarMeta strategies are accepted.
+2. **Formulas:** definitions live in `114/Props` as UTF-16 with `[MSPJ…]`
+   tokens; Project does not evaluate formulas into headless `GetField` (even
+   `1+1` reads 0). Direct values: Text UTF-16, Number f64, Duration u32 ticks,
+   Date packed u32; booleans live in the FixedMeta entry tail (+24 bit 0x02),
+   not VarMeta.
+3. **Usage:** no timephased stream. Assignment totals are in
+   `TBkndAssn/FixedData`; the contour is a step list in VarMeta
+   `0x0f400031`/`0x0f400032`. Period buckets are computed.
+4. **Preferences:** table date format is written into `114/Props`; global date/
+   duration format and the Gantt timescale have no exposed setter, so app
+   preferences are app-side.
+
+### Open after wave 10 (ranked)
+
+1. Wiring: resource/usage views and computed custom-field columns are models,
+   not UI; `core/formula` is not called by the app or the writer.
+2. Exact-date writes on a linked row (`w37-snet-link.mpp` still unbuilt);
+   add/delete for links and assignments; `214/` is still not regenerated.
+3. `114/Props` decoding (formula text, table definitions) to persist custom
+   fields and view settings.
+4. Recurring calendar exception parameters, per-task calendars, MPP12,
+   elapsed-DURATION format, resource Type in the reader (W40 landed the
+   fixture; reader exposure still open).
 
 

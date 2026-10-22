@@ -130,6 +130,30 @@ bool toggle_row(core::sheet::SheetModel& sheet, std::size_t row) {
     return sheet.toggle_collapsed(row);
 }
 
+bool toggle_row_selection(core::sheet::SheetModel& sheet) {
+    if (!sheet.has_selection() || sheet.visible_column_count() == 0) {
+        return false;
+    }
+    const core::sheet::CellRef anchor = sheet.anchor();
+    const std::size_t first = sheet.visible_column(0);
+    const std::size_t last = sheet.visible_column(sheet.visible_column_count() - 1);
+    if (first == kNoIndex || last == kNoIndex) {
+        return false;
+    }
+    const core::sheet::CellRange range = sheet.selection_range();
+    const bool whole_row = range.valid && range.row_begin == anchor.row &&
+                           range.row_end == anchor.row && range.column_begin == first &&
+                           range.column_end == last;
+    if (whole_row) {
+        sheet.select_cell(anchor.row, anchor.column);
+        return false;
+    }
+    if (!sheet.select_range(anchor.row, anchor.row, first, last)) {
+        return false;
+    }
+    return true;
+}
+
 ScrollTarget scroll_target(const core::sheet::SheetModel& sheet,
                            const core::sheet::SheetMetrics& metrics, std::size_t row) {
     ScrollTarget target;

@@ -81,6 +81,37 @@ if(MPP_BUILD_TESTS)
         WORKING_DIRECTORY "${MPP_REPO_ROOT}"
     )
 
+    # ---- W45: a tombstoned Task row (FixedMeta entry +0 = 0x02) is not a live
+    # task, even when its VarMeta group survives -- which is exactly what
+    # Project's own add-then-delete file leaves behind.  The committed synthetic
+    # fixture is the no-tombstone control, so a clean checkout still runs a real
+    # assertion; the corpus probe files and the writer's emitted fixtures are
+    # used when present and skipped when not.  Additive: this test reads files
+    # and writes nothing.
+    set(MPP_TEST_DATA_DIR "${MPP_REPO_ROOT}/tests/data")
+    set(MPP_W45_TEST_OUT_TOP "${CMAKE_BINARY_DIR}/core/mppwrite/test-out")
+    set(MPP_W45_TEST_OUT_MIRROR
+        "${MPP_REPO_ROOT}/core/mppwrite/build/vs-w45/test-out")
+    foreach(w45_path_var MPP_TEST_DATA_DIR MPP_W45_TEST_OUT_TOP
+                          MPP_W45_TEST_OUT_MIRROR)
+        file(TO_CMAKE_PATH "${${w45_path_var}}" ${w45_path_var})
+    endforeach()
+    add_executable(mpp_tombstone_tests "${MPP_REPO_ROOT}/tests/mpp_tombstone_tests.cpp")
+    target_link_libraries(mpp_tombstone_tests PRIVATE core_mpp)
+    target_compile_features(mpp_tombstone_tests PRIVATE cxx_std_20)
+    set_target_properties(mpp_tombstone_tests PROPERTIES CXX_EXTENSIONS OFF)
+    mpp_set_warnings(mpp_tombstone_tests)
+    target_compile_definitions(mpp_tombstone_tests PRIVATE
+        MPP_PROBE_DIR="${MPP_PROBE_DIR}"
+        MPP_TEST_DATA_DIR="${MPP_TEST_DATA_DIR}"
+        MPP_W45_TEST_OUT_TOP="${MPP_W45_TEST_OUT_TOP}"
+        MPP_W45_TEST_OUT_MIRROR="${MPP_W45_TEST_OUT_MIRROR}"
+    )
+    add_test(NAME mpp_tombstone COMMAND mpp_tombstone_tests)
+    set_tests_properties(mpp_tombstone PROPERTIES
+        WORKING_DIRECTORY "${MPP_REPO_ROOT}"
+    )
+
     # ---- W40: malformed-input coverage.  The fixtures are generated in memory,
     # so this test needs no corpus.  Each case must throw mpp::Error or produce a
     # warning -- never crash, read past a buffer, or allocate from an unchecked

@@ -293,3 +293,123 @@ over-matches; `plan_recalc_tests` rewrites the golden whenever corpus is present
 2. Build and open `w37-snet-link.mpp` — closes open item 1.
 3. Introspect `Calendar.Exceptions.Add` and build the five `w9-r-*` fixtures
    (also oracle agenda item 4 in the wave-10 board).
+
+## Wave 10 final (2026-10-22 ~18:30)
+
+Four streams, one coordinator oracle agenda, one Project gate, one CI fix cycle.
+The successor gate is `docs/handoff/wave10-complete.md`; the short version of
+everything below is `memory/coordinator.md`.
+
+### Where main is
+
+`0e3fbd7` plus the docs commit that follows it. Wave-10 commits: `5fdec56`
+(oracle tooling + evidence), `a043c7d` (W43), `3bb2b2b` (W44), `27f7e90` (W46),
+`fd19ba6` (W45), `54163e3` + `0e3fbd7` (the two `app-macos` fixes).
+
+### The number
+
+* **Clean MSVC `/W4 /WX` build `build\vs-w10`: 36/36 ctest tests passed**
+  (wave 9: 31). The five new tests are `resource_view`, `usage`, `formula`,
+  `mpp_tombstone`, `mppwrite_roundtrip_add_delete`.
+* **Standalone app `build\vs-w10-app`: 7/7**, 1,043 checks (`app_layout` 253,
+  `app_selection` 90, `app_document` 43, `app_prefs` 82, `app_menu` 457,
+  `app_filter` 60, `app_export` 58).
+* **M2 332/332** (start/finish/slack/critical 83/83 each, "unexplained: none").
+  schedin 20/20 dates, 10/10 slack. `plan_recalc` 231 checks.
+* CI: `app-macos` green on `0e3fbd7`; the three-platform `ci` run is the check on
+  the final docs commit (do not claim it before `gh run list` says so).
+
+### Oracle agenda — all four measured
+
+Evidence: `docs/analysis/oracle/w10-oracle.md` + six JSONs; tools
+`scripts/oracle_w10.py` (adddelete/formulas/usage/prefs/fieldvalues/flagdiff/
+analyze) and `scripts/mpp_diff.py`.
+
+1. **Add/delete (W45).** Add appends exactly one row's worth of each stream
+   (+202/+47/+64/+96/+96 B) and eight VarMeta entries; delete is a tombstone and
+   never shrinks. **The gate is `FixedMeta` header word +4 bit 0x02 (4→6)** in
+   addition to entry `+0=0x02`, `+2=0`. The first W45 deletes omitted the header
+   bit and Project reopened the deleted task; after the fix the coordinator
+   reopened all nine fixtures and got **4/5/4 add and 2/2/3/4/4 delete**, the
+   exact expected counts. A rogue detail: Project *recomputes IDs on open*, so
+   the stored ID renumber is cosmetic.
+2. **Formulas (W44).** Formula text lives in `114/Props` as UTF-16 with
+   `[MSPJ<decimal>]` tokens (`[% Complete]`→188743712, `[Duration]`→188744967 =
+   DurationText). Project does **not** evaluate formulas into headless
+   `GetField` — even `1+1` reads 0 — so evaluator semantics are inference, not
+   measurement. Direct value encodings are measured: Text UTF-16, Number f64,
+   Duration u32 ticks, Date packed u32; **Flag1 is in the FixedMeta entry tail
+   +24 bit 0x02** (mirrored at Fixed2Meta +31/+61 bit 0x80), not VarMeta.
+3. **Usage (W43).** There is no timephased stream. Assignment totals are in
+   `TBkndAssn/FixedData` (+12 units, +20 work, +52/+56/+60 dates); the work
+   contour is a step list in VarMeta `0x0f400031` (planned) / `0x0f400032`
+   (actual). Period buckets are computed — W43 spreads Work flat over the
+   calendar.
+4. **Preferences (W46).** Table date format changes `114/Props` (+214 churn);
+   there is no exposed setter for global date/duration format or the Gantt
+   timescale (`Application.Timescale`/`Options*` are dialogs, `Tables` is a
+   mis-invoked method on this build). W46 persists app preferences in
+   NSUserDefaults and documents why.
+
+### Per stream
+
+| # | Deliverable | Verified by |
+|---|---|---|
+| W43 | `core/usage` (periods, task/resource/assignment projections, flat calendar spread) + `core/view/resource_tables` (nine RT_RCDATA 311 tables, 86 columns) | `usage_tests` 164 (149 no corpus), `resource_view_tests` 386, ctest 3/3 |
+| W44 | `core/formula`: parser/evaluator, 100-field registry, measured encodings, computed columns via one `value_of_field` | `formula_tests` 1,179 |
+| W45 | `core/mppwrite/add_delete.*`, tombstone liveness fix in `core/mpp/reader.cpp` | add_delete 493, tombstone 47, reader 663, plan_recalc 231; **Project reopen gate 2/2/3/4/4** |
+| W46 | app v3: menus, preferences, filter dialog, Export PDF, dirty prompts, clipboard, keyboard nav | app 7/7, 1,043; `app-macos` green |
+
+### Two CI fixes this wave
+
+Both were invisible to MSVC and only `app-macos` (clang) caught them:
+1. **Unused static helper** in `app/prefs_tests.cpp` — clang
+   `-Wunused-function -Werror`; deleted.
+2. **Call/declaration arity in `main.mm`** — `draw_gantt` gained a
+   `working_day_shading` parameter but the view's call site was not updated;
+   clang says "no matching function", MSVC never sees `main.mm`. If a future
+   `main.mm` edit adds a parameter, grep for every call site before pushing.
+
+### Open after wave 10 (ranked)
+
+1. **Wiring**: `core/usage` and `core/formula` are models with no UI. The app
+   does not show resource/usage views or custom-field columns, and the writer
+   does not persist custom-field values.
+2. **Writer tail**: exact-date writes on a linked row (`w37-snet-link.mpp` still
+   unbuilt), add/delete for links/assignments, `214/` still not regenerated
+   (deliberate, §10.4), PROJECT_A structurally refused (broken `FixedMeta` identity).
+3. **`114/Props` decoding**: formula text and table definitions live there; until
+   it is decoded, formulas/custom fields cannot round-trip and view settings
+   cannot be written.
+4. Recurring calendar exception parameters, per-task calendars in CPM, MPP12,
+   elapsed-DURATION format, resource Type exposure (W40's fixture is unused).
+5. The app's manual-Mac smoke test: the ObjC++ half is compile- and
+   headless-test-proven, not human-driven.
+
+### Traps added this wave
+
+* **Project recomputes task IDs on open**; the stored `FixedData +0` renumber is
+  cosmetic. Do not use it as evidence that a delete worked — use the count.
+* **`FixedMeta` header +4 is a tombstone-state bit**; entry `+0=2` alone is
+  ignored by Project. Add leaves it at 4, delete sets 6.
+* `Task.Assignments.Add(ResourceID=...)` alone is rejected on this build; use
+  `Add(TaskID=..., ResourceID=...)` and re-read `t.Assignments(1)` (the return
+  value is not a usable Assignment). `Task.GetField` reads stored values, not
+  formula results.
+* `FileSaveAs(Name="x.xml", FormatID="MSProject.xml")` silently wrote a binary
+  `.mpp` in the formula session; check the first bytes before parsing an export.
+* `pywin32` `dir()` on the COM object raises "Not implemented"; probe a static
+  candidate list instead.
+* The add/delete fixtures are regenerated by `mppwrite_roundtrip_add_delete`;
+  the manifest lives in its build tree (`core\mppwrite\build\vs-w45\test-out`
+  and the mirrored `build\vs-w45\...`). Re-open them after any writer change.
+
+### Next three actions
+
+1. Wire `core/usage` and `core/formula` into `core/session`/`core/sheet`/the app
+   (a resource/usage view and a computed-column table), keeping `value_of_field`
+   the single read path.
+2. Decode the `114/Props` formula blocks W44 measured, so custom fields can be
+   read and (with a writer change) persisted.
+3. Build and open `w37-snet-link.mpp`; then add link/assignment row support to
+   `add_delete` so a task delete can cascade cleanly.

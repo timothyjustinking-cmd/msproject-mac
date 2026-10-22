@@ -187,3 +187,105 @@ the caption→field pairing (coordinator oracle could confirm through
 placement, and whether Project sorts top-level parents in outline sort the same
 way. No UI was added.
 
+## Wave 10 (W43) — resource table builder + time-phased usage
+
+Owned paths this wave: `core/usage/**`, `core/view/resource_tables.*`,
+`core/view/CMakeLists.txt`, `tests/usage_tests.cpp`,
+`tests/resource_view_tests.cpp`, this file, `docs/handoff/w43.md`. No other
+stream file was edited and no existing `core/view`/`core/sheet` API changed.
+
+| path | what |
+|---|---|
+| `core/usage/usage.h` | `Period{day,week,month}`, `PeriodSpan`, `enumerate_periods` (day numbers and date32 overloads), `AssignmentInput`, `UsageInput`, `UsageRow`, `UsageTable`, `AssignmentUsage`, `UsageProjection`, `project_usage`, `render_usage_table` |
+| `core/usage/usage.cpp` | the flat spread (cumulative rounding over the calendar's working ticks), period enumeration, table projections, name-free rendering |
+| `core/usage/usage_mpp.h` | header-only `usage_input_from_mpp(mpp::Document)`: tasks/resources uids and assignment uid/task/resource/start/finish/work; keeps `core_usage` free of a link dependency on `core_mpp` |
+| `core/usage/CMakeLists.txt` | `core_usage`, ctest `usage`, standalone branch (adds sched/mpp/cal with tests off) |
+| `core/view/resource_tables.h/.cpp` | neutral `ResourceRecord` + `build_resource_record_set`, resource field-id constants, `resource_field_kind`, `find_resource_table`, `resource_table_definitions`, `resource_tables_resolve` |
+| `tests/usage_tests.cpp` | 164 checks with corpus, **149** with `MPP_NO_CORPUS=1` |
+| `tests/resource_view_tests.cpp` | **386 checks**, no corpus |
+
+### What is verified (MSVC 19.44, Release, `/W4 /permissive- /utf-8 /WX`)
+
+```powershell
+cmd /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul && cmake -S . -B build\vs-w43 -G "Visual Studio 17 2022" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON'
+cmd /c '"C:\...\vcvars64.bat" >nul && cmake --build build\vs-w43 --config Release --target usage_tests resource_view_tests'
+.\build\vs-w43\core\usage\Release\usage_tests.exe
+# -> CORPUS: project_a: 303 day periods, 67 assignments, 22 resources, 83 tasks,
+#            322080 work minutes (task rows 322080, resource rows 0)
+# -> usage_tests: 164 checks passed
+.\build\vs-w43\core\view\Release\resource_view_tests.exe
+# -> resource_view_tests: 386 checks passed
+$env:MPP_NO_CORPUS='1'; .\build\vs-w43\core\usage\Release\usage_tests.exe
+# -> SKIP: PROJECT_A usage checks (...)   usage_tests: 149 checks passed
+cmd /c '"C:\...\vcvars64.bat" >nul && ctest --test-dir build\vs-w43 -C Release --output-on-failure -R "usage|resource|view"'
+# -> 3/3 passed (21 view_model, 22 resource_view, 35 usage); view_model 1339
+```
+
+Synthetic coverage: period enumeration Friday→Monday (4 day rows, weekend
+present), Sunday-start weeks (clipped first/last), civil months (Feb 28 in
+2026), empty/reversed/NA ranges; flat spread cells sum exactly to Work
+(full days, partial day, Work smaller than the span); a Friday→Monday
+assignment puts 480/0/0/480 and a Wednesday calendar holiday puts 480/480/0/
+480/480; task-usage equals the sum of its assignments; resource-usage equals
+the sum of its assignments (one resource, two tasks/assignments, plus a
+resource with no assignments); empty project; task/resource rows with no
+assignments; unplaceable Work (NA dates, finish == start) stays in the totals
+and is counted; the `mpp::Document` bridge and the null-resource mapping.
+
+Resource view: builder schema order ID/Name/Type/Initials/MaxUnits, kinds
+Integer/Text/Integer/Text/Number, MaxUnits in percent, Type 0/1/2
+Work/Material/Cost, rows keep uid identity, empty input keeps the schema; nine
+resource tables (86 columns) all resolve to Resource fields through
+`core::model::find_field_by_id`, Entry column data pinned (ID 6 R, Name 20 L
+"Resource Name", Type 11 L, MaxUnits 10 R "Max. Units"), `find_resource_table`
+by id and by name, task tables untouched (15).
+
+### Measured vs inferred
+
+- **Measured (inherited)**: the storage layout that motivates this module —
+  assignment totals at `TBkndAssn/FixedData` +12 Units, +20 Work minutes x1000,
+  +52/+56/+60 Start/Finish/Resume; the contour step list is VarMeta
+  `0x0f400031`/`0x0f400032`; there is **no** time-phased stream
+  (`docs/analysis/oracle/w10-oracle.md` §3). Field ids/kinds follow the MSPDI
+  resource importer and the descriptor table (W42's RT_RCDATA 311).
+- **Inference/decision (ours, no oracle)**: week periods start Sunday; months
+  are civil months; minutes are integers with cumulative rounding; flat spread
+  is proportional to the calendar's working ticks; unplaceable Work stays in
+  totals without buckets; resource `Type` uses Project's PjResourceTypes order
+  (0 Work / 1 Material / 2 Cost), not MSPDI's export spelling.
+- **Not decoded (optional, open)**: the `0x0f400031` contour step list. Flat is
+  exact for a contour-less assignment and is the documented fallback.
+
+### Open / next
+
+1. **PROJECT_A cannot exercise resource usage.** All 67 live PROJECT_A assignment rows
+   store `kNullResourceUid` at +8 (pinned by `tests/mpp_reader_tests.cpp`), so
+   the PROJECT_A resource-usage table is 22 present-but-zero rows and the test asserts
+   that measured shape. A corpus file with real +8 resource ids is the missing
+   case; `corpus/probe/assign1.mpp` would do it, but the probe fixtures are not
+   in every checkout (they are 1-byte stubs in this tree), so the resource path
+   is covered with a hand-built `mpp::Document`.
+2. **Contour shaping.** Decode assignment VarMeta `0x0f400031` (step list) to
+   reproduce back-loaded/front-loaded contours; mark inference until an oracle
+   pairs the step bytes with TimeScaleData buckets.
+3. **Per-resource calendars.** `core::sched` models one calendar; resource-usage
+   respects the project calendar only. A resource calendar/units cap is not
+   applied (`max_units` is exposed but not used to clip bucket work).
+4. **Week boundary oracle.** One `TimeScaleData`/timescale observation would
+   turn Sunday-start weeks from a decision into a measurement.
+
+### Traps hit
+
+- `core/mppwrite/CMakeLists.txt` briefly named `tests/roundtrip_add_delete.cpp`
+  before W45 created it; the root configure failed with "Cannot find source
+  file". Retrying the identical configure once the file landed was the fix —
+  do not edit another stream's file.
+- MSB6003 on a `.tlog` (Dropbox/AV churn) appeared once; the identical build
+  retried cleanly.
+- `ctest` and `cmake` are not on a bare `pwsh` PATH; run them after `vcvars64`
+  (or full paths).
+- The test binary lands under `build\vs-w43\core\usage\Release\` and
+  `build\vs-w43\core\view\Release\`, not `build\vs-w43\Release\`.
+- Do not print client names: this module only ever holds uids/dates/minutes, and
+  `render_usage_table` is name-free by construction.
+

@@ -1,0 +1,123 @@
+{
+  "case": "usage",
+  "run_at": "2026-10-22T17:33:01",
+  "sizes": {
+    "flat": 245760,
+    "contour": 360448,
+    "actual": 360448
+  },
+  "flat": {
+    "assignment": {
+      "ID": "<err AttributeError: <unknown>.ID>",
+      "TaskID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "ResourceID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "TaskUniqueID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "ResourceUniqueID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Units": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Work": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "ActualWork": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "RemainingWork": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Start": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Finish": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "WorkContour": "<err com_error: (-2147467259, 'Unspecified error', None, None)>"
+    },
+    "work": [
+      {
+        "start": "2026-10-18 00:00:00",
+        "end": "2026-10-21 00:00:00",
+        "value": 960.0
+      },
+      {
+        "start": "2026-10-21 00:00:00",
+        "end": "2026-10-24 00:00:00",
+        "value": 480.0
+      }
+    ],
+    "actual": [
+      {
+        "start": "2026-10-18 00:00:00",
+        "end": "2026-10-21 00:00:00",
+        "value": ""
+      },
+      {
+        "start": "2026-10-21 00:00:00",
+        "end": "2026-10-24 00:00:00",
+        "value": ""
+      }
+    ]
+  },
+  "contour": {
+    "assignment": {
+      "ID": "<err AttributeError: <unknown>.ID>",
+      "TaskID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "ResourceID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "TaskUniqueID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "ResourceUniqueID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Units": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Work": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "ActualWork": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "RemainingWork": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Start": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Finish": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "WorkContour": "<err com_error: (-2147467259, 'Unspecified error', None, None)>"
+    },
+    "work": [
+      {
+        "start": "2026-10-18 00:00:00",
+        "end": "2026-10-21 00:00:00",
+        "value": 240.0
+      },
+      {
+        "start": "2026-10-21 00:00:00",
+        "end": "2026-10-24 00:00:00",
+        "value": 1200.0
+      }
+    ]
+  },
+  "actual": {
+    "assignment": {
+      "ID": "<err AttributeError: <unknown>.ID>",
+      "TaskID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "ResourceID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "TaskUniqueID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "ResourceUniqueID": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Units": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Work": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "ActualWork": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "RemainingWork": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Start": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "Finish": "<err com_error: (-2147467259, 'Unspecified error', None, None)>",
+      "WorkContour": "<err com_error: (-2147467259, 'Unspecified error', None, None)>"
+    },
+    "work": [
+      {
+        "start": "2026-10-18 00:00:00",
+        "end": "2026-10-21 00:00:00",
+        "value": 960.0
+      },
+      {
+        "start": "2026-10-21 00:00:00",
+        "end": "2026-10-24 00:00:00",
+        "value": 480.0
+      }
+    ],
+    "actual": [
+      {
+        "start": "2026-10-18 00:00:00",
+        "end": "2026-10-21 00:00:00",
+        "value": 480.0
+      },
+      {
+        "start": "2026-10-21 00:00:00",
+        "end": "2026-10-24 00:00:00",
+        "value": ""
+      }
+    ],
+    "note": null
+  },
+  "fixtures": {
+    "flat": "corpus\\probe\\w10-usage-flat.mpp",
+    "contour": "corpus\\probe\\w10-usage-contour.mpp",
+    "actual": "corpus\\probe\\w10-usage-actual.mpp"
+  }
+}

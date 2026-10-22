@@ -1,8 +1,9 @@
 # app/ — the macOS shell (AppKit) over the portable core
 
 A native macOS application that opens a real `.mpp`, shows the tasks in a sheet on
-the left and the Gantt on the right, and lets you select, edit, undo, collapse and
-save task start dates. Everything below `main.mm` is portable C++ that is built and
+the left and the Gantt on the right, and lets you select, edit, undo, filter,
+collapse, export to PDF and save task start dates — behind a real menu bar and a
+Preferences panel. Everything below `main.mm` is portable C++ that is built and
 tested on Windows too.
 
 This directory is a **standalone CMake project**. It is deliberately *not* added to
@@ -13,16 +14,24 @@ same way).
 
 | file | what it is |
 |---|---|
-| `CMakeLists.txt` | standalone project: options, core libraries with their tests off, `app_layout`, three headless tests, AppKit target on `APPLE` only |
-| `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, plan summary, `sync_plan_from_records` (edits back into the drawing model), `make_gantt_source_for_rows` (the Gantt follows the visible rows), `apply_edit_policy` (read-only identity columns) |
-| `selection_model.h` / `.cpp` | **pure C++**: `RowMap` (visible ordinal ↔ RecordSet row ↔ uid), `selected_task`, Gantt hit-test → sheet row, arrow-key navigation, `toggle_row`, `scroll_target` |
+| `CMakeLists.txt` | standalone project: options, core libraries with their tests off, `app_layout`, seven headless tests, AppKit target on `APPLE` only |
+| `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, `timescale_for_zoom`, plan summary, `sync_plan_from_records`, `make_gantt_source_for_rows`, `apply_edit_policy` |
+| `selection_model.h` / `.cpp` | **pure C++**: `RowMap` (display ordinal ↔ RecordSet row ↔ uid), `selected_task`, Gantt hit-test → sheet row, arrow-key navigation, `toggle_row_selection` (Space), `toggle_row`, `scroll_target` |
 | `document.h` / `.cpp` | **pure C++ save helper**: diff the RecordSet against the loaded plan, then write the edited starts through `core/mppwrite` to a **new** file |
+| `prefs.h` / `.cpp` | **pure C++**: the preference model, its persisted one-line string + tolerant parser, the date format applied to `SheetFormat`, the app-side duration rendering, `cell_text` |
+| `menu_model.h` / `.cpp` | **pure C++**: the whole menu bar as data — items, key equivalents, `MenuAction` ids, enablement rules, and the reasons the unsupported items are greyed out |
+| `filter_model.h` / `.cpp` | **pure C++**: filter fields/operators from the sheet, a criterion → `core::view::FilterDefinition` with an error message, matching rows, the displayed-row restriction, the printed subset |
+| `export_pdf.h` / `.cpp` | **pure C++**: Export PDF through `core/render` — sheet and Gantt, the filtered rows, the preference formats, the shading-off calendar |
 | `reader_adapter.h` | the one header that includes `core/mpp/reader.h`; `mpp::Document` → `app::PlanInput` |
-| `layout_model_tests.cpp` | mapping, date identity (including two dates pinned by the spec), row texts, Gantt geometry; `corpus/probe` counts when present |
-| `selection_model_tests.cpp` | two-way selection, Gantt clicks (bar and dependency), collapse changing the Gantt row list, editing/undo through `SheetModel`, the read-only policy |
-| `document_tests.cpp` | `default_save_name`, the start-date diff, and the **real save round trip** on `tests/data/synthetic-base.mpp` |
-| `main.mm` | Objective-C++ / AppKit: window, menu, `PlanView` (drawing + mouse/key), open/save panels, alerts |
-| `../.github/workflows/app-macos.yml` | the macOS CI job: configure `app/`, build everything with `-Werror`, run the three tests, prove the bundle exists and links AppKit + UniformTypeIdentifiers |
+| `layout_model_tests.cpp` | mapping, date identity (including two dates pinned by the spec), row texts, Gantt geometry, zoom; `corpus/probe` counts when present |
+| `selection_model_tests.cpp` | two-way selection, Gantt clicks (bar and dependency), collapse, editing/undo/redo through `SheetModel`, the read-only policy |
+| `document_tests.cpp` | `default_save_name`, the start-date diff, the **real save round trip** on `tests/data/synthetic-base.mpp` |
+| `prefs_tests.cpp` | the identifiers, the parser (including bad/old strings), the three date styles, the three duration renderings, `cell_text`, the zoom mapping |
+| `menu_tests.cpp` | six menus, every action present once per menu, unique key equivalents, the documented shortcuts, enablement rules, the three permanently disabled items |
+| `filter_tests.cpp` | the field/operator lists, name/duration/date/blank criteria, two-rule All/Any, every error path, the row-list restriction, the printed subset |
+| `export_tests.cpp` | real PDFs: sheet + Gantt, filtered, duration preference, determinism, the shading-off calendar, the name/subtitle/footer helpers, failures |
+| `main.mm` | Objective-C++ / AppKit: window, menu bar built from `menu_model`, Preferences panel, filter dialog, save/export panels, dirty prompts, clipboard, keyboard, drawing |
+| `../.github/workflows/app-macos.yml` | the macOS CI job: configure `app/`, build everything with `-Werror`, run the seven tests, prove the bundle exists and links AppKit + UniformTypeIdentifiers |
 
 ## Build and run
 
@@ -43,10 +52,10 @@ configure skips the app target and must still succeed):
 ```bat
 set vc=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat
 call "%vc%"
-cmake -S app -B build\vs-w38 -G "Visual Studio 17 2022" -A x64 ^
+cmake -S app -B build\vs-w46 -G "Visual Studio 17 2022" -A x64 ^
       -DCMAKE_BUILD_TYPE=Release -DAPP_BUILD_TESTS=ON -DCORE_WARNINGS_AS_ERRORS=ON
-cmake --build build\vs-w38 --config Release
-ctest --test-dir build\vs-w38 -C Release --output-on-failure
+cmake --build build\vs-w46 --config Release
+ctest --test-dir build\vs-w46 -C Release --output-on-failure
 ```
 
 Never `--parallel` on this box (see `docs/build.md`). A transient
@@ -56,6 +65,30 @@ app build exactly as it fails the root build: retry, do not "fix" their file.
 
 Options: `APP_BUILD_TESTS` (default `ON`), `CORE_WARNINGS_AS_ERRORS` (default `OFF`;
 the workflow passes `ON`, which also reaches the core subdirectories).
+
+## The menu bar
+
+`app/menu_model.cpp` is the single description of the menu bar; `main.mm` only walks
+it (one `NSMenuItem` per `MenuItemSpec`, `tag` = the `MenuAction`) and dispatches by a
+switch on that tag. `app/menu_tests.cpp` pins the structure, the key equivalents and
+every enablement rule, which is the only way to test a menu bar without a window.
+
+| menu | items |
+|---|---|
+| MS Project Shell | Preferences… (Cmd-,), Hide (Cmd-H), Quit (Cmd-Q) |
+| File | Open… (Cmd-O), Save (Cmd-S), Save As… (Cmd-Shift-S), Export PDF (Sheet)… (Cmd-Shift-E), Export PDF (Gantt)… (Cmd-Option-E), Close (Cmd-W) |
+| Edit | Undo (Cmd-Z), Redo (Cmd-Shift-Z), Cut (Cmd-X, **disabled**), Copy (Cmd-C), Paste (Cmd-V), Select All (Cmd-A) |
+| View | Zoom In (Cmd-=), Zoom Out (Cmd--), Day/Week/Month Timescale (Cmd-1/2/3), Working-Day Shading (Cmd-Shift-D), Filter… (Cmd-F), Clear Filter (Cmd-Shift-F), Collapse All, Expand All, Columns ▸ (per-column check marks) |
+| Insert | Task…, Resource… — **both permanently disabled** |
+| Help | Keyboard Shortcuts, About MS Project Shell |
+
+**Greyed out rather than faked.** `Insert > Task` needs a writer that can *grow* a
+table: `RecordSet` has no insert/erase and `core/mppwrite` cannot add a directory
+entry or a table row (spec/mpp-writer.md §5, §10.4; wave 10 stream W45 owns that).
+`Insert > Resource` needs a resource table (wave 10 stream W43). `Cut` needs a
+`SheetModel` operation that does not exist — copy and paste do. All three are in the
+menu, disabled in every state, with `menu_disabled_reason()` as their tooltip and the
+reason pinned in `menu_tests.cpp`.
 
 ## What the window does
 
@@ -71,15 +104,18 @@ shows the standard edited dot while start-date edits are pending.
 
 **Status bar** (two lines at the bottom): task/link counts (plus skipped links),
 summary/milestone/critical counts, the plan's start–finish span **recalculated from
-the current rows**, the number of edited starts, the reader's warning count and the
-file path; then the last action, in red when it was a rejected edit or a failed save.
+the current rows**, the number of edited starts, the active filter (with *shown of
+total*), the preference summary, the reader's warning count and the file path; then
+the last action, in red when it was a rejected edit or a failed save/export/open.
 
 **Selection, two ways.** Clicking a sheet cell selects it; clicking a Gantt bar (or a
 dependency) selects the sheet row of that bar (the successor, for a link — a sheet
-selects one row); Shift-click extends the range; arrows move through the **visible**
-rows and columns. Selecting a row highlights its Gantt bar (outlined) and the row
-band in both views, and scrolls it into view. `SheetModel` owns the selection; the
-mapping lives in `app::RowMap`/`selected_task` and is unit-tested.
+selects one row); Shift-click extends the range; arrows move through the **displayed**
+rows and columns; **Space** toggles between the single cell and the whole row.
+Selecting a row highlights its Gantt bar (outlined) and the row band in both views,
+and scrolls it into view (by displayed position, so a filter cannot point the scroll
+at the wrong row). `SheetModel` owns the selection; the mapping lives in
+`app::RowMap`/`selected_task` and is unit-tested.
 
 **Editing.** Double-click or Return starts an edit seeded with the cell text; a
 printable character starts an edit that *replaces* the text (as Project does);
@@ -92,18 +128,95 @@ edits and undos re-derive the Gantt and the status line through
 `apply_edit_policy` (the sheet does not infer that); Name, Start, Finish and Duration
 are editable.
 
-**Outline.** A summary row shows a `-`/`+` box in the Name column's gutter; clicking
-it (or Cmd-Left / Cmd-Right on a selected summary) calls
-`SheetModel::toggle_collapsed`. The visible-row list is then re-read, the Gantt is
-**rebuilt** from exactly those rows (`make_gantt_source_for_rows`), so hidden tasks
-have no bars and links to them are dropped; the document shrinks/grows with the row
-count and the status line's counts follow.
+**Clipboard.** Cmd-C copies the selection as tab-separated text through the general
+pasteboard (`ClipboardBlock::to_text`), Cmd-V pastes it (`from_text` plus
+`SheetModel::paste`, one undo step, refused cells reported in the status line). Cut is
+disabled.
 
-**Save.** `File > Save Edited Starts…` (Cmd-S) collects the tasks whose Start differs
-from the file as loaded, asks for a target path (default suggestion
-`<name>-edited.mpp` next to the source) and calls `app::save_start_edits`. It reports
-rows written, the writer path, any warnings and the target path in the status bar;
-a failure raises an alert and leaves the opened file untouched.
+**Outline and columns.** A summary row shows a `-`/`+` box in the Name column's
+gutter; clicking it (or Cmd-Left / Cmd-Right on a selected summary) calls
+`SheetModel::toggle_collapsed`. The visible-row list is then re-read and the Gantt is
+**rebuilt** from exactly those rows. View ▸ Columns toggles each column's visibility
+through `SheetModel::set_column_visible` (the same default columns every load, so the
+submenu's tags are the model column indices).
+
+**Zoom.** View ▸ Zoom In/Out steps through the three core zoom levels (day → week →
+month) and View ▸ Day/Week/Month sets one; the Gantt is rebuilt through
+`app::timescale_for_zoom`, which takes the unit and the pixels per unit from
+`core::gantt::zoom_spec()` and seeds the origin from the plan. The choice persists.
+
+**Filter.** View ▸ Filter… (Cmd-F) opens an alert with column / operator / value
+controls and Apply / Clear / Cancel. The criterion is parsed with the same parser the
+cell editor uses (`parse_edit_text`), so a Duration thinks in "3d" and a Date in
+"2026-10-20"; a value the column cannot parse is refused with the field named.
+Applying a filter **restricts the displayed row list** (`app::RowMap`), never the
+`RecordSet`: the same rows stay editable, the save diff is unchanged, the Gantt draws
+only the matching bars, and the status bar says *shown of total*. A filter with no
+match shows an empty sheet and a red status line, not an error dialog.
+`app/filter_model.h` also builds All/Any trees of several rules; this wave's dialog
+authors one criterion, and the model's multi-rule path is tested.
+
+**Export PDF.** `File > Export PDF (Sheet)…` / `(Gantt)…` write through `core/render`
+(`render_sheet_report` / `render_gantt_report`) to a path you choose (default
+suggestion `<name>-sheet.pdf` / `<name>-gantt.pdf`). The report is built from the
+window's own state: the **filtered rows**, the **visible columns**, the **preference
+date format**, and — for the Gantt — the timescale level and the working-day shading
+preference. The current **selection** is named in the report footer; `core/render`
+has no selection concept and this wave does not edit `core/`, so the selected row is
+*not* highlighted on the page, and the README says so rather than implying otherwise.
+Shading off is implemented by handing the renderer an all-working calendar (every day
+00:00–24:00, so no non-working span exists) with the week anchor pinned, which
+changes nothing else: shading never moves a bar.
+
+**Preferences.** Cmd-, (or the app menu) opens a panel with four controls:
+
+| control | values | what it changes |
+|---|---|---|
+| Date format | `Tue 20/10/26` (day/month/year, default), `Tue 10/20/26`, `2026-10-20` (ISO) | `SheetFormat::date`, so every date cell, the status-line span and the PDF report agree |
+| Duration format | days + hours (default: `3 days`, `4 hrs`), hours only (`24 hrs`), days only (`0.5 days`) | the shell's Duration column rendering (`app::cell_text` / `app::format_duration`) in the sheet and in the PDF; the sheet's own parser still accepts `3d`/`4h` etc. |
+| Timescale | Days (default), Weeks, Months | the Gantt's timescale unit/width |
+| Working-day shading | on (default), off | whether the Gantt draws non-working spans and weekend header tints; the PDF Gantt uses the all-working calendar when off |
+
+Applying a preference repaints immediately; closing the app is not needed.
+
+### Where the preferences persist — and why not in the file
+
+They are stored **app-side**, in `NSUserDefaults` under
+`com.msprojectdecompile.shell.preferences`, as one string produced by
+`app::serialize_preferences` (`version=1;date=...;duration=...;zoom=...;shading=...`).
+`app::parse_preferences` is deliberately tolerant: an unknown key is ignored, a bad
+value keeps the default, and a missing key keeps the default, so an old or
+hand-edited defaults string can never stop the app from launching.
+
+That is a measured decision, not laziness. `docs/analysis/oracle/w10-oracle.md` §4
+measured Project's own stores: **the table's date format is a property of the table
+definition and is written into `114/Props`** (with Project's own `214/`/`Props14`
+churn), and there is **no exposed setter for the global date format, duration format
+or Gantt timescale** (`Application.DateFormat`/`DurationFormat` are conversion
+functions, `Application.Timescale`/`Options*` are dialog methods). Writing the
+per-table date format through `114/Props` would need a Props decoder this wave does
+not have, so **nothing about a preference is written into a `.mpp`** — the app does
+not fake file persistence. Working-day shading and the timescale are view state, and
+the duration rendering is the shell's own.
+
+## Dirty state, save and close prompts
+
+The document is **dirty exactly when a save would write something**: when a task's
+Start in the RecordSet differs from the file as loaded (`app::collect_start_edits`).
+That is the only edit `core/mppwrite` can persist, so it is the only edit that lights
+the window's edited dot — a renamed task or a changed Finish does not claim unsaved
+file changes. Clicking the close box (or Quit) with pending start edits asks **Save /
+Don't Save / Cancel**: Save goes through the normal save path (a cancelled panel or a
+writer failure keeps the window open), Don't Save discards, Cancel aborts the close.
+The prompt text says that only start dates are written and that the other edits are
+view-only.
+
+`File > Save` (Cmd-S) writes the edited starts to the **last save target**
+(`<name>-edited.mpp` until you choose another path); the first Save, and every
+`Save As…` (Cmd-Shift-S), shows an `NSSavePanel`. `app::save_start_edits` refuses
+`target == source` and reports rows written, the writer path, its notes and the
+target path in the status bar; a failure raises an alert and leaves the opened file
+untouched.
 
 ### What persists on save, and what does not
 
@@ -161,106 +274,108 @@ The one unrepresentable instant is 1983-12-31 00:00, which packs to 0, the file'
 
 Local, Windows MSVC 19.44, Release, `/W4 /permissive- /utf-8 /WX`
 (`-DCORE_WARNINGS_AS_ERRORS=ON`), 2026-10-22. Full standalone CMake build of `app/`
-(configure + `cmake --build build\vs-w38 --config Release`, no `--parallel`), then
+(configure + `cmake --build build\vs-w46 --config Release`, no `--parallel`), then
 `ctest`:
 
 ```
-1/3 Test #1: app_layout .....   Passed
-2/3 Test #2: app_selection ..   Passed
-3/3 Test #3: app_document ...   Passed
-100% tests passed, 0 tests failed out of 3
+1/7 Test #1: app_layout .....   Passed
+2/7 Test #2: app_selection ..   Passed
+3/7 Test #3: app_document ...   Passed
+4/7 Test #4: app_prefs ......   Passed
+5/7 Test #5: app_menu .......   Passed
+6/7 Test #6: app_filter .....   Passed
+7/7 Test #7: app_export .....   Passed
+100% tests passed, 0 tests failed out of 7
 
-app_layout_tests:      253 checks passed
-CORPUS: w3-o1: 4 tasks, 0 links (0 skipped), 0 summaries, 1 milestones, 1 critical
-CORPUS: holiday1: 3 tasks, 1 links (0 skipped), 0 summaries, 0 milestones, 2 critical
-CORPUS: project_a: 83 tasks, 88 links (0 skipped), 16 summaries, 10 milestones, 35 critical
-
-selection_model_tests:  90 checks passed
-document_tests:         43 checks passed
-SAVE: mppwrite::save_date_edits
-SAVE NOTE: uid 1: was manual; written as SNET and converted to auto-scheduled so Project
-           honours the date (manual scheduling is not preserved, measured 2026-10-22)
-SAVE NOTE: re-read from disk: uid 1 SNET 2026-03-02 08:00 at ConstraintType 4
+layout_model_tests:     253 checks passed
+selection_model_tests:   90 checks passed
+document_tests:          43 checks passed
+prefs_tests:             82 checks passed
+menu_tests:             457 checks passed
+filter_tests:            60 checks passed
+export_tests:            58 checks passed
+                                                 (1,043 checks in total)
 ```
 
 The build took the **W37 path** (`core/mppwrite/save.h` is present, so
-`document.cpp` compiles the single `mppwrite::save_date_edits` call), and the save
-round trip below ran through it. The same helper was also run through the fallback
-branch (`pin_task_start` + `CfbDocument::save`, 45 checks) while `core/mppwrite` was
-mid-edit; both are green, which is what the CMake switch exists for.
-
+`document.cpp` compiles the single `mppwrite::save_date_edits` call), and
 `document_tests` is a real end-to-end save: it loads
 `tests/data/synthetic-base.mpp`, edits a Start through `SheetModel` exactly as the
 keyboard does, writes to the build tree, re-reads the file with the .mpp reader and
 checks the task count, that the source fixture's size is unchanged (its SHA-256 still
 matches `tests/data/README.md`), that target == source is refused, that a cleared
-start writes nothing, and that an unknown uid fails without leaving a file. Its SNET
-type/date assertion is compiled only on the fallback branch — on the W37 branch the
-writer proves that itself by re-reading from disk (`SAVE NOTE` above), and the test
-prints what it read.
+start writes nothing, and that an unknown uid fails without leaving a file.
+
+`export_tests` writes real PDFs under `build\vs-w46\test-out` (sheet, Gantt, filtered,
+hours-style) and checks the `%PDF-` header, the `%%EOF` trailer, the page count, the
+printed row count, that two identical exports are byte-identical, that the hours
+rendering reaches the page, that the shading-off calendar makes Saturday and Sunday
+working days, and every failure path.
 
 **Verified** (on the Windows box): the date identity and its corpus round trip; the
 selection/collapse/edit/undo mapping; the save helper end to end on the synthetic
-fixture, through both writer branches; `app/`'s C++ compiles and links with the CI
-warning flags; `ctest` 3/3.
+fixture; the preference model and parser; the menu bar's structure and enablement;
+the filter model end to end; PDF export end to end; `app/`'s C++ compiles and links
+with the CI warning flags; `ctest` 7/7.
 
 **Inferred / to be proved by macOS CI**: that `main.mm` compiles, links and behaves.
-There is no Objective-C++ compiler on the development box. `.github/workflows/
-app-macos.yml` is that gate: configure `app/`, build `msproject_app.app` with
-`-Werror`, run the three tests, and assert the bundle executable exists and links
-AppKit + UniformTypeIdentifiers. No runner ever opens a window, so the actual
-interaction (a click, a keystroke, a panel) is verified by construction and by the
-pure helpers it calls — not by an automated UI test.
+There is no Objective-C++ compiler on the development box. `app-macos.yml` is that
+gate: configure `app/`, build `msproject_app.app` with `-Werror`, run the seven tests,
+and assert the bundle executable exists and links AppKit + UniformTypeIdentifiers.
+No runner ever opens a window, so the actual interaction (a click, a keystroke, a
+panel, a menu) is verified by construction and by the pure helpers it calls — not by
+an automated UI test.
 
 ## What the window does not do
 
-- **No clipboard**: `SheetModel::copy_selection`/`paste` exist and are tested in
-  `core/sheet`, but no menu item or NSPasteboard bridge is wired.
-- **No row insert/delete/move, no indent/outdent** (blocked on `RecordSet` having no
-  insert/erase/reorder — see `memory/sheet.md`), **no column resize/reorder**, no
-  fill handle.
+- **No Cut** (the sheet has copy/paste, not cut), **no row insert/delete/move, no
+  indent/outdent** (blocked on `RecordSet` having no insert/erase/reorder — see
+  `memory/sheet.md`), **no column resize/reorder** (only visibility), no fill handle.
 - **No IME/composition** in the in-cell editor: it is drawn by the view from
   `SheetModel::edit_text()` and fed by `NSEvent` characters, with a caret drawn as
   `|`. There is no selection within the cell and no cursor movement beyond backspace.
-  A real `NSTextField` editor is the replacement if that matters.
 - **No real project calendar**: shading is Saturday/Sunday only. `core/cal` can build
   the file's calendar and `GanttSource::calendar` accepts it; that join is not wired.
-- **No zoom, no printing, no multiple windows/files, no progress line** (only the
-  vertical status marker), no baseline bars, no split tasks, no summary-bar end
-  shapes beyond the approximation.
-- **No AppKit launch in CI**: the runner builds and links the bundle; it never opens
-  a window.
+- **No print dialog / paper settings**: Export PDF writes a report; there is no
+  `NSPrintOperation` and no page-setup UI.
+- **No multiple windows or multiple open files**; one document at a time.
+- **No selection highlight in the PDF**: the selected task is named in the footer,
+  not marked on the page (see Export PDF).
 - **No recalculated schedule**: editing a date does not re-run CPM; the Gantt and the
   status span follow the edited row values, and Project recalculates when it opens
   the saved file.
+- **The filter dialog authors one criterion per apply** (the model supports All/Any
+  trees of rules; the dialog does not build one yet).
 
 ## Two decisions worth knowing
 
-1. **The Gantt is rebuilt from visible rows, not panned.** `RowMap` is derived from
-   `SheetModel::visible_rows()` and `make_gantt_source_for_rows` builds the chart from
-   exactly those rows, so Gantt row N is visible ordinal N — the invariant the
-   drawing code relies on. A collapsed task has no bar and a link to it is dropped.
+1. **The Gantt is rebuilt from displayed rows, not panned.** `RowMap` is derived from
+   `SheetModel::visible_rows()`, restricted by the active filter, and
+   `make_gantt_source_for_rows` builds the chart from exactly those rows, so Gantt row
+   N is displayed ordinal N — the invariant the drawing code relies on. A collapsed
+   or filtered-out task has no bar and a link to it is dropped.
 2. **`app::kUidField`** (`0x0b4fff01`) is an app-private `RecordSet` field carrying
    the row's UniqueID for the UID column: the descriptor table has no
    `Task.UniqueID` (UniqueID is RecordSet identity, not a display field). The id is
    checked against `core/model/field_table.gen.cpp` to be unused and never goes near
-   a file.
+   a file. `app::kDurationTextField` (`0x0b4fff02`) is the same idea for the printed
+   duration text.
 
 ## Open, ranked
 
-1. **Selection fidelity on macOS** is unmeasured against the product: row band vs
+1. **Prove `main.mm` on macOS CI** — the whole AppKit surface (menus, Preferences
+   panel, filter dialog, export panel, dirty prompts, clipboard) is compile-unproven
+   here.
+2. **Selection fidelity on macOS** is unmeasured against the product: row band vs
    cell-only selection, and the disclosure box's exact look, are our choices.
-2. **A real in-cell text editor** (IME, cursor movement, selection) if the self-drawn
-   editor becomes limiting.
-3. **Clipboard wiring** (Cmd-C/Cmd-V over `ClipboardBlock::to_text/from_text`).
-4. **Two synced scroll views** (frozen sheet, horizontally scrolling Gantt) once
-   fidelity work starts; the one-scroll-view shell is still a first cut.
+3. **A real in-cell text editor** (IME, cursor movement, selection) if the
+   self-drawn editor becomes limiting.
+4. **Two synced scroll views** (frozen sheet, horizontally scrolling Gantt).
 5. **Real calendar shading** (`core/cal` → `GanttSource::set_calendar`), and the
    per-task calendar once the reader exposes it usefully.
-6. **Recalculation after an edit** — today the app shows the edit, Project
-   recalculates it on open; a CPM pass in the app would need `core/plan`.
-7. **Status date** should come from the file when the reader exposes it, not from
-   `today_date32()`.
+6. **Multi-rule filter UI** over the All/Any path that `filter_model` already builds
+   and tests.
+7. **Row insert/delete** when W45 lands a writer that can grow a table (then Insert ▸
+   Task can be enabled, and the reason it was greyed out goes away).
 8. **Non-date edits and saving**: Name/Finish/Duration persist nowhere. Only a writer
-   API for those fields (W37's `save_plan` writes recalculated rows, which is a
-   different, bigger operation) would change that.
+   API for those fields would change that.

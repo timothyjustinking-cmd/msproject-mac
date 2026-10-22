@@ -373,6 +373,22 @@ constexpr std::uint8_t kF2MetaFlagManual = 0x80;
  * only the fallback. */
 constexpr std::size_t kFixedMetaMilestoneByte = 10;
 constexpr std::uint8_t kFixedMetaFlagMilestone = 0x02;
+/* FixedMeta entry byte +0 is the row's state: 0x00 for a live row, 0x02 for a
+ * tombstone.  MEASURED 2026-10-22 (W45): corpus/probe/w10-adddel-back.mpp is
+ * Project's own file after Tasks.Add and then a delete; the deleted row keeps
+ * its FixedData slot, its Fixed2Data record and all 8 of its VarMeta entries,
+ * and only this byte changes 0x00 -> 0x02 (with the variable-field count at +2
+ * cleared to 0).  Project reports 5 tasks for it, not 6.  PROJECT_B stores 0x02 on
+ * exactly its 12 deleted slots (0x00 on the other 74); PROJECT_A and every other probe
+ * file store 0x00 on all of their rows.  Liveness must use this flag, not the
+ * presence of a VarMeta group -- see the liveness block in parse_document. */
+constexpr std::size_t kFixedMetaStateByte = 0;
+constexpr std::uint8_t kFixedMetaStateDeleted = 0x02;
+/* Per-row state-report sentinels for fixed_meta_coverage.  kStateNoMetaStream
+ * means "there is no readable FixedMeta, so the flag cannot decide"; the VarMeta
+ * group alone decides liveness then, as it did before W45. */
+constexpr std::int16_t kStateNoMetaEntry = -1;
+constexpr std::int16_t kStateNoMetaStream = -2;
 
 /* Task.Name: COM's PjFieldTaskName, the same id in analysis/field_id_map.tsv.
  * Evidence in the file header comment above. */
@@ -700,10 +716,14 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
                                       const std::vector<std::uint32_t>& uid_by_row,
                                       std::vector<std::string>& warnings,
                                       std::vector<std::uint32_t>* entry_offsets = nullptr,
-                                      std::vector<std::uint8_t>* row_flag_byte = nullptr) {
+                                      std::vector<std::uint8_t>* row_flag_byte = nullptr,
+                                      std::vector<std::int16_t>* row_state = nullptr) {
     std::vector<bool> covered(rows, false);
     if (row_flag_byte != nullptr) {
         row_flag_byte->assign(rows, 0);
+    }
+    if (row_state != nullptr) {
+        row_state->assign(rows, kStateNoMetaEntry);
     }
     const std::string path = "114/" + std::string(table) + "/FixedMeta";
     if (!cfb.has_stream(path)) {
@@ -714,6 +734,9 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
          * a deleted row, and returning all-false would drop the whole table
          * (Link and Assignment liveness read this vector). */
         std::fill(covered.begin(), covered.end(), true);
+        if (row_state != nullptr) {
+            std::fill(row_state->begin(), row_state->end(), kStateNoMetaStream);
+        }
         return covered;
     }
     std::vector<std::uint8_t> meta;
@@ -722,18 +745,27 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
     } catch (const Error& error) {
         warnings.emplace_back(std::string(label) + " FixedMeta is unreadable: " +
                               error.what());
+        if (row_state != nullptr) {
+            std::fill(row_state->begin(), row_state->end(), kStateNoMetaStream);
+        }
         return covered;
     }
     if (meta.size() < kFixedMetaHeaderSize) {
         warnings.emplace_back(std::string(label) + " FixedMeta is " +
                               std::to_string(meta.size()) +
                               " bytes, too short for its 16-byte header");
+        if (row_state != nullptr) {
+            std::fill(row_state->begin(), row_state->end(), kStateNoMetaStream);
+        }
         return covered;
     }
     if (u32_at(meta, 0) != kMetaMagic) {
         warnings.emplace_back(std::string(label) + " FixedMeta has magic " +
                               hex32(u32_at(meta, 0)) +
                               " instead of 0xfadfadba; its contents are not checked");
+        if (row_state != nullptr) {
+            std::fill(row_state->begin(), row_state->end(), kStateNoMetaStream);
+        }
         return covered;
     }
     const std::uint32_t declared = u32_at(meta, 8);
@@ -800,6 +832,9 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
         }
         offset_owner.emplace(offset, i);
         covered[row] = true;
+        if (row_state != nullptr) {
+            (*row_state)[row] = static_cast<std::int16_t>(meta[base + kFixedMetaStateByte]);
+        }
     }
     for (std::uint32_t row = 0; row < rows; ++row) {
         if (!covered[row]) {
@@ -1206,25 +1241,47 @@ Document parse_document(const CompoundFile& cfb) {
     const VarTable table = parse_var_meta(var_meta, var2, "Task", document.warnings);
     std::vector<std::uint32_t> task_meta_offsets;
     std::vector<std::uint8_t> task_meta_flag_bytes;
+    std::vector<std::int16_t> task_meta_state;
     const bool task_has_fixed_meta = cfb.has_stream("114/TBkndTask/FixedMeta");
     const std::vector<bool> fixed_meta_live =
         fixed_meta_coverage(cfb, "TBkndTask", "Task", kFixedHeaderSize, kFixedRowSize,
                             kFixedMetaEntrySize, kFixedMetaDescriptors, rows, uid_by_row,
-                            document.warnings, &task_meta_offsets, &task_meta_flag_bytes);
+                            document.warnings, &task_meta_offsets, &task_meta_flag_bytes,
+                            &task_meta_state);
 
-    /* Liveness, computed once: a row with no VarMeta group has no Name entry and
-     * MS Project does not report it (PROJECT_A row 67, uid 10856; PROJECT_B rows 1..12).
-     * Deleted tasks leave their FixedData slot and their Fixed2Data record
-     * behind, so the task loop and the outline walk must agree on which rows are
-     * live -- otherwise a deleted slot would consume an outline number. */
+    /* Liveness, computed once.  Two facts must both hold for a task row:
+     *
+     *   (a) it has a VarMeta group.  A row without one has no Name entry and MS
+     *       Project does not report it (PROJECT_A row 67, uid 10856; PROJECT_B rows
+     *       1..12).  Deleted tasks leave their FixedData slot and their
+     *       Fixed2Data record behind, so the task loop and the outline walk must
+     *       agree on which rows are live -- otherwise a deleted slot would
+     *       consume an outline number.
+     *
+     *   (b) its FixedMeta entry's +0 state byte is 0x00, not the 0x02 tombstone.
+     *       A delete does NOT remove the row's VarMeta group (Project's own
+     *       add-then-delete file, corpus/probe/w10-adddel-back.mpp, keeps all
+     *       8 entries for the deleted uid), so VarMeta presence alone reads a
+     *       tombstoned row as a live task: measured 6 tasks where Project
+     *       reports 5.  This is W45's reader fix; PROJECT_B (12 tombstones) and
+     *       PROJECT_A (none) are unchanged by it.
+     *
+     * When FixedMeta is absent or unreadable the state is unknown and the
+     * VarMeta group alone decides, exactly as before. */
+    std::vector<bool> has_var_group(rows, false);
     std::vector<bool> live_row(rows, false);
     live_row[0] = true;
     for (std::uint32_t row = 1; row < rows; ++row) {
         const std::uint32_t uid = uid_by_row[row];
-        const bool has_var_group = table.usable &&
-                                   (table.group_span.count(uid) != 0 ||
-                                    table.group_span.count(uid | kSecondaryUidFamily) != 0);
-        live_row[row] = !table.usable || has_var_group;
+        has_var_group[row] =
+            table.usable &&
+            (table.group_span.count(uid) != 0 ||
+             table.group_span.count(uid | kSecondaryUidFamily) != 0);
+        const std::int16_t state =
+            row < task_meta_state.size() ? task_meta_state[row] : kStateNoMetaEntry;
+        const bool state_live = state == kStateNoMetaStream ||
+                                state == static_cast<std::int16_t>(0);
+        live_row[row] = !table.usable || (has_var_group[row] && state_live);
     }
 
     /* ---- Outline: Fixed2Data's stored parent links -> level, number, summary. */
@@ -1257,15 +1314,31 @@ Document parse_document(const CompoundFile& cfb) {
             SkippedRow skipped;
             skipped.row = row;
             skipped.uid = uid;
+            const std::int16_t state = row < task_meta_state.size()
+                                           ? task_meta_state[row]
+                                           : kStateNoMetaEntry;
+            const bool tombstoned =
+                state == static_cast<std::int16_t>(kFixedMetaStateDeleted);
             skipped.reason =
-                "no VarMeta group (no Name entry): deleted row slot";
-            skipped.orphan_name = orphan_name_for_row(table, var2, row, uid_by_row);
-            std::string detail = "row " + std::to_string(row) + " (uid " +
-                                 std::to_string(uid) +
-                                 ") has no VarMeta group and is treated as a deleted row "
-                                 "slot, not a task";
-            if (!fixed_meta_live[row]) {
+                tombstoned ? "FixedMeta entry is a tombstone (+0 = 0x02): deleted row"
+                           : "no VarMeta group (no Name entry): deleted row slot";
+            if (!tombstoned) {
+                skipped.orphan_name = orphan_name_for_row(table, var2, row, uid_by_row);
+            }
+            std::string detail =
+                tombstoned
+                    ? "row " + std::to_string(row) + " (uid " + std::to_string(uid) +
+                          ") has FixedMeta's tombstone flag (+0 = 0x02) and is treated "
+                          "as a deleted row slot, not a task"
+                    : "row " + std::to_string(row) + " (uid " + std::to_string(uid) +
+                          ") has no VarMeta group and is treated as a deleted row "
+                          "slot, not a task";
+            if (!tombstoned && !fixed_meta_live[row]) {
                 detail += " (FixedMeta has no entry for it either)";
+            }
+            if (tombstoned && has_var_group[row]) {
+                detail += " (its VarMeta group is still present; Project ignores it "
+                          "because of the flag)";
             }
             if (!skipped.orphan_name.empty()) {
                 detail += "; the unreferenced Var2Data block between its neighbours "

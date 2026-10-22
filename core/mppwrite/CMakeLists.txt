@@ -30,6 +30,7 @@ add_library(core_mppwrite STATIC
     table.cpp
     row_writer.cpp
     save.cpp
+    add_delete.cpp
 )
 add_library(msproject::mppwrite ALIAS core_mppwrite)
 
@@ -82,9 +83,14 @@ if(MPPWRITE_BUILD_TESTS)
     # Tests never write into corpus/ (it is read-only for every stream); all
     # written fixtures go to the build tree.
     set(MPPWRITE_TEST_OUT "${CMAKE_CURRENT_BINARY_DIR}/test-out")
+    # W45 mirrors the add/delete fixtures here as well: the coordinator's brief
+    # names this in-tree build path, while ${CMAKE_CURRENT_BINARY_DIR}/test-out
+    # is where the top-level build puts them.  Both are git-ignored build output.
+    set(MPPWRITE_FIXTURE_MIRROR
+        "${MPPWRITE_REPO_ROOT}/core/mppwrite/build/vs-w45/test-out")
     foreach(path_var
             MPPWRITE_PROBE_DIR MPPWRITE_PROJECT_A_PATH MPPWRITE_PROJECT_B_PATH
-            MPPWRITE_TEST_DATA MPPWRITE_TEST_OUT)
+            MPPWRITE_TEST_DATA MPPWRITE_TEST_OUT MPPWRITE_FIXTURE_MIRROR)
         file(TO_CMAKE_PATH "${${path_var}}" ${path_var})
     endforeach()
 
@@ -100,6 +106,7 @@ if(MPPWRITE_BUILD_TESTS)
             MPPWRITE_PROJECT_B_PATH="${MPPWRITE_PROJECT_B_PATH}"
             MPPWRITE_TEST_DATA="${MPPWRITE_TEST_DATA}"
             MPPWRITE_TEST_OUT="${MPPWRITE_TEST_OUT}"
+            MPPWRITE_FIXTURE_MIRROR="${MPPWRITE_FIXTURE_MIRROR}"
         )
         add_test(NAME ${name} COMMAND ${name})
         set_tests_properties(${name} PROPERTIES
@@ -114,4 +121,14 @@ if(MPPWRITE_BUILD_TESTS)
     mppwrite_add_test(mppwrite_roundtrip_authority roundtrip_authority.cpp)
     mppwrite_add_test(mppwrite_roundtrip_manual roundtrip_manual_start.cpp)
     mppwrite_add_test(mppwrite_save_flow roundtrip_save_flow.cpp)
+    mppwrite_add_test(mppwrite_roundtrip_add_delete roundtrip_add_delete.cpp)
+    # W45's test also round-trips its own output through the independent core/mpp
+    # reader when the top-level build provides it.  The standalone core/mppwrite
+    # configure has no reader; the cross-check is then compiled out and the test
+    # still covers every byte-level claim.
+    if(TARGET core_mpp)
+        target_link_libraries(mppwrite_roundtrip_add_delete PRIVATE core_mpp)
+        target_compile_definitions(mppwrite_roundtrip_add_delete PRIVATE
+            MPPWRITE_HAVE_READER=1)
+    endif()
 endif()

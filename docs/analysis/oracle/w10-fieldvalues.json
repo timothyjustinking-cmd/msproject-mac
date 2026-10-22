@@ -1,0 +1,87 @@
+{
+  "case": "field-values",
+  "attempts": {
+    "Number1": "SetField ok",
+    "Number2": "SetField ok",
+    "Date1": "SetField com_error: (-2147352567, 'Exception occurred.', (0, None, \"The date you entered isn't supported for this field.\", None, 0, -2146827187), None) / attr ok",
+    "Flag1": "SetField ok",
+    "Text1": "SetField ok",
+    "Duration1": "SetField ok"
+  },
+  "read": [
+    {
+      "uid": 1,
+      "getfield": {
+        "Number1": "42.5",
+        "Number2": "3.25",
+        "Date1": "Mon 26/10/26",
+        "Flag1": "Yes",
+        "Text1": "alpha",
+        "Duration1": "1 day"
+      },
+      "attr": {
+        "Number1": 42.5,
+        "Number2": 3.25,
+        "Date1": "2026-10-26 08:00:00",
+        "Flag1": true,
+        "Text1": "alpha",
+        "Duration1": 480
+      }
+    },
+    {
+      "uid": 2,
+      "getfield": {
+        "Number1": "0",
+        "Number2": "0",
+        "Date1": "NA",
+        "Flag1": "No",
+        "Text1": "",
+        "Duration1": "0 days"
+      },
+      "attr": {
+        "Number1": 0.0,
+        "Number2": 0.0,
+        "Date1": "NA",
+        "Flag1": false,
+        "Text1": "",
+        "Duration1": 0
+      }
+    }
+  ],
+  "sizes": {
+    "mpp": 245760
+  },
+  "fixture": "corpus\\probe\\w10-fieldvalues.mpp",
+  "fields": [
+    {
+      "name": "Number1",
+      "field_id": "0x0b400057",
+      "value": 42.5
+    },
+    {
+      "name": "Number2",
+      "field_id": "0x0b400058",
+      "value": 3.25
+    },
+    {
+      "name": "Date1",
+      "field_id": "0x0b400109",
+      "value": "2026-10-26T08:00"
+    },
+    {
+      "name": "Flag1",
+      "field_id": "0x0b400048",
+      "value": "Yes"
+    },
+    {
+      "name": "Text1",
+      "field_id": "0x0b400033",
+      "value": "alpha"
+    },
+    {
+      "name": "Duration1",
+      "field_id": "0x0b400067",
+      "value": "1d"
+    }
+  ]
+}

@@ -103,6 +103,14 @@ std::size_t row_after(const RowMap& map, std::size_t row, int delta);
 // non-summary row, an out-of-range row, or an expand that changes nothing.
 bool toggle_row(core::sheet::SheetModel& sheet, std::size_t row);
 
+// Space in the sheet: toggles between the single focused cell and the WHOLE row
+// (every visible column) that contains it -- the "select the row, then go back"
+// toggle the brief asks for.  Returns true when the selection now covers the
+// whole row, false when it went back to one cell (or when there is no
+// selection, in which case nothing changed).  The original anchor cell is
+// restored on the way back, so a keyboard user never loses their column.
+bool toggle_row_selection(core::sheet::SheetModel& sheet);
+
 // Where the shell scrolls to show `row`: y and height in points from the top of
 // the document (header included), i.e. the rect main.mm hands to
 // -[NSView scrollRectToVisible:].  `valid` is false for a hidden row.

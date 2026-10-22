@@ -65,6 +65,7 @@ add_library(core_view STATIC
     view_set.cpp
     defaults.cpp
     table_registry.cpp
+    resource_tables.cpp
 )
 add_library(msproject::view ALIAS core_view)
 
@@ -95,6 +96,20 @@ if(VIEW_BUILD_TESTS)
 
     add_test(NAME view_model COMMAND view_model_tests)
     set_tests_properties(view_model PROPERTIES
+        WORKING_DIRECTORY "${VIEW_REPO_ROOT}"
+    )
+
+    # W43: the resource RecordSet builder and the measured resource table set
+    # (RT_RCDATA 311).  Additive to view_model_tests; owns no other file.
+    add_executable(resource_view_tests
+        "${VIEW_REPO_ROOT}/tests/resource_view_tests.cpp")
+    target_link_libraries(resource_view_tests PRIVATE core_view)
+    target_compile_features(resource_view_tests PRIVATE cxx_std_20)
+    set_target_properties(resource_view_tests PROPERTIES CXX_EXTENSIONS OFF)
+    view_set_warnings(resource_view_tests)
+
+    add_test(NAME resource_view COMMAND resource_view_tests)
+    set_tests_properties(resource_view PROPERTIES
         WORKING_DIRECTORY "${VIEW_REPO_ROOT}"
     )
 endif()

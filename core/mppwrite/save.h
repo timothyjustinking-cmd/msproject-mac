@@ -65,9 +65,11 @@
  *
  * WHAT THIS FILE DOES NOT DO.  It does not recalculate a schedule (that is
  * `save_plan`, which writes rows the caller's engine produced -- see
- * `recalculate_write_path`), does not create streams or rows (the writer cannot
- * add a directory entry or a table row; spec/mpp-writer.md §5, §10.4), and does
- * not regenerate `214/` (decision in spec §10.4).
+ * `recalculate_write_path`), does not create streams, and does not add or
+ * delete task rows: that is `add_delete.h` (W45), which grows or tombstones the
+ * six Task table streams and re-reads them from disk the same way.  The writer
+ * still cannot add a directory entry or a new stream (spec/mpp-writer.md §5.1).
+ * It does not regenerate `214/` (decision in spec §10.4).
  */
 
 #ifndef MPPWRITE_SAVE_H
