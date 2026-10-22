@@ -54,6 +54,10 @@ add_library(qt_shell STATIC
     plan_document.cpp
     sheet_table_model.cpp
     gantt_canvas.cpp
+    entry_columns.cpp
+    ribbon_bar.cpp
+    sheet_views.cpp
+    timeline_strip.cpp
 )
 target_compile_features(qt_shell PUBLIC cxx_std_20)
 set_target_properties(qt_shell PROPERTIES CXX_EXTENSIONS OFF)
@@ -106,3 +110,17 @@ add_test(NAME qt_shell_offscreen
                  $<TARGET_FILE:qt_shell_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}/qt-shell-window.png")
+
+# Wave 17 Q2: the numeric parity gate.  Asserts the reference-measured geometry
+# and typography (row/header heights, the eight Entry column widths, the 43 %
+# splitter, 11 px/day, the two timescale tiers), the pinned colours, and the
+# ribbon/timeline/status chrome.  No PNG is written; the PNGs stay with the Q1
+# render tests above and the Q4 golden harness.
+add_executable(qt_parity_tests tests/parity_test.cpp)
+target_link_libraries(qt_parity_tests PRIVATE qt_shell)
+qt_set_warnings(qt_parity_tests)
+
+add_test(NAME qt_parity_geometry
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_parity_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")

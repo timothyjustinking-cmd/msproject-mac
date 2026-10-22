@@ -9,6 +9,7 @@
 
 #include <cstddef>
 
+#include "entry_columns.h"
 #include "shell_style.h"
 
 namespace msqt {
@@ -22,9 +23,12 @@ QFont cell_font() {
 
 int alignment_for(core::sheet::CellAlign align) {
     switch (align) {
-        case core::sheet::CellAlign::Right: return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
-        case core::sheet::CellAlign::Center: return static_cast<int>(Qt::AlignHCenter | Qt::AlignVCenter);
-        case core::sheet::CellAlign::Left: break;
+        case core::sheet::CellAlign::Right:
+            return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
+        case core::sheet::CellAlign::Center:
+            return static_cast<int>(Qt::AlignHCenter | Qt::AlignVCenter);
+        case core::sheet::CellAlign::Left:
+            break;
     }
     return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
 }
@@ -51,11 +55,30 @@ std::size_t SheetTableModel::record_row(int display_row) const {
     return sheet_->visible_row(static_cast<std::size_t>(display_row));
 }
 
-std::size_t SheetTableModel::model_column(int display_column) const {
-    if (sheet_ == nullptr || display_column < 0) {
+std::size_t SheetTableModel::visible_column_for_field(core::view::FieldId field) const {
+    if (sheet_ == nullptr || field == 0) {
         return core::sheet::kNoIndex;
     }
-    return sheet_->visible_column(static_cast<std::size_t>(display_column));
+    const std::size_t count = sheet_->visible_column_count();
+    for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
+        const std::size_t column = sheet_->visible_column(ordinal);
+        if (column != core::sheet::kNoIndex && sheet_->column(column).field == field) {
+            return column;
+        }
+    }
+    return core::sheet::kNoIndex;
+}
+
+std::size_t SheetTableModel::model_column(int display_column) const {
+    if (sheet_ == nullptr || display_column <= kGutterColumn) {
+        return core::sheet::kNoIndex;  // the gutter has no model column
+    }
+    const std::vector<EntryColumn>& columns = entry_columns();
+    const int entry = display_column - 1;
+    if (entry < 0 || static_cast<std::size_t>(entry) >= columns.size()) {
+        return core::sheet::kNoIndex;
+    }
+    return visible_column_for_field(columns[static_cast<std::size_t>(entry)].field);
 }
 
 int SheetTableModel::rowCount(const QModelIndex& parent) const {
@@ -69,16 +92,32 @@ int SheetTableModel::columnCount(const QModelIndex& parent) const {
     if (sheet_ == nullptr || parent.isValid()) {
         return 0;
     }
-    return static_cast<int>(sheet_->visible_column_count());
+    return static_cast<int>(entry_columns().size()) + 1;  // + the 60 px gutter
 }
 
 QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
     if (sheet_ == nullptr || !index.isValid()) {
         return {};
     }
+    if (index.column() == kGutterColumn) {
+        // The row-number gutter: display ordinals 1..n, right-aligned like the
+        // reference's numbers at x ~ 44 of the 60 px gutter.
+        switch (role) {
+            case Qt::DisplayRole:
+                return index.row() + 1;
+            case Qt::TextAlignmentRole:
+                return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
+            case Qt::FontRole:
+                return cell_font();
+            default:
+                return {};
+        }
+    }
     const std::size_t row = record_row(index.row());
     const std::size_t column = model_column(index.column());
     if (row == core::sheet::kNoIndex || column == core::sheet::kNoIndex) {
+        // Indicators, Task Mode, Predecessors, Resource Names and the Add New
+        // Column stub hold no SheetModel value; the delegate paints the icons.
         return {};
     }
     switch (role) {
@@ -113,14 +152,15 @@ QVariant SheetTableModel::headerData(int section, Qt::Orientation orientation, i
     }
     if (orientation == Qt::Horizontal) {
         if (role == Qt::DisplayRole) {
-            if (section < 0) {
+            if (section == kGutterColumn) {
+                return QString();  // the gutter's header cell is blank
+            }
+            const std::vector<EntryColumn>& columns = entry_columns();
+            const int entry = section - 1;
+            if (entry < 0 || static_cast<std::size_t>(entry) >= columns.size()) {
                 return {};
             }
-            const std::size_t column = sheet_->visible_column(static_cast<std::size_t>(section));
-            if (column == core::sheet::kNoIndex) {
-                return {};
-            }
-            return QString::fromStdString(sheet_->column_title(column));
+            return QString::fromUtf8(columns[static_cast<std::size_t>(entry)].title);
         }
         if (role == Qt::TextAlignmentRole) {
             return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);

@@ -8,33 +8,57 @@
 #include <QColor>
 #include <QFileDialog>
 #include <QFont>
+#include <QFontDatabase>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QKeySequence>
 #include <QLabel>
+#include <QLayout>
+#include <QList>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QModelIndex>
 #include <QPalette>
+#include <QResizeEvent>
+#include <QScrollBar>
+#include <QShowEvent>
+#include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QSlider>
+#include <QSplitter>
 #include <QStatusBar>
+#include <QStringList>
 #include <QTableView>
+#include <QToolButton>
+#include <QVBoxLayout>
 #include <QWidget>
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
+#include "entry_columns.h"
 #include "gantt_canvas.h"
 #include "layout_model.h"
 #include "menus.h"
+#include "ribbon_bar.h"
 #include "selection_model.h"
+#include "sheet_views.h"
 #include "shell_style.h"
+#include "timeline_strip.h"
 
 namespace msqt {
 namespace {
+
+QString& font_family_storage() {
+    static QString family;
+    return family;
+}
 
 QFont fixed_font(int point_size) {
     QFont font = QApplication::font();
@@ -75,6 +99,10 @@ app::ZoomLevel stepped_zoom(app::ZoomLevel zoom, int delta) {
 
 }  // namespace
 
+QString& ui_font_family() { return font_family_storage(); }
+
+bool ui_font_is_carlito() { return ui_font_family() == QStringLiteral("Carlito"); }
+
 void configure_application() {
     // Fusion everywhere: the same widget painting on Windows, macOS and Linux.
     QApplication::setStyle(QStringLiteral("Fusion"));
@@ -84,16 +112,35 @@ void configure_application() {
     QPalette palette = QApplication::palette();
     palette.setColor(QPalette::Window, QColor(0xf0, 0xf0, 0xf0));
     palette.setColor(QPalette::WindowText, QColor(0x10, 0x10, 0x10));
-    palette.setColor(QPalette::Base, QColor(255, 255, 255));
-    palette.setColor(QPalette::AlternateBase, QColor(255, 255, 255));
+    palette.setColor(QPalette::Base, QColor(0xff, 0xff, 0xff));
+    palette.setColor(QPalette::AlternateBase, QColor(0xff, 0xff, 0xff));
     palette.setColor(QPalette::Text, QColor(0x10, 0x10, 0x10));
     palette.setColor(QPalette::Button, QColor(0xf0, 0xf0, 0xf0));
     palette.setColor(QPalette::ButtonText, QColor(0x10, 0x10, 0x10));
-    palette.setColor(QPalette::Highlight, QColor(0x33, 0x66, 0x99));
-    palette.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+    palette.setColor(QPalette::Highlight, kSelection);
+    palette.setColor(QPalette::HighlightedText, QColor(0x10, 0x10, 0x10));
     QApplication::setPalette(palette);
 
+    // The fixed family list (shell_style.h).  Carlito is preferred when it is
+    // installed; otherwise Calibri (the reference's own font) and then the
+    // open fallbacks.  If none is present the platform family is kept, and the
+    // handoff reports that.
+    QString family;
+    const QStringList available = QFontDatabase::families();
+    for (int index = 0; index < kFontFamilyCount; ++index) {
+        const QString candidate = QString::fromLatin1(kFontFamilies[index]);
+        if (available.contains(candidate, Qt::CaseInsensitive)) {
+            family = candidate;
+            break;
+        }
+    }
+    if (family.isEmpty()) {
+        family = QApplication::font().family();
+    }
+    font_family_storage() = family;
+
     QFont font = QApplication::font();
+    font.setFamily(family);
     font.setPointSize(kBodyPointSize);
     QApplication::setFont(font);
 }
@@ -101,6 +148,8 @@ void configure_application() {
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("MS Project Shell"));
     resize(kWindowWidth, kWindowHeight);
+    // The reference opens at the weekly timescale.
+    prefs_.zoom = app::ZoomLevel::week;
     build_central_widget();
     build_menus();
     build_status_bar();
@@ -122,17 +171,40 @@ MainWindow::~MainWindow() {
 
 void MainWindow::build_central_widget() {
     auto* central = new QWidget(this);
-    auto* layout = new QHBoxLayout(central);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(0);
+    auto* outer = new QVBoxLayout(central);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
 
-    const core::sheet::SheetMetrics metrics = app::default_sheet_metrics();
+    // Ribbon: tabs, groups and labelled buttons (structure and heights, text
+    // only; see ribbon_bar.h).
+    ribbon_ = new RibbonBar(central);
+    ribbon_->set_action_handler([this](app::MenuAction action) {
+        if (action == app::MenuAction::none) {
+            set_message("this ribbon command is not wired in the Qt shell yet (wave 17)",
+                        false);
+            update_status();
+            return;
+        }
+        handle_action(action);
+    });
+    outer->addWidget(ribbon_);
 
-    sheet_view_ = new QTableView(central);
+    // Timeline strip: Start/Finish at the ends, the timeline prompt centred.
+    timeline_ = new TimelineStrip(central);
+    outer->addWidget(timeline_);
+
+    // Sheet + Gantt split.  The splitter is the sheet's right edge: 43 % of the
+    // client width, with a visible drag thumb (sheet_views.h).
+    splitter_ = new SheetSplitter(central);
+    splitter_->setHandleWidth(kSplitHandleWidth);
+    connect(splitter_, &QSplitter::splitterMoved, this,
+            [this](int, int) { splitter_user_moved_ = true; });
+
+    sheet_view_ = new QTableView(splitter_);
     sheet_view_->setModel(&sheet_model_);
-    // Q1 shows the sheet; cell editing is Q2, so no edit trigger is enabled.
+    // Q1 shows the sheet; cell editing is Q2+ work, so no edit trigger is on.
     sheet_view_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    sheet_view_->setSelectionBehavior(QAbstractItemView::SelectItems);
+    sheet_view_->setSelectionBehavior(QAbstractItemView::SelectRows);
     sheet_view_->setSelectionMode(QAbstractItemView::SingleSelection);
     sheet_view_->setWordWrap(false);
     sheet_view_->setTextElideMode(Qt::ElideRight);
@@ -141,36 +213,46 @@ void MainWindow::build_central_widget() {
     sheet_view_->setAlternatingRowColors(false);
     sheet_view_->setCornerButtonEnabled(false);
     sheet_view_->setFrameShape(QFrame::NoFrame);
+    sheet_view_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     sheet_view_->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     sheet_view_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     sheet_view_->setFont(fixed_font(kBodyPointSize));
+    sheet_view_->setItemDelegate(new EntryItemDelegate(sheet_view_));
+    sheet_view_->setStyleSheet(QStringLiteral(
+        "QTableView { background: #ffffff; gridline-color: #d4d4d4;"
+        " selection-background-color: #dce9f5; selection-color: #101010; }"));
 
-    // The row height and header band come from the layout model, so a row in the
-    // sheet and a bar in the Gantt sit on the same 20 px line.
+    // The 42 px caption band (paint-only; the model still owns the section
+    // sizes).  The row-number gutter is model column 0, so the vertical header
+    // is hidden: the gutter scrolls with the columns and its cell borders join
+    // the sheet's grid, which is what the parity harness detects as the sheet's
+    // left edge.
+    auto* header = new SheetHeaderView(Qt::Horizontal, sheet_view_);
+    header->setFixedHeight(kSheetHeaderHeight);
+    header->setSectionResizeMode(QHeaderView::Interactive);
+    header->setStretchLastSection(false);
+    sheet_view_->setHorizontalHeader(header);
     sheet_view_->verticalHeader()->setVisible(false);
-    sheet_view_->verticalHeader()->setDefaultSectionSize(metrics.row_height);
-    sheet_view_->verticalHeader()->setMinimumSectionSize(metrics.row_height);
-    sheet_view_->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
-    sheet_view_->horizontalHeader()->setFixedHeight(metrics.header_height);
-    sheet_view_->horizontalHeader()->setStretchLastSection(false);
-    sheet_view_->horizontalHeader()->setHighlightSections(false);
-    sheet_view_->horizontalHeader()->setSectionsMovable(false);
+    sheet_view_->verticalHeader()->setDefaultSectionSize(kRowHeight);
+    sheet_view_->verticalHeader()->setMinimumSectionSize(kRowHeight);
+    sheet_view_->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
 
-    // One palette, built in code (docs/ui-qt-port.md section 2.1).
-    QPalette palette = sheet_view_->palette();
-    palette.setColor(QPalette::Base, QColor(255, 255, 255));
-    palette.setColor(QPalette::AlternateBase, QColor(255, 255, 255));
-    palette.setColor(QPalette::Text, QColor(0, 0, 0));
-    palette.setColor(QPalette::Highlight, QColor(0x33, 0x66, 0x99));
-    palette.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
-    sheet_view_->setPalette(palette);
+    QPalette sheet_palette = sheet_view_->palette();
+    sheet_palette.setColor(QPalette::Base, kSheetBackground);
+    sheet_palette.setColor(QPalette::Text, kBodyText);
+    sheet_palette.setColor(QPalette::Highlight, kSelection);
+    sheet_palette.setColor(QPalette::HighlightedText, kBodyText);
+    sheet_view_->setPalette(sheet_palette);
 
-    gantt_canvas_ = new GanttCanvas(central);
+    gantt_canvas_ = new GanttCanvas(splitter_);
     gantt_canvas_->set_shading(prefs_.working_day_shading);
 
-    layout->addWidget(sheet_view_, 0);
-    layout->addWidget(gantt_canvas_, 1);
-    central->setLayout(layout);
+    splitter_->addWidget(sheet_view_);
+    splitter_->addWidget(gantt_canvas_);
+    splitter_->setSizes(QList<int>{1, 1});
+    outer->addWidget(splitter_, 1);
+
+    central->setLayout(outer);
     setCentralWidget(central);
 
     // A click selects through the sheet model (the single source of truth), then
@@ -188,8 +270,13 @@ void MainWindow::build_central_widget() {
             return;
         }
         gantt_canvas_->set_selected_uid(doc_.selected_uid());
+        if (sheet_view_->viewport() != nullptr) {
+            sheet_view_->viewport()->update();
+        }
         update_menu_state();
     });
+
+    apply_split_fraction();
 }
 
 void MainWindow::build_menus() {
@@ -233,9 +320,139 @@ void MainWindow::build_status_bar() {
     status_message_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     status_message_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
+    // View buttons, as the reference's status bar has: Gantt Chart / Task
+    // Usage / Resource Sheet / Resource Usage.  They report until Q3 wires view
+    // switching, so a click is never silent.
+    auto* views = new QWidget(this);
+    auto* view_layout = new QHBoxLayout(views);
+    view_layout->setContentsMargins(4, 0, 4, 0);
+    view_layout->setSpacing(2);
+    const char* const names[4] = {"Gantt Chart", "Task Usage", "Resource Sheet",
+                                 "Resource Usage"};
+    for (int index = 0; index < 4; ++index) {
+        auto* button = new QToolButton(views);
+        button->setText(QString::fromLatin1(names[index]));
+        button->setCheckable(true);
+        button->setAutoExclusive(true);
+        button->setChecked(index == 0);
+        button->setAutoRaise(true);
+        button->setFont(fixed_font(kStatusPointSize - 1));
+        button->setFocusPolicy(Qt::NoFocus);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setFixedHeight(kStatusHeight - 6);
+        const QString label = QString::fromLatin1(names[index]);
+        connect(button, &QToolButton::clicked, this, [this, label](bool) {
+            set_message("view: " + label.toStdString() + " (view switching is not wired yet)",
+                        false);
+            update_status();
+        });
+        view_layout->addWidget(button);
+    }
+
+    // Zoom controls: the slider is wired to the same set_zoom() the menu's
+    // Day/Week/Month commands use.
+    auto* zoom_out = new QToolButton(this);
+    zoom_out->setText(QStringLiteral("\u2212"));
+    zoom_out->setAutoRaise(true);
+    zoom_out->setFont(fixed_font(kStatusPointSize));
+    zoom_out->setFocusPolicy(Qt::NoFocus);
+    zoom_out->setFixedWidth(18);
+    connect(zoom_out, &QToolButton::clicked, this,
+            [this](bool) { set_zoom(stepped_zoom(prefs_.zoom, -1)); });
+
+    zoom_slider_ = new QSlider(Qt::Horizontal, this);
+    zoom_slider_->setRange(static_cast<int>(app::ZoomLevel::day),
+                           static_cast<int>(app::ZoomLevel::month));
+    zoom_slider_->setSingleStep(1);
+    zoom_slider_->setPageStep(1);
+    zoom_slider_->setTickPosition(QSlider::TicksBelow);
+    zoom_slider_->setTickInterval(1);
+    zoom_slider_->setFixedWidth(104);
+    zoom_slider_->setFocusPolicy(Qt::NoFocus);
+    zoom_slider_->setFont(fixed_font(kStatusPointSize - 1));
+    connect(zoom_slider_, &QSlider::valueChanged, this, [this](int value) {
+        set_zoom(static_cast<app::ZoomLevel>(value));
+    });
+
+    auto* zoom_in = new QToolButton(this);
+    zoom_in->setText(QStringLiteral("+"));
+    zoom_in->setAutoRaise(true);
+    zoom_in->setFont(fixed_font(kStatusPointSize));
+    zoom_in->setFocusPolicy(Qt::NoFocus);
+    zoom_in->setFixedWidth(18);
+    connect(zoom_in, &QToolButton::clicked, this,
+            [this](bool) { set_zoom(stepped_zoom(prefs_.zoom, 1)); });
+
     statusBar()->setSizeGripEnabled(false);
     statusBar()->addWidget(status_summary_, 1);
+    statusBar()->addPermanentWidget(views, 0);
+    statusBar()->addPermanentWidget(zoom_out, 0);
+    statusBar()->addPermanentWidget(zoom_slider_, 0);
+    statusBar()->addPermanentWidget(zoom_in, 0);
     statusBar()->addPermanentWidget(status_message_, 0);
+    update_zoom_slider();
+
+    for (QToolButton* button : views->findChildren<QToolButton*>()) {
+        button->setToolTip(button->text());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Splitter geometry
+// ---------------------------------------------------------------------------
+
+void MainWindow::apply_split_fraction() {
+    if (splitter_ == nullptr || splitter_->count() < 2) {
+        return;
+    }
+    const int total = splitter_->width();
+    if (total <= kSplitHandleWidth + 160) {
+        return;
+    }
+    // The split's centre line sits at 43 % of the client width: the sheet is
+    // that width less half the handle, so the draggable thumb straddles 43 %.
+    const int sheet = std::max(160, static_cast<int>(std::lround(total * kSplitFraction)) -
+                                        kSplitHandleWidth / 2);
+    const int gantt = std::max(160, total - kSplitHandleWidth - sheet);
+    splitter_->setSizes(QList<int>{sheet, gantt});
+}
+
+bool MainWindow::table_widths_read() const { return doc_.table_widths_read(); }
+
+int MainWindow::table_column_chars(std::uint32_t table_field) const {
+    return doc_.table_column_chars(table_field);
+}
+
+double MainWindow::split_fraction() const {
+    if (splitter_ == nullptr || splitter_->count() < 2) {
+        return 0.0;
+    }
+    const QList<int> sizes = splitter_->sizes();
+    const int total = sizes[0] + sizes[1] + splitter_->handleWidth();
+    if (total <= 0) {
+        return 0.0;
+    }
+    return static_cast<double>(sizes[0]) / static_cast<double>(total);
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    if (!splitter_user_moved_) {
+        apply_split_fraction();
+    }
+}
+
+void MainWindow::showEvent(QShowEvent* event) {
+    QMainWindow::showEvent(event);
+    // The first show delivers the layout's real width; pin the split then too,
+    // so the measured fraction holds even when the window was constructed at
+    // its final size (the offscreen tests do exactly that).
+    if (centralWidget() != nullptr && centralWidget()->layout() != nullptr) {
+        centralWidget()->layout()->activate();
+    }
+    if (!splitter_user_moved_) {
+        apply_split_fraction();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +470,7 @@ bool MainWindow::open_file(const QString& path, QString* error) {
         configure_sheet();
         gantt_canvas_->set_layout(core::gantt::GanttLayout{});
         gantt_canvas_->set_selected_uid(0);
+        timeline_->set_dates(QString(), QString());
         setWindowTitle(QStringLiteral("MS Project Shell"));
         if (error != nullptr) {
             *error = QString::fromStdString(failure);
@@ -270,6 +488,17 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     gantt_canvas_->set_selected_uid(doc_.selected_uid());
     gantt_canvas_->set_shading(prefs_.working_day_shading);
 
+    const app::PlanSummary summary = doc_.summary();
+    if (!core::sched::is_na(summary.first_start) && !core::sched::is_na(summary.last_finish)) {
+        timeline_->set_dates(
+            QString::fromStdString(core::sheet::format_date_text(
+                app::date_value_from_date32(summary.first_start), doc_.format())),
+            QString::fromStdString(core::sheet::format_date_text(
+                app::date_value_from_date32(summary.last_finish), doc_.format())));
+    } else {
+        timeline_->set_dates(QString(), QString());
+    }
+
     const std::string title = doc_.title().empty() ? std::string("MS Project Shell") : doc_.title();
     setWindowTitle(QString::fromStdString(title) + QStringLiteral(" - ") + path);
 
@@ -277,34 +506,36 @@ bool MainWindow::open_file(const QString& path, QString* error) {
                     std::to_string(doc_.loaded().resources.size()) + " resource(s), " +
                     std::to_string(doc_.loaded().assignments.size()) + " assignment(s)",
                 false);
+    update_zoom_slider();
     update_menu_state();
     update_status();
     return true;
 }
 
 void MainWindow::configure_sheet() {
-    if (!doc_.has_document()) {
-        sheet_view_->setMinimumWidth(0);
+    if (sheet_view_ == nullptr) {
         return;
     }
-    const core::sheet::SheetMetrics metrics = app::default_sheet_metrics();
-    const int auto_width = metrics.char_width * 20;
-    int total = 0;
-    for (int display = 0; display < sheet_model_.columnCount(); ++display) {
-        const std::size_t column = sheet_model_.model_column(display);
-        int column_width = 0;
-        if (column != core::sheet::kNoIndex) {
-            // Widths are characters in the model; this is the one conversion to
-            // points (integer pixels, never font-dependent).
-            column_width = doc_.sheet()->column_width_points(column, metrics);
+    // Column widths come from the DATA: the file's `214/CTable` stores each
+    // column's width in characters (the first of its nine opaque bytes), and
+    // MS Project's column rule is one character = 6 px plus 3 px of padding.
+    // The stock Entry character widths are the fallback when the file has no
+    // CTable for the field (entry_columns.h).
+    sheet_view_->setMinimumWidth(0);
+    sheet_view_->setColumnWidth(kGutterColumn, kGutterWidth);
+    const std::vector<EntryColumn>& columns = entry_columns();
+    for (std::size_t index = 0; index < columns.size(); ++index) {
+        int chars = doc_.table_column_chars(columns[index].table_field);
+        if (chars <= 0) {
+            chars = columns[index].default_chars;
         }
-        if (column_width <= 0) {
-            column_width = auto_width;
+        int width = entry_width_px(chars);
+        if (width <= 0) {
+            width = columns[index].width;
         }
-        sheet_view_->setColumnWidth(display, column_width);
-        total += column_width;
+        sheet_view_->setColumnWidth(static_cast<int>(index) + 1, width);
     }
-    sheet_view_->setMinimumWidth(total + 1);
+    sheet_view_->verticalHeader()->setDefaultSectionSize(kRowHeight);
 }
 
 // The QTableView's own current index is not the sheet's selection (SheetModel
@@ -322,17 +553,9 @@ void MainWindow::sync_view_selection() {
     if (ordinal == core::sheet::kNoIndex) {
         return;
     }
-    int display_column = 0;
-    const core::view::FieldId name_field = app::name_field_id();
-    for (int index = 0; index < sheet_model_.columnCount(); ++index) {
-        const std::size_t column = sheet_model_.model_column(index);
-        if (column != core::sheet::kNoIndex && doc_.sheet()->column(column).field == name_field) {
-            display_column = index;
-            break;
-        }
-    }
+    const int name_column = entry_column_index(EntryCellKind::name) + 1;  // + gutter
     sheet_view_->setCurrentIndex(
-        sheet_model_.index(static_cast<int>(ordinal), display_column));
+        sheet_model_.index(static_cast<int>(ordinal), std::max(1, name_column)));
 }
 
 // ---------------------------------------------------------------------------
@@ -358,9 +581,36 @@ void MainWindow::set_message(std::string text, bool is_error) {
     message_is_error_ = is_error;
 }
 
+void MainWindow::update_zoom_slider() {
+    if (zoom_slider_ == nullptr) {
+        return;
+    }
+    const QSignalBlocker blocker(zoom_slider_);
+    zoom_slider_->setValue(static_cast<int>(prefs_.zoom));
+}
+
+std::string MainWindow::stored_widths_text() const {
+    // The `214/CTable` width byte (characters) for each Entry column, in sheet
+    // order.  A zero means the file/table did not carry that field.
+    std::string text;
+    for (const EntryColumn& column : entry_columns()) {
+        int chars = doc_.table_column_chars(column.table_field);
+        if (chars == 0 && column.kind == EntryCellKind::mode) {
+            // Some Entry tables carry the Indicators field (0x0b4000cd) in the
+            // mode slot; Report the first width that exists.
+            chars = doc_.table_column_chars(0x0b4000cd);
+        }
+        if (!text.empty()) {
+            text += "/";
+        }
+        text += std::to_string(chars);
+    }
+    return text;
+}
+
 std::string MainWindow::summary_text() const {
     if (!doc_.has_document()) {
-        return "No project open";
+        return "Ready";
     }
     const app::PlanSummary summary = doc_.summary();
     std::string text = std::to_string(summary.tasks) + " tasks, " +
@@ -382,8 +632,8 @@ std::string MainWindow::summary_text() const {
     text += "  |  " + std::to_string(doc_.warnings()) + " reader warnings";
     text += "  |  timescale " + std::string(app::zoom_level_name(prefs_.zoom)) + ", shading " +
             std::string(prefs_.working_day_shading ? "on" : "off");
-    if (!doc_.path().empty()) {
-        text += "  |  " + doc_.path();
+    if (doc_.table_widths_read()) {
+        text += "  |  Entry widths (chars) " + stored_widths_text();
     }
     return text;
 }
@@ -499,7 +749,7 @@ void MainWindow::handle_action(app::MenuAction action) {
         default:
             break;
     }
-    // Everything else belongs to Q2/Q3.  Say so, so a click is never silent;
+    // Everything else belongs to Q3.  Say so, so a click is never silent;
     // the menu item itself is enabled exactly as app::menu_model says.
     set_message(std::string("'") + app::menu_action_name(action) +
                     "' is not wired in the Qt shell yet (wave 17)",
@@ -527,7 +777,11 @@ void MainWindow::show_about() {
         this, QStringLiteral("About MS Project Shell"),
         QStringLiteral("MS Project Shell\n\nA personal three-platform port of MS Project.\n"
                        "Qt 6 Widgets over the portable app/ models.\n\n"
-                       "Opened file: ") +
+                       "UI font: ") +
+            ui_font_family() +
+            (ui_font_is_carlito() ? QStringLiteral(" (bundled metric-compatible)")
+                                  : QStringLiteral(" (fallback; Carlito not installed)")) +
+            QStringLiteral("\n\nOpened file: ") +
             QString::fromStdString(doc_.path().empty() ? std::string("(none)") : doc_.path()));
 }
 
@@ -536,13 +790,17 @@ void MainWindow::show_shortcuts() {
 }
 
 void MainWindow::set_zoom(app::ZoomLevel zoom) {
-    if (!doc_.has_document() || prefs_.zoom == zoom) {
+    if (prefs_.zoom == zoom) {
+        update_zoom_slider();
         return;
     }
     prefs_.zoom = zoom;
-    doc_.rebuild_views(prefs_.zoom);
-    gantt_canvas_->set_layout(doc_.gantt());
-    gantt_canvas_->set_selected_uid(doc_.selected_uid());
+    if (doc_.has_document()) {
+        doc_.rebuild_views(prefs_.zoom);
+        gantt_canvas_->set_layout(doc_.gantt());
+        gantt_canvas_->set_selected_uid(doc_.selected_uid());
+    }
+    update_zoom_slider();
     set_message(std::string("timescale ") + app::zoom_level_name(prefs_.zoom), false);
     update_status();
 }

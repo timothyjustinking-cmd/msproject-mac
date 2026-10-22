@@ -2,13 +2,19 @@
 
 #include "plan_document.h"
 
+#include <array>
 #include <cstddef>
 #include <exception>
 #include <filesystem>
+#include <string>
 #include <utility>
+#include <vector>
 
+#include "cfb_writer.h"
 #include "reader_adapter.h"
 #include "selection_model.h"
+#include "shell_style.h"
+#include "viewstate.h"
 
 namespace msqt {
 namespace {
@@ -24,6 +30,10 @@ std::size_t name_column_of(const core::sheet::SheetModel& sheet) {
     return 0;
 }
 
+// The four parts of `214/CTable`, the collection core/viewstate decodes.
+const char* const kTableParts[4] = {"214/CTable/FixedData", "214/CTable/FixedMeta",
+                                    "214/CTable/VarMeta", "214/CTable/Var2Data"};
+
 }  // namespace
 
 void PlanDocument::reset() {
@@ -34,6 +44,7 @@ void PlanDocument::reset() {
     format_ = core::sheet::SheetFormat{};
     row_map_ = app::RowMap{};
     gantt_ = core::gantt::GanttLayout{};
+    table_widths_.clear();
     path_.clear();
     title_.clear();
     warnings_ = 0;
@@ -70,6 +81,10 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
             sheet_->select_cell(sheet_->visible_row(0), name_column_of(*sheet_));
         }
 
+        // Read the persisted column widths (read-only; a decode failure only
+        // means the status line has no stored widths to report).
+        read_table_column_widths(source_path);
+
         build_gantt(zoom);
         return true;
     } catch (const std::exception& failure) {
@@ -94,11 +109,71 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
     // No status-date marker: app::today_date32() would make the offscreen render
     // change every day, and this wave's render must be deterministic.  Q2 can
     // add it once the golden harness pins a date.
-    gantt_ = core::gantt::build_gantt(source, app::default_gantt_style(),
-                                      app::timescale_for_zoom(view_, app::gantt_zoom(zoom)));
+    core::gantt::Timescale timescale = app::timescale_for_zoom(view_, app::gantt_zoom(zoom));
+    if (zoom == app::ZoomLevel::week) {
+        // The reference's weekly view: the *unit* stays week (so the header is a
+        // week tier), but its pixels-per-unit is the measured 24 px/day, and the
+        // day row starts on Sunday (MS Project's stock calendar week).  Snapping
+        // the origin to a Sunday also makes the chart's left edge a weekend
+        // column, as in the reference capture.
+        timescale.unit = core::gantt::TimescaleUnit::week;
+        timescale.week_start = 0;
+        timescale.pixels_per_unit = kPixelsPerWeek;
+    }
+    // The Gantt's row pitch must equal the sheet's 22 px rows, or the two halves
+    // drift apart one row-height style at a time.
+    core::gantt::GanttStyle style = app::default_gantt_style();
+    style.row_height = static_cast<double>(kRowHeight);
+    gantt_ = core::gantt::build_gantt(source, style, timescale);
 }
 
 void PlanDocument::rebuild_views(app::ZoomLevel zoom) { build_gantt(zoom); }
+
+void PlanDocument::read_table_column_widths(const std::string& source_path) {
+    table_widths_.clear();
+    try {
+        const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(source_path);
+        std::array<std::vector<std::uint8_t>, 4> raw;
+        for (std::size_t index = 0; index < raw.size(); ++index) {
+            if (!document.has_stream(kTableParts[index])) {
+                return;
+            }
+            raw[index] = document.read_stream(kTableParts[index]);
+        }
+        msproject::viewstate::PartSet parts;
+        parts.fixed_data = raw[0];
+        parts.fixed_meta = raw[1];
+        parts.var_meta = raw[2];
+        parts.var2_data = raw[3];
+
+        msproject::viewstate::ViewState state;
+        if (!msproject::viewstate::parse_view_state("CTable", parts, state, nullptr)) {
+            return;
+        }
+        if (state.tables.empty()) {
+            return;
+        }
+        for (const msproject::viewstate::ColumnDef& column : state.tables.front().columns) {
+            if (column.field_id == 0) {
+                continue;
+            }
+            table_widths_.emplace_back(column.field_id,
+                                       static_cast<int>(column.opaque_header[0]));
+        }
+    } catch (...) {
+        // A view-state decode is presentation metadata: never fail the load.
+        table_widths_.clear();
+    }
+}
+
+int PlanDocument::table_column_chars(std::uint32_t table_field) const {
+    for (const std::pair<std::uint32_t, int>& entry : table_widths_) {
+        if (entry.first == table_field) {
+            return entry.second;
+        }
+    }
+    return 0;
+}
 
 std::uint32_t PlanDocument::selected_uid() const {
     if (sheet_ == nullptr) {

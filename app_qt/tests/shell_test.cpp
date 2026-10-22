@@ -74,8 +74,8 @@ int main(int argc, char** argv) {
     if (window.sheet_view() != nullptr && window.sheet_view()->model() != nullptr) {
         check(window.sheet_view()->model()->rowCount() == 3,
               "the table model's row count is 3");
-        check(window.sheet_view()->model()->columnCount() == 7,
-              "the table model shows the 7 default columns");
+        check(window.sheet_view()->model()->columnCount() == 10,
+              "the table model shows the gutter plus the 9 Entry columns (wave 17 Q2)");
     } else {
         check(false, "the sheet view has a model");
     }

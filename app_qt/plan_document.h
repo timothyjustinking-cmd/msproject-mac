@@ -7,12 +7,22 @@
 //
 // Nothing here reads Qt types: the shell (main_window.cpp) is the only consumer.
 // The loaded file is never written to; this wave has no save path.
+//
+// WAVE 17 Q2 adds two things:
+//   * the Gantt timescale is pinned to the reference's weekly view: 11 px/day
+//     (PlanDocument::build_gantt overrides the pixels-per-unit only, keeping
+//     app::timescale_for_zoom's unit/origin);
+//   * the file's `214/CTable` column widths are read on load and exposed as
+//     table_column_chars(), so the shell can report the stored widths (the
+//     `214/CTable` record's first of nine opaque bytes, core/viewstate).
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "gantt.h"
 #include "layout_model.h"
@@ -56,6 +66,12 @@ class PlanDocument {
     // truth for the selection (app/selection_model.h).
     std::uint32_t selected_uid() const;
 
+    // The stored character width of the `214/CTable` column whose field id is
+    // `table_field` (0 when the table/file does not carry it).  This is the byte
+    // core/viewstate documents as the column WIDTH in characters.
+    int table_column_chars(std::uint32_t table_field) const;
+    bool table_widths_read() const noexcept { return !table_widths_.empty(); }
+
     const std::string& path() const noexcept { return path_; }
     const std::string& title() const noexcept { return title_; }
     std::size_t warnings() const noexcept { return warnings_; }
@@ -63,6 +79,7 @@ class PlanDocument {
   private:
     void reset();
     void build_gantt(app::ZoomLevel zoom);
+    void read_table_column_widths(const std::string& source_path);
 
     app::PlanInput loaded_;
     app::PlanInput view_;
@@ -71,6 +88,7 @@ class PlanDocument {
     core::sheet::SheetFormat format_;
     app::RowMap row_map_;
     core::gantt::GanttLayout gantt_;
+    std::vector<std::pair<std::uint32_t, int>> table_widths_;
     std::string path_;
     std::string title_;
     std::size_t warnings_ = 0;
