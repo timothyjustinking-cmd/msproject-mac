@@ -1,0 +1,47 @@
+# qt-linux -- the three-platform shell (app_qt) on the cheapest runner.
+#
+# The shell is Qt 6 Widgets; the operator has no Mac, so Linux is where the UI
+# gets compiled and its golden image is compared.  Windows and macOS jobs join
+# this file once the Linux job is stable (docs/ui-qt-port.md §4).
+#
+# Runs on demand or a version tag, like the other workflows: a public repo's
+# minutes are free, but a deliberate run is still easier to reason about.
+
+name: qt-linux
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-qt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt 6 (Widgets) and a headless platform plugin
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qt6-base-dev libgl1-mesa-dev libxkbcommon-dev
+
+      - name: Configure
+        run: cmake -S app_qt -B build-qt -DCMAKE_BUILD_TYPE=Release -DCORE_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build-qt --config Release
+
+      - name: Test (offscreen render)
+        run: ctest --test-dir build-qt --output-on-failure
+
+      - name: Upload the rendered window
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-window-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            build-qt/qt-render-smoke.png
