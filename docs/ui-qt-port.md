@@ -91,3 +91,43 @@ SmartScreen warnings matter, nothing for Linux.
 - **Native menu bar** cannot be pixel-identical on macOS; documented exception.
 - **Obsolete AppKit risk**: the old shell must not be half-migrated. Delete it
   once the Qt shell is green on macOS, not before.
+
+
+## 7. Benchmark change (2026-10-23): MS Project itself is the target
+
+The requirement is now stricter than "the three builds look the same as each
+other": **all three must match MS Project as installed on this machine**. The
+reference is captured directly from it:
+
+* `corpus/bench/msproject-gantt.png` — the Gantt view with the Entry table,
+  1920x1032 client area (git-ignored: it is a third-party UI screenshot, never
+  commit it, and never publish it);
+* `scripts/msproj_bench.py` — re-captures it under the oracle lock;
+* `scripts/parity_report.py` (P1) — measures both images and scores the Qt render
+  against the reference (column widths, row/header heights, splitter fraction,
+  day width, tier count, colours) with explicit tolerances;
+* `docs/parity.md` — the measured baseline those numbers are held to.
+
+**What "identical" means here, in order of fidelity:**
+
+1. **Geometry and typography** (measurable, the P1 harness scores it): column set
+   and widths, row and header heights, splitter position, timescale density and
+   tiers, fonts and point sizes, colours, grid and shading.
+2. **Structure**: ribbon tabs/groups/buttons in MS Project's order, timeline
+   strip, row gutter, Task Mode column, "Add New Column", status bar with view
+   buttons and zoom slider.
+3. **Behaviour**: editing, selection, scrolling, zoom, splitter drag, dialogs.
+4. **Everything else**: the full view set and every dialog.
+
+**Two limits, stated rather than discovered later:**
+
+* **Icons and artwork are ours.** We must not copy Microsoft's icon bitmaps,
+  ribbon images or font files. Structure, labels, geometry and behaviour are
+  matched; glyphs are original approximations. This is the one place the UI will
+  not be pixel-identical.
+* **Identity is ours too.** Window title, About box and bundle name say this is a
+  personal port, not MS Project.
+
+**Consequence for the plan:** the parity score becomes a per-screen gate (sheet,
+Gantt, ribbon, each dialog, each view), and `main.mm` retires only when the Qt
+shell passes the scored suite on macOS — not merely when it compiles.
