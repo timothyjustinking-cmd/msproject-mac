@@ -20,6 +20,7 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QItemSelection>
 #include <QItemSelectionModel>
 #include <QKeyEvent>
@@ -71,6 +72,7 @@
 #include "entry_columns.h"
 #include "export_pdf.h"
 #include "field_link_edits.h"
+#include "fields_model.h"  // app::read_file_formulas (the definition dialog)
 #include "filter_model.h"
 #include "gantt_canvas.h"
 #include "layout_model.h"
@@ -81,6 +83,7 @@
 #include "project_dialogs.h"     // app::ProjectInformation (wave 26 G5)
 #include "project_dialogs_qt.h"  // the Project tab's dialogs
 #include "reader.h"
+#include "reader_adapter.h"  // app::props_stream_from_file
 #include "ribbon_bar.h"
 #include "selection_model.h"
 #include "sheet_views.h"
@@ -1657,12 +1660,14 @@ void MainWindow::handle_action(app::MenuAction action) {
             delete_task();
             return;
         case app::MenuAction::task_fields:
-            // Wave 23 (B-13): Task > Information is Task Information now; the
-            // old Task Fields dialog is the Custom Fields command.
+            // Wave 23 (B-13): Task > Information is Task Information now.
             show_task_information();
             return;
         case app::MenuAction::custom_fields:
-            show_task_fields();
+            // Wave 26 (W26-5.3): the Custom Fields command is the field
+            // DEFINITION dialog; per-task values are Task Information's Custom
+            // Fields tab.
+            show_custom_fields();
             return;
         case app::MenuAction::predecessors:
             show_predecessors();
@@ -2538,6 +2543,64 @@ void MainWindow::show_task_fields() {
     update_status();
 }
 
+void MainWindow::show_custom_fields() {
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    // The Task fields whose storage the port knows, with the file's stored
+    // formulas attached; Project's Resource/Project scopes are laid out and
+    // disabled in the dialog.
+    std::vector<app::CustomFieldDefinition> fields = app::custom_field_definitions();
+    app::attach_custom_field_formulas(fields, app::props_stream_from_file(doc_.path()));
+
+    CustomFieldsDialog dialog(std::move(fields), this);
+    dialog.set_formula_editor([this](std::uint32_t field_id,
+                                     const QString& current) -> QString {
+        bool accepted = false;
+        const QString text = QInputDialog::getText(
+            this, QStringLiteral("Custom Field Formula"),
+            QStringLiteral("Formula for field 0x%1 (Project syntax, e.g. "
+                           "[Duration]/240):")
+                .arg(static_cast<qulonglong>(field_id), 8, 16, QChar('0')),
+            QLineEdit::Normal, current, &accepted);
+        if (!accepted) {
+            return QString();  // null = cancelled, nothing queued
+        }
+        return text;
+    });
+    if (dialog.exec() != QDialog::Accepted) {
+        set_message("custom fields cancelled", false);
+        update_status();
+        return;
+    }
+    if (!dialog.has_formula_edit()) {
+        set_message("no custom-field definition changed", false);
+        update_status();
+        return;
+    }
+    if (!document_) {
+        document_ = std::make_unique<app::Document>(doc_.path());
+    }
+    std::string error;
+    if (!document_->apply_custom_formula(dialog.formula_edit().field_id,
+                                         dialog.formula_edit().formula, &error)) {
+        QMessageBox::warning(this, QStringLiteral("Could not set the formula"),
+                             to_q(error));
+        set_message("the custom-field formula was refused: " + error, true);
+        update_status();
+        return;
+    }
+    update_window_title();
+    update_menu_state();
+    set_message("queued the formula for field 0x" +
+                    QString::number(dialog.formula_edit().field_id, 16).toStdString() +
+                    "; File > Save writes it",
+                false);
+    update_status();
+}
+
 void MainWindow::show_predecessors() {
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("Predecessors is available in the Task Sheet view", false);
@@ -3325,6 +3388,18 @@ bool MainWindow::task_information_values(TaskInformationValues* out) const {
             break;
         }
     }
+    // Wave 26 (W26-5.3): the Custom Fields tab's six stored values.  The row is
+    // resolved by UID (never by RecordSet row); an unstored field reads "".
+    out->custom_field_ids.clear();
+    out->custom_field_texts.clear();
+    const app::TaskRow* task = doc_.task_by_uid(selected.uid);
+    if (task != nullptr) {
+        for (const app::TaskFieldSpec& spec : app::task_field_specs()) {
+            out->custom_field_ids.push_back(spec.field_id);
+            out->custom_field_texts.push_back(
+                app::field_value_text(*task, spec.field_id, doc_.format()));
+        }
+    }
     return true;
 }
 
@@ -3391,8 +3466,48 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
         }
         applied = applied || outcome.changed;
     }
+
+    // Wave 26 (W26-5.3): the Custom Fields tab's six stored values, moved here
+    // from the old Task Fields command.  app::make_task_field_edits parses the
+    // texts and produces set_field/clear_field edits; the shared save cascade
+    // writes them.  A parse error refuses the whole tab (decision 15: never a
+    // partial, silently dropped edit).
+    bool structural_applied = false;
+    if (ok && !values.custom_field_ids.empty()) {
+        const app::TaskRow* row = doc_.task_by_uid(selected.uid);
+        std::vector<app::TaskFieldInput> inputs;
+        inputs.reserve(values.custom_field_ids.size());
+        for (std::size_t index = 0; index < values.custom_field_ids.size(); ++index) {
+            inputs.push_back(app::TaskFieldInput{
+                values.custom_field_ids[index],
+                index < values.custom_field_texts.size() ? values.custom_field_texts[index]
+                                                         : std::string()});
+        }
+        std::vector<app::StructuralEdit> field_edits;
+        std::string field_error;
+        if (row == nullptr ||
+            !app::make_task_field_edits(*row, inputs, doc_.format(), field_edits,
+                                        field_error)) {
+            ok = false;
+            set_message("task information: " +
+                            (field_error.empty() ? std::string("no task row")
+                                                 : field_error),
+                        true);
+        } else {
+            for (const app::StructuralEdit& edit : field_edits) {
+                structural_.push(edit);
+            }
+            structural_applied = !field_edits.empty();
+        }
+    }
+
     if (ok) {
-        if (applied) {
+        if (structural_applied) {
+            structural_.clear_redo();
+            // Rebuilds the display plan from the custom-field edits and folds
+            // the general cell edits back through without_structural_edits.
+            after_structural_change(selected.uid);
+        } else if (applied) {
             structural_.clear_redo();
             after_cell_change();
         }

@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "cal.h"
+#include "field_value.h"  // mpp::custom_field_id / storage measured
+#include "fields_model.h"  // app::read_file_formulas
 
 namespace app {
 namespace {
@@ -283,6 +285,54 @@ bool load_working_time(const std::string& mpp_path, std::string_view calendar_na
 const std::vector<std::string>& working_time_weekday_header() {
     static const std::vector<std::string> kHeader = {"M", "T", "W", "Th", "F", "S", "S"};
     return kHeader;
+}
+
+std::vector<CustomFieldDefinition> custom_field_definitions() {
+    struct Family {
+        mpp::FieldKind kind;
+        const char* name;
+        unsigned count;
+    };
+    static const Family kFamilies[] = {
+        {mpp::FieldKind::duration, "Duration", mpp::kDurationFieldCount},
+        {mpp::FieldKind::cost, "Cost", mpp::kCostFieldCount},
+        {mpp::FieldKind::date, "Date", mpp::kDateFieldCount},
+        {mpp::FieldKind::flag, "Flag", mpp::kFlagFieldCount},
+        {mpp::FieldKind::number, "Number", mpp::kNumberFieldCount},
+        {mpp::FieldKind::text, "Text", mpp::kTextFieldCount},
+    };
+    std::vector<CustomFieldDefinition> fields;
+    for (const Family& family : kFamilies) {
+        for (unsigned index = 1; index <= family.count; ++index) {
+            const std::uint32_t id = mpp::custom_field_id(family.kind, index);
+            if (id == 0) {
+                continue;
+            }
+            CustomFieldDefinition field;
+            field.field_id = id;
+            field.name = std::string(family.name) + std::to_string(index);
+            field.kind_name = family.name;
+            field.storage_measured = mpp::custom_field_storage_measured(family.kind, index);
+            fields.push_back(std::move(field));
+        }
+    }
+    return fields;
+}
+
+void attach_custom_field_formulas(std::vector<CustomFieldDefinition>& fields,
+                                  const std::vector<std::uint8_t>& props_bytes) {
+    if (props_bytes.empty()) {
+        return;
+    }
+    const FormulaColumnSet set = read_file_formulas(props_bytes);
+    for (CustomFieldDefinition& field : fields) {
+        for (const FormulaColumn& column : set.columns) {
+            if (column.field == field.field_id) {
+                field.formula = column.formula;
+                break;
+            }
+        }
+    }
 }
 
 bool project_has_actual_values(const PlanInput& plan) noexcept {    if (plan.project_percent_complete != 0) {

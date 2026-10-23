@@ -327,6 +327,10 @@ class MainWindow final : public QMainWindow {
     void print_plan();
     void save_as_pdf();
     void show_task_fields();
+    // W26-5.3: the field-definition dialog (per-task values moved to Task
+    // Information's Custom Fields tab).  The formula result is queued on
+    // app::Document and written by the 114/Props writer at Save.
+    void show_custom_fields();
     void show_predecessors();
     void show_filter_dialog();
     void clear_filter();

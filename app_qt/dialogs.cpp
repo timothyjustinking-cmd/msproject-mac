@@ -909,10 +909,6 @@ TaskInformationDialog::TaskInformationDialog(const TaskInformationValues& curren
          "are not decoded into an editable model yet.",
          "Set Constraint"},
         {"Notes", "Task notes are not written by this port yet.", "Add Notes"},
-        {"Custom Fields",
-         "Custom field values are edited by Task > Custom Fields...; this tab is "
-         "read-only.",
-         "Custom Fields"},
     };
     for (const TabSpec& spec : specs) {
         auto* page = new QWidget(tabs_);
@@ -935,6 +931,44 @@ TaskInformationDialog::TaskInformationDialog(const TaskInformationValues& curren
         tabs_->addTab(page, QString::fromUtf8(spec.title));
     }
 
+    // --- Custom Fields (wave 26, W26-5.3) ----------------------------------
+    // The per-task values that used to be the Custom Fields command.  The six
+    // fields are the ones whose storage is measured (app::task_field_specs);
+    // OK turns changed texts into set_field/clear_field edits, written by the
+    // shared save cascade.
+    {
+        auto* page = new QWidget(tabs_);
+        auto* page_layout = new QVBoxLayout(page);
+        page_layout->setContentsMargins(kMargin / 2, kMargin / 2, kMargin / 2, kMargin / 2);
+        page_layout->setSpacing(kSpacing);
+        QFormLayout* custom_form = make_form();
+        for (std::size_t index = 0; index < values_.custom_field_ids.size(); ++index) {
+            const app::TaskFieldSpec* spec =
+                app::task_field_spec(values_.custom_field_ids[index]);
+            if (spec == nullptr) {
+                continue;
+            }
+            auto* edit = new QLineEdit(page);
+            edit->setFixedSize(kFieldWidth, kControlHeight);
+            edit->setObjectName(
+                QStringLiteral("customField%1").arg(static_cast<qulonglong>(spec->field_id)));
+            edit->setText(index < values_.custom_field_texts.size()
+                              ? to_q(values_.custom_field_texts[index])
+                              : QString());
+            custom_form->addRow(make_form_label(page, to_q(spec->title) + QStringLiteral(":")),
+                                edit);
+            custom_field_inputs_.push_back(edit);
+        }
+        page_layout->addLayout(custom_form);
+        page_layout->addWidget(make_hint(
+            page, size,
+            QStringLiteral("These are the six custom fields whose file storage is "
+                           "measured.  A blank value clears a stored value; a changed "
+                           "value is queued and written by Save.")));
+        page_layout->addStretch(1);
+        tabs_->addTab(page, QStringLiteral("Custom Fields"));
+    }
+
     outer->addWidget(tabs_, 1);
     outer->addWidget(make_button_box(*this));
 }
@@ -944,6 +978,10 @@ void TaskInformationDialog::accept() {
     values_.duration_text = duration_->text().toStdString();
     values_.start_text = start_->text().toStdString();
     values_.finish_text = finish_->text().toStdString();
+    values_.custom_field_texts.clear();
+    for (QLineEdit* edit : custom_field_inputs_) {
+        values_.custom_field_texts.push_back(edit->text().toStdString());
+    }
     QDialog::accept();
 }
 
