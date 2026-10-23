@@ -4,12 +4,13 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Current (wave 21, in progress)
+## Wave 21 (closed — the current gate)
 
 | file | what |
 |---|---|
-| `wave21-brief.md` | wave-21 scope, owners, gates, operator decisions (CURRENT) |
-| `q6.md` | Q6 stored-table rendering + operator fixes (CURRENT, in flight) |
+| `wave21-complete.md` | **the wave-21 gate**: numbers, packages, the 16-decision scoreboard, open items |
+| `wave21-brief.md` | wave-21 scope, owners, gates, operator decisions |
+| `q6.md` | Q6 stored-table rendering + the operator fixes |
 | `e6.md` | E6 mppwrite CFB slack; MSO rule measured, not scored (wave 21) |
 | `ci3.md` | C6 parallel Linux build, validator output (wave 21) |
 | `coordinator.md` | the current coordinator handoff (wave-20 final; wave-21 section appended at the close) |
@@ -62,3 +63,9 @@ scheduling, schedcore, codegen, ci, qt, f1/e2/q2/a1/b1).
   prompt; `docs/START-HERE.md` replaces it.
 * `docs/archive/WAVES-coordination-board-wave7.md` — the old branch/
   worktree coordination board (45 KB).
+
+## Wave 22 (not started)
+
+No brief yet.  Its scope comes from `wave21-complete.md` "Open items": ribbon
+inventories (decision 1) first, then stored-column values/bar styles and the
+new-task mode, then dialogs 14/15, split view 16 and dark surfaces 10.

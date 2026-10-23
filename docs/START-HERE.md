@@ -1,30 +1,30 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-10-23 ~16:10, wave 21 in progress.  Keep this file current at
+_Updated 2026-10-23 ~16:50, wave 21 closed.  Keep this file current at
 every wave close; it is the only file a new session must read first._
 
 ## The 30-second state
 
-* `main` = **d51ab41**, pushed.  Wave 21 is **in progress** (no
-  `docs/handoff/wave21-complete.md` yet).
-* Committed this wave: **C6** (`e691794`, parallel Linux build), **E6**
-  (`d51ab41`, mppwrite CFB slack; MSO rule measured but not scored).
-  **Q6 is running**: the loaded table's stored columns, then the operator's
-  fixes (menu bar, backstage arrow, double-click Task Information, palette).
-* Last measured gates: ctest `-E plan_recalc` **50/50**, M2 **332/332**,
-  engine **7/8**, app_qt **11/11**, UI parity **9/9** (the app_qt numbers
-  predate Q6's changes and must be re-run).
-* Next: verify + commit Q6, full gates, **one** CI dispatch, then
-  `docs/handoff/wave21-complete.md` and the coordinator/roadmap updates.
+* `main` = **0f5920a** (wave 21's code; the docs close follows it), pushed.
+  **Wave 21 is closed** — `docs/handoff/wave21-complete.md` is the gate.
+* CI run **39904570421** is green on Windows, macOS and Linux (13/13 tests each)
+  with the three packages (Windows zip, macOS `.app`, Linux AppImage) and the
+  three 1920x1032 renders at 9/9 parity.
+* Engine parity **7/8**: `constraint-mso`'s save-time word is measured and
+  pinned but deliberately not scored.
+* **Wave 22 is not started.**  Its first job, from the wave-21 gate: rebuild the
+  seven ribbon tab inventories (decision 1) from the clean MS Project strips in
+  the local reference set.
 
 ## Reading order
 
-**Coordinator** (≈5 files, not more):
+**Coordinator starting wave 22** (≈5 files, not more):
 
 1. this file;
-2. `docs/handoff/wave21-brief.md` — the current wave's scope, owners, gates;
+2. `docs/handoff/wave21-complete.md` — the last gate, the decision scoreboard and
+   the ranked open items (the wave-22 scope comes from here);
 3. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
-4. `docs/handoff/wave20-complete.md` — the last wave gate + decision scoreboard;
+4. `docs/ui-reference-set.md` — where the clean per-tab captures live;
 5. `memory/coordinator.md` — the compact current memory.
 
 **Lane agent** (≈4 files):
