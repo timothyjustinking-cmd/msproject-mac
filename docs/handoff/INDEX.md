@@ -4,7 +4,15 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Wave 22 (closed — the current gate)
+## Wave 23 (open — the audit work order)
+
+| file | what |
+|---|---|
+| `wave23-brief.md` | **the work order**: W23-1..22 in order, verifier corrections, the gate, operator rulings |
+| `audit-w22-findings.md` | the 2026-10-23 adversarial + parity audit of wave 22: A-1..12, B-1..14, the re-scored 16 decisions, re-run recipe |
+| `audit-w22/` | per-lane evidence (A2 ribbon, A3 S6 oracle, A4 engine score, A5 E7 evidence, A7 fixtures, A8 UI parity gate) and the audit register |
+
+## Wave 22 (closed — audited; see wave 23)
 
 | file | what |
 |---|---|

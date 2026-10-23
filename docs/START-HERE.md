@@ -14,18 +14,23 @@ every wave close; it is the only file a new session must read first._
   mode** decoded from props `0x024013c8`.
 * Engine stays **7/8** by design until the MSO save-time word reaches the
   production save path.
-* **Wave 23 is not started.**  Its first job: restore reachability through the
-  backstage (About and Keyboard Shortcuts are mouse-unreachable after the
-  inventory change), then Flag10/SUMMARY, the dialog inventory and the split
-  view.
+* **Wave 22 was audited on 2026-10-23** (`docs/handoff/audit-w22-findings.md`):
+  the scheduling numbers reproduce, but the loaded file renders in the wrong
+  task order with no outline (B-1), "9/9 UI parity" and S6's "independent
+  oracle" do not test what they claim (A-1, A-2), and the 16-decision scoreboard
+  is re-scored there.  Read it before trusting any number above.
+* **Wave 23 = the audit work order:** `docs/handoff/wave23-brief.md`.  It is
+  the only brief the wave-23 coordinator reads; it carries the fix list in order,
+  the verifier corrections, the gate, and the wave-22 ranked items at the end.
 
 ## Reading order
 
 **Coordinator starting wave 23** (≈5 files, not more):
 
 1. this file;
-2. `docs/handoff/wave22-complete.md` — the last gate, the scoreboard and the
-   ranked open items (wave 23's scope comes from here);
+2. `docs/handoff/wave23-brief.md` — the work order (wave 23's scope is here), then
+   `docs/handoff/audit-w22-findings.md` — the audit it comes from;
+   `docs/handoff/wave22-complete.md` is the last gate, read for history;
 3. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
 4. `docs/ui-reference-set.md` — the clean per-tab captures and palettes;
 5. `memory/coordinator.md` — the compact current memory.
@@ -87,10 +92,10 @@ Archives (only for history): `docs/archive/coordinator-handoff-through-wave20.md
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md, then start wave 23 from the open items in
-docs/handoff/wave22-complete.md.  Wave 22 is closed; do not re-open it.  Write
-the wave-23 brief before launching lanes, keep owners disjoint, and do not close
-the wave until every lane is committed, the gates are green, one CI dispatch is
-green on Windows/macOS/Linux, and docs/handoff/wave23-complete.md is written.
-Use docs/handoff/INDEX.md instead of reading all handoffs.
+Read docs/START-HERE.md, then docs/handoff/wave23-brief.md and run it as the
+wave-23 coordinator on branch wave23: the W23 items in order, each committed with
+its finding id, every gate in section 1 green before each commit, one CI dispatch
+on the branch at the end, no merge to main.  Write docs/handoff/wave23-complete.md
+with the fixed/deferred table, the live same-file comparison and the re-scored
+16 decisions.  Use docs/handoff/INDEX.md instead of reading all handoffs.
 ```
