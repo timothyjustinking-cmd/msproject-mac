@@ -156,6 +156,12 @@ class RibbonBar final : public QWidget {
         set_stack_check(QStringLiteral("Critical Tasks"), checked);
     }
 
+    // W26-REV-4: the Font group's two value displays.  The shell sets the
+    // FILE's decoded default text style on load; an empty family / non-positive
+    // size restores the captured new-project default (Calibri 11).  These are
+    // displays, not a file edit.
+    void set_font_default(const QString& family, int point_size);
+
     // W26-6.2: the chrome palette the ribbon paints and styles itself with.
     // The light theme is the measured parity chrome; Dark Gray and Black swap
     // the tab row, the group-row surface, the separators and every label
@@ -241,6 +247,10 @@ class RibbonBar final : public QWidget {
     bool project_summary_checked_ = false;
     // Critical Tasks is a view toggle whose measured default is OFF.
     bool critical_checked_ = false;
+    // W26-REV-4: the Font group's value displays (the file's decoded default,
+    // else Project's captured new-project default).
+    QString font_family_ = QStringLiteral("Calibri");
+    QString font_size_ = QStringLiteral("11");
 };
 
 }  // namespace msqt

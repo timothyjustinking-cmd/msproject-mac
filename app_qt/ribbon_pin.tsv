@@ -29,10 +29,9 @@
 #   other     "-"
 #
 # The font value displays are the FILE's default text style when decoded
-# (G3-3.1), else Project's new-project default.  The text-style records are not
-# decoded yet, so the pin carries the new-project default Calibri 11 (the UI
-# contract's reference typography); the clean loaded capture's Arial 8 is that
-# file's own text style, not the new-project default.
+# (G3-3.1, W26-REV-4), else Project's new-project default.  Their live state is
+# therefore file-driven: the pin marks them `file` and the corpus test asserts
+# PROJECT_A's decoded Arial 8 (the new-project fallback stays Calibri 11).
 #
 # tab	contextual	group	kind	label	enabled	icon	row	state
 Task	0	View	group	-	-	-	-	-
@@ -43,8 +42,8 @@ Task	0	Clipboard	button	Cut	1	clipboard.cut	0	-
 Task	0	Clipboard	button	Copy	1	clipboard.copy	0	-
 Task	0	Clipboard	button	Format Painter	0	clipboard.painter	0	-
 Task	0	Font	group	-	-	-	-	-
-Task	0	Font	combo	font name	0	-	0	Calibri
-Task	0	Font	combo	font size	0	-	0	11
+Task	0	Font	combo	font name	0	-	0	file
+Task	0	Font	combo	font size	0	-	0	file
 Task	0	Font	small	B	0	font.bold	0	-
 Task	0	Font	small	I	0	font.italic	0	-
 Task	0	Font	small	U	0	font.underline	0	-
