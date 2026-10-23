@@ -987,8 +987,10 @@ def cmd_record(args):
     # under tests/data (they only read the oracle).
     ORACLE_DIR.mkdir(parents=True, exist_ok=True)
     oracle_path = ORACLE_DIR / f"{scenario['name']}.oracle.json"
-    oracle_path.write_text(
-        json.dumps(oracle, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    # LF, per docs/build.md's text-file rule: --record on Windows must not
+    # rewrite every line of a committed oracle as CRLF (wave 25 W25-6).
+    with open(oracle_path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(oracle, indent=2, sort_keys=False) + "\n")
     print(f"record: wrote {rel(oracle_path)} "
           f"({len(flatten(oracle))} fields, numbers only)")
     print("record: now run: python scripts/engine_diff.py "

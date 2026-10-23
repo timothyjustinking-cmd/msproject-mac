@@ -102,6 +102,83 @@ def sha256(path):
     return h.hexdigest().upper()
 
 
+SCENARIO_DIR = os.path.join(ROOT, "tests", "data", "scenarios")
+
+
+def _oracle_body(text):
+    """The oracle's measured body, canonicalised: everything but provenance."""
+    import hashlib
+    import json
+    data = json.loads(text)
+    data.pop("provenance", None)
+    canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _last_body_commit(rel):
+    """The newest commit whose measured body differs from its predecessor's."""
+    commits = git("log", "--format=%h", "--", rel).stdout.split()
+    previous = None
+    previous_sha = None
+    for sha in commits:
+        text = git("show", f"{sha}:{rel}").stdout
+        if not text:
+            continue
+        body = _oracle_body(text)
+        if previous is not None and body != previous:
+            # `previous_sha` is the NEWER commit of the pair, so it is the one
+            # whose body differs from its parent's.
+            return previous_sha
+        previous = body
+        previous_sha = sha
+    return commits[-1] if commits else None
+
+
+def check_oracle_provenance():
+    """W25-6/S7: provenance.recording_commit must be the last BODY change.
+
+    The wave-24 provenance named the commit that introduced six oracles and one
+    more for task-calendar, but every oracle's measured body was re-recorded by
+    e91f19b.  This reconstructs the answer from git (a provenance-only edit does
+    not count as a body change) and requires the JSON to hold it.
+    """
+    import glob
+    import json
+    import os as _os
+    failures = []
+    checked = 0
+    for path in sorted(glob.glob(_os.path.join(SCENARIO_DIR, "*.oracle.json"))):
+        rel = _os.path.relpath(path, ROOT).replace("\\", "/")
+        try:
+            with open(path, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError) as exc:               # noqa: BLE001
+            failures.append(f"{rel}: unreadable oracle ({exc})")
+            continue
+        provenance = data.get("provenance") or {}
+        claimed = str(provenance.get("recording_commit") or "")
+        actual = _last_body_commit(rel) or ""
+        if not claimed:
+            failures.append(f"{rel}: provenance has no recording_commit")
+            continue
+        if not actual.startswith(claimed) and not claimed.startswith(actual):
+            failures.append(
+                f"{rel}: recording_commit {claimed} is not the last body change "
+                f"({actual})")
+            continue
+        recorded = git("show", f"{actual}:{rel}").stdout
+        if not recorded:
+            failures.append(f"{rel}: {actual} does not contain the oracle")
+            continue
+        if _oracle_body(recorded) != _oracle_body(open(path, encoding="utf-8").read()):
+            failures.append(
+                f"{rel}: working body differs from the body recorded at {actual} "
+                f"(re-record or update provenance)")
+            continue
+        checked += 1
+    return failures, checked
+
+
 def main():
     failures = []
 
@@ -132,6 +209,9 @@ def main():
         if work != head:
             failures.append(f"differs from HEAD: {rel} (work {work[:12]} head {head[:12]})")
 
+    provenance_failures, oracles = check_oracle_provenance()
+    failures.extend(provenance_failures)
+
     if failures:
         print("FIXTURE CHECK FAILED")
         for f in failures:
@@ -139,6 +219,8 @@ def main():
         print("\nRestore with: Remove-Item <file>; git checkout HEAD -- <file>")
         return 1
     print(f"fixtures OK ({len(DOCUMENTED)} documented hashes, {len(tracked)} tracked .mpp)")
+    print(f"scenario oracle provenance OK ({oracles} oracle(s), recording_commit = "
+          f"last measured-body change)")
     return 0
 
 
