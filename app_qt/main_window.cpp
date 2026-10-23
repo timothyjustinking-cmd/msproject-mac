@@ -91,6 +91,7 @@
 #include "shell_icons.h"
 #include "shell_style.h"
 #include "start_edit_warning.h"
+#include "task_form.h"
 #include "theme.h"
 #include "timeline_strip.h"
 #include "usage.h"
@@ -508,7 +509,21 @@ void MainWindow::build_central_widget() {
     splitter_->addWidget(sheet_panel);
     splitter_->addWidget(chart_panel_);
     splitter_->setSizes(QList<int>{1, 1});
-    outer->addWidget(splitter_, 1);
+
+    // W26-6.3: the Details pane is a SECOND, vertical splitter whose first pane
+    // is the sheet/Gantt pair.  With the pane hidden the pair fills it exactly,
+    // so the measured 0.459 sheet fraction and every parity rectangle are
+    // unchanged; showing it docks the Task Form at the bottom with a draggable
+    // handle of the measured 6-px width.
+    details_splitter_ = new QSplitter(Qt::Vertical, central);
+    details_splitter_->setObjectName(QStringLiteral("detailsSplitter"));
+    details_splitter_->setHandleWidth(kSplitHandleWidth);
+    details_splitter_->setChildrenCollapsible(false);
+    details_splitter_->addWidget(splitter_);
+    task_form_ = new TaskForm(details_splitter_);
+    details_splitter_->addWidget(task_form_);
+    task_form_->setVisible(false);
+    outer->addWidget(details_splitter_, 1);
 
     central->setLayout(outer);
 
@@ -623,6 +638,8 @@ void MainWindow::build_central_widget() {
         if (sheet_view_->viewport() != nullptr) {
             sheet_view_->viewport()->update();
         }
+        // W26-6.3: the Task Form shows the newly selected task.
+        refresh_task_form();
         update_menu_state();
     });
 
@@ -1154,6 +1171,10 @@ void MainWindow::configure_generic_columns() {
 // owns that), so mirror the selected task onto the view.  This is display-only:
 // a click still goes through app::select_cell() in the clicked handler.
 void MainWindow::sync_view_selection() {
+    // W26-6.3: the docked Task Form follows the selection through EVERY path
+    // that re-derives it (load, rebuild, click, structural edit), because this
+    // is the one place the view selection is mirrored.
+    refresh_task_form();
     if (!doc_.has_document() || sheet_view_ == nullptr ||
         prefs_.view != app::ViewMode::task_sheet) {
         return;
@@ -1904,10 +1925,14 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             return;
         }
         case RibbonCommand::toggle_details:
+            // W26-6.3: dock/undock the Task Form; a view toggle, never a file
+            // write.
+            set_details_visible(checked);
+            return;
         case RibbonCommand::outdent:
         case RibbonCommand::indent:
         case RibbonCommand::split_task:
-            // Not wired (W26-6.3 / no engine edit); disabled until then.
+            // Not wired (no engine outline/split edit); disabled until then.
             return;
         case RibbonCommand::project_information:
             show_project_information();
@@ -1946,6 +1971,64 @@ void MainWindow::set_timeline_visible(bool visible) {
     }
     set_message(std::string("timeline ") + (visible ? "shown" : "hidden"), false);
     update_status();
+}
+
+void MainWindow::set_details_visible(bool visible) {
+    details_visible_ = visible;
+    if (task_form_ != nullptr) {
+        // Details is a Task Form: it is only meaningful in the Gantt/Task Sheet
+        // view.  The preference survives a view switch, so returning to the
+        // task view re-docks it.
+        const bool show = visible && prefs_.view == app::ViewMode::task_sheet;
+        task_form_->setVisible(show);
+        if (show && details_splitter_ != nullptr) {
+            const int total = details_splitter_->height();
+            const int form_height = std::max(150, total / 4);
+            details_splitter_->setSizes(
+                QList<int>{std::max(1, total - form_height -
+                                           details_splitter_->handleWidth()),
+                           form_height});
+            refresh_task_form();
+        }
+    }
+    set_message(visible ? "details pane shown" : "details pane hidden", false);
+    update_status();
+}
+
+void MainWindow::refresh_task_form() {
+    if (task_form_ == nullptr) {
+        return;
+    }
+    if (prefs_.view != app::ViewMode::task_sheet || doc_.sheet() == nullptr) {
+        task_form_->clear();
+        return;
+    }
+    TaskInformationValues info;
+    if (!task_information_values(&info)) {
+        task_form_->clear();
+        return;
+    }
+    TaskFormValues values;
+    values.has_task = true;
+    values.name = to_q(info.name);
+    values.duration = to_q(info.duration_text);
+    values.start = to_q(info.start_text);
+    values.finish = to_q(info.finish_text);
+    values.percent = to_q(info.percent_text);
+    // Predecessors and Resources are the COMPUTED columns the stored table
+    // shows (PlanDocument::fill_computed_columns writes them into the
+    // RecordSet), read through the SAME selected RecordSet row as the four
+    // fields above -- never a plan index.
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (selected.has_selection && selected.row < doc_.records().row_count()) {
+        auto computed = [this, &selected](core::view::FieldId field) {
+            const core::view::Value* value = doc_.records().get(selected.row, field);
+            return value != nullptr ? to_q(value->text) : QString();
+        };
+        values.predecessors = computed(kPredecessorsField);
+        values.resources = computed(kResourceNamesField);
+    }
+    task_form_->set_values(values);
 }
 
 void MainWindow::set_percent_complete(int percent) {
@@ -2129,6 +2212,9 @@ void MainWindow::after_cell_change() {
         gantt_canvas_->set_selected_uid(doc_.selected_uid());
     }
     refresh_timeline();
+    // W26-6.3: an edited start/finish/percent is visible in the Task Form at
+    // once.
+    refresh_task_form();
     update_window_title();
     update_menu_state();
     update_status();
@@ -3790,6 +3876,12 @@ void MainWindow::show_view(app::ViewMode mode) {
         // The contextual Gantt Chart Format tab exists only in the Gantt view.
         ribbon_->set_contextual_visible(mode == app::ViewMode::task_sheet);
     }
+    // W26-6.3: the Task Form belongs to the task view.  The Details preference
+    // survives a switch, so returning to the Gantt re-docks it.
+    if (task_form_ != nullptr) {
+        task_form_->setVisible(details_visible_ && mode == app::ViewMode::task_sheet);
+    }
+    refresh_task_form();
     refresh_view_buttons();
     update_menu_state();
     update_status();
