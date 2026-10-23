@@ -546,6 +546,7 @@ int main(int argc, char** argv) {
         struct Seen {
             bool dialog = false;
             QString title;
+            QString name;  // Task Information's Name field (which task)
             int tabs = 0;
         };
         const auto intercept = [](Seen* seen) {
@@ -619,6 +620,11 @@ int main(int argc, char** argv) {
                         }
                         seen.dialog = true;
                         seen.title = dialog->windowTitle();
+                        if (auto* info = dynamic_cast<msqt::TaskInformationDialog*>(dialog)) {
+                            if (info->name_edit() != nullptr) {
+                                seen.name = info->name_edit()->text();
+                            }
+                        }
                         if (auto* tabs = dialog->findChild<QTabWidget*>(
                                 QStringLiteral("taskInformationTabs"))) {
                             seen.tabs = tabs->count();
@@ -647,6 +653,10 @@ int main(int argc, char** argv) {
                             "a real double-click opens Task Information");
                 gate::check(double_clicks == 1,
                             "the view emitted doubleClicked exactly once");
+                // Second-agent review: the title alone does not prove WHICH
+                // task the dialog describes.  synthetic-base's row 0 is ID 1.
+                gate::check(seen.name == QStringLiteral("Task A"),
+                            "the dialog describes the clicked task (ID 1)");
             } else {
                 gate::check(false, "the sheet exposes a Name column and a task row");
             }
@@ -704,6 +714,11 @@ int main(int argc, char** argv) {
             });
             timer.start();
             const QPoint project_target = sheet->visualRect(project_index).center();
+            gate::check(sheet->indexAt(project_target) == project_index,
+                        "the project-row double-click lands on the project row");
+            int project_clicks = 0;
+            QObject::connect(sheet, &QAbstractItemView::doubleClicked,
+                             [&project_clicks](const QModelIndex&) { ++project_clicks; });
             QTest::mousePress(sheet->viewport(), Qt::LeftButton, Qt::NoModifier,
                               project_target);
             QTest::mouseDClick(sheet->viewport(), Qt::LeftButton, Qt::NoModifier,
@@ -712,6 +727,8 @@ int main(int argc, char** argv) {
                                 project_target);
             QApplication::processEvents();
             timer.stop();
+            gate::check(project_clicks == 1,
+                        "the project-row double-click reached the view (signal emitted)");
             gate::check(!seen.dialog,
                         "a double-click on the project row opens no editable dialog");
             const QModelIndex task_index = sheet->model()->index(1, name_column);

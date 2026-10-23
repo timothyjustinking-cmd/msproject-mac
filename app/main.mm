@@ -1821,8 +1821,24 @@ app::PrintRequest make_print_request(const PlanState& plan) {
         request.project_name = plan.loaded.source_name;
     }
     request.report_title = "Gantt report";
-    const std::size_t total = plan.records.row_count();
-    const std::size_t shown = plan.filter_active ? plan.filter_rows.size() : total;
+    // Wave 24 (W24-1 review): the subtitle counts TASKS.  The RecordSet
+    // includes the synthetic project row (uid 0) when the file shows it, so
+    // counting records would say "6 of 6" where the Qt shell says "5 of 5".
+    const std::size_t total = plan.view.tasks.size();
+    std::size_t shown = 0;
+    if (plan.filter_active) {
+        for (const std::size_t row : plan.filter_rows) {
+            if (row < plan.records.row_count() && plan.records.uid(row) != 0) {
+                ++shown;
+            }
+        }
+    } else {
+        for (std::size_t row = 0; row < plan.records.row_count(); ++row) {
+            if (plan.records.uid(row) != 0) {
+                ++shown;
+            }
+        }
+    }
     request.subtitle = app::export_subtitle(
         app::ReportKind::gantt,
         plan.filter_active ? plan.filter_description : std::string(), shown, total);

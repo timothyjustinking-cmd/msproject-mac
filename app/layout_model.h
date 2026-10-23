@@ -74,11 +74,12 @@ struct TaskRow {
     std::uint32_t uid = 0;
     std::uint32_t id = 0;
     /* Wave 24 (W24-1): the task's row number in the FILE's FixedData storage
-     * order (core/mpp Task::row, project row excluded).  The adapter sorts
-     * `tasks` into Project's ID order, so vector position is no longer the
-     * stored order; the Insert Task placeholder must copy the LAST live stored
-     * row's dates (what core/mppwrite's add_task_row clones), which is the row
-     * with the largest file_row.  A pending insert has no file row (0). */
+     * order (core/mpp Task::row: 0-based, INCLUDING the project row, so real
+     * tasks start at 1).  The adapter sorts `tasks` into Project's ID order,
+     * so vector position is no longer the stored order; the Insert Task
+     * placeholder must copy the LAST live stored row's dates (what
+     * core/mppwrite's add_task_row clones), which is the row with the largest
+     * file_row.  A pending insert has no file row (0, never a real task). */
     std::uint32_t file_row = 0;
     std::string outline_number;  // "1", "1.1" -- Project's Task.OutlineNumber
     std::string name;

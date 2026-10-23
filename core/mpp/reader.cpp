@@ -3250,16 +3250,19 @@ void parse_mpp12(const CompoundFile& cfb, std::string_view root, Document& docum
         task.custom_fields = decode_var_custom_fields(task_var, task_var2, uid);
         if (task_rows.meta_present) {
             append_mpp12_flags(task_rows, row, task.custom_fields);
-            // Wave 24 (W24-15): the same Flag1..Flag20 view as MPP14.
+            // Wave 24 (W24-15): the same Flag1..Flag20 view as MPP14.  The
+            // field ids are NOT contiguous: Flag11..20 are 0x0B400124..12D,
+            // not Flag10+1.., so map through custom_field_index() rather than
+            // subtracting ids (review finding: the first cut silently left
+            // flags[10..19] false and could copy Number1..5 into their slots).
             task.flags_stored = true;
             for (const CustomFieldValue& value : task.custom_fields) {
-                if (value.field_id >= kTaskFlag1FieldId &&
-                    value.field_id <= kTaskFlag10FieldId + 10u) {
-                    const std::size_t index =
-                        static_cast<std::size_t>(value.field_id - kTaskFlag1FieldId);
-                    if (index < task.flags.size()) {
-                        task.flags[index] = value.flag;
-                    }
+                if (custom_field_kind(value.field_id) != FieldKind::flag) {
+                    continue;
+                }
+                const unsigned flag_index = custom_field_index(value.field_id);
+                if (flag_index >= 1 && flag_index <= task.flags.size()) {
+                    task.flags[flag_index - 1] = value.flag;
                 }
             }
             task.flag10 = task.flags[9];

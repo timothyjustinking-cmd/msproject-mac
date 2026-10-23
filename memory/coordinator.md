@@ -17,8 +17,8 @@ public repo becomes private or its history is rewritten.
 
 * core ctest **51/51**; M2 **332/332**; plan_recalc **266** no-corpus / **512**
   with corpus (golden read-only, exact `1` opt-in); app **15/15**; app_qt
-  **18/18**; reader **1054** with corpus / **377** without; fixtures OK
-  (11 documented hashes, 10 tracked `.mpp`).
+  **18/18**; reader **1063** with corpus / **383** without; fixtures OK
+  (13 documented hashes, 12 tracked `.mpp`).
 * Engine **7/8** (`constraint-mso` deliberately left failing; the lane pins the
   failing SET by name; `save_plan` is test-only).
 * parity vs the recaptured Project reference: **10/10**, task_bar found and

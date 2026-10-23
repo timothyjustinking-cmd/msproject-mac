@@ -162,9 +162,12 @@ build\...\plan_recalc_tests.exe
 set PLAN_RECALC_UPDATE_GOLDEN=
 ```
 
-The writer is diff-before-write and refuses to run after a failed check.  CI and
-the local gate run `ctest -E plan_recalc`; the test itself skips its corpus
-checks when `MPP_NO_CORPUS=1` is set.
+The writer is diff-before-write and refuses to run after a failed check.  Only
+the exact value `1` enables the write; any other value (`0`, a typo, a stale
+shell variable) is a compare.  CI and the local gate run `ctest -E plan_recalc`
+for the main suite, then **wave 24 (W24-4)** runs the corpus-free checks on a
+runner in their own step: `MPP_NO_CORPUS=1 ctest -R '^plan_recalc$'` (266
+checks).  The test itself skips its corpus checks when `MPP_NO_CORPUS=1` is set.
 
 ## macOS
 

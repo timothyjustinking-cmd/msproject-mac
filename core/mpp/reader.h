@@ -424,7 +424,8 @@ struct PackedDate {
 };
 
 struct Task {
-    std::uint32_t row = 0;     /* FixedData row index, 0-based, project row excluded */
+    std::uint32_t row = 0;     /* FixedData row index, 0-based, INCLUDING the
+                                * project row (row 0): the first task row is 1 */
     std::uint32_t row_id = 0;  /* u32 at +0: MS Project's ID column */
     std::uint32_t uid = 0;     /* u32 at +4: UniqueID */
     /* name is the display form: ASCII spaces trimmed, which is what MS Project's
@@ -568,7 +569,8 @@ struct Task {
      * byte -- a flag is NOT a VarMeta block).  All twenty flag bits are decoded
      * into Task::flags (wave 24); Flag1 stays here for the engine dump's stable
      * shape.  `present` is always true here.  Cost is decoded from its f64
-     * Lookups: `custom_field(id)` returns nullptr when the file does not store
+     * hundredths; every flag bit is also on Task::flags (wave 24).  Lookups:
+     * `custom_field(id)` returns nullptr when the file does not store
      * that field for this row.  See field_value.h for the evidence. */
     std::vector<CustomFieldValue> custom_fields;
 

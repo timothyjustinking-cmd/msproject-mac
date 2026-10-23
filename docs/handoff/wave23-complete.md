@@ -80,7 +80,7 @@ decompiled file (`git log --diff-filter=A --name-only main..wave23` checked).
 ## 2. Gates (exact numbers, branch `wave23`)
 
 > **Erratum (wave 24).**  The reader count below (1025) was not reproduced from
-> the wave-23 diff; the wave-24 measured counts are 1054 with corpus / 377 with
+> the wave-23 diff; the wave-24 measured counts are 1063 with corpus / 383 with
 > `MPP_NO_CORPUS=1` (wave24-complete §6).  The project-row and Timeline claims
 > in §3/§5 are also superseded: both are stored file settings, measured in
 > `docs/handoff/wave24-complete.md` §1.  This table remains the wave-23 record.

@@ -30,6 +30,7 @@
 #include "edit_model.h"  // app::StructuralEdits
 #include "export_pdf.h"  // app::ReportKind (declared in export_pdf())
 #include "menu_model.h"
+#include "page_layout.h"  // app::PrintJob (current_print_job)
 #include "plan_document.h"
 #include "prefs.h"
 #include "sheet_table_model.h"
@@ -115,6 +116,12 @@ class MainWindow final : public QMainWindow {
     // sheet's committed cells).  Wave 24: the uid-routing gate needs the same
     // input the print path takes.
     const app::PlanInput& plan() const noexcept { return doc_.plan(); }
+
+    // Wave 24 (W24-1 review): the PrintJob File > Print would hand to the
+    // printer, built by the SAME production code path.  Public so the gate can
+    // assert the subtitle counts tasks (not the project row) without opening a
+    // printer dialog.
+    app::PrintJob current_print_job() const;
 
     // Wave 19: the active filter/view, for the offscreen tests.
     bool filter_active() const noexcept { return doc_.filter_active(); }

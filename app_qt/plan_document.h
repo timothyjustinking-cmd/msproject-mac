@@ -168,10 +168,6 @@ class PlanDocument {
     // one whenever the project row is shown (and the project row is a stored
     // setting -- W24-2), so a row index is not a task index.
     const app::TaskRow* task_by_uid(std::uint32_t uid) const;
-    // The task a RecordSet row names (nullptr for the project row, a hidden
-    // row, or an out-of-range index).  Goes through the row's uid, never
-    // row-1 arithmetic, so it survives a hidden/filtered row.
-    const app::TaskRow* task_for_record_row(std::size_t row) const;
 
     // The stored character width of the `214/CTable` column whose field id is
     // `table_field` (0 when the table/file does not carry it).

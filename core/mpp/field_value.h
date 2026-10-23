@@ -226,7 +226,8 @@ constexpr bool custom_field_storage_measured(FieldKind kind, unsigned index) {
  * their default.  (core/mpp/reader.cpp decodes every family above as of wave 14,
  * including the Cost block it previously reported as unmeasured; the writer's own
  * decoder in core/mppwrite/field_values.cpp remains the second opinion.
- * Flag2..20 stay unmeasured.)
+ * All twenty Flag bits are measured as of wave 24 and live on Task::flags;
+ * Flag1 is the one flag ALSO carried here for the engine dump's stable shape.)
  */
 struct CustomFieldValue {
     std::uint32_t field_id = 0;
