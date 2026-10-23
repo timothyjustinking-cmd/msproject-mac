@@ -4,6 +4,14 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
+## Wave 26 (open on branch `wave26` - parity first)
+
+| file | what |
+|---|---|
+| `wave26-brief.md` | **the work order**: G0 (one High), G1 ribbon controls, G2 icons, G3 file-driven rendering, G4 backstage/Options, G5 dialogs, G6 views/theme, CLOSE; deferral only with evidence |
+| `wave25-verification/gates.md` | the verifier's fresh-tree gate run on wave 25's tip |
+| `wave25-verification/review.md` | the independent review of `wave24..wave25` |
+
 ## Wave 25 (closed on branch `wave25` — not merged, not pushed; hold)
 
 | file | what |
