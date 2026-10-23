@@ -1,13 +1,33 @@
-# qt-linux -- the three-platform shell (app_qt) on the cheapest runner.
+# qt-shell -- the Qt 6 Widgets shell (app_qt) on Linux, Windows and macOS.
 #
-# The shell is Qt 6 Widgets; the operator has no Mac, so Linux is where the UI
-# gets compiled and its golden image is compared.  Windows and macOS jobs join
-# this file once the Linux job is stable (docs/ui-qt-port.md §4).
+# The shell is the three-platform UI (docs/ui-qt-port.md): Fusion style, fixed
+# metrics, one action table.  The offscreen tests render the real window and
+# assert the reference-measured geometry, so each job is a claim that the shell
+# builds and renders on that OS; a platform difference is a red job, not a
+# footnote.  Every job uploads the 900x560 renders and the 1920x1032 --parity
+# render as one artifact named for the OS.
 #
-# Runs on demand or a version tag, like the other workflows: a public repo's
-# minutes are free, but a deliberate run is still easier to reason about.
+# ONE QT VERSION, EVERYWHERE.  Fusion style metrics (row heights, font sizes)
+# are a property of the Qt build, and the parity/golden images assume them, so
+# all three jobs install the same Qt 6.5.3 through jurplel/install-qt-action@v4
+# with that OS's aqt arch: gcc_64, win64_msvc2019_64, clang_64.  Never float it
+# (`6.*` makes the UI a different target every run); bump the workflow-level
+# QT_VERSION and nothing else.  `clang_64` is aqt's only macOS desktop arch, and
+# the Qt 6.5.3 clang_64 package is universal (x86_64 + arm64), which is why the
+# arm64 macos-14 image works natively.
+#
+# WINDOWS needs the MSVC environment before configure: ilammy/msvc-dev-cmd@v1
+# plus Ninja, because the "Visual Studio 17 2022" generator is not discoverable
+# on windows-latest (ci.yml, first CI run 2026-10-22).  Linux keeps the apt
+# dependency line from the single-job version of this file; the distro Qt that
+# package pulls is NOT what CMake links -- CMAKE_PREFIX_PATH points at the
+# pinned 6.5.3 and the "Prove configure..." step fails if it did not.
+#
+# Runs on demand or a version tag, like the other workflows: the repository is
+# public so standard runners are free (macOS bills 10x only on private repos),
+# but a deliberate run is still easier to reason about.
 
-name: qt-linux
+name: qt-shell
 
 on:
   workflow_dispatch:
@@ -17,32 +37,147 @@ on:
 permissions:
   contents: read
 
+env:
+  # The one Qt version.  Fusion metrics and the golden/parity images are pinned
+  # to it; change it here and the three jobs change together.
+  QT_VERSION: "6.5.3"
+
 jobs:
   build-qt:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # Qt download + configure + build + tests.  The tests themselves time out at
+    # 60 s each; this is the safety net for a wedged runner.
+    timeout-minutes: 45
+    strategy:
+      # Do not cancel the other platforms when one fails: the three results
+      # together are the signal this workflow exists to produce.
+      fail-fast: false
+      matrix:
+        include:
+          # aqt's Qt < 6.7 Linux arch is gcc_64; linux_gcc_64 is the Qt >= 6.7
+          # name and does not exist as a 6.5.3 package.
+          - name: linux-qt
+            os: ubuntu-latest
+            arch: gcc_64
+            generator: Unix Makefiles
+          - name: windows-qt
+            os: windows-latest
+            arch: win64_msvc2019_64
+            generator: Ninja
+          # macos-14 is Apple Silicon.  Pinned by image name (not macos-latest)
+          # so an image rollover cannot silently change the OS under the render
+          # tests; the Qt 6.5.3 clang_64 package is universal, so it links
+          # natively here.
+          - name: macos-qt
+            os: macos-14
+            arch: clang_64
+            generator: Unix Makefiles
 
-      - name: Install Qt 6 (Widgets) and a headless platform plugin
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # Linux only.  The distro Qt is not linked (the next step pins 6.5.3), but
+      # these packages supply the GL/xkb/common headers and libraries the
+      # offscreen platform plugin needs, and keep the job's package set
+      # identical to the pre-wave-19 Linux job.  Qt's own PrintSupport module is
+      # part of qt6-base-dev, so a future Qt6::PrintSupport link needs no line
+      # here (Windows/macOS get it from aqt's qtbase).
+      - name: Install Linux Qt dependencies
+        if: runner.os == 'Linux'
+        shell: bash
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq qt6-base-dev libgl1-mesa-dev libxkbcommon-dev
 
+      # One version, one action, one arch per OS.  install-qt-action downloads
+      # from the Qt mirror with aqtinstall; it sets QT_ROOT_DIR for later steps.
+      # cache is off deliberately: this workflow runs a few times a wave, and the
+      # action's cache would add a moving part for no saved minute.
+      - name: Install Qt ${{ env.QT_VERSION }} (${{ matrix.arch }})
+        id: install-qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          target: desktop
+          arch: ${{ matrix.arch }}
+          cache: 'false'
+
+      # cl.exe, link.exe and Ninja on PATH (plus INCLUDE/LIB), exactly the
+      # environment vcvars64.bat provides.  x64 matches win64_msvc2019_64; MSVC
+      # 2019 and 2022 libraries are binary compatible.
+      - name: Set up the MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # Same flags on all three OSs; only the generator differs (Ninja on
+      # Windows, as in ci.yml).  CMAKE_PREFIX_PATH is the action's documented
+      # qt-root-dir output: install-qt-action v4 does NOT export a Qt6_DIR
+      # variable, and passing one would silently configure against nothing.
+      # The path is normalised to forward slashes because on Windows the action
+      # hands over a native (backslash) path and this step runs under Git Bash;
+      # CMake and Qt accept D:/... on MSVC without any escaping question.
       - name: Configure
-        run: cmake -S app_qt -B build-qt -DCMAKE_BUILD_TYPE=Release -DCORE_WARNINGS_AS_ERRORS=ON
+        shell: bash
+        run: |
+          qt_prefix="${{ steps.install-qt.outputs.qt-root-dir }}"
+          qt_prefix="$(printf '%s' "$qt_prefix" | tr '\\' '/')"
+          cmake -S app_qt -B build-qt \
+            -G "${{ matrix.generator }}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$qt_prefix" \
+            -DCORE_WARNINGS_AS_ERRORS=ON
+
+      # Cheap guard against a silent fallback to the distro Qt on Linux (and to
+      # any other Qt that happens to be on the image): the cache must name the
+      # pinned version.  This is also the only proof the pin took effect.
+      - name: Prove configure used the pinned Qt
+        shell: bash
+        run: |
+          set -euo pipefail
+          qt6_dir="$(grep -E '^Qt6_DIR:' build-qt/CMakeCache.txt || true)"
+          echo "${qt6_dir:-Qt6_DIR not found in the cache}"
+          if [[ "$qt6_dir" != *"$QT_VERSION"* ]]; then
+            echo "::error::configured Qt6_DIR is not Qt $QT_VERSION"
+            exit 1
+          fi
 
       - name: Build
+        shell: bash
         run: cmake --build build-qt --config Release
 
-      - name: Test (offscreen render)
-        run: ctest --test-dir build-qt --output-on-failure
+      # The tests set QT_QPA_PLATFORM=offscreen and QT_SCALE_FACTOR=1 themselves
+      # (${CMAKE_COMMAND} -E env in app_qt/CMakeLists.txt).  Deliberately not
+      # repeated here: a test that forgot them must fail, not inherit a pass.
+      - name: Test (offscreen renders + parity geometry)
+        shell: bash
+        run: ctest --test-dir build-qt --output-on-failure --timeout 60
 
-      - name: Upload the rendered window
+      # The 1920x1032 PNG is the image P1's harness scores against the reference
+      # capture; a green build that lost it would still upload a plausible 900px
+      # artifact, so fail loudly and say which file is missing.
+      - name: The 1920x1032 parity render was written
+        if: always()
+        shell: bash
+        run: |
+          test -s build-qt/test-out/qt-render-parity.png
+          ls -l build-qt/test-out/qt-render-parity.png
+
+      # One artifact per OS, always (a failed render is when the image matters
+      # most).  Both sizes live under build-qt: qt-render-smoke.png at the top,
+      # qt-render-document.png and qt-render-parity.png in test-out.
+      # if-no-files-found is per step, not per path, so "error" covers the whole
+      # set; on a configure failure this step is red too, which is the honest
+      # state of the artifact.
+      - name: Upload the 900x560 and 1920x1032 renders
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qt-window-${{ github.sha }}
-          if-no-files-found: warn
+          name: qt-window-${{ runner.os }}-${{ github.sha }}
+          if-no-files-found: error
           path: |
             build-qt/*.png
             build-qt/test-out/*.png
