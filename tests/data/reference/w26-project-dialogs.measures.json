@@ -1,0 +1,103 @@
+{
+  "source": {
+    "captures": {
+      "project_information": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744368836-py57vx.jpg",
+      "change_working_time": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744368837-htb1e6.jpg",
+      "custom_fields": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744368837-off3jn.jpg",
+      "links_between_projects": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744368837-1dkzfu.jpg",
+      "update_project": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744368837-xntqkf.jpg",
+      "move_project": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744368837-4nqzgp.jpg",
+      "wbs_menu": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744399885-51ed6m.jpg",
+      "baseline_menu": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744399886-3m496n.jpg"
+    },
+    "capture_size": [874, 491],
+    "note": "The audit frames are local-only JPEGs and are never committed. Only the numbers below are committed. They were measured on the capture pixels and are recorded as FRACTIONS of each dialog's client box, because the audit frames are scaled down and the exact capture scale is not independently pinned. The fractions are scale-free; the dialog sizes are the port's logical sizes chosen to keep the captured proportions (aspect ratio gated)."
+  },
+  "project_information": {
+    "width": 616,
+    "height": 410,
+    "aspect": 0.6643,
+    "label_left_fraction": 0.020,
+    "field_left_fraction": 0.204,
+    "row_top_fractions": [0.047, 0.180, 0.320],
+    "button_row_top_fraction": 0.907,
+    "title_template": "Project Information for '{title}'",
+    "labels": ["Start date:", "Finish date:", "Schedule from:", "Current date:",
+               "Status date:", "Calendar:", "Priority:"],
+    "date_fields": 4,
+    "combos": 2,
+    "spin_range": [0, 1000],
+    "disabled_tooltip": "not implemented in this port",
+    "functional": ["priority"]
+  },
+  "change_working_time": {
+    "width": 750,
+    "height": 480,
+    "aspect": 1.5625,
+    "legend_left_fraction": 0.020,
+    "month_grid_left_fraction": 0.385,
+    "month_grid_width_fraction": 0.365,
+    "right_pane_left_fraction": 0.780,
+    "exceptions_top_fraction": 0.520,
+    "button_row_top_fraction": 0.917,
+    "weekday_header": ["M", "T", "W", "Th", "F", "S", "S"],
+    "legend_entries": ["Working", "Nonworking", "Edited working hours",
+                       "Exception day", "Nondefault work week"],
+    "tabs": ["Exceptions", "Work Weeks"],
+    "exception_columns": ["Name", "Start", "Finish"],
+    "month": {"year": 2026, "month": 10, "days": 31,
+              "nonworking_days": [3, 4, 10, 11, 17, 18, 24, 25, 31]},
+    "disabled_tooltip": "not implemented in this port"
+  },
+  "custom_fields": {
+    "width": 700,
+    "height": 490,
+    "aspect": 1.4286,
+    "field_list_left_fraction": 0.020,
+    "field_list_width_fraction": 0.260,
+    "detail_left_fraction": 0.300,
+    "buttons_top_fraction": 0.930,
+    "type_names": ["Task", "Resource", "Project"],
+    "attribute_options": ["None", "Lookup", "Formula"],
+    "summary_row_options": ["None", "Rollup"],
+    "assignment_row_options": ["None", "Roll down unless manually entered"],
+    "values_to_display": ["Data", "Graphical Indicators..."],
+    "button_row": ["Rename...", "Delete", "Add Field to Enterprise...", "Import Field..."],
+    "disabled_tooltip": "not implemented in this port"
+  },
+  "links_between_projects": {
+    "width": 760,
+    "height": 410,
+    "aspect": 1.856,
+    "tabs": ["External Predecessors", "External Successors"],
+    "external_columns": ["Task", "Type", "Date", "% Comp", "Differ..."],
+    "links_columns": ["ID", "Unique ID", "Predecessors", "Successors"],
+    "buttons": ["Help", "Show", "Open", "Refresh", "Details...", "Options...", "Close"],
+    "disabled_tooltip": "not implemented in this port"
+  },
+  "update_project": {
+    "width": 340,
+    "height": 240,
+    "aspect": 1.417,
+    "title": "Update Project",
+    "captions": ["Update work as complete through:", "0% - 100% complete",
+                 "100% complete", "Reschedule uncompleted work to start after:",
+                 "Entire project", "Selected tasks"],
+    "note": "The port has no actuals writer, so OK is disabled with the exact tooltip and an inline note.",
+    "disabled_tooltip": "not implemented in this port"
+  },
+  "move_project": {
+    "width": 480,
+    "height": 180,
+    "text": "This project contains tasks with actual values.\nDo you still want to move it?",
+    "buttons": ["Yes", "No"]
+  },
+  "wbs_menu": {
+    "items": ["Define Code...", "Renumber..."],
+    "disabled_tooltip": "not implemented in this port"
+  },
+  "baseline_menu": {
+    "items": ["Set Baseline...", "Clear Baseline..."],
+    "disabled_tooltip": "not implemented in this port"
+  }
+}

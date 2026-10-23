@@ -63,6 +63,17 @@ enum class RibbonCommand : std::uint8_t {
     toggle_project_summary,
     toggle_timeline,
     toggle_details,
+    // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
+    // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
+    // commands with no menu-bar item.
+    project_information,
+    change_working_time,
+    links_between_projects,
+    update_project,
+    move_project,
+    // The two drop-down buttons: their click opens the menu the capture shows.
+    wbs_menu,
+    set_baseline_menu,
 };
 
 class RibbonBar final : public QWidget {

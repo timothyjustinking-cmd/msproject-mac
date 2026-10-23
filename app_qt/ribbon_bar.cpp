@@ -379,8 +379,9 @@ const std::vector<TabSpec>& tab_specs() {
         small(add_ins, "My Add-ins", app::MenuAction::none, 126, 1, 0, false, 1, false,
               "addins.my");
         GroupSpec& project_properties = add_group(project, "Properties", 341);
-        large(project_properties, "Project\nInformation", app::MenuAction::none, 60, 0, false,
-              "properties.project_information");
+        add(project_properties, "Project\nInformation", Kind::button, 60, 0, 0, 3, 1,
+            app::MenuAction::none, RibbonCommand::project_information, nullptr, 0, true,
+            false, "properties.project_information");
         large(project_properties, "Custom\nFields", app::MenuAction::custom_fields, 50, 1, true,
               "properties.custom_fields");
         large(project_properties, "Links Between\nProjects", app::MenuAction::none, 68, 2, false,
@@ -946,11 +947,20 @@ void RibbonBar::build_page(int tab_index) {
                     button->setEnabled(spec.enabled);
                     button->setToolTip(tip);
                     const app::MenuAction action = spec.action;
-                    connect(button, &QToolButton::clicked, this, [this, action](bool) {
-                        if (handler_) {
-                            handler_(action);
-                        }
-                    });
+                    const RibbonCommand command = spec.command;
+                    if (command != RibbonCommand::none) {
+                        connect(button, &QToolButton::clicked, this, [this, command](bool) {
+                            if (command_handler_) {
+                                command_handler_(command, false);
+                            }
+                        });
+                    } else {
+                        connect(button, &QToolButton::clicked, this, [this, action](bool) {
+                            if (handler_) {
+                                handler_(action);
+                            }
+                        });
+                    }
                     ++button_count_;
                     control = button;
                     break;

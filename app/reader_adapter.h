@@ -138,6 +138,10 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     input.project_finish = date32_from_packed(document.project.finish.raw);
     input.project_duration_ticks = static_cast<std::int64_t>(document.project.duration_ticks);
     input.project_percent_complete = document.project.percent_complete;
+    // Wave 26 (W26-5.1): the project row's Priority.  The reader decodes it from
+    // the same FixedData row a task uses (ProjectRow::priority); Project
+    // Information shows it and the save path writes it back.
+    input.project_priority = document.project.priority;
     // Wave 24 (W24-2/W24-3): the two view settings the file actually stores.
     // A file without the summary record means "hidden" (Project's new-project
     // default); a file without the Timeline record keeps the shown default.
