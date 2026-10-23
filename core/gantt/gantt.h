@@ -311,6 +311,8 @@ struct Bar {
     std::array<Point, 4> diamond{};
     std::array<Point, 3> cap_left{};
     std::array<Point, 3> cap_right{};
+    // Wave 25 (W25-2/S2): copied from TaskBarInput::manual.
+    bool manual = false;
 };
 
 // The per-task input.  `finish` is the task's finish *instant* (the real
@@ -327,6 +329,11 @@ struct TaskBarInput {
     // Appended: the resource text a resource-labelled bar shows.  The Gantt does
     // not know field ids, so the caller supplies it (usually ResourceNames).
     std::string resource;
+    // Wave 25 (W25-2/S2): manually scheduled.  Project's stock Gantt paints a
+    // manual task's bar and the links leaving it in its own colour ("Manual
+    // Task"/"Manual Summary" bar styles), distinct from the auto-scheduled
+    // "Task" style.  The model carries the flag; the shell picks the colour.
+    bool manual = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -347,6 +354,10 @@ struct LinkInput {
     // Driving/critical hint from the scheduler (core::sched::cpm); the Gantt
     // does not derive criticality itself.
     bool critical = false;
+    // Wave 25 (W25-2/S2): the predecessor's scheduling mode.  Project colours a
+    // link from the predecessor's bar style, so a link leaving a manual task is
+    // the Manual Task link colour.
+    bool manual = false;
 };
 
 struct ArrowHead {
@@ -360,6 +371,8 @@ struct LinkRoute {
     std::uint32_t successor_uid = 0;
     LinkType type = LinkType::finish_to_start;
     bool critical = false;
+    // Wave 25 (W25-2/S2): copied from LinkInput::manual.
+    bool manual = false;
     // Orthogonal polyline: points.front() is on the predecessor's edge,
     // points.back() == arrow.tip is on the successor's edge.  Consecutive
     // points are never coincident.

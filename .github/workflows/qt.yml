@@ -234,6 +234,25 @@ jobs:
             --reference-json tests/data/reference/wave23-outline-project.measures.json \
             build-qt/wave23-port.png
 
+      # Wave 25 (W25-2/S2): the auto-scheduled reference.  wave23-outline is an
+      # all-MANUAL fixture, so its bar colour could never tell the auto task
+      # style from the manual one -- wave 24 re-pinned three gates to the manual
+      # colour and called it "task".  This fixture's only task is auto, and the
+      # reference measures (138,187,237); a port that paints the manual teal
+      # fails here.
+      - name: Auto-scheduled bar-colour parity gate (W25-2)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1 \
+            ./build-qt/msproject_qt.exe --open tests/data/wave25-auto.mpp \
+            --render build-qt/wave25-auto-port.png --parity
+          python scripts/parity_report.py \
+            --reference-json tests/data/reference/wave25-auto.measures.json \
+            --only colour.task_bar \
+            build-qt/wave25-auto-port.png
+
       # The 1920x1032 PNG is the image P1's harness scores against the reference
       # capture; a green build that lost it would still upload a plausible 900px
       # artifact, so fail loudly and say which file is missing.

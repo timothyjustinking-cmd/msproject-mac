@@ -120,26 +120,39 @@ inline const QColor kWeekend(0xf7, 0xf7, 0xf7);           // measured (247,247,2
 inline const QColor kSelection(0xa2, 0xd3, 0xa0);
 inline const QColor kRowGutter(0xff, 0xff, 0xff);
 inline const QColor kRowGutterText(0x33, 0x33, 0x33);
-// Bar colours.  WAVE 24 (W24-18/W24-13): MEASURED from a NEW blank Project
-// 2021 project (FileNew, two auto tasks linked FS + a milestone, captured
-// locally on 2026-10-23).  The wave-21/23 values (blue task, pure-red critical,
-// black summary) came from PROJECT_A's capture -- that FILE's own bar styles --
-// and were the same mistake as the milestone-italic attribution.  Stock:
-//   non-critical task fill (116,204,212) teal; its links (27,173,186)
-//   critical task fill     (138,187,237) light blue; its links (38,124,211)
-//   summary fill           (43,163,173) dark teal  (wave23-outline's capture,
-//                          which is also a fresh Project file)
-//   milestone diamond      black (the styles capture's diamond)
+// Bar colours.  WAVE 25 (W25-2/S2) CORRECTS wave 24: (116,204,212) is
+// Project's MANUALLY SCHEDULED task fill, not the ordinary task fill, and
+// (138,187,237) is the ordinary AUTO task fill, not a critical fill.  Wave 24
+// sampled the first from an all-manual fixture and the second from a blank
+// project whose every task was auto and critical, with Critical Tasks
+// highlighting OFF -- so it measured two scheduling modes, not task-vs-critical.
+//
+// MEASURED on Project Professional 2021 (16.0.20430.20182), 2026-10-24, on a
+// synthetic plan with an unambiguous row of each type (auto task with slack,
+// auto critical task, manual task, auto/manual summary, auto/manual milestone),
+// captured locally with Format > Critical Tasks OFF and again ON:
+//   auto task fill        (138,187,237)   auto link        (38,124,211)
+//   manual task fill      (116,204,212)   manual link      (27,173,186)
+//   auto summary line     (84,84,84)      manual summary   (43,163,173)
+//   milestone diamond     black, both modes
+//   Critical Tasks ON: auto task (247,138,136), auto link (221,37,34);
+//   a summary keeps its own colour and a manual task/link does not change.
+// Critical highlighting is Project's default OFF and the port has no working
+// toggle yet, so ordinary painting uses the normal colours; kBarCritical and
+// kLinkCritical are the measured highlight-ON colours, reserved for the toggle.
 // The FILE's own bar-style colour records are still not decoded; a file that
 // overrides them renders with these measured stock colours (backlog W24-18).
-inline const QColor kBarTask(0x74, 0xcc, 0xd4);       // (116,204,212)
-inline const QColor kBarCritical(0x8a, 0xbb, 0xed);   // (138,187,237)
-inline const QColor kBarSummary(0x2b, 0xa3, 0xad);    // (43,163,173)
+inline const QColor kBarTask(0x8a, 0xbb, 0xed);        // (138,187,237) auto
+inline const QColor kBarManual(0x74, 0xcc, 0xd4);      // (116,204,212) manual
+inline const QColor kBarCritical(0xf7, 0x8a, 0x88);    // (247,138,136) highlight ON
+inline const QColor kBarSummary(0x54, 0x54, 0x54);     // (84,84,84) auto summary
+inline const QColor kBarSummaryManual(0x2b, 0xa3, 0xad);  // (43,163,173) manual summary
 inline const QColor kBarMilestone(0x00, 0x00, 0x00);
 inline const QColor kBarComplete(0x2f, 0x5f, 0x9a);
 inline const QColor kBarOutline(0x2b, 0x4a, 0x6f);
-inline const QColor kLinkLine(0x1b, 0xad, 0xba);       // (27,173,186)
-inline const QColor kLinkCritical(0x26, 0x7c, 0xd3);   // (38,124,211)
+inline const QColor kLinkAuto(0x26, 0x7c, 0xd3);       // (38,124,211)
+inline const QColor kLinkManual(0x1b, 0xad, 0xba);     // (27,173,186)
+inline const QColor kLinkCritical(0xdd, 0x25, 0x22);   // (221,37,34) highlight ON
 inline const QColor kBodyText(0x10, 0x10, 0x10);
 inline const QColor kMutedText(0x5a, 0x5a, 0x5a);
 inline const QColor kSheetBackground(0xff, 0xff, 0xff);

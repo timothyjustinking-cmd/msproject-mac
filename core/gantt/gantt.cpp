@@ -222,6 +222,7 @@ LinkRoute route_link(const Bar& pred, const Bar& succ, const LinkInput& input,
     route.successor_uid = input.successor_uid;
     route.type = input.type;
     route.critical = input.critical;
+    route.manual = input.manual;
 
     const double gap = style.link_gap > 0.0 ? style.link_gap : 0.0;
     const bool exit_left =
@@ -1088,6 +1089,7 @@ GanttLayout build_gantt(const GanttSource& source, const GanttStyle& style,
         bar.row = static_cast<int>(index);
         bar.kind = task.kind;
         bar.critical = task.critical;
+        bar.manual = task.manual;
         bar.percent_complete = clamp_unit(task.percent_complete);
         bar.label_text = bar_label_text(task, layout.style);
 

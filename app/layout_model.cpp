@@ -495,6 +495,10 @@ core::gantt::TaskBarInput bar_input_for(const TaskRow& row) {
         task.kind = core::gantt::BarKind::normal;
     }
     task.critical = row.critical;
+    // Wave 25 (W25-2/S2): Project's stock Gantt gives a manually scheduled
+    // row its own bar colour ("Manual Task"), distinct from the auto "Task"
+    // style.  The reader's measured bit decides which.
+    task.manual = row.manually_scheduled;
     return task;
 }
 
@@ -507,6 +511,14 @@ std::vector<core::gantt::LinkInput> link_inputs_for(const PlanInput& input) {
         link.successor_uid = row.successor_uid;
         link.type = row.type;
         link.critical = row.critical;
+        // Wave 25 (W25-2/S2): a link is drawn in the predecessor's bar style,
+        // so a link leaving a manually scheduled task is the manual colour.
+        for (const TaskRow& task : input.tasks) {
+            if (task.uid == row.predecessor_uid) {
+                link.manual = task.manually_scheduled;
+                break;
+            }
+        }
         links.push_back(link);
     }
     return links;
