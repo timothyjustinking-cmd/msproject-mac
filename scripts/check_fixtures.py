@@ -33,6 +33,11 @@ DOCUMENTED = {
     # task.  No client content.
     "tests/data/wave23-outline.mpp":
         "055721FF07E93F8C8C06B8428E9EF3495D10A38BE8C432506FCB5FF3A786DA20",
+    # Wave 23 (W23-6): wave23-outline.mpp opened by Project 2021 on a copy,
+    # Task.Flag10 set True on ID 3 and saved (the control save first).  The
+    # reader's Flag10 decode is checked against this file.
+    "tests/data/wave23-flags.mpp":
+        "6B74A9DAEA67F0759A6A465BAD63D20556C8A06EFFFEDCE3EBF71CF4F1B80958",
 }
 
 
