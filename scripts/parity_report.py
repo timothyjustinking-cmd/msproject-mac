@@ -752,9 +752,21 @@ class Analysis:
         sat = body.max(axis=2).astype(np.int16) - body.min(axis=2).astype(np.int16)
         saturated = sat >= 40
         min_run = max(12, int(2.0 * getattr(self, "day_width", 10.0)))
+        # A bar carries its label INSIDE the fill in both products, so the
+        # saturated run is interrupted by glyph pixels.  Wave 24 (W24-11):
+        # merge runs separated by a small gap (half a day cell) and measure the
+        # merged span; without this, a labelled 2-day bar (the port draws one)
+        # was never found and the colour check silently skipped.
+        gap = max(4, int(getattr(self, "day_width", 10.0) * 0.5))
         mask = np.zeros(saturated.shape, dtype=bool)
         for row in range(saturated.shape[0]):
+            spans = []
             for start, end in _runs(saturated[row]):
+                if spans and start - spans[-1][1] <= gap:
+                    spans[-1] = (spans[-1][0], end)
+                else:
+                    spans.append((start, end))
+            for start, end in spans:
                 if end - start >= min_run:
                     mask[row, start:end] = True
         # Require a few consecutive rows so a drawn status line cannot qualify.
@@ -1328,6 +1340,21 @@ def main(argv=None):
         if summary["comparable"] < MIN_COMPARABLE:
             print(f"error: only {summary['comparable']} comparable measure(s); "
                   f"at least {MIN_COMPARABLE} are required", file=sys.stderr)
+            return 1
+        # Wave 24 (W24-11): a colour the reference could not find (the wave-23
+        # capture had its chart scrolled away from the bars, so task_bar was
+        # "not found") must be a FAILURE, not a silently skipped measure.  All
+        # four measured colours must be present in the reference AND in the
+        # candidate render.
+        colour_keys = ("colour.header", "colour.grid", "colour.weekend",
+                       "colour.task_bar")
+        missing_colours = [
+            key for key in colour_keys
+            if not report.get("measures", {}).get(key, {}).get("found") or
+            not candidate.measures.get(key, {}).get("found")]
+        if missing_colours:
+            print("error: colour measure(s) not found: " +
+                  ", ".join(missing_colours), file=sys.stderr)
             return 1
         if args.json:
             payload = {"reference": args.reference_json, "comparison": rows,

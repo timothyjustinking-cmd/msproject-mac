@@ -224,14 +224,16 @@ if(CORE_BUILD_TESTS)
             )
             # Wave 23 (W23-9a, audit A-4): the scenario suite as a ctest lane,
             # with the CURRENT build tree's applier instead of the stale
-            # build/e1 default.  7/8 is the honest recorded state:
-            # constraint-mso is deliberately LEFT FAILING until a held-out
-            # Project measurement earns 8/8.  A change to that state, or a
-            # stale/missing applier, turns this test red.
+            # build/e1 default.  Wave 24 (W24-7/R10/V): the lane pins the
+            # FAILING SET BY NAME -- constraint-mso is deliberately LEFT
+            # FAILING until a held-out Project measurement earns 8/8, and every
+            # other scenario must pass.  A count-only expectation would stay
+            # green if constraint-mso started passing while another scenario
+            # broke.
             add_test(NAME engine_diff_suite
                 COMMAND "${Python3_EXECUTABLE}"
                         "${CMAKE_CURRENT_SOURCE_DIR}/scripts/engine_diff.py"
-                        --suite --expect 7/8
+                        --suite --expect-fail constraint-mso
                         --apply-bin "$<TARGET_FILE:engine_diff_tests>"
                         --workdir "${CMAKE_CURRENT_BINARY_DIR}/engine-diff/suite"
             )

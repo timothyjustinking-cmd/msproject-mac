@@ -1288,7 +1288,10 @@ void test_project_a(TestContext& context) {
         committed.assign(std::istreambuf_iterator<char>(existing),
                          std::istreambuf_iterator<char>());
     }
-    const bool update = !environment_value("PLAN_RECALC_UPDATE_GOLDEN").empty();
+    // Wave 24 (W24-4/V): the documented refresh value is EXACTLY "1".  The old
+    // test accepted any non-empty value (including "0"), so a typo or a
+    // leftover shell variable could rewrite a golden without saying so.
+    const bool update = environment_value("PLAN_RECALC_UPDATE_GOLDEN") == "1";
     if (!update) {
         context.check(committed == measured,
                       "the committed recalc golden equals the measured schedule "
