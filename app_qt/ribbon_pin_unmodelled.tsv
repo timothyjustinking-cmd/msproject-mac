@@ -1,13 +1,14 @@
 # Wave 23 (W23-10): controls Project's clean strips show that the port does NOT
 # model yet.
 #
-# WAVE 26 (G1): the Task Font controls, the Task Schedule buttons/icons, the
-# View Data/Zoom combos and Split View check boxes, the Gantt Chart Format
-# column icons/gallery/check boxes and the Resource/Project/View small-button
-# stacks are modelled in app_qt/ribbon_bar.cpp and pinned in
-# app_qt/ribbon_pin.tsv.  The one control still on the backlog is the Project
-# Status Date field, which W26-1.5 (the last item of this group) turns into a
-# date field.
+# WAVE 26 (G1): EMPTY.  Every control this file listed -- the Task Font combos,
+# B/I/U and colour splits and dialog launcher; the five %-complete buttons, the
+# five schedule icons, Mark on Track; the View Data/Zoom combos; the Split View
+# check boxes and combos; the Gantt Chart Format column icons, the 16-swatch
+# Gantt Chart Style gallery with its expander and dialog launcher, and the
+# Show/Hide / Bar Styles check boxes; the Project Status Date field; and the
+# Resource/Project/View small-button stacks -- is modelled in
+# app_qt/ribbon_bar.cpp and pinned in app_qt/ribbon_pin.tsv.  Keep this header:
+# a future backlog item goes here rather than being silently dropped.
 #
 # tab	group	kind	label
-Project	Status	field	Status Date
