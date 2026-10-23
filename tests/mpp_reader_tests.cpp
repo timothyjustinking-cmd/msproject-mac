@@ -224,6 +224,18 @@ class Sha256 {
     std::uint64_t bit_length_ = 0;
 };
 
+// The reader's display rule, restated independently: ASCII spaces trimmed from
+// both ends.  Wave 25 (W25-3 review) checks the relation exactly instead of
+// "name is a prefix of name_raw", which a reader that stops trimming passes.
+std::string trim_spaces(std::string text) {
+    const auto first = text.find_first_not_of(' ');
+    if (first == std::string::npos) {
+        return {};
+    }
+    const auto last = text.find_last_not_of(' ');
+    return text.substr(first, last - first + 1);
+}
+
 std::string name_hash(const std::string& name) {
     Sha256 sha;
     sha.update(name.data(), name.size());
@@ -850,15 +862,16 @@ void test_project_a(TestContext& context) {
         context.check(!spaced->name_raw.empty() && spaced->name_raw.back() == ' ',
                       "uid 8141 keeps the stored trailing space in name_raw");
         context.check(!spaced->name.empty() &&
-                          spaced->name == spaced->name_raw.substr(0, spaced->name.size()),
+                          spaced->name == trim_spaces(spaced->name_raw) &&
+                          spaced->name != spaced->name_raw,
                       "uid 8141's display name is the raw block trimmed like MS Project's");
     }
 
     const mpp::Task* named = find_task(document, 10733);
     context.check(named != nullptr, "uid 10733 is present");
     if (named != nullptr) {
-        context.check(!named->name.empty(),
-                      "uid 10733 has a name via key 0x0b40000e");
+        context.check(!named->name.empty() && named->name == trim_spaces(named->name_raw),
+                      "uid 10733 has a trimmed name via key 0x0b40000e");
         context.equal(named->duration_minutes(), std::uint32_t{16800},
                       "uid 10733 duration in minutes");
     }
@@ -2533,7 +2546,7 @@ void test_resources(TestContext& context) {
         // relation below is what the reader promises: a non-empty display name
         // that is the stored block trimmed.
         context.check(!first->name.empty(), "PROJECT_A resource 1 name is non-empty");
-        context.equal(first->name, first->name_raw.substr(0, first->name.size()),
+        context.equal(first->name, trim_spaces(first->name_raw),
                       "PROJECT_A resource 1 display name is the raw block trimmed");
     }
     const mpp::Resource* spaced = find_resource(project_a, 3);
@@ -2541,7 +2554,7 @@ void test_resources(TestContext& context) {
     if (spaced != nullptr) {
         context.check(!spaced->name_raw.empty() && spaced->name_raw.back() == ' ',
                       "resource name_raw keeps the stored trailing space");
-        context.equal(spaced->name, spaced->name_raw.substr(0, spaced->name.size()),
+        context.equal(spaced->name, trim_spaces(spaced->name_raw),
                       "resource name is trimmed for display like COM");
     }
     context.equal(mpp::load_file(MPP_PROJECT_B_PATH).resources.size(), std::size_t{22},
