@@ -9,6 +9,7 @@ checkout. Nothing here is client data.
 | `project_a_golden.tsv` | MS Project's own COM export of the PROJECT_A corpus file (83 live tasks), used as the oracle. See `project_a_golden.md`. |
 | `project_a_golden.md` | how the golden TSV was produced and what its columns mean |
 | `wave23-outline.mpp` | **synthetic** MPP14 fixture built by Project 2021 for wave 23: 3-level outline, FS+2 d / SS+1 d / FF links, one resource. See its provenance below. |
+| `wave23-flags.mpp` | the same fixture after Project set Task.Flag10 (0x0b400051) True on ID 3; the measured byte for the SUMMARY column (W23-6). SHA256 `6B74A9DA…F1B80958`. |
 | `synthetic-calendars.mpp` | synthetic two-calendar fixture (wave 19, `scripts/build_calendar_fixture.py`) |
 
 ## `wave23-outline.mpp` — provenance (wave 23)
@@ -62,6 +63,7 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `synthetic-viewstate-ctable-col.bin` | `7B753DFE1C930CF95C6C2E3D75A821505A2B6F43C35FB42C30979D824E5FF52E` |
 | `synthetic-viewstate-ctable-date.bin` | `E106E86452C37F4EA73263F043AE5EF1280BEEF46999C62271933960705EB3CB` |
 | `wave23-outline.mpp` | `055721FF07E93F8C8C06B8428E9EF3495D10A38BE8C432506FCB5FF3A786DA20` |
+| `wave23-flags.mpp` | `6B74A9DAEA67F0759A6A465BAD63D20556C8A06EFFFEDCE3EBF71CF4F1B80958` |
 
 ## `synthetic-base.mpp` — provenance
 
