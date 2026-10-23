@@ -88,8 +88,9 @@ const std::vector<TabPlan> kPlan = {
     // View's two "Other Views" entries are Project's one same-tab glyph reuse.
     {"View", {{"view.other", 2}}},
     {"Help", {}},
+    {"Gantt Chart Format", {}},
 };
-constexpr bool kAllTabsChecked = false;
+constexpr bool kAllTabsChecked = true;
 
 struct LiveCommand {
     QString group;

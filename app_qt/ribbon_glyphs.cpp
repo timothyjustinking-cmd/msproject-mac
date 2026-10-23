@@ -127,6 +127,89 @@ void info_page(QPainter& painter) {
     line(painter, 20, 19, 20, 23);
 }
 
+// --- Gantt Chart Format tab (W26-2.7) --------------------------------------
+bool draw_format_glyph(QPainter& painter, const QString& key) {
+    if (key == QStringLiteral("format.text_styles")) {
+        polyline(painter, {QPointF(2, 26), QPointF(10, 6), QPointF(18, 26)}, 2.5);
+        line(painter, 5, 19, 15, 19, 2.5);
+        polyline(painter, {QPointF(19, 26), QPointF(23, 16), QPointF(27, 26)}, 2.0);
+        line(painter, 21, 22, 25, 22, 2.0);
+    } else if (key == QStringLiteral("format.gridlines")) {
+        outline_rect(painter, 5, 5, 22, 22);
+        line(painter, 10.5, 5, 10.5, 27, 1.5);
+        line(painter, 16, 5, 16, 27, 1.5);
+        line(painter, 21.5, 5, 21.5, 27, 1.5);
+        line(painter, 5, 10.5, 27, 10.5, 1.5);
+        line(painter, 5, 16, 27, 16, 1.5);
+        line(painter, 5, 21.5, 27, 21.5, 1.5);
+    } else if (key == QStringLiteral("format.layout")) {
+        page(painter);
+        filled_rect(painter, 9, 14, 16, 6);
+        line(painter, 9, 24, 17, 24);
+    } else if (key == QStringLiteral("columns.insert")) {
+        outline_rect(painter, 4, 7, 18, 18);
+        line(painter, 12, 7, 12, 25);
+        line(painter, 12, 16, 28, 16, 2.5);
+        polyline(painter, {QPointF(24, 12), QPointF(28, 16), QPointF(24, 20)}, 2.5);
+    } else if (key == QStringLiteral("columns.align_left")) {
+        line(painter, 5, 8, 24, 8);
+        line(painter, 5, 13, 19, 13);
+        line(painter, 5, 18, 24, 18);
+        line(painter, 5, 23, 16, 23);
+    } else if (key == QStringLiteral("columns.align_centre")) {
+        line(painter, 7, 8, 25, 8);
+        line(painter, 10, 13, 22, 13);
+        line(painter, 6, 18, 26, 18);
+        line(painter, 11, 23, 21, 23);
+    } else if (key == QStringLiteral("columns.align_right")) {
+        line(painter, 8, 8, 27, 8);
+        line(painter, 13, 13, 27, 13);
+        line(painter, 8, 18, 27, 18);
+        line(painter, 16, 23, 27, 23);
+    } else if (key == QStringLiteral("columns.wrap")) {
+        line(painter, 6, 8, 26, 8);
+        line(painter, 6, 14, 26, 14);
+        line(painter, 6, 20, 18, 20);
+        line(painter, 18, 20, 18, 25);
+        line(painter, 18, 25, 12, 25);
+        polyline(painter, {QPointF(15, 22), QPointF(12, 25), QPointF(15, 28)}, 2.5);
+    } else if (key == QStringLiteral("columns.settings")) {
+        outline_rect(painter, 4, 8, 15, 17);
+        line(painter, 10, 8, 10, 25);
+        outline_circle(painter, 24, 20, 4.0);
+        line(painter, 24, 13.5, 24, 16, 2.0);
+        line(painter, 24, 24, 24, 26.5, 2.0);
+        line(painter, 17.5, 20, 20, 20, 2.0);
+        line(painter, 28, 20, 30.5, 20, 2.0);
+    } else if (key == QStringLiteral("bar_styles.format")) {
+        outline_rect(painter, 4, 10, 24, 6);
+        filled_rect(painter, 4, 18, 24, 6);
+    } else if (key == QStringLiteral("bar_styles.task_path")) {
+        filled_rect(painter, 4, 8, 24, 6);
+        line(painter, 16, 14, 16, 26);
+        line(painter, 16, 20, 7, 20);
+        line(painter, 16, 26, 25, 26);
+    } else if (key == QStringLiteral("bar_styles.baseline")) {
+        filled_rect(painter, 4, 9, 24, 5);
+        outline_rect(painter, 8, 20, 20, 4);
+        line(painter, 11, 22, 16, 22, 1.5);
+        line(painter, 19, 22, 25, 22, 1.5);
+    } else if (key == QStringLiteral("bar_styles.slippage")) {
+        filled_rect(painter, 4, 9, 14, 6);
+        filled_rect(painter, 14, 20, 14, 6);
+        line(painter, 20, 17, 20, 13, 2.0);
+        polyline(painter, {QPointF(17, 15), QPointF(20, 12), QPointF(23, 15)}, 2.0);
+    } else if (key == QStringLiteral("drawings.drawing")) {
+        page(painter);
+        outline_circle(painter, 14, 17, 5.5);
+        line(painter, 18, 25, 26, 17, 2.5);
+        filled_polygon(painter, {QPointF(17, 26), QPointF(21, 27), QPointF(18, 23)});
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // --- Help tab (W26-2.6) ----------------------------------------------------
 bool draw_help_glyph(QPainter& painter, const QString& key) {
     if (key == QStringLiteral("help.help")) {
@@ -677,7 +760,8 @@ QIcon shell_ribbon_icon(const QString& key, int pixels) {
     painter.setBrush(Qt::NoBrush);
     if (!draw_task_glyph(painter, key) && !draw_resource_glyph(painter, key) &&
         !draw_report_glyph(painter, key) && !draw_project_tab_glyph(painter, key) &&
-        !draw_view_glyph(painter, key) && !draw_help_glyph(painter, key)) {
+        !draw_view_glyph(painter, key) && !draw_help_glyph(painter, key) &&
+        !draw_format_glyph(painter, key)) {
         painter.end();
         // A key with no drawing is the neutral placeholder, never a blank
         // icon: the gate's placeholder hash then fails on it.
@@ -695,7 +779,8 @@ bool shell_ribbon_glyph_known(const QString& key) {
     painter.setBrush(Qt::NoBrush);
     const bool known = draw_task_glyph(painter, key) || draw_resource_glyph(painter, key) ||
                        draw_report_glyph(painter, key) || draw_project_tab_glyph(painter, key) ||
-                       draw_view_glyph(painter, key) || draw_help_glyph(painter, key);
+                       draw_view_glyph(painter, key) || draw_help_glyph(painter, key) ||
+                       draw_format_glyph(painter, key);
     painter.end();
     return known;
 }
