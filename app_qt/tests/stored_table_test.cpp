@@ -23,7 +23,8 @@
 // WAVE 22 adds the COLUMN VALUES:
 //   D. case_computed_text_rules(): the format rules of the three columns Project
 //      computes (Predecessors, Successors, Resource Names) on a CONSTRUCTED plan
-//      -- the bare id for a lag-free FS link, "FS+50 days" for a lagged one,
+//      -- the bare id for a lag-free FS link, "FS+50 d" for a lagged one (the
+//         file's own unit label, wave 23 W23-7),
 //      "33SS" for a type that is not FS, ", " inside Resource Names, and dead
 //      endpoints / unassigned rows / unknown uids skipped.
 //   E. The same text reaches the sheet: on the synthetic table's "Depends On"
@@ -781,7 +782,9 @@ void case_corpus(const QString& corpus) {
     // EVERY displayed row: % Complete is the task's stored percent, and Pre/Suc
     // are the plan's link text (the format itself is pinned by
     // case_computed_text_rules; this proves the file's links reach the sheet).
-    const core::sheet::SheetFormat format;
+    // Wave 23 (W23-7): the expectation uses the DOCUMENT's format, because this
+    // file stores the short day label ("d") and the port must print it.
+    const core::sheet::SheetFormat& format = sheet.format();
     int rows_checked = 0;
     int rows_with_links = 0;
     int blank_predecessors = 0;
@@ -835,8 +838,8 @@ void case_corpus(const QString& corpus) {
     // (corpus/reference/2026-10-23-msproject/project-gantt-loaded-clean.png).  The
     // number is the file's own task ID (the column Project prints):
     //   3 -> 4, 4 <- 3 -> 5, 5 <- 4;
-    //   9 <- 8 -> 10FS+50 days, 10 <- 9FS+50 days (240000 ticks = 50 days) -> 11;
-    //   17 -> 18,33FS+20 days,56,57,25 (the capture's 13-char column shows only
+    //   9 <- 8 -> 10FS+50 d, 10 <- 9FS+50 d (240000 ticks = 50 days) -> 11;
+    //   17 -> 18,33FS+20 d,56,57,25 (the capture's 13-char column shows only
     //     "18,33FS+20 d": Project CLIPS there, so the frame is the pin, not the PNG);
     //   33 <- 17FS+20 days -> 42SS,34; 34 <- 33 -> 39;
     //   35 <- 46 -> 40,36 and 36 <- 52,35 -> 39,37 and 37 <- 36 -> 38: the capture
@@ -853,10 +856,13 @@ void case_corpus(const QString& corpus) {
         {3, "", "4"},
         {4, "3", "5"},
         {5, "4", ""},
-        {9, "8", "10FS+50 days"},
-        {10, "9FS+50 days", "11"},
-        {17, "15", "18,33FS+20 days,56,57,25"},
-        {33, "17FS+20 days", "42SS,34"},
+        // Wave 23 (W23-7a): these are Project's own COM strings for this file.
+        // The four lagged rows print "d" (the file's day label is 0), not
+        // "days"; the wave-22 pins had encoded the port's own label rule.
+        {9, "8", "10FS+50 d"},
+        {10, "9FS+50 d", "11"},
+        {17, "15", "18,33FS+20 d,56,57,25"},
+        {33, "17FS+20 d", "42SS,34"},
         {34, "33", "39"},
         {35, "46", "40,36"},
         {36, "52,35", "39,37"},

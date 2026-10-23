@@ -72,8 +72,11 @@ ids, so the model and delegate paint them with no view special case.  Measured o
 
 The link syntax is taken from the operator's clean capture: commas without
 spaces, a bare id for a lag-free FS, FS kept when lagged, SS/FF/SF always
-printed, file link order.  The gate checks **83/83 rows** against an independent
-`mpp::load_file` oracle, plus 12 pinned Pre/Suc strings and 5 percents.
+printed, file link order.  The wave-22 gate checked **83/83 rows** against the
+app's own `mpp::load_file` reader, adapter and formatter path -- a wiring check,
+not an independent oracle (the audit's A-2).  Wave 23 replaces the expected text
+with Project's own `Task.Predecessors`/`Task.Successors` strings read through
+COM and pinned as a hash (`tests/data/project_a_preds_golden.sha256`).
 
 Two columns stay blank, asserted with byte reasons rather than invented:
 

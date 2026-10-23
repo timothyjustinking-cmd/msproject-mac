@@ -119,6 +119,11 @@ struct LinkRow {
     // The stored lag in 6-second file ticks (4800 = one 8-hour working day,
     // negative = lead).  The Predecessors dialog shows and edits it.
     std::int32_t lag_ticks = 0;
+    // Wave 23 (W23-7): the stored PjFormatUnit (link row +18): 7 = working
+    // days, 8 = elapsed days, 5/6 hours, 9/10 weeks, 11/12 months, 19 percent.
+    // Project prints the lag with this unit's label, not the sheet's
+    // magnitude-chosen one.
+    std::uint16_t lag_units = 0;
     bool critical = false;
 };
 

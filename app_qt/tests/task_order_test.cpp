@@ -16,12 +16,15 @@
 // Usage: qt_task_order <outline.mpp> <synthetic-base.mpp> [corpus/project_a.mpp]
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QFile>
 
 #include <cstdint>
 #include <cstdio>
 #include <string>
 #include <vector>
 
+#include "gantt.h"
 #include "layout_model.h"
 #include "plan_document.h"
 
@@ -133,6 +136,139 @@ void case_outline(const QString& path) {
     }
 }
 
+// Wave 23 (W23-7): the Depends On text of the oracle-built fixture, measured
+// through COM (Task.Predecessors/Successors) when the fixture was built, plus
+// one constructed case per stored PjFormatUnit.  The labels come from the
+// file's Options > Edit records (day = full words in this fixture).
+void case_link_text(const QString& path) {
+    msqt::PlanDocument document;
+    std::string error;
+    check(document.load(path.toStdString(), app::ZoomLevel::week, error),
+          "the outline fixture loads for the link-text case");
+    if (!error.empty()) {
+        return;
+    }
+    const auto text_of = [&document](std::uint32_t uid, bool incoming) {
+        return incoming ? msqt::predecessors_text(document.plan(), uid, document.format())
+                        : msqt::successors_text(document.plan(), uid, document.format());
+    };
+    const std::string t3 = text_of(3, false);
+    check(t3 == "4FS+2 days,5SS+1 day", "COM successor text of task 3");
+    check(text_of(4, true) == "3FS+2 days", "COM predecessor text of task 4");
+    check(text_of(4, false) == "6FF", "COM successor text of task 4");
+    check(text_of(5, true) == "3SS+1 day", "COM predecessor text of task 5");
+    check(text_of(6, true) == "4FF", "COM predecessor text of task 6");
+    // W23-7(d): the fixture carries a NAMED assignment, so the Who column is
+    // not blank-vs-blank in CI.  Project's Resource Names string for task 6 is
+    // the resource's name (read through COM when the fixture was built).
+    check(msqt::resource_names_text(document.plan(), 6) == "Resource A",
+          "the fixture's Who text is its assigned resource");
+    check(msqt::resource_names_text(document.plan(), 3).empty(),
+          "an unassigned task has an empty Who text");
+
+    // Every stored lag unit Project can write, in the fixture's full-word
+    // labels (2 days, 3 hrs, 1 wk, 1 mon, 50%).  Elapsed units carry Project's
+    // "e" prefix; a negative lag carries "-".
+    app::PlanInput plan;
+    plan.title = "units";
+    app::TaskRow first;
+    first.uid = 1;
+    first.id = 1;
+    first.name = "A";
+    app::TaskRow second;
+    second.uid = 2;
+    second.id = 2;
+    second.name = "B";
+    plan.tasks = {first, second};
+    core::sheet::SheetFormat format;  // full words, matching the fixture
+    struct UnitCase {
+        std::int32_t ticks;
+        std::uint16_t units;
+        const char* expected;
+        const char* what;
+    };
+    const UnitCase cases[] = {
+        {1800, 5, "1FS+3 hrs", "working hours"},
+        {1800, 6, "1FS+3 ehrs", "elapsed hours"},
+        {9600, 7, "1FS+2 days", "working days"},
+        {28800, 8, "1FS+2 edays", "elapsed days"},
+        {24000, 9, "1FS+1 wk", "working weeks"},
+        // COM prints "1 ewk" (singular), not "ewks", for one elapsed week.
+        {100800, 10, "1FS+1 ewk", "elapsed weeks"},
+        {96000, 11, "1FS+1 mon", "working months"},
+        {50, 19, "1FS+50%", "percent lag"},
+        {-9600, 7, "1FS-2 days", "negative lag"},
+        // A finish-to-start link with no lag is the BARE id (the capture's
+        // "9", "33"); the letters are dropped only for that case.
+        {0, 7, "1", "a bare finish-to-start link"},
+    };
+    for (const UnitCase& item : cases) {
+        plan.links.clear();
+        app::LinkRow link;
+        link.uid = 1;
+        link.predecessor_uid = 1;
+        link.successor_uid = 2;
+        link.type = core::gantt::LinkType::finish_to_start;
+        link.lag_ticks = item.ticks;
+        link.lag_units = item.units;
+        plan.links.push_back(link);
+        const std::string got = msqt::predecessors_text(plan, 2, format);
+        if (got != item.expected) {
+            std::fprintf(stderr, "FAIL: %s (got %s, want %s)\n", item.what, got.c_str(),
+                         item.expected);
+            ++g_failures;
+        }
+        ++g_checks;
+    }
+}
+
+// The same-file oracle for the 83-row Predecessors/Successors sweep: Project's
+// own COM strings, hashed.  The file carries only the hash, so no client task
+// name enters the repository.  Provenance: tests/data/project_a_preds_golden.sha256.
+void case_preds_golden(const QString& path, const QString& golden_path) {
+    msqt::PlanDocument document;
+    std::string error;
+    check(document.load(path.toStdString(), app::ZoomLevel::week, error),
+          "project_a.mpp loads for the predecessors golden");
+    if (!error.empty()) {
+        return;
+    }
+    std::string lines;
+    for (const app::TaskRow& task : document.plan().tasks) {
+        lines += std::to_string(task.id);
+        lines += '\t';
+        lines += msqt::predecessors_text(document.plan(), task.uid, document.format());
+        lines += '\t';
+        lines += msqt::successors_text(document.plan(), task.uid, document.format());
+        lines += '\n';
+    }
+    const QByteArray digest =
+        QCryptographicHash::hash(QByteArray::fromStdString(lines), QCryptographicHash::Sha256)
+            .toHex()
+            .toUpper();
+    QFile golden(golden_path);
+    if (!golden.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        std::fprintf(stderr, "FAIL: cannot open %s\n", qPrintable(golden_path));
+        ++g_failures;
+        ++g_checks;
+        return;
+    }
+    QString expected;
+    for (const QByteArray& raw : golden.readAll().split('\n')) {
+        const QString line = QString::fromLatin1(raw).trimmed();
+        if (!line.isEmpty() && !line.startsWith('#')) {
+            expected = line;
+            break;
+        }
+    }
+    check(QString::fromLatin1(digest) == expected,
+          "the 83-row Predecessors/Successors text matches Project's COM strings");
+    if (QString::fromLatin1(digest) != expected) {
+        std::fprintf(stderr, "note: port %s, golden %s\n", digest.constData(),
+                     qPrintable(expected));
+    }
+}
+
 void case_synthetic(const QString& path) {
     msqt::PlanDocument document;
     std::string error;
@@ -195,15 +331,20 @@ void case_corpus(const QString& path) {
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
-    if (argc < 3) {
-        std::fprintf(stderr, "usage: %s <outline.mpp> <synthetic-base.mpp> [project_a.mpp]\n",
+    if (argc < 4) {
+        std::fprintf(stderr,
+                     "usage: %s <outline.mpp> <synthetic-base.mpp> <golden.sha256> "
+                     "[project_a.mpp]\n",
                      argv[0]);
         return 2;
     }
     case_outline(QString::fromLocal8Bit(argv[1]));
     case_synthetic(QString::fromLocal8Bit(argv[2]));
-    if (argc >= 4) {
-        case_corpus(QString::fromLocal8Bit(argv[3]));
+    case_link_text(QString::fromLocal8Bit(argv[1]));
+    if (argc >= 5) {
+        case_preds_golden(QString::fromLocal8Bit(argv[4]),
+                          QString::fromLocal8Bit(argv[3]));
+        case_corpus(QString::fromLocal8Bit(argv[4]));
     }
     std::printf("qt_task_order: %d checks, %d failure(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
