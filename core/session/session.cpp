@@ -380,7 +380,8 @@ void Session::apply_plan_result() {
     status_.recalc_slack_matches = 0;
     status_.recalc_critical_matches = 0;
     status_.summary_links = 0;
-    flag10_disagreements_ = 0;
+    summary_disagreements_ = 0;
+    rows_without_schedule_ = 0;
 
     if (!plan_ || !recalc_attempted_) {
         apply_stored_values();
@@ -431,7 +432,7 @@ void Session::apply_plan_result() {
         if (scheduled == nullptr) {
             // No result for this row: keep what the file said rather than
             // inventing a schedule.  Counted, not named.
-            ++flag10_disagreements_;
+            ++rows_without_schedule_;
             continue;
         }
         row.start = scheduled->start;
@@ -453,7 +454,7 @@ void Session::apply_plan_result() {
             ++status_.recalc_critical_matches;
         }
         if (scheduled->summary != row.summary) {
-            ++flag10_disagreements_;
+            ++summary_disagreements_;
         }
     }
 
@@ -531,10 +532,17 @@ void Session::rebuild_warnings() {
         status_.warnings.push_back("links: " + count_text(status_.summary_links) +
                                    " link(s) touch a summary task and are not scheduled");
     }
-    if (flag10_disagreements_ > 0) {
-        status_.warnings.push_back("plan: " + count_text(flag10_disagreements_) +
-                                   " row(s) disagree with the reader's Summary flag or have "
-                                   "no schedule result");
+    // Wave 25 (W25-11/S13): these are two different facts.  Wave 24's blanket
+    // rename from summary_flag_disagreements to flag10_disagreements made both
+    // sound like the stored Flag10 bit; neither has anything to do with it.
+    if (rows_without_schedule_ > 0) {
+        status_.warnings.push_back("plan: " + count_text(rows_without_schedule_) +
+                                   " row(s) have no schedule result; the stored values "
+                                   "are shown");
+    }
+    if (summary_disagreements_ > 0) {
+        status_.warnings.push_back("plan: " + count_text(summary_disagreements_) +
+                                   " row(s) disagree with the reader's Summary flag");
     }
     if (recalc_attempted_ && !status_.recalculated) {
         status_.warnings.emplace_back(

@@ -329,7 +329,9 @@ class Session {
     // Raw counters the deterministic warning list is rebuilt from, so
     // recalculate() never appends a duplicate warning.
     std::size_t reader_warnings_ = 0;
-    std::size_t flag10_disagreements_ = 0;
+    // Wave 25 (W25-11/S13): Schedule-vs-reader facts, named for what they count.
+    std::size_t summary_disagreements_ = 0;    // scheduled summary != reader's Summary
+    std::size_t rows_without_schedule_ = 0;    // no PlanResult row for a live row
     bool calendar_fell_back_ = false;
     // True once recalculate() has run (even if it failed), so apply_plan_result()
     // can tell "never attempted" from "attempted and produced nothing".

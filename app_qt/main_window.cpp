@@ -2135,8 +2135,12 @@ void MainWindow::export_pdf(app::ReportKind kind) {
     request.metrics = app::default_sheet_metrics();
     request.preferences = prefs_;
     request.title = doc_.loaded().title.empty() ? "Project report" : doc_.loaded().title;
-    const std::size_t total = doc_.records().row_count();
-    const std::size_t shown = doc_.filter_active() ? doc_.filter_rows().size() : total;
+    // Wave 25 (W25-11/S14): the project-summary row (uid 0) is a row, not a
+    // task; Print already says "N of N", so the PDF subtitle must not count it.
+    const std::size_t total = app::task_row_count(doc_.records(), {});
+    const std::size_t shown = doc_.filter_active()
+                                  ? app::task_row_count(doc_.records(), doc_.filter_rows())
+                                  : total;
     request.subtitle =
         app::export_subtitle(kind, doc_.filter_active() ? doc_.filter_description() : "",
                              shown, total);

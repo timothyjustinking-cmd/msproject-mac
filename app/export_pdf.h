@@ -111,6 +111,13 @@ std::shared_ptr<const core::sched::Calendar> shading_calendar(bool working_day_s
 std::string export_subtitle(ReportKind kind, const std::string& filter_description,
                             std::size_t shown, std::size_t total);
 
+// Wave 25 (W25-11/S14): how many of `rows` are TASKS.  The synthetic
+// project-summary row (uid 0) is a displayed row, not a task, and both Print
+// and the PDF subtitle say "N of N tasks" -- so the PDF must not count it.
+// An empty `rows` means every RecordSet row.
+std::size_t task_row_count(const core::view::RecordSet& records,
+                           const std::vector<std::size_t>& rows);
+
 // "Selected: <text>" (when a task is selected) + the preference summary.
 std::string export_footer(const Preferences& preferences, const std::string& selection_text);
 

@@ -57,7 +57,18 @@ recorded here rather than by rewriting them.
   `39d11b4` is the commit that removed it.  The clean baseline is `39d11b4`.
   Both statements are corrected in `docs/START-HERE.md` in this wave.
 
-### 2.3 Claims that stand
+### 2.3 R16 and R17 dispositions (W25-11/S13/S14)
+
+The wave-24 review found that R16 and R17 were never mapped to a W24 item and
+had no disposition.  They are mapped here.
+
+| finding | what it is | disposition |
+|---|---|---|
+| R16a | the frozen row-number gutter paints "0" on a pending inserted row | **DEFERRED to W25-21 (cosmetic, no data loss).** Cause: a pending row has ID 0, and `SheetTableModel::row_number_text()` returns the non-empty `field_text` "0" before its display-ordinal fallback. The fix is for the model to return empty when `id == 0` and `row_uid != 0` (the project row is uid 0 and must keep its "0") and for `SheetRowHeader::paintSection` to paint nothing rather than fall back to the ordinal; a Qt test must pin the blank. Not attempted here because it changes the header contract in the same wave as the row-routing work and needs the pending-row fixture. |
+| R16b | Insert Task while the project row is selected appends the new row at the end | **DEFERRED to W25-21.** `MainWindow::insert_task()` sets `anchor_uid = selected_uid`; uid 0 means "no anchor", which the edit model treats as append. Project inserts at the top of the plan (the project row is not a task). The fix needs an anchor rule ("project row selected" -> anchor at the first level-0 task) plus a `qt_uid_routing` assertion. |
+| R17 | macOS duplicate menu label | **DEFERRED to W25-21.** The AppKit menu builder in `app/main.mm` is macOS-only and cannot be compiled or run on this development machine; the shared `app::menu_model` data has no duplicate title within a menu by inspection, and no test compares the AppKit menu to it. Reproduce on a Mac, then either remove the duplicate item or give it a distinct title; add the missing macOS menu-shape check at the same time. |
+
+### 2.4 Claims that stand
 
 `gate-core-ctest.log` 51/51, `gate-plan-recalc.log` 266 checks,
 `gate-app-ctest.log` 15/15, `gate-qt-ctest.log` 18/18, `gate-m2.log` 332/332
