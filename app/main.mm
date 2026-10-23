@@ -1783,11 +1783,15 @@ void run_export_panel(PlanState& plan, app::ReportKind kind) {
     request.metrics = plan.metrics;
     request.preferences = g_prefs;
     request.title = plan.loaded.title.empty() ? "Project report" : plan.loaded.title;
+    // Wave 25 (W25-11/S14 review): the project-summary row (uid 0) is a row,
+    // not a task; the macOS PDF must say "N of N" like Print and the Qt shell.
+    // A filtered list is counted exactly (an empty zero-match filter is 0).
+    const std::size_t total = app::task_row_count(plan.records);
     const std::size_t shown =
-        plan.filter_active ? plan.filter_rows.size() : plan.records.row_count();
+        plan.filter_active ? app::task_row_count(plan.records, plan.filter_rows) : total;
     request.subtitle =
         app::export_subtitle(kind, plan.filter_active ? plan.filter_description : std::string(),
-                             shown, plan.records.row_count());
+                             shown, total);
     request.footer = app::export_footer(g_prefs, selection_label(plan));
     for (const app::LinkRow& row : plan.view.links) {
         core::gantt::LinkInput link;

@@ -107,17 +107,19 @@ std::string export_subtitle(ReportKind kind, const std::string& filter_descripti
     return text;
 }
 
+std::size_t task_row_count(const core::view::RecordSet& records) {
+    std::size_t count = 0;
+    for (std::size_t row = 0; row < records.row_count(); ++row) {
+        if (records.uid(row) != 0) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 std::size_t task_row_count(const core::view::RecordSet& records,
                            const std::vector<std::size_t>& rows) {
     std::size_t count = 0;
-    if (rows.empty()) {
-        for (std::size_t row = 0; row < records.row_count(); ++row) {
-            if (records.uid(row) != 0) {
-                ++count;
-            }
-        }
-        return count;
-    }
     for (const std::size_t row : rows) {
         if (row < records.row_count() && records.uid(row) != 0) {
             ++count;
