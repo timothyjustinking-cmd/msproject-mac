@@ -87,6 +87,7 @@ const std::vector<TabPlan> kPlan = {
     {"Project", {}},
     // View's two "Other Views" entries are Project's one same-tab glyph reuse.
     {"View", {{"view.other", 2}}},
+    {"Help", {}},
 };
 constexpr bool kAllTabsChecked = false;
 
