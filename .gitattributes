@@ -1,0 +1,9 @@
+# Wave 23: the reference measurement JSON is hashed by check_fixtures.py and is
+# committed with LF; Windows CI has core.autocrlf=true, which converted it to
+# CRLF on checkout and failed the fixture gate (run 39945123565).  Pin THIS file
+# to LF.  Do not blanket-normalise the tree: project_a_recalc_golden.tsv is
+# committed with CRLF and its documented SHA-256 is of those bytes.
+tests/data/reference/*.json text eol=lf
+*.mpp binary
+*.png binary
+*.bin binary
