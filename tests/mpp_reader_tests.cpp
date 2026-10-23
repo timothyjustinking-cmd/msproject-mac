@@ -1404,6 +1404,16 @@ void test_flag10(TestContext& context) {
         const SingleFlagCase singles[] = {
             {"wave24-flag2.mpp", 1, "Flag2 decodes to flags[1] only"},
             {"wave24-flag20.mpp", 19, "Flag20 decodes to flags[19] only"},
+            // Wave 25 (W25-9/S11): one control per bit in the non-contiguous
+            // +33 group.  A permuted mask table inside the group passes the
+            // all-20 aggregate; each row here names exactly one decoded slot.
+            {"wave25-flag11.mpp", 10, "Flag11 decodes to flags[10] only"},
+            {"wave25-flag12.mpp", 11, "Flag12 decodes to flags[11] only"},
+            {"wave25-flag13.mpp", 12, "Flag13 decodes to flags[12] only"},
+            {"wave25-flag14.mpp", 13, "Flag14 decodes to flags[13] only"},
+            {"wave25-flag15.mpp", 14, "Flag15 decodes to flags[14] only"},
+            {"wave25-flag16.mpp", 15, "Flag16 decodes to flags[15] only"},
+            {"wave25-flag17.mpp", 16, "Flag17 decodes to flags[16] only"},
         };
         for (const SingleFlagCase& item : singles) {
             const std::string path = (test_data_dir() / item.file).string();
