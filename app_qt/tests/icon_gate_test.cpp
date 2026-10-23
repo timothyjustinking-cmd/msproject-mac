@@ -84,6 +84,7 @@ const std::vector<TabPlan> kPlan = {
     {"Task", {}},
     {"Resource", {}},
     {"Report", {}},
+    {"Project", {}},
 };
 constexpr bool kAllTabsChecked = false;
 
