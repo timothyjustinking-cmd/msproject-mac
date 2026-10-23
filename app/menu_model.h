@@ -79,6 +79,7 @@ enum class MenuAction : std::uint8_t {
     // both queue edits the Save path writes (app/edit_model.h): Task Fields edits
     // the six measured custom fields, Predecessors adds/removes incoming links.
     task_fields,
+    custom_fields,
     predecessors,
     // Wave 16: the two pending document edits app::Document::save() writes -- a
     // `214/CTable` table date format and a `114/Props` custom-field formula.
