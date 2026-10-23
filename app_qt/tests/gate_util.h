@@ -34,23 +34,38 @@ inline void check_near(double value, double target, double tolerance, const char
     }
 }
 
+inline QAction* find_action_in_menu(QMenu* menu, app::MenuAction id) {
+    if (menu == nullptr) {
+        return nullptr;
+    }
+    for (QAction* action : menu->actions()) {
+        if (action->menu() != nullptr) {
+            // W26-6.1: the View drop-downs put commands one level down.
+            if (QAction* found = find_action_in_menu(action->menu(), id);
+                found != nullptr) {
+                return found;
+            }
+            continue;
+        }
+        if (!action->data().isValid()) {
+            continue;
+        }
+        if (action->data().toInt() == static_cast<int>(id)) {
+            return action;
+        }
+    }
+    return nullptr;
+}
+
 inline QAction* find_action(QMainWindow& window, app::MenuAction id) {
     QMenuBar* bar = window.menuBar();
     if (bar == nullptr) {
         return nullptr;
     }
     for (QAction* menu_action : bar->actions()) {
-        QMenu* menu = menu_action->menu();
-        if (menu == nullptr) {
-            continue;
-        }
-        for (QAction* action : menu->actions()) {
-            if (!action->data().isValid()) {
-                continue;
-            }
-            if (action->data().toInt() == static_cast<int>(id)) {
-                return action;
-            }
+        if (QAction* found = find_action_in_menu(menu_action->menu(), id);
+            found != nullptr) {
+            return found;
         }
     }
     return nullptr;

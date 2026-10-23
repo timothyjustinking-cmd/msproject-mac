@@ -21,6 +21,19 @@ MenuItemSpec item(MenuAction action, const char* title, const char* key = "",
     return spec;
 }
 
+// WAVE 26 (W26-6.1): a drop-down container.  It has no action or key of its
+// own; the children are ordinary MenuItemSpecs and are what the builders
+// create actions for.
+MenuItemSpec submenu(const char* title, std::vector<MenuItemSpec> children,
+                     bool separator_before = false) {
+    MenuItemSpec spec;
+    spec.title = title;
+    spec.children = std::move(children);
+    spec.command_key = false;
+    spec.separator_before = separator_before;
+    return spec;
+}
+
 std::vector<MenuSpec> build_menu_specs() {
     std::vector<MenuSpec> menus;
 
@@ -82,13 +95,34 @@ std::vector<MenuSpec> build_menu_specs() {
     MenuSpec view;
     view.title = "View";
     view.items = {
-        // Wave 11: the four views.  Cmd-Option-1..4 do not collide with the
-        // Gantt timescale's Cmd-1..3 (different modifier mask), which is what
-        // menu_tests' per-menu key-equivalent uniqueness check compares.
-        item(MenuAction::view_task_sheet, "Task Sheet", "1", false, true),
-        item(MenuAction::view_resource_sheet, "Resource Sheet", "2", false, true),
-        item(MenuAction::view_task_usage, "Task Usage", "3", false, true),
-        item(MenuAction::view_resource_usage, "Resource Usage", "4", false, true),
+        // WAVE 26 (W26-6.1 / W25-15 / operator Q17): Project 2021 puts the view
+        // switches in two drop-downs, not as flat View-menu commands.  The
+        // entries and their order are the clean View-strip readback
+        // (docs/handoff/audit-w22/A2-fable-readback.md lines 35-36):
+        //   Task Views:     Gantt Chart, Task Usage, Network Diagram, Calendar,
+        //                   Other Views
+        //   Resource Views: Team Planner, Resource Usage, Resource Sheet,
+        //                   Other Views
+        // The four views this port has keep the wave-11 Cmd-Option-1..4 keys;
+        // the four it does not have are present, disabled and carry the
+        // decision-9 tooltip (never faked, never dropped).
+        submenu("Task Views",
+                {
+                    item(MenuAction::view_task_sheet, "Gantt Chart", "1", false, true),
+                    item(MenuAction::view_task_usage, "Task Usage", "3", false, true),
+                    item(MenuAction::none, "Network Diagram"),
+                    item(MenuAction::none, "Calendar"),
+                    item(MenuAction::none, "Other Views"),
+                }),
+        submenu("Resource Views",
+                {
+                    item(MenuAction::none, "Team Planner"),
+                    item(MenuAction::view_resource_usage, "Resource Usage", "4", false,
+                         true),
+                    item(MenuAction::view_resource_sheet, "Resource Sheet", "2", false,
+                         true),
+                    item(MenuAction::none, "Other Views"),
+                }),
         // The usage grids' period width.  No key equivalents: the period is a
         // display scale, not a command users reach for blind.
         item(MenuAction::usage_day, "Usage Period: Day", "", false, false, true),
@@ -191,10 +225,18 @@ const std::vector<MenuSpec>& menu_specs() {
 }
 
 const MenuItemSpec* find_menu_item(MenuAction action) {
+    // W26-6.1: the View drop-downs put commands one level down, so the lookup
+    // walks into a submenu and reports the container itself for a drop-down
+    // action (there is none today; the parents carry no action).
     for (const MenuSpec& menu : menu_specs()) {
         for (const MenuItemSpec& spec : menu.items) {
             if (spec.action == action) {
                 return &spec;
+            }
+            for (const MenuItemSpec& child : spec.children) {
+                if (child.action == action) {
+                    return &child;
+                }
             }
         }
     }
@@ -218,6 +260,10 @@ const char* menu_disabled_reason(MenuAction action) noexcept {
         case MenuAction::insert_resource:
             return "adding a resource needs a resource writer; the resource sheet is read-only "
                    "(wave 11), insert/delete is wave 12";
+        // W26-6.1: Project's View drop-downs list views this port does not
+        // build.  They are present and disabled with decision 9's exact text.
+        case MenuAction::none:
+            return "not implemented in this port";
         default:
             return "";
     }

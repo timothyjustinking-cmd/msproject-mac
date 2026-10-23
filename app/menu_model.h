@@ -105,6 +105,17 @@ struct MenuItemSpec {
     bool shift = false;
     bool option = false;
     bool separator_before = false;
+    // WAVE 26 (W26-6.1): a non-empty list makes this item a SUBMENU.  The
+    // parent itself carries no action (Project's View > Task Views / Resource
+    // Views are drop-down containers); every child is a normal item with its own
+    // title, action, key and enablement rule.  A child whose action is `none` is
+    // an entry Project shows and this port cannot implement yet: both builders
+    // grey it out with the decision-9 tooltip, exactly like a top-level
+    // unsupported command.  W25-15 named the missing submenu axis as the
+    // obstacle to the two View drop-downs; this is that axis.
+    std::vector<MenuItemSpec> children;
+
+    bool is_submenu() const noexcept { return !children.empty(); }
 };
 
 struct MenuSpec {

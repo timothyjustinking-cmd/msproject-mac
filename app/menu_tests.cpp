@@ -72,10 +72,35 @@ int count_items(MenuAction action) {
             if (item.action == action) {
                 ++count;
             }
+            for (const MenuItemSpec& child : item.children) {
+                if (child.action == action) {
+                    ++count;
+                }
+            }
         }
     }
     return count;
 }
+
+// W26-6.1: the View drop-downs are one level deep, so the checks below flatten
+// each menu's items before looking at actions/keys.
+std::vector<const MenuItemSpec*> flattened_items(const MenuSpec& menu) {
+    std::vector<const MenuItemSpec*> items;
+    for (const MenuItemSpec& item : menu.items) {
+        if (item.is_submenu()) {
+            for (const MenuItemSpec& child : item.children) {
+                items.push_back(&child);
+            }
+        } else {
+            items.push_back(&item);
+        }
+    }
+    return items;
+}
+
+// The View drop-downs' captured contents, in the clean strip's order
+// (docs/handoff/audit-w22/A2-fable-readback.md lines 35-36).
+
 
 const MenuSpec& menu_named(const std::string& title) {
     static const MenuSpec fallback;
@@ -85,6 +110,17 @@ const MenuSpec& menu_named(const std::string& title) {
         }
     }
     return fallback;
+}
+
+// The View drop-downs' captured contents, in the clean strip's order
+// (docs/handoff/audit-w22/A2-fable-readback.md lines 35-36).
+const MenuItemSpec* submenu_named(const std::string& title) {
+    for (const MenuItemSpec& item : menu_named("View").items) {
+        if (item.is_submenu() && title == item.title) {
+            return &item;
+        }
+    }
+    return nullptr;
 }
 
 void test_menus() {
@@ -102,8 +138,26 @@ void test_menus() {
     for (const MenuSpec& menu : menus) {
         check(!menu.items.empty(), "no menu is empty");
         for (const MenuItemSpec& item : menu.items) {
-            check(item.action != MenuAction::none, "no item has a null action");
-            check(item.title != nullptr && item.title[0] != '\0', "no item has an empty title");
+            check(item.title != nullptr && item.title[0] != '\0',
+                  "no item has an empty title");
+            if (item.is_submenu()) {
+                // W26-6.1: a container has no action and no key of its own; its
+                // children carry them.
+                check(item.action == MenuAction::none,
+                      "a submenu container has no action");
+                check(std::string(item.key).empty(),
+                      "a submenu container has no key equivalent");
+                check(!item.children.empty(), "a submenu has at least one child");
+                for (const MenuItemSpec& child : item.children) {
+                    check(child.title != nullptr && child.title[0] != '\0',
+                          "a submenu child has a non-empty title");
+                    check(!child.is_submenu(),
+                          "the measured View drop-downs are one level deep");
+                }
+            } else {
+                check(item.action != MenuAction::none,
+                      "a top-level item has a null action");
+            }
         }
     }
 }
@@ -117,10 +171,20 @@ void test_actions_present_once_per_menu() {
         check(std::string(app::menu_action_name(action)) != "none", "no action is named none");
     }
     // No action appears twice inside one menu (the shell uses one tag per item).
+    // W26-6.1: the check walks through the View drop-downs too.  `none` is the
+    // placeholder for a present-but-unimplemented entry; several of those may
+    // share it because it is never dispatched or used as a tag.
     for (const MenuSpec& menu : app::menu_specs()) {
-        for (std::size_t left = 0; left < menu.items.size(); ++left) {
-            for (std::size_t right = left + 1; right < menu.items.size(); ++right) {
-                check(menu.items[left].action != menu.items[right].action,
+        const std::vector<const MenuItemSpec*> items = flattened_items(menu);
+        for (std::size_t left = 0; left < items.size(); ++left) {
+            if (items[left]->action == MenuAction::none) {
+                continue;
+            }
+            for (std::size_t right = left + 1; right < items.size(); ++right) {
+                if (items[right]->action == MenuAction::none) {
+                    continue;
+                }
+                check(items[left]->action != items[right]->action,
                       "no action appears twice in one menu");
             }
         }
@@ -129,13 +193,14 @@ void test_actions_present_once_per_menu() {
 
 void test_key_equivalents_unique() {
     for (const MenuSpec& menu : app::menu_specs()) {
-        for (std::size_t left = 0; left < menu.items.size(); ++left) {
-            const MenuItemSpec& first = menu.items[left];
+        const std::vector<const MenuItemSpec*> items = flattened_items(menu);
+        for (std::size_t left = 0; left < items.size(); ++left) {
+            const MenuItemSpec& first = *items[left];
             if (first.key == nullptr || first.key[0] == '\0') {
                 continue;
             }
-            for (std::size_t right = left + 1; right < menu.items.size(); ++right) {
-                const MenuItemSpec& second = menu.items[right];
+            for (std::size_t right = left + 1; right < items.size(); ++right) {
+                const MenuItemSpec& second = *items[right];
                 if (second.key == nullptr || second.key[0] == '\0') {
                     continue;
                 }
@@ -247,8 +312,9 @@ void test_documented_menu_contents() {
     check_text(custom_field_formula_title, "Custom Field Formula...",
                "Custom Field Formula has its documented label");
 
-    // View: the four views (wave 11) with Cmd-Option-1..4, the usage periods,
-    // and the three timescales, the shading toggle, the filter.
+    // View: the four views (wave 11) in Project's two drop-downs with
+    // Cmd-Option-1..4, the usage periods, and the three timescales, the shading
+    // toggle, the filter.  W26-6.1: the view switches are no longer flat items.
     bool view_task = false;
     bool view_resource = false;
     bool view_task_usage = false;
@@ -264,7 +330,8 @@ void test_documented_menu_contents() {
     bool clear_filter = false;
     bool table_date_format = false;
     std::string table_date_format_title;
-    for (const MenuItemSpec& item : menu_named("View").items) {
+    for (const MenuItemSpec* item_pointer : flattened_items(menu_named("View"))) {
+        const MenuItemSpec& item = *item_pointer;
         zoom_day = zoom_day || item.action == MenuAction::zoom_day;
         zoom_week = zoom_week || item.action == MenuAction::zoom_week;
         zoom_month = zoom_month || item.action == MenuAction::zoom_month;
@@ -301,6 +368,55 @@ void test_documented_menu_contents() {
     check(table_date_format, "View offers Table Date Format with no key equivalent");
     check_text(table_date_format_title, "Table Date Format...",
                "Table Date Format has its documented label");
+
+    // W26-6.1: the two View drop-downs carry exactly the clean strip's entries,
+    // in its order.  The entries this port implements carry their actions; the
+    // rest are present and unsupported so both builders grey them out.
+    const MenuItemSpec* task_views = submenu_named("Task Views");
+    const MenuItemSpec* resource_views = submenu_named("Resource Views");
+    check(task_views != nullptr, "View has a Task Views drop-down");
+    check(resource_views != nullptr, "View has a Resource Views drop-down");
+    if (task_views != nullptr && resource_views != nullptr) {
+        const char* const task_titles[5] = {"Gantt Chart", "Task Usage", "Network Diagram",
+                                            "Calendar", "Other Views"};
+        const char* const resource_titles[4] = {"Team Planner", "Resource Usage",
+                                                "Resource Sheet", "Other Views"};
+        check(task_views->children.size() == 5, "Task Views has the five captured entries");
+        check(resource_views->children.size() == 4,
+              "Resource Views has the four captured entries");
+        for (std::size_t index = 0;
+             index < task_views->children.size() && index < 5; ++index) {
+            check_text(task_views->children[index].title, task_titles[index],
+                       "a Task Views entry is the capture's, in order");
+        }
+        for (std::size_t index = 0;
+             index < resource_views->children.size() && index < 4; ++index) {
+            check_text(resource_views->children[index].title, resource_titles[index],
+                       "a Resource Views entry is the capture's, in order");
+        }
+        check(task_views->children[0].action == MenuAction::view_task_sheet,
+              "Task Views > Gantt Chart is the Task Sheet view");
+        check(task_views->children[1].action == MenuAction::view_task_usage,
+              "Task Views > Task Usage is the usage view");
+        check(resource_views->children[1].action == MenuAction::view_resource_usage,
+              "Resource Views > Resource Usage is the usage view");
+        check(resource_views->children[2].action == MenuAction::view_resource_sheet,
+              "Resource Views > Resource Sheet is the resource sheet");
+        const MenuItemSpec* const unimplemented[4] = {
+            &task_views->children[2], &task_views->children[3],
+            &task_views->children[4], &resource_views->children[0]};
+        for (const MenuItemSpec* item : unimplemented) {
+            check(item->action == MenuAction::none,
+                  "an unimplemented View entry carries no action");
+            check(!app::menu_item_supported(item->action),
+                  "an unimplemented View entry is disabled");
+        }
+        check(resource_views->children[3].action == MenuAction::none,
+              "Resource Views > Other Views is present and disabled");
+        check_text(app::menu_disabled_reason(MenuAction::none),
+                   "not implemented in this port",
+                   "an unimplemented View entry carries decision 9's exact tooltip");
+    }
 
     // Insert: Task (wave 12, Cmd-I) and Resource (still unsupported).
     const MenuSpec& insert = menu_named("Insert");

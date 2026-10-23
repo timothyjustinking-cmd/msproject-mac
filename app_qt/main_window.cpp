@@ -60,6 +60,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <iterator>
 #include <string>
 #include <utility>
@@ -114,17 +115,28 @@ QFont fixed_font(int point_size) {
 // drift from the menu bar.
 QString shortcuts_text() {
     QString text;
+    // W26-6.1: a drop-down's own title is a heading line and its children carry
+    // the keys, so the panel lists them too.
+    std::function<void(const std::vector<app::MenuItemSpec>&, int)> append_items =
+        [&append_items, &text](const std::vector<app::MenuItemSpec>& items, int depth) {
+            const QString indent(4 * (depth + 1), QLatin1Char(' '));
+            for (const app::MenuItemSpec& item : items) {
+                if (item.is_submenu()) {
+                    text += indent + QString::fromUtf8(item.title) + QStringLiteral("\n");
+                    append_items(item.children, depth + 1);
+                    continue;
+                }
+                const QKeySequence shortcut = menu_shortcut(item);
+                if (shortcut.isEmpty()) {
+                    continue;
+                }
+                text += indent + QString::fromUtf8(item.title) + QStringLiteral("    ") +
+                        shortcut.toString(QKeySequence::NativeText) + QStringLiteral("\n");
+            }
+        };
     for (const app::MenuSpec& menu : app::menu_specs()) {
         text += QString::fromUtf8(menu.title) + QStringLiteral("\n");
-        for (const app::MenuItemSpec& item : menu.items) {
-            const QKeySequence shortcut = menu_shortcut(item);
-            if (shortcut.isEmpty()) {
-                continue;
-            }
-            text += QStringLiteral("    ") + QString::fromUtf8(item.title) +
-                    QStringLiteral("    ") + shortcut.toString(QKeySequence::NativeText) +
-                    QStringLiteral("\n");
-        }
+        append_items(menu.items, 0);
         text += QStringLiteral("\n");
     }
     return text;
@@ -625,44 +637,61 @@ void MainWindow::build_central_widget() {
 void MainWindow::build_menus() {
     QMenuBar* bar = menuBar();
     actions_.clear();
+    // W26-6.1: one recursive item builder so a drop-down goes through exactly
+    // the same action table as a top-level command.  Every leaf QAction lands in
+    // actions_, which update_menu_state() walks; a container QAction has no
+    // data and is never enabled/disabled by the table.
+    std::function<void(QMenu*, const std::vector<app::MenuItemSpec>&)> add_items =
+        [this, &add_items](QMenu* menu, const std::vector<app::MenuItemSpec>& items) {
+            bool first = true;
+            for (const app::MenuItemSpec& item : items) {
+                if (item.separator_before && !first) {
+                    menu->addSeparator();
+                }
+                first = false;
+                if (item.is_submenu()) {
+                    QMenu* child = menu->addMenu(QString::fromUtf8(item.title));
+                    add_items(child, item.children);
+                    continue;
+                }
+                QAction* action = menu->addAction(QString::fromUtf8(item.title));
+                action->setData(static_cast<int>(item.action));
+                if (item.action != app::MenuAction::none) {
+                    // The quick-access toolbar reuses these actions, so give
+                    // every one an icon drawn by shell_icons.cpp (never
+                    // Microsoft artwork).  A present-but-unimplemented entry
+                    // draws no glyph rather than the placeholder.
+                    action->setIcon(shell_action_icon(item.action));
+                }
+                const QKeySequence shortcut = menu_shortcut(item);
+                if (!shortcut.isEmpty()) {
+                    action->setShortcut(shortcut);
+                }
+                const char* reason = app::menu_disabled_reason(item.action);
+                if (!shell_implements(item.action)) {
+                    // Operator decision 9: every unimplemented command is disabled
+                    // with this exact tooltip (and listed in the generated backlog).
+                    action->setToolTip(QStringLiteral("not implemented in this port"));
+                    action->setStatusTip(action->toolTip());
+                } else if (item.action == app::MenuAction::cut) {
+                    // The app's action table marks Cut unsupported because the
+                    // macOS shell has no cut path.  The Qt shell implements it as
+                    // Copy + a clearing transaction on the same SheetModel, so the
+                    // reason is stale here; give it the real description instead.
+                    action->setToolTip(QStringLiteral("Cut the selected cells (values only)"));
+                    action->setStatusTip(action->toolTip());
+                } else if (reason != nullptr && reason[0] != '\0') {
+                    action->setToolTip(QString::fromUtf8(reason));
+                    action->setStatusTip(QString::fromUtf8(reason));
+                }
+                connect(action, &QAction::triggered, this,
+                        [this, action_id = item.action]() { handle_action(action_id); });
+                actions_.push_back(action);
+            }
+        };
     for (const app::MenuSpec& spec : app::menu_specs()) {
         QMenu* menu = bar->addMenu(QString::fromUtf8(spec.title));
-        bool first = true;
-        for (const app::MenuItemSpec& item : spec.items) {
-            if (item.separator_before && !first) {
-                menu->addSeparator();
-            }
-            first = false;
-            QAction* action = menu->addAction(QString::fromUtf8(item.title));
-            action->setData(static_cast<int>(item.action));
-            // The quick-access toolbar reuses these actions, so give every one an
-            // icon drawn by shell_icons.cpp (never Microsoft artwork).
-            action->setIcon(shell_action_icon(item.action));
-            const QKeySequence shortcut = menu_shortcut(item);
-            if (!shortcut.isEmpty()) {
-                action->setShortcut(shortcut);
-            }
-            const char* reason = app::menu_disabled_reason(item.action);
-            if (!shell_implements(item.action)) {
-                // Operator decision 9: every unimplemented command is disabled
-                // with this exact tooltip (and listed in the generated backlog).
-                action->setToolTip(QStringLiteral("not implemented in this port"));
-                action->setStatusTip(action->toolTip());
-            } else if (item.action == app::MenuAction::cut) {
-                // The app's action table marks Cut unsupported because the macOS
-                // shell has no cut path.  The Qt shell implements it as
-                // Copy + a clearing transaction on the same SheetModel, so the
-                // reason is stale here; give it the real description instead.
-                action->setToolTip(QStringLiteral("Cut the selected cells (values only)"));
-                action->setStatusTip(action->toolTip());
-            } else if (reason != nullptr && reason[0] != '\0') {
-                action->setToolTip(QString::fromUtf8(reason));
-                action->setStatusTip(QString::fromUtf8(reason));
-            }
-            connect(action, &QAction::triggered, this,
-                    [this, action_id = item.action]() { handle_action(action_id); });
-            actions_.push_back(action);
-        }
+        add_items(menu, spec.items);
     }
     // Wave 21 (operator decision: "hide it for parity"): Project 2021 has no
     // classic menu bar -- its commands live on the ribbon and the QAT.  The bar
