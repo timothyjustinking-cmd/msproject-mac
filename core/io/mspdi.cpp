@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
+#include <cstdlib>
 #include <cstddef>
 #include <fstream>
 #include <iterator>
@@ -265,11 +267,13 @@ bool parse_int64(std::string_view text, std::int64_t& out) noexcept {
 }
 
 bool parse_double(std::string_view text, double& out) noexcept {
-    double value = 0.0;
-    const char* begin = text.data();
-    const char* end = begin + text.size();
-    const auto result = std::from_chars(begin, end, value);
-    if (result.ec != std::errc{} || result.ptr != end) {
+    /* std::from_chars(double) is DELETED in libc++ (AppleClang/macOS) and only
+     * exists in libstdc++ from GCC 11; a full-consumption strtod is the same
+     * parse everywhere (measured wave 19, the Qt shell's macOS job). */
+    std::string copy(text);
+    char* end = nullptr;
+    const double value = std::strtod(copy.c_str(), &end);
+    if (end != copy.c_str() + copy.size() || !std::isfinite(value)) {
         return false;
     }
     out = value;

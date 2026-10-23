@@ -3,6 +3,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <string>
 
@@ -177,9 +178,15 @@ class Parser {
         }
         const char* begin = text_.data() + start;
         const char* end = text_.data() + pos_;
-        double value = 0.0;
-        const auto result = std::from_chars(begin, end, value);
-        if (result.ec != std::errc{} || result.ptr != end) {
+        /* std::from_chars(double) is DELETED in libc++ (AppleClang 16/macOS 14,
+         * measured wave 19 on the Qt shell's macOS job) and only exists in
+         * libstdc++ from GCC 11.  The token has already been validated above, so
+         * a full-consumption strtod is the same parse on every platform. */
+        std::string number_text(begin, end);
+        char* number_end = nullptr;
+        double value = std::strtod(number_text.c_str(), &number_end);
+        if (number_end != number_text.c_str() + number_text.size() ||
+            !std::isfinite(value)) {
             fail("invalid number");
             return false;
         }
