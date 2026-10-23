@@ -118,6 +118,71 @@ void page(QPainter& painter, qreal x = 5.0, qreal y = 3.0, qreal w = 22.0, qreal
     line(painter, x + w - 7, y + 7, x + w, y + 7);
 }
 
+// --- Report tab (W26-2.3) --------------------------------------------------
+bool draw_report_glyph(QPainter& painter, const QString& key) {
+    if (key == QStringLiteral("project.compare")) {
+        page(painter, 3, 5, 12, 22);
+        page(painter, 17, 5, 12, 22);
+        line(painter, 6, 16, 26, 16, 2.5);
+        polyline(painter, {QPointF(10, 12), QPointF(6, 16), QPointF(10, 20)}, 2.5);
+        polyline(painter, {QPointF(22, 12), QPointF(26, 16), QPointF(22, 20)}, 2.5);
+    } else if (key == QStringLiteral("reports.new")) {
+        page(painter);
+        filled_rect(painter, 9, 20, 3, 6);
+        filled_rect(painter, 13, 16, 3, 10);
+        line(painter, 15, 9, 25, 9, 2.5);
+        line(painter, 20, 4, 20, 14, 2.5);
+    } else if (key == QStringLiteral("reports.dashboards")) {
+        page(painter);
+        painter.setPen(ink_pen(2.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawArc(QRectF(9, 13, 14, 14), 0, 180 * 16);
+        line(painter, 16, 20, 22, 14, 2.5);
+        filled_circle(painter, 16, 20, 1.5);
+    } else if (key == QStringLiteral("reports.resources")) {
+        page(painter);
+        person(painter, 18, 17, 3.0);
+    } else if (key == QStringLiteral("reports.costs")) {
+        page(painter);
+        outline_circle(painter, 19, 19, 5.5);
+        line(painter, 19, 16, 19, 22);
+        line(painter, 16, 19, 22, 19);
+    } else if (key == QStringLiteral("reports.in_progress")) {
+        page(painter);
+        outline_circle(painter, 19, 19, 5.5);
+        line(painter, 19, 19, 19, 15);
+        line(painter, 19, 19, 22, 21);
+    } else if (key == QStringLiteral("reports.getting_started")) {
+        page(painter);
+        outline_circle(painter, 19, 17, 4);
+        line(painter, 17, 22, 21, 22);
+        line(painter, 18, 25, 20, 25);
+    } else if (key == QStringLiteral("reports.custom")) {
+        page(painter);
+        line(painter, 12, 24, 22, 14, 3.5);
+        filled_polygon(painter, {QPointF(11, 25), QPointF(15, 26), QPointF(12, 22)});
+    } else if (key == QStringLiteral("reports.recent")) {
+        page(painter);
+        painter.setPen(ink_pen(2.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawArc(QRectF(9, 7, 13, 13), 40 * 16, 230 * 16);
+        filled_polygon(painter, {QPointF(9, 8), QPointF(15, 8), QPointF(11, 13)});
+        outline_circle(painter, 21, 22, 4.5);
+        line(painter, 21, 22, 21, 19);
+        line(painter, 21, 22, 23, 23);
+    } else if (key == QStringLiteral("export.visual_reports")) {
+        filled_rect(painter, 4, 21, 4, 8);
+        filled_rect(painter, 11, 14, 4, 15);
+        filled_rect(painter, 18, 7, 4, 22);
+        line(painter, 4, 29, 29, 29, 2.5);
+        line(painter, 27, 20, 27, 7, 2.5);
+        polyline(painter, {QPointF(23, 11), QPointF(27, 6), QPointF(31, 11)}, 2.5);
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // --- Resource tab (W26-2.2) ------------------------------------------------
 // True when `key` belongs to this tab and was drawn.  Information/Notes/
 // Details are Task-tab keys too: Project reuses those glyphs, and the Task
@@ -385,7 +450,8 @@ QIcon shell_ribbon_icon(const QString& key, int pixels) {
     painter.scale(static_cast<double>(pixels) / 32.0, static_cast<double>(pixels) / 32.0);
     painter.setPen(ink_pen(2.0));
     painter.setBrush(Qt::NoBrush);
-    if (!draw_task_glyph(painter, key) && !draw_resource_glyph(painter, key)) {
+    if (!draw_task_glyph(painter, key) && !draw_resource_glyph(painter, key) &&
+        !draw_report_glyph(painter, key)) {
         painter.end();
         // A key with no drawing is the neutral placeholder, never a blank
         // icon: the gate's placeholder hash then fails on it.
@@ -401,7 +467,8 @@ bool shell_ribbon_glyph_known(const QString& key) {
     QPainter painter(&probe);
     painter.setPen(ink_pen(2.0));
     painter.setBrush(Qt::NoBrush);
-    const bool known = draw_task_glyph(painter, key) || draw_resource_glyph(painter, key);
+    const bool known = draw_task_glyph(painter, key) || draw_resource_glyph(painter, key) ||
+                       draw_report_glyph(painter, key);
     painter.end();
     return known;
 }
