@@ -1,0 +1,165 @@
+# Wave 23 (W23-10 / audit A-5): the INDEPENDENT ribbon pin.
+#
+# Typed from docs/handoff/audit-w22/A2-fable-readback.md, Fable's re-read of
+# corpus/reference/2026-10-23-msproject/project-ribbon-*.png (and the clean
+# loaded capture for the Task tab) BEFORE seeing the gate's old pinned list.
+# The gate parses THIS file; it no longer carries a second copy of the table.
+# The `enabled` column is the port's decision-9 set (which commands are really
+# implemented), pinned by name and counted -- not "enabled iff implemented".
+#
+# Format: tab, contextual(0/1), group, kind, label, enabled(0/1), icon key.
+# A `group` row opens a group; following `button` rows are its controls in
+# order.  Icon-only buttons, combos, checkboxes, the gallery and dialog
+# launchers are NOT modelled yet (W23-15 / B-6); they are listed in
+# app_qt/ribbon_pin_unmodelled.tsv so the backlog is explicit.
+#
+# tab	contextual	group	kind	label	enabled	icon
+Task	0	View	group	-	-	-
+Task	0	View	button	Gantt Chart	0	view.gantt
+Task	0	Clipboard	group	-	-	-
+Task	0	Clipboard	button	Paste	1	clipboard.paste
+Task	0	Clipboard	button	Cut	1	clipboard.cut
+Task	0	Clipboard	button	Copy	1	clipboard.copy
+Task	0	Clipboard	button	Format Painter	0	clipboard.painter
+Task	0	Font	group	-	-	-
+Task	0	Font	button	Arial	0	font.family
+Task	0	Font	button	8	0	font.size
+Task	0	Font	button	B	0	font.bold
+Task	0	Font	button	I	0	font.italic
+Task	0	Font	button	U	0	font.underline
+Task	0	Schedule	group	-	-	-
+Task	0	Schedule	button	Mark on Track	0	schedule.track
+Task	0	Schedule	button	Respect Links	0	schedule.respect_links
+Task	0	Schedule	button	Inactivate	0	schedule.inactivate
+Task	0	Tasks	group	-	-	-
+Task	0	Tasks	button	Manually Schedule	0	tasks.manual
+Task	0	Tasks	button	Auto Schedule	0	tasks.auto
+Task	0	Tasks	button	Inspect	0	tasks.inspect
+Task	0	Tasks	button	Move	0	tasks.move
+Task	0	Tasks	button	Mode	0	tasks.mode
+Task	0	Insert	group	-	-	-
+Task	0	Insert	button	Task	1	insert.task
+Task	0	Insert	button	Summary	0	insert.summary
+Task	0	Insert	button	Milestone	0	insert.milestone
+Task	0	Insert	button	Deliverable	0	insert.deliverable
+Task	0	Properties	group	-	-	-
+Task	0	Properties	button	Information	1	properties.information
+Task	0	Properties	button	Notes	0	properties.notes
+Task	0	Properties	button	Details	0	properties.details
+Task	0	Properties	button	Add to Timeline	0	properties.add_to_timeline
+Task	0	Editing	group	-	-	-
+Task	0	Editing	button	Scroll to Task	0	editing.scroll_to_task
+Task	0	Editing	button	Find	1	editing.find
+Task	0	Editing	button	Clear	1	editing.clear
+Task	0	Editing	button	Fill	0	editing.fill
+Resource	0	View	group	-	-	-
+Resource	0	View	button	Team Planner	0	view.team_planner
+Resource	0	Assignments	group	-	-	-
+Resource	0	Assignments	button	Assign Resources	0	assignments.assign
+Resource	0	Assignments	button	Resource Pool	0	assignments.pool
+Resource	0	Insert	group	-	-	-
+Resource	0	Insert	button	Add Resources	0	insert.add_resources
+Resource	0	Properties	group	-	-	-
+Resource	0	Properties	button	Information	0	properties.information
+Resource	0	Properties	button	Notes	0	properties.notes
+Resource	0	Properties	button	Details	0	properties.details
+Resource	0	Level	group	-	-	-
+Resource	0	Level	button	Level Selection	0	level.selection
+Resource	0	Level	button	Level Resource	0	level.resource
+Resource	0	Level	button	Level All	0	level.all
+Resource	0	Level	button	Leveling Options	0	level.options
+Resource	0	Level	button	Clear Leveling	0	level.clear
+Resource	0	Level	button	Next Overallocation	0	level.next
+Report	0	Project	group	-	-	-
+Report	0	Project	button	Compare Projects	0	project.compare
+Report	0	View Reports	group	-	-	-
+Report	0	View Reports	button	New Report	0	reports.new
+Report	0	View Reports	button	Dashboards	0	reports.dashboards
+Report	0	View Reports	button	Resources	0	reports.resources
+Report	0	View Reports	button	Costs	0	reports.costs
+Report	0	View Reports	button	In Progress	0	reports.in_progress
+Report	0	View Reports	button	Getting Started	0	reports.getting_started
+Report	0	View Reports	button	Custom	0	reports.custom
+Report	0	View Reports	button	Recent	0	reports.recent
+Report	0	Export	group	-	-	-
+Report	0	Export	button	Visual Reports	0	export.visual_reports
+Project	0	Insert	group	-	-	-
+Project	0	Insert	button	Subproject	0	insert.subproject
+Project	0	Add-ins	group	-	-	-
+Project	0	Add-ins	button	Get Add-ins	0	addins.get
+Project	0	Add-ins	button	My Add-ins	0	addins.my
+Project	0	Properties	group	-	-	-
+Project	0	Properties	button	Project Information	0	properties.project_information
+Project	0	Properties	button	Custom Fields	0	properties.custom_fields
+Project	0	Properties	button	Links Between Projects	0	properties.links_between
+Project	0	Properties	button	WBS	0	properties.wbs
+Project	0	Properties	button	Change Working Time	0	properties.change_working_time
+Project	0	Schedule	group	-	-	-
+Project	0	Schedule	button	Calculate Project	0	schedule.calculate
+Project	0	Schedule	button	Set Baseline	0	schedule.set_baseline
+Project	0	Schedule	button	Move Project	0	schedule.move
+Project	0	Status	group	-	-	-
+Project	0	Status	button	Status Date	0	status.date
+Project	0	Status	button	Update Project	0	status.update
+Project	0	Proofing	group	-	-	-
+Project	0	Proofing	button	Spelling	0	proofing.spelling
+View	0	Task Views	group	-	-	-
+View	0	Task Views	button	Gantt Chart	0	view.gantt
+View	0	Task Views	button	Task Usage	1	view.task_usage
+View	0	Task Views	button	Network Diagram	0	view.network_diagram
+View	0	Task Views	button	Calendar	0	view.calendar
+View	0	Task Views	button	Other Views	0	view.other_task_views
+View	0	Resource Views	group	-	-	-
+View	0	Resource Views	button	Team Planner	0	view.team_planner
+View	0	Resource Views	button	Resource Usage	1	view.resource_usage
+View	0	Resource Views	button	Resource Sheet	1	view.resource_sheet
+View	0	Resource Views	button	Other Views	0	view.other_resource_views
+View	0	Data	group	-	-	-
+View	0	Data	button	Sort	0	data.sort
+View	0	Data	button	Outline	0	data.outline
+View	0	Data	button	Tables	0	data.tables
+View	0	Data	button	Highlight	0	data.highlight
+View	0	Data	button	Filter	1	data.filter
+View	0	Data	button	Group by	0	data.group_by
+View	0	Zoom	group	-	-	-
+View	0	Zoom	button	Timescale	0	zoom.timescale
+View	0	Zoom	button	Zoom	0	zoom.zoom
+View	0	Zoom	button	Entire Project	0	zoom.entire
+View	0	Zoom	button	Selected Tasks	0	zoom.selected
+View	0	Split View	group	-	-	-
+View	0	Split View	button	Timeline	0	split.timeline
+View	0	Split View	button	Details	0	split.details
+View	0	Window	group	-	-	-
+View	0	Window	button	New Window	0	window.new
+View	0	Window	button	Switch Windows	0	window.switch
+View	0	Window	button	Arrange All	0	window.arrange
+View	0	Window	button	Hide	0	window.hide
+View	0	Macros	group	-	-	-
+View	0	Macros	button	Macros	0	macros.macros
+Help	0	Help	group	-	-	-
+Help	0	Help	button	Help	0	help.help
+Help	0	Help	button	Feedback	0	help.feedback
+Help	0	Help	button	Show Training	0	help.training
+Gantt Chart Format	1	Format	group	-	-	-
+Gantt Chart Format	1	Format	button	Text Styles	0	format.text_styles
+Gantt Chart Format	1	Format	button	Gridlines	0	format.gridlines
+Gantt Chart Format	1	Format	button	Layout	0	format.layout
+Gantt Chart Format	1	Columns	group	-	-	-
+Gantt Chart Format	1	Columns	button	Insert Column	0	columns.insert
+Gantt Chart Format	1	Columns	button	Column Settings	0	columns.settings
+Gantt Chart Format	1	Columns	button	Custom Fields	0	columns.custom_fields
+Gantt Chart Format	1	Bar Styles	group	-	-	-
+Gantt Chart Format	1	Bar Styles	button	Format	0	bar_styles.format
+Gantt Chart Format	1	Bar Styles	button	Critical Tasks	0	bar_styles.critical
+Gantt Chart Format	1	Bar Styles	button	Slack	0	bar_styles.slack
+Gantt Chart Format	1	Bar Styles	button	Late Tasks	0	bar_styles.late
+Gantt Chart Format	1	Bar Styles	button	Task Path	0	bar_styles.task_path
+Gantt Chart Format	1	Bar Styles	button	Baseline	0	bar_styles.baseline
+Gantt Chart Format	1	Bar Styles	button	Slippage	0	bar_styles.slippage
+Gantt Chart Format	1	Gantt Chart Style	group	-	-	-
+Gantt Chart Format	1	Show/Hide	group	-	-	-
+Gantt Chart Format	1	Show/Hide	button	Outline Number	0	show.outline_number
+Gantt Chart Format	1	Show/Hide	button	Project Summary Task	0	show.project_summary
+Gantt Chart Format	1	Show/Hide	button	Summary Tasks	0	show.summary_tasks
+Gantt Chart Format	1	Drawings	group	-	-	-
+Gantt Chart Format	1	Drawings	button	Drawing	0	drawings.drawing

@@ -330,7 +330,8 @@ qt_set_warnings(qt_ribbon_inventory_tests)
 add_test(NAME qt_ribbon_inventory
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_ribbon_inventory_tests>
-                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/ribbon_pin.tsv")
 
 # ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The

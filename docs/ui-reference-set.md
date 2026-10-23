@@ -7,8 +7,9 @@ third-party UI (MS Project Professional 2021) plus screenshots of our own build,
 kept locally for measurement only.
 
 `README.md` and `manifest.json` in that directory list every file with its size,
-dimensions and SHA-256.  The set is 27 files: 21 of MS Project 2021 and 6 of the
-packaged Windows build (CI run 39898703443).
+dimensions and SHA-256.  The set is **28 files: 22 of MS Project 2021 and 6 of
+the packaged Windows build** (CI run 39898703443) -- corrected in wave 23 from
+the stale 27/21 count (audit A-11).
 
 ## What it covers
 
@@ -65,9 +66,10 @@ does not exist.
   (Timeline checkbox, Details checkbox with a drop-down)**, Window (New Window,
   Arrange All, Hide), Macros.
 * **Resource tab inventory (Project):** View (Team Planner), Assignments (Assign
-  Resources, Resource Pool, Add Resources), Insert, Properties (Information,
-  Notes, Details), Level (Level Selection, Level Resource, Level All, Leveling
-  Options, Clear Leveling, Next Overallocation).
+  Resources, Resource Pool), **Insert (Add Resources)**, Properties
+  (Information, Notes, Details), Level (Level Selection, Level Resource, Level
+  All, Leveling Options, Clear Leveling, Next Overallocation).  Add Resources
+  is the Insert group, not Assignments (wave-23 correction, audit A-5).
 * **The real file's stored table** is Task Name, Duration, Start, Finish,
   % Complete, Pre, Succ, Summary, Yes — not Entry.  Its bars: critical red,
   summary/milestone near-black, normal blue.  Its status bar says
