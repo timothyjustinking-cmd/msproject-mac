@@ -3,6 +3,7 @@
 #include "project_dialogs_qt.h"
 
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDate>
 #include <QDateEdit>
@@ -13,9 +14,11 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QListWidget>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTableWidget>
@@ -646,6 +649,220 @@ void ChangeWorkingTimeDialog::select_day(int day) {
 void ChangeWorkingTimeDialog::set_month(int year, int month) {
     const std::string calendar = model_.selected_calendar;
     reload(calendar, year, month, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Project > Custom Fields (wave 26, W26-5.3)
+// ---------------------------------------------------------------------------
+CustomFieldsDialog::CustomFieldsDialog(std::vector<app::CustomFieldDefinition> fields,
+                                       QWidget* parent)
+    : QDialog(parent), fields_(std::move(fields)) {
+    setWindowTitle(QStringLiteral("Custom Fields"));
+    setFixedSize(project_dialog_geometry::kCustomFieldsWidth,
+                 project_dialog_geometry::kCustomFieldsHeight);
+
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(project_dialog_geometry::kMargin,
+                              project_dialog_geometry::kMargin,
+                              project_dialog_geometry::kMargin,
+                              project_dialog_geometry::kMargin);
+    outer->setSpacing(8);
+
+    // Type: only Task is implemented; the other two scopes are Project's and
+    // have no writer here.
+    auto* type_row = new QHBoxLayout();
+    type_row->setContentsMargins(0, 0, 0, 0);
+    type_row->setSpacing(8);
+    auto* type_label = new QLabel(QStringLiteral("Type:"), this);
+    type_row->addWidget(type_label);
+    task_radio_ = new QRadioButton(QStringLiteral("Task"), this);
+    task_radio_->setObjectName(QStringLiteral("taskTypeRadio"));
+    task_radio_->setChecked(true);
+    resource_radio_ = new QRadioButton(QStringLiteral("Resource"), this);
+    resource_radio_->setEnabled(false);
+    resource_radio_->setToolTip(kDisabledTip);
+    project_radio_ = new QRadioButton(QStringLiteral("Project"), this);
+    project_radio_->setEnabled(false);
+    project_radio_->setToolTip(kDisabledTip);
+    type_row->addWidget(task_radio_);
+    type_row->addWidget(resource_radio_);
+    type_row->addWidget(project_radio_);
+    type_row->addSpacing(24);
+    type_row->addWidget(new QLabel(QStringLiteral("Type"), this));
+    type_ = new QComboBox(this);
+    type_->setObjectName(QStringLiteral("fieldTypeCombo"));
+    type_->setFixedWidth(130);
+    type_->setEnabled(false);
+    type_->setToolTip(kDisabledTip);
+    type_row->addWidget(type_);
+    type_row->addStretch(1);
+    outer->addLayout(type_row);
+
+    auto* body = new QHBoxLayout();
+    body->setContentsMargins(0, 0, 0, 0);
+    body->setSpacing(12);
+    list_ = new QListWidget(this);
+    list_->setObjectName(QStringLiteral("customFieldList"));
+    list_->setFixedWidth(project_dialog_geometry::kCustomFieldListWidth);
+    for (const app::CustomFieldDefinition& field : fields_) {
+        auto* item = new QListWidgetItem(QString::fromStdString(field.name), list_);
+        item->setToolTip(QString::fromStdString(field.kind_name) +
+                         (field.formula.empty()
+                              ? QString()
+                              : QStringLiteral(" | formula: ") +
+                                    QString::fromStdString(field.formula)));
+    }
+    body->addWidget(list_);
+
+    auto* details = new QVBoxLayout();
+    details->setContentsMargins(0, 0, 0, 0);
+    details->setSpacing(6);
+    auto* definition_buttons = new QHBoxLayout();
+    definition_buttons->setSpacing(6);
+    rename_ = make_button(this, QStringLiteral("Rename..."));
+    delete_ = make_button(this, QStringLiteral("Delete"));
+    add_field_ = make_button(this, QStringLiteral("Add Field to Enterprise..."));
+    import_ = make_button(this, QStringLiteral("Import Field..."));
+    const char* const kDefinitionNames[] = {"renameButton", "deleteFieldButton",
+                                            "addFieldButton", "importFieldButton"};
+    QPushButton* const definition[] = {rename_, delete_, add_field_, import_};
+    for (int index = 0; index < 4; ++index) {
+        definition[index]->setObjectName(QString::fromLatin1(kDefinitionNames[index]));
+        definition[index]->setEnabled(false);
+        definition[index]->setToolTip(kDisabledTip);
+        definition_buttons->addWidget(definition[index]);
+    }
+    details->addLayout(definition_buttons);
+
+    auto* attributes = new QGroupBox(QStringLiteral("Custom attributes"), this);
+    auto* attributes_layout = new QHBoxLayout(attributes);
+    attributes_layout->setSpacing(8);
+    attributes_none_ = new QRadioButton(QStringLiteral("None"), attributes);
+    attributes_none_->setObjectName(QStringLiteral("attributesNoneRadio"));
+    attributes_none_->setChecked(true);
+    auto* lookup = new QRadioButton(QStringLiteral("Lookup"), attributes);
+    lookup->setObjectName(QStringLiteral("lookupRadio"));
+    lookup->setEnabled(false);
+    lookup->setToolTip(kDisabledTip);
+    formula_radio_ = new QRadioButton(QStringLiteral("Formula"), attributes);
+    formula_radio_->setObjectName(QStringLiteral("formulaRadio"));
+    formula_ = make_button(attributes, QStringLiteral("Formula..."));
+    formula_->setObjectName(QStringLiteral("formulaButton"));
+    formula_->setToolTip(QStringLiteral("set or replace this field's stored formula"));
+    attributes_layout->addWidget(attributes_none_);
+    attributes_layout->addWidget(lookup);
+    attributes_layout->addWidget(formula_radio_);
+    attributes_layout->addWidget(formula_);
+    attributes_layout->addStretch(1);
+    details->addWidget(attributes);
+
+    const auto add_option_group = [this, details](const char* title, const char* first,
+                                                  const char* second) {
+        auto* group = new QGroupBox(QString::fromUtf8(title), this);
+        auto* row = new QHBoxLayout(group);
+        row->setSpacing(8);
+        auto* first_radio = new QRadioButton(QString::fromUtf8(first), group);
+        first_radio->setChecked(true);
+        auto* second_radio = new QRadioButton(QString::fromUtf8(second), group);
+        second_radio->setEnabled(false);
+        second_radio->setToolTip(kDisabledTip);
+        row->addWidget(first_radio);
+        row->addWidget(second_radio);
+        row->addStretch(1);
+        details->addWidget(group);
+    };
+    add_option_group("Calculation for task and group summary rows", "None", "Rollup");
+    add_option_group("Calculation for assignment rows", "None",
+                     "Roll down unless manually entered");
+    // "Use formula" sits on the summary row in the capture; it has no writer.
+    auto* use_formula = new QCheckBox(QStringLiteral("Use formula"), this);
+    use_formula->setObjectName(QStringLiteral("useFormulaCheck"));
+    use_formula->setEnabled(false);
+    use_formula->setToolTip(kDisabledTip);
+    details->addWidget(use_formula);
+    add_option_group("Values to display", "Data", "Graphical Indicators...");
+    details->addStretch(1);
+    body->addLayout(details, 1);
+    outer->addLayout(body, 1);
+
+    auto* bottom = new QHBoxLayout();
+    bottom->setContentsMargins(0, 0, 0, 0);
+    bottom->setSpacing(8);
+    help_ = make_button(this, QStringLiteral("Help"));
+    help_->setObjectName(QStringLiteral("helpButton"));
+    help_->setEnabled(false);
+    help_->setToolTip(kDisabledTip);
+    bottom->addWidget(help_);
+    bottom->addStretch(1);
+    ok_ = make_button(this, QStringLiteral("OK"));
+    ok_->setObjectName(QStringLiteral("okButton"));
+    ok_->setDefault(true);
+    cancel_ = make_button(this, QStringLiteral("Cancel"));
+    cancel_->setObjectName(QStringLiteral("cancelButton"));
+    bottom->addWidget(ok_);
+    bottom->addWidget(cancel_);
+    outer->addLayout(bottom);
+
+    connect(ok_, &QPushButton::clicked, this, &QDialog::accept);
+    connect(cancel_, &QPushButton::clicked, this, &QDialog::reject);
+    connect(formula_, &QPushButton::clicked, this, [this]() { edit_formula(); });
+    connect(list_, &QListWidget::currentRowChanged, this,
+            [this](int) { refresh_details(); });
+    if (!fields_.empty()) {
+        list_->setCurrentRow(0);
+    }
+    refresh_details();
+}
+
+int CustomFieldsDialog::selected_field_index() const {
+    return list_ != nullptr ? list_->currentRow() : -1;
+}
+
+void CustomFieldsDialog::refresh_details() {
+    type_->clear();
+    if (!type_->isEnabled()) {
+        // The type is display-only; the items are still the field's own kind.
+    }
+    const int index = selected_field_index();
+    if (index < 0 || index >= static_cast<int>(fields_.size())) {
+        return;
+    }
+    const app::CustomFieldDefinition& field = fields_[static_cast<std::size_t>(index)];
+    for (const char* kind : {"Text", "Number", "Duration", "Date", "Flag", "Cost"}) {
+        type_->addItem(QString::fromLatin1(kind));
+    }
+    type_->setCurrentText(QString::fromStdString(field.kind_name));
+    if (field.formula.empty()) {
+        attributes_none_->setChecked(true);
+    } else {
+        formula_radio_->setChecked(true);
+    }
+}
+
+void CustomFieldsDialog::edit_formula() {
+    const int index = selected_field_index();
+    if (index < 0 || index >= static_cast<int>(fields_.size())) {
+        return;
+    }
+    app::CustomFieldDefinition& field = fields_[static_cast<std::size_t>(index)];
+    if (!formula_editor_) {
+        return;
+    }
+    const QString result =
+        formula_editor_(field.field_id, QString::fromStdString(field.formula));
+    if (result.isNull()) {
+        return;  // the editor was cancelled; nothing is queued
+    }
+    if (result.isEmpty()) {
+        return;  // clearing is the separate Clear Formulas action, never a per-field guess
+    }
+    field.formula = result.toStdString();
+    formula_edit_ = app::CustomFormulaEdit{};
+    formula_edit_.operation = app::CustomFormulaEdit::Operation::set;
+    formula_edit_.field_id = field.field_id;
+    formula_edit_.formula = field.formula;
+    has_formula_edit_ = true;
+    refresh_details();
 }
 
 }  // namespace msqt

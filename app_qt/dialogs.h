@@ -290,6 +290,13 @@ struct TaskInformationValues {
     std::string finish_text;
     std::string percent_text;
     bool manually_scheduled = false;
+    // Wave 26 (W26-5.3): the per-task custom-field values, moved here from the
+    // old Task Fields command.  `custom_field_ids` is app::task_field_specs()
+    // order; `custom_field_texts` is the matching initial text.  OK writes the
+    // changed ones through app::make_task_field_edits (the same writer the Task
+    // Fields dialog used).
+    std::vector<std::uint32_t> custom_field_ids;
+    std::vector<std::string> custom_field_texts;
 };
 
 class TaskInformationDialog final : public QDialog {
@@ -307,11 +314,17 @@ class TaskInformationDialog final : public QDialog {
     QLineEdit* finish_edit() const noexcept { return finish_; }
     QCheckBox* hide_bar_check() const noexcept { return hide_bar_; }
     QCheckBox* rollup_check() const noexcept { return rollup_; }
+    // W26-5.3: the Custom Fields tab's six value edits, in
+    // app::task_field_specs() order (the gate fills one to prove the path).
+    const std::vector<QLineEdit*>& custom_field_inputs() const noexcept {
+        return custom_field_inputs_;
+    }
 
     void accept() override;
 
   private:
     TaskInformationValues values_;
+    std::vector<QLineEdit*> custom_field_inputs_;
     QTabWidget* tabs_ = nullptr;
     QLineEdit* name_ = nullptr;
     QLineEdit* duration_ = nullptr;

@@ -21,6 +21,7 @@
 #include <QString>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -33,7 +34,9 @@ class QDateEdit;
 class QGridLayout;
 class QLabel;
 class QLineEdit;
+class QListWidget;
 class QPushButton;
+class QRadioButton;
 class QSpinBox;
 class QTableWidget;
 class QTabWidget;
@@ -80,6 +83,14 @@ inline constexpr const char* kLegendWorkWeekColour = "#D8E0C8";
 inline constexpr int kLegendSwatch = 20;
 inline constexpr int kDayCellWidth = 38;
 inline constexpr int kDayCellHeight = 28;
+
+// Custom Fields (the field-definition dialog).
+inline constexpr int kCustomFieldsWidth = 700;
+inline constexpr int kCustomFieldsHeight = 490;
+inline constexpr double kCustomFieldsAspect = 323.0 / 227.0;  // capture client box
+inline constexpr int kCustomFieldListWidth = 182;             // 0.26 of the width
+inline constexpr double kCustomFieldListLeftFraction = 0.020;
+inline constexpr double kCustomFieldsButtonsTopFraction = 0.930;
 
 // Capture-relative positions the gate asserts (fractions of the dialog's client
 // box, which is what the capture's title-bar-excluded area gives).
@@ -219,6 +230,75 @@ class ChangeWorkingTimeDialog final : public QDialog {
     QGridLayout* day_grid_ = nullptr;
     std::vector<QWidget*> cells_;
     std::vector<QWidget*> swatches_;
+};
+
+// ---------------------------------------------------------------------------
+// Project > Custom Fields (the field-definition dialog; wave 26, W26-5.3)
+// ---------------------------------------------------------------------------
+//
+// The capture's layout: the Task/Resource/Project type radios and Type combo,
+// the field list, the definition actions (Rename/Delete/Add/Import), the custom
+// attributes (None/Lookup/Formula) and both calculation rows, and Values to
+// display.  FORMULA is the one functional definition operation: the Formula...
+// button asks the installed editor for text and OK returns the resulting
+// app::CustomFormulaEdit, which the shell queues on app::Document (the
+// 114/Props writer).  Rename/type/lookup/graphical indicators have no proven
+// writer and are disabled with the exact decision-9 tooltip.
+class CustomFieldsDialog final : public QDialog {
+  public:
+    // (field id, current formula) -> the new formula.  A NULL QString means
+    // cancel; the shell installs one that opens the port's own input dialog.
+    using FormulaEditor = std::function<QString(std::uint32_t, const QString&)>;
+
+    explicit CustomFieldsDialog(std::vector<app::CustomFieldDefinition> fields,
+                                QWidget* parent = nullptr);
+
+    void set_formula_editor(FormulaEditor editor) { formula_editor_ = std::move(editor); }
+
+    bool has_formula_edit() const noexcept { return has_formula_edit_; }
+    const app::CustomFormulaEdit& formula_edit() const noexcept { return formula_edit_; }
+    const std::vector<app::CustomFieldDefinition>& fields() const noexcept { return fields_; }
+    int selected_field_index() const;
+
+    QListWidget* field_list() const noexcept { return list_; }
+    QComboBox* type_combo() const noexcept { return type_; }
+    QRadioButton* task_radio() const noexcept { return task_radio_; }
+    QRadioButton* resource_radio() const noexcept { return resource_radio_; }
+    QRadioButton* project_radio() const noexcept { return project_radio_; }
+    QRadioButton* attributes_none_radio() const noexcept { return attributes_none_; }
+    QRadioButton* formula_radio() const noexcept { return formula_radio_; }
+    QPushButton* formula_button() const noexcept { return formula_; }
+    QPushButton* rename_button() const noexcept { return rename_; }
+    QPushButton* delete_button() const noexcept { return delete_; }
+    QPushButton* add_field_button() const noexcept { return add_field_; }
+    QPushButton* import_field_button() const noexcept { return import_; }
+    QPushButton* help_button() const noexcept { return help_; }
+    QPushButton* ok_button() const noexcept { return ok_; }
+    QPushButton* cancel_button() const noexcept { return cancel_; }
+
+  private:
+    void refresh_details();
+    void edit_formula();
+
+    std::vector<app::CustomFieldDefinition> fields_;
+    app::CustomFormulaEdit formula_edit_;
+    bool has_formula_edit_ = false;
+    FormulaEditor formula_editor_;
+    QListWidget* list_ = nullptr;
+    QComboBox* type_ = nullptr;
+    QRadioButton* task_radio_ = nullptr;
+    QRadioButton* resource_radio_ = nullptr;
+    QRadioButton* project_radio_ = nullptr;
+    QRadioButton* attributes_none_ = nullptr;
+    QRadioButton* formula_radio_ = nullptr;
+    QPushButton* formula_ = nullptr;
+    QPushButton* rename_ = nullptr;
+    QPushButton* delete_ = nullptr;
+    QPushButton* add_field_ = nullptr;
+    QPushButton* import_ = nullptr;
+    QPushButton* help_ = nullptr;
+    QPushButton* ok_ = nullptr;
+    QPushButton* cancel_ = nullptr;
 };
 
 }  // namespace msqt

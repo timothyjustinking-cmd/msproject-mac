@@ -110,15 +110,17 @@ struct FieldDialogResult {
 void fill_and_accept_task_fields(FieldDialogResult* seen, const QString& text) {
     QTimer::singleShot(0, [seen, text]() {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
-            // TaskFieldsDialog has no Q_OBJECT (the shell defines no custom
-            // signals), so identify it with RTTI rather than qobject_cast.
-            auto* dialog = dynamic_cast<msqt::TaskFieldsDialog*>(widget);
+            // Wave 26 (W26-5.3): the per-task values moved to Task
+            // Information's Custom Fields tab.  The dialog has no Q_OBJECT, so
+            // identify it with RTTI; fill the Text1 edit (the first of the six
+            // app::task_field_specs) and accept.
+            auto* dialog = dynamic_cast<msqt::TaskInformationDialog*>(widget);
             if (dialog == nullptr || !dialog->isVisible()) {
                 continue;
             }
             seen->seen = true;
-            if (!dialog->inputs().empty()) {
-                dialog->inputs().front()->setText(text);
+            if (!dialog->custom_field_inputs().empty()) {
+                dialog->custom_field_inputs().front()->setText(text);
                 seen->filled = true;
             }
             dialog->accept();
@@ -252,17 +254,17 @@ int main(int argc, char** argv) {
     gate::check(!window.document_dirty(),
                 "a refused project-row edit does not mark the document dirty");
 
-    // --- 3. Custom Fields: a save-and-reread proves the uid -----------------
+    // --- 3. Custom Fields values: a save-and-reread proves the uid ----------
     select_row(window, 1);
     FieldDialogResult field_seen;
     fill_and_accept_task_fields(&field_seen, QStringLiteral("ROUTE-ALPHA"));
-    QAction* custom = gate::find_action(window, app::MenuAction::custom_fields);
-    gate::check(custom != nullptr, "the Custom Fields command exists");
+    QAction* custom = gate::find_action(window, app::MenuAction::task_fields);
+    gate::check(custom != nullptr, "the Task Information command exists");
     if (custom != nullptr) {
         custom->trigger();
     }
     gate::check(field_seen.seen && field_seen.filled,
-                "the Custom Fields dialog opened and was filled");
+                "Task Information's Custom Fields tab opened and was filled");
     gate::check(window.document_dirty(), "the queued field edit is a pending save");
 
     const QString saved = out_dir + QStringLiteral("/uid-routing.mpp");

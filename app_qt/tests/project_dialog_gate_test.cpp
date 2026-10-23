@@ -24,7 +24,9 @@
 #include <QJsonValue>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QSpinBox>
 #include <QStringList>
 #include <QTableWidget>
@@ -379,6 +381,116 @@ void check_change_working_time(const QJsonObject& measures, const QString& data_
                  dialog.legend_swatches().size());
 }
 
+// ---------------------------------------------------------------------------
+// Custom Fields (the field-definition dialog)
+// ---------------------------------------------------------------------------
+void check_custom_fields(const QJsonObject& measures) {
+    const QJsonObject spec = measures.value(QStringLiteral("custom_fields")).toObject();
+    gate::check(!spec.isEmpty(), "the measures file carries Custom Fields");
+    const std::vector<app::CustomFieldDefinition> definitions =
+        app::custom_field_definitions();
+    gate::check(definitions.size() == 100,
+                "the definition list is the six measured families' every field");
+
+    msqt::CustomFieldsDialog dialog(definitions);
+    dialog.show();
+    QApplication::processEvents();
+
+    gate::check(dialog.width() == spec.value(QStringLiteral("width")).toInt() &&
+                    dialog.height() == spec.value(QStringLiteral("height")).toInt(),
+                "Custom Fields has the measured fixed size");
+    gate::check(dialog.minimumSize() == dialog.maximumSize(),
+                "Custom Fields is non-resizable");
+    const double aspect = double(dialog.width()) / dialog.height();
+    gate::check(close_enough(aspect, spec.value(QStringLiteral("aspect")).toDouble(), 0.03),
+                "Custom Fields has the captured aspect ratio");
+
+    gate::check(dialog.field_list()->count() == 100,
+                "the live field list carries every definition");
+    int text1_row = -1;
+    for (int row = 0; row < dialog.field_list()->count(); ++row) {
+        if (dialog.field_list()->item(row)->text() == QStringLiteral("Text1")) {
+            text1_row = row;
+        }
+    }
+    gate::check(text1_row >= 0, "Text1 is in the live list (the capture's family order)");
+    gate::check(dialog.field_list()->item(0)->text() == QStringLiteral("Duration1") &&
+                    dialog.field_list()->item(99)->text() == QStringLiteral("Text30"),
+                "the list runs Duration1..Text30 in the measured family order");
+
+    const QString tooltip = QString::fromUtf8(
+        msqt::project_dialog_geometry::kNotImplemented);
+    gate::check(dialog.task_radio()->isChecked() && dialog.task_radio()->isEnabled(),
+                "the capture's Task type is selected and live");
+    QRadioButton* scopes[] = {dialog.resource_radio(), dialog.project_radio()};
+    for (QRadioButton* scope : scopes) {
+        gate::check(scope != nullptr && !scope->isEnabled() && scope->toolTip() == tooltip,
+                    "an unimplemented field scope is disabled with the exact tooltip");
+    }
+    QPushButton* definition_buttons[] = {dialog.rename_button(), dialog.delete_button(),
+                                         dialog.add_field_button(),
+                                         dialog.import_field_button(), dialog.help_button()};
+    for (QPushButton* button : definition_buttons) {
+        gate::check(button != nullptr && !button->isEnabled() &&
+                        button->toolTip() == tooltip,
+                    "a definition action with no writer is disabled with the exact tooltip");
+    }
+
+    // The selected field's type is DISPLAYED from the field registry, not guessed.
+    dialog.field_list()->setCurrentRow(0);
+    QApplication::processEvents();
+    gate::check(dialog.type_combo()->currentText() == QStringLiteral("Duration"),
+                "the Type combo shows the selected field's own kind");
+    gate::check(!dialog.type_combo()->isEnabled() &&
+                    dialog.type_combo()->toolTip() == tooltip,
+                "changing a field's type is disabled with the exact tooltip");
+    if (text1_row >= 0) {
+        dialog.field_list()->setCurrentRow(text1_row);
+        QApplication::processEvents();
+        gate::check(dialog.type_combo()->currentText() == QStringLiteral("Text"),
+                    "selecting Text1 shows the Text kind");
+    }
+
+    // The Formula... path: the editor's returned text becomes the pending
+    // app::CustomFormulaEdit for THIS field.
+    bool asked = false;
+    dialog.set_formula_editor([&asked](std::uint32_t, const QString&) -> QString {
+        asked = true;
+        return QStringLiteral("[Duration]/240");
+    });
+    gate::check(dialog.formula_button()->isEnabled(),
+                "Formula... is the one enabled definition action");
+    dialog.formula_button()->click();
+    QApplication::processEvents();
+    gate::check(asked, "Formula... asks the installed editor");
+    gate::check(dialog.has_formula_edit(),
+                "the formula result becomes a pending edit");
+    if (text1_row >= 0) {
+        gate::check(dialog.formula_edit().operation ==
+                        app::CustomFormulaEdit::Operation::set &&
+                        dialog.formula_edit().field_id ==
+                            definitions[static_cast<std::size_t>(text1_row)].field_id &&
+                        dialog.formula_edit().formula == "[Duration]/240",
+                    "the pending edit targets the selected field with the typed text");
+    }
+    dialog.accept();
+    gate::check(dialog.result() == QDialog::Accepted, "OK accepts the definition dialog");
+
+    // A cancelled editor queues nothing.
+    msqt::CustomFieldsDialog cancelled(definitions);
+    cancelled.set_formula_editor([](std::uint32_t, const QString&) -> QString {
+        return QString();  // null = cancel
+    });
+    cancelled.show();
+    QApplication::processEvents();
+    cancelled.formula_button()->click();
+    QApplication::processEvents();
+    gate::check(!cancelled.has_formula_edit(),
+                "a cancelled formula editor queues no edit");
+    std::fprintf(stderr, "note: Custom Fields %dx%d, %d definitions\n", dialog.width(),
+                 dialog.height(), dialog.field_list()->count());
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -397,6 +509,7 @@ int main(int argc, char** argv) {
 
     check_project_information(measures);
     check_change_working_time(measures, data_dir);
+    check_custom_fields(measures);
 
     std::printf("qt_project_dialog_gate: ");
     return gate::finish();

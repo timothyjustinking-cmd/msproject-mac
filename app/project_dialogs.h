@@ -149,6 +149,33 @@ bool load_working_time(const std::string& mpp_path, std::string_view calendar_na
 // "M T W Th F S S").
 const std::vector<std::string>& working_time_weekday_header();
 
+// ---------------------------------------------------------------------------
+// Custom Fields (Project > Properties > Custom Fields) -- the field-definition
+// dialog, not the per-task value editor (that moved to Task Information's
+// Custom Fields tab in W26-5.3)
+// ---------------------------------------------------------------------------
+//
+// This port decodes the SIX field families whose storage W48 measured (Text,
+// Flag, Number, Duration, Cost, Date) and the formula table in `114/Props`.
+// The list is every field the registry names, in the capture's family order
+// (Duration, Cost, Date, Flag, Number, Text); Project's Start/Finish custom
+// fields are not in this port's field table and are not invented.
+struct CustomFieldDefinition {
+    std::uint32_t field_id = 0;
+    std::string name;       // "Text1", "Flag20", ...
+    std::string kind_name;  // "Text", "Flag", "Number", "Duration", "Cost", "Date"
+    bool storage_measured = false;
+    std::string formula;  // the file's stored formula text, empty when none
+};
+
+std::vector<CustomFieldDefinition> custom_field_definitions();
+
+// Copies the formulas the file's `114/Props` stores onto the matching
+// definitions.  A field with no stored formula keeps an empty string; a blob
+// that does not parse leaves every formula empty (the values are still shown).
+void attach_custom_field_formulas(std::vector<CustomFieldDefinition>& fields,
+                                  const std::vector<std::uint8_t>& props_bytes);
+
 // Project's priority domain (Project > Project Information > Priority).
 inline constexpr int kMinPriority = 0;
 inline constexpr int kMaxPriority = 1000;

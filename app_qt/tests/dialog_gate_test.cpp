@@ -593,8 +593,8 @@ int main(int argc, char** argv) {
             intercept(&seen);
             custom->trigger();
             QApplication::processEvents();
-            gate::check(seen.dialog && seen.title == QStringLiteral("Task Fields"),
-                        "the Custom Fields command still opens the Task Fields dialog");
+            gate::check(seen.dialog && seen.title == QStringLiteral("Custom Fields"),
+                        "the Custom Fields command opens the field-definition dialog");
         }
 
         // Wave 24 (W24-6): a REAL double-click through QTest::mouseDClick on

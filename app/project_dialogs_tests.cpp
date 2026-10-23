@@ -12,6 +12,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -266,6 +268,58 @@ int main() {
         } else {
             std::fprintf(stderr, "note: corpus/probe/w12-exceptions.mpp absent; skipped\n");
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Custom Fields: the field-definition list and the file's formula table
+    // -----------------------------------------------------------------------
+    {
+        std::vector<app::CustomFieldDefinition> fields = app::custom_field_definitions();
+        check(fields.size() == 100,
+              "the definition list is every field in the six measured families");
+        bool duration = false, cost = false, date = false, flag = false, number = false,
+             text = false;
+        for (const app::CustomFieldDefinition& field : fields) {
+            duration = duration || field.kind_name == "Duration";
+            cost = cost || field.kind_name == "Cost";
+            date = date || field.kind_name == "Date";
+            flag = flag || field.kind_name == "Flag";
+            number = number || field.kind_name == "Number";
+            text = text || field.kind_name == "Text";
+        }
+        check(duration && cost && date && flag && number && text,
+              "all six measured field families are listed");
+        check(fields.front().name == "Duration1" &&
+                  fields.back().name == "Text30",
+              "the capture's family order and Project's names are used");
+        check(fields.front().formula.empty(),
+              "a field starts with no formula when no Props blob is supplied");
+
+        const std::string props_path = std::string(APP_TEST_DATA_DIR) + "/synthetic-props.bin";
+        std::vector<std::uint8_t> props;
+        {
+            std::ifstream in(props_path, std::ios::binary);
+            props.assign(std::istreambuf_iterator<char>(in),
+                         std::istreambuf_iterator<char>());
+        }
+        check(!props.empty(), "the committed Props blob is present");
+        app::attach_custom_field_formulas(fields, props);
+        int with_formula = 0;
+        for (const app::CustomFieldDefinition& field : fields) {
+            with_formula += field.formula.empty() ? 0 : 1;
+        }
+        check(with_formula == 6,
+              "the file's six measured formulas attach to their own fields");
+        const std::uint32_t text1 = mpp::custom_field_id(mpp::FieldKind::text, 1);
+        bool text1_formula = false;
+        for (const app::CustomFieldDefinition& field : fields) {
+            if (field.field_id == text1) {
+                text1_formula = !field.formula.empty();
+            }
+        }
+        check(text1_formula, "Text1 carries the file's stored formula text");
+        std::fprintf(stderr, "note: Custom Fields: %zu definitions, %d with a formula\n",
+                     fields.size(), with_formula);
     }
 
     // -----------------------------------------------------------------------
