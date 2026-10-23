@@ -33,9 +33,17 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+  # Wave 23 (A-9): 'CI green' used to cover the Qt shell only, because this
+  # workflow was never dispatched alongside qt.yml.  Run the core lane whenever
+  # qt-shell finishes (and on a manual dispatch), so one dispatch produces both
+  # signals.  The checkout below follows the triggering branch.
+  workflow_run:
+    workflows: ["qt-shell"]
+    types: [completed]
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build-and-test:
@@ -61,6 +69,11 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v4
+        with:
+          # workflow_run has no ref of its own; the head branch of the qt-shell
+          # run is the branch under test.  Manual dispatches and tags keep the
+          # event ref.
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
 
       # Puts cl.exe, link.exe and Ninja on PATH (and sets INCLUDE/LIB) the same
       # way `vcvars64.bat` does in docs/build.md.  Windows-only: the other two
