@@ -251,7 +251,8 @@ def cmd_diff(args):
             log(f"    of {report[a]['summary']['214_total']} 214/ streams, "
                 f"{len(st214)} changed; {len(st114)} of the 114/ streams changed")
     os.makedirs(OUT, exist_ok=True)
-    with open(os.path.join(OUT, "writer-diff.json"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(OUT, "writer-diff.json"), "w", encoding="utf-8",
+              newline="\n") as fh:
         json.dump(report, fh, indent=2)
     log(f"\nwrote docs/analysis/oracle/writer-diff.json")
 

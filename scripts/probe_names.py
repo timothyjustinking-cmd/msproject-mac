@@ -9,14 +9,16 @@ the VarMeta entries whose `mid` equals that UniqueID, picks the entry keyed by
 field id 0x0b400564 (Task.Name, established by var-name.mpp), and prints the
 Var2Data block offset, its u32 byte-length prefix, and the raw UTF-16LE bytes.
 
-Expected output (build 16.0.19725, file saved 2026-07-22):
+Expected output (build 16.0.19725, file saved 2026-07-22).  The names are client
+content and are not printed here or committed -- the lengths are what the
+probe's output pins (wave 25 W25-3 removed the invertible hash labels):
 
     row 1  uid 8141  field 0x0b400564  Var2Data[1456]
-           prefix 28 00 00 00  -> 40 bytes, "client-string-10dbe851 "
+           prefix 28 00 00 00  -> 40 bytes (19 UTF-16 units + NUL), client name 01
     row 2  uid 8142  field 0x0b400564  Var2Data[1660]
-           prefix 46 00 00 00  -> 70 bytes, "client-string-25d8f08b"
+           prefix 46 00 00 00  -> 70 bytes (34 UTF-16 units + NUL), client name 02
     row 3  uid 8166  field 0x0b400564  Var2Data[1866]
-           prefix 1a 00 00 00  -> 26 bytes, "client-string-9c4bcb75"
+           prefix 1a 00 00 00  -> 26 bytes (12 UTF-16 units + NUL), client name 03
 """
 
 import sys

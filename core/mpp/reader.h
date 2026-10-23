@@ -429,7 +429,8 @@ struct Task {
     std::uint32_t row_id = 0;  /* u32 at +0: MS Project's ID column */
     std::uint32_t uid = 0;     /* u32 at +4: UniqueID */
     /* name is the display form: ASCII spaces trimmed, which is what MS Project's
-     * COM surface reports (PROJECT_A row 1 is stored as "client-string-10dbe851 ").
+     * COM surface reports (PROJECT_A row 1 stores a client task name with one
+     * trailing space; the name itself is never quoted).
      * name_raw is the decoded block verbatim, for a writer's round trip. */
     std::string name;
     std::string name_raw;

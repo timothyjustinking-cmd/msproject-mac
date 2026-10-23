@@ -201,9 +201,10 @@ history of 3d3ef34 and 4d789b5, including a commit message.
     record id constant to 0x024013c9; the arithmetic checks stay green.
 
 14. **Low (privacy) -- 3d3ef34, 4d789b5; fixture b3a257b.**  Client task-like
-    names added in this wave, first word only: "client-string-9c4bcb75" in the 4d789b5
-    COMMIT MESSAGE and in that commit's stored_table_test.cpp and reader.h
-    comments, and "Stage" in a 3d3ef34 task_order_test.cpp comment.  d236f91
+    names added in this wave, first word only: a client task name (opaque label
+    client-name-03; the text is not quoted) in the 4d789b5 COMMIT MESSAGE and in
+    that commit's stored_table_test.cpp and reader.h comments, and "Stage" in a
+    3d3ef34 task_order_test.cpp comment.  d236f91
     removed them from the tree, but they stay in history, as the fixer
     disclosed.  d236f91 also removed pre-existing pinned-percent names (an
     improvement).  The new fixture tests/data/wave23-flags.mpp embeds an
@@ -215,8 +216,11 @@ history of 3d3ef34 and 4d789b5, including a commit message.
     synthetic ones ("Resource A", "Leaf A1a" and similar).
     analysis/project_property_names.tsv is derived from the decompiled binary
     but is the derived table the brief's Q9 authorises.  Falsifying test:
-    `git log -p main..wave23 | grep -c client-string-9c4bcb75`; strings on
-    wave23-flags.mpp.
+    `python -I build/audit-w22/scan_client_names.py wave23` (expects
+    `0 file(s), 0 name hit(s)` on a clean tree), plus `strings` on
+    wave23-flags.mpp.  Wave 25 (W25-3) replaced this review's original
+    hash-grep command with the name scan: the hash was invertible from a
+    guess, so grepping for it could not falsify anything.
 
 15. **Low -- e4b2bd9 / f40111f -- app_qt/tests/ribbon_inventory_test.cpp:
     201-260, app_qt/ribbon_pin.tsv:7-8.**  The old gate asserted the

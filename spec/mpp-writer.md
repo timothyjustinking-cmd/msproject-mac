@@ -303,26 +303,31 @@ must tolerate it (`mpp-records.md` §5.3), and the project's reader does.
 
 ### 4.4 Measured results (`tests/roundtrip_stream_replace.cpp`, 439 checks)
 
-Source `corpus/probe/base.mpp` (237,568 B), written into
+Source `corpus/probe/base.mpp` (238,080 B as measured 2026-10-24), written into
 `core/mppwrite/build/vs/test-out/`:
 
 | case | change | file size | streams changed |
 |---|---|---|---|
-| A | FixedData rebuilt with task C priority 900 (same size) | 237,568 (**2 bytes differ**) | `114/TBkndTask/FixedData` |
-| B | task B name `Task B` → `client-string-25d8f08b (rev B)` | 238,080 (+512) | `Var2Data`, `VarMeta` |
-| C | task A name → 4,200 characters (forces Var2Data past 4,096 B) | 246,784 (+9,216) | `Var2Data`, `VarMeta` |
+| A | FixedData rebuilt with task C priority 900 (same size) | 238,080 (**2 bytes differ**) | `114/TBkndTask/FixedData` |
+| B | task B name `Task B` → `Task B renamed (synthetic rev)` (30 chars; wave 25 W25-3 replaced the client-derived label) | 239,104 (+1,024) | `Var2Data`, `VarMeta` |
+| C | task A name → 4,200 characters (forces Var2Data past 4,096 B) | 247,296 (+9,216) | `Var2Data`, `VarMeta` |
 | D | PROJECT_A `114/Props` 90,082 → 102,082 B (needs two more FAT sectors) | 1,671,168 (+103,424) | `114/Props` |
 | E | PROJECT_A `114/Props` 90,082 → 100 B (moves into the mini stream, 176 FAT sectors freed) | 1,567,744 (+0) | `114/Props` |
 
 - **A** is byte-for-byte identical to the in-place patch of the same field, and
   differs from the input in exactly 2 bytes.
-- **B**: Var2Data 464 → 552 bytes (+4 length prefix + 2·43 + 2 NUL bytes);
+- **B**: Var2Data 464 → 530 bytes (+4 length prefix + 2·30 UTF-16 bytes + 2
+  NUL bytes for the 30-character synthetic name);
   VarMeta keeps its size (no entry added); FixedData unchanged; the new data is
   an exact extension of the old (append-only asserted).
-  The mini stream grew from 15,744 to 16,320 bytes, which pushed the root
-  entry's chain from 31 to 32 sectors — +512 bytes in the file, and the root
-  `size` field had to move with it (this was a real bug the test caught: the
+  The mini stream grew from 15,936 to 16,512 bytes (+576), which pushed the
+  root entry's chain from 32 to 33 512-byte sectors; the file grows by 1,024
+  bytes (the chain sector plus the FAT sector that records it), and the root
+  `size` field has to move with it (this was a real bug the test caught: the
   first version left the root size stale and the re-read truncated the stream).
+  These numbers were re-measured for wave 25 (W25-3) on the current
+  corpus/probe/base.mpp; the earlier table quoted a 237,568-byte base whose
+  stream sizes no longer exist.
 - **C**: Var2Data 464 → 8,870 bytes, above the cutoff, so it leaves the mini
   stream and is addressed in whole 512-byte FAT sectors (18 of them, +9,216
   bytes). The old mini sectors are released in the mini FAT.
@@ -439,7 +444,7 @@ needed.
    ```
    inplace-patched.mpp: uid 1 prio 900 pct 50 dur 33600 start 2026-03-02 08:00
    replace-fixeddata.mpp: uid 3 prio 900
-   replace-name.mpp: uid 2 name 'client-string-25d8f08b (rev B)'
+   replace-name.mpp: uid 2 name 'Task B renamed (synthetic rev)'
    ```
 
    Reproduce with a scratch driver (not committed):
@@ -487,7 +492,7 @@ button press):
 |---|---|
 | Priority 900 | **900** (FixedData +78 is authoritative) |
 | PercentComplete 50 | **50** (FixedData +92) |
-| Name `client-string-25d8f08b (rev B)` | **the full name** (Var2Data) |
+| Name `Task B renamed (synthetic rev)` | **the full name** (Var2Data) |
 | Duration 33600 ticks (7 d) | **2400 minutes = 5 d** — the value the file had before the patch |
 | Start `0x3c2a12c0` (2026-03-02) | the schedule's own date, not the patched one |
 

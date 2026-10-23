@@ -1026,8 +1026,9 @@ std::vector<std::uint32_t> offsets_for(const VarTable& table, std::uint32_t uid,
 
 /*
  * MS Project stores names with whatever trailing spaces the user typed (PROJECT_A
- * row 1 is "client-string-10dbe851 " in the file) but its COM surface returns the
- * trimmed string, and tests/data/project_a_golden.tsv was exported that way.  The
+ * row 1 stores its client task name with one trailing space -- not quoted) but
+ * its COM surface returns the trimmed string, and tests/data/project_a_golden.tsv
+ * was exported that way.  The
  * reader trims ASCII spaces so its output is the name a user sees; without
  * this, the golden comparison disagrees on that one task and only that one.
  */
