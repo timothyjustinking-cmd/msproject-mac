@@ -17,6 +17,7 @@ packaged Windows build (CI run 39898703443).
 | clean ribbon strips (near-full width) | `project-ribbon-{resource,report,project,view,help,gantt-format}.png` | per-tab group/button inventory (decision 1); the Resource file is a full 1910x986 window, the others are ribbon-height strips |
 | backstage | `project-backstage-{home,home-alt,home-alt2,account}.png` | the rail, the top-left back arrow, the Account page, Options pinned (decision 2) |
 | Gantt + tables | `project-gantt-{task-tab,task-tab-alt,format-tab,format-tab-alt,row-menu}.png` | the real file's stored table, bar palette, row menu, Format tab (decisions 6/7/9/10) |
+| clean loaded capture | `project-gantt-loaded-clean.png` | **1910x1027 PNG** of the real file in MS Project, no dialogs: stored table, selection/tab colours, bar colours, status bar, no menu bar (the primary measurement file) |
 | dialogs | `project-task-information-{general,advanced}.png` | the six-tab Task Information target (decision 14/15) |
 | views | `project-task-usage.png`, `project-team-planner.png`, `project-resource-sheet.png`, `project-report-critical-tasks.png` | the other view families and a Report Design page (decisions 1/14) |
 | our build | `our-build-gantt.png`, `our-build-desktop-{1..5}.png` | the same file in the packaged build, 1914x1008, with its menus open |
@@ -30,8 +31,24 @@ does not exist.
 ## What the set establishes (measured, not inferred)
 
 * **Selection green is `(162, 211, 160)` / `#A2D3A0`** — sampled from the clean
-  Resource-tab capture's active Indicators header and cell.  Our shell paints
-  `#DCE9F5` (light blue).  Decision 10's "selection" is therefore not matching.
+  Resource-tab capture's active Indicators header and cell, and again from the
+  clean loaded capture's Task Name header.  Our shell paints `#DCE9F5` (light
+  blue).  Decision 10's "selection" is therefore not matching.
+* **Critical bars are `#FF0000`** (pure red) in the clean loaded capture.  Our
+  `kBarCritical` is `#C0392B`; that is a design value, not Project's.
+* **The clean loaded capture's other bar colours are file-specific**: green
+  `#00B050` on the non-critical (and 100 %-complete) leaf rows, navy `#000080`
+  on a non-critical summary, red on the critical summaries/milestones.  Those
+  come from the file's Gantt bar styles, not from a universal default; do NOT
+  hard-code them as global constants until bar styles are decoded.  Only the
+  selection and critical colours are safe to adopt now.
+* **The real file's stored table** is Task Name, Dur, Start, Finish, %Com, Pre,
+  Suc, SUMMARY, Yes (nine columns), with a narrow row-number gutter to its left,
+  no Indicators column, and the Task Name header/selected column in green.  The
+  1910x1027 capture is close enough to the 1920x1032 reference to compare
+  absolute widths.
+* **Its status bar** is "Ready" + "New Tasks : Auto Scheduled" (with the
+  change-default callout); no classic menu bar; QAT in the title bar.
 * **No classic menu bar.**  Every MS Project capture starts at the title bar (with
   the QAT in it) and then the ribbon tab row.  Operator decision: hide ours.
 * **Status bar in a clean capture:** "Ready" at the left, "New Tasks : Manually
