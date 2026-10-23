@@ -1,4 +1,4 @@
-# memory — coordinator (2026-10-23, wave 21 closed)
+# memory — coordinator (2026-10-23, wave 22 in progress)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
 `docs/handoff/wave21-complete.md`.  Full pre-wave-21 history:
@@ -6,9 +6,10 @@
 
 ## Where main is
 
-`main` = **0f5920a**, pushed and clean (the docs close is the next commit).
-Wave 21: Q6 (`0f5920a`), E6 (`d51ab41`), C6 (`e691794`) all committed; CI run
-**39904570421** green on Windows, macOS and Linux (13/13 each), three packages.
+`main` = **2911c40**, pushed and clean.  Wave 21 is closed (gate
+`docs/handoff/wave21-complete.md`; CI 39904570421 green on three, three
+packages).  **Wave 22 is in progress**: R6 (ribbon inventories), S6 (stored
+column values), E7 (new-task mode); brief `docs/handoff/wave22-brief.md`.
 
 ## The numbers
 
@@ -50,8 +51,17 @@ pixel diff (12).
 * Never run `plan_recalc_tests` with the corpus (rewrites the golden).
 * Serial builds; `newline="\n"`; `gh run download` fresh dir.
 
+## Wave 22 (in progress)
+
+* **R6**: the seven ribbon tabs' group/button inventories from the clean strips;
+  regenerate the backlog; a per-tab inventory gate.
+* **S6**: stored-column values (Predecessors, Successors, Resource Names,
+  % Complete, SUMMARY/Yes) on `corpus/project_a.mpp` read-only.
+* **E7**: the project's new-task scheduling default (reader field + status bar).
+* Not this wave: dialogs 14/15, split view 16, dark surfaces 10, pixel diff 12.
+
 ## Next three actions
 
-1. Wave 22: rebuild the seven ribbon tab inventories from the clean strips.
-2. Stored-column values/bar styles + the new-task mode.
-3. The dialog inventory, split view and dark surfaces.
+1. Commit each wave-22 lane as it reports; re-run app_qt/parity/root gates.
+2. One CI dispatch; verify the packages and the three renders.
+3. `docs/handoff/wave22-complete.md`, coordinator/roadmap updates, push.
