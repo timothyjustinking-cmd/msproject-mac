@@ -13,11 +13,11 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Task | Clipboard | Cut | implemented |  |
 | Task | Clipboard | Copy | implemented |  |
 | Task | Clipboard | Format Painter | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Font | Arial | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Font | 8 | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Task | Font | B | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Task | Font | I | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Task | Font | U | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Task | Font | highlight colour | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Task | Font | font colour | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Task | Schedule | Mark on Track | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Task | Schedule | Respect Links | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Task | Schedule | Inactivate | disabled | future: the ribbon command is not modelled by app::MenuAction |
@@ -65,7 +65,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Project | Add-ins | Get Add-ins | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Project | Add-ins | My Add-ins | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Project | Properties | Project Information | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Properties | Custom Fields | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Project | Properties | Custom Fields | implemented |  |
 | Project | Properties | Links Between Projects | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Project | Properties | WBS | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Project | Properties | Change Working Time | disabled | future: the ribbon command is not modelled by app::MenuAction |
@@ -87,15 +87,9 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | View | Data | Sort | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | View | Data | Outline | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | View | Data | Tables | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Data | Highlight | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Data | Filter | implemented |  |
-| View | Data | Group by | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Zoom | Timescale | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | View | Zoom | Zoom | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | View | Zoom | Entire Project | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | View | Zoom | Selected Tasks | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Split View | Timeline | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Split View | Details | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | View | Window | New Window | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | View | Window | Switch Windows | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | View | Window | Arrange All | disabled | future: the ribbon command is not modelled by app::MenuAction |
@@ -109,17 +103,11 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Gantt Chart Format | Format | Layout | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Gantt Chart Format | Columns | Insert Column | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Gantt Chart Format | Columns | Column Settings | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Columns | Custom Fields | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Gantt Chart Format | Columns | Custom Fields | implemented |  |
 | Gantt Chart Format | Bar Styles | Format | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Bar Styles | Critical Tasks | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Bar Styles | Slack | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Bar Styles | Late Tasks | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Gantt Chart Format | Bar Styles | Task Path | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Gantt Chart Format | Bar Styles | Baseline | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Gantt Chart Format | Bar Styles | Slippage | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Show/Hide | Outline Number | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Show/Hide | Project Summary Task | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Show/Hide | Summary Tasks | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Gantt Chart Format | Drawings | Drawing | disabled | future: the ribbon command is not modelled by app::MenuAction |
 
 ## Menu bar
@@ -144,7 +132,8 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Edit | Paste | implemented |  |
 | Edit | Select All | implemented |  |
 | Edit | Delete Task | implemented |  |
-| Edit | Task Fields... | implemented |  |
+| Edit | Task Information... | implemented |  |
+| Edit | Custom Fields... | implemented |  |
 | Edit | Predecessors... | implemented |  |
 | Edit | Custom Field Formula... | implemented |  |
 | View | Task Sheet | implemented |  |
@@ -172,6 +161,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 113 (102 disabled)
-* menu commands: 43 (2 disabled)
+* ribbon commands: 101 (89 disabled)
+* menu commands: 44 (2 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

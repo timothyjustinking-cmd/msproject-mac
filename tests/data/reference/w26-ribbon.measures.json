@@ -1,0 +1,95 @@
+{
+  "source": "Measured from the local, git-ignored clean MS Project 2021 ribbon strips (corpus/reference/2026-10-23-msproject). Only the measured numbers are committed; the captures stay local (operator ruling 2026-10-23).",
+  "measured_on": "2026-10-24",
+  "client_width": 1920,
+  "group_band_height": 89,
+  "controls_top_offset": 5,
+  "stack_row_height": 22,
+  "stack_rows": 3,
+  "large_button_height": 64,
+  "notes": "left/right are the vertical group separator positions in the clean strips (the first group starts at the window's 8-px page margin). The wave-26 ribbon lays the groups out at these widths, so the live group rectangles are compared with these numbers at 1920. controls_top_offset and stack_row_height are the measured three-row stack baselines (5, 27, 49 relative to the group band top).",
+  "palette": [
+    [116, 204, 212],
+    [209, 54, 141],
+    [171, 89, 164],
+    [153, 153, 153],
+    [114, 193, 211],
+    [74, 189, 162],
+    [164, 200, 57],
+    [93, 184, 51],
+    [19, 154, 161],
+    [37, 130, 48],
+    [238, 178, 33],
+    [88, 123, 31],
+    [31, 93, 169],
+    [112, 90, 158],
+    [68, 63, 99],
+    [88, 117, 163]
+  ],
+  "tabs": {
+    "Task": {
+      "groups": [
+        {"title": "View", "left": 8, "right": 66},
+        {"title": "Clipboard", "left": 66, "right": 237},
+        {"title": "Font", "left": 237, "right": 414},
+        {"title": "Schedule", "left": 414, "right": 696},
+        {"title": "Tasks", "left": 696, "right": 965},
+        {"title": "Insert", "left": 965, "right": 1205},
+        {"title": "Properties", "left": 1205, "right": 1409},
+        {"title": "Editing", "left": 1409, "right": 1549}
+      ]
+    },
+    "Resource": {
+      "groups": [
+        {"title": "View", "left": 8, "right": 74},
+        {"title": "Assignments", "left": 74, "right": 203},
+        {"title": "Insert", "left": 203, "right": 288},
+        {"title": "Properties", "left": 288, "right": 460},
+        {"title": "Level", "left": 460, "right": 767}
+      ]
+    },
+    "Report": {
+      "groups": [
+        {"title": "Project", "left": 8, "right": 78},
+        {"title": "View Reports", "left": 78, "right": 531},
+        {"title": "Export", "left": 531, "right": 592}
+      ]
+    },
+    "Project": {
+      "groups": [
+        {"title": "Insert", "left": 8, "right": 85},
+        {"title": "Add-ins", "left": 85, "right": 220},
+        {"title": "Properties", "left": 220, "right": 561},
+        {"title": "Schedule", "left": 561, "right": 736},
+        {"title": "Status", "left": 736, "right": 869},
+        {"title": "Proofing", "left": 869, "right": 932}
+      ]
+    },
+    "View": {
+      "groups": [
+        {"title": "Task Views", "left": 8, "right": 272},
+        {"title": "Resource Views", "left": 272, "right": 486},
+        {"title": "Data", "left": 486, "right": 809},
+        {"title": "Zoom", "left": 809, "right": 1057},
+        {"title": "Split View", "left": 1057, "right": 1242},
+        {"title": "Window", "left": 1242, "right": 1440},
+        {"title": "Macros", "left": 1440, "right": 1500}
+      ]
+    },
+    "Help": {
+      "groups": [
+        {"title": "Help", "left": 8, "right": 164}
+      ]
+    },
+    "Gantt Chart Format": {
+      "groups": [
+        {"title": "Format", "left": 8, "right": 161},
+        {"title": "Columns", "left": 161, "right": 359},
+        {"title": "Bar Styles", "left": 359, "right": 666},
+        {"title": "Gantt Chart Style", "left": 666, "right": 1599},
+        {"title": "Show/Hide", "left": 1599, "right": 1760},
+        {"title": "Drawings", "left": 1760, "right": 1825}
+      ]
+    }
+  }
+}

@@ -1,27 +1,34 @@
-// app_qt/ribbon_bar.h -- the ribbon-like toolbar: tabs, groups, labelled
-// buttons, at the heights the reference screenshot uses.
+// app_qt/ribbon_bar.h -- the ribbon-like toolbar: tabs, groups and the
+// controls Project actually shows (large buttons, small stacked rows, combo
+// boxes, check boxes, split buttons, a date field, the Gantt Chart Style
+// gallery and dialog launchers).
 //
-// Pixel-exact ribbon artwork is out of scope (wave 17 brief): this is structure
-// and order, text buttons only, simple glyphs.  The tab set is Task, Resource,
-// Report, Project, View, Help plus the contextual "Gantt Chart Format"; each tab
-// owns ordered groups with a caption under the buttons, exactly as the ribbon
-// lays them out.  Heights come from shell_style.h.
+// WAVE 26 (W26-1.1..1.5): the wave-22 model was text buttons only -- every
+// icon-only control, combo, check box and the gallery was listed in
+// ribbon_pin_unmodelled.tsv as backlog.  This header now models each of those
+// kinds, with the live widget class as the source of truth for the kind (W25-7:
+// the inventory gate compares the pin's kind column with the LIVE widget, never
+// with the port's own spec).  The measured group rectangles come from the clean
+// ribbon strips; `tests/data/reference/w26-ribbon.measures.json` carries the
+// numbers, and the gate compares the live geometry with them.
 //
-// WAVE 18 Q3: every button gets a FIXED width from its own label's QFontMetrics
-// plus padding, and a group is as wide as the widest of its button row and its
-// caption.  A narrow window therefore drops whole groups (in ribbon order) at
-// the page's right edge instead of squeezing them: Qt's QToolButton clips text
-// from BOTH ends when it is too narrow ("Cu", "t F"), which is the visible bug
-// this replaces.  No label is ever cut, at 1920 or at 900.
+// The controls are laid out in Project's grid: three 22-px stack rows at a
+// measured 5-px offset from the top of the group band, a 64-px large button
+// spanning all three, and the group caption at the bottom.  A group's width is
+// FIXED to the measured clean strip, so the group rectangles do not drift with
+// the font metrics; the page drops whole groups at the right edge exactly as
+// before.
 //
-// No Q_OBJECT: the widget has no custom signals; button clicks go through a
-// std::function set by MainWindow.
+// No Q_OBJECT: the widget has no custom signals; clicks and toggles go through
+// std::function handlers set by MainWindow.
 #pragma once
 
 #include <QSize>
+#include <QString>
 #include <QStringList>
 #include <QWidget>
 
+#include <cstdint>
 #include <functional>
 #include <vector>
 
@@ -35,6 +42,29 @@ class QToolButton;
 
 namespace msqt {
 
+// Wave 26: ribbon controls that are not app::MenuActions.  They are commands
+// the ribbon offers that the menu bar does not: the %-complete quick buttons,
+// the Link/Unlink task buttons, and the format/view toggles.  The shell handles
+// them through set_command_handler(); their live wiring is pinned by the
+// inventory gate.
+enum class RibbonCommand : std::uint8_t {
+    none = 0,
+    percent_0,
+    percent_25,
+    percent_50,
+    percent_75,
+    percent_100,
+    link_tasks,
+    unlink_tasks,
+    outdent,
+    indent,
+    split_task,
+    toggle_critical_tasks,
+    toggle_project_summary,
+    toggle_timeline,
+    toggle_details,
+};
+
 class RibbonBar final : public QWidget {
   public:
     explicit RibbonBar(QWidget* parent = nullptr);
@@ -47,30 +77,66 @@ class RibbonBar final : public QWidget {
     QStringList tab_titles() const;
     // The groups currently shown (the active tab's), by their caption.
     QStringList group_titles() const;
+    // Large command buttons only (the measured 64-px shape).  Small stacked
+    // buttons, combos, check boxes, split buttons and the gallery are not part
+    // of this count; the inventory gate reads them through group_control().
     int button_count() const;
     // How many of the active tab's groups are actually on screen: a narrow
     // window drops whole groups rather than clipping their labels.
     int visible_group_count() const;
 
-    // WAVE 22: the measured inventory, for app_qt/tests/ribbon_inventory_test.cpp.
     // The active tab can be selected without a mouse click so the gate can pin
     // every one of the seven tabs, and the live page can be read back group by
     // group in ribbon order (hidden groups included).
     int active_tab_index() const noexcept { return active_tab_; }
     void set_active_tab(int index);
-    // One group's button labels / modelled commands, in ribbon order.  An index
-    // outside the current page returns empty.
-    QStringList group_button_labels(int group_index) const;
-    app::MenuAction group_button_action(int group_index, int button_index) const;
-    // Wave 25 (W25-7/S9): the kind of a live control, read from the WIDGET's
-    // class -- never from the pin file.  `control_kind` is public and static so
-    // the inventory gate can prove the classifier with real QWidgets.
-    static QString control_kind(const QWidget* control);
-    QString group_control_kind(int group_index, int button_index) const;
 
-    // Buttons with a modelled command call the handler; the rest report through
-    // the same handler with MenuAction::none (MainWindow shows "not wired").
+    // --- WAVE 26: the live control inventory --------------------------------
+    // One group's controls, in ribbon order (left to right, then top to
+    // bottom).  The pointer is the LIVE widget: the gate classifies it through
+    // control_kind() and reads its own text/enabled/checked state, so a control
+    // built as the wrong class cannot pass.
+    int group_control_count(int group_index) const;
+    QWidget* group_control(int group_index, int control_index) const;
+    // The group's own box (controls + caption).  The inventory gate measures the
+    // live control rows against it.
+    QWidget* group_box(int group_index) const;
+    app::MenuAction group_control_action(int group_index, int control_index) const;
+    RibbonCommand group_control_command(int group_index, int control_index) const;
+    // The spec's stack row (0..2; -1 for a control that is not a stack row,
+    // such as the gallery or a dialog launcher).  The gate proves the live
+    // geometry against the measured row baselines.
+    int group_control_row(int group_index, int control_index) const;
+    // The kind of a live control, read from the WIDGET (its class, or the
+    // small QWidget/QToolButton subclasses this file builds) -- never from the
+    // pin file.  Public and static so the inventory gate can prove the
+    // classifier with real QWidgets.
+    static QString control_kind(const QWidget* control);
+    QString group_control_kind(int group_index, int control_index) const;
+
+    // Buttons with a modelled MenuAction call the action handler; small buttons
+    // and toggles call the command handler.  A disabled control never calls
+    // either (Qt blocks the signal), and the gate invokes the live widget.
     void set_action_handler(std::function<void(app::MenuAction)> handler);
+    void set_command_handler(std::function<void(RibbonCommand, bool)> handler);
+
+    // Wave 26: the document state the ribbon's check boxes show.  The Timeline
+    // and Project Summary Task boxes are file state (wave 24): their initial
+    // state is the loaded file's stored setting, and the shell keeps the live
+    // control in step through this call.  A new project uses Project's defaults
+    // (Timeline shown, project row hidden).  The state survives a tab switch
+    // because it is held here, not in the page widgets.
+    void set_document_state(bool has_document, bool timeline_shown,
+                            bool project_summary_shown);
+    bool timeline_checked() const noexcept { return timeline_checked_; }
+    bool project_summary_checked() const noexcept { return project_summary_checked_; }
+    bool critical_tasks_checked() const noexcept { return critical_checked_; }
+    // Flipping Critical Tasks is not document state; a new/loaded file resets
+    // the measured default (OFF), and the live check box follows.
+    void set_critical_tasks(bool checked) {
+        critical_checked_ = checked;
+        set_stack_check(QStringLiteral("Critical Tasks"), checked);
+    }
 
     // The File tab is chrome, not one of the seven modelled command tabs: it has
     // its own styling and opens the backstage through this handler.
@@ -96,7 +162,7 @@ class RibbonBar final : public QWidget {
     void resizeEvent(QResizeEvent* event) override;
 
   private:
-    // One group's two widgets: the box (buttons + caption) and the separator
+    // One group's two widgets: the box (controls + caption) and the separator
     // after it.  They are hidden together when the group does not fit.
     struct GroupWidgets {
         QWidget* box = nullptr;
@@ -110,6 +176,8 @@ class RibbonBar final : public QWidget {
     // edge; the rest are hidden (never half-drawn, so no label is cut).
     void layout_page_groups();
     void update_tab_overflow();
+    void sync_document_checkboxes();
+    void set_stack_check(const QString& accessible_name, bool checked);
 
     QWidget* tab_row_ = nullptr;
     QWidget* page_ = nullptr;
@@ -123,14 +191,25 @@ class RibbonBar final : public QWidget {
     bool contextual_enabled_ = true;
     QLabel* tell_me_ = nullptr;
     std::vector<GroupWidgets> page_groups_;
-    // WAVE 22: per group of the active page, its buttons and their modelled
-    // commands, in ribbon order.  Same shape/order as page_groups_.
-    std::vector<std::vector<QToolButton*>> page_buttons_;
+    // WAVE 26: per group of the active page, its live controls and their
+    // modelled command/action/stack row, in ribbon order.  Same shape/order as
+    // page_groups_.
+    std::vector<std::vector<QWidget*>> page_controls_;
     std::vector<std::vector<app::MenuAction>> page_actions_;
+    std::vector<std::vector<RibbonCommand>> page_commands_;
+    std::vector<std::vector<int>> page_rows_;
     std::function<void(app::MenuAction)> handler_;
+    std::function<void(RibbonCommand, bool)> command_handler_;
     std::function<void()> file_handler_;
     int active_tab_ = 0;
     int button_count_ = 0;
+
+    // Wave 26: the document-driven check-box state (see set_document_state()).
+    bool has_document_ = false;
+    bool timeline_checked_ = true;
+    bool project_summary_checked_ = false;
+    // Critical Tasks is a view toggle whose measured default is OFF.
+    bool critical_checked_ = false;
 };
 
 }  // namespace msqt

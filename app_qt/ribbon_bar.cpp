@@ -5,9 +5,12 @@
 #include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
+#include <QDate>
+#include <QDateEdit>
 #include <QFont>
 #include <QFontMetrics>
 #include <QFrame>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
@@ -15,9 +18,12 @@
 #include <QMargins>
 #include <QMenu>
 #include <QPainter>
+#include <QPixmap>
 #include <QPen>
 #include <QPoint>
+#include <QPolygon>
 #include <QResizeEvent>
+#include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QString>
 #include <QToolButton>
@@ -25,7 +31,9 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -36,214 +44,393 @@
 namespace msqt {
 namespace {
 
-struct ButtonSpec {
-    const char* label;
-    app::MenuAction action;
+// ---------------------------------------------------------------------------
+// Measured geometry (wave 26)
+// ---------------------------------------------------------------------------
+// The clean ribbon strips (local, git-ignored) put the group band at 89 px with
+// three 22-px stack rows whose first top is 5 px below the band's top; a large
+// button spans all three rows (its 64-px body sits one pixel inside the 66-px
+// span).  The page keeps the wave-20 group height (95) and its 4-px top margin,
+// so the band box is 91 px: 5 px offset + 66 px rows + a 6-px gap + the 14-px
+// caption.  The numbers are pinned in
+// tests/data/reference/w26-ribbon.measures.json and the inventory gate compares
+// the live widget geometry with them.
+constexpr int kStackRowHeight = 22;
+constexpr int kStackRows = 3;
+constexpr int kStackTopOffset = 5;
+constexpr int kControlsHeight = kStackTopOffset + kStackRows * kStackRowHeight;
+constexpr int kGroupBandHeight = kRibbonGroupHeight - 4;
+constexpr int kLargeHeight = kRibbonButtonHeight;
+constexpr int kGroupSeparatorWidth = 1;
+constexpr int kLauncherSize = 14;
+constexpr const char* kNotImplemented = "not implemented in this port";
+
+// The 16 Gantt Chart Style bar colours, sampled from the clean Gantt Chart
+// Format strip's gallery (one sample per swatch cell).  Only numbers are
+// committed; the capture stays local.
+constexpr std::array<std::uint32_t, 16> kGanttStylePalette = {
+    0x74ccd4u, 0xd1368du, 0xab59a4u, 0x999999u, 0x72c1d3u, 0x4abda2u,
+    0xa4c839u, 0x5db833u, 0x139aa1u, 0x258230u, 0xeeb221u, 0x587b1fu,
+    0x1f5da9u, 0x705a9eu, 0x443f63u, 0x5875a3u,
+};
+
+enum class Kind {
+    button,   // large command button (32-px icon over a two-line label)
+    small,    // one 22-px stack row (small button or icon-only button)
+    split,    // QToolButton with a menu (large or one-row shape)
+    combo,    // QComboBox
+    checkbox, // QCheckBox
+    field,    // RibbonField (label + date field)
+    gallery,  // RibbonGallery (16 swatches + expander)
+};
+
+struct ControlSpec {
+    const char* label = "";             // display text ('\n' = two lines)
+    app::MenuAction action = app::MenuAction::none;
+    RibbonCommand command = RibbonCommand::none;
+    Kind kind = Kind::button;
+    int width = 40;
+    int row = 0;                        // stack row (0..2); large spans all
+    int col = 0;
+    int row_span = 3;
+    int col_span = 1;
+    const char* items = nullptr;        // combo: '|'-separated values
+    int checked = 0;                    // checkbox: 0/1, -1 = document state
+    bool enabled = false;
+    bool icon_only = false;             // small button: no visible text
 };
 
 struct GroupSpec {
-    const char* title;
-    std::vector<ButtonSpec> buttons;
+    const char* title = "";
+    int width = 0;                      // measured group rect, separator included
+    std::vector<ControlSpec> controls;
+    const char* launcher = nullptr;     // dialog launcher, bottom right
 };
 
 struct TabSpec {
-    const char* title;
-    bool contextual;
+    const char* title = "";
+    bool contextual = false;
     std::vector<GroupSpec> groups;
 };
 
-// The ribbon structure and order: Task first (the reference's active tab), then
-// Resource, Report, Project, View, Help, and the contextual Gantt Chart Format.
-// WAVE 22 (operator decision 1): every group and every text-labelled button is
-// the inventory MEASURED from MS Project 2021's clean ribbon captures (local,
-// git-ignored; see docs/handoff/r6.md for the per-tab source file).  Group
-// order is left to right; within a group the order is the tab order of the
-// capture.  Only exact command matches keep a MenuAction: everything MS Project
-// shows that this port does not model is `none`, so it is disabled with the
-// exact "not implemented in this port" tooltip.
-//
-// Notes on the shape of this model:
-//   * the port's ribbon is text-labelled commands only.  The Font group's
-//     family/size entries are value displays carried as buttons (Arial/8 are the
-//     values in the clean capture); colour pickers, the five quick %-complete
-//     buttons, the indent/outdent arrows and the Gantt Chart Style swatch
-//     palette have no text label, so they are not modelled.  "Gantt Chart Style"
-//     is kept as a caption-only group so the measured group order is complete.
-//   * the Task tab is deliberately unchanged in width so the 9/9 UI parity
-//     fixture and the empty-state gate keep their measured fit at 1920.
+GroupSpec& add_group(TabSpec& tab, const char* title, int width) {
+    tab.groups.push_back(GroupSpec{});
+    GroupSpec& group = tab.groups.back();
+    group.title = title;
+    group.width = width;
+    return group;
+}
+
+ControlSpec& add(GroupSpec& group, const char* label, Kind kind, int width, int row, int col,
+                 int row_span, int col_span, app::MenuAction action, RibbonCommand command,
+                 const char* items, int checked, bool enabled, bool icon_only) {
+    group.controls.push_back(ControlSpec{});
+    ControlSpec& control = group.controls.back();
+    control.label = label;
+    control.kind = kind;
+    control.width = width;
+    control.row = row;
+    control.col = col;
+    control.row_span = row_span;
+    control.col_span = col_span;
+    control.action = action;
+    control.command = command;
+    control.items = items;
+    control.checked = checked;
+    control.enabled = enabled;
+    control.icon_only = icon_only;
+    return control;
+}
+
+GroupSpec& large(GroupSpec& group, const char* label, app::MenuAction action, int width, int col,
+                 bool enabled = false) {
+    add(group, label, Kind::button, width, 0, col, 3, 1, action, RibbonCommand::none, nullptr, 0,
+        enabled, false);
+    return group;
+}
+
+GroupSpec& split(GroupSpec& group, const char* label, int width, int row, int col,
+                 int row_span = 3) {
+    add(group, label, Kind::split, width, row, col, row_span, 1, app::MenuAction::none,
+        RibbonCommand::none, nullptr, 0, false, false);
+    return group;
+}
+
+GroupSpec& small(GroupSpec& group, const char* label, app::MenuAction action, int width, int row,
+                 int col, bool enabled = false, int col_span = 1) {
+    add(group, label, Kind::small, width, row, col, 1, col_span, action, RibbonCommand::none,
+        nullptr, 0, enabled, false);
+    return group;
+}
+
+GroupSpec& small_cmd(GroupSpec& group, const char* label, RibbonCommand command, int width,
+                     int row, int col, bool enabled = false, bool icon_only = false) {
+    add(group, label, Kind::small, width, row, col, 1, 1, app::MenuAction::none, command,
+        nullptr, 0, enabled, icon_only);
+    return group;
+}
+
+GroupSpec& combo(GroupSpec& group, const char* label, const char* value, int width, int row,
+                 int col, bool enabled = false) {
+    add(group, label, Kind::combo, width, row, col, 1, 1, app::MenuAction::none,
+        RibbonCommand::none, value, 0, enabled, false);
+    return group;
+}
+
+GroupSpec& check(GroupSpec& group, const char* label, RibbonCommand command, int width, int row,
+                 int col, bool enabled = false, int checked = 0) {
+    add(group, label, Kind::checkbox, width, row, col, 1, 1, app::MenuAction::none, command,
+        nullptr, checked, enabled, false);
+    return group;
+}
+
+[[maybe_unused]] GroupSpec& field(GroupSpec& group, const char* label, int width, int row,
+                                 int col) {
+    add(group, label, Kind::field, width, row, col, 1, 1, app::MenuAction::none,
+        RibbonCommand::none, "NA", 0, false, false);
+    return group;
+}
+
+GroupSpec& gallery(GroupSpec& group, int width, int col) {
+    add(group, "Gantt Chart Style", Kind::gallery, width, 0, col, 3, 1, app::MenuAction::none,
+        RibbonCommand::none, "16", 0, false, false);
+    return group;
+}
+
+GroupSpec& launcher(GroupSpec& group, const char* label) {
+    group.launcher = label;
+    return group;
+}
+
+// ---------------------------------------------------------------------------
+// The ribbon structure: measured group order, measured group widths and the
+// controls Project shows (docs/handoff/audit-w22/A2-fable-readback.md plus the
+// clean loaded capture for the Task tab).  Only commands this port implements
+// are enabled; every other control is disabled with the exact decision-9
+// tooltip.  The `enabled` set is the independent pin's.
+// ---------------------------------------------------------------------------
 const std::vector<TabSpec>& tab_specs() {
-    static const std::vector<TabSpec> kTabs = {
-        {"Task",
-         false,
-         {
-             {"View", {{"Gantt Chart", app::MenuAction::none}}},
-             {"Clipboard",
-              {{"Paste", app::MenuAction::paste},
-               {"Cut", app::MenuAction::cut},
-               {"Copy", app::MenuAction::copy},
-               {"Format Painter", app::MenuAction::none}}},
-             {"Font", {{"Arial", app::MenuAction::none},
-                       {"8", app::MenuAction::none},
-                       {"B", app::MenuAction::none},
-                       {"I", app::MenuAction::none},
-                       {"U", app::MenuAction::none}}},
-             {"Schedule",
-              {{"Mark on Track", app::MenuAction::none},
-               {"Respect Links", app::MenuAction::none},
-               {"Inactivate", app::MenuAction::none}}},
-             {"Tasks",
-              {{"Manually Schedule", app::MenuAction::none},
-               {"Auto Schedule", app::MenuAction::none},
-               {"Inspect", app::MenuAction::none},
-               {"Move", app::MenuAction::none},
-               {"Mode", app::MenuAction::none}}},
-             {"Insert",
-              {{"Task", app::MenuAction::insert_task},
-               {"Summary", app::MenuAction::none},
-               {"Milestone", app::MenuAction::none},
-               {"Deliverable", app::MenuAction::none}}},
-             {"Properties",
-              {{"Information", app::MenuAction::task_fields},
-               {"Notes", app::MenuAction::none},
-               {"Details", app::MenuAction::none},
-               {"Add to Timeline", app::MenuAction::none}}},
-             {"Editing",
-              {{"Scroll to Task", app::MenuAction::none},
-               {"Find", app::MenuAction::show_filter},
-               {"Clear", app::MenuAction::clear_filter},
-               {"Fill", app::MenuAction::none}}},
-         }},
-        {"Resource",
-         false,
-         {
-             {"View", {{"Team Planner", app::MenuAction::none}}},
-             {"Assignments",
-              {{"Assign Resources", app::MenuAction::none},
-               {"Resource Pool", app::MenuAction::none}}},
-             {"Insert", {{"Add Resources", app::MenuAction::insert_resource}}},
-             {"Properties",
-              {{"Information", app::MenuAction::none},
-               {"Notes", app::MenuAction::none},
-               {"Details", app::MenuAction::none}}},
-             {"Level",
-              {{"Level Selection", app::MenuAction::none},
-               {"Level Resource", app::MenuAction::none},
-               {"Level All", app::MenuAction::none},
-               {"Leveling Options", app::MenuAction::none},
-               {"Clear Leveling", app::MenuAction::none},
-               {"Next Overallocation", app::MenuAction::none}}},
-         }},
-        {"Report",
-         false,
-         {
-             {"Project", {{"Compare Projects", app::MenuAction::none}}},
-             {"View Reports",
-              {{"New Report", app::MenuAction::none},
-               {"Dashboards", app::MenuAction::none},
-               {"Resources", app::MenuAction::none},
-               {"Costs", app::MenuAction::none},
-               {"In Progress", app::MenuAction::none},
-               {"Getting Started", app::MenuAction::none},
-               {"Custom", app::MenuAction::none},
-               {"Recent", app::MenuAction::none}}},
-             {"Export", {{"Visual Reports", app::MenuAction::none}}},
-         }},
-        {"Project",
-         false,
-         {
-             {"Insert", {{"Subproject", app::MenuAction::none}}},
-             {"Add-ins",
-              {{"Get Add-ins", app::MenuAction::none},
-               {"My Add-ins", app::MenuAction::none}}},
-             {"Properties",
-              {{"Project Information", app::MenuAction::none},
-               {"Custom Fields", app::MenuAction::custom_fields},
-               {"Links Between Projects", app::MenuAction::none},
-               {"WBS", app::MenuAction::none},
-               {"Change Working Time", app::MenuAction::none}}},
-             {"Schedule",
-              {{"Calculate Project", app::MenuAction::none},
-               {"Set Baseline", app::MenuAction::none},
-               {"Move Project", app::MenuAction::none}}},
-             {"Status",
-              {{"Status Date", app::MenuAction::none},
-               {"Update Project", app::MenuAction::none}}},
-             {"Proofing", {{"Spelling", app::MenuAction::none}}},
-         }},
-        {"View",
-         false,
-         {
-             {"Task Views",
-              {{"Gantt Chart", app::MenuAction::none},
-               {"Task Usage", app::MenuAction::view_task_usage},
-               {"Network Diagram", app::MenuAction::none},
-               {"Calendar", app::MenuAction::none},
-               {"Other Views", app::MenuAction::none}}},
-             {"Resource Views",
-              {{"Team Planner", app::MenuAction::none},
-               {"Resource Usage", app::MenuAction::view_resource_usage},
-               {"Resource Sheet", app::MenuAction::view_resource_sheet},
-               {"Other Views", app::MenuAction::none}}},
-             {"Data",
-              {{"Sort", app::MenuAction::none},
-               {"Outline", app::MenuAction::none},
-               {"Tables", app::MenuAction::none},
-               // The clean capture stacks Highlight ABOVE Filter above Group by
-               // (the pencil row, then the funnel row, then the group row).
-               {"Highlight", app::MenuAction::none},
-               {"Filter", app::MenuAction::show_filter},
-               {"Group by", app::MenuAction::none}}},
-             {"Zoom",
-              {{"Timescale", app::MenuAction::none},
-               {"Zoom", app::MenuAction::none},
-               {"Entire Project", app::MenuAction::none},
-               {"Selected Tasks", app::MenuAction::none}}},
-             {"Split View",
-              {{"Timeline", app::MenuAction::none}, {"Details", app::MenuAction::none}}},
-             {"Window",
-              {{"New Window", app::MenuAction::none},
-               {"Switch Windows", app::MenuAction::none},
-               {"Arrange All", app::MenuAction::none},
-               {"Hide", app::MenuAction::none}}},
-             {"Macros", {{"Macros", app::MenuAction::none}}},
-         }},
-        {"Help",
-         false,
-         {
-             {"Help",
-              {{"Help", app::MenuAction::none},
-               {"Feedback", app::MenuAction::none},
-               {"Show Training", app::MenuAction::none}}},
-         }},
-        {"Gantt Chart Format",
-         true,
-         {
-             {"Format",
-              {{"Text Styles", app::MenuAction::none},
-               {"Gridlines", app::MenuAction::none},
-               {"Layout", app::MenuAction::none}}},
-             {"Columns",
-              {{"Insert Column", app::MenuAction::none},
-               {"Column Settings", app::MenuAction::none},
-               {"Custom Fields", app::MenuAction::custom_fields}}},
-             {"Bar Styles",
-              {{"Format", app::MenuAction::none},
-               {"Critical Tasks", app::MenuAction::none},
-               {"Slack", app::MenuAction::none},
-               {"Late Tasks", app::MenuAction::none},
-               {"Task Path", app::MenuAction::none},
-               {"Baseline", app::MenuAction::none},
-               {"Slippage", app::MenuAction::none}}},
-             // The 16 bar-colour swatches + preset drop-down: a palette, not
-             // text commands.  The caption keeps the measured group in order.
-             {"Gantt Chart Style", {}},
-             {"Show/Hide",
-              {{"Outline Number", app::MenuAction::none},
-               {"Project Summary Task", app::MenuAction::none},
-               {"Summary Tasks", app::MenuAction::none}}},
-             {"Drawings", {{"Drawing", app::MenuAction::none}}},
-         }},
-    };
+    static const std::vector<TabSpec> kTabs = [] {
+        std::vector<TabSpec> tabs;
+
+        // --- Task -----------------------------------------------------------
+        TabSpec task;
+        task.title = "Task";
+        GroupSpec& task_view = add_group(task, "View", 58);
+        large(task_view, "Gantt\nChart", app::MenuAction::none, 50, 0);
+        GroupSpec& clipboard = add_group(task, "Clipboard", 171);
+        large(clipboard, "Paste", app::MenuAction::paste, 38, 0, true);
+        large(clipboard, "Cut", app::MenuAction::cut, 36, 1, true);
+        large(clipboard, "Copy", app::MenuAction::copy, 38, 2, true);
+        large(clipboard, "Format\nPainter", app::MenuAction::none, 48, 3);
+        GroupSpec& font = add_group(task, "Font", 177);
+        // W26-1.1: the font value displays are the FILE's default text style
+        // when decoded (G3-3.1), else Project's new-project default.  The text
+        // style records are not decoded yet, so the captured new-project
+        // default (Calibri 11, the UI contract's own reference typography) is
+        // shown; the values are displays, not an edit of the file.
+        combo(font, "font name", "Calibri", 66, 0, 0);
+        combo(font, "font size", "11", 34, 0, 1);
+        small(font, "B", app::MenuAction::none, 20, 0, 2);
+        small(font, "I", app::MenuAction::none, 20, 0, 3);
+        small(font, "U", app::MenuAction::none, 20, 0, 4);
+        split(font, "highlight colour", 26, 1, 0, 1);
+        split(font, "font colour", 26, 1, 1, 1);
+        launcher(font, "Font");
+        GroupSpec& schedule = add_group(task, "Schedule", 282);
+        small_cmd(schedule, "0%", RibbonCommand::percent_0, 18, 0, 0, false);
+        small_cmd(schedule, "25%", RibbonCommand::percent_25, 20, 0, 1, false);
+        small_cmd(schedule, "50%", RibbonCommand::percent_50, 20, 0, 2, false);
+        small_cmd(schedule, "75%", RibbonCommand::percent_75, 20, 0, 3, false);
+        small_cmd(schedule, "100%", RibbonCommand::percent_100, 26, 0, 4, false);
+        split(schedule, "Mark on Track", 64, 0, 5, 3);
+        small(schedule, "Respect Links", app::MenuAction::none, 96, 0, 6);
+        small(schedule, "Inactivate", app::MenuAction::none, 96, 1, 6);
+        small_cmd(schedule, "outdent", RibbonCommand::outdent, 18, 1, 0, false, true);
+        small_cmd(schedule, "indent", RibbonCommand::indent, 20, 1, 1, false, true);
+        small_cmd(schedule, "link tasks", RibbonCommand::link_tasks, 20, 1, 2, false, true);
+        small_cmd(schedule, "unlink tasks", RibbonCommand::unlink_tasks, 20, 1, 3, false, true);
+        small_cmd(schedule, "split task", RibbonCommand::split_task, 26, 1, 4, false, true);
+        GroupSpec& tasks = add_group(task, "Tasks", 269);
+        large(tasks, "Manually\nSchedule", app::MenuAction::none, 52, 0);
+        large(tasks, "Auto\nSchedule", app::MenuAction::none, 50, 1);
+        large(tasks, "Inspect", app::MenuAction::none, 52, 2);
+        large(tasks, "Move", app::MenuAction::none, 38, 3);
+        large(tasks, "Mode", app::MenuAction::none, 40, 4);
+        GroupSpec& insert = add_group(task, "Insert", 240);
+        large(insert, "Task", app::MenuAction::insert_task, 48, 0, true);
+        large(insert, "Summary", app::MenuAction::none, 56, 1);
+        large(insert, "Milestone", app::MenuAction::none, 58, 2);
+        large(insert, "Deliverable", app::MenuAction::none, 58, 3);
+        GroupSpec& properties = add_group(task, "Properties", 204);
+        large(properties, "Information", app::MenuAction::task_fields, 58, 0, true);
+        small(properties, "Notes", app::MenuAction::none, 130, 0, 1);
+        small(properties, "Details", app::MenuAction::none, 130, 1, 1);
+        small(properties, "Add to Timeline", app::MenuAction::none, 130, 2, 1);
+        GroupSpec& editing = add_group(task, "Editing", 140);
+        large(editing, "Scroll\nto Task", app::MenuAction::none, 66, 0);
+        small(editing, "Find", app::MenuAction::show_filter, 60, 0, 1, true);
+        small(editing, "Clear", app::MenuAction::clear_filter, 60, 1, 1, true);
+        small(editing, "Fill", app::MenuAction::none, 60, 2, 1);
+        tabs.push_back(std::move(task));
+
+        // --- Resource -------------------------------------------------------
+        TabSpec resource;
+        resource.title = "Resource";
+        GroupSpec& resource_view = add_group(resource, "View", 66);
+        large(resource_view, "Team\nPlanner", app::MenuAction::none, 55, 0);
+        GroupSpec& assignments = add_group(resource, "Assignments", 129);
+        large(assignments, "Assign\nResources", app::MenuAction::none, 58, 0);
+        large(assignments, "Resource\nPool", app::MenuAction::none, 58, 1);
+        GroupSpec& resource_insert = add_group(resource, "Insert", 85);
+        large(resource_insert, "Add\nResources", app::MenuAction::insert_resource, 74, 0);
+        GroupSpec& resource_properties = add_group(resource, "Properties", 172);
+        large(resource_properties, "Information", app::MenuAction::none, 58, 0);
+        small(resource_properties, "Notes", app::MenuAction::none, 100, 0, 1);
+        small(resource_properties, "Details", app::MenuAction::none, 100, 1, 1);
+        GroupSpec& level = add_group(resource, "Level", 307);
+        large(level, "Level\nSelection", app::MenuAction::none, 60, 0);
+        large(level, "Level\nResource", app::MenuAction::none, 56, 1);
+        large(level, "Level\nAll", app::MenuAction::none, 46, 2);
+        small(level, "Leveling Options", app::MenuAction::none, 100, 0, 3);
+        small(level, "Clear Leveling", app::MenuAction::none, 100, 1, 3);
+        small(level, "Next Overallocation", app::MenuAction::none, 100, 2, 3);
+        tabs.push_back(std::move(resource));
+
+        // --- Report ---------------------------------------------------------
+        TabSpec report;
+        report.title = "Report";
+        GroupSpec& report_project = add_group(report, "Project", 70);
+        large(report_project, "Compare\nProjects", app::MenuAction::none, 60, 0);
+        GroupSpec& view_reports = add_group(report, "View Reports", 453);
+        large(view_reports, "New\nReport", app::MenuAction::none, 48, 0);
+        large(view_reports, "Dashboards", app::MenuAction::none, 56, 1);
+        large(view_reports, "Resources", app::MenuAction::none, 50, 2);
+        large(view_reports, "Costs", app::MenuAction::none, 40, 3);
+        large(view_reports, "In\nProgress", app::MenuAction::none, 48, 4);
+        large(view_reports, "Getting\nStarted", app::MenuAction::none, 50, 5);
+        large(view_reports, "Custom", app::MenuAction::none, 44, 6);
+        large(view_reports, "Recent", app::MenuAction::none, 44, 7);
+        GroupSpec& report_export = add_group(report, "Export", 61);
+        large(report_export, "Visual\nReports", app::MenuAction::none, 52, 0);
+        tabs.push_back(std::move(report));
+
+        // --- Project --------------------------------------------------------
+        TabSpec project;
+        project.title = "Project";
+        GroupSpec& project_insert = add_group(project, "Insert", 77);
+        large(project_insert, "Subproject", app::MenuAction::none, 64, 0);
+        GroupSpec& add_ins = add_group(project, "Add-ins", 135);
+        small(add_ins, "Get Add-ins", app::MenuAction::none, 126, 0, 0);
+        small(add_ins, "My Add-ins", app::MenuAction::none, 126, 1, 0);
+        GroupSpec& project_properties = add_group(project, "Properties", 341);
+        large(project_properties, "Project\nInformation", app::MenuAction::none, 60, 0);
+        large(project_properties, "Custom\nFields", app::MenuAction::custom_fields, 50, 1, true);
+        large(project_properties, "Links Between\nProjects", app::MenuAction::none, 68, 2);
+        large(project_properties, "WBS", app::MenuAction::none, 40, 3);
+        large(project_properties, "Change\nWorking Time", app::MenuAction::none, 68, 4);
+        GroupSpec& project_schedule = add_group(project, "Schedule", 175);
+        large(project_schedule, "Calculate\nProject", app::MenuAction::none, 52, 0);
+        large(project_schedule, "Set\nBaseline", app::MenuAction::none, 48, 1);
+        large(project_schedule, "Move\nProject", app::MenuAction::none, 46, 2);
+        GroupSpec& status = add_group(project, "Status", 133);
+        // W26-1.5 (next commit in this group): the measured Status Date field.
+        large(status, "Status\nDate", app::MenuAction::none, 58, 0);
+        large(status, "Update\nProject", app::MenuAction::none, 68, 1);
+        GroupSpec& proofing = add_group(project, "Proofing", 63);
+        large(proofing, "Spelling", app::MenuAction::none, 52, 0);
+        tabs.push_back(std::move(project));
+
+        // --- View -----------------------------------------------------------
+        TabSpec view;
+        view.title = "View";
+        GroupSpec& task_views = add_group(view, "Task Views", 264);
+        large(task_views, "Gantt\nChart", app::MenuAction::none, 64, 0);
+        large(task_views, "Task\nUsage", app::MenuAction::view_task_usage, 58, 1, true);
+        small(task_views, "Network Diagram", app::MenuAction::none, 130, 0, 2);
+        small(task_views, "Calendar", app::MenuAction::none, 130, 1, 2);
+        small(task_views, "Other Views", app::MenuAction::none, 130, 2, 2);
+        GroupSpec& resource_views = add_group(view, "Resource Views", 214);
+        large(resource_views, "Team\nPlanner", app::MenuAction::none, 64, 0);
+        small(resource_views, "Resource Usage", app::MenuAction::view_resource_usage, 138, 0, 1,
+              true);
+        small(resource_views, "Resource Sheet", app::MenuAction::view_resource_sheet, 138, 1, 1,
+              true);
+        small(resource_views, "Other Views", app::MenuAction::none, 138, 2, 1);
+        GroupSpec& data = add_group(view, "Data", 323);
+        large(data, "Sort", app::MenuAction::none, 50, 0);
+        large(data, "Outline", app::MenuAction::none, 50, 1);
+        large(data, "Tables", app::MenuAction::none, 50, 2);
+        combo(data, "Highlight", "No Highlight", 156, 0, 3);
+        combo(data, "Filter", "No Filter", 156, 1, 3);
+        combo(data, "Group by", "No Group", 156, 2, 3);
+        GroupSpec& zoom = add_group(view, "Zoom", 248);
+        combo(zoom, "Timescale", "Days", 96, 0, 0);
+        large(zoom, "Zoom", app::MenuAction::none, 46, 1);
+        large(zoom, "Entire\nProject", app::MenuAction::none, 42, 2);
+        large(zoom, "Selected\nTasks", app::MenuAction::none, 50, 3);
+        GroupSpec& split_view = add_group(view, "Split View", 185);
+        check(split_view, "Timeline", RibbonCommand::toggle_timeline, 64, 0, 0, false, -1);
+        combo(split_view, "Timeline options", "Timeline", 112, 0, 1);
+        check(split_view, "Details", RibbonCommand::toggle_details, 64, 1, 0, false, 0);
+        combo(split_view, "Details options", "", 112, 1, 1);
+        GroupSpec& window = add_group(view, "Window", 198);
+        large(window, "New\nWindow", app::MenuAction::none, 62, 0);
+        small(window, "Switch\nWindows", app::MenuAction::none, 128, 0, 1);
+        small(window, "Arrange All", app::MenuAction::none, 128, 1, 1);
+        small(window, "Hide", app::MenuAction::none, 128, 2, 1);
+        GroupSpec& macros = add_group(view, "Macros", 60);
+        large(macros, "Macros", app::MenuAction::none, 50, 0);
+        tabs.push_back(std::move(view));
+
+        // --- Help -----------------------------------------------------------
+        TabSpec help;
+        help.title = "Help";
+        GroupSpec& help_group = add_group(help, "Help", 156);
+        large(help_group, "Help", app::MenuAction::none, 48, 0);
+        large(help_group, "Feedback", app::MenuAction::none, 50, 1);
+        large(help_group, "Show\nTraining", app::MenuAction::none, 48, 2);
+        tabs.push_back(std::move(help));
+
+        // --- Gantt Chart Format (contextual) -------------------------------
+        TabSpec format;
+        format.title = "Gantt Chart Format";
+        format.contextual = true;
+        GroupSpec& format_group = add_group(format, "Format", 153);
+        large(format_group, "Text\nStyles", app::MenuAction::none, 48, 0);
+        large(format_group, "Gridlines", app::MenuAction::none, 48, 1);
+        large(format_group, "Layout", app::MenuAction::none, 44, 2);
+        GroupSpec& columns = add_group(format, "Columns", 198);
+        large(columns, "Insert\nColumn", app::MenuAction::none, 56, 0);
+        small_cmd(columns, "align left", RibbonCommand::none, 24, 0, 1, false, true);
+        small_cmd(columns, "align centre", RibbonCommand::none, 24, 0, 2, false, true);
+        small_cmd(columns, "align right", RibbonCommand::none, 24, 0, 3, false, true);
+        small_cmd(columns, "wrap text", RibbonCommand::none, 24, 0, 4, false, true);
+        small(columns, "Column Settings", app::MenuAction::none, 102, 1, 1, false, 4);
+        small(columns, "Custom Fields", app::MenuAction::custom_fields, 102, 2, 1, true, 4);
+        GroupSpec& bar_styles = add_group(format, "Bar Styles", 307);
+        split(bar_styles, "Format", 50, 0, 0, 3);
+        check(bar_styles, "Critical Tasks", RibbonCommand::toggle_critical_tasks, 96, 0, 1,
+              false);
+        check(bar_styles, "Slack", RibbonCommand::none, 96, 1, 1);
+        check(bar_styles, "Late Tasks", RibbonCommand::none, 96, 2, 1);
+        large(bar_styles, "Task Path", app::MenuAction::none, 46, 2);
+        large(bar_styles, "Baseline", app::MenuAction::none, 46, 3);
+        large(bar_styles, "Slippage", app::MenuAction::none, 46, 4);
+        GroupSpec& style = add_group(format, "Gantt Chart Style", 933);
+        gallery(style, 920, 0);
+        launcher(style, "Gantt Chart Style");
+        GroupSpec& show_hide = add_group(format, "Show/Hide", 161);
+        check(show_hide, "Outline Number", RibbonCommand::none, 150, 0, 0);
+        check(show_hide, "Project Summary Task", RibbonCommand::toggle_project_summary, 150, 1, 0,
+              false, -1);
+        check(show_hide, "Summary Tasks", RibbonCommand::none, 150, 2, 0, false, 1);
+        GroupSpec& drawings = add_group(format, "Drawings", 65);
+        split(drawings, "Drawing", 54, 0, 0, 3);
+        tabs.push_back(std::move(format));
+
+        return tabs;
+    }();
     return kTabs;
 }
 
@@ -254,18 +441,107 @@ QFont ribbon_font(int point_size, bool bold = false) {
     return font;
 }
 
-// A ribbon button's stylesheet is `padding: 1px 4px` plus a 1 px transparent
-// border, i.e. 5 px on each side of the label.  12 px therefore covers the whole
-// style budget and leaves a pixel of slack each side, so a fixed width taken from
-// the label's own metrics can never clip it (Qt clips QToolButton text from both
-// ends).  It is deliberately not generous: the Task tab must still fit the
-// reference's 1920 px with a wide fallback font (DejaVu is ~10 % wider than
-// Calibri).
-constexpr int kButtonTextPadding = 12;
-// The separator after each group is 1 px wide (below).
-constexpr int kGroupSeparatorWidth = 1;
+// The longest line of a label: a two-line ribbon label is measured line by
+// line so a fixed width can be checked, and never clips, either line.
+int widest_line(const QFontMetrics& metrics, const QString& text) {
+    int widest = 0;
+    for (const QString& line : text.split(QLatin1Char('\n'))) {
+        widest = std::max(widest, metrics.horizontalAdvance(line));
+    }
+    return widest;
+}
+
+// A small square glyph for the dialog launcher (an expand arrow), drawn by us.
+QIcon launcher_icon() {
+    QPixmap pixmap(12, 12);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.setPen(QPen(QColor(0x44, 0x44, 0x44), 1));
+    painter.drawLine(2, 10, 9, 3);
+    painter.drawLine(9, 3, 9, 7);
+    painter.drawLine(9, 3, 5, 3);
+    return QIcon(pixmap);
+}
+
+// A gallery swatch: a bar in the measured colour with its darker outline, the
+// shape Project's Gantt Chart Style gallery uses.
+QIcon swatch_icon(const QColor& colour) {
+    QPixmap pixmap(52, 30);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.setPen(QPen(colour.darker(130), 1));
+    painter.setBrush(colour);
+    painter.drawRect(QRect(2, 9, 42, 9));
+    QPolygon diamond;
+    diamond << QPoint(8, 5) << QPoint(13, 13) << QPoint(8, 21) << QPoint(3, 13);
+    painter.drawPolygon(diamond);
+    return QIcon(pixmap);
+}
+
+// The live widget classes the inventory gate classifies.  They are real
+// QWidget/QToolButton subclasses (no Q_OBJECT, so no AUTOMOC): control_kind()
+// reads the class, never a name or a spec field.
+class RibbonSmallButton final : public QToolButton {
+  public:
+    using QToolButton::QToolButton;
+};
+
+class RibbonSplitButton final : public QToolButton {
+  public:
+    using QToolButton::QToolButton;
+};
+
+class RibbonLauncher final : public QToolButton {
+  public:
+    using QToolButton::QToolButton;
+};
+
+class RibbonGallery final : public QWidget {
+  public:
+    using QWidget::QWidget;
+};
+
+class RibbonField final : public QWidget {
+  public:
+    using QWidget::QWidget;
+};
+
+// The small stack button: Project's one-row command shape.  Icon-only commands
+// carry their pin label as the accessible name (the gate compares that); a text
+// command shows the label beside a 16-px glyph.
+void build_small_button(RibbonSmallButton* button, const ControlSpec& spec, QWidget* parent) {
+    button->setObjectName(QStringLiteral("ribbonSmallButton"));
+    button->setFont(ribbon_font(kRibbonPointSize));
+    button->setFixedHeight(kStackRowHeight);
+    button->setFixedWidth(spec.width);
+    button->setFocusPolicy(Qt::NoFocus);
+    button->setAutoRaise(true);
+    button->setAccessibleName(QString::fromUtf8(spec.label));
+    if (spec.icon_only) {
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        button->setIcon(shell_action_icon(spec.action, 16));
+        button->setIconSize(QSize(16, 16));
+        button->setText(QString());
+    } else {
+        button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        button->setIcon(shell_action_icon(spec.action, 16));
+        button->setIconSize(QSize(16, 16));
+        button->setText(QString::fromUtf8(spec.label));
+    }
+    button->setEnabled(spec.enabled);
+    const QString tip = spec.enabled ? QString::fromUtf8(spec.label)
+                                     : QString::fromUtf8(kNotImplemented);
+    button->setToolTip(tip);
+    button->setParent(parent);
+}
 
 }  // namespace
+
+// ---------------------------------------------------------------------------
+// RibbonBar
+// ---------------------------------------------------------------------------
 
 RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("ribbon"));
@@ -280,7 +556,8 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
 
     // One stylesheet: tabs look like tabs, the File tab is the product's dark
     // tile, group captions are small and grey, and the buttons are flat until
-    // hovered.
+    // hovered.  The wave-26 small row has its own object name so the legacy
+    // large-button gates cannot mistake it for the 64-px shape.
     setStyleSheet(QStringLiteral(
         "QToolButton#ribbonFileTab { background: #1f5c99; color: #ffffff;"
         " border: none; padding: 2px 14px; }"
@@ -296,7 +573,20 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
         "QToolButton#ribbonButton { border: 1px solid transparent; padding: 1px 4px;"
         " color: #232323; background: transparent; }"
         "QToolButton#ribbonButton:hover { background: #e8eef5; border: 1px solid #b9cde3; }"
+        "QToolButton#ribbonSmallButton { border: 1px solid transparent; padding: 0px 2px;"
+        " color: #232323; background: transparent; }"
+        "QToolButton#ribbonSmallButton:hover { background: #e8eef5;"
+        " border: 1px solid #b9cde3; }"
+        "QToolButton#ribbonSplitButton { border: 1px solid transparent; padding: 1px 4px;"
+        " color: #232323; background: transparent; }"
+        "QToolButton#ribbonSwatch { border: 1px solid #d0d0d0; background: #ffffff;"
+        " padding: 0px; }"
+        "QToolButton#ribbonGalleryExpander { border: none; color: #555555; }"
+        "QToolButton#ribbonLauncher { border: none; }"
         "QLabel#ribbonGroupLabel { color: #6a6a6a; }"
+        "QComboBox#ribbonCombo { border: 1px solid #b8b8b8; background: #ffffff;"
+        " padding-left: 3px; }"
+        "QCheckBox#ribbonCheck { color: #232323; }"
         "QAbstractButton { border-radius: 2px; }"));
 
     auto* outer = new QVBoxLayout(this);
@@ -369,12 +659,46 @@ void RibbonBar::set_action_handler(std::function<void(app::MenuAction)> handler)
     handler_ = std::move(handler);
 }
 
+void RibbonBar::set_command_handler(
+    std::function<void(RibbonCommand, bool)> handler) {
+    command_handler_ = std::move(handler);
+}
+
 void RibbonBar::set_file_handler(std::function<void()> handler) {
     file_handler_ = std::move(handler);
 }
 
 QString RibbonBar::tell_me_text() const {
     return tell_me_ != nullptr ? tell_me_->text() : QString();
+}
+
+void RibbonBar::set_document_state(bool has_document, bool timeline_shown,
+                                   bool project_summary_shown) {
+    has_document_ = has_document;
+    timeline_checked_ = timeline_shown;
+    project_summary_checked_ = project_summary_shown;
+    sync_document_checkboxes();
+}
+
+void RibbonBar::sync_document_checkboxes() {
+    set_stack_check(QStringLiteral("Timeline"), timeline_checked_);
+    set_stack_check(QStringLiteral("Project Summary Task"), project_summary_checked_);
+}
+
+void RibbonBar::set_stack_check(const QString& accessible_name, bool checked) {
+    for (std::size_t group = 0; group < page_controls_.size(); ++group) {
+        for (std::size_t control = 0; control < page_controls_[group].size(); ++control) {
+            if (page_controls_[group][control] == nullptr ||
+                page_controls_[group][control]->accessibleName() != accessible_name) {
+                continue;
+            }
+            auto* box = qobject_cast<QCheckBox*>(page_controls_[group][control]);
+            if (box != nullptr) {
+                const QSignalBlocker blocker(box);
+                box->setChecked(checked);
+            }
+        }
+    }
 }
 
 void RibbonBar::set_contextual_visible(bool visible) {
@@ -461,8 +785,10 @@ void RibbonBar::build_tabs() {
 
 void RibbonBar::clear_page() {
     page_groups_.clear();
-    page_buttons_.clear();
+    page_controls_.clear();
     page_actions_.clear();
+    page_commands_.clear();
+    page_rows_.clear();
     if (page_layout_ == nullptr) {
         return;
     }
@@ -486,86 +812,272 @@ void RibbonBar::build_page(int tab_index) {
     active_tab_ = tab_index;
 
     const TabSpec& tab = tabs[static_cast<std::size_t>(tab_index)];
-    const QFont button_font = ribbon_font(kRibbonPointSize);
-    const QFontMetrics button_metrics(button_font);
     for (const GroupSpec& group : tab.groups) {
-        std::vector<QToolButton*> group_buttons;
+        std::vector<QWidget*> group_controls;
         std::vector<app::MenuAction> group_actions;
-        group_buttons.reserve(group.buttons.size());
-        group_actions.reserve(group.buttons.size());
+        std::vector<RibbonCommand> group_commands;
+        std::vector<int> group_rows;
         auto* box = new QWidget(page_);
-        box->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
+        box->setFixedSize(group.width - 1, kGroupBandHeight);
         auto* box_layout = new QVBoxLayout(box);
-        // 4 px on both sides: with the bundled Carlito the eight Task-tab
-        // groups need 1908 px at 1920 (1904 available) with an 8 px right
-        // margin; the product's own gutters are tight, and 4 px leaves ~28 px
-        // of slack without moving any measured element.
-        box_layout->setContentsMargins(4, 0, 4, 0);
-        box_layout->setSpacing(1);
+        box_layout->setContentsMargins(0, 0, 0, 0);
+        box_layout->setSpacing(0);
 
-        auto* buttons = new QWidget(box);
-        auto* row = new QHBoxLayout(buttons);
-        row->setContentsMargins(0, 0, 0, 0);
-        row->setSpacing(2);
-        for (const ButtonSpec& spec : group.buttons) {
-            auto* button = new QToolButton(buttons);
-            button->setObjectName(QStringLiteral("ribbonButton"));
-            const QString label = QString::fromUtf8(spec.label);
-            button->setText(label);
-            // Icon above label: the product's ribbon button shape.  The icon is
-            // drawn by shell_icons.cpp (never Microsoft artwork).
-            button->setIcon(shell_action_icon(spec.action, kRibbonIconPx));
-            button->setIconSize(QSize(kRibbonIconPx, kRibbonIconPx));
-            button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-            button->setFont(button_font);
-            button->setAutoRaise(true);
-            button->setFixedHeight(kRibbonButtonHeight);
-            button->setFocusPolicy(Qt::NoFocus);
-            // The width is the LABEL's, from the same font metrics that will
-            // draw it, plus the stylesheet's padding/border.  Never narrower
-            // than the style's own hint.  This is what stops "Cut"/"Copy"/
-            // "Format Painter" from being clipped to "Cu"/"op"/"t F".
-            const int label_width =
-                button_metrics.horizontalAdvance(label) + kButtonTextPadding;
-            button->setFixedWidth(std::max(label_width, button->sizeHint().width()));
-            button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-            const app::MenuAction action = spec.action;
-            // Decision 9: an unimplemented ribbon command is greyed with the
-            // exact tooltip, never silently dead.
-            const bool implemented = shell_implements(action);
-            button->setEnabled(implemented);
-            button->setToolTip(implemented ? label
-                                           : QStringLiteral("not implemented in this port"));
-            connect(button, &QToolButton::clicked, this, [this, action](bool) {
-                if (handler_) {
-                    handler_(action);
-                }
-            });
-            row->addWidget(button);
-            group_buttons.push_back(button);
-            group_actions.push_back(action);
-            ++button_count_;
+        auto* host = new QWidget(box);
+        host->setFixedHeight(kControlsHeight);
+        auto* grid = new QGridLayout(host);
+        grid->setContentsMargins(2, kStackTopOffset, 2, 0);
+        grid->setHorizontalSpacing(2);
+        grid->setVerticalSpacing(0);
+        for (int row = 0; row < kStackRows; ++row) {
+            grid->setRowMinimumHeight(row, kStackRowHeight);
         }
-        row->addStretch(1);
-        box_layout->addWidget(buttons);
 
-        auto* caption = new QLabel(QString::fromUtf8(group.title), box);
+        for (const ControlSpec& spec : group.controls) {
+            const QString label = QString::fromUtf8(spec.label);
+            const QString tip = spec.enabled ? label : QString::fromUtf8(kNotImplemented);
+            QWidget* control = nullptr;
+            switch (spec.kind) {
+                case Kind::button: {
+                    auto* button = new QToolButton(host);
+                    button->setObjectName(QStringLiteral("ribbonButton"));
+                    button->setText(label);
+                    button->setIcon(shell_action_icon(spec.action, kRibbonIconPx));
+                    button->setIconSize(QSize(kRibbonIconPx, kRibbonIconPx));
+                    button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+                    button->setFont(ribbon_font(kRibbonPointSize));
+                    button->setAutoRaise(true);
+                    button->setFixedSize(spec.width, kLargeHeight);
+                    button->setFocusPolicy(Qt::NoFocus);
+                    button->setEnabled(spec.enabled);
+                    button->setToolTip(tip);
+                    const app::MenuAction action = spec.action;
+                    connect(button, &QToolButton::clicked, this, [this, action](bool) {
+                        if (handler_) {
+                            handler_(action);
+                        }
+                    });
+                    ++button_count_;
+                    control = button;
+                    break;
+                }
+                case Kind::split: {
+                    auto* button = new RibbonSplitButton(host);
+                    button->setObjectName(QStringLiteral("ribbonSplitButton"));
+                    button->setText(label);
+                    button->setIcon(shell_action_icon(spec.action, kRibbonIconPx));
+                    button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+                    if (spec.row_span == 1) {
+                        button->setIconSize(QSize(16, 16));
+                        button->setFixedSize(spec.width, kStackRowHeight);
+                        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+                        button->setAccessibleName(label);
+                    } else {
+                        button->setIconSize(QSize(kRibbonIconPx, kRibbonIconPx));
+                        button->setFixedSize(spec.width, kLargeHeight);
+                    }
+                    button->setFont(ribbon_font(kRibbonPointSize));
+                    button->setFocusPolicy(Qt::NoFocus);
+                    auto* menu = new QMenu(button);
+                    QAction* entry = menu->addAction(QStringLiteral("not implemented in this port"));
+                    entry->setEnabled(false);
+                    button->setMenu(menu);
+                    button->setEnabled(false);  // decision 9: never a dead click
+                    button->setToolTip(QString::fromUtf8(kNotImplemented));
+                    control = button;
+                    break;
+                }
+                case Kind::small: {
+                    auto* button = new RibbonSmallButton(host);
+                    build_small_button(button, spec, host);
+                    const RibbonCommand command = spec.command;
+                    const app::MenuAction action = spec.action;
+                    if (spec.enabled) {
+                        if (command != RibbonCommand::none) {
+                            connect(button, &QToolButton::clicked, this,
+                                    [this, command](bool) {
+                                        if (command_handler_) {
+                                            command_handler_(command, false);
+                                        }
+                                    });
+                        } else if (action != app::MenuAction::none) {
+                            connect(button, &QToolButton::clicked, this, [this, action](bool) {
+                                if (handler_) {
+                                    handler_(action);
+                                }
+                            });
+                        }
+                    }
+                    control = button;
+                    break;
+                }
+                case Kind::combo: {
+                    auto* combo_box = new QComboBox(host);
+                    combo_box->setObjectName(QStringLiteral("ribbonCombo"));
+                    combo_box->setFont(ribbon_font(kRibbonPointSize));
+                    combo_box->setFixedSize(spec.width, kStackRowHeight);
+                    combo_box->setFocusPolicy(Qt::NoFocus);
+                    combo_box->setAccessibleName(label);
+                    QString items = QString::fromUtf8(spec.items != nullptr ? spec.items : "");
+                    if (!items.isEmpty()) {
+                        for (const QString& item : items.split(QLatin1Char('|'))) {
+                            combo_box->addItem(item);
+                        }
+                    } else {
+                        combo_box->addItem(QString());
+                    }
+                    combo_box->setEnabled(spec.enabled);
+                    combo_box->setToolTip(tip);
+                    control = combo_box;
+                    break;
+                }
+                case Kind::checkbox: {
+                    auto* box_check = new QCheckBox(host);
+                    box_check->setObjectName(QStringLiteral("ribbonCheck"));
+                    box_check->setFont(ribbon_font(kRibbonPointSize));
+                    box_check->setText(label);
+                    box_check->setFixedSize(spec.width, kStackRowHeight);
+                    box_check->setFocusPolicy(Qt::NoFocus);
+                    bool checked = spec.checked == 1;
+                    if (spec.checked < 0) {
+                        checked = spec.command == RibbonCommand::toggle_timeline
+                                      ? timeline_checked_
+                                      : (spec.command == RibbonCommand::toggle_project_summary
+                                             ? project_summary_checked_
+                                             : critical_checked_);
+                    }
+                    box_check->setChecked(checked);
+                    box_check->setEnabled(spec.enabled);
+                    box_check->setToolTip(tip);
+                    const RibbonCommand command = spec.command;
+                    connect(box_check, &QCheckBox::toggled, this, [this, command](bool on) {
+                        if (command == RibbonCommand::toggle_timeline) {
+                            timeline_checked_ = on;
+                        } else if (command == RibbonCommand::toggle_project_summary) {
+                            project_summary_checked_ = on;
+                        } else if (command == RibbonCommand::toggle_critical_tasks) {
+                            critical_checked_ = on;
+                        }
+                        if (command_handler_) {
+                            command_handler_(command, on);
+                        }
+                    });
+                    control = box_check;
+                    break;
+                }
+                case Kind::field: {
+                    auto* field_widget = new RibbonField(host);
+                    field_widget->setObjectName(QStringLiteral("ribbonField"));
+                    field_widget->setAccessibleName(label);
+                    field_widget->setFixedSize(spec.width, kStackRowHeight);
+                    auto* field_layout = new QHBoxLayout(field_widget);
+                    field_layout->setContentsMargins(0, 0, 0, 0);
+                    field_layout->setSpacing(2);
+                    auto* field_label = new QLabel(QStringLiteral("Status Date:"), field_widget);
+                    field_label->setFont(ribbon_font(kRibbonPointSize));
+                    field_layout->addWidget(field_label);
+                    auto* date_edit = new QDateEdit(field_widget);
+                    date_edit->setObjectName(QStringLiteral("ribbonDateField"));
+                    date_edit->setFont(ribbon_font(kRibbonPointSize));
+                    date_edit->setDisplayFormat(QStringLiteral("M/d/yyyy"));
+                    date_edit->setCalendarPopup(false);
+                    date_edit->setMinimumDate(QDate(2000, 1, 1));
+                    date_edit->setMaximumDate(QDate(2099, 12, 31));
+                    date_edit->setDate(QDate(2000, 1, 1));
+                    date_edit->setSpecialValueText(QStringLiteral("NA"));
+                    date_edit->setFixedHeight(kStackRowHeight);
+                    date_edit->setEnabled(false);
+                    date_edit->setToolTip(QString::fromUtf8(kNotImplemented));
+                    field_layout->addWidget(date_edit, 1);
+                    field_widget->setEnabled(false);
+                    field_widget->setToolTip(QString::fromUtf8(kNotImplemented));
+                    control = field_widget;
+                    break;
+                }
+                case Kind::gallery: {
+                    auto* gallery_widget = new RibbonGallery(host);
+                    gallery_widget->setObjectName(QStringLiteral("ribbonGallery"));
+                    gallery_widget->setAccessibleName(label);
+                    gallery_widget->setFixedSize(spec.width, kControlsHeight - kStackTopOffset);
+                    auto* gallery_layout = new QHBoxLayout(gallery_widget);
+                    gallery_layout->setContentsMargins(0, 0, 0, 0);
+                    gallery_layout->setSpacing(2);
+                    for (std::size_t swatch = 0; swatch < kGanttStylePalette.size(); ++swatch) {
+                        auto* button = new QToolButton(gallery_widget);
+                        button->setObjectName(QStringLiteral("ribbonSwatch"));
+                        button->setFixedSize(52, 34);
+                        button->setIcon(swatch_icon(QColor(kGanttStylePalette[swatch])));
+                        button->setIconSize(QSize(52, 30));
+                        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+                        button->setFocusPolicy(Qt::NoFocus);
+                        button->setEnabled(false);
+                        button->setToolTip(QString::fromUtf8(kNotImplemented));
+                        button->setAccessibleName(
+                            QStringLiteral("Gantt Chart Style %1").arg(swatch + 1));
+                        gallery_layout->addWidget(button);
+                    }
+                    auto* expander = new QToolButton(gallery_widget);
+                    expander->setObjectName(QStringLiteral("ribbonGalleryExpander"));
+                    expander->setText(QStringLiteral("v"));
+                    expander->setFixedWidth(18);
+                    expander->setFont(ribbon_font(kRibbonPointSize));
+                    expander->setFocusPolicy(Qt::NoFocus);
+                    expander->setEnabled(false);
+                    expander->setToolTip(QString::fromUtf8(kNotImplemented));
+                    gallery_layout->addWidget(expander);
+                    gallery_layout->addStretch(0);
+                    gallery_widget->setEnabled(false);
+                    gallery_widget->setToolTip(QString::fromUtf8(kNotImplemented));
+                    control = gallery_widget;
+                    break;
+                }
+            }
+            if (control == nullptr) {
+                continue;
+            }
+            grid->addWidget(control, spec.row, spec.col, spec.row_span, spec.col_span);
+            group_controls.push_back(control);
+            group_actions.push_back(spec.action);
+            group_commands.push_back(spec.command);
+            group_rows.push_back(spec.row_span == 1 ? spec.row : -1);
+        }
+        box_layout->addWidget(host);
+        box_layout->addStretch(1);
+
+        auto* bottom = new QWidget(box);
+        bottom->setFixedHeight(kRibbonGroupLabelHeight);
+        auto* bottom_layout = new QHBoxLayout(bottom);
+        bottom_layout->setContentsMargins(0, 0, 0, 0);
+        bottom_layout->setSpacing(0);
+        auto* caption = new QLabel(QString::fromUtf8(group.title), bottom);
         caption->setObjectName(QStringLiteral("ribbonGroupLabel"));
         caption->setFont(ribbon_font(kGroupLabelPointSize));
         caption->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
-        caption->setFixedHeight(kRibbonGroupLabelHeight);
-        box_layout->addWidget(caption);
+        bottom_layout->addWidget(caption, 1);
+        if (group.launcher != nullptr) {
+            auto* launcher_button = new RibbonLauncher(bottom);
+            launcher_button->setObjectName(QStringLiteral("ribbonLauncher"));
+            launcher_button->setFixedSize(kLauncherSize, kLauncherSize);
+            launcher_button->setIcon(launcher_icon());
+            launcher_button->setIconSize(QSize(12, 12));
+            launcher_button->setFocusPolicy(Qt::NoFocus);
+            launcher_button->setAccessibleName(QString::fromUtf8(group.launcher));
+            launcher_button->setEnabled(false);
+            launcher_button->setToolTip(QString::fromUtf8(kNotImplemented));
+            bottom_layout->addWidget(launcher_button, 0, Qt::AlignRight | Qt::AlignBottom);
+            group_controls.push_back(launcher_button);
+            group_actions.push_back(app::MenuAction::none);
+            group_commands.push_back(RibbonCommand::none);
+            group_rows.push_back(-1);
+        }
+        box_layout->addWidget(bottom);
 
-        // The group's width follows its widest child (the button row or the
-        // caption); the box layout's minimum already reports that, so a narrower
-        // page cannot squeeze the buttons below their labels.
-        box->setMinimumWidth(box->sizeHint().width());
         page_layout_->addWidget(box);
 
         auto* separator = new QFrame(page_);
         separator->setFrameShape(QFrame::VLine);
         separator->setFrameShadow(QFrame::Plain);
-        separator->setFixedWidth(kGroupSeparatorWidth);
+        separator->setFixedSize(kGroupSeparatorWidth, kGroupBandHeight);
         separator->setStyleSheet(QStringLiteral("background: #dcdcdc;"));
         page_layout_->addWidget(separator);
 
@@ -573,11 +1085,14 @@ void RibbonBar::build_page(int tab_index) {
         widgets.box = box;
         widgets.separator = separator;
         page_groups_.push_back(widgets);
-        page_buttons_.push_back(std::move(group_buttons));
+        page_controls_.push_back(std::move(group_controls));
         page_actions_.push_back(std::move(group_actions));
+        page_commands_.push_back(std::move(group_commands));
+        page_rows_.push_back(std::move(group_rows));
     }
     page_layout_->addStretch(1);
     layout_page_groups();
+    sync_document_checkboxes();
 }
 
 void RibbonBar::layout_page_groups() {
@@ -606,7 +1121,7 @@ void RibbonBar::layout_page_groups() {
         if (group.box == nullptr || group.separator == nullptr) {
             continue;
         }
-        const int wanted = group.box->sizeHint().width() + kGroupSeparatorWidth;
+        const int wanted = group.box->width() + kGroupSeparatorWidth;
         const bool fits = !overflow && used + wanted <= available;
         group.box->setVisible(fits);
         group.separator->setVisible(fits);
@@ -679,7 +1194,7 @@ QStringList RibbonBar::group_titles() const {
 
 int RibbonBar::button_count() const { return button_count_; }
 
-// WAVE 22: the inventory read-back the ribbon gate pins.  Switching tabs goes
+// WAVE 22/26: the inventory read-back the ribbon gate pins.  Switching tabs goes
 // through the same build_page() a tab click uses, so the checked tab button and
 // the page cannot drift apart.
 void RibbonBar::set_active_tab(int index) {
@@ -698,57 +1213,102 @@ QString RibbonBar::control_kind(const QWidget* control) {
     if (control == nullptr) {
         return QStringLiteral("none");
     }
+    // The live class decides.  These four subclasses exist so a split button,
+    // a small stack button, the gallery and the dialog launcher are distinct
+    // from an ordinary QToolButton/QWidget without consulting the spec.
+    if (dynamic_cast<const RibbonGallery*>(control) != nullptr) {
+        return QStringLiteral("gallery");
+    }
+    if (dynamic_cast<const RibbonField*>(control) != nullptr) {
+        return QStringLiteral("field");
+    }
+    if (dynamic_cast<const RibbonLauncher*>(control) != nullptr) {
+        return QStringLiteral("launcher");
+    }
+    if (dynamic_cast<const RibbonSplitButton*>(control) != nullptr) {
+        return QStringLiteral("split");
+    }
+    if (dynamic_cast<const RibbonSmallButton*>(control) != nullptr) {
+        return QStringLiteral("small");
+    }
     if (qobject_cast<const QComboBox*>(control) != nullptr) {
         return QStringLiteral("combo");
     }
     if (qobject_cast<const QCheckBox*>(control) != nullptr) {
         return QStringLiteral("checkbox");
     }
-    if (const auto* button = qobject_cast<const QToolButton*>(control)) {
-        // A tool button that opens a menu is the gallery/drop-down shape; a
-        // plain one is the command button.
-        return button->menu() != nullptr ? QStringLiteral("gallery")
-                                         : QStringLiteral("button");
+    if (qobject_cast<const QDateEdit*>(control) != nullptr) {
+        return QStringLiteral("field");
+    }
+    if (qobject_cast<const QToolButton*>(control) != nullptr) {
+        return QStringLiteral("button");
     }
     return QStringLiteral("unknown");
 }
 
-QString RibbonBar::group_control_kind(int group_index, int button_index) const {
-    if (group_index < 0 ||
-        static_cast<std::size_t>(group_index) >= page_buttons_.size()) {
-        return QStringLiteral("none");
+int RibbonBar::group_control_count(int group_index) const {
+    if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_controls_.size()) {
+        return 0;
     }
-    const std::vector<QToolButton*>& group =
-        page_buttons_[static_cast<std::size_t>(group_index)];
-    if (button_index < 0 || static_cast<std::size_t>(button_index) >= group.size()) {
-        return QStringLiteral("none");
-    }
-    return control_kind(group[static_cast<std::size_t>(button_index)]);
+    return static_cast<int>(page_controls_[static_cast<std::size_t>(group_index)].size());
 }
 
-QStringList RibbonBar::group_button_labels(int group_index) const {
-    QStringList labels;
-    if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_buttons_.size()) {
-        return labels;
+QWidget* RibbonBar::group_box(int group_index) const {
+    if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_groups_.size()) {
+        return nullptr;
     }
-    for (const QToolButton* button : page_buttons_[static_cast<std::size_t>(group_index)]) {
-        if (button != nullptr) {
-            labels.push_back(button->text());
-        }
-    }
-    return labels;
+    return page_groups_[static_cast<std::size_t>(group_index)].box;
 }
 
-app::MenuAction RibbonBar::group_button_action(int group_index, int button_index) const {
+QWidget* RibbonBar::group_control(int group_index, int control_index) const {
+    if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_controls_.size()) {
+        return nullptr;
+    }
+    const std::vector<QWidget*>& group =
+        page_controls_[static_cast<std::size_t>(group_index)];
+    if (control_index < 0 || static_cast<std::size_t>(control_index) >= group.size()) {
+        return nullptr;
+    }
+    return group[static_cast<std::size_t>(control_index)];
+}
+
+app::MenuAction RibbonBar::group_control_action(int group_index, int control_index) const {
     if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_actions_.size()) {
         return app::MenuAction::none;
     }
     const std::vector<app::MenuAction>& actions =
         page_actions_[static_cast<std::size_t>(group_index)];
-    if (button_index < 0 || static_cast<std::size_t>(button_index) >= actions.size()) {
+    if (control_index < 0 || static_cast<std::size_t>(control_index) >= actions.size()) {
         return app::MenuAction::none;
     }
-    return actions[static_cast<std::size_t>(button_index)];
+    return actions[static_cast<std::size_t>(control_index)];
+}
+
+RibbonCommand RibbonBar::group_control_command(int group_index, int control_index) const {
+    if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_commands_.size()) {
+        return RibbonCommand::none;
+    }
+    const std::vector<RibbonCommand>& commands =
+        page_commands_[static_cast<std::size_t>(group_index)];
+    if (control_index < 0 || static_cast<std::size_t>(control_index) >= commands.size()) {
+        return RibbonCommand::none;
+    }
+    return commands[static_cast<std::size_t>(control_index)];
+}
+
+int RibbonBar::group_control_row(int group_index, int control_index) const {
+    if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_rows_.size()) {
+        return -1;
+    }
+    const std::vector<int>& rows = page_rows_[static_cast<std::size_t>(group_index)];
+    if (control_index < 0 || static_cast<std::size_t>(control_index) >= rows.size()) {
+        return -1;
+    }
+    return rows[static_cast<std::size_t>(control_index)];
+}
+
+QString RibbonBar::group_control_kind(int group_index, int control_index) const {
+    return control_kind(group_control(group_index, control_index));
 }
 
 void RibbonBar::paintEvent(QPaintEvent*) {

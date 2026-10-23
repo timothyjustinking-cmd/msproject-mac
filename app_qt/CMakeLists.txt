@@ -338,22 +338,37 @@ add_test(NAME qt_ux_gate
 
 # ===========================================================================
 # WAVE 22 (operator decision 1): the seven ribbon tabs carry MS Project 2021's
-# measured group/button inventory.  The gate pins tab -> group -> button order
-# for EVERY tab (against the local clean captures, recorded in
-# docs/handoff/r6.md), proves the decision-9 enabled/tooltip rule on every
-# button, the prefix/fit contract and the >> chevron at 1920 and 900, the
-# seven-tab count, and that the contextual Gantt Chart Format tab is shown only
-# in the Gantt view (through the real view QActions).
+# measured group/button inventory.  Wave 26 (G1) extends the same gate to every
+# control kind Project's clean strips show (combos, check boxes, split buttons,
+# the Gantt Chart Style gallery, dialog launchers, the Status Date field and the
+# small-button stacks), compares the live group rectangles and stack row
+# baselines with tests/data/reference/w26-ribbon.measures.json, and drives the
+# functional controls against the committed fixtures.  The corpus case (whose
+# stored table shows % Complete) is registered only where the corpus exists.
 # ===========================================================================
 add_executable(qt_ribbon_inventory_tests tests/ribbon_inventory_test.cpp)
 target_link_libraries(qt_ribbon_inventory_tests PRIVATE qt_shell)
 qt_set_warnings(qt_ribbon_inventory_tests)
 
+set(QT_RIBBON_ARGS
+    "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ribbon_pin.tsv"
+    "${QT_REPO_ROOT}/tests/data/reference/w26-ribbon.measures.json"
+    "${QT_TEST_DATA_DIR_CMAKE}/wave24-timeline-hidden.mpp"
+    "${QT_TEST_DATA_DIR_CMAKE}/wave24-timeline-shown.mpp"
+    "${QT_TEST_DATA_DIR_CMAKE}/wave24-summary-on.mpp"
+    "${QT_TEST_DATA_DIR_CMAKE}/wave24-summary-off.mpp"
+    "${QT_TEST_DATA_DIR_CMAKE}/wave24-order.mpp"
+    "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ribbon_pin_unmodelled.tsv")
+if(EXISTS "${QT_REPO_ROOT}/corpus/project_a.mpp")
+    list(APPEND QT_RIBBON_ARGS "${QT_REPO_ROOT}/corpus/project_a.mpp")
+    message(STATUS "app_qt: corpus/project_a.mpp found -- ribbon %-complete corpus case enabled")
+endif()
 add_test(NAME qt_ribbon_inventory
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_ribbon_inventory_tests>
-                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
-                 "${CMAKE_CURRENT_SOURCE_DIR}/ribbon_pin.tsv")
+                 ${QT_RIBBON_ARGS})
 
 # ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
