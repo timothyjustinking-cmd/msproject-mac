@@ -598,11 +598,15 @@ void test_corpus_file(const std::filesystem::path& path, const char* label,
                "milestones are exactly the zero-day non-summary rows");
 
     core::view::RecordSet records = app::make_record_set(input);
-    // Wave 24 (W24-2): the file decides whether the synthetic project row is
-    // shown; project_a stores it ON (1), so its RecordSet/sheet have one more
-    // row than the plan's task list.  The plan itself (and the Gantt built from
-    // it below) still has only the file's tasks.
-    const std::size_t project_rows = input.show_project_summary ? 1u : 0u;
+    // Wave 25 (W25-8/S10): the expected row count must NOT be derived from
+    // input.show_project_summary -- that is the value under test, and a reader
+    // that decoded 0x03400009 wrongly would still agree with itself.  The
+    // expectation is pinned independently: PROJECT_A stores the row SHOWN (1),
+    // and the COM-built w3-o1/holiday1 probes store it HIDDEN (0).
+    const bool expected_project_row = label == "project_a";
+    check(input.show_project_summary == expected_project_row,
+          "the file's stored project-row setting is the pinned value");
+    const std::size_t project_rows = expected_project_row ? 1u : 0u;
     check_size(records.row_count(), input.tasks.size() + project_rows,
                "corpus record set rows");
     core::sheet::SheetModel sheet(records, app::default_sheet_columns());
