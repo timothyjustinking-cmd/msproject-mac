@@ -12,8 +12,9 @@ every wave close; it is the only file a new session must read first._
 * Wave 22 landed: the **measured seven-tab ribbon**, the **stored columns'
   values** (Pre/Suc/Resource Names/% Complete) and the **new-task scheduling
   mode** decoded from props `0x024013c8`.
-* Engine stays **7/8** by design until the MSO save-time word reaches the
-  production save path.
+* Engine stays **7/8**: `constraint-mso` is deliberately left failing until a
+  held-out Project measurement earns 8/8.  `mppwrite::save_plan` is test-only
+  (no app/, app_qt/ or tools/ caller) — wave-23 audit A-4.
 * **Wave 22 was audited on 2026-10-23** (`docs/handoff/audit-w22-findings.md`):
   the scheduling numbers reproduce, but the loaded file renders in the wrong
   task order with no outline (B-1), "9/9 UI parity" and S6's "independent

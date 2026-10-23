@@ -80,16 +80,19 @@ now exits 0 with the 191/768/959 warning; a slack document is readable but not
 re-emittable (`check()` says not round-trippable, `to_bytes()` refuses).  A
 synthetic corpus-free regression covers both directions (1693 checks).
 
-### The MSO save-time word — measured, not scored
+### The MSO save-time word — measured, deliberately left failing
 
 `constraint-mso`'s field is Project's save-time duration word on a manual pinned
 MSO row with an off-calendar start: `+84 = plan duration + the remaining
 standard-day windows after the start clock` (12000 = 9600 + 2400).  The rule is
 implemented as a pure function and pinned by the nine-row table plus five
 end-to-end cases, but **only behind an explicit self-test opt-in**
-(`Applier::model_project_save`).  The scored scenarios and the production save
-path still write 9600, so the suite stays **7/8**.  An 8/8 obtained by patching
-the comparison applier would not be a product result.
+(`Applier::model_project_save`).  The scored scenarios and
+`mppwrite::save_plan` still write 9600, so the suite stays **7/8** and
+`constraint-mso` is deliberately **left failing**.  `save_plan` is test-only:
+no app/, app_qt/ or tools/ caller exists, so "the production save path writes
+9600" was a statement about a test helper (wave-23 A-4).  An 8/8 obtained by
+patching the comparison applier or the oracle would not be a product result.
 
 ### Linux CI is parallel (C6)
 

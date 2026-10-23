@@ -26,7 +26,7 @@ kept for investigation; each is the record of its stream at that wave.
 | `wave21-complete.md` | **the wave-21 gate**: numbers, packages, the 16-decision scoreboard, open items |
 | `wave21-brief.md` | wave-21 scope, owners, gates, operator decisions |
 | `q6.md` | Q6 stored-table rendering + the operator fixes |
-| `e6.md` | E6 mppwrite CFB slack; MSO rule measured, not scored (wave 21) |
+| `e6.md` | E6 mppwrite CFB slack; MSO rule measured, scenario deliberately left failing (wave 21) |
 | `ci3.md` | C6 parallel Linux build, validator output (wave 21) |
 | `coordinator.md` | the current coordinator handoff (wave-20 final; wave-21 section appended at the close) |
 

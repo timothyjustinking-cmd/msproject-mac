@@ -74,8 +74,8 @@ on all three with the three packages.
 * ctest `-E plan_recalc` **50/50**; M2 **332/332**; plan_recalc_tests **266**;
   engine self-test **265**; mppwrite CFB **1693**; reader **984**; cal **785**.
 * Engine **7/8** — `constraint-mso`'s save-time word is measured and pinned but
-  deliberately not scored (the rule lives behind a self-test opt-in; production
-  still writes 9600).
+  deliberately left failing (the rule lives behind a self-test opt-in;
+  `mppwrite::save_plan` is test-only and still writes 9600).
 * app_qt **14/14** locally, **13/13** in CI; UI parity **9/9 on Windows, macOS
   and Linux**.
 * Packages: Windows 48.1 MB zip, macOS 21.5 MB zip, Linux 32.8 MB AppImage
@@ -140,7 +140,8 @@ is green on all three with the three packages.
 
 * ctest `-E plan_recalc` **50/50**; M2 **332/332**; plan_recalc_tests **266**;
   engine self-test **265**; writer **1693**; reader **1016** (+32); cal **785**.
-* Engine **7/8** (the MSO save-time word stays measured/pinned, not scored).
+* Engine **7/8** (`constraint-mso` deliberately left failing; its rule is
+  measured and pinned, but `mppwrite::save_plan` is test-only).
 * app_qt **15/15** locally, **14/14** in CI; UI parity **9/9 on all three**.
 * Packages: Windows 48.2 MB zip, macOS 21.6 MB zip, Linux 32.8 MB AppImage
   (smoke-rendered 900x560).  Linux Build **2m10s** parallel on this tree.
