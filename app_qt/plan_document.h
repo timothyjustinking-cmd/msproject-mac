@@ -169,6 +169,14 @@ class PlanDocument {
     // setting -- W24-2), so a row index is not a task index.
     const app::TaskRow* task_by_uid(std::uint32_t uid) const;
 
+    // Wave 26 (W26-1.4): view state for the Format tab's Project Summary Task
+    // toggle.  The file's stored setting (loaded_.show_project_summary) is the
+    // initial state; a toggle rebuilds the RecordSet and the Gantt from it
+    // without touching the file.  The override survives a structural rebuild,
+    // which re-derives `base_` from `loaded_`.
+    void set_project_summary_visible(bool visible, app::ZoomLevel zoom);
+    bool project_summary_visible() const noexcept { return show_project_summary_; }
+
     // The stored character width of the `214/CTable` column whose field id is
     // `table_field` (0 when the table/file does not carry it).
     int table_column_chars(std::uint32_t table_field) const;
@@ -237,6 +245,10 @@ class PlanDocument {
     std::string path_;
     std::string title_;
     std::size_t warnings_ = 0;
+    // Wave 26: the Project Summary Task toggle.  `override_` is false until the
+    // ribbon toggles it; the initial display state is the file's stored one.
+    bool show_project_summary_ = false;
+    bool project_summary_override_ = false;
 };
 
 }  // namespace msqt

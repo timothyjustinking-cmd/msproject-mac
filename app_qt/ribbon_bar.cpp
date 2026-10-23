@@ -411,7 +411,7 @@ const std::vector<TabSpec>& tab_specs() {
         GroupSpec& bar_styles = add_group(format, "Bar Styles", 307);
         split(bar_styles, "Format", 50, 0, 0, 3);
         check(bar_styles, "Critical Tasks", RibbonCommand::toggle_critical_tasks, 96, 0, 1,
-              false);
+              true);
         check(bar_styles, "Slack", RibbonCommand::none, 96, 1, 1);
         check(bar_styles, "Late Tasks", RibbonCommand::none, 96, 2, 1);
         large(bar_styles, "Task Path", app::MenuAction::none, 46, 2);
@@ -423,7 +423,7 @@ const std::vector<TabSpec>& tab_specs() {
         GroupSpec& show_hide = add_group(format, "Show/Hide", 161);
         check(show_hide, "Outline Number", RibbonCommand::none, 150, 0, 0);
         check(show_hide, "Project Summary Task", RibbonCommand::toggle_project_summary, 150, 1, 0,
-              false, -1);
+              true, -1);
         check(show_hide, "Summary Tasks", RibbonCommand::none, 150, 2, 0, false, 1);
         GroupSpec& drawings = add_group(format, "Drawings", 65);
         split(drawings, "Drawing", 54, 0, 0, 3);

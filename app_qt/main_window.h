@@ -199,6 +199,13 @@ class MainWindow final : public QMainWindow {
     void set_timeline_visible(bool visible);
     bool timeline_visible() const noexcept { return timeline_visible_; }
 
+    // --- wave 26: Gantt Chart Format toggles (W26-1.4) ----------------------
+    // Project Summary Task: the initial state is the file's stored setting and a
+    // toggle rebuilds the displayed rows (never the file).
+    bool project_summary_visible() const noexcept { return doc_.project_summary_visible(); }
+    // Critical Tasks highlighting (the measured default is OFF).
+    bool critical_tasks_highlight() const noexcept;
+
     // --- wave 21: Task Information (double-click) --------------------------
     // The General values the dialog edits, read from the selected task.  False
     // when no task is selected.  Public so the offscreen gate can prove the
