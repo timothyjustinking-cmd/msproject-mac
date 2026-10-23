@@ -20,7 +20,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 get_filename_component(QT_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
+# WAVE 19: PrintSupport is a separate Qt module (qtbase's PrintSupport target) and
+# File > Print... uses QPrinter/QPrintDialog from it.  Distro packaging note for
+# the Linux CI job: Ubuntu's `qt6-base-dev` ships Qt6PrintSupport, but a minimal
+# image needs `libqt6printsupport6`/the matching -dev package as well.
+find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets PrintSupport)
 
 # The app/ and core/ targets must be configured before the warning function is
 # used, because CORE_WARNINGS_AS_ERRORS is an app/ option (the coordinator's CI
@@ -58,13 +62,15 @@ add_library(qt_shell STATIC
     ribbon_bar.cpp
     sheet_views.cpp
     timeline_strip.cpp
+    dialogs.cpp
+    print_page.cpp
 )
 target_compile_features(qt_shell PUBLIC cxx_std_20)
 set_target_properties(qt_shell PROPERTIES CXX_EXTENSIONS OFF)
 target_include_directories(qt_shell PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )
-target_link_libraries(qt_shell PUBLIC Qt6::Widgets app_layout)
+target_link_libraries(qt_shell PUBLIC Qt6::Widgets Qt6::PrintSupport app_layout)
 qt_set_warnings(qt_shell)
 
 add_executable(msproject_qt main.cpp)
@@ -141,3 +147,20 @@ add_test(NAME qt_parity_geometry
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_parity_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
+
+# WAVE 19: the command surface's acceptance test.  Copies the committed fixture
+# into test-out/ (never opens it in place), loads the copy into the real
+# MainWindow, edits a cell through SheetTableModel -> SheetModel, exercises
+# Undo/Redo through the menu actions, saves through app::Document to a new file,
+# reopens it and asserts the edit persisted as the writer's SNET constraint, then
+# proves that a save with nothing pending is byte-identical.  Every write is
+# under ${CMAKE_CURRENT_BINARY_DIR}/test-out.
+add_executable(qt_save_reopen_tests tests/save_reopen_test.cpp)
+target_link_libraries(qt_save_reopen_tests PRIVATE qt_shell)
+qt_set_warnings(qt_save_reopen_tests)
+
+add_test(NAME qt_save_reopen
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_save_reopen_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")

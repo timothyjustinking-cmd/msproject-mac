@@ -33,11 +33,14 @@ render exposed.  The numbers are P1's measurements, not estimates:
 | `ribbon_bar.{h,cpp}` | tabs (Task/Resource/Report/Project/View/Help + contextual Gantt Chart Format), groups, buttons sized from their labels, 105 px, whole-group overflow |
 | `timeline_strip.{h,cpp}` | Start/Finish labels + "Add tasks with dates to the timeline", 44 px |
 | `gantt_canvas.{h,cpp}` | `QWidget` + `QPainter`: two-tier weekly/day header, bars, labels, links, weekend shading, `header_info()` |
-| `plan_document.{h,cpp}` | load a `.mpp` through `app/reader_adapter.h`; owns the RecordSet, SheetModel, RowMap, GanttLayout; reads `214/CTable` widths; 24 px/day weekly timescale |
+| `plan_document.{h,cpp}` | load a `.mpp` through `app/reader_adapter.h`; owns the RecordSet, SheetModel, RowMap, GanttLayout; reads `214/CTable` widths; 24 px/day weekly timescale; applies pending structural edits and the filter |
+| `dialogs.{h,cpp}` | Task Fields, Predecessors, Filter and Insert-name dialogs over the `app/` models (Qt dialogs, no native panels) |
+| `print_page.{h,cpp}` | File ▸ Print through `QPrinter` on `app::PageSpec`/`build_print_job`; the printed Gantt is `core::gantt` geometry |
 | `menus.{h,cpp}` | the one `app::menu_model` → `QKeySequence` translation (`Ctrl` portable, Command on macOS) |
 | `tests/shell_test.cpp` | Q1's offscreen gate: fixture rows, full menu command list, 900x560 PNG |
 | `tests/parity_test.cpp` | `qt_parity_geometry`: the measured geometry/typography gate, the frozen gutter, no clipped ribbon labels, and the 1920 fit |
-| `CMakeLists.txt` | Qt6 Widgets target, `app/` as a subdirectory with its headless tests OFF, five CTest entries |
+| `tests/save_reopen_test.cpp` | `qt_save_reopen`: edit → save → reopen on a build-tree copy of the fixture, Undo/Redo through the menu, the persisted SNET pin, and the byte-identical no-edit save |
+| `CMakeLists.txt` | Qt6 Widgets + PrintSupport target, `app/` as a subdirectory with its headless tests OFF, six CTest entries |
 
 `app/` and `core/` are linked unchanged; nothing here edits them.
 
@@ -70,6 +73,74 @@ CTest (all offscreen, `QT_SCALE_FACTOR=1`):
   Calibri-11/fallback typography, the seven-tab ribbon with every visible
   button wide enough for its label, the timeline strip, the status-bar zoom
   slider, and that at 1920x1032 all nine Entry columns fit.
+* `qt_save_reopen` — wave 19's acceptance gate: copies the committed fixture
+  into `test-out/` (the fixture itself is never opened in place), loads it into
+  the real `MainWindow`, edits a Duration and a Start through
+  `SheetTableModel` → `SheetModel`, exercises Undo/Redo through the menu
+  actions, saves through `app::Document` to a new file, reopens it, asserts the
+  Start persisted as the writer's SNET constraint (type 4 + date) with the plan
+  consistent, and proves that a save with nothing pending writes the source
+  container byte-identically.
+
+## Commands and dialogs (wave 19)
+
+| command | route |
+|---|---|
+| cell edit (double-click / Return) | `SheetTableModel::setData` → `SheetModel::begin_edit/commit_edit` (the real undo stack); a rejected value goes to the status line |
+| Undo / Redo | the sheet's stack first, then `app::StructuralEdits`; a cell edit clears the structural redo list |
+| Insert ▸ Task… / Edit ▸ Delete Task | pending `app::StructuralEdits` (the name dialog, then a delete confirmation naming the cascade size); Save writes them |
+| File ▸ Save / Save As | one shared writer: `app::Document::save` (start pins) or `save_structural` (the whole cascade), then a reload for a structural save; `QFileDialog` with `DontUseNativeDialog` and `default_save_name()` |
+| dirty state / close | `collect_start_edits` + pending structural edits; close/open ask Save / Discard / Cancel |
+| File ▸ Print… | `QPrinter` + `app::build_print_job` on `app::PageSpec`; `print_page.cpp` paints the table and the `core::gantt` chart into the layout's bands |
+| File ▸ Save as PDF / Export PDF | `app::export_report` (`core/render`), so the bytes are the shared renderer's on every platform |
+| View ▸ Filter… / Clear Filter | `app::filter_fields`/`build_filter`; only the displayed row list is restricted (the RecordSet stays editable and the save diff unchanged) |
+| View ▸ the four views, Usage Period | `app::ViewModel`: Task Sheet (Entry + Gantt), Resource Sheet, Task Usage, Resource Usage (read-only grids; the Gantt is hidden) |
+| Edit ▸ Task Fields… / Predecessors… | the `app::field_link_edits` models; both queue pending edits Save writes |
+| start-edit warning | `app::warn_start_edits` once per interactive save, before the panel |
+
+`Qt6::PrintSupport` is a new CMake component (and a new Linux CI package
+requirement: a slim image needs `libqt6printsupport6`; `qt6-base-dev` normally
+carries it).
+
+## Wired
+
+Open (`--open` or the dialog), the menu bar and its enablement, the sheet and
+Gantt views, selection (click a sheet cell → the Gantt row/bar is outlined),
+status line and view buttons, zoom (View ▸ Zoom, Day/Week/Month timescale, and
+the status-bar slider), working-day shading, Collapse All / Expand All, Select
+All, Undo/Redo, cell editing, Insert/Delete Task, Save/Save As, the dirty state
+and discard guard, Print, Export PDF / Save as PDF, Filter, the four views and
+the usage period, and the Task Fields / Predecessors / Filter / Insert /
+save-changes / start-warning / About dialogs.  The ribbon's buttons that map to
+modelled commands dispatch through the same handler as the menu; the rest report
+"not wired" in the status line.
+
+## Deliberately not wired / not matched
+
+* The clipboard (Copy/Paste/Cut) is not wired: the menu items stay disabled.
+* Preferences, Table Date Format and Custom Field Formula still report "not
+  wired"; they were outside wave 19's dialog list.  `app::Document`'s
+  view-state/formula pending-edit API is already in the save path for a later
+  stream.
+* The filter dialog authors one comparison rule (the app model supports All/Any
+  trees; the reference's dialog is one criterion).
+* The chosen view is not persisted across a launch: a newly opened file starts in
+  the Task Sheet.
+* The ribbon is structure, not artwork: text buttons and simple glyphs (the
+  brief puts pixel-exact ribbon icons out of scope).  Buttons are sized from
+  their own labels, and a window too narrow for a group drops the whole group
+  (in ribbon order) instead of clipping its labels.
+* The **Indicators cells are blank**, like the reference capture's (MS Project
+  shows an indicator only when a task has one; the fixture's tasks have none).
+  This is also load-bearing: P1's harness calls a body-band column a grid line
+  when it differs from its row background for ≥80 % of the band, so a 16 px icon
+  in the 39 px column reads as a tenth sheet column.  `qt_parity_geometry`
+  asserts the cells stay blank.
+* The task-bar colour is the shell palette: the current reference capture has
+  no bars (docs/parity.md §2.3), so no bar colour is claimed.  Bar labels follow
+  the product: a label that fits inside the bar (its text plus 4 px padding
+  either side) is drawn centred inside it, otherwise it is drawn to the right
+  and elided only at the canvas edge.
 
 ## Scoring against the reference
 

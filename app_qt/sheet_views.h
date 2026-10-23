@@ -35,8 +35,16 @@ class SheetHeaderView final : public QHeaderView {
 
     QSize sizeHint() const override;
 
+    // Wave 19: the resource sheet and the usage grids have their own column set,
+    // so the caption band asks the model for each title instead of showing the
+    // nine Entry titles.
+    void set_model_titles(bool enabled) { model_titles_ = enabled; }
+
   protected:
     void paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const override;
+
+  private:
+    bool model_titles_ = false;
 };
 
 // The row-number gutter: the view's vertical header, 60 px, frozen.  QTableView
@@ -83,8 +91,15 @@ class EntryItemDelegate final : public QStyledItemDelegate {
   public:
     explicit EntryItemDelegate(QObject* parent = nullptr);
 
+    // Wave 19: the Task Mode pin belongs to the Entry table only; the generic
+    // resource/usage grids are ordinary text cells.
+    void set_entry_mode(bool enabled) { entry_mode_ = enabled; }
+
     void paint(QPainter* painter, const QStyleOptionViewItem& option,
                const QModelIndex& index) const override;
+
+  private:
+    bool entry_mode_ = true;
 };
 
 // A splitter whose handle paints a visible drag thumb (three dots) on white, so

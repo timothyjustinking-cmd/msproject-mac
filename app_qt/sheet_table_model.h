@@ -1,32 +1,38 @@
-// app_qt/sheet_table_model.h -- the Entry table over core::sheet::SheetModel.
+// app_qt/sheet_table_model.h -- the table view over core::sheet::SheetModel.
 //
-// Q1 adapted only SheetModel's own seven columns.  Q2 presents the measured MS
-// Project Entry table (entry_columns.h, docs/parity.md section 2.2):
+// TWO PRESENTATIONS, ONE ADAPTER
+//   * ENTRY mode (the Task Sheet, wave 17/18): exactly the nine measured Entry
+//     columns (entry_columns.h, docs/parity.md section 2.2).  Rows are the
+//     DISPLAYED rows: visible_row_count()/visible_row(), so a collapse removes
+//     rows from the table exactly as it removes bars from the Gantt, and the
+//     wave-19 filter removes them from the display list without touching the
+//     model.
+//   * GENERIC mode (wave 19: the resource sheet and the two usage grids): the
+//     sheet model's own visible columns, in its own order, titled by
+//     SheetModel::column_title().  Read-only (app/view_model.h declares every
+//     such column read-only).
 //
-//   the nine Entry columns: Indicators, Task Mode, Task Name, Duration, Start,
-//   Finish, Predecessors, Resource Names, Add New Column.
+// EDITING (wave 19)
+//   setData() is the one edit path and it runs the shell's real edit model:
+//   SheetModel::begin_edit -> set_edit_text -> commit_edit, i.e. the same
+//   parser/undo/RecordSet write the macOS shell's keyboard path uses
+//   (app/README.md "Editing").  flags() marks a cell editable exactly when its
+//   model column is not declared read-only; it never opens a session (a view
+//   asks for flags constantly), so it stays side-effect free.
 //
 // The row-number gutter is NOT a model column: it is the view's FROZEN vertical
-// header (SheetRowHeader in sheet_views.h), so it does not scroll horizontally
-// with the columns the way a display column 0 did.  The model therefore exposes
-// exactly the nine Entry columns, and display column N is entry column N.
+// header (SheetRowHeader in sheet_views.h).  Display column N is Entry column N.
 //
-// The four data columns map onto SheetModel columns by FIELD ID, so the model
-// never invents a value: Name/Duration/Start/Finish come from
-// SheetModel::cell_text exactly as Q1's adapter did.  Indicators and Task Mode
-// are painted by the delegate; Predecessors/Resources are not in app/'s
-// RecordSet (the portable model carries links/assignments separately), so their
-// cells are empty -- the same as the reference fixture, which has neither.
-//
-// Rows are the DISPLAYED ones: visible_row_count()/visible_row(), so a collapse
-// removes rows from the table exactly as it removes bars from the Gantt.
-//
-// No Q_OBJECT: the adapter defines no signals or slots, so CMake needs no AUTOMOC.
+// No Q_OBJECT: the adapter defines no signals or slots (it emits the base
+// class's dataChanged), so CMake needs no AUTOMOC.
 #pragma once
 
 #include <QAbstractTableModel>
 
 #include <cstddef>
+#include <functional>
+#include <string>
+#include <vector>
 
 #include "sheet.h"
 
@@ -34,12 +40,27 @@ namespace msqt {
 
 class SheetTableModel final : public QAbstractTableModel {
   public:
+    // Called after a setData() attempt: ok, and the message to show ("" when ok).
+    using CommitHandler = std::function<void(bool ok, const std::string& message)>;
+
     explicit SheetTableModel(QObject* parent = nullptr);
 
     // Points the adapter at `model` (nullptr = empty).  Resets the view.
     void set_sheet(core::sheet::SheetModel* model);
     // Re-reads rows/columns after the sheet changed (a collapse, an edit).
     void refresh();
+
+    // Wave 19: which presentation this adapter serves.  `generic` shows the
+    // sheet's visible columns (read-only); the default is the Entry table.
+    void set_generic(bool generic);
+    bool generic() const noexcept { return generic_; }
+
+    // Wave 19: the filtered display list (RecordSet rows in display order).
+    // `active == false` means "no filter" and falls back to the sheet's own
+    // visible rows; an active filter with an empty list shows zero rows.
+    void set_display_rows(std::vector<std::size_t> rows, bool active);
+
+    void set_commit_handler(CommitHandler handler);
 
     core::sheet::SheetModel* sheet() const noexcept { return sheet_; }
 
@@ -57,9 +78,22 @@ class SheetTableModel final : public QAbstractTableModel {
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QVariant headerData(int section, Qt::Orientation orientation,
                         int role = Qt::DisplayRole) const override;
+    Qt::ItemFlags flags(const QModelIndex& index) const override;
+    bool setData(const QModelIndex& index, const QVariant& value,
+                 int role = Qt::EditRole) override;
 
   private:
+    // The SheetModel column a display column maps to.  In generic mode the
+    // display ordinal is the visible ordinal; in Entry mode the field id of the
+    // Entry column resolves through visible_column_for_field().
+    std::size_t column_for_display(int display_column) const;
+    void report_commit(bool ok, const std::string& message);
+
     core::sheet::SheetModel* sheet_ = nullptr;
+    bool generic_ = false;
+    bool filter_active_ = false;
+    std::vector<std::size_t> display_rows_;
+    CommitHandler commit_handler_;
 };
 
 }  // namespace msqt

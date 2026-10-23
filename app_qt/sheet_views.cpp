@@ -87,35 +87,46 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
     }
 
     const std::vector<EntryColumn>& columns = entry_columns();
-    if (logicalIndex >= 0 && static_cast<std::size_t>(logicalIndex) < columns.size()) {
+    QString title;
+    bool stub = false;
+    if (model_titles_) {
+        // Wave 19 generic presentation: the sheet model's own column captions
+        // (resource sheet, usage grids), so the band never shows Entry titles
+        // over a different table.
+        if (model() != nullptr) {
+            title = model()->headerData(logicalIndex, Qt::Horizontal, Qt::DisplayRole).toString();
+        }
+    } else if (logicalIndex >= 0 &&
+               static_cast<std::size_t>(logicalIndex) < columns.size()) {
         const EntryColumn& column = columns[static_cast<std::size_t>(logicalIndex)];
-        const bool stub = column.kind == EntryCellKind::stub;
+        stub = column.kind == EntryCellKind::stub;
+        title = QString::fromUtf8(column.title);
+    }
 
-        QFont font = header_font();
-        font.setItalic(stub);
-        painter->setFont(font);
-        painter->setPen(stub ? kHeaderTextMuted : kHeaderText);
+    QFont font = header_font();
+    font.setItalic(stub);
+    painter->setFont(font);
+    painter->setPen(stub ? kHeaderTextMuted : kHeaderText);
 
-        // Reserve the right ~18 px for the chevron/grip, and let a narrow header
-        // wrap ("Task" / "Mode") exactly as the reference does.
-        const QRect text_rect = rect.adjusted(8, 2, -19, -2);
-        const int text_flags = static_cast<int>(Qt::AlignLeft) |
-                               static_cast<int>(Qt::AlignVCenter) |
-                               static_cast<int>(Qt::TextWordWrap);
-        painter->drawText(text_rect, text_flags, QString::fromUtf8(column.title));
+    // Reserve the right ~19 px for the chevron/grip, and let a narrow header
+    // wrap ("Task" / "Mode") exactly as the reference does.
+    const QRect text_rect = rect.adjusted(8, 2, -19, -2);
+    const int text_flags = static_cast<int>(Qt::AlignLeft) |
+                           static_cast<int>(Qt::AlignVCenter) |
+                           static_cast<int>(Qt::TextWordWrap);
+    painter->drawText(text_rect, text_flags, title);
 
-        if (column.title[0] != '\0') {
-            // Every titled header carries the sort chevron, the reference's
-            // "Add New Column" stub included (muted, like its caption).
-            painter->setPen(QPen(stub ? kHeaderTextMuted : QColor(0x6a, 0x6a, 0x6a), 1));
-            const int arrow_y = rect.center().y();
-            const int arrow_x = rect.right() - 12;
-            painter->drawLine(arrow_x - 3, arrow_y - 1, arrow_x, arrow_y + 2);
-            painter->drawLine(arrow_x, arrow_y + 2, arrow_x + 3, arrow_y - 1);
-        }
-        if (!stub) {
-            paint_resize_grip(*painter, rect);
-        }
+    if (!title.isEmpty() && !model_titles_) {
+        // Every titled Entry header carries the sort chevron, the reference's
+        // "Add New Column" stub included (muted, like its caption).
+        painter->setPen(QPen(stub ? kHeaderTextMuted : QColor(0x6a, 0x6a, 0x6a), 1));
+        const int arrow_y = rect.center().y();
+        const int arrow_x = rect.right() - 12;
+        painter->drawLine(arrow_x - 3, arrow_y - 1, arrow_x, arrow_y + 2);
+        painter->drawLine(arrow_x, arrow_y + 2, arrow_x + 3, arrow_y - 1);
+    }
+    if (!stub) {
+        paint_resize_grip(*painter, rect);
     }
     painter->restore();
 }
@@ -249,7 +260,7 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
     // of 9 (wave 18, CI run f4a4e4a).  Keep every non-boundary column of the
     // body band under that threshold: no tall glyphs, no full-height rules.
     const int mode = entry_column_index(EntryCellKind::mode);
-    if (index.column() != mode) {
+    if (!entry_mode_ || index.column() != mode) {
         // The data columns and the blank Indicators cells are ordinary styled
         // items: the model's text/alignment/font and the selection palette do
         // the work, and Qt draws the grid over them.

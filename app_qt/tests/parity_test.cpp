@@ -289,8 +289,9 @@ int main(int argc, char** argv) {
               "at 1920x1032 the sheet pane holds the whole Entry table");
         check_near(window.split_fraction(), msqt::kSplitFraction, 0.02,
                    "the splitter still holds 0.459 at the reference size");
-        const int content_right = sheet->columnViewportPosition(columns.size() - 1) +
-                                  sheet->columnWidth(static_cast<int>(columns.size()) - 1);
+        const int last_column = static_cast<int>(columns.size()) - 1;
+        const int content_right = sheet->columnViewportPosition(last_column) +
+                                  sheet->columnWidth(last_column);
         std::fprintf(stderr, "note: 1920 pane %d, viewport %d, table right %d\n", sheet_pane,
                      sheet->viewport()->width(), content_right);
         check(content_right <= sheet->viewport()->width() + 1,

@@ -2,6 +2,7 @@
 
 #include "plan_document.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <exception>
@@ -11,6 +12,8 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "edit_model.h"
+#include "filter_model.h"
 #include "reader_adapter.h"
 #include "selection_model.h"
 #include "shell_style.h"
@@ -39,11 +42,16 @@ const char* const kTableParts[4] = {"214/CTable/FixedData", "214/CTable/FixedMet
 void PlanDocument::reset() {
     sheet_.reset();
     loaded_ = app::PlanInput{};
+    base_ = app::PlanInput{};
     view_ = app::PlanInput{};
     records_ = core::view::RecordSet{};
     format_ = core::sheet::SheetFormat{};
     row_map_ = app::RowMap{};
     gantt_ = core::gantt::GanttLayout{};
+    filter_definition_ = core::view::FilterDefinition{};
+    filter_rows_.clear();
+    filter_description_.clear();
+    filter_active_ = false;
     table_widths_.clear();
     path_.clear();
     title_.clear();
@@ -61,14 +69,17 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         warnings_ = document.warnings.size();
         title_ = loaded_.title;
         path_ = source_path;
+        // No pending structural edits yet: the display plan starts as the file.
+        base_ = loaded_;
 
         // The RecordSet is a stable member: SheetModel holds a reference to it,
         // so assignment (not replacement) is what keeps that reference valid.
-        records_ = app::make_record_set(loaded_);
+        records_ = app::make_record_set(base_);
         sheet_ = std::make_unique<core::sheet::SheetModel>(records_,
                                                            app::default_sheet_columns());
         // The date format is the SheetFormat default this wave; the preference
-        // panel that changes it is Q2 (app/prefs.h's apply_preferences()).
+        // panel that changes it is a later stream (app/prefs.h's
+        // apply_preferences()).
         format_ = core::sheet::SheetFormat{};
         sheet_->set_format(format_);
         // UID, ID and Outline are identity/calculated columns: the layout model
@@ -100,22 +111,30 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
     }
     // The RecordSet -- not the loaded plan -- is the source of truth for task
     // fields once a cell is edited, so re-derive the plan the views draw from.
-    view_ = app::sync_plan_from_records(loaded_, records_);
+    view_ = app::sync_plan_from_records(base_, records_);
     row_map_ = app::build_row_map(*sheet_);
+    if (filter_active_) {
+        // Restrict the DISPLAYED row list (never the RecordSet): the same rows
+        // stay editable and the Save diff is unchanged (app/filter_model.h).
+        app::RowMap filtered;
+        filtered.rows = app::restrict_to_filter(row_map_.rows, filter_rows_);
+        filtered.uids.reserve(filtered.rows.size());
+        for (const std::size_t row : filtered.rows) {
+            filtered.uids.push_back(records_.uid(row));
+        }
+        row_map_ = std::move(filtered);
+    }
     // The Gantt is rebuilt from exactly the displayed rows, never panned, so
     // Gantt row N is displayed ordinal N (app/selection_model.h).
     const core::gantt::GanttSource source =
         app::make_gantt_source_for_rows(view_, row_map_.rows, {}, core::gantt::kDateNa);
     // No status-date marker: app::today_date32() would make the offscreen render
-    // change every day, and this wave's render must be deterministic.  Q2 can
-    // add it once the golden harness pins a date.
+    // change every day, and this wave's render must be deterministic.
     core::gantt::Timescale timescale = app::timescale_for_zoom(view_, app::gantt_zoom(zoom));
     if (zoom == app::ZoomLevel::week) {
         // The reference's weekly view: the *unit* stays week (so the header is a
         // week tier), but its pixels-per-unit is the measured 24 px/day, and the
-        // day row starts on Sunday (MS Project's stock calendar week).  Snapping
-        // the origin to a Sunday also makes the chart's left edge a weekend
-        // column, as in the reference capture.
+        // day row starts on Sunday (MS Project's stock calendar week).
         timescale.unit = core::gantt::TimescaleUnit::week;
         timescale.week_start = 0;
         timescale.pixels_per_unit = kPixelsPerWeek;
@@ -128,6 +147,89 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
 }
 
 void PlanDocument::rebuild_views(app::ZoomLevel zoom) { build_gantt(zoom); }
+
+void PlanDocument::refresh_filter_rows() {
+    if (!filter_active_ || sheet_ == nullptr) {
+        filter_rows_.clear();
+        return;
+    }
+    filter_rows_ = app::filter_rows(filter_definition_, records_);
+}
+
+void PlanDocument::rebuild_from_base(app::ZoomLevel zoom, std::uint32_t keep_uid) {
+    // Keep the current selection's task across the rebuild by uid; a pending
+    // insert asks for its own placeholder uid instead.
+    std::uint32_t wanted = keep_uid;
+    if (wanted == 0 && sheet_ != nullptr && sheet_->has_selection()) {
+        wanted = records_.uid(sheet_->anchor().row);
+    }
+
+    records_ = app::make_record_set(base_);
+    sheet_ = std::make_unique<core::sheet::SheetModel>(records_,
+                                                       app::default_sheet_columns());
+    sheet_->set_format(format_);
+    app::apply_edit_policy(*sheet_);
+    refresh_filter_rows();
+
+    if (sheet_->visible_row_count() != 0) {
+        std::size_t target = sheet_->visible_row(0);
+        if (wanted != 0) {
+            for (std::size_t ordinal = 0; ordinal < sheet_->visible_row_count(); ++ordinal) {
+                const std::size_t row = sheet_->visible_row(ordinal);
+                if (row != core::sheet::kNoIndex && records_.uid(row) == wanted) {
+                    target = row;
+                    break;
+                }
+            }
+        }
+        sheet_->select_cell(target, name_column_of(*sheet_));
+    }
+    build_gantt(zoom);
+}
+
+void PlanDocument::apply_structural_edits(const app::StructuralEdits& edits, app::ZoomLevel zoom,
+                                          std::uint32_t keep_uid) {
+    if (sheet_ == nullptr) {
+        return;
+    }
+    // Fold the CURRENT cell values back into the plan before the rebuild: the
+    // sheet's edits (a Start, say) are still pending file changes, and building
+    // from `loaded_` alone would silently drop them.
+    // without_structural_edits() recovers "the file plus those edits", so
+    // apply() then re-applies this edit list on top without double-counting.
+    const app::PlanInput edited = edits.without_structural_edits(view_, loaded_);
+    base_ = edits.apply(edited);
+    rebuild_from_base(zoom, keep_uid);
+}
+
+void PlanDocument::accept_start_edits(const std::vector<app::StartEdit>& edits) {
+    app::accept_start_edits(loaded_, edits);
+}
+
+void PlanDocument::set_filter(core::view::FilterDefinition definition, std::string description) {
+    filter_definition_ = std::move(definition);
+    filter_description_ = std::move(description);
+    filter_active_ = true;
+    refresh_filter_rows();
+}
+
+void PlanDocument::clear_filter() {
+    filter_active_ = false;
+    filter_definition_ = core::view::FilterDefinition{};
+    filter_description_.clear();
+    filter_rows_.clear();
+}
+
+std::vector<std::size_t> PlanDocument::display_rows() const {
+    if (sheet_ == nullptr) {
+        return {};
+    }
+    std::vector<std::size_t> rows = sheet_->visible_rows();
+    if (filter_active_) {
+        rows = app::restrict_to_filter(rows, filter_rows_);
+    }
+    return rows;
+}
 
 void PlanDocument::read_table_column_widths(const std::string& source_path) {
     table_widths_.clear();
