@@ -107,6 +107,17 @@ std::string export_subtitle(ReportKind kind, const std::string& filter_descripti
     return text;
 }
 
+std::vector<std::size_t> export_rows(const ExportRequest& request) {
+    if (request.records == nullptr) {
+        return {};
+    }
+    if (request.rows_are_filtered) {
+        // A zero-match filter is an empty list, not "all rows".
+        return request.rows;
+    }
+    return request.rows.empty() ? every_row(*request.records) : request.rows;
+}
+
 std::size_t task_row_count(const core::view::RecordSet& records) {
     std::size_t count = 0;
     for (std::size_t row = 0; row < records.row_count(); ++row) {
@@ -160,8 +171,9 @@ ExportOutcome export_report(const ExportRequest& request, const std::string& pat
     }
 
     try {
-        const std::vector<std::size_t> rows =
-            request.rows.empty() ? every_row(*request.records) : request.rows;
+        // Wave 25 review: `rows_are_filtered` distinguishes a zero-match
+        // filter (print nothing) from no filter (print every row).
+        const std::vector<std::size_t> rows = export_rows(request);
         core::view::RecordSet printed = filtered_record_set(*request.records, rows);
 
         std::vector<core::sheet::SheetColumn> columns = request.columns;

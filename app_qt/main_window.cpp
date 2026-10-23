@@ -2125,6 +2125,7 @@ void MainWindow::export_pdf(app::ReportKind kind) {
     request.records = &doc_.records();
     if (doc_.filter_active()) {
         request.rows = doc_.filter_rows();
+        request.rows_are_filtered = true;
     }
     for (const std::size_t column : doc_.sheet()->visible_columns()) {
         if (column < doc_.sheet()->column_count()) {
@@ -2446,6 +2447,12 @@ void MainWindow::cut_selection() {
     }
     std::size_t staged = 0;
     for (const core::sheet::CellRef& cell : sheet->selected_cells()) {
+        // Wave 25 review: Cut writes the RecordSet directly and must obey the
+        // same uid-0 rule as begin_cell_edit -- an edit on the synthetic
+        // project row is shown by the sheet but never saved.
+        if (cell.row >= sheet->row_count() || sheet->row_uid(cell.row) == 0) {
+            continue;
+        }
         if (cell.column >= sheet->column_count() || sheet->column_read_only(cell.column)) {
             continue;
         }
@@ -2500,6 +2507,14 @@ void MainWindow::paste_selection() {
     }
     if (!sheet->has_selection()) {
         set_message("select the target cell first", false);
+        update_status();
+        return;
+    }
+    // Wave 25 review: SheetModel::paste writes the RecordSet directly, so the
+    // uid-0 guard must be checked here too (the project row would show the
+    // paste but the save diff never writes it).
+    if (sheet->row_uid(sheet->anchor().row) == 0) {
+        set_message("the project summary row is read-only", true);
         update_status();
         return;
     }

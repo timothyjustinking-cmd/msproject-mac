@@ -772,9 +772,12 @@ void test_project_a(TestContext& context) {
         const mpp::SkippedRow& skipped = document.skipped_rows.front();
         context.equal(skipped.row, std::uint32_t{67}, "the dead row is row 67");
         context.equal(skipped.uid, std::uint32_t{10856}, "the dead row's uid is 10856");
-        context.equal(skipped.orphan_name,
-                      std::string("client-text-014)"),
-                      "the dead slot's orphaned name block is reported as evidence");
+        // Wave 25 review: the dead slot's orphaned name is CLIENT CONTENT and is
+        // not quoted.  The name scanner only sees live rows, so it could not
+        // catch this literal; the block being reported is the evidence that
+        // matters (row 67 / uid 10856 above).
+        context.check(!skipped.orphan_name.empty(),
+                      "the dead slot's orphaned name block is reported (text not quoted)");
     }
 
     context.equal(document.project.uid, std::uint32_t{0}, "PROJECT_A project row uid");
@@ -1325,13 +1328,26 @@ void test_project_view_settings(TestContext& context) {
         for (std::size_t index = 0; index < shown.tasks.size(); ++index) {
             const mpp::Task& left = shown.tasks[index];
             const mpp::Task& right = hidden.tasks[index];
-            if (left.uid != right.uid || left.row_id != right.row_id ||
-                left.name != right.name || left.start.raw != right.start.raw ||
+            // Wave 25 review: compare every field the reader exposes here, so
+            // a same-size change in an unlisted field cannot pass.
+            if (left.row != right.row || left.uid != right.uid ||
+                left.row_id != right.row_id || left.name != right.name ||
+                left.name_raw != right.name_raw ||
+                left.start.raw != right.start.raw ||
                 left.finish.raw != right.finish.raw ||
+                left.calculated_start.raw != right.calculated_start.raw ||
+                left.calculated_finish.raw != right.calculated_finish.raw ||
                 left.duration_ticks != right.duration_ticks ||
+                left.duration_format != right.duration_format ||
+                left.priority != right.priority ||
                 left.percent_complete != right.percent_complete ||
                 left.summary != right.summary ||
                 left.is_milestone() != right.is_milestone() ||
+                left.critical != right.critical ||
+                left.manually_scheduled != right.manually_scheduled ||
+                left.constraint_type != right.constraint_type ||
+                left.constraint_date.raw != right.constraint_date.raw ||
+                left.deadline.raw != right.deadline.raw ||
                 left.flags != right.flags) {
                 same_tasks = false;
                 break;
@@ -1342,10 +1358,60 @@ void test_project_view_settings(TestContext& context) {
                   "every decoded task row is identical in the shown/hidden pair");
     context.equal(shown.links.size(), hidden.links.size(),
                   "the pair has the same link rows");
+    bool same_links = shown.links.size() == hidden.links.size();
+    if (same_links) {
+        for (std::size_t index = 0; index < shown.links.size(); ++index) {
+            const mpp::Link& left = shown.links[index];
+            const mpp::Link& right = hidden.links[index];
+            if (left.uid != right.uid ||
+                left.predecessor_uid != right.predecessor_uid ||
+                left.successor_uid != right.successor_uid ||
+                left.type() != right.type() || left.lag_ticks != right.lag_ticks ||
+                left.lag_units != right.lag_units) {
+                same_links = false;
+                break;
+            }
+        }
+    }
+    context.check(same_links, "every decoded link row is identical in the pair");
     context.equal(shown.resources.size(), hidden.resources.size(),
                   "the pair has the same resource rows");
+    bool same_resources = shown.resources.size() == hidden.resources.size();
+    if (same_resources) {
+        for (std::size_t index = 0; index < shown.resources.size(); ++index) {
+            const mpp::Resource& left = shown.resources[index];
+            const mpp::Resource& right = hidden.resources[index];
+            if (left.uid != right.uid || left.row_id != right.row_id ||
+                left.name != right.name || left.name_raw != right.name_raw ||
+                left.initials != right.initials ||
+                left.max_units_x100 != right.max_units_x100) {
+                same_resources = false;
+                break;
+            }
+        }
+    }
+    context.check(same_resources,
+                  "every decoded resource row is identical in the pair");
     context.equal(shown.assignments.size(), hidden.assignments.size(),
                   "the pair has the same assignment rows");
+    bool same_assignments = shown.assignments.size() == hidden.assignments.size();
+    if (same_assignments) {
+        for (std::size_t index = 0; index < shown.assignments.size(); ++index) {
+            const mpp::Assignment& left = shown.assignments[index];
+            const mpp::Assignment& right = hidden.assignments[index];
+            if (left.uid != right.uid || left.task_uid != right.task_uid ||
+                left.resource_uid() != right.resource_uid() ||
+                left.units_x100 != right.units_x100 ||
+                left.work_x1000 != right.work_x1000 ||
+                left.start.raw != right.start.raw ||
+                left.finish.raw != right.finish.raw) {
+                same_assignments = false;
+                break;
+            }
+        }
+    }
+    context.check(same_assignments,
+                  "every decoded assignment row is identical in the pair");
 }
 
 /* Wave 23 (W23-6): Flag10 (0x0b400051) decodes from Task FixedMeta entry byte

@@ -67,8 +67,11 @@ struct ExportRequest {
     ReportKind kind = ReportKind::sheet;
     // Every row; `rows` selects the subset to print.
     const core::view::RecordSet* records = nullptr;
-    // RecordSet rows to print, ascending.  Empty means every row.
+    // RecordSet rows to print, ascending.  Empty means every row UNLESS
+    // `rows_are_filtered` is set: a filter that matches nothing is an empty
+    // list that must print nothing (wave 25 review).
     std::vector<std::size_t> rows;
+    bool rows_are_filtered = false;
     // Empty means core::render::task_report_columns().
     std::vector<core::sheet::SheetColumn> columns;
     core::sheet::SheetFormat format{};
@@ -122,6 +125,11 @@ std::string export_subtitle(ReportKind kind, const std::string& filter_descripti
 std::size_t task_row_count(const core::view::RecordSet& records);
 std::size_t task_row_count(const core::view::RecordSet& records,
                            const std::vector<std::size_t>& rows);
+
+// The rows a request prints: `rows` verbatim when a filter is active (even if
+// empty), else every RecordSet row when `rows` is empty.  Exposed so the
+// zero-match case can be pinned without parsing a PDF.
+std::vector<std::size_t> export_rows(const ExportRequest& request);
 
 // "Selected: <text>" (when a task is selected) + the preference summary.
 std::string export_footer(const Preferences& preferences, const std::string& selection_text);
