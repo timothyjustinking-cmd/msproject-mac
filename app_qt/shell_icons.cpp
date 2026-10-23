@@ -247,16 +247,28 @@ QIcon shell_view_icon(int view_mode) {
             painter.drawRect(QRect(6, 5, 5, 2));
             painter.drawRect(QRect(7, 9, 5, 2));
             break;
-        case 1:  // Resource sheet: a list.
+        case 1:  // Task usage: a grid with an extra divider.
+            painter.drawLine(2, 6, 14, 6);
+            painter.drawLine(2, 10, 14, 10);
+            painter.drawLine(9, 2, 9, 14);
+            break;
+        case 2:  // Team planner: two resource lanes with a block each.
+            painter.drawLine(2, 7, 14, 7);
+            painter.setBrush(kAccent);
+            painter.drawRect(QRect(4, 4, 3, 2));
+            painter.drawRect(QRect(9, 9, 3, 2));
+            break;
+        case 3:  // Resource sheet: a list.
             for (int y = 4; y <= 12; y += 4) {
                 painter.drawLine(2, y, 14, y);
             }
             break;
-        case 2:  // Task usage: a grid.
-        case 3:  // Resource usage: a grid with an extra divider.
-            painter.drawLine(2, 6, 14, 6);
-            painter.drawLine(2, 10, 14, 10);
-            painter.drawLine(9, 2, 9, 14);
+        case 4:  // Report: a page with a bar chart.
+            painter.drawLine(4, 12, 12, 12);
+            painter.setBrush(kAccent);
+            painter.drawRect(QRect(5, 8, 2, 4));
+            painter.drawRect(QRect(8, 5, 2, 7));
+            painter.drawRect(QRect(11, 7, 1, 5));
             break;
         default:
             break;

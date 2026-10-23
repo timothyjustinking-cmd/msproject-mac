@@ -58,6 +58,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -135,17 +136,23 @@ app::ZoomLevel stepped_zoom(app::ZoomLevel zoom, int delta) {
 
 QString to_q(const std::string& text) { return QString::fromStdString(text); }
 
-// The status-bar view buttons, in the reference's order, mapped to the modes.
+// The status-bar view buttons, in Project 2021's measured order.  Wave 23
+// (B-9): five, as in the clean capture -- Gantt Chart, Task Usage, Team Planner,
+// Resource Sheet, Report.  Resource Usage is a View-tab command; it was never
+// one of the five.  Team Planner and Report have no view in this port yet, so
+// they are disabled with the exact decision-9 tooltip (never faked).
 struct ViewButtonSpec {
     const char* label;
     app::ViewMode mode;
+    bool implemented;
 };
 
-const ViewButtonSpec kViewButtons[4] = {
-    {"Gantt Chart", app::ViewMode::task_sheet},
-    {"Task Usage", app::ViewMode::task_usage},
-    {"Resource Sheet", app::ViewMode::resource_sheet},
-    {"Resource Usage", app::ViewMode::resource_usage},
+const ViewButtonSpec kViewButtons[5] = {
+    {"Gantt Chart", app::ViewMode::task_sheet, true},
+    {"Task Usage", app::ViewMode::task_usage, true},
+    {"Team Planner", app::ViewMode::task_sheet, false},
+    {"Resource Sheet", app::ViewMode::resource_sheet, true},
+    {"Report", app::ViewMode::task_sheet, false},
 };
 
 }  // namespace
@@ -643,10 +650,17 @@ void MainWindow::build_status_bar() {
         button->setFocusPolicy(Qt::NoFocus);
         button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         button->setFixedHeight(kStatusHeight - 4);
-        button->setToolTip(button->text());
         const app::ViewMode mode = spec.mode;
-        connect(button, &QToolButton::clicked, this,
-                [this, mode](bool) { set_view(mode); });
+        if (!spec.implemented) {
+            // Wave 23 (B-9): Project's five buttons exist; the two views this
+            // port does not have yet are disabled with the exact tooltip.
+            button->setEnabled(false);
+            button->setToolTip(QStringLiteral("not implemented in this port"));
+        } else {
+            button->setToolTip(button->text());
+            connect(button, &QToolButton::clicked, this,
+                    [this, mode](bool) { set_view(mode); });
+        }
         view_layout->addWidget(button);
         view_buttons_.push_back(button);
         ++view_index;
@@ -689,6 +703,12 @@ void MainWindow::build_status_bar() {
     // The zoom group is minus / slider / plus, with no percentage readout
     // (operator decision: the slider maps to Days/Weeks/Months).
     statusBar()->setSizeGripEnabled(false);
+    // Wave 23 (B-9): an explicit light bar.  Fusion's default plus the labels'
+    // own palettes had rendered it dark in the light theme; the measured
+    // reference is a light grey strip with dark text in every theme.
+    statusBar()->setStyleSheet(QStringLiteral(
+        "QStatusBar { background: #f0f0f0; border-top: 1px solid #c8c8c8; }"
+        "QStatusBar QLabel { color: #202020; }"));
     statusBar()->addWidget(status_summary_, 1);
     statusBar()->addWidget(status_mode_, 0);
     statusBar()->addPermanentWidget(views, 0);
@@ -1246,9 +1266,17 @@ void MainWindow::update_window_title() {
         setWindowTitle(QStringLiteral("MS Project Shell"));
         return;
     }
-    const std::string title =
-        doc_.title().empty() ? std::string("MS Project Shell") : doc_.title();
-    QString text = to_q(title) + QStringLiteral(" - ") + to_q(doc_.path());
+    // Wave 23 (B-10): Project's title is "<file name>.mpp - Project
+    // Professional", not the project title plus the full path.  The port's own
+    // identity replaces the product name (operator ruling 5).
+    std::string file_name = doc_.loaded().source_name;
+    if (file_name.empty()) {
+        file_name = QFileInfo(to_q(doc_.path())).fileName().toStdString();
+    }
+    if (file_name.empty()) {
+        file_name = "untitled.mpp";
+    }
+    QString text = to_q(file_name) + QStringLiteral(" - MS Project Shell");
     // The reference shows the standard edited dot; text is the portable form.
     if (document_dirty()) {
         text += QStringLiteral(" *");
@@ -1257,13 +1285,16 @@ void MainWindow::update_window_title() {
 }
 
 void MainWindow::refresh_view_buttons() {
-    for (std::size_t index = 0; index < view_buttons_.size() && index < 4; ++index) {
+    for (std::size_t index = 0; index < view_buttons_.size() &&
+                                index < std::size(kViewButtons);
+         ++index) {
         QToolButton* button = view_buttons_[index];
         if (button == nullptr) {
             continue;
         }
         const QSignalBlocker blocker(button);
-        button->setChecked(kViewButtons[index].mode == prefs_.view);
+        button->setChecked(kViewButtons[index].implemented &&
+                           kViewButtons[index].mode == prefs_.view);
     }
 }
 

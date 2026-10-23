@@ -90,6 +90,12 @@ int main(int argc, char** argv) {
     // colours (black summary because the file's styles are not decoded, Q1).
     check(window.status_left_text() == QStringLiteral("Ready"),
           "the status bar's left segment says Ready");
+    // Wave 23 (B-10): "<file name>.mpp - <port name>", not title + full path.
+    check(window.windowTitle().endsWith(QStringLiteral(" - MS Project Shell")),
+          "the window title names the port after the file");
+    check(!window.windowTitle().contains(QStringLiteral("/")) &&
+              !window.windowTitle().contains(QStringLiteral("\\")),
+          "the window title carries the file name, not its path");
     if (window.sheet_view() != nullptr) {
         check(window.sheet_view()->palette().color(QPalette::Highlight) ==
                   QColor(0xa2, 0xd3, 0xa0),
