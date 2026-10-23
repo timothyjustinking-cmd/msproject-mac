@@ -4,13 +4,14 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Wave 26 (open on branch `wave26` - parity first)
+## Wave 26 (closed on branch `wave26` - not merged, not pushed; hold)
 
 | file | what |
 |---|---|
-| `wave26-brief.md` | **the work order**: G0 (one High), G1 ribbon controls, G2 icons, G3 file-driven rendering, G4 backstage/Options, G5 dialogs, G6 views/theme, CLOSE; deferral only with evidence |
+| `wave26-complete.md` | **the wave-26 gate**: G0..G6 + CLOSE, every item DONE, the fresh-tree gates on the fixed tree, the privacy scans (including the wrapped-name finding), the independent review and its High fixes, the live same-file comparison, the re-scored 16 decisions, "Found, not fixed" |
+| `wave26-brief.md` | **the work order**: groups G0..G6 + CLOSE, parity first, one finding id per commit, deferral only with evidence |
 | `wave25-verification/gates.md` | the verifier's fresh-tree gate run on wave 25's tip |
-| `wave25-verification/review.md` | the independent review of `wave24..wave25` |
+| `wave25-verification/review.md` | the independent review of `wave24..wave25` (G0 answers its one High) |
 
 ## Wave 25 (closed on branch `wave25` — not merged, not pushed; hold)
 

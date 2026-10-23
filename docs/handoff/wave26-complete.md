@@ -38,16 +38,18 @@ W26-0.1 detail:
   function and the portable sequence are the tested half; the AppKit additions
   are written for CI, not claimed as run here.
 
-Gates on the commit's tree (all numbers from
-`build/w26/gates-a5dff41-W26-0.1.log`, parent `a5dff41`): core ctest
-`-E plan_recalc` 51/51; `plan_recalc` 512 checks with corpus / 266 with
-`MPP_NO_CORPUS=1`; M2 `recalc --compare` 332/332 (268 leaves, 64 summaries);
-reader 1100 with corpus / 420 without; app ctest 15/15 (`app_layout` 279
-checks, `app_smoke` 121); app_qt ctest 18/18; `check_fixtures.py` OK (23
-documented hashes, 21 tracked `.mpp`) and oracle provenance OK (8); parity
-wave23-outline 10 comparable / 0 failing and wave25-auto `colour.task_bar`
-1 / 0; client-name scan 0 hits on the parent, on the working-tree content and
-on `28a9f9b` including its commit message.
+Gates on the commit's tree (the ctest totals are from
+`build/w26/gates-a5dff41-W26-0.1.log`, parent `a5dff41`; the log prints the
+ctest totals, not the per-test check counts): core ctest `-E plan_recalc`
+51/51; `plan_recalc` 512 checks with corpus / 266 with `MPP_NO_CORPUS=1`; M2
+`recalc --compare` 332/332 (268 leaf fields, 64 summary fields from 16
+summaries); reader 1100 with corpus / 420 without; app ctest 15/15 (`app_layout`
+and `app_smoke` passed; their check counts are from the direct runs, not the
+ctest log); app_qt ctest 18/18; `check_fixtures.py` OK (23 documented hashes, 21
+tracked `.mpp`) and oracle provenance OK (8); parity wave23-outline 10
+comparable / 0 failing and wave25-auto `colour.task_bar` 1 / 0; client-name
+scan 0 hits on the parent, on the working-tree content and on `28a9f9b`
+(including its commit message; the post-commit scan is appended to the log).
 
 ## Found, not fixed
 
@@ -84,13 +86,16 @@ W26-1.1 detail -- the control model and Task > Font:
   left/right, row offsets, the 16 gallery colours); the captures stay local.
 - `app_qt/ribbon_pin.tsv` is now 9 columns (tab, contextual, group, kind, label,
   enabled, icon, row, state) and pins every control on the seven tabs;
-  `app_qt/ribbon_pin_unmodelled.tsv` is header-only.  The backlog generator
+  `app_qt/ribbon_pin_unmodelled.tsv` is header-only from W26-1.5 (`b868aff`,
+  when the last row it listed -- the Project Status date field -- was
+  modelled).  The backlog generator
   (`app_qt/tools/command_backlog.py`) learned the new spec builders; the
   generated `docs/ui-command-backlog.md` is regenerated.
-- The Font group carries combos showing the new-project default (Calibri 11;
-  the FILE's text style is G3-3.1's decode), B/I/U, the two colour splits and
-  the launcher.  No engine edit exists for any of them, so they are disabled
-  with the exact decision-9 tooltip.
+- The Font group carries combos, B/I/U, the two colour splits and the
+  launcher.  At W26-1.1 the combos showed the new-project default (Calibri 11;
+  the FILE's text style was G3-3.1's decode); W26-REV-2 then wired the decoded
+  default (PROJECT_A's Arial 8).  No engine edit exists for any of them, so
+  they are disabled with the exact decision-9 tooltip.
 
 W26-1.2 detail -- Schedule:
 
@@ -156,7 +161,7 @@ checkbox 8, combo 8, field 1; the unmodelled backlog is 0 rows; 0 failures.
 At 900 the prefix/fit/chevron contract holds (Task 4/8, Project 5/6, View 3/7,
 Gantt Chart Format 3/6 show the `>>` chevron).
 
-Gates per commit (each log is on that commit's parent tree):
+Gates per commit (each log is named for the parent and was run on the working tree that became the commit):
 
 | item | log | core | plan_recalc | reader | M2 | app | app_qt | fixtures | parity |
 |---|---|---|---|---|---|---|---|---|---|
@@ -267,7 +272,7 @@ a command cannot draw one glyph while the pin names another.
 `app_qt/ribbon_pin_unmodelled.tsv` remains empty and the existing inventory
 gate still passes.
 
-Gates per commit (each log is on that commit's parent tree, quoted from the
+Gates per commit (each log is named for the parent and was run on the working tree that became the commit, quoted from the
 log):
 
 | item | log | core | plan_recalc | reader | M2 | app | app_qt | fixtures | parity |
@@ -384,16 +389,20 @@ verified against Project 2021's own controlled saves.
   finished.  A stock project has no critical/summary-critical/finished style
   and keeps the wave-25 measured fallbacks.  PROJECT_A's 10 active styles are
   the capture's palette: noncritical (0,32,96), critical (255,0,0), summary
-  (0,0,128), project-summary red, milestone (255,0,0), progress/finished
-  (0,176,80).  Its unused light-red "Critical" (247,138,136) is never painted
-  -- the capture has zero pixels of it.
+  (0,0,128), project summary navy (0,0,128), milestone (255,0,0),
+  progress/finished (0,176,80).  Its unused light-red "Critical" (247,138,136)
+  is never painted -- the capture has zero pixels of it.  The project row
+  paints red through the summary+critical style, not the project-summary
+  style.
 - **Rendering.**  `GanttCanvas::bar_colour_for` paints the palette; the
   completion fill is the file's Progress colour (Finished when complete; a
   summary's progress is the thin top line) instead of the stock blue.
   Critical Tasks highlighting ON keeps its wave-25 measured override.
-  `qt_stored_table_corpus` asserts that the rendered bars include
-  (0,32,96)/(255,0,0)/(0,0,128), exclude (247,138,136) and paint the project
-  row red.
+  `qt_stored_table_corpus` asserts the model palette, and since W26-REV-2 the
+  PAINTED pixels too: the live canvas contains (0,32,96)/(255,0,0)/(0,0,128)/
+  (0,176,80) and no (247,138,136), and the rendered sheet carries the decoded
+  milestone red and summary blue; the project row paints red through the
+  summary+critical style.
 
 ### W26-3.3 detail -- timescale
 
@@ -440,7 +449,7 @@ verified against Project 2021's own controlled saves.
 | bar palette | navy summaries, red critical bars, dark-blue noncritical, green progress; 0 light-red pixels | decoded 10-style palette paints (0,0,128), (255,0,0), (0,32,96), (0,176,80); the port render contains the same roles and no (247,138,136) | **match** |
 | timescale | year "2026" / quarter "Qtr 2, 2026" / month "Apr" | stored years/quarters/months formats 0/3/10 render as "2025 / Qtr 4, 2025 / Dec" at the port's scroll origin | **match** in tiers and label format; the visible date range/zoom still differs (the port keeps its own scroll origin) |
 
-### Gates per commit (each log is on that commit's parent tree)
+### Gates per commit (each log is named for the parent and was run on the working tree that became the commit)
 
 | item | log | core | plan_recalc | reader | M2 | app | app_qt | fixtures | parity |
 |---|---|---|---|---|---|---|---|---|---|
@@ -451,9 +460,10 @@ verified against Project 2021's own controlled saves.
 Every log also carries `check_fixtures.py` (25 documented hashes, 21 tracked
 `.mpp`), the oracle-provenance check (8), the client-name scan (0 hits on HEAD
 and on the working-tree content) and the 8-hex grep (no matches).  `app` is
-16/16 from W26-3.1 on: the new `app_view_style` is the sixteenth test (29
-checks at 3.1, 47 at 3.2, 54 at 3.3).  The core `viewstate` test grew from 791
-checks to 820 (W26-3.1), 832 (W26-3.2) and 844 (W26-3.3).
+16/16 from W26-3.1 on: the new `app_view_style` is test #13 of the 16 app tests
+(29 checks at 3.1, 47 at 3.2, 54 at 3.3).  The core `viewstate` test grew from
+791 checks to 820 (W26-3.1), 832 (W26-3.2) and 844 (W26-3.3); those check
+counts are from the direct test runs, not the ctest log.
 
 ## Found, not fixed
 
@@ -463,10 +473,14 @@ No new Critical or High finding in G3.  Notes for later work, all deliberate:
   yellow cell fill.  The file's Highlighted text-style
   record carries no background (its colour flag is 0xFF = automatic), so the
   fill is a per-row cell format that neither the style record nor the reader
-  decodes.  The decoder and renderer DO support a stored highlight fill
-  (synthetic-base's pale yellow (255,255,102) is in the committed fixture and
-  asserted), but PROJECT_A's yellow row is not reproduced.  Its text still
-  renders with the milestone style, as the capture shows.
+  decodes.  The DECODER reads a stored highlight fill (synthetic-base's pale
+  yellow (255,255,102) is in the committed fixture and asserted), but
+  `text_style_item_for_row()` never returns the Highlighted item, so the
+  RENDERER applies no stored fill; a later wave must map the item and add a
+  fixture row.  PROJECT_A's row 10 is not reproduced; its text still renders
+  with the milestone style, as the capture shows.  (The earlier wording said
+  "the decoder and renderer DO support" it; the review corrected the renderer
+  half.)
 - **TextStyles' COM Item numbering.**  The controlled saves prove the record
   layout, but Project's `TextStyles(Item=3)` wrote the style record at +506
   (MPXJ's "external" slot) rather than MPXJ's milestone slot at +186;
@@ -479,11 +493,13 @@ No new Critical or High finding in G3.  Notes for later work, all deliberate:
   top tier or a count > 1 (see W26-3.3 detail); both fields are decoded from
   PROJECT_A's own record and rendered, but a COM-driven >1-count fixture does
   not exist.
-- **GanttBarStyleEdit on "Task".**  Two saves naming the "Task" style (by
-  index and by name) left the record byte-identical, while "Summary" and
-  "Milestone" applied.  The bar record layout is proven on those two styles;
-  the Task slot is the same stride and its decoded (138,187,237) is the
-  colour the wave25-auto parity gate matches.
+- **GanttBarStyleEdit on "Task".**  The by-index and by-name saves changed the
+  Task bar's middle colour (138,187,237) -> (255,0,0) in the view they changed
+  (`build/w26/g3/trees3/b2-task-red-int`, `b2-task-red-name`: 7 byte diffs vs
+  `trees/control-a`); the explicit variant was the no-op (its COM call was
+  rejected, `oracle-probe2.log`).  The record layout is proven on Task, Summary
+  and Milestone; the decoded Task colour is the one the wave25-auto parity gate
+  matches.
 - **The port's timescale origin/zoom** still differs from the capture's
   scroll position.  G3's acceptance is the stored tiers' units, counts and
   formats, which match; the visible date range remains the zoom stream's
@@ -500,9 +516,10 @@ WAVE-26-G3-COMPLETE
 
 The measured sources are the clean `project-backstage-account.png` capture and
 the audit frames in `corpus/reference/2026-10-23-audit/` (all local-only).  The
-committed numbers are `tests/data/reference/w26-backstage.measures.json` and
-`w26-options.measures.json`; the gate measures the LIVE widgets and the RENDERED
-pixels against them.
+committed numbers are `tests/data/reference/w26-backstage.measures.json` (its
+`options` object carries the Options numbers; there is no separate
+`w26-options.measures.json`); the gate measures the LIVE widgets and the
+RENDERED pixels against them.
 
 | item | finding | status | evidence |
 |---|---|---|---|
@@ -594,7 +611,10 @@ pixels against them.
   is the measured 17.5 % of the dialog width (100 of 572 px in the capture).
 - The shell's new-task mode follows the Schedule result (`set_new_task_mode`
   updates the status bar and the new-project callout); General's date format
-  applies to the sheet preferences and its theme choice to the palette.
+  applies to the sheet preferences and its theme choice to the palette.  The
+  review found that the mode does NOT yet change how `insert_task()` creates a
+  task, so "functional" means the shell state and callout follow the choice,
+  not the created task's mode (listed as a Medium).
 - The rail's Options entry opens this dialog; the application-menu Preferences
   dialog (wave 20) is unchanged and still carries the port-only
   duration/timescale/shading choices.
@@ -693,8 +713,10 @@ The captures themselves and any client text in them are never committed.
   client-data rule keeps them out of every tool and test; the tables carry the
   capture's row number and dates only.  On `synthetic-calendars.mpp` the tables
   are empty (the file stores none); the local exception probe
-  (`corpus/probe/w12-exceptions.mpp`, git-ignored) exercises 7 rows and 29
-  marked days without a name.
+  (`corpus/probe/w12-exceptions.mpp`, git-ignored) exercises rows and marked
+  days without a name; the test asserts the rows are non-empty, the first row's
+  index and dates and `marked > 0`, and the 7-row / 29-day figures are a
+  direct-run stderr note, not a gated count.
 - Measured acceptance: Standard and Shift A are the two base calendars;
   October 2026 has 31 cells with 1 October in the Thursday column and the
   weekend set {3,4,10,11,17,18,24,25,31}; Standard is 8:00-12:00 + 13:00-17:00,
@@ -751,7 +773,7 @@ The captures themselves and any client text in them are never committed.
   Options/Close.  The port decodes no external project links, so only Close is
   live; the tables are empty.
 
-### Gates per commit (each log is on that commit's parent tree)
+### Gates per commit (each log is named for the parent and was run on the working tree that became the commit)
 
 | item | log | core | plan_recalc | reader | M2 | app | app_qt | fixtures | parity |
 |---|---|---|---|---|---|---|---|---|---|
@@ -863,9 +885,10 @@ finding id each on branch `wave26`.
   Black on `tests/data/synthetic-base.mpp`.  For each theme it takes the
   dominant colour of the LIVE ribbon and QStatusBar widgets and requires an
   exact match with the committed measurements (each must also cover at least
-  30 % of the surface), proves the committed dark values ARE the capture's
-  sampled group-row/status fills, and asserts light -> Dark Gray -> Black gets
-  darker on both surfaces.  It then compares the sheet viewport and the Gantt
+  30 % of the surface), cross-checks the committed dark chrome values with the
+  committed capture-sample fields (the capture sampling itself is local, so
+  this pair is a provenance cross-check, not a live capture read), and asserts
+  light -> Dark Gray -> Black gets darker on both surfaces.  It then compares the sheet viewport and the Gantt
   canvas as images across all three themes: byte-identical, tolerance 0 (the
   `QImage` equality operator).
 - Human-review renders (not committed, `build/` is git-ignored):
@@ -900,13 +923,14 @@ finding id each on branch `wave26`.
 - The new `qt_split_view_gate` (23rd `app_qt` test) drives the LIVE check box,
   proves the form starts hidden/unchecked (Project's measured default), that
   it docks below the Gantt in a vertical splitter with a draggable 6-px handle,
-  that the form's name/duration/start follow two real QTest mouse selections in
-  the live sheet, that setting the splitter sizes 3/4 then 1/2 changes the
-  pane's height (both directions, restored afterwards), and that the second
-  click undocks it and leaves the document clean.  A human-review render is at
-  `build/w26/split-view-details.png`.
+  that the form's NAME follows two real QTest mouse selections in the live
+  sheet (duration and start are asserted non-empty, not followed), that
+  setting the splitter sizes 3/4 then 1/2 changes the pane's height (the test
+  asserts the larger-then-smaller relation and a >=100 px restore, not an exact
+  geometry), and that the second click undocks it and leaves the document
+  clean.  A human-review render is at `build/w26/split-view-details.png`.
 
-### Gates per commit (each log is on that commit's parent tree)
+### Gates per commit (each log is named for the parent and was run on the working tree that became the commit)
 
 | item | log | core | plan_recalc | reader | M2 | app | app_qt | fixtures | parity |
 |---|---|---|---|---|---|---|---|---|---|
@@ -954,3 +978,232 @@ claimed:
   Views entries are honest disabled entries: this port has no such views.
 
 WAVE-26-G6-COMPLETE
+
+## CLOSE - the wave record
+
+The wave ran as seven groups plus this close, one fresh session each.  Every
+item in G0..G6 is DONE; nothing is deferred.  The group marker lines end each
+section above.  The CLOSE work is the fresh-tree gate run, the privacy scans,
+the independent review passes (four read-only reviewers over two scopes), the
+live same-file comparison, the START-HERE / INDEX / memory update and the
+re-scored 16 decisions.
+
+### Fresh-tree gates (final tree `3d78191`)
+
+Three trees were configured FROM SCRATCH on 2026-10-24 and built serially:
+`build/w26-fresh` (core, `-DCORE_WARNINGS_AS_ERRORS=ON`), `build/w26-fresh-app`
+(headless app tests) and `build/w26-fresh-qt` (Qt shell and its 23 tests).  The
+numbers and the engine scenario suite are both in
+**`build/w26/final-gates.log`**; the engine harness is
+`scripts/engine_diff.py --suite --expect-fail constraint-mso` (a first run on
+`ebb835d` used the wrong argv and is superseded - the old
+`final-gates-engine.log` recorded the correct invocation separately).
+
+| gate | result |
+|---|---|
+| core ctest `-E plan_recalc` | **51/51** |
+| `plan_recalc` with corpus | **512 checks**, 0 failures |
+| `plan_recalc` `MPP_NO_CORPUS=1` | **266 checks**, 0 failures |
+| engine scenario suite | 8 recorded, **7 pass / 1 fail**, 0 unrecorded; expected failing set `constraint-mso` reached; exit 0 |
+| reader with corpus | **1100 checks** |
+| reader `MPP_NO_CORPUS=1` | **420 checks** |
+| M2 `recalc --compare` | **332/332** (268/268 leaf fields, 64/64 summary fields; 16 summaries) |
+| app ctest | **17/17** |
+| app_qt ctest | **23/23** |
+| `check_fixtures.py` / oracle provenance | **OK** (25 documented hashes, 21 tracked `.mpp`); provenance OK (8) |
+| parity wave23-outline | **10 comparable, 0 failing** |
+| parity wave25-auto `--only colour.task_bar` | **1 comparable, 0 failing** |
+| client-name scan | the line-based pass reports 0 on all 42 trees but is a false negative for a wrapped name (see Privacy); the normalised pass found it on 18 trees and is 0 from `759a856` onward; 0 commit messages after the fix; positive control on the pre-scrub `wave23` tree = 14 files |
+| 8-hex `client-string-<8 hex>` grep | **0 trees** |
+| live same-file render | `build/w26/live-port.png` 1920x1032, exit 0 |
+| pixel score | not run: no PROJECT_A reference PNG locally (unchanged from wave 25) |
+
+The trees were removed and re-configured for this run; the builds are serial
+(no `--parallel`), as `docs/build.md` requires.  The gate numbers belong to
+`3d78191` (the review's code fixes); the CLOSE docs commit that follows is
+docs-only.  The review fixes themselves were falsified before the run: with the
+summary-toggle fold disabled, `qt_save_reopen` fails 11 checks; with the
+backstage guards disabled, 8 (log
+`build/w26/gates-759a856-W26-REV-2.log`).
+
+### Privacy (brief section 0)
+
+`build/w26/close-privacy.log`: 156 corpus names, one `git grep -F -f` pass per
+tree (the label-only scanner is used only where a tree hits).  The line-based
+scan reports **0 files / 0 name hits** on all 42 trees in `wave25..wave26`, and
+the positive control on the pre-scrub `wave23` tree finds **14 files**, so the
+pass can detect a name.
+
+**The independent review found that the line-based pass was a false negative
+for a wrapped name.**  A PROJECT_A task name was quoted across two lines in the
+G3 note; a whitespace-normalised scan (`build/w26/scan_wrapped_names.py`) found
+it in the record on 18 commit trees (`99304ad`..`ebb835d`); the per-revision
+check is `build/w26/close-privacy-normalised.log` (labels only).  It is removed
+in `759a856` (W26-REV-1): the row is named by ID, and the normalised scan on the
+CLOSE tree and on every commit message reports **0**.  The name remains in the
+history of those 18 wave-26 commits; removing it needs a history rewrite, which
+the publication hold leaves to Tim, as with the wave-23/24 names.  Future
+scans must run the normalised pass, not only `git grep -F`.
+
+Beyond that: **0 commit messages** on `wave25..wave26` quote a name after the
+fix, 0 trees contain a `client-string-<8 hex>` token, and the only tracked
+binary additions in the wave are the two synthetic Gantt-style blobs
+(`tests/data/synthetic-gantt-{style,fonts}.bin`).  The wave-25 residual
+(`tests/data/project_a_golden.tsv`'s unsalted 16-hex task-name hashes) and the
+wave-23/24 plaintext names in history are unchanged and remain Tim's decision
+with the hold.
+
+### Independent review of `wave25..wave26`
+
+Two independent reviewers with fresh contexts (not the authors) reviewed the
+code diff, the records and the gate logs on 2026-10-24; a third focused pass
+re-read the highest-risk files and a fourth audited the record.  They ran no
+git write and quoted no client data.  **They found no Critical in code and one
+Critical privacy breach in the record**, plus four High code findings; all are
+fixed on the branch.  The Medium/Low items are listed with dispositions; the
+record corrections are in this CLOSE commit.
+
+| # | sev | finding | disposition |
+|---|---|---|---|
+| 1 | **Critical (privacy)** | The G3 "yellow row" note quoted a PROJECT_A task name, wrapped over two lines; the line-based scanner missed it (0 hits) and the name was in 18 wave-26 commit trees. | **FIXED** in `759a856` (W26-REV-1): the row is named by ID, the normalised scan is clean, and the history residual is recorded in the Privacy section. |
+| 2 | **High** | The Project Summary Task toggle rebuilt from `base_` without folding the live `records_`, silently dropping a pending cell edit (a Start) before Save. | **FIXED** in `3d78191` (W26-REV-2): `base_ = sync_plan_from_records(base_, records_)` before the flag; `qt_save_reopen` fails 11 checks with the fold disabled. |
+| 3 | **High** | Blank Project and a Backstage Recent row replaced the document without the File > Open unsaved-edit guard. | **FIXED** in `3d78191`: both call `confirm_proceed_with_discard()` first; the test fails 8 checks with the guards disabled. |
+| 4 | **High** | the G3 palette/text evidence read model roles, not rendered pixels; a paint regression would pass. | **FIXED** in `3d78191`: `qt_stored_table_corpus` counts the decoded colours in the live canvas and the rendered sheet and still rejects the unused light red. |
+| 5 | **High/Medium** | W26-1.1's Font combos were hard-coded Calibri 11 after G3 decoded the file's default; the acceptance clause was unmet. | **FIXED** in `3d78191`: the combos take the first FONT_BASES entry on load (PROJECT_A's Arial 8), Calibri 11 for a new project; the pin marks them `file` and the corpus test asserts Arial 8. |
+| 6 | Medium | `set_stack_check()` matches `accessibleName()`, which the QCheckBox builder never sets; a load with the View/Gantt Format tab already active can leave the check boxes stale. | **LISTED**: the gate switches tabs, so it hides this; the one-line fix (set the accessible name) and a same-tab load gate are for the next wave. |
+| 7 | Medium | Task Information's General-tab edits commit before the Custom Fields tab is validated; a failed Apply keeps edits that the next Save writes. | **LISTED**: no data loss, but a failed dialog should not leave a file change; needs a validate-then-commit ordering and a gate. |
+| 8 | Medium | Options > Schedule's "New tasks created" changes the status text but `insert_task()` never consults it, so the "functional" control does not change how tasks are created. | **LISTED**: the G4 record overclaims "functional"; a later wave must apply the mode to inserted tasks or disable the control. |
+| 9 | Medium/Low | A `set_percent` edit on a pending inserted task can make step 5a throw ("no task row with UniqueID") and fail every later save. | **LISTED**: reject `set_percent` for a pending insert (the Predecessors guard's pattern) and add a delete-save-reopen-insert test. |
+| 10 | Medium | The G3 note said the Task `GanttBarStyleEdit` saves were byte-identical. | **CORRECTED** in this commit: the by-index/by-name saves changed the Task middle colour to (255,0,0); the explicit variant was the rejected no-op. |
+| 11 | Medium | G0 said "all numbers from `gates-a5dff41-W26-0.1.log`" and quoted `app_layout` 279 / `app_smoke` 121, which the log does not print. | **CORRECTED** in this commit: the log prints the ctest totals; the check counts are direct-run figures. |
+| 12 | Medium | G0 claimed a `28a9f9b` post-commit name scan the log did not contain. | **FIXED**: the scan is appended to `build/w26/gates-a5dff41-W26-0.1.log` (28a9f9b and its message, 0 hits). |
+| 13 | Medium | G4 cited `tests/data/reference/w26-options.measures.json`, which does not exist; the Options numbers are the `options` object in `w26-backstage.measures.json`. | **CORRECTED** in this commit. |
+| 14 | Medium | G6 said `qt_theme_gate` "proves the committed dark values ARE the capture's sampled fills"; the test compares two fields of the same committed JSON. | **CORRECTED** in this commit: it is a provenance cross-check; the capture sampling is local. |
+| 15 | Medium | "Each log is on that commit's parent tree" was imprecise: the logs named for the parent were run on the working tree that became the commit (they contain tests added by that commit). | **CORRECTED** in all five gate sections. |
+| 16 | Low | G3 said `app_view_style` "is the sixteenth test"; it is test #13 of 16. | **CORRECTED**. |
+| 17 | Low | G6.3 said the split gate proves duration/start follow selections and both splitter directions restore; it asserts the name only, non-empty duration/start, and a size relation. | **CORRECTED** to what the gate asserts. |
+| 18 | Low | G5's "7 rows and 29 marked days" is a direct-run note; the gate asserts rows non-empty, the first row and `marked > 0`. | **CORRECTED**. |
+| 19 | Low | `WAVE-26-G2-COMPLETE` was followed by W26-2.8 and its correction; `WAVE-26-G3-COMPLETE` by the counts correction. | **RECORDED**: both are post-marker corrections; the marker remains each group's finish line. |
+| 20 | Low | The two pre-G0 setup commits (`8ac3137` brief, `a5dff41` driver) carry no W26-x.y id. | **RECORDED**: setup commits, not items. |
+| 21 | Low | The W26-1.1 detail called `ribbon_pin_unmodelled.tsv` header-only at W26-1.1; it became so at W26-1.5. | **CORRECTED** in the G1 detail. |
+| 22 | Low | G0's "64 summaries" is the summary-field total; the file has 16 summaries. | **CORRECTED** to "268 leaf fields, 64 summary fields from 16 summaries". |
+| 23 | Low | G3.2 said "project-summary red"; the style is navy (0,0,128) and the project row paints red through summary+critical. | **CORRECTED** in the G3.2 detail. |
+| 24 | Low | A `read_style()` failure reason is discarded, so a malformed style record falls back silently. | **LISTED**: no crash; surface the reason in `PlanDocument`'s warnings. |
+| 25 | Low | The theme gate's capture-sample check is a self-consistency check, not a live capture read. | **LISTED** (the record now says so); a committed capture generator would make it stronger. |
+| 26 | Low | `qt_theme_gate_tests` and `qt_split_view_gate_tests` are missing from the Carlito bundle list. | **LISTED**: their assertions avoid most text pixels; add both targets to the list. |
+| 27 | Low | The Backstage Print preview compares against the port's own `render_print_page`, so it proves wiring, not layout correctness. | **LISTED**: needs a Project-measured page image. |
+| 28 | Low | `read_gantt_style` hard-codes the `214/` stream names; a 2010-format (`212/`) file falls back to stock. | **LISTED**: choose the prefix from the streams present. |
+| 29 | Low | `qt_ribbon_inventory` reads `argv[8]` (the order fixture) and discards it. | **LISTED**: a dead argument; open it and gate on success or remove the CTest argument. |
+| 30 | Low | `tests/data/reference/w26-backstage.measures.json` still lists Black under `theme_choices_disabled` after W26-6.2 enabled it. | **LISTED**: the gate ignores the field; correct the committed data in a later pass. |
+| 31 | Low | Two new files are wholly CRLF (`app_qt/project_dialogs_qt.cpp`, its gate test), against `docs/build.md`'s LF rule; three comments cite the nonexistent `scripts/oracle_w26.py`. | **LISTED**: both are non-behavioural; normalise the line endings and correct the pointers to `build/w26/g3/oracle_styles.py` / `oracle_probe3.py`. |
+
+The reviewers' independent positive checks (not findings): W26-0.1's
+`print_row_list()` is correct for all rows/filters/zero-match in both shells;
+the `app_layout` test on `wave24-order.mpp` is genuinely falsifying; the
+`gantt_style` decoder is bounds-checked (41,362-byte minimum, bar-array end,
+FONT_BASES count, bounded UTF-16 reads, payload length) with no OOB found; the
+percent/priority edits are validated, last-wins and re-read; most G1/G2/G4/G5/G6
+gates read live widgets/pixels; and the record's gate logs, parent shas,
+markers, fixture hashes and privacy state (apart from the wrapped-name blind
+spot) match the claims.
+
+### Live same-file comparison (PROJECT_A copy)
+
+Project 2021 opened a read-only copy of `corpus/project_a.mpp`
+(`build/w26/live-project.png`, 1920x1032 client, Gantt Chart, 83 tasks, project
+row shown, status date 2018-03-27); the port rendered the same copy through
+`--parity` (`build/w26/live-port.png`, 1920x1032).  No client string is quoted;
+rows are named by ID.
+
+| surface | Project 2021 (live copy) | the port (same copy) | verdict |
+|---|---|---|---|
+| view, row order, IDs, project row | Gantt Chart; project row 0 and IDs 1..83 in stored order | the same rows and order; project row 0 shown | **match** |
+| project row 0 | 217 d / 37 % | 217 d / 37 % | **match** |
+| sheet text | the file's Text Styles: italic milestones, red critical rows, bold blue summaries, one yellow row; the Font box shows Arial 8 | the same decoded styles: milestone Calibri 8 italic red, summary Calibri 9 bold blue, noncritical Calibri 8; no yellow row; the Font box now shows Arial 8 | **match on style, format and colour**; the yellow per-row fill is the G3 residual |
+| bar palette | navy summaries, red critical/summary bars, dark-blue noncritical, green progress/finished, red milestone diamonds | the same roles from the file's 10-style palette: (0,0,128), (255,0,0), (0,32,96), (0,176,80) | **match** |
+| bar labels | a label on most bars | labels on a few bars | **differs** (label coverage; not a G3 acceptance item) |
+| timescale | year 2026 / "Qtr n, 2026" / month names, three tiers | the same three tiers and formats; "2025 / Qtr 4, 2025 / Dec" at the port's scroll origin | **match in tiers and formats**; the visible range/origin differs |
+| sheet columns | Task Name, Dur, Start, Finish, % Com, Pre, Suc, SUMMARY (8); Dur wide enough for "3.3 mons" | Task Name, Dur, Start, Finish, % Com (5); Dur clips to "3..." | **differs** - the stored column widths/table (wave-25 carry) |
+| Font group combo | Arial 8 (the selection's cell font) | Arial 8 (the file's default FONT_BASES entry, W26-REV-2) | **match** |
+| Timeline strip | hidden | hidden | **match** |
+| status mode | New Tasks: Auto Scheduled | New Tasks: Auto Scheduled | **match** |
+| title | `<file> [Read-Only] - Project Professional` | no title bar in the offscreen render; the shell's title is `<file> - MS Project Shell` | **differs by ruling** (decision 5 identity) |
+| split view | off | off | **match** |
+
+The port's bars, text styles and timescale now come from the FILE's own
+`0x22400008` record, not the stock palette; the remaining differences are the
+stored column widths, the per-row yellow fill, the bar-label coverage, the
+timescale origin and the Font combo's default value.
+
+### The 16 decisions re-scored (wave-25 close as the starting point)
+
+| # | decision | wave 25 | after wave 26 | why |
+|---|---|---|---|---|
+| 1 | all seven tabs | PARTIAL | **DONE** | every tab's groups are pinned and the live-kind gate reads the real widget classes: Task 8/8, Resource 5/5, Report 3/3, Project 6/6, View 7/7, Help 1/1, Gantt Chart Format 6/6 at 1920; the 1920 group rectangles and the 5/27/49 stack baselines are measured; every command has a glyph |
+| 2 | full backstage | PARTIAL | **DONE** | the Project rail (Home..Close, Account, Options pinned) and all eleven pages exist; New/Open/Save As/Print/Account/Info are real local pages, Share/Export are honest local pages, and the online entries are laid out and disabled with no Microsoft identity |
+| 3 | original icon set | NOT DONE | **DONE** | 114 command controls on seven tabs carry our own one-ink glyph at 32/16 px, none is the placeholder, and the uniqueness/monochrome gate passes; the five status-bar view buttons keep the shell's older two-shade drawings (ours, not Microsoft) and menu/QAT artwork is still the older set (listed) |
+| 4 | measured chrome metrics | DONE (stronger) | **DONE (stronger)** | the G1 measured rectangles/rows/gallery colours are committed numbers, and parity is still 10/10 plus the colour-only reference 1/0 |
+| 5 | timeline strip | PARTIAL | **DONE** | the strip has the vertical label, Start/Finish blocks, prompt and canvas; the View tab's Timeline check box now toggles the live strip, starting from the file's stored setting (the View menu carries the two view drop-downs, not a timeline item) |
+| 6 | real Entry table | DONE | **DONE** | unchanged |
+| 7 | render what the file says | PARTIAL | **PARTIAL (stronger)** | the FILE's text styles, bar styles and timescale tiers now decode and render (PROJECT_A's italic/red milestones, navy/red/green bars, year/quarter/month tiers); still open: the stored sheet column widths at 1920 (5 vs 8 columns), PROJECT_A's yellow per-row highlight, the bar-label coverage and the port's timescale scroll origin |
+| 8 | status bar | PARTIAL | **PARTIAL** | the measured contents are unchanged from wave 25; G6 now paints its chrome with the dark palettes |
+| 9 | disabled commands + backlog | DONE | **DONE** | the backlog is regenerated (49 menu rows, 7 disabled; 95 ribbon rows, 83 disabled) and `ribbon_pin_unmodelled.tsv` is empty |
+| 10 | light and dark themes | PARTIAL | **PARTIAL (stronger)** | Dark Gray and Black darken the chrome live and the gate matches the measured fills exactly while sheet/chart are byte-identical (tolerance 0); the sheet/chart header bands stay light and the ribbon ink stays the light-theme ink, both recorded |
+| 11 | new-project defaults | DONE | **DONE** | unchanged; Options > Schedule's new-task mode updates the shell state and the new-project callout (it does not yet change `insert_task()` — listed as a Medium; the decision's default itself is unchanged) |
+| 12 | structural measurement | PARTIAL (stronger) | **PARTIAL (stronger)** | new live gates and committed measure JSONs for the ribbon, icons, backstage, project dialogs, theme and split view; still not every screen, and the pixel score is not re-run (no reference PNG locally) |
+| 13 | Carlito bundled | DONE | **DONE** | unchanged |
+| 14 | every dialog on every tab | PARTIAL | **PARTIAL (stronger)** | Custom Fields is now the field-definition dialog and per-task values moved to Task Information (the wave-25 named gap); Text Styles, Gridlines, Bar Styles, Page Setup, Visual Reports and Compare Projects are still disabled backlog entries, not dialogs |
+| 15 | dialog semantics | PARTIAL | **PARTIAL** | the new dialogs follow the rule (engine-backed action functional, otherwise laid out and disabled with the exact tooltip, no fake success); the older dialog set is unchanged |
+| 16 | split view | NOT DONE | **DONE** | View > Details docks the Task Form below the Gantt, follows the selection and has a resizable 6-px splitter; the live gate drives the check box, two real mouse selections and both splitter directions; the form is display-only (listed) |
+
+## Found, not fixed
+
+The review's Medium/Low items are the not-fixed defect list: items 6, 7, 8, 9
+and 24-31 in the table above, each with its reason and smallest fix.  The
+wave's deliberate limits, none Critical or High (severity in brackets where it
+is a defect rather than a stated limit):
+
+* **Stored sheet columns** (decision 7): at 1920 the port shows the five columns
+  that fit its splitter; Project shows eight (Pre, Suc, SUMMARY lie beyond it).
+  The stored column widths are a wave-25 carry.  [Medium - decision 7]
+* **PROJECT_A's yellow row** (G3): the file's per-row cell fill is not decoded;
+  the row's text style is.  The decoder supports a stored highlight fill
+  (synthetic-base's is asserted) but the renderer never selects the Highlighted
+  item, so PROJECT_A's yellow row is not reproduced.  [Low]
+* **Bar-label coverage** (live comparison): the port labels fewer bars than
+  Project draws; not a G3 acceptance item.  [Low]
+* **Dark themes** (G6): the sheet/chart header bands and the ribbon ink stay
+  light (the G6 record's deliberate scope); Black's icons therefore have less
+  contrast than Project's.  [Low]
+* **Menu-bar / QAT / status-bar artwork**: the menu and quick-access icons keep
+  the older `shell_action_icon` drawings and the five status-bar view buttons
+  keep their two-shade drawings; the ribbon's 114 commands are the new one-ink
+  set.  [Low - decision 3's named surfaces are the ribbon and status bar]
+* **Task Form is display-only** (G6-6.3); editing from it needs its own save
+  path.  [Low]
+* **The stored combination view** (`0x2240000a/0x2240000b`) is not decoded;
+  Details starts off (Project's measured default), not from the file.  [Low]
+* **White remains an unimplemented Office Theme name** (laid out, disabled).
+  [Low]
+* **Six dialogs are still disabled backlog entries** (decision 14): Text Styles,
+  Gridlines, Bar Styles, Page Setup, Visual Reports, Compare Projects.  [Medium
+  - decision 14 remains PARTIAL]
+* **No-writer engines**: actuals/Update Project, Move Project, baselines, WBS
+  codes and calendars are laid out and honestly inert.  [Low]
+* **Custom Fields** covers the six measured families; Start/Finish custom fields
+  and the Resource/Project scopes are not in the port's field table.  [Low]
+* **Timescale origin/zoom** still differs from Project's scroll position.
+  [Low]
+* **The pixel score is not re-run**: no PROJECT_A reference PNG is local
+  (unchanged from wave 25).  [Low]
+* **Two new files are wholly CRLF** (`app_qt/project_dialogs_qt.cpp`,
+  `app_qt/tests/project_dialog_gate_test.cpp`), against `docs/build.md`'s LF
+  rule; `app/edit_model.cpp` was already CRLF at wave 25.  They compile and pass
+  every gate; a normalisation pass should follow.  [Low]
+* **A stale provenance pointer**: three committed comments cite
+  `scripts/oracle_w26.py`, which does not exist; the controlled-save scripts are
+  local at `build/w26/g3/oracle_styles.py` and `build/w26/g3/oracle_probe3.py`
+  (the G3 record cites those).  The fixture hashes and the decode are unaffected.
+  [Low - correct the comments in a later docs pass]
+
+WAVE-26-COMPLETE
