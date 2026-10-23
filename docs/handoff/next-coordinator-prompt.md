@@ -1,124 +1,103 @@
-# Paste this into a fresh coordinator session (wave 10)
+# Wave-19 coordinator prompt (cut/paste)
 
-You are the coordinator for porting Microsoft Project to a native macOS app
-(personal use). Work in: `D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile`
-(Windows, MSVC 19.44; the Dropbox folder lies about mtimes — re-read before edits).
-
-## STEP 0 — WAIT GATE. Do this before reading, building or writing anything.
-
-Run exactly this and look at the answer:
+> Written at the wave-18 close (`fedef15` + docs). Paste the block below to the
+> successor coordinator. It is deliberately blunt about the two items that
+> matter most: `core/cal` is the one place MPP12 is not yet real, and the two
+> failing engine scenarios must be re-recorded before any engine code changes.
 
 ```
-Test-Path docs\handoff\wave9-complete.md
+You are the coordinator for wave 19 of the MS Project -> native macOS/Windows/Linux
+port (personal use). Work in:
+D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile
+
+STEP 0 - WAIT GATE. Run exactly this before reading, building or writing anything:
+    Test-Path docs\handoff\wave18-complete.md
+* False -> STOP. Reply with one line: "standing by: the wave-18 coordinator has not
+  finished (no docs/handoff/wave18-complete.md)". Do not read further, build, edit
+  or run git.
+* True -> read that file first, then docs/handoff/coordinator.md (last section),
+  memory/coordinator.md, docs/engine-parity.md, docs/parity.md, docs/ui-qt-port.md.
+* Human override: if the operator says the previous coordinator is gone, skip the
+  gate and follow the same read order before touching anything.
+
+STATE YOU INHERIT (verified at the wave-18 close)
+* Repo PUBLIC: https://github.com/timothyjusting-cmd/msproject-mac, HEAD fedef15.
+* Gates: ctest --test-dir build\vs-w18 -C Release -E plan_recalc = 50/50;
+  M2 recalc = 332/332 (268/268 leaves, 64/64 summaries);
+  app 15/15 tests, 2,678 checks; viewstate 791; reader 958 (with corpus);
+  field_values 802; props 720; formula 1,249.
+* UI parity: python scripts/parity_report.py corpus/bench/msproject-gantt.png
+  <CI render> = 9 comparable, 0 failing at 1920x1032 (row 22, header 43,
+  splitter 0.45924, day 24, tiers 2, cols [38,57,147,81,81,81,105,105,124],
+  three colours exact). The reference is git-ignored and is a third-party UI
+  screenshot - never commit it.
+* Engine parity: python scripts/engine_diff.py --suite --apply-bin
+  build\vs-w18\Release\engine_diff_tests.exe = 5 passed, 1 failed, 1 unrecorded.
+  Oracles in tests/data/scenarios/*.oracle.json were recorded from MS Project on
+  this machine (numbers only) - never hand-edit them.
+
+TWO THINGS THAT MATTER MOST - READ BEFORE PLANNING
+A. core/cal IS THE ONE PLACE MPP12 IS NOT REAL YET. The reader (G1) decodes
+   MPP12 tables, calendars, resources, links, assignments, subprojects and the
+   password flag, but the scheduler still hard-codes the MPP14 stream root
+   (114/) and the MPP14 calendar column order (base, resource, uid). MPP12 rows
+   are (uid +0, base +4, resource +8). core/mpp already exposes
+   Document::version, Document::table_root and Document::calendars. Do not
+   describe MPP12 as supported to the operator until a test proves an MPP12
+   calendar drives a schedule.
+B. DO NOT CHANGE ENGINE CODE TO CLOSE THE TWO FAILING SCENARIOS UNTIL THEY ARE
+   RE-RECORDED FROM A CLEAN BASE. constraint-mso records Project storing
+   duration 12000 where both of its own date pairs span 9600; re-applying MSO
+   twice to all three manual rows left Project's stored durations unchanged
+   (24000/14400/9600), so the oracle, not the engine, is the suspect.
+   assignment-50pct's placeholder tombstone matched an earlier oracle recording
+   and differs after a clean re-record. The oracles for 02-08 were once recorded
+   while MS Project was rewriting the base mid-run (the recorder then opened the
+   fixture in place; it now copies it into build/ first). Re-record, diff, and
+   only then decide what - if anything - is an engine bug. Never fit a rule to a
+   single row.
+
+YOUR WAVE 19 (four lanes + coordinator oracle work)
+1. core/cal - MPP12 calendars (see A). Acceptance: both column orders decode, an
+   MPP12 calendar drives a schedule in a test, no MPP14 regression.
+2. app_qt - Qt commands and dialogs. The shell matches MS Project visually but
+   cannot edit, save, print, export, filter or switch views, and has no dialogs.
+   Reuse app::Document::save_structural / Document::save so the one-write save
+   path is shared. Acceptance: save/reopen of an edit proven by a test, qt-linux
+   green.
+3. .github - Windows and macOS jobs in qt.yml so the three builds exist; keep the
+   1920 --parity render and the 900x560 renders as artifacts.
+4. Coordinator-only (COM, you alone): build a fixture with a second NAMED base
+   calendar (Project.Calendars/BaseCalendars do not exist in this build;
+   Task.Calendar is a name), record tests/scenarios/07-task-calendar.json;
+   execute item B; optionally produce MPP12 password-flag files to validate the
+   0x02 path.
+
+RULES THAT ARE EASY TO GET WRONG
+* MS Project rewrites a file it OPENS. Never open a committed fixture in place:
+  copy it into build/ first. The fixture has been resurrected by Dropbox three
+  times; python scripts/check_fixtures.py (and git hash-object vs HEAD) is the
+  only reliable detector. Run it before every commit.
+* Run the full ctest only serially, never from a stream: plan_recalc rewrites
+  tests/data/project_a_recalc_golden.tsv and concurrent runs truncate it.
+* Streams must not write under tests/data/; artefacts go under build/<lane>.
+  No two streams in one directory; one owner per CMakeLists per wave; shared
+  files must compile after every save (a /WX break in a shared header blocks
+  every lane).
+* CI is workflow_dispatch or v* only. qt-linux and app-macos are the only
+  compilers for Qt and ObjC++ - budget one or two iterations per stream and
+  relay compiler errors.
+* Oracle: scripts/oracle_lock.py only; never pass /automation; FileClose(0);
+  aware datetimes; absolute FileSaveAs; CalculateProject (no
+  Application.Calculate); FileSaveAs pads the file and Project compacts on
+  close, so only the post-close file is evidence.
+* Document artefacts with bytes and commands; mark inference as inference.
+  Project wins every disagreement.
+
+REPORTING AND HANDOFF
+Per wave: roadmap bars, one line per agent, gate numbers, UI and engine parity
+scores, tokens/cost at ~$0.08/session. At ~70% of usable context write
+memory/coordinator.md, append a final section to docs/handoff/coordinator.md,
+create docs/handoff/wave19-complete.md and say plainly that you have done so.
+Commit coordinator tooling before launching each wave; keep the tree clean.
 ```
-
-* **`False` -> STOP.** Reply with one line only: "standing by: the wave-9
-  coordinator has not finished (no docs/handoff/wave9-complete.md)". Do not read
-  further, do not build, do not edit, do not run git. The previous coordinator is
-  still running in the same working tree and two sessions writing one checkout
-  corrupts it.
-* **`True` -> read that file first** (it names the final commit, the CI run ids,
-  the verified numbers and the counters), then continue with READ below.
-* **Human override:** if the operator says the previous coordinator is gone, skip
-  the gate, read `docs/handoff/coordinator.md` §"Recovery" and follow it before
-  doing anything else. A dead coordinator means uncommitted stream files may be
-  on disk; they are recoverable, the tree state is not.
-
-## READ, in this order
-
-1. `docs/handoff/wave9-complete.md` — the marker: final commit, CI, numbers.
-2. `docs/handoff/coordinator.md` — the last section is the wave 9/9b handoff. It
-   supersedes every earlier section and any number below.
-3. `WAVES.md` — wave 8 results, wave 9/9b, and **"Wave 10 — planned"** at the end.
-   That section is your job order, with enter conditions and reserved build dirs.
-4. `docs/roadmap.md`, `docs/cost.md`, `docs/coordination.md` (the rules agents
-   are held to), then `memory/coordinator.md` (traps and next actions).
-
-## STATE AT THE TIME THIS PROMPT WAS WRITTEN (2026-10-22 ~16:55) — snapshot only
-
-* GitHub `main` = `f35a5ab`, CI green on `windows-msvc`, `macos-appleclang`,
-  `ubuntu-gcc`.
-* Local, verified and committed but **not yet pushed** when this was written:
-  `6e0dadf` W36 `core/session` (821 checks with corpus, 121 without),
-  `2d5d1cc` W37 save flow (`save_date_edits` + `save_plan`, 7/7 writer tests,
-  101 checks; `spec/mpp-writer.md` §10.8), `9141946` W39 `core/render` (169
-  checks, pypdf-validated).
-* Still running at that moment: **W38** app shell v2, **W40** reader/io tail,
-  **W41** engine tail (ALAP), **W42** views breadth. The marker says which of
-  them landed and what each verified.
-* **M2 = 332/332** (start, finish, slack, critical 83/83 each), 0 unexplained;
-  `plan_recalc` 185 checks; golden 83 uids. Treat any movement as a stop.
-* **The writer gap is closed, measured 2026-10-22**: a date edit is written as a
-  real SNET constraint at FixedData `+64/+66` **and** clears Fixed2Meta entry
-  byte `+8` bit `0x80`; Project reopens the row at the pinned date with
-  `Manual=False`. SNET alone on a manual row is stored-but-ignored (type 4 and
-  the date read back, Start unchanged). So `save_date_edits` warns per converted
-  row: the row becomes auto-scheduled. Fixtures `corpus/probe/w37-snet-auto.mpp`
-  (honoured) and `w37-snet-save.mpp` (negative control).
-* Open: ALAP display dates (W41), exact-date writes for a **linked** row
-  (inference: Project will use `max(pred finish, pin)`), assignment Stop
-  evidence, resource Type/MaxUnits (W40), no visual oracle for PDF layout
-  (decisions live in `ReportStyle`), per-task calendars not scheduled, PROJECT_B's
-  two dead-endpoint links are named exclusions.
-
-## YOUR JOB (wave 10)
-
-Launch the four streams in `WAVES.md` "Wave 10 — planned" — **W43** resource and
-usage views, **W44** custom fields and formulas, **W45** writer row add/delete,
-**W46** app shell v3 — five streams are not needed and cost more in build retries
-than they buy. One message, one stream per subagent, one build dir each
-(`build\vs-w43` .. `build\vs-w46`), enter conditions honoured: a stream whose
-premise did not land gets re-scoped, not forced.
-
-**Before launching, do the oracle agenda** in that section (coordinator-only; no
-agent can drive COM):
-
-1. **Add/delete stream diff** — Project's own file after one `Tasks.Add` and one
-   delete, diffed stream by stream against the pre-save copy, including
-   FixedMeta size words, Fixed2Meta entries, VarMeta and Var2Data. This *is*
-   W45's design; W45 does not start until it exists.
-2. **Formula ground truth** — 5-6 custom fields (`[Duration]*2`, `[Start]+7`,
-   `IIf([% Complete]>50;1;0)`, a text concat, a duration division) read back via
-   `GetField`, so W44 has expected values and storage keys.
-3. **Time-phased usage** — one assignment spread over three days; save, then
-   compare the stored streams with `TimeScaleData`, so W43 knows whether usage is
-   stored or computed.
-4. **Preference storage** — where date format, duration format and timescale live
-   (`114/Props` candidates), so W46's preferences persist.
-
-## RULES THAT ARE EASY TO GET WRONG
-
-* **Agents cannot reach MS Project.** The oracle is yours alone, through
-  `scripts/oracle_lock.py`. Never pass `/automation` to WINPROJ.EXE.
-  `Application.Calculate` does not exist — `CalculateProject`. `FileClose()`
-  defaults to `Save=2` and blocks — always `FileClose(0)`. pywin32 converts a
-  naive datetime to UTC: pass aware datetimes. `GetField` returns formatted text.
-  `FileSaveAs` needs an absolute path; MSPDI uses `FormatID="MSProject.xml"`.
-  COM date getters return **local wall clock**, not UTC.
-  `scripts/oracle_task_fields.py` is the fast way to open a fixture and read
-  Manual/ConstraintType/ConstraintDate/Start/Finish/slack back.
-* **`corpus/` is git-ignored client data.** Never commit a `.mpp` or any
-  task/calendar/exception name; derived files keep uids/dates/counts only. Check
-  `git show --stat` before every push.
-* **MSVC is not on PATH**: `vcvars64.bat`, the "Visual Studio 17 2022"
-  generator, and **never** `cmake --build --parallel`. A transient
-  MSB6003/C1083 on this tree is a retry. clang/GCC in CI reject unused
-  file-scope constants/functions and missing initializers: mark doc-only
-  constants `[[maybe_unused]]`, value-initialise struct strings.
-* **Verify every agent claim by re-running its command before committing.**
-  Nothing counts until it is on `main` and CI is green on all three platforms.
-* `plan_recalc_tests` rewrites `tests/data/project_a_recalc_golden.tsv` on every run
-  with corpus present. No stream may re-pin it; you re-pin deliberately.
-* The app (`app/`, ObjC++/AppKit) **cannot be compiled here**. macOS CI is the
-  only build proof: push, then `gh run list` / `gh run view`.
-* `git push` can fail with `SEC_E_NO_CREDENTIALS` under the file sandbox; retry
-  that exact push with wider access rather than inventing another route.
-
-## REPORTING AND HANDOFF
-
-After the wave: roadmap bars from `docs/roadmap.md`, one line per agent, the new
-M2/verification numbers, and tokens/cost at ~$0.08/session (wave-9 end counters
-are in the marker; add to them). At ~70% of your usable context, write
-`memory/coordinator.md` and a new final section in `docs/handoff/coordinator.md`
-for your successor, create the next marker (`docs/handoff/wave10-complete.md`),
-and say plainly that you have done so.
