@@ -126,8 +126,10 @@ class MainWindow final : public QMainWindow {
     // Wave 24 (W24-1 review): the PrintJob File > Print would hand to the
     // printer, built by the SAME production code path.  Public so the gate can
     // assert the subtitle counts tasks (not the project row) without opening a
-    // printer dialog.
+    // printer dialog.  W26-4.5 adds the spec overload the backstage Print page
+    // uses for its preview and its print.
     app::PrintJob current_print_job() const;
+    app::PrintJob current_print_job(const app::PageSpec& spec) const;
 
     // Wave 19: the active filter/view, for the offscreen tests.
     bool filter_active() const noexcept { return doc_.filter_active(); }

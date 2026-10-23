@@ -351,7 +351,14 @@ void draw_page(QPainter& painter, const app::PrintJob& job, std::size_t page_ind
 // The QPrinter a print request uses: the job's own PageSpec, so the printed page
 // and core/render's PDF agree on the paper, orientation and margins.
 void configure_printer(QPrinter& printer, const app::PageSpec& spec) {
-    printer.setPageSize(QPageSize(QPageSize::A4));
+    // W26-4.5: the backstage's paper combo chooses A4 or Letter; the shared
+    // PageSpec's two presets and their swapped (portrait) forms are recognised
+    // by their measured point sizes.
+    const double long_side = std::max(spec.width, spec.height);
+    const double short_side = std::min(spec.width, spec.height);
+    const bool letter = std::fabs(long_side - 792.0) < 1.0 &&
+                        std::fabs(short_side - 612.0) < 1.0;
+    printer.setPageSize(QPageSize(letter ? QPageSize::Letter : QPageSize::A4));
     printer.setPageOrientation(spec.width > spec.height ? QPageLayout::Landscape
                                                         : QPageLayout::Portrait);
     printer.setPageMargins(QMarginsF(0.0, 0.0, 0.0, 0.0), QPageLayout::Point);
@@ -364,7 +371,8 @@ app::PrintJob make_print_job(const app::PlanInput& plan,
                              const std::vector<std::size_t>& rows,
                              std::size_t printed_task_count,
                              const std::string& filter_description,
-                             const std::string& date_text, app::ZoomLevel zoom) {
+                             const std::string& date_text, app::ZoomLevel zoom,
+                             const app::PageSpec& spec) {
     app::PrintRequest request;
     request.kind = app::PrintKind::gantt;
     request.project_name = plan.title.empty() ? plan.source_name : plan.title;
@@ -372,7 +380,7 @@ app::PrintJob make_print_job(const app::PlanInput& plan,
     request.subtitle = app::export_subtitle(app::ReportKind::gantt, filter_description,
                                             printed_task_count, plan.tasks.size());
     request.date_text = date_text;
-    request.spec = app::PageSpec::a4_landscape();
+    request.spec = spec;
     request.rows = rows;
     (void)zoom;  // the zoom is a paint-time property, not a pagination one
     return app::build_print_job(request, app::PrintRoute::printer);
@@ -400,7 +408,8 @@ core::gantt::GanttLayout print_gantt(const app::PlanInput& plan,
 
 bool print_job(QWidget* parent, const app::PrintJob& job,
                const core::sheet::SheetModel& sheet, const app::PlanInput& plan,
-               const app::Preferences& preferences, QString* error) {
+               const app::Preferences& preferences, QString* error, int copies,
+               const QString& printer_name) {
     if (job.pages.empty()) {
         if (error != nullptr) {
             *error = QStringLiteral("the print job has no page");
@@ -409,6 +418,12 @@ bool print_job(QWidget* parent, const app::PrintJob& job,
     }
     QPrinter printer(QPrinter::HighResolution);
     configure_printer(printer, job.spec);
+    if (!printer_name.isEmpty()) {
+        printer.setPrinterName(printer_name);
+    }
+    if (copies > 0) {
+        printer.setCopyCount(copies);
+    }
     QPrintDialog dialog(&printer, parent);
     if (dialog.exec() != QDialog::Accepted) {
         if (error != nullptr) {
@@ -447,6 +462,57 @@ bool print_job(QWidget* parent, const app::PrintJob& job,
         error->clear();
     }
     return true;
+}
+
+QImage render_print_page(const app::PrintJob& job, std::size_t page_index,
+                         const core::sheet::SheetModel& sheet,
+                         const app::PlanInput& plan,
+                         const app::Preferences& preferences,
+                         const QSize& target_size) {
+    const int width = std::max(1, target_size.width());
+    const int height = std::max(1, target_size.height());
+    QImage image(width, height, QImage::Format_ARGB32_Premultiplied);
+    image.fill(QColor(0xd9, 0xd9, 0xd9));
+    if (job.pages.empty() || page_index >= job.pages.size()) {
+        return image;
+    }
+    const app::PageSpec& spec = job.spec;
+    if (spec.width <= 0.0 || spec.height <= 0.0) {
+        return image;
+    }
+
+    // The white page rectangle, fitted inside the preview with an 8-px margin
+    // and centred.  Its aspect is the shared PageSpec's -- the gate measures it.
+    const double margin = 8.0;
+    const double available_width = std::max(1.0, static_cast<double>(width) - 2.0 * margin);
+    const double available_height = std::max(1.0, static_cast<double>(height) - 2.0 * margin);
+    const double scale = std::min(available_width / spec.width,
+                                  available_height / spec.height);
+    QRectF page_rect(0.0, 0.0, spec.width * scale, spec.height * scale);
+    page_rect.moveCenter(QRectF(0.0, 0.0, static_cast<double>(width),
+                                static_cast<double>(height))
+                             .center());
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.fillRect(page_rect, QColor(0xff, 0xff, 0xff));
+    painter.setPen(QPen(QColor(0x8a, 0x8a, 0x8a), 1.0));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(page_rect.adjusted(-0.5, -0.5, 0.5, 0.5));
+
+    core::gantt::GanttLayout gantt;
+    if (job.kind == app::PrintKind::gantt) {
+        gantt = print_gantt(plan, sheet, job.rows, spec, preferences.zoom);
+    }
+    painter.save();
+    painter.translate(page_rect.topLeft());
+    painter.scale(scale, scale);
+    painter.setClipRect(QRectF(0.0, 0.0, spec.width, spec.height),
+                        Qt::IntersectClip);
+    draw_page(painter, job, page_index, sheet, gantt, preferences);
+    painter.restore();
+    painter.end();
+    return image;
 }
 
 }  // namespace msqt

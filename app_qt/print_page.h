@@ -22,6 +22,8 @@
 // identically.
 #pragma once
 
+#include <QImage>
+#include <QSize>
 #include <QString>
 
 #include <cstddef>
@@ -43,11 +45,14 @@ namespace msqt {
 // `printed_task_count` is how many of `rows` are real tasks (the synthetic
 // project row, uid 0, is a row but not a task), so the subtitle never reads
 // "N+1 of N" when the file shows the project row (wave 24, W24-1).
+// W26-4.5: `spec` is the paper/orientation the Print page's controls chose; the
+// default is the shared A4 landscape page.
 app::PrintJob make_print_job(const app::PlanInput& plan,
                              const std::vector<std::size_t>& rows,
                              std::size_t printed_task_count,
                              const std::string& filter_description,
-                             const std::string& date_text, app::ZoomLevel zoom);
+                             const std::string& date_text, app::ZoomLevel zoom,
+                             const app::PageSpec& spec = app::PageSpec::a4_landscape());
 
 // The rows a print/export request covers: the filtered display list when a
 // filter is active (an empty active list is a legitimate "nothing matches"),
@@ -69,8 +74,23 @@ core::gantt::GanttLayout print_gantt(const app::PlanInput& plan,
 
 // Opens the print dialog for a QPrinter configured from `job.spec` and paints
 // every page.  False when the user cancels or the device cannot be painted.
+// W26-4.5: `copies` and `printer_name` come from the backstage Print page's
+// controls; the page geometry is always job.spec's.
 bool print_job(QWidget* parent, const app::PrintJob& job,
                const core::sheet::SheetModel& sheet, const app::PlanInput& plan,
-               const app::Preferences& preferences, QString* error);
+               const app::Preferences& preferences, QString* error,
+               int copies = 1, const QString& printer_name = QString());
+
+// W26-4.5: one page of `job` rendered into an image of `target_size` -- the
+// SHARED painter the printer path uses, so the backstage preview cannot drift
+// from what is printed.  The image is the measured preview surface (a neutral
+// #d9d9d9 backdrop with the white page rectangle fitted and centred); the gate
+// compares the live preview pane with this function's output and the page
+// rectangle's aspect with job.spec.
+QImage render_print_page(const app::PrintJob& job, std::size_t page_index,
+                         const core::sheet::SheetModel& sheet,
+                         const app::PlanInput& plan,
+                         const app::Preferences& preferences,
+                         const QSize& target_size);
 
 }  // namespace msqt

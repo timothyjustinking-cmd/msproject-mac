@@ -3,8 +3,11 @@
 #include "backstage.h"
 
 #include <QAbstractButton>
+#include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
+#include <QDate>
+#include <QDateEdit>
 #include <QEnterEvent>
 #include <QEvent>
 #include <QFileInfo>
@@ -13,6 +16,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
@@ -21,9 +25,12 @@
 #include <QPainterPath>
 #include <QPalette>
 #include <QPixmap>
+#include <QPrinterInfo>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QStandardItem>
 #include <QStandardItemModel>
@@ -392,9 +399,8 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
          "Save the pending edits through the shared writer. A new target path is "
          "asked for when the file is not one this app wrote.",
          "Save the pending edits", "save"},
-        {Page::print, "Print",
-         "Print the task sheet and Gantt through the shared page layout.",
-         "Print the project", "print"},
+        // W26-4.5: Print is built by build_print_page() (copies, printer,
+        // settings and the live shared-layout preview).
         {Page::share, "Share",
          "This port has no cloud sharing, OneDrive or Microsoft account integration. "
          "Use Export to write a local PDF copy and share that file yourself.",
@@ -433,6 +439,14 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
         QWidget* save_as_page = build_location_page(Page::save_as);
         ordered[static_cast<std::size_t>(Page::save_as)] = save_as_page;
         page_widgets_.push_back(save_as_page);
+    }
+
+    // W26-4.5: Print -- copies, the printer list, the local settings and the
+    // live preview rendered through the shared print layout.
+    {
+        QWidget* page = build_print_page();
+        ordered[static_cast<std::size_t>(Page::print)] = page;
+        page_widgets_.push_back(page);
     }
 
     // Info: honest local project facts, refreshed by set_info_text().
@@ -505,6 +519,62 @@ void Backstage::set_recent_files(const QStringList& files) {
 
 void Backstage::set_recent_open_handler(std::function<void(const QString&)> handler) {
     recent_open_handler_ = std::move(handler);
+}
+
+void Backstage::set_print_preview_provider(PrintPreviewProvider provider) {
+    print_provider_ = std::move(provider);
+    refresh_print_preview();
+}
+
+void Backstage::refresh_print_preview() {
+    if (print_preview_ == nullptr || !print_provider_) {
+        return;
+    }
+    // Only the visible Print page has a meaningful label size; a hidden page's
+    // stale geometry would cache a wrong-sized preview.
+    if (pages_ == nullptr ||
+        pages_->currentIndex() != static_cast<int>(Page::print) ||
+        print_preview_->width() < 40 || print_preview_->height() < 40) {
+        return;
+    }
+    const QImage image =
+        print_provider_(print_preview_->size(), print_landscape(), print_paper_letter());
+    if (image.isNull()) {
+        print_preview_->clear();
+        return;
+    }
+    print_preview_->setPixmap(QPixmap::fromImage(image));
+}
+
+bool Backstage::print_landscape() const {
+    return print_landscape_ == nullptr || print_landscape_->isChecked();
+}
+
+bool Backstage::print_paper_letter() const {
+    return print_paper_ != nullptr && print_paper_->currentIndex() == 1;
+}
+
+int Backstage::print_copies() const {
+    return print_copies_ != nullptr ? print_copies_->value() : 1;
+}
+
+QString Backstage::print_printer_name() const {
+    if (print_printer_ == nullptr) {
+        return QString();
+    }
+    const QString name = print_printer_->currentText();
+    // "Print to PDF" is the empty-list placeholder, not a device.
+    for (const QPrinterInfo& info : QPrinterInfo::availablePrinters()) {
+        if (info.printerName() == name) {
+            return name;
+        }
+    }
+    return QString();
+}
+
+void Backstage::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    refresh_print_preview();
 }
 
 void Backstage::rebuild_recent_lists() {
@@ -591,6 +661,16 @@ void Backstage::show_page(int index) {
     }
     pages_->setCurrentIndex(index);
     set_nav_checked(index);
+    // W26-4.5: a freshly shown Print page lays out its preview label first,
+    // then paints the shared layout into it.
+    if (index == static_cast<int>(Page::print)) {
+        if (QWidget* current = pages_->currentWidget()) {
+            if (QLayout* current_layout = current->layout()) {
+                current_layout->activate();
+            }
+        }
+        refresh_print_preview();
+    }
 }
 
 void Backstage::set_nav_checked(int page_index) {
@@ -875,6 +955,199 @@ QWidget* Backstage::build_location_page(Page page) {
     right_layout->addStretch(1);
     columns->addWidget(right, 1);
     layout->addStretch(0);
+    return widget;
+}
+
+QWidget* Backstage::build_print_page() {
+    auto* widget = new QWidget(this);
+    auto* layout = new QVBoxLayout(widget);
+    layout->setContentsMargins(41, 27, 41, 27);
+    layout->setSpacing(10);
+    auto* heading = new QLabel(QStringLiteral("Print"), widget);
+    heading->setFont(backstage_font(15, true));
+    heading->setStyleSheet(QStringLiteral("color: #202020;"));
+    layout->addWidget(heading);
+
+    auto* columns = new QHBoxLayout();
+    columns->setContentsMargins(0, 0, 0, 0);
+    columns->setSpacing(24);
+    layout->addLayout(columns, 1);
+
+    auto* left = new QWidget(widget);
+    left->setObjectName(QStringLiteral("printSettings"));
+    left->setFixedWidth(300);
+    auto* left_layout = new QVBoxLayout(left);
+    left_layout->setContentsMargins(0, 0, 0, 0);
+    left_layout->setSpacing(8);
+    auto section = [left](const QString& text) {
+        auto* label = new QLabel(text, left);
+        label->setFont(backstage_font(kBodyPointSize, true));
+        label->setStyleSheet(QStringLiteral("color: #202020;"));
+        return label;
+    };
+
+    {
+        auto* copies_row = new QHBoxLayout();
+        copies_row->setContentsMargins(0, 0, 0, 0);
+        copies_row->setSpacing(8);
+        auto* copies_label = new QLabel(QStringLiteral("Copies"), left);
+        copies_label->setFont(backstage_font(kBodyPointSize));
+        copies_row->addWidget(copies_label);
+        print_copies_ = new QSpinBox(left);
+        print_copies_->setObjectName(QStringLiteral("printCopies"));
+        print_copies_->setRange(1, 99);
+        print_copies_->setValue(1);
+        print_copies_->setFixedWidth(64);
+        copies_row->addWidget(print_copies_);
+        copies_row->addStretch(1);
+        left_layout->addLayout(copies_row);
+    }
+    print_button_ = new QPushButton(QStringLiteral("Print"), left);
+    print_button_->setObjectName(QStringLiteral("printButton"));
+    print_button_->setFixedHeight(34);
+    print_button_->setStyleSheet(QStringLiteral(
+        "QPushButton { background: #ffffff; color: #242424;"
+        " border: 1px solid #b8b8b8; padding: 3px 12px; }"
+        "QPushButton:hover { background: #eef5fb; }"));
+    connect(print_button_, &QAbstractButton::clicked, this, [this](bool) {
+        if (command_handler_) {
+            command_handler_(QStringLiteral("print"));
+        }
+    });
+    left_layout->addWidget(print_button_);
+
+    left_layout->addWidget(section(QStringLiteral("Printer")));
+    print_printer_ = new QComboBox(left);
+    print_printer_->setObjectName(QStringLiteral("printPrinter"));
+    print_printer_->setFixedWidth(280);
+    const QList<QPrinterInfo> printers = QPrinterInfo::availablePrinters();
+    for (const QPrinterInfo& info : printers) {
+        print_printer_->addItem(info.printerName());
+    }
+    if (print_printer_->count() == 0) {
+        print_printer_->addItem(QStringLiteral("Print to PDF"));
+    }
+    left_layout->addWidget(print_printer_);
+    auto* properties = new QPushButton(QStringLiteral("Printer Properties..."), left);
+    properties->setFlat(true);
+    properties->setFixedHeight(24);
+    properties->setStyleSheet(QStringLiteral(
+        "QPushButton { border: none; text-align: left; color: #1a5c8f;"
+        " background: transparent; } QPushButton:disabled { color: #999999; }"));
+    properties->setEnabled(false);
+    properties->setToolTip(QStringLiteral("not implemented in this port"));
+    left_layout->addWidget(properties);
+
+    left_layout->addWidget(section(QStringLiteral("Settings")));
+    auto* specific = new QCheckBox(QStringLiteral("Print Specific Dates"), left);
+    specific->setObjectName(QStringLiteral("printSpecificDates"));
+    specific->setEnabled(false);
+    specific->setToolTip(QStringLiteral("not implemented in this port"));
+    left_layout->addWidget(specific);
+    {
+        auto* dates = new QHBoxLayout();
+        dates->setContentsMargins(0, 0, 0, 0);
+        dates->setSpacing(6);
+        auto* from = new QDateEdit(QDate::currentDate(), left);
+        from->setObjectName(QStringLiteral("printDateFrom"));
+        from->setCalendarPopup(false);
+        from->setFixedWidth(120);
+        from->setEnabled(false);
+        from->setToolTip(QStringLiteral("not implemented in this port"));
+        auto* to = new QDateEdit(QDate::currentDate(), left);
+        to->setObjectName(QStringLiteral("printDateTo"));
+        to->setCalendarPopup(false);
+        to->setFixedWidth(120);
+        to->setEnabled(false);
+        to->setToolTip(QStringLiteral("not implemented in this port"));
+        dates->addWidget(from);
+        dates->addWidget(to);
+        dates->addStretch(1);
+        left_layout->addLayout(dates);
+    }
+    {
+        auto* pages = new QHBoxLayout();
+        pages->setContentsMargins(0, 0, 0, 0);
+        pages->setSpacing(6);
+        auto* pages_label = new QLabel(QStringLiteral("Pages:"), left);
+        pages_label->setFont(backstage_font(kBodyPointSize));
+        pages->addWidget(pages_label);
+        auto* from = new QSpinBox(left);
+        from->setObjectName(QStringLiteral("printPageFrom"));
+        from->setRange(1, 999);
+        from->setEnabled(false);
+        from->setToolTip(QStringLiteral("not implemented in this port"));
+        auto* to = new QSpinBox(left);
+        to->setObjectName(QStringLiteral("printPageTo"));
+        to->setRange(1, 999);
+        to->setValue(1);
+        to->setEnabled(false);
+        to->setToolTip(QStringLiteral("not implemented in this port"));
+        auto* dash = new QLabel(QStringLiteral("to"), left);
+        dash->setFont(backstage_font(kBodyPointSize));
+        pages->addWidget(from);
+        pages->addWidget(dash);
+        pages->addWidget(to);
+        pages->addStretch(1);
+        left_layout->addLayout(pages);
+    }
+    print_landscape_ = new QCheckBox(QStringLiteral("Landscape Orientation"), left);
+    print_landscape_->setObjectName(QStringLiteral("printLandscape"));
+    print_landscape_->setChecked(true);
+    connect(print_landscape_, &QCheckBox::toggled, this,
+            [this](bool) { refresh_print_preview(); });
+    left_layout->addWidget(print_landscape_);
+    {
+        auto* paper_row = new QHBoxLayout();
+        paper_row->setContentsMargins(0, 0, 0, 0);
+        paper_row->setSpacing(8);
+        auto* paper_label = new QLabel(QStringLiteral("Paper:"), left);
+        paper_label->setFont(backstage_font(kBodyPointSize));
+        paper_row->addWidget(paper_label);
+        print_paper_ = new QComboBox(left);
+        print_paper_->setObjectName(QStringLiteral("printPaper"));
+        print_paper_->addItem(QStringLiteral("A4"));
+        print_paper_->addItem(QStringLiteral("Letter"));
+        print_paper_->setFixedWidth(120);
+        connect(print_paper_, &QComboBox::currentIndexChanged, this,
+                [this](int) { refresh_print_preview(); });
+        paper_row->addWidget(print_paper_);
+        paper_row->addStretch(1);
+        left_layout->addLayout(paper_row);
+    }
+    auto* setup = new QPushButton(QStringLiteral("Page Setup..."), left);
+    setup->setObjectName(QStringLiteral("printPageSetup"));
+    setup->setFlat(true);
+    setup->setFixedHeight(24);
+    setup->setStyleSheet(QStringLiteral(
+        "QPushButton { border: none; text-align: left; color: #1a5c8f;"
+        " background: transparent; } QPushButton:disabled { color: #999999; }"));
+    setup->setEnabled(false);
+    setup->setToolTip(QStringLiteral("not implemented in this port"));
+    left_layout->addWidget(setup);
+    left_layout->addStretch(1);
+    columns->addWidget(left);
+
+    auto* right = new QWidget(widget);
+    auto* right_layout = new QVBoxLayout(right);
+    right_layout->setContentsMargins(0, 0, 0, 0);
+    right_layout->setSpacing(6);
+    auto* preview_title = new QLabel(QStringLiteral("Preview"), right);
+    preview_title->setFont(backstage_font(kBodyPointSize, true));
+    preview_title->setStyleSheet(QStringLiteral("color: #202020;"));
+    right_layout->addWidget(preview_title);
+    print_preview_ = new QLabel(right);
+    print_preview_->setObjectName(QStringLiteral("printPreview"));
+    print_preview_->setAlignment(Qt::AlignCenter);
+    print_preview_->setMinimumSize(320, 260);
+    print_preview_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    print_preview_->setStyleSheet(QStringLiteral("background: #f5f5f5;"));
+    right_layout->addWidget(print_preview_, 1);
+    right_layout->addWidget(make_body(
+        right, QStringLiteral("The preview is painted by the same page layout the printer "
+                              "and the PDF export use; dates and page ranges are not "
+                              "implemented in this port.")));
+    columns->addWidget(right, 1);
     return widget;
 }
 

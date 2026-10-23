@@ -15,6 +15,7 @@
 #include <QAbstractButton>
 #include <QAbstractItemModel>
 #include <QApplication>
+#include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
 #include <QDialog>
@@ -39,6 +40,7 @@
 #include <QPushButton>
 #include <QRect>
 #include <QSize>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QString>
 #include <QStringList>
@@ -59,16 +61,19 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "backstage.h"
 #include "gate_util.h"
 #include "main_window.h"
 #include "preferences_store.h"
+#include "print_page.h"
 #include "ribbon_bar.h"
 #include "shell_style.h"
 #include "theme.h"
@@ -714,6 +719,141 @@ void check_locations(msqt::MainWindow& window, const QString& fixture, const QSt
     window.set_preferences_store(nullptr);
 }
 
+void check_print(msqt::MainWindow& window) {
+    msqt::Backstage* backstage = window.backstage();
+    if (backstage == nullptr || window.sheet() == nullptr) {
+        gate::check(false, "the Print gate needs an open document");
+        return;
+    }
+    window.show_backstage(true);
+    backstage->show_page(msqt::Backstage::Page::print);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    QApplication::processEvents();
+    QWidget* page = backstage->pages()->currentWidget();
+
+    // The capture's Print page: copies and the printer list are live; dates,
+    // page ranges and Page Setup are laid out and disabled (the shared print
+    // job has no date/page selection).
+    QSpinBox* copies =
+        page != nullptr ? page->findChild<QSpinBox*>(QStringLiteral("printCopies"))
+                        : nullptr;
+    gate::check(copies != nullptr && copies->isEnabled() && copies->value() == 1,
+                "the Print page has the enabled Copies spin");
+    QComboBox* printer =
+        page != nullptr ? page->findChild<QComboBox*>(QStringLiteral("printPrinter"))
+                        : nullptr;
+    gate::check(printer != nullptr && printer->count() >= 1,
+                "the Print page lists the local printers");
+    QAbstractButton* print_button = backstage->print_button();
+    gate::check(print_button != nullptr && print_button->isEnabled(),
+                "the Print page has the live Print button");
+    for (const char* name : {"printSpecificDates", "printDateFrom", "printDateTo",
+                             "printPageFrom", "printPageTo", "printPageSetup"}) {
+        QWidget* control = page != nullptr
+                               ? page->findChild<QWidget*>(QString::fromUtf8(name))
+                               : nullptr;
+        gate::check(control != nullptr && !control->isEnabled(),
+                    "the Print date/page control is laid out and disabled");
+        if (control != nullptr) {
+            gate::check(control->toolTip() ==
+                            QStringLiteral("not implemented in this port"),
+                        "the disabled Print control carries the exact tooltip");
+        }
+    }
+    QCheckBox* landscape = backstage->print_landscape_check();
+    QComboBox* paper = backstage->print_paper_combo();
+    gate::check(landscape != nullptr && landscape->isEnabled() && landscape->isChecked(),
+                "the landscape orientation control is live and checked");
+    gate::check(paper != nullptr && paper->isEnabled() && paper->count() == 2 &&
+                    paper->itemText(0) == QStringLiteral("A4") &&
+                    paper->itemText(1) == QStringLiteral("Letter"),
+                "the paper control offers the shared A4/Letter specs");
+
+    QLabel* preview = backstage->print_preview();
+    gate::check(preview != nullptr, "the Print page has the preview pane");
+    if (preview == nullptr || landscape == nullptr || paper == nullptr) {
+        return;
+    }
+
+    auto expected = [&window, preview](bool is_landscape, bool is_letter) {
+        app::PageSpec spec = is_letter ? app::PageSpec::letter_landscape()
+                                       : app::PageSpec::a4_landscape();
+        if (!is_landscape) {
+            std::swap(spec.width, spec.height);
+        }
+        const app::PrintJob job = window.current_print_job(spec);
+        return msqt::render_print_page(job, 0, *window.sheet(), window.plan(),
+                                       window.preferences(), preview->size());
+    };
+    auto pixmap_matches = [preview](const QImage& want) {
+        const QPixmap pixmap = preview->pixmap();
+        if (pixmap.isNull() || pixmap.size() != want.size()) {
+            return false;
+        }
+        const QImage live = pixmap.toImage();
+        if (live.size() != want.size()) {
+            return false;
+        }
+        for (int y = 0; y < want.height(); ++y) {
+            for (int x = 0; x < want.width(); ++x) {
+                if (live.pixelColor(x, y) != want.pixelColor(x, y)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
+    gate::check(pixmap_matches(expected(true, false)),
+                "the preview pane is the shared print layout's A4 landscape page");
+
+    // The white page rectangle's own aspect is the shared PageSpec's.
+    {
+        const QImage image = preview->pixmap().toImage();
+        int left = image.width();
+        int right = -1;
+        int top = image.height();
+        int bottom = -1;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor colour = image.pixelColor(x, y);
+                if (colour.red() > 245 && colour.green() > 245 && colour.blue() > 245) {
+                    left = std::min(left, x);
+                    right = std::max(right, x);
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
+            }
+        }
+        gate::check(right > left && bottom > top,
+                    "the preview paints a white page rectangle");
+        if (right > left && bottom > top) {
+            const double aspect = static_cast<double>(right - left + 1) /
+                                  static_cast<double>(bottom - top + 1);
+            const app::PageSpec spec = app::PageSpec::a4_landscape();
+            gate::check(std::abs(aspect - spec.width / spec.height) < 0.03,
+                        "the preview page rectangle has the shared A4 aspect");
+        }
+    }
+
+    // Live settings: unchecking landscape and choosing Letter each re-render.
+    landscape->setChecked(false);
+    QApplication::processEvents();
+    gate::check(pixmap_matches(expected(false, false)),
+                "unchecking landscape re-renders the portrait shared page");
+    paper->setCurrentIndex(1);
+    QApplication::processEvents();
+    gate::check(pixmap_matches(expected(false, true)),
+                "choosing Letter re-renders the Letter portrait shared page");
+    landscape->setChecked(true);
+    paper->setCurrentIndex(0);
+    QApplication::processEvents();
+    gate::check(pixmap_matches(expected(true, false)),
+                "the preview returns to the A4 landscape shared page");
+    window.show_backstage(false);
+}
+
 void check_document_state(msqt::MainWindow& window, const QString& fixture) {
     // No document: Save..Close disabled (the clean Account capture).
     window.show_backstage(true);
@@ -781,9 +921,10 @@ int main(int argc, char** argv) {
     check_document_state(window, fixture);
     check_new(window, fixture, out_dir);
     check_locations(window, fixture, out_dir);
+    check_print(window);
 
     std::fprintf(stderr,
-                 "note: W26-4.1..4.4 rail, File-tab, Account, New and location checks ran "
-                 "on the live window\n");
+                 "note: W26-4.1..4.5 rail, File-tab, Account, New, location and Print "
+                 "checks ran on the live window\n");
     return gate::finish();
 }
