@@ -309,6 +309,13 @@ Qt::ItemFlags SheetTableModel::flags(const QModelIndex& index) const {
     if (sheet_ == nullptr || !index.isValid() || generic_) {
         return result;
     }
+    // Wave 23 (review finding): the synthetic project-summary row (uid 0) has
+    // no file row behind it, and sync_plan_from_records deliberately skips it,
+    // so an edit there would be silently dropped.  Refuse the edit up front.
+    const std::size_t edited_row = record_row(index.row());
+    if (edited_row != core::sheet::kNoIndex && sheet_->row_uid(edited_row) == 0) {
+        return result;
+    }
     // Read the column's declared read-only bit; NEVER call begin_edit() here.
     // A view asks for flags while painting and while deciding whether to open an
     // editor, and a probe that opened a session would fight the real one.
@@ -327,6 +334,10 @@ bool SheetTableModel::setData(const QModelIndex& index, const QVariant& value, i
     const std::size_t column = column_for_display(index.column());
     if (row == core::sheet::kNoIndex || column == core::sheet::kNoIndex) {
         report_commit(false, "this cell is not editable");
+        return false;
+    }
+    if (sheet_->row_uid(row) == 0) {
+        report_commit(false, "the project summary row is read-only");
         return false;
     }
     // Move the sheet's own selection to the edited cell first: the selection is

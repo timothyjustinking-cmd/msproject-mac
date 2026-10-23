@@ -54,6 +54,10 @@ const char* const kEdlParts[4] = {"214/CEdl/FixedData", "214/CEdl/FixedMeta",
 struct LabelSet {
     const char* shortest_singular;
     const char* shortest_plural;
+    // Value 1 is the abbreviated form; MEASURED through COM (day "dy"/"dys",
+    // hour "hr"/"hrs", week "wk"/"wks", month "mon"/"mons", minute "min").
+    const char* abbreviated_singular;
+    const char* abbreviated_plural;
     const char* full_singular;
     const char* full_plural;
 };
@@ -76,7 +80,10 @@ void set_unit_labels(const msproject::props::PropsDocument& document, std::uint3
             singular = labels.shortest_singular;
             plural = labels.shortest_plural;
             break;
-        case 1: break;  // the abbreviated pair the SheetFormat already holds
+        case 1:
+            singular = labels.abbreviated_singular;
+            plural = labels.abbreviated_plural;
+            break;
         case 2:
             singular = labels.full_singular;
             plural = labels.full_plural;
@@ -96,15 +103,15 @@ void apply_file_labels(const std::string& source_path, core::sheet::SheetFormat&
     if (!msproject::props::parse_props(bytes, document, nullptr)) {
         return;
     }
-    set_unit_labels(document, 0x02400033u, {"m", "m", "minute", "minutes"},
+    set_unit_labels(document, 0x02400033u, {"m", "m", "min", "mins", "minute", "minutes"},
                     format.units.minute_singular, format.units.minute_plural);
-    set_unit_labels(document, 0x02400034u, {"h", "h", "hour", "hours"},
+    set_unit_labels(document, 0x02400034u, {"h", "h", "hr", "hrs", "hour", "hours"},
                     format.units.hour_singular, format.units.hour_plural);
-    set_unit_labels(document, 0x02400035u, {"d", "d", "day", "days"},
+    set_unit_labels(document, 0x02400035u, {"d", "d", "dy", "dys", "day", "days"},
                     format.units.day_singular, format.units.day_plural);
-    set_unit_labels(document, 0x02400036u, {"w", "w", "week", "weeks"},
+    set_unit_labels(document, 0x02400036u, {"w", "w", "wk", "wks", "week", "weeks"},
                     format.units.week_singular, format.units.week_plural);
-    set_unit_labels(document, 0x0240138eu, {"mo", "mo", "month", "months"},
+    set_unit_labels(document, 0x0240138eu, {"mo", "mo", "mon", "mons", "month", "months"},
                     format.units.month_singular, format.units.month_plural);
 }
 
@@ -188,12 +195,16 @@ std::string link_lag_text(std::int32_t lag_ticks, std::uint16_t lag_units,
     const std::uint16_t unit =
         lag_units >= 32 ? static_cast<std::uint16_t>(lag_units - 32) : lag_units;
     const bool elapsed = mpp::format_unit_is_elapsed(lag_units);
-    const double ticks_per_hour =
-        static_cast<double>(mpp::kTicksPerDay) / static_cast<double>(format.hours_per_day > 0
-                                                                          ? format.hours_per_day
-                                                                          : 8);
+    // An hour is 600 file ticks (an 8-hour file day / 8), the same
+    // core::sheet::kTicksPerHour the sheet formatter uses; a working day is
+    // hours_per_day hours, and an ELAPSED day is 24 wall-clock hours (measured:
+    // 2 edays = 28800 ticks).  Do not divide kTicksPerDay by hours_per_day --
+    // that disagrees with the sheet whenever the preference changes the day
+    // length (review finding).
+    const double ticks_per_hour = 600.0;
+    const int hours_per_day = format.hours_per_day > 0 ? format.hours_per_day : 8;
     const double ticks_per_day = elapsed ? 24.0 * ticks_per_hour
-                                         : static_cast<double>(mpp::kTicksPerDay);
+                                         : ticks_per_hour * static_cast<double>(hours_per_day);
     const double ticks_per_week =
         ticks_per_day * (elapsed ? 7.0 : static_cast<double>(format.days_per_week > 0
                                                                  ? format.days_per_week

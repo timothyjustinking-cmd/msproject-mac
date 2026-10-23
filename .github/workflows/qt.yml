@@ -204,10 +204,10 @@ jobs:
         run: ctest --test-dir build-qt --output-on-failure --timeout 60
 
       # Wave 23 (A-1d / A-7c): the committed fixtures match their pinned hashes,
-      # and the Windows job compares the 1920 render to a committed PROJECT
-      # capture of the client-free oracle fixture -- the verifier's "our own
-      # earlier render is not a reference".  The pixel score is printed in the
-      # same run and never gates (decision 12); the structural comparison does.
+      # and the Windows job compares the 1920 render to the MEASUREMENTS of a
+      # Project capture of the client-free oracle fixture -- the verifier's "our
+      # own earlier render is not a reference".  The pixel score needs the local
+      # PNG (wave close only); the structural comparison gates.
       - name: Committed fixtures match their pinned hashes
         shell: bash
         run: |
@@ -219,8 +219,8 @@ jobs:
 
       # Wave 23 (A-1d): Project's own capture stays local (operator ruling
       # 2026-10-23); the committed reference is the NUMBERS measured from it.
-      # The pixel score is report-only and needs the local PNG, so it runs in
-      # the wave close, not here.
+      # The pixel score is report-only and needs the local PNG, so it is run in
+      # the wave close and NOT in this step.
       - name: Parity gate against Project's measured capture
         if: runner.os == 'Windows'
         shell: bash

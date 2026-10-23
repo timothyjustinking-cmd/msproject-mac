@@ -161,7 +161,8 @@ int main(int argc, char** argv) {
     check(edited_uid != 0, "the fixture's first task has a UniqueID");
 
     // --- Undo/Redo through the real sheet stack and the menu actions ---------
-    // Row 1 is the fixture's first task (row 0 is the project summary row).
+    // Row 2 is the fixture's second task (row 0 is the project summary row,
+    // row 1 the first task); "5d" changes the 3-day second task's text.
     const QModelIndex duration_index = model->index(2, duration_column);
     const QString duration_before = model->data(duration_index, Qt::DisplayRole).toString();
     check(model->setData(duration_index, QStringLiteral("5d"), Qt::EditRole),

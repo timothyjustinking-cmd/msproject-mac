@@ -123,6 +123,16 @@ int main(int argc, char** argv) {
         check(window.sheet_view()->model()->columnCount() == 9,
               "the table model shows the 9 Entry columns (the gutter is the frozen row "
               "header, wave 18 Q3)");
+        // The project row is synthetic: an edit there has no writer and would be
+        // silently dropped (review finding), so the model refuses it.
+        const int name_column =
+            window.sheet_table_model()->display_column_for_field(app::name_field_id());
+        const QModelIndex project_cell = window.sheet_view()->model()->index(0, name_column);
+        const QModelIndex task_cell = window.sheet_view()->model()->index(1, name_column);
+        check(!window.sheet_view()->model()->flags(project_cell).testFlag(Qt::ItemIsEditable),
+              "the project summary row is not editable");
+        check(window.sheet_view()->model()->flags(task_cell).testFlag(Qt::ItemIsEditable),
+              "a task row stays editable");
     } else {
         check(false, "the sheet view has a model");
     }

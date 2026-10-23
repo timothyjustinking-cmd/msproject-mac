@@ -12,7 +12,7 @@
  *       Apply an ordered operation list to a copy of a fixture through the
  *       project's own writer (core/mppwrite) and scheduler (core/plan), and
  *       save the result.  The ops file is compiled by scripts/engine_diff.py
- *       from a tests/scenarios/*.json file; see the grammar below.  The base
+ *       from a file under tests/scenarios/; see the grammar below.  The base
  *       file is hashed before and after the run: a run that changes its input
  *       is refused, and when the expected hash is supplied (scripts/
  *       engine_diff.py always supplies the pinned one) a changed base is

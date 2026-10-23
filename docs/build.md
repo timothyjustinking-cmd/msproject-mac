@@ -148,7 +148,7 @@ ctest --test-dir build-qt -C Release --output-on-failure --timeout 180
 That is 17 tests: the 15 shell tests plus `qt_task_order` and
 `qt_task_order_corpus` (the corpus one is registered only where
 `corpus/project_a.mpp` exists), and `qt_stored_table_corpus` follows the same
-rule -- 17 locally, 16 in CI.
+rule -- 17 locally, 15 in CI.
 
 ## The recalc golden is opt-in
 
