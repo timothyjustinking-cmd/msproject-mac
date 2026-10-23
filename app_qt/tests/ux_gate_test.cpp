@@ -16,11 +16,15 @@
 #include <QAbstractItemModel>
 #include <QApplication>
 #include <QCheckBox>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QFont>
 #include <QFontMetrics>
 #include <QHeaderView>
 #include <QImage>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMetaObject>
@@ -50,6 +54,7 @@
 #include "gantt.h"
 #include "layout_model.h"
 #include "main_window.h"
+#include "reader.h"
 #include "sheet_views.h"
 #include "shell_style.h"
 
@@ -267,6 +272,109 @@ void case_header_captions() {
           "\"Duration\" is whole at 81 px (no \"Dura\")");
 }
 
+// --- wave 22 (E7): the status centre follows the loaded file's new-task mode --
+//
+// The committed fixture's project props store Project's QNEWTASKSAREMANUAL
+// property (record 0x024013c8, kind 2) as 1 = Manually Scheduled.  To prove the
+// window follows the FILE and not a constant, the gate writes a copy under
+// test-out with ONLY that 2-byte value flipped to 0 (Auto Scheduled): the
+// record's framing and every length stay identical, so the copy is a valid
+// project.  It then checks the label against the reader's decoded value on both
+// files, and against corpus/project_a.mpp (Project's own export says
+// <NewTasksAreManual>0) when that local-only file exists.
+bool write_auto_new_tasks_copy(const QString& source, const QString& target,
+                               QString* why) {
+    QFile in(source);
+    if (!in.open(QIODevice::ReadOnly)) {
+        *why = QStringLiteral("cannot read ") + source;
+        return false;
+    }
+    QByteArray bytes = in.readAll();
+    in.close();
+    // u32 length=2, u32 id=0x024013c8, u32 kind=2, u16 value=1.
+    const QByteArray pattern =
+        QByteArray("\x02\x00\x00\x00\xc8\x13\x40\x02\x02\x00\x00\x00\x01\x00", 14);
+    const int at = bytes.indexOf(pattern);
+    if (at < 0 || bytes.indexOf(pattern, at + 1) >= 0) {
+        *why = QStringLiteral("the fixture does not hold exactly one 0x024013c8=1 record");
+        return false;
+    }
+    bytes[at + 12] = '\0';
+    bytes[at + 13] = '\0';
+    QFile out(target);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        *why = QStringLiteral("cannot write ") + target;
+        return false;
+    }
+    const bool written = out.write(bytes) == bytes.size();
+    out.close();
+    if (!written) {
+        *why = QStringLiteral("short write to ") + target;
+    }
+    return written;
+}
+
+void check_status_mode(const QString& path, bool want_manual, const char* what) {
+    const mpp::Document decoded = mpp::load_file(path.toStdString());
+    check(decoded.project.new_tasks_manual_stored,
+          "the file stores the project's new-task scheduling default");
+    check(decoded.project.new_tasks_manual == want_manual,
+          "the decoded new-task default matches the label expectation");
+    msqt::MainWindow window;
+    window.resize(msqt::kWindowWidth, msqt::kWindowHeight);
+    QString error;
+    if (!window.open_file(path, &error)) {
+        std::fprintf(stderr, "FAIL: %s: could not open %s: %s\n", what,
+                     path.toUtf8().constData(), error.toUtf8().constData());
+        ++g_failures;
+        return;
+    }
+    const QLabel* label = window.status_mode_label();
+    check(label != nullptr, "the status bar has the New Tasks label");
+    if (label == nullptr) {
+        return;
+    }
+    const QString expected = want_manual
+                                 ? QStringLiteral("New Tasks : Manually Scheduled")
+                                 : QStringLiteral("New Tasks : Auto Scheduled");
+    if (label->text() != expected) {
+        std::fprintf(stderr, "FAIL: %s: status centre is \"%s\", want \"%s\"\n", what,
+                     label->text().toUtf8().constData(), expected.toUtf8().constData());
+        ++g_failures;
+    }
+    check(!label->toolTip().contains(QStringLiteral("does not store")),
+          "the label is not showing the unknown-value fallback");
+}
+
+void case_status_mode(const QString& fixture, const QString& out_dir) {
+    check_status_mode(fixture, true, "fixture (Manual)");
+    if (out_dir.isEmpty()) {
+        std::fprintf(stderr, "FAIL: the status gate needs an out-dir for the Auto copy\n");
+        ++g_failures;
+        return;
+    }
+    QDir().mkpath(out_dir);
+    const QString auto_path = out_dir + QStringLiteral("/qt-newtasks-auto.mpp");
+    QString why;
+    if (!write_auto_new_tasks_copy(fixture, auto_path, &why)) {
+        std::fprintf(stderr, "FAIL: %s\n", why.toUtf8().constData());
+        ++g_failures;
+        return;
+    }
+    check_status_mode(auto_path, false, "synthetic Auto copy");
+
+    // The real-file case: corpus/project_a.mpp is local-only (git-ignored).
+    const QFileInfo fixture_info(fixture);
+    const QString project_a =
+        fixture_info.absolutePath() + QStringLiteral("/../../corpus/project_a.mpp");
+    if (QFileInfo::exists(project_a)) {
+        check_status_mode(project_a, false, "corpus/project_a.mpp (Auto)");
+    } else {
+        std::printf("SKIP: corpus/project_a.mpp not present; the real Auto file check "
+                    "is deferred\n");
+    }
+}
+
 // --- 1/2/3. the window chrome ------------------------------------------------
 
 void case_window(const QString& fixture, const QString& out_dir) {
@@ -433,8 +541,11 @@ int main(int argc, char** argv) {
     }
     case_header_captions();
     case_palette();
-    case_window(QString::fromLocal8Bit(argv[1]),
-                argc >= 3 ? QString::fromLocal8Bit(argv[2]) : QString());
+    const QString fixture = QString::fromLocal8Bit(argv[1]);
+    const QString out_dir =
+        argc >= 3 ? QString::fromLocal8Bit(argv[2]) : QString();
+    case_status_mode(fixture, out_dir);
+    case_window(fixture, out_dir);
     std::printf("qt_ux_gate: %d failure(s)\n", g_failures);
     return g_failures == 0 ? 0 : 1;
 }

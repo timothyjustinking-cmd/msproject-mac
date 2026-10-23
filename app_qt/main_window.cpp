@@ -75,6 +75,7 @@
 #include "menus.h"
 #include "preferences_store.h"
 #include "print_page.h"
+#include "reader.h"
 #include "ribbon_bar.h"
 #include "selection_model.h"
 #include "sheet_views.h"
@@ -802,6 +803,9 @@ bool MainWindow::open_file(const QString& path, QString* error) {
         structural_ = app::StructuralEdits{};
         document_.reset();
         owns_path_ = false;
+        // Back to the new-project default: no loaded file says otherwise.
+        new_tasks_manual_ = true;
+        new_tasks_manual_known_ = false;
         last_save_target_.clear();
         view_sheet_.reset();
         view_records_.clear();
@@ -847,6 +851,17 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     view_sheet_.reset();
     view_records_.clear();
     prefs_.view = app::ViewMode::task_sheet;
+
+    /* Wave 22 (E7): the loaded document's new-task scheduling default, read
+     * from the project props (mpp::ProjectRow::new_tasks_manual).  PlanDocument
+     * does not expose the mpp::Document, so the container is reopened for that
+     * one record: the accessor reads no table, only `114|112/Props`.  A file
+     * that does not store it (an original Project 2007 MPP12 file) or a read
+     * failure leaves `known` false, and the status bar keeps its Manual
+     * fallback rather than claiming a mode the bytes did not state. */
+    const mpp::NewTaskMode new_task_mode = mpp::read_new_task_mode(path.toStdString());
+    new_tasks_manual_known_ = new_task_mode.known;
+    new_tasks_manual_ = new_task_mode.known ? new_task_mode.manual : true;
 
     // The persisted date style belongs to the loaded SheetFormat before anything
     // formats a cell or the status line.
@@ -1018,6 +1033,29 @@ void MainWindow::update_status() {
         status_message_->setText(status_detail_text());
         status_message_->setToolTip(QString::fromStdString(summary_text()));
     }
+    update_status_mode();
+}
+
+void MainWindow::update_status_mode() {
+    if (status_mode_ == nullptr) {
+        return;
+    }
+    // Wave 22 (E7): the centre follows the loaded file's stored default.  An
+    // unknown value (new project, original Project 2007 file, undecodable
+    // record) keeps the product's current Manual text -- the documented
+    // fallback -- and the tooltip says so, so the display never invents a mode.
+    const bool manual = !new_tasks_manual_known_ || new_tasks_manual_;
+    status_mode_->setText(manual ? QStringLiteral("New Tasks : Manually Scheduled")
+                                 : QStringLiteral("New Tasks : Auto Scheduled"));
+    QString tip = manual ? QStringLiteral("New tasks are created in Manually Scheduled mode")
+                         : QStringLiteral("New tasks are created in Auto Scheduled mode");
+    if (!new_tasks_manual_known_) {
+        tip = doc_.has_document()
+                  ? tip + QStringLiteral(
+                              " (this file does not store the setting; the default is shown)")
+                  : QStringLiteral("New projects start with Manually Scheduled tasks");
+    }
+    status_mode_->setToolTip(tip);
 }
 
 void MainWindow::clear_render_selection() {
@@ -1135,6 +1173,10 @@ void MainWindow::new_project() {
     document_.reset();
     structural_ = app::StructuralEdits{};
     owns_path_ = false;
+    // Operator decision 11 / wave 22: a NEW project is Manually Scheduled,
+    // whatever the file that was open before said.
+    new_tasks_manual_ = true;
+    new_tasks_manual_known_ = false;
     last_save_target_.clear();
     view_sheet_.reset();
     view_records_.clear();

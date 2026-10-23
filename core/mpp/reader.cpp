@@ -718,6 +718,15 @@ constexpr std::uint32_t kPropsVersion = 0x3540000Cu;
 /* Project props (112/114/Props): the inserted-project table and its counts. */
 constexpr std::uint32_t kProjectPropsSubprojectData = 0x024000A2u;
 constexpr std::uint32_t kProjectPropsSubprojectCount = 0x02400084u;
+/* Project props: Project's internal property QNEWTASKSAREMANUAL -- File >
+ * Options > Schedule > "New tasks: Manually Scheduled / Auto Scheduled".
+ * Kind 2 (u16), 0 = Auto Scheduled, nonzero = Manually Scheduled.  The id is
+ * derived from Project's own property-name table (index 64 of the name list in
+ * decompiled/part_0000.c FUN_1401b8a70, whose record id is 0x02400000 + 5000
+ * + index) and measured on both sides: the corpus files whose MSPDI export
+ * says <NewTasksAreManual>0 store 0 and those that say 1 store 1.  See
+ * ProjectRow in reader.h for the full evidence. */
+constexpr std::uint32_t kProjectPropsNewTasksManual = 0x024013C8u;
 
 /* Task.Name: COM's PjFieldTaskName, the same id in analysis/field_id_map.tsv.
  * Evidence in the file header comment above. */
@@ -3594,6 +3603,60 @@ void resolve_resource_calendars(Document& document) {
     }
 }
 
+/* ---- The project's new-task scheduling default.  See ProjectRow in reader.h
+ * for the evidence and `read_new_task_mode` at the bottom of this file for the
+ * path-only accessor.
+ *
+ * The project props stream uses core/props' measured framing: a 16-byte header,
+ * then records back to back (u32 payload_length, u32 id, u32 kind, payload),
+ * scanned until an id whose byte 2 is not 0x40 (core/props `is_props_id`).
+ * Only the one 2-byte record is needed here, so core/mpp does not link
+ * core/props; the framing is the same five lines core/props uses. */
+bool decode_new_tasks_manual(const CompoundFile& cfb, std::string_view root, bool& manual,
+                             std::vector<std::string>* warnings = nullptr) {
+    const std::string path = std::string(root) + "/Props";
+    if (!cfb.has_stream(path)) {
+        return false; /* an original Project 2007 MPP12 file has no such record */
+    }
+    std::vector<std::uint8_t> props;
+    try {
+        props = cfb.read_stream(path);
+    } catch (const Error&) {
+        return false;
+    }
+    if (props.size() < 16) {
+        return false;
+    }
+    std::size_t offset = 16;
+    while (offset + 12 <= props.size()) {
+        const std::uint32_t length = u32_at(props, offset);
+        const std::uint32_t id = u32_at(props, offset + 4);
+        if ((id & 0x00FF0000u) != 0x00400000u) {
+            break; /* record framing has ended; the rest is the opaque tail */
+        }
+        if (static_cast<std::uint64_t>(offset) + 12u + length > props.size()) {
+            break;
+        }
+        if (id == kProjectPropsNewTasksManual) {
+            const std::uint32_t kind = u32_at(props, offset + 8);
+            if (kind != 2u || length < 2u) {
+                if (warnings != nullptr) {
+                    warnings->emplace_back(
+                        path + " stores the new-task scheduling default (record " +
+                        hex32(kProjectPropsNewTasksManual) + ") as kind " +
+                        std::to_string(kind) + " / " + std::to_string(length) +
+                        " bytes, not the measured kind 2 / 2 bytes; it is not decoded");
+                }
+                return false;
+            }
+            manual = u16_at(props, offset + 12) != 0;
+            return true;
+        }
+        offset += 12u + length;
+    }
+    return false;
+}
+
 Document parse_document(const CompoundFile& cfb) {
     Document document;
     /* Container-level anomalies (FAT slack) come first: they describe the file
@@ -3623,6 +3686,16 @@ Document parse_document(const CompoundFile& cfb) {
         parse_mpp12(cfb, format.table_root, document);
     } else {
         parse_mpp14(cfb, format.table_root, document);
+    }
+    /* The project-level new-task scheduling default lives in the project props,
+     * not in a task row.  Decoded for BOTH versions: an original Project 2007
+     * MPP12 file has no such record (the field reports not-stored), but a 2010+
+     * project down-saved to MPP12 keeps it in 112/Props. */
+    bool new_tasks_manual = false;
+    if (decode_new_tasks_manual(cfb, format.table_root, new_tasks_manual,
+                                &document.warnings)) {
+        document.project.new_tasks_manual = new_tasks_manual;
+        document.project.new_tasks_manual_stored = true;
     }
     resolve_resource_calendars(document);
     return document;
@@ -3720,6 +3793,23 @@ Document load_file(std::string const& path) {
 Document load_bytes(std::vector<std::uint8_t> bytes) {
     const CompoundFile file = CompoundFile::from_bytes(std::move(bytes));
     return parse_document(file);
+}
+
+NewTaskMode read_new_task_mode(std::string const& path) {
+    NewTaskMode mode;
+    try {
+        const CompoundFile file = CompoundFile::from_file(path);
+        std::vector<std::string> warnings;
+        const FormatInfo format = detect_format(file, warnings);
+        bool manual = false;
+        if (decode_new_tasks_manual(file, format.table_root, manual)) {
+            mode.known = true;
+            mode.manual = manual;
+        }
+    } catch (const Error&) {
+        /* Unreadable container: unknown, so the caller keeps its fallback. */
+    }
+    return mode;
 }
 
 }  // namespace mpp

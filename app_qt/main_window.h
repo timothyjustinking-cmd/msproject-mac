@@ -228,6 +228,13 @@ class MainWindow final : public QMainWindow {
     void sync_view_selection();
     void update_menu_state();
     void update_status();
+    // Wave 22 (E7): the status bar's centred "New Tasks : <mode>" text follows
+    // the LOADED file's stored default (Project's QNEWTASKSAREMANUAL property,
+    // mpp::ProjectRow::new_tasks_manual).  A new/empty project, a file that
+    // does not store the setting (an original Project 2007 MPP12 file) or an
+    // undecodable value keeps the Manually Scheduled text -- operator decision
+    // 11 and the documented fallback.
+    void update_status_mode();
     void update_zoom_slider();
     void update_window_title();
     void update_chrome();
@@ -309,7 +316,12 @@ class MainWindow final : public QMainWindow {
     QWidget* chart_panel_ = nullptr;
     ViewLabel* view_label_ = nullptr;
     QLabel* info_callout_ = nullptr;  // new-project manual-scheduling callout
-    QLabel* status_mode_ = nullptr;  // "New Tasks : Manually Scheduled"
+    QLabel* status_mode_ = nullptr;  // "New Tasks : Manually Scheduled/Auto Scheduled"
+    // Wave 22 (E7): the loaded file's stored new-task default.  `known` is false
+    // for a new project and for a file that does not store the property (every
+    // original Project 2007 MPP12 file); the label then falls back to Manual.
+    bool new_tasks_manual_ = true;
+    bool new_tasks_manual_known_ = false;
     Theme theme_ = Theme::light;
 
     // --- wave 19: the document's pending edits and save target --------------

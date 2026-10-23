@@ -768,7 +768,52 @@ struct ProjectRow {
     std::uint16_t percent_complete = 0;
     PackedDate start;
     PackedDate finish;
+
+    /* ---- The project's new-task scheduling default (Project 2021: File >
+     * Options > Schedule > "New tasks: Manually Scheduled / Auto Scheduled",
+     * the status bar's "New Tasks : ..." text).  STORED, not inferred, in the
+     * project props stream (`114/Props`, or `112/Props` in a 2010+ project
+     * down-saved to MPP12) as the 2-byte record 0x024013c8: 0 = Auto
+     * Scheduled, nonzero = Manually Scheduled.
+     *
+     * The id is Project's own property name `QNEWTASKSAREMANUAL`: in the
+     * decompiled winproj property-name table (decompiled/part_0000.c
+     * FUN_1401b8a70), name[i] is the project property whose record id is
+     * 0x02400000 + 5000 + i, and i = 64 is `QNEWTASKSAREMANUAL` -> 0x024013c8.
+     * That index rule is checked by other names in the same table against the
+     * same files: QISNEWTASKSESTIMATED (0x0240138a) matches its MSPDI value,
+     * DAYSPERMONTH (0x0240138f) is 20, PROJECTCURRENCYCODE (0x024013bb) is
+     * "AUD", CREATIONSYSTEMTIME (0x02401394) is a 16-byte SYSTEMTIME and
+     * BASELINE1..10SAVEDATE (0x02401395..0x0240139f) are 0xffffffff.
+     *
+     * MEASURED against Project's own MSPDI export (the `<NewTasksAreManual>`
+     * element of the Project element): corpus/project_a.mpp and
+     * corpus/project_b.mpp are 0 (Auto) in both the export and the record;
+     * corpus/probe/assign1.mpp, lagff1.mpp and w9-resourcetypes.mpp are 1
+     * (Manual) in both.  All five such files agree, with no exception.
+     *
+     * `new_tasks_manual_stored` is false when the file does not carry the
+     * record (every original Project 2007 MPP12 file -- manual scheduling was
+     * introduced in Project 2010 -- and a few writer-produced probe files).
+     * A caller must then fall back to its own default, never read
+     * `new_tasks_manual` as if the file had said so. */
+    bool new_tasks_manual = false;
+    bool new_tasks_manual_stored = false;
 };
+
+/*
+ * The project-level new-task scheduling default of one file, read by reopening
+ * only the container and its project props.  This exists for a caller that has
+ * the file's PATH but not the mpp::Document (the Qt status bar is one: the
+ * portable app layer's PlanInput does not carry this field).  `known` is false
+ * when the container cannot be read or the file does not store the record; the
+ * caller must then show its fallback, not `manual`.
+ */
+struct NewTaskMode {
+    bool known = false;
+    bool manual = true;
+};
+NewTaskMode read_new_task_mode(std::string const& path);
 
 /* A row that is present in FixedData but is not a live record. */
 struct SkippedRow {

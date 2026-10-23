@@ -1088,6 +1088,97 @@ void test_project_b(TestContext& context) {
     }
 }
 
+/* ---- W22 / E7: the project-level new-task scheduling default.
+ *
+ * Project 2021 File > Options > Schedule > "New tasks: Manually Scheduled /
+ * Auto Scheduled" is stored per file, not inferred from the tasks: the project
+ * props stream (114/Props, or 112/Props in a 2010+ project down-saved to MPP12)
+ * record 0x024013c8, kind 2 (u16): 0 = Auto Scheduled, 1 = Manually Scheduled.
+ * The record id is Project's own property QNEWTASKSAREMANUAL (see ProjectRow in
+ * reader.h for the name-table derivation and the cross-checked neighbours).
+ *
+ * The labels below are Project's OWN MSPDI exports, whose Project element
+ * carries <NewTasksAreManual>:
+ *   corpus/probe/wct-export.xml    = PROJECT_A's export (same title, 83 tasks) -> 0
+ *   corpus/probe/tender-export.xml = PROJECT_B's export (same title, 73 tasks) -> 0
+ *   corpus/probe/assign1.xml, lagff1.xml, w9-resourcetypes.xml                 -> 1
+ * The committed fixture's own record says 1, matching the four COM FileNew
+ * files whose exports do (it is the same FileNew project family).
+ *
+ * The negative control is a real Project 2007 MPP12 file, which predates
+ * manual scheduling: it stores no such record, so `new_tasks_manual_stored` is
+ * false and a caller must keep its own fallback rather than believe the field.
+ */
+void test_new_task_mode(TestContext& context) {
+    const std::string fixture = (test_data_dir() / "synthetic-base.mpp").string();
+    if (!file_exists(fixture)) {
+        std::cout << "SKIP: " << fixture << " is not present (the fixture checks "
+                     "report the broken checkout)\n";
+    } else {
+        const mpp::Document document = mpp::load_file(fixture);
+        context.check(document.project.new_tasks_manual_stored,
+                      "synthetic-base stores the new-task scheduling default");
+        context.check(document.project.new_tasks_manual,
+                      "synthetic-base is Manually Scheduled (114/Props 0x024013c8 = 1)");
+        const mpp::NewTaskMode mode = mpp::read_new_task_mode(fixture);
+        context.check(mode.known, "read_new_task_mode finds the fixture's record");
+        context.check(mode.known && mode.manual,
+                      "read_new_task_mode agrees with the loaded document (Manual)");
+    }
+
+    if (corpus_hidden()) {
+        std::cout << "SKIP: corpus new-task-mode checks (MPP_NO_CORPUS is set)\n";
+        return;
+    }
+    struct Case {
+        std::string path;
+        bool known;
+        bool manual;
+        const char* what;
+    };
+    const std::string probe = MPP_PROBE_DIR;
+    const std::string imported = (std::filesystem::path(MPP_PROBE_DIR).parent_path() /
+                                  "imported").string();
+    const Case cases[] = {
+        {MPP_PROJECT_A_PATH, true, false,
+         "PROJECT_A is Auto Scheduled (wct-export.xml NewTasksAreManual = 0)"},
+        {MPP_PROJECT_B_PATH, true, false,
+         "PROJECT_B is Auto Scheduled (tender-export.xml NewTasksAreManual = 0)"},
+        {probe + "/assign1.mpp", true, true,
+         "assign1 is Manually Scheduled (assign1.xml NewTasksAreManual = 1)"},
+        {probe + "/lagff1.mpp", true, true,
+         "lagff1 is Manually Scheduled (lagff1.xml NewTasksAreManual = 1)"},
+        {probe + "/w9-resourcetypes.mpp", true, true,
+         "w9-resourcetypes is Manually Scheduled (its XML says 1)"},
+        {probe + "/mpp12task.mpp", false, false,
+         "an original Project 2007 MPP12 file stores no new-task default"},
+        {imported + "/mpp12nulltasks-from14.mpp", true, false,
+         "a 2010+ project down-saved to MPP12 keeps the record in 112/Props"},
+        {probe + "/oracle-patch.mpp", false, false,
+         "a writer-patched MPP14 probe without the record reports not-stored"},
+    };
+    for (const Case& item : cases) {
+        if (!file_exists(item.path)) {
+            std::cout << "SKIP: " << item.path << " is not present\n";
+            continue;
+        }
+        const mpp::Document document = mpp::load_file(item.path);
+        context.equal(document.project.new_tasks_manual_stored, item.known,
+                      std::string("new-task default stored flag: ") + item.what);
+        if (item.known) {
+            context.equal(document.project.new_tasks_manual, item.manual,
+                          std::string("new-task default value: ") + item.what);
+        }
+        const mpp::NewTaskMode mode = mpp::read_new_task_mode(item.path);
+        context.equal(mode.known, item.known,
+                      std::string("read_new_task_mode known: ") + item.what);
+        if (item.known) {
+            context.equal(mode.manual, item.manual,
+                          std::string("read_new_task_mode value: ") + item.what);
+        }
+    }
+}
+
 /* ---- 7. W18: the outline fixture, against docs/analysis/oracle/outline-probe.json.
  *
  * corpus/probe/outline1.mpp: S1 is a summary at OutlineLevel 1 with children C1
@@ -3327,6 +3418,7 @@ int run_tests() {
     test_synthetic_fixture(context);
     test_project_a(context);
     test_project_b(context);
+    test_new_task_mode(context);
     test_outline_fixture(context);
     test_status_fixture(context);
     test_w31_fixed_fields(context);
