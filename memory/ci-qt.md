@@ -220,6 +220,6 @@ OK: qt.yml shape matches the wave-19 brief
    red at link = arch (should not happen: universal package); red at
    `qt_parity_geometry` = font metrics, an app_qt/coordinator decision.
 3. **After the first green run**: update the docs that still say Windows/macOS
-   "join later" (`docs/ui-qt-port.md` §4, `docs/handoff/next-coordinator-prompt.md`
+   "join later" (`docs/ui-qt-port.md` §4, `docs/archive/next-coordinator-prompt-wave19.md`
    line ~87 still says `qt-linux`), and only then decide Q4's cross-OS golden
    hashes — which require a pinned/bundled font first.
