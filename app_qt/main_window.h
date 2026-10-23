@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "edit_model.h"  // app::StructuralEdits
+#include "export_pdf.h"  // app::ReportKind (declared in export_pdf())
 #include "menu_model.h"
 #include "plan_document.h"
 #include "prefs.h"

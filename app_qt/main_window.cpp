@@ -1717,7 +1717,7 @@ void MainWindow::rebuild_generic_view() {
         return;
     }
     if (prefs_.view == app::ViewMode::resource_sheet) {
-        view_records_ = app::make_resource_view_records(doc_.view(), nullptr);
+        view_records_ = app::make_resource_view_records(doc_.plan(), nullptr);
         view_sheet_ = std::make_unique<core::sheet::SheetModel>(view_records_,
                                                                app::resource_sheet_columns());
         return;
@@ -1725,11 +1725,11 @@ void MainWindow::rebuild_generic_view() {
     // The two usage grids: the same core::usage projection the macOS shell draws
     // (app/view_model.h), on the stock standard week the app documents.
     const core::usage::UsageProjection projection = core::usage::project_usage(
-        app::usage_input_from_plan(doc_.view()), app::standard_calendar(),
+        app::usage_input_from_plan(doc_.plan()), app::standard_calendar(),
         prefs_.usage_period);
     const bool resource = prefs_.view == app::ViewMode::resource_usage;
     const app::UsageView usage =
-        app::make_usage_view(projection, resource, doc_.view(), doc_.format());
+        app::make_usage_view(projection, resource, doc_.plan(), doc_.format());
     view_records_ = app::make_usage_record_set(usage);
     view_sheet_ = std::make_unique<core::sheet::SheetModel>(view_records_,
                                                            app::usage_sheet_columns(usage));
@@ -1745,6 +1745,9 @@ void MainWindow::show_view(app::ViewMode mode) {
     if (header == nullptr || delegate == nullptr) {
         return;
     }
+    // Detach the adapter first: the branches below destroy or replace the
+    // SheetModel the adapter points at (view_sheet_/doc_.sheet_).
+    sheet_model_.set_sheet(nullptr);
     if (mode == app::ViewMode::task_sheet) {
         view_sheet_.reset();
         view_records_.clear();
