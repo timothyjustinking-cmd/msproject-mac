@@ -128,8 +128,11 @@ inline const QColor kRowGutterText(0x33, 0x33, 0x33);
 // FILE's own bar styles, which this port does not decode, so hard-coding them as
 // global constants would be a guess (docs/handoff/q6.md).
 inline const QColor kBarTask(0x4a, 0x7e, 0xbb);
-inline const QColor kBarSummary(0x1f, 0x38, 0x64);
-inline const QColor kBarMilestone(0x1f, 0x38, 0x64);
+// Wave 23 (Q1): when a file's bar styles cannot be decoded, Project's STOCK
+// defaults are black summary bars and black milestone diamonds (the clean
+// capture's navy/green are that FILE's styles, backlogged as B-4).
+inline const QColor kBarSummary(0x00, 0x00, 0x00);
+inline const QColor kBarMilestone(0x00, 0x00, 0x00);
 inline const QColor kBarCritical(0xff, 0x00, 0x00);
 inline const QColor kBarComplete(0x2f, 0x5f, 0x9a);
 inline const QColor kBarOutline(0x2b, 0x4a, 0x6f);

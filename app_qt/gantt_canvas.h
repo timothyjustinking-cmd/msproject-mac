@@ -20,6 +20,7 @@
 // offscreen render is deterministic (it must not depend on today's date).
 #pragma once
 
+#include <QColor>
 #include <QSize>
 #include <QWidget>
 
@@ -65,6 +66,12 @@ class GanttCanvas final : public QWidget {
     // Geometry of the two-tier header for a widget of `width` pixels.
     GanttHeaderInfo header_info(int width) const;
     const core::gantt::GanttLayout& layout() const noexcept { return layout_; }
+
+    // Wave 23 (A-1): the fill colour paintEvent gives layout bar `index` --
+    // summary, milestone, critical or ordinary task.  Exposed so the same-file
+    // structural gate can compare the per-row table against literals instead
+    // of re-reading the code it is testing.
+    QColor bar_colour(std::size_t index) const;
 
   protected:
     void paintEvent(QPaintEvent* event) override;

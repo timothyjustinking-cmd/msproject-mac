@@ -69,6 +69,13 @@ QColor bar_color(const core::gantt::Bar& bar) {
 
 }  // namespace
 
+QColor GanttCanvas::bar_colour(std::size_t index) const {
+    if (index >= layout_.bars.size()) {
+        return {};
+    }
+    return bar_color(layout_.bars[index]);
+}
+
 GanttCanvas::GanttCanvas(QWidget* parent) : QWidget(parent) {
     QFont body = QApplication::font();
     body.setPointSize(kBodyPointSize);

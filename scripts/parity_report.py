@@ -1194,6 +1194,59 @@ def selftest():
     return 0
 
 
+# ------------------------------------------------------- pixel score (report) --
+
+# Decision 12 asks for a pixel-difference score that is REPORTED, not gated
+# (original icons and font metrics are ours by policy).  wave 20 claimed the
+# score existed; it did not -- wave 23 adds it.  The candidate is scaled to the
+# reference's size (the two windows are captured at different DPI), and the
+# score is the percentage of pixels whose largest channel difference exceeds
+# PIXEL_DELTA, plus the mean absolute channel difference.  Regions are split by
+# the measured chrome proportions: title 4 %, ribbon 10 %, timeline 5 %, body
+# 75 % (sheet left 46 %, chart right), status 6 %.
+PIXEL_DELTA = 16
+SCORE_REGIONS = [
+    ("title", 0.00, 0.04, 0.0, 1.0),
+    ("ribbon", 0.04, 0.14, 0.0, 1.0),
+    ("timeline", 0.14, 0.19, 0.0, 1.0),
+    ("sheet", 0.19, 0.94, 0.0, 0.46),
+    ("chart", 0.19, 0.94, 0.46, 1.0),
+    ("status", 0.94, 1.00, 0.0, 1.0),
+]
+
+
+def pixel_score(reference_path, candidate_path):
+    """Per-region pixel-difference percentages.  Report only; never raises."""
+    reference = Image.open(reference_path).convert("RGB")
+    candidate = Image.open(candidate_path).convert("RGB").resize(
+        reference.size, Image.LANCZOS)
+    a = np.asarray(reference, dtype=np.int16)
+    b = np.asarray(candidate, dtype=np.int16)
+    diff = np.abs(a - b)
+    height, width = a.shape[0], a.shape[1]
+    rows = []
+    for name, y0, y1, x0, x1 in SCORE_REGIONS:
+        top, bottom = int(y0 * height), int(y1 * height)
+        left, right = int(x0 * width), int(x1 * width)
+        region = diff[top:bottom, left:right]
+        if region.size == 0:
+            continue
+        changed = float(np.mean(np.max(region, axis=2) > PIXEL_DELTA)) * 100.0
+        rows.append((name, changed, float(np.mean(region))))
+    changed = float(np.mean(np.max(diff, axis=2) > PIXEL_DELTA)) * 100.0
+    total = ("total", changed, float(np.mean(diff)))
+    return rows, total
+
+
+def print_score(rows, total, reference_path, candidate_path):
+    print(f"pixel score (report only, original icons/fonts are ours)")
+    print(f"  reference {os.path.basename(reference_path)}")
+    print(f"  candidate {os.path.basename(candidate_path)} (scaled to reference)")
+    print(f"  {'region':10s} {'changed %':>10s} {'mean abs':>10s}")
+    for name, changed, mean_abs in list(rows) + [total]:
+        print(f"  {name:10s} {changed:10.2f} {mean_abs:10.2f}")
+
+
 # --------------------------------------------------------------------- main --
 
 def main(argv=None):
@@ -1207,6 +1260,8 @@ def main(argv=None):
                         help="write the measurement as JSON ('-' for stdout)")
     parser.add_argument("--selftest", action="store_true",
                         help="run the synthetic self-check")
+    parser.add_argument("--score", action="store_true",
+                        help="decision-12 pixel score (report only, two images)")
     parser.add_argument("--quiet", action="store_true",
                         help="suppress the human table")
     args = parser.parse_args(argv)
@@ -1252,6 +1307,26 @@ def main(argv=None):
         print("error: comparison needs exactly two PNGs (reference, candidate)",
               file=sys.stderr)
         return 2
+
+    if args.score:
+        rows, total = pixel_score(paths[0], paths[1])
+        print_score(rows, total, paths[0], paths[1])
+        if args.json:
+            payload = {"regions": [{"region": n, "changed_percent": c,
+                                    "mean_abs": m} for n, c, m in rows],
+                       "total": {"changed_percent": total[1],
+                                 "mean_abs": total[2]},
+                       "note": "report only; does not gate (decision 12)"}
+            text = json.dumps(payload, indent=2)
+            if args.json == "-":
+                print(text)
+            else:
+                os.makedirs(os.path.dirname(os.path.abspath(args.json)),
+                            exist_ok=True)
+                with open(args.json, "w", encoding="utf-8") as handle:
+                    handle.write(text + "\n")
+                print(f"\nwrote {args.json}")
+        return 0
 
     reference = Analysis(paths[0])
     candidate = Analysis(paths[1])
