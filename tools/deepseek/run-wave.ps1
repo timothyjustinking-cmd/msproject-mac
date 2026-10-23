@@ -27,6 +27,7 @@ $nudge = "Continue wave $Wave from where you left off. Do not re-orient or summa
 # Headless mode loads every built-in and MCP tool, and DeepSeek rejects some tool
 # schemas (the Artifact tool's regex pattern returned HTTP 400 on 2026-10-23), so
 # the session gets the core tools only and no MCP servers.
+# --tools is variadic, so it goes LAST: anything after it would be read as a tool name.
 $tools = "Bash,PowerShell,Read,Edit,Write,Glob,Grep,Agent,TodoWrite,WebFetch,WebSearch"
 $failures = 0
 for ($i = 1; $i -le $MaxIterations; $i++) {
@@ -34,9 +35,9 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     $log = Join-Path $logdir ("run-wave{0}-{1:d2}.log" -f $Wave, $i)
     Write-Host "`n=== wave $Wave iteration $i / $MaxIterations  $(Get-Date -Format 'HH:mm:ss')  session $SessionId ===`n"
     if ($i -eq 1 -and -not $resume) {
-        & $launcher -p --session-id $SessionId --permission-mode auto --verbose --strict-mcp-config --tools $tools $first 2>&1 | Tee-Object -FilePath $log
+        & $launcher -p $first --session-id $SessionId --permission-mode auto --verbose --strict-mcp-config --tools $tools 2>&1 | Tee-Object -FilePath $log
     } else {
-        & $launcher -p --resume $SessionId --permission-mode auto --verbose --strict-mcp-config --tools $tools $nudge 2>&1 | Tee-Object -FilePath $log
+        & $launcher -p $nudge --resume $SessionId --permission-mode auto --verbose --strict-mcp-config --tools $tools 2>&1 | Tee-Object -FilePath $log
     }
     $code = $LASTEXITCODE
     if ($code -ne 0) {
