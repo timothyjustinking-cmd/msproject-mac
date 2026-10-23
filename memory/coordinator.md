@@ -317,3 +317,21 @@ Everything else in that run succeeded: Windows and macOS packages uploaded, rend
 uploaded (if-no-files-found fired only because the Linux step died first).
 
 Q5 branch run 39895551240 was still in progress at round 2; check it before merging.
+
+### Round 4: Q5 branch does NOT merge
+
+CI run 39895551240 (branch `w20-q5`): **windows-qt = failure**, macOS and Linux still
+in progress at the round close.  Job logs are unavailable until the whole run
+finishes; fetch them with `gh run view --job=<windows id> --log` (set
+LOCALAPPDATA=<repo>\build\gh-cache) and fix the MSVC errors on the branch.  Do not
+merge `w20-q5` until Windows is green: a failure there means the chrome cut does
+not compile under /W4 /WX.
+
+Branch contents to work from: backstage.cpp/h, theme.cpp/h, shell_icons.cpp/h,
+preferences_store.cpp/h, view_label.cpp/h, command_status.h, tools/, five new test
+files (empty_state, chrome_gate, view_gate, dialog_gate, clipboard), and
+docs/handoff/qt2.md + docs/ui-command-backlog.md.
+
+State at close: `main` = 85d4418 (qmake fix, engine 7/8, M6/E5/CI2 merged), clean.
+The one dispatch that still needs to happen after the branch is green: `main` with
+the qmake fix, which also produces the Linux AppImage.
