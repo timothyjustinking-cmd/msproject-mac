@@ -20,13 +20,20 @@
 // Everything is written under the build tree's test-out directory, and the test
 // is offscreen like the rest (QT_QPA_PLATFORM=offscreen, QT_SCALE_FACTOR=1).
 #include <QAction>
+#include <QAbstractButton>
 #include <QApplication>
 #include <QByteArray>
+#include <QCheckBox>
+#include <QFile>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QModelIndex>
 #include <QString>
+#include <QStringList>
 #include <QTableView>
+#include <QTimer>
 #include <QVariant>
 
 #include <cstddef>
@@ -39,12 +46,15 @@
 #include <string>
 #include <vector>
 
+#include "backstage.h"
 #include "document.h"
 #include "entry_columns.h"
 #include "layout_model.h"
 #include "main_window.h"
 #include "menu_model.h"
+#include "preferences_store.h"
 #include "reader.h"
+#include "ribbon_bar.h"
 #include "sheet.h"
 #include "shell_style.h"
 
@@ -76,6 +86,37 @@ QAction* find_action(QMainWindow& window, app::MenuAction id) {
             if (action->data().toInt() == static_cast<int>(id)) {
                 return action;
             }
+        }
+    }
+    return nullptr;
+}
+
+QCheckBox* find_ribbon_checkbox(msqt::RibbonBar* ribbon, const QString& tab,
+                                const QString& group, const QString& label) {
+    if (ribbon == nullptr) {
+        return nullptr;
+    }
+    const QStringList tabs = ribbon->tab_titles();
+    const int tab_index = tabs.indexOf(tab);
+    if (tab_index < 0) {
+        return nullptr;
+    }
+    ribbon->set_active_tab(tab_index);
+    QApplication::processEvents();
+    const QStringList groups = ribbon->group_titles();
+    const int group_index = groups.indexOf(group);
+    if (group_index < 0) {
+        return nullptr;
+    }
+    for (int index = 0; index < ribbon->group_control_count(group_index); ++index) {
+        auto* box = qobject_cast<QCheckBox*>(ribbon->group_control(group_index, index));
+        if (box == nullptr) {
+            continue;
+        }
+        QString text = box->text();
+        text.remove(QLatin1Char('&'));
+        if (text == label) {
+            return box;
         }
     }
     return nullptr;
@@ -201,6 +242,96 @@ int main(int argc, char** argv) {
           "a Start edit commits through the shell's model path");
     check(window.pending_start_edits() == 1, "exactly one start edit is pending");
     check(window.document_dirty(), "the start edit makes the document dirty");
+
+    // --- W26-REV-2: a project-summary toggle must not drop a pending cell edit.
+    // The RecordSet is the source of truth for cell edits; the toggle rebuilds
+    // from the plan, so it must fold the records back first.  Before the fix,
+    // pending_start_edits() fell to 0 here and the save wrote no start row.
+    QCheckBox* summary_box = find_ribbon_checkbox(
+        window.ribbon(), QStringLiteral("Gantt Chart Format"), QStringLiteral("Show/Hide"),
+        QStringLiteral("Project Summary Task"));
+    check(summary_box != nullptr, "the Project Summary Task check box is live");
+    const std::size_t rows_before_toggle = window.sheet_row_count();
+    if (summary_box != nullptr) {
+        summary_box->click();
+        QApplication::processEvents();
+        check(window.project_summary_visible(), "the toggle shows the project row");
+        check(window.sheet_row_count() == rows_before_toggle + 1,
+              "the project row is the one row added");
+        check(window.pending_start_edits() == 1,
+              "the pending Start edit survives the project-summary toggle");
+        check(window.document_dirty(), "the document stays dirty after the toggle");
+        summary_box->click();
+        QApplication::processEvents();
+        check(!window.project_summary_visible(), "the second click hides the row again");
+        check(window.pending_start_edits() == 1,
+              "the pending Start edit survives the second toggle");
+        check(window.sheet_row_count() == rows_before_toggle,
+              "the sheet returns to its original row count");
+    }
+
+    // --- W26-REV-3: a dirty document must survive Recent/Blank Project Cancel.
+    // Both handlers used to replace the document without the File > Open guard.
+    const QString ini =
+        QString::fromStdString((out_dir / "recent.ini").string());
+    QFile::remove(ini);
+    msqt::PreferencesStore store(ini);
+    store.add_recent_file(QString::fromStdString(fixture.string()));
+    window.set_preferences_store(&store);
+    window.show_backstage(true);
+    msqt::Backstage* backstage = window.backstage();
+    check(backstage != nullptr, "the window has a backstage");
+    if (backstage != nullptr) {
+        backstage->show_page(msqt::Backstage::Page::create_new);
+        QApplication::processEvents();
+        QListWidget* recent = backstage->new_recent_list();
+        check(recent != nullptr && recent->count() == 1,
+              "the New page lists the local recent file");
+        bool saw_recent_prompt = false;
+        QTimer::singleShot(0, [&saw_recent_prompt]() {
+            auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            if (box != nullptr) {
+                saw_recent_prompt = true;
+                if (QAbstractButton* cancel = box->button(QMessageBox::Cancel)) {
+                    cancel->click();
+                } else {
+                    box->reject();
+                }
+            }
+        });
+        if (recent != nullptr && recent->count() > 0) {
+            recent->itemActivated(recent->item(0));
+            QApplication::processEvents();
+        }
+        check(saw_recent_prompt, "a Recent row on a dirty document asks first");
+        check(window.pending_start_edits() == 1 && window.document_dirty(),
+              "Cancel on the Recent prompt keeps the pending Start edit");
+        check(window.loaded_task_count() == 3,
+              "Cancel on the Recent prompt keeps the open project");
+
+        bool saw_blank_prompt = false;
+        QTimer::singleShot(0, [&saw_blank_prompt]() {
+            auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            if (box != nullptr) {
+                saw_blank_prompt = true;
+                if (QAbstractButton* cancel = box->button(QMessageBox::Cancel)) {
+                    cancel->click();
+                } else {
+                    box->reject();
+                }
+            }
+        });
+        if (QAbstractButton* blank = backstage->new_blank_button()) {
+            blank->click();
+            QApplication::processEvents();
+        }
+        check(saw_blank_prompt, "Blank Project on a dirty document asks first");
+        check(window.pending_start_edits() == 1 && window.document_dirty(),
+              "Cancel on the Blank Project prompt keeps the pending Start edit");
+        check(window.loaded_task_count() == 3,
+              "Cancel on the Blank Project prompt keeps the open project");
+    }
+    window.set_preferences_store(nullptr);
 
     // --- Save through the shared Document path ------------------------------
     if (!window.save_document_path(QString::fromStdString(saved.string()), &error)) {

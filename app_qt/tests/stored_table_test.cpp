@@ -44,11 +44,14 @@
 #include <QApplication>
 #include <QByteArray>
 #include <QColor>
+#include <QComboBox>
 #include <QDir>
 #include <QFont>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QString>
+#include <QStringList>
 #include <QTableView>
 
 #include <algorithm>
@@ -66,6 +69,7 @@
 #include "gantt_canvas.h"
 #include "main_window.h"
 #include "reader_adapter.h"
+#include "ribbon_bar.h"
 #include "shell_style.h"
 #include "sheet.h"
 #include "viewstate.h"
@@ -685,6 +689,52 @@ void check_computed_columns_synthetic(msqt::MainWindow& window, const QString& p
 }
 
 // Optional: a real corpus file (read-only).  Its stored table is not Entry.
+// W26-REV-4: a live Font-group combo by its accessible name (the Task tab).
+QComboBox* ribbon_font_combo(msqt::RibbonBar* ribbon, const QString& name) {
+    if (ribbon == nullptr) {
+        return nullptr;
+    }
+    const int task = ribbon->tab_titles().indexOf(QStringLiteral("Task"));
+    if (task < 0) {
+        return nullptr;
+    }
+    // Do not rebuild an already-active page: a rebuild deletes the widgets, so
+    // a pointer returned by an earlier call would dangle.
+    if (ribbon->active_tab_index() != task) {
+        ribbon->set_active_tab(task);
+        QApplication::processEvents();
+    }
+    const QStringList groups = ribbon->group_titles();
+    for (int group = 0; group < groups.size(); ++group) {
+        for (int control = 0; control < ribbon->group_control_count(group); ++control) {
+            auto* combo = qobject_cast<QComboBox*>(ribbon->group_control(group, control));
+            if (combo != nullptr && combo->accessibleName() == name) {
+                return combo;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// W26-REV-5 (the independent review's gate hole): count the pixels of a
+// rendered widget that are within `tolerance` of a decoded Project colour.  The
+// G3 checks below use this so a paint-layer regression cannot pass on the model
+// accessor alone.
+int pixels_near(const QImage& image, QRgb want, int tolerance) {
+    int count = 0;
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            const QRgb rgb = image.pixel(x, y);
+            if (qAbs(qRed(rgb) - qRed(want)) <= tolerance &&
+                qAbs(qGreen(rgb) - qGreen(want)) <= tolerance &&
+                qAbs(qBlue(rgb) - qBlue(want)) <= tolerance) {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
 void case_corpus(const QString& corpus) {
     if (!QFileInfo::exists(corpus)) {
         std::fprintf(stderr, "note: no corpus file at %s; skipped\n", corpus.toUtf8().constData());
@@ -721,6 +771,18 @@ void case_corpus(const QString& corpus) {
         std::fprintf(stderr, "note: the corpus file loads no tasks; skipped\n");
         return;
     }
+    // W26-REV-4: the Font group's value displays are the FILE's default text
+    // style (PROJECT_A's first FONT_BASES entry, Arial 8), not the hard-coded
+    // new-project fallback.  Project's own Font box shows the same pair.
+    QComboBox* font_name = ribbon_font_combo(window.ribbon(), QStringLiteral("font name"));
+    QComboBox* font_size = ribbon_font_combo(window.ribbon(), QStringLiteral("font size"));
+    std::printf("note: Font combo live state '%s' / '%s'\n",
+                font_name != nullptr ? font_name->currentText().toUtf8().constData() : "(none)",
+                font_size != nullptr ? font_size->currentText().toUtf8().constData() : "(none)");
+    check(font_name != nullptr && font_name->currentText() == QStringLiteral("Arial"),
+          "the Font name combo shows the file's decoded default");
+    check(font_size != nullptr && font_size->currentText() == QStringLiteral("8"),
+          "the Font size combo shows the file's decoded default");
     // Measured from corpus/project_a.mpp's first CTable row: Indicators width 0,
     // Task Name 70, Dur 9, Start 19, Finish 21, % Comp 7, Pre 13, Suc 13,
     // SUMMARY 17 characters (docs/handoff/q6.md).
@@ -804,6 +866,15 @@ void case_corpus(const QString& corpus) {
         check(colour == QColor(0xff, 0x00, 0x00),
               "project_a row 3 (a critical milestone) is Project's stored red 0xFF0000");
     }
+    // W26-REV-5: the decoded text colours must reach the PAINTED sheet, not only
+    // the model roles.  A paint-layer regression (a different brush) fails here.
+    if (window.sheet_view() != nullptr && window.sheet_view()->viewport() != nullptr) {
+        const QImage painted = window.sheet_view()->viewport()->grab().toImage();
+        check(pixels_near(painted, qRgb(0xff, 0x00, 0x00), 60) > 20,
+              "the painted sheet carries the decoded milestone red text");
+        check(pixels_near(painted, qRgb(0x33, 0x66, 0xff), 60) > 20,
+              "the painted sheet carries the decoded summary blue text");
+    }
 
     // Wave 26 (W26-3.2): the Gantt bars use PROJECT_A's own 10-style palette.
     // The colours asserted are the decoded ones the clean capture shows:
@@ -831,6 +902,19 @@ void case_corpus(const QString& corpus) {
         check(bar_colours.count(qRgb(0xf7, 0x8a, 0x88)) == 0,
               "project_a never paints the unused light-red 'Critical' bar style");
         check(project_row_red, "project_a's project-summary bar is its red summary style");
+
+        // W26-REV-5: the palette must be in the PAINTED pixels, not only the
+        // model accessor.  Render the live canvas; the visible rows carry the
+        // critical, summary and progress roles at the test window size.
+        const QImage chart = gantt->grab().toImage();
+        check(pixels_near(chart, qRgb(0xff, 0x00, 0x00), 2) > 100,
+              "the painted chart contains the critical (255,0,0) bars");
+        check(pixels_near(chart, qRgb(0x00, 0x00, 0x80), 2) > 100,
+              "the painted chart contains the summary (0,0,128) bars");
+        check(pixels_near(chart, qRgb(0x00, 0xb0, 0x50), 2) > 100,
+              "the painted chart contains the file's green progress/finished bars");
+        check(pixels_near(chart, qRgb(0xf7, 0x8a, 0x88), 0) == 0,
+              "the painted chart contains none of the unused light-red style");
 
         // Wave 26 (W26-3.3): the file stores three timescale tiers -- year
         // ("2026"), quarter ("Qtr 2, 2026") and month ("Apr") -- so the 42-px

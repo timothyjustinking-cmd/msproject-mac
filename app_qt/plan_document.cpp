@@ -615,6 +615,10 @@ void PlanDocument::set_project_summary_visible(bool visible, app::ZoomLevel zoom
     // The RecordSet (and so the sheet, the Gantt rows and every uid lookup) is
     // built from `base_`: flipping this presentation flag and rebuilding is the
     // same path a structural edit takes.
+    // Fold the CURRENT cell values back into `base_` first: a pending Start (or
+    // any other cell edit) lives only in `records_`, and rebuilding from the
+    // old `base_` would silently drop it before Save can write it.
+    base_ = app::sync_plan_from_records(base_, records_);
     base_.show_project_summary = visible;
     rebuild_from_base(zoom, 0);
 }

@@ -827,6 +827,36 @@ void RibbonBar::sync_document_checkboxes() {
     set_stack_check(QStringLiteral("Project Summary Task"), project_summary_checked_);
 }
 
+void RibbonBar::set_font_default(const QString& family, int point_size) {
+    font_family_ = family.isEmpty() ? QStringLiteral("Calibri") : family;
+    font_size_ = point_size > 0 ? QString::number(point_size) : QStringLiteral("11");
+    // The Font group lives on the Task tab.  If it is the live page, update the
+    // two displays in place; otherwise they are built from the members when the
+    // tab is next shown.
+    if (active_tab_ != 0) {
+        return;
+    }
+    for (const std::vector<QWidget*>& group : page_controls_) {
+        for (QWidget* control : group) {
+            auto* combo = qobject_cast<QComboBox*>(control);
+            if (combo == nullptr) {
+                continue;
+            }
+            const QString name = combo->accessibleName();
+            const QString value = name == QLatin1String("font name")  ? font_family_
+                                  : name == QLatin1String("font size") ? font_size_
+                                                                       : QString();
+            if (value.isEmpty()) {
+                continue;
+            }
+            const QSignalBlocker blocker(combo);
+            combo->clear();
+            combo->addItem(value);
+            combo->setCurrentIndex(0);
+        }
+    }
+}
+
 void RibbonBar::set_stack_check(const QString& accessible_name, bool checked) {
     for (std::size_t group = 0; group < page_controls_.size(); ++group) {
         for (std::size_t control = 0; control < page_controls_[group].size(); ++control) {
@@ -1102,6 +1132,14 @@ void RibbonBar::build_page(int tab_index) {
                     combo_box->setFocusPolicy(Qt::NoFocus);
                     combo_box->setAccessibleName(label);
                     QString items = QString::fromUtf8(spec.items != nullptr ? spec.items : "");
+                    // W26-REV-4: the Font group's two displays follow the file's
+                    // decoded default text style (the spec's Calibri/11 is only
+                    // the new-project fallback).
+                    if (label == QLatin1String("font name") && !font_family_.isEmpty()) {
+                        items = font_family_;
+                    } else if (label == QLatin1String("font size") && !font_size_.isEmpty()) {
+                        items = font_size_;
+                    }
                     if (!items.isEmpty()) {
                         for (const QString& item : items.split(QLatin1Char('|'))) {
                             combo_box->addItem(item);

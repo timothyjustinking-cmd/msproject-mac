@@ -542,6 +542,11 @@ void MainWindow::build_central_widget() {
             show_backstage(false);
             open_dialog(QDir::rootPath());
         } else if (command == QStringLiteral("new")) {
+            // W26-REV-3: Blank Project discards the open document, so the same
+            // unsaved-edit guard as File > Open must run first.
+            if (!confirm_proceed_with_discard()) {
+                return;
+            }
             new_project();
         } else if (command == QStringLiteral("new_from_existing")) {
             // W26-4.3: start from an existing project by opening it; the reader
@@ -579,8 +584,13 @@ void MainWindow::build_central_widget() {
     backstage_->set_about_handler([this]() { show_about(); });
     backstage_->set_recent_open_handler([this](const QString& path) {
         // W26-4.3: a Recent row opens a local file through the same path as
-        // File > Open.  A failure is reported in the status line, not a modal,
-        // so the offscreen gate can drive the row.
+        // File > Open.  W26-REV-3: it must also run File > Open's unsaved-edit
+        // guard first, or a Recent click silently discards pending edits.
+        if (!confirm_proceed_with_discard()) {
+            return;
+        }
+        // A failure is reported in the status line, not a modal, so the
+        // offscreen gate can drive the row.
         show_backstage(false);
         QString error;
         if (!open_file(path, &error)) {
@@ -993,6 +1003,7 @@ bool MainWindow::open_file(const QString& path, QString* error) {
         gantt_canvas_->set_critical_highlight(false);
         ribbon_->set_document_state(false, timeline_visible_, false);
         ribbon_->set_critical_tasks(false);
+        ribbon_->set_font_default(QString(), 0);
         doc_.build_empty_view(prefs_.zoom, app::today_date32());
         gantt_canvas_->set_layout(doc_.gantt());
         gantt_canvas_->set_selected_uid(0);
@@ -1065,6 +1076,32 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     gantt_canvas_->set_critical_highlight(false);
     ribbon_->set_document_state(true, timeline_visible_, doc_.project_summary_visible());
     ribbon_->set_critical_tasks(false);
+    // W26-REV-4: W26-1.1's Font value displays follow the FILE's decoded default
+    // text style when the view record carries one; the captured new-project
+    // default (Calibri 11) stays the fallback.  The first FONT_BASES entry is
+    // the document's default font (PROJECT_A's Arial 8, which is what Project's
+    // own Font box shows); an absent table falls back to the non-critical style.
+    {
+        QString family;
+        int point_size = 0;
+        const msproject::viewstate::GanttStyle& style = doc_.gantt_style();
+        if (style.decoded) {
+            if (!style.fonts.empty() && style.fonts.front().valid &&
+                !style.fonts.front().name.empty()) {
+                family = to_q(style.fonts.front().name);
+                point_size = style.fonts.front().point_size;
+            } else {
+                const std::size_t index = static_cast<std::size_t>(
+                    msproject::viewstate::TextStyleItem::non_critical);
+                if (index < style.text.size() && style.text[index].valid &&
+                    !style.text[index].font_name.empty()) {
+                    family = to_q(style.text[index].font_name);
+                    point_size = style.text[index].point_size;
+                }
+            }
+        }
+        ribbon_->set_font_default(family, point_size);
+    }
 
     refresh_timeline();
 
@@ -1398,6 +1435,7 @@ void MainWindow::new_project() {
     gantt_canvas_->set_critical_highlight(false);
     ribbon_->set_document_state(false, timeline_visible_, false);
     ribbon_->set_critical_tasks(false);
+    ribbon_->set_font_default(QString(), 0);
     refresh_timeline();
     setWindowTitle(QStringLiteral("MS Project Shell"));
     refresh_view_buttons();

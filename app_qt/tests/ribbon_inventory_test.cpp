@@ -313,9 +313,10 @@ void check_inventory(msqt::RibbonBar* ribbon, const TabPin& pin, const QJsonObje
             // State: check boxes (except file-driven ones), combos, the gallery
             // and the date field.
             if (expected.state != "-") {
-                if (expected.kind == "checkbox" && expected.state == "file") {
+                if (expected.state == "file") {
                     // The functional section proves the file-driven initial
-                    // state and the toggle against the real fixtures.
+                    // state and the toggle against the real fixtures (the
+                    // check boxes and the two Font combos, W26-REV-4).
                 } else {
                     const QString state = live_state(live);
                     gate::check(state == QString::fromUtf8(expected.state.c_str()),
