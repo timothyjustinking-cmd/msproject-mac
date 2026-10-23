@@ -1,27 +1,47 @@
-# Drive DeepSeek (via the Claude CLI launcher) through a wave without manual nudges.
-# deepseek-flash tends to end its turn after each planning or orientation pass; this
-# loop re-prompts the SAME conversation (--continue) until the wave's completion file
-# exists, a blocker is declared, or the iteration cap is hit.  Run from the repo root:
-#   pwsh -ExecutionPolicy Bypass -File tools\deepseek\run-wave.ps1
+# Drive DeepSeek (via the Claude CLI launcher) through one wave without manual nudges.
+# deepseek-flash tends to end its turn after a planning pass; this loop re-prompts
+# the SAME conversation until the wave's completion file exists, DeepSeek declares
+# BLOCKED, or the iteration cap is hit.  Run from anywhere:
+#   pwsh -ExecutionPolicy Bypass -File tools\deepseek\run-wave.ps1 -Wave 24
+# The conversation is pinned by an explicit session id (never --continue: the most
+# recent session in this project folder may be another Claude session's).
 param(
-    [string]$DoneFile = "docs\handoff\wave23-complete.md",
+    [Parameter(Mandatory = $true)][int]$Wave,
     [int]$MaxIterations = 80,
-    [string]$Brief = "docs/handoff/wave23-brief.md"
+    [string]$SessionId = ""
 )
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $root
 $launcher = Join-Path $PSScriptRoot "deepseek-claude.cmd"
-$first = "Read docs/START-HERE.md, then $Brief, and run it as the wave-23 coordinator on branch wave23: the W23 items in order, each committed with its finding id, every gate in section 1 green before each commit, one CI dispatch per workflow on the branch at the end, no merge to main. Write $DoneFile when done. Do not stop to summarise; act."
-$nudge = "Continue the wave from where you left off. Do not re-orient or summarise: pick up the next unfinished W23 item, do the work, run the gates, commit with the finding id, and move to the next item. Write $DoneFile only when every item is fixed or deferred with a reason. If you are blocked by something only Tim can resolve, write BLOCKED and the reason as your last line."
+$brief = "docs/handoff/wave$Wave-brief.md"
+$done = "docs/handoff/wave$Wave-complete.md"
+$branch = "wave$Wave"
+$logdir = Join-Path $root "build\deepseek-sessions"
+New-Item -ItemType Directory -Force $logdir | Out-Null
+$resume = $SessionId -ne ""
+if (-not $resume) { $SessionId = [guid]::NewGuid().ToString() }
+"wave=$Wave session=$SessionId started=$(Get-Date -Format s)" | Set-Content (Join-Path $logdir "run-wave$Wave.session")
+
+$first = "Read docs/START-HERE.md, then $brief, and run it as the wave-$Wave coordinator on branch ${branch}: the items in order, each committed with its finding id, every gate in the brief green before each commit and recorded in the commit message, one CI dispatch per workflow on the branch at the end, no merge to main. Write $done when done. Do not stop to summarise or ask; act. If something only Tim can resolve blocks you, write BLOCKED and the reason as your last line."
+$nudge = "Continue wave $Wave from where you left off. Do not re-orient or summarise: take the next unfinished item in $brief order, do the work, run the gates, commit with the finding id, and move on. Write $done only when every item is fixed or deferred with a reason. If something only Tim can resolve blocks you, write BLOCKED and the reason as your last line."
 $failures = 0
 for ($i = 1; $i -le $MaxIterations; $i++) {
-    if (Test-Path (Join-Path $root $DoneFile)) { Write-Host "`n=== $DoneFile exists; wave done after $($i-1) iteration(s) ==="; break }
-    Write-Host "`n=== run-wave iteration $i / $MaxIterations  $(Get-Date -Format 'HH:mm:ss') ===`n"
-    $prompt = if ($i -eq 1) { $first } else { $nudge }
-    & $launcher -p --continue --permission-mode auto --verbose $prompt 2>&1 | Tee-Object -FilePath (Join-Path $root "build\deepseek-sessions\run-wave-$i.log")
+    if (Test-Path (Join-Path $root $done)) { Write-Host "`n=== $done exists; wave $Wave done after $($i-1) iteration(s) ==="; break }
+    $log = Join-Path $logdir ("run-wave{0}-{1:d2}.log" -f $Wave, $i)
+    Write-Host "`n=== wave $Wave iteration $i / $MaxIterations  $(Get-Date -Format 'HH:mm:ss')  session $SessionId ===`n"
+    if ($i -eq 1 -and -not $resume) {
+        & $launcher -p --session-id $SessionId --permission-mode auto --verbose $first 2>&1 | Tee-Object -FilePath $log
+    } else {
+        & $launcher -p --resume $SessionId --permission-mode auto --verbose $nudge 2>&1 | Tee-Object -FilePath $log
+    }
     $code = $LASTEXITCODE
-    if ($code -ne 0) { $failures++; Write-Host "iteration $i exited $code ($failures consecutive failure(s))"; if ($failures -ge 3) { Write-Host "three consecutive failures; stopping"; break }; Start-Sleep 30 } else { $failures = 0 }
-    $log = Get-Content (Join-Path $root "build\deepseek-sessions\run-wave-$i.log") -Tail 5 -ErrorAction SilentlyContinue
-    if ($log -match '^BLOCKED') { Write-Host "DeepSeek reports BLOCKED; stopping for Tim"; break }
+    if ($code -ne 0) {
+        $failures++
+        Write-Host "iteration $i exited $code ($failures consecutive failure(s))"
+        if ($failures -ge 3) { Write-Host "three consecutive failures; stopping"; break }
+        Start-Sleep 60
+    } else { $failures = 0 }
+    $tail = Get-Content $log -Tail 8 -ErrorAction SilentlyContinue
+    if ($tail -match '^\s*BLOCKED') { Write-Host "DeepSeek reports BLOCKED; stopping for Tim"; break }
 }
-Write-Host "run-wave finished $(Get-Date -Format 'HH:mm:ss')"
+Write-Host "run-wave $Wave finished $(Get-Date -Format 'HH:mm:ss')"

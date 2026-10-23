@@ -6,6 +6,14 @@ first._
 
 ## The 30-second state
 
+* **Wave 24 is running on branch `wave24`** (cut from local `wave23` d236f91),
+  from `docs/handoff/wave24-brief.md`.  It exists because the verifier found
+  wave 23 **not ready to merge**: a Critical row-index bug (Custom Fields edits and
+  saves the task below the selection), the project summary row forced on although
+  the file stores it (214/Props 0x03400009), CI dropping the corpus-free
+  plan_recalc checks - see `docs/handoff/wave23-verification/`.  **Nothing is
+  pushed until Tim rules on the client data already on the public repo** (brief
+  section 0).
 * `main` = **488481f** (wave-22 docs close); the wave-23 code is on **`wave23`**,
   **not merged**.  Remote `wave23` = `63cd087` (qt-shell green, core red on a
   GCC comment since fixed); the review-fix and docs-close commits are LOCAL
