@@ -201,6 +201,65 @@ void check_inventory(msqt::RibbonBar* ribbon, const TabPin& pin, int tab_index) 
     }
 }
 
+// Wave 23 review finding: the independent pin carries the enabled SET but not
+// the command each button runs, so dropping the old MenuAction assertion left a
+// mis-wired button undetected.  This table pins the action of every ENABLED
+// control (the implemented commands); disabled controls cannot act.
+struct EnabledWiring {
+    const char* tab;
+    const char* group;
+    const char* label;
+    const char* action;
+};
+const EnabledWiring kEnabledWiring[] = {
+    {"Task", "Clipboard", "Paste", "paste"},
+    {"Task", "Clipboard", "Cut", "cut"},
+    {"Task", "Clipboard", "Copy", "copy"},
+    {"Task", "Insert", "Task", "insert_task"},
+    {"Task", "Properties", "Information", "task_fields"},
+    {"Task", "Editing", "Find", "show_filter"},
+    {"Task", "Editing", "Clear", "clear_filter"},
+    {"View", "Task Views", "Task Usage", "view_task_usage"},
+    {"View", "Resource Views", "Resource Usage", "view_resource_usage"},
+    {"View", "Resource Views", "Resource Sheet", "view_resource_sheet"},
+    {"View", "Data", "Filter", "show_filter"},
+    {"Project", "Properties", "Custom Fields", "custom_fields"},
+    {"Gantt Chart Format", "Columns", "Custom Fields", "custom_fields"},
+};
+
+void check_action_wiring(msqt::RibbonBar* ribbon, const TabPin& pin) {
+    for (const EnabledWiring& wiring : kEnabledWiring) {
+        if (pin.title != wiring.tab) {
+            continue;
+        }
+        int group_index = -1;
+        int button_index = -1;
+        for (std::size_t g = 0; g < pin.groups.size(); ++g) {
+            if (pin.groups[g].title != wiring.group) {
+                continue;
+            }
+            group_index = static_cast<int>(g);
+            for (std::size_t b = 0; b < pin.groups[g].buttons.size(); ++b) {
+                if (pin.groups[g].buttons[b].label == wiring.label) {
+                    button_index = static_cast<int>(b);
+                    break;
+                }
+            }
+            break;
+        }
+        if (group_index < 0 || button_index < 0) {
+            gate::check(false, "an enabled control exists in the pin for its wiring");
+            continue;
+        }
+        const app::MenuAction action =
+            ribbon->group_button_action(group_index, button_index);
+        const std::string named = std::string("ribbon button '") + wiring.label +
+                                  "' runs " + wiring.action;
+        gate::check(std::string(app::menu_action_name(action)) == wiring.action,
+                    named.c_str());
+    }
+}
+
 // Every live button's decision-9 rule: enabled iff the shell implements the
 // modelled action; a disabled button carries the exact product tooltip.
 void check_button_state(msqt::RibbonBar* ribbon, const TabPin& pin) {
@@ -387,6 +446,7 @@ int main(int argc, char** argv) {
         gate::check(ribbon->active_tab_index() == static_cast<int>(tab_index),
                     "set_active_tab selects the tab (and checks its tab button)");
         check_inventory(ribbon, pin, static_cast<int>(tab_index));
+        check_action_wiring(ribbon, pin);
         check_button_state(ribbon, pin);
         bool overflowed = false;
         check_layout(ribbon, pin.title.c_str(), &overflowed);

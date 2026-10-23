@@ -32,10 +32,10 @@ checkout. Nothing here is client data.
 
 ## Every tracked file and its SHA-256 (wave 23, A-8/A-7d)
 
-`scripts/check_fixtures.py` pins the four files whose content is quoted in
+`scripts/check_fixtures.py` pins the six files whose content is quoted in
 docs or used as an oracle reference; this table is the complete inventory so a
 silent substitution is visible even for the small binaries.  These are the
-hashes at the wave-23 close (commit `e00e910`); regenerate the table in the
+hashes at the wave-23 close (branch `wave23`); regenerate the table in the
 same commit as any deliberate change -- never edit a fixture to make a test
 pass.  `README.md` cannot carry its own hash (it changes when this table does).
 

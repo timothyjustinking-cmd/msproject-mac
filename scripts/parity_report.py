@@ -1321,6 +1321,14 @@ def main(argv=None):
         rows, summary = compare(reference, candidate)
         if not args.quiet:
             print_compare(rows, summary, reference, candidate)
+        # Wave 23 review: a gate that passes on ONE surviving measure is not a
+        # gate.  The committed reference supplies nine structural measures; a
+        # candidate that fails to exhibit most of them is not comparable.
+        MIN_COMPARABLE = 8
+        if summary["comparable"] < MIN_COMPARABLE:
+            print(f"error: only {summary['comparable']} comparable measure(s); "
+                  f"at least {MIN_COMPARABLE} are required", file=sys.stderr)
+            return 1
         if args.json:
             payload = {"reference": args.reference_json, "comparison": rows,
                        "summary": summary}

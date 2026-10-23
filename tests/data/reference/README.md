@@ -6,7 +6,8 @@ our own earlier render is not a reference).
 
 **Operator ruling (Tim, 2026-10-23): Project screenshots stay local and never
 reach the repository.**  Only the NUMBERS measured from them are committed.
-The pre-push guard enforces this.
+The coordinator's local pre-push guard (not tracked in the repo) enforces this,
+and the ruling stands for any clone regardless of the hook.
 
 | file | what |
 |---|---|
