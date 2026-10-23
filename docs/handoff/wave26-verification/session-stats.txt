@@ -1,0 +1,40 @@
+== 6e75db70-f3e1-420e-ba02-b890492e5eb8
+  wall 0.2 h, model turns 86, tool calls 112
+  tokens: input 116819, cache-read 10070912, cache-write 0, output 60634
+  build/test commands 7; tool output 0.4 MB, 1 results > 20 KB
+  top tools: Bash 56, Read 20, PowerShell 18, Edit 17, Write 1
+== 25a86a24-960d-4fd9-90e3-5cf7cbd2818b
+  wall 1.1 h, model turns 396, tool calls 493
+  tokens: input 263461, cache-read 131353216, cache-write 0, output 287975
+  build/test commands 64; tool output 1.4 MB, 7 results > 20 KB
+  top tools: Bash 255, Edit 181, Read 27, Write 18, PowerShell 12
+== a542a0ba-d409-4922-a52b-1c715bc458f2
+  wall 0.5 h, model turns 175, tool calls 232
+  tokens: input 138188, cache-read 32220288, cache-write 0, output 147807
+  build/test commands 43; tool output 1.8 MB, 22 results > 20 KB
+  top tools: Edit 73, Bash 57, PowerShell 43, Read 40, Write 13, Grep 6
+== 6a161c65-184e-4da1-b607-f5bb842efe16
+  wall 1.1 h, model turns 445, tool calls 461
+  tokens: input 317860, cache-read 144167424, cache-write 0, output 270698
+  build/test commands 32; tool output 1.6 MB, 11 results > 20 KB
+  top tools: Bash 276, Edit 89, Read 36, PowerShell 29, Write 24, Grep 3, WebFetch 3, WebSearch 1
+== 11cadc43-68ff-4198-9d8e-1790afcc4908
+  wall 1.3 h, model turns 406, tool calls 461
+  tokens: input 241715, cache-read 106326272, cache-write 0, output 231113
+  build/test commands 16; tool output 7.7 MB, 67 results > 20 KB
+  top tools: Bash 187, Edit 166, Read 94, Write 14
+== df3f6b6b-a3cc-4d54-bd91-6a38ea4d1600
+  wall 1.1 h, model turns 357, tool calls 411
+  tokens: input 281228, cache-read 103360000, cache-write 0, output 189581
+  build/test commands 13; tool output 9.7 MB, 59 results > 20 KB
+  top tools: Bash 176, Edit 142, Read 81, Write 7, PowerShell 5
+== d61cd3ac-72c8-417b-a6b9-4e852e6cadfe
+  wall 0.6 h, model turns 247, tool calls 286
+  tokens: input 227019, cache-read 58229504, cache-write 0, output 135145
+  build/test commands 27; tool output 1.7 MB, 14 results > 20 KB
+  top tools: Bash 123, Edit 83, Read 49, PowerShell 24, Write 7
+== a9f2fa86-1004-4136-85ba-7bcaca400144
+  wall 0.9 h, model turns 607, tool calls 626
+  tokens: input 298152, cache-read 188673920, cache-write 0, output 268890
+  build/test commands 170; tool output 1.3 MB, 6 results > 20 KB
+  top tools: Bash 395, Read 89, Edit 85, PowerShell 39, Write 13, Agent 5
