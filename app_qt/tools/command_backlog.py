@@ -51,34 +51,69 @@ def menu_commands() -> list[tuple[str, str, str]]:
 
 
 def ribbon_commands() -> list[tuple[str, str, str, str]]:
+    """Every ribbon command, in ribbon order, from the wave-26 spec builders.
+
+    The ribbon spec is code, not a literal table: tabs are built with
+    ``add_group(tab_var, "Group", width)`` and commands with
+    ``large/small(group_var, "Label", app::MenuAction::x, ...)`` (``split``
+    carries no action).  Only command controls are listed: the combos, check
+    boxes, the gallery, dialog launchers and the date field are controls, not
+    menu commands, and the inventory pin (app_qt/ribbon_pin.tsv) already
+    records them.
+    """
     text = (ROOT / "app_qt" / "ribbon_bar.cpp").read_text(encoding="utf-8")
-    block = text.split("kTabs = {", 1)[1].split("return kTabs;", 1)[0]
+    block = text.split("const std::vector<TabSpec>& tab_specs()", 1)[1].split(
+        "return tabs;", 1
+    )[0]
+    tab_titles: dict[str, str] = {}
+    group_titles: dict[str, tuple[str, str]] = {}
     rows: list[tuple[str, str, str, str]] = []
-    tab = ""
-    group = ""
-    lines = block.splitlines()
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        # A name alone on a line is either a tab start (next line is
-        # "false,"/"true,") or a group start (next line opens the button list).
-        name_match = re.match(r'^\{"([^"]+)",$', stripped)
-        if name_match:
-            following = lines[index + 1].strip() if index + 1 < len(lines) else ""
-            if following in ("true,", "false,"):
-                tab = name_match.group(1)
-                group = ""
-            else:
-                group = name_match.group(1)
+    current_tab = ""
+    for line in block.splitlines():
+        tab = re.search(r"TabSpec\s+(\w+);", line)
+        if tab:
+            current_tab = tab.group(1)
             continue
-        # A group either opens its button list on the same line ("{{") or has
-        # none at all ("{}" -- the Gantt Chart Style swatch palette, wave 22).
-        group_match = re.match(r'^\{"([^"]+)",\s*\{\{?', stripped)
-        if group_match:
-            group = group_match.group(1)
-        for label, action in re.findall(
-            r'\{"([^"]+)",\s*app::MenuAction::(\w+)\}', line
-        ):
-            rows.append((tab, group, label, action))
+        title = re.search(r"(\w+)\.title\s*=\s*\"([^\"]+)\";", line)
+        if title and title.group(1) == current_tab:
+            tab_titles[current_tab] = title.group(2)
+            continue
+        group = re.search(
+            r"GroupSpec&\s+(\w+)\s*=\s*add_group\(\w+,\s*\"([^\"]+)\",\s*\d+\)", line
+        )
+        if group:
+            group_titles[group.group(1)] = (current_tab, group.group(2))
+            continue
+        command = re.search(
+            r"(?:large|small)\((\w+),\s*\"((?:[^\"\\]|\\.)*)\",\s*"
+            r"app::MenuAction::(\w+)",
+            line,
+        )
+        if command:
+            group_var, label, action = command.groups()
+            context = group_titles.get(group_var)
+            if context is not None:
+                rows.append(
+                    (
+                        tab_titles.get(context[0], context[0]),
+                        context[1],
+                        label.replace("\\n", " "),
+                        action,
+                    )
+                )
+            continue
+        split = re.search(r"split\((\w+),\s*\"([^\"]+)\",", line)
+        if split:
+            context = group_titles.get(split.group(1))
+            if context is not None:
+                rows.append(
+                    (
+                        tab_titles.get(context[0], context[0]),
+                        context[1],
+                        split.group(2),
+                        "none",
+                    )
+                )
     return rows
 
 

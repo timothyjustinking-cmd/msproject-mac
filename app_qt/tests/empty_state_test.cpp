@@ -35,6 +35,7 @@
 #include <QToolButton>
 #include <QWidget>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -289,7 +290,14 @@ void check_ribbon(msqt::MainWindow& window, int width, bool expect_all_groups) {
         gate::check(!button->icon().isNull(), "a visible ribbon button has an icon");
         gate::check(button->height() == msqt::kRibbonButtonHeight,
                     "a visible ribbon button has the pinned height");
-        const int label_width = button->fontMetrics().horizontalAdvance(button->text());
+        // Wave 26: a large ribbon label may carry a two-line caption ("Manually
+        // Schedule"); every line must fit, not just the horizontal advance of
+        // the whole string.
+        int label_width = 0;
+        for (const QString& line : button->text().split(QLatin1Char('\n'))) {
+            label_width = std::max(label_width,
+                                   button->fontMetrics().horizontalAdvance(line));
+        }
         gate::check(button->width() >= label_width + 2,
                     "a visible ribbon button fits its label (no clipping)");
         const QRect mapped(button->mapTo(ribbon, QPoint(0, 0)), button->size());

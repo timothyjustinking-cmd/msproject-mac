@@ -95,7 +95,12 @@ void check_ribbon_labels(msqt::RibbonBar* ribbon, int& visible_buttons) {
             continue;
         }
         ++visible_buttons;
-        const int label_width = button->fontMetrics().horizontalAdvance(button->text());
+        // Wave 26: large labels may be two lines; measure the widest line.
+        int label_width = 0;
+        for (const QString& line : button->text().split(QLatin1Char('\n'))) {
+            label_width = std::max(label_width,
+                                   button->fontMetrics().horizontalAdvance(line));
+        }
         check(button->width() >= label_width + 2, "a visible ribbon button fits its label");
         const QPoint top_left = button->mapTo(ribbon, QPoint(0, 0));
         check(top_left.x() >= 0 && top_left.x() + button->width() <= ribbon->width(),
