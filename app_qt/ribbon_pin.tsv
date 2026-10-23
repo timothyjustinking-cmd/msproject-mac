@@ -125,16 +125,16 @@ Project	0	Add-ins	small	My Add-ins	0	addins.my	1	-
 Project	0	Properties	group	-	-	-	-	-
 Project	0	Properties	button	Project Information	1	properties.project_information	0	-
 Project	0	Properties	button	Custom Fields	1	properties.custom_fields	0	-
-Project	0	Properties	button	Links Between Projects	0	properties.links_between	0	-
-Project	0	Properties	button	WBS	0	properties.wbs	0	-
+Project	0	Properties	button	Links Between Projects	1	properties.links_between	0	-
+Project	0	Properties	split	WBS	1	properties.wbs	0	-
 Project	0	Properties	button	Change Working Time	1	properties.change_working_time	0	-
 Project	0	Schedule	group	-	-	-	-	-
 Project	0	Schedule	button	Calculate Project	0	schedule.calculate	0	-
-Project	0	Schedule	button	Set Baseline	0	schedule.set_baseline	0	-
-Project	0	Schedule	button	Move Project	0	schedule.move	0	-
+Project	0	Schedule	split	Set Baseline	1	schedule.set_baseline	0	-
+Project	0	Schedule	button	Move Project	1	schedule.move	0	-
 Project	0	Status	group	-	-	-	-	-
 Project	0	Status	field	Status Date	0	-	0	NA
-Project	0	Status	small	Update Project	0	status.update	1	-
+Project	0	Status	small	Update Project	1	status.update	1	-
 Project	0	Proofing	group	-	-	-	-	-
 Project	0	Proofing	button	Spelling	0	proofing.spelling	0	-
 View	0	Task Views	group	-	-	-	-	-

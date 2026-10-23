@@ -335,6 +335,32 @@ void attach_custom_field_formulas(std::vector<CustomFieldDefinition>& fields,
     }
 }
 
+const char* move_project_prompt_text() {
+    return "This project contains tasks with actual values.\nDo you still want to move it?";
+}
+
+const std::vector<std::string>& wbs_menu_items() {
+    static const std::vector<std::string> kItems = {"Define Code...", "Renumber..."};
+    return kItems;
+}
+
+const std::vector<std::string>& baseline_menu_items() {
+    static const std::vector<std::string> kItems = {"Set Baseline...", "Clear Baseline..."};
+    return kItems;
+}
+
+const std::vector<std::string>& update_project_captions() {
+    static const std::vector<std::string> kCaptions = {
+        "Update work as complete through:",
+        "0% - 100% complete",
+        "100% complete",
+        "Reschedule uncompleted work to start after:",
+        "Entire project",
+        "Selected tasks",
+    };
+    return kCaptions;
+}
+
 bool project_has_actual_values(const PlanInput& plan) noexcept {    if (plan.project_percent_complete != 0) {
         return true;
     }

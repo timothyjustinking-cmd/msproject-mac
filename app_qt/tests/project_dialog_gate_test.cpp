@@ -11,6 +11,8 @@
 // Each dialog is constructed and SHOWN offscreen without exec(), then its size,
 // measured layout fractions, control kinds, labels, enabled states and exact
 // disabled tooltips are checked.  The functional paths are driven directly.
+#include <QAbstractButton>
+#include <QAction>
 #include <QApplication>
 #include <QColor>
 #include <QComboBox>
@@ -25,12 +27,16 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSpinBox>
 #include <QStringList>
 #include <QTableWidget>
 #include <QTabWidget>
+#include <QTimer>
+#include <QToolButton>
 #include <QWidget>
 
 #include <cmath>
@@ -488,7 +494,279 @@ void check_custom_fields(const QJsonObject& measures) {
     gate::check(!cancelled.has_formula_edit(),
                 "a cancelled formula editor queues no edit");
     std::fprintf(stderr, "note: Custom Fields %dx%d, %d definitions\n", dialog.width(),
-                 dialog.height(), dialog.field_list()->count());
+                 dialog.height(), static_cast<int>(dialog.field_list()->count()));
+}
+
+// ---------------------------------------------------------------------------
+// Update Project
+// ---------------------------------------------------------------------------
+void check_update_project(const QJsonObject& measures) {
+    const QJsonObject spec = measures.value(QStringLiteral("update_project")).toObject();
+    gate::check(!spec.isEmpty(), "the measures file carries Update Project");
+
+    msqt::UpdateProjectDialog dialog;
+    dialog.show();
+    QApplication::processEvents();
+    gate::check(dialog.width() == spec.value(QStringLiteral("width")).toInt() &&
+                    dialog.height() == spec.value(QStringLiteral("height")).toInt(),
+                "Update Project has the measured fixed size");
+    const double aspect = double(dialog.width()) / dialog.height();
+    gate::check(close_enough(aspect, spec.value(QStringLiteral("aspect")).toDouble(), 0.03),
+                "Update Project has the captured aspect ratio");
+
+    QStringList live_texts;
+    for (QLabel* label : dialog.findChildren<QLabel*>()) {
+        live_texts.push_back(label->text());
+    }
+    for (QRadioButton* radio : dialog.findChildren<QRadioButton*>()) {
+        live_texts.push_back(radio->text());
+    }
+    const QJsonArray captions = spec.value(QStringLiteral("captions")).toArray();
+    for (const QJsonValue& value : captions) {
+        gate::check(live_texts.contains(value.toString()),
+                    "the captured Update Project caption exists on the live dialog");
+    }
+    gate::check(dialog.radios().size() == 5,
+                "the live dialog has the capture's five choices");
+    gate::check(dialog.through_date() != nullptr && dialog.after_date() != nullptr,
+                "both captured date fields are live widgets");
+    const QString tooltip = QString::fromUtf8(
+        msqt::project_dialog_geometry::kNotImplemented);
+    gate::check(!dialog.ok_button()->isEnabled() &&
+                    dialog.ok_button()->toolTip() == tooltip,
+                "OK is disabled with the exact decision-9 tooltip (no actuals writer)");
+    gate::check(dialog.cancel_button()->isEnabled(), "Cancel works");
+    std::fprintf(stderr, "note: Update Project %dx%d, %d choices\n", dialog.width(),
+                 dialog.height(), static_cast<int>(dialog.radios().size()));
+}
+
+// ---------------------------------------------------------------------------
+// Links Between Projects
+// ---------------------------------------------------------------------------
+void check_links_between_projects(const QJsonObject& measures) {
+    const QJsonObject spec =
+        measures.value(QStringLiteral("links_between_projects")).toObject();
+    gate::check(!spec.isEmpty(), "the measures file carries Links Between Projects");
+    msqt::LinksBetweenProjectsDialog dialog("C:/w26/synthetic.mpp");
+    dialog.show();
+    QApplication::processEvents();
+    gate::check(dialog.width() == spec.value(QStringLiteral("width")).toInt() &&
+                    dialog.height() == spec.value(QStringLiteral("height")).toInt(),
+                "Links Between Projects has the measured fixed size");
+    const QJsonArray tabs = spec.value(QStringLiteral("tabs")).toArray();
+    gate::check(dialog.tabs()->count() == tabs.size(),
+                "the live dialog has the capture's two external-link tabs");
+    for (int index = 0; index < tabs.size() && index < dialog.tabs()->count(); ++index) {
+        gate::check(dialog.tabs()->tabText(index) == tabs.at(index).toString(),
+                    "the external-link tab is the capture's label in order");
+    }
+    const QJsonArray external_columns =
+        spec.value(QStringLiteral("external_columns")).toArray();
+    gate::check(dialog.external_table()->columnCount() == external_columns.size(),
+                "the external table has the capture's five columns");
+    for (int column = 0; column < external_columns.size() &&
+                         column < dialog.external_table()->columnCount();
+         ++column) {
+        gate::check(dialog.external_table()->horizontalHeaderItem(column)->text() ==
+                        external_columns.at(column).toString(),
+                    "an external table column is the capture's");
+    }
+    const QJsonArray links_columns = spec.value(QStringLiteral("links_columns")).toArray();
+    gate::check(dialog.links_table()->columnCount() == links_columns.size(),
+                "the Links table has the capture's four columns");
+    for (int column = 0; column < links_columns.size() &&
+                         column < dialog.links_table()->columnCount();
+         ++column) {
+        gate::check(dialog.links_table()->horizontalHeaderItem(column)->text() ==
+                        links_columns.at(column).toString(),
+                    "a Links column is the capture's");
+    }
+    const QString tooltip = QString::fromUtf8(
+        msqt::project_dialog_geometry::kNotImplemented);
+    QWidget* disabled[] = {dialog.help_button(), dialog.show_button(), dialog.open_button(),
+                           dialog.refresh_button(), dialog.details_button(),
+                           dialog.options_button(), dialog.path_edit()};
+    for (QWidget* control : disabled) {
+        gate::check(control != nullptr && !control->isEnabled() &&
+                        control->toolTip() == tooltip,
+                    "an external-link action is disabled with the exact tooltip");
+    }
+    gate::check(dialog.close_button()->isEnabled(), "Close is the live exit");
+    gate::check(dialog.windowTitle().startsWith(
+                    QStringLiteral("Links Between Projects in ")),
+                "the title carries the project path, as the capture does");
+}
+
+// ---------------------------------------------------------------------------
+// The WBS and Set Baseline drop-down menus (live ribbon controls)
+// ---------------------------------------------------------------------------
+QWidget* ribbon_control_by_label(msqt::MainWindow& window, const QString& tab,
+                                 const QString& group, const QString& label) {
+    msqt::RibbonBar* ribbon = window.ribbon();
+    if (ribbon == nullptr) {
+        return nullptr;
+    }
+    ribbon->set_active_tab(ribbon->tab_titles().indexOf(tab));
+    QApplication::processEvents();
+    const int group_index = ribbon->group_titles().indexOf(group);
+    if (group_index < 0) {
+        return nullptr;
+    }
+    for (int control = 0; control < ribbon->group_control_count(group_index); ++control) {
+        QWidget* live = ribbon->group_control(group_index, control);
+        if (live == nullptr) {
+            continue;
+        }
+        QString text = live->accessibleName();
+        if (auto* button = qobject_cast<QToolButton*>(live)) {
+            text = button->text().isEmpty() ? button->accessibleName() : button->text();
+        }
+        text.replace(QLatin1Char('\n'), QLatin1Char(' '));
+        if (text.simplified() == label) {
+            return live;
+        }
+    }
+    return nullptr;
+}
+
+void check_ribbon_menus(const QJsonObject& measures, const QString& data_dir) {
+    msqt::MainWindow window;
+    QString error;
+    gate::check(window.open_file(data_dir + QStringLiteral("/synthetic-base.mpp"), &error),
+                "the fixture opens for the menu gate");
+    window.show();
+    QApplication::processEvents();
+
+    const struct {
+        const char* name;
+        const char* group;
+        const char* label;
+        const char* items_key;
+    } kMenus[] = {
+        {"WBS", "Properties", "WBS", "wbs_menu"},
+        {"Set Baseline", "Schedule", "Set Baseline", "baseline_menu"},
+    };
+    for (const auto& menu : kMenus) {
+        QWidget* control = ribbon_control_by_label(window, QStringLiteral("Project"),
+                                                   QString::fromUtf8(menu.group),
+                                                   QString::fromUtf8(menu.label));
+        gate::check(control != nullptr, "the captured drop-down control is live");
+        auto* button = qobject_cast<QToolButton*>(control);
+        gate::check(button != nullptr && button->menu() != nullptr,
+                    "the control owns a QMenu");
+        if (button == nullptr || button->menu() == nullptr) {
+            continue;
+        }
+        gate::check(button->isEnabled(), "the drop-down control can be opened");
+        gate::check(msqt::RibbonBar::control_kind(button) == QStringLiteral("split"),
+                    "the live control is the split-button class the capture shows");
+        const QJsonObject spec = measures.value(QString::fromUtf8(menu.items_key)).toObject();
+        const QJsonArray items = spec.value(QStringLiteral("items")).toArray();
+        const QList<QAction*> actions = button->menu()->actions();
+        gate::check(actions.size() == items.size(),
+                    "the menu has the capture's items");
+        for (int index = 0; index < items.size() && index < actions.size(); ++index) {
+            gate::check(actions.at(index)->text() == items.at(index).toString(),
+                        "the menu item is the capture's label in order");
+            gate::check(!actions.at(index)->isEnabled() &&
+                            actions.at(index)->toolTip() ==
+                                QString::fromUtf8(
+                                    msqt::project_dialog_geometry::kNotImplemented),
+                        "a menu item with no engine is disabled with the exact tooltip");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Move Project's actual-values prompt
+// ---------------------------------------------------------------------------
+struct PromptSeen {
+    bool seen = false;
+    QString text;
+    bool yes = false;
+    bool no = false;
+    int buttons = 0;
+};
+
+void check_move_project(const QJsonObject& measures, const QString& data_dir) {
+    const QJsonObject spec = measures.value(QStringLiteral("move_project")).toObject();
+    gate::check(!spec.isEmpty(), "the measures file carries Move Project");
+
+    msqt::MainWindow window;
+    QString error;
+    gate::check(window.open_file(data_dir + QStringLiteral("/synthetic-base.mpp"), &error),
+                "the fixture opens for the Move Project gate");
+    window.show();
+    QApplication::processEvents();
+
+    // No actual values: Project would not prompt, and neither do we.
+    bool prompt_without_actuals = false;
+    QTimer probe;
+    probe.setInterval(10);
+    QObject::connect(&probe, &QTimer::timeout, [&prompt_without_actuals]() {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* box = qobject_cast<QMessageBox*>(widget);
+            if (box != nullptr && box->isVisible()) {
+                prompt_without_actuals = true;
+                box->reject();
+            }
+        }
+    });
+    probe.start();
+    window.show_move_project();
+    QApplication::processEvents();
+    probe.stop();
+    gate::check(!prompt_without_actuals,
+                "a project without actual values gets no Move Project prompt");
+
+    // Give the selected task an actual value through the ribbon's own 50 %
+    // command (a pending edit), then the prompt must appear.
+    QWidget* percent = ribbon_control_by_label(window, QStringLiteral("Task"),
+                                               QStringLiteral("Schedule"),
+                                               QStringLiteral("50%"));
+    gate::check(percent != nullptr, "the 50% ribbon control is live");
+    if (percent != nullptr) {
+        auto* button = qobject_cast<QAbstractButton*>(percent);
+        if (button != nullptr) {
+            button->click();
+        }
+        QApplication::processEvents();
+    }
+    gate::check(app::project_has_actual_values(window.plan()),
+                "the live edit gives the plan an actual value");
+
+    PromptSeen seen;
+    QTimer timer;
+    timer.setInterval(10);
+    QObject::connect(&timer, &QTimer::timeout, [&seen, &timer]() {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* box = qobject_cast<QMessageBox*>(widget);
+            if (box == nullptr || !box->isVisible()) {
+                continue;
+            }
+            seen.seen = true;
+            seen.text = box->text();
+            seen.yes = box->button(QMessageBox::Yes) != nullptr;
+            seen.no = box->button(QMessageBox::No) != nullptr;
+            seen.buttons = static_cast<int>(box->buttons().size());
+            if (QAbstractButton* yes = box->button(QMessageBox::Yes)) {
+                yes->click();
+            }
+            timer.stop();
+            return;
+        }
+    });
+    timer.start();
+    window.show_move_project();
+    QApplication::processEvents();
+    timer.stop();
+    gate::check(seen.seen, "the Move Project prompt is shown for a project with actuals");
+    gate::check(seen.text == spec.value(QStringLiteral("text")).toString(),
+                "the prompt carries Project's captured text verbatim");
+    gate::check(seen.yes && seen.no && seen.buttons == 2,
+                "the prompt offers exactly the captured Yes/No buttons");
+    gate::check(window.pending_edits().size() == 1,
+                "answering Yes queues no move edit (only the percent edit remains)");
 }
 
 }  // namespace
@@ -510,6 +788,10 @@ int main(int argc, char** argv) {
     check_project_information(measures);
     check_change_working_time(measures, data_dir);
     check_custom_fields(measures);
+    check_update_project(measures);
+    check_links_between_projects(measures);
+    check_ribbon_menus(measures, data_dir);
+    check_move_project(measures, data_dir);
 
     std::printf("qt_project_dialog_gate: ");
     return gate::finish();

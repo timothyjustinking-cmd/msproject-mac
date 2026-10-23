@@ -176,6 +176,28 @@ std::vector<CustomFieldDefinition> custom_field_definitions();
 void attach_custom_field_formulas(std::vector<CustomFieldDefinition>& fields,
                                   const std::vector<std::uint8_t>& props_bytes);
 
+// ---------------------------------------------------------------------------
+// Update Project, Move Project, WBS and the baseline menus (W26-5.4)
+// ---------------------------------------------------------------------------
+//
+// These commands have no engine in this port (no actuals writer, no project
+// move, no baseline table writer, no WBS code writer).  What is shared here is
+// the captured VOCABULARY, so the dialogs and menus cannot drift from the
+// audit readback while the gate compares the live widgets with the committed
+// measured JSON.
+
+// "This project contains tasks with actual values.\nDo you still want to move
+// it?" -- Project's prompt before moving a project that stores actuals.
+const char* move_project_prompt_text();
+
+// The captured drop-down items: WBS "Define Code..." / "Renumber..."; Set
+// Baseline "Set Baseline..." / "Clear Baseline...".
+const std::vector<std::string>& wbs_menu_items();
+const std::vector<std::string>& baseline_menu_items();
+
+// The captured Update Project dialog's texts, in order.
+const std::vector<std::string>& update_project_captions();
+
 // Project's priority domain (Project > Project Information > Priority).
 inline constexpr int kMinPriority = 0;
 inline constexpr int kMaxPriority = 1000;

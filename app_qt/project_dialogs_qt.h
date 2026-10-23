@@ -18,6 +18,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QList>
 #include <QString>
 
 #include <cstdint>
@@ -91,6 +92,17 @@ inline constexpr double kCustomFieldsAspect = 323.0 / 227.0;  // capture client 
 inline constexpr int kCustomFieldListWidth = 182;             // 0.26 of the width
 inline constexpr double kCustomFieldListLeftFraction = 0.020;
 inline constexpr double kCustomFieldsButtonsTopFraction = 0.930;
+
+// Update Project and Links Between Projects (W26-5.4).
+inline constexpr int kUpdateProjectWidth = 340;
+inline constexpr int kUpdateProjectHeight = 240;
+inline constexpr double kUpdateProjectAspect = 155.0 / 110.0;
+inline constexpr double kUpdateProjectButtonsTopFraction = 0.880;
+inline constexpr int kLinksWidth = 760;
+inline constexpr int kLinksHeight = 410;
+inline constexpr double kLinksAspect = 340.0 / 183.0;
+inline constexpr double kLinksTabsTopFraction = 0.090;
+inline constexpr double kLinksButtonsTopFraction = 0.900;
 
 // Capture-relative positions the gate asserts (fractions of the dialog's client
 // box, which is what the capture's title-bar-excluded area gives).
@@ -299,6 +311,72 @@ class CustomFieldsDialog final : public QDialog {
     QPushButton* help_ = nullptr;
     QPushButton* ok_ = nullptr;
     QPushButton* cancel_ = nullptr;
+};
+
+// ---------------------------------------------------------------------------
+// Project > Status > Update Project (wave 26, W26-5.4)
+// ---------------------------------------------------------------------------
+//
+// Laid out from the capture: work-as-complete-through date, 0%-100% and 100%
+// complete, reschedule-after date, and the Entire project / Selected tasks
+// scope.  The port has no actuals writer, so every control is inert and OK is
+// disabled with the exact decision-9 tooltip plus an inline note; Cancel works.
+class UpdateProjectDialog final : public QDialog {
+  public:
+    explicit UpdateProjectDialog(QWidget* parent = nullptr);
+
+    QDateEdit* through_date() const noexcept { return through_; }
+    QDateEdit* after_date() const noexcept { return after_; }
+    QPushButton* ok_button() const noexcept { return ok_; }
+    QPushButton* cancel_button() const noexcept { return cancel_; }
+    QList<QRadioButton*> radios() const noexcept { return radios_; }
+
+  private:
+    QDateEdit* through_ = nullptr;
+    QDateEdit* after_ = nullptr;
+    QPushButton* ok_ = nullptr;
+    QPushButton* cancel_ = nullptr;
+    QList<QRadioButton*> radios_;
+};
+
+// ---------------------------------------------------------------------------
+// Project > Properties > Links Between Projects (wave 26, W26-5.4)
+// ---------------------------------------------------------------------------
+//
+// Laid out from the capture: the External Predecessors / External Successors
+// tabs with their five columns, the Links group with its four columns, the
+// Path field and the action row.  This port decodes no external project links,
+// so every action except Close is disabled with the exact tooltip and the
+// tables are empty.
+class LinksBetweenProjectsDialog final : public QDialog {
+  public:
+    explicit LinksBetweenProjectsDialog(std::string project_path,
+                                        QWidget* parent = nullptr);
+
+    QTabWidget* tabs() const noexcept { return tabs_; }
+    QTableWidget* external_table() const noexcept { return external_; }
+    QTableWidget* links_table() const noexcept { return links_; }
+    QLineEdit* path_edit() const noexcept { return path_; }
+    QPushButton* help_button() const noexcept { return help_; }
+    QPushButton* show_button() const noexcept { return show_; }
+    QPushButton* open_button() const noexcept { return open_; }
+    QPushButton* refresh_button() const noexcept { return refresh_; }
+    QPushButton* details_button() const noexcept { return details_; }
+    QPushButton* options_button() const noexcept { return options_; }
+    QPushButton* close_button() const noexcept { return close_; }
+
+  private:
+    QTabWidget* tabs_ = nullptr;
+    QTableWidget* external_ = nullptr;
+    QTableWidget* links_ = nullptr;
+    QLineEdit* path_ = nullptr;
+    QPushButton* help_ = nullptr;
+    QPushButton* show_ = nullptr;
+    QPushButton* open_ = nullptr;
+    QPushButton* refresh_ = nullptr;
+    QPushButton* details_ = nullptr;
+    QPushButton* options_ = nullptr;
+    QPushButton* close_ = nullptr;
 };
 
 }  // namespace msqt
