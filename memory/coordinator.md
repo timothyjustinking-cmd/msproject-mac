@@ -1,69 +1,56 @@
-# memory — coordinator (2026-10-23, wave 23 closed on branch)
+# memory — coordinator (2026-10-24, wave 24 closed on branch)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
-`docs/handoff/wave23-complete.md`.  History:
+`docs/handoff/wave24-complete.md`.  History:
 `memory/archive/coordinator-through-wave20-full.md`.
 
 ## Where the branches are
 
-`main` = **488481f** (wave-22 docs close).  **`wave23`** is NOT merged.  Remote
-`wave23` = `63cd087` (qt-green, core red on a GCC comment, fixed locally); the
-review-fix and docs-close commits are LOCAL because the push was held by the
-client-name policy classifier — see wave23-complete §6 "Publication hold".
-Client task names exist on `main` and in the already-pushed early commits;
-purging them needs Tim's decision on a history rewrite.  The local
-`wave23-with-screenshot` branch is an unpushed backup whose history contains a
-Project screenshot — **never push it**.
+`main` = **488481f** (wave-22 docs close).  **`wave23`** and **`wave24`** are
+NOT merged and NOT pushed (remote `wave23` = `63cd087`; no `origin/wave24`).
+The push is held by the client-name policy decision — see wave24-complete §5
+and brief section 0.  The local `wave23-with-screenshot` / `wave23-pre-push`
+branches are unpushed backups; **never push them**.  Tim decides whether the
+public repo becomes private or its history is rewritten.
 
-## Numbers (wave 23 on `wave23`)
+## Numbers (wave 24 on `wave24`, tip `cc4ce8a`)
 
-* core ctest **51/51** (50 + engine_diff_suite); M2 **332/332**; plan_recalc
-  **266** no-corpus / **512** with corpus (golden read-only); app **15/15**;
-  app_qt **17/17** local / 15 CI; reader **1025**; writer 1693.
-* Engine **7/8** (`constraint-mso` deliberately left failing; `save_plan` is
-  test-only).  Fixtures OK (6 hashes, 5 tracked `.mpp`).
-* parity vs Project's measured capture: **9/9**; pixel score **15.89 %**
-  (report only).
-* CI: qt-shell **39945118772**, ci **39945123565** on `wave23`.
+* core ctest **51/51**; M2 **332/332**; plan_recalc **266** no-corpus / **512**
+  with corpus (golden read-only, exact `1` opt-in); app **15/15**; app_qt
+  **18/18**; reader **1054** with corpus / **377** without; fixtures OK
+  (11 documented hashes, 10 tracked `.mpp`).
+* Engine **7/8** (`constraint-mso` deliberately left failing; the lane pins the
+  failing SET by name; `save_plan` is test-only).
+* parity vs the recaptured Project reference: **10/10**, task_bar found and
+  equal (116,204,212); colour not-found is now a gate failure.
+* client-name scan at the tip: **0 hits**; 0 commit messages quote names.
+* CI: **not run — publication hold**.  No push.
 
-## Wave 23 result
+## Wave 24 result (what a later session must not re-break)
 
-* **B-1 fixed**: rows in the file's ID order, stored IDs in the gutter, project
-  row 0, outline levels/indentation/collapse, summary shading.
-* **Flag10 decoded**: Task FixedMeta +25 bit 0x04 -> Task::summary_flag; the
-  stored SUMMARY column renders Yes/No (and is NOT Task.Summary -- the capture's
-  summary rows 1/2/6 read No).
-* **A-2 fixed**: Pre/Suc text pinned to Project's COM strings (hashed golden)
-  with per-unit lag labels read from `114/Props`.
-* **A-1/A-5/A-7/A-9/A-10/A-6**: independent pin files, capture-literal gates,
-  report-only pixel score, read-only golden, core CI coverage, E7 evidence
-  committed.
-* **B-9/B-10/B-13**: five status views, light bar, file-name title, Task
-  Information wired to the action and double-click (Task Fields moved to
-  Custom Fields).
-* **B-2 premise overturned**: Timeline visibility is application state, not
-  file state (COM CurrentView is "Gantt Chart" for every file; fresh captures
-  show the strip).  Default shown.
+* **Row vs uid (Critical)**: every shell call site resolves the selection to a
+  UID (`PlanDocument::task_by_uid`); never index `plan().tasks` with a RecordSet
+  row.  `qt_uid_routing` pins Task Information, Custom Fields save/re-read,
+  Delete naming, the row-menu label, print row alignment and Insert Task's
+  pending row.
+* **File view settings**: `214/Props` `0x03400009` = project-summary row,
+  `0x03400008` = Timeline strip ("Time&line"/empty).  Both are FILE state;
+  the wave-23 "application state" conclusion was wrong.  Fixtures:
+  `wave24-summary-off/on`, `wave24-timeline-hidden`.
+* **Flags**: Flag1..20 measured bits (+24/+25/+33/+34) on `Task::flags`;
+  Flag10 = SUMMARY; the name `summary_flag` is gone.  `wave24-flags20.mpp`.
+* **ID sort**: `wave24-order.mpp` stores a different order from its IDs;
+  deleting the adapter sort fails CI.
+* **CI/harness**: corpus-free plan_recalc step; `--expect-fail
+  constraint-mso`; workflow_run checks head_sha, success only, no tag duplicate;
+  per-row Pre/Suc golden; colour-not-found is a failure.
+* **Stock style fallback**: a blank Project capture says milestone rows are
+  upright, critical rows normal text, task bar teal, critical light blue,
+  summary dark teal.  The FILE's own styles are still undecoded (largest gap).
 
-## Deferred (wave 24 candidates)
+## Next
 
-1. Bar-style and timescale decode (`0x22400008`; storage located, encoding not).
-2. Distinct icon glyphs (B-5) and ribbon control kinds (B-6).
-3. 11-page Options + B-14 dialogs, split view, live dark chrome.
-4. New-task writer acceptance fixture, clipboard display order, macOS/sf248.
-
-## Traps
-
-* Pixel beats prose; re-read the capture.
-* Flag10 is the file's SUMMARY field, not Task.Summary.
-* Timeline visibility is app state; a capture without the strip is not a stored
-  byte.
-* Screenshots never enter the repo; commit `*.measures.json` only.
-* CI has no corpus: app_qt 15 there, 17 here.
-* Serial builds, newline="\n", plan_recalc never with corpus by default.
-
-## Next three actions
-
-1. Tim reads `wave23-complete.md` and merges `wave23` if it holds.
-2. Wave 24: decode the Gantt view blob (bars + timescale together).
-3. Then the icon set and ribbon control kinds; Options/dialogs after.
+wave24-complete §3: decode the FILE's text/bar styles (W24-13/18), Custom
+Fields definition dialog (W24-14), timescale tiers (W24-17), then the carried
+W24-19..25 backlog.  Keep the §2 gates green before each commit; no push until
+Tim rules.
