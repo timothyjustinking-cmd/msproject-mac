@@ -582,64 +582,62 @@ pinned with the fixture and used only by the COM half (`--record`).  The
 scenario JSON stays ids-only.  `--check` maps uid 4 -> task `+178`, builds the
 calendar through `core/cal`, and the whole state dump matches Project exactly.
 
-## Wave 20 (E4): schema 2 — the wider dump found the late pair
+## Wave 20: schema 2 -- the wider dump found the late pair, E5 modelled it
 
-The dump now also compares `tasks[].late_start/late_finish` (`+112/+116`, MPP12
+The dump also compares `tasks[].late_start/late_finish` (`+112/+116`, MPP12
 `+12/+152`) and `resources[].calendar_uid` (from `TBkndCal`).  All eight oracles
-were re-recorded against schema 2.
+were re-recorded against schema 2, so the first schema-2 run read **4 pass /
+4 fail** -- a measurement increase, not a new defect: the dump had not compared
+the late pair before.
 
-### Score: 4 pass / 4 fail (247/247/254/247/247/247/253/209 fields)
+### Score: 7 pass / 1 fail (E5, 2026-10-23)
 
 | scenario | result | what differs |
 |---|---|---|
 | recalculate | **PASS** (247) | - |
-| duration-change | FAIL (5/247) | late pair, tasks 1-3 |
-| link-fs-lag | FAIL (5/254) | late pair |
+| duration-change | **PASS** (247) | - |
+| link-fs-lag | **PASS** (254) | - |
 | constraint-snet | **PASS** (247) | - |
-| constraint-mso | FAIL (1/247) | `task 3 duration_ticks` 9600 vs 12000 (unchanged) |
+| constraint-mso | FAIL (1/247) | `task 3 duration_ticks` 9600 vs 12000 |
 | assignment-50pct | **PASS** (247) | - |
 | task-calendar | **PASS** (253) | - |
-| delete-task-with-successor | FAIL (4/209) | late pair |
+| delete-task-with-successor | **PASS** (209) | - |
 
-This is a **measurement increase, not a new defect**: the wave-19 7/8 came from a
-dump that did not compare the late pair.  Example: after `duration-change`, the
-oracle stores late finish `2026-01-07 12:00` for tasks 1/2/3 while our saved file
-stores `2026-01-09 12:00`; after `delete-task-with-successor` the oracle stores
-`2026-01-16 12:00` where ours stores `2026-01-09 12:00`.
+### The cause and the rule
 
-### The cause
+For a **manual** row, Project's stored `+112/+116` is not the CPM late pair.  E2
+measured it as the inverse of the manual boundary arithmetic; E5 established the
+generalisable rule over every Project-written manual row in the tree:
 
-For a **manual** row, Project's stored `+112/+116` is not the CPM late pair: E2
-measured it as the inverse of the manual boundary arithmetic (the start whose
-manual finish lands on the project finish), which is why the row's StartSlack
-equals its TotalSlack.  Our planner computes CPM late dates and the applier
-writes them when the row's dates move; on rows whose dates do not move it keeps
-the stored pair, which is why `recalculate`, `constraint-snet`,
-`assignment-50pct` and `task-calendar` still match.  `constraint-mso`'s only
-remaining field is the duration word described above.
+    late finish = min(project finish,
+                      min over outgoing FS links of successor KEPT start - lag,
+                      min over outgoing FF links of successor KEPT finish - lag)
+    late start  = max(kept start, plain calendar walk back from late finish)
 
-### Next action (engine, not UI)
+The FS/FF subtraction and the duration walk are `Calendar::sub_work` (the plain
+backward walk, **not** `align_back`); SS/SF outgoing links do not bound the late
+finish; the successor bound reads the successor's **kept** (early) date, not its
+late date.  The slack words do not change -- they remain the effective pass's
+`TotalSlack = LF - EF` and `StartSlack = TotalSlack`, because the stored pair's
+difference from the CPM pair is normally the zero-working-time lunch break.
 
-Either compute Project's inverse late pair for manual rows in the applier (the
-four failing scenarios become the regression), or stop comparing the late pair
-for manual rows with that reason written here.  Do not fit a formula to one
-scenario: the four cases disagree in both directions (ours later by 2 days in
-duration-change, earlier by 7 days in delete).
+It lives in `core/plan/plan.cpp` as a second pass after the results are built,
+gated on `PlanTaskResult::manually_pinned`; auto rows and `core/sched/cpm.cpp`
+are untouched.  The applier writes the plan's pair for a pinned manual row.  The
+evidence table (19 measured rows: the eight oracles, `w12-linkadd`,
+`manual-start-edited`, PROJECT_B) and the inference boundaries (FF inferred,
+elapsed lag falls back and is counted in `PlanResult::manual_late_unmodelled`,
+task calendar from the row) are in `docs/handoff/e5.md`.
 
-### Update (E5, same day): the late pair is modelled — 7 pass / 1 fail
+The four cases disagreed in both directions under the old "keep the stored pair
+when the dates do not move" rule (ours later by 2 days in duration-change,
+earlier by 7 days in delete), which is why a shift fitted to one scenario was
+rejected.
 
-E5 measured Project's stored late pair for manual rows and implemented it, so the
-four wave-20 failures above now pass:
+### constraint-mso: one field, still open
 
-* `late finish = min(project finish, over outgoing FS links: successor KEPT start
-  - lag, over FF: successor kept finish - lag)`
-* `late start = max(kept start, plain Calendar::sub_work(late finish, duration))`
-* successor bounds read the successor's EARLY/KEPT date, not its late date;
-  FS subtraction is the plain walk (not `align_back`); SS/SF do not bound the
-  late finish; elapsed lags fall back to the CPM pair and are counted.
-
-Evidence: the eight schema-2 oracles, `w12-linkadd.mpp` (Project's own save after
-two COM link adds), `manual-start-edited.mpp`, and PROJECT_B's manual rows
-10762/10775/10805.  The four failing cases needed moves in BOTH directions, so
-this is a rule, not a fit.  Suite: **7 pass, 1 fail** (`constraint-mso`, the
-duration word only).  `ctest -E plan_recalc` 50/50; M2 332/332.
+`task 3 duration_ticks` is 9600 here and 12000 in Project's stored file.  This is
+Project's save-time recomputation, not CPM: nine measurements show the stored
+duration gains the remaining work windows of an off-calendar start day (a
+weekday start gains 0).  The applier does not model it.  Decision: leave it
+documented rather than fit it; it is the only engine-scenario mismatch left.
