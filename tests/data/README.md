@@ -8,6 +8,26 @@ checkout. Nothing here is client data.
 | `synthetic-base.mpp` | **synthetic** MPP14 fixture, 237,568 bytes, 3 tasks + project row. The only `.mpp` that may be committed. |
 | `project_a_golden.tsv` | MS Project's own COM export of the PROJECT_A corpus file (83 live tasks), used as the oracle. See `project_a_golden.md`. |
 | `project_a_golden.md` | how the golden TSV was produced and what its columns mean |
+| `wave23-outline.mpp` | **synthetic** MPP14 fixture built by Project 2021 for wave 23: 3-level outline, FS+2 d / SS+1 d / FF links, one resource. See its provenance below. |
+| `synthetic-calendars.mpp` | synthetic two-calendar fixture (wave 19, `scripts/build_calendar_fixture.py`) |
+
+## `wave23-outline.mpp` — provenance (wave 23)
+
+- **Built by the coordinator through COM automation of MS Project Professional
+  2021 (16.0.20430.20182)** on **2026-10-23**, under `scripts/oracle_lock.py`,
+  by `scripts/oracle_w23.py`. The file was written to `build/w23/` and copied
+  here only after it loaded and the reader showed the intended shape.
+- Six synthetic tasks: `Summary A` (level 1), `Sub A1` (2), `Leaf A1a` and
+  `Leaf A1b` (3), `Sub A2` (2), `Final Task` (1); links `Leaf A1a -> Leaf A1b`
+  FS+2 days, `Leaf A1a -> Sub A2` SS+1 day, `Leaf A1b -> Final Task` FF; resource
+  `Resource A` assigned to `Final Task`. No client content.
+- **SHA256 055721FF07E93F8C8C06B8428E9EF3495D10A38BE8C432506FCB5FF3A786DA20**,
+  pinned in `scripts/check_fixtures.py`. It is the CI fixture for wave 23's
+  ID-order/outline gate (`qt_task_order`), the Depends On/Who gate
+  (`qt_stored_table`) and the parity reference work.
+- Regenerate with `python scripts/oracle_w23.py` (Project must be closed); the
+  script writes to `build/w23/`, so copy the file here and update the hash only
+  after a deliberate review of the reader dump.
 
 ## `synthetic-base.mpp` — provenance
 
