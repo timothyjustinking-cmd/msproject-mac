@@ -1348,13 +1348,16 @@ def main(argv=None):
             return 2
         only = None
         if args.only:
-            only = tuple(part.strip() for part in args.only.split(",") if part.strip())
+            requested = [part.strip() for part in args.only.split(",") if part.strip()]
             known = {item[0] for item in MEASURES}
-            unknown = [key for key in only if key not in known]
+            unknown = [key for key in requested if key not in known]
             if unknown:
                 print("error: unknown measure key(s): " + ", ".join(unknown),
                       file=sys.stderr)
                 return 2
+            # Deduplicate, keeping order: compare() counts each MEASURES key
+            # once, so a repeated key would set an unreachable minimum.
+            only = tuple(dict.fromkeys(requested))
         reference = JsonReference(report)
         candidate = Analysis(paths[0])
         rows, summary = compare(reference, candidate, keys=only)

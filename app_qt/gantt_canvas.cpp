@@ -69,10 +69,12 @@ QColor bar_color(const core::gantt::Bar& bar, bool critical_highlight) {
         case core::gantt::BarKind::normal:
             break;
     }
-    if (bar.critical && critical_highlight) {
-        return kBarCritical;
+    // The measured table: a manual bar does NOT change with Critical Tasks ON;
+    // only an auto bar takes the highlight colour (wave 25 review).
+    if (bar.manual) {
+        return kBarManual;
     }
-    return bar.manual ? kBarManual : kBarTask;
+    return bar.critical && critical_highlight ? kBarCritical : kBarTask;
 }
 
 }  // namespace
@@ -290,9 +292,11 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
         }
         // Wave 25 (W25-2/S2): a link takes the predecessor's scheduling style;
         // red only when Critical Tasks highlighting is on.
-        const QColor link_colour = link.critical && critical_highlight_
-                                       ? kLinkCritical
-                                       : (link.manual ? kLinkManual : kLinkAuto);
+        // A manual link does not change with highlighting (measured); only an
+        // auto critical link turns red.
+        const QColor link_colour =
+            link.manual ? kLinkManual
+                        : (link.critical && critical_highlight_ ? kLinkCritical : kLinkAuto);
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(link_colour, 1.0));
         painter.drawPolyline(polyline);

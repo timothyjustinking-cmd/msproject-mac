@@ -191,6 +191,12 @@ def check_oracle_provenance():
                 f"{rel}: recording_commit {claimed} is not the last body change "
                 f"({actual})")
             continue
+        if not actual:
+            # A staged-but-never-committed oracle has no history to verify; a
+            # claimed commit would otherwise pass the empty-prefix test.
+            failures.append(
+                f"{rel}: not committed; its recording_commit cannot be verified")
+            continue
         recorded = git("show", f"{actual}:{rel}").stdout
         if not recorded:
             failures.append(f"{rel}: {actual} does not contain the oracle")

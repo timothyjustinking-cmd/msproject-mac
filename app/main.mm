@@ -1719,6 +1719,12 @@ void paste_from_pasteboard(PlanState& plan) {
         note(plan, "the clipboard does not hold tabular text", true);
         return;
     }
+    // Wave 25 review: SheetModel::paste writes the RecordSet directly; the
+    // uid-0 project row would show the paste but the save diff skips it.
+    if (plan.sheet->row_uid(plan.sheet->anchor().row) == 0) {
+        note(plan, "the project summary row is read-only", true);
+        return;
+    }
     const core::sheet::PasteResult result = plan.sheet->paste(block);
     if (!result.ok) {
         note(plan, "paste refused: " + result.error, true);
@@ -1773,6 +1779,7 @@ void run_export_panel(PlanState& plan, app::ReportKind kind) {
     request.records = &plan.records;
     if (plan.filter_active) {
         request.rows = plan.filter_rows;
+        request.rows_are_filtered = true;  // an empty zero-match filter prints nothing
     }
     for (const std::size_t column : plan.sheet->visible_columns()) {
         if (column < plan.sheet->column_count()) {

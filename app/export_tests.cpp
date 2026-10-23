@@ -242,6 +242,18 @@ void test_helpers() {
                "the project row alone is no task");
     check_size(app::task_row_count(records, {}), 0,
                "an active filter that matches nothing is 0 of N, not all rows");
+    // Wave 25 review: the BODY must agree with the subtitle.
+    app::ExportRequest request;
+    request.records = &records;
+    check_size(app::export_rows(request).size(), 3,
+               "no filter prints every RecordSet row");
+    request.rows_are_filtered = true;
+    request.rows.clear();
+    check_size(app::export_rows(request).size(), 0,
+               "an active zero-match filter prints no rows");
+    request.rows = {1};
+    check_size(app::export_rows(request).size(), 1,
+               "a filtered list prints exactly its rows");
 
     check_text(app::export_footer(prefs, ""), app::preferences_summary(prefs),
                "the footer without a selection is the preference summary");
