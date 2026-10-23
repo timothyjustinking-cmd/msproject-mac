@@ -35,7 +35,9 @@ session must read first._
   **scrubbed of client strings** (scan: 0 hits).
 * Gates at the close: core **51/51**, plan_recalc **266** no-corpus / **512**
   with corpus, M2 **332/332**, engine **7 pass + constraint-mso expected**,
-  app **15/15**, app_qt **18/18**, fixtures **OK** (11 hashes, 10 `.mpp`),
+  app **15/15**, app_qt **18/18**, fixtures **OK** (13 documented hashes,
+  12 tracked `.mpp` at the wave-24 tip; the 00:13 log's 11/10 predates the
+  review-fix fixtures),
   parity **10/10**, reader **1063** with corpus / **383** without.
 * Engine stays **7/8**: `constraint-mso` is deliberately left failing;
   `mppwrite::save_plan` is test-only.
@@ -93,7 +95,8 @@ Archives (only for history): `docs/archive/coordinator-handoff-through-wave20.md
   `tests/data/reference/*.measures.json`.
 * **Never write a client task/resource/project/person name** into any file,
   comment, test or commit message.  Refer to rows by ID and strings by hash.
-  The tree is clean as of `ff22c7b`; run
+  The tree is clean as of `39d11b4` (`ff22c7b` still carried one short client
+  resource name); run
   `python -I build/audit-w22/scan_client_names.py HEAD` before every commit and
   expect 0 hits.
 * **Fixtures:** never open a committed fixture in place (Project rewrites files
