@@ -211,6 +211,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // measured default so the parity numbers cannot depend on the host's store.
     prefs_.zoom = app::ZoomLevel::week;
     sheet_model_.set_preferences(&prefs_);
+    // Wave 26 (W26-3.1): the file's text styles.  doc_ is a stable member, so
+    // the model keeps this pointer across loads and reads the style record that
+    // PlanDocument::load() replaces in place.
+    sheet_model_.set_gantt_style(&doc_.gantt_style());
     build_central_widget();
     build_menus();
     build_quick_access();

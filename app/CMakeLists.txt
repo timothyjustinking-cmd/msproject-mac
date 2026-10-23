@@ -174,6 +174,7 @@ add_library(app_layout STATIC
     page_layout.cpp
     start_edit_warning.cpp
     smoke.cpp
+    view_style.cpp
 )
 add_library(msproject::app_layout ALIAS app_layout)
 target_compile_features(app_layout PUBLIC cxx_std_20)
@@ -385,6 +386,23 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_edits_links COMMAND app_edits_links_tests)
     set_tests_properties(app_edits_links PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 26 (W26-3.1): the file's Gantt style record -- the row -> Text Styles
+    # category rule and the headless read seam.  The stock fixture is committed;
+    # the PROJECT_A half skips when corpus/ is absent.
+    file(TO_CMAKE_PATH "${APP_REPO_ROOT}/corpus" APP_CORPUS_DIR_CMAKE)
+    add_executable(view_style_tests view_style_tests.cpp)
+    target_compile_features(view_style_tests PRIVATE cxx_std_20)
+    set_target_properties(view_style_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(view_style_tests PRIVATE app_layout)
+    target_compile_definitions(view_style_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_CORPUS_DIR="${APP_CORPUS_DIR_CMAKE}"
+    )
+    app_set_warnings(view_style_tests)
+
+    add_test(NAME app_view_style COMMAND view_style_tests)
+    set_tests_properties(app_view_style PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
     # Wave 14: printing.  The page arithmetic (rows per page for a 3-row and an
     # 83-row plan, page count, header/footer text) and the seam: the printer and

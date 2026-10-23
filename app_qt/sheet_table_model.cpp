@@ -14,6 +14,7 @@
 #include "entry_columns.h"
 #include "layout_model.h"  // app::task_field_id (the stored ID field)
 #include "shell_style.h"
+#include "view_style.h"  // app::text_style_for_row (wave 26)
 
 namespace msqt {
 namespace {
@@ -246,20 +247,44 @@ QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
             const core::sheet::CellStyle style = sheet_->cell_style(row, column);
             QFont font = cell_font();
             font.setBold(style.bold);
-            // Wave 24 (W24-13): the wave-23 "stock milestone italic" claim was
-            // measured from PROJECT_A's capture -- the FILE's own text style.
-            // A NEW blank Project 2021 project (two auto tasks + a milestone,
-            // captured 2026-10-23) renders its milestone row UPRIGHT, so the
-            // stock fallback is not italic.  The file's own text styles are
-            // still not decoded (backlog W24-13), so no italic is invented.
+            // Wave 26 (W26-3.1): the FILE's text style for this row.  Project
+            // stores a font family/size and bold/italic/underline/strike per
+            // Text Styles item (gantt_style.h); the selected item follows the
+            // measured precedence in app/view_style.h (project summary,
+            // summary, milestone, critical, noncritical).  Without a decoded
+            // record the wave-24 stock fallback (upright, summary bold) stands.
+            const msproject::viewstate::TextStyle* file_style = row_text_style(row);
+            if (file_style != nullptr) {
+                if (!file_style->font_name.empty()) {
+                    font.setFamily(QString::fromStdString(file_style->font_name));
+                }
+                if (file_style->point_size > 0) {
+                    font.setPointSize(file_style->point_size);
+                }
+                font.setBold(file_style->bold);
+                font.setItalic(file_style->italic);
+                font.setUnderline(file_style->underline);
+                font.setStrikeOut(file_style->strikethrough);
+            }
             return font;
         }
         case Qt::ForegroundRole: {
-            // Wave 24 (W24-13): PROJECT_A's critical rows are red, but a NEW
-            // blank project renders critical rows in the ordinary text colour.
-            // The wave-23 red was that file's text style, not stock; until the
-            // file's text styles are decoded, the stock fallback is the normal
-            // foreground.
+            // Wave 26 (W26-3.1): the file's stored colour, when the record
+            // names one.  The stock fallback stays no colour: wave 24 measured
+            // that a NEW blank project draws critical rows in ordinary text.
+            const msproject::viewstate::TextStyle* file_style = row_text_style(row);
+            if (file_style != nullptr && file_style->has_colour) {
+                return QColor(file_style->colour.red, file_style->colour.green,
+                              file_style->colour.blue);
+            }
+            return {};
+        }
+        case Qt::BackgroundRole: {
+            const msproject::viewstate::TextStyle* file_style = row_text_style(row);
+            if (file_style != nullptr && file_style->has_background) {
+                return QColor(file_style->background.red, file_style->background.green,
+                              file_style->background.blue);
+            }
             return {};
         }
         default:
@@ -370,6 +395,23 @@ void SheetTableModel::report_commit(bool ok, const std::string& message) {
     if (commit_handler_) {
         commit_handler_(ok, message);
     }
+}
+
+// Wave 26 (W26-3.1): the file's Text Styles item for a RecordSet row.  The row
+// facts come from the SheetModel (the same is_summary/is_milestone/is_critical
+// the stock fallback uses); uid 0 is the synthetic project row, which Project
+// styles with the Project Summary item.  The category precedence itself lives
+// in app/view_style.h, so the headless app test pins it.
+const msproject::viewstate::TextStyle* SheetTableModel::row_text_style(
+    std::size_t row) const {
+    if (style_ == nullptr || sheet_ == nullptr) {
+        return nullptr;
+    }
+    const bool project_row = sheet_->row_uid(row) == 0;
+    const bool summary = !project_row && sheet_->is_summary(row);
+    const bool milestone = !project_row && !summary && sheet_->is_milestone(row);
+    const bool critical = sheet_->is_critical(row);
+    return app::text_style_for_row(*style_, project_row, summary, milestone, critical);
 }
 
 }  // namespace msqt
