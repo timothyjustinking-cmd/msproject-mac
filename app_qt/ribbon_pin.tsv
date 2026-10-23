@@ -95,15 +95,15 @@ Resource	0	Insert	group	-	-	-	-	-
 Resource	0	Insert	button	Add Resources	0	insert.add_resources	0	-
 Resource	0	Properties	group	-	-	-	-	-
 Resource	0	Properties	button	Information	0	properties.information	0	-
-Resource	0	Properties	small	Notes	0	-	0	-
-Resource	0	Properties	small	Details	0	-	1	-
+Resource	0	Properties	small	Notes	0	properties.notes	0	-
+Resource	0	Properties	small	Details	0	properties.details	1	-
 Resource	0	Level	group	-	-	-	-	-
 Resource	0	Level	button	Level Selection	0	level.selection	0	-
 Resource	0	Level	button	Level Resource	0	level.resource	0	-
 Resource	0	Level	button	Level All	0	level.all	0	-
-Resource	0	Level	small	Leveling Options	0	-	0	-
-Resource	0	Level	small	Clear Leveling	0	-	1	-
-Resource	0	Level	small	Next Overallocation	0	-	2	-
+Resource	0	Level	small	Leveling Options	0	level.options	0	-
+Resource	0	Level	small	Clear Leveling	0	level.clear	1	-
+Resource	0	Level	small	Next Overallocation	0	level.next_overallocation	2	-
 Report	0	Project	group	-	-	-	-	-
 Report	0	Project	button	Compare Projects	0	project.compare	0	-
 Report	0	View Reports	group	-	-	-	-	-
