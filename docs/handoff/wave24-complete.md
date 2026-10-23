@@ -112,7 +112,7 @@ twenty on ID 3 and none elsewhere; `wave23-flags.mpp` is the single-bit control.
 
 ## 2. Gates (exact numbers, branch `wave24`)
 
-All gates were run on the final code tree (`cc4ce8a`), locally and serially; the
+All gates were run on the final code tree (`39d11b4`), locally and serially; the
 core lane, `plan_recalc`, app and app_qt were ALSO re-run on fresh trees
 (`build/w24-fresh`, `build/w24-fresh-app`, `build/w24-fresh-qt`, configured from
 scratch, core with `CORE_WARNINGS_AS_ERRORS=ON`): **51/51**, **266 checks**,
