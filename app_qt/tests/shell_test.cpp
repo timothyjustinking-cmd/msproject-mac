@@ -32,6 +32,7 @@
 #include "main_window.h"
 #include "menu_model.h"
 #include "shell_style.h"
+#include "timeline_strip.h"
 
 namespace {
 
@@ -73,6 +74,11 @@ int main(int argc, char** argv) {
     // of the fixture's three tasks, and the Gantt draws its project bar.
     check(window.sheet_row_count() == 4, "the fixture shows the project row + 3 task rows");
     check(window.gantt_bar_count() == 4, "the fixture has the project bar + 3 task bars");
+    // Wave 23 (B-2): the fixture's stored view is the plain Gantt, so the
+    // Timeline strip must not be in the window's layout (isHidden, not
+    // isVisible: the offscreen window is never shown).
+    check(window.timeline() != nullptr && window.timeline()->isHidden(),
+          "the loaded fixture hides the Timeline strip its view does not have");
     check(window.sheet_view() != nullptr, "the window owns a sheet view");
     if (window.sheet_view() != nullptr && window.sheet_view()->model() != nullptr) {
         check(window.sheet_view()->model()->rowCount() == 4,

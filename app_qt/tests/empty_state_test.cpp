@@ -127,6 +127,11 @@ void check_timescale_origin(msqt::MainWindow& window) {
 void check_timeline(msqt::MainWindow& window) {
     msqt::TimelineStrip* timeline = window.timeline();
     gate::check(timeline != nullptr, "the window has a timeline strip");
+    // Wave 23 (B-2): a new project's default view is "Gantt Chart with
+    // Timeline", so the strip is shown (operator answer Q2).  isHidden, because
+    // this offscreen window is never shown itself.
+    gate::check(timeline != nullptr && !timeline->isHidden(),
+                "a new project shows the Timeline strip");
     if (timeline == nullptr) {
         return;
     }

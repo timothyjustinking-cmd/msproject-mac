@@ -1363,6 +1363,10 @@ void MainWindow::refresh_timeline() {
     if (timeline_ == nullptr) {
         return;
     }
+    // Wave 23 (B-2): the strip is a pane of the file's stored view.  Project's
+    // clean capture of project_a (applied view "&Gantt Chart") has none; a new
+    // project opens on the default "Gantt Chart with Timeline" (operator Q2).
+    timeline_->setVisible(!doc_.has_document() || doc_.timeline_visible());
     if (!doc_.has_document()) {
         // A new project: Start and Finish are today, and the strip shows the
         // product's prompt because nothing has been added to the timeline.
