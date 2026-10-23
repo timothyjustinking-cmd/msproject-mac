@@ -51,7 +51,8 @@ app::PrintJob make_print_job(const app::PlanInput& plan,
 
 // The rows a print/export request covers: the filtered display list when a
 // filter is active (an empty active list is a legitimate "nothing matches"),
-// else every RecordSet row in order.
+// else every RecordSet row in order.  Wave 26 (W26-0.1): a thin wrapper over
+// app::print_row_list(), the one implementation both shells call.
 std::vector<std::size_t> print_rows(std::size_t record_row_count,
                                     const std::vector<std::size_t>& display_rows,
                                     bool filter_active);

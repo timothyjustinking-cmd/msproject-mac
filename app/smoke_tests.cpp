@@ -17,7 +17,10 @@
 //      that NAMES THE STEP, not an exception or an empty pass;
 //   4. the real sequence on the committed synthetic fixture, checking the report
 //      is complete (named steps, no failures), that the specific decisions ran,
-//      the artifacts exist, and that tests/data/synthetic-base.mpp is untouched.
+//      the artifacts exist, and that tests/data/synthetic-base.mpp is untouched;
+//   5. the row-showing sequence (wave 26) on tests/data/wave24-order.mpp, whose
+//      project row is SHOWN -- the half of W25-1's acceptance the synthetic
+//      fixture cannot exercise.
 //
 // WHERE IT WRITES
 //   Only under the build tree: APP_SMOKE_OUT_DIR (a `test-out/smoke` directory).
@@ -398,6 +401,105 @@ void test_real_plan() {
 
 #endif
 
+// ---------------------------------------------------------------------------
+// 5. The row-showing sequence on the committed fixture (wave 26, W26-0.1)
+// ---------------------------------------------------------------------------
+
+#if defined(APP_TEST_DATA_DIR) && defined(APP_SMOKE_OUT_DIR)
+
+// wave24-order.mpp stores the project row SHOWN and the tasks out of ID order.
+// This is the smoke half of W25-1's acceptance: the synthetic fixture hides the
+// row, which is how the one-row print defect survived two review passes.  Every
+// check below fails under RecordSet-row == task-row arithmetic.
+void test_row_shown_fixture() {
+    const fs::path fixture = fs::path(APP_TEST_DATA_DIR) / "wave24-order.mpp";
+    if (!fs::exists(fixture)) {
+        std::printf("SKIP: %s is not present; the row-shown smoke needs the committed fixture\n",
+                    fixture.string().c_str());
+        return;
+    }
+    std::string fixture_before;
+    check(read_all(fixture, fixture_before), "the row-shown fixture can be read");
+    const std::size_t fixture_size = bytes_on_disk(fixture);
+
+    const fs::path out_dir = fs::path(APP_SMOKE_OUT_DIR) / "row-shown";
+    std::error_code error;
+    fs::remove_all(out_dir, error);
+
+    app::SmokeOptions options;
+    options.fixture_path = fixture.string();
+    options.out_dir = out_dir.string();
+    app::SmokeReport report;
+    std::string smoke_error;
+    const bool ran = app::smoke_row_shown(options, report, smoke_error);
+
+    if (!smoke_error.empty()) {
+        std::printf("ROW-SHOWN SMOKE ERROR: %s\n", smoke_error.c_str());
+    }
+    for (const app::SmokeCheck& entry : report.checks) {
+        if (!entry.ok) {
+            std::printf("ROW-SHOWN FAIL [%s] %s: %s\n", entry.step.c_str(),
+                        entry.name.c_str(), entry.detail.c_str());
+        }
+    }
+
+    check(ran, "the row-shown sequence runs to the end: " + smoke_error);
+    check(report.checks_failed == 0, "no row-shown smoke check failed");
+    check(report.checks_passed >= 30, "the row-shown smoke ran a meaningful number of checks");
+    check_size(report.checks_passed, report.checks.size(),
+               "every recorded row-shown check passed");
+    check(report.steps_run() >= 5, "the row-shown smoke ran every step");
+
+    // The checks that fail under the old row arithmetic, by name.
+    check_named(report, "row_shown.load", "RecordSet row 0 is the project row");
+    check_named(report, "row_shown.load",
+                "the last RecordSet row is the highest-ID task");
+    check_named(report, "row_shown.sheet",
+                "row 1's Start cell is the first task's start, not the project's");
+    check_named(report, "row_shown.sheet",
+                "uid 0 (the project row) refuses an edit session");
+    check_named(report, "row_shown.gantt",
+                "the last displayed row draws the highest-ID task, not nothing");
+    check_named(report, "row_shown.gantt", "the chart's last bar is the highest-ID task");
+    check_named(report, "row_shown.print",
+                "the print row list is every RecordSet row, not the task count");
+    check_named(report, "row_shown.print", "every task uid reaches the printer");
+    check_named(report, "row_shown.print",
+                "the print job holds the project row and every task");
+    check_named(report, "row_shown.print", "the page holds all six rows");
+    check_named(report, "row_shown.print", "the print subtitle counts the five tasks");
+    check_named(report, "row_shown.print",
+                "the exported report prints the project row and every task");
+
+    // The PDF the CI upload exposes to a reviewer.
+    const app::SmokeArtifact* pdf = nullptr;
+    for (const app::SmokeArtifact& artifact : report.artifacts) {
+        if (artifact.name == "row-shown-report-pdf") {
+            pdf = &artifact;
+        }
+    }
+    check(pdf != nullptr, "the row-shown PDF is listed as an artifact");
+    if (pdf != nullptr) {
+        check(fs::is_regular_file(pdf->path), "the row-shown PDF exists: " + pdf->path);
+        check(bytes_on_disk(pdf->path) > 0, "the row-shown PDF is not empty");
+    }
+
+    // The committed fixture is never written.
+    std::string fixture_after;
+    check(read_all(fixture, fixture_after) && fixture_after == fixture_before,
+          "tests/data/wave24-order.mpp is byte-identical after the row-shown smoke");
+    check_size(bytes_on_disk(fixture), fixture_size,
+               "the row-shown fixture's size is unchanged");
+}
+
+#else
+
+void test_row_shown_fixture() {
+    std::printf("SKIP: APP_TEST_DATA_DIR/APP_SMOKE_OUT_DIR are not defined\n");
+}
+
+#endif
+
 }  // namespace
 
 int main() {
@@ -407,6 +509,7 @@ int main() {
     test_json();
     test_missing_fixture();
     test_real_plan();
+    test_row_shown_fixture();
 
     if (g_failures != 0) {
         std::printf("FAIL: %d of %d checks failed\n", g_failures, g_checks);

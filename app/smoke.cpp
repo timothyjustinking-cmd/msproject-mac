@@ -933,6 +933,330 @@ SmokeReport smoke_plan(const SmokeOptions& options) {
 }
 
 // ---------------------------------------------------------------------------
+// The row-showing sequence (wave 26, W26-0.1)
+// ---------------------------------------------------------------------------
+
+bool smoke_row_shown(const SmokeOptions& options, SmokeReport& report, std::string& error) {
+    error.clear();
+    const app::Preferences preferences{};
+    const fs::path out_dir(options.out_dir);
+
+    // ---- 1. fixture -------------------------------------------------------
+    {
+        const Step step(report, "row_shown.fixture");
+        std::string fixture_bytes;
+        const bool fixture_read = read_all(options.fixture_path, fixture_bytes);
+        step.check(fixture_read, "the row-shown fixture can be read", options.fixture_path);
+        if (!fixture_read) {
+            error = "row_shown: cannot read " + options.fixture_path;
+            return false;
+        }
+
+        std::error_code file_error;
+        fs::create_directories(out_dir, file_error);
+        step.check(!file_error && fs::is_directory(out_dir),
+                   "the row-shown output directory exists",
+                   file_error ? file_error.message() : std::string());
+        if (!fs::is_directory(out_dir)) {
+            error = "row_shown: cannot create " + options.out_dir;
+            return false;
+        }
+
+        const fs::path input_path = out_dir / kSmokeRowShownInputFile;
+        fs::remove(input_path, file_error);
+        file_error.clear();
+        fs::copy_file(fs::path(options.fixture_path), input_path,
+                      fs::copy_options::overwrite_existing, file_error);
+        step.check(!file_error, "the row-shown fixture is copied into the output directory",
+                   file_error ? file_error.message() : std::string());
+        std::string copy_bytes;
+        step.check(read_all(input_path, copy_bytes) && copy_bytes == fixture_bytes,
+                   "the row-shown copy is byte-identical to the fixture");
+        smoke_add_artifact(report, "row-shown-input", input_path.string());
+    }
+
+    const fs::path input_path = out_dir / kSmokeRowShownInputFile;
+
+    // ---- 2. load ----------------------------------------------------------
+    LoadedPlan plan;
+    {
+        const Step step(report, "row_shown.load");
+        std::string load_error;
+        if (!load_plan_file(input_path.string(), preferences, plan, load_error)) {
+            step.check(false, "the row-shown copy loads through the reader", load_error);
+            error = "row_shown: load: " + load_error;
+            return false;
+        }
+        step.check(true, "the row-shown copy loads through the reader");
+        step.check(plan.loaded.show_project_summary,
+                   "the fixture stores the project row SHOWN");
+        if (!plan.loaded.show_project_summary || plan.loaded.tasks.empty()) {
+            error = "row_shown: the fixture does not show the project row or has no tasks";
+            return false;
+        }
+        step.count(plan.loaded.tasks.size(), 5, "the row-shown fixture has five tasks");
+        step.count(plan.records.row_count(), plan.loaded.tasks.size() + 1,
+                   "the RecordSet has one row per task plus the project row");
+        step.count(plan.records.uid(0), 0, "RecordSet row 0 is the project row");
+        step.count(plan.sheet->row_count(), plan.records.row_count(),
+                   "the sheet shows every RecordSet row");
+        step.check(plan.records.uid(1) == plan.loaded.tasks.front().uid,
+                   "RecordSet row 1 is the first ID-sorted task");
+        step.check(plan.records.uid(plan.records.row_count() - 1) ==
+                       plan.loaded.tasks.back().uid,
+                   "the last RecordSet row is the highest-ID task");
+    }
+
+    const std::vector<app::TaskRow>& tasks = plan.loaded.tasks;
+
+    // ---- 3. sheet: the row's cell and the edit-entry guard ----------------
+    {
+        const Step step(report, "row_shown.sheet");
+        const std::size_t start_column = column_of(*plan.sheet, "Start");
+        const std::size_t name_column = plan.sheet->column_of_field(app::name_field_id());
+        step.check(start_column != core::sheet::kNoIndex, "the sheet has a Start column");
+        step.check(name_column != core::sheet::kNoIndex, "the sheet has a Name column");
+        if (start_column != core::sheet::kNoIndex) {
+            const app::SheetRowText expected =
+                app::sheet_row_text(tasks.front(), plan.format);
+            step.text(plan.sheet->cell_text(1, start_column), expected.start,
+                      "row 1's Start cell is the first task's start, not the project's");
+        }
+        if (name_column != core::sheet::kNoIndex) {
+            step.text(plan.sheet->cell_text(1, name_column), tasks.front().name,
+                      "row 1's Name cell is the first task's name");
+        }
+
+        // The R5 guard through the one entry point both shells call.
+        std::string guard_error;
+        step.check(!app::begin_cell_edit(*plan.sheet, 0, start_column, guard_error),
+                   "uid 0 (the project row) refuses an edit session");
+        step.check(!guard_error.empty(), "the refusal explains itself", guard_error);
+        step.check(!plan.sheet->editing(), "no edit session is left open after the refusal");
+        guard_error.clear();
+        step.check(app::begin_cell_edit(*plan.sheet, 1, start_column, guard_error),
+                   "the first task's row opens an edit session", guard_error);
+        plan.sheet->cancel_edit();
+        step.check(!plan.sheet->editing(), "the task-row session cancels cleanly");
+    }
+
+    // ---- 4. gantt: one row per displayed row, by uid -----------------------
+    {
+        const Step step(report, "row_shown.gantt");
+        const std::vector<std::size_t> displayed = plan.sheet->visible_rows();
+        step.count(displayed.size(), plan.records.row_count(),
+                   "every RecordSet row is displayed");
+        const core::gantt::GanttSource source =
+            app::make_gantt_source_for_displayed_rows(plan.loaded, plan.records, displayed,
+                                                      {}, kDateNa);
+        step.count(source.tasks.size(), displayed.size(),
+                   "the Gantt source has one task per displayed row");
+        std::size_t mismatches = 0;
+        for (std::size_t index = 0; index < source.tasks.size() && index < displayed.size();
+             ++index) {
+            if (source.tasks[index].uid != plan.records.uid(displayed[index])) {
+                ++mismatches;
+            }
+        }
+        step.count(mismatches, 0, "every Gantt task carries its displayed row's uid");
+        step.check(!source.tasks.empty() && source.tasks.front().uid == 0,
+                   "the first displayed row draws the project bar");
+        step.check(!source.tasks.empty() && source.tasks.back().uid == tasks.back().uid,
+                   "the last displayed row draws the highest-ID task, not nothing");
+        const core::gantt::GanttLayout chart = core::gantt::build_gantt(
+            source, app::default_gantt_style(),
+            app::timescale_for_zoom(plan.loaded, app::gantt_zoom(preferences.zoom)));
+        step.count(chart.bars.size(), tasks.size() + 1,
+                   "the chart has one bar per task plus the project row");
+        step.check(!chart.bars.empty() && chart.bars.back().task_uid == tasks.back().uid,
+                   "the chart's last bar is the highest-ID task");
+    }
+
+    // ---- 5. print: RecordSet rows, never the task count --------------------
+    {
+        const Step step(report, "row_shown.print");
+        const std::vector<std::size_t> printed_rows =
+            app::print_row_list(plan.records.row_count(), {}, false);
+        step.count(printed_rows.size(), plan.records.row_count(),
+                   "the print row list is every RecordSet row, not the task count");
+        step.check(!printed_rows.empty() &&
+                       printed_rows.back() + 1 == plan.records.row_count(),
+                   "the print row list ends at the last RecordSet row (the old loop stopped short)");
+        step.count(app::task_row_count(plan.records, printed_rows), tasks.size(),
+                   "every task is counted in the print subtitle");
+        std::size_t missing = 0;
+        for (const app::TaskRow& task : tasks) {
+            bool found = false;
+            for (const std::size_t row : printed_rows) {
+                found = found || plan.records.uid(row) == task.uid;
+            }
+            if (!found) {
+                ++missing;
+            }
+        }
+        step.count(missing, 0, "every task uid reaches the printer");
+        // The printed chart's mapping (app/main.mm): uid 0 is the project bar,
+        // every other printed uid must resolve to a task.
+        std::size_t unresolved = 0;
+        for (const std::size_t row : printed_rows) {
+            const std::uint32_t uid = plan.records.uid(row);
+            bool found = uid == 0;
+            for (const app::TaskRow& task : tasks) {
+                found = found || task.uid == uid;
+            }
+            if (!found) {
+                ++unresolved;
+            }
+        }
+        step.count(unresolved, 0, "every printed row maps to a task or the project row");
+
+        app::PrintRequest request;
+        request.kind = app::PrintKind::gantt;
+        request.project_name = plan.document.project.title;
+        if (request.project_name.empty()) {
+            request.project_name = plan.loaded.source_name;
+        }
+        request.report_title = "Gantt report";
+        request.subtitle = app::export_subtitle(
+            app::ReportKind::gantt, std::string(),
+            app::task_row_count(plan.records, printed_rows), tasks.size());
+        step.text(request.subtitle, "Gantt report - 5 of 5 tasks",
+                  "the print subtitle counts the five tasks");
+        request.date_text = options.date_text;
+        request.spec = app::PageSpec::a4_landscape();
+        request.rows = printed_rows;
+        const app::PrintJob job = app::build_print_job(request, app::PrintRoute::pdf);
+        step.count(job.rows.size(), plan.records.row_count(),
+                   "the print job holds the project row and every task");
+        step.count(job.pages.size(), 1, "the six-row plan is one printed page");
+        if (!job.pages.empty()) {
+            step.count(job.pages.front().row_count, plan.records.row_count(),
+                       "the page holds all six rows");
+            step.text(job.pages.front().header,
+                      app::print_header_text(request.project_name, "Gantt report"),
+                      "the page header is the project and the report title");
+        }
+
+        // A filter prints exactly its rows; a zero-match filter prints none.
+        const std::vector<app::FilterField> fields = app::filter_fields(*plan.sheet);
+        const std::vector<app::FilterOperatorChoice>& operators = app::filter_operators();
+        std::size_t id_index = fields.size();
+        for (std::size_t index = 0; index < fields.size(); ++index) {
+            if (fields[index].field == app::task_field_id("ID")) {
+                id_index = index;
+                break;
+            }
+        }
+        std::size_t at_least = operators.size();
+        for (std::size_t index = 0; index < operators.size(); ++index) {
+            if (operators[index].op == core::view::FilterOp::GreaterOrEqual) {
+                at_least = index;
+                break;
+            }
+        }
+        if (id_index < fields.size() && at_least < operators.size()) {
+            app::FilterRule rule;
+            rule.field_index = id_index;
+            rule.operator_index = at_least;
+            rule.value = "2";
+            std::vector<app::FilterRule> rules{rule};
+            const app::FilterBuild build =
+                app::build_filter(fields, operators, rules, plan.format);
+            step.check(build.ok, "the ID >= 2 filter builds", build.error);
+            if (build.ok) {
+                const std::vector<std::size_t> matching =
+                    app::filter_rows(build.definition, plan.records);
+                std::size_t expected_matches = 0;
+                for (const app::TaskRow& task : tasks) {
+                    if (task.id >= 2) {
+                        ++expected_matches;
+                    }
+                }
+                step.count(matching.size(), expected_matches,
+                           "the filter matches every task with ID 2 or more");
+                step.check(app::print_row_list(plan.records.row_count(), matching, true) ==
+                               matching,
+                           "an active filter's print rows are the filter's rows verbatim");
+                bool project_row_matched = false;
+                for (const std::size_t row : matching) {
+                    project_row_matched = project_row_matched || plan.records.uid(row) == 0;
+                }
+                step.check(!project_row_matched, "the ID filter does not match the project row");
+
+                rule.value = "99";
+                std::vector<app::FilterRule> none_rules{rule};
+                const app::FilterBuild none =
+                    app::build_filter(fields, operators, none_rules, plan.format);
+                if (none.ok) {
+                    const std::vector<std::size_t> zero =
+                        app::filter_rows(none.definition, plan.records);
+                    step.count(zero.size(), 0, "ID >= 99 matches nothing");
+                    const std::vector<std::size_t> zero_print =
+                        app::print_row_list(plan.records.row_count(), zero, true);
+                    step.count(zero_print.size(), 0,
+                               "a zero-match filter prints no rows, not every row");
+                    app::PrintRequest empty_request = request;
+                    empty_request.rows = zero_print;
+                    const app::PrintJob empty_job =
+                        app::build_print_job(empty_request, app::PrintRoute::pdf);
+                    step.count(empty_job.pages.size(), 1,
+                               "an empty filtered report is still one page");
+                    if (!empty_job.pages.empty()) {
+                        step.count(empty_job.pages.front().row_count, 0,
+                                   "that page holds no rows");
+                    }
+                }
+            }
+        } else {
+            step.check(false, "the sheet offers an ID field and an 'is at least' operator");
+        }
+
+        // File > Export PDF (core/render) on the same RecordSet: no row list is
+        // passed when no filter is active, and the report must print every row.
+        app::ExportRequest export_request;
+        export_request.kind = app::ReportKind::gantt;
+        export_request.records = &plan.records;
+        for (const std::size_t column : plan.sheet->visible_columns()) {
+            if (column < plan.sheet->column_count()) {
+                export_request.columns.push_back(plan.sheet->column(column));
+            }
+        }
+        export_request.format = plan.format;
+        export_request.metrics = app::default_sheet_metrics();
+        export_request.preferences = preferences;
+        export_request.page = request.spec;
+        export_request.title = request.project_name;
+        export_request.subtitle = request.subtitle;
+        export_request.footer = app::export_footer(preferences, std::string());
+        for (const app::LinkRow& link_row : plan.loaded.links) {
+            core::gantt::LinkInput link_input;
+            link_input.predecessor_uid = link_row.predecessor_uid;
+            link_input.successor_uid = link_row.successor_uid;
+            link_input.type = link_row.type;
+            link_input.critical = link_row.critical;
+            export_request.links.push_back(link_input);
+        }
+        export_request.timescale = app::timescale_for_zoom(
+            plan.loaded, app::gantt_zoom(preferences.zoom));
+        export_request.auto_timescale = true;
+        export_request.working_day_shading = preferences.working_day_shading;
+
+        const std::string export_path = joined(options.out_dir, kSmokeRowShownReportPdf);
+        const app::ExportOutcome exported = app::export_report(export_request, export_path);
+        step.check(exported.ok, "the row-shown plan exports through core/render",
+                   exported.error);
+        step.count(exported.rows, plan.records.row_count(),
+                   "the exported report prints the project row and every task");
+        step.check(bytes_on_disk(export_path) > 0,
+                   "the row-shown PDF exists and is not empty",
+                   "bytes=" + std::to_string(bytes_on_disk(export_path)));
+        smoke_add_artifact(report, "row-shown-report-pdf", export_path);
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // JSON
 // ---------------------------------------------------------------------------
 

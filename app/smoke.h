@@ -32,8 +32,10 @@
 // THE FIXTURE IS READ-ONLY
 //   `smoke_plan()` copies `tests/data/synthetic-base.mpp` into the output
 //   directory as `smoke-input.mpp` and never opens the committed fixture for
-//   writing.  The edited file is `smoke-edited.mpp` beside it; every written path
-//   is under `SmokeOptions::out_dir`, which the caller owns (CI uploads it).
+//   writing.  `smoke_row_shown()` does the same with the fixture it is given
+//   (`tests/data/wave24-order.mpp`) as `smoke-row-shown-input.mpp`.  The edited
+//   file is `smoke-edited.mpp` beside them; every written path is under
+//   `SmokeOptions::out_dir`, which the caller owns (CI uploads it).
 #pragma once
 
 #include <cstddef>
@@ -53,6 +55,13 @@ inline constexpr const char* kSmokeWindowPdf = "smoke-window.pdf";
 inline constexpr const char* kSmokeWindowPng = "smoke-window.png";
 inline constexpr const char* kSmokePrintGanttPdf = "smoke-print-gantt.pdf";
 inline constexpr const char* kSmokePrintSheetPdf = "smoke-print-sheet.pdf";
+// Wave 26 (W26-0.1): the row-shown sequence's copy of tests/data/wave24-order.mpp
+// and the PDF it exports.  Separate names so the synthetic run's artifacts are
+// never overwritten (and a reviewer can open both side by side).
+inline constexpr const char* kSmokeRowShownInputFile = "smoke-row-shown-input.mpp";
+inline constexpr const char* kSmokeRowShownReportPdf = "smoke-row-shown-report.pdf";
+// The row-shown plan printed through run_print_view (app/main.mm's AppKit half).
+inline constexpr const char* kSmokeRowShownPrintPdf = "smoke-print-rows-shown.pdf";
 // Written by the PORTABLE half (File > Export PDF through core/render), so a
 // reviewer on Windows has a real PDF of the same plan and page spec even though
 // the AppKit print PDFs above can only be produced on macOS.
@@ -163,6 +172,27 @@ void smoke_add_artifact(SmokeReport& report, std::string name, std::string path)
 // all of them.  Every write is under `options.out_dir`; the fixture is never
 // opened for writing.
 SmokeReport smoke_plan(const SmokeOptions& options);
+
+// The row-showing half of the smoke (wave 26, W26-0.1).
+//
+// WHY IT IS SEPARATE.  smoke_plan() pins the synthetic fixture's CONTENT (three
+// tasks, three assignments, no links, a two-row filter), so it cannot simply be
+// re-pointed at a row-shown file.  But the row-addressed paths have a second
+// answer when RecordSet row 0 is the project row, and wave 25's review showed
+// that a smoke which only ever sees row 0 hidden lets a one-row print defect
+// through.  This sequence runs those paths on `options.fixture_path`, which
+// must store the project row SHOWN (tests/data/wave24-order.mpp: five tasks,
+// stored out of ID order): RecordSet identity, the row's sheet cell, the
+// edit-entry guard, the Gantt source, the print row list, a printed page, a
+// filter (matching and zero-match) and a core/render export.  The fixture is
+// copied to `<out>/smoke-row-shown-input.mpp` and the copy is what is loaded --
+// the committed fixture is never opened for writing.
+//
+// Returns false with `error` set when the fixture cannot be read/loaded or does
+// not show the project row; the checks are appended to `report` either way, so
+// the caller's report names the failure.  It never sets report.error itself:
+// the caller decides whether the row-shown half is fatal to its run.
+bool smoke_row_shown(const SmokeOptions& options, SmokeReport& report, std::string& error);
 
 // The report as JSON (a stable, pretty-printed object with steps, counts, checks
 // and artifacts).  Exposed so a test can pin the encoding without a second

@@ -381,15 +381,9 @@ app::PrintJob make_print_job(const app::PlanInput& plan,
 std::vector<std::size_t> print_rows(std::size_t record_row_count,
                                     const std::vector<std::size_t>& display_rows,
                                     bool filter_active) {
-    if (filter_active) {
-        return display_rows;
-    }
-    std::vector<std::size_t> rows;
-    rows.reserve(record_row_count);
-    for (std::size_t row = 0; row < record_row_count; ++row) {
-        rows.push_back(row);
-    }
-    return rows;
+    // Wave 26 (W26-0.1): one implementation, shared with the macOS shell
+    // (app/page_layout.h).  RecordSet rows are not task indexes.
+    return app::print_row_list(record_row_count, display_rows, filter_active);
 }
 
 core::gantt::GanttLayout print_gantt(const app::PlanInput& plan,

@@ -1842,19 +1842,18 @@ app::PrintRequest make_print_request(const PlanState& plan) {
     // Wave 24 (W24-1 review): the subtitle counts TASKS.  The RecordSet
     // includes the synthetic project row (uid 0) when the file shows it, so
     // counting records would say "6 of 6" where the Qt shell says "5 of 5".
+    // WAVE 26 (W26-0.1): `total` is the TASK count and feeds the subtitle only.
+    // The printed rows are RecordSet rows, so they come from the RecordSet --
+    // the old `0 .. total-1` loop printed the project row plus all but the last
+    // task when row 0 was shown.  The list is built in app/page_layout.h so the
+    // headless app_layout test can fail that arithmetic on wave24-order.mpp.
     const std::size_t total = plan.view.tasks.size();
+    request.rows = app::print_row_list(plan.records.row_count(), plan.filter_rows,
+                                       plan.filter_active);
     std::size_t shown = 0;
-    if (plan.filter_active) {
-        for (const std::size_t row : plan.filter_rows) {
-            if (row < plan.records.row_count() && plan.records.uid(row) != 0) {
-                ++shown;
-            }
-        }
-    } else {
-        for (std::size_t row = 0; row < plan.records.row_count(); ++row) {
-            if (plan.records.uid(row) != 0) {
-                ++shown;
-            }
+    for (const std::size_t row : request.rows) {
+        if (row < plan.records.row_count() && plan.records.uid(row) != 0) {
+            ++shown;
         }
     }
     request.subtitle = app::export_subtitle(
@@ -1863,14 +1862,6 @@ app::PrintRequest make_print_request(const PlanState& plan) {
     request.date_text = core::sheet::format_date_text(
         app::date_value_from_date32(app::today_date32()), plan.format);
     request.spec = app::PageSpec::a4_landscape();
-    if (plan.filter_active) {
-        request.rows = plan.filter_rows;
-    } else {
-        request.rows.reserve(total);
-        for (std::size_t row = 0; row < total; ++row) {
-            request.rows.push_back(row);
-        }
-    }
     return request;
 }
 
@@ -4326,14 +4317,28 @@ static PlanView* g_view = nil;
             app::smoke_add_check(report, "appkit.window", "the sheet has three rows",
                                  plan.sheet->row_count() == 3,
                                  "rows=" + std::to_string(plan.sheet->row_count()));
+            // Wave 26 (W26-0.1): these count ROWS, not tasks.  A file that
+            // shows the project row has one more displayed row than it has
+            // tasks, and the old `bars == tasks` check was the assertion that
+            // hid the row-shown print defect.  The row-shown sequence below
+            // exercises the same paths on tests/data/wave24-order.mpp.
             app::smoke_add_check(report, "appkit.window",
-                                 "the displayed row list has three rows",
-                                 plan.row_map.size() == 3,
-                                 "rows=" + std::to_string(plan.row_map.size()));
+                                 "the sheet has one row per RecordSet row",
+                                 plan.sheet->row_count() == plan.records.row_count(),
+                                 "rows=" + std::to_string(plan.sheet->row_count()) +
+                                     ", records=" +
+                                     std::to_string(plan.records.row_count()));
             app::smoke_add_check(report, "appkit.window",
-                                 "the Gantt has a bar for each task",
-                                 plan.gantt.bars.size() == plan.loaded.tasks.size(),
-                                 "bars=" + std::to_string(plan.gantt.bars.size()));
+                                 "the displayed row list has one row per RecordSet row",
+                                 plan.row_map.size() == plan.records.row_count(),
+                                 "rows=" + std::to_string(plan.row_map.size()) +
+                                     ", records=" +
+                                     std::to_string(plan.records.row_count()));
+            app::smoke_add_check(report, "appkit.window",
+                                 "the Gantt has a bar for each displayed row",
+                                 plan.gantt.bars.size() == plan.row_map.size(),
+                                 "bars=" + std::to_string(plan.gantt.bars.size()) +
+                                     ", rows=" + std::to_string(plan.row_map.size()));
             app::smoke_add_check(report, "appkit.window",
                                  "the sheet has laid-out columns", plan.columns.size() >= 5,
                                  "columns=" + std::to_string(plan.columns.size()));
@@ -4430,6 +4435,90 @@ static PlanView* g_view = nil;
                                  "bytes=" + std::to_string(path_size(window_png_path)));
             app::smoke_add_artifact(report, "window-png", window_png_path.string());
         }
+
+        // ---- the row-shown fixture: the REAL load and print paths --------
+        // WAVE 26 (W26-0.1).  The fixture the smoke is given in CI
+        // (synthetic-base) HIDES the project row, and the wave-25 review's High
+        // print defect only appears when row 0 is shown.  Run the row-addressed
+        // sequence and then the real load + print paths on the committed
+        // row-shown fixture; smoke_row_shown() makes the copy this loads.
+#if defined(APP_TEST_DATA_DIR)
+        {
+            app::smoke_begin_step(report, "appkit.row_shown");
+            const std::filesystem::path fixture =
+                std::filesystem::path(APP_TEST_DATA_DIR) / "wave24-order.mpp";
+            std::error_code row_error;
+            const bool fixture_present =
+                std::filesystem::is_regular_file(fixture, row_error);
+            app::smoke_add_check(report, "appkit.row_shown",
+                                 "the committed row-shown fixture is present",
+                                 fixture_present, fixture.string());
+            if (fixture_present) {
+                app::SmokeOptions row_options;
+                row_options.fixture_path = fixture.string();
+                row_options.out_dir = g_smoke_out;
+                row_options.date_text = options.date_text;
+                std::string row_smoke_error;
+                const bool row_sequence_ok =
+                    app::smoke_row_shown(row_options, report, row_smoke_error);
+                app::smoke_add_check(report, "appkit.row_shown",
+                                     "the row-shown sequence runs to the end",
+                                     row_sequence_ok, row_smoke_error);
+                if (row_sequence_ok) {
+                    const std::string row_input =
+                        (out / app::kSmokeRowShownInputFile).string();
+                    [self loadPath:row_input];
+                    const bool row_ready =
+                        g_plan != nullptr && g_plan->sheet != nullptr &&
+                        g_plan->loaded.show_project_summary;
+                    app::smoke_add_check(report, "appkit.row_shown",
+                                         "the real load path opened the row-shown plan",
+                                         row_ready,
+                                         g_plan != nullptr ? g_plan->error
+                                                           : std::string("no plan state"));
+                    if (row_ready) {
+                        PlanState& row_plan = *g_plan;
+                        const app::PrintRequest request = make_print_request(row_plan);
+                        app::smoke_add_check(
+                            report, "appkit.row_shown",
+                            "the print request holds every RecordSet row",
+                            request.rows.size() == row_plan.records.row_count(),
+                            "rows=" + std::to_string(request.rows.size()) +
+                                ", records=" +
+                                std::to_string(row_plan.records.row_count()));
+                        app::smoke_add_check(
+                            report, "appkit.row_shown",
+                            "the print request's last row is the highest-ID task",
+                            !request.rows.empty() &&
+                                request.rows.back() + 1 == row_plan.records.row_count(),
+                            "last=" + (request.rows.empty()
+                                           ? std::string("none")
+                                           : std::to_string(request.rows.back())));
+                        const app::PrintJob row_job =
+                            app::build_print_job(request, app::PrintRoute::pdf);
+                        const std::filesystem::path row_pdf =
+                            out / app::kSmokeRowShownPrintPdf;
+                        std::filesystem::remove(row_pdf, file_error);
+                        NSURL* row_url =
+                            [NSURL fileURLWithPath:to_ns(row_pdf.string())];
+                        const BOOL row_saved =
+                            run_print_view(row_plan, row_job, row_url);
+                        app::smoke_add_check(
+                            report, "appkit.row_shown",
+                            "run_print_view writes the row-shown print job as a PDF",
+                            row_saved == YES, "run_print_view returned NO");
+                        app::smoke_add_check(
+                            report, "appkit.row_shown",
+                            "the row-shown print PDF exists and is not empty",
+                            path_size(row_pdf) > 0,
+                            "bytes=" + std::to_string(path_size(row_pdf)));
+                        app::smoke_add_artifact(report, "print-rows-shown-pdf",
+                                                row_pdf.string());
+                    }
+                }
+            }
+        }
+#endif
     } @catch (NSException* exception) {
         app::smoke_add_check(report, "appkit", "no Objective-C exception in the AppKit steps",
                              false, to_std([exception reason]));
