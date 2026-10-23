@@ -91,11 +91,26 @@ jobs:
       # -C Release: harmless on the single-config generators, required if the
       # generator ever becomes multi-config again.  --timeout 60 turns a wedged
       # test into a 60-second failure instead of a hung runner.
-      # No exclusions: mpp_reader runs everywhere now that its synthetic fixture
-      # is committed (tests/data/synthetic-base.mpp, tests/data/README.md).
+      # mpp_reader runs everywhere now that its synthetic fixture is committed
+      # (tests/data/synthetic-base.mpp, tests/data/README.md).  Wave 23 (A-7a):
+      # plan_recalc is excluded here, as in the local gate -- it reads the client
+      # corpus when present, and its golden is refreshed only deliberately with
+      # PLAN_RECALC_UPDATE_GOLDEN=1.  The engine suite IS included (51 core tests:
+      # 50 + engine_diff_suite).
       - name: Test
         shell: bash
-        run: ctest --test-dir build -C Release --output-on-failure --timeout 60
+        run: ctest --test-dir build -C Release -E plan_recalc --output-on-failure --timeout 60
+
+      # Wave 23 (A-7c): the committed fixtures must match their pinned hashes on
+      # every runner, not only the Windows Qt job.
+      - name: Committed fixtures match their pinned hashes
+        shell: bash
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            python3 scripts/check_fixtures.py
+          else
+            python scripts/check_fixtures.py
+          fi
 
       # Re-runs the reader with the corpus forced absent.  GitHub's runners have
       # no corpus/ anyway, so this repeats the step above by design: MPP_NO_CORPUS

@@ -25,7 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
-from oracle_lock import log, oracle_session                    # noqa: E402
+from oracle_lock import log, oracle_session, working_copy     # noqa: E402
 from oracle_w3 import (Guard, add_task, calc, new_project,     # noqa: E402
                        rows_of, save, utc, val)
 
@@ -140,7 +140,8 @@ def fieldbase():
     """Project's own six custom-field values on the SAME synthetic base our
     writer uses, so the FixedMeta/Fixed2Meta/Props deltas are directly
     comparable byte for byte."""
-    src = os.path.join(ROOT, "tests", "data", "synthetic-base.mpp")
+    original = os.path.join(ROOT, "tests", "data", "synthetic-base.mpp")
+    src = working_copy(original, "w11-fields-base")  # wave 23: never in place
     out = os.path.join(PROBE, "w11-fields-base.mpp")
     with oracle_session() as app:
         with Guard(300):
@@ -159,7 +160,7 @@ def fieldbase():
             app.FileOpen(Name=out, ReadOnly=True)
             rows = brief(app.ActiveProject)
             app.FileClose(0)
-    payload = {"case": "field-base", "source": os.path.relpath(src, ROOT),
+    payload = {"case": "field-base", "source": os.path.relpath(original, ROOT),
                "saved": os.path.relpath(out, ROOT), "bytes": size,
                "rows": rows}
     save("w11-fields-base", payload)
@@ -168,7 +169,8 @@ def fieldbase():
 
 def fieldone():
     """One and two custom fields on the same base, to derive the presence rule."""
-    src = os.path.join(ROOT, "tests", "data", "synthetic-base.mpp")
+    src = working_copy(os.path.join(ROOT, "tests", "data", "synthetic-base.mpp"),
+                       "w11-fields-one-two")  # wave 23: never in place
     one = os.path.join(PROBE, "w11-fields-number1.mpp")
     two = os.path.join(PROBE, "w11-fields-number1-text1.mpp")
     with oracle_session() as app:
@@ -192,7 +194,8 @@ def fieldone():
 
 def fieldprobe():
     """One custom field at a time on the same base: build the presence bitmap."""
-    src = os.path.join(ROOT, "tests", "data", "synthetic-base.mpp")
+    src = working_copy(os.path.join(ROOT, "tests", "data", "synthetic-base.mpp"),
+                       "w11-fieldprobe")  # wave 23: never in place
     specs = [
         ("number2", 0x0B400058, 3.25),
         ("duration1", 0x0B400067, "1d"),

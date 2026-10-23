@@ -23,7 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
-from oracle_lock import log, oracle_session                     # noqa: E402
+from oracle_lock import log, oracle_session, working_copy      # noqa: E402
 from oracle_w3 import Guard, calc, new_project, save, utc, val   # noqa: E402
 
 PROBE = os.path.join(ROOT, "corpus", "probe")
@@ -132,7 +132,8 @@ def apiprobe():
 
 def linkadd():
     """Project's own add-link save on the same synthetic base (W52's target)."""
-    src = os.path.join(ROOT, "tests", "data", "synthetic-base.mpp")
+    original = os.path.join(ROOT, "tests", "data", "synthetic-base.mpp")
+    src = working_copy(original, "w12-linkadd")  # wave 23: never in place
     out = os.path.join(PROBE, "w12-linkadd.mpp")
     with oracle_session() as app:
         with Guard(300):
@@ -149,7 +150,7 @@ def linkadd():
             app.FileSaveAs(Name=out)
             size = os.path.getsize(out)
             app.FileClose(0)
-    payload = {"case": "link-add", "source": os.path.relpath(src, ROOT),
+    payload = {"case": "link-add", "source": os.path.relpath(original, ROOT),
                "saved": os.path.relpath(out, ROOT), "bytes": size,
                "links": [{"pred": 1, "succ": 2, "type": 1, "lag": "0"},
                          {"pred": 1, "succ": 3, "type": 3, "lag": "1d"}]}
@@ -159,7 +160,8 @@ def linkadd():
 
 def assignadd():
     """Project's own add-resource + assignment save on the same synthetic base."""
-    src = os.path.join(ROOT, "tests", "data", "synthetic-base.mpp")
+    src = working_copy(os.path.join(ROOT, "tests", "data", "synthetic-base.mpp"),
+                       "w12-assignadd")  # wave 23: never in place
     out = os.path.join(PROBE, "w12-assignadd.mpp")
     with oracle_session() as app:
         with Guard(300):

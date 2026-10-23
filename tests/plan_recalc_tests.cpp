@@ -56,6 +56,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <string>
 #include <vector>
@@ -1272,21 +1273,52 @@ void test_project_a(TestContext& context) {
     context.equal(critical_stats.match, kRecordedCriticalMatches,
                   "PROJECT_A critical matches equal the recorded measurement");
 
-    /* Emit the golden file.  It can only contain fully matching uids. */
-    std::ofstream golden(PLAN_GOLDEN_PATH);
-    if (!golden) {
-        context.check(false, std::string("the golden file can be written: ") +
-                                 std::string(PLAN_GOLDEN_PATH));
-        return;
-    }
+    /* The golden file (wave 23, A-7a): a READ by default, an explicit WRITE
+     * only with PLAN_RECALC_UPDATE_GOLDEN=1, and never a write after a failed
+     * check.  The old writer rewrote the committed file unconditionally on any
+     * machine with the corpus, so the documented ctest line could silently
+     * change a golden. */
+    std::string measured;
     for (const std::string& line : golden_lines) {
-        golden << line << '\n';
+        measured += line;
+        measured.push_back('\n');
     }
-    golden.close();
-    context.check(static_cast<bool>(golden), "the golden file was written completely");
-    std::cout << "golden: " << (golden_lines.size() - golden_header_lines)
-              << " fully matching uids written to " << PLAN_GOLDEN_PATH << '\n'
-              << std::flush;
+    std::string committed;
+    if (std::ifstream existing(PLAN_GOLDEN_PATH); existing) {
+        committed.assign(std::istreambuf_iterator<char>(existing),
+                         std::istreambuf_iterator<char>());
+    }
+    const bool update = !environment_value("PLAN_RECALC_UPDATE_GOLDEN").empty();
+    if (!update) {
+        context.check(committed == measured,
+                      "the committed recalc golden equals the measured schedule "
+                      "(PLAN_RECALC_UPDATE_GOLDEN=1 rewrites it after review)");
+        if (committed != measured) {
+            std::cerr << "  golden differs: " << PLAN_GOLDEN_PATH << '\n'
+                      << "  (diff-before-write: nothing was changed)\n";
+        }
+    } else if (context.failed()) {
+        context.check(false, "the golden was NOT written: an earlier check failed");
+    } else {
+        if (committed == measured) {
+            std::cout << "golden: unchanged (" << (golden_lines.size() - golden_header_lines)
+                      << " uids)\n";
+        } else {
+            std::ofstream golden(PLAN_GOLDEN_PATH);
+            if (!golden) {
+                context.check(false, std::string("the golden file can be written: ") +
+                                         std::string(PLAN_GOLDEN_PATH));
+                return;
+            }
+            golden << measured;
+            golden.close();
+            context.check(static_cast<bool>(golden),
+                          "the golden file was written completely");
+            std::cout << "golden: " << (golden_lines.size() - golden_header_lines)
+                      << " fully matching uids written to " << PLAN_GOLDEN_PATH << '\n';
+        }
+    }
+    std::cout << std::flush;
 }
 
 /* ---- 3. schedin.mpp: one task per constraint type ----------------------- */
