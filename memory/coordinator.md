@@ -95,3 +95,43 @@ columns** (Number1 at index 9) and the formula record intact. Project accepts wh
 we write. The formula *value* reads back empty in Project for both our file and
 Project's own `w14-formula.mpp` — a readback behaviour, not our bug. See
 `docs/analysis/oracle/w15-oracle.md`.
+
+
+## Wave 18 final (2026-10-23)
+
+Four streams, all merged, tree **50/50** (`ctest -E plan_recalc`), M2 332/332.
+
+* **UI parity: 9/9 measures pass** at the reference's own 1920x1032 —
+  `scripts/parity_report.py corpus/bench/msproject-gantt.png <CI render>`.
+  The last N/A fell when Q3 traced a phantom tenth column to a green indicator
+  badge splitting the Indicators cell (MS Project leaves it blank); row 22,
+  header 43, splitter 0.45924, day 24, tiers 2, colours exact, columns
+  `[38,57,147,81,81,81,105,105,124]` vs `[39,...,123]` (the -1/+1 are
+  gutter-border and splitter-line conventions).
+* **Engine parity: 5/7** on clean re-recorded oracles (`--suite` with
+  `--apply-bin build\vs-w18\Release\engine_diff_tests.exe`). A real defect fell
+  out: `write_task_row` wrote **total slack at +74** where the reader reads free
+  slack; `TaskValues::free_slack` added, three words at +74/+186/+190.
+  Remaining: `constraint-mso` (1 field: Project's stored 12000; my probe applying
+  MSO twice to all manual rows leaves durations unchanged, so the fresh oracle
+  needs re-examination, not an engine change) and `assignment-50pct` (7 fields:
+  placeholder tombstones differ between the two recordings).
+* **F2**: the corpus `214/CEdl` "trailer" is a **cumulative Props cache** (10
+  documents); `parse_var2_edl_cache` parses and round-trips both corpus files.
+  CFilter criteria = 20-byte header + N*36 records + string table. viewstate 791.
+* **G1**: **MPP12** implemented — `112/`/`212/` tree, task row **264 B** (uid/ID
+  reversed, stored parent/level), resource 188 B, assignment 142 B (no Resume),
+  link lag fields swapped, calendar columns `(uid, base, resource)`. Five
+  fixtures round-trip byte-identically; master/subproject + password flag
+  decoded. reader 958 checks. **`core/cal` still hard-codes `114/` and the
+  MPP14 calendar column order — next lane's first job.**
+* Harness changes: `file.*`/`file stream ...` excluded from parity scoring
+  (Project's save churn is not semantics); the recorder copies the base into
+  `build/` because Project rewrites a file it opens.
+
+### Next
+
+1. `core/cal` consumes `Document::version/table_root/calendars` (MPP12 calendars).
+2. Coordinator: named-base-calendar fixture (unblocks `task-calendar`); re-examine
+   the MSO and assignment oracles against the clean base; MPP12 password files.
+3. Wave 19: Qt commands/dialogs (D13) and Windows/macOS Qt jobs.
