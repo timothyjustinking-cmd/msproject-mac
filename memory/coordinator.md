@@ -14,7 +14,8 @@
 
 * ctest **50/50**; M2 **332/332**; plan 266; engine self-test 265; writer 1693;
   reader **1016**; cal **785**; app_qt **15/15** local / 14 CI; parity **9/9**.
-* Engine **7/8** (MSO word measured/pinned, not scored).
+* Engine **7/8** (`constraint-mso` deliberately left failing; `save_plan` is
+  test-only, no app caller).
 * Packages: Windows 48.2 MB, macOS 21.6 MB, Linux 32.8 MB AppImage; Linux Build
   2m10s parallel.
 

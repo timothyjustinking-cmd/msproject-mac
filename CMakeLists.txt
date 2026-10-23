@@ -222,6 +222,22 @@ if(CORE_BUILD_TESTS)
             set_tests_properties(engine_diff_harness PROPERTIES
                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             )
+            # Wave 23 (W23-9a, audit A-4): the scenario suite as a ctest lane,
+            # with the CURRENT build tree's applier instead of the stale
+            # build/e1 default.  7/8 is the honest recorded state:
+            # constraint-mso is deliberately LEFT FAILING until a held-out
+            # Project measurement earns 8/8.  A change to that state, or a
+            # stale/missing applier, turns this test red.
+            add_test(NAME engine_diff_suite
+                COMMAND "${Python3_EXECUTABLE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/engine_diff.py"
+                        --suite --expect 7/8
+                        --apply-bin "$<TARGET_FILE:engine_diff_tests>"
+                        --workdir "${CMAKE_CURRENT_BINARY_DIR}/engine-diff/suite"
+            )
+            set_tests_properties(engine_diff_suite PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            )
         else()
             message(STATUS
                 "Python3 not found: engine_diff_harness test not registered")

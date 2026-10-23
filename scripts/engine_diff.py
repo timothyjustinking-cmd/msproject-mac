@@ -28,6 +28,12 @@ THE TWO HALVES.
                         and a summary.  Exit 1 if a recorded scenario differs,
                         exit 3 if some scenario has no oracle yet (so "0
                         recorded" is visible, not a silent pass).
+  --expect PASS/TOTAL   with --suite: accept exactly that recorded state.
+                        The ctest lane (engine_diff_suite) runs
+                        `--suite --expect 7/8 --apply-bin
+                        $<TARGET_FILE:engine_diff_tests>`: constraint-mso is
+                        deliberately LEFT FAILING until a held-out Project
+                        measurement earns 8/8 (wave-23 A-4).
   --selftest            proves the machinery without MS Project: every
                         committed scenario applies and dumps; a self-recorded
                         oracle passes --check; a deliberately tampered oracle
@@ -75,19 +81,25 @@ Link types: FF=0, FS=1, SF=2, SS=3.  Lag is in 6-second file ticks
 (4800 = one 8-hour working day); it must be a whole number of minutes because
 that is what COM takes.
 
-EXAMPLES.
-    python scripts/engine_diff.py --check tests/scenarios/02-duration-change.json
-    python scripts/engine_diff.py --suite
-    python scripts/engine_diff.py --selftest --apply-bin build/e1/Release/engine_diff_tests.exe
+EXAMPLES (wave 23: always name the CURRENT build tree's applier; there is no
+build/e1 default, and omitting --apply-bin picks the newest helper under build/
+with a warning).
+    python scripts/engine_diff.py --check tests/scenarios/02-duration-change.json \
+        --apply-bin build/w23-core/Release/engine_diff_tests.exe
+    python scripts/engine_diff.py --suite --expect 7/8 \
+        --apply-bin build/w23-core/Release/engine_diff_tests.exe
+    python scripts/engine_diff.py --selftest \
+        --apply-bin build/w23-core/Release/engine_diff_tests.exe
     python scripts/engine_diff.py --record tests/scenarios/01-recalculate.json
 
 The oracle output path is tests/data/scenarios/<name>.oracle.json (committed,
 numbers only).  All generated .mpp files and intermediate dumps go under
-build/e1/engine-diff/ (git-ignored); the committed fixture is never modified.
+build/<tree>/engine-diff/ (git-ignored); the committed fixture is never modified.
 """
 
 import argparse
 import copy
+import datetime
 import hashlib
 import json
 import os
@@ -463,22 +475,29 @@ def resolve_apply_bin(explicit):
             raise HarnessError(
                 f"ENGINE_DIFF_APPLY does not exist: {path}")
         return path
+    # Wave 23 (W23-9a, audit A-4): NO fixed `build/e1` default.  The old
+    # candidates resolved a stale exe that could not apply `task-calendar`, so
+    # the documented command failed for reasons unrelated to the engine.  The
+    # ctest lane (engine_diff_suite) and CI pass --apply-bin explicitly from the
+    # current build tree; an interactive run gets the NEWEST helper under
+    # build/, with a warning naming it.
     names = ["engine_diff_tests.exe", "engine_diff_tests"]
     candidates = []
     for name in names:
-        candidates += [
-            ROOT / "build" / "e1" / "Release" / name,
-            ROOT / "build" / "e1" / name,
-            ROOT / "build" / "e1" / "tests" / "Release" / name,
-            ROOT / "build" / "e1" / "tests" / name,
-        ]
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
+        candidates += list(ROOT.glob(f"build/**/{name}"))
+    fresh = [c for c in candidates if c.is_file()]
+    if fresh:
+        chosen = max(fresh, key=lambda p: p.stat().st_mtime)
+        print(f"engine_diff: using {rel(chosen)} (newest under build/); "
+              f"pass --apply-bin to pin one", file=sys.stderr)
+        return chosen
     raise HarnessError(
         "cannot find the engine_diff_tests helper; build it first:\n"
-        "  cmake --build build/e1 --config Release --target engine_diff_tests\n"
-        "or pass --apply-bin <path> (or set ENGINE_DIFF_APPLY)")
+        "  cmake --build <your build tree> --config Release "
+        "--target engine_diff_tests\n"
+        "then pass --apply-bin <tree>/Release/engine_diff_tests(.exe) "
+        "(or set ENGINE_DIFF_APPLY).  CMake's engine_diff_suite test does this "
+        "with $<TARGET_FILE:engine_diff_tests> automatically.")
 
 
 def run_helper(apply_bin, arguments, capture=False):
@@ -916,8 +935,14 @@ def cmd_record(args):
     # copy under build/, never from the committed fixture.
     run_base = workdir / f"{scenario['name']}.base.mpp"
     shutil.copy2(base, run_base)
+    project_version = ""
+    project_build = ""
     with oracle_session() as app:
         with Guard(600):
+            # Wave 23 (W23-9c): provenance for the oracle header.  COM exposes
+            # Version ("16.0") and Build (the 20430 in 16.0.20430.20182).
+            project_version = str(getattr(app, "Version", "") or "")
+            project_build = str(getattr(app, "Build", "") or "")
             app.FileOpen(str(run_base))
             proj = app.ActiveProject
             if proj is None:
@@ -938,6 +963,20 @@ def cmd_record(args):
 
     oracle = dump_state(apply_bin, saved,
                         workdir / f"{scenario['name']}.oracle.raw.json")
+    # W23-9c provenance: Project version/build, the UTC recording instant and
+    # the exact source .mpp hash.  compare_dumps() flattens known families only,
+    # so this header never enters the field comparison.
+    oracle = {
+        "provenance": {
+            "project_version": project_version,
+            "project_build": project_build,
+            "recorded_at": datetime.datetime.now(datetime.timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": rel(base),
+            "source_sha256": str(expected).lower(),
+        },
+        **oracle,
+    }
     # The one tests/data write in this script: the committed oracle JSON.
     # --record is coordinator-only; --check/--suite/--selftest never write
     # under tests/data (they only read the oracle).
@@ -983,6 +1022,14 @@ def cmd_check(args):
 
 def cmd_suite(args):
     apply_bin = resolve_apply_bin(args.apply_bin)
+    expected = None
+    if args.expect:
+        try:
+            pass_text, total_text = args.expect.split("/", 1)
+            expected = (int(pass_text), int(total_text))
+        except ValueError as error:
+            raise HarnessError(
+                f"--expect wants PASS/TOTAL (e.g. 7/8), got {args.expect!r}") from error
     workdir = workdir_for(args, "suite")
     scenarios = scenario_paths()
     if not scenarios:
@@ -1025,6 +1072,14 @@ def cmd_suite(args):
             if not oracle.is_file():
                 print(f"  python scripts/engine_diff.py --record "
                       f"{rel(path)}")
+    if expected is not None:
+        actual = (recorded - failed, len(scenarios))
+        if unrecorded == 0 and actual == expected:
+            print(f"suite: expected state reached ({actual[0]}/{actual[1]})")
+            return 0
+        print(f"suite: expected {expected[0]}/{expected[1]}, got "
+              f"{actual[0]}/{actual[1]} with {unrecorded} unrecorded")
+        return 1
     if failed:
         return 1
     if unrecorded:
@@ -1283,6 +1338,10 @@ def main(argv=None):
     group.add_argument("--check", metavar="SCENARIO",
                        help="apply a scenario through our engine and diff it "
                             "against the recorded oracle (no COM)")
+    parser.add_argument("--expect", metavar="PASS/TOTAL",
+                        help="with --suite: the exact recorded state to accept, "
+                             "e.g. 7/8 for the deliberately-left-failing "
+                             "constraint-mso scenario (the ctest lane uses it)")
     group.add_argument("--suite", action="store_true",
                        help="every scenario, PASS/FAIL/UNRECORDED and a summary")
     group.add_argument("--selftest", action="store_true",

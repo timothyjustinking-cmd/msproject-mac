@@ -545,8 +545,11 @@ that day is not a working day for the calendar (Sun 08:00 -> 08:00-12:00 +
 distance to the MSO date, and it appears only when a constraint is applied.
 
 Conclusion for the engine: this is a **Project save-time recomputation**, not
-CPM.  Our writer stores the plan's duration (9600) and is one field away.  It is
-left failing deliberately this wave: the rule above is measured on nine rows,
+CPM.  Our writer stores the plan's duration (9600) and is one field away.  The
+only writer that could carry the rule into a file is `mppwrite::save_plan`, and
+it has **no production caller**: no app/, app_qt/ or tools/ code calls it, so it
+is test-only until the app's save path is wired to it (wave-23 A-4).  The
+scenario is deliberately left failing this wave: the rule above is measured on nine rows,
 but its cause is not understood well enough to be sure it generalises to every
 manual/constraint/calendar combination, and the brief's rule is "do not fit a
 rule to one row".  The next wave can implement it in the applier with this table
