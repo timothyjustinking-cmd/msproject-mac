@@ -343,7 +343,21 @@ jobs:
           export PATH="$tools:$PATH"
           # Point the Qt plugin at the pinned 6.5.3 explicitly: Qt's bin is on
           # PATH, but an image change must not silently swap qmake.
-          export QMAKE="${{ steps.install-qt.outputs.qt-root-dir }}/bin/qmake"
+          # Resolve qmake explicitly and PROVE it answers before linuxdeploy runs: the
+          # first three-platform packaging run died with "Could not find qmake" because
+          # the plugin could not use the exported path.  qmake6 is the fallback name on
+          # some aqt packages.
+          qmake_bin="${{ steps.install-qt.outputs.qt-root-dir }}/bin/qmake"
+          if [ ! -x "$qmake_bin" ]; then
+            qmake_bin="$(command -v qmake6 || command -v qmake || true)"
+          fi
+          if [ ! -x "$qmake_bin" ]; then
+            echo "::error::no qmake under the pinned Qt and none on PATH"
+            ls -l "${{ steps.install-qt.outputs.qt-root-dir }}/bin" || true
+            exit 1
+          fi
+          echo "qmake: $qmake_bin ($("$qmake_bin" -query QT_VERSION))"
+          export QMAKE="$qmake_bin"
           # linuxdeploy ships the xcb platform plugin by default (that is what a
           # user's desktop needs).  offscreen is added so the smoke step after
           # ctest can prove the packaged file starts with no window server.
