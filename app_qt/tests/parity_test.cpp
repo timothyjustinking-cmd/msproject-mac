@@ -153,8 +153,11 @@ int main(int argc, char** argv) {
         // be visible, 60 px, and must not scroll horizontally with the columns.
         check(sheet->verticalHeader()->isVisible(),
               "the row-number gutter is a visible, frozen row header");
-        check(sheet->verticalHeader()->width() == msqt::kGutterWidth,
-              "row-number gutter is 60 px");
+        // The measured 60 px gutter is the 22 px rotated view caption plus the
+        // 38 px number column; the first grid line therefore stays at x=60.
+        check(msqt::kViewLabelWidth + sheet->verticalHeader()->width() ==
+                  msqt::kGutterWidth,
+              "row-number gutter is 60 px including the view caption");
     }
     if (sheet->horizontalHeader() != nullptr) {
         check(sheet->horizontalHeader()->height() == msqt::kSheetHeaderHeight,
@@ -267,7 +270,8 @@ int main(int argc, char** argv) {
         sheet->horizontalScrollBar()->setValue(120);
         QApplication::processEvents();
         check(sheet->verticalHeader()->isVisible() &&
-                  sheet->verticalHeader()->width() == msqt::kGutterWidth,
+                  sheet->verticalHeader()->width() ==
+                      msqt::kGutterWidth - msqt::kViewLabelWidth,
               "the row-number gutter stays put when the sheet scrolls sideways");
         check(sheet->columnViewportPosition(0) < 0,
               "the sheet's columns scroll under the frozen gutter");
@@ -296,7 +300,8 @@ int main(int argc, char** argv) {
                      sheet->viewport()->width(), content_right);
         check(content_right <= sheet->viewport()->width() + 1,
               "all nine Entry columns are visible at 1920x1032");
-        check(sheet->verticalHeader()->width() == msqt::kGutterWidth,
+        check(msqt::kViewLabelWidth + sheet->verticalHeader()->width() ==
+                  msqt::kGutterWidth,
               "the frozen gutter is still 60 px at 1920x1032");
     }
     int visible_buttons_1920 = 0;

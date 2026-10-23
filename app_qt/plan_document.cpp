@@ -148,6 +148,43 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
 
 void PlanDocument::rebuild_views(app::ZoomLevel zoom) { build_gantt(zoom); }
 
+void PlanDocument::apply_preferences(const app::Preferences& preferences) {
+    // The date format is a property of the sheet's formatter, not of the data:
+    // every date cell, the status line and the PDF report read this one format.
+    app::apply_preferences(preferences, format_);
+    if (sheet_ != nullptr) {
+        sheet_->set_format(format_);
+    }
+}
+
+void PlanDocument::build_empty_view(app::ZoomLevel zoom, core::sched::date32 today) {
+    // No document: a new project.  The chart still needs an axis, and the axis
+    // must start on the CURRENT week -- the engine's Timescale default origin is
+    // 1984-01-02, which is the defect this replaces.
+    core::gantt::GanttSource source;  // no tasks, no bars, no links
+    core::gantt::GanttStyle style = app::default_gantt_style();
+    style.row_height = static_cast<double>(kRowHeight);
+    core::gantt::Timescale timescale =
+        app::timescale_for_zoom(view_, app::gantt_zoom(zoom));
+    if (zoom == app::ZoomLevel::week) {
+        // The reference's weekly view: week unit, 24 px/day, Sunday-first.
+        timescale.unit = core::gantt::TimescaleUnit::week;
+        timescale.week_start = 0;
+        timescale.pixels_per_unit = kPixelsPerWeek;
+    }
+    core::sched::date32 day = today;
+    if (core::sched::is_na(day) || core::sched::is_overflow(day)) {
+        day = app::today_date32();
+    }
+    day = core::sched::date_only(day);
+    // Start the visible axis at the week containing today (Sunday 00:00), so the
+    // first header tier is the current week for every zoom level.
+    const std::int32_t weekday = core::sched::weekday(day);
+    timescale.origin = core::sched::add_days(day, -weekday);
+    gantt_ = core::gantt::build_gantt(source, style, timescale);
+    row_map_ = app::RowMap{};
+}
+
 void PlanDocument::refresh_filter_rows() {
     if (!filter_active_ || sheet_ == nullptr) {
         filter_rows_.clear();

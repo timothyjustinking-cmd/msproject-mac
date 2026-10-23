@@ -33,15 +33,19 @@
 #include "plan_document.h"
 #include "prefs.h"
 #include "sheet_table_model.h"
+#include "theme.h"
 
 class QAction;
 class QCloseEvent;
 class QLabel;
+class QMenu;
 class QShowEvent;
 class QSlider;
 class QSplitter;
 class QTableView;
+class QToolBar;
 class QToolButton;
+class QStackedWidget;
 
 namespace app {
 class Document;
@@ -54,8 +58,11 @@ class SheetModel;
 namespace msqt {
 
 class GanttCanvas;
+class Backstage;
+class PreferencesStore;
 class RibbonBar;
 class TimelineStrip;
+class ViewLabel;
 
 // The process's one resolved UI font family (see shell_style.h).  Used by the
 // offscreen test and the About box.
@@ -105,12 +112,61 @@ class MainWindow final : public QMainWindow {
     bool filter_active() const noexcept { return doc_.filter_active(); }
     app::ViewMode view_mode() const noexcept { return prefs_.view; }
 
+    // --- wave 20: preferences, dialogs and clipboard -----------------------
+    const app::Preferences& preferences() const noexcept { return prefs_; }
+    // The store the Preferences dialog persists through.  main.cpp installs the
+    // native QSettings store; the offscreen tests install an explicit ini file.
+    // nullptr means "apply in memory only" (the measured test default).
+    void set_preferences_store(PreferencesStore* store) noexcept { preferences_store_ = store; }
+    // Applies `preferences` to the sheet/Gantt and (when persist) writes them to
+    // the installed store.  This is the exact path Preferences [OK] runs; the
+    // per-screen gate calls it without a modal widget.
+    bool apply_preferences(const app::Preferences& preferences, bool persist);
+
+    // --- wave 20: Office themes --------------------------------------------
+    Theme theme() const noexcept { return theme_; }
+    // Swaps the QPalette between Office light and dark; (persist) writes the
+    // choice to the preference store under its own key.
+    void set_theme(Theme theme, bool persist);
+
+    // Opens/closes the File backstage.  Public so the structural gate can prove
+    // the left rail and pages without clicking through a modal.
+    void show_backstage(bool open);
+
+    // Re-runs app::menu_item_enabled() for every action after the selection or
+    // the clipboard changed.  Public so the clipboard gate can observe the real
+    // enablement instead of a copy of the rule.
+    void refresh_menu_state() { update_menu_state(); }
+
+    // The sheet model and the current core::sheet::SheetModel, for the clipboard
+    // commands and their gate (selection is owned by the core model).
+    SheetTableModel* sheet_table_model() noexcept { return &sheet_model_; }
+    core::sheet::SheetModel* sheet() noexcept { return doc_.sheet(); }
+    const core::sheet::ClipboardBlock& clipboard_block() const noexcept { return clipboard_; }
+
+    // Wave 20: the View > Filter combined sort/group/filter drop-down with its
+    // checkable date tree.  Built for the structural gate; show_filter uses it.
+    QMenu* build_filter_menu();
+    // The task-row right-click menu (distinct from the column header menu).
+    QMenu* build_row_menu();
+
     QTableView* sheet_view() const noexcept { return sheet_view_; }
     GanttCanvas* gantt_view() const noexcept { return gantt_canvas_; }
     QSplitter* splitter() const noexcept { return splitter_; }
     RibbonBar* ribbon() const noexcept { return ribbon_; }
     TimelineStrip* timeline() const noexcept { return timeline_; }
     QSlider* zoom_slider() const noexcept { return zoom_slider_; }
+
+    // --- wave 20 chrome (the empty-state / structural gates) ----------------
+    QToolBar* quick_access() const noexcept { return quick_access_; }
+    QWidget* chart_panel() const noexcept { return chart_panel_; }
+    ViewLabel* view_label() const noexcept { return view_label_; }
+    QLabel* info_callout() const noexcept { return info_callout_; }
+    QLabel* status_mode_label() const noexcept { return status_mode_; }
+    const std::vector<QToolButton*>& view_buttons() const noexcept { return view_buttons_; }
+    Backstage* backstage() const noexcept { return backstage_; }
+    QStackedWidget* central_stack() const noexcept { return central_stack_; }
+    bool backstage_open() const noexcept { return backstage_open_; }
 
     // The `214/CTable` column widths actually read from the open file (the
     // status line reports them; the parity test asserts they reached the shell).
@@ -130,6 +186,7 @@ class MainWindow final : public QMainWindow {
     void build_central_widget();
     void build_menus();
     void build_status_bar();
+    void build_quick_access();
     void configure_sheet();
     void apply_split_fraction();
     void sync_view_selection();
@@ -137,6 +194,9 @@ class MainWindow final : public QMainWindow {
     void update_status();
     void update_zoom_slider();
     void update_window_title();
+    void update_chrome();
+    void new_project();
+    void refresh_backstage_info();
     void set_message(std::string text, bool is_error);
     void handle_action(app::MenuAction action);
     void open_dialog();
@@ -147,6 +207,7 @@ class MainWindow final : public QMainWindow {
     std::string summary_text() const;
     std::string stored_widths_text() const;
     std::string today_text() const;
+    void refresh_timeline();
 
     // --- wave 19: commands -------------------------------------------------
     bool save_document(bool force_panel);
@@ -163,6 +224,17 @@ class MainWindow final : public QMainWindow {
     void show_view(app::ViewMode mode);
     void set_usage_period(core::usage::Period period);
     void rebuild_generic_view();
+
+    // --- wave 20: the new dialogs and the clipboard -------------------------
+    void show_preferences();
+    void show_table_date_format();
+    void show_custom_formula();
+    void copy_selection();
+    void cut_selection();
+    void paste_selection();
+    // Mirrors the core model's rectangle onto the QTableView (one cell when the
+    // rectangle is one cell; a clear-and-select range otherwise).
+    void select_core_range_in_view();
 
     // --- wave 19: state plumbing -------------------------------------------
     bool confirm_proceed_with_discard();
@@ -191,6 +263,19 @@ class MainWindow final : public QMainWindow {
     bool message_is_error_ = false;
     bool splitter_user_moved_ = false;
 
+    // --- wave 20: the chrome the operator's screenshot found missing ---------
+    QStackedWidget* central_stack_ = nullptr;
+    Backstage* backstage_ = nullptr;
+    bool backstage_open_ = false;
+    QToolBar* quick_access_ = nullptr;
+    // The chart pane: the rotated view caption + the Gantt canvas in one splitter
+    // widget, so the sheet's measured gutter/columns are untouched.
+    QWidget* chart_panel_ = nullptr;
+    ViewLabel* view_label_ = nullptr;
+    QLabel* info_callout_ = nullptr;  // new-project manual-scheduling callout
+    QLabel* status_mode_ = nullptr;  // "New Tasks : Manually Scheduled"
+    Theme theme_ = Theme::light;
+
     // --- wave 19: the document's pending edits and save target --------------
     std::unique_ptr<app::Document> document_;
     app::StructuralEdits structural_;
@@ -198,6 +283,12 @@ class MainWindow final : public QMainWindow {
     bool owns_path_ = false;
     std::vector<std::string> last_save_warnings_;
     std::size_t last_save_rows_written_ = 0;
+
+    // --- wave 20: preference persistence and the sheet clipboard -------------
+    PreferencesStore* preferences_store_ = nullptr;
+    // The last Copy/Cut block.  Values only: core::sheet::ClipboardBlock keeps
+    // the typed value and its rendering, never a font or a colour.
+    core::sheet::ClipboardBlock clipboard_;
 
     // The non-task views own their own RecordSet and SheetModel (the task view
     // uses doc_ directly).  The RecordSet is a member so its address is stable

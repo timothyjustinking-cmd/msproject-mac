@@ -135,8 +135,13 @@ std::size_t SheetTableModel::model_column(int display_column) const {
 }
 
 int SheetTableModel::rowCount(const QModelIndex& parent) const {
-    if (sheet_ == nullptr || parent.isValid()) {
+    if (parent.isValid()) {
         return 0;
+    }
+    if (sheet_ == nullptr) {
+        // A NEW project shows the product's first empty row (Task Mode cell and
+        // (i) gutter number); there is no RecordSet row behind it.
+        return generic_ ? 0 : 1;
     }
     if (filter_active_) {
         return static_cast<int>(display_rows_.size());
@@ -145,13 +150,15 @@ int SheetTableModel::rowCount(const QModelIndex& parent) const {
 }
 
 int SheetTableModel::columnCount(const QModelIndex& parent) const {
-    if (sheet_ == nullptr || parent.isValid()) {
+    if (parent.isValid()) {
         return 0;
     }
     if (generic_) {
-        return static_cast<int>(sheet_->visible_column_count());
+        return sheet_ != nullptr ? static_cast<int>(sheet_->visible_column_count()) : 0;
     }
     // The row-number gutter is the view's frozen vertical header, not a column.
+    // An EMPTY project still presents the nine Entry columns: the caption band
+    // must exist with its titles (wave 20), and only the row count is zero.
     return static_cast<int>(entry_columns().size());
 }
 
@@ -170,7 +177,13 @@ QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
         case Qt::DisplayRole:
         case Qt::EditRole:
             // The one formatter: SheetModel formats the value exactly once
-            // (core/sheet/sheet.h), so the sheet and the Gantt label agree.
+            // (core/sheet/sheet.h), so the sheet and the Gantt label agree.  The
+            // duration-style preference is applied by app::cell_text on top of
+            // that same rendering (app/prefs.h); the date style is already in
+            // the sheet's SheetFormat.
+            if (preferences_ != nullptr) {
+                return QString::fromStdString(app::cell_text(*sheet_, row, column, *preferences_));
+            }
             return QString::fromStdString(sheet_->cell_text(row, column));
         case Qt::TextAlignmentRole:
             if (generic_) {
@@ -196,13 +209,10 @@ QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
 }
 
 QVariant SheetTableModel::headerData(int section, Qt::Orientation orientation, int role) const {
-    if (sheet_ == nullptr) {
-        return {};
-    }
     if (orientation == Qt::Horizontal) {
         if (role == Qt::DisplayRole) {
             if (generic_) {
-                if (section < 0) {
+                if (sheet_ == nullptr || section < 0) {
                     return {};
                 }
                 const std::size_t column =
@@ -212,6 +222,8 @@ QVariant SheetTableModel::headerData(int section, Qt::Orientation orientation, i
                 }
                 return QString::fromStdString(sheet_->column_title(column));
             }
+            // An empty project keeps the Entry captions: the header band is part
+            // of the shell's structure, not of the loaded document.
             const std::vector<EntryColumn>& columns = entry_columns();
             if (section < 0 || static_cast<std::size_t>(section) >= columns.size()) {
                 return {};
@@ -221,6 +233,9 @@ QVariant SheetTableModel::headerData(int section, Qt::Orientation orientation, i
         if (role == Qt::TextAlignmentRole) {
             return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
         }
+        return {};
+    }
+    if (sheet_ == nullptr) {
         return {};
     }
     // The row header (SheetRowHeader) paints the numbers itself; this is the

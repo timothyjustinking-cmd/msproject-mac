@@ -7,11 +7,14 @@
 #include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLayoutItem>
 #include <QMargins>
+#include <QMenu>
 #include <QPainter>
 #include <QPen>
+#include <QPoint>
 #include <QResizeEvent>
 #include <QSizePolicy>
 #include <QString>
@@ -24,6 +27,8 @@
 #include <utility>
 #include <vector>
 
+#include "command_status.h"
+#include "shell_icons.h"
 #include "shell_style.h"
 
 namespace msqt {
@@ -186,9 +191,13 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
     setMinimumWidth(0);
     setAutoFillBackground(false);
 
-    // One stylesheet: tabs look like tabs, group captions are small and grey,
-    // and the buttons are flat text until hovered.
+    // One stylesheet: tabs look like tabs, the File tab is the product's dark
+    // tile, group captions are small and grey, and the buttons are flat until
+    // hovered.
     setStyleSheet(QStringLiteral(
+        "QToolButton#ribbonFileTab { background: #1f5c99; color: #ffffff;"
+        " border: none; padding: 2px 14px; }"
+        "QToolButton#ribbonFileTab:hover { background: #2f6ba8; }"
         "QToolButton#ribbonTab { border: none; padding: 2px 10px; color: #232323;"
         " background: transparent; }"
         "QToolButton#ribbonTab:checked { background: #ffffff; border: 1px solid #d0d0d0;"
@@ -230,6 +239,35 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
     outer->addWidget(page_);
     outer->addStretch(0);
 
+    // The group-row overflow chevron: one ">>" at the right edge instead of
+    // wrapping the groups onto a second row.
+    overflow_ = new QToolButton(page_);
+    overflow_->setObjectName(QStringLiteral("ribbonOverflow"));
+    overflow_->setText(QStringLiteral(">>"));
+    overflow_->setToolTip(QStringLiteral("More commands"));
+    overflow_->setFixedSize(30, 24);
+    overflow_->setFocusPolicy(Qt::NoFocus);
+    overflow_->hide();
+    connect(overflow_, &QToolButton::clicked, this, [this](bool) {
+        QMenu menu(this);
+        for (const GroupWidgets& group : page_groups_) {
+            if (group.box != nullptr && !group.box->isVisible()) {
+                QAction* action = menu.addAction(QStringLiteral("More"));
+                action->setEnabled(false);
+                (void)action;
+            }
+        }
+        menu.exec(mapToGlobal(QPoint(width() - 40, kRibbonTabHeight + 6)));
+    });
+
+    tab_overflow_ = new QToolButton(tab_row_);
+    tab_overflow_->setObjectName(QStringLiteral("ribbonTabOverflow"));
+    tab_overflow_->setText(QStringLiteral(">>"));
+    tab_overflow_->setToolTip(QStringLiteral("More tabs"));
+    tab_overflow_->setFixedSize(30, kRibbonTabHeight - 4);
+    tab_overflow_->setFocusPolicy(Qt::NoFocus);
+    tab_overflow_->hide();
+
     build_tabs();
     build_page(0);
 }
@@ -244,8 +282,62 @@ void RibbonBar::set_action_handler(std::function<void(app::MenuAction)> handler)
     handler_ = std::move(handler);
 }
 
+void RibbonBar::set_file_handler(std::function<void()> handler) {
+    file_handler_ = std::move(handler);
+}
+
+QString RibbonBar::tell_me_text() const {
+    return tell_me_ != nullptr ? tell_me_->text() : QString();
+}
+
+void RibbonBar::set_contextual_visible(bool visible) {
+    contextual_enabled_ = visible;
+    update_tab_overflow();
+}
+
+void RibbonBar::update_tab_overflow() {
+    if (tab_overflow_ == nullptr || tab_row_ == nullptr) {
+        return;
+    }
+    // Widen enough: every tab is shown.  Narrow: the last two tabs go behind the
+    // chevron (the strip never wraps to a second row).
+    const bool narrow = width() < 1000;
+    for (std::size_t index = 0; index < tab_buttons_.size(); ++index) {
+        if (tab_buttons_[index] == nullptr) {
+            continue;
+        }
+        const bool hidden_by_context =
+            tab_buttons_[index] == contextual_tab_ && !contextual_enabled_;
+        const bool hide = hidden_by_context || (narrow && index + 2 >= tab_buttons_.size());
+        tab_buttons_[index]->setVisible(!hide);
+    }
+    if (narrow) {
+        tab_overflow_->setVisible(true);
+        tab_overflow_->move(tab_row_->width() - tab_overflow_->width() - 8, 2);
+        tab_overflow_->raise();
+    } else {
+        tab_overflow_->hide();
+    }
+}
+
 void RibbonBar::build_tabs() {
     auto* layout = static_cast<QHBoxLayout*>(tab_row_->layout());
+    // The File tab is chrome: dark tile, its own click handler, and deliberately
+    // not one of the seven modelled command tabs (tab_count() stays 7).
+    file_tab_ = new QToolButton(tab_row_);
+    file_tab_->setObjectName(QStringLiteral("ribbonFileTab"));
+    file_tab_->setText(QStringLiteral("File"));
+    file_tab_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    file_tab_->setFont(ribbon_font(kBodyPointSize - 1));
+    file_tab_->setFixedHeight(kRibbonTabHeight - 4);
+    file_tab_->setFocusPolicy(Qt::NoFocus);
+    connect(file_tab_, &QToolButton::clicked, this, [this](bool) {
+        if (file_handler_) {
+            file_handler_();
+        }
+    });
+    layout->addWidget(file_tab_);
+
     const std::vector<TabSpec>& tabs = tab_specs();
     for (std::size_t index = 0; index < tabs.size(); ++index) {
         auto* button = new QToolButton(tab_row_);
@@ -261,15 +353,21 @@ void RibbonBar::build_tabs() {
         button->setFocusPolicy(Qt::NoFocus);
         connect(button, &QToolButton::clicked, this,
                 [this, tab = static_cast<int>(index)](bool) { build_page(tab); });
+        if (tabs[index].contextual) {
+            contextual_tab_ = button;
+        }
+        tab_buttons_.push_back(button);
         layout->addWidget(button);
     }
     layout->addStretch(1);
 
-    // The reference's right-hand "Tell me" box; a label is enough for structure.
-    auto* tell_me = new QLabel(QStringLiteral("Tell me what you want to do"), tab_row_);
-    tell_me->setFont(ribbon_font(kBodyPointSize - 1));
-    tell_me->setStyleSheet(QStringLiteral("color: #7a7a7a; padding-right: 8px;"));
-    layout->addWidget(tell_me);
+    // The reference's right-hand "Tell me" box.  The chrome gate asserts this is
+    // present and that its label is the full sentence, not an empty box.
+    tell_me_ = new QLabel(QStringLiteral("Tell me what you want to do"), tab_row_);
+    tell_me_->setObjectName(QStringLiteral("ribbonTellMe"));
+    tell_me_->setFont(ribbon_font(kBodyPointSize - 1));
+    tell_me_->setStyleSheet(QStringLiteral("color: #7a7a7a; padding-right: 8px;"));
+    layout->addWidget(tell_me_);
 }
 
 void RibbonBar::clear_page() {
@@ -314,10 +412,14 @@ void RibbonBar::build_page(int tab_index) {
             button->setObjectName(QStringLiteral("ribbonButton"));
             const QString label = QString::fromUtf8(spec.label);
             button->setText(label);
-            button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            // Icon above label: the product's ribbon button shape.  The icon is
+            // drawn by shell_icons.cpp (never Microsoft artwork).
+            button->setIcon(shell_action_icon(spec.action, kRibbonIconPx));
+            button->setIconSize(QSize(kRibbonIconPx, kRibbonIconPx));
+            button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
             button->setFont(button_font);
             button->setAutoRaise(true);
-            button->setFixedHeight(24);
+            button->setFixedHeight(kRibbonButtonHeight);
             button->setFocusPolicy(Qt::NoFocus);
             // The width is the LABEL's, from the same font metrics that will
             // draw it, plus the stylesheet's padding/border.  Never narrower
@@ -328,6 +430,12 @@ void RibbonBar::build_page(int tab_index) {
             button->setFixedWidth(std::max(label_width, button->sizeHint().width()));
             button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
             const app::MenuAction action = spec.action;
+            // Decision 9: an unimplemented ribbon command is greyed with the
+            // exact tooltip, never silently dead.
+            const bool implemented = shell_implements(action);
+            button->setEnabled(implemented);
+            button->setToolTip(implemented ? label
+                                           : QStringLiteral("not implemented in this port"));
             connect(button, &QToolButton::clicked, this, [this, action](bool) {
                 if (handler_) {
                     handler_(action);
@@ -343,7 +451,7 @@ void RibbonBar::build_page(int tab_index) {
         caption->setObjectName(QStringLiteral("ribbonGroupLabel"));
         caption->setFont(ribbon_font(kGroupLabelPointSize));
         caption->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
-        caption->setFixedHeight(14);
+        caption->setFixedHeight(kRibbonGroupLabelHeight);
         box_layout->addWidget(caption);
 
         // The group's width follows its widest child (the button row or the
@@ -406,6 +514,16 @@ void RibbonBar::layout_page_groups() {
             overflow = true;
         }
     }
+    groups_overflow_ = overflow;
+    if (overflow_ != nullptr) {
+        // One chevron at the group row's right edge; the row height is unchanged
+        // (no wrapping).
+        overflow_->setVisible(overflow);
+        if (overflow) {
+            overflow_->move(width() - overflow_->width() - 6, 8);
+            overflow_->raise();
+        }
+    }
     page_layout_->invalidate();
 }
 
@@ -422,6 +540,7 @@ int RibbonBar::visible_group_count() const {
 void RibbonBar::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     layout_page_groups();
+    update_tab_overflow();
 }
 
 int RibbonBar::tab_count() const { return static_cast<int>(tab_specs().size()); }
