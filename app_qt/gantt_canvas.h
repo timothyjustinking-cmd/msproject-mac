@@ -107,9 +107,28 @@ class GanttCanvas final : public QWidget {
         double x = 0.0;
         double width = 0.0;
     };
+    // Wave 26 (W26-3.3): one cell of a timescale tier and the tier itself.
+    // The tier list comes from the FILE's stored units/formats when the style
+    // record decodes, else from the measured stock week/day pair.
+    struct TierCell {
+        double x = 0.0;
+        double width = 0.0;
+        std::string label;
+        int weekday = -1;  // day tier only
+    };
+    struct HeaderTier {
+        msproject::viewstate::TimescaleTier spec;
+        bool has_text_style = false;
+        msproject::viewstate::TextStyle text;
+        std::vector<TierCell> cells;
+    };
 
     std::vector<DayCell> visible_days(double x0, double x1) const;
     std::vector<WeekCell> visible_weeks(double x0, double x1) const;
+    // Wave 26 (W26-3.3): the tiers Project stores for this view (a stock file
+    // stores week/day with no top tier; PROJECT_A stores year/quarter/month).
+    std::vector<HeaderTier> header_tiers(const std::vector<DayCell>& days,
+                                        const std::vector<WeekCell>& weeks) const;
     void paint_header(QPainter& painter, const std::vector<DayCell>& days,
                       const std::vector<WeekCell>& weeks, int canvas_width) const;
     // Wave 26 (W26-3.2): the fill colour for a bar, file palette first.

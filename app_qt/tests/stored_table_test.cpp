@@ -831,6 +831,18 @@ void case_corpus(const QString& corpus) {
         check(bar_colours.count(qRgb(0xf7, 0x8a, 0x88)) == 0,
               "project_a never paints the unused light-red 'Critical' bar style");
         check(project_row_red, "project_a's project-summary bar is its red summary style");
+
+        // Wave 26 (W26-3.3): the file stores three timescale tiers -- year
+        // ("2026"), quarter ("Qtr 2, 2026") and month ("Apr") -- so the 42-px
+        // header is split three ways, not the stock 2x21.
+        const msqt::GanttHeaderInfo info = gantt->header_info(gantt->width());
+        check(info.header_height == 42, "the Gantt header band is still 42 px");
+        check(info.tier_height == 14, "project_a's three tiers share the 42 px header");
+        check(info.first_major_label.find("Qtr ") != std::string::npos &&
+                  info.first_major_label.find(',') != std::string::npos,
+              "project_a's middle tier prints the stored quarter format");
+        check(info.first_minor_label.size() == 3,
+              "project_a's bottom tier prints the stored short month name");
     }
 
     // EVERY displayed row: % Complete is the task's stored percent, and Pre/Suc

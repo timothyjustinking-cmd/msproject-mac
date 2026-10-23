@@ -145,11 +145,51 @@ struct BarStyle {
     std::uint32_t inside_text = 0;
 };
 
+// One Gantt timescale tier.  `unit` is decoded from the stored byte through
+// MPXJ's TimescaleUnitsHelper table (stored byte + 1 indexes it); 255 means
+// "no tier" (the stock project's top tier), reported as `none`.
+enum class TimescaleUnit : std::uint8_t {
+    none = 0,
+    minutes,
+    hours,
+    days,
+    weeks,
+    thirds_of_months,
+    months,
+    quarters,
+    half_years,
+    years,
+};
+
+[[nodiscard]] const char* timescale_unit_name(TimescaleUnit unit) noexcept;
+
+struct TimescaleTier {
+    TimescaleUnit unit = TimescaleUnit::none;
+    int count = 0;
+    // PjTimescaleFormat value from the stored short (0 = "2002", 2 = "1st
+    // Quarter", 3 = "Qtr 1, 2002", 10 = "Jan, Feb, ...", 13 = week date,
+    // 20 = single-letter day, 35 = none).  Kept as the stored number; the
+    // shell maps the formats it renders.
+    int format = 35;
+    // TimescaleAlignment: 0 left, 1 centre, 2 right.
+    int align = 1;
+    bool tick_lines = false;
+    bool fiscal_year = false;
+};
+
 struct GanttStyle {
     bool decoded = false;
     std::vector<FontBase> fonts;
     std::array<TextStyle, kTextStyleItemCount> text{};
     std::vector<BarStyle> bars;
+    TimescaleTier top;
+    TimescaleTier middle;
+    TimescaleTier bottom;
+    // The stored tier-visibility byte and the "timescale size" byte, kept for
+    // the record; the shells decide what to draw from the units themselves.
+    int timescale_show = 0;
+    int timescale_size = 0;
+    int view_flags = 0;
     std::vector<std::string> warnings;
 };
 
@@ -171,6 +211,32 @@ inline constexpr std::size_t kGanttBarFirstOffset = 2255;
 inline constexpr std::size_t kGanttBarStride = 195;
 inline constexpr std::size_t kGanttBarNameOffset = 91;   // NUL-terminated UTF-16
 inline constexpr std::size_t kGanttBarNameBytes = kGanttBarStride - kGanttBarNameOffset;
+
+// The timescale tiers, measured from the same record (MPXJ's
+// GanttChartView14.processViewProperties layout):
+//   top    units +41311, count +41313, format u16 +41315, align +41317,
+//          tick lines +41349, fiscal year bit 0 of +41361;
+//   middle units +1152, count +1156, format u16 +1160, align +1166, tick
+//          lines and fiscal year in the view-flags byte +1086 (0x01 / 0x08);
+//   bottom units +1154, count +1158, format u16 +1162, align +1164, tick
+//          lines 0x02 / fiscal year 0x10 of the same flags byte.
+inline constexpr std::size_t kGanttMiddleUnitsOffset = 1152;
+inline constexpr std::size_t kGanttBottomUnitsOffset = 1154;
+inline constexpr std::size_t kGanttMiddleCountOffset = 1156;
+inline constexpr std::size_t kGanttBottomCountOffset = 1158;
+inline constexpr std::size_t kGanttMiddleFormatOffset = 1160;
+inline constexpr std::size_t kGanttBottomFormatOffset = 1162;
+inline constexpr std::size_t kGanttBottomAlignOffset = 1164;
+inline constexpr std::size_t kGanttMiddleAlignOffset = 1166;
+inline constexpr std::size_t kGanttShowTiersOffset = 41255;
+inline constexpr std::size_t kGanttTopUnitsOffset = 41311;
+inline constexpr std::size_t kGanttTopCountOffset = 41313;
+inline constexpr std::size_t kGanttTopFormatOffset = 41315;
+inline constexpr std::size_t kGanttTopAlignOffset = 41317;
+inline constexpr std::size_t kGanttTopTicksOffset = 41349;
+inline constexpr std::size_t kGanttTopFiscalOffset = 41361;
+inline constexpr std::size_t kGanttViewFlagsOffset = 1086;
+inline constexpr std::size_t kGanttTimescaleSizeOffset = 1180;
 
 // Decodes the `214/Props` FONT_BASES payload (record id 0x03400000).  The
 // table's declared count must fit the payload; a count that does not is a
