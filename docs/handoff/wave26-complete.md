@@ -628,3 +628,166 @@ No new Critical or High finding in G4.  Deliberate notes:
   from the host's QPrinterInfo; neither is a Microsoft surface.
 
 WAVE-26-G4-COMPLETE
+
+## G5 - Project dialogs
+
+Every item is DONE; nothing in G5 is deferred.  The measured source is the local
+audit capture set (`corpus/reference/2026-10-23-audit/`); the committed numbers
+are `tests/data/reference/w26-project-dialogs.measures.json`, and the new
+`qt_project_dialog_gate` (21st `app_qt` test) measures the LIVE widget tree and
+the RENDERED pixels against them.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W26-5.1 | Project Information: the captured fields, functional Priority saved through the shared cascade, Statistics laid out | **DONE** | commit `7b2268e`; gates `build/w26/gates-aa10b3d-W26-5.1.log` |
+| W26-5.2 | Change Working Time: calendar picker, legend, month grid, Exceptions/Work Weeks from the file's calendars; Details/Options laid out | **DONE** | commit `5dc2019`; gates `build/w26/gates-7b2268e-W26-5.2.log` |
+| W26-5.3 | Custom Fields as the field-definition dialog; per-task values moved to Task Information's Custom Fields tab | **DONE** | commit `d4541c2`; gates `build/w26/gates-5dc2019-W26-5.3.log` |
+| W26-5.4 | Update Project, Move Project's actual-values prompt, Set/Clear Baseline and WBS Define Code/Renumber menus, Links Between Projects | **DONE** | commit `712535a`; gates `build/w26/gates-d4541c2-W26-5.4.log` |
+
+### Measurement note (honest)
+
+The audit frames are local-only JPEGs of the 1920x1080 screen scaled to
+874x491.  The exact capture scale is not independently pinned (the clean
+capture is full-resolution, the audit frames are not), so the committed
+numbers are FRACTIONS of each captured dialog's client box -- scale-free and
+measured from the capture pixels -- plus the captured control inventory
+(labels, tab names, column headers, button texts, choice counts).  The dialog
+sizes are the port's logical sizes chosen to keep the captured aspect ratio,
+which the gate asserts together with the fractions (+/-0.03) and the inventory.
+The captures themselves and any client text in them are never committed.
+
+### W26-5.1 detail -- Project Information
+
+- The dialog is Project Information for the loaded file: Start/Finish date,
+  Current date, Status date, Schedule from, Calendar, Priority, the Enterprise
+  Custom Fields grid and Help/Statistics... .
+- `app::project_information_from` maps the file values with no Qt: the project
+  row's start/finish and Priority (new `PlanInput::project_priority`, read by
+  `reader_adapter.h` from `ProjectRow::priority`), core/cal's base-calendar
+  names and default name, and the shell's today (never a clock in the model).
+  Status date and Schedule from have no decoded field; they show NA and
+  Project's captured new-project default respectively, and are disabled with
+  the exact decision-9 tooltip.
+- PRIORITY is functional: OK queues `StructuralKind::set_project_priority`
+  (uid 0, the project row).  Step 5a of `save_structural_edits` writes it with
+  `mppwrite::TaskTable::set_priority` on row 0 -- the same single-copy table
+  write the ribbon's PercentComplete edits use -- and the headless test saves
+  750, re-opens the file with the reader and reads 750 back.
+- The ribbon's Project Information control is enabled and wired
+  (`RibbonCommand::project_information`).
+
+### W26-5.2 detail -- Change Working Time
+
+- `app::load_working_time` decodes the file's table through core/cal and
+  builds: the base-calendar picker (the file's names), the legend, the month
+  grid (Monday-first M T W Th F S S, working/non-working/exception/
+  nondefault-work-week fills), the selected day's intervals, the Based on line
+  and the Exceptions / Work Weeks rows.  It never throws; an undecodable table
+  is refused with a message and no model.
+- The dialog is READ-ONLY: the port has no calendar writer.  Details...,
+  Delete and Options... are laid out and disabled with the exact decision-9
+  tooltip; the picker, day clicking and month navigation are live display
+  navigation, not file edits.
+- Exception and work-week names are not decoded or printed.  core/cal's
+  client-data rule keeps them out of every tool and test; the tables carry the
+  capture's row number and dates only.  On `synthetic-calendars.mpp` the tables
+  are empty (the file stores none); the local exception probe
+  (`corpus/probe/w12-exceptions.mpp`, git-ignored) exercises 7 rows and 29
+  marked days without a name.
+- Measured acceptance: Standard and Shift A are the two base calendars;
+  October 2026 has 31 cells with 1 October in the Thursday column and the
+  weekend set {3,4,10,11,17,18,24,25,31}; Standard is 8:00-12:00 + 13:00-17:00,
+  Shift A is 9:00-13:00 + 14:00-18:00; a Saturday reads Nonworking.  The Qt gate
+  RENDERS the five legend swatches and samples the day cells' pixels against
+  the measured fills.
+
+### W26-5.3 detail -- Custom Fields
+
+- Project > Custom Fields (and the Gantt Chart Format tab's entry) now opens
+  the field-DEFINITION dialog laid out from the capture: the Task type and the
+  selected field's displayed type, the field list, Rename.../Delete/Add Field
+  to Enterprise.../Import Field..., Custom attributes (None/Lookup/Formula,
+  Formula...), both calculation rows, Values to display, Help/OK/Cancel.
+- The list is every field in the six families whose storage W48 measured, in
+  the capture's family order: Duration1..10, Cost1..10, Date1..10, Flag1..20,
+  Number1..20, Text1..30 (100 rows).  Start/Finish custom fields are not in
+  this port's field table and are not invented.
+- FORMULA is functional: Formula... asks the shell's editor (the port's own
+  non-native input dialog) and OK returns the `app::CustomFormulaEdit`, queued
+  on `app::Document` and written by the existing 114/Props writer.  Clearing
+  remains the separate Clear Formulas action (the writer has no per-field
+  clear).  Rename, type change, Lookup, rollup and graphical indicators have
+  no proven writer and are disabled with the exact tooltip.
+- Per-task values moved to Task Information's Custom Fields tab.  The tab is
+  live with the six measured fields; a blank clears a stored value, a changed
+  text is parsed by `app::make_task_field_edits` and queued as
+  set_field/clear_field edits.  The uid-routing test now drives that tab
+  instead of the old Task Fields dialog and still proves the value lands on the
+  selected task's uid, not the row below it.  The Task Fields dialog class
+  remains for its own per-screen gate but is no longer a command.
+
+### W26-5.4 detail -- Update Project, Move Project, the menus and Links
+
+- Update Project is laid out from the capture (work-as-complete-through date,
+  0%-100% and 100%, reschedule-after date, Entire project / Selected tasks,
+  OK/Cancel with an inline note).  OK is disabled with the exact tooltip: the
+  port has no actuals writer, and no fake success is offered.
+- Move Project shows Project's prompt verbatim when the plan stores a non-zero
+  Percent Complete (the port's actual-values evidence,
+  `app::project_has_actual_values`): "This project contains tasks with actual
+  values.<newline>Do you still want to move it?" with Yes/No.  Yes answers
+  honestly that moving a project is not implemented and changes nothing; the
+  gate proves no move edit is queued.  A project with no actual values gets no
+  prompt (Project's own rule).
+- WBS and Set Baseline are the split buttons the independent readback lists as
+  `[v]`; their drop-down menus carry the captured Define Code.../Renumber...
+  and Set Baseline.../Clear Baseline... items.  Each item is disabled with the
+  exact decision-9 tooltip (no WBS-code or baseline writer).  The pin's kind
+  column is corrected button -> split on that evidence.
+- Links Between Projects has the External Predecessors / External Successors
+  tabs with their five columns, the Links group with ID/Unique ID/
+  Predecessors/Successors, the Path field and Help/Show/Open/Refresh/Details/
+  Options/Close.  The port decodes no external project links, so only Close is
+  live; the tables are empty.
+
+### Gates per commit (each log is on that commit's parent tree)
+
+| item | log | core | plan_recalc | reader | M2 | app | app_qt | fixtures | parity |
+|---|---|---|---|---|---|---|---|---|---|
+| W26-5.1 | `gates-aa10b3d-W26-5.1.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 17/17 | 21/21 | OK | 10/0, 1/0 |
+| W26-5.2 | `gates-7b2268e-W26-5.2.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 17/17 | 21/21 | OK | 10/0, 1/0 |
+| W26-5.3 | `gates-5dc2019-W26-5.3.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 17/17 | 21/21 | OK | 10/0, 1/0 |
+| W26-5.4 | `gates-d4541c2-W26-5.4.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 17/17 | 21/21 | OK | 10/0, 1/0 |
+
+Every log also carries `check_fixtures.py` (25 documented hashes, 21 tracked
+`.mpp`), the oracle-provenance check (8), the client-name scan (0 hits on HEAD
+and on the working-tree content) and the 8-hex grep (no matches).  `app` is
+17/17 from W26-5.1 on (the new `app_project_dialogs`); `app_qt` is 21/21 from
+W26-5.1 on (the new `qt_project_dialog_gate`).  Two transient MSBuild link-log
+locks hit during the stage builds; the builds were retried, not changed.
+
+## Found, not fixed
+
+No new Critical or High finding in G5.  Deliberate notes:
+
+- Project Information has one functional field.  Start/Finish/Current/Status
+  date, Schedule from and Calendar are displayed (the file's values where it
+  stores them) but disabled: this port has no project-date, status-date,
+  schedule-from or default-calendar writer.  Priority is the one field the
+  engine both reads and writes.
+- No actuals / project-move / baseline / WBS engines.  Update Project, the
+  baseline and WBS menus and the Move Project action are laid out and honestly
+  inert; each disabled control carries the exact decision-9 tooltip.
+- No calendar writer and no exception-name decode.  Change Working Time is
+  read-only, and core/cal's client-data rule keeps exception/work-week names
+  out of every surface; the rows show the index and dates.
+- The Custom Fields list is the six measured families.  Project's Start/Finish
+  custom fields and Resource/Project scopes are not in this port's field
+  table; the dialog lays their type choices out and disables them rather than
+  inventing field ids.
+- The measurement fractions are capture-relative.  The audit frames are
+  scaled JPEGs; the committed fractions are scale-free, but an absolute
+  Project-pixel dialog size could not be pinned from them.  The gate therefore
+  compares proportions and the live inventory, not an absolute pixel table.
+
+WAVE-26-G5-COMPLETE
