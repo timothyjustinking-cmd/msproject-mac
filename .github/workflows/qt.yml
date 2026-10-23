@@ -62,7 +62,13 @@ jobs:
             arch: gcc_64
             generator: Unix Makefiles
           - name: windows-qt
-            os: windows-latest
+            # PINNED, not windows-latest: the image moved to Visual Studio 18
+            # (MSVC 14.51) in October 2026 and Qt 6.5.3's qvarlengtharray.h no
+            # longer compiles there ("'stdext': identifier not found", first
+            # three-platform run 39885673497).  windows-2022 keeps the MSVC 17.x
+            # toolset the pinned Qt's win64_msvc2019_64 package targets, which
+            # also keeps the render metrics stable.
+            os: windows-2022
             arch: win64_msvc2019_64
             generator: Ninja
           # macos-14 is Apple Silicon.  Pinned by image name (not macos-latest)
