@@ -1109,6 +1109,87 @@ void test_project_b(TestContext& context) {
  * manual scheduling: it stores no such record, so `new_tasks_manual_stored` is
  * false and a caller must keep its own fallback rather than believe the field.
  */
+/* Wave 23 (W23-13 / A-6): the project-property name table is DERIVED from the
+ * local-only decompiled binary into analysis/project_property_names.tsv (Q9),
+ * and the reader's new-task record id is checked against it.  This is the
+ * committed, reproducible half of E7's evidence: the decompiled file itself is
+ * git-ignored.  index 64 = QNEWTASKSAREMANUAL -> 0x02401388 + 64 = 0x024013c8,
+ * the record the reader consumes. */
+void test_project_property_names(TestContext& context) {
+    const std::string path = MPP_PROPERTY_NAMES_PATH;
+    if (!file_exists(path)) {
+        context.check(false, "analysis/project_property_names.tsv is present");
+        return;
+    }
+    std::ifstream input(path);
+    std::map<std::uint32_t, std::string> names;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty() || line[0] == '#' || line.rfind("index\t", 0) == 0) {
+            continue;
+        }
+        const std::size_t tab = line.find('\t');
+        if (tab == std::string::npos) {
+            continue;
+        }
+        names[static_cast<std::uint32_t>(std::stoul(line.substr(0, tab)))] =
+            line.substr(tab + 1);
+    }
+    context.check(names.size() >= 100,
+                  "the property-name TSV holds the measured table (>=100 names)");
+    const auto name_at = [&names](std::uint32_t index) {
+        const auto found = names.find(index);
+        return found == names.end() ? std::string() : found->second;
+    };
+    context.check(name_at(64) == "QNEWTASKSAREMANUAL",
+                  "index 64 is QNEWTASKSAREMANUAL");
+    context.equal(0x02401388u + 64u, 0x024013c8u,
+                  "the id rule (0x02401388 + index) yields the reader's record id");
+    // The same rule on names E7 checks independently against Project's files.
+    context.check(name_at(2) == "QISNEWTASKSESTIMATED",
+                  "index 2 is QISNEWTASKSESTIMATED");
+    context.equal(0x02401388u + 2u, 0x0240138au,
+                  "QISNEWTASKSESTIMATED maps to 0x0240138a");
+    context.check(name_at(7) == "DAYSPERMONTH", "index 7 is DAYSPERMONTH");
+    context.equal(0x02401388u + 7u, 0x0240138fu,
+                  "DAYSPERMONTH maps to 0x0240138f");
+
+    // The committed fixture's 114/Props really carries 0x024013c8 with the
+    // value the reader reports, tying the TSV's id to the bytes.
+    const std::string fixture = (test_data_dir() / "synthetic-base.mpp").string();
+    if (!file_exists(fixture)) {
+        context.check(false, "synthetic-base.mpp is present for the props check");
+        return;
+    }
+    const mpp::CompoundFile container = mpp::CompoundFile::from_file(fixture);
+    const std::vector<std::uint8_t> props = container.read_stream("114/Props");
+    std::size_t offset = 16;
+    bool found = false;
+    std::uint16_t value = 0;
+    while (offset + 12 <= props.size()) {
+        std::uint32_t length = 0;
+        std::uint32_t id = 0;
+        std::uint32_t kind = 0;
+        std::memcpy(&length, &props[offset], sizeof length);
+        std::memcpy(&id, &props[offset + 4], sizeof id);
+        std::memcpy(&kind, &props[offset + 8], sizeof kind);
+        if (((id >> 16) & 0xFFu) != 0x40u || offset + 12 + length > props.size()) {
+            break;
+        }
+        if (id == 0x024013c8u && kind == 2 && length >= 2) {
+            found = true;
+            value = static_cast<std::uint16_t>(props[offset + 12] |
+                                               (props[offset + 13] << 8));
+            break;
+        }
+        offset += 12 + length;
+    }
+    context.check(found, "synthetic-base's 114/Props stores 0x024013c8 (kind 2)");
+    const mpp::Document document = mpp::load_file(fixture);
+    context.equal(value != 0, document.project.new_tasks_manual,
+                  "the record's u16 and the reader's Manual flag agree");
+}
+
 void test_new_task_mode(TestContext& context) {
     const std::string fixture = (test_data_dir() / "synthetic-base.mpp").string();
     if (!file_exists(fixture)) {
@@ -3418,6 +3499,7 @@ int run_tests() {
     test_synthetic_fixture(context);
     test_project_a(context);
     test_project_b(context);
+    test_project_property_names(context);
     test_new_task_mode(context);
     test_outline_fixture(context);
     test_status_fixture(context);
