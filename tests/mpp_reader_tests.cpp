@@ -1382,6 +1382,45 @@ void test_flag10(TestContext& context) {
             context.equal(set_in_control, std::size_t{1},
                           "wave23-flags sets no other flag bit");
         }
+        // Single-bit controls for the non-contiguous groups: Flag2 (+24/0x04)
+        // and Flag20 (+34/0x04).  A swapped mask table still passes the all-20
+        // aggregate but fails these.
+        struct SingleFlagCase {
+            const char* file;
+            std::size_t index;
+            const char* what;
+        };
+        const SingleFlagCase singles[] = {
+            {"wave24-flag2.mpp", 1, "Flag2 decodes to flags[1] only"},
+            {"wave24-flag20.mpp", 19, "Flag20 decodes to flags[19] only"},
+        };
+        for (const SingleFlagCase& item : singles) {
+            const std::string path = (test_data_dir() / item.file).string();
+            if (!file_exists(path)) {
+                context.check(false, std::string(item.file) + " is present");
+                continue;
+            }
+            const mpp::Document single = mpp::load_file(path);
+            const mpp::Task* row = nullptr;
+            for (const mpp::Task& task : single.tasks) {
+                if (task.uid == 3) {
+                    row = &task;
+                }
+            }
+            std::size_t total_set = 0;
+            if (row != nullptr) {
+                for (const bool value : row->flags) {
+                    if (value) {
+                        ++total_set;
+                    }
+                }
+            }
+            context.check(row != nullptr && row->flags_stored,
+                          std::string(item.file) + " stores the flag metadata");
+            context.check(row != nullptr && row->flags[item.index], item.what);
+            context.equal(total_set, std::size_t{1},
+                          std::string(item.file) + " sets exactly one flag bit");
+        }
     }
 }
 
@@ -3129,9 +3168,18 @@ void test_mpp12(TestContext& context) {
                           "MPP12 Cost1 = 0x0b40006a (hundredths)");
             context.check(document.custom_field(1, 0x0B400048u).flag,
                           "MPP12 Flag1 is the FixedMeta +37 bit 0x20");
-            /* All twenty flags are measurable in MPP12; MPP14 exposes Flag1 only. */
+            /* All twenty flag positions are measured for MPP12 and decoded into
+             * Task::flags (wave 24).  Flag11..20 ids are NOT contiguous with
+             * Flag10 (0x0B400124..12D), so the mapping goes through
+             * custom_field_index(); these two assertions pin the id mapping. */
+            context.check(task->flags_stored, "MPP12 flags are decoded");
+            context.equal(task->flags[0], document.custom_field(1, 0x0B400048u).flag,
+                          "Flag1 maps to flags[0]");
             context.check(task->has_custom_field(0x0B400124u),
-                          "MPP12 also reports Flag11 (all twenty bit positions measured)");
+                          "MPP12 reports Flag11 (0x0b400124)");
+            context.equal(task->flags[10],
+                          document.custom_field(1, 0x0B400124u).flag,
+                          "Flag11 maps to flags[10] (non-contiguous id)");
         }
         const mpp::Assignment* assignment = find_assignment(document, 1);
         context.check(assignment != nullptr, "mpp12task has its one assignment");

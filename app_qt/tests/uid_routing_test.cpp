@@ -15,12 +15,15 @@
 //   scheduling modes: ID 1 Alpha is auto, ID 2 Inserted Row is manual and has
 //   a 4-day duration; the other tasks are 1-day manual rows.  So with the
 //   project row at RecordSet 0, row+1 arithmetic lands on Inserted Row for row
-//   1 -- a different task, manual and 4 days long.  Every assertion below
-//   fails under that arithmetic.
+//   1 -- a different task, manual and 4 days long.  Sections 2-7 below fail
+//   under that arithmetic (section 1 pins the values the fixed code returns;
+//   the old Task Information read the sheet at the selected row, so it already
+//   showed the right name).
 //
 // Usage: qt_uid_routing <wave24-order.mpp> <out-dir>
 
 #include <QAction>
+#include <QAbstractItemModel>
 #include <QApplication>
 #include <QDialog>
 #include <QInputDialog>
@@ -208,6 +211,26 @@ int main(int argc, char** argv) {
     gate::check(window.sheet() != nullptr && window.sheet()->row_uid(1) == alpha_uid,
                 "RecordSet row 1 is ID 1 (not index 1 of plan().tasks)");
 
+    // --- 0. the project row's cells are not editable -----------------------
+    // Wave 24 (W24-2/W24-9 review): wave 23 pinned this in shell_test on a
+    // fixture that now hides the project row, so the assertion had become
+    // vacuous.  This fixture shows it.
+    {
+        const int name_column =
+            window.sheet_table_model()->display_column_for_field(app::name_field_id());
+        QAbstractItemModel* model = window.sheet_view()->model();
+        gate::check(model != nullptr && name_column >= 0 && model->rowCount() > 1,
+                    "the model exposes the project row's Name cell");
+        if (model != nullptr && name_column >= 0 && model->rowCount() > 1) {
+            const QModelIndex project_cell = model->index(0, name_column);
+            gate::check(!model->flags(project_cell).testFlag(Qt::ItemIsEditable),
+                        "the project row's cell is not editable");
+            gate::check(!model->setData(project_cell, QStringLiteral("renamed"),
+                                        Qt::EditRole),
+                        "a project-row cell edit is refused");
+        }
+    }
+
     // --- 1. Task Information reads the SELECTED task ------------------------
     select_row(window, 1);
     msqt::TaskInformationValues values;
@@ -322,10 +345,11 @@ int main(int argc, char** argv) {
 
     // --- 6. the printed chart aligns with the printed sheet -----------------
     {
-        const std::vector<std::size_t> rows =
-            msqt::print_rows(window.sheet()->row_count(), {}, false);
-        const app::PrintJob job = msqt::make_print_job(
-            window.plan(), rows, 5, std::string(), std::string(), app::ZoomLevel::week);
+        // The PRODUCTION job File > Print builds (no printer dialog): the
+        // subtitle must count the five tasks, not the six printed rows.
+        const app::PrintJob job = window.current_print_job();
+        const std::vector<std::size_t>& rows = job.rows;
+        gate::check(rows.size() == 6, "the print job covers all six printed rows");
         gate::check(job.subtitle.find("5 of 5 tasks") != std::string::npos,
                     "the print subtitle counts tasks, not the project row");
         const core::gantt::GanttLayout gantt =

@@ -740,8 +740,4 @@ const app::TaskRow* PlanDocument::task_by_uid(std::uint32_t uid) const {
     return nullptr;
 }
 
-const app::TaskRow* PlanDocument::task_for_record_row(std::size_t row) const {
-    return row < records_.row_count() ? task_by_uid(records_.uid(row)) : nullptr;
-}
-
 }  // namespace msqt

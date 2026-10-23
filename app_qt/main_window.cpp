@@ -2057,11 +2057,9 @@ bool MainWindow::confirm_proceed_with_discard() {
 // Wave 19: print and export
 // ---------------------------------------------------------------------------
 
-void MainWindow::print_plan() {
-    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
-        set_message("printing is available in the Task Sheet view", true);
-        update_status();
-        return;
+app::PrintJob MainWindow::current_print_job() const {
+    if (!doc_.has_document()) {
+        return {};
     }
     const std::vector<std::size_t> rows =
         print_rows(doc_.records().row_count(),
@@ -2073,10 +2071,18 @@ void MainWindow::print_plan() {
             ++printed_tasks;
         }
     }
-    const app::PrintJob job =
-        make_print_job(doc_.plan(), rows, printed_tasks,
-                       doc_.filter_active() ? doc_.filter_description() : std::string(),
-                       today_text(), prefs_.zoom);
+    return make_print_job(doc_.plan(), rows, printed_tasks,
+                          doc_.filter_active() ? doc_.filter_description() : std::string(),
+                          today_text(), prefs_.zoom);
+}
+
+void MainWindow::print_plan() {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
+        set_message("printing is available in the Task Sheet view", true);
+        update_status();
+        return;
+    }
+    const app::PrintJob job = current_print_job();
     QString error;
     if (!print_job(this, job, *doc_.sheet(), doc_.plan(), prefs_, &error)) {
         if (!error.isEmpty()) {

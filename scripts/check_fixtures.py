@@ -68,6 +68,13 @@ DOCUMENTED = {
     # The reader's generic flag table is checked against this file.
     "tests/data/wave24-flags20.mpp":
         "1C74D403B7EB5280D57F1D6264D6A17B28A2F9578AF15F40282FDDC44CC471FF",
+    # Wave 24 (W24-15 review): single-bit controls from the same one-flag-at-a-
+    # time measurement -- Flag2 (+24/0x04) and Flag20 (+34/0x04).  They pin the
+    # NON-CONTIGUOUS positions object-by-object, not just the all-20 aggregate.
+    "tests/data/wave24-flag2.mpp":
+        "614097D1031CA82B2F171170A5EB613349DA9BEEF6432CFB61900FBD91294BC6",
+    "tests/data/wave24-flag20.mpp":
+        "1C1C9F2433962AFE309535074D92CAEAFA8052572B7AA7AFEC22541F7479F64F",
 }
 
 

@@ -7,9 +7,11 @@ session must read first._
 ## The 30-second state
 
 * **Wave 24 is closed on branch `wave24`** from `docs/handoff/wave24-brief.md`;
-  the record is **`docs/handoff/wave24-complete.md`** (the gate).  Three local
-  commits on top of local `wave23` = `d236f91`: `ca9e7d7` (fixtures/oracles),
-  `ff22c7b` (fixes), `cc4ce8a` (CI/harness).  **Nothing is pushed.**
+  the record is **`docs/handoff/wave24-complete.md`** (the gate).  The branch
+  was cut from local `wave23` = `d236f91` and already carried the brief and two
+  tools commits; this session added `ca9e7d7` (fixtures/oracles), `ff22c7b`
+  (fixes), `cc4ce8a` (CI/harness), `d5d8126` (close docs) and this record's
+  commit.  **Nothing is pushed.**
 * `main` = **488481f** (wave-22 docs close).  `wave23` is **not merged**;
   `origin/wave23` = `63cd087`.  Remote `wave24` does not exist.
 * **Publication hold still in force:** client data is already on the public
@@ -27,7 +29,7 @@ session must read first._
 * Gates at the close: core **51/51**, plan_recalc **266** no-corpus / **512**
   with corpus, M2 **332/332**, engine **7 pass + constraint-mso expected**,
   app **15/15**, app_qt **18/18**, fixtures **OK** (11 hashes, 10 `.mpp`),
-  parity **10/10**, reader **1054** with corpus / **377** without.
+  parity **10/10**, reader **1063** with corpus / **383** without.
 * Engine stays **7/8**: `constraint-mso` is deliberately left failing;
   `mppwrite::save_plan` is test-only.
 * Still deferred (wave24-complete §3): the FILE's own text/bar styles
