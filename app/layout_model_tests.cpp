@@ -603,7 +603,9 @@ void test_corpus_file(const std::filesystem::path& path, const char* label,
     // that decoded 0x03400009 wrongly would still agree with itself.  The
     // expectation is pinned independently: PROJECT_A stores the row SHOWN (1),
     // and the COM-built w3-o1/holiday1 probes store it HIDDEN (0).
-    const bool expected_project_row = label == "project_a";
+    // Compare the strings, not the pointers: string-literal pooling is not
+    // guaranteed (/GF- would make the pointer comparison false).
+    const bool expected_project_row = std::string(label) == "project_a";
     check(input.show_project_summary == expected_project_row,
           "the file's stored project-row setting is the pinned value");
     const std::size_t project_rows = expected_project_row ? 1u : 0u;
