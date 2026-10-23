@@ -1546,6 +1546,71 @@ Outline read_outline(const CompoundFile& cfb, std::string_view root, std::uint32
     return outline;
 }
 
+/* MPP14 TASK RECORD STRIDE.  The Project-2010+ task fixed row is 202 bytes and
+ * parse_mpp14 slices FixedData with that stride.  MPXJ's own writer emits a
+ * DIFFERENT record layout in its MPP14 containers: 206-byte rows whose fields
+ * are not the MPP14 offsets.  corpus/probe/SubprojectA-9.mpp is the measured
+ * case: FixedData 872 = 48 + 206*4 and its FixedMeta data entries start at
+ * 48,254,460,666; SubprojectB-9.mpp is 1078 = 48 + 206*5 with the same stride.
+ * That is the same MPXJ variant the MPP12 reader already refuses for the
+ * `*-from14.mpp` files (docs/handoff/g1.md §3.12), so it must not be decoded as
+ * four 202-byte rows plus 16 trailing bytes: that path emits UniqueID 0 rows
+ * with nonsense dates.  The metadata offsets are the evidence; when they
+ * describe a uniform non-202 stride that consumes FixedData exactly, refuse
+ * with a positioned error instead of guessing at the field offsets.
+ */
+struct UnsupportedTaskStride {
+    std::size_t rows = 0;
+    std::size_t stride = 0;
+};
+
+bool detect_unsupported_task_stride(const CompoundFile& cfb, std::string_view root,
+                                    const std::vector<std::uint8_t>& fixed,
+                                    UnsupportedTaskStride& out) {
+    const std::string path = std::string(root) + "/TBkndTask/FixedMeta";
+    if (!cfb.has_stream(path)) {
+        return false;
+    }
+    std::vector<std::uint8_t> meta;
+    try {
+        meta = cfb.read_stream(path);
+    } catch (const Error&) {
+        return false;
+    }
+    if (meta.size() < kFixedMetaHeaderSize || u32_at(meta, 0) != kMetaMagic) {
+        return false;
+    }
+    const std::size_t count =
+        (meta.size() - kFixedMetaHeaderSize) / kFixedMetaEntrySize;
+    if (count <= kFixedMetaDescriptors) {
+        return false;
+    }
+    std::vector<std::uint32_t> offsets;
+    offsets.reserve(count - kFixedMetaDescriptors);
+    for (std::size_t i = kFixedMetaDescriptors; i < count; ++i) {
+        offsets.push_back(
+            u32_at(meta, kFixedMetaHeaderSize + i * kFixedMetaEntrySize + 4));
+    }
+    if (offsets.size() < 2 || offsets.front() != kFixedHeaderSize) {
+        return false;
+    }
+    const std::size_t stride = offsets[1] - offsets[0];
+    if (stride == 0 || stride == kFixedRowSize) {
+        return false;
+    }
+    for (std::size_t i = 1; i < offsets.size(); ++i) {
+        if (offsets[i] < offsets[i - 1] || offsets[i] - offsets[i - 1] != stride) {
+            return false;
+        }
+    }
+    if (kFixedHeaderSize + stride * offsets.size() != fixed.size()) {
+        return false;
+    }
+    out.rows = offsets.size();
+    out.stride = stride;
+    return true;
+}
+
 /* MPP14 (Project 2010+) task/resource/link/assignment tables.  `root` is the
  * table storage the container carries ("114" for every MPP14 file measured);
  * the caller has already put the format metadata in `document`. */
@@ -1567,6 +1632,22 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
     if (fixed.size() < kFixedHeaderSize) {
         throw Error("TBkndTask/FixedData is " + std::to_string(fixed.size()) +
                     " bytes, smaller than its 48-byte header");
+    }
+    /* A non-202-byte row layout is a different record format, not a shifted
+     * 202-byte row; refuse it before the slice below turns it into zero-uid
+     * rows with nonsense dates.  See detect_unsupported_task_stride(). */
+    {
+        UnsupportedTaskStride unsupported;
+        if (detect_unsupported_task_stride(cfb, root, fixed, unsupported)) {
+            throw Error(
+                "MPP14 Task table at " + std::string(root) +
+                "/TBkndTask/FixedData holds " + std::to_string(unsupported.rows) +
+                " data rows of " + std::to_string(unsupported.stride) +
+                " bytes each (row 0 is the project row); the Project-2010+ layout "
+                "this reader implements is 202 bytes.  The file may be an "
+                "MPXJ-written MPP14 or a different variant; its record size is not "
+                "guessed at.");
+        }
     }
     std::size_t body = fixed.size() - kFixedHeaderSize;
     if (body % kFixedRowSize != 0) {
@@ -3515,6 +3596,12 @@ void resolve_resource_calendars(Document& document) {
 
 Document parse_document(const CompoundFile& cfb) {
     Document document;
+    /* Container-level anomalies (FAT slack) come first: they describe the file
+     * before any table is parsed and are also visible to a caller that only
+     * wants the container. */
+    for (const std::string& warning : cfb.warnings()) {
+        document.warnings.push_back(warning);
+    }
     const FormatInfo format = detect_format(cfb, document.warnings);
     document.version = format.version;
     document.table_root = format.table_root;

@@ -81,6 +81,13 @@ std::string catch_error(const std::vector<std::uint8_t>& bytes) {
     return {};
 }
 
+std::uint32_t get_u32(const std::vector<std::uint8_t>& bytes, std::size_t offset) {
+    return static_cast<std::uint32_t>(bytes[offset]) |
+           (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+           (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
+           (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+}
+
 /* The smallest valid document: project row + one live task, no VarMeta (so the
  * table is "usable == false" and every row is live), Task FixedMeta in place. */
 std::vector<mpp_fixture::Stream> valid_streams() {
@@ -104,9 +111,101 @@ void test_valid_control(TestContext& context) {
         context.equal(document.tasks[0].uid, std::uint32_t{1}, "the task uid");
         context.equal(document.tasks[0].duration_ticks, std::uint32_t{4800},
                       "the task duration");
+        context.check(!has_warning(document, "unreferenced sectors"),
+                      "a compact CFB reports no FAT slack");
     } catch (const std::exception& error) {
         context.check(false, std::string("the valid control loads: ") + error.what());
     }
+}
+
+/* FAT slack is not damage.  corpus/imported/sf248.mpp is the measured real case:
+ * 959 sectors, a FAT describing 768, and olefile reads all 81 streams to their
+ * declared sizes.  Build the same shape in memory by appending sectors no chain
+ * references: the document must load with an "N unreferenced sectors" warning.
+ * But a chain that POINTS past the FAT is fatal -- that is real truncation, not
+ * slack -- so patch the directory chain's first FAT link into the slack area and
+ * expect mpp::Error. */
+void test_cfb_unreferenced_sectors(TestContext& context) {
+    {
+        std::vector<std::uint8_t> bytes = mpp_fixture::make_cfb(valid_streams());
+        /* make_cfb pads the FAT to whole sectors, so the FAT's entry count is
+         * `num_fat * 128` and can exceed the sector count.  Add whole FAT-padding
+         * plus 8 sectors: exactly 8 sectors then have no FAT entry. */
+        const std::size_t fat_entries =
+            static_cast<std::size_t>(get_u32(bytes, 0x2C)) *
+            (mpp_fixture::kSector / 4);
+        const std::size_t total_sectors = bytes.size() / mpp_fixture::kSector - 1;
+        const std::size_t append_sectors =
+            (fat_entries > total_sectors ? fat_entries - total_sectors : 0) + 8;
+        bytes.resize(bytes.size() + append_sectors * mpp_fixture::kSector, 0);
+        const mpp::Document document = mpp::load_bytes(bytes);
+        context.equal(document.tasks.size(), std::size_t{1},
+                      "FAT slack does not drop a live task");
+        context.check(has_warning(document, "8 unreferenced sectors"),
+                      "FAT slack is reported as 8 unreferenced sectors");
+        context.check(has_warning(document,
+                                  std::to_string(fat_entries) + " of the file's"),
+                      "the slack warning names the FAT and physical sector counts");
+    }
+    {
+        std::vector<std::uint8_t> bytes = mpp_fixture::make_cfb(valid_streams());
+        const std::size_t fat_entries =
+            static_cast<std::size_t>(get_u32(bytes, 0x2C)) *
+            (mpp_fixture::kSector / 4);
+        const std::size_t total_sectors = bytes.size() / mpp_fixture::kSector - 1;
+        const std::size_t append_sectors =
+            (fat_entries > total_sectors ? fat_entries - total_sectors : 0) + 8;
+        bytes.resize(bytes.size() + append_sectors * mpp_fixture::kSector, 0);
+        /* DIFAT[0] in the header names the FAT sector; entry 0 is the directory
+         * chain's first link.  Aim it at a sector that exists physically but has
+         * no FAT entry, i.e. past the end of the FAT. */
+        const std::uint32_t fat_sector = get_u32(bytes, 0x4C);
+        const std::size_t fat_offset =
+            (static_cast<std::size_t>(fat_sector) + 1) * mpp_fixture::kSector;
+        mpp_fixture::put_u32(bytes, fat_offset,
+                             static_cast<std::uint32_t>(fat_entries + 2));
+        const std::string message = catch_error(bytes);
+        context.check(!message.empty(),
+                      "a chain that walks past the FAT raises mpp::Error");
+        context.check(message.find("NON-MPP") == std::string::npos,
+                      "the chain-past-FAT error is mpp::Error: " + message);
+        context.check(message.find("FAT") != std::string::npos,
+                      "the chain-past-FAT error names the FAT: " + message);
+    }
+}
+
+/* The MPXJ-written MPP14 task layout (corpus/probe/SubprojectA-9.mpp and
+ * SubprojectB-9.mpp) is 206-byte rows, not Project's 202: A-9's FixedData is
+ * 872 = 48 + 206*4 and its FixedMeta data offsets are 48,254,460,666.  Reading
+ * that with the 202-byte stride slipped 4 bytes per row and emitted UniqueID 0
+ * rows with nonsense dates.  The metadata offsets are enough to see that the
+ * record layout is different; the reader must refuse it with a positioned error
+ * (like the MPP12 206-byte variant) instead of returning invented rows. */
+void test_unsupported_task_row_stride(TestContext& context) {
+    constexpr std::size_t kRows = 4;
+    constexpr std::size_t kStride = 206;
+    std::vector<mpp_fixture::Stream> streams;
+    streams.push_back({"114/TBkndTask/FixedData",
+                       std::vector<std::uint8_t>(mpp_fixture::kTaskHeader +
+                                                     kStride * kRows,
+                                                 0),
+                       0});
+    /* 3 descriptors + 4 data entries; entry offsets 48, 254, 460, 666. */
+    streams.push_back({"114/TBkndTask/FixedMeta",
+                       mpp_fixture::fixed_meta(kRows + 3, 47, 3,
+                                               static_cast<std::uint32_t>(kRows + 3),
+                                               static_cast<std::uint32_t>(
+                                                   mpp_fixture::kTaskHeader),
+                                               static_cast<std::uint32_t>(kStride)),
+                       0});
+    const std::string message = catch_error(mpp_fixture::make_cfb(streams));
+    context.check(!message.empty(), "a 206-byte MPP14 task row raises mpp::Error");
+    context.check(message.find("206") != std::string::npos,
+                  "the unsupported-stride error names 206: " + message);
+    context.check(message.find("202") != std::string::npos,
+                  "the unsupported-stride error names the implemented 202: " + message);
+    context.check(message.find("NON-MPP") == std::string::npos,
+                  "the unsupported-stride error is mpp::Error: " + message);
 }
 
 void test_container_failures(TestContext& context) {
@@ -297,6 +396,8 @@ int run() {
     TestContext context;
     test_valid_control(context);
     test_container_failures(context);
+    test_cfb_unreferenced_sectors(context);
+    test_unsupported_task_row_stride(context);
     test_missing_task_table(context);
     test_metadata_damage(context);
     test_duplicate_and_dead_references(context);

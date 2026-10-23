@@ -350,6 +350,23 @@ void CompoundFile::parse() {
         }
     }
 
+    /* ---- Unreferenced sectors.  A FAT shorter than the file is SLACK, not
+     * truncation, when every chain ends before the FAT does: MS Project writes
+     * files like that (corpus/imported/sf248.mpp has 959 sectors and a 768-entry
+     * FAT; olefile reads all 81 streams to their declared sizes, so the 191
+     * trailing sectors are not part of any stream).  Report the count and keep
+     * going; a chain that actually points past the FAT is still fatal because
+     * fat_next() refuses the lookup (see "chain walks past the FAT" below). */
+    const std::size_t physical_sectors =
+        data_.size() >= sector_size_ ? data_.size() / sector_size_ - 1 : 0;
+    if (fat_.size() < physical_sectors) {
+        warnings_.push_back(
+            std::to_string(physical_sectors - fat_.size()) +
+            " unreferenced sectors: the FAT describes " + std::to_string(fat_.size()) +
+            " of the file's " + std::to_string(physical_sectors) +
+            " sectors; the remainder is not part of any chain");
+    }
+
     /* ---- Directory: a regular sector chain starting at dir_start_. */
     std::vector<std::uint8_t> directory;
     {

@@ -58,6 +58,18 @@ class CompoundFile {
      * all).  Useful for diagnostics when a lookup fails. */
     std::vector<std::string> stream_paths() const;
 
+    /*
+     * Container anomalies that are recoverable, in the order they were found.
+     * The one this reader reports is FAT slack: a file may carry sectors that no
+     * chain references (MS Project writes such files; corpus/imported/sf248.mpp
+     * has 959 sectors and a 768-entry FAT).  That is not damage -- every chain
+     * still ends inside the FAT -- so it becomes "N unreferenced sectors" here
+     * and the read continues.  A chain that actually points past the FAT is still
+     * fatal and throws Error.  The reader copies these into
+     * Document::warnings so a caller sees them.
+     */
+    std::vector<std::string> const& warnings() const { return warnings_; }
+
     /* Number of directory entries (storages + streams + root). */
     std::size_t entry_count() const { return entries_.size(); }
 
@@ -94,6 +106,7 @@ class CompoundFile {
     std::vector<std::uint32_t> mini_fat_;
     std::vector<std::uint8_t> mini_stream_;
     std::vector<Entry> entries_;
+    std::vector<std::string> warnings_;
 };
 
 /* Strip ASCII spaces from both sides and compare, component by component. */

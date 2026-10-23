@@ -18,6 +18,12 @@
  * of scope.
  *
  * WHERE THE BYTES COME FROM.  Container layout: `spec/mpp-container.md`.
+ * Container tolerance: a FAT shorter than the file is SLACK, not damage, when
+ * every chain still ends inside it -- corpus/imported/sf248.mpp has 959 sectors
+ * and a 768-entry FAT, and olefile reads all 81 streams to their declared sizes.
+ * `CompoundFile` reports that as "N unreferenced sectors" through warnings(),
+ * this reader copies container warnings into Document::warnings, and a chain
+ * that actually points past the FAT still throws (cfb.h).
  * Task layout: `spec/mpp-records.md` (W1), with three corrections this stream
  * established against the files and against MS Project's own output
  * (tests/data/project_a_golden.tsv).  See reader.cpp for the evidence of each:
@@ -51,6 +57,16 @@
  *     +120  u32  ActualStart (packed date; 0xffffffff until work is recorded)
  *     +124  u32  ActualFinish (packed date; 0xffffffff until 100 % complete)
  *     +182  u32  Deadline (packed date; unaligned; 0xffffffff = NA)
+ *
+ * A NON-202-BYTE TASK STRIDE IS NOT DECODED.  The 202-byte row above is Project
+ * 2010+'s layout.  MPXJ's own writer emits an MPP14 container whose task records
+ * are 206 bytes with different field offsets: corpus/probe/SubprojectA-9.mpp has
+ * FixedData 872 = 48 + 206*4 and FixedMeta data offsets 48,254,460,666, and
+ * SubprojectB-9.mpp has 1078 = 48 + 206*5 with the same stride.  That is a
+ * different record layout, not a shifted 202-byte row -- the metadata offsets
+ * prove it -- so `load_file` throws an mpp::Error naming both strides instead of
+ * returning rows with UniqueID 0 and nonsense dates.  The MPP12 reader refuses
+ * its 206-byte `*-from14.mpp` variant the same way (reader.cpp).
  *
  * SCHEDULING INPUTS (W19).  The row groups above were proved from fixture
  * diffs, not guessed:
@@ -814,7 +830,9 @@ struct Document {
     std::vector<SkippedRow> skipped_resources;
     std::vector<SkippedRow> skipped_links;
     std::vector<SkippedRow> skipped_assignments;
-    std::vector<std::string> warnings; /* recoverable anomalies, in file order */
+    std::vector<std::string> warnings; /* recoverable anomalies, in file order:
+                                       * container warnings first (FAT slack),
+                                       * then format detection and the tables */
 
     /* ---- Which format, and where its tables live.  `version` is detected
      * from the container (never assumed); `table_root`/`view_root` are the

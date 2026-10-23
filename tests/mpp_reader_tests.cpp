@@ -1764,6 +1764,15 @@ void test_probe_fixtures(TestContext& context) {
             std::cout << "SKIP (MPXJ-written variant): " << name << "\n";
             continue;
         }
+        /* MPXJ's writer also produces MPP14 containers with 206-byte task rows
+         * (SubprojectA-9/SubprojectB-9: FixedData 872 = 48 + 206*4, FixedMeta
+         * data offsets 48,254,460,666).  That is a different record layout, not
+         * Project's 202-byte row; the reader refuses it with a positioned error
+         * instead of emitting UniqueID 0 rows, and that refusal is pinned below. */
+        if (name == "SubprojectA-9.mpp" || name == "SubprojectB-9.mpp") {
+            std::cout << "SKIP (MPXJ-written 206-byte MPP14 variant): " << name << "\n";
+            continue;
+        }
         try {
             const mpp::Document document = mpp::load_file(item.path().string());
             ++loaded;
@@ -1809,6 +1818,28 @@ void test_probe_fixtures(TestContext& context) {
     }
     context.check(loaded >= 19, "every corpus/probe fixture loaded (" +
                                     std::to_string(loaded) + " files)");
+
+    /* The two MPXJ-written MPP14 subproject fixtures are the measured 206-byte
+     * variant: refuse them with a positioned error that names both strides (the
+     * 202-byte slice used to read row 0's uid 0 four times and invent dates). */
+    for (const char* name : {"SubprojectA-9.mpp", "SubprojectB-9.mpp"}) {
+        const std::string path = directory + "/" + name;
+        if (!file_exists(path)) {
+            continue;
+        }
+        bool threw = false;
+        std::string message;
+        try {
+            (void)mpp::load_file(path);
+        } catch (const mpp::Error& error) {
+            threw = true;
+            message = error.what();
+        }
+        context.check(threw, std::string(name) + " is refused, not decoded");
+        context.check(message.find("206") != std::string::npos &&
+                          message.find("202") != std::string::npos,
+                      std::string(name) + " error names 206 and 202: " + message);
+    }
 }
 
 /* ---- 7. A file that is not a compound file is rejected, not guessed at. */

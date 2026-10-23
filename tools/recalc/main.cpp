@@ -35,10 +35,13 @@
 // names).  --attrib-json without --compare is a usage error.
 //
 // CALENDAR, CONSTRAINTS, ACTUALS, SUMMARIES.  The project calendar is decoded
-// from 114/TBkndCal (+ the Standard week in 114/Props) and every task that stores
-// a +178 calendar uid gets its own core::sched::Calendar through
-// core::plan::attach_task_calendars.  A file that cannot be decoded falls back to
-// the stock Mon-Fri 08:00-12:00/13:00-17:00 week with a visible note.
+// from the file's own table root -- `<table_root>/TBkndCal` plus the Standard
+// week in `<table_root>/Props`, where table_root is the root the READER detected
+// ("114" for MPP14, "112" for MPP12; core/cal::decode_file applies the same
+// rule).  Every task that stores a +178 calendar uid gets its own
+// core::sched::Calendar through core::plan::attach_task_calendars.  A file that
+// cannot be decoded falls back to the stock Mon-Fri 08:00-12:00/13:00-17:00
+// week with a visible note.
 // Constraints and deadlines are taken from mpp::Task; actual dates pin a started
 // or completed task
 // (spec/scheduling.md §2.4) and summaries are rolled up from their children after
@@ -312,15 +315,31 @@ int run(const std::string& path, const std::string& compare_path, const std::str
         return 1;
     }
 
+    // Reader/container anomalies (FAT slack: "N unreferenced sectors", recoverable
+    // table damage from Document::warnings).  Printed on stderr, so the TSV and the
+    // --compare tables on stdout are unchanged.  A damaged real file can carry
+    // hundreds of warnings (PROJECT_A 30, sf248 280+), so show a bounded list and
+    // the total count; reader_dump --warnings prints all of them.
+    constexpr std::size_t kMaxReaderWarnings = 20;
+    for (std::size_t i = 0; i < document.warnings.size() && i < kMaxReaderWarnings; ++i) {
+        std::cerr << "  reader warning: " << document.warnings[i] << '\n';
+    }
+    if (document.warnings.size() > kMaxReaderWarnings) {
+        std::cerr << "  reader warning: ... and "
+                  << (document.warnings.size() - kMaxReaderWarnings)
+                  << " more (reader_dump --warnings prints all)\n";
+    }
+
     if (dump_fields) {
         print_fields(document);
     }
 
     core::plan::PlanInput input = core::plan::from_mpp(document);
-    // The file's own calendar (114/TBkndCal + the Standard week in 114/Props).
-    // from_mpp still returns the stock standard calendar; replace it when the
-    // table decodes, and say so on stderr.  A damaged calendar must not stop the
-    // recalculation: fall back to the standard week with a visible note.
+    // The file's own calendar: core::cal detects the table root the same way the
+    // reader does (114/ for MPP14, 112/ for MPP12) and reads TBkndCal + Props
+    // there.  from_mpp still returns the stock standard calendar; replace it when
+    // the table decodes, and say so on stderr.  A damaged calendar must not stop
+    // the recalculation: fall back to the standard week with a visible note.
     try {
         const core::cal::CalendarTable table = core::cal::decode_file(path);
         input.calendar = core::cal::build_project_calendar(table);
