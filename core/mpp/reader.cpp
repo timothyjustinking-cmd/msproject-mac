@@ -116,6 +116,15 @@
  *             so the PROJECT_A golden stays 83/83.  The project row (row 0) is read
  *             from +96/+100, which equals its +104/+108 in every corpus file.
  *
+ *   +112/+116 u32  LateStart/LateFinish (wave 20).  Task::late_start/late_finish.
+ *             MEASURED on corpus/probe/w3-o1.mpp: COM reports T1
+ *             2026-10-26 08:00/17:00, T3 13:00/17:00 and T4 17:00/17:00
+ *             (docs/analysis/oracle/w3-o1-open.json) and those are exactly the
+ *             words here.  base.mpp's uid 2 stores 2026-01-06 13:00, which is not
+ *             its Start, so this is a separate field.  EarlyStart/EarlyFinish are
+ *             NOT separate words: on all 32 COM rows of w3-o4.json and all four of
+ *             w3-o1.json they equal Start/Finish, i.e. +104/+108.  See reader.h.
+ *
  *   +174 u32  Start anchor (packed date, 0xffffffff = none).  It is the bound
  *             the start was aligned *from*, not the effective Start at +104.
  *             PROJECT_A uid 10759 stores 2026-08-10 17:00 (its predecessor's finish)
@@ -552,6 +561,19 @@ constexpr std::size_t kRowCalculatedStart = 96;   /* u32: packed date */
 constexpr std::size_t kRowCalculatedFinish = 100; /* u32: packed date */
 constexpr std::size_t kRowStart = 104;            /* u32: effective, packed date */
 constexpr std::size_t kRowFinish = 108;           /* u32: effective, packed date */
+/* LATE PAIR (W33 follow-up, wave 20).  +112/+116 are the stored LateStart/
+ * LateFinish fields.  MEASURED, not inferred: COM read of
+ * corpus/probe/w3-o1.mpp (docs/analysis/oracle/w3-o1-open.json) reports
+ * T1 2026-10-26 08:00/17:00, T3 2026-10-26 13:00/17:00 and T4
+ * 2026-10-26 17:00/17:00, which are exactly the words here on all four rows;
+ * Project's own re-save of base.mpp (corpus/probe/resaved-base.mpp) keeps
+ * base's three values, and uid 2's late start (2026-01-06 13:00) is not its
+ * Start -- so this is a separate field, not a copy of +104/+108.  Every COM
+ * read-back on disk reports EarlyStart == Start and EarlyFinish == Finish
+ * (32/32 w3-o4 rows, 4/4 w3-o1), so the +104/+108 pair already carries the
+ * early fields and no early word is decoded separately (see reader.h). */
+constexpr std::size_t kRowLateStart = 112;        /* u32: packed date */
+constexpr std::size_t kRowLateFinish = 116;       /* u32: packed date */
 constexpr std::size_t kRowActualStart = 120;  /* u32: packed date */
 constexpr std::size_t kRowActualFinish = 124; /* u32: packed date */
 constexpr std::size_t kRowDeadline = 182;     /* u32: packed date, unaligned */
@@ -633,6 +655,15 @@ constexpr std::size_t k12TaskStart = 88;
 constexpr std::size_t k12TaskFinish = 92;
 constexpr std::size_t k12TaskActualStart = 96;
 constexpr std::size_t k12TaskActualFinish = 100;
+/* The stored late pair (the same fields as MPP14's +112/+116, at different row
+ * offsets).  The MPP12 row layout in the file comment lists +12 LateStart and
+ * +152 LateFinish; the coherence check on disk is mpp12task.mpp's zero-slack
+ * task, where +12 == +88 (start) and +152 == +92 (finish), while
+ * mpp12duration.mpp's rows store a distinct late start and the project finish at
+ * +152.  No COM read-back of an MPP12 file exists, so these offsets rest on
+ * that documented layout (itself cross-checked against MPXJ's MPP12 reader). */
+constexpr std::size_t k12TaskLateStart = 12;
+constexpr std::size_t k12TaskLateFinish = 152;
 constexpr std::size_t k12TaskConstraintDate = 112;
 constexpr std::size_t k12TaskPriority = 120;
 constexpr std::size_t k12TaskPercent = 122;
@@ -1683,6 +1714,8 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
         task.finish.raw = u32_at(fixed, base + kRowFinish);
         task.calculated_start.raw = u32_at(fixed, base + kRowCalculatedStart);
         task.calculated_finish.raw = u32_at(fixed, base + kRowCalculatedFinish);
+        task.late_start.raw = u32_at(fixed, base + kRowLateStart);
+        task.late_finish.raw = u32_at(fixed, base + kRowLateFinish);
         /* Scheduling inputs (W19).  A value outside PjConstraint's 0..7 is
          * damage, not a type: report it and treat the task as ASAP with no
          * date rather than handing the engine an impossible enum.  The one
@@ -3012,6 +3045,8 @@ void parse_mpp12(const CompoundFile& cfb, std::string_view root, Document& docum
          * effective pair twice rather than invent a second date. */
         task.calculated_start = task.start;
         task.calculated_finish = task.finish;
+        task.late_start.raw = u32_at(row_bytes_value, k12TaskLateStart);
+        task.late_finish.raw = u32_at(row_bytes_value, k12TaskLateFinish);
         const std::uint16_t constraint_type =
             u16_at(row_bytes_value, k12TaskConstraintType);
         if (constraint_type <= kConstraintFnlt) {
@@ -3446,6 +3481,38 @@ bool has_storage(const CompoundFile& cfb, std::string_view name) {
     return false;
 }
 
+/* RESOURCE CALENDAR.  A resource's calendar is not a word in the 172-byte
+ * (MPP14) / 188-byte (MPP12) resource row: it is a TBkndCal/FixedData row whose
+ * resource column (+4 MPP14, +8 MPP12) equals the resource's uid, and the
+ * calendar's own uid is that row's key column (+8 MPP14, +0 MPP12).  The
+ * mapping is MEASURED against Project's own MSPDI export of
+ * corpus/probe/w9-resourcetypes.mpp: the table holds (resource 1 -> uid 3),
+ * (2 -> 4), (3 -> 5) and the export writes <CalendarUID>3/4/5</CalendarUID>.
+ * Files also carry a row with resource column 0 (a calendar for the null
+ * resource); no live resource has uid 0, so it never matches.  A resource with
+ * no such row keeps -1: the file stores no word to read, and the project
+ * calendar then applies -- reporting a guessed uid would be invented state. */
+void resolve_resource_calendars(Document& document) {
+    for (Resource& resource : document.resources) {
+        resource.calendar_uid = -1;
+        for (Calendar const& calendar : document.calendars) {
+            if (calendar.resource_uid != static_cast<std::int32_t>(resource.uid)) {
+                continue;
+            }
+            if (resource.calendar_uid != -1) {
+                document.warnings.emplace_back(
+                    "resource uid " + std::to_string(resource.uid) +
+                    " is named by more than one calendar row (uids " +
+                    std::to_string(resource.calendar_uid) + " and " +
+                    std::to_string(calendar.uid) +
+                    "); the first is used for Resource::calendar_uid");
+                break;
+            }
+            resource.calendar_uid = calendar.uid;
+        }
+    }
+}
+
 Document parse_document(const CompoundFile& cfb) {
     Document document;
     const FormatInfo format = detect_format(cfb, document.warnings);
@@ -3470,6 +3537,7 @@ Document parse_document(const CompoundFile& cfb) {
     } else {
         parse_mpp14(cfb, format.table_root, document);
     }
+    resolve_resource_calendars(document);
     return document;
 }
 

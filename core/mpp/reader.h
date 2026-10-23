@@ -4,11 +4,12 @@
  *
  * SCOPE.  Open a real MPP14 (Project 2010+) or MPP12 (Project 2007) file and
  * return one record per *live*
- * task (UniqueID, ID, Name, Duration, Start, Finish, Priority,
- * PercentComplete, OutlineLevel, OutlineNumber, Summary, Milestone, Critical,
- * ConstraintType, ConstraintDate, Deadline, the actual dates/duration, the
- * start anchor and the task-calendar uid), one per live resource (UniqueID, ID,
- * Name, Initials, MaxUnits, Type), one per live link (UniqueID,
+ * task (UniqueID, ID, Name, Duration, Start, Finish, the stored late pair,
+ * Priority, PercentComplete, OutlineLevel, OutlineNumber, Summary, Milestone,
+ * Critical, ConstraintType, ConstraintDate, Deadline, the actual
+ * dates/duration, the start anchor and the task-calendar uid), one per live
+ * resource (UniqueID, ID, Name, Initials, MaxUnits, Type and the calendar the
+ * TBkndCal table names for it), one per live link (UniqueID,
  * predecessor/successor, type, lag) and one per live assignment (UniqueID, task
  * UniqueID, Units, Work, Start/Finish/Resume), plus the project row's title,
  * start and finish, the calendar identities, the password/read-only flags and
@@ -45,6 +46,8 @@
  *     +100  u32  calculated Finish (packed date)
  *     +104  u32  effective Start   (packed date; Task::start)
  *     +108  u32  effective Finish  (packed date; Task::finish)
+ *     +112  u32  LateStart        (packed date; Task::late_start)
+ *     +116  u32  LateFinish       (packed date; Task::late_finish)
  *     +120  u32  ActualStart (packed date; 0xffffffff until work is recorded)
  *     +124  u32  ActualFinish (packed date; 0xffffffff until 100 % complete)
  *     +182  u32  Deadline (packed date; unaligned; 0xffffffff = NA)
@@ -432,6 +435,25 @@ struct Task {
     PackedDate finish;                  /* +108 (effective) */
     PackedDate calculated_start;        /* +96 (calculated copy) */
     PackedDate calculated_finish;       /* +100 (calculated copy) */
+    /* ---- The stored late pair: +112 LateStart, +116 LateFinish (MPP12:
+     * +12/+152).  MEASURED against COM: docs/analysis/oracle/w3-o1-open.json
+     * reports T1 LateStart/LateFinish 2026-10-26 08:00/17:00, T3 13:00/17:00 and
+     * T4 17:00/17:00 for corpus/probe/w3-o1.mpp, and those are exactly the
+     * words at +112/+116 on its four rows; on base.mpp/synthetic-base the three
+     * manual rows keep their late pair on Project's own re-save
+     * (corpus/probe/resaved-base.mpp), and uid 2's late start 2026-01-06 13:00
+     * is NOT its Start -- the late pair is a separate stored field, so a dump
+     * that omits it is blind to it.  See the reader.cpp "LATE PAIR" note.
+     *
+     * The COM EarlyStart/EarlyFinish properties are NOT a separate stored word:
+     * every COM read-back we have reports EarlyStart == Start and
+     * EarlyFinish == Finish (32/32 rows in w3-o4.json, 4/4 in w3-o1.json,
+     * base's manual rows too), i.e. the +104/+108 pair this struct exposes as
+     * start/finish.  The +96/+100 words are the calculated copy.  That is why
+     * there is no early_start/early_finish member: it would duplicate those two
+     * measured words (docs/handoff/e4.md). */
+    PackedDate late_start{kDateNa};     /* +112 (MPP12 +12) */
+    PackedDate late_finish{kDateNa};    /* +116 (MPP12 +152) */
 
     /* ---- Scheduling inputs for core::plan and the CPM engine (wave 6).
      * Decoded by W19 from the fixed row; see "SCHEDULING INPUTS" in the file
@@ -591,6 +613,20 @@ struct Resource {
      * per-row metadata did not supply the value. */
     ResourceType type = ResourceType::work;
     bool type_stored = false;
+    /* Resource calendar UniqueID, DERIVED from the calendar table -- there is
+     * no calendar word in the 172-byte (MPP14) / 188-byte (MPP12) resource row.
+     * A TBkndCal/FixedData row names its resource in the +4 column (MPP14) or
+     * +8 column (MPP12); the calendar whose resource column equals this
+     * resource's uid is this resource's calendar (see the "Calendar" struct
+     * above and core/cal/cal.h for that layout).  MEASURED against Project's
+     * own MSPDI export of corpus/probe/w9-resourcetypes.mpp: the table rows are
+     * (resource 1 -> uid 3), (2 -> 4), (3 -> 5) and the export writes
+     * <CalendarUID>3/4/5</CalendarUID> for R1/R2/R3.  `calendar_uid` stays -1
+     * when the file has no resource-calendar row for this resource (the
+     * project/standard calendar then applies, but the word itself does not
+     * exist, so -1 is reported rather than guessed).  Resolved after both
+     * tables are parsed; it is not a byte in the resource row. */
+    std::int32_t calendar_uid = -1;
 
     double max_units() const { return max_units_x100 / 100.0; }
     /* The MSPDI spelling: a fraction, 1.0 == 100 %.  Project's exports write

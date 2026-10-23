@@ -101,7 +101,7 @@ SCENARIO_DIR = ROOT / "tests" / "scenarios"
 ORACLE_DIR = ROOT / "tests" / "data" / "scenarios"
 DEFAULT_WORKDIR = ROOT / "build" / "e1" / "engine-diff"
 
-SCHEMA = "engine-diff/1"
+SCHEMA = "engine-diff/2"
 
 # Base fixtures that scenarios may name.  These are the only .mpp files a
 # committed scenario may read: synthetic, committed, never client data.  Each
@@ -1059,10 +1059,27 @@ def validate_dump(dump, label):
     if not isinstance(dump.get("tasks"), list):
         problems.append(f"{label}: 'tasks' is not a list")
     for row in dump.get("tasks") or []:
+        # late_start/late_finish are schema 2 (the stored +112/+116 pair).
+        # early start/finish are already carried by start/finish, because on
+        # every COM read-back Project reports EarlyStart == Start and
+        # EarlyFinish == Finish (32/32 w3-o4 rows, 4/4 w3-o1; see
+        # core/mpp/reader.h), so no duplicate early_* key is emitted.
         for key in ("uid", "duration_ticks", "start", "finish",
+                    "calculated_start", "calculated_finish",
+                    "late_start", "late_finish",
                     "constraint_type", "constraint_date", "calendar_uid"):
             if key not in row:
                 problems.append(f"{label}: task {row.get('uid')} has no "
+                                f"'{key}'")
+    if not isinstance(dump.get("resources"), list):
+        problems.append(f"{label}: 'resources' is not a list")
+    for row in dump.get("resources") or []:
+        # type/max_units_x100 were already there; calendar_uid is schema 2 and
+        # is derived from the calendar table's resource column.
+        for key in ("uid", "type", "type_stored", "max_units_x100",
+                    "calendar_uid"):
+            if key not in row:
+                problems.append(f"{label}: resource {row.get('uid')} has no "
                                 f"'{key}'")
     streams = (dump.get("file") or {}).get("streams")
     if not isinstance(streams, list) or not streams:
@@ -1144,6 +1161,26 @@ def cmd_selftest(args):
                   "delete-task-with-successor: uids 1 and 3 remain")
             check(not ours["links"],
                   "delete-task-with-successor: the links are gone")
+        if scenario["name"] == "recalculate":
+            # Schema 2: the stored late pair and the resource calendar uid.
+            task1 = next((row for row in ours["tasks"] if row["uid"] == 1), None)
+            if check(task1 is not None, "recalculate: task 1 is in the dump"):
+                check(task1.get("late_start") == "2026-01-04 13:00:00+00:00",
+                      "recalculate: task 1 late_start is the stored +112 word")
+                check(task1.get("late_finish") == "2026-01-09 12:00:00+00:00",
+                      "recalculate: task 1 late_finish is the stored +116 word")
+            task2 = next((row for row in ours["tasks"] if row["uid"] == 2), None)
+            if check(task2 is not None, "recalculate: task 2 is in the dump"):
+                check(task2.get("late_start") != task2.get("start"),
+                      "recalculate: task 2's late_start (+112) is a distinct "
+                      "stored word, not a copy of start")
+            crew = next((row for row in ours["resources"] if row["uid"] == 1),
+                        None)
+            if check(crew is not None,
+                     "recalculate: resource 1 is in the dump"):
+                check(crew.get("calendar_uid") == 3,
+                      "recalculate: the resource calendar uid is 3 "
+                      "(the TBkndCal row whose resource column is 1)")
 
     # ---- the diff machinery: a self-recorded oracle passes ---------------
     scenario = load_scenario(SCENARIO_DIR / "02-duration-change.json")
@@ -1186,6 +1223,37 @@ def cmd_selftest(args):
               f"the difference shows both values: {line!r}")
     else:
         check(False, "the tampered oracle produced no difference")
+
+    # ---- a stale schema-1 oracle fails cleanly, naming the new fields -----
+    # The committed oracles are re-recorded by the coordinator; until then they
+    # are engine-diff/1 and lack the schema-2 leaves.  A --check against one
+    # must be a clean FAIL that names what is missing, never a crash: flatten()
+    # unions the keys and reports each one-sided leaf as MISSING.
+    stale = copy.deepcopy(ours)
+    stale["schema"] = "engine-diff/1"
+    for row in stale["tasks"]:
+        row.pop("late_start", None)
+        row.pop("late_finish", None)
+    for row in stale["resources"]:
+        row.pop("calendar_uid", None)
+    stale_path = workdir / "stale-v1-oracle.json"
+    stale_path.write_text(json.dumps(stale, indent=2) + "\n", encoding="utf-8")
+    stale_workdir = workdir / "stale" / "oracle"
+    stale_workdir.mkdir(parents=True, exist_ok=True)
+    status, differences, field_count, message, _ = check_scenario(
+        scenario, apply_bin, stale_workdir, stale_path)
+    check(status == "fail",
+          "a stale engine-diff/1 oracle makes --check fail "
+          f"(status {status}, {message})")
+    stale_paths = [path for path, _, _ in differences]
+    check("schema" in stale_paths,
+          "the stale oracle difference names the schema")
+    check(any(path.endswith("late_start") for path in stale_paths),
+          "the stale oracle difference names task late_start")
+    check(any(path.endswith("late_finish") for path in stale_paths),
+          "the stale oracle difference names task late_finish")
+    check(any(path.endswith("calendar_uid") for path in stale_paths),
+          "the stale oracle difference names resource calendar_uid")
 
     print(f"selftest: {checks} checks, {len(failures)} failure(s)")
     if failures:

@@ -735,7 +735,7 @@ void dump_file(std::string const& mpp_path, std::string const& json_path) {
     json.begin_object();
 
     json.key("schema");
-    json.value("engine-diff/1");
+    json.value("engine-diff/2");
 
     /* ---- project row ---------------------------------------------------- */
     json.key("project");
@@ -800,6 +800,17 @@ void dump_file(std::string const& mpp_path, std::string const& json_path) {
         json.value(date_text(task->calculated_start.raw));
         json.key("calculated_finish");
         json.value(date_text(task->calculated_finish.raw));
+        /* The stored late pair (+112/+116).  NOT a copy of start/finish on every
+         * row: synthetic-base's uid 2 stores 2026-01-06 13:00 here while its
+         * start is 2026-01-04 13:00, and COM's LateStart/LateFinish equal these
+         * words on corpus/probe/w3-o1.mpp.  The COM EarlyStart/EarlyFinish
+         * properties are the +104/+108 words already dumped as start/finish
+         * (they are equal on every COM read-back on disk), so there is no
+         * duplicate early_* key; see core/mpp/reader.h. */
+        json.key("late_start");
+        json.value(date_text(task->late_start.raw));
+        json.key("late_finish");
+        json.value(date_text(task->late_finish.raw));
         json.key("priority");
         json.value(task->priority);
         json.key("percent_complete");
@@ -925,6 +936,12 @@ void dump_file(std::string const& mpp_path, std::string const& json_path) {
         json.value(resource->type_stored);
         json.key("max_units_x100");
         json.value(static_cast<long long>(std::llround(resource->max_units_x100)));
+        /* Derived by the reader from the calendar table's resource column (not a
+         * resource-row word); -1 when the file has no resource-calendar row.
+         * Measured against Project's MSPDI export of w9-resourcetypes.mpp
+         * (CalendarUID 3/4/5); see core/mpp/reader.h. */
+        json.key("calendar_uid");
+        json.value(resource->calendar_uid);
         json.end_object();
     }
     json.end_array();
@@ -1890,7 +1907,7 @@ void dump_check(TestContext& context, std::string const& mpp_path,
     const std::string json_path = mpp_path + ".json";
     dump_file(mpp_path, json_path);
     const std::string text = read_text(json_path);
-    context.check(text.find("\"schema\": \"engine-diff/1\"") != std::string::npos,
+    context.check(text.find("\"schema\": \"engine-diff/2\"") != std::string::npos,
                   label + ": the dump carries the schema line");
     for (char const* family :
          {"project", "tasks", "links", "assignments", "resources",
@@ -1899,6 +1916,28 @@ void dump_check(TestContext& context, std::string const& mpp_path,
                           std::string::npos,
                       label + ": the dump carries the " + family + " family");
     }
+    /* Schema 2 adds the stored late pair on every task and the resource calendar
+     * uid.  Every built-in case starts from synthetic-base, whose uid 1 is a
+     * manual row that keeps its late pair (2026-01-04 13:00 / 2026-01-09 12:00,
+     * the stored +112/+116 words) and whose one resource's calendar is the
+     * TBkndCal row (resource 1 -> uid 3). */
+    for (char const* key : {"late_start", "late_finish"}) {
+        context.check(text.find(std::string("\"") + key + "\"") !=
+                          std::string::npos,
+                      label + ": the dump carries " + key +
+                          " (the stored +112/+116 late pair)");
+    }
+    context.check(text.find("\"late_start\": \"2026-01-04 13:00:00+00:00\"") !=
+                      std::string::npos,
+                  label + ": uid 1's late start is the stored +112 word");
+    context.check(text.find("\"late_finish\": \"2026-01-09 12:00:00+00:00\"") !=
+                      std::string::npos,
+                  label + ": uid 1's late finish is the stored +116 word");
+    context.check(text.find("\"calendar_uid\": 3") != std::string::npos,
+                  label + ": the resource calendar uid is derived from the "
+                          "calendar table (resource 1 -> calendar 3)");
+    context.check(text.find("\"calendar_uid\": -1") != std::string::npos,
+                  label + ": a task with no task calendar still reports -1 (+178)");
     for (char const* name : {"\"Task A\"", "\"Task B\"", "\"Task C\"",
                              "\"Crew\"", "Task A", "Task B", "Task C", "Crew"}) {
         context.check(text.find(name) == std::string::npos,
@@ -2124,6 +2163,40 @@ int run_self_test() {
         } catch (std::exception const& failure) {
             context.check(false, std::string(test_case.name) +
                                      ": threw " + failure.what());
+        }
+    }
+    /* ---- the late pair is a SEPARATE stored field, not a date copy --------
+     * Dumping the fixture itself (to build/, never over it) proves the new
+     * leaves carry values that are not derivable from start/finish: uid 2's
+     * +112 is 2026-01-06 13:00 while its start is 2026-01-04 13:00, and uid 3's
+     * is 2026-01-07 13:00.  The resource calendar uid (3) is the TBkndCal row
+     * whose resource column is 1; Project's MSPDI export of the same fixture
+     * family writes that as Resource.CalendarUID (w9-resourcetypes: 3/4/5). */
+    {
+        const std::string base_json = join_path(out_dir, "selftest-base.json");
+        dump_file(fixture, base_json);
+        const std::string text = read_text(base_json);
+        context.check(text.find("\"schema\": \"engine-diff/2\"") !=
+                          std::string::npos,
+                      "base: the dump carries the schema line");
+        context.check(text.find("\"late_start\": \"2026-01-04 13:00:00+00:00\"") !=
+                          std::string::npos,
+                      "base: uid 1 late start is its stored +112 word");
+        context.check(text.find("\"late_start\": \"2026-01-06 13:00:00+00:00\"") !=
+                          std::string::npos,
+                      "base: uid 2 late start (+112) is not a copy of its start");
+        context.check(text.find("\"late_start\": \"2026-01-07 13:00:00+00:00\"") !=
+                          std::string::npos,
+                      "base: uid 3 late start (+112) is not a copy of its start");
+        context.check(text.find("\"late_finish\": \"2026-01-09 12:00:00+00:00\"") !=
+                          std::string::npos,
+                      "base: the late finish (+116) is the project finish");
+        context.check(text.find("\"calendar_uid\": 3") != std::string::npos,
+                      "base: the resource's calendar uid is 3");
+        for (char const* name : {"Task A", "Task B", "Task C", "Crew"}) {
+            context.check(text.find(name) == std::string::npos,
+                          "base: the dump carries no name (" + std::string(name) +
+                              ")");
         }
     }
     context.check(sha256::of_file(fixture) == fixture_sha256_before,

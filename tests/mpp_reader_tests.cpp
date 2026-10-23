@@ -578,16 +578,25 @@ void test_synthetic_fixture(TestContext& context) {
         std::uint32_t duration_min;
         const char* start;
         const char* finish;
+        const char* late_start;
+        const char* late_finish;
     };
     /* The EFFECTIVE pair (+104/+108), which is what COM reported for
      * corpus/probe/base.mpp: its three manual tasks start at the date-only
      * project start (2026-01-04 13:00 = 2026-01-05 00:00 Sydney) and finish at
      * the same wall-clock instants.  The calculated pair (+96/+100) is
-     * asserted separately below -- it still stores 08:00/17:00 scheduled times. */
+     * asserted separately below -- it still stores 08:00/17:00 scheduled times.
+     * The late pair (+112/+116) is a THIRD stored pair, not a copy of either:
+     * uid 2/3 keep 2026-01-06/07 13:00 as LateStart while their Start is
+     * 2026-01-04 13:00 (Project's own re-save, corpus/probe/resaved-base.mpp,
+     * keeps the same words). */
     const ExpectedTask expected[] = {
-        {1, "Task A", "5", 2400, "2026-01-04 13:00", "2026-01-09 12:00"},
-        {2, "Task B", "3", 1440, "2026-01-04 13:00", "2026-01-07 12:00"},
-        {3, "Task C", "2", 960, "2026-01-04 13:00", "2026-01-06 12:00"},
+        {1, "Task A", "5", 2400, "2026-01-04 13:00", "2026-01-09 12:00",
+         "2026-01-04 13:00", "2026-01-09 12:00"},
+        {2, "Task B", "3", 1440, "2026-01-04 13:00", "2026-01-07 12:00",
+         "2026-01-06 13:00", "2026-01-09 12:00"},
+        {3, "Task C", "2", 960, "2026-01-04 13:00", "2026-01-06 12:00",
+         "2026-01-07 13:00", "2026-01-09 12:00"},
     };
     for (const ExpectedTask& row : expected) {
         const std::string uid = std::to_string(row.uid);
@@ -616,6 +625,12 @@ void test_synthetic_fixture(TestContext& context) {
                       std::string("2026-01-05 08:00"),
                       "synthetic base uid " + uid +
                           " calculated Start stays at +96 (08:00)");
+        context.equal(mpp::format_date(task->late_start),
+                      std::string(row.late_start),
+                      "synthetic base uid " + uid + " LateStart (+112)");
+        context.equal(mpp::format_date(task->late_finish),
+                      std::string(row.late_finish),
+                      "synthetic base uid " + uid + " LateFinish (+116)");
         context.equal(static_cast<unsigned>(task->priority), 500u,
                       "synthetic base uid " + uid + " priority");
         context.equal(static_cast<unsigned>(task->percent_complete), 0u,
@@ -705,6 +720,19 @@ void test_synthetic_fixture(TestContext& context) {
                       "base uid 3 OutlineNumber");
         context.equal(task_c->total_slack_ticks, std::int32_t{14400},
                       "base uid 3 stored TotalSlack is 14400 ticks (3 days)");
+    }
+    /* ---- The late pair is its own stored field, and the resource calendar is
+     * derived from the calendar table, not from a resource-row word. */
+    if (task_b != nullptr) {
+        context.check(task_b->late_start.raw != task_b->start.raw,
+                      "base uid 2 LateStart (+112) is not a copy of Start (+104)");
+    }
+    context.equal(document.resources.size(), std::size_t{1},
+                  "synthetic-base.mpp has one resource (Crew)");
+    if (document.resources.size() == 1) {
+        context.equal(document.resources.front().calendar_uid, std::int32_t{3},
+                      "synthetic base Crew's calendar is uid 3: the TBkndCal row "
+                      "whose resource column is 1, not a resource-row byte");
     }
 }
 
@@ -1204,15 +1232,28 @@ void test_status_fixture(TestContext& context) {
         std::uint32_t duration_min;
         std::uint32_t constraint_type;
         const char* constraint_date;
+        const char* late_start;
+        const char* late_finish;
     };
     /* Values from docs/analysis/oracle/w3-o1.json (COM).  W19: every task was
      * pinned by a Set Start edit, which Project stores as SNET (type 4) with
-     * that instant as the constraint date; T1's remains ASAP with no date. */
+     * that instant as the constraint date; T1's remains ASAP with no date.
+     * The LateStart/LateFinish columns are the other measured half of
+     * docs/analysis/oracle/w3-o1-open.json's six date words: they are the +112
+     * and +116 words on these rows, and T1/T3/T4 are all later than the task's
+     * own Start -- the proof that +112/+116 is the stored late pair, not a
+     * copy of +104/+108. */
     const Expected expected[] = {
-        {1, "T1", 1, "1", false, false, 24000, 480, 0, ""},
-        {2, "T2", 1, "2", true, false, 0, 2400, 4, "2026-10-20 08:00:00+00:00"},
-        {3, "T3", 1, "3", false, false, 3600, 240, 4, "2026-10-23 15:00:00+00:00"},
-        {4, "T4", 1, "4", false, true, 19200, 0, 4, "2026-10-21 08:00:00+00:00"},
+        {1, "T1", 1, "1", false, false, 24000, 480, 0, "",
+         "2026-10-26 08:00:00+00:00", "2026-10-26 17:00:00+00:00"},
+        {2, "T2", 1, "2", true, false, 0, 2400, 4, "2026-10-20 08:00:00+00:00",
+         "2026-10-20 08:00:00+00:00", "2026-10-26 17:00:00+00:00"},
+        {3, "T3", 1, "3", false, false, 3600, 240, 4,
+         "2026-10-23 15:00:00+00:00",
+         "2026-10-26 13:00:00+00:00", "2026-10-26 17:00:00+00:00"},
+        {4, "T4", 1, "4", false, true, 19200, 0, 4,
+         "2026-10-21 08:00:00+00:00",
+         "2026-10-26 17:00:00+00:00", "2026-10-26 17:00:00+00:00"},
     };
     for (const Expected& row : expected) {
         const std::string uid = std::to_string(row.uid);
@@ -1259,10 +1300,29 @@ void test_status_fixture(TestContext& context) {
         context.equal(mpp::format_date_iso(task->constraint_date),
                       std::string(row.constraint_date),
                       "w3-o1 uid " + uid + " ConstraintDate (+66, COM)");
+        /* Wave 20: LateStart/LateFinish are the stored +112/+116 words, and
+         * the COM read of this exact file is w3-o1-open.json. */
+        context.equal(mpp::format_date_iso(task->late_start),
+                      std::string(row.late_start),
+                      "w3-o1 uid " + uid + " LateStart (+112, COM)");
+        context.equal(mpp::format_date_iso(task->late_finish),
+                      std::string(row.late_finish),
+                      "w3-o1 uid " + uid + " LateFinish (+116, COM)");
         context.check(!task->deadline.valid(), "w3-o1 uid " + uid + " has no Deadline");
         context.check(!task->summary, "w3-o1 uid " + uid + " is not a summary");
         context.check(!task->manually_scheduled,
                       "w3-o1 uid " + uid + " is auto-scheduled (COM Manual=false)");
+    }
+
+    /* The late pair is a separate stored field: T1's LateStart is the project
+     * finish week, not its Start. */
+    {
+        const mpp::Task* first = find_task(document, 1);
+        context.check(first != nullptr &&
+                          first->late_start.raw != first->start.raw &&
+                          first->late_finish.raw != first->finish.raw,
+                      "w3-o1 uid 1's Late pair (+112/+116) is not a copy of its "
+                      "Start/Finish (+104/+108)");
     }
 
     /* W31: none of w3-o1's tasks has a stored start anchor (its dates come from
@@ -1866,6 +1926,12 @@ void test_resources(TestContext& context) {
                       "MaxUnits reports as 100 %");
         context.check(crew->is_work() && crew->type_stored,
                       "resource type is the stored Work bit in the Resource FixedMeta entry");
+        /* Wave 20: the resource calendar is DERIVED from TBkndCal -- the row
+         * whose resource column is 1 is calendar uid 3 (base.mpp's table is
+         * uid 1 base, uid 2 for resource 0, uid 3 for resource 1). */
+        context.equal(crew->calendar_uid, std::int32_t{3},
+                      "base.mpp resource uid 1's calendar is uid 3, from the "
+                      "TBkndCal resource column (not a resource-row word)");
     }
 
     const mpp::Document n1 = mpp::load_file(probe + "/n1.mpp");
@@ -1908,6 +1974,15 @@ void test_resources(TestContext& context) {
             context.equal(r2->material_label, std::string("metre"),
                           "R2 carries MaterialLabel via VarMeta 0x0c40012b");
         }
+        /* Wave 20: the resource calendar uid, measured against Project's own
+         * MSPDI export of this file (corpus/probe/w9-resourcetypes.xml writes
+         * <CalendarUID>3/4/5</CalendarUID> for R1/R2/R3).  The table rows are
+         * (resource 1 -> uid 3), (2 -> 4), (3 -> 5). */
+        context.check(r1 != nullptr && r1->calendar_uid == 3 &&
+                          r2 != nullptr && r2->calendar_uid == 4 &&
+                          r3 != nullptr && r3->calendar_uid == 5,
+                      "w9-resourcetypes resource calendar uids are 3/4/5, exactly "
+                      "the MSPDI <CalendarUID> values");
     } else {
         std::cout << "SKIP: " << type_fixture
                   << " is not present (resource-type oracle fixture absent)\n";
@@ -2619,6 +2694,14 @@ void test_mpp12(TestContext& context) {
                           "MPP12 constraint date is +112");
             context.equal(iso(task->deadline), std::string("2006-08-30 17:00"),
                           "MPP12 deadline is +164");
+            /* Wave 20: the MPP12 late pair is +12/+152.  This task has zero
+             * slack, so Late* == Start/Finish -- the coherence check that the
+             * two offsets are the late words (mpp12duration.mpp, where the
+             * values differ, is the discriminating file). */
+            context.equal(iso(task->late_start), std::string("2006-08-23 08:00"),
+                          "MPP12 LateStart is +12 (== Start on a zero-slack row)");
+            context.equal(iso(task->late_finish), std::string("2006-08-29 17:00"),
+                          "MPP12 LateFinish is +152 (== Finish on a zero-slack row)");
             context.equal(task->calendar_uid, std::int32_t{-1},
                           "MPP12 task calendar uid is +160 (-1 = project calendar)");
             context.check(!task->start_anchor.valid(),
