@@ -83,6 +83,7 @@ struct TabPlan {
 const std::vector<TabPlan> kPlan = {
     {"Task", {}},
     {"Resource", {}},
+    {"Report", {}},
 };
 constexpr bool kAllTabsChecked = false;
 

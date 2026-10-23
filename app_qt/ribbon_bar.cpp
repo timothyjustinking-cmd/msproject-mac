@@ -347,18 +347,24 @@ const std::vector<TabSpec>& tab_specs() {
         TabSpec report;
         report.title = "Report";
         GroupSpec& report_project = add_group(report, "Project", 70);
-        large(report_project, "Compare\nProjects", app::MenuAction::none, 60, 0);
+        large(report_project, "Compare\nProjects", app::MenuAction::none, 60, 0, false,
+              "project.compare");
         GroupSpec& view_reports = add_group(report, "View Reports", 453);
-        large(view_reports, "New\nReport", app::MenuAction::none, 48, 0);
-        large(view_reports, "Dashboards", app::MenuAction::none, 56, 1);
-        large(view_reports, "Resources", app::MenuAction::none, 50, 2);
-        large(view_reports, "Costs", app::MenuAction::none, 40, 3);
-        large(view_reports, "In\nProgress", app::MenuAction::none, 48, 4);
-        large(view_reports, "Getting\nStarted", app::MenuAction::none, 50, 5);
-        large(view_reports, "Custom", app::MenuAction::none, 44, 6);
-        large(view_reports, "Recent", app::MenuAction::none, 44, 7);
+        large(view_reports, "New\nReport", app::MenuAction::none, 48, 0, false, "reports.new");
+        large(view_reports, "Dashboards", app::MenuAction::none, 56, 1, false,
+              "reports.dashboards");
+        large(view_reports, "Resources", app::MenuAction::none, 50, 2, false,
+              "reports.resources");
+        large(view_reports, "Costs", app::MenuAction::none, 40, 3, false, "reports.costs");
+        large(view_reports, "In\nProgress", app::MenuAction::none, 48, 4, false,
+              "reports.in_progress");
+        large(view_reports, "Getting\nStarted", app::MenuAction::none, 50, 5, false,
+              "reports.getting_started");
+        large(view_reports, "Custom", app::MenuAction::none, 44, 6, false, "reports.custom");
+        large(view_reports, "Recent", app::MenuAction::none, 44, 7, false, "reports.recent");
         GroupSpec& report_export = add_group(report, "Export", 61);
-        large(report_export, "Visual\nReports", app::MenuAction::none, 52, 0);
+        large(report_export, "Visual\nReports", app::MenuAction::none, 52, 0, false,
+              "export.visual_reports");
         tabs.push_back(std::move(report));
 
         // --- Project --------------------------------------------------------
