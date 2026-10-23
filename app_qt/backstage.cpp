@@ -2,12 +2,19 @@
 
 #include "backstage.h"
 
-#include <QComboBox>
+#include <QAbstractButton>
 #include <QColor>
+#include <QEnterEvent>
+#include <QEvent>
 #include <QFont>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPalette>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QStackedWidget>
@@ -24,7 +31,13 @@
 namespace msqt {
 namespace {
 
-const QColor kContentBackground(0xff, 0xff, 0xff);
+// The measured Account capture (project-backstage-account.png, 1903x1033).
+const QColor kRailBackground(0xf0, 0xf0, 0xf0);
+const QColor kContentBackground(0xf5, 0xf5, 0xf5);
+const QColor kNavText(0x24, 0x24, 0x24);
+const QColor kNavDisabledText(0x99, 0x99, 0x99);
+const QColor kNavSelectedText(0x0f, 0x70, 0x3b);
+const QColor kSeparator(0xd1, 0xd1, 0xd1);
 
 QFont backstage_font(int point_size, bool bold = false) {
     QFont font;
@@ -42,6 +55,148 @@ QLabel* make_body(QWidget* parent, const QString& text) {
     return label;
 }
 
+// The three rail glyphs the clean capture shows, drawn on a 16-unit grid in one
+// ink colour (our artwork; nothing is copied from Office).  A disabled render in
+// the capture's grey gives the rail entry the measured disabled look.
+enum class RailGlyph { home, page, folder };
+
+QPixmap draw_rail_glyph(RailGlyph glyph, const QColor& ink) {
+    QPixmap pixmap(16, 16);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(ink);
+    pen.setWidthF(1.4);
+    pen.setJoinStyle(Qt::MiterJoin);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    switch (glyph) {
+        case RailGlyph::home: {
+            QPainterPath roof;
+            roof.moveTo(8.0, 2.0);
+            roof.lineTo(2.0, 7.5);
+            painter.drawPath(roof);
+            painter.drawRect(QRectF(3.5, 7.5, 9.0, 6.5));
+            painter.drawRect(QRectF(6.5, 10.5, 3.0, 3.5));
+            break;
+        }
+        case RailGlyph::page: {
+            QPainterPath outline;
+            outline.moveTo(4.0, 1.5);
+            outline.lineTo(9.5, 1.5);
+            outline.lineTo(12.5, 4.5);
+            outline.lineTo(12.5, 14.5);
+            outline.lineTo(4.0, 14.5);
+            outline.closeSubpath();
+            painter.drawPath(outline);
+            QPainterPath fold;
+            fold.moveTo(9.5, 1.5);
+            fold.lineTo(9.5, 4.5);
+            fold.lineTo(12.5, 4.5);
+            painter.drawPath(fold);
+            break;
+        }
+        case RailGlyph::folder: {
+            QPainterPath outline;
+            outline.moveTo(1.5, 5.0);
+            outline.lineTo(1.5, 13.5);
+            outline.lineTo(14.5, 13.5);
+            outline.lineTo(14.5, 5.0);
+            outline.lineTo(7.5, 5.0);
+            outline.lineTo(6.0, 2.5);
+            outline.lineTo(1.5, 2.5);
+            outline.closeSubpath();
+            painter.drawPath(outline);
+            painter.drawLine(QPointF(2.0, 6.5), QPointF(14.0, 6.5));
+            break;
+        }
+    }
+    painter.end();
+    return pixmap;
+}
+
+// One rail entry, painted at the capture's own geometry.  A QToolButton centres
+// its text even when the stylesheet asks for text-align:left (measured: Info
+// landed at x=74 instead of the capture's 38), so the rail draws its own rows:
+// the glyph at x=13 and the label at x=38, both measured from
+// project-backstage-account.png.  QAbstractButton still supplies the checkable
+// auto-exclusive group, the enabled state and the clicked() signal.
+class RailButton final : public QAbstractButton {
+  public:
+    RailButton(QWidget* parent, const QString& label, bool has_glyph, RailGlyph glyph,
+               bool bottom)
+        : QAbstractButton(parent),
+          has_glyph_(has_glyph),
+          glyph_(glyph),
+          bottom_(bottom) {
+        setText(label);
+        setFont(backstage_font(kBodyPointSize));
+        setCheckable(true);
+        setAutoExclusive(true);
+        setFixedHeight(Backstage::kNavEntryHeight);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setCursor(Qt::PointingHandCursor);
+        setAttribute(Qt::WA_Hover, true);
+    }
+
+    QSize sizeHint() const override { return QSize(Backstage::kRailWidth, Backstage::kNavEntryHeight); }
+    QSize minimumSizeHint() const override { return QSize(40, Backstage::kNavEntryHeight); }
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        if (underMouse() && isEnabled()) {
+            painter.fillRect(rect(), QColor(0xe5, 0xe5, 0xe5));
+        }
+        const bool selected = isChecked();
+        const QColor ink = !isEnabled() ? kNavDisabledText
+                                        : (bottom_ && selected ? kNavSelectedText : kNavText);
+        QFont row_font = font();
+        row_font.setBold(selected);
+        painter.setFont(row_font);
+        if (has_glyph_) {
+            painter.drawPixmap(13, (height() - 16) / 2, draw_rail_glyph(glyph_, ink));
+        }
+        painter.setPen(ink);
+        painter.drawText(QRect(38, 0, width() - 38, height()),
+                         Qt::AlignLeft | Qt::AlignVCenter, text());
+        if (bottom_ && selected) {
+            painter.fillRect(0, 0, 2, height(), kNavSelectedText);
+            painter.fillRect(0, 0, width(), 2, QColor(0x00, 0x00, 0x00));
+            painter.fillRect(0, height() - 2, width(), 2, QColor(0x00, 0x00, 0x00));
+        }
+    }
+
+    void enterEvent(QEnterEvent* event) override {
+        QAbstractButton::enterEvent(event);
+        update();
+    }
+    void leaveEvent(QEvent* event) override {
+        QAbstractButton::leaveEvent(event);
+        update();
+    }
+
+  private:
+    bool has_glyph_ = false;
+    RailGlyph glyph_ = RailGlyph::home;
+    bool bottom_ = false;
+};
+
+// A one-pixel rule inset the measured 15 px from the rail's left and 18 px from
+// its right (the Account capture's separators at y=207 and y=914).
+QWidget* make_separator(QWidget* parent, int top_margin, int bottom_margin) {
+    auto* wrapper = new QWidget(parent);
+    auto* layout = new QVBoxLayout(wrapper);
+    layout->setContentsMargins(15, top_margin, 18, bottom_margin);
+    layout->setSpacing(0);
+    auto* line = new QFrame(wrapper);
+    line->setObjectName(QStringLiteral("backstageSeparator"));
+    line->setFixedHeight(1);
+    line->setStyleSheet(QStringLiteral("background: #d1d1d1;"));
+    layout->addWidget(line);
+    return wrapper;
+}
+
 }  // namespace
 
 Backstage::Backstage(QWidget* parent) : QWidget(parent) {
@@ -55,99 +210,121 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
 
-    // --- left rail ---------------------------------------------------------
+    // --- left rail (W26-4.1: Project's measured light rail) ----------------
     nav_rail_ = new QWidget(this);
     nav_rail_->setObjectName(QStringLiteral("backstageRail"));
-    nav_rail_->setFixedWidth(220);
+    nav_rail_->setFixedWidth(kRailWidth);
     nav_rail_->setStyleSheet(QStringLiteral(
-        "QWidget#backstageRail { background: #2b578a; }"
-        "QToolButton#backstageNav { color: #ffffff; border: none; text-align: left;"
-        " padding: 7px 18px; background: transparent; }"
-        "QToolButton#backstageNav:hover { background: #3a6aa3; }"
-        "QToolButton#backstageNav:checked { background: #ffffff; color: #2b578a; }"
-        "QToolButton#backstageOptions { color: #ffffff; border: none; text-align: left;"
-        " padding: 8px 18px; background: transparent; border-top: 1px solid #3a6aa3; }"
-        "QToolButton#backstageOptions:hover { background: #3a6aa3; }"));
+        "QWidget#backstageRail { background: #f0f0f0; }"));
     auto* rail_layout = new QVBoxLayout(nav_rail_);
-    rail_layout->setContentsMargins(0, 10, 0, 0);
+    rail_layout->setContentsMargins(0, 0, 0, 0);
     rail_layout->setSpacing(0);
 
-    // Wave 21: the circular BACK arrow at the very top of the rail, above Home --
-    // Project 2021's position.  Before this the backstage had no way back except
-    // the Close nav entry; the button calls the same close handler as Escape.
+    // The circular BACK arrow at the top-left, 21x21 at (10, 14) -- the clean
+    // capture's box x=10..30, y=45..65 below its 31-px title bar.  It calls the
+    // same close handler the Close page uses (Escape does the same).
     back_button_ = new QToolButton(nav_rail_);
     back_button_->setObjectName(QStringLiteral("backstageBack"));
     back_button_->setText(QString::fromUtf8("\xE2\x86\x90"));  // U+2190 leftwards arrow
     back_button_->setToolTip(QStringLiteral("Back (Esc)"));
     back_button_->setAccessibleName(QStringLiteral("Back"));
     back_button_->setCursor(Qt::PointingHandCursor);
-    back_button_->setFixedSize(28, 28);
-    back_button_->setFont(backstage_font(12, true));
+    back_button_->setFixedSize(kBackArrowSize, kBackArrowSize);
+    back_button_->setFont(backstage_font(9, false));
     back_button_->setStyleSheet(QStringLiteral(
-        "QToolButton#backstageBack { color: #ffffff; background: #2b578a;"
-        " border: 1px solid #ffffff; border-radius: 14px; }"
-        "QToolButton#backstageBack:hover { background: #3a6aa3; }"));
+        "QToolButton#backstageBack { color: #4a4a4a; background: transparent;"
+        " border: 1px solid #4a4a4a; border-radius: 10px; }"
+        "QToolButton#backstageBack:hover { background: #e5e5e5; }"));
     connect(back_button_, &QToolButton::clicked, this, [this](bool) {
         if (close_handler_) {
             close_handler_();
         }
     });
     auto* back_row = new QHBoxLayout();
-    back_row->setContentsMargins(14, 0, 0, 8);
+    back_row->setContentsMargins(kBackArrowLeft, kBackArrowTop, 0, 0);
     back_row->setSpacing(0);
     back_row->addWidget(back_button_);
     back_row->addStretch(1);
     rail_layout->addLayout(back_row);
+    // The capture's Home text centre is 44 px below the arrow's centre; the
+    // arrow occupies 14..35, so the first 40-px entry starts at y=51.
+    rail_layout->addSpacing(16);
 
     struct NavSpec {
         const char* label;
         Page page;
+        RailGlyph glyph;
+        bool has_glyph;
     };
-    const NavSpec nav_specs[] = {
-        {"Home", Page::home},       {"New", Page::create_new},
-        {"Open", Page::open},       {"Info", Page::info},
-        {"Save", Page::save},       {"Save As", Page::save_as},
-        {"Print", Page::print},     {"Share", Page::share},
-        {"Export", Page::export_file}, {"Close", Page::close_file},
+    const NavSpec main_nav[] = {
+        {"Home", Page::home, RailGlyph::home, true},
+        {"New", Page::create_new, RailGlyph::page, true},
+        {"Open", Page::open, RailGlyph::folder, true},
     };
-    for (const NavSpec& spec : nav_specs) {
-        auto* button = new QToolButton(nav_rail_);
+    for (const NavSpec& spec : main_nav) {
+        auto* button = new RailButton(nav_rail_, QString::fromUtf8(spec.label), spec.has_glyph,
+                                      spec.glyph, false);
         button->setObjectName(QStringLiteral("backstageNav"));
-        button->setText(QString::fromUtf8(spec.label));
-        button->setCheckable(true);
-        button->setAutoExclusive(true);
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setFont(backstage_font(kBodyPointSize));
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        button->setFixedHeight(34);
         const int index = static_cast<int>(spec.page);
-        connect(button, &QToolButton::clicked, this,
+        connect(button, &QAbstractButton::clicked, this,
                 [this, index](bool) { show_page(index); });
         rail_layout->addWidget(button);
         nav_buttons_.push_back(button);
     }
+
+    rail_layout->addWidget(make_separator(nav_rail_, 4, 4));
+
+    // Info..Close are text-only; their label starts at the same measured x=38.
+    const NavSpec text_nav[] = {
+        {"Info", Page::info, RailGlyph::home, false},
+        {"Save", Page::save, RailGlyph::home, false},
+        {"Save As", Page::save_as, RailGlyph::home, false},
+        {"Print", Page::print, RailGlyph::home, false},
+        {"Share", Page::share, RailGlyph::home, false},
+        {"Export", Page::export_file, RailGlyph::home, false},
+        {"Close", Page::close_file, RailGlyph::home, false},
+    };
+    for (const NavSpec& spec : text_nav) {
+        auto* button = new RailButton(nav_rail_, QString::fromUtf8(spec.label), false,
+                                      RailGlyph::home, false);
+        button->setObjectName(QStringLiteral("backstageNav"));
+        const int index = static_cast<int>(spec.page);
+        connect(button, &QAbstractButton::clicked, this,
+                [this, index](bool) { show_page(index); });
+        rail_layout->addWidget(button);
+        nav_buttons_.push_back(button);
+    }
+
     rail_layout->addStretch(1);
 
-    // Options is pinned at the bottom of the rail (operator decision 2).
-    auto* options = new QToolButton(nav_rail_);
-    options->setObjectName(QStringLiteral("backstageOptions"));
-    options->setText(QStringLiteral("Options"));
-    options->setCheckable(true);
-    options->setAutoExclusive(true);
-    options->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    options->setFont(backstage_font(kBodyPointSize));
-    options->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    options->setFixedHeight(36);
-    connect(options, &QToolButton::clicked, this,
-            [this](bool) { show_page(Page::options); });
-    rail_layout->addWidget(options);
-    nav_buttons_.push_back(options);
+    // Account sits under Close at the bottom, above the pinned Options entry.
+    rail_layout->addWidget(make_separator(nav_rail_, 1, 5));
+    auto* account = new RailButton(nav_rail_, QStringLiteral("Account"), false,
+                                   RailGlyph::home, true);
+    account->setObjectName(QStringLiteral("backstageNavBottom"));
+    connect(account, &QAbstractButton::clicked, this,
+            [this](bool) { show_page(Page::account); });
+    rail_layout->addWidget(account);
+    nav_buttons_.push_back(account);
+
+    options_button_ = new RailButton(nav_rail_, QStringLiteral("Options"), false,
+                                     RailGlyph::home, false);
+    options_button_->setObjectName(QStringLiteral("backstageOptions"));
+    options_button_->setCheckable(false);
+    options_button_->setAutoExclusive(false);
+    connect(options_button_, &QAbstractButton::clicked, this, [this](bool) {
+        if (options_handler_) {
+            options_handler_();
+        }
+    });
+    rail_layout->addWidget(options_button_);
+    nav_buttons_.push_back(options_button_);
     outer->addWidget(nav_rail_);
 
     // --- pages -------------------------------------------------------------
     pages_ = new QStackedWidget(this);
     pages_->setObjectName(QStringLiteral("backstagePages"));
-    pages_->setStyleSheet(QStringLiteral("QStackedWidget { background: #ffffff; }"));
+    pages_->setStyleSheet(QStringLiteral("QStackedWidget { background: #f5f5f5; }"));
     outer->addWidget(pages_, 1);
 
     struct PageSpec {
@@ -191,8 +368,6 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
          "Close this project window. Unsaved edits are confirmed first.",
          "Close the window", "close"},
     };
-    // The pages are indexed by Page, so Info (3) and Options (10) are inserted
-    // into their nav slots below rather than appended out of order.
     std::vector<QWidget*> ordered(static_cast<std::size_t>(Page::count), nullptr);
     for (const PageSpec& spec : page_specs) {
         QWidget* page = build_page(spec.page, QString::fromUtf8(spec.title),
@@ -207,10 +382,10 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
     {
         auto* page = new QWidget(this);
         auto* layout = new QVBoxLayout(page);
-        layout->setContentsMargins(36, 28, 36, 28);
+        layout->setContentsMargins(41, 27, 41, 27);
         layout->setSpacing(10);
         auto* title = new QLabel(QStringLiteral("Info"), page);
-        title->setFont(backstage_font(20, true));
+        title->setFont(backstage_font(15, true));
         title->setStyleSheet(QStringLiteral("color: #202020;"));
         layout->addWidget(title);
         info_title_ = new QLabel(QStringLiteral("No project is open"), page);
@@ -228,52 +403,11 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
         page_widgets_.push_back(page);
     }
 
-    // Options: the Office theme choice (Options > General) + Preferences.
+    // Account: the page shell is W26-4.1; W26-4.2 fills its content.
     {
-        auto* page = new QWidget(this);
-        auto* layout = new QVBoxLayout(page);
-        layout->setContentsMargins(36, 28, 36, 28);
-        layout->setSpacing(10);
-        auto* title = new QLabel(QStringLiteral("Options"), page);
-        title->setFont(backstage_font(20, true));
-        title->setStyleSheet(QStringLiteral("color: #202020;"));
-        layout->addWidget(title);
-        auto* general = new QLabel(QStringLiteral("General"), page);
-        general->setFont(backstage_font(kBodyPointSize, true));
-        layout->addWidget(general);
-        auto* row = new QHBoxLayout();
-        row->setSpacing(10);
-        row->addWidget(new QLabel(QStringLiteral("Office Theme"), page));
-        theme_combo_ = new QComboBox(page);
-        theme_combo_->setObjectName(QStringLiteral("officeThemeCombo"));
-        theme_combo_->addItem(QStringLiteral("Office Light"));
-        theme_combo_->addItem(QStringLiteral("Office Dark"));
-        theme_combo_->setFixedWidth(220);
-        row->addWidget(theme_combo_);
-        row->addStretch(1);
-        layout->addLayout(row);
-        options_button_ = new QPushButton(QStringLiteral("All preferences..."), page);
-        options_button_->setFixedHeight(28);
-        options_button_->setMaximumWidth(200);
-        layout->addWidget(options_button_);
-        layout->addWidget(make_body(
-            page, QStringLiteral("The light theme is the parity reference; the dark theme "
-                                 "uses the Office dark values. More Options pages follow in "
-                                 "the dialog cut.")));
-        layout->addStretch(1);
-        ordered[static_cast<std::size_t>(Page::options)] = page;
+        QWidget* page = build_account_page();
+        ordered[static_cast<std::size_t>(Page::account)] = page;
         page_widgets_.push_back(page);
-
-        connect(theme_combo_, &QComboBox::currentIndexChanged, this, [this](int index) {
-            if (theme_handler_) {
-                theme_handler_(index == 1 ? Theme::dark : Theme::light);
-            }
-        });
-        connect(options_button_, &QPushButton::clicked, this, [this](bool) {
-            if (options_handler_) {
-                options_handler_();
-            }
-        });
     }
 
     for (QWidget* page : ordered) {
@@ -312,20 +446,47 @@ void Backstage::set_info_text(const QString& title, const QString& detail) {
     }
 }
 
+void Backstage::set_document_state(bool has_document) {
+    has_document_ = has_document;
+    // The clean Account capture (no document) greys Save..Close and keeps
+    // Home/New/Open/Info/Account/Options active; that is the measured rule.
+    const int first_stateful = static_cast<int>(Page::save);
+    const int last_stateful = static_cast<int>(Page::close_file);
+    for (int index = first_stateful; index <= last_stateful; ++index) {
+        if (index < static_cast<int>(nav_buttons_.size()) &&
+            nav_buttons_[static_cast<std::size_t>(index)] != nullptr) {
+            nav_buttons_[static_cast<std::size_t>(index)]->setEnabled(has_document);
+        }
+    }
+}
+
 int Backstage::nav_count() const { return static_cast<int>(nav_buttons_.size()); }
+
+QSize Backstage::minimumSizeHint() const { return QSize(320, 320); }
 
 void Backstage::show_page(Page page) { show_page(static_cast<int>(page)); }
 
 void Backstage::show_page(int index) {
+    // The rail's last entry is the Options ACTION, not a page.
+    if (index == static_cast<int>(Page::count)) {
+        if (options_handler_) {
+            options_handler_();
+        }
+        return;
+    }
     if (pages_ == nullptr || index < 0 || index >= pages_->count()) {
         return;
     }
     pages_->setCurrentIndex(index);
+    set_nav_checked(index);
+}
+
+void Backstage::set_nav_checked(int page_index) {
     for (std::size_t i = 0; i < nav_buttons_.size(); ++i) {
-        if (nav_buttons_[i] == nullptr) {
+        if (nav_buttons_[i] == nullptr || nav_buttons_[i] == options_button_) {
             continue;
         }
-        if (static_cast<int>(i) == index) {
+        if (static_cast<int>(i) == page_index) {
             nav_buttons_[i]->setChecked(true);
         }
     }
@@ -335,22 +496,24 @@ QWidget* Backstage::build_page(Page page, const QString& title, const QString& b
                                const QString& command_label, const QString& command) {
     auto* widget = new QWidget(this);
     auto* layout = new QVBoxLayout(widget);
-    layout->setContentsMargins(36, 28, 36, 28);
+    layout->setContentsMargins(41, 27, 41, 27);
     layout->setSpacing(10);
     auto* heading = new QLabel(title, widget);
-    heading->setFont(backstage_font(20, true));
+    heading->setFont(backstage_font(15, true));
     heading->setStyleSheet(QStringLiteral("color: #202020;"));
     layout->addWidget(heading);
     layout->addWidget(make_body(widget, body));
     if (!command_label.isEmpty()) {
         auto* button = new QPushButton(command_label, widget);
         button->setObjectName(QStringLiteral("backstageAction"));
-        button->setFixedHeight(30);
+        button->setFixedHeight(26);
         button->setMaximumWidth(260);
         button->setStyleSheet(QStringLiteral(
-            "QPushButton { background: #2b578a; color: #ffffff; border: none;"
-            " padding: 4px 14px; } QPushButton:hover { background: #3a6aa3; }"
-            "QPushButton:disabled { background: #c8c8c8; color: #6a6a6a; }"));
+            "QPushButton { background: #ffffff; color: #242424;"
+            " border: 1px solid #b8b8b8; padding: 3px 12px; }"
+            "QPushButton:hover { background: #eef5fb; }"
+            "QPushButton:disabled { background: #f0f0f0; color: #999999;"
+            " border-color: #d0d0d0; }"));
         connect(button, &QPushButton::clicked, this, [this, command](bool) {
             if (command_handler_) {
                 command_handler_(command);
@@ -363,7 +526,7 @@ QWidget* Backstage::build_page(Page page, const QString& title, const QString& b
             // removed with the ribbon, leaving it mouse-unreachable.
             auto* create_pdf = new QPushButton(QStringLiteral("Create PDF/XPS..."), widget);
             create_pdf->setObjectName(QStringLiteral("backstageAction"));
-            create_pdf->setFixedHeight(30);
+            create_pdf->setFixedHeight(26);
             create_pdf->setMaximumWidth(260);
             create_pdf->setStyleSheet(button->styleSheet());
             connect(create_pdf, &QPushButton::clicked, this, [this](bool) {
@@ -377,7 +540,7 @@ QWidget* Backstage::build_page(Page page, const QString& title, const QString& b
             // Honest stub: the page works (it exports a local copy); the cloud
             // half is disabled with an inline note rather than faked.
             auto* offline = new QPushButton(QStringLiteral("Share to OneDrive"), widget);
-            offline->setFixedHeight(30);
+            offline->setFixedHeight(26);
             offline->setMaximumWidth(260);
             offline->setEnabled(false);
             offline->setToolTip(QStringLiteral("not implemented in this port"));
@@ -386,6 +549,23 @@ QWidget* Backstage::build_page(Page page, const QString& title, const QString& b
     }
     layout->addStretch(1);
     return widget;
+}
+
+QWidget* Backstage::build_account_page() {
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(41, 27, 41, 27);
+    layout->setSpacing(10);
+    auto* title = new QLabel(QStringLiteral("Account"), page);
+    title->setFont(backstage_font(15, true));
+    title->setStyleSheet(QStringLiteral("color: #202020;"));
+    layout->addWidget(title);
+    layout->addWidget(make_body(
+        page, QStringLiteral("This port has no Microsoft account, Office sign-in or "
+                             "cloud services. The account page shows the port's own "
+                             "identity and theme choice.")));
+    layout->addStretch(1);
+    return page;
 }
 
 }  // namespace msqt

@@ -494,3 +494,20 @@ No new Critical or High finding in G3.  Notes for later work, all deliberate:
   item and was not done.
 
 WAVE-26-G3-COMPLETE
+
+## G4 - backstage and Options
+
+The measured sources are the clean `project-backstage-account.png` capture and
+the audit frames in `corpus/reference/2026-10-23-audit/` (all local-only).  The
+committed numbers are `tests/data/reference/w26-backstage.measures.json` and
+`w26-options.measures.json`; the gate measures the LIVE widgets and the RENDERED
+pixels against them.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W26-4.1 | File tab and rail styled as the Account capture: plain File tab, light rail, back arrow, Account under Close, Options pinned | **DONE** | commit `PENDING`; gates `build/w26/gates-4ca7821-W26-4.1.log` |
+| W26-4.2 | Account page: identity, version, mouse-reachable About, Project's five Office Theme names (implemented ones enabled) | pending | - |
+| W26-4.3 | New page: Blank Project, New from existing, local Recent list, disabled online search with a note | pending | - |
+| W26-4.4 | Open and Save As pages: Recent, This PC, Browse; OneDrive/SharePoint laid out and disabled | pending | - |
+| W26-4.5 | Print page: copies, printer list, settings (dates, pages, orientation, paper), live preview through the shared print layout | pending | - |
+| W26-4.6 | Options: the 11-page dialog; General and the Schedule new-task mode functional; every other control laid out and disabled with the exact tooltip | pending | - |

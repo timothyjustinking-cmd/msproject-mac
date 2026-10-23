@@ -32,6 +32,7 @@
 #include <QStackedWidget>
 #include <QTableView>
 #include <QToolBar>
+#include <QAbstractButton>
 #include <QToolButton>
 #include <QWidget>
 
@@ -350,12 +351,16 @@ void check_backstage(msqt::MainWindow& window) {
     if (backstage == nullptr) {
         return;
     }
-    const std::vector<QToolButton*>& nav = backstage->nav_buttons();
-    gate::check(nav.size() == 11, "the backstage rail has eleven entries");
-    const char* const labels[11] = {"Home",    "New",     "Open",  "Info",
+    const std::vector<QAbstractButton*>& nav = backstage->nav_buttons();
+    // Wave 26 (W26-4.1): Project's rail is Home, New, Open, Info, Save, Save As,
+    // Print, Share, Export, Close, Account, with Options pinned at the bottom.
+    // Account is a page; Options opens the Options dialog (W26-4.6), so it is
+    // the twelfth button and not one of the eleven pages.
+    gate::check(nav.size() == 12, "the backstage rail has twelve entries");
+    const char* const labels[12] = {"Home",    "New",     "Open",  "Info",
                                     "Save",    "Save As", "Print", "Share",
-                                    "Export",  "Close",   "Options"};
-    for (std::size_t index = 0; index < nav.size() && index < 11; ++index) {
+                                    "Export",  "Close",   "Account", "Options"};
+    for (std::size_t index = 0; index < nav.size() && index < 12; ++index) {
         gate::check(nav[index] != nullptr &&
                         nav[index]->text() == QString::fromUtf8(labels[index]),
                     "the backstage rail entry has the expected label");
@@ -366,24 +371,33 @@ void check_backstage(msqt::MainWindow& window) {
     // it after the switch, not from an unlaid-out hidden widget.
     window.show_backstage(true);
     QApplication::processEvents();
-    if (nav.size() == 11) {
+    if (nav.size() == 12) {
         const int close_y = nav[9]->mapTo(backstage, QPoint(0, 0)).y();
-        const int options_y = nav[10]->mapTo(backstage, QPoint(0, 0)).y();
-        gate::check(options_y > close_y + 20,
-                    "Options is pinned at the bottom of the rail");
+        const int account_y = nav[10]->mapTo(backstage, QPoint(0, 0)).y();
+        const int options_y = nav[11]->mapTo(backstage, QPoint(0, 0)).y();
+        gate::check(account_y > close_y + 20,
+                    "Account sits under Close at the bottom of the rail");
+        gate::check(options_y > account_y + 20,
+                    "Options is pinned below Account at the bottom of the rail");
+        // The clean Account capture has no document open: Save..Close are grey.
+        gate::check(!window.backstage()->nav_buttons()[4]->isEnabled(),
+                    "Save is disabled while no document is open");
+        gate::check(nav[9]->isEnabled() == false,
+                    "Close is disabled while no document is open");
+        gate::check(nav[0]->isEnabled() && nav[1]->isEnabled() &&
+                        nav[2]->isEnabled() && nav[10]->isEnabled(),
+                    "Home/New/Open/Account stay enabled without a document");
     }
     gate::check(window.backstage_open() && backstage->isVisible(),
                 "the File tab opens the backstage");
     gate::check(backstage->pages()->currentIndex() ==
                     static_cast<int>(msqt::Backstage::Page::home),
                 "the backstage opens on Home");
-    backstage->show_page(msqt::Backstage::Page::options);
+    backstage->show_page(msqt::Backstage::Page::account);
     QApplication::processEvents();
     gate::check(backstage->pages()->currentIndex() ==
-                    static_cast<int>(msqt::Backstage::Page::options),
-                "the Options nav opens the Options page");
-    gate::check(backstage->theme_combo() != nullptr && backstage->theme_combo()->isVisible(),
-                "Options > General carries the Office theme choice");
+                    static_cast<int>(msqt::Backstage::Page::account),
+                "the Account nav opens the Account page");
     window.show_backstage(false);
     QApplication::processEvents();
     gate::check(!window.backstage_open(), "the backstage closes back to the chrome");

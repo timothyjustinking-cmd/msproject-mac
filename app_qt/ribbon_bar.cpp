@@ -640,14 +640,19 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
     setMinimumWidth(0);
     setAutoFillBackground(false);
 
-    // One stylesheet: tabs look like tabs, the File tab is the product's dark
-    // tile, group captions are small and grey, and the buttons are flat until
-    // hovered.  The wave-26 small row has its own object name so the legacy
-    // large-button gates cannot mistake it for the 64-px shape.
+    // One stylesheet: tabs look like tabs, group captions are small and grey,
+    // and the buttons are flat until hovered.  The wave-26 small row has its own
+    // object name so the legacy large-button gates cannot mistake it for the
+    // 64-px shape.
+    //
+    // WAVE 26 (W26-4.1, audit B-7): Project 2021 draws "File" as a PLAIN tab on
+    // the tab row (the clean ribbon strips), not as a filled accent tile.  The
+    // old dark-blue block is gone; the tab uses the same measured padding and
+    // colours as Task..Help.
     setStyleSheet(QStringLiteral(
-        "QToolButton#ribbonFileTab { background: #1f5c99; color: #ffffff;"
-        " border: none; padding: 2px 14px; }"
-        "QToolButton#ribbonFileTab:hover { background: #2f6ba8; }"
+        "QToolButton#ribbonFileTab { border: none; padding: 2px 10px;"
+        " color: #232323; background: transparent; }"
+        "QToolButton#ribbonFileTab:hover { background: #e8eef5; }"
         "QToolButton#ribbonTab { border: none; padding: 2px 10px; color: #232323;"
         " background: transparent; }"
         "QToolButton#ribbonTab:checked { background: #ffffff; border: 1px solid #d0d0d0;"

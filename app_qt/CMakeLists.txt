@@ -390,6 +390,23 @@ add_test(NAME qt_icon_gate
                  "${QT_REPO_ROOT}/build/w26")
 
 # ===========================================================================
+# WAVE 26 (G4): the File backstage and the Options dialog.  The gate parses the
+# measured numbers from the clean Account capture and the audit frames
+# (tests/data/reference/w26-backstage.measures.json and
+# w26-options.measures.json), then measures the LIVE widgets and the rendered
+# pixels against them.  It grows one section per G4 item.
+# ===========================================================================
+add_executable(qt_backstage_gate_tests tests/backstage_gate_test.cpp)
+target_link_libraries(qt_backstage_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_backstage_gate_tests)
+
+add_test(NAME qt_backstage_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_backstage_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_REPO_ROOT}/tests/data/reference/w26-backstage.measures.json")
+
+# ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
 # four OFL faces live in app_qt/fonts/ and are compiled into each executable as
 # Qt resources, so the shell never depends on the host having the font and the
@@ -415,7 +432,7 @@ foreach(carlito_target
         qt_empty_state_tests qt_chrome_gate_tests qt_view_gate_tests
         qt_dialog_gate_tests qt_clipboard_tests qt_stored_table_tests
         qt_ux_gate_tests qt_ribbon_inventory_tests qt_uid_routing_tests
-        qt_icon_gate_tests)
+        qt_icon_gate_tests qt_backstage_gate_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 

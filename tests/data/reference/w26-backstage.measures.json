@@ -1,0 +1,35 @@
+{
+  "source": {
+    "capture": "corpus/reference/2026-10-23-msproject/project-backstage-account.png",
+    "capture_size": [1903, 1033],
+    "note": "Clean 1903x1033 Account capture, measured locally on 2026-10-24; the capture itself stays git-ignored. Only these measured numbers are committed. The 31-px title bar of the capture is not part of the port's backstage, so the arrow y is recorded below the title bar (45 - 31 = 14)."
+  },
+  "rail": {
+    "width": 133,
+    "background": "#F0F0F0",
+    "content_background": "#F5F5F5",
+    "nav_text_left": 39,
+    "nav_text_left_note": "first dark pixel of the rendered Info label in the capture; the label's draw origin is the nominal 38 px",
+    "nav_entry_height": 40,
+    "separator_inset_left": 15,
+    "separator_inset_right": 18,
+    "separator_colour": "#D1D1D1",
+    "text_enabled": "#242424",
+    "text_disabled": "#999999",
+    "text_selected": "#0F703B"
+  },
+  "back_arrow": {
+    "x": 10,
+    "y_below_title_bar": 14,
+    "width": 21,
+    "height": 21,
+    "capture_box": [10, 45, 30, 65]
+  },
+  "nav": {
+    "order": ["Home", "New", "Open", "Info", "Save", "Save As", "Print", "Share", "Export", "Close", "Account", "Options"],
+    "glyph_entries": ["Home", "New", "Open"],
+    "account_is_last_page": true,
+    "options_is_action": true,
+    "disabled_without_document": ["Save", "Save As", "Print", "Share", "Export", "Close"]
+  }
+}

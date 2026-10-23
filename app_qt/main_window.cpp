@@ -1242,6 +1242,10 @@ void MainWindow::show_backstage(bool open) {
     // exists only as the QAction owner the shortcuts and tests use.
     if (open) {
         refresh_backstage_info();
+        // W26-4.1: the clean Account capture (no document) greys Save..Close;
+        // a loaded document enables them.  Refresh on every open so the rail
+        // never keeps a stale state.
+        backstage_->set_document_state(doc_.has_document());
         backstage_->show_page(Backstage::Page::home);
         backstage_->setFocus();
     } else {
