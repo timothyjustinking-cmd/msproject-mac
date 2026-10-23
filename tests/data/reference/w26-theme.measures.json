@@ -1,0 +1,39 @@
+{
+  "source": {
+    "light": "Parity measurement, docs/parity.md section 2 and app_qt/shell_style.h: the ribbon group-row surface is the measured #F7F7F7 and the status bar #F0F0F0.",
+    "dark_gray": "Sampled from the local audit frame corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744264666-4mp1fn.jpg (MS Project Professional 2021, Office Dark Gray theme; git-ignored, never committed).",
+    "black": "Sampled from the local audit frame corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744264666-ekrn72.jpg (MS Project Professional 2021, Office Black theme; git-ignored, never committed).",
+    "note": "The audit frames are 874x491 scaled JPEGs. The committed values are the dominant flat fill of the blank ribbon band and the status band (rounded to the mode), which is also what the port paints, so the gate compares rendered pixels with these numbers exactly. chrome.*.ribbon is the capture's GROUP ROW (the light-grey band in Dark Gray, the near-black band in Black); capture_samples also records the tab row for context. White is not implemented and is not in this table."
+  },
+  "chrome": {
+    "colorful": {
+      "ribbon": "#F7F7F7",
+      "status": "#F0F0F0"
+    },
+    "dark_gray": {
+      "ribbon": "#BDBDBD",
+      "status": "#545454"
+    },
+    "black": {
+      "ribbon": "#292929",
+      "status": "#151515"
+    }
+  },
+  "capture_samples": {
+    "colorful": {
+      "group_row": "#F7F7F7",
+      "tab_row": "#F7F7F7",
+      "status": "#F0F0F0"
+    },
+    "dark_gray": {
+      "group_row": "#BDBDBD",
+      "tab_row": "#52575A",
+      "status": "#545454"
+    },
+    "black": {
+      "group_row": "#292929",
+      "tab_row": "#192028",
+      "status": "#151515"
+    }
+  }
+}

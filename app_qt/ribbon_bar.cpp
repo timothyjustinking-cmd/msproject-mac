@@ -656,36 +656,10 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
     // the tab row (the clean ribbon strips), not as a filled accent tile.  The
     // old dark-blue block is gone; the tab uses the same measured padding and
     // colours as Task..Help.
-    setStyleSheet(QStringLiteral(
-        "QToolButton#ribbonFileTab { border: none; padding: 2px 10px;"
-        " color: #232323; background: transparent; }"
-        "QToolButton#ribbonFileTab:hover { background: #e8eef5; }"
-        "QToolButton#ribbonTab { border: none; padding: 2px 10px; color: #232323;"
-        " background: transparent; }"
-        "QToolButton#ribbonTab:checked { background: #ffffff; border: 1px solid #d0d0d0;"
-        " border-bottom: 1px solid #ffffff; }"
-        "QToolButton#ribbonTabContextual { border: none; padding: 2px 10px; color: #2f6b3a;"
-        " background: transparent; }"
-        "QToolButton#ribbonTabContextual:checked { background: #ffffff;"
-        " border: 1px solid #d0d0d0; border-bottom: 1px solid #ffffff; }"
-        "QToolButton#ribbonButton { border: 1px solid transparent; padding: 1px 4px;"
-        " color: #232323; background: transparent; }"
-        "QToolButton#ribbonButton:hover { background: #e8eef5; border: 1px solid #b9cde3; }"
-        "QToolButton#ribbonSmallButton { border: 1px solid transparent; padding: 0px 2px;"
-        " color: #232323; background: transparent; }"
-        "QToolButton#ribbonSmallButton:hover { background: #e8eef5;"
-        " border: 1px solid #b9cde3; }"
-        "QToolButton#ribbonSplitButton { border: 1px solid transparent; padding: 1px 4px;"
-        " color: #232323; background: transparent; }"
-        "QToolButton#ribbonSwatch { border: 1px solid #d0d0d0; background: #ffffff;"
-        " padding: 0px; }"
-        "QToolButton#ribbonGalleryExpander { border: none; color: #555555; }"
-        "QToolButton#ribbonLauncher { border: none; }"
-        "QLabel#ribbonGroupLabel { color: #6a6a6a; }"
-        "QComboBox#ribbonCombo { border: 1px solid #b8b8b8; background: #ffffff;"
-        " padding-left: 3px; }"
-        "QCheckBox#ribbonCheck { color: #232323; }"
-        "QAbstractButton { border-radius: 2px; }"));
+    //
+    // W26-6.2: the colours now come from chrome_palette(theme_); the stylesheet
+    // is (re)built by apply_theme_style() at the end of the constructor and on
+    // every theme change, so the chrome repaints live.
 
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
@@ -698,12 +672,11 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
     tab_layout->setSpacing(0);
     outer->addWidget(tab_row_);
 
-    auto* rule = new QFrame(this);
-    rule->setFrameShape(QFrame::HLine);
-    rule->setFrameShadow(QFrame::Plain);
-    rule->setFixedHeight(1);
-    rule->setStyleSheet(QStringLiteral("background: #d0d0d0;"));
-    outer->addWidget(rule);
+    rule_ = new QFrame(this);
+    rule_->setFrameShape(QFrame::HLine);
+    rule_->setFrameShadow(QFrame::Plain);
+    rule_->setFixedHeight(1);
+    outer->addWidget(rule_);
 
     page_ = new QWidget(this);
     page_->setFixedHeight(kRibbonGroupHeight);
@@ -745,9 +718,80 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
 
     build_tabs();
     build_page(0);
+    apply_theme_style();
 }
 
 RibbonBar::~RibbonBar() = default;
+
+void RibbonBar::set_theme(Theme theme) {
+    if (theme_ == theme) {
+        return;
+    }
+    theme_ = theme;
+    apply_theme_style();
+}
+
+void RibbonBar::apply_theme_style() {
+    const ChromePalette& c = chrome_palette(theme_);
+    // Every colour below is one of the palette fields (see theme.h).  The tab
+    // row and the group row are separate surfaces in the dark captures, so they
+    // get separate label colours; light keeps both at the measured #232323.
+    const QString tab_text = c.ribbon_tab_text.name();
+    const QString tab_active = c.ribbon_tab_active.name();
+    const QString border = c.ribbon_border.name();
+    const QString contextual = c.ribbon_contextual_text.name();
+    const QString tab_hover = c.ribbon_tab_background.lighter(112).name();
+    const QString hover = c.ribbon_hover.name();
+    const QString text = c.ribbon_text.name();
+    const QString muted = c.ribbon_muted.name();
+    const QString field = c.ribbon_field_background.name();
+    const QString field_border = c.ribbon_field_border.name();
+    setStyleSheet(
+        QStringLiteral(
+            "QToolButton#ribbonFileTab { border: none; padding: 2px 10px;"
+            " color: %1; background: transparent; }"
+            "QToolButton#ribbonFileTab:hover { background: %2; }"
+            "QToolButton#ribbonTab { border: none; padding: 2px 10px; color: %1;"
+            " background: transparent; }"
+            "QToolButton#ribbonTab:hover { background: %2; }"
+            "QToolButton#ribbonTab:checked { background: %3; border: 1px solid %4;"
+            " border-bottom: 1px solid %3; }"
+            "QToolButton#ribbonTabContextual { border: none; padding: 2px 10px; color: %5;"
+            " background: transparent; }"
+            "QToolButton#ribbonTabContextual:checked { background: %3;"
+            " border: 1px solid %4; border-bottom: 1px solid %3; }"
+            "QToolButton#ribbonButton { border: 1px solid transparent; padding: 1px 4px;"
+            " color: %6; background: transparent; }"
+            "QToolButton#ribbonButton:hover { background: %7; border: 1px solid %7; }"
+            "QToolButton#ribbonSmallButton { border: 1px solid transparent; padding: 0px 2px;"
+            " color: %6; background: transparent; }"
+            "QToolButton#ribbonSmallButton:hover { background: %7;"
+            " border: 1px solid %7; }"
+            "QToolButton#ribbonSplitButton { border: 1px solid transparent; padding: 1px 4px;"
+            " color: %6; background: transparent; }"
+            "QToolButton#ribbonSwatch { border: 1px solid %4; background: %8;"
+            " padding: 0px; }"
+            "QToolButton#ribbonGalleryExpander { border: none; color: %6; }"
+            "QToolButton#ribbonLauncher { border: none; }"
+            "QToolButton#ribbonOverflow { color: %6; }"
+            "QToolButton#ribbonTabOverflow { color: %1; }"
+            "QLabel#ribbonGroupLabel { color: %9; }"
+            "QComboBox#ribbonCombo { border: 1px solid %10; background: %8;"
+            " color: %6; padding-left: 3px; }"
+            "QCheckBox#ribbonCheck { color: %6; }"
+            "QAbstractButton { border-radius: 2px; }")
+            .arg(tab_text, tab_hover, tab_active, border, contextual, text, hover, field,
+                 muted, field_border));
+    if (rule_ != nullptr) {
+        rule_->setStyleSheet(QStringLiteral("background: %1;").arg(border));
+    }
+    for (const GroupWidgets& group : page_groups_) {
+        if (group.separator != nullptr) {
+            group.separator->setStyleSheet(QStringLiteral("background: %1;").arg(border));
+        }
+    }
+    update();
+}
 
 QSize RibbonBar::sizeHint() const { return QSize(900, kRibbonHeight + 1); }
 
@@ -1219,7 +1263,9 @@ void RibbonBar::build_page(int tab_index) {
         separator->setFrameShape(QFrame::VLine);
         separator->setFrameShadow(QFrame::Plain);
         separator->setFixedSize(kGroupSeparatorWidth, kGroupBandHeight);
-        separator->setStyleSheet(QStringLiteral("background: #dcdcdc;"));
+        separator->setStyleSheet(
+            QStringLiteral("background: %1;")
+                .arg(chrome_palette(theme_).ribbon_border.name()));
         page_layout_->addWidget(separator);
 
         GroupWidgets widgets;
@@ -1466,9 +1512,13 @@ QString RibbonBar::group_control_kind(int group_index, int control_index) const 
 }
 
 void RibbonBar::paintEvent(QPaintEvent*) {
+    const ChromePalette& palette = chrome_palette(theme_);
     QPainter painter(this);
-    painter.fillRect(rect(), kRibbonBackground);
-    painter.setPen(QPen(kRibbonBorder, 1));
+    // W26-6.2: the tab row and the group row are two surfaces (the dark
+    // captures show a darker tab row over the group-row surface).
+    painter.fillRect(rect(), palette.ribbon_background);
+    painter.fillRect(QRect(0, 0, width(), kRibbonTabHeight), palette.ribbon_tab_background);
+    painter.setPen(QPen(palette.ribbon_border, 1));
     painter.drawLine(0, height() - 1, width(), height() - 1);
 }
 

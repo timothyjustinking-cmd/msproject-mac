@@ -485,9 +485,17 @@ void check_account(msqt::MainWindow& window, const QJsonObject& measures,
             msqt::Theme stored = msqt::Theme::light;
             gate::check(store.load_theme(stored) && stored == msqt::Theme::dark,
                         "the resolved palette is persisted through the store");
-            gate::check(!window.set_theme_choice(msqt::ThemeChoice::black, false),
-                        "the unimplemented Black choice is refused");
-            gate::check(window.theme() == msqt::Theme::dark,
+            // W26-6.2: Black is a real palette now; White is the remaining
+            // unimplemented name and is refused without changing anything.
+            gate::check(window.set_theme_choice(msqt::ThemeChoice::black, true),
+                        "the Black choice is implemented and applies");
+            gate::check(window.theme() == msqt::Theme::black,
+                        "Black resolves to its own palette");
+            gate::check(store.load_theme(stored) && stored == msqt::Theme::black,
+                        "the Black palette is persisted under the same key");
+            gate::check(!window.set_theme_choice(msqt::ThemeChoice::white, false),
+                        "the unimplemented White choice is refused");
+            gate::check(window.theme() == msqt::Theme::black,
                         "a refused choice changes no palette");
             combo->setCurrentIndex(static_cast<int>(msqt::ThemeChoice::colorful));
             QApplication::processEvents();
@@ -941,8 +949,11 @@ void check_options(msqt::MainWindow& window, const QJsonObject& measures) {
                         (model->flags(model->index(0, 0)) & Qt::ItemIsEnabled) != 0,
                     "General enables Colorful");
         gate::check(model != nullptr &&
-                        (model->flags(model->index(2, 0)) & Qt::ItemIsEnabled) == 0,
-                    "General disables the unimplemented Black");
+                        (model->flags(model->index(2, 0)) & Qt::ItemIsEnabled) != 0,
+                    "General enables Black (W26-6.2 paints it)");
+        gate::check(model != nullptr &&
+                        (model->flags(model->index(3, 0)) & Qt::ItemIsEnabled) == 0,
+                    "General disables the unimplemented White");
         theme->setCurrentIndex(static_cast<int>(msqt::ThemeChoice::dark_gray));
         gate::check(dialog.theme_choice() == msqt::ThemeChoice::dark_gray,
                     "the General theme choice is read back");

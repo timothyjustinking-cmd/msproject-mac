@@ -21,10 +21,6 @@
 namespace msqt {
 namespace {
 
-const QColor kTimelineText(0x3a, 0x3a, 0x3a);
-const QColor kTimelineMuted(0x6e, 0x6e, 0x6e);
-const QColor kBlockBackground(0xfa, 0xfa, 0xfa);
-const QColor kBlockBorder(0xd0, 0xd0, 0xd0);
 const QColor kBarBorder(0xc4, 0xc4, 0xc4);
 const QColor kTaskBar(0x4a, 0x7e, 0xbb);
 
@@ -62,6 +58,14 @@ void TimelineStrip::set_tasks(std::vector<TimelineTask> tasks) {
     update();
 }
 
+void TimelineStrip::set_theme(Theme theme) {
+    if (theme_ == theme) {
+        return;
+    }
+    theme_ = theme;
+    update();
+}
+
 QString TimelineStrip::centre_text() const {
     return QStringLiteral("Add tasks with dates to the timeline");
 }
@@ -92,32 +96,33 @@ bool TimelineStrip::has_timeline_label() const {
 }
 
 void TimelineStrip::paintEvent(QPaintEvent*) {
+    const ChromePalette& chrome = chrome_palette(theme_);
     QPainter painter(this);
-    painter.fillRect(rect(), kTimelineBackground);
-    painter.setPen(QPen(kRibbonBorder, 1));
+    painter.fillRect(rect(), chrome.timeline_background);
+    painter.setPen(QPen(chrome.ribbon_border, 1));
     painter.drawLine(0, height() - 1, width(), height() - 1);
 
     // The vertical TIMELINE label at the strip's left edge.
     const QRect label = timeline_label_rect();
-    painter.fillRect(label, QColor(0xf2, 0xf2, 0xf2));
-    painter.setPen(QPen(kBlockBorder, 1));
+    painter.fillRect(label, chrome.timeline_label);
+    painter.setPen(QPen(chrome.timeline_block_border, 1));
     painter.drawLine(label.right(), label.top(), label.right(), label.bottom());
     painter.save();
     painter.translate(label.center().x(), label.center().y());
     painter.rotate(-90.0);
     painter.setFont(label_font(kStatusPointSize - 1, true));
-    painter.setPen(kTimelineMuted);
+    painter.setPen(chrome.timeline_muted);
     painter.drawText(QRect(-60, -10, 120, 20), static_cast<int>(Qt::AlignCenter),
                      QStringLiteral("TIMELINE"));
     painter.restore();
 
     // The Start/Finish block: two labelled lines, today for a new project.
     const QRect block = start_block_rect();
-    painter.setPen(QPen(kBlockBorder, 1));
-    painter.setBrush(kBlockBackground);
+    painter.setPen(QPen(chrome.timeline_block_border, 1));
+    painter.setBrush(chrome.timeline_block);
     painter.drawRoundedRect(block, 2, 2);
     painter.setFont(label_font(kStatusPointSize - 1, true));
-    painter.setPen(kTimelineMuted);
+    painter.setPen(chrome.timeline_muted);
     painter.drawText(QRect(block.left() + 8, block.top() + 2, 44, 12),
                      static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter),
                      QStringLiteral("Start"));
@@ -125,7 +130,7 @@ void TimelineStrip::paintEvent(QPaintEvent*) {
                      static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter),
                      QStringLiteral("Finish"));
     painter.setFont(label_font(kStatusPointSize));
-    painter.setPen(kTimelineText);
+    painter.setPen(chrome.timeline_text);
     painter.drawText(QRect(block.left() + 54, block.top() + 2, block.width() - 62, 12),
                      static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter),
                      start_text_.isEmpty() ? QStringLiteral("--") : start_text_);
@@ -138,10 +143,10 @@ void TimelineStrip::paintEvent(QPaintEvent*) {
     // shows the product's centred prompt.
     const QRect bar = timeline_bar_rect();
     painter.setPen(QPen(kBarBorder, 1));
-    painter.setBrush(QColor(0xff, 0xff, 0xff));
+    painter.setBrush(chrome.timeline_block);
     painter.drawRoundedRect(bar, 8, 8);
     if (tasks_.empty()) {
-        painter.setPen(kTimelineText);
+        painter.setPen(chrome.timeline_text);
         painter.setFont(label_font(kBodyPointSize));
         painter.drawText(bar, static_cast<int>(Qt::AlignCenter), centre_text());
     } else {

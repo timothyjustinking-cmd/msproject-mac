@@ -170,9 +170,14 @@ PreferencesDialog::PreferencesDialog(const app::Preferences& current, Theme curr
     form->addRow(make_form_label(this, QStringLiteral("Timescale")), timescale_);
 
     theme_combo_ = make_combo(this);
+    // W26-6.2: Black is a third resolved palette now, so the compact chooser
+    // offers it too (the Account page keeps Project's five measured names).
     theme_combo_->addItem(QStringLiteral("Office Light"));
     theme_combo_->addItem(QStringLiteral("Office Dark"));
-    theme_combo_->setCurrentIndex(current_theme == Theme::dark ? 1 : 0);
+    theme_combo_->addItem(QStringLiteral("Office Black"));
+    theme_combo_->setCurrentIndex(current_theme == Theme::black
+                                      ? 2
+                                      : (current_theme == Theme::dark ? 1 : 0));
     form->addRow(make_form_label(this, QStringLiteral("Office theme")), theme_combo_);
 
     // The shading choice is the form's fifth row, not a detached widget: the
@@ -215,7 +220,14 @@ Theme PreferencesDialog::theme() const {
     if (theme_combo_ == nullptr) {
         return original_theme_;
     }
-    return theme_combo_->currentIndex() == 1 ? Theme::dark : Theme::light;
+    switch (theme_combo_->currentIndex()) {
+        case 1:
+            return Theme::dark;
+        case 2:
+            return Theme::black;
+        default:
+            return Theme::light;
+    }
 }
 
 bool edit_preferences(QWidget* parent, app::Preferences* prefs) {

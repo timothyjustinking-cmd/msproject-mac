@@ -39,7 +39,7 @@
     "theme_combo_left": 41,
     "theme_combo_width": 377,
     "theme_combo_order": ["Colorful", "Dark Gray", "Black", "White", "Use system setting"],
-    "theme_choices_implemented": ["Colorful", "Dark Gray", "Use system setting"],
+    "theme_choices_implemented": ["Colorful", "Dark Gray", "Black", "Use system setting"],
     "theme_choices_disabled": ["Black", "White"],
     "product_name": "MS Project Shell",
     "product_version": "0.1.0",

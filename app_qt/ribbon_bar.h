@@ -33,12 +33,14 @@
 #include <vector>
 
 #include "menu_model.h"
+#include "theme.h"
 
 class QHBoxLayout;
 class QLabel;
 class QPaintEvent;
 class QResizeEvent;
 class QToolButton;
+class QFrame;
 
 namespace msqt {
 
@@ -154,6 +156,12 @@ class RibbonBar final : public QWidget {
         set_stack_check(QStringLiteral("Critical Tasks"), checked);
     }
 
+    // W26-6.2: the chrome palette the ribbon paints and styles itself with.
+    // The light theme is the measured parity chrome; Dark Gray and Black swap
+    // the tab row, the group-row surface, the separators and every label
+    // colour.  Reapplies the stylesheet and repaints in place (live).
+    void set_theme(Theme theme);
+
     // The File tab is chrome, not one of the seven modelled command tabs: it has
     // its own styling and opens the backstage through this handler.
     void set_file_handler(std::function<void()> handler);
@@ -188,6 +196,9 @@ class RibbonBar final : public QWidget {
     void build_tabs();
     void build_page(int tab_index);
     void clear_page();
+    // W26-6.2: applies the current theme's stylesheet to the produced children
+    // (tabs, buttons, combos, check boxes, separators) and repaints.
+    void apply_theme_style();
     // Shows whole groups from the left until the next one would pass the right
     // edge; the rest are hidden (never half-drawn, so no label is cut).
     void layout_page_groups();
@@ -198,6 +209,7 @@ class RibbonBar final : public QWidget {
     QWidget* tab_row_ = nullptr;
     QWidget* page_ = nullptr;
     QHBoxLayout* page_layout_ = nullptr;
+    QFrame* rule_ = nullptr;
     QToolButton* file_tab_ = nullptr;
     QToolButton* contextual_tab_ = nullptr;
     QToolButton* overflow_ = nullptr;
@@ -220,6 +232,8 @@ class RibbonBar final : public QWidget {
     std::function<void()> file_handler_;
     int active_tab_ = 0;
     int button_count_ = 0;
+    // W26-6.2: the resolved palette this ribbon paints with.
+    Theme theme_ = Theme::light;
 
     // Wave 26: the document-driven check-box state (see set_document_state()).
     bool has_document_ = false;

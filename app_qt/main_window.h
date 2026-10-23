@@ -307,6 +307,9 @@ class MainWindow final : public QMainWindow {
     void update_zoom_slider();
     void update_window_title();
     void update_chrome();
+    // W26-6.2: repaints the shell-owned chrome (quick-access strip, status bar)
+    // from chrome_palette(theme_) after a live theme change.
+    void apply_chrome_theme();
     void new_project();
     void refresh_backstage_info();
     void set_message(std::string text, bool is_error);

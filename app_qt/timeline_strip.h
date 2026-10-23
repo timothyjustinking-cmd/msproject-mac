@@ -14,6 +14,8 @@
 
 #include <vector>
 
+#include "theme.h"
+
 class QPaintEvent;
 
 namespace msqt {
@@ -36,6 +38,8 @@ class TimelineStrip final : public QWidget {
 
     // The formatted project start/finish (empty hides the end labels).
     void set_dates(const QString& start_text, const QString& finish_text);
+    // W26-6.2: the strip is shell chrome, so it follows the Office theme live.
+    void set_theme(Theme theme);
     QString centre_text() const;
     const QString& start_text() const noexcept { return start_text_; }
     const QString& finish_text() const noexcept { return finish_text_; }
@@ -59,6 +63,7 @@ class TimelineStrip final : public QWidget {
     QString start_text_;
     QString finish_text_;
     std::vector<TimelineTask> tasks_;
+    Theme theme_ = Theme::light;
 };
 
 }  // namespace msqt
