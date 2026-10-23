@@ -130,6 +130,42 @@ working directory. `MPP_NO_CORPUS=1` makes a machine that *does* have `corpus/`
 behave like a runner — that is how the no-corpus path is verified without
 touching the client data.
 
+## The Qt shell's ctest gate
+
+`app_qt/CMakeLists.txt` adds its tests at the 900x560 and 1920x1032 sizes with
+`QT_QPA_PLATFORM=offscreen`.  Before wave 23 a fresh shell reported **0/15**
+with `0xc0000135` because the Qt `bin` directory was not on `PATH`; the CMake
+file now prepends the linked `Qt6::Core` directory through ctest's
+`ENVIRONMENT_MODIFICATION`, so this works from any shell:
+
+```bat
+cmake -S app_qt -B build-qt -G "Visual Studio 17 2022" -A x64 ^
+      -DCMAKE_PREFIX_PATH=build\Qt\6.5.3\6.5.3\msvc2019_64
+cmake --build build-qt --config Release
+ctest --test-dir build-qt -C Release --output-on-failure --timeout 180
+```
+
+That is 17 tests: the 15 shell tests plus `qt_task_order` and
+`qt_task_order_corpus` (the corpus one is registered only where
+`corpus/project_a.mpp` exists), and `qt_stored_table_corpus` follows the same
+rule -- 17 locally, 16 in CI.
+
+## The recalc golden is opt-in
+
+`plan_recalc_tests` no longer rewrites `tests/data/project_a_recalc_golden.tsv`.
+It compares by default and fails if the measured schedule differs; refreshing
+the committed golden is a deliberate act:
+
+```bat
+set PLAN_RECALC_UPDATE_GOLDEN=1
+build\...\plan_recalc_tests.exe
+set PLAN_RECALC_UPDATE_GOLDEN=
+```
+
+The writer is diff-before-write and refuses to run after a failed check.  CI and
+the local gate run `ctest -E plan_recalc`; the test itself skips its corpus
+checks when `MPP_NO_CORPUS=1` is set.
+
 ## macOS
 
 Xcode command-line tools are enough (no full Xcode for the core; the Swift app

@@ -361,3 +361,27 @@ foreach(carlito_target
         qt_ux_gate_tests qt_ribbon_inventory_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
+
+# ===========================================================================
+# WAVE 23 (A-10): the local Qt gate needs the Qt bin directory on PATH or every
+# test dies with 0xc0000135 before main().  Have ctest prepend the directory the
+# linked Qt6::Core actually lives in, so `ctest --test-dir build-qt` works from
+# a shell that never ran vcvars or set PATH (CI's install-qt-action already adds
+# it; this makes the local command match the documented one).
+# ===========================================================================
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.22")
+    get_target_property(_qt_core_location Qt6::Core IMPORTED_LOCATION_RELEASE)
+    if(NOT _qt_core_location)
+        get_target_property(_qt_core_location Qt6::Core IMPORTED_LOCATION)
+    endif()
+    if(_qt_core_location)
+        get_filename_component(QT_TEST_BIN_DIR "${_qt_core_location}" DIRECTORY)
+        get_property(_qt_directory_tests DIRECTORY PROPERTY TESTS)
+        foreach(_qt_test IN LISTS _qt_directory_tests)
+            set_tests_properties(${_qt_test} PROPERTIES
+                ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:${QT_TEST_BIN_DIR}")
+        endforeach()
+        message(STATUS "app_qt: ctest prepends ${QT_TEST_BIN_DIR} to PATH")
+    endif()
+endif()
