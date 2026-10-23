@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "entry_columns.h"  // DisplayColumn (wave 21)
+#include "gantt_style.h"    // the file's text styles (wave 26)
 #include "prefs.h"
 #include "sheet.h"
 
@@ -85,6 +86,19 @@ class SheetTableModel final : public QAbstractTableModel {
     // the sheet's own cell_text() (the wave-19 behaviour).
     void set_preferences(const app::Preferences* preferences) { preferences_ = preferences; }
 
+    // Wave 26 (W26-3.1): the loaded file's text styles.  The pointer must
+    // outlive the adapter (the shell points it at PlanDocument's member, whose
+    // address is stable across loads).  nullptr, or a record that did not
+    // decode, keeps the measured stock presentation.
+    void set_gantt_style(const msproject::viewstate::GanttStyle* style) {
+        style_ = style;
+        if (rowCount() > 0) {
+            emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1),
+                             {Qt::FontRole, Qt::ForegroundRole,
+                              Qt::BackgroundRole});
+        }
+    }
+
     core::sheet::SheetModel* sheet() const noexcept { return sheet_; }
 
     // Displayed row -> RecordSet row.  core::sheet::kNoIndex when out of range.
@@ -118,9 +132,13 @@ class SheetTableModel final : public QAbstractTableModel {
     // Entry column resolves through visible_column_for_field().
     std::size_t column_for_display(int display_column) const;
     void report_commit(bool ok, const std::string& message);
+    // Wave 26: the file text style for a RecordSet row (nullptr when the file
+    // has no decoded style or the row's item has no font base).
+    const msproject::viewstate::TextStyle* row_text_style(std::size_t row) const;
 
     core::sheet::SheetModel* sheet_ = nullptr;
     const app::Preferences* preferences_ = nullptr;
+    const msproject::viewstate::GanttStyle* style_ = nullptr;
     bool generic_ = false;
     // The task-sheet presentation, in display order.  Initialised to the Entry
     // list, replaced by a loaded file's own table.

@@ -49,6 +49,7 @@ endif()
 
 add_library(core_viewstate STATIC
     viewstate.cpp
+    gantt_style.cpp
 )
 add_library(msproject::viewstate ALIAS core_viewstate)
 

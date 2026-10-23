@@ -80,24 +80,6 @@ void check(bool condition, const char* what) {
     }
 }
 
-// Wave 25 (W25-5/S6): a KNOWN GAP is listed by name instead of being asserted
-// as correct output (the engine lane's --expect-fail pattern).  The condition is
-// what Project shows; while the gap is open it fails and the test stays green,
-// and the day the port closes the gap the same call FAILS so the list cannot rot
-// silently.
-void check_expected_failure(bool project_truth, const char* what) {
-    if (project_truth) {
-        std::fprintf(stderr,
-                     "FAIL: expected failure '%s' now PASSES -- remove it from the "
-                     "expected-failure list and make it a normal check\n",
-                     what);
-        ++g_failures;
-        return;
-    }
-    ++g_expected_failures;
-    std::printf("EXPECTED FAIL: %s\n", what);
-}
-
 void check_text(const QString& got, const QString& want, const char* what, int index) {
     if (got != want) {
         std::fprintf(stderr, "FAIL: %s (column %d: got \"%s\", want \"%s\")\n", what, index,
@@ -802,14 +784,13 @@ void case_corpus(const QString& corpus) {
     check(table_model->display_kind(succ_column) == msqt::EntryCellKind::successors,
           "the stored Suc column maps to the successors kind");
 
-    // Wave 25 (W25-5/S6): restore what Project's own capture of THIS file
-    // shows -- row 3 (ID 3) is a milestone and renders italic in the file's red
-    // (0xB01C1C).  Wave 24 had turned the gate into an assertion of the port's
-    // known divergence (the stock fallback, upright and uncoloured), which
-    // would go on passing after the file's styles were decoded.  Until W25-12
-    // decodes the file's text styles this is an EXPECTED FAILURE by name: the
-    // test stays green while the gap is open, and fails the day the port starts
-    // matching Project so the expectation is removed deliberately.
+    // Wave 26 (W26-3.1): the file's own text styles are decoded now, so these
+    // are ordinary checks.  Wave 25 (W25-5/S6) had kept them as named expected
+    // failures until the decode landed.  The red is MEASURED, not guessed: the
+    // style record stores RGB (255,0,0) (build/w26/g3/decode_style.py on
+    // corpus/project_a.mpp), and the clean capture contains 10,858 pure-red
+    // pixels with zero 0xB01C1C pixels -- the old 0xB01C1C expectation was a
+    // wave-23 sampling error, not Project's colour.
     const int name_display = table_model->display_column_for_field(app::name_field_id());
     check(name_display >= 0, "the corpus sheet shows a Name display column");
     if (name_display >= 0 && model->rowCount() > 3) {
@@ -817,12 +798,9 @@ void case_corpus(const QString& corpus) {
         const QFont font = model->data(milestone_cell, Qt::FontRole).value<QFont>();
         const QColor colour =
             model->data(milestone_cell, Qt::ForegroundRole).value<QColor>();
-        check_expected_failure(
-            font.italic(),
-            "project_a row 3 (a milestone) is italic as Project's capture shows");
-        check_expected_failure(
-            colour == QColor(0xb0, 0x1c, 0x1c),
-            "project_a row 3 (a critical milestone) is Project's red 0xB01C1C");
+        check(font.italic(), "project_a row 3 (a milestone) is italic as Project shows");
+        check(colour == QColor(0xff, 0x00, 0x00),
+              "project_a row 3 (a critical milestone) is Project's stored red 0xFF0000");
     }
 
     // EVERY displayed row: % Complete is the task's stored percent, and Pre/Suc

@@ -38,6 +38,7 @@
 #include "record_set.h"
 #include "selection_model.h"  // app::RowMap
 #include "sheet.h"
+#include "gantt_style.h"  // msproject::viewstate::GanttStyle (wave 26)
 #include "viewstate.h"  // msproject::viewstate::TableDef (wave 21)
 
 namespace app {
@@ -182,6 +183,14 @@ class PlanDocument {
     int table_column_chars(std::uint32_t table_field) const;
     bool table_widths_read() const noexcept { return !table_.columns.empty(); }
 
+    // Wave 26 (W26-3.1): the applied Gantt view's style record -- text styles,
+    // and (from W26-3.2/3.3) its bar styles and timescale tiers.  A file whose
+    // record does not decode keeps `decoded == false`, and the sheet/Gantt fall
+    // back to their measured stock presentation.
+    const msproject::viewstate::GanttStyle& gantt_style() const noexcept {
+        return gantt_style_;
+    }
+
     // Wave 21 (operator decision 7): the file's own first `214/CTable` table.
     // The SheetModel is built from it through app::table_sheet_columns(), so the
     // sheet's column set, order, titles and widths are the file's.  An empty
@@ -214,6 +223,7 @@ class PlanDocument {
     void refresh_filter_rows();
     void read_table(const std::string& source_path);
     void read_applied_view(const std::string& source_path);
+    void read_style(const std::string& source_path);
     // Wave 22: writes the three computed texts (predecessors_text() and friends)
     // into the RecordSet for every row, from the CURRENT view plan.  Runs at the
     // end of build_gantt(), i.e. after view_ has been re-derived, so a structural
@@ -241,6 +251,7 @@ class PlanDocument {
     // The file's stored `214/CTable` table (wave 21): presentation metadata, never
     // part of the save diff.
     msproject::viewstate::TableDef table_;
+    msproject::viewstate::GanttStyle gantt_style_;
     std::string applied_view_;
     std::string path_;
     std::string title_;

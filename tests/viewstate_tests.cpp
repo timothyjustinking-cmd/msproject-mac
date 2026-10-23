@@ -17,6 +17,7 @@
 // corpus/ is never required.
 
 #include "viewstate.h"
+#include "gantt_style.h"
 
 #include <algorithm>
 #include <array>
@@ -957,6 +958,109 @@ void test_text_helpers() {
     const std::vector<std::uint8_t> binary = {0x01, 0x02, 0x03, 0x04};
     check_eq(msproject::viewstate::preview_bytes(binary), std::string("01020304"),
              "preview falls back to hex");
+}
+
+// ---------------------------------------------------------------------------
+// Wave 26 (W26-3.1): the Gantt view's style record
+//
+// The two committed blobs are the `0x22400008` record and the `214/Props`
+// FONT_BASES payload of tests/data/synthetic-base.mpp's applied Gantt view
+// ("&Gantt Chart", view 2).  They are Project 2021's own MPP14 bytes; no client
+// content (synthetic-base is neutral and the blobs carry no path or name).
+//
+// The offsets are MPXJ's GanttChartView14.processViewProperties layout, then
+// verified by scripts/oracle_w26.py's one-change-per-save session: the font
+// family save moves every record's font index, the size save changes the
+// FONT_BASES entry the index names, the milestone italic save sets bit 0x02,
+// the critical colour save writes RGB in the first three colour bytes, and the
+// highlight fill save writes the background colour at +16.
+// ---------------------------------------------------------------------------
+
+void test_gantt_style() {
+    using msproject::viewstate::FontBase;
+    using msproject::viewstate::GanttStyle;
+    using msproject::viewstate::ParseError;
+    using msproject::viewstate::Rgb;
+    using msproject::viewstate::TextStyle;
+    using msproject::viewstate::TextStyleItem;
+
+    const std::string data_dir = VIEWSTATE_TEST_DATA;
+    const std::vector<std::uint8_t> style_bytes =
+        read_file(data_dir + "/synthetic-gantt-style.bin");
+    const std::vector<std::uint8_t> font_bytes =
+        read_file(data_dir + "/synthetic-gantt-fonts.bin");
+    check(!style_bytes.empty(), "gantt style: the committed style blob reads");
+    check(!font_bytes.empty(), "gantt style: the committed FONT_BASES blob reads");
+    if (style_bytes.empty() || font_bytes.empty()) {
+        return;
+    }
+
+    std::vector<FontBase> fonts;
+    ParseError error;
+    check(msproject::viewstate::parse_font_bases(font_bytes, fonts, &error),
+          "gantt style: FONT_BASES parses");
+    check_eq(fonts.size(), std::size_t{64}, "gantt style: 64 FONT_BASES slots");
+    check(fonts[3].valid, "gantt style: font base 3 is defined");
+    check_eq(fonts[3].name, std::string("Calibri"), "gantt style: font base 3 family");
+    check_eq(fonts[3].point_size, 11, "gantt style: font base 3 size");
+    check(!fonts[2].valid, "gantt style: an empty family is an invalid slot");
+
+    GanttStyle style;
+    check(msproject::viewstate::parse_gantt_style(style_bytes, fonts, style, &error),
+          "gantt style: the record parses");
+    check(style.decoded, "gantt style: decoded flag");
+
+    const TextStyle& highlighted =
+        style.text[static_cast<std::size_t>(TextStyleItem::highlighted)];
+    check(highlighted.valid, "gantt style: the highlighted style resolves its font");
+    check_eq(highlighted.font_name, std::string("Calibri"),
+             "gantt style: highlighted family");
+    check_eq(highlighted.point_size, 11, "gantt style: highlighted size");
+    check(!highlighted.bold && !highlighted.italic, "gantt style: highlighted is upright");
+    check(highlighted.has_colour, "gantt style: highlighted foreground is an explicit black");
+    check(highlighted.colour == (Rgb{0, 0, 0}),
+          "gantt style: highlighted foreground is black");
+    check(highlighted.has_background, "gantt style: highlighted background is set");
+    check(highlighted.background == (Rgb{255, 255, 102}),
+          "gantt style: highlighted background is the stored pale yellow");
+    check_eq(highlighted.background_pattern, std::uint16_t{1},
+             "gantt style: highlighted background is solid");
+
+    const TextStyle& summary =
+        style.text[static_cast<std::size_t>(TextStyleItem::summary)];
+    check(summary.bold, "gantt style: the summary style is bold");
+    check(!summary.has_colour, "gantt style: the stock summary colour is automatic");
+
+    const TextStyle& milestone =
+        style.text[static_cast<std::size_t>(TextStyleItem::milestone)];
+    check(!milestone.italic, "gantt style: the stock milestone style is upright");
+    check(!milestone.has_colour, "gantt style: the stock milestone colour is automatic");
+
+    // A record shorter than the measured minimum is refused, not read past.
+    const std::vector<std::uint8_t> short_record(style_bytes.begin(),
+                                                 style_bytes.begin() + 41361);
+    GanttStyle refused;
+    check(!msproject::viewstate::parse_gantt_style(short_record, fonts, refused, &error),
+          "gantt style: a 41361-byte record is refused");
+    check(!error.message.empty(), "gantt style: the refusal names the size");
+
+    // A FONT_BASES count that cannot fit the payload is refused.
+    std::vector<std::uint8_t> bad_fonts = font_bytes;
+    put_u16(bad_fonts, 0, 0xffff);
+    std::vector<FontBase> bad_out;
+    check(!msproject::viewstate::parse_font_bases(bad_fonts, bad_out, &error),
+          "gantt style: an oversized FONT_BASES count is refused");
+
+    // A font index past the table keeps the record decodable but marks that
+    // style invalid and warns -- presentation damage must not lose the view.
+    std::vector<std::uint8_t> bad_index = style_bytes;
+    bad_index[26] = 200;
+    GanttStyle partial;
+    check(msproject::viewstate::parse_gantt_style(bad_index, fonts, partial, &error),
+          "gantt style: a bad font index still parses the record");
+    check(!partial.text[static_cast<std::size_t>(TextStyleItem::highlighted)].valid,
+          "gantt style: a bad font index marks the style invalid");
+    check(!partial.warnings.empty(), "gantt style: a bad font index warns");
 }
 
 // ---------------------------------------------------------------------------
@@ -2806,6 +2910,7 @@ int main(int argc, char** argv) {
     run("empty", test_empty_class);
     run("errors", test_errors_and_warnings);
     run("text", test_text_helpers);
+    run("gantt-style", test_gantt_style);
     run("writer-roundtrip", test_writer_roundtrip);
     run("writer-date-format", test_writer_date_format);
     run("writer-column", test_writer_column);

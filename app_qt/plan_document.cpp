@@ -21,6 +21,7 @@
 #include "reader_adapter.h"
 #include "selection_model.h"
 #include "shell_style.h"
+#include "view_style.h"
 #include "viewstate.h"
 
 namespace msqt {
@@ -345,6 +346,7 @@ void PlanDocument::reset() {
     filter_description_.clear();
     filter_active_ = false;
     table_ = msproject::viewstate::TableDef{};
+    gantt_style_ = msproject::viewstate::GanttStyle{};
     applied_view_.clear();
     path_.clear();
     title_.clear();
@@ -384,6 +386,10 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         read_table(source_path);
         // Wave 23 (B-2): which view the file was left in, for the Timeline strip.
         read_applied_view(source_path);
+        // Wave 26 (W26-3.1): the applied Gantt view's own style record.  The
+        // applied-view name read above selects the view; a decode failure only
+        // means the sheet keeps the stock presentation.
+        read_style(source_path);
 
         // The RecordSet is a stable member: SheetModel holds a reference to it,
         // so assignment (not replacement) is what keeps that reference valid.
@@ -714,8 +720,19 @@ void PlanDocument::read_applied_view(const std::string& source_path) {
     }
 }
 
-std::vector<core::sheet::SheetColumn> PlanDocument::stored_columns() const {
-    std::vector<core::sheet::SheetColumn> columns = app::table_sheet_columns(table_);
+// Wave 26 (W26-3.1): the applied view's Gantt style record.  The shared app
+// seam (app/view_style.h) reads 214/Props's FONT_BASES, the CV_iew definitions
+// and the applied view name from 214/CEdl; a file without a decodable Gantt
+// record is presentation metadata only, so a failure never fails the load.
+void PlanDocument::read_style(const std::string& source_path) {
+    gantt_style_ = msproject::viewstate::GanttStyle{};
+    std::string reason;
+    if (!app::read_gantt_style(source_path, gantt_style_, &reason)) {
+        gantt_style_ = msproject::viewstate::GanttStyle{};
+    }
+}
+
+std::vector<core::sheet::SheetColumn> PlanDocument::stored_columns() const {    std::vector<core::sheet::SheetColumn> columns = app::table_sheet_columns(table_);
     // Wave 22: % Complete (0x0b400020) is a PERCENT, and Project prints the sign
     // -- the clean capture's column reads "57%", "100%", "0%".  app::
     // table_sheet_columns gives a field it does not know the sheet's default kind
