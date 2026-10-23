@@ -1,7 +1,8 @@
 # Wave 21 complete — the file's own table, the writer's slack, a faster Linux job
 
-_2026-10-23.  `main` at **`0f5920a`** (CI run 39904570421).  Successor: read
-`docs/START-HERE.md` first; this file is the wave gate for wave 21._
+_2026-10-23.  `main` at **`f156ee3`** (the docs close; the code CI validated is
+**`0f5920a`**, CI run 39904570421).  Successor: read `docs/START-HERE.md` first;
+this file is the wave gate for wave 21._
 
 Wave 21 took the first open item from the wave-20 gate — build-order step 3,
 **decision 7, render the file's own table** — and closed the two smaller lanes
@@ -96,8 +97,8 @@ The Build step branches on `runner.os`: Linux (Unix Makefiles) runs
 `cmake --build build-qt --config Release --parallel 2`; Windows (Ninja) and
 macOS keep the exact previous command.  The whole-file diff is one hunk, +14/−1;
 a validator built from a pre-edit snapshot asserts the 17-step order, matrix, Qt
-pin and all four artifacts are otherwise unchanged.  The wall-clock gain and the
-shell syntax are only provable by the wave dispatch.
+pin and all four artifacts are otherwise unchanged.  The wave dispatch proved
+the build itself: **2m55s → 1m42s**, no graph race, no `jobserver unavailable`.
 
 ## Packages
 
