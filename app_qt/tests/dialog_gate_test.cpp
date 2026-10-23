@@ -249,8 +249,8 @@ int main(int argc, char** argv) {
                     "Preferences offers the three timescales");
         gate::check(dialog.shading_check() != nullptr && dialog.shading_check()->isVisible(),
                     "Preferences has the shading checkbox");
-        gate::check(dialog.theme_combo() != nullptr && dialog.theme_combo()->count() == 2,
-                    "Preferences carries the Office theme choice");
+        gate::check(dialog.theme_combo() != nullptr && dialog.theme_combo()->count() == 3,
+                    "Preferences carries the three resolved Office themes");
         check_vertical_hint(dialog, "preferencesHint");
         check_button_box(dialog);
         dialog.date_style_combo()->setCurrentIndex(2);

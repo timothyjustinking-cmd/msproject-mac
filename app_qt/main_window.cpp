@@ -243,6 +243,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // The File tab opens the backstage shell (operator decision 2).
     ribbon_->set_file_handler([this]() { show_backstage(true); });
     build_status_bar();
+    // W26-6.2: paint the shell-owned chrome with the light palette now; every
+    // later theme change repaints it through apply_chrome_theme().
+    apply_chrome_theme();
     // A new project opens on the current week with the Entry header band, the
     // Start/Finish block and the manual-scheduling callout -- never the engine's
     // 1984 epoch and never an empty caption band.
@@ -796,12 +799,8 @@ void MainWindow::build_status_bar() {
     // The zoom group is minus / slider / plus, with no percentage readout
     // (operator decision: the slider maps to Days/Weeks/Months).
     statusBar()->setSizeGripEnabled(false);
-    // Wave 23 (B-9): an explicit light bar.  Fusion's default plus the labels'
-    // own palettes had rendered it dark in the light theme; the measured
-    // reference is a light grey strip with dark text in every theme.
-    statusBar()->setStyleSheet(QStringLiteral(
-        "QStatusBar { background: #f0f0f0; border-top: 1px solid #c8c8c8; }"
-        "QStatusBar QLabel { color: #202020; }"));
+    // W26-6.2: the bar's colours are applied by apply_chrome_theme(), so the
+    // light measurement and the two dark palettes share one code path.
     statusBar()->addWidget(status_summary_, 1);
     statusBar()->addWidget(status_mode_, 0);
     statusBar()->addPermanentWidget(views, 0);
@@ -824,9 +823,7 @@ void MainWindow::build_quick_access() {
     quick_access_->setFixedHeight(kQuickAccessHeight);
     quick_access_->setIconSize(QSize(kShellIconPx, kShellIconPx));
     quick_access_->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    quick_access_->setStyleSheet(
-        QStringLiteral("QToolBar { background: #f7f7f7; border-bottom: 1px solid #d0d0d0;"
-                       " spacing: 2px; padding: 1px 6px; }"));
+    // W26-6.2: the strip's colours are applied by apply_chrome_theme().
     const app::MenuAction ids[] = {app::MenuAction::save, app::MenuAction::undo,
                                    app::MenuAction::redo};
     for (const app::MenuAction id : ids) {
@@ -2723,19 +2720,47 @@ void MainWindow::note_recent_file(const QString& path) {
     }
 }
 
-void MainWindow::set_theme(Theme theme, bool persist) {    theme_ = theme;
+void MainWindow::set_theme(Theme theme, bool persist) {
+    theme_ = theme;
     // A programmatic palette change keeps the chooser honest; a choice that
     // resolves to the same palette (Use system setting -> light) stays itself.
     if (theme_for_choice(theme_choice_) != theme) {
         theme_choice_ = theme_choice_for_theme(theme);
     }
     apply_theme(theme_);
+    // W26-6.2: the shell's custom-painted chrome does not follow QPalette, so
+    // repaint it from the same theme (live, no restart).
+    if (ribbon_ != nullptr) {
+        ribbon_->set_theme(theme_);
+    }
+    if (timeline_ != nullptr) {
+        timeline_->set_theme(theme_);
+    }
+    apply_chrome_theme();
     update();
     if (persist && preferences_store_ != nullptr) {
         preferences_store_->save_theme(theme_);
     }
     set_message(std::string("Office theme: ") + theme_name(theme_), false);
     update_status();
+}
+
+void MainWindow::apply_chrome_theme() {
+    const ChromePalette& chrome = chrome_palette(theme_);
+    if (quick_access_ != nullptr) {
+        quick_access_->setStyleSheet(QStringLiteral(
+            "QToolBar { background: %1; border-bottom: 1px solid %2;"
+            " spacing: 2px; padding: 1px 6px; }")
+                                         .arg(chrome.quick_access_background.name(),
+                                              chrome.ribbon_border.name()));
+    }
+    if (statusBar() != nullptr) {
+        statusBar()->setStyleSheet(
+            QStringLiteral("QStatusBar { background: %1; border-top: 1px solid %2; }"
+                           "QStatusBar QLabel { color: %3; }")
+                .arg(chrome.status_background.name(), chrome.ribbon_border.name(),
+                     chrome.status_text.name()));
+    }
 }
 
 bool MainWindow::set_theme_choice(ThemeChoice choice, bool persist) {

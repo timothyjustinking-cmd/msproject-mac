@@ -426,6 +426,24 @@ add_test(NAME qt_project_dialog_gate
                  "${QT_TEST_DATA_DIR_CMAKE}")
 
 # ===========================================================================
+# WAVE 26 (G6, W26-6.2): the dark themes darken ONLY the chrome.  The gate
+# renders Colorful, Dark Gray and Black, compares the live ribbon/status pixels
+# with the committed Project measurements (tests/data/reference/
+# w26-theme.measures.json) and requires the sheet viewport and Gantt canvas to
+# be pixel-identical across all three (tolerance 0).
+# ===========================================================================
+add_executable(qt_theme_gate_tests tests/theme_gate_test.cpp)
+target_link_libraries(qt_theme_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_theme_gate_tests)
+
+add_test(NAME qt_theme_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_theme_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_REPO_ROOT}/tests/data/reference/w26-theme.measures.json"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
 # four OFL faces live in app_qt/fonts/ and are compiled into each executable as
 # Qt resources, so the shell never depends on the host having the font and the
