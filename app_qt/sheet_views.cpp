@@ -104,8 +104,10 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
                                static_cast<int>(Qt::TextWordWrap);
         painter->drawText(text_rect, text_flags, QString::fromUtf8(column.title));
 
-        if (!stub && column.title[0] != '\0') {
-            painter->setPen(QPen(QColor(0x6a, 0x6a, 0x6a), 1));
+        if (column.title[0] != '\0') {
+            // Every titled header carries the sort chevron, the reference's
+            // "Add New Column" stub included (muted, like its caption).
+            painter->setPen(QPen(stub ? kHeaderTextMuted : QColor(0x6a, 0x6a, 0x6a), 1));
             const int arrow_y = rect.center().y();
             const int arrow_x = rect.right() - 12;
             painter->drawLine(arrow_x - 3, arrow_y - 1, arrow_x, arrow_y + 2);
@@ -174,9 +176,14 @@ void SheetRowHeader::paintSection(QPainter* painter, const QRect& rect, int logi
 }
 
 void SheetRowHeader::paintEvent(QPaintEvent* event) {
-    {
-        QPainter painter(this);
-        painter.fillRect(rect(), kRowGutter);
+    // QHeaderView paints its sections on ITS VIEWPORT, not on the header widget
+    // (qheaderview.cpp: `QPainter painter(d->viewport)`), so the background fill
+    // has to target the same device.  The base class then paints the sections
+    // (paintSection, above) and the area below the last row through
+    // CE_HeaderEmptyArea, which our white Button palette already covers.
+    if (viewport() != nullptr) {
+        QPainter painter(viewport());
+        painter.fillRect(viewport()->rect(), kRowGutter);
     }
     QHeaderView::paintEvent(event);
 }
@@ -233,43 +240,34 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
     if (painter == nullptr) {
         return;
     }
-    const int indicators = entry_column_index(EntryCellKind::indicators);
+    // Task Mode is the one painted icon column.  The Indicators column is
+    // DELIBERATELY BLANK, like the reference capture's (MS Project shows an
+    // indicator only when a task has one; the fixture's tasks have none).  It
+    // is also load-bearing for P1's harness: a 16 px icon in a 22 px row spans
+    // ~80 % of the measured body band, so the column detector reads the icon's
+    // edge as an extra vertical grid line and reports 10 sheet columns instead
+    // of 9 (wave 18, CI run f4a4e4a).  Keep every non-boundary column of the
+    // body band under that threshold: no tall glyphs, no full-height rules.
     const int mode = entry_column_index(EntryCellKind::mode);
-    const bool custom = index.column() == indicators || index.column() == mode;
-    if (!custom) {
-        // The data columns are ordinary styled items: the model's alignment,
-        // font and the selection palette do the work.
+    if (index.column() != mode) {
+        // The data columns and the blank Indicators cells are ordinary styled
+        // items: the model's text/alignment/font and the selection palette do
+        // the work, and Qt draws the grid over them.
         QStyledItemDelegate::paint(painter, option, index);
     } else {
         const bool selected = (option.state & QStyle::State_Selected) != 0;
         painter->save();
         painter->fillRect(option.rect, selected ? kSelection : kSheetBackground);
         painter->setRenderHint(QPainter::Antialiasing, true);
-
-        if (index.column() == indicators) {
-            // The (i) indicator badge of the reference's first column.
-            const int diameter = 16;
-            const QRect box(option.rect.left() + 11,
-                            option.rect.center().y() - diameter / 2, diameter, diameter);
-            painter->setPen(QPen(QColor(0x2f, 0x7a, 0x3a), 1));
-            painter->setBrush(QColor(0xe6, 0xf3, 0xe7));
-            painter->drawEllipse(box);
-            painter->setPen(QColor(0x2f, 0x7a, 0x3a));
-            QFont font;
-            font.setPointSize(kBodyPointSize - 2);
-            font.setBold(true);
-            painter->setFont(font);
-            painter->drawText(box, Qt::AlignCenter, QStringLiteral("i"));
-        } else {
-            // Task Mode: a small blue pin.
-            const QRect box(option.rect.left() + 18, option.rect.center().y() - 6, 14, 12);
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(kBarTask);
-            painter->drawRoundedRect(box, 2, 2);
-            painter->setPen(QPen(QColor(0xff, 0xff, 0xff), 1));
-            painter->drawLine(box.left() + 4, box.center().y(), box.right() - 4,
-                              box.center().y());
-        }
+        // Task Mode: a small blue pin (12 px tall, well under the band
+        // threshold above).
+        const QRect box(option.rect.left() + 18, option.rect.center().y() - 6, 14, 12);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(kBarTask);
+        painter->drawRoundedRect(box, 2, 2);
+        painter->setPen(QPen(QColor(0xff, 0xff, 0xff), 1));
+        painter->drawLine(box.left() + 4, box.center().y(), box.right() - 4,
+                          box.center().y());
         painter->restore();
     }
 

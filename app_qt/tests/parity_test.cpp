@@ -13,24 +13,28 @@
 //   enough for its whole label, the timeline strip and the status bar's zoom
 //   slider (wired to the zoom actions),
 //   and the 1920x1032 parity size: all nine Entry columns fit, so P1's
-//   column-width comparison becomes comparable (wave 18 Q3).
+//   column-width comparison becomes comparable (wave 18 Q3), and the Indicators
+//   cells are blank so no icon reads as a tenth grid line.
 //
 // Run it with QT_QPA_PLATFORM=offscreen (app_qt/CMakeLists.txt does).
-#include <QSplitter>
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QByteArray>
 #include <QColor>
 #include <QFont>
 #include <QHeaderView>
+#include <QImage>
 #include <QList>
 #include <QPoint>
+#include <QPixmap>
 #include <QScrollBar>
 #include <QSlider>
+#include <QSplitter>
 #include <QString>
 #include <QTableView>
 #include <QToolButton>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -301,6 +305,41 @@ int main(int argc, char** argv) {
               "at 1920 the ribbon shows whole groups, never a cut label");
         std::fprintf(stderr, "note: visible ribbon groups %d at 1920, buttons %d\n",
                      ribbon->visible_group_count(), visible_buttons_1920);
+    }
+
+    // --- the Indicators cells stay blank -----------------------------------
+    // P1's column detector calls a body-band column a grid line when it differs
+    // from its row's background for >= 80 % of the band.  A tall icon in the
+    // 39 px Indicators column does exactly that: the 16 px (i) badge of wave 17
+    // made the real 1920 render measure 10 sheet columns instead of 9 (CI run
+    // f4a4e4a).  The reference's Indicators cells are blank, so blank is both
+    // faithful and the only safe content.  This is the gate that keeps it so.
+    if (sheet->viewport() != nullptr && sheet->model() != nullptr &&
+        sheet->model()->rowCount() > 0) {
+        const QImage image = window.grab().toImage();
+        // CTest pins QT_SCALE_FACTOR=1, so the grab is 1:1; say so rather than
+        // sampling the wrong pixels if that ever changes.
+        check(image.size() == QSize(window.width(), window.height()),
+              "the 1920 grab is 1:1 with the window");
+        const QPoint viewport_origin = sheet->viewport()->mapTo(&window, QPoint(0, 0));
+        const int column_width = sheet->columnWidth(0);
+        bool blank = true;
+        for (int row = 0; row < sheet->model()->rowCount() && blank; ++row) {
+            // Inside the row: skip the top rule and the bottom grid line.
+            const int top = viewport_origin.y() + row * msqt::kRowHeight + 2;
+            const int bottom = viewport_origin.y() + (row + 1) * msqt::kRowHeight - 2;
+            for (int x = viewport_origin.x() + 2;
+                 x < viewport_origin.x() + column_width - 2 && blank; ++x) {
+                for (int y = top; y < bottom; ++y) {
+                    const QColor colour = image.pixelColor(x, y);
+                    if (std::min({colour.red(), colour.green(), colour.blue()}) < 200) {
+                        blank = false;
+                        break;
+                    }
+                }
+            }
+        }
+        check(blank, "the Indicators cells are blank (no icon reads as a grid line)");
     }
 
     std::printf("qt_parity_geometry: %d failure(s)\n", g_failures);

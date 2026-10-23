@@ -75,9 +75,10 @@ class SheetView final : public QTableView {
     QWidget* corner_ = nullptr;
 };
 
-// Cell painter: the Indicators column draws a small (i) badge, Task Mode a pin;
-// every other column is the ordinary styled item (the model supplies text,
-// alignment and font).
+// Cell painter: Task Mode draws its pin; every other column -- Indicators
+// included -- is the ordinary styled item (the model supplies text, alignment
+// and font).  The Indicators cells are deliberately BLANK: the reference's are,
+// and a tall icon there is read by P1's column detector as an extra grid line.
 class EntryItemDelegate final : public QStyledItemDelegate {
   public:
     explicit EntryItemDelegate(QObject* parent = nullptr);

@@ -29,7 +29,7 @@ render exposed.  The numbers are P1's measurements, not estimates:
 | `shell_style.h` | the fidelity contract's fixed numbers and colours, in one place (`kParityWidth`/`kParityHeight` included) |
 | `entry_columns.{h,cpp}` | the nine Entry columns: titles, model fields, stock character widths, `214/CTable` field ids, `chars*6+3` rule |
 | `sheet_table_model.{h,cpp}` | `QAbstractTableModel` over `core::sheet::SheetModel`: exactly the nine Entry columns (the gutter is the row header) |
-| `sheet_views.{h,cpp}` | 42 px caption-band painter, the FROZEN `SheetRowHeader` gutter, the white top-left corner, the Indicators/Task Mode delegate, splitter handle with a visible drag thumb |
+| `sheet_views.{h,cpp}` | 42 px caption-band painter, the FROZEN `SheetRowHeader` gutter, the white top-left corner, the Task Mode pin delegate (Indicators cells stay blank), splitter handle with a visible drag thumb |
 | `ribbon_bar.{h,cpp}` | tabs (Task/Resource/Report/Project/View/Help + contextual Gantt Chart Format), groups, buttons sized from their labels, 105 px, whole-group overflow |
 | `timeline_strip.{h,cpp}` | Start/Finish labels + "Add tasks with dates to the timeline", 44 px |
 | `gantt_canvas.{h,cpp}` | `QWidget` + `QPainter`: two-tier weekly/day header, bars, labels, links, weekend shading, `header_info()` |
@@ -118,6 +118,12 @@ line.
   brief puts pixel-exact ribbon icons out of scope).  Buttons are sized from
   their own labels, and a window too narrow for a group drops the whole group
   (in ribbon order) instead of clipping its labels.
+* The **Indicators cells are blank**, like the reference capture's (MS Project
+  shows an indicator only when a task has one; the fixture's tasks have none).
+  This is also load-bearing: P1's harness calls a body-band column a grid line
+  when it differs from its row background for ≥80 % of the band, so a 16 px icon
+  in the 39 px column reads as a tenth sheet column.  `qt_parity_geometry`
+  asserts the cells stay blank.
 * The task-bar colour is the shell palette: the current reference capture has
   no bars (docs/parity.md §2.3), so no bar colour is claimed.  Bar labels follow
   the product: a label that fits inside the bar (its text plus 4 px padding
