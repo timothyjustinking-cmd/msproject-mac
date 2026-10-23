@@ -296,3 +296,24 @@ on macOS.
   cut (all-tab scope + laid-out-only ones); `constraint-mso` decision (documented,
   not implemented); wave-20 gate re-run on a fresh `build\vs-w20`; then
   `docs/handoff/wave20-complete.md`.
+
+### Round 2: Linux package failure diagnosed (run 39894203777, job 120220718337)
+
+Tests were green (ctest 6/6).  The only failure is the AppImage step:
+
+    [qt/stdout] ERROR: Could not find qmake, please install or provide path using $QMAKE
+    ERROR: Failed to run plugin: qt (exit code: 1)
+
+`linuxdeploy-plugin-qt` cannot resolve the QMAKE export, although Configure used
+`steps.install-qt.outputs.qt-root-dir` successfully.  Likely fixes, in order:
+1. Resolve it explicitly and verify before linuxdeploy:
+   `QMAKE="$(readlink -f "${{ steps.install-qt.outputs.qt-root-dir }}/bin/qmake")"`
+   plus `test -x "$QMAKE" && "$QMAKE" -query QT_VERSION` (fail fast with the path).
+2. If the path is a symlink into aqt's prefix, prefer `"$QT_ROOT_DIR/bin/qmake"`
+   from the action's environment, or `command -v qmake` when the action put it on PATH.
+3. As a last resort set `QMAKE=.../bin/qmake6` (some aqt packages ship qmake6 only)
+   -- check `ls "${{ steps.install-qt.outputs.qt-root-dir }}/bin" | grep qmake` in the log.
+Everything else in that run succeeded: Windows and macOS packages uploaded, renders
+uploaded (if-no-files-found fired only because the Linux step died first).
+
+Q5 branch run 39895551240 was still in progress at round 2; check it before merging.
