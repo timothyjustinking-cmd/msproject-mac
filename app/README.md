@@ -30,7 +30,7 @@ same way).
 | file | what it is |
 |---|---|
 | `CMakeLists.txt` | standalone project: options, core libraries with their tests off (including `core/props`), `app_layout`, fifteen headless tests, AppKit target on `APPLE` only |
-| `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link/resource/assignment rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, `timescale_for_zoom`, plan summary, `sync_plan_from_records`, `make_gantt_source_for_rows`, `apply_edit_policy` |
+| `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link/resource/assignment rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, `timescale_for_zoom`, plan summary, `sync_plan_from_records`, `make_gantt_source_for_displayed_rows`, `begin_cell_edit`, `apply_edit_policy` |
 | `view_model.h` / `.cpp` | **pure C++ (wave 11)**: the four view modes, the stock Mon-Fri calendar, `PlanInput` → `core::view::ResourceRecord`s, the registry-backed resource-sheet columns, the usage grid (labels, period columns, a TOTAL row and a Total column), the two demo formula columns, and the read-only policy |
 | `fields_model.h` / `.cpp` | **pure C++ (wave 12)**: the six stored custom-field columns from the field registry, `114/Props` → the file's formulas (`core/props` → `core/formula`), the sheet's complete column set (default + stored + formula, one column per field), read-only enforcement and the per-column visibility the preferences own |
 | `edit_model.h` / `.cpp` | **pure C++ (wave 12/13)**: the pending edit stack — Insert/Delete Task, custom-field set/clear and link add/delete — with one undo/redo, the display plan and its inverse (so a rebuild keeps a cell edit), the dependant count the delete confirmation names, and the writer sequence (link deletes/adds, task insert/delete, `save_field_values`/`clear_field_value`, then `save_date_edits`) that a Save runs |
@@ -612,7 +612,8 @@ and every line of `main.mm` -- compiles only on `app-macos`, which has not run s
 
 1. **The Gantt is rebuilt from displayed rows, not panned.** `RowMap` is derived from
    `SheetModel::visible_rows()`, restricted by the active filter, and
-   `make_gantt_source_for_rows` builds the chart from exactly those rows, so Gantt row
+   `make_gantt_source_for_displayed_rows` builds the chart from exactly those rows
+   (resolving each through its uid, wave 25), so Gantt row
    N is displayed ordinal N — the invariant the drawing code relies on. A collapsed
    or filtered-out task has no bar and a link to it is dropped.
 2. **`app::kUidField`** (`0x0b4fff01`) is an app-private `RecordSet` field carrying

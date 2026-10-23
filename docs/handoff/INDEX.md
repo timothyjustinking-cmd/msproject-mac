@@ -4,10 +4,11 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Wave 25 (open on branch `wave25`)
+## Wave 25 (closed on branch `wave25` — not merged, not pushed; hold)
 
 | file | what |
 |---|---|
+| `wave25-complete.md` | **the wave-25 gate**: every W25 item fixed/deferred with commit ids, the wave-24 errata, R16/R17 dispositions, the live comparison, the fresh-tree gates, the 16 decisions |
 | `wave25-brief.md` | **the work order**: hold unchanged, tightened rules, W25-1..21 (regressions, privacy scrub done properly, record honesty, gate holes, then parity) |
 | `wave24-verification/gates.md` | the verifier's fresh-tree gate run on wave 24's tip |
 | `wave24-verification/review.md` | the independent review of `wave23..wave24`: S1..S14 |

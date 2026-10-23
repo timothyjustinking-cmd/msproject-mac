@@ -348,7 +348,7 @@ core::gantt::GanttSource make_gantt_source(const PlanInput& input,
 // ahead of the tasks (a file whose 0x03400009 is set), so RecordSet row N is
 // task N only when that row is hidden.  Indexing input.tasks with a RecordSet
 // row shifts every bar and drops the last one -- on the macOS screen Gantt and
-// the smoke sequence, which both see the adapters's row now.
+// the smoke sequence, which both see the adapter's row now.
 //
 // After a collapse Gantt row N is still visible ordinal N, a hidden task has no
 // bar, and a link whose endpoint is hidden is dropped by build_gantt() (it skips

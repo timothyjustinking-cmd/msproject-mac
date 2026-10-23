@@ -301,7 +301,7 @@ Nothing else moves, so no other record needs rewriting. The old block stays
 behind as unreferenced bytes — which real files already contain, so a reader
 must tolerate it (`mpp-records.md` §5.3), and the project's reader does.
 
-### 4.4 Measured results (`tests/roundtrip_stream_replace.cpp`, 439 checks)
+### 4.4 Measured results (`tests/roundtrip_stream_replace.cpp`, 520 checks as of wave 25)
 
 Source `corpus/probe/base.mpp` (238,080 B as measured 2026-10-24), written into
 `core/mppwrite/build/vs/test-out/`:
