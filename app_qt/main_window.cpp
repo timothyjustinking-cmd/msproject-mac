@@ -227,6 +227,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         refresh_timeline();
         update_chrome();
     }
+    // Wave 26: a new project uses Project's defaults (Timeline shown).
+    ribbon_->set_document_state(doc_.has_document(), timeline_visible_,
+                                doc_.loaded().show_project_summary);
     update_menu_state();
     update_status();
 }
@@ -884,7 +887,10 @@ bool MainWindow::open_file(const QString& path, QString* error) {
         }
         configure_task_columns();
         // Back to a NEW project: current week, Entry headers, today's Start and
-        // Finish -- not the engine's 1984 default axis.
+        // Finish -- not the engine's 1984 default axis.  Wave 26: Project's
+        // ribbon defaults apply (Timeline shown).
+        timeline_visible_ = true;
+        ribbon_->set_document_state(false, timeline_visible_, false);
         doc_.build_empty_view(prefs_.zoom, app::today_date32());
         gantt_canvas_->set_layout(doc_.gantt());
         gantt_canvas_->set_selected_uid(0);
@@ -949,6 +955,10 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     gantt_canvas_->set_layout(doc_.gantt());
     gantt_canvas_->set_selected_uid(doc_.selected_uid());
     gantt_canvas_->set_shading(prefs_.working_day_shading);
+
+    // Wave 26: the file's stored view state drives the ribbon's Timeline box.
+    timeline_visible_ = doc_.loaded().show_timeline;
+    ribbon_->set_document_state(true, timeline_visible_, doc_.loaded().show_project_summary);
 
     refresh_timeline();
 
@@ -1257,6 +1267,9 @@ void MainWindow::new_project() {
     doc_.build_empty_view(prefs_.zoom, app::today_date32());
     gantt_canvas_->set_layout(doc_.gantt());
     gantt_canvas_->set_selected_uid(0);
+    // Wave 26: a new project uses Project's defaults.
+    timeline_visible_ = true;
+    ribbon_->set_document_state(false, timeline_visible_, false);
     refresh_timeline();
     setWindowTitle(QStringLiteral("MS Project Shell"));
     refresh_view_buttons();
@@ -1411,7 +1424,10 @@ void MainWindow::refresh_timeline() {
     // (plus the per-save GUID).  Wave 23's "application state" conclusion came
     // from a diff that did not decode the Props record framing.  A new project
     // keeps Project's default (shown).
-    timeline_->setVisible(!doc_.has_document() || doc_.loaded().show_timeline);
+    // Wave 26: the strip's visibility is the RUNTIME state, seeded from the
+    // file's stored setting on load (wave 24) and toggled by the View > Split
+    // View > Timeline check box.  Nothing here writes the file.
+    timeline_->setVisible(timeline_visible_);
     if (!doc_.has_document()) {
         // A new project: Start and Finish are today, and the strip shows the
         // product's prompt because nothing has been added to the timeline.
@@ -1716,7 +1732,7 @@ void MainWindow::handle_action(app::MenuAction action) {
 // Wave 26 (G1): the ribbon controls that are not menu actions
 // ---------------------------------------------------------------------------
 
-void MainWindow::handle_ribbon_command(RibbonCommand command, bool /*checked*/) {
+void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
     switch (command) {
         case RibbonCommand::none:
             return;
@@ -1743,16 +1759,27 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool /*checked*/) 
         case RibbonCommand::unlink_tasks:
             unlink_selected_task();
             return;
+        case RibbonCommand::toggle_timeline:
+            set_timeline_visible(checked);
+            return;
         case RibbonCommand::toggle_critical_tasks:
         case RibbonCommand::toggle_project_summary:
-        case RibbonCommand::toggle_timeline:
         case RibbonCommand::toggle_details:
         case RibbonCommand::outdent:
         case RibbonCommand::indent:
         case RibbonCommand::split_task:
-            // Not wired yet (W26-1.3/1.4); the controls are disabled until then.
+            // Not wired yet (W26-1.4); the controls are disabled until then.
             return;
     }
+}
+
+void MainWindow::set_timeline_visible(bool visible) {
+    timeline_visible_ = visible;
+    if (timeline_ != nullptr) {
+        timeline_->setVisible(visible);
+    }
+    set_message(std::string("timeline ") + (visible ? "shown" : "hidden"), false);
+    update_status();
 }
 
 void MainWindow::set_percent_complete(int percent) {

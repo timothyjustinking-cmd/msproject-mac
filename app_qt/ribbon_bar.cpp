@@ -370,7 +370,7 @@ const std::vector<TabSpec>& tab_specs() {
         large(zoom, "Entire\nProject", app::MenuAction::none, 42, 2);
         large(zoom, "Selected\nTasks", app::MenuAction::none, 50, 3);
         GroupSpec& split_view = add_group(view, "Split View", 185);
-        check(split_view, "Timeline", RibbonCommand::toggle_timeline, 64, 0, 0, false, -1);
+        check(split_view, "Timeline", RibbonCommand::toggle_timeline, 64, 0, 0, true, -1);
         combo(split_view, "Timeline options", "Timeline", 112, 0, 1);
         check(split_view, "Details", RibbonCommand::toggle_details, 64, 1, 0, false, 0);
         combo(split_view, "Details options", "", 112, 1, 1);
