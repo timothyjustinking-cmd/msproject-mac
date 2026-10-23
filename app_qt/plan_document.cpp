@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstddef>
 #include <exception>
 #include <filesystem>
@@ -37,6 +38,9 @@ std::size_t name_column_of(const core::sheet::SheetModel& sheet) {
 // The four parts of `214/CTable`, the collection core/viewstate decodes.
 const char* const kTableParts[4] = {"214/CTable/FixedData", "214/CTable/FixedMeta",
                                     "214/CTable/VarMeta", "214/CTable/Var2Data"};
+// `214/CEdl` -- the applied view/table records (wave 23, B-2).
+const char* const kEdlParts[4] = {"214/CEdl/FixedData", "214/CEdl/FixedMeta",
+                                  "214/CEdl/VarMeta", "214/CEdl/Var2Data"};
 
 // Wave 22: the task a uid names, or nullptr when the plan has no live row for it
 // (the reader drops links with a dead endpoint, and a structural rebuild keeps
@@ -142,6 +146,15 @@ std::string successors_text(const app::PlanInput& plan, std::uint32_t task_uid,
     return link_list_text(plan, task_uid, false, format);
 }
 
+bool view_shows_timeline(std::string_view applied_view_name) {
+    std::string lower;
+    lower.reserve(applied_view_name.size());
+    for (const char c : applied_view_name) {
+        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    return lower.find("timeline") != std::string::npos;
+}
+
 std::string resource_names_text(const app::PlanInput& plan, std::uint32_t task_uid) {
     if (task_uid == 0) {
         return {};
@@ -183,6 +196,8 @@ void PlanDocument::reset() {
     filter_description_.clear();
     filter_active_ = false;
     table_ = msproject::viewstate::TableDef{};
+    applied_view_.clear();
+    timeline_visible_ = false;
     path_.clear();
     title_.clear();
     warnings_ = 0;
@@ -214,6 +229,8 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         // what makes the presentation the file's rather than the Entry default.
         // A decode failure only means the sheet keeps app::default_sheet_columns().
         read_table(source_path);
+        // Wave 23 (B-2): which view the file was left in, for the Timeline strip.
+        read_applied_view(source_path);
 
         // The RecordSet is a stable member: SheetModel holds a reference to it,
         // so assignment (not replacement) is what keeps that reference valid.
@@ -487,6 +504,44 @@ void PlanDocument::read_table(const std::string& source_path) {
         // A view-state decode is presentation metadata: never fail the load.
         table_ = msproject::viewstate::TableDef{};
     }
+}
+
+void PlanDocument::read_applied_view(const std::string& source_path) {
+    applied_view_.clear();
+    timeline_visible_ = false;
+    try {
+        const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(source_path);
+        std::array<std::vector<std::uint8_t>, 4> raw;
+        for (std::size_t index = 0; index < raw.size(); ++index) {
+            if (!document.has_stream(kEdlParts[index])) {
+                return;
+            }
+            raw[index] = document.read_stream(kEdlParts[index]);
+        }
+        msproject::viewstate::PartSet parts;
+        parts.fixed_data = raw[0];
+        parts.fixed_meta = raw[1];
+        parts.var_meta = raw[2];
+        parts.var2_data = raw[3];
+        msproject::viewstate::ViewState state;
+        if (!msproject::viewstate::parse_view_state("CEdl", parts, state, nullptr)) {
+            return;
+        }
+        // The CEdl block named 0x26400018 is the applied view.  The stream keeps
+        // a per-save cache of older documents too, so only the FIRST decoded
+        // name is taken; on every measured file the caches agree.
+        for (const msproject::viewstate::EmbeddedProps& props : state.embedded_props) {
+            if (props.view_name_decoded && !props.view_name.empty()) {
+                applied_view_ = props.view_name;
+                break;
+            }
+        }
+    } catch (...) {
+        // View state is presentation metadata; a decode failure never fails the
+        // load.  The strip stays hidden (the file has not been shown to have it).
+        return;
+    }
+    timeline_visible_ = view_shows_timeline(applied_view_);
 }
 
 std::vector<core::sheet::SheetColumn> PlanDocument::stored_columns() const {

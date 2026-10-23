@@ -110,6 +110,19 @@ void case_outline(const QString& path) {
         check_int(document.sheet()->is_summary(static_cast<std::size_t>(row)) ? 1 : 0,
                   expected_summary[row], "the row's summary flag");
     }
+    // Wave 23 (B-2): the fixture's applied view is "&Gantt Chart", not the
+    // combination view, so the Timeline strip is not part of this file's view.
+    check(!document.timeline_visible(),
+          "a plain Gantt view has no Timeline strip");
+    check(msqt::view_shows_timeline("Gantt Chart with Timeline"),
+          "the combination view's display name shows the strip");
+    check(msqt::view_shows_timeline("Gantt &with Timeline"),
+          "Project's stored combination view name shows the strip");
+    check(!msqt::view_shows_timeline("&Gantt Chart"),
+          "the plain Gantt view name hides the strip");
+    check(!msqt::view_shows_timeline(""),
+          "an undecoded view name does not invent a strip");
+
     const char* expected_outline[] = {"", "1", "1.1", "1.1.1", "1.1.2", "1.2", "2"};
     const core::view::FieldId outline_field = app::task_field_id("OutlineNumber");
     for (std::size_t row = 1; row < 7; ++row) {

@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -86,6 +87,12 @@ std::string predecessors_text(const app::PlanInput& plan, std::uint32_t task_uid
 std::string successors_text(const app::PlanInput& plan, std::uint32_t task_uid,
                             const core::sheet::SheetFormat& format);
 std::string resource_names_text(const app::PlanInput& plan, std::uint32_t task_uid);
+
+// Wave 23 (B-2): does the stored applied-view name name a combination view with
+// the Timeline pane?  Accelerator-insensitive ("Gantt &with Timeline" is a
+// Project name; "Gantt Chart with Timeline" is the combination view's display
+// name), case-insensitive.  An empty/undecoded name is false.
+bool view_shows_timeline(std::string_view applied_view_name);
 
 class PlanDocument {
   public:
@@ -172,6 +179,16 @@ class PlanDocument {
     // this reader cannot decode), and the sheet keeps app::default_sheet_columns().
     const msproject::viewstate::TableDef& table() const noexcept { return table_; }
 
+    // Wave 23 (B-2): true when the FILE's stored applied view is a combination
+    // view with the Timeline pane ("Gantt Chart with Timeline").  Read from
+    // CEdl's applied-view record (0x26400018); corpus/project_a.mpp stores
+    // "&Gantt Chart", which is why Project's clean capture has no strip.  A
+    // file whose CEdl cannot be decoded stays false: the file has not been
+    // shown to carry the pane.  A NEW project has no document; the window
+    // shows the strip for it (operator answer Q2).
+    bool timeline_visible() const noexcept { return timeline_visible_; }
+    const std::string& applied_view_name() const noexcept { return applied_view_; }
+
     const std::string& path() const noexcept { return path_; }
     const std::string& title() const noexcept { return title_; }
     std::size_t warnings() const noexcept { return warnings_; }
@@ -182,6 +199,7 @@ class PlanDocument {
     void rebuild_from_base(app::ZoomLevel zoom, std::uint32_t keep_uid);
     void refresh_filter_rows();
     void read_table(const std::string& source_path);
+    void read_applied_view(const std::string& source_path);
     // Wave 22: writes the three computed texts (predecessors_text() and friends)
     // into the RecordSet for every row, from the CURRENT view plan.  Runs at the
     // end of build_gantt(), i.e. after view_ has been re-derived, so a structural
@@ -209,6 +227,8 @@ class PlanDocument {
     // The file's stored `214/CTable` table (wave 21): presentation metadata, never
     // part of the save diff.
     msproject::viewstate::TableDef table_;
+    std::string applied_view_;
+    bool timeline_visible_ = false;
     std::string path_;
     std::string title_;
     std::size_t warnings_ = 0;
