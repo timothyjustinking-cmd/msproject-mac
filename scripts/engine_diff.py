@@ -28,12 +28,17 @@ THE TWO HALVES.
                         and a summary.  Exit 1 if a recorded scenario differs,
                         exit 3 if some scenario has no oracle yet (so "0
                         recorded" is visible, not a silent pass).
-  --expect PASS/TOTAL   with --suite: accept exactly that recorded state.
-                        The ctest lane (engine_diff_suite) runs
-                        `--suite --expect 7/8 --apply-bin
+  --expect-fail NAMES   with --suite: accept exactly this comma-separated SET
+                        of failing scenarios; everything else must pass.  The
+                        ctest lane (engine_diff_suite) runs
+                        `--suite --expect-fail constraint-mso --apply-bin
                         $<TARGET_FILE:engine_diff_tests>`: constraint-mso is
                         deliberately LEFT FAILING until a held-out Project
-                        measurement earns 8/8 (wave-23 A-4).
+                        measurement earns 8/8.  Pinning by name (wave 24,
+                        W24-7) means a different scenario breaking cannot hide
+                        behind a 7/8 count.
+  --expect PASS/TOTAL   with --suite: the legacy count-only expectation (kept
+                        for old commands; the ctest lane no longer uses it).
   --selftest            proves the machinery without MS Project: every
                         committed scenario applies and dumps; a self-recorded
                         oracle passes --check; a deliberately tampered oracle
@@ -86,7 +91,7 @@ build/e1 default, and omitting --apply-bin picks the newest helper under build/
 with a warning).
     python scripts/engine_diff.py --check tests/scenarios/02-duration-change.json \
         --apply-bin build/w23-core/Release/engine_diff_tests.exe
-    python scripts/engine_diff.py --suite --expect 7/8 \
+    python scripts/engine_diff.py --suite --expect-fail constraint-mso \
         --apply-bin build/w23-core/Release/engine_diff_tests.exe
     python scripts/engine_diff.py --selftest \
         --apply-bin build/w23-core/Release/engine_diff_tests.exe

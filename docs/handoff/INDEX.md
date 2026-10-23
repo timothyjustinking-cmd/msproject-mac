@@ -1,13 +1,14 @@
 # Handoff index — read only the group you need
 
-63 handoffs, ~770 KB: do **not** read the directory.  Start with
+64 handoffs, ~780 KB: do **not** read the directory.  Start with
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Wave 24 (open on branch `wave24` - the verify-and-fix work order)
+## Wave 24 (closed on branch `wave24` — the verify-and-fix work order)
 
 | file | what |
 |---|---|
+| `wave24-complete.md` | **the wave-24 gate**: every W24 item fixed/deferred with commit ids, exact gate numbers, the live comparison, the 16 decisions, the errata |
 | `wave24-brief.md` | **the work order**: section 0 publication hold, W24-1..26 in order, verifier corrections, the gate |
 | `wave23-verification/gates.md` | the verifier's fresh-tree gate run on wave 23's tip |
 | `wave23-verification/review.md` | the independent review of `main..wave23`: R1..R18, most severe first |
