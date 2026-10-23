@@ -8,106 +8,101 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 | Tab | Group | Command | Status | Why missing |
 |---|---|---|---|---|
-| Task | View | Gantt Chart | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Task | View | Gantt Chart | disabled | future: not implemented in this port |
 | Task | Clipboard | Paste | implemented |  |
 | Task | Clipboard | Cut | implemented |  |
 | Task | Clipboard | Copy | implemented |  |
-| Task | Clipboard | Format Painter | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Font | B | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Font | I | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Font | U | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Font | highlight colour | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Font | font colour | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Schedule | Mark on Track | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Schedule | Respect Links | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Schedule | Inactivate | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Tasks | Manually Schedule | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Tasks | Auto Schedule | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Tasks | Inspect | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Tasks | Move | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Tasks | Mode | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Task | Clipboard | Format Painter | disabled | future: not implemented in this port |
+| Task | Font | B | disabled | future: not implemented in this port |
+| Task | Font | I | disabled | future: not implemented in this port |
+| Task | Font | U | disabled | future: not implemented in this port |
+| Task | Font | highlight colour | disabled | future: not implemented in this port |
+| Task | Font | font colour | disabled | future: not implemented in this port |
+| Task | Schedule | Mark on Track | disabled | future: not implemented in this port |
+| Task | Schedule | Respect Links | disabled | future: not implemented in this port |
+| Task | Schedule | Inactivate | disabled | future: not implemented in this port |
+| Task | Tasks | Manually Schedule | disabled | future: not implemented in this port |
+| Task | Tasks | Auto Schedule | disabled | future: not implemented in this port |
+| Task | Tasks | Inspect | disabled | future: not implemented in this port |
+| Task | Tasks | Move | disabled | future: not implemented in this port |
+| Task | Tasks | Mode | disabled | future: not implemented in this port |
 | Task | Insert | Task | implemented |  |
-| Task | Insert | Summary | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Insert | Milestone | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Insert | Deliverable | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Task | Insert | Summary | disabled | future: not implemented in this port |
+| Task | Insert | Milestone | disabled | future: not implemented in this port |
+| Task | Insert | Deliverable | disabled | future: not implemented in this port |
 | Task | Properties | Information | implemented |  |
-| Task | Properties | Notes | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Properties | Details | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Properties | Add to Timeline | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Task | Editing | Scroll to Task | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Task | Properties | Notes | disabled | future: not implemented in this port |
+| Task | Properties | Details | disabled | future: not implemented in this port |
+| Task | Properties | Add to Timeline | disabled | future: not implemented in this port |
+| Task | Editing | Scroll to Task | disabled | future: not implemented in this port |
 | Task | Editing | Find | implemented |  |
 | Task | Editing | Clear | implemented |  |
-| Task | Editing | Fill | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | View | Team Planner | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Assignments | Assign Resources | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Assignments | Resource Pool | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Task | Editing | Fill | disabled | future: not implemented in this port |
+| Resource | View | Team Planner | disabled | future: not implemented in this port |
+| Resource | Assignments | Assign Resources | disabled | future: not implemented in this port |
+| Resource | Assignments | Resource Pool | disabled | future: not implemented in this port |
 | Resource | Insert | Add Resources | disabled | model: no resource writer; the resource sheet is read-only |
-| Resource | Properties | Information | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Properties | Notes | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Properties | Details | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Level | Level Selection | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Level | Level Resource | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Level | Level All | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Level | Leveling Options | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Level | Clear Leveling | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Resource | Level | Next Overallocation | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | Project | Compare Projects | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | View Reports | New Report | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | View Reports | Dashboards | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | View Reports | Resources | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | View Reports | Costs | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | View Reports | In Progress | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | View Reports | Getting Started | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | View Reports | Custom | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | View Reports | Recent | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Report | Export | Visual Reports | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Insert | Subproject | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Add-ins | Get Add-ins | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Add-ins | My Add-ins | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Properties | Project Information | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Resource | Properties | Information | disabled | future: not implemented in this port |
+| Resource | Properties | Notes | disabled | future: not implemented in this port |
+| Resource | Properties | Details | disabled | future: not implemented in this port |
+| Resource | Level | Level Selection | disabled | future: not implemented in this port |
+| Resource | Level | Level Resource | disabled | future: not implemented in this port |
+| Resource | Level | Level All | disabled | future: not implemented in this port |
+| Resource | Level | Leveling Options | disabled | future: not implemented in this port |
+| Resource | Level | Clear Leveling | disabled | future: not implemented in this port |
+| Resource | Level | Next Overallocation | disabled | future: not implemented in this port |
+| Report | Project | Compare Projects | disabled | future: not implemented in this port |
+| Report | View Reports | New Report | disabled | future: not implemented in this port |
+| Report | View Reports | Dashboards | disabled | future: not implemented in this port |
+| Report | View Reports | Resources | disabled | future: not implemented in this port |
+| Report | View Reports | Costs | disabled | future: not implemented in this port |
+| Report | View Reports | In Progress | disabled | future: not implemented in this port |
+| Report | View Reports | Getting Started | disabled | future: not implemented in this port |
+| Report | View Reports | Custom | disabled | future: not implemented in this port |
+| Report | View Reports | Recent | disabled | future: not implemented in this port |
+| Report | Export | Visual Reports | disabled | future: not implemented in this port |
+| Project | Insert | Subproject | disabled | future: not implemented in this port |
+| Project | Add-ins | Get Add-ins | disabled | future: not implemented in this port |
+| Project | Add-ins | My Add-ins | disabled | future: not implemented in this port |
 | Project | Properties | Custom Fields | implemented |  |
-| Project | Properties | Links Between Projects | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Properties | WBS | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Properties | Change Working Time | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Schedule | Calculate Project | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Schedule | Set Baseline | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Schedule | Move Project | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Status | Update Project | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Proofing | Spelling | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Task Views | Gantt Chart | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Project | Properties | WBS | disabled | future: not implemented in this port |
+| Project | Schedule | Calculate Project | disabled | future: not implemented in this port |
+| Project | Schedule | Set\nBaseline | disabled | future: not implemented in this port |
+| Project | Proofing | Spelling | disabled | future: not implemented in this port |
+| View | Task Views | Gantt Chart | disabled | future: not implemented in this port |
 | View | Task Views | Task Usage | implemented |  |
-| View | Task Views | Network Diagram | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Task Views | Calendar | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Task Views | Other Views | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Resource Views | Team Planner | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| View | Task Views | Network Diagram | disabled | future: not implemented in this port |
+| View | Task Views | Calendar | disabled | future: not implemented in this port |
+| View | Task Views | Other Views | disabled | future: not implemented in this port |
+| View | Resource Views | Team Planner | disabled | future: not implemented in this port |
 | View | Resource Views | Resource Usage | implemented |  |
 | View | Resource Views | Resource Sheet | implemented |  |
-| View | Resource Views | Other Views | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Data | Sort | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Data | Outline | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Data | Tables | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Zoom | Zoom | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Zoom | Entire Project | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Zoom | Selected Tasks | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Window | New Window | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Window | Switch Windows | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Window | Arrange All | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Window | Hide | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| View | Macros | Macros | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Help | Help | Help | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Help | Help | Feedback | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Help | Help | Show Training | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Format | Text Styles | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Format | Gridlines | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Format | Layout | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Columns | Insert Column | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Columns | Column Settings | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| View | Resource Views | Other Views | disabled | future: not implemented in this port |
+| View | Data | Sort | disabled | future: not implemented in this port |
+| View | Data | Outline | disabled | future: not implemented in this port |
+| View | Data | Tables | disabled | future: not implemented in this port |
+| View | Zoom | Zoom | disabled | future: not implemented in this port |
+| View | Zoom | Entire Project | disabled | future: not implemented in this port |
+| View | Zoom | Selected Tasks | disabled | future: not implemented in this port |
+| View | Window | New Window | disabled | future: not implemented in this port |
+| View | Window | Switch Windows | disabled | future: not implemented in this port |
+| View | Window | Arrange All | disabled | future: not implemented in this port |
+| View | Window | Hide | disabled | future: not implemented in this port |
+| View | Macros | Macros | disabled | future: not implemented in this port |
+| Help | Help | Help | disabled | future: not implemented in this port |
+| Help | Help | Feedback | disabled | future: not implemented in this port |
+| Help | Help | Show Training | disabled | future: not implemented in this port |
+| Gantt Chart Format | Format | Text Styles | disabled | future: not implemented in this port |
+| Gantt Chart Format | Format | Gridlines | disabled | future: not implemented in this port |
+| Gantt Chart Format | Format | Layout | disabled | future: not implemented in this port |
+| Gantt Chart Format | Columns | Insert Column | disabled | future: not implemented in this port |
+| Gantt Chart Format | Columns | Column Settings | disabled | future: not implemented in this port |
 | Gantt Chart Format | Columns | Custom Fields | implemented |  |
-| Gantt Chart Format | Bar Styles | Format | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Bar Styles | Task Path | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Bar Styles | Baseline | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Bar Styles | Slippage | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Gantt Chart Format | Drawings | Drawing | disabled | future: the ribbon command is not modelled by app::MenuAction |
+| Gantt Chart Format | Bar Styles | Format | disabled | future: not implemented in this port |
+| Gantt Chart Format | Bar Styles | Task Path | disabled | future: not implemented in this port |
+| Gantt Chart Format | Bar Styles | Baseline | disabled | future: not implemented in this port |
+| Gantt Chart Format | Bar Styles | Slippage | disabled | future: not implemented in this port |
+| Gantt Chart Format | Drawings | Drawing | disabled | future: not implemented in this port |
 
 ## Menu bar
 
@@ -135,10 +130,15 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Edit | Custom Fields... | implemented |  |
 | Edit | Predecessors... | implemented |  |
 | Edit | Custom Field Formula... | implemented |  |
-| View | Task Sheet | implemented |  |
-| View | Resource Sheet | implemented |  |
+| View | Gantt Chart | implemented |  |
 | View | Task Usage | implemented |  |
+| View | Network Diagram | disabled | future: not implemented in this port |
+| View | Calendar | disabled | future: not implemented in this port |
+| View | Other Views | disabled | future: not implemented in this port |
+| View | Team Planner | disabled | future: not implemented in this port |
 | View | Resource Usage | implemented |  |
+| View | Resource Sheet | implemented |  |
+| View | Other Views | disabled | future: not implemented in this port |
 | View | Usage Period: Day | implemented |  |
 | View | Usage Period: Week | implemented |  |
 | View | Usage Period: Month | implemented |  |
@@ -160,6 +160,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 100 (88 disabled)
-* menu commands: 44 (2 disabled)
+* ribbon commands: 95 (83 disabled)
+* menu commands: 49 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

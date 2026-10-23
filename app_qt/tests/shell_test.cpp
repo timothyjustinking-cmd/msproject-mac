@@ -25,10 +25,12 @@
 #include <QModelIndex>
 #include <QPixmap>
 #include <QString>
+#include <QStringList>
 #include <QTableView>
 
 #include <cstddef>
 #include <cstdio>
+#include <functional>
 #include <vector>
 
 #include "gantt_canvas.h"
@@ -168,6 +170,40 @@ int main(int argc, char** argv) {
         std::vector<QString> expected_titles;
         std::vector<QString> actual_titles;
 
+        // W26-6.1: the View drop-downs put commands one level down.  Flatten
+        // each side the same way: a container contributes its children, a normal
+        // item contributes itself.  Then the existing id/title comparison still
+        // covers every command, wherever it lives.
+        const auto flatten_spec = [](const app::MenuSpec& spec) {
+            std::vector<const app::MenuItemSpec*> leaves;
+            for (const app::MenuItemSpec& item : spec.items) {
+                if (item.is_submenu()) {
+                    for (const app::MenuItemSpec& child : item.children) {
+                        leaves.push_back(&child);
+                    }
+                } else {
+                    leaves.push_back(&item);
+                }
+            }
+            return leaves;
+        };
+        std::function<void(QMenu*, std::vector<QAction*>&)> flatten_menu =
+            [&flatten_menu](QMenu* menu, std::vector<QAction*>& leaves) {
+                for (QAction* action : menu->actions()) {
+                    if (action->isSeparator()) {
+                        continue;
+                    }
+                    if (action->menu() != nullptr) {
+                        flatten_menu(action->menu(), leaves);
+                        continue;
+                    }
+                    if (!action->data().isValid()) {
+                        continue;
+                    }
+                    leaves.push_back(action);
+                }
+            };
+
         for (std::size_t menu_index = 0; menu_index < specs.size(); ++menu_index) {
             if (menu_index >= static_cast<std::size_t>(bar->actions().size())) {
                 break;
@@ -188,20 +224,15 @@ int main(int argc, char** argv) {
             // A platform may add its own item to a menu (the macOS Help search);
             // that is documented chrome, not a shell command, so it is skipped.
             std::vector<QAction*> commands;
-            for (QAction* action : menu->actions()) {
-                if (action->isSeparator() || !action->data().isValid()) {
-                    continue;
-                }
-                commands.push_back(action);
-            }
-            check(commands.size() == specs[menu_index].items.size(),
+            flatten_menu(menu, commands);
+            const std::vector<const app::MenuItemSpec*> expected =
+                flatten_spec(specs[menu_index]);
+            check(commands.size() == expected.size(),
                   "a menu lists every modelled command and no other");
             const std::size_t count =
-                commands.size() < specs[menu_index].items.size()
-                    ? commands.size()
-                    : specs[menu_index].items.size();
+                commands.size() < expected.size() ? commands.size() : expected.size();
             for (std::size_t action_index = 0; action_index < count; ++action_index) {
-                const app::MenuItemSpec& item = specs[menu_index].items[action_index];
+                const app::MenuItemSpec& item = *expected[action_index];
                 QAction* action = commands[action_index];
                 expected_ids.push_back(static_cast<int>(item.action));
                 actual_ids.push_back(action->data().toInt());
@@ -211,6 +242,54 @@ int main(int argc, char** argv) {
         }
         check(expected_ids == actual_ids, "the command ids match app::menu_specs()");
         check(expected_titles == actual_titles, "the command titles match app::menu_specs()");
+
+        // W26-6.1: the View menu's two drop-downs exist as live QMenus with the
+        // clean strip's titles and entries, in order.
+        QMenu* view_menu = nullptr;
+        for (QAction* top : bar->actions()) {
+            if (top->menu() != nullptr &&
+                top->menu()->title() == QStringLiteral("View")) {
+                view_menu = top->menu();
+            }
+        }
+        check(view_menu != nullptr, "the View menu exists");
+        if (view_menu != nullptr) {
+            QStringList submenu_titles;
+            for (QAction* action : view_menu->actions()) {
+                if (action->menu() != nullptr) {
+                    submenu_titles.push_back(action->menu()->title());
+                }
+            }
+            check(submenu_titles == (QStringList{QStringLiteral("Task Views"),
+                                                 QStringLiteral("Resource Views")}),
+                  "View has the Task Views and Resource Views drop-downs in order");
+            for (QAction* action : view_menu->actions()) {
+                if (action->menu() == nullptr) {
+                    continue;
+                }
+                QMenu* drop_down = action->menu();
+                QStringList labels;
+                for (QAction* child : drop_down->actions()) {
+                    if (!child->isSeparator()) {
+                        labels.push_back(child->text());
+                    }
+                }
+                if (drop_down->title() == QStringLiteral("Task Views")) {
+                    check(labels == (QStringList{QStringLiteral("Gantt Chart"),
+                                                 QStringLiteral("Task Usage"),
+                                                 QStringLiteral("Network Diagram"),
+                                                 QStringLiteral("Calendar"),
+                                                 QStringLiteral("Other Views")}),
+                          "Task Views carries the capture's five entries in order");
+                } else if (drop_down->title() == QStringLiteral("Resource Views")) {
+                    check(labels == (QStringList{QStringLiteral("Team Planner"),
+                                                 QStringLiteral("Resource Usage"),
+                                                 QStringLiteral("Resource Sheet"),
+                                                 QStringLiteral("Other Views")}),
+                          "Resource Views carries the capture's four entries in order");
+                }
+            }
+        }
     }
 
     // --- the render --------------------------------------------------------

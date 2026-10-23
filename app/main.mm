@@ -1520,44 +1520,8 @@ void refresh_menu_bar() {
         if (submenu == nil) {
             continue;
         }
-        for (NSMenuItem* item in [submenu itemArray]) {
-            if ([item action] != @selector(performMenuAction:)) {
-                continue;
-            }
-            const app::MenuAction action = static_cast<app::MenuAction>([item tag]);
-            [item setEnabled:app::menu_item_enabled(action, state)];
-            // Check marks are view state: the four views, the usage period and
-            // the two display toggles (shading, Gantt zoom).  if/else rather than
-            // a switch so a new MenuAction cannot silently get a stale mark.
-            BOOL checked = NO;
-            if (g_plan != nullptr) {
-                if (action == app::MenuAction::view_task_sheet) {
-                    checked = g_plan->view_mode == app::ViewMode::task_sheet;
-                } else if (action == app::MenuAction::view_resource_sheet) {
-                    checked = g_plan->view_mode == app::ViewMode::resource_sheet;
-                } else if (action == app::MenuAction::view_task_usage) {
-                    checked = g_plan->view_mode == app::ViewMode::task_usage;
-                } else if (action == app::MenuAction::view_resource_usage) {
-                    checked = g_plan->view_mode == app::ViewMode::resource_usage;
-                } else if (action == app::MenuAction::usage_day) {
-                    checked = g_plan->usage_period == core::usage::Period::day;
-                } else if (action == app::MenuAction::usage_week) {
-                    checked = g_plan->usage_period == core::usage::Period::week;
-                } else if (action == app::MenuAction::usage_month) {
-                    checked = g_plan->usage_period == core::usage::Period::month;
-                }
-            }
-            if (action == app::MenuAction::toggle_shading) {
-                checked = g_prefs.working_day_shading;
-            } else if (action == app::MenuAction::zoom_day) {
-                checked = g_prefs.zoom == app::ZoomLevel::day;
-            } else if (action == app::MenuAction::zoom_week) {
-                checked = g_prefs.zoom == app::ZoomLevel::week;
-            } else if (action == app::MenuAction::zoom_month) {
-                checked = g_prefs.zoom == app::ZoomLevel::month;
-            }
-            [item setState:checked ? NSControlStateValueOn : NSControlStateValueOff];
-        }
+        // W26-6.1: recurses into the View drop-downs.
+        refresh_menu_items(submenu, state);
     }
     if (g_columns_menu != nil) {
         for (NSMenuItem* item in [g_columns_menu itemArray]) {
@@ -2632,6 +2596,98 @@ BOOL run_print_view(PlanState& plan, const app::PrintJob& job, NSURL* save_url) 
 static AppDelegate* g_delegate = nil;
 static PlanView* g_view = nil;
 
+// W26-6.1: one recursive item builder.  menu_specs() can now carry a drop-down
+// (View > Task Views / Resource Views), and a child must go through exactly the
+// same tag/validation path as a top-level command.  A container item has no
+// action; its children are NSMenuItems targeting performMenuAction:.
+static void append_menu_items(NSMenu* menu, const std::vector<app::MenuItemSpec>& items,
+                              id target) {
+    for (const app::MenuItemSpec& item_spec : items) {
+        if (item_spec.separator_before) {
+            [menu addItem:[NSMenuItem separatorItem]];
+        }
+        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:to_ns(item_spec.title)
+                                                     action:nil
+                                              keyEquivalent:@""];
+        [item setTarget:target];
+        [item setTag:static_cast<NSInteger>(item_spec.action)];
+        if (item_spec.is_submenu()) {
+            NSMenu* child_menu = [[NSMenu alloc] initWithTitle:to_ns(item_spec.title)];
+            [child_menu setAutoenablesItems:NO];
+            [child_menu setDelegate:(id<NSMenuDelegate>)target];
+            append_menu_items(child_menu, item_spec.children, target);
+            [item setSubmenu:child_menu];
+            [menu addItem:item];
+            continue;
+        }
+        [item setAction:@selector(performMenuAction:)];
+        [item setKeyEquivalent:to_ns(item_spec.key)];
+        NSEventModifierFlags mask = 0;
+        if (item_spec.command_key) {
+            mask |= NSEventModifierFlagCommand;
+        }
+        if (item_spec.shift) {
+            mask |= NSEventModifierFlagShift;
+        }
+        if (item_spec.option) {
+            mask |= NSEventModifierFlagOption;
+        }
+        [item setKeyEquivalentModifierMask:mask];
+        if (!app::menu_item_supported(item_spec.action)) {
+            [item setToolTip:to_ns(app::menu_disabled_reason(item_spec.action))];
+        }
+        [menu addItem:item];
+    }
+}
+
+// W26-6.1: the enablement/check walk must descend into the View drop-downs;
+// otherwise their items would keep the NSMenu default (enabled) state.
+static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
+    for (NSMenuItem* item in [menu itemArray]) {
+        NSMenu* child = [item submenu];
+        if (child != nil) {
+            refresh_menu_items(child, state);
+            continue;
+        }
+        if ([item action] != @selector(performMenuAction:)) {
+            continue;
+        }
+        const app::MenuAction action = static_cast<app::MenuAction>([item tag]);
+        [item setEnabled:app::menu_item_enabled(action, state)];
+        // Check marks are view state: the four views, the usage period and
+        // the two display toggles (shading, Gantt zoom).  if/else rather than
+        // a switch so a new MenuAction cannot silently get a stale mark.
+        BOOL checked = NO;
+        if (g_plan != nullptr) {
+            if (action == app::MenuAction::view_task_sheet) {
+                checked = g_plan->view_mode == app::ViewMode::task_sheet;
+            } else if (action == app::MenuAction::view_resource_sheet) {
+                checked = g_plan->view_mode == app::ViewMode::resource_sheet;
+            } else if (action == app::MenuAction::view_task_usage) {
+                checked = g_plan->view_mode == app::ViewMode::task_usage;
+            } else if (action == app::MenuAction::view_resource_usage) {
+                checked = g_plan->view_mode == app::ViewMode::resource_usage;
+            } else if (action == app::MenuAction::usage_day) {
+                checked = g_plan->usage_period == core::usage::Period::day;
+            } else if (action == app::MenuAction::usage_week) {
+                checked = g_plan->usage_period == core::usage::Period::week;
+            } else if (action == app::MenuAction::usage_month) {
+                checked = g_plan->usage_period == core::usage::Period::month;
+            }
+        }
+        if (action == app::MenuAction::toggle_shading) {
+            checked = g_prefs.working_day_shading;
+        } else if (action == app::MenuAction::zoom_day) {
+            checked = g_prefs.zoom == app::ZoomLevel::day;
+        } else if (action == app::MenuAction::zoom_week) {
+            checked = g_prefs.zoom == app::ZoomLevel::week;
+        } else if (action == app::MenuAction::zoom_month) {
+            checked = g_prefs.zoom == app::ZoomLevel::month;
+        }
+        [item setState:checked ? NSControlStateValueOn : NSControlStateValueOff];
+    }
+}
+
 @implementation AppDelegate
 
 - (void)installMenu {
@@ -2647,32 +2703,9 @@ static PlanView* g_view = nil;
         NSMenu* submenu = [[NSMenu alloc] initWithTitle:to_ns(spec.title)];
         [submenu setAutoenablesItems:NO];
         [submenu setDelegate:self];
-        for (const app::MenuItemSpec& item_spec : spec.items) {
-            if (item_spec.separator_before) {
-                [submenu addItem:[NSMenuItem separatorItem]];
-            }
-            NSMenuItem* item =
-                [[NSMenuItem alloc] initWithTitle:to_ns(item_spec.title)
-                                           action:@selector(performMenuAction:)
-                                    keyEquivalent:to_ns(item_spec.key)];
-            [item setTarget:self];
-            [item setTag:static_cast<NSInteger>(item_spec.action)];
-            NSEventModifierFlags mask = 0;
-            if (item_spec.command_key) {
-                mask |= NSEventModifierFlagCommand;
-            }
-            if (item_spec.shift) {
-                mask |= NSEventModifierFlagShift;
-            }
-            if (item_spec.option) {
-                mask |= NSEventModifierFlagOption;
-            }
-            [item setKeyEquivalentModifierMask:mask];
-            if (!app::menu_item_supported(item_spec.action)) {
-                [item setToolTip:to_ns(app::menu_disabled_reason(item_spec.action))];
-            }
-            [submenu addItem:item];
-        }
+        // W26-6.1: the helper also creates the View > Task Views / Resource
+        // Views drop-downs, so the AppKit menu is the same data as the Qt one.
+        append_menu_items(submenu, spec.items, self);
         if (std::string(spec.title) == "View") {
             // The Columns submenu is document-shaped: wave 12's column set depends
             // on the file's own formulas, so it is rebuilt per load by

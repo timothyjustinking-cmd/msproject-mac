@@ -24,7 +24,10 @@ OUT = ROOT / "docs" / "ui-command-backlog.md"
 MISSING_REASON = {
     "insert_resource": "model: no resource writer; the resource sheet is read-only",
     "hide_app": "chrome: Qt has no portable hide-application command",
-    "none": "future: the ribbon command is not modelled by app::MenuAction",
+    # W26-6.1: the View drop-downs' unimplemented entries are MenuAction::none,
+    # and so are the ribbon commands with no MenuAction at all.  One neutral
+    # wording covers both tables.
+    "none": "future: not implemented in this port",
 }
 
 
