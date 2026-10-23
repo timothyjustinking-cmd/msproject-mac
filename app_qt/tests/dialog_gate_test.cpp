@@ -40,6 +40,7 @@
 
 #include "dialogs.h"
 #include "entry_columns.h"
+#include "filter_model.h"  // app::FilterField / app::filter_operators()
 #include "gantt_canvas.h"
 #include "main_window.h"
 #include "preferences_store.h"
@@ -70,7 +71,8 @@ void check_button(QPushButton* button, const char* what) {
                 "the button fits its label");
 }
 
-void check_shell(QDialog& dialog, const char* name, const dialog_geometry::DialogSize size) {
+void check_shell(QDialog& dialog, const char* name,
+                 const msqt::dialog_geometry::DialogSize size) {
     gate::check(dialog.width() == size.width && dialog.height() == size.height,
                 "the dialog has its fixed size");
     gate::check(dialog.minimumSize() == dialog.maximumSize(),
@@ -466,14 +468,20 @@ int main(int argc, char** argv) {
             msqt::EntryCellKind::duration));
         const int start_column =
             static_cast<int>(msqt::entry_column_index(msqt::EntryCellKind::start));
-        const std::size_t duration_model = window.sheet_table_model()->visible_column_for_field(
-            msqt::entry_field(msqt::EntryCellKind::duration));
-        const std::size_t start_model = window.sheet_table_model()->visible_column_for_field(
-            msqt::entry_field(msqt::EntryCellKind::start));
         gate::check(duration_column >= 0 && start_column >= 0,
                     "the Entry table has Duration and Start columns");
+        // Read the DISPLAYED text (the Qt model's DisplayRole), not the core
+        // sheet's own rendering: the duration style is a shell preference that
+        // app::cell_text applies above the sheet (app/prefs.h).
+        auto displayed = [&window](int column) {
+            const QModelIndex index = window.sheet_table_model()->index(0, column);
+            return window.sheet_table_model()
+                ->data(index, Qt::DisplayRole)
+                .toString()
+                .toStdString();
+        };
         const std::string before_duration =
-            window.sheet() != nullptr ? window.sheet()->cell_text(0, duration_model) : std::string();
+            duration_column >= 0 ? displayed(duration_column) : std::string();
 
         app::Preferences chosen = window.preferences();
         chosen.date_style = app::DateStyle::iso;
@@ -488,8 +496,8 @@ int main(int argc, char** argv) {
         gate::check(window.gantt_view() != nullptr && !window.gantt_view()->shading(),
                     "the preference turned working-day shading off");
         if (window.sheet() != nullptr) {
-            const std::string after_duration = window.sheet()->cell_text(0, duration_model);
-            const std::string after_start = window.sheet()->cell_text(0, start_model);
+            const std::string after_duration = displayed(duration_column);
+            const std::string after_start = displayed(start_column);
             gate::check(after_duration.find("hrs") != std::string::npos,
                         "the hours duration preference changes Duration rendering");
             gate::check(after_start.find('-') != std::string::npos &&

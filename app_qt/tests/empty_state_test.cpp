@@ -54,7 +54,11 @@
 
 namespace {
 
-const char* const kExpectedTitles[9] = {"Indicators",    "Task Mode", "Task Name",
+// Column 0 is the Indicators field: the reference capture shows the blue (i)
+// glyph on a selected cell and NO caption text, so its expected caption is
+// empty.  The other eight carry the product's words.  (This is the reference's
+// own header band, cropped and read locally; the image is never committed.)
+const char* const kExpectedTitles[9] = {"",              "Task Mode", "Task Name",
                                         "Duration",      "Start",     "Finish",
                                         "Predecessors",  "Resource Names",
                                         "Add New Column"};
@@ -335,14 +339,16 @@ void check_backstage(msqt::MainWindow& window) {
     }
     gate::check(backstage->pages() != nullptr && backstage->pages()->count() == 11,
                 "the backstage has eleven pages");
+    // The rail's geometry only exists once the backstage is on screen; measure
+    // it after the switch, not from an unlaid-out hidden widget.
+    window.show_backstage(true);
+    QApplication::processEvents();
     if (nav.size() == 11) {
         const int close_y = nav[9]->mapTo(backstage, QPoint(0, 0)).y();
         const int options_y = nav[10]->mapTo(backstage, QPoint(0, 0)).y();
         gate::check(options_y > close_y + 20,
                     "Options is pinned at the bottom of the rail");
     }
-    window.show_backstage(true);
-    QApplication::processEvents();
     gate::check(window.backstage_open() && backstage->isVisible(),
                 "the File tab opens the backstage");
     gate::check(backstage->pages()->currentIndex() ==

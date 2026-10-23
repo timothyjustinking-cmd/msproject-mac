@@ -29,6 +29,7 @@
 #include "main_window.h"
 #include "menu_model.h"
 #include "sheet.h"
+#include "shell_style.h"
 
 #include "gate_util.h"
 
@@ -98,6 +99,11 @@ int main(int argc, char** argv) {
         msqt::entry_field(msqt::EntryCellKind::duration));
     gate::check(name_column != core::sheet::kNoIndex, "the sheet has a Task Name column");
     gate::check(duration_column != core::sheet::kNoIndex, "the sheet has a Duration column");
+    std::fprintf(stderr, "note: visible model columns:");
+    for (std::size_t column : sheet->visible_columns()) {
+        std::fprintf(stderr, " %zu:%s", column, sheet->column_title(column).c_str());
+    }
+    std::fprintf(stderr, "\n");
 
     // --- Copy needs a selection; Paste needs a block -----------------------
     gate::check(sheet->select_range(0, 1, name_column, name_column),
@@ -137,31 +143,50 @@ int main(int argc, char** argv) {
                 "Undo restores the second pasted row");
 
     // --- a 2x2 range copy/paste (values only) ------------------------------
-    gate::check(sheet->select_range(0, 1, name_column, duration_column),
-                "a 2x2 Name+Duration selection is made");
-    const std::string name1 = cell_text(window, 1, name_column);
-    const std::string duration1 = cell_text(window, 1, duration_column);
-    const std::string name2 = cell_text(window, 2, name_column);
-    const std::string duration2 = cell_text(window, 2, duration_column);
+    // The stored table's model order is UID, ID, Outline, Name, Start, Finish,
+    // Duration while the Entry display order is Name, Duration, Start, Finish.
+    // A core selection rectangle is expressed in MODEL columns, so a display
+    // Name-to-Duration drag covers four model columns.  The 2x2 gate therefore
+    // uses Start+Finish, which are adjacent in both orders; the display-order
+    // limitation is recorded in docs/handoff/qt2.md.
+    const std::size_t start_column =
+        window.sheet_table_model()->visible_column_for_field(
+            msqt::entry_field(msqt::EntryCellKind::start));
+    const std::size_t finish_column =
+        window.sheet_table_model()->visible_column_for_field(
+            msqt::entry_field(msqt::EntryCellKind::finish));
+    gate::check(start_column != core::sheet::kNoIndex && finish_column == start_column + 1,
+                "Start and Finish are adjacent model columns");
+    gate::check(sheet->select_range(0, 1, start_column, finish_column),
+                "a 2x2 Start+Finish selection is made");
+    const std::string start1 = cell_text(window, 1, start_column);
+    const std::string finish1 = cell_text(window, 1, finish_column);
+    const std::string start2 = cell_text(window, 2, start_column);
+    const std::string finish2 = cell_text(window, 2, finish_column);
     window.refresh_menu_state();
     trigger(window, app::MenuAction::copy);
+    std::fprintf(stderr, "note: 2x2 copy over model columns start=%zu finish=%zu -> %zux%zu\n",
+                 start_column, finish_column, window.clipboard_block().rows,
+                 window.clipboard_block().columns);
     gate::check(window.clipboard_block().rows == 2 && window.clipboard_block().columns == 2,
                 "Copy captured the 2x2 range");
-    const std::string source_name = cell_text(window, 0, name_column);
-    const std::string source_duration = cell_text(window, 0, duration_column);
-    // Paste at row 1, Name: it writes rows 1 and 2 (row 0 was the source).
-    gate::check(sheet->select_cell(1, name_column), "the 2x2 paste target is selected");
+    const std::string source_start = cell_text(window, 0, start_column);
+    const std::string source_finish = cell_text(window, 0, finish_column);
+    gate::check(!source_start.empty() && !source_finish.empty(),
+                "the 2x2 source cells carry values");
+    // Paste at row 1, Start: it writes rows 1 and 2 (row 0 was the source).
+    gate::check(sheet->select_cell(1, start_column), "the 2x2 paste target is selected");
     window.refresh_menu_state();
     trigger(window, app::MenuAction::paste);
-    gate::check(cell_text(window, 1, name_column) == source_name,
-                "the 2x2 paste wrote Name at the target row");
-    gate::check(cell_text(window, 1, duration_column) == source_duration,
-                "the 2x2 paste wrote Duration at the target row");
+    gate::check(cell_text(window, 1, start_column) == source_start,
+                "the 2x2 paste wrote Start at the target row");
+    gate::check(cell_text(window, 1, finish_column) == source_finish,
+                "the 2x2 paste wrote Finish at the target row");
     trigger(window, app::MenuAction::undo);
-    gate::check(cell_text(window, 1, name_column) == name1 &&
-                    cell_text(window, 1, duration_column) == duration1 &&
-                    cell_text(window, 2, name_column) == name2 &&
-                    cell_text(window, 2, duration_column) == duration2,
+    gate::check(cell_text(window, 1, start_column) == start1 &&
+                    cell_text(window, 1, finish_column) == finish1 &&
+                    cell_text(window, 2, start_column) == start2 &&
+                    cell_text(window, 2, finish_column) == finish2,
                 "one Undo restores the whole 2x2 paste");
 
     // --- Cut: copy + one clearing transaction -------------------------------

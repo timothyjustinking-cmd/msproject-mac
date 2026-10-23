@@ -75,7 +75,7 @@ SheetHeaderView::SheetHeaderView(Qt::Orientation orientation, QWidget* parent)
             [this](int logical_index) { show_column_menu(logical_index); });
     setContextMenuPolicy(Qt::CustomContextMenu);
     connect(this, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
-        show_column_menu(sectionAt(pos));
+        show_column_menu(logicalIndexAt(pos.x()));
     });
 }
 

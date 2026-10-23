@@ -160,3 +160,77 @@ Copy.
   `tests/data/synthetic-base.mpp` read-only; writes go to
   `build/test-out/` (renders, `prefs-gate.ini`).
 * The Windows job must keep `/W4 /WX`; the new code avoids Q_OBJECT/AUTOMOC.
+
+
+## Coordinator verification (2026-10-23 14:50, local Qt 6.5.3)
+
+The first branch CI run (39895551240) failed on **all three jobs at the same two
+lines**, so the cut did not compile anywhere:
+
+* `main_window.cpp` passed `std::string` to `TimelineStrip::set_dates(QString)`;
+* `QDate::longMonthName()` does not exist in Qt 6 (the locale owns month names).
+
+A local Qt 6.5.3 (`qtbase`, MSVC2019 x64) was fetched into `build/Qt/` and the
+standalone project built with `-DCORE_WARNINGS_AS_ERRORS=ON`, which found three
+more Windows-only stops the CI had not reached yet: `dialogs.h` was missing
+`#include "prefs.h"` (so `app::Preferences` was unknown), `sheet_views.cpp` called
+the non-existent `QHeaderView::sectionAt` (now `logicalIndexAt(pos.x())`), and two
+tests were missing includes (`shell_style.h`, `filter_model.h`).  All fixed.
+
+**Result after the fixes, measured, not asserted:**
+
+* `ctest --test-dir build\q5-build -C Release`: **11/11 passed** (the six
+  pre-existing tests and the five new gates), Release, `/W4 /WX`.
+* `python scripts\parity_report.py corpus\bench\msproject-gantt.png
+  build\q5-build\test-out\qt-render-parity.png`: **9 comparable, 0 failing**
+  -- row 22, header 43, splitter 0.45924, day 24, tiers 2, nine columns with
+  deltas `-1,+0,...,+1`, three colours exact.  The task bar stays `N/A` (the
+  reference has no bars).
+
+### What was wrong in the cut, not just uncompiled
+
+1. **The rotated view caption was on the wrong side.**  It sat inside the chart
+   pane, inserting 22 px between the last column and the splitter; P1's harness
+   then read the sheet's right edge 113 px short (splitter 0.398, last column
+   10 px).  The reference capture puts the caption in the **left 22 px of the
+   sheet band, before the row numbers**.  The caption is now
+   `[caption 22][row numbers 38]` inside the sheet pane, so the gutter total is
+   still the measured 60 px and the first grid line is still at x=60.
+2. **The caption's background was `#f7f7f7`, the weekend grey.**  P1 reads any
+   light-grey full-height strip as a shaded Gantt column; with the caption at
+   x=0 it moved the detected chart edge to 0.  It is now white and has no
+   vertical rule (the reference has neither), so the first detected weekend band
+   is the clipped Sunday at the chart edge, as in the reference.
+3. **The gate expectations that contradicted the reference** were corrected:
+   column 0's caption is **empty** (the reference shows the blue (i) glyph, no
+   text -- cropped and read locally); the backstage rail geometry is measured
+   **after** the backstage is shown (a hidden widget has no layout); the
+   duration/date preference is read from the Qt model's DisplayRole (the
+   duration style is a shell rendering preference, not a core-sheet property);
+   Preferences' shading is the form's **fifth** row (the gate's 5-row contract);
+   the 2x2 clipboard case uses Start+Finish, which are adjacent in both model
+   and display order.
+4. **Clipboard display-order limitation (recorded, not fixed).**  The core
+   selection rectangle is in MODEL-column space.  The stored table's order is
+   UID, ID, Outline, Name, Start, Finish, Duration while the Entry display order
+   is Name, Duration, Start, Finish, so a display Name-to-Duration Shift-drag
+   selects four model columns (Name, Start, Finish, Duration) and copies them.
+   The gate therefore proves 2x2 over Start+Finish.  A display-space copy/paste
+   is a separate change in `core::sheet` and is on the backlog.
+
+### Still provisional / not in this cut
+
+* **Dark theme**: the QPalette swap is implemented, persisted and gated (both
+  themes at both sizes, palette asserted).  The shell's custom-painted surfaces
+  (ribbon, timeline, sheet, Gantt) still use `shell_style.h`'s light constants,
+  so a dark window has light chrome inside it.  The operator still owes a dark
+  Office capture; until then the dark palette is **provisional** and the
+  theme-aware surface palette is the follow-up.
+* **Decision 14 dialog inventory** is still the six gated dialogs
+  (Preferences, Table/Date Format, Custom Formula, Task Fields, Predecessors,
+  Filter).  Task Information's six tabs, Project Information, Change Working
+  Time + Details, Options' 13 pages, Timescale, Text Styles, Gridlines, Bar
+  Styles, Layout, Insert/Column Settings, Sort, the Filter dialog form, Group
+  By, Assign Resources, Leveling Options, Page Setup, and the Report dialogs
+  are not built.  That is the next cut, and `docs/ui-command-backlog.md` does
+  not yet list them.

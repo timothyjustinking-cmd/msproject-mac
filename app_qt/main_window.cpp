@@ -10,6 +10,7 @@
 #include <QColor>
 #include <QCursor>
 #include <QDate>
+#include <QLocale>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFont>
@@ -344,6 +345,11 @@ void MainWindow::build_central_widget() {
     sheet_view_->setHorizontalHeader(header);
 
     auto* row_header = new SheetRowHeader(sheet_view_);
+    // The reference's rotated view caption occupies the LEFT 22 px of the sheet
+    // band, before the row-number gutter: caption 22 + numbers 38 = the measured
+    // 60 px before the first grid line.  Keeping the sum at 60 leaves the
+    // sheet's column geometry (and the parity harness's sheet_left) unchanged.
+    row_header->setFixedWidth(kGutterWidth - kViewLabelWidth);
     sheet_view_->setVerticalHeader(row_header);
     sheet_view_->verticalHeader()->setVisible(true);
 
@@ -357,18 +363,28 @@ void MainWindow::build_central_widget() {
     gantt_canvas_ = new GanttCanvas(splitter_);
     gantt_canvas_->set_shading(prefs_.working_day_shading);
 
-    // The chart pane: the rotated "GANTT CHART" view caption at the chart's left
-    // edge plus the canvas.  Keeping the caption INSIDE the splitter's chart pane
-    // leaves the sheet's measured 60 px gutter and 819 px Entry span untouched.
+    // The sheet pane is [rotated view caption 22 px][sheet].  The caption sits
+    // where the REFERENCE capture shows it: at the far left of the sheet band,
+    // not between the table and the chart.  Placing it inside the chart pane
+    // would insert 22 px between the last column and the splitter and move the
+    // parity harness's sheet/chart boundary by that amount.
+    QWidget* sheet_panel = new QWidget(splitter_);
+    auto* sheet_layout = new QHBoxLayout(sheet_panel);
+    sheet_layout->setContentsMargins(0, 0, 0, 0);
+    sheet_layout->setSpacing(0);
+    view_label_ = new ViewLabel(QStringLiteral("Gantt Chart"), sheet_panel);
+    view_label_->setFixedWidth(kViewLabelWidth);
+    sheet_layout->addWidget(view_label_);
+    sheet_layout->addWidget(sheet_view_, 1);
+
+    // The chart pane is the canvas alone, starting exactly at the splitter.
     chart_panel_ = new QWidget(splitter_);
     auto* chart_layout = new QHBoxLayout(chart_panel_);
     chart_layout->setContentsMargins(0, 0, 0, 0);
     chart_layout->setSpacing(0);
-    view_label_ = new ViewLabel(QStringLiteral("Gantt Chart"), chart_panel_);
-    chart_layout->addWidget(view_label_);
     chart_layout->addWidget(gantt_canvas_, 1);
 
-    splitter_->addWidget(sheet_view_);
+    splitter_->addWidget(sheet_panel);
     splitter_->addWidget(chart_panel_);
     splitter_->setSizes(QList<int>{1, 1});
     outer->addWidget(splitter_, 1);
@@ -1161,7 +1177,8 @@ void MainWindow::refresh_timeline() {
     if (!doc_.has_document()) {
         // A new project: Start and Finish are today, and the strip shows the
         // product's prompt because nothing has been added to the timeline.
-        timeline_->set_dates(today_text(), today_text());
+        const QString today = QString::fromStdString(today_text());
+        timeline_->set_dates(today, today);
         timeline_->set_tasks({});
         return;
     }
@@ -2403,7 +2420,8 @@ QMenu* MainWindow::build_filter_menu() {
     std::vector<QTreeWidgetItem*> days;
     for (int month = 1; month <= 12; ++month) {
         auto* month_item = new QTreeWidgetItem(year);
-        month_item->setText(0, QDate::longMonthName(month));
+        // QDate has no longMonthName in Qt 6; the locale owns the month name.
+        month_item->setText(0, QLocale().monthName(month, QLocale::LongFormat));
         month_item->setFlags(month_item->flags() | Qt::ItemIsUserCheckable);
         month_item->setCheckState(0, Qt::Unchecked);
         for (int day = 1; day <= 31; ++day) {

@@ -43,6 +43,7 @@
 #include "edit_model.h"    // app::StructuralEdit(s)
 #include "filter.h"
 #include "layout_model.h"  // app::PlanInput / TaskRow
+#include "prefs.h"         // app::Preferences (the Preferences dialog's payload)
 #include "sheet.h"
 #include "theme.h"
 

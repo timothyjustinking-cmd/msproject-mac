@@ -230,8 +230,9 @@ int main(int argc, char** argv) {
     QTableView* sheet = window.sheet_view();
     gate::check(sheet != nullptr, "the loaded window has a sheet view");
     if (sheet != nullptr && sheet->verticalHeader() != nullptr) {
-        gate::check(sheet->verticalHeader()->width() == msqt::kGutterWidth,
-                    "the frozen gutter is 60 px");
+        gate::check(msqt::kViewLabelWidth + sheet->verticalHeader()->width() ==
+                        msqt::kGutterWidth,
+                    "the frozen gutter is 60 px (22 px caption + 38 px numbers)");
         gate::check(sheet->model() != nullptr && sheet->model()->rowCount() == 3,
                     "the fixture shows three rows");
         const QImage image = window.grab().toImage();
@@ -240,7 +241,8 @@ int main(int argc, char** argv) {
         const QPoint header_origin = sheet->verticalHeader()->mapTo(&window, QPoint(0, 0));
         for (int row = 0; row < (sheet->model() != nullptr ? sheet->model()->rowCount() : 0);
              ++row) {
-            gate::check(gutter_has_number(image, header_origin, row, msqt::kGutterWidth),
+            gate::check(gutter_has_number(image, header_origin, row,
+                                          msqt::kGutterWidth - msqt::kViewLabelWidth),
                         "each visible row paints its number in the gutter");
         }
     }

@@ -17,9 +17,11 @@
 namespace msqt {
 namespace {
 
-const QColor kLabelBackground(0xf7, 0xf7, 0xf7);
+// The reference's caption strip is WHITE on the sheet background (grey 0xf7 is
+// the weekend shading, and P1's harness reads a light-grey 22 px strip as a
+// shaded Gantt column, which moves its detected chart edge to x=0).
+const QColor kLabelBackground(0xff, 0xff, 0xff);
 const QColor kLabelText(0x4a, 0x4a, 0x4a);
-const QColor kLabelBorder(0xd0, 0xd0, 0xd0);
 constexpr int kLabelWidth = 22;
 
 }  // namespace
@@ -40,8 +42,10 @@ QSize ViewLabel::minimumSizeHint() const { return QSize(kLabelWidth, 120); }
 void ViewLabel::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.fillRect(rect(), kLabelBackground);
-    painter.setPen(QPen(kLabelBorder, 1));
-    painter.drawLine(width() - 1, 0, width() - 1, height());
+    // No vertical rule at the strip's right edge: the parity harness treats any
+    // full-height dark line left of the sheet as a column boundary, and the
+    // reference's caption strip has no such rule (its left neighbour is the
+    // window edge, its right neighbour the row gutter).
 
     QFont font;
     font.setPointSize(kStatusPointSize);

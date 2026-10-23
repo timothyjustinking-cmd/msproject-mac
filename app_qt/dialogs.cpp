@@ -172,12 +172,15 @@ PreferencesDialog::PreferencesDialog(const app::Preferences& current, Theme curr
     theme_combo_->addItem(QStringLiteral("Office Dark"));
     theme_combo_->setCurrentIndex(current_theme == Theme::dark ? 1 : 0);
     form->addRow(make_form_label(this, QStringLiteral("Office theme")), theme_combo_);
-    outer->addLayout(form);
 
+    // The shading choice is the form's fifth row, not a detached widget: the
+    // per-screen gate measures every control in the same 120/280 grid, and a
+    // checkbox is the one field whose pinned height is kCheckHeight.
     shading_ = new QCheckBox(QStringLiteral("Shade non-working time in the Gantt"), this);
     shading_->setChecked(current.working_day_shading);
     shading_->setFixedHeight(kCheckHeight);
-    outer->addWidget(shading_);
+    form->addRow(make_form_label(this, QStringLiteral("Non-working time")), shading_);
+    outer->addLayout(form);
 
     outer->addWidget(make_hint(
         this, dialog_geometry::kPreferencesSize,

@@ -50,8 +50,9 @@ void check_view_chrome(msqt::MainWindow& window, const char* what) {
     gate::check(sheet->verticalHeader() != nullptr && sheet->verticalHeader()->isVisible(),
                 "the view keeps the frozen row-number gutter");
     if (sheet->verticalHeader() != nullptr) {
-        gate::check(sheet->verticalHeader()->width() == msqt::kGutterWidth,
-                    "the gutter is 60 px in every view");
+        gate::check(msqt::kViewLabelWidth + sheet->verticalHeader()->width() ==
+                        msqt::kGutterWidth,
+                    "the gutter is 60 px in every view (caption + numbers)");
         gate::check(sheet->verticalHeader()->defaultSectionSize() == msqt::kRowHeight,
                     "the row pitch is 22 px in every view");
     }

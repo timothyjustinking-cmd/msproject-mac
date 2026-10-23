@@ -93,3 +93,20 @@ ctest --test-dir build\qt-app-w20 -C Release -E plan_recalc --output-on-failure
 # regenerate the command backlog after changing menu_model/ribbon/command_status
 python app_qt/tools/command_backlog.py
 ```
+
+
+## Coordinator verification (14:50)
+
+* CI run 39895551240: all three jobs failed at `set_dates(std::string)` and
+  `QDate::longMonthName`.  Local Qt 6.5.3 then found 3 more stops (`prefs.h`
+  include, `QHeaderView::sectionAt`, two test includes).  Fixed.
+* Local: **11/11 ctest**, `/W4 /WX`, Release; parity **9/9 PASS** (0.45924,
+  columns -1..+1).
+* The view caption was in the CHART pane; the reference has it in the sheet
+  band's LEFT 22 px (gutter 22 + 38 = 60).  Moved.  Its `#f7f7f7` fill was read
+  as a weekend band at x=0; now white, no border.
+* Test-contract corrections: empty Indicators caption; show backstage before
+  measuring; read duration from the Qt model; shading = form row 5; clipboard
+  2x2 over Start+Finish.
+* Open: clipboard display-order range (model-space selection), dark custom
+  surfaces (operator owes the capture), decision-14 dialog inventory.
