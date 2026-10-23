@@ -24,15 +24,19 @@ if (-not $resume) { $SessionId = [guid]::NewGuid().ToString() }
 
 $first = "Read docs/START-HERE.md, then $brief, and run it as the wave-$Wave coordinator on branch ${branch}: the items in order, each committed with its finding id, every gate in the brief green before each commit and recorded in the commit message, one CI dispatch per workflow on the branch at the end, no merge to main. Write $done when done. Do not stop to summarise or ask; act. If something only Tim can resolve blocks you, write BLOCKED and the reason as your last line."
 $nudge = "Continue wave $Wave from where you left off. Do not re-orient or summarise: take the next unfinished item in $brief order, do the work, run the gates, commit with the finding id, and move on. Write $done only when every item is fixed or deferred with a reason. If something only Tim can resolve blocks you, write BLOCKED and the reason as your last line."
+# Headless mode loads every built-in and MCP tool, and DeepSeek rejects some tool
+# schemas (the Artifact tool's regex pattern returned HTTP 400 on 2026-10-23), so
+# the session gets the core tools only and no MCP servers.
+$tools = "Bash,PowerShell,Read,Edit,Write,Glob,Grep,Agent,TodoWrite,WebFetch,WebSearch"
 $failures = 0
 for ($i = 1; $i -le $MaxIterations; $i++) {
     if (Test-Path (Join-Path $root $done)) { Write-Host "`n=== $done exists; wave $Wave done after $($i-1) iteration(s) ==="; break }
     $log = Join-Path $logdir ("run-wave{0}-{1:d2}.log" -f $Wave, $i)
     Write-Host "`n=== wave $Wave iteration $i / $MaxIterations  $(Get-Date -Format 'HH:mm:ss')  session $SessionId ===`n"
     if ($i -eq 1 -and -not $resume) {
-        & $launcher -p --session-id $SessionId --permission-mode auto --verbose $first 2>&1 | Tee-Object -FilePath $log
+        & $launcher -p --session-id $SessionId --permission-mode auto --verbose --strict-mcp-config --tools $tools $first 2>&1 | Tee-Object -FilePath $log
     } else {
-        & $launcher -p --resume $SessionId --permission-mode auto --verbose $nudge 2>&1 | Tee-Object -FilePath $log
+        & $launcher -p --resume $SessionId --permission-mode auto --verbose --strict-mcp-config --tools $tools $nudge 2>&1 | Tee-Object -FilePath $log
     }
     $code = $LASTEXITCODE
     if ($code -ne 0) {
