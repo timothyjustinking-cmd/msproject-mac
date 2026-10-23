@@ -53,18 +53,18 @@ Task	0	Font	split	highlight colour	0	-	1	-
 Task	0	Font	split	font colour	0	-	1	-
 Task	0	Font	launcher	Font	0	-	2	-
 Task	0	Schedule	group	-	-	-	-	-
-Task	0	Schedule	small	0%	0	-	0	-
-Task	0	Schedule	small	25%	0	-	0	-
-Task	0	Schedule	small	50%	0	-	0	-
-Task	0	Schedule	small	75%	0	-	0	-
-Task	0	Schedule	small	100%	0	-	0	-
+Task	0	Schedule	small	0%	1	-	0	-
+Task	0	Schedule	small	25%	1	-	0	-
+Task	0	Schedule	small	50%	1	-	0	-
+Task	0	Schedule	small	75%	1	-	0	-
+Task	0	Schedule	small	100%	1	-	0	-
 Task	0	Schedule	split	Mark on Track	0	-	0	-
 Task	0	Schedule	small	Respect Links	0	-	0	-
 Task	0	Schedule	small	Inactivate	0	-	1	-
 Task	0	Schedule	small	outdent	0	-	1	-
 Task	0	Schedule	small	indent	0	-	1	-
-Task	0	Schedule	small	link tasks	0	-	1	-
-Task	0	Schedule	small	unlink tasks	0	-	1	-
+Task	0	Schedule	small	link tasks	1	-	1	-
+Task	0	Schedule	small	unlink tasks	1	-	1	-
 Task	0	Schedule	small	split task	0	-	1	-
 Task	0	Tasks	group	-	-	-	-	-
 Task	0	Tasks	button	Manually Schedule	0	tasks.manual	0	-

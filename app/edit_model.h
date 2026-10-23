@@ -79,6 +79,11 @@ enum class StructuralKind : std::uint8_t {
     // the file link row named by `link_uid`.
     add_link = 4,
     delete_link = 5,
+    // Wave 26 (W26-1.2): the ribbon's 0/25/50/75/100 % buttons.  `uid` is the
+    // task and `percent` is 0..100; the writer has exactly one stored copy of
+    // PercentComplete (mppwrite::TaskTable::set_percent_complete), so the edit
+    // saves through the same cascade as the other structural edits.
+    set_percent = 6,
 };
 
 // One pending edit, as the user asked for it.
@@ -116,6 +121,8 @@ struct StructuralEdit {
     std::uint32_t predecessor_uid = 0;
     // delete_link: the TBkndCons FixedData +0 uid of the row to tombstone.
     std::uint32_t link_uid = 0;
+    // set_percent: the task's new PercentComplete, 0..100.
+    std::uint16_t percent = 0;
     core::gantt::LinkType link_type = core::gantt::LinkType::finish_to_start;
     // The lag in 6-second file ticks (4800 = one 8-hour working day).
     std::int32_t lag_ticks = 0;
@@ -225,6 +232,8 @@ struct StructuralSaveResult {
     std::size_t links_tombstoned = 0;
     std::size_t assignments_tombstoned = 0;
     std::size_t start_rows_written = 0;
+    // Wave 26 (W26-1.2): tasks whose PercentComplete was written.
+    std::size_t percent_rows_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the
@@ -305,6 +314,9 @@ struct StructuralDocumentEdits {
 //                        value (one file);
 //      clear_field    -> one mppwrite::clear_field_value call per field, because
 //                        clearing is the measured empty-value shape;
+//   5a. set_percent    -> one TaskTable::set_percent_complete + store_into and one
+//                        container write for all of them (wave 26; PercentComplete
+//                        has exactly one stored copy, so no cross-stream fix-up);
 //   5b. document edits-> only when `document_edits.hook` is set: the hook runs on
 //                        the SAME CfbDocument, after step 5 and before the final
 //                        write (this is the wave-17 seam);

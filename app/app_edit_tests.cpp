@@ -486,6 +486,51 @@ void test_real_save_round_trip() {
         }
     }
 
+    // ---- percent complete (wave 26, W26-1.2) ------------------------------
+    // The ribbon's %-complete buttons queue StructuralKind::set_percent.  The
+    // model applies it last-one-wins and the save cascade writes
+    // mppwrite::TaskTable::set_percent_complete in the one final container.
+    Loaded percent_base = load(copy);
+    if (percent_base.ok && !percent_base.plan.tasks.empty()) {
+        const std::uint32_t percent_uid = percent_base.plan.tasks.front().uid;
+        app::StructuralEdits percent_edits;
+        app::StructuralEdit percent_edit;
+        percent_edit.kind = app::StructuralKind::set_percent;
+        percent_edit.uid = percent_uid;
+        percent_edit.percent = 40;
+        check(percent_edits.push(percent_edit), "the percent edit is recorded");
+        const app::PlanInput percent_shown = percent_edits.apply(percent_base.plan);
+        check(!percent_shown.tasks.empty() &&
+                  percent_shown.tasks.front().percent_complete == 40,
+              "apply() shows the task at 40 % complete");
+
+        percent_edit.percent = 101;
+        check(!percent_edits.push(percent_edit), "a percent above 100 is refused");
+
+        const std::filesystem::path percent_path =
+            std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-percent.mpp";
+        std::filesystem::remove(percent_path, error);
+        const app::StructuralSaveResult percent_outcome = app::save_structural_edits(
+            percent_edits, {}, copy.string(), percent_path.string(), false);
+        check(percent_outcome.ok, "the percent edit saves");
+        check_size(percent_outcome.percent_rows_written, 1,
+                   "one task's PercentComplete was written");
+        check(!std::filesystem::exists(percent_path.string() + ".w51-structural-tmp"),
+              "the percent save leaves no intermediate file");
+        Loaded percent_reread = load(percent_path);
+        if (percent_reread.ok) {
+            bool percent_found = false;
+            for (const app::TaskRow& row : percent_reread.plan.tasks) {
+                if (row.uid == percent_uid) {
+                    percent_found = true;
+                    check_size(row.percent_complete, 40,
+                               "the saved file reads back 40 % complete");
+                }
+            }
+            check(percent_found, "the percent-edited task is in the saved file");
+        }
+    }
+
     // ---- refusals ---------------------------------------------------------
     app::StructuralEdits empty_edits;
     const app::StructuralSaveResult none =

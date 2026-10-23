@@ -253,7 +253,8 @@ bool StructuralEdits::push(StructuralEdit edit) {
                 std::remove_if(applied_.begin(), applied_.end(),
                                [&edit](const StructuralEdit& existing) {
                                    if (existing.kind == StructuralKind::set_field ||
-                                       existing.kind == StructuralKind::clear_field) {
+                                       existing.kind == StructuralKind::clear_field ||
+                                       existing.kind == StructuralKind::set_percent) {
                                        return existing.uid == edit.uid;
                                    }
                                    if (existing.kind == StructuralKind::add_link) {
@@ -322,6 +323,19 @@ bool StructuralEdits::push(StructuralEdit edit) {
                 if (existing.kind == StructuralKind::delete_link &&
                     existing.link_uid == edit.link_uid) {
                     return false;
+                }
+            }
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::set_percent: {
+            if (edit.uid == 0 || edit.percent > 100) {
+                return false;
+            }
+            for (const StructuralEdit& existing : applied_) {
+                if (existing.kind == StructuralKind::delete_task &&
+                    existing.uid == edit.uid) {
+                    return false;  // the row will not exist when the save runs
                 }
             }
             edit.dependants = 0;
@@ -544,6 +558,18 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
             }
         }
     }
+    // Wave 26: the ribbon's %-complete edits, same last-one-wins rule.
+    for (const StructuralEdit& edit : applied_) {
+        if (edit.kind != StructuralKind::set_percent) {
+            continue;
+        }
+        for (TaskRow& row : tasks) {
+            if (row.uid == edit.uid) {
+                row.percent_complete = edit.percent;
+                break;
+            }
+        }
+    }
     effective.tasks = std::move(tasks);
 
     // Link adds last, only between rows the display still shows: a link whose
@@ -691,6 +717,24 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     std::sort(field_sets.begin(), field_sets.end(), by_index);
     std::sort(field_clears.begin(), field_clears.end(), by_index);
 
+    // Wave 26: the %-complete edits.  Last edit per task wins, exactly as the
+    // display plan applies them; all rows go through one table write.
+    std::map<std::uint32_t, std::size_t> last_percent;
+    for (std::size_t index = 0; index < edits.applied().size(); ++index) {
+        const StructuralEdit& edit = edits.applied()[index];
+        if (edit.kind == StructuralKind::set_percent) {
+            last_percent[edit.uid] = index;
+        }
+    }
+    std::vector<const StructuralEdit*> percent_edits;
+    for (const auto& entry : last_percent) {
+        percent_edits.push_back(&edits.applied()[entry.second]);
+    }
+    std::sort(percent_edits.begin(), percent_edits.end(),
+              [&last_percent](const StructuralEdit* left, const StructuralEdit* right) {
+                  return last_percent.at(left->uid) < last_percent.at(right->uid);
+              });
+
     // Count the writer calls first: every one writes a file, and only the LAST one
     // may write the target (so an earlier refusal leaves the target untouched).
     std::size_t write_ops = 0;
@@ -703,6 +747,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         ++write_ops;
     }
     write_ops += field_clears.size();
+    if (!percent_edits.empty()) {
+        ++write_ops;  // one table write for every percent edit
+    }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
         ++write_ops;
@@ -846,6 +893,22 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             }
             result.notes.push_back("cleared field 0x" + std::to_string(edit->field_id) +
                                    " of task uid " + std::to_string(edit->uid));
+        }
+
+        // 5a (wave 26).  PercentComplete: one stored copy per task, so the table
+        // write needs no cross-stream fix-up.  All winning edits ride one write.
+        if (!percent_edits.empty()) {
+            mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
+            for (const StructuralEdit* edit : percent_edits) {
+                const std::size_t row = table.row_for_uid(edit->uid);
+                table.set_percent_complete(row, edit->percent);
+                ++result.percent_rows_written;
+                result.notes.push_back("task uid " + std::to_string(edit->uid) +
+                                       ": percent complete " +
+                                       std::to_string(edit->percent));
+            }
+            table.store_into(document);
+            document.save(next_write_path());
         }
 
         // 5b (wave 17).  The document-edit seam: the `214/CTable` view state and

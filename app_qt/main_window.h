@@ -33,6 +33,7 @@
 #include "page_layout.h"  // app::PrintJob (current_print_job)
 #include "plan_document.h"
 #include "prefs.h"
+#include "ribbon_bar.h"  // RibbonCommand (wave 26)
 #include "sheet_table_model.h"
 #include "theme.h"
 
@@ -254,6 +255,12 @@ class MainWindow final : public QMainWindow {
     void refresh_backstage_info();
     void set_message(std::string text, bool is_error);
     void handle_action(app::MenuAction action);
+    // Wave 26: the ribbon controls that are not menu actions (the %-complete
+    // buttons and Link/Unlink in W26-1.2; the view/format toggles arrive with
+    // W26-1.3/1.4).
+    void handle_ribbon_command(RibbonCommand command, bool checked);
+    void set_percent_complete(int percent);
+    void unlink_selected_task();
     void open_dialog();
     void show_about();
     void show_shortcuts();
