@@ -67,6 +67,7 @@ add_library(qt_shell STATIC
     sheet_views.cpp
     timeline_strip.cpp
     dialogs.cpp
+    options_dialog.cpp
     print_page.cpp
     preferences_store.cpp
     shell_icons.cpp

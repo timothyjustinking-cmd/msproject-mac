@@ -75,6 +75,7 @@
 #include "gantt_canvas.h"
 #include "layout_model.h"
 #include "menus.h"
+#include "options_dialog.h"
 #include "preferences_store.h"
 #include "print_page.h"
 #include "reader.h"
@@ -537,7 +538,7 @@ void MainWindow::build_central_widget() {
         }
     });
     backstage_->set_close_handler([this]() { show_backstage(false); });
-    backstage_->set_options_handler([this]() { show_preferences(); });
+    backstage_->set_options_handler([this]() { show_options(); });
     backstage_->set_theme_choice_handler(
         [this](ThemeChoice choice) { set_theme_choice(choice, true); });
     backstage_->set_about_handler([this]() { show_about(); });
@@ -2641,6 +2642,43 @@ void MainWindow::show_preferences() {
     }
     apply_preferences(dialog.preferences(), true);
     set_theme(dialog.theme(), true);
+}
+
+void MainWindow::show_options() {
+    // W26-4.6: File > Options.  The dialog is laid out from the eleven audit
+    // captures; only General's Date format/Office Theme and Schedule's
+    // "New tasks created" are live.
+    const QString project =
+        doc_.has_document()
+            ? QString::fromStdString(doc_.title().empty() ? doc_.path() : doc_.title())
+            : QStringLiteral("Current project");
+    OptionsDialog dialog(prefs_, theme_choice_, new_tasks_manual_, project, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        set_message("options cancelled", false);
+        update_status();
+        return;
+    }
+    apply_preferences(dialog.preferences(), true);
+    set_theme_choice(dialog.theme_choice(), true);
+    set_new_task_mode(dialog.new_tasks_manual());
+}
+
+void MainWindow::set_new_task_mode(bool manual) {
+    // The port has no writer for the stored new-task property, so this is the
+    // shell's live mode: the status bar and the new-project callout follow it,
+    // exactly as Project's Options page changes the current project's mode.
+    new_tasks_manual_ = manual;
+    new_tasks_manual_known_ = true;
+    if (info_callout_ != nullptr) {
+        info_callout_->setText(
+            manual ? QStringLiteral("New tasks are created in Manually Scheduled mode.")
+                   : QStringLiteral("New tasks are created in Auto Scheduled mode."));
+    }
+    update_status_mode();
+    set_message(std::string("new tasks: ") +
+                    (manual ? "manually scheduled" : "auto scheduled"),
+                false);
+    update_status();
 }
 
 void MainWindow::show_table_date_format() {
