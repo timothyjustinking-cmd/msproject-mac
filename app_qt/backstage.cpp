@@ -4,6 +4,7 @@
 
 #include <QAbstractButton>
 #include <QColor>
+#include <QComboBox>
 #include <QEnterEvent>
 #include <QEvent>
 #include <QFont>
@@ -16,8 +17,11 @@
 #include <QPalette>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QStackedWidget>
+#include <QStandardItem>
+#include <QStandardItemModel>
 #include <QString>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -433,8 +437,12 @@ void Backstage::set_options_handler(std::function<void()> handler) {
     options_handler_ = std::move(handler);
 }
 
-void Backstage::set_theme_handler(std::function<void(Theme)> handler) {
-    theme_handler_ = std::move(handler);
+void Backstage::set_theme_choice_handler(std::function<void(ThemeChoice)> handler) {
+    theme_choice_handler_ = std::move(handler);
+}
+
+void Backstage::set_about_handler(std::function<void()> handler) {
+    about_handler_ = std::move(handler);
 }
 
 void Backstage::set_info_text(const QString& title, const QString& detail) {
@@ -444,6 +452,31 @@ void Backstage::set_info_text(const QString& title, const QString& detail) {
     if (info_detail_ != nullptr) {
         info_detail_->setText(detail);
     }
+}
+
+void Backstage::set_account_info(const QString& product, const QString& version,
+                                 const QString& detail) {
+    if (product_label_ != nullptr) {
+        product_label_->setText(product);
+    }
+    if (version_label_ != nullptr) {
+        version_label_->setText(version);
+    }
+    if (account_detail_ != nullptr && !detail.isEmpty()) {
+        account_detail_->setText(detail);
+    }
+}
+
+void Backstage::set_theme_choice(ThemeChoice choice) {
+    if (theme_combo_ == nullptr) {
+        return;
+    }
+    const int index = static_cast<int>(choice);
+    if (index < 0 || index >= theme_combo_->count()) {
+        return;
+    }
+    const QSignalBlocker blocker(theme_combo_);
+    theme_combo_->setCurrentIndex(index);
 }
 
 void Backstage::set_document_state(bool has_document) {
@@ -552,18 +585,190 @@ QWidget* Backstage::build_page(Page page, const QString& title, const QString& b
 }
 
 QWidget* Backstage::build_account_page() {
+    // The clean Account capture's two columns: the left starts at the page's
+    // 41-px margin, the right at x=494 (41 + the measured 453-px left column).
     auto* page = new QWidget(this);
     auto* layout = new QVBoxLayout(page);
     layout->setContentsMargins(41, 27, 41, 27);
-    layout->setSpacing(10);
+    layout->setSpacing(12);
     auto* title = new QLabel(QStringLiteral("Account"), page);
     title->setFont(backstage_font(15, true));
     title->setStyleSheet(QStringLiteral("color: #202020;"));
     layout->addWidget(title);
-    layout->addWidget(make_body(
-        page, QStringLiteral("This port has no Microsoft account, Office sign-in or "
-                             "cloud services. The account page shows the port's own "
-                             "identity and theme choice.")));
+
+    auto* columns = new QHBoxLayout();
+    columns->setContentsMargins(0, 0, 0, 0);
+    columns->setSpacing(0);
+    layout->addLayout(columns);
+
+    auto* left = new QWidget(page);
+    left->setObjectName(QStringLiteral("accountLeftColumn"));
+    left->setFixedWidth(453);
+    account_left_column_ = left;
+    auto* left_layout = new QVBoxLayout(left);
+    left_layout->setContentsMargins(0, 0, 0, 0);
+    left_layout->setSpacing(8);
+
+    auto section = [left](const QString& text) {
+        auto* label = new QLabel(text, left);
+        label->setFont(backstage_font(kBodyPointSize, true));
+        label->setStyleSheet(QStringLiteral("color: #202020;"));
+        return label;
+    };
+    auto field_label = [left](const QString& text) {
+        auto* label = new QLabel(text, left);
+        label->setFont(backstage_font(kBodyPointSize));
+        label->setStyleSheet(QStringLiteral("color: #3a3a3a;"));
+        return label;
+    };
+    auto secondary = [left](const QString& text, bool enabled, bool link_style = false) {
+        auto* button = new QPushButton(text, left);
+        button->setFlat(true);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setFixedHeight(24);
+        button->setMaximumWidth(377);
+        button->setStyleSheet(link_style
+                                  ? QStringLiteral(
+                                        "QPushButton { border: none; text-align: left;"
+                                        " color: #1a5c8f; background: transparent; }"
+                                        "QPushButton:disabled { color: #999999; }")
+                                  : QStringLiteral(
+                                        "QPushButton { background: #ffffff; color: #242424;"
+                                        " border: 1px solid #b8b8b8; padding: 2px 10px; }"
+                                        "QPushButton:disabled { background: #f0f0f0;"
+                                        " color: #999999; border-color: #d0d0d0; }"));
+        button->setEnabled(enabled);
+        if (!enabled) {
+            button->setToolTip(QStringLiteral("not implemented in this port"));
+        }
+        return button;
+    };
+
+    left_layout->addWidget(section(QStringLiteral("User Information")));
+    {
+        auto* row = new QHBoxLayout();
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(10);
+        auto* avatar = new QLabel(QStringLiteral("MS"), left);
+        avatar->setObjectName(QStringLiteral("accountAvatar"));
+        avatar->setFixedSize(28, 28);
+        avatar->setAlignment(Qt::AlignCenter);
+        avatar->setFont(backstage_font(kBodyPointSize, true));
+        avatar->setStyleSheet(QStringLiteral(
+            "background: #2b578a; color: #ffffff; border-radius: 14px;"));
+        row->addWidget(avatar);
+        auto* identity = new QVBoxLayout();
+        identity->setContentsMargins(0, 0, 0, 0);
+        identity->setSpacing(0);
+        auto* name = new QLabel(QStringLiteral("Local session"), left);
+        name->setFont(backstage_font(kBodyPointSize, true));
+        identity->addWidget(name);
+        auto* note = new QLabel(
+            QStringLiteral("No Microsoft account is connected."), left);
+        note->setFont(backstage_font(kBodyPointSize));
+        note->setStyleSheet(QStringLiteral("color: #4a4a4a;"));
+        identity->addWidget(note);
+        row->addLayout(identity, 1);
+        left_layout->addLayout(row);
+    }
+    {
+        auto* links = new QHBoxLayout();
+        links->setContentsMargins(0, 0, 0, 0);
+        links->setSpacing(12);
+        links->addWidget(secondary(QStringLiteral("Sign out"), false, true));
+        links->addWidget(secondary(QStringLiteral("Switch account"), false, true));
+        links->addStretch(1);
+        left_layout->addLayout(links);
+    }
+    left_layout->addWidget(section(QStringLiteral("Account Privacy")));
+    left_layout->addWidget(secondary(QStringLiteral("Manage Settings"), false));
+    left_layout->addWidget(field_label(QStringLiteral("Office Background:")));
+    {
+        auto* background = new QComboBox(left);
+        background->addItem(QStringLiteral("No Background"));
+        background->setFixedWidth(377);
+        background->setFixedHeight(24);
+        background->setEnabled(false);
+        background->setToolTip(QStringLiteral("not implemented in this port"));
+        left_layout->addWidget(background);
+    }
+    left_layout->addWidget(field_label(QStringLiteral("Office Theme:")));
+    theme_combo_ = new QComboBox(left);
+    theme_combo_->setObjectName(QStringLiteral("accountThemeCombo"));
+    theme_combo_->setFixedWidth(377);
+    theme_combo_->setFixedHeight(24);
+    auto* theme_model = qobject_cast<QStandardItemModel*>(theme_combo_->model());
+    const std::vector<ThemeChoiceSpec>& choices = office_theme_choices();
+    for (std::size_t index = 0; index < choices.size(); ++index) {
+        theme_combo_->addItem(QString::fromUtf8(choices[index].name));
+        if (!choices[index].implemented) {
+            // W26-4.2: the five names are laid out; only the palettes the port
+            // paints are enabled (decision 9's exact tooltip on the others).
+            theme_combo_->setItemData(static_cast<int>(index),
+                                      QStringLiteral("not implemented in this port"),
+                                      Qt::ToolTipRole);
+            if (theme_model != nullptr) {
+                if (QStandardItem* item = theme_model->item(static_cast<int>(index))) {
+                    item->setEnabled(false);
+                }
+            }
+        }
+    }
+    connect(theme_combo_, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index < 0 || index >= static_cast<int>(office_theme_choices().size())) {
+            return;
+        }
+        const ThemeChoice choice = static_cast<ThemeChoice>(index);
+        if (theme_choice_handler_ != nullptr && theme_choice_implemented(choice)) {
+            theme_choice_handler_(choice);
+        }
+    });
+    left_layout->addWidget(theme_combo_);
+    left_layout->addWidget(section(QStringLiteral("Connected Services:")));
+    left_layout->addWidget(
+        secondary(QStringLiteral("OneDrive - Personal"), false, true));
+    left_layout->addWidget(secondary(QStringLiteral("Add a service"), false));
+    left_layout->addStretch(1);
+    columns->addWidget(left);
+
+    auto* right = new QWidget(page);
+    right->setObjectName(QStringLiteral("accountRightColumn"));
+    account_right_column_ = right;
+    auto* right_layout = new QVBoxLayout(right);
+    right_layout->setContentsMargins(0, 0, 0, 0);
+    right_layout->setSpacing(8);
+    right_layout->addWidget(section(QStringLiteral("Product Information")));
+    product_label_ = new QLabel(QStringLiteral("MS Project Shell"), right);
+    product_label_->setObjectName(QStringLiteral("accountProduct"));
+    product_label_->setFont(backstage_font(kBodyPointSize + 2, false));
+    right_layout->addWidget(product_label_);
+    version_label_ = new QLabel(QStringLiteral("Version 0.1.0"), right);
+    version_label_->setObjectName(QStringLiteral("accountVersion"));
+    version_label_->setFont(backstage_font(kBodyPointSize));
+    right_layout->addWidget(version_label_);
+    account_detail_ = make_body(
+        right, QStringLiteral("This product contains the portable reader, scheduler and "
+                              "writer of this port; it is not Microsoft Project and is not "
+                              "activated by any Microsoft account."));
+    right_layout->addWidget(account_detail_);
+    right_layout->addWidget(section(QStringLiteral("About")));
+    right_layout->addWidget(make_body(
+        right, QStringLiteral("Learn about this port's reader, scheduler, writer and the "
+                              "three-platform Qt shell.")));
+    about_button_ = secondary(QStringLiteral("About MS Project Shell..."), true);
+    about_button_->setObjectName(QStringLiteral("accountAbout"));
+    about_button_->setMaximumWidth(240);
+    connect(about_button_, &QAbstractButton::clicked, this, [this](bool) {
+        if (about_handler_) {
+            about_handler_();
+        }
+    });
+    right_layout->addWidget(about_button_);
+    right_layout->addWidget(
+        secondary(QStringLiteral("Switch License"), false));
+    right_layout->addStretch(1);
+    columns->addWidget(right, 1);
+
     layout->addStretch(1);
     return page;
 }

@@ -67,10 +67,18 @@ class Backstage final : public QWidget {
     void set_command_handler(std::function<void(const QString& command)> handler);
     void set_close_handler(std::function<void()> handler);
     void set_options_handler(std::function<void()> handler);
-    void set_theme_handler(std::function<void(Theme)> handler);
+    // W26-4.2: the Account page's Office Theme chooser.  Only an implemented
+    // choice calls the handler (Black/White are laid out and disabled).
+    void set_theme_choice_handler(std::function<void(ThemeChoice)> handler);
+    void set_about_handler(std::function<void()> handler);
 
     // Honest local project description for the Info page.
     void set_info_text(const QString& title, const QString& detail);
+    // The port's own identity, version and local note for the Account page.
+    void set_account_info(const QString& product, const QString& version,
+                          const QString& detail);
+    // Selects the chooser's current theme without emitting the handler.
+    void set_theme_choice(ThemeChoice choice);
 
     // W26-4.1: the rail's command entries follow the document state.  With no
     // document open the clean Account capture shows Save..Close disabled.
@@ -91,6 +99,13 @@ class Backstage final : public QWidget {
     // back to the project chrome (Escape does the same).
     QToolButton* back_button() const noexcept { return back_button_; }
     QAbstractButton* options_button() const noexcept { return options_button_; }
+    // W26-4.2: the Account page's live controls, for the structural gate.
+    QComboBox* theme_combo() const noexcept { return theme_combo_; }
+    QAbstractButton* about_button() const noexcept { return about_button_; }
+    QLabel* product_label() const noexcept { return product_label_; }
+    QLabel* version_label() const noexcept { return version_label_; }
+    QWidget* account_left_column() const noexcept { return account_left_column_; }
+    QWidget* account_right_column() const noexcept { return account_right_column_; }
     int nav_count() const;
 
     void show_page(Page page);
@@ -127,10 +142,17 @@ class Backstage final : public QWidget {
     QLabel* info_detail_ = nullptr;
     QComboBox* theme_combo_ = nullptr;
     QAbstractButton* options_button_ = nullptr;
+    QAbstractButton* about_button_ = nullptr;
+    QLabel* product_label_ = nullptr;
+    QLabel* version_label_ = nullptr;
+    QLabel* account_detail_ = nullptr;
+    QWidget* account_left_column_ = nullptr;
+    QWidget* account_right_column_ = nullptr;
     std::function<void(const QString&)> command_handler_;
     std::function<void()> close_handler_;
     std::function<void()> options_handler_;
-    std::function<void(Theme)> theme_handler_;
+    std::function<void(ThemeChoice)> theme_choice_handler_;
+    std::function<void()> about_handler_;
     bool has_document_ = false;
 };
 

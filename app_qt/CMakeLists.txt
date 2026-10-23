@@ -404,7 +404,8 @@ add_test(NAME qt_backstage_gate
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_backstage_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
-                 "${QT_REPO_ROOT}/tests/data/reference/w26-backstage.measures.json")
+                 "${QT_REPO_ROOT}/tests/data/reference/w26-backstage.measures.json"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The

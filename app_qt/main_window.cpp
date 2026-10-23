@@ -524,8 +524,9 @@ void MainWindow::build_central_widget() {
     });
     backstage_->set_close_handler([this]() { show_backstage(false); });
     backstage_->set_options_handler([this]() { show_preferences(); });
-    backstage_->set_theme_handler(
-        [this](Theme theme) { set_theme(theme, true); });
+    backstage_->set_theme_choice_handler(
+        [this](ThemeChoice choice) { set_theme_choice(choice, true); });
+    backstage_->set_about_handler([this]() { show_about(); });
     central_stack_ = new QStackedWidget(this);
     central_stack_->addWidget(central);
     central_stack_->addWidget(backstage_);
@@ -1246,6 +1247,13 @@ void MainWindow::show_backstage(bool open) {
         // a loaded document enables them.  Refresh on every open so the rail
         // never keeps a stale state.
         backstage_->set_document_state(doc_.has_document());
+        // W26-4.2: the port's own identity, never Microsoft's.
+        backstage_->set_account_info(
+            QStringLiteral("MS Project Shell"),
+            QStringLiteral("Version ") + QString::fromLatin1(kShellVersion),
+            QStringLiteral("A personal three-platform port of MS Project. This port has no "
+                           "Microsoft account, cloud service or license."));
+        backstage_->set_theme_choice(theme_choice_);
         backstage_->show_page(Backstage::Page::home);
         backstage_->setFocus();
     } else {
@@ -1939,9 +1947,10 @@ void MainWindow::open_dialog() {
 void MainWindow::show_about() {
     QMessageBox::about(
         this, QStringLiteral("About MS Project Shell"),
-        QStringLiteral("MS Project Shell\n\nA personal three-platform port of MS Project.\n"
-                       "Qt 6 Widgets over the portable app/ models.\n\n"
-                       "UI font: ") +
+        QStringLiteral("MS Project Shell ") + QString::fromLatin1(kShellVersion) +
+            QStringLiteral("\n\nA personal three-platform port of MS Project.\n"
+                           "Qt 6 Widgets over the portable app/ models.\n\n"
+                           "UI font: ") +
             ui_font_family() +
             (ui_font_is_carlito() ? QStringLiteral(" (bundled metric-compatible)")
                                   : QStringLiteral(" (fallback; Carlito not installed)")) +
@@ -2516,6 +2525,11 @@ bool MainWindow::apply_preferences(const app::Preferences& preferences, bool per
 
 void MainWindow::set_theme(Theme theme, bool persist) {
     theme_ = theme;
+    // A programmatic palette change keeps the chooser honest; a choice that
+    // resolves to the same palette (Use system setting -> light) stays itself.
+    if (theme_for_choice(theme_choice_) != theme) {
+        theme_choice_ = theme_choice_for_theme(theme);
+    }
     apply_theme(theme_);
     update();
     if (persist && preferences_store_ != nullptr) {
@@ -2523,6 +2537,18 @@ void MainWindow::set_theme(Theme theme, bool persist) {
     }
     set_message(std::string("Office theme: ") + theme_name(theme_), false);
     update_status();
+}
+
+bool MainWindow::set_theme_choice(ThemeChoice choice, bool persist) {
+    if (!theme_choice_implemented(choice)) {
+        return false;
+    }
+    theme_choice_ = choice;
+    set_theme(theme_for_choice(choice), persist);
+    if (backstage_ != nullptr) {
+        backstage_->set_theme_choice(theme_choice_);
+    }
+    return true;
 }
 
 void MainWindow::show_preferences() {
