@@ -501,6 +501,11 @@ void MainWindow::build_central_widget() {
             open_dialog();
         } else if (command == QStringLiteral("new")) {
             new_project();
+        } else if (command == QStringLiteral("new_from_existing")) {
+            // W26-4.3: start from an existing project by opening it; the reader
+            // never modifies it in place, so Save needs a new target.
+            show_backstage(false);
+            open_dialog();
         } else if (command == QStringLiteral("save")) {
             show_backstage(false);
             save_document(false);
@@ -527,6 +532,17 @@ void MainWindow::build_central_widget() {
     backstage_->set_theme_choice_handler(
         [this](ThemeChoice choice) { set_theme_choice(choice, true); });
     backstage_->set_about_handler([this]() { show_about(); });
+    backstage_->set_recent_open_handler([this](const QString& path) {
+        // W26-4.3: a Recent row opens a local file through the same path as
+        // File > Open.  A failure is reported in the status line, not a modal,
+        // so the offscreen gate can drive the row.
+        show_backstage(false);
+        QString error;
+        if (!open_file(path, &error)) {
+            set_message("could not open the recent file: " + error.toStdString(), true);
+            update_status();
+        }
+    });
     central_stack_ = new QStackedWidget(this);
     central_stack_->addWidget(central);
     central_stack_->addWidget(backstage_);
@@ -988,6 +1004,9 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     refresh_view_buttons();
     update_menu_state();
     update_status();
+    // W26-4.3: a successful local open joins the recent list (the pages show
+    // local paths only; nothing is uploaded or synced).
+    note_recent_file(path);
     return true;
 }
 
@@ -1254,6 +1273,8 @@ void MainWindow::show_backstage(bool open) {
             QStringLiteral("A personal three-platform port of MS Project. This port has no "
                            "Microsoft account, cloud service or license."));
         backstage_->set_theme_choice(theme_choice_);
+        // W26-4.3: the local Recent list, read from the installed store.
+        backstage_->set_recent_files(recent_files());
         backstage_->show_page(Backstage::Page::home);
         backstage_->setFocus();
     } else {
@@ -2147,6 +2168,7 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
     last_save_target_ = outcome.path;
     last_save_rows_written_ = outcome.rows_written;
     last_save_warnings_ = outcome.warnings;
+    note_recent_file(to_q(outcome.path));
 
     std::string message = "saved " + std::to_string(outcome.rows_written) + " start(s) to " +
                           outcome.path + " (" + outcome.api + ")";
@@ -2523,8 +2545,18 @@ bool MainWindow::apply_preferences(const app::Preferences& preferences, bool per
     return true;
 }
 
-void MainWindow::set_theme(Theme theme, bool persist) {
-    theme_ = theme;
+QStringList MainWindow::recent_files() const {
+    return preferences_store_ != nullptr ? preferences_store_->load_recent_files()
+                                         : QStringList();
+}
+
+void MainWindow::note_recent_file(const QString& path) {
+    if (preferences_store_ != nullptr && !path.isEmpty()) {
+        preferences_store_->add_recent_file(path);
+    }
+}
+
+void MainWindow::set_theme(Theme theme, bool persist) {    theme_ = theme;
     // A programmatic palette change keeps the chooser honest; a choice that
     // resolves to the same palette (Use system setting -> light) stays itself.
     if (theme_for_choice(theme_choice_) != theme) {

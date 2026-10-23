@@ -56,6 +56,10 @@ QString theme_key() {
     return QString::fromLatin1(app::kPreferencesDefaultsKey) + QStringLiteral(".theme");
 }
 
+QString recent_key() {
+    return QString::fromLatin1(app::kPreferencesDefaultsKey) + QStringLiteral(".recent");
+}
+
 }  // namespace
 
 bool PreferencesStore::load_theme(Theme& out) const {
@@ -75,6 +79,43 @@ void PreferencesStore::save_theme(Theme theme) {
         return;
     }
     settings_->setValue(theme_key(), QString::fromLatin1(theme_name(theme)));
+    settings_->sync();
+}
+
+QStringList PreferencesStore::load_recent_files() const {
+    QStringList files;
+    if (settings_ == nullptr) {
+        return files;
+    }
+    const QStringList stored = settings_->value(recent_key()).toStringList();
+    for (const QString& path : stored) {
+        // Only local, existing-looking paths: the pages never show a URL or a
+        // cloud placeholder.  A stale entry is still listed (Project does the
+        // same) but an empty or non-local string is dropped.
+        if (path.isEmpty() || path.contains(QStringLiteral("://"))) {
+            continue;
+        }
+        if (!files.contains(path)) {
+            files.push_back(path);
+        }
+        if (files.size() >= kRecentFileLimit) {
+            break;
+        }
+    }
+    return files;
+}
+
+void PreferencesStore::add_recent_file(const QString& path) {
+    if (settings_ == nullptr || path.isEmpty() || path.contains(QStringLiteral("://"))) {
+        return;
+    }
+    QStringList files = load_recent_files();
+    files.removeAll(path);
+    files.push_front(path);
+    while (files.size() > kRecentFileLimit) {
+        files.removeLast();
+    }
+    settings_->setValue(recent_key(), files);
     settings_->sync();
 }
 
