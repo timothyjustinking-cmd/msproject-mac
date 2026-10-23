@@ -466,6 +466,7 @@ if(APP_BUILD_TESTS)
     target_compile_definitions(project_dialogs_tests PRIVATE
         APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
         APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+        APP_CORPUS_DIR="${APP_CORPUS_DIR_CMAKE}"
     )
     app_set_warnings(project_dialogs_tests)
 

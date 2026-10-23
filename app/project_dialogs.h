@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "edit_model.h"  // StructuralEdit
@@ -87,6 +88,66 @@ struct CalendarNames {
 };
 
 CalendarNames read_calendar_names(const std::string& mpp_path);
+
+// ---------------------------------------------------------------------------
+// Change Working Time (Project > Properties > Change Working Time)
+// ---------------------------------------------------------------------------
+//
+// The model is a READ-ONLY view of the file's calendars: this port has no
+// calendar writer, so the dialog's Details/Delete/Options controls are laid out
+// and disabled (decision 9).  What is real is the data: the base-calendar
+// picker, the month grid's working/non-working days (core::cal's decoded week,
+// exceptions and dated work weeks), the selected day's working intervals and the
+// exception/work-week tables.
+//
+// NAMES.  core/cal deliberately decodes calendar NAMES (it needs them for
+// lookup) but never exception or work-week names: those are not decoded at all,
+// because in a real file they are free text that can carry client data (cal.h's
+// client-data rule).  The table rows therefore carry no name text -- only the
+// index and the dates -- and no tool or test here can print one.
+struct WorkingTimeRow {
+    int index = 0;  // 1-based, the capture's first column
+    std::string start_text;
+    std::string finish_text;
+    int start_day = 0;
+    int finish_day = 0;
+};
+
+struct WorkingTimeDay {
+    int day = 0;
+    bool working = false;
+    bool exception = false;            // a dated exception covers this day
+    bool nondefault_work_week = false; // a dated work week covers this day
+};
+
+struct WorkingTimeModel {
+    bool decoded = false;
+    std::vector<std::string> calendars;  // base calendars, file order
+    std::string selected_calendar;
+    bool selected_is_base = true;
+    std::string based_on_text;
+    std::string selected_day_heading;
+    std::string selected_day_hours;  // one interval per line, "Nonworking" when none
+    int year = 0;
+    int month = 0;  // 1..12
+    int first_weekday_monday0 = 0;  // the 1st's weekday, Monday = 0
+    std::vector<WorkingTimeDay> days;  // 1..month length, in order
+    std::vector<WorkingTimeRow> exceptions;
+    std::vector<WorkingTimeRow> work_weeks;
+};
+
+// Decodes `mpp_path`, selects `calendar_name` (empty = the project default) and
+// builds the month grid at `year`/`month` with `selected_day` highlighted.  False
+// with `error` when the file's calendar table cannot be decoded; `out` then has
+// decoded == false.  Never throws.
+bool load_working_time(const std::string& mpp_path, std::string_view calendar_name,
+                       int year, int month, int selected_day,
+                       const core::sheet::SheetFormat& format, WorkingTimeModel& out,
+                       std::string* error = nullptr);
+
+// The month grid's weekday header, Project's Monday-first order (the capture's
+// "M T W Th F S S").
+const std::vector<std::string>& working_time_weekday_header();
 
 // Project's priority domain (Project > Project Information > Priority).
 inline constexpr int kMinPriority = 0;

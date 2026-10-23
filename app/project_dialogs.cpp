@@ -3,6 +3,7 @@
 #include "project_dialogs.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <exception>
 #include <string>
 #include <utility>
@@ -62,8 +63,85 @@ bool valid_project_priority(int priority) noexcept {
     return priority >= kMinPriority && priority <= kMaxPriority;
 }
 
-CalendarNames read_calendar_names(const std::string& mpp_path) {
-    CalendarNames out;
+namespace {
+
+const char* month_name(int month) {
+    static const char* const kNames[] = {"January", "February", "March",     "April",
+                                         "May",     "June",     "July",      "August",
+                                         "September", "October", "November", "December"};
+    if (month < 1 || month > 12) {
+        return "";
+    }
+    return kNames[month - 1];
+}
+
+int day_number(int year, int month, int day) {
+    return core::sched::day_of(core::sched::from_ymd(year, month, day));
+}
+
+int month_length(int year, int month) {
+    const int next_year = month == 12 ? year + 1 : year;
+    const int next_month = month == 12 ? 1 : month + 1;
+    return day_number(next_year, next_month, 1) - day_number(year, month, 1);
+}
+
+std::string date_text_from_day(int day, const core::sheet::SheetFormat& format) {
+    return core::sheet::format_date_text(
+        app::date_value_from_date32(static_cast<app::date32>(day) << 16), format);
+}
+
+// "8:00 AM" from tenths of a minute (core::sched's interval unit).
+std::string clock_text(std::int32_t tenths) {
+    const std::int32_t minutes = tenths / 10;
+    std::int32_t hour = minutes / 60;
+    const std::int32_t minute = minutes % 60;
+    const char* suffix = hour < 12 ? "AM" : "PM";
+    if (hour == 0) {
+        hour = 12;
+    } else if (hour > 12) {
+        hour -= 12;
+    }
+    char text[24];
+    std::snprintf(text, sizeof(text), "%d:%02d %s", static_cast<int>(hour),
+                  static_cast<int>(minute), suffix);
+    return text;
+}
+
+std::string intervals_text(const core::sched::DayPattern& pattern) {
+    if (pattern.empty()) {
+        return "Nonworking";
+    }
+    std::string text;
+    for (std::size_t index = 0; index < pattern.count; ++index) {
+        if (!text.empty()) {
+            text += "\n";
+        }
+        text += clock_text(pattern.start_ticks(index));
+        text += " to ";
+        text += clock_text(pattern.end_ticks(index));
+    }
+    return text;
+}
+
+// A dated exception covers `day`: a plain range directly, a recurring one
+// through core/cal's measured expansion (which refuses rather than guesses).
+bool exception_covers(const core::cal::DatedException& exception, int day) {
+    if (exception.recurrence_type >= 2 && exception.recurrence_type <= 7) {
+        const core::cal::RecurrenceExpansion expanded =
+            core::cal::expand_recurring_exception(exception);
+        return expanded.applied &&
+               std::binary_search(expanded.days.begin(), expanded.days.end(), day);
+    }
+    return day >= exception.start_day && day <= exception.end_day;
+}
+
+bool work_week_covers(const core::cal::DatedWorkWeek& week, int day) {
+    return day >= week.start_day && day <= week.end_day;
+}
+
+}  // namespace
+
+CalendarNames read_calendar_names(const std::string& mpp_path) {    CalendarNames out;
     try {
         const core::cal::CalendarTable table = core::cal::decode_file(mpp_path);
         out.decoded = true;
@@ -83,6 +161,128 @@ CalendarNames read_calendar_names(const std::string& mpp_path) {
         out = CalendarNames{};
     }
     return out;
+}
+
+bool load_working_time(const std::string& mpp_path, std::string_view calendar_name,
+                       int year, int month, int selected_day,
+                       const core::sheet::SheetFormat& format, WorkingTimeModel& out,
+                       std::string* error) {
+    out = WorkingTimeModel{};
+    if (error != nullptr) {
+        error->clear();
+    }
+    core::cal::CalendarTable table;
+    try {
+        table = core::cal::decode_file(mpp_path);
+    } catch (const std::exception& failure) {
+        if (error != nullptr) {
+            *error = std::string("the file's calendar table does not decode: ") +
+                     failure.what();
+        }
+        return false;
+    }
+
+    for (const core::cal::CalendarDefinition& calendar : table.calendars) {
+        if (calendar.base_uid <= 0 && !calendar.name.empty()) {
+            out.calendars.push_back(calendar.name);
+        }
+    }
+    std::string selected(calendar_name);
+    if (selected.empty()) {
+        selected = table.default_calendar_name;
+    }
+    const auto contains = [&out](const std::string& name) {
+        return std::find(out.calendars.begin(), out.calendars.end(), name) !=
+               out.calendars.end();
+    };
+    if (!contains(selected)) {
+        selected = out.calendars.empty() ? std::string() : out.calendars.front();
+    }
+    const core::cal::CalendarDefinition* definition =
+        selected.empty() ? nullptr : core::cal::find_calendar(table, selected);
+    if (definition == nullptr) {
+        if (error != nullptr) {
+            *error = "the file has no readable base calendar";
+        }
+        return false;
+    }
+    out.selected_calendar = definition->name;
+    out.selected_is_base = definition->base_uid <= 0;
+    if (out.selected_is_base) {
+        out.based_on_text = "Default work week on calendar " + definition->name;
+    } else {
+        const core::cal::CalendarDefinition* base =
+            core::cal::find_calendar_by_uid(table, definition->base_uid);
+        out.based_on_text = "Default work week on calendar " +
+                            (base != nullptr ? base->name : definition->name);
+    }
+
+    const core::sched::Calendar calendar = core::cal::build_calendar(table, *definition);
+    if (month < 1 || month > 12) {
+        month = 1;
+    }
+    out.year = year;
+    out.month = month;
+    const int length = month_length(year, month);
+    const int first = day_number(year, month, 1);
+    out.first_weekday_monday0 = (core::sched::weekday_of_day(first) + 6) % 7;
+    out.days.reserve(static_cast<std::size_t>(length));
+    for (int day = 1; day <= length; ++day) {
+        const int number = first + day - 1;
+        WorkingTimeDay cell;
+        cell.day = day;
+        cell.working = calendar.is_working_day(number);
+        for (const core::cal::DatedException& exception : definition->exceptions) {
+            if (exception_covers(exception, number)) {
+                cell.exception = true;
+                break;
+            }
+        }
+        for (const core::cal::DatedWorkWeek& week : definition->work_weeks) {
+            if (work_week_covers(week, number)) {
+                cell.nondefault_work_week = true;
+                break;
+            }
+        }
+        out.days.push_back(cell);
+    }
+
+    if (selected_day < 1 || selected_day > length) {
+        selected_day = std::min(std::max(selected_day, 1), length);
+    }
+    const int selected_number = first + selected_day - 1;
+    out.selected_day_heading = std::string("Working times for ") +
+                               std::to_string(selected_day) + " " + month_name(month) + " " +
+                               std::to_string(year);
+    out.selected_day_hours = intervals_text(calendar.pattern_for_day(selected_number));
+
+    for (std::size_t index = 0; index < definition->exceptions.size(); ++index) {
+        const core::cal::DatedException& exception = definition->exceptions[index];
+        WorkingTimeRow row;
+        row.index = static_cast<int>(index) + 1;
+        row.start_day = exception.start_day;
+        row.finish_day = exception.end_day;
+        row.start_text = date_text_from_day(exception.start_day, format);
+        row.finish_text = date_text_from_day(exception.end_day, format);
+        out.exceptions.push_back(std::move(row));
+    }
+    for (std::size_t index = 0; index < definition->work_weeks.size(); ++index) {
+        const core::cal::DatedWorkWeek& week = definition->work_weeks[index];
+        WorkingTimeRow row;
+        row.index = static_cast<int>(index) + 1;
+        row.start_day = week.start_day;
+        row.finish_day = week.end_day;
+        row.start_text = date_text_from_day(week.start_day, format);
+        row.finish_text = date_text_from_day(week.end_day, format);
+        out.work_weeks.push_back(std::move(row));
+    }
+    out.decoded = true;
+    return true;
+}
+
+const std::vector<std::string>& working_time_weekday_header() {
+    static const std::vector<std::string> kHeader = {"M", "T", "W", "Th", "F", "S", "S"};
+    return kHeader;
 }
 
 bool project_has_actual_values(const PlanInput& plan) noexcept {    if (plan.project_percent_complete != 0) {

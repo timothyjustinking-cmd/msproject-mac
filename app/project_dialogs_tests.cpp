@@ -20,7 +20,6 @@
 #include "project_dialogs.h"
 #include "reader.h"
 #include "reader_adapter.h"
-
 namespace {
 
 int g_checks = 0;
@@ -160,6 +159,113 @@ int main() {
                      static_cast<unsigned>(reread.project.priority), target.c_str());
         std::filesystem::remove(source);
         std::filesystem::remove(target);
+    }
+
+    // -----------------------------------------------------------------------
+    // Change Working Time: the file's calendars, month grid and hours
+    // -----------------------------------------------------------------------
+    {
+        const std::string calendars_fixture =
+            std::string(APP_TEST_DATA_DIR) + "/synthetic-calendars.mpp";
+        app::WorkingTimeModel model;
+        std::string error;
+        const bool loaded =
+            app::load_working_time(calendars_fixture, "", 2026, 10, 23, format, model, &error);
+        check(loaded, "the calendar fixture's table decodes");
+        if (!loaded) {
+            std::printf("  calendar error: %s\n", error.c_str());
+        }
+        check(model.decoded, "the working-time model is decoded");
+        check(model.calendars.size() == 2 && model.calendars[0] == "Standard" &&
+                  model.calendars[1] == "Shift A",
+              "the picker lists the file's two base calendars");
+        check(model.selected_calendar == "Standard" && model.selected_is_base,
+              "the empty selection resolves to the project default calendar");
+        check_text(model.based_on_text, "Default work week on calendar Standard",
+                   "the based-on line names the calendar's default work week");
+        check(model.year == 2026 && model.month == 10 && model.days.size() == 31,
+              "October 2026 has its 31 day cells");
+        check(model.first_weekday_monday0 == 3,
+              "1 October 2026 is the fourth Monday-first column (Thursday)");
+        if (model.days.size() == 31) {
+            const int weekend[] = {3, 4, 10, 11, 17, 18, 24, 25, 31};
+            bool weekends_ok = true;
+            for (const int day : weekend) {
+                if (model.days[static_cast<std::size_t>(day - 1)].working) {
+                    weekends_ok = false;
+                }
+            }
+            check(weekends_ok, "the captured month's weekend days are non-working");
+            check(model.days[22].day == 23 && model.days[22].working,
+                  "23 October is a working Friday");
+            check(!model.days[22].exception && !model.days[22].nondefault_work_week,
+                  "the synthetic calendar has no exception on 23 October");
+        }
+        check_text(model.selected_day_hours, "8:00 AM to 12:00 PM\n1:00 PM to 5:00 PM",
+                   "Standard's day is the captured two-interval week");
+        check(model.exceptions.empty() && model.work_weeks.empty(),
+              "the synthetic-calendars fixture stores no exceptions or work weeks");
+        check(app::working_time_weekday_header().size() == 7 &&
+                  app::working_time_weekday_header().front() == "M" &&
+                  app::working_time_weekday_header().back() == "S",
+              "the month grid header is Project's Monday-first M T W Th F S S");
+
+        // The second base calendar's own week, and a weekend day.
+        app::WorkingTimeModel shift;
+        check(app::load_working_time(calendars_fixture, "Shift A", 2026, 10, 23, format,
+                                     shift, &error),
+              "Shift A loads by name");
+        check(shift.selected_calendar == "Shift A" && shift.selected_is_base,
+              "Shift A is selected and is a base calendar");
+        check_text(shift.selected_day_hours, "9:00 AM to 1:00 PM\n2:00 PM to 6:00 PM",
+                   "Shift A's captured week is 09:00-13:00 + 14:00-18:00");
+        app::WorkingTimeModel saturday;
+        check(app::load_working_time(calendars_fixture, "Shift A", 2026, 10, 24, format,
+                                     saturday, &error),
+              "a weekend selection loads");
+        check_text(saturday.selected_day_hours, "Nonworking",
+                   "a Saturday reports Nonworking");
+
+        // A file that cannot decode is refused with a message, not guessed.
+        app::WorkingTimeModel broken;
+        check(!app::load_working_time(std::string(APP_TEST_DATA_DIR) + "/does-not-exist.mpp",
+                                      "", 2026, 10, 23, format, broken, &error),
+              "a file with no readable calendar table is refused");
+        check(!error.empty() && !broken.decoded,
+              "the refusal carries an error and no decoded model");
+    }
+
+    // The real exception fixture (corpus is local-only): row dates decode, names
+    // are never decoded, and the exception days are marked in the grid.
+    {
+        const std::string exceptions_fixture =
+            std::string(APP_CORPUS_DIR) + "/probe/w12-exceptions.mpp";
+        if (std::filesystem::exists(exceptions_fixture)) {
+            app::WorkingTimeModel model;
+            std::string error;
+            const bool loaded = app::load_working_time(exceptions_fixture, "", 2026, 11, 1,
+                                                       format, model, &error);
+            check(loaded, "the exception probe's calendar table decodes");
+            if (loaded) {
+                check(!model.exceptions.empty(),
+                      "the exception probe's table rows come from the file");
+                check(model.exceptions.front().index == 1 &&
+                          !model.exceptions.front().start_text.empty() &&
+                          !model.exceptions.front().finish_text.empty(),
+                      "an exception row carries its index and dates (never a name)");
+                int marked = 0;
+                for (const app::WorkingTimeDay& day : model.days) {
+                    marked += day.exception ? 1 : 0;
+                }
+                check(marked > 0, "at least one day of the month is an exception day");
+                std::fprintf(stderr, "note: exception probe: %zu exception row(s), %d marked day(s)\n",
+                             model.exceptions.size(), marked);
+            } else {
+                std::printf("  exception probe error: %s\n", error.c_str());
+            }
+        } else {
+            std::fprintf(stderr, "note: corpus/probe/w12-exceptions.mpp absent; skipped\n");
+        }
     }
 
     // -----------------------------------------------------------------------
