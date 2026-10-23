@@ -262,10 +262,26 @@ int main(int argc, char** argv) {
 
     // --- status bar --------------------------------------------------------
     const std::vector<QToolButton*>& buttons = window.view_buttons();
-    gate::check(buttons.size() == 4, "four status-bar view buttons");
-    for (QToolButton* button : buttons) {
+    // Wave 23 (B-9): Project's five buttons, in its order; Team Planner and
+    // Report are disabled with the decision-9 tooltip until their views exist.
+    gate::check(buttons.size() == 5, "five status-bar view buttons (Project's order)");
+    const char* expected_labels[] = {"Gantt Chart", "Task Usage", "Team Planner",
+                                     "Resource Sheet", "Report"};
+    for (std::size_t index = 0; index < buttons.size() && index < 5; ++index) {
+        QToolButton* button = buttons[index];
         gate::check(button != nullptr && button->isVisible() && !button->icon().isNull(),
                     "a view button is visible and carries an icon");
+        if (button != nullptr) {
+            gate::check(button->text() == QString::fromLatin1(expected_labels[index]),
+                        "the view buttons are in Project's order");
+        }
+    }
+    if (buttons.size() == 5) {
+        gate::check(!buttons[2]->isEnabled() && !buttons[4]->isEnabled(),
+                    "Team Planner and Report are disabled (views not built)");
+        gate::check(buttons[2]->toolTip() ==
+                        QStringLiteral("not implemented in this port"),
+                    "a missing view says so with the exact tooltip");
     }
     QSlider* zoom = window.zoom_slider();
     gate::check(zoom != nullptr && zoom->isVisible(), "the zoom slider is visible");

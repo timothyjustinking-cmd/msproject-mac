@@ -158,7 +158,9 @@ void check_timeline(msqt::MainWindow& window) {
 
 void check_status_bar(msqt::MainWindow& window) {
     const std::vector<QToolButton*>& buttons = window.view_buttons();
-    gate::check(buttons.size() == 4, "the status bar has four view buttons");
+    // Wave 23 (B-9): Project's five (Gantt, Task Usage, Team Planner, Resource
+    // Sheet, Report); the last two are honest disabled stubs.
+    gate::check(buttons.size() == 5, "the status bar has Project's five view buttons");
     for (std::size_t index = 0; index < buttons.size(); ++index) {
         QToolButton* button = buttons[index];
         gate::check(button != nullptr, "a view button exists");
