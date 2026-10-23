@@ -164,6 +164,7 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
         row.successor_uid = link.successor_uid;
         row.type = gantt_link_type(link.type());
         row.lag_ticks = link.lag_ticks;
+        row.lag_units = link.lag_units;
         // The reader exposes no per-link critical flag; the Gantt's optional
         // "critical hint" stays false rather than being guessed from slack.
         row.critical = false;

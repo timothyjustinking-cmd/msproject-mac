@@ -65,19 +65,20 @@ namespace msqt {
 //   * a plain finish-to-start link with NO lag is the bare id -- "9", "33";
 //   * a LAGGED finish-to-start link keeps its letters -- "9FS+50 d",
 //     "17FS+20 d" -- so the letters are dropped only for the bare case;
-//   * the other three types always print theirs -- the capture's task 42 has an
-//     SS predecessor and shows "33SS";
+//   * the other three types always print theirs -- Project's COM
+//     Task.Predecessors for task 42 is "33SS,57" (the clean capture's row is
+//     below its fold, so this pin is from COM, not the capture);
 //   * the list is in the FILE's link order, NOT sorted by ID: the capture's task
 //     35 shows "40,36", task 36 "39,37" and task 17 "18,33..." -- the first two
 //     are not ascending, and all three are exactly the stored link order.
-// Measured but NOT reproduced here: the lag's unit text, which is printed through
-// the sheet's OWN duration formatter -- so it comes out "50 days" under
-// core::sheet's default labels while Project's capture (whose file uses the
-// abbreviated "d") prints "50 d".  FF/SF letters are Project's documented display
-// syntax, not seen in that capture (it contains no such link on a visible row).
-// Resource Names are comma+space separated with no unit suffix; a file that
-// assigns a resource at other than 100 % renders "name[50%]" in Project, which no
-// corpus file proves, so the units are NOT invented here.
+// WAVE 23: the lag's unit and label are the LINK's stored PjFormatUnit and the
+// FILE's Options > Edit label setting -- "9FS+50 d" on project_a (day label 0,
+// measured through COM), "4FS+2 days" on tests/data/wave23-outline.mpp (label
+// 2).  Units measured per value: hours/elapsed hours, days/elapsed days,
+// weeks/elapsed weeks, months and percent, plus negative lags.  Resource Names
+// are comma+space separated with no unit suffix; a file that assigns a resource
+// at other than 100 % renders "name[50%]" in Project, which no corpus file
+// proves, so the units are NOT invented here.
 //
 // An endpoint with no live task row contributes nothing (the adapter has already
 // dropped such links from the plan, and a structural rebuild keeps that rule); a

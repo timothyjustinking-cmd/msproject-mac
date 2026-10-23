@@ -6,6 +6,7 @@
 #include <array>
 #include <cctype>
 #include <cstddef>
+#include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <string>
@@ -16,6 +17,7 @@
 #include "edit_model.h"
 #include "entry_columns.h"  // kPredecessorsField/kSuccessorsField/kResourceNamesField
 #include "filter_model.h"
+#include "props.h"
 #include "reader_adapter.h"
 #include "selection_model.h"
 #include "shell_style.h"
@@ -42,6 +44,70 @@ const char* const kTableParts[4] = {"214/CTable/FixedData", "214/CTable/FixedMet
 const char* const kEdlParts[4] = {"214/CEdl/FixedData", "214/CEdl/FixedMeta",
                                   "214/CEdl/VarMeta", "214/CEdl/Var2Data"};
 
+// Unit label display records in `114/Props`, all MEASURED on 2026-10-23 by
+// saving one Options > Edit change at a time and diffing the props records:
+// minute 0x02400033, hour 0x02400034, day 0x02400035, week 0x02400036,
+// year 0x02400037, month 0x0240138e.  Value 0 is the shortest form, 1 the
+// abbreviated form, 2 the full word; COM's Task.Predecessors strings confirm
+// each (day 0/1/2 prints "d"/"dys"/"days", hour "h"/"hrs"/"hours", week
+// "w"/"wks"/"weeks", month "mo"/"mons"/"months").
+struct LabelSet {
+    const char* shortest_singular;
+    const char* shortest_plural;
+    const char* full_singular;
+    const char* full_plural;
+};
+
+void set_unit_labels(const msproject::props::PropsDocument& document, std::uint32_t id,
+                     const LabelSet& labels, std::string& singular, std::string& plural) {
+    const msproject::props::PropsRecord* record = document.find(id);
+    if (record == nullptr || record->kind != static_cast<std::uint32_t>(
+                                               msproject::props::ValueKind::int16)) {
+        return;
+    }
+    const std::span<const std::uint8_t> bytes = document.payload(*record);
+    if (bytes.size() < 2) {
+        return;
+    }
+    const std::uint16_t display =
+        static_cast<std::uint16_t>(bytes[0] | (static_cast<std::uint16_t>(bytes[1]) << 8));
+    switch (display) {
+        case 0:
+            singular = labels.shortest_singular;
+            plural = labels.shortest_plural;
+            break;
+        case 1: break;  // the abbreviated pair the SheetFormat already holds
+        case 2:
+            singular = labels.full_singular;
+            plural = labels.full_plural;
+            break;
+        default: break;
+    }
+}
+
+// Loads the file's Options > Edit unit-label settings into `format`.  A file
+// without the records keeps the SheetFormat defaults (the same full words).
+void apply_file_labels(const std::string& source_path, core::sheet::SheetFormat& format) {
+    const std::vector<std::uint8_t> bytes = app::props_stream_from_file(source_path);
+    if (bytes.empty()) {
+        return;
+    }
+    msproject::props::PropsDocument document;
+    if (!msproject::props::parse_props(bytes, document, nullptr)) {
+        return;
+    }
+    set_unit_labels(document, 0x02400033u, {"m", "m", "minute", "minutes"},
+                    format.units.minute_singular, format.units.minute_plural);
+    set_unit_labels(document, 0x02400034u, {"h", "h", "hour", "hours"},
+                    format.units.hour_singular, format.units.hour_plural);
+    set_unit_labels(document, 0x02400035u, {"d", "d", "day", "days"},
+                    format.units.day_singular, format.units.day_plural);
+    set_unit_labels(document, 0x02400036u, {"w", "w", "week", "weeks"},
+                    format.units.week_singular, format.units.week_plural);
+    set_unit_labels(document, 0x0240138eu, {"mo", "mo", "month", "months"},
+                    format.units.month_singular, format.units.month_plural);
+}
+
 // Wave 22: the task a uid names, or nullptr when the plan has no live row for it
 // (the reader drops links with a dead endpoint, and a structural rebuild keeps
 // that rule, so this is a guard rather than a normal path).
@@ -65,11 +131,11 @@ std::string endpoint_id(const app::PlanInput& plan, std::uint32_t uid) {
     return row != nullptr ? std::to_string(row->id) : std::string();
 }
 
-// Project's link-type suffix.  MEASURED from the clean capture: a plain
-// finish-to-start link with no lag is the BARE id ("9", "33"), but a
-// finish-to-start link with a lag prints FS too ("9FS+50 d", "17FS+20 d"), and
-// the other three types always print their letters -- the capture shows
-// "33SS" for a lag-free SS predecessor (task 42's Pre in the reference file).
+// Project's link-type suffix.  MEASURED from the clean capture and from COM's
+// Task.Predecessors strings: a plain finish-to-start link with no lag is the
+// BARE id ("9", "33"), but a finish-to-start link with a lag prints FS too
+// ("9FS+50 d", "17FS+20 d"), and the other three types always print their
+// letters -- COM's task 42 reads "33SS,57" for a lag-free SS predecessor.
 const char* link_type_suffix(core::gantt::LinkType type) {
     switch (type) {
         case core::gantt::LinkType::finish_to_start: return "FS";
@@ -80,18 +146,98 @@ const char* link_type_suffix(core::gantt::LinkType type) {
     return "FS";
 }
 
-// The lag text of one link, or "" for a zero lag: "+" / "-" and the sheet's own
-// duration rendering of the stored tick count, exactly as Project prints the
-// signed lag after the type letters ("9FS+50 days").
-std::string link_lag_text(std::int32_t lag_ticks, const core::sheet::SheetFormat& format) {
+// Project's lag number: up to two decimals, trailing zeros trimmed.
+std::string lag_number(double value, char decimal_separator) {
+    char buffer[64];
+    std::snprintf(buffer, sizeof buffer, "%.2f", value);
+    std::string text(buffer);
+    const std::size_t dot = text.find('.');
+    if (dot != std::string::npos) {
+        while (!text.empty() && text.back() == '0') {
+            text.pop_back();
+        }
+        if (!text.empty() && text.back() == '.') {
+            text.pop_back();
+        }
+    }
+    if (decimal_separator != '.') {
+        for (char& c : text) {
+            if (c == '.') {
+                c = decimal_separator;
+            }
+        }
+    }
+    return text;
+}
+
+// Wave 23 (W23-7): the link's own stored PjFormatUnit decides the unit; the
+// number is the stored tick count in that unit.  Elapsed units (4/6/8/10/12)
+// are wall-clock and print with Project's "e" prefix.  Percent (19) stores the
+// percentage itself, not ticks.
+std::string link_lag_text(std::int32_t lag_ticks, std::uint16_t lag_units,
+                          const core::sheet::SheetFormat& format) {
     if (lag_ticks == 0) {
         return {};
     }
-    const std::string magnitude =
-        core::sheet::format_duration_text(lag_ticks < 0 ? -static_cast<std::int64_t>(lag_ticks)
-                                                        : lag_ticks,
-                                          format);
-    return (lag_ticks < 0 ? "-" : "+") + magnitude;
+    const bool negative = lag_ticks < 0;
+    const double magnitude =
+        static_cast<double>(negative ? -static_cast<std::int64_t>(lag_ticks) : lag_ticks);
+
+    std::string number;
+    std::string label;
+    const std::uint16_t unit =
+        lag_units >= 32 ? static_cast<std::uint16_t>(lag_units - 32) : lag_units;
+    const bool elapsed = mpp::format_unit_is_elapsed(lag_units);
+    const double ticks_per_hour =
+        static_cast<double>(mpp::kTicksPerDay) / static_cast<double>(format.hours_per_day > 0
+                                                                          ? format.hours_per_day
+                                                                          : 8);
+    const double ticks_per_day = elapsed ? 24.0 * ticks_per_hour
+                                         : static_cast<double>(mpp::kTicksPerDay);
+    const double ticks_per_week =
+        ticks_per_day * (elapsed ? 7.0 : static_cast<double>(format.days_per_week > 0
+                                                                 ? format.days_per_week
+                                                                 : 5));
+    const double ticks_per_month =
+        ticks_per_day * (elapsed ? 30.0 : static_cast<double>(format.days_per_month > 0
+                                                                  ? format.days_per_month
+                                                                  : 20));
+    if (unit == 19 || unit == 20) {
+        return (negative ? "-" : "+") + lag_number(magnitude, format.decimal_separator) + "%";
+    }
+    if (unit == 3 || unit == 4) {
+        number = lag_number(magnitude / static_cast<double>(mpp::kTicksPerMinute),
+                            format.decimal_separator);
+        label = magnitude / static_cast<double>(mpp::kTicksPerMinute) == 1.0
+                    ? format.units.minute_singular
+                    : format.units.minute_plural;
+    } else if (unit == 5 || unit == 6) {
+        const double value = magnitude / ticks_per_hour;
+        number = lag_number(value, format.decimal_separator);
+        label = value == 1.0 ? format.units.hour_singular : format.units.hour_plural;
+    } else if (unit == 7 || unit == 8) {
+        const double value = magnitude / ticks_per_day;
+        number = lag_number(value, format.decimal_separator);
+        label = value == 1.0 ? format.units.day_singular : format.units.day_plural;
+    } else if (unit == 9 || unit == 10) {
+        const double value = magnitude / ticks_per_week;
+        number = lag_number(value, format.decimal_separator);
+        label = value == 1.0 ? format.units.week_singular : format.units.week_plural;
+    } else if (unit == 11 || unit == 12) {
+        const double value = magnitude / ticks_per_month;
+        number = lag_number(value, format.decimal_separator);
+        label = value == 1.0 ? format.units.month_singular : format.units.month_plural;
+    } else {
+        // An unmeasured PjFormatUnit: fall back to the sheet's magnitude rule
+        // rather than claim a unit.
+        const std::string text =
+            core::sheet::format_duration_text(static_cast<std::int64_t>(magnitude), format);
+        return (negative ? "-" : "+") + text;
+    }
+    if (label.empty()) {
+        label = "d";
+    }
+    return (negative ? "-" : "+") + number + " " + (elapsed ? "e" : "") + label;
 }
 
 // One link's entry in the predecessor/successor list: the other endpoint's ID,
@@ -100,12 +246,12 @@ std::string link_lag_text(std::int32_t lag_ticks, const core::sheet::SheetFormat
 // "5FS+5 days" and "33SS" both keep theirs.
 std::string link_entry(const app::PlanInput& plan, std::uint32_t other_uid,
                        core::gantt::LinkType type, std::int32_t lag_ticks,
-                       const core::sheet::SheetFormat& format) {
+                       std::uint16_t lag_units, const core::sheet::SheetFormat& format) {
     const std::string id = endpoint_id(plan, other_uid);
     if (id.empty()) {
         return {};
     }
-    const std::string lag = link_lag_text(lag_ticks, format);
+    const std::string lag = link_lag_text(lag_ticks, lag_units, format);
     const bool bare = type == core::gantt::LinkType::finish_to_start && lag.empty();
     return id + (bare ? std::string() : std::string(link_type_suffix(type))) + lag;
 }
@@ -122,7 +268,8 @@ std::string link_list_text(const app::PlanInput& plan, std::uint32_t task_uid, b
         }
         const std::uint32_t other =
             incoming ? link.predecessor_uid : link.successor_uid;
-        const std::string entry = link_entry(plan, other, link.type, link.lag_ticks, format);
+        const std::string entry =
+            link_entry(plan, other, link.type, link.lag_ticks, link.lag_units, format);
         if (entry.empty()) {
             continue;
         }
@@ -240,6 +387,10 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         // panel that changes it is a later stream (app/prefs.h's
         // apply_preferences()).
         format_ = core::sheet::SheetFormat{};
+        // Wave 23 (W23-7): the file's unit labels (Options > Edit), which decide
+        // whether a lag prints "50 d" or "50 days" -- Project_a stores the
+        // shortest form and prints "9FS+50 d" in both its grid and COM.
+        apply_file_labels(source_path, format_);
         sheet_->set_format(format_);
         // UID, ID and Outline are identity/calculated columns: the layout model
         // declares the policy (core::sheet deliberately does not infer it).

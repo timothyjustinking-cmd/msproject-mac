@@ -285,7 +285,8 @@ add_test(NAME qt_task_order
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_task_order_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
-                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/project_a_preds_golden.sha256")
 
 if(EXISTS "${QT_REPO_ROOT}/corpus/project_a.mpp")
     add_test(NAME qt_task_order_corpus
@@ -293,6 +294,7 @@ if(EXISTS "${QT_REPO_ROOT}/corpus/project_a.mpp")
                      $<TARGET_FILE:qt_task_order_tests>
                      "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
                      "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                     "${QT_TEST_DATA_DIR_CMAKE}/project_a_preds_golden.sha256"
                      "${QT_REPO_ROOT}/corpus/project_a.mpp")
 endif()
 
