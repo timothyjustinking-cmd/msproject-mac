@@ -1,0 +1,187 @@
+{
+ "image": {
+  "path": "local-only Project capture of tests/data/wave25-auto.mpp (wave23-outline with every task AUTO-scheduled, Critical Tasks OFF); not committed; operator ruling 2026-10-23.",
+  "width": 1920,
+  "height": 1032,
+  "sha256": "daa611958ecd897a8d909862c1628bac0aa44ae6ff8e5d7b38178bbb22936279"
+ },
+ "background": [
+  255,
+  255,
+  255
+ ],
+ "layout": {
+  "weekend_bands_px": [
+   [
+    979,
+    1027
+   ],
+   [
+    1147,
+    1195
+   ],
+   [
+    1316,
+    1363
+   ],
+   [
+    1483,
+    1531
+   ],
+   [
+    1651,
+    1699
+   ],
+   [
+    1819,
+    1867
+   ]
+  ],
+  "day_width_source": "weekend bands",
+  "chart_left_px": 859.0,
+  "splitter_px": 859.0,
+  "sheet_right_px": 859.0,
+  "header_top_px": 253,
+  "header_bottom_px": 295,
+  "body_top_px": 295,
+  "body_bottom_px": 977,
+  "row_pitch_px": 22,
+  "sheet_left_px": 60.0,
+  "column_count": 9,
+  "sheet_column_boundaries_px": [
+   60.0,
+   99.0,
+   156.0,
+   303.0,
+   384.0,
+   465.0,
+   546.0,
+   651.0,
+   756.0,
+   859.0
+  ],
+  "timescale_rules_px": [
+   253,
+   257,
+   295
+  ]
+ },
+ "measures": {
+  "day_width_px": {
+   "found": true,
+   "unit": "px",
+   "value": 24.0
+  },
+  "day_width_fraction": {
+   "found": true,
+   "unit": "fraction of image width",
+   "value": 0.0125
+  },
+  "splitter_fraction": {
+   "found": true,
+   "unit": "fraction of image width",
+   "value": 0.4474
+  },
+  "splitter_px": {
+   "found": true,
+   "unit": "px",
+   "value": 859.0
+  },
+  "row_height_px": {
+   "found": true,
+   "unit": "px",
+   "value": 22
+  },
+  "row_height_fraction": {
+   "found": true,
+   "unit": "fraction of image height",
+   "value": 0.02132
+  },
+  "header_height_px": {
+   "found": true,
+   "unit": "px",
+   "value": 42
+  },
+  "sheet_column_widths_px": {
+   "found": true,
+   "unit": "px",
+   "value": [
+    39.0,
+    57.0,
+    147.0,
+    81.0,
+    81.0,
+    81.0,
+    105.0,
+    105.0,
+    103.0
+   ]
+  },
+  "sheet_column_widths_fraction": {
+   "found": true,
+   "unit": "fraction of sheet width",
+   "value": [
+    0.04881,
+    0.07134,
+    0.18398,
+    0.10138,
+    0.10138,
+    0.10138,
+    0.13141,
+    0.13141,
+    0.12891
+   ]
+  },
+  "timescale_rules_px": {
+   "found": true,
+   "unit": "px",
+   "value": [
+    253,
+    257,
+    295
+   ]
+  },
+  "timescale_tier_count": {
+   "found": true,
+   "unit": "count",
+   "value": 2
+  },
+  "colour.header": {
+   "found": true,
+   "unit": "rgb",
+   "value": [
+    255,
+    255,
+    255
+   ]
+  },
+  "colour.grid": {
+   "found": true,
+   "unit": "rgb",
+   "value": [
+    212,
+    212,
+    212
+   ]
+  },
+  "colour.weekend": {
+   "found": true,
+   "unit": "rgb",
+   "value": [
+    247,
+    247,
+    247
+   ]
+  },
+  "colour.task_bar": {
+   "found": true,
+   "unit": "rgb",
+   "value": [
+    138,
+    187,
+    237
+   ]
+  }
+ },
+ "notes": []
+}
