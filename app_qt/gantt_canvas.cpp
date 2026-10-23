@@ -57,14 +57,22 @@ std::string week_label(core::sched::date32 monday) {
     return std::string(buffer);
 }
 
-QColor bar_color(const core::gantt::Bar& bar) {
+// Wave 25 (W25-2/S2): the row's scheduling mode chooses the bar style, not
+// its critical flag: Project's default has Critical Tasks highlighting OFF, so
+// a critical auto task is painted like any auto task.  kBarCritical is only for
+// the highlight-ON state (the measured (247,138,136)).
+QColor bar_color(const core::gantt::Bar& bar, bool critical_highlight) {
     switch (bar.kind) {
-        case core::gantt::BarKind::summary: return kBarSummary;
+        case core::gantt::BarKind::summary:
+            return bar.manual ? kBarSummaryManual : kBarSummary;
         case core::gantt::BarKind::milestone: return kBarMilestone;
         case core::gantt::BarKind::normal:
             break;
     }
-    return bar.critical ? kBarCritical : kBarTask;
+    if (bar.critical && critical_highlight) {
+        return kBarCritical;
+    }
+    return bar.manual ? kBarManual : kBarTask;
 }
 
 }  // namespace
@@ -73,7 +81,7 @@ QColor GanttCanvas::bar_colour(std::size_t index) const {
     if (index >= layout_.bars.size()) {
         return {};
     }
-    return bar_color(layout_.bars[index]);
+    return bar_color(layout_.bars[index], critical_highlight_);
 }
 
 GanttCanvas::GanttCanvas(QWidget* parent) : QWidget(parent) {
@@ -96,6 +104,11 @@ void GanttCanvas::set_selected_uid(std::uint32_t uid) {
 
 void GanttCanvas::set_shading(bool enabled) {
     shading_ = enabled;
+    update();
+}
+
+void GanttCanvas::set_critical_highlight(bool enabled) {
+    critical_highlight_ = enabled;
     update();
 }
 
@@ -275,8 +288,13 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
         for (const core::gantt::Point& point : link.points) {
             polyline << QPointF(point.x, point.y + body_top);
         }
+        // Wave 25 (W25-2/S2): a link takes the predecessor's scheduling style;
+        // red only when Critical Tasks highlighting is on.
+        const QColor link_colour = link.critical && critical_highlight_
+                                       ? kLinkCritical
+                                       : (link.manual ? kLinkManual : kLinkAuto);
         painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(link.critical ? kLinkCritical : kLinkLine, 1.0));
+        painter.setPen(QPen(link_colour, 1.0));
         painter.drawPolyline(polyline);
 
         QPolygonF arrow;
@@ -284,7 +302,7 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
               << QPointF(link.arrow.wing[0].x, link.arrow.wing[0].y + body_top)
               << QPointF(link.arrow.wing[1].x, link.arrow.wing[1].y + body_top);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(link.critical ? kLinkCritical : kLinkLine);
+        painter.setBrush(link_colour);
         painter.drawPolygon(arrow);
     }
 
@@ -292,7 +310,7 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
     for (const core::gantt::Bar& bar : layout_.bars) {
         const QRectF bar_rect(bar.rect.x, bar.rect.y + body_top, bar.rect.w, bar.rect.h);
         painter.setPen(QPen(kBarOutline, 1.0));
-        painter.setBrush(bar_color(bar));
+        painter.setBrush(bar_color(bar, critical_highlight_));
 
         QPolygonF diamond;
         if (bar.shape == core::gantt::BarShape::diamond) {
@@ -306,7 +324,7 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
                 // The model leaves the cap points at the origin when a bar is too
                 // short for a cap; check the width before drawing a degenerate
                 // triangle at (0, 0).
-                painter.setBrush(kBarSummary);
+                painter.setBrush(bar_color(bar, critical_highlight_));
                 if (bar.cap_left[1].x > bar.cap_left[0].x) {
                     QPolygonF cap;
                     for (const core::gantt::Point& point : bar.cap_left) {
@@ -321,12 +339,13 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
                     }
                     painter.drawPolygon(cap);
                 }
-            } else if (bar.fill.w > 0.0 && !bar.critical) {
-                // The completion fill is the normal bar's darker blue.  It must NOT
-                // cover a CRITICAL bar: Project keeps a critical task red along its
-                // whole length even at 100 % complete, and the operator's capture
-                // showed our blue fill making critical invisible (wave 21, decision
-                // 4 of the operator review).
+            } else if (bar.fill.w > 0.0 && !(bar.critical && critical_highlight_)) {
+                // The completion fill is the normal bar's darker blue.  With
+                // Critical Tasks highlighting ON it must NOT cover a critical
+                // bar (Project keeps it red along its whole length, even at
+                // 100 % complete; wave 21 decision 4).  With highlighting OFF
+                // -- Project's default -- a critical bar is an ordinary bar and
+                // takes the fill like any other.
                 painter.fillRect(
                     QRectF(bar.fill.x, bar.fill.y + body_top, bar.fill.w, bar.fill.h),
                     kBarComplete);

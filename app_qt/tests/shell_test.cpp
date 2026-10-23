@@ -106,8 +106,11 @@ int main(int argc, char** argv) {
         check(window.gantt_view()->layout().bars.size() == 3,
               "the Gantt has the three task bars");
         if (window.gantt_view()->layout().bars.size() == 3) {
+            // Wave 25 (W25-2/S2): synthetic-base's tasks are MANUALLY scheduled
+            // (it was built with Tasks.Add and no Manual = False), so the manual
+            // task style is the measured teal; an auto task is (138,187,237).
             check(window.gantt_view()->bar_colour(0) == QColor(0x74, 0xcc, 0xd4),
-                  "an ordinary task bar uses Project's measured stock teal (W24-18)");
+                  "a manually scheduled task bar uses Project's measured teal (W25-2)");
         }
     } else {
         check(false, "the window owns a Gantt canvas");

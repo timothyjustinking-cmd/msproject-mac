@@ -111,7 +111,7 @@ void case_palette() {
     core::gantt::GanttSource source;
     const auto day = [](int d) { return core::sched::from_ymd(2026, 10, 19 + d); };
     const auto make_task = [&day](std::uint32_t uid, BarKind kind, bool critical, int start,
-                              int finish, double percent) {
+                              int finish, double percent, bool manual = false) {
         core::gantt::TaskBarInput task;
         task.uid = uid;
         task.label = "Task";
@@ -119,17 +119,23 @@ void case_palette() {
         task.finish = day(finish);
         task.kind = kind;
         task.critical = critical;
+        task.manual = manual;
         // The completion fill is drawn when percent complete is > 0.
         task.percent_complete = percent;
         return task;
     };
-    // normal blue, critical red, summary, milestone, and a 100 %-complete critical
-    // task (the operator's defect: the blue fill hid the red).
-    source.tasks.push_back(make_task(1, BarKind::normal, false, 0, 3, 0.0));
-    source.tasks.push_back(make_task(2, BarKind::normal, true, 1, 4, 0.0));
-    source.tasks.push_back(make_task(3, BarKind::summary, true, 0, 4, 0.0));
-    source.tasks.push_back(make_task(4, BarKind::milestone, true, 2, 2, 0.0));
-    source.tasks.push_back(make_task(5, BarKind::normal, true, 0, 3, 1.0));
+    // Wave 25 (W25-2/S2): one row per unambiguous type measured in Project --
+    // auto task, auto critical task, auto summary, milestone, a 100 %-complete
+    // critical task, and the MANUAL task/summary styles.  The wave-24 gate
+    // mislabelled the manual task colour as "task" and the auto task colour as
+    // "critical".
+    source.tasks.push_back(make_task(1, BarKind::normal, false, 0, 3, 0.0));      // auto
+    source.tasks.push_back(make_task(2, BarKind::normal, true, 1, 4, 0.0));       // auto critical
+    source.tasks.push_back(make_task(3, BarKind::summary, true, 0, 4, 0.0));      // auto summary
+    source.tasks.push_back(make_task(4, BarKind::milestone, true, 2, 2, 0.0));    // milestone
+    source.tasks.push_back(make_task(5, BarKind::normal, true, 0, 3, 1.0));       // 100 %
+    source.tasks.push_back(make_task(6, BarKind::normal, false, 0, 3, 0.0, true));  // manual
+    source.tasks.push_back(make_task(7, BarKind::summary, true, 0, 4, 0.0, true));  // manual summary
 
     core::gantt::Timescale timescale;
     timescale.unit = core::gantt::TimescaleUnit::day;
@@ -146,7 +152,8 @@ void case_palette() {
     check(image.width() == 600 && image.height() == 260, "the canvas grab is 1:1");
 
     const int body_top = msqt::kGanttHeaderHeight;
-    auto sample = [&](std::uint32_t uid, const char* what, const QColor& want) {
+    auto sample = [&](const QImage& canvas_image, std::uint32_t uid, const char* what,
+                      const QColor& want) {
         const core::gantt::Bar* bar = bar_for(layout, uid);
         check(bar != nullptr, what);
         if (bar == nullptr) {
@@ -156,7 +163,7 @@ void case_palette() {
         // outline, the caps and the label.
         const int x = static_cast<int>(bar->rect.x + bar->rect.w * 0.25);
         const int y = static_cast<int>(bar->rect.y + body_top + bar->rect.h * 0.5);
-        const QColor got = pixel_at(image, x, y);
+        const QColor got = pixel_at(canvas_image, x, y);
         if (got != want) {
             std::fprintf(stderr,
                          "FAIL: %s: pixel (%d,%d) is (%d,%d,%d), want (%d,%d,%d)\n", what, x, y,
@@ -165,14 +172,41 @@ void case_palette() {
             ++g_failures;
         }
     };
-    sample(1, "a normal bar is Project's measured stock teal", msqt::kBarTask);
-    sample(2, "a critical bar is Project's measured stock light blue",
+    // Project's default: Format > Critical Tasks OFF.  A critical AUTO task is
+    // an ordinary auto task, and a completed one shows the completion fill.
+    sample(image, 1, "an auto bar is Project's measured light blue (138,187,237)",
+           msqt::kBarTask);
+    sample(image, 2, "a critical auto bar is the AUTO colour with highlighting OFF",
+           msqt::kBarTask);
+    sample(image, 3, "an auto summary paints the measured (84,84,84) line colour",
+           msqt::kBarSummary);
+    sample(image, 4, "a milestone diamond is black", msqt::kBarMilestone);
+    sample(image, 5, "a 100 %-complete bar shows the completion fill with highlighting OFF",
+           msqt::kBarComplete);
+    sample(image, 6, "a manual bar is Project's measured teal (116,204,212)",
+           msqt::kBarManual);
+    sample(image, 7, "a manual summary paints the measured (43,163,173)",
+           msqt::kBarSummaryManual);
+    // Highlighting ON: only critical AUTO bars change (Project leaves summaries
+    // and manual rows alone).
+    canvas.set_critical_highlight(true);
+    const QImage highlighted = canvas.grab().toImage();
+    sample(highlighted, 1, "a non-critical auto bar is unchanged with highlighting ON",
+           msqt::kBarTask);
+    sample(highlighted, 2, "a critical auto bar is the measured (247,138,136) with highlighting ON",
            msqt::kBarCritical);
-    sample(3, "a summary bar paints the shell's summary colour", msqt::kBarSummary);
-    sample(5, "a 100 %-complete CRITICAL bar stays the critical colour",
+    sample(highlighted, 3, "an auto summary keeps its summary colour with highlighting ON",
+           msqt::kBarSummary);
+    sample(highlighted, 5, "a 100 %-complete critical bar stays critical with highlighting ON",
            msqt::kBarCritical);
-    check(msqt::kBarCritical == QColor(0x8a, 0xbb, 0xed),
-          "critical is the blank-project measured (138,187,237), not PROJECT_A's red");
+    sample(highlighted, 6, "a manual bar keeps the manual colour with highlighting ON",
+           msqt::kBarManual);
+    check(msqt::kBarTask == QColor(0x8a, 0xbb, 0xed),
+          "auto task is the measured (138,187,237), not wave 24's manual teal");
+    check(msqt::kBarManual == QColor(0x74, 0xcc, 0xd4),
+          "manual task is the measured (116,204,212), not wave 24's 'task' colour");
+    check(msqt::kBarCritical == QColor(0xf7, 0x8a, 0x88),
+          "the highlight-ON critical bar is the measured (247,138,136)");
     check(msqt::kSelection == QColor(0xa2, 0xd3, 0xa0),
           "the selection is Project's measured green #a2d3a0");
     // A selected row paints that green behind the whole row of the canvas.

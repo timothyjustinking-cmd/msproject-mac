@@ -222,10 +222,25 @@ int main(int argc, char** argv) {
     // Wave 21: the selection is Project 2021's measured green (162,211,160), read
     // from the operator's clean reference capture -- not the earlier guess.
     check(msqt::kSelection == QColor(0xa2, 0xd3, 0xa0), "selection is #a2d3a0");
-    // Wave 24 (W24-18): the blank-project capture measured the stock task fill
-    // as (116,204,212); the old #4a7ebb was PROJECT_A's own style.
-    check(msqt::kBarTask == QColor(0x74, 0xcc, 0xd4),
-          "task bar is Project's measured stock teal (116,204,212)");
+    // Wave 25 (W25-2/S2): re-measured with an unambiguous row of each type.
+    // Wave 24 had labelled the MANUAL task fill (116,204,212) "task" and the
+    // ordinary AUTO task fill (138,187,237) "critical"; the auto task is the
+    // light blue, the manual task the teal, and (247,138,136) is only the
+    // Critical Tasks highlight-ON colour.
+    check(msqt::kBarTask == QColor(0x8a, 0xbb, 0xed),
+          "auto task bar is Project's measured light blue (138,187,237)");
+    check(msqt::kBarManual == QColor(0x74, 0xcc, 0xd4),
+          "manual task bar is Project's measured teal (116,204,212)");
+    check(msqt::kBarCritical == QColor(0xf7, 0x8a, 0x88),
+          "Critical Tasks highlighting is the measured (247,138,136)");
+    check(msqt::kBarSummary == QColor(0x54, 0x54, 0x54),
+          "an auto summary is the measured (84,84,84) bracket colour");
+    check(msqt::kBarSummaryManual == QColor(0x2b, 0xa3, 0xad),
+          "a manual summary is the measured (43,163,173)");
+    check(msqt::kLinkAuto == QColor(0x26, 0x7c, 0xd3),
+          "an auto link is the measured (38,124,211)");
+    check(msqt::kLinkManual == QColor(0x1b, 0xad, 0xba),
+          "a manual link is the measured (27,173,186)");
 
     // --- chrome ------------------------------------------------------------
     msqt::RibbonBar* ribbon = window.ribbon();

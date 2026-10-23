@@ -59,6 +59,12 @@ class GanttCanvas final : public QWidget {
     void set_shading(bool enabled);
     // The current preference, for the preferences gate and the status line.
     bool shading() const noexcept { return shading_; }
+    // Wave 25 (W25-2/S2): Format > Critical Tasks highlighting.  Project's
+    // default is OFF, so ordinary painting uses the auto/manual bar styles;
+    // ON paints critical tasks and links with the measured highlight colours.
+    // The ribbon action is still unimplemented, so the shell passes nothing.
+    void set_critical_highlight(bool enabled);
+    bool critical_highlight() const noexcept { return critical_highlight_; }
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -68,7 +74,8 @@ class GanttCanvas final : public QWidget {
     const core::gantt::GanttLayout& layout() const noexcept { return layout_; }
 
     // Wave 23 (A-1): the fill colour paintEvent gives layout bar `index` --
-    // summary, milestone, critical or ordinary task.  Exposed so the same-file
+    // auto/manual summary, milestone, highlighted-critical, manual or ordinary
+    // task.  Exposed so the same-file
     // structural gate can compare the per-row table against literals instead
     // of re-reading the code it is testing.
     QColor bar_colour(std::size_t index) const;
@@ -100,6 +107,7 @@ class GanttCanvas final : public QWidget {
     core::gantt::GanttLayout layout_;
     std::uint32_t selected_uid_ = 0;
     bool shading_ = true;
+    bool critical_highlight_ = false;  // Project's default: Critical Tasks OFF
 };
 
 }  // namespace msqt

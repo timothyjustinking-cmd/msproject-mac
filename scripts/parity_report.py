@@ -825,13 +825,20 @@ def _measure_meta(key):
     return None
 
 
-def compare(reference, candidate):
-    """Build the delta table.  Returns (rows, summary)."""
+def compare(reference, candidate, keys=None):
+    """Build the delta table.  Returns (rows, summary).
+
+    `keys` restricts the comparison to the named measures (wave 25: the
+    auto-scheduled reference exists to pin ONE colour, and its FileNew-descended
+    view geometry is not part of that claim).  None compares every measure.
+    """
     rows = []
     comparable = 0
     failures = 0
     missing = 0
     for key, label, kind, tolerance, why in MEASURES:
+        if keys is not None and key not in keys:
+            continue
         ref_measure = reference.measures.get(key, {})
         cand_measure = candidate.measures.get(key, {})
         ref_found = bool(ref_measure.get("found"))
@@ -1296,7 +1303,18 @@ def main(argv=None):
                              "local Project capture; wave-23 operator ruling)")
     parser.add_argument("--quiet", action="store_true",
                         help="suppress the human table")
+    parser.add_argument("--only", metavar="KEYS",
+                        help="comma-separated measure keys to compare; the "
+                             "structural minimum drops to the number selected "
+                             "(wave 25: a colour-only reference)")
+    parser.add_argument("--list-measures", action="store_true",
+                        help="print the measure keys and exit")
     args = parser.parse_args(argv)
+
+    if args.list_measures:
+        for key, label, _kind, _tolerance, _why in MEASURES:
+            print(f"{key:24s} {label}")
+        return 0
 
     if args.selftest:
         return selftest()
@@ -1328,15 +1346,25 @@ def main(argv=None):
         except (OSError, ValueError) as exc:               # noqa: BLE001
             print(f"error: cannot read {args.reference_json}: {exc}", file=sys.stderr)
             return 2
+        only = None
+        if args.only:
+            only = tuple(part.strip() for part in args.only.split(",") if part.strip())
+            known = {item[0] for item in MEASURES}
+            unknown = [key for key in only if key not in known]
+            if unknown:
+                print("error: unknown measure key(s): " + ", ".join(unknown),
+                      file=sys.stderr)
+                return 2
         reference = JsonReference(report)
         candidate = Analysis(paths[0])
-        rows, summary = compare(reference, candidate)
+        rows, summary = compare(reference, candidate, keys=only)
         if not args.quiet:
             print_compare(rows, summary, reference, candidate)
         # Wave 23 review: a gate that passes on ONE surviving measure is not a
         # gate.  The committed reference supplies nine structural measures; a
-        # candidate that fails to exhibit most of them is not comparable.
-        MIN_COMPARABLE = 8
+        # candidate that fails to exhibit most of them is not comparable.  A
+        # --only comparison is explicit about which measures are its claim.
+        MIN_COMPARABLE = len(only) if only else 8
         if summary["comparable"] < MIN_COMPARABLE:
             print(f"error: only {summary['comparable']} comparable measure(s); "
                   f"at least {MIN_COMPARABLE} are required", file=sys.stderr)
@@ -1346,8 +1374,9 @@ def main(argv=None):
         # "not found") must be a FAILURE, not a silently skipped measure.  All
         # four measured colours must be present in the reference AND in the
         # candidate render.
-        colour_keys = ("colour.header", "colour.grid", "colour.weekend",
-                       "colour.task_bar")
+        colour_keys = tuple(key for key in ("colour.header", "colour.grid",
+                                            "colour.weekend", "colour.task_bar")
+                            if only is None or key in only)
         missing_colours = [
             key for key in colour_keys
             if not report.get("measures", {}).get(key, {}).get("found") or
