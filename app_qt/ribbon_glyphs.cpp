@@ -367,14 +367,24 @@ bool draw_project_tab_glyph(QPainter& painter, const QString& key) {
         painter.drawArc(QRectF(20, 15, 9, 9), 90 * 16, 180 * 16);
         line(painter, 7, 24, 26, 24);
     } else if (key == QStringLiteral("properties.project_information")) {
-        info_page(painter);
+        // Project's Project Information is a table/window with the info badge,
+        // not the page Task Information uses.
+        outline_rect(painter, 4, 6, 20, 18);
+        line(painter, 9, 6, 9, 24);
+        line(painter, 4, 11, 24, 11);
+        outline_circle(painter, 20, 20, 5.0);
+        filled_circle(painter, 20, 17.5, 1.1);
+        line(painter, 20, 20, 20, 23.5);
     } else if (key == QStringLiteral("properties.custom_fields")) {
-        page(painter);
-        line(painter, 9, 12, 24, 12);
-        line(painter, 9, 17, 24, 17);
-        line(painter, 9, 22, 24, 22);
-        line(painter, 14, 12, 14, 22);
-        line(painter, 19, 12, 19, 22);
+        // The field grid with the add badge: Project shows this same glyph on
+        // the Project tab and on Gantt Chart Format.
+        outline_rect(painter, 4, 6, 20, 20);
+        line(painter, 11, 6, 11, 26);
+        line(painter, 18, 6, 18, 26);
+        line(painter, 4, 12, 24, 12);
+        line(painter, 4, 18, 24, 18);
+        line(painter, 20, 23, 28, 23, 2.5);
+        line(painter, 24, 19, 24, 27, 2.5);
     } else if (key == QStringLiteral("properties.links_between")) {
         page(painter);
         outline_rect(painter, 9, 13, 8, 5, 2);
@@ -701,6 +711,22 @@ bool draw_task_glyph(QPainter& painter, const QString& key) {
         filled_polygon(painter, {QPointF(18, 8), QPointF(27, 12), QPointF(18, 16)});
     } else if (key == QStringLiteral("properties.information")) {
         info_page(painter);
+    } else if (key == QStringLiteral("properties.resource_information")) {
+        // Project's Resource Information is a person with the info badge -- a
+        // different glyph from Task Information's page.
+        person(painter, 12, 11, 4.0);
+        outline_circle(painter, 22, 21, 5.5);
+        filled_circle(painter, 22, 18.5, 1.2);
+        line(painter, 22, 21, 22, 25);
+    } else if (key == QStringLiteral("properties.resource_details")) {
+        // A page with detail lines and two value boxes, as Resource Details
+        // shows (Task Details keeps its table page).
+        page(painter);
+        line(painter, 9, 12, 17, 12);
+        line(painter, 9, 17, 17, 17);
+        line(painter, 9, 22, 17, 22);
+        outline_rect(painter, 19, 11, 5, 4);
+        outline_rect(painter, 19, 16, 5, 4);
     } else if (key == QStringLiteral("properties.notes")) {
         outline_rect(painter, 6, 5, 20, 22, 2);
         filled_polygon(painter, {QPointF(26, 5), QPointF(26, 13), QPointF(18, 5)});
