@@ -341,6 +341,15 @@ bool StructuralEdits::push(StructuralEdit edit) {
             edit.dependants = 0;
             break;
         }
+        case StructuralKind::set_project_priority: {
+            if (edit.uid != 0 || edit.priority > 1000) {
+                return false;
+            }
+            // Last one wins, like set_percent: the display plan and the save
+            // both take the newest edit per target.
+            edit.dependants = 0;
+            break;
+        }
     }
     applied_.push_back(std::move(edit));
     undone_.clear();
@@ -570,6 +579,12 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
             }
         }
     }
+    // Wave 26 (W26-5.1): the project priority, last one wins.
+    for (const StructuralEdit& edit : applied_) {
+        if (edit.kind == StructuralKind::set_project_priority) {
+            effective.project_priority = edit.priority;
+        }
+    }
     effective.tasks = std::move(tasks);
 
     // Link adds last, only between rows the display still shows: a link whose
@@ -735,6 +750,15 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                   return last_percent.at(left->uid) < last_percent.at(right->uid);
               });
 
+    // Wave 26 (W26-5.1): the project priority, last edit wins.  It lives in the
+    // same FixedData table as PercentComplete, so both ride ONE table write.
+    const StructuralEdit* priority_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::set_project_priority) {
+            priority_edit = &edit;
+        }
+    }
+
     // Count the writer calls first: every one writes a file, and only the LAST one
     // may write the target (so an earlier refusal leaves the target untouched).
     std::size_t write_ops = 0;
@@ -747,8 +771,8 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         ++write_ops;
     }
     write_ops += field_clears.size();
-    if (!percent_edits.empty()) {
-        ++write_ops;  // one table write for every percent edit
+    if (!percent_edits.empty() || priority_edit != nullptr) {
+        ++write_ops;  // one table write for every percent/priority edit
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -895,9 +919,10 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                    " of task uid " + std::to_string(edit->uid));
         }
 
-        // 5a (wave 26).  PercentComplete: one stored copy per task, so the table
-        // write needs no cross-stream fix-up.  All winning edits ride one write.
-        if (!percent_edits.empty()) {
+        // 5a (wave 26).  PercentComplete and the project Priority each have one
+        // stored copy (FixedData words of their rows), so the table write needs
+        // no cross-stream fix-up.  All winning edits ride one write.
+        if (!percent_edits.empty() || priority_edit != nullptr) {
             mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
             for (const StructuralEdit* edit : percent_edits) {
                 const std::size_t row = table.row_for_uid(edit->uid);
@@ -906,6 +931,14 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 result.notes.push_back("task uid " + std::to_string(edit->uid) +
                                        ": percent complete " +
                                        std::to_string(edit->percent));
+            }
+            if (priority_edit != nullptr) {
+                // Row 0 is the project row (uid 0), matched like any other.
+                const std::size_t row = table.row_for_uid(0);
+                table.set_priority(row, priority_edit->priority);
+                result.priority_rows_written = 1;
+                result.notes.push_back("project priority " +
+                                       std::to_string(priority_edit->priority));
             }
             table.store_into(document);
             document.save(next_write_path());

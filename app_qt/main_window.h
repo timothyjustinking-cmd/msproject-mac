@@ -109,6 +109,9 @@ class MainWindow final : public QMainWindow {
     bool document_dirty() const;
     std::size_t pending_start_edits() const;
     std::size_t loaded_task_count() const;
+    // Wave 26 (G5): the pending structural edits, for the project-dialog gate
+    // (Project Information's priority lands here before Save writes it).
+    const app::StructuralEdits& pending_edits() const noexcept { return structural_; }
 
     // The last save_document_path() result, for the status line and the test.
     std::size_t last_save_rows_written() const noexcept { return last_save_rows_written_; }
@@ -169,6 +172,12 @@ class MainWindow final : public QMainWindow {
     void show_options();
     void set_new_task_mode(bool manual);
     bool new_tasks_manual() const noexcept { return new_tasks_manual_; }
+
+    // --- wave 26 (G5): the Project tab's dialogs ---------------------------
+    // Project Information: the file's values; Priority is the one functional
+    // field and its OK queues a StructuralEdits set_project_priority.  Public
+    // so the offscreen gate can drive the real path without a modal.
+    void show_project_information();
 
     // Opens/closes the File backstage.  Public so the structural gate can prove
     // the left rail and pages without clicking through a modal.

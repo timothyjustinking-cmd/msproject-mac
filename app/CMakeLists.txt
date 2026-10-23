@@ -123,7 +123,7 @@ set(VIEWSTATE_BUILD_TESTS OFF CACHE BOOL "core/viewstate tests (off: app configu
 # Order matters: view needs model, sheet needs view, gantt needs sched, render
 # needs sheet + gantt, usage needs sched, formula needs sheet.  props (W50) has no
 # core dependency of its own: it parses an already-extracted stream blob.
-foreach(app_core_dep mpp sched view sheet gantt usage formula mppwrite render props viewstate)
+foreach(app_core_dep mpp sched view sheet gantt usage formula mppwrite render props viewstate cal)
     if(NOT EXISTS "${APP_REPO_ROOT}/core/${app_core_dep}/CMakeLists.txt")
         message(FATAL_ERROR
             "app: core/${app_core_dep}/CMakeLists.txt is missing. The shell links the "
@@ -175,6 +175,7 @@ add_library(app_layout STATIC
     start_edit_warning.cpp
     smoke.cpp
     view_style.cpp
+    project_dialogs.cpp
 )
 add_library(msproject::app_layout ALIAS app_layout)
 target_compile_features(app_layout PUBLIC cxx_std_20)
@@ -189,7 +190,7 @@ target_include_directories(app_layout PUBLIC
 # core/usage's own use of core_sched.
 target_link_libraries(app_layout PUBLIC core_sheet core_gantt core_mpp core_mppwrite
                                      core_render core_usage core_formula core_props
-                                     core_viewstate)
+                                     core_viewstate core_cal)
 # PUBLIC so the tests see the same branch of app/document.cpp the shell compiles.
 target_compile_definitions(app_layout PUBLIC
     APP_MPPWRITE_SAVE_HEADER=${APP_MPPWRITE_SAVE_HEADER}
@@ -452,6 +453,24 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_smoke COMMAND smoke_tests)
     set_tests_properties(app_smoke PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 26 (W26-5.1..5.4): the Project tab's dialog payloads -- Project
+    # Information's file values and its one functional field (Priority, saved and
+    # re-read through the shared cascade), and (as the group grows) the calendar,
+    # custom-field and command models.  The fixture is copied under
+    # APP_TEST_OUT_DIR before it is saved from.
+    add_executable(project_dialogs_tests project_dialogs_tests.cpp)
+    target_compile_features(project_dialogs_tests PRIVATE cxx_std_20)
+    set_target_properties(project_dialogs_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(project_dialogs_tests PRIVATE app_layout)
+    target_compile_definitions(project_dialogs_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(project_dialogs_tests)
+
+    add_test(NAME app_project_dialogs COMMAND project_dialogs_tests)
+    set_tests_properties(app_project_dialogs PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 endif()
 
 # ---------------------------------------------------------------------------

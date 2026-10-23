@@ -123,7 +123,7 @@ Project	0	Add-ins	group	-	-	-	-	-
 Project	0	Add-ins	small	Get Add-ins	0	addins.get	0	-
 Project	0	Add-ins	small	My Add-ins	0	addins.my	1	-
 Project	0	Properties	group	-	-	-	-	-
-Project	0	Properties	button	Project Information	0	properties.project_information	0	-
+Project	0	Properties	button	Project Information	1	properties.project_information	0	-
 Project	0	Properties	button	Custom Fields	1	properties.custom_fields	0	-
 Project	0	Properties	button	Links Between Projects	0	properties.links_between	0	-
 Project	0	Properties	button	WBS	0	properties.wbs	0	-

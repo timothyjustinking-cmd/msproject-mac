@@ -496,6 +496,7 @@ const EnabledWiring kEnabledWiring[] = {
     {"View", "Resource Views", "Resource Usage", "view_resource_usage", ""},
     {"View", "Resource Views", "Resource Sheet", "view_resource_sheet", ""},
     {"Project", "Properties", "Custom Fields", "custom_fields", ""},
+    {"Project", "Properties", "Project Information", "", "project_information"},
     {"Gantt Chart Format", "Columns", "Custom Fields", "custom_fields", ""},
     {"Task", "Schedule", "0%", "", "percent_0"},
     {"Task", "Schedule", "25%", "", "percent_25"},
@@ -527,6 +528,13 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::toggle_project_summary: return "toggle_project_summary";
         case RibbonCommand::toggle_timeline: return "toggle_timeline";
         case RibbonCommand::toggle_details: return "toggle_details";
+        case RibbonCommand::project_information: return "project_information";
+        case RibbonCommand::change_working_time: return "change_working_time";
+        case RibbonCommand::links_between_projects: return "links_between_projects";
+        case RibbonCommand::update_project: return "update_project";
+        case RibbonCommand::move_project: return "move_project";
+        case RibbonCommand::wbs_menu: return "wbs_menu";
+        case RibbonCommand::set_baseline_menu: return "set_baseline_menu";
     }
     return "none";
 }

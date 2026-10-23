@@ -78,6 +78,8 @@
 #include "options_dialog.h"
 #include "preferences_store.h"
 #include "print_page.h"
+#include "project_dialogs.h"     // app::ProjectInformation (wave 26 G5)
+#include "project_dialogs_qt.h"  // the Project tab's dialogs
 #include "reader.h"
 #include "ribbon_bar.h"
 #include "selection_model.h"
@@ -1876,6 +1878,17 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::split_task:
             // Not wired (W26-6.3 / no engine edit); disabled until then.
             return;
+        case RibbonCommand::project_information:
+            show_project_information();
+            return;
+        case RibbonCommand::change_working_time:
+        case RibbonCommand::links_between_projects:
+        case RibbonCommand::update_project:
+        case RibbonCommand::move_project:
+        case RibbonCommand::wbs_menu:
+        case RibbonCommand::set_baseline_menu:
+            // W26-5.2..5.4 wire these; until then the controls stay disabled.
+            return;
     }
 }
 
@@ -2642,6 +2655,39 @@ void MainWindow::show_preferences() {
     }
     apply_preferences(dialog.preferences(), true);
     set_theme(dialog.theme(), true);
+}
+
+void MainWindow::show_project_information() {
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    const app::CalendarNames names = app::read_calendar_names(doc_.path());
+    const app::ProjectInformation info = app::project_information_from(
+        doc_.plan(), names.names, names.default_name, app::today_date32(), doc_.format());
+    int priority = info.priority;
+    if (!edit_project_information(this, info, &priority)) {
+        set_message("project information cancelled", false);
+        update_status();
+        return;
+    }
+    if (priority == info.priority) {
+        set_message("no project information changed", false);
+        update_status();
+        return;
+    }
+    if (!app::valid_project_priority(priority) ||
+        !structural_.push(app::make_project_priority_edit(priority))) {
+        set_message("the project priority was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change();
+    set_message("queued project priority " + std::to_string(priority) +
+                    "; File > Save writes it",
+                false);
+    update_status();
 }
 
 void MainWindow::show_options() {

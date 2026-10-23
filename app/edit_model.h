@@ -84,6 +84,11 @@ enum class StructuralKind : std::uint8_t {
     // PercentComplete (mppwrite::TaskTable::set_percent_complete), so the edit
     // saves through the same cascade as the other structural edits.
     set_percent = 6,
+    // Wave 26 (W26-5.1): Project Information's Priority.  The value lives in the
+    // project row's FixedData +78 (row 0, uid 0) and is written through
+    // mppwrite::TaskTable::set_priority on the project row -- the same
+    // single-copy table write set_percent uses.
+    set_project_priority = 7,
 };
 
 // One pending edit, as the user asked for it.
@@ -123,6 +128,8 @@ struct StructuralEdit {
     std::uint32_t link_uid = 0;
     // set_percent: the task's new PercentComplete, 0..100.
     std::uint16_t percent = 0;
+    // set_project_priority: Project's project priority, 0..1000.
+    std::uint16_t priority = 500;
     core::gantt::LinkType link_type = core::gantt::LinkType::finish_to_start;
     // The lag in 6-second file ticks (4800 = one 8-hour working day).
     std::int32_t lag_ticks = 0;
@@ -234,6 +241,8 @@ struct StructuralSaveResult {
     std::size_t start_rows_written = 0;
     // Wave 26 (W26-1.2): tasks whose PercentComplete was written.
     std::size_t percent_rows_written = 0;
+    // Wave 26 (W26-5.1): 1 when the project row's Priority was written.
+    std::size_t priority_rows_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the

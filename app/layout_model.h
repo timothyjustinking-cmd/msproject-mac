@@ -182,6 +182,12 @@ struct PlanInput {
     std::vector<AssignmentRow> assignments;
     date32 project_start = kDateNa;
     date32 project_finish = kDateNa;
+    /* Wave 26 (W26-5.1): the project row's Priority word (FixedData +78 of row
+     * 0), the one Project Information field this port can both read and write.
+     * Project's new-project value is 500; a producer that does not store the
+     * word leaves the reader's 0 rather than this default, so the value shown is
+     * the file's. */
+    std::uint16_t project_priority = 500;
     std::size_t skipped_links = 0;  // links whose endpoint the reader did not know
 
     /* Wave 23 (B-1) / wave 24 (W24-2): Project's project-summary row, shown as
