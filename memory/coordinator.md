@@ -399,8 +399,9 @@ operator owes a dark capture); **12** partial (no per-screen pixel-diff run).
 
 ### Counters
 
-This wave: 1 agent session (Q5, stopped) + ~4 coordinator rounds (two sessions);
-**~$0.30 at ~$0.077/session (estimate, not metered)**.  Roadmap ~78% by the
+This wave: 4 agent lanes (Q5, E5, M6, CI2) + ~4 coordinator rounds (~2
+coordinator sessions) -- ~8 sessions, **~$0.62 at ~$0.077/session (estimate,
+not metered)**.  Roadmap ~78% by the
 table's own arithmetic (the old ~83% was inconsistent with its rows).
 
 ### Next three actions
