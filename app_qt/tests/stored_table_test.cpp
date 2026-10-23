@@ -42,7 +42,9 @@
 #include <QAbstractItemModel>
 #include <QApplication>
 #include <QByteArray>
+#include <QColor>
 #include <QDir>
+#include <QFont>
 #include <QFile>
 #include <QFileInfo>
 #include <QString>
@@ -778,6 +780,22 @@ void case_corpus(const QString& corpus) {
           "the stored Pre column maps to the predecessors kind");
     check(table_model->display_kind(succ_column) == msqt::EntryCellKind::successors,
           "the stored Suc column maps to the successors kind");
+
+    // Wave 23 (B-11): project_a's row 3 (ID 3) is a milestone from the stored
+    // Milestone flag; Project's stock text style renders it italic, and it is
+    // critical, so red.  (The file's own text styles -- font family/size and
+    // row highlight -- are not decoded yet; backlogged in wave23-complete.)
+    const int name_display = table_model->display_column_for_field(app::name_field_id());
+    check(name_display >= 0, "the corpus sheet shows a Name display column");
+    if (name_display >= 0 && model->rowCount() > 3) {
+        const QModelIndex milestone_cell = model->index(3, name_display);
+        const QFont font = model->data(milestone_cell, Qt::FontRole).value<QFont>();
+        const QColor colour =
+            model->data(milestone_cell, Qt::ForegroundRole).value<QColor>();
+        check(font.italic(), "project_a row 3 (a milestone) renders italic");
+        check(colour == QColor(0xb0, 0x1c, 0x1c),
+              "project_a row 3 (a critical milestone) renders red");
+    }
 
     // EVERY displayed row: % Complete is the task's stored percent, and Pre/Suc
     // are the plan's link text (the format itself is pinned by

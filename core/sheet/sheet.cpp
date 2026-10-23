@@ -1471,6 +1471,13 @@ bool SheetModel::is_summary(std::size_t row) const noexcept {
     return field_summary(row) || has_children(row);
 }
 
+bool SheetModel::is_milestone(std::size_t row) const noexcept {
+    if (row >= records_.row_count()) {
+        return false;
+    }
+    return field_flag(row, milestone_field_);
+}
+
 void SheetModel::set_outline_level(std::size_t row, int level, bool summary) {
     if (row >= records_.row_count()) {
         return;
@@ -2816,6 +2823,7 @@ void SheetModel::rebuild_outline() {
 
     outline_level_field_ = 0;
     summary_field_ = 0;
+    milestone_field_ = 0;
     critical_field_ = 0;
     finish_field_ = 0;
     percent_field_ = 0;
@@ -2827,6 +2835,7 @@ void SheetModel::rebuild_outline() {
     };
     outline_level_field_ = resolve("OutlineLevel");
     summary_field_ = resolve("Summary");
+    milestone_field_ = resolve("Milestone");
     critical_field_ = resolve("Critical");
     finish_field_ = resolve("Finish");
     percent_field_ = resolve("PercentComplete");

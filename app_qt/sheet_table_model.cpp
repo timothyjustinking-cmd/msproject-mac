@@ -246,6 +246,11 @@ QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
             const core::sheet::CellStyle style = sheet_->cell_style(row, column);
             QFont font = cell_font();
             font.setBold(style.bold);
+            // Wave 23 (B-11): Project's stock milestone text style is italic
+            // (the clean capture's milestone rows are italic; red comes from
+            // the critical rule).  The FILE's own text styles are not decoded
+            // yet, so this is the documented stock fallback.
+            font.setItalic(sheet_->is_milestone(row));
             return font;
         }
         case Qt::ForegroundRole: {
