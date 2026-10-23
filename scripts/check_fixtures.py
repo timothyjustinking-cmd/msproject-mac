@@ -75,6 +75,16 @@ DOCUMENTED = {
         "614097D1031CA82B2F171170A5EB613349DA9BEEF6432CFB61900FBD91294BC6",
     "tests/data/wave24-flag20.mpp":
         "1C1C9F2433962AFE309535074D92CAEAFA8052572B7AA7AFEC22541F7479F64F",
+    # Wave 25 (W25-2/S2): wave23-outline.mpp opened as a COPY, EVERY task
+    # switched to automatic scheduling (Manual = False) and saved by Project
+    # 2021 with neutral metadata.  Same table/geometry as the wave23 reference,
+    # so the controlled difference is the bar colour: (138,187,237) auto, where
+    # wave23-outline's all-manual capture measured (116,204,212).  The reference
+    # that makes wave 24's manual-vs-auto mislabel fail the parity gate.
+    "tests/data/wave25-auto.mpp":
+        "BD8503EE4BDF7E117491E3C245D1A84E64ECF91F51B1AA0625AE4F064E96ED16",
+    "tests/data/reference/wave25-auto.measures.json":
+        "054CDBFAA0048F8FAECC20FD73A431E0CB0F57F919B27585351270CA0F8E7637",
 }
 
 
@@ -111,9 +121,15 @@ def main():
         if not os.path.exists(path):
             failures.append(f"MISSING {rel}")
             continue
-        head = git("rev-parse", f"HEAD:{rel}").stdout.strip()
+        # A fixture staged for its FIRST commit is in the index but not in
+        # HEAD; its documented SHA256 above is the check, and the HEAD
+        # comparison starts applying on the next run.
+        resolved = git("rev-parse", "--verify", "-q", f"HEAD:{rel}")
+        head = resolved.stdout.strip()
+        if resolved.returncode != 0 or not head:
+            continue
         work = git("hash-object", "--", rel).stdout.strip()
-        if head and work != head:
+        if work != head:
             failures.append(f"differs from HEAD: {rel} (work {work[:12]} head {head[:12]})")
 
     if failures:
