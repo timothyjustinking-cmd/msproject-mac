@@ -324,11 +324,11 @@ const std::vector<TabSpec>& tab_specs() {
               "insert.add_resources");
         GroupSpec& resource_properties = add_group(resource, "Properties", 172);
         large(resource_properties, "Information", app::MenuAction::none, 58, 0, false,
-              "properties.information");
+              "properties.resource_information");
         small(resource_properties, "Notes", app::MenuAction::none, 100, 0, 1, false, 1, false,
               "properties.notes");
         small(resource_properties, "Details", app::MenuAction::none, 100, 1, 1, false, 1, false,
-              "properties.details");
+              "properties.resource_details");
         GroupSpec& level = add_group(resource, "Level", 307);
         large(level, "Level\nSelection", app::MenuAction::none, 60, 0, false,
               "level.selection");
