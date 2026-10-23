@@ -63,6 +63,7 @@ add_library(qt_shell STATIC
     gantt_canvas.cpp
     entry_columns.cpp
     ribbon_bar.cpp
+    ribbon_glyphs.cpp
     sheet_views.cpp
     timeline_strip.cpp
     dialogs.cpp
@@ -371,6 +372,24 @@ add_test(NAME qt_ribbon_inventory
                  ${QT_RIBBON_ARGS})
 
 # ===========================================================================
+# WAVE 26 (G2): the ribbon icon gate.  One item per tab; the test's kPlan lists
+# the tabs whose glyphs are done, so a tab joins the gate in its own commit.
+# It reads the independent pin's icon column, hashes the LIVE widgets' rendered
+# glyphs at both Project sizes (32/16), fails on the placeholder or an
+# unexpected duplicate, proves the ink is monochrome, and writes a contact sheet
+# per tab for human review (build/w26/ locally).
+# ===========================================================================
+add_executable(qt_icon_gate_tests tests/icon_gate_test.cpp)
+target_link_libraries(qt_icon_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_icon_gate_tests)
+
+add_test(NAME qt_icon_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_icon_gate_tests>
+                 "${CMAKE_CURRENT_SOURCE_DIR}/ribbon_pin.tsv"
+                 "${QT_REPO_ROOT}/build/w26")
+
+# ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
 # four OFL faces live in app_qt/fonts/ and are compiled into each executable as
 # Qt resources, so the shell never depends on the host having the font and the
@@ -395,7 +414,8 @@ foreach(carlito_target
         qt_shell_tests qt_parity_tests qt_save_reopen_tests
         qt_empty_state_tests qt_chrome_gate_tests qt_view_gate_tests
         qt_dialog_gate_tests qt_clipboard_tests qt_stored_table_tests
-        qt_ux_gate_tests qt_ribbon_inventory_tests qt_uid_routing_tests)
+        qt_ux_gate_tests qt_ribbon_inventory_tests qt_uid_routing_tests
+        qt_icon_gate_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 

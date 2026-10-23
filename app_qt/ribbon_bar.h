@@ -103,6 +103,11 @@ class RibbonBar final : public QWidget {
     QWidget* group_box(int group_index) const;
     app::MenuAction group_control_action(int group_index, int control_index) const;
     RibbonCommand group_control_command(int group_index, int control_index) const;
+    // W26-2: the pin's icon key for a command control (button/small/split), or
+    // an empty string for a control that draws no command glyph.  The icon gate
+    // compares this with the pin's icon column and hashes the LIVE widget's
+    // rendered icon, so the key can never pass for artwork on its own.
+    QString group_control_icon_key(int group_index, int control_index) const;
     // The spec's stack row (0..2; -1 for a control that is not a stack row,
     // such as the gallery or a dialog launcher).  The gate proves the live
     // geometry against the measured row baselines.
@@ -197,6 +202,7 @@ class RibbonBar final : public QWidget {
     std::vector<std::vector<QWidget*>> page_controls_;
     std::vector<std::vector<app::MenuAction>> page_actions_;
     std::vector<std::vector<RibbonCommand>> page_commands_;
+    std::vector<std::vector<QString>> page_icons_;
     std::vector<std::vector<int>> page_rows_;
     std::function<void(app::MenuAction)> handler_;
     std::function<void(RibbonCommand, bool)> command_handler_;
