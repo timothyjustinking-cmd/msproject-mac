@@ -134,7 +134,9 @@ def show(rows):
 def save(case, payload):
     os.makedirs(OUT, exist_ok=True)
     path = os.path.join(OUT, case + ".json")
-    with open(path, "w", encoding="utf-8") as fh:
+    # LF, per docs/build.md's text-file rule: an oracle JSON regenerated on
+    # Windows must not churn every line into a CRLF diff.
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(payload, fh, indent=2, default=str)
     log(f"wrote {os.path.relpath(path, ROOT)}")
 

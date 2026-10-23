@@ -126,7 +126,7 @@ def main():
     # 2. Disassemble CustomPropInfoData constructor context
     # =========================================================================
     print(f"\n{'='*70}")
-    print("2. CUSTOM PROP INFO DATA client-string-9c4bcb75 SITES")
+    print("2. CUSTOM PROP INFO DATA SITES")
     print("-" * 60)
 
     for site_va in [0x1407ca9bf, 0x1407cabb8]:
@@ -139,7 +139,7 @@ def main():
     # 3. Analyze first few PropInfoData construction sites
     # =========================================================================
     print(f"\n{'='*70}")
-    print("3. CORE PropInfoData client-string-9c4bcb75 FUNCTION")
+    print("3. CORE PropInfoData FUNCTION")
     print("-" * 60)
 
     # First 5 LEA refs from section 5 of previous analysis

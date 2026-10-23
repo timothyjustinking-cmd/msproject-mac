@@ -274,7 +274,7 @@ observed:
 
 | payload | encoding | example |
 |---|---|---|
-| task name | UTF-16LE, NUL-terminated; length = bytes incl. NUL (always even) | "client-string-9c4bcb75" = 12 chars + NUL = 26 B → `1a 00 00 00` |
+| task name | UTF-16LE, NUL-terminated; length = bytes incl. NUL (always even) | a 12-character name = 12 chars + NUL = 26 B → `1a 00 00 00` |
 | notes | 8-bit RTF (`{\rtf1\ansi...`), not UTF-16 | `var-notes` block `7b 5c 72 74 66 31 ...` |
 | integer | u32/i32 LE | `ff ff ff ff` = -1; `03 00 00 00` = 3 |
 | pair/quad | 8 B = two u32; 16 B = four u32 | `01 00 00 00 01 00 ff ff` |
@@ -366,21 +366,25 @@ one entry).
 
 `python scripts/fk_dump.py corpus/project_a.mpp --limit=3`:
 
+The payload bytes are client text, so the block bodies are described by length
+rather than quoted (wave 25 W25-3 removed the UTF-16 hex of their first
+characters, which was another way to read the names):
+
 ```
 row 1: FixedData[250:258] = id 13 uid 8141
   VarMeta entry 168: uid 8141 offset 1456 key 0x0b40000e
-  Var2Data[1456:1500] = 28 00 00 00 53 00 69 00 74 00 65 00 20 00 ... 20 00 00 00
-  prefix 28 00 00 00 = 40 bytes; name = 'client-string-10dbe851 '
+  Var2Data[1456:1500] = 28 00 00 00 <40 bytes: UTF-16LE text + NUL>
+  prefix 28 00 00 00 = 40 bytes; client-name-01 (stored with a trailing space)
 
 row 2: FixedData[452:460] = id 5 uid 8142
   VarMeta entry 189: uid 8142 offset 1660 key 0x0b40000e
-  Var2Data[1660:1734] = 46 00 00 00 52 00 65 00 63 00 65 00 69 00 70 00 ...
-  prefix 46 00 00 00 = 70 bytes; name = 'client-string-25d8f08b'
+  Var2Data[1660:1734] = 46 00 00 00 <70 bytes: UTF-16LE text + NUL>
+  prefix 46 00 00 00 = 70 bytes; client-name-02
 
 row 3: FixedData[654:662] = id 12 uid 8166
   VarMeta entry 208: uid 8166 offset 1866 key 0x0b40000e
-  Var2Data[1866:1896] = 1a 00 00 00 43 00 4f 00 4e 00 53 00 54 00 52 00 ...
-  prefix 1a 00 00 00 = 26 bytes; name = 'client-string-9c4bcb75'
+  Var2Data[1866:1896] = 1a 00 00 00 <26 bytes: UTF-16LE text + NUL>
+  prefix 1a 00 00 00 = 26 bytes; client-name-03
 ```
 
 The chain, end to end: `row = (FixedData - 48) / 202`; `uid = u32(row, +4)`;

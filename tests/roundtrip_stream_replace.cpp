@@ -260,7 +260,11 @@ int main() {
             std::string const old_name = mppwrite::read_task_name(doc, 2);
             t.check(old_name == "Task B",
                     "B: uid 2 name is '" + old_name + "', expected 'Task B'");
-            std::string const new_name = "client-string-25d8f08b (rev B)";
+            // Wave 25 (W25-3): a SYNTHETIC 30-character name, the same length
+            // as the scrub label this test used to carry.  The length keeps
+            // the Var2Data growth and the container's +512-byte sector in the
+            // measured case B; the name is not client text.
+            std::string const new_name = "Task B renamed (synthetic rev)";
             std::uint64_t const var2_before = doc.stream_size(kVar2);
             std::uint64_t const var_meta_before = doc.stream_size(kVarMeta);
 

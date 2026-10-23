@@ -61,10 +61,13 @@ golden file uses, so no client name is reproduced here.
 
 `uid 8141` (golden id 13), name only:
 
-* parser hash of the stored block: `sha256:d2d31247d7563771`
-* golden hash: `sha256:10dbe851f0ba475d`
-* hash of the stored value with trailing whitespace removed:
-  `sha256:10dbe851f0ba475d` — matches the golden.
+* the parser's hash of the stored block and the golden's name field differ;
+* the parser's hash with the trailing whitespace removed equals the golden's
+  name field.
+
+(The three 16-hex values are not quoted: an unsalted prefix of a short client
+name is invertible from a guess.  They remain in the committed golden TSV,
+which is the oracle the test reads; wave 25 W25-3 removed the prose copies.)
 
 The stored Var2Data block is 40 bytes = 19 UTF-16 characters + NUL; the last
 character is a space. MS Project's exported value has no trailing space. So the

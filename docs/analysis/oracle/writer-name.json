@@ -1,7 +1,7 @@
 {
   "case": "name",
   "source": "corpus\\probe\\oracle-name.mpp",
-  "run_at": "2026-10-22T10:18:39",
+  "run_at": "2026-10-24T02:02:00",
   "stored_rows": [
     {
       "row": 0,
@@ -81,6 +81,7 @@
       "Summary": false,
       "PercentComplete": 0,
       "Priority": 500,
+      "OutlineLevel": 1,
       "Predecessors": "",
       "Successors": "",
       "raw": {
@@ -123,7 +124,7 @@
     },
     {
       "ID": 2,
-      "Name": "client-string-25d8f08b (rev B)",
+      "Name": "Task B renamed (synthetic rev)",
       "Duration": 1440,
       "DurationText": "3 days",
       "Work": 0.0,
@@ -148,6 +149,7 @@
       "Summary": false,
       "PercentComplete": 0,
       "Priority": 500,
+      "OutlineLevel": 1,
       "Predecessors": "",
       "Successors": "",
       "raw": {
@@ -215,6 +217,7 @@
       "Summary": false,
       "PercentComplete": 0,
       "Priority": 500,
+      "OutlineLevel": 1,
       "Predecessors": "",
       "Successors": "",
       "raw": {
@@ -284,6 +287,7 @@
       "Summary": false,
       "PercentComplete": 0,
       "Priority": 500,
+      "OutlineLevel": 1,
       "Predecessors": "",
       "Successors": "",
       "raw": {
@@ -326,7 +330,7 @@
     },
     {
       "ID": 2,
-      "Name": "client-string-25d8f08b (rev B)",
+      "Name": "Task B renamed (synthetic rev)",
       "Duration": 1440,
       "DurationText": "3 days",
       "Work": 0.0,
@@ -351,6 +355,7 @@
       "Summary": false,
       "PercentComplete": 0,
       "Priority": 500,
+      "OutlineLevel": 1,
       "Predecessors": "",
       "Successors": "",
       "raw": {
@@ -418,6 +423,7 @@
       "Summary": false,
       "PercentComplete": 0,
       "Priority": 500,
+      "OutlineLevel": 1,
       "Predecessors": "",
       "Successors": "",
       "raw": {

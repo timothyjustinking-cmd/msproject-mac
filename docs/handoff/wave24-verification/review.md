@@ -94,10 +94,10 @@ against the golden format committed in that same commit.
    spec/mpp-records.md:277/372-383, scripts/probe_names.py:15-19,
    tests/mpp_reader_tests.cpp:846-855/2445-2457, reader.h/reader.cpp
    comments.**  `client-string-<sha8>` is the first 8 hex digits of an unsalted
-   SHA-256 of the plaintext.  I confirmed that:
-   - sha256 of the generic phrase whose first word is "Site" gives 10dbe851;
-   - the single-word 12-character task name gives 9c4bcb75;
-   - the phrase whose first word is "Receipt" gives 25d8f08b.
+   SHA-256 of the plaintext.  I confirmed three of them in one hash call each
+   (task-name labels 01, 03 and 02 of the scrub, in tree order); the plaintexts
+   and the hash prefixes are not repeated here (wave 25 W25-3 removed them from
+   the tree).
 
    Each was one hash call.  Construction schedule names come from a small
    vocabulary, so a phrase list inverts most of them.  The resource-name pins

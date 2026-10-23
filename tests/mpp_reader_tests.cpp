@@ -474,7 +474,10 @@ void compare_against_golden(TestContext& context, const mpp::Document& document)
         }
         const std::string hash = name_hash(task->name);
         if (hash != row.name_hash) {
-            report("name", hash + " ('" + task->name + "')", row.name_hash);
+            // Never print the name itself: the golden stores a hash, and a
+            // failure report goes to a log.  Wave 25 (W25-3) removed the last
+            // place that echoed it.
+            report("name", hash, row.name_hash);
         }
         if (task->duration_minutes() != row.duration_min) {
             report("duration", std::to_string(task->duration_minutes()),
@@ -835,25 +838,27 @@ void test_project_a(TestContext& context) {
     context.equal(actual_finish_mismatch, std::size_t{0},
                   "no PROJECT_A task below 100 % stores an ActualFinish");
 
-    /* PROJECT_A row 1 is stored with a trailing space (the string itself is
-     * client content; wave 24 W24-26 keeps only its hash); COM trims it.  The
-     * display name must match the oracle, the raw block must stay verbatim for
-     * a writer's round trip. */
+    /* PROJECT_A row 1 is stored with a trailing space; the string is client
+     * content and is never quoted.  COM trims it, so the display name must be
+     * the raw block without the trailing space while name_raw stays verbatim
+     * for a writer's round trip.  Wave 25 (W25-3): assert the RELATION, not an
+     * unsalted hash of the name -- short-name hashes are a dictionary lookup
+     * away from the plaintext. */
     const mpp::Task* spaced = find_task(document, 8141);
     context.check(spaced != nullptr, "uid 8141 is present");
     if (spaced != nullptr) {
-        context.equal(name_hash(spaced->name_raw), std::string("sha256:d2d31247d7563771"),
+        context.check(!spaced->name_raw.empty() && spaced->name_raw.back() == ' ',
                       "uid 8141 keeps the stored trailing space in name_raw");
-        context.equal(name_hash(spaced->name), std::string("sha256:10dbe851f0ba475d"),
-                      "uid 8141's display name is trimmed like MS Project's");
+        context.check(!spaced->name.empty() &&
+                          spaced->name == spaced->name_raw.substr(0, spaced->name.size()),
+                      "uid 8141's display name is the raw block trimmed like MS Project's");
     }
 
     const mpp::Task* named = find_task(document, 10733);
     context.check(named != nullptr, "uid 10733 is present");
     if (named != nullptr) {
-        context.equal(name_hash(named->name),
-                      std::string("sha256:c27bd0ed6b018900"),
-                      "uid 10733 name via key 0x0b40000e");
+        context.check(!named->name.empty(),
+                      "uid 10733 has a name via key 0x0b40000e");
         context.equal(named->duration_minutes(), std::uint32_t{16800},
                       "uid 10733 duration in minutes");
     }
@@ -2442,18 +2447,20 @@ void test_resources(TestContext& context) {
     const mpp::Resource* first = find_resource(project_a, 1);
     context.check(first != nullptr, "PROJECT_A resource uid 1 is present");
     if (first != nullptr) {
-        // The client resource name itself is never quoted (W24-26); the pinned
-        // hash is of the string COM reports.
-        context.equal(name_hash(first->name), std::string("sha256:184b30f76d2b8e17"),
-                      "PROJECT_A resource 1 name");
+        // Wave 25 (W25-3): no hash pin of a person's name -- an unsalted
+        // 16-hex prefix of a "First Last" name is a surname-list lookup.  The
+        // relation below is what the reader promises: a non-empty display name
+        // that is the stored block trimmed.
+        context.check(!first->name.empty(), "PROJECT_A resource 1 name is non-empty");
+        context.equal(first->name, first->name_raw.substr(0, first->name.size()),
+                      "PROJECT_A resource 1 display name is the raw block trimmed");
     }
     const mpp::Resource* spaced = find_resource(project_a, 3);
     context.check(spaced != nullptr, "PROJECT_A resource uid 3 is present");
     if (spaced != nullptr) {
-        context.equal(name_hash(spaced->name_raw),
-                      std::string("sha256:339dd3e90c47ba29"),
+        context.check(!spaced->name_raw.empty() && spaced->name_raw.back() == ' ',
                       "resource name_raw keeps the stored trailing space");
-        context.equal(name_hash(spaced->name), std::string("sha256:9d2aa1ee44706c9b"),
+        context.equal(spaced->name, spaced->name_raw.substr(0, spaced->name.size()),
                       "resource name is trimmed for display like COM");
     }
     context.equal(mpp::load_file(MPP_PROJECT_B_PATH).resources.size(), std::size_t{22},
