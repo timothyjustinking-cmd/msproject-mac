@@ -7,6 +7,23 @@
 # footnote.  Every job uploads the 900x560 renders and the 1920x1032 --parity
 # render as one artifact named for the OS.
 #
+# EVERY JOB ALSO PUBLISHES A RUNNABLE DOWNLOAD (wave 20; docs/ui-qt-port.md Q5,
+# "one artifact per OS per tag"):
+#   windows  msproject-windows-<sha>   windeployqt + cmake -E tar (a zip)
+#   macos    msproject-macos-<sha>     a minimal .app assembled in this file +
+#                                      macdeployqt, zipped with ditto
+#   linux    msproject-linux-<sha>     linuxdeploy + linuxdeploy-plugin-qt
+#                                      (an AppImage)
+# The macOS bundle is assembled in the workflow, not by CMake: app_qt/
+# CMakeLists.txt keeps a plain executable on purpose (a CMake bundle target
+# changes window behaviour), and another stream owns that file.
+#
+# Nothing here is signed or notarized (the repository has no certificates).  The
+# macOS bundle is ad-hoc signed by macdeployqt, so Gatekeeper still wants a
+# right-click Open or `xattr -dr com.apple.quarantine` on first launch; the
+# AppImage wants FUSE 2 or `--appimage-extract-and-run` on the user's machine.
+# Q5's notarization work starts only when procurement supplies a Developer ID.
+#
 # ONE QT VERSION, EVERYWHERE.  Fusion style metrics (row heights, font sizes)
 # are a property of the Qt build, and the parity/golden images assume them, so
 # all three jobs install the same Qt 6.5.3 through jurplel/install-qt-action@v4
@@ -19,9 +36,11 @@
 # WINDOWS needs the MSVC environment before configure: ilammy/msvc-dev-cmd@v1
 # plus Ninja, because the "Visual Studio 17 2022" generator is not discoverable
 # on windows-latest (ci.yml, first CI run 2026-10-22).  Linux keeps the apt
-# dependency line from the single-job version of this file; the distro Qt that
-# package pulls is NOT what CMake links -- CMAKE_PREFIX_PATH points at the
-# pinned 6.5.3 and the "Prove configure..." step fails if it did not.
+# dependency line from the single-job version of this file, plus libxcb-cursor0:
+# Qt 6.5's xcb platform plugin links it and linuxdeploy must be able to copy it
+# into the AppImage (the distro Qt package set predates that dependency).  The
+# distro Qt that line pulls is NOT what CMake links -- CMAKE_PREFIX_PATH points
+# at the pinned 6.5.3 and the "Prove configure..." step fails if it did not.
 #
 # Runs on demand or a version tag, like the other workflows: the repository is
 # public so standard runners are free (macOS bills 10x only on private repos),
@@ -95,13 +114,16 @@ jobs:
       # offscreen platform plugin needs, and keep the job's package set
       # identical to the pre-wave-19 Linux job.  Qt's own PrintSupport module is
       # part of qt6-base-dev, so a future Qt6::PrintSupport link needs no line
-      # here (Windows/macOS get it from aqt's qtbase).
+      # here (Windows/macOS get it from aqt's qtbase).  libxcb-cursor0 is the
+      # wave-20 addition: the pinned 6.5.3 xcb plugin (which linuxdeploy copies
+      # into the AppImage) links it, while Ubuntu's Qt 6.4-era package set does
+      # not pull it in.
       - name: Install Linux Qt dependencies
         if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qt6-base-dev libgl1-mesa-dev libxkbcommon-dev
+          sudo apt-get install -y -qq qt6-base-dev libgl1-mesa-dev libxkbcommon-dev libxcb-cursor0
 
       # One version, one action, one arch per OS.  install-qt-action downloads
       # from the Qt mirror with aqtinstall; it sets QT_ROOT_DIR for later steps.
@@ -164,24 +186,7 @@ jobs:
       # A RUNNABLE Windows build, not only the render PNGs.  windeployqt copies
       # the Qt DLLs and plugins next to the exe (and --compiler-runtime the MSVC
       # runtime), so the zip runs on a machine with no Qt installed.  The macOS
-      # and Linux jobs still publish images only: a macOS .app bundle and an
-      # AppImage are packaging work (docs/ui-qt-port.md Q5), not a side effect.
-      - name: Package the Windows build
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp build-qt/msproject_qt.exe dist/
-          windeployqt --release --compiler-runtime --no-translations dist/msproject_qt.exe
-          # CMake ships its own zip writer, so the step does not depend on
-          # 7-Zip being on PATH on the runner image.
-          cmake -E tar cf msproject-windows.zip --format=zip dist
-          ls -l dist/msproject_qt.exe msproject-windows.zip
-
-      # The tests set QT_QPA_PLATFORM=offscreen and QT_SCALE_FACTOR=1 themselves
-      # (${CMAKE_COMMAND} -E env in app_qt/CMakeLists.txt).  Deliberately not
-      # repeated here: a test that forgot them must fail, not inherit a pass.
+      # and Linux jobs get the equivalent below: a .app bundle and an AppImage.
       - name: Test (offscreen renders + parity geometry)
         shell: bash
         run: ctest --test-dir build-qt --output-on-failure --timeout 60
@@ -196,12 +201,190 @@ jobs:
           test -s build-qt/test-out/qt-render-parity.png
           ls -l build-qt/test-out/qt-render-parity.png
 
-      # One artifact per OS, always (a failed render is when the image matters
-      # most).  Both sizes live under build-qt: qt-render-smoke.png at the top,
-      # qt-render-document.png and qt-render-parity.png in test-out.
-      # if-no-files-found is per step, not per path, so "error" covers the whole
-      # set; on a configure failure this step is red too, which is the honest
-      # state of the artifact.
+      # Prove the AppImage is a program, not just a file: run the packaged file
+      # itself (not build-qt/msproject_qt).  --render is offscreen and writes a
+      # PNG, so no window server is needed; it exits non-zero if the bundled Qt
+      # or the offscreen plugin did not make it into the AppImage.  Deliberately
+      # after ctest, so a packaging smoke cannot hide the UI gate's result.
+      - name: Package the Windows build
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp build-qt/msproject_qt.exe dist/
+          windeployqt --release --compiler-runtime --no-translations dist/msproject_qt.exe
+          # CMake ships its own zip writer, so the step does not depend on
+          # 7-Zip being on PATH on the runner image.
+          cmake -E tar cf msproject-windows.zip --format=zip dist
+          ls -l dist/msproject_qt.exe msproject-windows.zip
+
+      # A RUNNABLE macOS build: a minimal .app around the plain executable, then
+      # macdeployqt to copy the Qt frameworks into Contents/Frameworks and the
+      # plugins into Contents/PlugIns (and rewrite them to @executable_path).
+      # macdeployqt signs ad-hoc by default (-codesign=-) and exits non-zero if
+      # signing fails; that ad-hoc signature is what makes an arm64 bundle
+      # launch after install_name_tool invalidated the linker's signature.  The
+      # bundle is deliberately NOT a CMake target: see the header.
+      - name: Package the macOS build as a .app bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="dist/MS Project Shell.app"
+          mkdir -p "$app/Contents/MacOS"
+          cp build-qt/msproject_qt "$app/Contents/MacOS/msproject_qt"
+          cat > "$app/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>MS Project Shell</string>
+            <key>CFBundleDisplayName</key><string>MS Project Shell</string>
+            <key>CFBundleIdentifier</key><string>org.personal.msproject-shell</string>
+            <key>CFBundleExecutable</key><string>msproject_qt</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          macdeployqt "$app" -always-overwrite -verbose=2
+          # Prove the deployment landed where dyld and QPA look for it: the shell
+          # linked Qt6::Widgets + Qt6::PrintSupport, and the cocoa platform
+          # plugin is what gives the app a window on a Mac.
+          test -x "$app/Contents/MacOS/msproject_qt"
+          test -d "$app/Contents/Frameworks/QtWidgets.framework"
+          test -f "$app/Contents/PlugIns/platforms/libqcocoa.dylib"
+          # --keepParent keeps the .app itself at the zip root (so a download
+          # expands to "MS Project Shell.app", not to dist/), and ditto preserves
+          # the signature and permissions that Finder's unzip would otherwise
+          # flatten.
+          ditto -c -k --sequesterRsrc --keepParent "$app" msproject-macos.zip
+          ls -ld "$app" "$app/Contents/Frameworks" msproject-macos.zip
+
+      # A RUNNABLE Linux build: linuxdeploy copies the binary's Qt libraries and
+      # (through linuxdeploy-plugin-qt, which is pointed at the pinned 6.5.3 via
+      # QMAKE, not at the distro Qt) the Qt plugins into an AppDir; appimagetool
+      # packs it into one executable file.
+      #
+      # Both tools are the projects' continuous AppImages.  continuous floats
+      # (unlike the pinned Qt), so if it ever breaks, replace these two URLs with
+      # a dated release tag -- do not switch to the distro's linuxdeployqt.
+      #
+      # APPIMAGE_EXTRACT_AND_RUN makes both tools unpack and run without FUSE 2
+      # (the smoke step sets the same variable for the finished AppImage).
+      # ubuntu-latest does not guarantee libfuse2, and neither do all user
+      # machines; this keeps packaging and the smoke run independent of it.
+      - name: Package the Linux build as an AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$PWD/build-qt/appimage"
+          tools="$work/tools"
+          appdir="$work/AppDir"
+          mkdir -p "$tools" dist/linux
+          curl -fsSL --retry 3 -o "$tools/linuxdeploy-x86_64.AppImage" \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -fsSL --retry 3 -o "$tools/linuxdeploy-plugin-qt-x86_64.AppImage" \
+            https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x "$tools/"*.AppImage
+
+          # The repository has no icon file (app_qt paints its icons in code) and
+          # a desktop entry requires one, so draw a 256x256 Gantt-bar placeholder
+          # with the Python stdlib rather than depend on ImageMagick.
+          python3 - dist/linux/msproject-shell.png <<'PY'
+          import struct
+          import sys
+          import zlib
+
+          width = height = 256
+          background = (24, 38, 56)
+          bars = [(34, 62, 150, 30, (74, 144, 226)),
+                  (58, 112, 118, 30, (96, 200, 140)),
+                  (82, 162, 108, 30, (232, 196, 88))]
+          rows = []
+          for y in range(height):
+              row = bytearray([0])
+              for x in range(width):
+                  colour = background
+                  for left, top, bar_width, bar_height, fill in bars:
+                      if left <= x < left + bar_width and top <= y < top + bar_height:
+                          colour = fill
+                          break
+                  row += bytes(colour)
+              rows.append(bytes(row))
+
+          def chunk(tag, data):
+              crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+              return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+          png = (b"\x89PNG\r\n\x1a\n"
+                 + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+                 + chunk(b"IDAT", zlib.compress(b"".join(rows), 9))
+                 + chunk(b"IEND", b""))
+          open(sys.argv[1], "wb").write(png)
+          PY
+
+          cat > dist/linux/msproject-shell.desktop <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=MS Project Shell
+          Comment=A personal MS Project-compatible shell (Qt)
+          Exec=msproject_qt
+          Icon=msproject-shell
+          Terminal=false
+          Categories=Office;ProjectManagement;
+          DESKTOP
+
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export PATH="$tools:$PATH"
+          # Point the Qt plugin at the pinned 6.5.3 explicitly: Qt's bin is on
+          # PATH, but an image change must not silently swap qmake.
+          export QMAKE="${{ steps.install-qt.outputs.qt-root-dir }}/bin/qmake"
+          # linuxdeploy ships the xcb platform plugin by default (that is what a
+          # user's desktop needs).  offscreen is added so the smoke step after
+          # ctest can prove the packaged file starts with no window server.
+          export EXTRA_PLATFORM_PLUGINS="libqoffscreen.so"
+          # LDAI_OUTPUT is the current appimage plugin's output name; OUTPUT is
+          # what older bundled plugin versions read.  Both name the same file, so
+          # the mv below does not have to guess appimagetool's default name.
+          export LDAI_OUTPUT="msproject-linux-x86_64.AppImage"
+          export OUTPUT="msproject-linux-x86_64.AppImage"
+
+          "$tools/linuxdeploy-x86_64.AppImage" \
+            --appdir "$appdir" \
+            --executable "$PWD/build-qt/msproject_qt" \
+            --desktop-file "$PWD/dist/linux/msproject-shell.desktop" \
+            --icon-file "$PWD/dist/linux/msproject-shell.png" \
+            --plugin qt \
+            --output appimage
+          mv "msproject-linux-x86_64.AppImage" dist/
+          test -s dist/msproject-linux-x86_64.AppImage
+          ls -l dist/msproject-linux-x86_64.AppImage
+
+      # The tests set QT_QPA_PLATFORM=offscreen and QT_SCALE_FACTOR=1 themselves
+      # (${CMAKE_COMMAND} -E env in app_qt/CMakeLists.txt).  Deliberately not
+      # repeated here: a test that forgot them must fail, not inherit a pass.
+      - name: Run the packaged Linux AppImage (offscreen smoke)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APPIMAGE_EXTRACT_AND_RUN=1 QT_QPA_PLATFORM=offscreen \
+            ./dist/msproject-linux-x86_64.AppImage \
+            --render build-qt/appimage/appimage-smoke.png \
+            | tee build-qt/appimage/appimage-smoke.log
+          grep -q "rendered 900x560" build-qt/appimage/appimage-smoke.log
+          ls -l dist/msproject-linux-x86_64.AppImage
+
+      # The three runnable packages.  if-no-files-found is warn, matching the
+      # original Windows step: on a configure failure the package genuinely does
+      # not exist and the render upload below is the artifact that matters.
       - name: Upload the Windows build
         if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@v4
@@ -210,6 +393,30 @@ jobs:
           if-no-files-found: warn
           path: msproject-windows.zip
 
+      - name: Upload the macOS bundle
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: msproject-macos-${{ github.sha }}
+          if-no-files-found: warn
+          path: msproject-macos.zip
+
+      - name: Upload the Linux AppImage
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: msproject-linux-${{ github.sha }}
+          if-no-files-found: warn
+          path: dist/msproject-linux-x86_64.AppImage
+
+      # One artifact per OS, always (a failed render is when the image matters
+      # most).  Both sizes live under build-qt: qt-render-smoke.png at the top,
+      # qt-render-document.png and qt-render-parity.png in test-out.  The
+      # AppImage packaging writes build-qt/appimage/*, which these globs do not
+      # match, so the render artifact stays exactly the four PNGs.
+      # if-no-files-found is per step, not per path, so "error" covers the whole
+      # set; on a configure failure this step is red too, which is the honest
+      # state of the artifact.
       - name: Upload the 900x560 and 1920x1032 renders
         if: always()
         uses: actions/upload-artifact@v4
