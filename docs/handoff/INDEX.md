@@ -4,11 +4,12 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Wave 23 (open — the audit work order)
+## Wave 23 (closed on branch `wave23`, not merged)
 
 | file | what |
 |---|---|
-| `wave23-brief.md` | **the work order**: W23-1..22 in order, verifier corrections, the gate, operator rulings |
+| `wave23-complete.md` | **the wave-23 gate**: fixed/deferred table, exact gate numbers, the live same-file comparison, the re-scored 16 decisions, CI run ids |
+| `wave23-brief.md` | the work order: W23-1..22, verifier corrections, the gate, operator rulings |
 | `audit-w22-findings.md` | the 2026-10-23 adversarial + parity audit of wave 22: A-1..12, B-1..14, the re-scored 16 decisions, re-run recipe |
 | `audit-w22/` | per-lane evidence (A2 ribbon, A3 S6 oracle, A4 engine score, A5 E7 evidence, A7 fixtures, A8 UI parity gate) and the audit register |
 
@@ -79,9 +80,4 @@ scheduling, schedcore, codegen, ci, qt, f1/e2/q2/a1/b1).
 * `docs/archive/WAVES-coordination-board-wave7.md` — the old branch/
   worktree coordination board (45 KB).
 
-## Wave 23 (not started)
-
-No brief yet.  Scope from `wave22-complete.md` "Open items": reachability through
-the backstage first (About/Keyboard Shortcuts, PDF export, zoom/shading), then
-Flag10/SUMMARY and a link/assignment fixture, then dialogs 14/15, split view 16,
-dark surfaces 10 and the pixel diff 12.
+_Wave 23 used the audit work order; its outcome is in `wave23-complete.md`.
