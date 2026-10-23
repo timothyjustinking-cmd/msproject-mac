@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <utility>
 
 namespace msproject::viewstate {
 namespace {
@@ -11,6 +12,18 @@ namespace {
 std::uint16_t read_u16(std::span<const std::uint8_t> data, std::size_t offset) {
     return static_cast<std::uint16_t>(data[offset]) |
            static_cast<std::uint16_t>(static_cast<std::uint16_t>(data[offset + 1]) << 8u);
+}
+
+std::uint32_t read_u32(std::span<const std::uint8_t> data, std::size_t offset) {
+    return static_cast<std::uint32_t>(data[offset]) |
+           (static_cast<std::uint32_t>(data[offset + 1]) << 8u) |
+           (static_cast<std::uint32_t>(data[offset + 2]) << 16u) |
+           (static_cast<std::uint32_t>(data[offset + 3]) << 24u);
+}
+
+std::uint64_t read_u64(std::span<const std::uint8_t> data, std::size_t offset) {
+    return static_cast<std::uint64_t>(read_u32(data, offset)) |
+           (static_cast<std::uint64_t>(read_u32(data, offset + 4)) << 32u);
 }
 
 // A NUL-terminated UTF-16LE string of printable ASCII, bounded by `max_bytes`.
@@ -171,6 +184,46 @@ bool parse_gantt_style(std::span<const std::uint8_t> style_data,
                 "' names font base " + std::to_string(style.font_index) +
                 ", which the FONT_BASES table does not define");
         }
+    }
+
+    const std::size_t bar_count = style_data[kGanttBarCountOffset];
+    const std::size_t bars_end = kGanttBarFirstOffset + bar_count * kGanttBarStride;
+    if (bars_end > style_data.size()) {
+        if (error != nullptr) {
+            error->message = "the bar-style array (" + std::to_string(bar_count) +
+                             " records) runs past the " +
+                             std::to_string(style_data.size()) + "-byte record";
+            error->offset = style_data.size();
+        }
+        return false;
+    }
+    out.bars.reserve(bar_count);
+    for (std::size_t index = 0; index < bar_count; ++index) {
+        const std::size_t base = kGanttBarFirstOffset + index * kGanttBarStride;
+        BarStyle bar;
+        bar.name = read_utf16_name(style_data, base + kGanttBarNameOffset,
+                                   kGanttBarNameBytes);
+        bar.id = read_u16(style_data, base + 89);
+        bar.row = read_u16(style_data, base + 65);
+        bar.middle_shape = style_data[base];
+        bar.middle_pattern = style_data[base + 1];
+        bar.has_middle_colour = read_colour(style_data, base + 2, bar.middle_colour);
+        const std::uint8_t start = style_data[base + 15];
+        bar.start_shape = static_cast<std::uint8_t>(start % 25);
+        bar.start_type = static_cast<std::uint8_t>(start / 25);
+        bar.has_start_colour = read_colour(style_data, base + 16, bar.start_colour);
+        const std::uint8_t end = style_data[base + 28];
+        bar.end_shape = static_cast<std::uint8_t>(end % 25);
+        bar.end_type = static_cast<std::uint8_t>(end / 25);
+        bar.has_end_colour = read_colour(style_data, base + 29, bar.end_colour);
+        bar.show_for = read_u64(style_data, base + 49);
+        bar.show_for_not = read_u64(style_data, base + 57);
+        bar.left_text = read_u32(style_data, base + 67);
+        bar.right_text = read_u32(style_data, base + 71);
+        bar.top_text = read_u32(style_data, base + 75);
+        bar.bottom_text = read_u32(style_data, base + 79);
+        bar.inside_text = read_u32(style_data, base + 83);
+        out.bars.push_back(std::move(bar));
     }
     out.decoded = true;
     return true;

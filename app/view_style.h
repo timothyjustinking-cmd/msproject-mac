@@ -18,6 +18,10 @@
 
 namespace app {
 
+// The decoder's RGB triple, named once here so the palette and the tests read
+// the same type.
+using Rgb = msproject::viewstate::Rgb;
+
 // The Text Styles item Project applies to a row.  The precedence is measured
 // from PROJECT_A's capture: its row 3 is both critical and a milestone and
 // renders with the MILESTONE style (italic red), not the critical style (which
@@ -56,6 +60,43 @@ namespace app {
     const msproject::viewstate::TextStyle& item = style.text[index];
     return item.valid ? &item : nullptr;
 }
+
+// Wave 26 (W26-3.2): the colours the active view's bar styles give each role.
+// A role is absent (`has_* == false`) when the file defines no such style; the
+// shell then keeps the wave-25 measured stock colour for it.
+//
+// Resolution is by the decoded style's own Name and ShowFor bits, not by slot
+// order: PROJECT_A's active list has 10 styles (Critical Task, Non-Critical
+// Task, Summary, Project Summary, ...) while a stock project has 41.  The
+// ShowFor bits are GanttBarShowForTasks: Normal 0, Milestone 1, Summary 2,
+// Critical 3, Noncritical 4, In Progress 7, Finished 6, Project Summary 27.
+struct BarPalette {
+    bool decoded = false;
+    Rgb normal{};
+    bool has_normal = false;
+    Rgb manual_normal{};
+    bool has_manual_normal = false;
+    Rgb critical{};
+    bool has_critical = false;
+    Rgb summary{};
+    bool has_summary = false;
+    // The style that shows for Summary AND Critical (PROJECT_A's unnamed
+    // 2+3 record, the red the capture shows on its critical summary bars).
+    Rgb summary_critical{};
+    bool has_summary_critical = false;
+    Rgb milestone{};
+    bool has_milestone = false;
+    Rgb project_summary{};
+    bool has_project_summary = false;
+    Rgb progress{};
+    bool has_progress = false;
+    Rgb finished{};
+    bool has_finished = false;
+};
+
+// Reads the palette from a decoded Gantt style.  `decoded` is false (and every
+// has_* false) when the record did not decode.
+[[nodiscard]] BarPalette bar_palette_from(const msproject::viewstate::GanttStyle& style);
 
 // Reads a whole .mpp and decodes the applied view's Gantt style record:
 //

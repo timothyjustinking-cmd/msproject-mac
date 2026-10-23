@@ -1036,6 +1036,41 @@ void test_gantt_style() {
     check(!milestone.italic, "gantt style: the stock milestone style is upright");
     check(!milestone.has_colour, "gantt style: the stock milestone colour is automatic");
 
+    // Wave 26 (W26-3.2): the active view's bar styles.  The stock synthetic
+    // view has all 41 Project bar styles; the values below are Project 2021's
+    // own (and the summary/milestone middle/start/end colours are the fields
+    // the controlled GanttBarStyleEdit saves changed).
+    check_eq(style.bars.size(), std::size_t{41}, "gantt style: 41 bar styles");
+    if (!style.bars.empty()) {
+        const msproject::viewstate::BarStyle& task = style.bars[0];
+        check_eq(task.name, std::string("Task"), "gantt style: bar 0 is Task");
+        check_eq(task.middle_shape, std::uint8_t{1}, "gantt style: Task middle shape");
+        check_eq(task.middle_pattern, std::uint8_t{1}, "gantt style: Task pattern solid");
+        check(task.has_middle_colour && task.middle_colour == (Rgb{138, 187, 237}),
+              "gantt style: Task auto middle colour is (138,187,237)");
+        check((task.show_for & 0x1u) != 0, "gantt style: Task shows for Normal tasks");
+    }
+    for (const msproject::viewstate::BarStyle& bar : style.bars) {
+        if (bar.name == "Summary") {
+            check(bar.has_middle_colour && bar.middle_colour == (Rgb{84, 84, 84}),
+                  "gantt style: the Summary bar middle colour is (84,84,84)");
+            check_eq(bar.middle_shape, std::uint8_t{5},
+                     "gantt style: the Summary bar is a top line");
+            check(bar.has_start_colour && bar.start_colour == (Rgb{84, 84, 84}),
+                  "gantt style: the Summary bar start colour");
+        }
+        if (bar.name == "Milestone") {
+            check_eq(bar.start_shape, std::uint8_t{3},
+                     "gantt style: the Milestone start shape is a diamond");
+            check(bar.has_start_colour && bar.start_colour == (Rgb{99, 99, 99}),
+                  "gantt style: the stock Milestone start colour is grey");
+        }
+        if (bar.name == "Progress") {
+            check(bar.has_middle_colour && bar.middle_colour == (Rgb{59, 135, 212}),
+                  "gantt style: the stock Progress colour");
+        }
+    }
+
     // A record shorter than the measured minimum is refused, not read past.
     const std::vector<std::uint8_t> short_record(style_bytes.begin(),
                                                  style_bytes.begin() + 41361);
