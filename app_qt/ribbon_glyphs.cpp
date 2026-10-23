@@ -127,6 +127,114 @@ void info_page(QPainter& painter) {
     line(painter, 20, 19, 20, 23);
 }
 
+// --- View tab (W26-2.5) ----------------------------------------------------
+// Gantt Chart and Team Planner are the Task/Resource keys reused here (Project
+// reuses both); "Other Views" appears in both View groups and is the wave's
+// one expected same-tab reuse, so both keys draw the same page-and-dots mark.
+bool draw_view_glyph(QPainter& painter, const QString& key) {
+    if (key == QStringLiteral("view.task_usage")) {
+        page(painter);
+        line(painter, 14, 9, 14, 27);
+        line(painter, 8, 14, 25, 14);
+        line(painter, 8, 20, 25, 20);
+        filled_rect(painter, 16, 16, 7, 2);
+    } else if (key == QStringLiteral("view.network_diagram")) {
+        outline_rect(painter, 4, 5, 9, 7, 1);
+        outline_rect(painter, 19, 5, 9, 7, 1);
+        outline_rect(painter, 11, 20, 10, 7, 1);
+        line(painter, 13, 8, 19, 8);
+        line(painter, 8, 12, 14, 20);
+        line(painter, 24, 12, 18, 20);
+    } else if (key == QStringLiteral("view.calendar")) {
+        page(painter);
+        line(painter, 5, 11, 27, 11);
+        line(painter, 10, 3, 10, 7);
+        line(painter, 20, 3, 20, 7);
+        line(painter, 12, 11, 12, 29);
+        line(painter, 19, 11, 19, 29);
+        line(painter, 5, 17, 27, 17);
+        line(painter, 5, 23, 27, 23);
+    } else if (key == QStringLiteral("view.other")) {
+        page(painter);
+        filled_circle(painter, 11, 17, 2);
+        filled_circle(painter, 16, 17, 2);
+        filled_circle(painter, 21, 17, 2);
+    } else if (key == QStringLiteral("view.resource_usage")) {
+        page(painter);
+        line(painter, 14, 9, 14, 27);
+        line(painter, 8, 14, 25, 14);
+        line(painter, 8, 21, 25, 21);
+        person(painter, 21, 15, 2.5);
+    } else if (key == QStringLiteral("view.resource_sheet")) {
+        page(painter);
+        line(painter, 9, 13, 25, 13);
+        line(painter, 9, 19, 25, 19);
+        line(painter, 9, 25, 25, 25);
+        person(painter, 12, 8, 2.0);
+    } else if (key == QStringLiteral("data.sort")) {
+        line(painter, 5, 9, 22, 9);
+        line(painter, 5, 16, 18, 16);
+        line(painter, 5, 23, 14, 23);
+        line(painter, 26, 5, 26, 24, 2.5);
+        polyline(painter, {QPointF(21, 18), QPointF(26, 26), QPointF(31, 18)}, 2.5);
+    } else if (key == QStringLiteral("data.outline")) {
+        line(painter, 8, 6, 8, 26);
+        line(painter, 8, 10, 12, 10);
+        line(painter, 8, 16, 12, 16);
+        line(painter, 8, 22, 12, 22);
+        line(painter, 12, 10, 26, 10);
+        line(painter, 12, 16, 22, 16);
+        line(painter, 12, 22, 18, 22);
+    } else if (key == QStringLiteral("data.tables")) {
+        outline_rect(painter, 6, 7, 20, 18);
+        line(painter, 13, 7, 13, 25);
+        line(painter, 20, 7, 20, 25);
+        line(painter, 6, 13, 26, 13);
+        line(painter, 6, 19, 26, 19);
+    } else if (key == QStringLiteral("zoom.zoom")) {
+        outline_circle(painter, 13, 13, 8);
+        line(painter, 19, 19, 27, 27, 3);
+        line(painter, 9, 13, 17, 13, 2.5);
+        line(painter, 13, 9, 13, 17, 2.5);
+    } else if (key == QStringLiteral("zoom.entire")) {
+        outline_circle(painter, 13, 13, 8);
+        line(painter, 19, 19, 27, 27, 3);
+        outline_rect(painter, 9, 10, 8, 6);
+    } else if (key == QStringLiteral("zoom.selected")) {
+        outline_circle(painter, 13, 13, 8);
+        line(painter, 19, 19, 27, 27, 3);
+        filled_rect(painter, 9, 11, 8, 3);
+        line(painter, 9, 17, 14, 17);
+    } else if (key == QStringLiteral("window.new")) {
+        outline_rect(painter, 4, 6, 16, 13, 1);
+        line(painter, 4, 10, 20, 10);
+        outline_rect(painter, 12, 14, 16, 13, 1);
+        line(painter, 12, 18, 28, 18);
+    } else if (key == QStringLiteral("window.switch")) {
+        outline_rect(painter, 5, 5, 16, 14, 1);
+        line(painter, 5, 9, 21, 9);
+        line(painter, 8, 12, 18, 12);
+        line(painter, 8, 15, 18, 15);
+        line(painter, 18, 24, 29, 24, 2.5);
+        polyline(painter, {QPointF(25, 20), QPointF(29, 24), QPointF(25, 28)}, 2.5);
+    } else if (key == QStringLiteral("window.arrange")) {
+        outline_rect(painter, 4, 8, 11, 16, 1);
+        line(painter, 4, 12, 15, 12);
+        outline_rect(painter, 17, 8, 11, 16, 1);
+        line(painter, 17, 12, 28, 12);
+    } else if (key == QStringLiteral("window.hide")) {
+        outline_rect(painter, 5, 6, 18, 15, 1);
+        line(painter, 5, 10, 23, 10);
+        line(painter, 7, 27, 28, 5, 3);
+    } else if (key == QStringLiteral("macros.macros")) {
+        page(painter);
+        filled_polygon(painter, {QPointF(13, 12), QPointF(24, 18), QPointF(13, 24)});
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // --- Project tab (W26-2.4) -------------------------------------------------
 bool draw_project_tab_glyph(QPainter& painter, const QString& key) {
     if (key == QStringLiteral("insert.subproject")) {
@@ -538,7 +646,8 @@ QIcon shell_ribbon_icon(const QString& key, int pixels) {
     painter.setPen(ink_pen(2.0));
     painter.setBrush(Qt::NoBrush);
     if (!draw_task_glyph(painter, key) && !draw_resource_glyph(painter, key) &&
-        !draw_report_glyph(painter, key) && !draw_project_tab_glyph(painter, key)) {
+        !draw_report_glyph(painter, key) && !draw_project_tab_glyph(painter, key) &&
+        !draw_view_glyph(painter, key)) {
         painter.end();
         // A key with no drawing is the neutral placeholder, never a blank
         // icon: the gate's placeholder hash then fails on it.
@@ -555,7 +664,8 @@ bool shell_ribbon_glyph_known(const QString& key) {
     painter.setPen(ink_pen(2.0));
     painter.setBrush(Qt::NoBrush);
     const bool known = draw_task_glyph(painter, key) || draw_resource_glyph(painter, key) ||
-                       draw_report_glyph(painter, key) || draw_project_tab_glyph(painter, key);
+                       draw_report_glyph(painter, key) || draw_project_tab_glyph(painter, key) ||
+                       draw_view_glyph(painter, key);
     painter.end();
     return known;
 }
