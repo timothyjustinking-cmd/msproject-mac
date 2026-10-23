@@ -289,7 +289,7 @@ class MainWindow final : public QMainWindow {
     void handle_ribbon_command(RibbonCommand command, bool checked);
     void set_percent_complete(int percent);
     void unlink_selected_task();
-    void open_dialog();
+    void open_dialog(const QString& start_dir = QString());
     void show_about();
     void show_shortcuts();
     void set_zoom(app::ZoomLevel zoom);
@@ -300,7 +300,7 @@ class MainWindow final : public QMainWindow {
     void refresh_timeline();
 
     // --- wave 19: commands -------------------------------------------------
-    bool save_document(bool force_panel);
+    bool save_document(bool force_panel, const QString& start_dir = QString());
     void export_pdf(app::ReportKind kind);
     void print_plan();
     void save_as_pdf();

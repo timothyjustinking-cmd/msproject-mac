@@ -12,6 +12,7 @@
 #include <QDate>
 #include <QLocale>
 #include <QFileDialog>
+#include <QDir>
 #include <QFileInfo>
 #include <QFont>
 #include <QFontDatabase>
@@ -499,6 +500,11 @@ void MainWindow::build_central_widget() {
         if (command == QStringLiteral("open")) {
             show_backstage(false);
             open_dialog();
+        } else if (command == QStringLiteral("open_this_pc")) {
+            // W26-4.4: This PC starts at the computer root; Browse keeps the
+            // dialog's own last location.
+            show_backstage(false);
+            open_dialog(QDir::rootPath());
         } else if (command == QStringLiteral("new")) {
             new_project();
         } else if (command == QStringLiteral("new_from_existing")) {
@@ -512,6 +518,9 @@ void MainWindow::build_central_widget() {
         } else if (command == QStringLiteral("save_as")) {
             show_backstage(false);
             save_document(true);
+        } else if (command == QStringLiteral("save_as_this_pc")) {
+            show_backstage(false);
+            save_document(true, QDir::rootPath());
         } else if (command == QStringLiteral("print")) {
             show_backstage(false);
             print_plan();
@@ -1947,12 +1956,12 @@ void MainWindow::unlink_selected_task() {
     update_status();
 }
 
-void MainWindow::open_dialog() {
+void MainWindow::open_dialog(const QString& start_dir) {
     if (!confirm_proceed_with_discard()) {
         return;
     }
     const QString path = QFileDialog::getOpenFileName(
-        this, QStringLiteral("Open Project"), QString(),
+        this, QStringLiteral("Open Project"), start_dir,
         QStringLiteral("MS Project files (*.mpp);;All files (*)"), nullptr,
         QFileDialog::DontUseNativeDialog);
     if (path.isEmpty()) {
@@ -2191,7 +2200,7 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
     return true;
 }
 
-bool MainWindow::save_document(bool force_panel) {
+bool MainWindow::save_document(bool force_panel, const QString& start_dir) {
     if (!doc_.has_document()) {
         return false;
     }
@@ -2235,7 +2244,9 @@ bool MainWindow::save_document(bool force_panel) {
     std::string target = last_save_target_;
     if (force_panel || target.empty()) {
         QString directory;
-        if (!doc_.path().empty()) {
+        if (!start_dir.isEmpty()) {
+            directory = start_dir;
+        } else if (!doc_.path().empty()) {
             directory = QFileInfo(to_q(doc_.path())).absolutePath();
         }
         const QString suggested = to_q(app::default_save_name(doc_.path()));

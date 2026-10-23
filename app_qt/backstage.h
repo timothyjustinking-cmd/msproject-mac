@@ -67,6 +67,11 @@ class Backstage final : public QWidget {
 
     // A command a page button asks the shell to run.
     void set_command_handler(std::function<void(const QString& command)> handler);
+    // The installed handler (the gate swaps in a recorder to prove a button's
+    // command without opening the modal file dialog).
+    const std::function<void(const QString&)>& command_handler() const noexcept {
+        return command_handler_;
+    }
     void set_close_handler(std::function<void()> handler);
     void set_options_handler(std::function<void()> handler);
     // W26-4.2: the Account page's Office Theme chooser.  Only an implemented
@@ -144,6 +149,7 @@ class Backstage final : public QWidget {
     QWidget* build_page(Page page, const QString& title, const QString& body,
                         const QString& command_label, const QString& command);
     QWidget* build_new_page();
+    QWidget* build_location_page(Page page);
     QWidget* build_account_page();
     void set_nav_checked(int page_index);
     void rebuild_recent_lists();
@@ -175,6 +181,8 @@ class Backstage final : public QWidget {
     QLineEdit* online_search_ = nullptr;
     QLabel* online_note_ = nullptr;
     QListWidget* new_recent_ = nullptr;
+    QListWidget* open_recent_ = nullptr;
+    QListWidget* save_as_recent_ = nullptr;
     bool has_document_ = false;
 };
 

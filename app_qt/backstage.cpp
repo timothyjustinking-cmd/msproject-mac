@@ -386,17 +386,12 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
          "Open a project...", "open"},
         // W26-4.3: the New page is built by build_new_page() below (templates,
         // the disabled online search and the local Recent list).
-        {Page::open, "Open",
-         "Open an .mpp file from this computer. The file is read through the shared "
-         "portable reader; it is never modified in place.",
-         "Browse for a project...", "open"},
+        // W26-4.4: Open and Save As are built by build_location_page() (Recent,
+        // This PC and Browse; OneDrive/SharePoint laid out and disabled).
         {Page::save, "Save",
          "Save the pending edits through the shared writer. A new target path is "
          "asked for when the file is not one this app wrote.",
          "Save the pending edits", "save"},
-        {Page::save_as, "Save As",
-         "Write the project to a new .mpp file, leaving the opened file untouched.",
-         "Choose a target...", "save_as"},
         {Page::print, "Print",
          "Print the task sheet and Gantt through the shared page layout.",
          "Print the project", "print"},
@@ -427,6 +422,17 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
         QWidget* page = build_new_page();
         ordered[static_cast<std::size_t>(Page::create_new)] = page;
         page_widgets_.push_back(page);
+    }
+
+    // W26-4.4: Open and Save As -- Recent, This PC, Browse; the cloud entries
+    // are laid out and disabled.
+    {
+        QWidget* page = build_location_page(Page::open);
+        ordered[static_cast<std::size_t>(Page::open)] = page;
+        page_widgets_.push_back(page);
+        QWidget* save_as_page = build_location_page(Page::save_as);
+        ordered[static_cast<std::size_t>(Page::save_as)] = save_as_page;
+        page_widgets_.push_back(save_as_page);
     }
 
     // Info: honest local project facts, refreshed by set_info_text().
@@ -502,15 +508,20 @@ void Backstage::set_recent_open_handler(std::function<void(const QString&)> hand
 }
 
 void Backstage::rebuild_recent_lists() {
-    if (new_recent_ == nullptr) {
-        return;
-    }
-    new_recent_->clear();
-    for (const QString& path : recent_files_) {
-        auto* item = new QListWidgetItem(QFileInfo(path).fileName(), new_recent_);
-        item->setData(Qt::UserRole, path);
-        item->setToolTip(path);
-    }
+    auto fill = [this](QListWidget* list) {
+        if (list == nullptr) {
+            return;
+        }
+        list->clear();
+        for (const QString& path : recent_files_) {
+            auto* item = new QListWidgetItem(QFileInfo(path).fileName(), list);
+            item->setData(Qt::UserRole, path);
+            item->setToolTip(path);
+        }
+    };
+    fill(new_recent_);
+    fill(open_recent_);
+    fill(save_as_recent_);
 }
 
 void Backstage::set_info_text(const QString& title, const QString& detail) {
@@ -743,6 +754,128 @@ QWidget* Backstage::build_new_page() {
                              "a cloud service.")));
     layout->addStretch(1);
     return page;
+}
+
+QWidget* Backstage::build_location_page(Page page) {
+    const bool save_as = page == Page::save_as;
+    auto* widget = new QWidget(this);
+    auto* layout = new QVBoxLayout(widget);
+    layout->setContentsMargins(41, 27, 41, 27);
+    layout->setSpacing(10);
+    auto* heading = new QLabel(save_as ? QStringLiteral("Save As") : QStringLiteral("Open"),
+                               widget);
+    heading->setFont(backstage_font(15, true));
+    heading->setStyleSheet(QStringLiteral("color: #202020;"));
+    layout->addWidget(heading);
+    layout->addWidget(make_body(
+        widget,
+        save_as ? QStringLiteral("Write the project to a new .mpp file, leaving the opened "
+                                 "file untouched. This port writes local files only.")
+                : QStringLiteral("Open an .mpp file from this computer. The file is read "
+                                 "through the shared portable reader; it is never modified "
+                                 "in place.")));
+
+    auto* columns = new QHBoxLayout();
+    columns->setContentsMargins(0, 0, 0, 0);
+    columns->setSpacing(24);
+    layout->addLayout(columns, 1);
+
+    auto* left = new QWidget(widget);
+    left->setObjectName(save_as ? QStringLiteral("saveAsLocations")
+                                : QStringLiteral("openLocations"));
+    left->setFixedWidth(220);
+    auto* left_layout = new QVBoxLayout(left);
+    left_layout->setContentsMargins(0, 0, 0, 0);
+    left_layout->setSpacing(6);
+    auto section = [left](const QString& text) {
+        auto* label = new QLabel(text, left);
+        label->setFont(backstage_font(kBodyPointSize, true));
+        label->setStyleSheet(QStringLiteral("color: #202020;"));
+        return label;
+    };
+    auto location = [left](const QString& text, const char* object_name, bool enabled) {
+        auto* button = new QPushButton(text, left);
+        button->setObjectName(QString::fromUtf8(object_name));
+        button->setFlat(true);
+        button->setFixedHeight(28);
+        button->setStyleSheet(QStringLiteral(
+            "QPushButton { border: none; text-align: left; color: #242424;"
+            " padding-left: 8px; background: transparent; }"
+            "QPushButton:hover { background: #e5e5e5; }"
+            "QPushButton:disabled { color: #999999; }"));
+        button->setEnabled(enabled);
+        if (!enabled) {
+            button->setToolTip(QStringLiteral("not implemented in this port"));
+        }
+        return button;
+    };
+    auto command_button = [this](QAbstractButton* button, const char* command) {
+        connect(button, &QAbstractButton::clicked, this, [this, command](bool) {
+            if (command_handler_) {
+                command_handler_(QString::fromUtf8(command));
+            }
+        });
+    };
+
+    left_layout->addWidget(section(QStringLiteral("Recent")));
+    left_layout->addWidget(section(QStringLiteral("Personal")));
+    QAbstractButton* onedrive =
+        location(QStringLiteral("OneDrive - Personal"),
+                 save_as ? "saveAsOneDrive" : "openOneDrive", false);
+    left_layout->addWidget(onedrive);
+    QAbstractButton* sharepoint =
+        location(QStringLiteral("SharePoint"),
+                 save_as ? "saveAsSharePoint" : "openSharePoint", false);
+    left_layout->addWidget(sharepoint);
+    left_layout->addWidget(section(QStringLiteral("Other locations")));
+    QAbstractButton* this_pc = location(QStringLiteral("This PC"),
+                                       save_as ? "saveAsThisPc" : "openThisPc", true);
+    command_button(this_pc, save_as ? "save_as_this_pc" : "open_this_pc");
+    left_layout->addWidget(this_pc);
+    left_layout->addWidget(location(QStringLiteral("Add a Place"),
+                                    save_as ? "saveAsAddPlace" : "openAddPlace", false));
+    QAbstractButton* browse = location(QStringLiteral("Browse"),
+                                      save_as ? "saveAsBrowse" : "openBrowse", true);
+    command_button(browse, save_as ? "save_as" : "open");
+    left_layout->addWidget(browse);
+    left_layout->addStretch(1);
+    columns->addWidget(left);
+
+    auto* right = new QWidget(widget);
+    auto* right_layout = new QVBoxLayout(right);
+    right_layout->setContentsMargins(0, 0, 0, 0);
+    right_layout->setSpacing(6);
+    auto* recent_title = new QLabel(QStringLiteral("Recent"), right);
+    recent_title->setFont(backstage_font(kBodyPointSize, true));
+    recent_title->setStyleSheet(QStringLiteral("color: #202020;"));
+    right_layout->addWidget(recent_title);
+    auto* list = new QListWidget(right);
+    list->setObjectName(save_as ? QStringLiteral("saveAsRecentList")
+                                : QStringLiteral("openRecentList"));
+    list->setFont(backstage_font(kBodyPointSize));
+    list->setMinimumHeight(240);
+    if (save_as) {
+        save_as_recent_ = list;
+        right_layout->addWidget(make_body(
+            right, QStringLiteral("Save As writes a new target file; choose Browse or "
+                                  "This PC. The recent list is local and shown for "
+                                  "reference.")));
+    } else {
+        open_recent_ = list;
+        connect(list, &QListWidget::itemActivated, this, [this](QListWidgetItem* item) {
+            if (item != nullptr && recent_open_handler_) {
+                recent_open_handler_(item->data(Qt::UserRole).toString());
+            }
+        });
+        right_layout->addWidget(make_body(
+            right, QStringLiteral("Double-click a recent local file to open it; nothing "
+                                  "here is synced to a cloud service.")));
+    }
+    right_layout->addWidget(list);
+    right_layout->addStretch(1);
+    columns->addWidget(right, 1);
+    layout->addStretch(0);
+    return widget;
 }
 
 QWidget* Backstage::build_account_page() {
