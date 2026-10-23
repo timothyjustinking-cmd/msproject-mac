@@ -1,8 +1,9 @@
-// tests/cal_tests.cpp -- 114/TBkndCal: day patterns, dated exceptions, work
-// weeks, the CalendarTable builder, and the three MS Project dates of
-// corpus/probe/holiday1.mpp.
+// tests/cal_tests.cpp -- TBkndCal (MPP14 114/ and MPP12 112/): day patterns,
+// dated exceptions, work weeks, the CalendarTable builder, the three MS Project
+// dates of corpus/probe/holiday1.mpp, and (wave 19) the MPP12 row order,
+// detection rule and a real schedule driven by an MPP12 calendar.
 //
-// Ground truth for the corpus case is docs/analysis/oracle/holiday-probe.json
+// Ground truth for the MPP14 corpus case is docs/analysis/oracle/holiday-probe.json
 // (Project's own calculation, synthetic fixture):
 //
 //   T1 2d from Mon 2026-10-19 08:00 -> Tue 2026-10-20 17:00
@@ -14,8 +15,14 @@
 // are synthetic: the coordinator built holiday1.mpp over COM, so no client data
 // is in this file.  Nothing here prints a name from corpus/project_a.mpp.
 //
+// The MPP12 corpus cases use corpus/probe/mpp12calendar.mpp / mpp12task.mpp
+// (MPXJ's public test fixtures); the independent check is core/mpp's reader,
+// which decodes the same 112/TBkndCal table with its own code.  The MPP12
+// scheduling dates are this engine's output from decoded bytes, not COM.
+//
 // CI-safe cases (no corpus needed): decode_calendar_data() on hand-built byte
-// blocks and the builder on a hand-built CalendarTable.
+// blocks, the builder on a hand-built CalendarTable, and the MPP12/MPP14 row
+// order + detection test built from an in-memory compound file.
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -27,6 +34,9 @@
 #include <vector>
 
 #include "cal.h"
+#include "cpm.h"
+#include "mpp_fixture_builder.h"
+#include "reader.h"
 #include "sched_test_support.h"
 
 namespace cal = core::cal;
@@ -43,6 +53,7 @@ constexpr std::int32_t kFri = 15637;      // 2026-10-23, 4 working hours
 constexpr std::int32_t kSat = 15638;      // 2026-10-24
 constexpr std::int32_t kSun = 15639;      // 2026-10-25
 constexpr std::int32_t kNextMon = 15640;  // 2026-10-26
+constexpr std::int32_t kNextTue = 15641;  // 2026-10-27
 constexpr std::int32_t kNextThu = 15643;  // 2026-10-29
 
 constexpr sched::ticks kDay8h = 4800;   // 8 working hours in tenths of a minute
@@ -156,6 +167,173 @@ std::vector<std::uint8_t> make_five_day_week() {
         blob.insert(blob.end(), block.begin(), block.end());
     }
     return blob;
+}
+
+// --- in-memory TBkndCal tables and containers (CI-safe) ---------------------
+//
+// The MPP12/MPP14 column-order and format-detection tests need a container
+// without the corpus.  tests/mpp_fixture_builder.h is the reader tests' own
+// header-only CFB builder; this uses it to assemble a calendar table byte for
+// byte.  Every name below is synthetic (no corpus text is used).
+
+struct SyntheticCalendarTable {
+    std::vector<std::uint8_t> fixed_data;
+    std::vector<std::uint8_t> fixed_meta;
+    std::vector<std::uint8_t> var_meta;
+    std::vector<std::uint8_t> var2;
+};
+
+std::vector<std::uint8_t> utf16le_bytes(std::string const& text) {
+    std::vector<std::uint8_t> out;
+    out.reserve(text.size() * 2 + 2);
+    for (char c : text) {
+        out.push_back(static_cast<std::uint8_t>(static_cast<unsigned char>(c)));
+        out.push_back(0);
+    }
+    out.push_back(0);  // NUL terminator (names are stored NUL-terminated)
+    out.push_back(0);
+    return out;
+}
+
+// TBkndCal/FixedData: four zeroed 16-byte descriptors, then the three i32
+// columns per row written in one layout's order.
+std::vector<std::uint8_t> make_calendar_fixed_data(std::vector<cal::CalendarRow> const& rows,
+                                                   cal::CalendarLayout layout) {
+    std::vector<std::uint8_t> data(64, 0);
+    for (cal::CalendarRow const& row : rows) {
+        std::vector<std::uint8_t> bytes(12, 0);
+        if (layout == cal::CalendarLayout::mpp12) {
+            set_u32(bytes, 0, static_cast<std::uint32_t>(row.uid));
+            set_u32(bytes, 4, static_cast<std::uint32_t>(row.base_uid));
+            set_u32(bytes, 8, static_cast<std::uint32_t>(row.resource_uid));
+        } else {
+            set_u32(bytes, 0, static_cast<std::uint32_t>(row.base_uid));
+            set_u32(bytes, 4, static_cast<std::uint32_t>(row.resource_uid));
+            set_u32(bytes, 8, static_cast<std::uint32_t>(row.uid));
+        }
+        data.insert(data.end(), bytes.begin(), bytes.end());
+    }
+    return data;
+}
+
+// FixedMeta: 16-byte header (magic, version 4, 4 + n entries, FixedData size)
+// then 10-byte entries.  Four 16-byte descriptors precede the rows.
+std::vector<std::uint8_t> make_calendar_fixed_meta(std::size_t rows, std::size_t fixed_size) {
+    std::vector<std::uint8_t> meta(16 + 10 * (4 + rows), 0);
+    set_u32(meta, 0, 0xFADFADBAu);  // stored ba ad df fa
+    set_u32(meta, 4, 4);
+    set_u32(meta, 8, static_cast<std::uint32_t>(4 + rows));
+    set_u32(meta, 12, static_cast<std::uint32_t>(fixed_size));
+    for (std::size_t i = 0; i < 4 + rows; ++i) {
+        const std::size_t at = 16 + i * 10;
+        set_u16(meta, at, static_cast<std::uint32_t>(i < 4 ? 4 : 0));
+        set_u32(meta, at + 4,
+                static_cast<std::uint32_t>(i < 4 ? i * 16 : 64 + (i - 4) * 12));
+        set_u16(meta, at + 8, static_cast<std::uint32_t>(i < 4 ? 16 : 12));
+    }
+    return meta;
+}
+
+SyntheticCalendarTable make_calendar_table(std::vector<cal::CalendarRow> const& rows,
+                                           std::vector<std::string> const& names,
+                                           cal::CalendarLayout layout) {
+    SyntheticCalendarTable out;
+    out.fixed_data = make_calendar_fixed_data(rows, layout);
+    out.fixed_meta = make_calendar_fixed_meta(rows.size(), out.fixed_data.size());
+    std::vector<std::uint32_t> entries;
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+        if (names[i].empty()) {
+            continue;
+        }
+        entries.push_back(static_cast<std::uint32_t>(rows[i].uid));
+        entries.push_back(static_cast<std::uint32_t>(out.var2.size()));
+        entries.push_back(0x0D400001u);  // calendar name
+        mpp_fixture::append_block(out.var2, utf16le_bytes(names[i]));
+    }
+    out.var_meta = mpp_fixture::var_meta(entries, static_cast<std::uint32_t>(entries.size() / 3),
+                                         static_cast<std::uint32_t>(out.var2.size()));
+    return out;
+}
+
+// Seven 60-byte day blocks: one interval per weekday, none at the weekend.
+std::vector<std::uint8_t> make_week(
+    std::initializer_list<std::pair<std::int32_t, std::int32_t>> weekday_intervals) {
+    const std::vector<std::uint8_t> off = make_day_block(false, {});
+    const std::vector<std::uint8_t> working = make_day_block(false, weekday_intervals);
+    std::vector<std::uint8_t> blob;
+    for (std::size_t day = 0; day < 7; ++day) {
+        const std::vector<std::uint8_t>& block = (day == 0 || day == 6) ? off : working;
+        blob.insert(blob.end(), block.begin(), block.end());
+    }
+    return blob;
+}
+
+// <root>/Props holding the two calendar defaults.  112/Props and 114/Props have
+// the same block layout and the same keys (measured on mpp12calendar.mpp).
+std::vector<std::uint8_t> make_calendar_props(std::string const& default_name,
+                                              std::vector<std::uint8_t> const& week) {
+    struct Record {
+        std::uint32_t key;
+        std::vector<std::uint8_t> data;
+    };
+    const std::vector<Record> records = {
+        {37748750u, utf16le_bytes(default_name)},  // DEFAULT_CALENDAR_NAME 0x0240000E
+        {37753736u, week},                         // DEFAULT_CALENDAR_HOURS 0x02401388
+    };
+    std::vector<std::uint8_t> out(16, 0);
+    set_u16(out, 12, static_cast<std::uint32_t>(records.size()));
+    for (Record const& record : records) {
+        append_u32(out, static_cast<std::uint32_t>(record.data.size()));
+        append_u32(out, record.key);
+        append_u32(out, 0);
+        out.insert(out.end(), record.data.begin(), record.data.end());
+        if ((record.data.size() & 1u) != 0) {
+            out.push_back(0);  // 2-byte alignment
+        }
+    }
+    return out;
+}
+
+const std::vector<cal::CalendarRow>& synthetic_rows() {
+    static const std::vector<cal::CalendarRow> rows = {
+        {10, -1, -1},  // base calendar
+        {11, 10, -1},  // derived from 10
+        {12, 10, 3},   // resource 3's calendar, derived from 10
+    };
+    return rows;
+}
+
+const std::vector<std::string>& synthetic_names() {
+    static const std::vector<std::string> names = {"Alpha", "Beta", "Gamma"};
+    return names;
+}
+
+// A whole CFB: <root>/TBkndCal + <root>/Props, optionally a Props12/Props14
+// stub and a TBkndTask storage stub so each detection rule can be exercised.
+std::vector<std::uint8_t> make_calendar_cfb(cal::CalendarLayout layout,
+                                            std::string const& default_name,
+                                            std::vector<std::uint8_t> const& default_week,
+                                            bool props_stub, bool task_table_stub) {
+    const bool mpp12 = layout == cal::CalendarLayout::mpp12;
+    const std::string root = mpp12 ? "112" : "114";
+    const SyntheticCalendarTable table =
+        make_calendar_table(synthetic_rows(), synthetic_names(), layout);
+    std::vector<mpp_fixture::Stream> streams;
+    if (props_stub) {
+        streams.push_back(mpp_fixture::Stream{mpp12 ? "Props12" : "Props14",
+                                              std::vector<std::uint8_t>(16, 0)});
+    }
+    if (task_table_stub) {
+        streams.push_back(mpp_fixture::Stream{root + "/TBkndTask/FixedMeta",
+                                              std::vector<std::uint8_t>(16, 0)});
+    }
+    streams.push_back(
+        mpp_fixture::Stream{root + "/Props", make_calendar_props(default_name, default_week)});
+    streams.push_back(mpp_fixture::Stream{root + "/TBkndCal/FixedData", table.fixed_data});
+    streams.push_back(mpp_fixture::Stream{root + "/TBkndCal/FixedMeta", table.fixed_meta});
+    streams.push_back(mpp_fixture::Stream{root + "/TBkndCal/VarMeta", table.var_meta});
+    streams.push_back(mpp_fixture::Stream{root + "/TBkndCal/Var2Data", table.var2});
+    return mpp_fixture::make_cfb(streams);
 }
 
 // 92-byte exception block followed by a zero name length (4-byte aligned = 0).
@@ -1351,6 +1529,508 @@ void test_project_a_counts(sched_test::TestContext& ctx, std::string const& path
               "PROJECT_A: the project default calendar resolves by name (no fallback needed)");
 }
 
+// --- MPP12/MPP14 row order and format detection (CI-safe) --------------------
+//
+// This fails if the two column orders are swapped.  It builds the same logical
+// three-calendar table in both layouts and decodes both, then reads the MPP12
+// bytes under the MPP14 layout as the negative control (the identity columns
+// move).  The second half does the same through a real compound file, so the
+// table root and the props root are covered as well.
+void test_calendar_row_layouts(sched_test::TestContext& ctx) {
+    const std::vector<cal::CalendarRow>& rows = synthetic_rows();
+    const std::vector<std::uint8_t> mpp12_bytes =
+        make_calendar_fixed_data(rows, cal::CalendarLayout::mpp12);
+    const std::vector<std::uint8_t> mpp14_bytes =
+        make_calendar_fixed_data(rows, cal::CalendarLayout::mpp14);
+
+    const std::vector<cal::CalendarRow> decoded12 =
+        cal::decode_calendar_rows(mpp12_bytes, cal::CalendarLayout::mpp12);
+    const std::vector<cal::CalendarRow> decoded14 =
+        cal::decode_calendar_rows(mpp14_bytes, cal::CalendarLayout::mpp14);
+    ctx.equal(decoded12.size(), 3u, "row order: three MPP12 rows decode");
+    ctx.equal(decoded14.size(), 3u, "row order: three MPP14 rows decode");
+    if (decoded12.size() == 3 && decoded14.size() == 3) {
+        for (std::size_t i = 0; i < 3; ++i) {
+            ctx.equal(decoded12[i].uid, rows[i].uid, "row order: MPP12 uid column");
+            ctx.equal(decoded12[i].base_uid, rows[i].base_uid, "row order: MPP12 base column");
+            ctx.equal(decoded12[i].resource_uid, rows[i].resource_uid,
+                      "row order: MPP12 resource column");
+            ctx.equal(decoded14[i].uid, rows[i].uid, "row order: MPP14 uid column");
+            ctx.equal(decoded14[i].base_uid, rows[i].base_uid, "row order: MPP14 base column");
+            ctx.equal(decoded14[i].resource_uid, rows[i].resource_uid,
+                      "row order: MPP14 resource column");
+        }
+    }
+
+    // Negative control: the same MPP12 bytes under the MPP14 order.
+    const std::vector<cal::CalendarRow> crossed =
+        cal::decode_calendar_rows(mpp12_bytes, cal::CalendarLayout::mpp14);
+    ctx.equal(crossed.size(), 3u, "row order: the wrong layout still yields three rows");
+    if (crossed.size() == 3) {
+        ctx.equal(crossed[0].base_uid, 10, "row order: MPP14 read of MPP12 row 0 sees base 10");
+        ctx.equal(crossed[0].uid, -1, "row order: MPP14 read of MPP12 row 0 sees uid -1");
+        ctx.equal(crossed[1].base_uid, 11, "row order: MPP14 read of MPP12 row 1 sees base 11");
+        ctx.equal(crossed[2].uid, 3, "row order: MPP14 read of MPP12 row 2 sees uid 3");
+        ctx.equal(crossed[2].base_uid, 12, "row order: MPP14 read of MPP12 row 2 sees base 12");
+        ctx.equal(crossed[2].resource_uid, 10,
+                  "row order: MPP14 read of MPP12 row 2 sees resource 10");
+        ctx.check(crossed[2].uid != decoded12[2].uid ||
+                      crossed[2].base_uid != decoded12[2].base_uid,
+                  "row order: the swapped read really mis-routes uid/base");
+    }
+
+    bool threw = false;
+    try {
+        static_cast<void>(cal::decode_calendar_rows(mpp12_bytes, cal::CalendarLayout::automatic));
+    } catch (mpp::Error const&) {
+        threw = true;
+    }
+    ctx.check(threw, "row order: a byte buffer needs an explicit layout (auto throws)");
+
+    threw = false;
+    try {
+        static_cast<void>(cal::decode_calendar_rows(std::vector<std::uint8_t>(70, 0),
+                                                    cal::CalendarLayout::mpp12));
+    } catch (mpp::Error const&) {
+        threw = true;
+    }
+    ctx.check(threw, "row order: a FixedData size that is not 64 + 12*n throws");
+
+    // ---- the same two layouts through a whole compound file ---------------
+    const std::vector<std::uint8_t> week12 = make_week({{10 * 60, 18 * 60}});
+    const std::vector<std::uint8_t> week14 = make_week({{9 * 60, 17 * 60}});
+    const mpp::CompoundFile file12 = mpp::CompoundFile::from_bytes(
+        make_calendar_cfb(cal::CalendarLayout::mpp12, "Auto MPP12", week12, true, false));
+    const mpp::CompoundFile file14 = mpp::CompoundFile::from_bytes(
+        make_calendar_cfb(cal::CalendarLayout::mpp14, "Auto MPP14", week14, true, false));
+
+    const cal::CalendarFormat format12 = cal::detect_calendar_layout(file12);
+    ctx.check(format12.layout == cal::CalendarLayout::mpp12, "detect: Props12 names MPP12");
+    ctx.equal_string(format12.table_root, "112", "detect: MPP12 table root is 112");
+    ctx.equal_string(format12.props_stream, "112/Props", "detect: MPP12 props stream");
+    const cal::CalendarFormat format14 = cal::detect_calendar_layout(file14);
+    ctx.check(format14.layout == cal::CalendarLayout::mpp14, "detect: Props14 names MPP14");
+    ctx.equal_string(format14.table_root, "114", "detect: MPP14 table root is 114");
+    ctx.equal_string(format14.props_stream, "114/Props", "detect: MPP14 props stream");
+
+    const cal::CalendarTable table12 = cal::decode_compound_file(file12);
+    const cal::CalendarTable table14 = cal::decode_compound_file(file14);
+    ctx.check(table12.layout == cal::CalendarLayout::mpp12,
+              "cfb: the MPP12 container is decoded as MPP12");
+    ctx.check(table14.layout == cal::CalendarLayout::mpp14,
+              "cfb: the MPP14 container is decoded as MPP14");
+    ctx.check(table12.layout_detected && table14.layout_detected,
+              "cfb: both layouts were auto-detected");
+    ctx.check(!cal::decode_compound_file(file12, cal::CalendarLayout::mpp12).layout_detected,
+              "cfb: a forced layout is reported as not detected");
+    ctx.equal_string(table12.table_root, "112", "cfb: MPP12 table root");
+    ctx.equal_string(table14.table_root, "114", "cfb: MPP14 table root");
+    ctx.equal_string(table12.default_calendar_name, "Auto MPP12",
+                     "cfb: the default name comes from 112/Props");
+    ctx.equal_string(table14.default_calendar_name, "Auto MPP14",
+                     "cfb: the default name comes from 114/Props");
+    ctx.equal(table12.default_week[1].intervals.size(), 1u,
+              "cfb: the MPP12 default week has Monday's interval");
+    if (table12.default_week[1].intervals.size() == 1) {
+        ctx.equal(table12.default_week[1].intervals[0].start_ticks, 10 * 600,
+                  "cfb: 112/Props Monday starts 10:00");
+    }
+    ctx.equal(table14.default_week[1].intervals.size(), 1u,
+              "cfb: the MPP14 default week has Monday's interval");
+    if (table14.default_week[1].intervals.size() == 1) {
+        ctx.equal(table14.default_week[1].intervals[0].start_ticks, 9 * 600,
+                  "cfb: 114/Props Monday starts 09:00");
+    }
+
+    ctx.equal(table12.calendars.size(), 3u, "cfb: three MPP12 calendars");
+    ctx.equal(table14.calendars.size(), 3u, "cfb: three MPP14 calendars");
+    if (table12.calendars.size() == 3 && table14.calendars.size() == 3) {
+        for (std::size_t i = 0; i < 3; ++i) {
+            ctx.equal(table12.calendars[i].uid, rows[i].uid, "cfb: MPP12 calendar uid");
+            ctx.equal(table12.calendars[i].base_uid, rows[i].base_uid, "cfb: MPP12 calendar base");
+            ctx.equal(table12.calendars[i].resource_uid, rows[i].resource_uid,
+                      "cfb: MPP12 calendar resource");
+            ctx.equal(table14.calendars[i].uid, rows[i].uid, "cfb: MPP14 calendar uid");
+            ctx.equal(table14.calendars[i].base_uid, rows[i].base_uid, "cfb: MPP14 calendar base");
+            ctx.equal(table14.calendars[i].resource_uid, rows[i].resource_uid,
+                      "cfb: MPP14 calendar resource");
+            ctx.equal_string(table12.calendars[i].name, synthetic_names()[i],
+                             "cfb: MPP12 calendar name");
+            ctx.equal_string(table14.calendars[i].name, synthetic_names()[i],
+                             "cfb: MPP14 calendar name");
+        }
+    }
+
+    // A forced layout also forces its table root, so forcing MPP12 on an MPP14
+    // container is refused rather than silently reading the wrong tree.
+    threw = false;
+    try {
+        static_cast<void>(cal::decode_compound_file(file14, cal::CalendarLayout::mpp12));
+    } catch (mpp::Error const&) {
+        threw = true;
+    }
+    ctx.check(threw, "cfb: forcing MPP12 on an MPP14 container throws");
+
+    // Detection without a props stub: the 112/ TBkndTask storage decides, and a
+    // calendar-only container falls back to its TBkndCal tree.
+    const cal::CalendarTable from_storage = cal::decode_compound_file(
+        mpp::CompoundFile::from_bytes(
+            make_calendar_cfb(cal::CalendarLayout::mpp12, "Storage MPP12", week12, false, true)));
+    ctx.check(from_storage.layout == cal::CalendarLayout::mpp12,
+              "detect: 112/TBkndTask storage names MPP12 when Props12 is absent");
+    const cal::CalendarTable from_calendar_tree = cal::decode_compound_file(
+        mpp::CompoundFile::from_bytes(
+            make_calendar_cfb(cal::CalendarLayout::mpp14, "Tree MPP14", week14, false, false)));
+    ctx.check(from_calendar_tree.layout == cal::CalendarLayout::mpp14,
+              "detect: a calendar-only container falls back to 114/TBkndCal");
+
+    // A container with a props stream but no calendar table is refused.
+    std::vector<mpp_fixture::Stream> bare;
+    bare.push_back(mpp_fixture::Stream{"Props14", std::vector<std::uint8_t>(16, 0)});
+    threw = false;
+    try {
+        static_cast<void>(cal::detect_calendar_layout(
+            mpp::CompoundFile::from_bytes(mpp_fixture::make_cfb(bare))));
+    } catch (mpp::Error const&) {
+        threw = true;
+    }
+    ctx.check(threw, "detect: a container with no TBkndCal table is refused");
+}
+
+// --- corpus-gated: MPP12 (Project 2007) -------------------------------------
+//
+// corpus/probe/mpp12calendar.mpp is MPXJ's public MPP12 test fixture and
+// corpus/probe/mpp12task.mpp is the reader stream's field showcase; the names
+// are the fixtures' own, not client data.  The independent check for the table
+// layout is core/mpp's reader: it decodes the same 112/TBkndCal/FixedData with
+// its own code (mpp::Document::calendars), so agreement on every row is
+// evidence that the column order and the uid routing are right.
+void test_mpp12_identity(sched_test::TestContext& ctx, std::string const& path) {
+    const cal::CalendarTable table = cal::decode_file(path);
+    ctx.check(table.layout == cal::CalendarLayout::mpp12,
+              "mpp12calendar: auto-detected as MPP12");
+    ctx.equal_string(table.table_root, "112", "mpp12calendar: the table root is 112");
+    ctx.equal(table.calendars.size(), 8u, "mpp12calendar: eight calendar rows");
+    ctx.equal(table.base_calendar_count(), 5u, "mpp12calendar: five base calendars");
+    ctx.equal(table.derived_calendar_count(), 3u, "mpp12calendar: three resource calendars");
+    ctx.equal(table.metadata_anomalies, 0u, "mpp12calendar: FixedMeta/VarMeta agree");
+    ctx.equal(table.sub_minute_intervals, 0u, "mpp12calendar: every interval is whole minutes");
+
+    // 112/Props decodes exactly like 114/Props: the stock week and the project
+    // default name.  This is the point the task asked not to assume.
+    ctx.equal_string(table.default_calendar_name, "Standard",
+                     "mpp12calendar: 112/Props names the project default Standard");
+    ctx.equal(table.default_week[1].intervals.size(), 2u,
+              "mpp12calendar: the default Monday has two intervals");
+    if (table.default_week[1].intervals.size() == 2) {
+        ctx.equal(table.default_week[1].intervals[0].start_ticks, 4800,
+                  "mpp12calendar: the default morning starts 08:00");
+        ctx.equal(table.default_week[1].intervals[0].length_ticks, 2400,
+                  "mpp12calendar: the default morning is 4 h");
+        ctx.equal(table.default_week[1].intervals[1].start_ticks, 7800,
+                  "mpp12calendar: the default afternoon starts 13:00");
+        ctx.equal(table.default_week[1].intervals[1].length_ticks, 2400,
+                  "mpp12calendar: the default afternoon is 4 h");
+    }
+    ctx.equal(table.default_week[0].intervals.size(), 0u, "mpp12calendar: Sunday is non-working");
+    ctx.equal(table.default_week[6].intervals.size(), 0u, "mpp12calendar: Saturday is non-working");
+
+    const cal::CalendarTable forced = cal::decode_file(path, cal::CalendarLayout::mpp12);
+    ctx.check(forced.layout == cal::CalendarLayout::mpp12,
+              "mpp12calendar: the explicit MPP12 layout agrees with auto-detection");
+    ctx.equal(forced.calendars.size(), table.calendars.size(),
+              "mpp12calendar: forced and automatic decodes have the same rows");
+
+    bool threw = false;
+    try {
+        static_cast<void>(cal::decode_file(path, cal::CalendarLayout::mpp14));
+    } catch (mpp::Error const&) {
+        threw = true;
+    }
+    ctx.check(threw, "mpp12calendar: forcing MPP14 finds no 114/TBkndCal and throws");
+
+    // The project default through the public convenience API.
+    const sched::Calendar project = cal::load_project_calendar(path);
+    ctx.equal(project.day_total_ticks(kMon), kDay8h,
+              "mpp12calendar: the project default calendar is the stock 8 h day");
+
+    // ---- independent reader agreement ------------------------------------
+    const mpp::Document document = mpp::load_file(path);
+    ctx.check(document.version == mpp::MppVersion::mpp12,
+              "mpp12calendar: the reader also sees MPP12");
+    ctx.equal_string(document.table_root, "112", "mpp12calendar: the reader's table root");
+    ctx.equal(document.calendars.size(), table.calendars.size(),
+              "mpp12calendar: the reader reports the same number of calendars");
+    std::size_t matched = 0;
+    for (cal::CalendarDefinition const& calendar : table.calendars) {
+        for (mpp::Calendar const& reader_calendar : document.calendars) {
+            if (reader_calendar.uid != calendar.uid) {
+                continue;
+            }
+            ++matched;
+            ctx.equal(calendar.base_uid, reader_calendar.base_uid,
+                      "mpp12calendar: base uid agrees with the reader");
+            ctx.equal(calendar.resource_uid, reader_calendar.resource_uid,
+                      "mpp12calendar: resource uid agrees with the reader");
+            // Compared, never printed: the value is fixture text and the
+            // client-data rule forbids echoing a corpus name on failure.
+            ctx.check(calendar.name == reader_calendar.name,
+                      "mpp12calendar: name agrees with the reader");
+        }
+    }
+    ctx.equal(matched, table.calendars.size(),
+              "mpp12calendar: every core/cal row has a reader row with the same uid");
+}
+
+// mpp12task.mpp: three calendars (1 Standard, 2 and 3 the two resource
+// calendars) whose identity is the second witness for the uid/base/resource
+// column order.
+void test_mpp12_task_table(sched_test::TestContext& ctx, std::string const& path) {
+    const cal::CalendarTable table = cal::decode_file(path);
+    ctx.check(table.layout == cal::CalendarLayout::mpp12, "mpp12task: auto-detected as MPP12");
+    ctx.equal_string(table.table_root, "112", "mpp12task: the table root is 112");
+    ctx.equal(table.calendars.size(), 3u, "mpp12task: three calendar rows");
+    ctx.equal(table.base_calendar_count(), 1u, "mpp12task: one base calendar");
+    ctx.equal(table.derived_calendar_count(), 2u, "mpp12task: two resource calendars");
+    ctx.equal_string(table.default_calendar_name, "Standard", "mpp12task: the default is Standard");
+    const std::int32_t expected_uids[3] = {1, 2, 3};
+    const std::int32_t expected_base[3] = {-1, 1, 1};
+    const std::int32_t expected_resource[3] = {-1, 0, 1};
+    for (std::size_t i = 0; i < table.calendars.size() && i < 3; ++i) {
+        ctx.equal(table.calendars[i].uid, expected_uids[i], "mpp12task: uid column");
+        ctx.equal(table.calendars[i].base_uid, expected_base[i], "mpp12task: base column");
+        ctx.equal(table.calendars[i].resource_uid, expected_resource[i],
+                  "mpp12task: resource column");
+    }
+    const mpp::Document document = mpp::load_file(path);
+    ctx.equal(document.calendars.size(), table.calendars.size(),
+              "mpp12task: the reader reports the same rows");
+    std::size_t matched = 0;
+    for (cal::CalendarDefinition const& calendar : table.calendars) {
+        for (mpp::Calendar const& reader_calendar : document.calendars) {
+            if (reader_calendar.uid == calendar.uid) {
+                ++matched;
+                ctx.equal(calendar.base_uid, reader_calendar.base_uid,
+                          "mpp12task: base uid agrees with the reader");
+                ctx.equal(calendar.resource_uid, reader_calendar.resource_uid,
+                          "mpp12task: resource uid agrees with the reader");
+            }
+        }
+    }
+    ctx.equal(matched, table.calendars.size(), "mpp12task: every row agrees with the reader");
+}
+
+// MPP12 vs MPP14 agreement: the same logical calendar (the stock "Standard"
+// week) must build the same core::sched week and schedule the same dates from a
+// Project 2007 file and a Project 2010+ file.
+void test_mpp12_agreement(sched_test::TestContext& ctx, std::string const& mpp12_path,
+                          std::string const& mpp14_path) {
+    if (!file_exists(mpp14_path)) {
+        std::cout << "SKIP: " << mpp14_path
+                  << " is absent; the MPP12/MPP14 agreement case is not checked\n";
+        return;
+    }
+    const cal::CalendarTable table12 = cal::decode_file(mpp12_path);
+    const cal::CalendarTable table14 = cal::decode_file(mpp14_path);
+    ctx.check(table14.layout == cal::CalendarLayout::mpp14, "agreement: base.mpp is MPP14");
+    const cal::CalendarDefinition* standard12 = cal::find_calendar(table12, "Standard");
+    const cal::CalendarDefinition* standard14 = cal::find_calendar(table14, "Standard");
+    ctx.check(standard12 != nullptr, "agreement: mpp12calendar has Standard");
+    ctx.check(standard14 != nullptr, "agreement: base.mpp has Standard");
+    if (standard12 == nullptr || standard14 == nullptr) {
+        return;
+    }
+    ctx.check(!standard12->has_week_data && !standard14->has_week_data,
+              "agreement: Standard takes its week from <root>/Props in both files");
+
+    const sched::Calendar cal12 = cal::build_calendar(table12, *standard12);
+    const sched::Calendar cal14 = cal::build_calendar(table14, *standard14);
+    const auto same_pattern = [](sched::DayPattern const& left, sched::DayPattern const& right) {
+        if (left.count != right.count) {
+            return false;
+        }
+        for (std::size_t i = 0; i < left.count; ++i) {
+            if (left.start_minute[i] != right.start_minute[i] ||
+                left.length_minutes[i] != right.length_minutes[i]) {
+                return false;
+            }
+        }
+        return true;
+    };
+    bool same_week = true;
+    for (std::size_t day = 0; day < 7; ++day) {
+        same_week = same_week && same_pattern(cal12.default_week()[day], cal14.default_week()[day]);
+    }
+    ctx.check(same_week, "agreement: the Standard week is identical in MPP12 and MPP14");
+
+    // Day numbers, not weekday indices: kMon..kFri is the measured week.
+    for (const std::int32_t day : {kMon, kTue, kWed, kThu, kFri}) {
+        ctx.equal(cal12.day_total_ticks(day), kDay8h,
+                  "agreement: MPP12 Standard weekday is 8 h");
+        ctx.equal(cal14.day_total_ticks(day), kDay8h,
+                  "agreement: MPP14 Standard weekday is 8 h");
+    }
+    ctx.equal(cal12.day_total_ticks(kSun), 0, "agreement: MPP12 Standard Sunday is non-working");
+    ctx.equal(cal12.day_total_ticks(kSat), 0,
+              "agreement: MPP12 Standard Saturday is non-working");
+    ctx.equal(cal14.day_total_ticks(kSat), 0,
+              "agreement: MPP14 Standard Saturday is non-working");
+
+    // The explicit acceptance date: stock week, 2 d from Fri 08:00 -> Mon 17:00.
+    ctx.equal_date(cal12.add_work(at(kFri, 8, 0), 2 * kDay8h), at(kNextMon, 17, 0),
+                   "agreement: MPP12 Standard 2 d from Fri 08:00 finishes Mon 17:00");
+    ctx.equal_date(cal14.add_work(at(kFri, 8, 0), 2 * kDay8h), at(kNextMon, 17, 0),
+                   "agreement: MPP14 Standard 2 d from Fri 08:00 finishes Mon 17:00");
+    ctx.equal_date(cal12.add_work(at(kFri, 8, 0), 2 * kDay8h),
+                   cal14.add_work(at(kFri, 8, 0), 2 * kDay8h),
+                   "agreement: both formats give the same finish instant");
+
+    // The same acceptance row through the production scheduling engine, once
+    // per format: a 2 d task with the project start Fri 08:00.
+    sched::CpmTask task;
+    task.id = 1;
+    task.duration = 2 * kDay8h;
+    sched::CpmOptions options;
+    options.project_start = at(kFri, 8, 0);
+    const sched::CpmResult result12 = sched::schedule_tasks({task}, {}, cal12, options);
+    const sched::CpmResult result14 = sched::schedule_tasks({task}, {}, cal14, options);
+    ctx.check(result12.ok() && result14.ok(), "agreement: both formats schedule");
+    if (result12.ok() && result14.ok() && result12.tasks.size() == 1 &&
+        result14.tasks.size() == 1) {
+        ctx.equal_date(result12.tasks[0].finish, at(kNextMon, 17, 0),
+                       "agreement: MPP12 2 d task finishes Mon 17:00");
+        ctx.equal_date(result14.tasks[0].finish, at(kNextMon, 17, 0),
+                       "agreement: MPP14 2 d task finishes Mon 17:00");
+        ctx.equal_date(result12.tasks[0].start, result14.tasks[0].start,
+                       "agreement: both start at the same instant");
+    }
+}
+
+// A real schedule driven by an MPP12 calendar: "Night Shift" (uid 7) works
+// Mon 23:00-24:00, Tue-Fri 00:00-03:00 + 04:00-08:00 + 23:00-24:00 and
+// Sat 00:00-03:00 + 04:00-08:00, with Sunday inherited (non-working).  Its week
+// is read from the 112/TBkndCal/Var2Data block, not from 112/Props.
+void test_mpp12_schedules(sched_test::TestContext& ctx, std::string const& path) {
+    const cal::CalendarTable table = cal::decode_file(path);
+    const cal::CalendarDefinition* night = cal::find_calendar_by_uid(table, 7);
+    ctx.check(night != nullptr, "mpp12 sched: calendar uid 7 is present");
+    if (night == nullptr) {
+        return;
+    }
+    ctx.check(night->base_uid <= 0, "mpp12 sched: uid 7 is a base calendar");
+    ctx.check(night->has_week_data, "mpp12 sched: uid 7 has its own Var2Data week");
+    ctx.check(night->week[0].use_base, "mpp12 sched: uid 7 Sunday inherits the default");
+    ctx.check(!night->week[1].use_base, "mpp12 sched: uid 7 Monday is a custom day");
+    ctx.equal(night->week[1].intervals.size(), 1u, "mpp12 sched: Monday has one interval");
+    if (night->week[1].intervals.size() == 1) {
+        ctx.equal(night->week[1].intervals[0].start_ticks, 23 * 600,
+                  "mpp12 sched: Monday starts 23:00");
+        ctx.equal(night->week[1].intervals[0].length_ticks, 600,
+                  "mpp12 sched: Monday is one hour");
+    }
+    for (std::size_t day = 2; day <= 5; ++day) {
+        ctx.equal(night->week[day].intervals.size(), 3u,
+                  "mpp12 sched: Tue-Fri have three intervals");
+        if (night->week[day].intervals.size() == 3) {
+            ctx.equal(night->week[day].intervals[0].start_ticks, 0,
+                      "mpp12 sched: Tue-Fri start 00:00");
+            ctx.equal(night->week[day].intervals[0].length_ticks, 1800,
+                      "mpp12 sched: Tue-Fri first interval is 3 h");
+            ctx.equal(night->week[day].intervals[1].start_ticks, 2400,
+                      "mpp12 sched: Tue-Fri restart 04:00");
+            ctx.equal(night->week[day].intervals[1].length_ticks, 2400,
+                      "mpp12 sched: Tue-Fri second interval is 4 h");
+            ctx.equal(night->week[day].intervals[2].start_ticks, 13800,
+                      "mpp12 sched: Tue-Fri last interval starts 23:00");
+            ctx.equal(night->week[day].intervals[2].length_ticks, 600,
+                      "mpp12 sched: Tue-Fri last interval is one hour");
+        }
+    }
+    ctx.equal(night->week[6].intervals.size(), 2u, "mpp12 sched: Saturday has two intervals");
+    if (night->week[6].intervals.size() == 2) {
+        ctx.equal(night->week[6].intervals[1].start_ticks, 2400,
+                  "mpp12 sched: Saturday restarts 04:00");
+        ctx.equal(night->week[6].intervals[1].length_ticks, 2400,
+                  "mpp12 sched: Saturday is 7 h in total");
+    }
+
+    const sched::Calendar night_calendar = cal::build_calendar(table, *night);
+    ctx.equal(night_calendar.day_total_ticks(kFri), 4800, "mpp12 sched: Friday is 8 h");
+    ctx.equal(night_calendar.day_total_ticks(kSat), 4200, "mpp12 sched: Saturday is 7 h");
+    ctx.equal(night_calendar.day_total_ticks(kSun), 0, "mpp12 sched: Sunday is non-working");
+    ctx.equal(night_calendar.day_total_ticks(kNextMon), 600,
+              "mpp12 sched: the next Monday is one hour");
+    ctx.equal(night_calendar.day_total_ticks(kNextTue), 4800,
+              "mpp12 sched: the next Tuesday is 8 h");
+    ctx.equal(night_calendar.work_week_count(), 0u,
+              "mpp12 sched: Night Shift needs no week overrides");
+
+    const cal::CalendarDefinition* standard = cal::find_calendar(table, "Standard");
+    ctx.check(standard != nullptr, "mpp12 sched: Standard is present");
+    if (standard == nullptr) {
+        return;
+    }
+    const sched::Calendar standard_calendar = cal::build_calendar(table, *standard);
+
+    // The task calendar is installed in the CPM engine: two 8 h days from the
+    // project start (Fri 08:00 = the end of Friday's first night-shift block).
+    sched::CpmTask task;
+    task.id = 1;
+    task.duration = 2 * kDay8h;
+    task.calendar = &night_calendar;
+    sched::CpmOptions options;
+    options.project_start = at(kFri, 8, 0);
+    const sched::CpmResult night_result =
+        sched::schedule_tasks({task}, {}, standard_calendar, options);
+    ctx.check(night_result.ok(), "mpp12 sched: the Night Shift task schedules");
+    if (night_result.ok() && night_result.tasks.size() == 1) {
+        ctx.equal_date(night_result.tasks[0].start, at(kFri, 23, 0),
+                       "mpp12 sched: the Night Shift task starts Fri 23:00");
+        ctx.equal_date(night_result.tasks[0].finish, at(kNextTue, 8, 0),
+                       "mpp12 sched: 2 d from Fri 23:00 crosses the weekend to Tue 08:00");
+        ctx.equal_date(night_result.tasks[0].early_finish, at(kNextTue, 8, 0),
+                       "mpp12 sched: the early finish is Tue 08:00");
+    }
+
+    // The same duration on the project's Standard calendar finishes earlier in
+    // wall-clock terms, so the dates above are driven by the MPP12 calendar.
+    task.calendar = &standard_calendar;
+    const sched::CpmResult standard_result =
+        sched::schedule_tasks({task}, {}, standard_calendar, options);
+    ctx.check(standard_result.ok(), "mpp12 sched: the Standard-calendar control schedules");
+    if (standard_result.ok() && standard_result.tasks.size() == 1) {
+        ctx.equal_date(standard_result.tasks[0].start, at(kFri, 8, 0),
+                       "mpp12 sched: the Standard control starts Fri 08:00");
+        ctx.equal_date(standard_result.tasks[0].finish, at(kNextMon, 17, 0),
+                       "mpp12 sched: the Standard control finishes Mon 17:00");
+    }
+
+    // uid 9 ("Test Calendar 2"): a different custom week (Mon 09:00-12:00 +
+    // 13:00-17:00, Thu/Fri shorter) exercises the day-length arm of the engine.
+    const cal::CalendarDefinition* varied = cal::find_calendar_by_uid(table, 9);
+    ctx.check(varied != nullptr, "mpp12 sched: calendar uid 9 is present");
+    if (varied != nullptr) {
+        const sched::Calendar varied_calendar = cal::build_calendar(table, *varied);
+        ctx.equal(varied_calendar.day_total_ticks(kMon), 4200,
+                  "mpp12 sched: uid 9 Monday is 7 h");
+        ctx.equal(varied_calendar.day_total_ticks(kThu), 4600,
+                  "mpp12 sched: uid 9 Thursday is 7 h 40");
+        task.calendar = &varied_calendar;
+        task.duration = kDay8h;
+        sched::CpmOptions monday_start;
+        monday_start.project_start = at(kMon, 8, 0);
+        const sched::CpmResult varied_result =
+            sched::schedule_tasks({task}, {}, standard_calendar, monday_start);
+        ctx.check(varied_result.ok(), "mpp12 sched: the uid 9 task schedules");
+        if (varied_result.ok() && varied_result.tasks.size() == 1) {
+            ctx.equal_date(varied_result.tasks[0].start, at(kMon, 9, 0),
+                           "mpp12 sched: uid 9 starts Mon 09:00, not 08:00");
+            ctx.equal_date(varied_result.tasks[0].finish, at(kTue, 9, 0),
+                           "mpp12 sched: 8 h over the 7 h Monday finishes Tue 09:00");
+        }
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -1483,6 +2163,9 @@ int main() {
     test_recurrence(ctx);
     test_recurrence_parameters(ctx);
 
+    // --- CI-safe: the MPP12/MPP14 row order and format detection ------------
+    test_calendar_row_layouts(ctx);
+
     // --- corpus-gated cases --------------------------------------------------
     const std::string probe_dir = CAL_PROBE_DIR;
     const std::string corpus_dir = CAL_CORPUS_DIR;
@@ -1491,6 +2174,8 @@ int main() {
     const std::string w3o1_path = join_path(probe_dir, "w3-o1.mpp");
     const std::string w12_path = join_path(probe_dir, "w12-exceptions.mpp");
     const std::string w12_monthpos_path = join_path(probe_dir, "w12-exceptions-monthpos.mpp");
+    const std::string mpp12_calendar_path = join_path(probe_dir, "mpp12calendar.mpp");
+    const std::string mpp12_task_path = join_path(probe_dir, "mpp12task.mpp");
     const std::string project_a_path = join_path(corpus_dir, "project_a.mpp");
 
     if (file_exists(base_path)) {
@@ -1522,6 +2207,20 @@ int main() {
         test_w12_monthpos(ctx, w12_monthpos_path);
     } else {
         std::cout << "SKIP: " << w12_monthpos_path << " is absent"
+                  << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
+    }
+    if (file_exists(mpp12_calendar_path)) {
+        test_mpp12_identity(ctx, mpp12_calendar_path);
+        test_mpp12_agreement(ctx, mpp12_calendar_path, base_path);
+        test_mpp12_schedules(ctx, mpp12_calendar_path);
+    } else {
+        std::cout << "SKIP: " << mpp12_calendar_path << " is absent"
+                  << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
+    }
+    if (file_exists(mpp12_task_path)) {
+        test_mpp12_task_table(ctx, mpp12_task_path);
+    } else {
+        std::cout << "SKIP: " << mpp12_task_path << " is absent"
                   << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
     }
     if (file_exists(project_a_path)) {

@@ -23,7 +23,7 @@ constexpr std::uint32_t kMetaVersion = 4;
 constexpr std::size_t kMetaHeaderBytes = 16;
 constexpr std::size_t kMetaEntryBytes = 10;
 
-// 114/TBkndCal/FixedData starts with four 16-byte descriptors whose FixedMeta
+// TBkndCal/FixedData starts with four 16-byte descriptors whose FixedMeta
 // entries point at 0, 16, 32 and 48; the first calendar row is at 64.
 constexpr std::size_t kFixedHeaderBytes = 64;
 constexpr std::size_t kCalendarRowBytes = 12;
@@ -46,7 +46,7 @@ constexpr std::size_t kWorkWeekTailBytes = 2 + 2 + 8 + 4;    // 16
 constexpr std::int32_t kMaxStoredIntervals = 8;              // spec §1.1
 constexpr std::int32_t kMaxDayTicks = 14400;                 // 24 h in tenths
 
-// 114/Props keys (PropsKey.DEFAULT_CALENDAR_HOURS / .DEFAULT_CALENDAR_NAME).
+// <root>/Props keys (PropsKey.DEFAULT_CALENDAR_HOURS / .DEFAULT_CALENDAR_NAME).
 constexpr std::uint32_t kPropsDefaultCalendarHours = 37753736u;  // 0x02401388
 constexpr std::uint32_t kPropsDefaultCalendarName = 37748750u;   // 0x0240000E
 
@@ -120,9 +120,9 @@ std::string ascii_lower(std::string value) {
     return value;
 }
 
-// --- 114/Props --------------------------------------------------------------
+// --- <root>/Props -----------------------------------------------------------
 
-// Props14 header: 16 bytes, record count as u16 at +12.  Each record is
+// Props header: 16 bytes, record count as u16 at +12.  Each record is
 // (u32 data byte length, u32 key, u32 unused, data), padded to an even length.
 std::map<std::uint32_t, std::vector<std::uint8_t>> parse_props(
     std::vector<std::uint8_t> const& props) {
@@ -153,7 +153,7 @@ std::map<std::uint32_t, std::vector<std::uint8_t>> parse_props(
     return out;
 }
 
-// --- 114/TBkndCal/VarMeta ---------------------------------------------------
+// --- TBkndCal/VarMeta (identical under 112/ and 114/) -----------------------
 
 struct VarEntry {
     std::uint32_t uid = 0;
@@ -207,7 +207,7 @@ WeekSpec stock_week_impl() {
 }
 
 // Resolve a calendar's seven days through its base chain.  A "use base" day in a
-// base calendar falls back to 114/Props DEFAULT_CALENDAR_HOURS (which is how the
+// base calendar falls back to <root>/Props DEFAULT_CALENDAR_HOURS (which is how
 // Standard calendar is stored); in a derived calendar it falls back to the
 // parent's resolved day.
 WeekSpec resolve_week(CalendarTable const& table, CalendarDefinition const& calendar,
@@ -358,11 +358,98 @@ void decode_recurrence_parameters(DatedException& exception) noexcept {
     }
 }
 
+// --- layout detection -------------------------------------------------------
+//
+// Mirrors core/mpp/reader.cpp's "Version detection" rule exactly (Props12 /
+// Props14 first, then the 112/ versus 114/ TBkndTask storage), because a file
+// that core/cal and core/mpp classify differently would be a contradiction.
+// core/cal adds one fallback the reader does not need: a synthetic container
+// that carries no task table at all is classified by which TBkndCal/FixedData
+// exists.  A forced layout skips detection and forces its own root; the raw row
+// order is exercised independently through decode_calendar_rows().
+struct FormatChoice {
+    CalendarLayout layout = CalendarLayout::mpp14;
+    std::string table_root = "114";
+    bool detected = true;
+};
+
+FormatChoice choose_format(mpp::CompoundFile const& file, CalendarLayout requested) {
+    if (requested == CalendarLayout::mpp12) {
+        return FormatChoice{CalendarLayout::mpp12, "112", false};
+    }
+    if (requested == CalendarLayout::mpp14) {
+        return FormatChoice{CalendarLayout::mpp14, "114", false};
+    }
+    if (requested != CalendarLayout::automatic) {
+        throw mpp::Error("core/cal: unknown CalendarLayout value");
+    }
+
+    const bool has12 = file.has_stream("Props12");
+    const bool has14 = file.has_stream("Props14");
+    const bool tables12 = file.has_stream("112/TBkndTask/FixedData") ||
+                          file.has_stream("112/TBkndTask/FixedMeta");
+    const bool tables14 = file.has_stream("114/TBkndTask/FixedData") ||
+                          file.has_stream("114/TBkndTask/FixedMeta");
+    CalendarLayout layout = CalendarLayout::mpp14;
+    if (has12 && !has14) {
+        layout = CalendarLayout::mpp12;
+    } else if (has12 && has14) {
+        // Both props streams: the storage that actually holds the tables wins,
+        // like the reader.
+        layout = tables12 && !tables14 ? CalendarLayout::mpp12 : CalendarLayout::mpp14;
+    } else if (has14) {
+        layout = CalendarLayout::mpp14;
+    } else if (tables12 && !tables14) {
+        layout = CalendarLayout::mpp12;
+    } else if (tables14) {
+        layout = CalendarLayout::mpp14;
+    } else {
+        // No props stream and no task table: a calendar-only container.  The
+        // calendar tree is the only evidence left.
+        const bool cal12 = file.has_stream("112/TBkndCal/FixedData");
+        const bool cal14 = file.has_stream("114/TBkndCal/FixedData");
+        if (cal12 && !cal14) {
+            layout = CalendarLayout::mpp12;
+        } else if (cal14) {
+            layout = CalendarLayout::mpp14;
+        } else {
+            throw mpp::Error(
+                "core/cal: no 112/ or 114/TBkndCal/FixedData stream, and no "
+                "Props12/Props14 or TBkndTask storage to detect the format");
+        }
+    }
+
+    // "The tree decides": when the detected root has no calendar table but the
+    // other root does, read the table that is really there.
+    const std::string root = layout == CalendarLayout::mpp12 ? "112" : "114";
+    const std::string other = layout == CalendarLayout::mpp12 ? "114" : "112";
+    if (!file.has_stream(root + "/TBkndCal/FixedData") &&
+        file.has_stream(other + "/TBkndCal/FixedData")) {
+        layout = other == "112" ? CalendarLayout::mpp12 : CalendarLayout::mpp14;
+    }
+    if (!file.has_stream("112/TBkndCal/FixedData") &&
+        !file.has_stream("114/TBkndCal/FixedData")) {
+        throw mpp::Error(
+            "core/cal: the container carries neither 112/TBkndCal/FixedData nor "
+            "114/TBkndCal/FixedData");
+    }
+    return FormatChoice{layout, layout == CalendarLayout::mpp12 ? "112" : "114", true};
+}
+
 }  // namespace
 
 // --- public decoders --------------------------------------------------------
 
 WeekSpec stock_default_week() { return stock_week_impl(); }
+
+CalendarFormat detect_calendar_layout(mpp::CompoundFile const& file) {
+    const FormatChoice choice = choose_format(file, CalendarLayout::automatic);
+    CalendarFormat format;
+    format.layout = choice.layout;
+    format.table_root = choice.table_root;
+    format.props_stream = choice.table_root + "/Props";
+    return format;
+}
 
 std::size_t CalendarTable::base_calendar_count() const noexcept {
     std::size_t count = 0;
@@ -448,6 +535,17 @@ CalendarData decode_calendar_data(std::vector<std::uint8_t> const& data) {
         offset += 4;  // count + padding, aligned to 8 bytes
     } else {
         offset += 4;  // skip the count word and its padding
+        // One record is at least 92 bytes, so a count larger than the remaining
+        // bytes can hold is impossible.  Measured case: the two resource-calendar
+        // blocks under 112/TBkndCal/Var2Data key 0x0D400008 in
+        // corpus/probe/mpp12calendar.mpp are 520-byte non-week payloads whose
+        // +420 word happens to be 8339; without this check the decoder installs
+        // one exception read out of the text.  Refuse the list instead.
+        const std::size_t available = data.size() > offset ? data.size() - offset : 0;
+        if (static_cast<std::size_t>(exception_count) > available / kExceptionFixedBytes) {
+            out.truncated = true;
+            return out;
+        }
         for (std::uint16_t i = 0; i < exception_count; ++i) {
             if (offset + kExceptionFixedBytes > data.size()) {
                 out.truncated = true;
@@ -528,27 +626,79 @@ CalendarData decode_calendar_data(std::vector<std::uint8_t> const& data) {
     return out;
 }
 
-CalendarTable decode_compound_file(mpp::CompoundFile const& file) {
-    if (!file.has_stream("114/TBkndCal/FixedData")) {
-        throw mpp::Error("core/cal: no 114/TBkndCal/FixedData stream");
+std::vector<CalendarRow> decode_calendar_rows(std::vector<std::uint8_t> const& fixed_data,
+                                              CalendarLayout layout) {
+    if (layout == CalendarLayout::automatic) {
+        throw mpp::Error(
+            "core/cal: decode_calendar_rows needs an explicit layout (a FixedData "
+            "byte buffer carries no version)");
     }
-    const std::vector<std::uint8_t> fixed_data = file.read_stream("114/TBkndCal/FixedData");
+    if (layout != CalendarLayout::mpp12 && layout != CalendarLayout::mpp14) {
+        throw mpp::Error("core/cal: unknown CalendarLayout value");
+    }
+    if (fixed_data.size() < kFixedHeaderBytes ||
+        (fixed_data.size() - kFixedHeaderBytes) % kCalendarRowBytes != 0) {
+        throw mpp::Error("core/cal: TBkndCal/FixedData is not 64 + 12*n bytes");
+    }
+    const std::size_t rows = (fixed_data.size() - kFixedHeaderBytes) / kCalendarRowBytes;
+    std::vector<CalendarRow> out;
+    out.reserve(rows);
+    for (std::size_t row = 0; row < rows; ++row) {
+        const std::size_t at = kFixedHeaderBytes + row * kCalendarRowBytes;
+        const std::int32_t first =
+            static_cast<std::int32_t>(read_u32(fixed_data, at, "calendar row"));
+        const std::int32_t second =
+            static_cast<std::int32_t>(read_u32(fixed_data, at + 4, "calendar row"));
+        const std::int32_t third =
+            static_cast<std::int32_t>(read_u32(fixed_data, at + 8, "calendar row"));
+        CalendarRow decoded;
+        if (layout == CalendarLayout::mpp12) {
+            // Measured on corpus/probe/{mpp12calendar,mpp12task,mpp12resource}.mpp
+            // and cross-checked against core/mpp's Document::calendars.
+            decoded.uid = first;
+            decoded.base_uid = second;
+            decoded.resource_uid = third;
+        } else {
+            decoded.base_uid = first;
+            decoded.resource_uid = second;
+            decoded.uid = third;
+        }
+        out.push_back(decoded);
+    }
+    return out;
+}
+
+CalendarTable decode_compound_file(mpp::CompoundFile const& file, CalendarLayout layout) {
+    const FormatChoice format = choose_format(file, layout);
+    const std::string root = format.table_root;
+    const std::string table_path = root + "/TBkndCal/FixedData";
+    if (!file.has_stream(table_path)) {
+        throw mpp::Error("core/cal: no " + table_path + " stream");
+    }
+    const std::vector<std::uint8_t> fixed_data = file.read_stream(table_path);
     const std::vector<std::uint8_t> fixed_meta =
-        file.has_stream("114/TBkndCal/FixedMeta") ? file.read_stream("114/TBkndCal/FixedMeta")
-                                                  : std::vector<std::uint8_t>{};
+        file.has_stream(root + "/TBkndCal/FixedMeta")
+            ? file.read_stream(root + "/TBkndCal/FixedMeta")
+            : std::vector<std::uint8_t>{};
     const std::vector<std::uint8_t> var_meta =
-        file.has_stream("114/TBkndCal/VarMeta") ? file.read_stream("114/TBkndCal/VarMeta")
-                                                : std::vector<std::uint8_t>{};
+        file.has_stream(root + "/TBkndCal/VarMeta")
+            ? file.read_stream(root + "/TBkndCal/VarMeta")
+            : std::vector<std::uint8_t>{};
     const std::vector<std::uint8_t> var2 =
-        file.has_stream("114/TBkndCal/Var2Data") ? file.read_stream("114/TBkndCal/Var2Data")
-                                                 : std::vector<std::uint8_t>{};
+        file.has_stream(root + "/TBkndCal/Var2Data")
+            ? file.read_stream(root + "/TBkndCal/Var2Data")
+            : std::vector<std::uint8_t>{};
 
     CalendarTable table;
+    table.layout = format.layout;
+    table.layout_detected = format.detected;
+    table.table_root = root;
     table.default_week = stock_week_impl();
 
-    if (file.has_stream("114/Props")) {
+    const std::string props_path = root + "/Props";
+    if (file.has_stream(props_path)) {
         const std::map<std::uint32_t, std::vector<std::uint8_t>> props =
-            parse_props(file.read_stream("114/Props"));
+            parse_props(file.read_stream(props_path));
         const auto hours = props.find(kPropsDefaultCalendarHours);
         if (hours != props.end()) {
             if (hours->second.size() >= kWeekAreaBytes) {
@@ -563,11 +713,7 @@ CalendarTable decode_compound_file(mpp::CompoundFile const& file) {
         }
     }
 
-    if (fixed_data.size() < kFixedHeaderBytes ||
-        (fixed_data.size() - kFixedHeaderBytes) % kCalendarRowBytes != 0) {
-        throw mpp::Error("core/cal: 114/TBkndCal/FixedData is not 64 + 12*n bytes");
-    }
-    const std::size_t rows = (fixed_data.size() - kFixedHeaderBytes) / kCalendarRowBytes;
+    const std::vector<CalendarRow> rows = decode_calendar_rows(fixed_data, format.layout);
 
     // FixedMeta is only cross-checked: rows are read from FixedData's own size,
     // so a damaged metadata stream cannot shift them.
@@ -580,7 +726,8 @@ CalendarTable decode_compound_file(mpp::CompoundFile const& file) {
         const std::uint32_t entries = read_u32(fixed_meta, 8, "FixedMeta header");
         const std::uint32_t declared_size = read_u32(fixed_meta, 12, "FixedMeta header");
         if (magic != kMetaMagic || version != kMetaVersion || declared_size != fixed_data.size() ||
-            entries != 4 + rows || kMetaHeaderBytes + entries * kMetaEntryBytes != fixed_meta.size()) {
+            entries != 4 + rows.size() ||
+            kMetaHeaderBytes + entries * kMetaEntryBytes != fixed_meta.size()) {
             ++table.metadata_anomalies;
         }
     }
@@ -593,14 +740,12 @@ CalendarTable decode_compound_file(mpp::CompoundFile const& file) {
         by_uid[entry.uid].push_back(&entry);
     }
 
-    table.calendars.reserve(rows);
-    for (std::size_t row = 0; row < rows; ++row) {
-        const std::size_t at = kFixedHeaderBytes + row * kCalendarRowBytes;
+    table.calendars.reserve(rows.size());
+    for (CalendarRow const& row : rows) {
         CalendarDefinition calendar;
-        calendar.base_uid = static_cast<std::int32_t>(read_u32(fixed_data, at, "calendar row"));
-        calendar.resource_uid =
-            static_cast<std::int32_t>(read_u32(fixed_data, at + 4, "calendar row"));
-        calendar.uid = static_cast<std::int32_t>(read_u32(fixed_data, at + 8, "calendar row"));
+        calendar.uid = row.uid;
+        calendar.base_uid = row.base_uid;
+        calendar.resource_uid = row.resource_uid;
         if (calendar.uid <= 0) {
             ++table.metadata_anomalies;  // mpxj skips these too
             continue;
@@ -655,8 +800,8 @@ CalendarTable decode_compound_file(mpp::CompoundFile const& file) {
     return table;
 }
 
-CalendarTable decode_file(std::string const& mpp_path) {
-    return decode_compound_file(mpp::CompoundFile::from_file(mpp_path));
+CalendarTable decode_file(std::string const& mpp_path, CalendarLayout layout) {
+    return decode_compound_file(mpp::CompoundFile::from_file(mpp_path), layout);
 }
 
 // --- builder ----------------------------------------------------------------
@@ -978,17 +1123,20 @@ core::sched::Calendar build_project_calendar(CalendarTable const& table,
     if (bases == 1 && only != nullptr) {
         return build_calendar(table, *only, report);
     }
-    throw mpp::Error("core/cal: the project's default calendar is not in 114/TBkndCal");
+    throw mpp::Error("core/cal: the project's default calendar is not in " + table.table_root +
+                     "/TBkndCal");
 }
 
 core::sched::Calendar load_project_calendar(std::string const& mpp_path,
-                                            std::string const& calendar_name) {
-    return build_project_calendar(decode_file(mpp_path), calendar_name);
+                                            std::string const& calendar_name,
+                                            CalendarLayout layout) {
+    return build_project_calendar(decode_file(mpp_path, layout), calendar_name);
 }
 
 core::sched::Calendar load_project_calendar(mpp::CompoundFile const& file,
-                                            std::string const& calendar_name) {
-    return build_project_calendar(decode_compound_file(file), calendar_name);
+                                            std::string const& calendar_name,
+                                            CalendarLayout layout) {
+    return build_project_calendar(decode_compound_file(file, layout), calendar_name);
 }
 
 }  // namespace core::cal

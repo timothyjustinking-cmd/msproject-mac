@@ -1,15 +1,22 @@
-// core/cal/cal.h -- decode the base calendars of MPP14's "114/TBkndCal" table
+// core/cal/cal.h -- decode the base calendars of an MPP file's TBkndCal table
 // and build a core::sched::Calendar from one of them.
 //
-// The table is a fixed-row table (FixedMeta/FixedData) whose per-calendar
-// payloads live in Var2Data.  Everything below was measured on
-// corpus/probe/{base,holiday1,w3-o1,lagff1}.mpp and on the two real files, and
-// cross-checked against the layout mpxj's MPP14CalendarFactory implements
-// (see core/cal/README.md for the byte evidence and the command that dumps it).
+// TWO STORAGE LAYOUTS, ONE DECODER.  MPP14 (Project 2010+) stores the table
+// under "114/" and the project props under "114/Props"; MPP12 (Project 2007)
+// stores the same four-part table under "112/" and its props under "112/Props".
+// Everything in the table framing is identical between the two -- only the
+// table root and the order of the three u32 columns in a FixedData row differ.
+// decode_compound_file() detects the layout by itself (see CalendarLayout).
+// The MPP14 side was measured on corpus/probe/{base,holiday1,w3-o1,lagff1}.mpp
+// and cross-checked against mpxj's MPP14CalendarFactory; the MPP12 side was
+// measured on corpus/probe/mpp12calendar.mpp (and mpp12task/mpp12resource) and
+// cross-checked against the independent core/mpp reader: see
+// core/cal/README.md "MPP12" for the byte evidence and the dump commands.
 //
 // Layout summary (all offsets verified, see README):
 //
-//   114/TBkndCal/FixedMeta : 16-byte header + n x 10-byte entries
+//   TBkndCal/FixedMeta (identical under 112/ and 114/) :
+//       16-byte header + n x 10-byte entries
 //       +0  u32 magic 0xFADFADBA (stored ba ad df fa)
 //       +4  u32 version, 4
 //       +8  u32 entry count
@@ -19,22 +26,32 @@
 //              +4 u32 byte offset into FixedData
 //              +8 u16 block length
 //
-//   114/TBkndCal/FixedData : four 16-byte header descriptors (64 bytes), then
-//       a 12-byte row per calendar:
+//   TBkndCal/FixedData : four 16-byte header descriptors (64 bytes), then
+//       a 12-byte row per calendar.  MPP14 column order:
 //       +0 i32 base calendar uid   (<= 0: this row is a base calendar)
 //       +4 i32 resource uid        (-1: not a resource calendar)
 //       +8 i32 calendar uid        (> 0, the key into VarMeta/Var2Data)
+//       MPP12 (112/TBkndCal/FixedData) stores the SAME three i32 columns in a
+//       different order -- see CalendarLayout and decode_calendar_rows():
+//       +0 calendar uid, +4 base uid, +8 resource uid.
 //
-//   114/TBkndCal/VarMeta  : 24-byte header + n x 12-byte (uid, offset, key).
+//   TBkndCal/VarMeta (identical under 112/ and 114/) :
+//       24-byte header + n x 12-byte (uid, offset, key).
 //       key 0x0D400001 (low word 1) = calendar name, UTF-16LE NUL-terminated.
 //       key 0x0D400008 (low word 8) = calendar data block, layout below.
+//       Identical under 112/ (measured on mpp12calendar/mpp12task/
+//       mpp12resource: same header, same entry order, same keys).
 //
-//   114/Props : 16-byte header + records of (u32 length, u32 key, u32 unused,
+//   <root>/Props : 16-byte header + records of (u32 length, u32 key, u32 unused,
 //       data).  key 37753736 (0x02401388, DEFAULT_CALENDAR_HOURS) holds 420
 //       bytes = seven 60-byte day blocks: this is where the *Standard* base
 //       calendar lives (it has no Var2Data payload of its own).
 //       key 37748750 (0x0240000E, DEFAULT_CALENDAR_NAME) holds the project's
 //       default calendar name as UTF-16LE.
+//       112/Props has the same block layout and the same two keys; measured on
+//       mpp12calendar.mpp, where they decode to the stock Mon-Fri
+//       08:00-12:00 + 13:00-17:00 week and the name "Standard" (see README
+//       "MPP12 default calendar").
 //
 //   calendar data block:
 //       0    .. 419 : seven 60-byte day blocks, index 0 = Sunday
@@ -73,6 +90,57 @@ namespace core::cal {
 // the layout without copying the number).
 inline constexpr std::size_t kDayBlockBytes = 60;
 inline constexpr std::size_t kWeekBlockBytes = 7 * kDayBlockBytes;  // 420
+
+// Which storage layout a TBkndCal table uses.
+//
+// `automatic` is the default everywhere and needs no caller knowledge: the
+// layout is detected from the container exactly the way core/mpp's reader does
+// it (core/mpp/reader.cpp "Version detection"): a top-level `Props12` stream
+// means MPP12 and `Props14` means MPP14; when neither exists the `112/` versus
+// `114/` TBkndTask storage decides; if the container has no task table at all,
+// core/cal falls back to which `TBkndCal/FixedData` exists (which is also what
+// keeps a synthetic, calendar-only container decodable).
+//
+// The forced values exist so a caller (and the tests) can decode one layout's
+// bytes as the other and observe that the columns move.
+enum class CalendarLayout : std::uint8_t {
+    automatic = 0,  // detect from the container (see decode_compound_file)
+    mpp14 = 1,      // 114/TBkndCal + 114/Props; row = base, resource, uid
+    mpp12 = 2,      // 112/TBkndCal + 112/Props; row = uid, base, resource
+};
+
+// The layout decode_compound_file() selected and where it will read from.
+struct CalendarFormat {
+    CalendarLayout layout = CalendarLayout::mpp14;
+    std::string table_root = "114";  // "114" or "112"
+    std::string props_stream;        // "114/Props" or "112/Props"
+};
+
+// Detect the calendar layout of an already-open compound file without decoding
+// the table.  Throws mpp::Error when the file carries no TBkndCal table that
+// the detection rule can classify.
+CalendarFormat detect_calendar_layout(mpp::CompoundFile const& file);
+
+// One 12-byte TBkndCal/FixedData row decoded under one layout: the three i32
+// columns are the calendar identity.  A row is laid out either
+//   MPP14: +0 base_uid, +4 resource_uid, +8 uid
+//   MPP12: +0 uid,      +4 base_uid,     +8 resource_uid
+// so the same bytes read under the wrong layout yield different rows; that is
+// what tests/cal_tests.cpp's row-order test pins.
+struct CalendarRow {
+    std::int32_t uid = 0;
+    std::int32_t base_uid = -1;
+    std::int32_t resource_uid = -1;
+};
+
+// Decode the rows of one TBkndCal/FixedData payload under an EXPLICIT layout.
+// `fixed_data` must be the whole stream (four 16-byte descriptors, then 12-byte
+// rows); mpp::Error is thrown for a bad size or for CalendarLayout::automatic
+// (a byte buffer carries no version, so the layout cannot be detected from it).
+// Placeholder rows (uid <= 0) are returned as stored; decode_compound_file()
+// skips them, like the reader does.
+std::vector<CalendarRow> decode_calendar_rows(std::vector<std::uint8_t> const& fixed_data,
+                                              CalendarLayout layout);
 
 // One working interval as stored: tenths of a minute from midnight (the same
 // 6-second tick as core::sched::date32, spec/scheduling.md §0.1).
@@ -200,23 +268,30 @@ struct DatedWorkWeek {
     WeekSpec days{};
 };
 
-// One row of 114/TBkndCal/FixedData plus its Var2Data payloads.
+// One row of the TBkndCal/FixedData table plus its Var2Data payloads.  The
+// offsets below are the MPP14 ones; MPP12 stores the same three words in the
+// order uid/base/resource (see CalendarLayout).  Use decode_calendar_rows() to
+// turn a FixedData buffer into identities under a known layout.
 struct CalendarDefinition {
-    std::int32_t uid = 0;           // +8 in the row
-    std::int32_t base_uid = -1;     // +0 in the row; <= 0 means "base calendar"
-    std::int32_t resource_uid = -1; // +4 in the row; -1 means "not a resource calendar"
+    std::int32_t uid = 0;           // MPP14 +8 (MPP12 +0); the Var2Data key
+    std::int32_t base_uid = -1;     // MPP14 +0 (MPP12 +4); <= 0 means "base calendar"
+    std::int32_t resource_uid = -1; // MPP14 +4 (MPP12 +8); -1 means "not a resource calendar"
     std::string name;               // Var2Data key 0x0D400001; empty when absent
-    bool has_week_data = false;     // Var2Data key 0x0D400008 present
+    bool has_week_data = false;     // Var2Data key 0x0D400008 had a readable week
     WeekSpec week{};                // from the data block (flags still unresolved)
     std::vector<DatedException> exceptions;
     std::vector<DatedWorkWeek> work_weeks;
 };
 
-// Everything 114/TBkndCal plus the project defaults say about calendars.
+// Everything TBkndCal plus the project defaults say about calendars.
 struct CalendarTable {
     std::vector<CalendarDefinition> calendars;  // FixedData row order
-    WeekSpec default_week{};                    // 114/Props DEFAULT_CALENDAR_HOURS
-    std::string default_calendar_name;          // 114/Props DEFAULT_CALENDAR_NAME
+    WeekSpec default_week{};                    // <root>/Props DEFAULT_CALENDAR_HOURS
+    std::string default_calendar_name;          // <root>/Props DEFAULT_CALENDAR_NAME
+    // Which table was decoded (set by decode_compound_file).
+    CalendarLayout layout = CalendarLayout::mpp14;
+    std::string table_root = "114";             // "114" or "112"
+    bool layout_detected = true;                // false => the caller forced `layout`
     // Counters, for reporting rather than guessing:
     std::size_t metadata_anomalies = 0;    // FixedMeta/VarMeta disagreed with FixedData
     std::size_t recurring_exceptions = 0;  // PjExceptionType 2..7, not applied
@@ -245,21 +320,30 @@ struct CalendarData {
 WeekSpec decode_day_blocks(std::vector<std::uint8_t> const& data, std::size_t offset);
 
 // One calendar data block (Var2Data key 0x0D400008).  Throws mpp::Error when
-// the block is shorter than the 420-byte week area.
+// the block is shorter than the 420-byte week area.  A block whose exception
+// count cannot fit in the remaining bytes is reported as truncated instead of
+// decoding a garbage record (measured: the two MPP12 resource-calendar blocks of
+// mpp12calendar.mpp are 520-byte non-week payloads whose +420 word reads as
+// 8339; see README "MPP12 resource-calendar blocks").
 CalendarData decode_calendar_data(std::vector<std::uint8_t> const& data);
 
-// 114/TBkndCal (+ 114/Props for the default week and default calendar name) of
-// an already-open compound file.  Throws mpp::Error when the table is absent or
-// internally impossible (e.g. FixedData is not 64 + 12*n bytes).
-CalendarTable decode_compound_file(mpp::CompoundFile const& file);
+// TBkndCal (+ <root>/Props for the default week and default calendar name) of
+// an already-open compound file.  The layout is detected from the container
+// unless one is forced; the table root, props stream and row order all follow
+// it.  Throws mpp::Error when the table is absent or internally impossible
+// (e.g. FixedData is not 64 + 12*n bytes).
+CalendarTable decode_compound_file(
+    mpp::CompoundFile const& file, CalendarLayout layout = CalendarLayout::automatic);
 
 // Same, opening the file first.
-CalendarTable decode_file(std::string const& mpp_path);
+CalendarTable decode_file(std::string const& mpp_path,
+                          CalendarLayout layout = CalendarLayout::automatic);
 
 // MS Project's built-in default working week: Mon-Fri 08:00-12:00 + 13:00-17:00,
-// weekend non-working.  Used only when 114/Props has no DEFAULT_CALENDAR_HOURS
+// weekend non-working.  Used only when <root>/Props has no DEFAULT_CALENDAR_HOURS
 // record; every file on disk carries that record and it holds exactly this week
-// (measured), so this is a fallback, not a claim about the format.
+// (measured on MPP14 and on the MPP12 fixture corpus/probe/mpp12calendar.mpp, so
+// this is a fallback, not a claim about the format).
 WeekSpec stock_default_week();
 
 // --- builder ----------------------------------------------------------------
@@ -344,18 +428,21 @@ core::sched::Calendar build_calendar(CalendarTable const& table,
                                      RecurrenceReport* report = nullptr);
 
 // Name resolution: an empty `calendar_name` means "the project's default
-// calendar" (114/Props DEFAULT_CALENDAR_NAME).  Throws mpp::Error when the name
-// is not in the table; when the default name is missing and the file has
+// calendar" (<root>/Props DEFAULT_CALENDAR_NAME).  Throws mpp::Error when the
+// name is not in the table; when the default name is missing and the file has
 // exactly one base calendar that calendar is used instead.
 core::sched::Calendar build_project_calendar(CalendarTable const& table,
                                              std::string const& calendar_name = {},
                                              RecurrenceReport* report = nullptr);
 
 // Convenience: decode + build in one call.  `calendar_name` empty = project
-// default.  Throws mpp::Error for an unreadable file or a missing calendar.
-core::sched::Calendar load_project_calendar(std::string const& mpp_path,
-                                            std::string const& calendar_name = {});
-core::sched::Calendar load_project_calendar(mpp::CompoundFile const& file,
-                                            std::string const& calendar_name = {});
+// default.  `layout` defaults to auto-detection, like decode_file().  Throws
+// mpp::Error for an unreadable file or a missing calendar.
+core::sched::Calendar load_project_calendar(
+    std::string const& mpp_path, std::string const& calendar_name = {},
+    CalendarLayout layout = CalendarLayout::automatic);
+core::sched::Calendar load_project_calendar(
+    mpp::CompoundFile const& file, std::string const& calendar_name = {},
+    CalendarLayout layout = CalendarLayout::automatic);
 
 }  // namespace core::cal

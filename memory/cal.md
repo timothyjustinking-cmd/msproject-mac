@@ -1,77 +1,120 @@
-# memory/cal.md — W25: 114/TBkndCal base calendars
+# memory/cal.md — W25 + W19: TBkndCal base calendars (MPP14 and MPP12)
 
-Status: 2026-10-22 (W25 run). Owned paths: `core/cal/` (cal.h, cal.cpp,
-CMakeLists.txt, README.md), `tests/cal_tests.cpp`, this file.  No other stream's
-files were touched, `core/sched` was not modified, and no git command was run.
+Status: 2026-10-23 (W19 run, on top of W25/W41/W49/W53). Owned paths:
+`core/cal/` (cal.h, cal.cpp, CMakeLists.txt, README.md), `tests/cal_tests.cpp`,
+`build/cal-w19/`, `docs/handoff/cal.md`, this file.  No other stream's files were
+touched (`core/mpp` was read only), and no git command was run.
 
-**One line:** the calendar table is decoded, the builder reproduces all three MS
-Project dates of the holiday1 fixture with `core/sched` arithmetic, and PROJECT_A's
-calendar structure is counted (10 base calendars, 0 work weeks, 1331 dated
-exceptions).  `core::cal::load_project_calendar(path[, name])` is ready for
-`core/plan` to consume.
+**One line:** the calendar table is decoded for **both** formats — MPP14 under
+`114/` and MPP12 under `112/`, auto-detected exactly like `core/mpp`'s reader —
+the builder still reproduces all three MS Project dates of the holiday1 fixture,
+and an MPP12 calendar (`mpp12calendar.mpp`, uid 7, "Night Shift") now drives a
+real `core::sched::schedule_tasks` schedule (2 d from Fri 08:00 -> Tue 08:00
+across a weekend).  `cal_tests`: 785 checks with the corpus, 323 with
+`CAL_NO_CORPUS=1` (was 553 / 245 before wave 19).
+
+## W19 summary (MPP12 — read this first if you only need the new state)
+
+| item | state |
+|---|---|
+| `114/` vs `112/` table root + `<root>/Props` | done, auto-detected (`CalendarLayout::automatic`) |
+| MPP12 FixedData column order `uid, base, resource` | done, byte-verified + pinned by a swap test |
+| `112/Props` DEFAULT_CALENDAR_HOURS / _NAME | done, verified equal to MPP14's stock week/"Standard" |
+| per-calendar MPP12 week blocks (`0x0D400008`) | decoded with the same framing; uid 6/7/9 have real weeks |
+| MPP12 vs MPP14 Standard agreement | asserted (`mpp12calendar.mpp` vs `base.mpp`) |
+| MPP12-driven schedule | asserted through `core::sched::schedule_tasks` (concrete dates) |
+| new public API | `CalendarLayout`, `CalendarFormat`, `detect_calendar_layout`, `decode_calendar_rows`, `CalendarTable::layout/table_root/layout_detected`, layout params on `decode_file`/`decode_compound_file`/`load_project_calendar` |
+| MPP14 behaviour | unchanged; 553 checks before -> all still pass (`/W4 /WX` clean) |
+
+Details, byte evidence and traps are in the W19 addendum at the bottom and in
+`docs/handoff/cal.md`; `core/cal/README.md` has the format documentation.
 
 ## What is done
 
 | deliverable | state |
 |---|---|
-| decode `114/TBkndCal` (FixedMeta/FixedData/VarMeta/Var2Data) + `114/Props` | done, `core/cal/cal.cpp` |
-| work-week day patterns (start/length per weekday) | done (60-byte day blocks, index 0 = Sunday) |
+| decode `<root>/TBkndCal` (FixedMeta/FixedData/VarMeta/Var2Data) + `<root>/Props` | done for `114/` (MPP14) **and `112/` (MPP12)**, auto-detected |
+| work-week day patterns (start/length per weekday) | done (60-byte day blocks, index 0 = Sunday, both formats) |
 | dated exceptions, non-working **and** special working | done |
 | dated work-week overrides ("Calendar > Work Weeks") | decoder implemented, **0 in every file on disk**, exercised only by the synthetic test (layout from mpxj, marked inference) |
 | builder -> `core::sched::Calendar` | done: dated changes become per-week `set_work_week` overrides (no `core/sched` API added) |
 | prove against the oracle | `tests/cal_tests.cpp`: T1/T2/T3 reproduced exactly |
 | Standard calendar from a synthetic probe | done on `corpus/probe/base.mpp` (+ a cheap `w3-o1.mpp` check) |
 | PROJECT_A counts | done (below) |
-| API for the plan bridge | done |
+| MPP12 table + reader agreement | done (`mpp12calendar`, `mpp12task`; every row matches `mpp::load_file`) |
+| MPP12 calendar drives a schedule | done (`Night Shift` in `schedule_tasks`, concrete dates) |
+| API for the plan bridge | done, now version-agnostic by default |
 
 ## Verification (exact, re-runnable from the repo root)
 
+Wave 19 (current; `cmake` is not on PATH in this shell, use the full path):
+
 ```
-$vc='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat'
-cmd /c "call `"$vc`" >nul && cmake -S . -B build\vs-w25 -G `"Visual Studio 17 2022`" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON"
-cmd /c "call `"$vc`" >nul && cmake --build build\vs-w25 --config Release --target cal_tests"
-build\vs-w25\core\cal\Release\cal_tests.exe                     # 165 checks passed
-$env:CAL_NO_CORPUS='1'; build\vs-w25\core\cal\Release\cal_tests.exe   # 38 checks, 4 SKIP lines
-cmd /c "call `"$vc`" >nul && ctest --test-dir build\vs-w25 -C Release -R `"^cal$`""   # 1/1 passed
+$cmake='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
+& $cmake -S . -B build\cal-w19 -G "Visual Studio 17 2022" -A x64 -DCORE_BUILD_TESTS=ON -DCORE_WARNINGS_AS_ERRORS=ON
+& $cmake --build build\cal-w19 --config Release --target cal_tests
+build\cal-w19\core\cal\Release\cal_tests.exe                         # 785 checks passed
+$env:CAL_NO_CORPUS='1'; build\cal-w19\core\cal\Release\cal_tests.exe # 323 checks, 8 SKIP lines
+& $cmake --build build\cal-w19 --config Release                      # all targets
+ctest --test-dir build\cal-w19 -C Release -E plan_recalc --output-on-failure   # serial, plan_recalc excluded
+                                                                     # 50/50 passed (35.3 s cold / 4.7 s warm)
 ```
 
+`plan_recalc` is excluded on purpose (it rewrites a golden and must never run
+concurrently with anything); nothing in wave 19 touches goldens.
+
 * `/W4 /WX` clean (configured with `-DCORE_WARNINGS_AS_ERRORS=ON`).
-* Standalone mode also verified: `cmake -S core\cal -B <dir> -G "Visual Studio 17
-  2022" -A x64` + build + run -> 165 checks passed.
+* Before wave 19: 553 checks with the corpus, 245 with `CAL_NO_CORPUS=1`
+  (all still pass; the wave-19 deltas are additive).
+* History (W25): 165 / 38 checks in `build\vs-w25`; the wave-19 tree is
+  `build\cal-w19`.
+* Standalone mode: `cmake -S core\cal -B <dir> -G "Visual Studio 17 2022" -A x64`
+  builds `core_cal` and `cal_tests` after adding `core/mpp` and `core/sched`
+  with their tests off.
 * `ctest -R cal` (unanchored) also matches `core_sched_calendar` and
-  `plan_recalc`, which are "Not Run" in my tree because those targets were not
-  built there; the anchored filter is the meaningful one.
+  `plan_recalc`; the anchored `-R "^cal$"` is the meaningful one, and
+  `plan_recalc` must never be run concurrently with anything.
 
 ## Verified byte facts (evidence in core/cal/README.md)
 
-1. `114/TBkndCal/FixedMeta` = 16-byte header (`ba ad df fa`, version 4, entry
+1. `TBkndCal/FixedMeta` = 16-byte header (`ba ad df fa`, version 4, entry
    count, FixedData size) + **10-byte** entries; the first four describe the
    four 16-byte FixedData header descriptors (offsets 0/16/32/48), the rest are
    rows.  `rows = (FixedData - 64) / 12`; `FixedMeta = 16 + 10*(rows+4)`.
-2. `114/TBkndCal/FixedData` row = 12 bytes: `i32 base_uid | i32 resource_uid |
-   i32 calendar_uid`.  base_uid <= 0 means "base calendar"; resource_uid -1
+   **Identical in MPP12** (mpp12calendar: FixedData 160, FixedMeta 136).
+2. `FixedData` row = 12 bytes.  MPP14 (`114/`): `i32 base_uid | i32 resource_uid |
+   i32 calendar_uid`.  MPP12 (`112/`): `i32 calendar_uid | i32 base_uid |
+   i32 resource_uid` (measured on mpp12calendar/mpp12task/mpp12resource and
+   cross-checked against `core/mpp`'s `Document::calendars`).  base_uid <= 0
+   means "base calendar" (MPP12 stores -1, MPP14 stores 0); resource_uid -1
    means "not a resource calendar".
-3. `114/TBkndCal/VarMeta` = 24-byte header + 12-byte `(uid, offset, key)`;
+3. `TBkndCal/VarMeta` = 24-byte header + 12-byte `(uid, offset, key)`;
    key `0x0D400001` = name (UTF-16LE), key `0x0D400008` = calendar data block.
+   Identical in MPP12 (mpp12calendar: 144 bytes = 24 + 12*10).
 4. Calendar data block: 7 x 60-byte day blocks at 0..419 (index 0 = Sunday),
    `u16` exception count at 420, then 92-byte exception records + padded names,
    then a `u32` work-week header and work-week records.  The decoder consumes
-   **all 21** data blocks on disk exactly (`end == length`), which validates the
-   framing.
+   **all 21** MPP14 data blocks on disk exactly (`end == length`) and the five
+   MPP12 blocks in mpp12calendar/mpp12resource too, which validates the framing.
+   An exception count that cannot fit in the remaining bytes is refused as
+   `truncated` (added wave 19; no measured file hits it).
 5. 60-byte day block: `+0 u16 day type (1 = inherit)`, `+2 u16 count`,
    `+4 u32 total tenths`, `+8 u16 start[i]` tenths, `+20 u32 length[i]` tenths.
    Arithmetic cross-check: PROJECT_A uid 102 day 2 lengths 1800+2400+600 = 4800 = the
-   stored total.
+   stored total.  **Same layout in MPP12** (Night Shift / Test Calendar 2 decode
+   sensibly and consume exactly).
 6. **The Standard base calendar has no Var2Data block.**  In `base.mpp` its row
    exists (uid 1) but VarMeta has only its name.  Its week is
-   `114/Props` key **37753736** (`0x02401388`, `DEFAULT_CALENDAR_HOURS`,
+   `<root>/Props` key **37753736** (`0x02401388`, `DEFAULT_CALENDAR_HOURS`,
    420 bytes): day 0 and day 6 custom non-working, days 1..5 custom with
    starts 4800/7800 and lengths 2400/2400 tenths = Mon-Fri 08:00-12:00 +
-   13:00-17:00.  `holiday1.mpp` and PROJECT_A carry the identical 420 bytes.  A
+   13:00-17:00.  `holiday1.mpp` and PROJECT_A carry the identical 420 bytes, and
+   **so does `112/Props` of mpp12calendar.mpp** (verified, not assumed).  A
    decoder that reads only TBkndCal gets a non-working Standard week.
-7. `114/Props` = 16-byte header (record count u16 at +12) + records
+7. `<root>/Props` = 16-byte header (record count u16 at +12) + records
    `(u32 len, u32 key, u32 unused, data)`.  Key **37748750** (`0x0240000E`) is
-   `DEFAULT_CALENDAR_NAME`, UTF-16LE.
+   `DEFAULT_CALENDAR_NAME`, UTF-16LE; mpp12calendar's `112/Props` says
+   "Standard".  Same layout in both formats.
 
 ## The holiday1 fixture, row by row
 
@@ -537,4 +580,99 @@ builder applied 1 / refused 0, `add_work` Fri 11-13 + 2 d = Tue 11-17 17:00).
 2. Yearly recurrences store no period word, so "every N years" is unmeasurable
    from these fixtures; the decoder assumes every year, which is what all seven
    records show.
+
+## W19 addendum (wave 19, 2026-10-23) — MPP12 calendars are real
+
+### What changed
+
+* `core/cal/cal.h`: `CalendarLayout {automatic, mpp14, mpp12}`; `CalendarFormat`
+  + `detect_calendar_layout()`; `CalendarRow` + `decode_calendar_rows()`;
+  `CalendarTable::{layout, table_root, layout_detected}`; layout parameters
+  (defaulted to automatic) on `decode_file`, `decode_compound_file` and
+  `load_project_calendar(path|cfb, name, layout)`.  Existing one-argument calls
+  are source-compatible.
+* `core/cal/cal.cpp`: `choose_format()` mirrors `core/mpp/reader.cpp`'s
+  version rule; `decode_compound_file()` reads `<root>/TBkndCal` and
+  `<root>/Props`, decodes rows through `decode_calendar_rows`, and reports the
+  chosen layout.  `decode_calendar_data()` now refuses an exception count that
+  cannot fit in the block (no measured file changes behaviour).
+* `tests/cal_tests.cpp`: the row-order/detection test (CI-safe) plus four
+  corpus-gated MPP12 tests.
+* `core/cal/README.md`, `docs/handoff/cal.md`, this file.
+
+### MPP12 measured facts (bytes + reader)
+
+* `mpp12calendar.mpp`: `112/TBkndCal` FixedData **160** = 64+12*8, FixedMeta
+  **136**, VarMeta **144**, Var2Data **2484**; `112/Props` **84106**.
+* Rows `(uid, base, resource)`: `(1,-1,-1) (2,1,0) (4,1,2) (5,-1,-1) (6,-1,-1)
+  (7,-1,-1) (8,1,3) (9,-1,-1)`.
+* Names on uids 1,5,6,7,9; data blocks on uids 4,6,7,8,9.
+* `112/Props` `DEFAULT_CALENDAR_HOURS` = the stock 420-byte week (Mon-Fri
+  08:00-12:00 + 13:00-17:00); `DEFAULT_CALENDAR_NAME` = "Standard".
+* Night Shift (uid 7): Mon 23:00-24:00; Tue-Fri 00:00-03:00 + 04:00-08:00 +
+  23:00-24:00; Sat 00:00-03:00 + 04:00-08:00; Sun inherit (non-working).
+* Test Calendar 2 (uid 9): Mon 09:00-12:00 + 13:00-17:00 (4200 tenths), Tue
+  4800, Wed 4700, Thu 4600, Fri 4500; weekend inherit.
+* uid 4 and 8 (resource calendars) store a 520-byte block whose seven day
+  types are all 1 (inherit) plus one non-working exception on day **8339 =
+  2006-10-31**.  The 420-byte day area is stale buffer text (fragments like
+  "ResourceCalendarEditDays", an old Change Working Time field list).  It is a
+  valid block (consumes exactly), not damage -- do not "fix" it by rejecting.
+* `mpp12task.mpp`: 3 rows `(1,-1,-1) (2,1,0) (3,1,1)`; only uid 1 is named.
+* `mpp12resource.mpp` (checked with a throwaway dump, not in the test): 7 rows,
+  uid 6 Night Shift with the same week as above; reader agrees.
+* Reader agreement: `mpp::load_file` on both files reports MPP12 / root `112`
+  and the same uid/base/resource/name for every row.
+
+### Tests added and acceptance numbers
+
+* `test_calendar_row_layouts` (CI-safe): in-memory CFB via
+  `tests/mpp_fixture_builder.h`; the same 3 rows in both orders decode equal;
+  the MPP12 bytes under the MPP14 order give (uid -1/-1/3, base 10/11/12);
+  detection via Props12/Props14, `112/TBkndTask`, calendar-only fallback;
+  no-table refusal; forcing MPP12 on an MPP14 container throws.
+* `test_mpp12_identity`: 8 rows (5 base + 3 resource), 0 anomalies,
+  `112/Props` week/name, every row matches the reader, forcing MPP14 throws,
+  `load_project_calendar(path)` works.
+* `test_mpp12_task_table`: 3 rows and reader agreement (second witness for the
+  column order).
+* `test_mpp12_agreement`: Standard from mpp12calendar vs base.mpp: identical
+  week; 2 d from Fri 08:00 -> Mon 17:00 in both.
+* `test_mpp12_schedules`: Night Shift uid 7 in `core::sched::schedule_tasks`:
+  2 d from the Fri 2026-10-23 08:00 project start -> start Fri 23:00, finish
+  Tue 2026-10-27 08:00; the same task on Standard runs Fri 08:00..Mon 17:00 (the
+  control that proves the MPP12 calendar drove it).  uid 9 1 d from Mon 08:00
+  -> start Mon 09:00, finish Tue 09:00.
+* Counts: **553 -> 785** with the corpus; **245 -> 323** with
+  `CAL_NO_CORPUS=1` (8 SKIP lines).  All old checks still pass (`/W4 /WX` clean).
+
+### Traps
+
+* `day_total_ticks(day)` takes a DATE day number, not a weekday index.  The
+  first version of the agreement test passed 1..5 and failed; use kMon..kFri.
+* The edit tool can report "file changed since it was read" because the Dropbox
+  folder updates mtimes; batch read+edit in one message.
+* `decode_calendar_rows` requires an explicit layout; `automatic` throws.
+* MPP12 base rows store base_uid -1, MPP14 rows store 0; both mean "<= 0".
+* A forced layout also forces the table root, so `decode_file(mpp14, mpp12)`
+  throws rather than reading 114 with swapped columns; that experiment belongs
+  in `decode_calendar_rows`.
+* `cal_tests` now includes `tests/mpp_fixture_builder.h` (read-only) and
+  `reader.h`; `core_mpp`/`core_sched` include directories must stay PUBLIC on
+  `core_cal` (they are).
+* cmake/ctest are not on PATH in this shell: use the VS BuildTools path (see
+  the Verification section).
+
+### Open
+
+1. No COM oracle for MPP12: the scheduling dates are this engine's output from
+   decoded data, and the identity/name agreement is against the independent
+   reader, not against Project.  If a Project 2007 install ever exists, re-run
+   the Night Shift schedule under COM.
+2. MPP12 per-calendar week data has no second independent decoder (`core/mpp`
+   only reads identity/name).  The structural evidence is exact consumption plus
+   plausible values; any stronger claim is inference.
+3. `core/plan` calls `load_project_calendar`, so it now auto-detects MPP12 for
+   the calendar itself; whether the rest of its task path supports MPP12 is
+   another stream's scope (the G1 reader does).
 

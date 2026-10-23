@@ -1,20 +1,88 @@
-# core/cal — base calendars from `114/TBkndCal`
+# core/cal — base calendars from `TBkndCal` (MPP12 and MPP14)
 
-Decodes the base calendars of an MPP14 file (work-week day patterns, dated
-exceptions, dated work weeks, names) and builds a `core::sched::Calendar` from
-one of them.  `core/plan` consumes it through
-`core::cal::load_project_calendar()`; `core/sched` is not modified by this
-stream, so dated exceptions are installed as per-week `set_work_week` overrides.
+Decodes the base calendars of an MPP file — work-week day patterns, dated
+exceptions, dated work weeks, names — and builds a `core::sched::Calendar` from
+one of them.  **Both storage layouts are supported**: MPP14 (Project 2010+) under
+`114/` and MPP12 (Project 2007) under `112/`.  The four-part table framing is
+identical; only the table root and the column order of a FixedData row differ,
+and `decode_compound_file()` detects the layout by itself, so callers do not pass
+a version.  `core/plan` consumes it through `core::cal::load_project_calendar()`;
+`core/sched` is not modified by this stream, so dated exceptions are installed as
+per-week `set_work_week` overrides.
 
 Everything below is **verified** against files on disk unless it says
-**inference**.  The end-to-end proof is `tests/cal_tests.cpp`: it rebuilds the
-three task dates MS Project calculated for `corpus/probe/holiday1.mpp` (the
-oracle is `docs/analysis/oracle/holiday-probe.json`).
+**inference**.  The end-to-end MPP14 proof is `tests/cal_tests.cpp`: it rebuilds
+the three task dates MS Project calculated for `corpus/probe/holiday1.mpp` (the
+oracle is `docs/analysis/oracle/holiday-probe.json`).  The MPP12 proof is the
+same test binary on `corpus/probe/mpp12calendar.mpp`: the decoded identities are
+cross-checked against the independent `core/mpp` reader, and a real schedule is
+run through `core::sched::schedule_tasks` with the decoded calendar.
+
+## MPP12 vs MPP14 (measured)
+
+| | MPP14 (Project 2010+) | MPP12 (Project 2007) |
+|---|---|---|
+| table root | `114/` | `112/` |
+| project props | `114/Props` | `112/Props` |
+| FixedData 12-byte row | `+0` base uid, `+4` resource uid, `+8` calendar uid | `+0` calendar uid, `+4` base uid, `+8` resource uid |
+| FixedMeta | 16-byte header + 10-byte entries, 4 descriptors | identical |
+| VarMeta / Var2Data | 24-byte header + `(uid, offset, key)`; length-prefixed blocks | identical |
+| calendar data block, 60-byte day block | below | identical |
+| `DEFAULT_CALENDAR_HOURS` / `DEFAULT_CALENDAR_NAME` keys | `0x02401388` / `0x0240000E` | identical |
+
+**Detection** (`core::cal::detect_calendar_layout`, and the default
+`CalendarLayout::automatic`) mirrors `core/mpp/reader.cpp`'s "Version detection"
+rule, so the two libraries cannot classify one file differently:
+
+1. a top-level `Props12` stream means MPP12, `Props14` means MPP14;
+2. when both exist, the `112/` vs `114/` `TBkndTask` storage decides;
+3. when neither exists, the `TBkndTask` storage decides; if there is no task
+   table at all (a synthetic container), core/cal falls back to which
+   `TBkndCal/FixedData` exists;
+4. finally the table that is actually present wins: if the chosen root has no
+   `TBkndCal/FixedData` but the other root does, the other root is read.
+
+A caller can force `CalendarLayout::mpp12` / `mpp14`; that also forces the table
+root, so forcing the wrong layout either reads the other tree or throws.  A
+forced layout is reported as `CalendarTable::layout_detected == false`.
+
+Measured on `corpus/probe/mpp12calendar.mpp` (MPXJ's public MPP12 test file;
+synthetic names): `112/TBkndCal` = FixedData **160** (`64 + 12*8`), FixedMeta
+**136** (`16 + 10*12`), VarMeta **144** (`24 + 12*10`), Var2Data **2484**;
+`112/Props` is 84 106 bytes.  The eight rows are
+`(uid, base, resource)` = `(1,-1,-1) (2,1,0) (4,1,2) (5,-1,-1) (6,-1,-1)
+(7,-1,-1) (8,1,3) (9,-1,-1)`; reading the same bytes with the MPP14 order gives
+`(base, resource, uid)` = `(1,-1,-1) (2,1,0) ...`, i.e. the wrong identities.
+Five calendars have names (uids 1, 5, 6, 7, 9); five have a var2 data block
+(uids 4, 6, 7, 8, 9).  The reader's format rule decides MPP12 from the top-level
+`Props12` stream and its `Document::calendars` lists the same eight
+`uid/base/resource/name` rows.
+
+The default week is the MPP12 point that was verified rather than assumed:
+`112/Props` key `0x02401388` holds the same 420-byte stock week as MPP14
+(Mon–Fri 08:00–12:00 + 13:00–17:00, weekend non-working) and key `0x0240000E`
+holds `Standard`, so a `TBkndCal`-only decoder is not needed and the two formats
+agree on the default calendar.
+
+The two resource calendars (uids 4 and 8) store a week whose seven days are all
+day type 1 ("inherit") plus one non-working exception on day 8339
+(2006-10-31).  The 420-byte week area is stale buffer text (fragments such as
+`ResourceCalendarEditDays`, i.e. an old "Change Working Time" field list) and
+must **not** be read as intervals — which the day-type rule already guarantees.
+Both blocks are 520 bytes = 420 + 4 + 92 + 4 and consume exactly, so they are
+valid data blocks, not damage.
+
+`metadata_anomalies` is 0 for `mpp12calendar.mpp`.  A data block whose exception
+count cannot fit in the remaining bytes is reported as `truncated` and its
+exception list is refused rather than decoded out of stale text
+(`decode_calendar_data`); that guard is format-independent.
 
 ## Stream inventory (measured)
 
-`TBkndCal` is a fixed-row table plus Var2Data payloads; since MPP14 stores the
-whole file in one `114` storage, the paths are `114/TBkndCal/<stream>`.
+`TBkndCal` is a fixed-row table plus Var2Data payloads; MPP14 stores the whole
+file in one `114` storage and MPP12 in one `112` storage, so the paths below are
+`<root>/TBkndCal/<stream>`.  The MPP14 sizes are the original table; the MPP12
+sizes are from `mpp12calendar.mpp`.
 
 | stream | base.mpp | holiday1.mpp | w3-o1.mpp | project_a.mpp |
 |---|---|---|---|---|
@@ -25,10 +93,10 @@ whole file in one `114` storage, the paths are `114/TBkndCal/<stream>`.
 | `Fixed2Data` | 336 | 336 | – | – |
 | `Fixed2Meta` | 86 | 86 | – | – |
 
-The project defaults are in the sibling stream `114/Props` (88 690 bytes for
-`base.mpp`).
+The project defaults are in the sibling stream `<root>/Props` (88 690 bytes for
+`base.mpp`, 84 106 for `mpp12calendar.mpp`).
 
-Identities that hold in every file measured:
+Identities that hold in every file measured, both formats:
 
 ```
 rows          = (len(FixedData) - 64) / 12
@@ -38,7 +106,7 @@ VarMeta  len  = 24 + 12 * entries
 
 ## Byte layout
 
-### `114/TBkndCal/FixedMeta` — 16-byte header + 10-byte entries
+### `TBkndCal/FixedMeta` — 16-byte header + 10-byte entries
 
 ```
 +0   u32 magic 0xFADFADBA (bytes ba ad df fa)
@@ -68,7 +136,9 @@ FixedData 0/16/32/48; the rest are rows.  This decoder reads rows from
 (`CalendarTable::metadata_anomalies`), so a damaged metadata stream cannot shift
 the rows.
 
-### `114/TBkndCal/FixedData` — 64-byte header + 12-byte row per calendar
+### `TBkndCal/FixedData` — 64-byte header + 12-byte row per calendar
+
+MPP14 row (the order every example below uses):
 
 ```
 +0  i32 base calendar uid    <= 0 means "this row is a base calendar"
@@ -76,7 +146,21 @@ the rows.
 +8  i32 calendar uid         > 0, the key into VarMeta / Var2Data
 ```
 
-`base.mpp` (100 bytes; 1 base + 2 resource calendars):
+MPP12 row (`112/TBkndCal/FixedData`; the same three i32s, different order --
+MPXJ's MPP12CalendarFactory declares the calendar id first, the MPP14 factory
+the reverse):
+
+```
++0  i32 calendar uid         > 0, the key into VarMeta / Var2Data
++4  i32 base calendar uid    -1 or 0 means "this row is a base calendar"
++8  i32 resource uid         -1 (0xFFFFFFFF) means "not a resource calendar"
+```
+
+`decode_calendar_rows(fixed_data, layout)` is the public row decoder; the
+CI-safe test builds the same three logical rows in both orders and checks that
+reading MPP12 bytes under the MPP14 order changes the identity columns.
+
+`base.mpp` (MPP14, 100 bytes; 1 base + 2 resource calendars):
 
 ```
 0040  00 00 00 00 ff ff ff ff 01 00 00 00   base 0, res -1, uid 1 = Standard
@@ -86,9 +170,9 @@ the rows.
 
 `holiday1.mpp` row 2 is `00 00 00 00 ff ff ff ff 03 00 00 00`: the synthetic
 SiteCal is stored as a **root** calendar (base uid 0), and its days that do not
-override anything inherit the project default week (see `114/Props`).
+override anything inherit the project default week (see `<root>/Props`).
 
-### `114/TBkndCal/VarMeta` — 24-byte header + 12-byte entry
+### `TBkndCal/VarMeta` — 24-byte header + 12-byte entry (identical under 112/ and 114/)
 
 ```
 +0  u32 magic 0xFADFADBA      +8  u32 entry count
@@ -115,12 +199,16 @@ UTF-16LE NUL-terminated; the length includes the terminator.
 `base.mpp` has **one** VarMeta entry (`uid 1, offset 0, key 0x0D400001`), i.e.
 the Standard calendar has a name and **no data block at all**.
 
-### `114/Props` — 16-byte header + records, and where Standard really lives
+### `<root>/Props` — 16-byte header + records, and where Standard really lives
 
 ```
 +0 16-byte header, record count as u16 at +12
 record: u32 data length | u32 key | u32 unused | data[length]  (+1 pad if odd)
 ```
+
+The layout and both keys are identical in `114/Props` (MPP14) and `112/Props`
+(MPP12); the MPP12 defaults were decoded on `mpp12calendar.mpp` and hold exactly
+the stock week and the name `Standard` shown below.
 
 Two keys matter:
 
@@ -160,8 +248,11 @@ fallback is MS Project's stock default, not a measured file behaviour).
                 8 unknown bytes, u32 name length (+ padded name)
 ```
 
-Consumption is exact on all 21 calendar data blocks on disk (`end == length`),
-which is what validates the framing.
+Consumption is exact on all 21 MPP14 calendar data blocks on disk (`end ==
+length`), and on the five MPP12 blocks in `mpp12calendar.mpp` / `mpp12resource.mpp`
+(`end == length` there too), which is what validates the identical framing.  An
+exception count that cannot fit in the remaining bytes is refused as `truncated`
+(the count word is then stale text, not a count).
 
 ### 60-byte day block
 
@@ -347,17 +438,35 @@ overlap; they are not the same file.
 namespace core::cal {
     // all declarations of the table, plus the project default week/name
     CalendarTable decode_file(std::string const& mpp_path);
-    CalendarTable decode_compound_file(mpp::CompoundFile const& file);
+    // all declarations of the table, plus the project default week/name.
+    // `layout` defaults to automatic detection; the existing one-argument
+    // calls are unchanged.
+    CalendarFormat detect_calendar_layout(mpp::CompoundFile const& file);
+    std::vector<CalendarRow> decode_calendar_rows(std::vector<std::uint8_t> const& fixed_data,
+                                                  CalendarLayout layout);
+    CalendarTable decode_file(std::string const& mpp_path,
+                              CalendarLayout layout = CalendarLayout::automatic);
+    CalendarTable decode_compound_file(mpp::CompoundFile const& file,
+                                       CalendarLayout layout = CalendarLayout::automatic);
 
     // one calendar -> the engine's model
     core::sched::Calendar build_calendar(CalendarTable const&, CalendarDefinition const&);
     core::sched::Calendar build_project_calendar(CalendarTable const&, std::string const& name = {});
-    core::sched::Calendar load_project_calendar(std::string const& mpp_path, std::string const& name = {});
-    core::sched::Calendar load_project_calendar(mpp::CompoundFile const&, std::string const& name = {});
+    core::sched::Calendar load_project_calendar(std::string const& mpp_path,
+                                                std::string const& name = {},
+                                                CalendarLayout layout = CalendarLayout::automatic);
+    core::sched::Calendar load_project_calendar(mpp::CompoundFile const&,
+                                                std::string const& name = {},
+                                                CalendarLayout layout = CalendarLayout::automatic);
 }
 ```
 
-* `name` empty = the project's default calendar: `114/Props`
+`CalendarLayout` is `automatic` (default), `mpp12` or `mpp14`.  A decoded table
+reports what was used in `CalendarTable::layout`, `table_root` and
+`layout_detected`; a forced layout also forces its table root, so forcing the
+wrong one either reads the other tree or throws.
+
+* `name` empty = the project's default calendar: `<root>/Props`
   `DEFAULT_CALENDAR_NAME`, matched exactly then ASCII case-insensitively.  In a
   client file that name is itself client data (it can carry a company/project
   identifier): it is decoded only so lookup works, and is never printed by this
@@ -365,11 +474,13 @@ namespace core::cal {
 * `name` given but absent -> **throws `mpp::Error`** (no silent fallback).
 * the default name absent from the table -> falls back only when the file has
   exactly one base calendar, otherwise **throws `mpp::Error`**.
-* a missing `114/TBkndCal/FixedData`, a `FixedData` that is not `64 + 12*n`
+* a missing `<root>/TBkndCal/FixedData`, a `FixedData` that is not `64 + 12*n`
   bytes, or a short Var2Data block -> **throws `mpp::Error`**.
 * damaged-but-readable metadata (FixedMeta/VarMeta counts or sizes that
   disagree with FixedData) does **not** throw: it increments
   `CalendarTable::metadata_anomalies` and rows are still read from `FixedData`.
+* a container with no calendar table at all is refused by
+  `detect_calendar_layout()` and by the auto-detect path of the decoders.
 
 Exception mapping: every dated exception (and dated work week) is merged into
 the seven `DayPattern`s of the week it falls in — `Calendar::set_work_week` — so
@@ -382,20 +493,48 @@ counted and skipped rather than guessed.
 ## Re-running the evidence
 
 ```
-$vc='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat'
-cmd /c "call `"$vc`" >nul && cmake -S . -B build\vs-w25 -G `"Visual Studio 17 2022`" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON"
-cmd /c "call `"$vc`" >nul && cmake --build build\vs-w25 --config Release --target cal_tests"
-build\vs-w25\core\cal\Release\cal_tests.exe
+$cmake='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
+& $cmake -S . -B build\cal-w19 -G "Visual Studio 17 2022" -A x64 -DCORE_BUILD_TESTS=ON -DCORE_WARNINGS_AS_ERRORS=ON
+& $cmake --build build\cal-w19 --config Release --target cal_tests
+build\cal-w19\core\cal\Release\cal_tests.exe
 ```
+
+Current counts (wave 19): **785 checks** from `cal_tests` with the corpus, **323**
+with `CAL_NO_CORPUS=1` (the corpus-gated cases print `SKIP` and still pass), the
+same convention as `MPP_NO_CORPUS` in the reader tests.  Wave 19 added the
+MPP12/MPP14 row-order (CI-safe), MPP12 table/reader agreement, MPP12-vs-MPP14
+`Standard` agreement and the MPP12-driven schedule cases.
+
+### What `cal_tests` checks for MPP12
+
+No corpus is needed for the first group; `CAL_NO_CORPUS=1` skips the rest.
+
+* **Row order / detection (CI-safe)**: `tests/mpp_fixture_builder.h` builds an
+  in-memory CFB with the same three calendars written in both layouts; both
+  decode to the same `uid/base/resource/name`, and the MPP12 bytes read under
+  the MPP14 order are asserted to move the columns (the negative control).  The
+  same test covers `Props12`/`Props14` detection, the `112`/`114` `TBkndTask`
+  fallback, the calendar-only fallback and the "no table" refusal.
+* **`mpp12calendar.mpp`**: auto-detected MPP12, 8 rows (5 base + 3 resource),
+  0 metadata anomalies, `112/Props` default week and name; every row
+  `uid/base/resource/name` equals `mpp::load_file()`'s `Document::calendars`;
+  forcing MPP14 throws.
+* **MPP12 vs MPP14**: `Standard` from `mpp12calendar.mpp` and from `base.mpp`
+  build the identical week and both schedule 2 d from Fri 08:00 to Mon 17:00.
+* **Real schedule driven by MPP12 data**: `Night Shift` (uid 7, its own
+  Var2Data week) is installed in `core::sched::schedule_tasks`; a 2 d task from
+  the Fri 08:00 project start runs Fri 23:00 -> Tue 08:00 across the weekend,
+  while the same task on `Standard` runs Fri 08:00 -> Mon 17:00.  uid 9's
+  short-day week schedules an 8 h task Mon 09:00 -> Tue 09:00.
+* **`mpp12task.mpp`**: 3 rows with the expected `(uid, base, resource)` identity
+  and reader agreement (second witness for the column order).
 
 Standalone: `cmake -S core\cal -B <dir> -G "Visual Studio 17 2022" -A x64`
 builds `core_cal` and `cal_tests` after adding `core/mpp` and `core/sched` with
 their tests off.
 
-`CAL_NO_CORPUS=1` forces the corpus-gated cases to skip (245 checks instead of
-553), the same convention as `MPP_NO_CORPUS` in the reader tests.
-
-To dump the raw streams without this code (read-only; prints no client names):
+To dump the raw streams without this code (read-only; prints no client names;
+use `112/TBkndCal` instead of `114/TBkndCal` for an MPP12 file):
 
 ```
 python -c "import olefile,struct;ole=olefile.OleFileIO('corpus/probe/holiday1.mpp');\
@@ -405,8 +544,13 @@ python -c "import olefile,struct;ole=olefile.OleFileIO('corpus/probe/holiday1.mp
 
 ## Limits
 
-* MPP14 only (this is the format of every file in the corpus).  MPP12 uses
-  different FixedMeta entry sizes and a different id-offset order.
+* Both formats are supported: MPP14 (`114/`) and MPP12 (`112/`).  The MPP12
+  week data is decoded with the same 60-byte day-block layout and was measured
+  on `corpus/probe/mpp12calendar.mpp` (5 blocks) and `mpp12resource.mpp`;
+  MPP12's two resource-calendar blocks in `mpp12calendar.mpp` are all-"inherit"
+  weeks whose day area holds stale text, so only the day-type word is read there.
+  MPP12 identity uses the reader's detection rule; there is no separate
+  MPP12-only API.
 * Recurring exceptions (types 2..7): every parameter word is decoded and applied
   (wave 12, "Recurrence parameter words" above).  The one gap is the weekday of a
   *monthly* positional record, which Project does not store; it is derived from

@@ -1,4 +1,5 @@
-# core/cal -- base calendars from 114/TBkndCal, built into core::sched::Calendar.
+# core/cal -- base calendars from <root>/TBkndCal (MPP14 114/, MPP12 112/),
+# built into core::sched::Calendar.
 #
 # SELF-CONTAINED.  Two modes, exactly like core/gantt and core/view:
 #
