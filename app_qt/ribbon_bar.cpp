@@ -371,25 +371,36 @@ const std::vector<TabSpec>& tab_specs() {
         TabSpec project;
         project.title = "Project";
         GroupSpec& project_insert = add_group(project, "Insert", 77);
-        large(project_insert, "Subproject", app::MenuAction::none, 64, 0);
+        large(project_insert, "Subproject", app::MenuAction::none, 64, 0, false,
+              "insert.subproject");
         GroupSpec& add_ins = add_group(project, "Add-ins", 135);
-        small(add_ins, "Get Add-ins", app::MenuAction::none, 126, 0, 0);
-        small(add_ins, "My Add-ins", app::MenuAction::none, 126, 1, 0);
+        small(add_ins, "Get Add-ins", app::MenuAction::none, 126, 0, 0, false, 1, false,
+              "addins.get");
+        small(add_ins, "My Add-ins", app::MenuAction::none, 126, 1, 0, false, 1, false,
+              "addins.my");
         GroupSpec& project_properties = add_group(project, "Properties", 341);
-        large(project_properties, "Project\nInformation", app::MenuAction::none, 60, 0);
-        large(project_properties, "Custom\nFields", app::MenuAction::custom_fields, 50, 1, true);
-        large(project_properties, "Links Between\nProjects", app::MenuAction::none, 68, 2);
-        large(project_properties, "WBS", app::MenuAction::none, 40, 3);
-        large(project_properties, "Change\nWorking Time", app::MenuAction::none, 68, 4);
+        large(project_properties, "Project\nInformation", app::MenuAction::none, 60, 0, false,
+              "properties.project_information");
+        large(project_properties, "Custom\nFields", app::MenuAction::custom_fields, 50, 1, true,
+              "properties.custom_fields");
+        large(project_properties, "Links Between\nProjects", app::MenuAction::none, 68, 2, false,
+              "properties.links_between");
+        large(project_properties, "WBS", app::MenuAction::none, 40, 3, false, "properties.wbs");
+        large(project_properties, "Change\nWorking Time", app::MenuAction::none, 68, 4, false,
+              "properties.change_working_time");
         GroupSpec& project_schedule = add_group(project, "Schedule", 175);
-        large(project_schedule, "Calculate\nProject", app::MenuAction::none, 52, 0);
-        large(project_schedule, "Set\nBaseline", app::MenuAction::none, 48, 1);
-        large(project_schedule, "Move\nProject", app::MenuAction::none, 46, 2);
+        large(project_schedule, "Calculate\nProject", app::MenuAction::none, 52, 0, false,
+              "schedule.calculate");
+        large(project_schedule, "Set\nBaseline", app::MenuAction::none, 48, 1, false,
+              "schedule.set_baseline");
+        large(project_schedule, "Move\nProject", app::MenuAction::none, 46, 2, false,
+              "schedule.move");
         GroupSpec& status = add_group(project, "Status", 133);
         field(status, "Status Date", 126, 0, 0);
-        small(status, "Update Project", app::MenuAction::none, 100, 1, 0);
+        small(status, "Update Project", app::MenuAction::none, 100, 1, 0, false, 1, false,
+              "status.update");
         GroupSpec& proofing = add_group(project, "Proofing", 63);
-        large(proofing, "Spelling", app::MenuAction::none, 52, 0);
+        large(proofing, "Spelling", app::MenuAction::none, 52, 0, false, "proofing.spelling");
         tabs.push_back(std::move(project));
 
         // --- View -----------------------------------------------------------

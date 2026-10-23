@@ -118,6 +118,96 @@ void page(QPainter& painter, qreal x = 5.0, qreal y = 3.0, qreal w = 22.0, qreal
     line(painter, x + w - 7, y + 7, x + w, y + 7);
 }
 
+// The information page (a page with the "i" badge): Project shows the same
+// glyph for Task Information and Project Information, so both keys draw this.
+void info_page(QPainter& painter) {
+    page(painter);
+    outline_circle(painter, 20, 19, 5.5);
+    filled_circle(painter, 20, 16.5, 1.2);
+    line(painter, 20, 19, 20, 23);
+}
+
+// --- Project tab (W26-2.4) -------------------------------------------------
+bool draw_project_tab_glyph(QPainter& painter, const QString& key) {
+    if (key == QStringLiteral("insert.subproject")) {
+        page(painter, 4, 4, 12, 20);
+        page(painter, 10, 8, 14, 20);
+        line(painter, 14, 23, 24, 23, 2.5);
+        polyline(painter, {QPointF(20, 19), QPointF(24, 23), QPointF(20, 27)}, 2.5);
+    } else if (key == QStringLiteral("addins.get")) {
+        outline_rect(painter, 6, 6, 20, 20, 4);
+        line(painter, 10, 16, 22, 16, 2.5);
+        line(painter, 16, 10, 16, 22, 2.5);
+    } else if (key == QStringLiteral("addins.my")) {
+        painter.setPen(ink_pen(2.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawArc(QRectF(4, 14, 10, 10), 90 * 16, 180 * 16);
+        painter.drawArc(QRectF(11, 10, 13, 13), 90 * 16, 180 * 16);
+        painter.drawArc(QRectF(20, 15, 9, 9), 90 * 16, 180 * 16);
+        line(painter, 7, 24, 26, 24);
+    } else if (key == QStringLiteral("properties.project_information")) {
+        info_page(painter);
+    } else if (key == QStringLiteral("properties.custom_fields")) {
+        page(painter);
+        line(painter, 9, 12, 24, 12);
+        line(painter, 9, 17, 24, 17);
+        line(painter, 9, 22, 24, 22);
+        line(painter, 14, 12, 14, 22);
+        line(painter, 19, 12, 19, 22);
+    } else if (key == QStringLiteral("properties.links_between")) {
+        page(painter);
+        outline_rect(painter, 9, 13, 8, 5, 2);
+        outline_rect(painter, 15, 13, 8, 5, 2);
+        line(painter, 14, 23, 25, 23, 2.5);
+        polyline(painter, {QPointF(22, 20), QPointF(26, 23), QPointF(22, 26)}, 2.5);
+    } else if (key == QStringLiteral("properties.wbs")) {
+        outline_rect(painter, 10, 4, 12, 5, 1);
+        outline_rect(painter, 4, 21, 9, 5, 1);
+        outline_rect(painter, 19, 21, 9, 5, 1);
+        line(painter, 16, 9, 16, 15);
+        line(painter, 8, 15, 24, 15);
+        line(painter, 8, 15, 8, 21);
+        line(painter, 24, 15, 24, 21);
+    } else if (key == QStringLiteral("properties.change_working_time")) {
+        page(painter);
+        line(painter, 5, 10, 27, 10);
+        line(painter, 10, 3, 10, 7);
+        line(painter, 20, 3, 20, 7);
+        outline_circle(painter, 20, 20, 4.5);
+        line(painter, 20, 20, 20, 17);
+        line(painter, 20, 20, 22, 21);
+    } else if (key == QStringLiteral("schedule.calculate")) {
+        outline_rect(painter, 7, 4, 18, 24, 2);
+        filled_rect(painter, 10, 7, 12, 4, 1);
+        for (const qreal x : {11.0, 16.0, 21.0}) {
+            for (const qreal y : {16.0, 21.0, 26.0}) {
+                filled_circle(painter, x, y, 1.3);
+            }
+        }
+    } else if (key == QStringLiteral("schedule.set_baseline")) {
+        page(painter);
+        outline_rect(painter, 10, 12, 12, 3);
+        filled_rect(painter, 8, 20, 16, 4);
+    } else if (key == QStringLiteral("schedule.move")) {
+        page(painter);
+        polyline(painter, {QPointF(11, 13), QPointF(17, 20), QPointF(11, 27)}, 2.5);
+        polyline(painter, {QPointF(18, 13), QPointF(24, 20), QPointF(18, 27)}, 2.5);
+    } else if (key == QStringLiteral("status.update")) {
+        painter.setPen(ink_pen(2.5));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawArc(QRectF(6, 6, 20, 20), 60 * 16, 270 * 16);
+        filled_polygon(painter, {QPointF(23, 3), QPointF(28, 9), QPointF(20, 11)});
+    } else if (key == QStringLiteral("proofing.spelling")) {
+        line(painter, 8, 9, 8, 15, 2.5);
+        line(painter, 13, 7, 13, 15, 2.5);
+        line(painter, 18, 10, 18, 15, 2.5);
+        polyline(painter, {QPointF(7, 21), QPointF(13, 28), QPointF(26, 17)}, 3.0);
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // --- Report tab (W26-2.3) --------------------------------------------------
 bool draw_report_glyph(QPainter& painter, const QString& key) {
     if (key == QStringLiteral("project.compare")) {
@@ -389,10 +479,7 @@ bool draw_task_glyph(QPainter& painter, const QString& key) {
         line(painter, 18, 8, 18, 26);
         filled_polygon(painter, {QPointF(18, 8), QPointF(27, 12), QPointF(18, 16)});
     } else if (key == QStringLiteral("properties.information")) {
-        page(painter);
-        outline_circle(painter, 20, 19, 5.5);
-        filled_circle(painter, 20, 16.5, 1.2);
-        line(painter, 20, 19, 20, 23);
+        info_page(painter);
     } else if (key == QStringLiteral("properties.notes")) {
         outline_rect(painter, 6, 5, 20, 22, 2);
         filled_polygon(painter, {QPointF(26, 5), QPointF(26, 13), QPointF(18, 5)});
@@ -451,7 +538,7 @@ QIcon shell_ribbon_icon(const QString& key, int pixels) {
     painter.setPen(ink_pen(2.0));
     painter.setBrush(Qt::NoBrush);
     if (!draw_task_glyph(painter, key) && !draw_resource_glyph(painter, key) &&
-        !draw_report_glyph(painter, key)) {
+        !draw_report_glyph(painter, key) && !draw_project_tab_glyph(painter, key)) {
         painter.end();
         // A key with no drawing is the neutral placeholder, never a blank
         // icon: the gate's placeholder hash then fails on it.
@@ -468,7 +555,7 @@ bool shell_ribbon_glyph_known(const QString& key) {
     painter.setPen(ink_pen(2.0));
     painter.setBrush(Qt::NoBrush);
     const bool known = draw_task_glyph(painter, key) || draw_resource_glyph(painter, key) ||
-                       draw_report_glyph(painter, key);
+                       draw_report_glyph(painter, key) || draw_project_tab_glyph(painter, key);
     painter.end();
     return known;
 }

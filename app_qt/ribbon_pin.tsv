@@ -120,8 +120,8 @@ Report	0	Export	button	Visual Reports	0	export.visual_reports	0	-
 Project	0	Insert	group	-	-	-	-	-
 Project	0	Insert	button	Subproject	0	insert.subproject	0	-
 Project	0	Add-ins	group	-	-	-	-	-
-Project	0	Add-ins	small	Get Add-ins	0	-	0	-
-Project	0	Add-ins	small	My Add-ins	0	-	1	-
+Project	0	Add-ins	small	Get Add-ins	0	addins.get	0	-
+Project	0	Add-ins	small	My Add-ins	0	addins.my	1	-
 Project	0	Properties	group	-	-	-	-	-
 Project	0	Properties	button	Project Information	0	properties.project_information	0	-
 Project	0	Properties	button	Custom Fields	1	properties.custom_fields	0	-
@@ -134,7 +134,7 @@ Project	0	Schedule	button	Set Baseline	0	schedule.set_baseline	0	-
 Project	0	Schedule	button	Move Project	0	schedule.move	0	-
 Project	0	Status	group	-	-	-	-	-
 Project	0	Status	field	Status Date	0	-	0	NA
-Project	0	Status	small	Update Project	0	-	1	-
+Project	0	Status	small	Update Project	0	status.update	1	-
 Project	0	Proofing	group	-	-	-	-	-
 Project	0	Proofing	button	Spelling	0	proofing.spelling	0	-
 View	0	Task Views	group	-	-	-	-	-
