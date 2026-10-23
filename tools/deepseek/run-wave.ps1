@@ -9,6 +9,9 @@ param(
     [string[]]$Groups = @("ALL"),
     [int]$MaxIterationsPerGroup = 40
 )
+# `pwsh -File ... -Groups G0,G1` passes ONE string "G0,G1" (comma lists are only
+# arrays inside PowerShell), so split it here; it must never reach a prompt whole.
+$Groups = @($Groups | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $root
 $launcher = Join-Path $PSScriptRoot "deepseek-claude.cmd"
