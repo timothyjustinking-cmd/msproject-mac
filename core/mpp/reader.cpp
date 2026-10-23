@@ -1059,6 +1059,7 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
                                       std::vector<std::int16_t>* row_state = nullptr,
                                       std::vector<std::uint8_t>* row_custom_flag_byte =
                                           nullptr,
+                                      std::vector<std::uint8_t>* row_flag10_byte = nullptr,
                                       std::vector<std::uint8_t>* row_type_flag = nullptr) {
     std::vector<bool> covered(rows, false);
     if (row_flag_byte != nullptr) {
@@ -1066,6 +1067,9 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
     }
     if (row_custom_flag_byte != nullptr) {
         row_custom_flag_byte->assign(rows, 0);
+    }
+    if (row_flag10_byte != nullptr) {
+        row_flag10_byte->assign(rows, 0);
     }
     if (row_type_flag != nullptr) {
         row_type_flag->assign(rows, 0);
@@ -1175,6 +1179,10 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
         if (row_custom_flag_byte != nullptr &&
             base + kFixedMetaCustomFlagByte < meta.size()) {
             (*row_custom_flag_byte)[row] = meta[base + kFixedMetaCustomFlagByte];
+        }
+        if (row_flag10_byte != nullptr &&
+            base + kFixedMetaFlag10Byte < meta.size()) {
+            (*row_flag10_byte)[row] = meta[base + kFixedMetaFlag10Byte];
         }
         const auto previous = offset_owner.find(offset);
         if (previous != offset_owner.end()) {
@@ -1682,6 +1690,7 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
     std::vector<std::uint8_t> task_meta_flag_bytes;
     std::vector<std::int16_t> task_meta_state;
     std::vector<std::uint8_t> task_meta_custom_flag_bytes;
+    std::vector<std::uint8_t> task_meta_flag10_bytes;
     const bool task_has_fixed_meta = cfb.has_stream(std::string(root) +
                                                     "/TBkndTask/FixedMeta");
     const std::vector<bool> fixed_meta_live =
@@ -1689,7 +1698,7 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                             kFixedRowSize, kFixedMetaEntrySize, kFixedMetaDescriptors,
                             rows, uid_by_row, document.warnings, &task_meta_offsets,
                             &task_meta_flag_bytes, &task_meta_state,
-                            &task_meta_custom_flag_bytes);
+                            &task_meta_custom_flag_bytes, &task_meta_flag10_bytes);
 
     /* Liveness, computed once.  Two facts must both hold for a task row:
      *
@@ -1845,6 +1854,14 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
             task.milestone = task.duration_ticks == 0;
             task.milestone_stored = false;
         }
+        // Wave 23 (W23-6): Flag10 / the SUMMARY column, from the same metadata
+        // entry (byte +25 bit 0x04).  A clear bit is a stored No.
+        if (task_has_fixed_meta && fixed_meta_live[row] &&
+            row < task_meta_flag10_bytes.size()) {
+            task.summary_flag =
+                (task_meta_flag10_bytes[row] & kFixedMetaFlag10Bit) != 0;
+            task.summary_flag_stored = true;
+        }
         task.free_slack_ticks =
             static_cast<std::int32_t>(u32_at(fixed, base + kRowFreeSlack));
         task.start_slack_ticks =
@@ -1990,7 +2007,7 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                                     kRscRowSize, kRscFixedMetaEntrySize,
                                     kFixedMetaDescriptors, rsc_rows, rsc_uid_by_row,
                                     document.warnings, &rsc_meta_offsets, nullptr,
-                                    nullptr, nullptr, &rsc_meta_type);
+                                    nullptr, nullptr, nullptr, &rsc_meta_type);
             /* W49: the Cost/Material half of the type is the Fixed2Meta entry's
              * +8 bit 0x10 (measured, see reader.h "Resource Type").  The two
              * metadata streams pair by ENTRY INDEX, as the Task outline does. */

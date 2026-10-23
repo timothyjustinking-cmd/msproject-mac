@@ -83,6 +83,12 @@ struct TaskRow {
     bool summary = false;
     bool milestone = false;
     bool critical = false;
+    // Wave 23 (W23-6): Task.Flag10 (0x0b400051), Project's SUMMARY column, a
+    // stored Task FixedMeta bit (reader.h Task::summary_flag).  `stored` is
+    // false for a row the file's metadata does not cover; the record then has
+    // no value (Project's No is a stored False, not an absent field).
+    bool summary_flag = false;
+    bool summary_flag_stored = false;
     // Wave 14: the reader's MEASURED manually-scheduled bit (Fixed2Meta 0x80;
     // core/mpp/reader.h Task::manually_scheduled).  A pending inserted row has no
     // file row and is false.  app/start_edit_warning.h uses it to warn that a date

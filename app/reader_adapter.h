@@ -118,6 +118,8 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     row.summary = task.summary;
     row.milestone = task.is_milestone() && !task.summary;
     row.critical = task.critical;
+    row.summary_flag = task.summary_flag;
+    row.summary_flag_stored = task.summary_flag_stored;
     // Wave 14: the manually-scheduled bit, so the app can warn that save_date_edits
     // writes an auto-scheduled pin (docs/audit-handoff.md section 4.1/4.2).
     row.manually_scheduled = task.manually_scheduled;
