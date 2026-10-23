@@ -67,6 +67,7 @@ class GanttCanvas;
 class Backstage;
 class PreferencesStore;
 class RibbonBar;
+class TaskForm;
 class TimelineStrip;
 class ViewLabel;
 
@@ -242,6 +243,15 @@ class MainWindow final : public QMainWindow {
     void set_timeline_visible(bool visible);
     bool timeline_visible() const noexcept { return timeline_visible_; }
 
+    // --- wave 26: View > Split View > Details (W26-6.3) ---------------------
+    // Docks the Task Form under the sheet/Gantt splitter, in its own vertical
+    // splitter so the pane is resizable; the form follows the selection.  The
+    // file is never written by a toggle.
+    void set_details_visible(bool visible);
+    bool details_visible() const noexcept { return details_visible_; }
+    TaskForm* task_form() const noexcept { return task_form_; }
+    QSplitter* details_splitter() const noexcept { return details_splitter_; }
+
     // --- wave 26: Gantt Chart Format toggles (W26-1.4) ----------------------
     // Project Summary Task: the initial state is the file's stored setting and a
     // toggle rebuilds the displayed rows (never the file).
@@ -320,6 +330,8 @@ class MainWindow final : public QMainWindow {
     void handle_ribbon_command(RibbonCommand command, bool checked);
     void set_percent_complete(int percent);
     void unlink_selected_task();
+    // W26-6.3: pushes the selected task's values into the docked Task Form.
+    void refresh_task_form();
     void open_dialog(const QString& start_dir = QString());
     void show_about();
     void show_shortcuts();
@@ -379,6 +391,12 @@ class MainWindow final : public QMainWindow {
     RibbonBar* ribbon_ = nullptr;
     TimelineStrip* timeline_ = nullptr;
     QSplitter* splitter_ = nullptr;
+    // W26-6.3: the vertical splitter that docks the Task Form below the
+    // sheet/Gantt pair.  Keeping the pair as the splitter's FIRST pane (rather
+    // than nesting a second splitter inside it) keeps the measured 0.459 sheet
+    // fraction and every parity rectangle unchanged while Details is hidden.
+    QSplitter* details_splitter_ = nullptr;
+    TaskForm* task_form_ = nullptr;
     QSlider* zoom_slider_ = nullptr;
     QLabel* status_summary_ = nullptr;
     QLabel* status_message_ = nullptr;
@@ -390,6 +408,9 @@ class MainWindow final : public QMainWindow {
     // Wave 26: View > Split View > Timeline; starts at the file's stored setting
     // (a new project keeps Project's shown default).
     bool timeline_visible_ = true;
+    // W26-6.3: View > Split View > Details; Project's measured default is OFF
+    // (the clean View capture shows the box unchecked).
+    bool details_visible_ = false;
 
     // --- wave 20: the chrome the operator's screenshot found missing ---------
     QStackedWidget* central_stack_ = nullptr;

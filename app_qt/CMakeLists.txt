@@ -65,6 +65,7 @@ add_library(qt_shell STATIC
     ribbon_bar.cpp
     ribbon_glyphs.cpp
     sheet_views.cpp
+    task_form.cpp
     timeline_strip.cpp
     dialogs.cpp
     project_dialogs_qt.cpp
@@ -441,6 +442,22 @@ add_test(NAME qt_theme_gate
                  $<TARGET_FILE:qt_theme_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                  "${QT_REPO_ROOT}/tests/data/reference/w26-theme.measures.json"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# ===========================================================================
+# WAVE 26 (G6, W26-6.3): View > Details docks the Task Form below the Gantt in
+# a vertical, resizable splitter, synchronised with the live sheet selection.
+# The gate clicks the LIVE check box, selects rows with QTest mouse clicks and
+# measures the pane's geometry/height as the splitter is resized.
+# ===========================================================================
+add_executable(qt_split_view_gate_tests tests/split_view_gate_test.cpp)
+target_link_libraries(qt_split_view_gate_tests PRIVATE qt_shell Qt6::Test)
+qt_set_warnings(qt_split_view_gate_tests)
+
+add_test(NAME qt_split_view_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_split_view_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================
