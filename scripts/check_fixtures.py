@@ -53,10 +53,14 @@ DOCUMENTED = {
     "tests/data/wave24-summary-on.mpp":
         "90BF1055E1FF415E453208C04123C2A2F869E38D950237DF116D59D2E53C7C05",
     # Wave 24 (W24-3): the same synthetic project saved with the Timeline strip
-    # hidden in Project (214/Props 0x03400008 = empty).  Its shown partner is
-    # synthetic-base.mpp, whose record is "Time&line".
+    # hidden in Project (214/Props 0x03400008 = empty).  Wave 25 (W25-10/S12)
+    # commits its SHOWN partner from the SAME session (the record is
+    # "Time&line"), so the pair reproduces from the repo; synthetic-base is a
+    # different session and cannot.
     "tests/data/wave24-timeline-hidden.mpp":
         "9BE6D2E9343149F58DE7800F3F840B158AC90C4F0403423BF8167396EC2E61E4",
+    "tests/data/wave24-timeline-shown.mpp":
+        "829AE5E8DBAF6C33FF4043B5F210CCAB78730E18866BE491186BA2B3EE288EC5",
     # Wave 24 (W24-5): a FileNew project with four tasks, then a task inserted
     # above row 1 and saved.  Project appends the new FixedData row but displays
     # it as ID 2, so the stored order (Alpha, Bravo, Charlie, Delta, Inserted
