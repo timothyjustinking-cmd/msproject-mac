@@ -674,8 +674,6 @@ int main(int argc, char** argv) {
     (void)summary_on;
     (void)summary_off;
     (void)order_fixture;
-    (void)outline_fixture;
-    (void)corpus_path;
 
     // The unmodelled backlog is empty (brief: it shrinks to empty or to items
     // deferred under rule 4).
@@ -884,6 +882,153 @@ int main(int argc, char** argv) {
     }
 
     // (W26-1.4 adds the measured-palette check for the gallery's 16 swatches.)
+
+    // %-complete buttons: the ribbon queues app::StructuralKind::set_percent
+    // (app/edit_model.h), the path the save cascade writes, and the selected
+    // task's plan value changes immediately.
+    {
+        QString open_percent_error;
+        gate::check(window.open_file(fixture, &open_percent_error),
+                    "the fixture reopens for the %-complete edit");
+        QApplication::processEvents();
+        const std::size_t rows = window.sheet_row_count();
+        std::uint32_t uid = 0;
+        for (std::size_t row = 0; row < window.sheet()->row_count(); ++row) {
+            const std::uint32_t candidate = window.sheet()->row_uid(row);
+            if (candidate != 0) {
+                uid = candidate;
+                break;
+            }
+        }
+        gate::check(uid != 0, "the fixture has a task row");
+        gate::check(uid == 0 || select_uid(window, uid),
+                    "a task row is selected for the %-complete edit");
+        // NOTE: find_control() rebuilds the ribbon page, so a control pointer
+        // from an earlier call must never be used after another one.
+        QWidget* percent = find_control(ribbon, QStringLiteral("Task"),
+                                        QStringLiteral("Schedule"), QStringLiteral("25%"));
+        gate::check(percent != nullptr, "the 25% button is in the page");
+        if (percent != nullptr && uid != 0) {
+            click_control(percent);
+            QApplication::processEvents();
+            const app::TaskRow* task = plan_task(window, uid);
+            gate::check(task != nullptr && task->percent_complete == 25,
+                        "the 25% button sets the selected task's % Complete");
+            if (task != nullptr && task->percent_complete != 25) {
+                std::fprintf(stderr, "  task uid %u percent_complete %u\n", uid,
+                             static_cast<unsigned>(task->percent_complete));
+            }
+            QWidget* hundred = find_control(ribbon, QStringLiteral("Task"),
+                                            QStringLiteral("Schedule"),
+                                            QStringLiteral("100%"));
+            gate::check(hundred != nullptr, "the 100% button is in the page");
+            if (hundred != nullptr) {
+                click_control(hundred);
+                QApplication::processEvents();
+                const app::TaskRow* done = plan_task(window, uid);
+                gate::check(done != nullptr && done->percent_complete == 100,
+                            "the 100% button overrides the earlier value (last edit wins)");
+            }
+        }
+        gate::check(window.sheet_row_count() == rows,
+                    "the %-complete edit never adds or removes a row");
+
+        // On the corpus file the stored table SHOWS % Complete: the rebuilt
+        // RecordSet must make the read-only display cell follow the edit (the
+        // edit itself never goes through that column).
+        if (!corpus_path.isEmpty()) {
+            QString open_corpus_error;
+            gate::check(window.open_file(corpus_path, &open_corpus_error),
+                        "the corpus file (stored table with % Complete) opens");
+            QApplication::processEvents();
+            std::uint32_t corpus_uid = 0;
+            std::size_t corpus_row = 0;
+            for (std::size_t row = 0; row < window.sheet()->row_count(); ++row) {
+                const std::uint32_t candidate = window.sheet()->row_uid(row);
+                if (candidate != 0) {
+                    corpus_uid = candidate;
+                    corpus_row = row;
+                    break;
+                }
+            }
+            gate::check(corpus_uid != 0 && select_uid(window, corpus_uid),
+                        "a corpus task row is selected");
+            percent = find_control(ribbon, QStringLiteral("Task"),
+                                   QStringLiteral("Schedule"), QStringLiteral("25%"));
+            if (percent != nullptr && corpus_uid != 0) {
+                click_control(percent);
+                QApplication::processEvents();
+                const app::TaskRow* task = plan_task(window, corpus_uid);
+                gate::check(task != nullptr && task->percent_complete == 25,
+                            "the corpus task's plan value is 25 % complete");
+                std::size_t percent_column = core::sheet::kNoIndex;
+                for (std::size_t candidate = 0; candidate < window.sheet()->column_count();
+                     ++candidate) {
+                    if (window.sheet()->column(candidate).field ==
+                        app::task_field_id("PercentComplete")) {
+                        percent_column = candidate;
+                        break;
+                    }
+                }
+                gate::check(percent_column != core::sheet::kNoIndex,
+                            "the corpus stored table shows % Complete");
+                if (percent_column != core::sheet::kNoIndex && task != nullptr) {
+                    const std::string text = app::cell_text(*window.sheet(), corpus_row,
+                                                            percent_column,
+                                                            window.preferences());
+                    gate::check(text == "25%",
+                                "the displayed % Complete cell follows the edit");
+                    if (text != "25%") {
+                        std::fprintf(stderr, "  displayed %% Complete: '%s'\n", text.c_str());
+                    }
+                }
+            }
+        }
+    }
+
+    // Unlink removes the selected task's saved predecessor links through the
+    // shared link-edit path; the display plan's link list shrinks.
+    {
+        QString open_unlink_error;
+        gate::check(window.open_file(outline_fixture, &open_unlink_error),
+                    "the linked fixture opens for the Unlink check");
+        QApplication::processEvents();
+        std::uint32_t successor = 0;
+        for (const app::LinkRow& link : window.plan().links) {
+            if (link.successor_uid != 0) {
+                successor = link.successor_uid;
+                break;
+            }
+        }
+        gate::check(successor != 0, "the fixture carries a saved link");
+        const std::size_t links_before = window.plan().links.size();
+        gate::check(successor == 0 || select_uid(window, successor),
+                    "the linked successor is selected");
+        QWidget* unlink = find_control(ribbon, QStringLiteral("Task"),
+                                       QStringLiteral("Schedule"),
+                                       QStringLiteral("unlink tasks"));
+        gate::check(unlink != nullptr, "the Unlink button is in the page");
+        if (unlink != nullptr && successor != 0) {
+            click_control(unlink);
+            QApplication::processEvents();
+            gate::check(window.plan().links.size() < links_before,
+                        "Unlink removes the selected task's predecessor links");
+            std::fprintf(stderr, "note: links %zu -> %zu after Unlink\n", links_before,
+                         window.plan().links.size());
+        }
+        // The outdent/indent/split-task buttons are disabled with the exact
+        // tooltip: the shared sheet model has no outline/split edit
+        // (core/sheet/sheet.h: "No row insert/delete/move or indent/outdent").
+        for (const char* label : {"outdent", "indent", "split task"}) {
+            QWidget* control = find_control(ribbon, QStringLiteral("Task"),
+                                            QStringLiteral("Schedule"),
+                                            QString::fromUtf8(label));
+            gate::check(control != nullptr && !control->isEnabled() &&
+                            control->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                        "a schedule icon without an engine edit is disabled with the exact tooltip");
+        }
+    }
 
     std::printf("qt_ribbon_inventory: ");
     return gate::finish();

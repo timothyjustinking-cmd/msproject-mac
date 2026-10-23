@@ -260,6 +260,11 @@ void MainWindow::build_central_widget() {
         }
         handle_action(action);
     });
+    // Wave 26: the %-complete buttons and Link/Unlink are ribbon commands with
+    // no menu action.
+    ribbon_->set_command_handler([this](RibbonCommand command, bool checked) {
+        handle_ribbon_command(command, checked);
+    });
     outer->addWidget(ribbon_);
 
     // The new-project information callout the reference shows under the ribbon.
@@ -1703,6 +1708,129 @@ void MainWindow::handle_action(app::MenuAction action) {
     }
     set_message(std::string("'") + app::menu_action_name(action) +
                     "' is not wired in the Qt shell yet",
+                false);
+    update_status();
+}
+
+// ---------------------------------------------------------------------------
+// Wave 26 (G1): the ribbon controls that are not menu actions
+// ---------------------------------------------------------------------------
+
+void MainWindow::handle_ribbon_command(RibbonCommand command, bool /*checked*/) {
+    switch (command) {
+        case RibbonCommand::none:
+            return;
+        case RibbonCommand::percent_0:
+            set_percent_complete(0);
+            return;
+        case RibbonCommand::percent_25:
+            set_percent_complete(25);
+            return;
+        case RibbonCommand::percent_50:
+            set_percent_complete(50);
+            return;
+        case RibbonCommand::percent_75:
+            set_percent_complete(75);
+            return;
+        case RibbonCommand::percent_100:
+            set_percent_complete(100);
+            return;
+        case RibbonCommand::link_tasks:
+            // The shell's direct link command is the Predecessors dialog: the
+            // file's link table is edited through app::StructuralEdits there.
+            show_predecessors();
+            return;
+        case RibbonCommand::unlink_tasks:
+            unlink_selected_task();
+            return;
+        case RibbonCommand::toggle_critical_tasks:
+        case RibbonCommand::toggle_project_summary:
+        case RibbonCommand::toggle_timeline:
+        case RibbonCommand::toggle_details:
+        case RibbonCommand::outdent:
+        case RibbonCommand::indent:
+        case RibbonCommand::split_task:
+            // Not wired yet (W26-1.3/1.4); the controls are disabled until then.
+            return;
+    }
+}
+
+void MainWindow::set_percent_complete(int percent) {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr) {
+        set_message("the % Complete buttons are available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (!selected.has_selection) {
+        set_message("select a task first", false);
+        update_status();
+        return;
+    }
+    if (selected.uid == 0 || doc_.task_by_uid(selected.uid) == nullptr) {
+        set_message("the project summary row is not editable in this port", true);
+        update_status();
+        return;
+    }
+    // Wave 26: PercentComplete rides the structural-edit path (app/edit_model.h
+    // set_percent), the same queue Task Fields and the link edits use.  It is
+    // the only path that can SAVE the value: the sheet's % Complete column is
+    // presentation-only (app/view_model.h task_column_editable), so a cell edit
+    // there would be refused and, if forced, dropped by the save diff.
+    app::StructuralEdit edit;
+    edit.kind = app::StructuralKind::set_percent;
+    edit.uid = selected.uid;
+    edit.percent = static_cast<std::uint16_t>(percent);
+    if (!structural_.push(edit)) {
+        set_message("% complete: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(selected.uid);
+    set_message("task " + std::to_string(percent) +
+                    "% complete; File > Save writes the value",
+                false);
+    update_status();
+}
+
+void MainWindow::unlink_selected_task() {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr) {
+        set_message("unlinking is available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (!selected.has_selection || selected.uid == 0) {
+        set_message("select a task first", false);
+        update_status();
+        return;
+    }
+    const std::vector<app::PredecessorListItem> links =
+        app::predecessors_of(doc_.plan(), structural_, selected.uid);
+    std::size_t removed = 0;
+    std::string error;
+    for (const app::PredecessorListItem& item : links) {
+        if (item.link_uid == 0) {
+            continue;  // a pending add: undo removes it, a delete cannot
+        }
+        app::StructuralEdit edit;
+        if (!app::make_link_delete(item, selected.uid, edit, error)) {
+            continue;
+        }
+        if (structural_.push(edit)) {
+            ++removed;
+        }
+    }
+    if (removed == 0) {
+        set_message("the selected task has no saved predecessor link to unlink", false);
+        update_status();
+        return;
+    }
+    after_structural_change(selected.uid);
+    set_message("removed " + std::to_string(removed) +
+                    " predecessor link(s); File > Save writes the change",
                 false);
     update_status();
 }
