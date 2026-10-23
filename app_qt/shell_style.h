@@ -20,10 +20,10 @@
 // are NOT measured; they stay for the next capture (docs/parity.md section 2.3).
 //
 // TYPOGRAPHY.  The reference is Calibri 11 pt.  Carlito is the metric-compatible
-// open substitute and is preferred when installed; it is NOT installed on this
-// machine and downloading is forbidden, so the shell falls back to a fixed
-// family list (Calibri first: it IS installed on Windows) and reports which
-// family it got.  See kFontFamilies and ui_font_family().
+// open substitute and is BUNDLED (operator decision 13): app_qt/fonts/ carries
+// the four OFL faces, compiled into every executable, so kFontFamilies' first
+// entry is always available.  The fallbacks below it remain for safety.  See
+// kFontFamilies, configure_application() and ui_font_family().
 #pragma once
 
 #include <QColor>

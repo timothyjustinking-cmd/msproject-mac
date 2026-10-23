@@ -161,10 +161,19 @@ void configure_application() {
     // setStyle installs the style's own standard palette.
     apply_theme(Theme::light);
 
-    // The fixed family list (shell_style.h).  Carlito is preferred when it is
-    // installed; otherwise Calibri (the reference's own font) and then the
-    // open fallbacks.  If none is present the platform family is kept, and the
-    // handoff reports that.
+    // Operator decision 13: Carlito ships WITH the shell, it is not assumed to
+    // be installed.  The four OFL faces are compiled in as Qt resources
+    // (app_qt/CMakeLists.txt), so a bare offscreen runner -- which since Qt 6
+    // has no fonts of its own -- measures the same text metrics as a desktop.
+    for (const char* face :
+         {":/fonts/Carlito-Regular.ttf", ":/fonts/Carlito-Bold.ttf",
+          ":/fonts/Carlito-Italic.ttf", ":/fonts/Carlito-BoldItalic.ttf"}) {
+        QFontDatabase::addApplicationFont(QString::fromLatin1(face));
+    }
+
+    // The fixed family list (shell_style.h).  Carlito is now always first (the
+    // bundled faces above); Calibri and the open families remain as fallbacks
+    // for a build that somehow did not embed the resource.
     QString family;
     const QStringList available = QFontDatabase::families();
     for (int index = 0; index < kFontFamilyCount; ++index) {

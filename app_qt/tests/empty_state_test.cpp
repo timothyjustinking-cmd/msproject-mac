@@ -18,6 +18,7 @@
 #include <QColor>
 #include <QComboBox>
 #include <QDir>
+#include <QFontDatabase>
 #include <QFontMetrics>
 #include <QHeaderView>
 #include <QImage>
@@ -316,9 +317,16 @@ void check_ribbon(msqt::MainWindow& window, int width, bool expect_all_groups) {
         gate::check(ribbon->height() == msqt::kRibbonHeight + 1,
                     "the overflow chevron does not change the ribbon height");
     }
-    std::fprintf(stderr, "note: ribbon at %d px: groups %d/%d, buttons %d/%d\n", width,
-                 visible_groups, static_cast<int>(ribbon->group_titles().size()),
-                 visible_buttons, ribbon->button_count());
+    int needed = 0;
+    for (QLabel* caption : captions) {
+        if (QWidget* box = caption != nullptr ? caption->parentWidget() : nullptr) {
+            needed += box->sizeHint().width() + 1;
+        }
+    }
+    std::fprintf(stderr,
+                 "note: ribbon at %d px: groups %d/%d, buttons %d/%d (needs %d, has %d)\n",
+                 width, visible_groups, static_cast<int>(ribbon->group_titles().size()),
+                 visible_buttons, ribbon->button_count(), needed, ribbon->width() - 16);
 }
 
 void check_backstage(msqt::MainWindow& window) {
@@ -387,6 +395,16 @@ void check_themes(msqt::MainWindow& window) {
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     msqt::configure_application();
+
+    // Operator decision 13: Carlito is bundled, not assumed installed.  Both
+    // the registered family and the resolved UI family prove the resource made
+    // it into this executable (a static library would have let the linker drop
+    // it, which is why app_qt/CMakeLists.txt adds it per executable).
+    gate::check(QFontDatabase::families().contains(QStringLiteral("Carlito"),
+                                                   Qt::CaseInsensitive),
+                "the bundled Carlito family is registered");
+    gate::check(msqt::ui_font_is_carlito(),
+                "the bundled Carlito is the resolved UI font");
 
     const QString out_dir = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QString();
     if (!out_dir.isEmpty()) {

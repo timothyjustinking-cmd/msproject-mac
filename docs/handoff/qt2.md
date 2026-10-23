@@ -234,3 +234,34 @@ tests were missing includes (`shell_style.h`, `filter_model.h`).  All fixed.
   By, Assign Resources, Leveling Options, Page Setup, and the Report dialogs
   are not built.  That is the next cut, and `docs/ui-command-backlog.md` does
   not yet list them.
+
+
+## Bundled Carlito (decision 13) — added after the first re-dispatch
+
+The re-dispatched run compiled on all three platforms but the same *two* gates
+failed there (`qt_empty_state`, `qt_dialog_gate`), always at the ribbon: 4 of 8
+groups visible at 1920 instead of 8.  The cause was font availability, not
+layout: Qt 6 ships no fonts and the offscreen runners have an empty font
+database, so every label measured differently.  That is exactly the risk
+decision 13 exists to remove.
+
+Carlito is now **bundled**, not assumed installed:
+
+* `app_qt/fonts/` carries Carlito Regular/Bold/Italic/BoldItalic (SIL OFL 1.1,
+  upstream `googlefonts/carlito`), plus `OFL.txt`, `AUTHORS.txt` and a README
+  with the full SHA-256 of every file.
+* `app_qt/CMakeLists.txt` adds the four faces as Qt resources **to each
+  executable** (a resource in a static library can be dropped by the linker),
+  with `PREFIX "/fonts"`.
+* `configure_application()` calls `QFontDatabase::addApplicationFont()` for the
+  four `:/fonts/Carlito-*.ttf` faces before resolving the family, so the
+  resolved family is Carlito on every platform.  `qt_empty_state` now asserts
+  both the registered family and `ui_font_is_carlito()`.
+* With Carlito the eight Task-tab groups need 1908 px at 1920 and only 1904
+  were available; the group box's right margin went 8 -> 4 px (the gate prints
+  "needs / has" so a future font change is visible rather than mysterious).
+  Slack is now 28 px.  No measured element moved.
+
+Measured after the change (same local Qt): **ctest 11/11** and parity
+**9/9 PASS** unchanged (splitter 0.45924, columns -1..+1).  `shell_style.h`'s
+"Carlito is NOT installed" note is corrected: it is now always first.

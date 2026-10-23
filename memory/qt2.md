@@ -110,3 +110,16 @@ python app_qt/tools/command_backlog.py
   2x2 over Start+Finish.
 * Open: clipboard display-order range (model-space selection), dark custom
   surfaces (operator owes the capture), decision-14 dialog inventory.
+
+
+## Bundled Carlito (after re-dispatch)
+
+* CI compilation succeeded on all three; `qt_empty_state` + `qt_dialog_gate`
+  failed only because offscreen runners have NO fonts (ribbon 4/8 groups).
+* `app_qt/fonts/` now carries Carlito Regular/Bold/Italic/BoldItalic + OFL +
+  AUTHORS + README (full hashes).  CMake adds them as Qt resources PER
+  EXECUTABLE (static-lib resources can be dropped); configure_application()
+  registers them before resolving the family.
+* Ribbon needed 1908 px at 1920 with Carlito, had 1904: group right margin
+  8 -> 4 (28 px slack).  The gate prints needs/has.
+* Local: **11/11 ctest**, **9/9 parity** with the bundled font.

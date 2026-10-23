@@ -238,3 +238,31 @@ add_test(NAME qt_clipboard
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_clipboard_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
+
+# ===========================================================================
+# WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
+# four OFL faces live in app_qt/fonts/ and are compiled into each executable as
+# Qt resources, so the shell never depends on the host having the font and the
+# offscreen CI runners (Qt 6 ships no fonts) measure the same text metrics as a
+# desktop.  Resources are added per executable because a resource in a static
+# library can be dropped by the linker.
+# ===========================================================================
+set(QT_CARLITO_FONT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/fonts")
+set(QT_CARLITO_FONTS
+    "${QT_CARLITO_FONT_DIR}/Carlito-Regular.ttf"
+    "${QT_CARLITO_FONT_DIR}/Carlito-Bold.ttf"
+    "${QT_CARLITO_FONT_DIR}/Carlito-Italic.ttf"
+    "${QT_CARLITO_FONT_DIR}/Carlito-BoldItalic.ttf")
+function(qt_bundle_carlito target)
+    qt_add_resources(${target} "carlito_${target}"
+        PREFIX "/fonts"
+        BASE "${QT_CARLITO_FONT_DIR}"
+        FILES ${QT_CARLITO_FONTS})
+endfunction()
+qt_bundle_carlito(msproject_qt)
+foreach(carlito_target
+        qt_shell_tests qt_parity_tests qt_save_reopen_tests
+        qt_empty_state_tests qt_chrome_gate_tests qt_view_gate_tests
+        qt_dialog_gate_tests qt_clipboard_tests)
+    qt_bundle_carlito(${carlito_target})
+endforeach()

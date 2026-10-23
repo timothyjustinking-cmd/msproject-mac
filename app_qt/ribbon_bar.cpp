@@ -400,7 +400,11 @@ void RibbonBar::build_page(int tab_index) {
         auto* box = new QWidget(page_);
         box->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
         auto* box_layout = new QVBoxLayout(box);
-        box_layout->setContentsMargins(4, 0, 8, 0);
+        // 4 px on both sides: with the bundled Carlito the eight Task-tab
+        // groups need 1908 px at 1920 (1904 available) with an 8 px right
+        // margin; the product's own gutters are tight, and 4 px leaves ~28 px
+        // of slack without moving any measured element.
+        box_layout->setContentsMargins(4, 0, 4, 0);
         box_layout->setSpacing(1);
 
         auto* buttons = new QWidget(box);
