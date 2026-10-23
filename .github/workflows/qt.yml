@@ -179,9 +179,22 @@ jobs:
             exit 1
           fi
 
+      # Linux was the slow job: Unix Makefiles with no -j, about 18 min
+      # serial (wave-20 open item 11).  --parallel 2 is the honest budget
+      # for the job's 2-core sizing -- it is compile/link bound, and an
+      # unbounded -j only oversubscribes and adds contention.  Windows
+      # (Ninja) keeps the exact command it had: Ninja already starts as
+      # many compilers as the machine allows.  macOS is also Make and
+      # could take the same flag later, but this change is scoped to the
+      # one job it was asked for.
       - name: Build
         shell: bash
-        run: cmake --build build-qt --config Release
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            cmake --build build-qt --config Release --parallel 2
+          else
+            cmake --build build-qt --config Release
+          fi
 
       # The tests set QT_QPA_PLATFORM=offscreen and QT_SCALE_FACTOR=1 themselves
       # (${CMAKE_COMMAND} -E env in app_qt/CMakeLists.txt).  Deliberately not
