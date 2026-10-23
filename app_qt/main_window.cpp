@@ -489,6 +489,11 @@ void MainWindow::build_central_widget() {
         } else if (command == QStringLiteral("export")) {
             show_backstage(false);
             export_pdf(app::ReportKind::gantt);
+        } else if (command == QStringLiteral("save_as_pdf")) {
+            // File > Export > Create PDF/XPS (Q17): the same shared renderer as
+            // Export PDF, restored to its Project home (W23-10).
+            show_backstage(false);
+            save_as_pdf();
         } else if (command == QStringLiteral("close")) {
             close();
         }

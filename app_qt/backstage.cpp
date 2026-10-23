@@ -357,6 +357,22 @@ QWidget* Backstage::build_page(Page page, const QString& title, const QString& b
             }
         });
         layout->addWidget(button);
+        if (page == Page::export_file) {
+            // Wave 23 (W23-10 / A-5, Q17): Save as PDF's Project home is
+            // File > Export > Create PDF/XPS.  It had been ribbon-only and then
+            // removed with the ribbon, leaving it mouse-unreachable.
+            auto* create_pdf = new QPushButton(QStringLiteral("Create PDF/XPS..."), widget);
+            create_pdf->setObjectName(QStringLiteral("backstageAction"));
+            create_pdf->setFixedHeight(30);
+            create_pdf->setMaximumWidth(260);
+            create_pdf->setStyleSheet(button->styleSheet());
+            connect(create_pdf, &QPushButton::clicked, this, [this](bool) {
+                if (command_handler_) {
+                    command_handler_(QStringLiteral("save_as_pdf"));
+                }
+            });
+            layout->addWidget(create_pdf);
+        }
         if (page == Page::share) {
             // Honest stub: the page works (it exports a local copy); the cloud
             // half is disabled with an inline note rather than faked.

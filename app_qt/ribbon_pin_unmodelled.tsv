@@ -1,0 +1,41 @@
+# Wave 23 (W23-10): controls Project's clean strips show that the port does NOT
+# model yet -- icon-only buttons, combos/fields, checkboxes, the Gantt Chart
+# Style gallery and its dialog launcher.  Typed from
+# docs/handoff/audit-w22/A2-fable-readback.md; W23-15 (B-6) turns these into
+# real control kinds.  Until then they are the explicit backlog, never silently
+# dropped from the inventory.
+#
+# tab	group	kind	label
+Task	Font	icon	highlight colour
+Task	Font	icon	font colour
+Task	Font	dialog_launcher	Font
+Task	Schedule	icon	0%
+Task	Schedule	icon	25%
+Task	Schedule	icon	50%
+Task	Schedule	icon	75%
+Task	Schedule	icon	100%
+Task	Schedule	icon	outdent
+Task	Schedule	icon	indent
+Task	Schedule	icon	link tasks
+Task	Schedule	icon	unlink tasks
+Task	Schedule	icon	split task
+View	Data	combo	Highlight: [No Highlight]
+View	Data	combo	Filter: [No Filter]
+View	Data	combo	Group by: [No Group]
+View	Zoom	combo	Timescale: [Days]
+View	Split View	checkbox	Timeline (checked)
+View	Split View	combo	Timeline
+View	Split View	checkbox	Details (unchecked)
+View	Split View	combo	Details (disabled)
+Gantt Chart Format	Columns	icon	align left
+Gantt Chart Format	Columns	icon	align centre
+Gantt Chart Format	Columns	icon	align right
+Gantt Chart Format	Columns	icon	wrap text
+Gantt Chart Format	Gantt Chart Style	gallery	16 colour swatches + expander
+Gantt Chart Format	Gantt Chart Style	dialog_launcher	Gantt Chart Style
+Gantt Chart Format	Show/Hide	checkbox	Outline Number
+Gantt Chart Format	Show/Hide	checkbox	Project Summary Task
+Gantt Chart Format	Show/Hide	checkbox	Summary Tasks (checked)
+Gantt Chart Format	Bar Styles	checkbox	Critical Tasks
+Gantt Chart Format	Bar Styles	checkbox	Slack
+Gantt Chart Format	Bar Styles	checkbox	Late Tasks
