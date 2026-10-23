@@ -10,8 +10,8 @@ session must read first._
   the record is **`docs/handoff/wave24-complete.md`** (the gate).  The branch
   was cut from local `wave23` = `d236f91` and already carried the brief and two
   tools commits; this session added `ca9e7d7` (fixtures/oracles), `ff22c7b`
-  (fixes), `cc4ce8a` (CI/harness), `d5d8126` (close docs) and this record's
-  commit.  **Nothing is pushed.**
+  (fixes), `cc4ce8a` (CI/harness), `d5d8126` (close docs) and `39d11b4`
+  (independent-review fixes + the close record).  **Nothing is pushed.**
 * `main` = **488481f** (wave-22 docs close).  `wave23` is **not merged**;
   `origin/wave23` = `63cd087`.  Remote `wave24` does not exist.
 * **Publication hold still in force:** client data is already on the public

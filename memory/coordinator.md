@@ -13,7 +13,7 @@ and brief section 0.  The local `wave23-with-screenshot` / `wave23-pre-push`
 branches are unpushed backups; **never push them**.  Tim decides whether the
 public repo becomes private or its history is rewritten.
 
-## Numbers (wave 24 on `wave24`, tip `cc4ce8a`)
+## Numbers (wave 24 on `wave24`, tip `39d11b4`)
 
 * core ctest **51/51**; M2 **332/332**; plan_recalc **266** no-corpus / **512**
   with corpus (golden read-only, exact `1` opt-in); app **15/15**; app_qt

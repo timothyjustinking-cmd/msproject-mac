@@ -9,8 +9,7 @@ force.**
 
 **Branch state.** `wave24` was cut from local `wave23` = `d236f91`; before this
 session it carried the brief and two tools commits (`552aaf4`, `394d69a`,
-`763bbc5`).  This session added four commits on top (`ca9e7d7`, `ff22c7b`,
-`cc4ce8a`, `d5d8126`), plus this record's commit:
+`763bbc5`).  This session added five commits on top:
 
 | commit | what |
 |---|---|
@@ -18,6 +17,7 @@ session it carried the brief and two tools commits (`552aaf4`, `394d69a`,
 | `ff22c7b` | the fixes: uid routing, file view settings, flags, stock style fallback, privacy scrub |
 | `cc4ce8a` | CI coverage, suite pin by name, workflow_run, colour gate, pin kind |
 | `d5d8126` | wave-24 close docs, wave-23 errata, engine docstring |
+| `39d11b4` | the independent review's fixes (short-name scrub, MPP12 flags, gate holes) and this record |
 
 `origin/wave24` does not exist (no push).  `wave23` is still unmerged; this wave
 does not touch it or its two local backup branches.
@@ -132,7 +132,7 @@ scratch, core with `CORE_WARNINGS_AS_ERRORS=ON`): **51/51**, **266 checks**,
 | parity vs Project's recaptured reference | **10 comparable, 0 failing** (task_bar found and equal) |
 | pixel score (decision 12, report only) | **16.08 % total** — title 34.94, ribbon 24.63, timeline 48.21, sheet 10.16, chart 12.53, status 20.40 |
 | `PLAN_RECALC_UPDATE_GOLDEN=0` | treated as compare (golden unchanged) |
-| client-name scan at the tip | **0 file(s), 0 hit(s)**; 0 commit messages quote names |
+| client-name scan at the tip | **0 file(s), 0 hit(s)** on 156 names (including short multi-word resource names) and 0 commit messages; the scan rule was widened after the review found a 9-character name |
 
 The parity render and the reference capture are local (PNGs git-ignored); only
 the recaptured numbers JSON is committed.
