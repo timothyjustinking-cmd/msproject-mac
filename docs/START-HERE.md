@@ -6,6 +6,13 @@ session must read first._
 
 ## The 30-second state
 
+* **Wave 26 is running on branch `wave26`** (cut from local `wave25` 3b4da5f)
+  from `docs/handoff/wave26-brief.md`: **parity first** (Tim, 2026-10-24) - only
+  Critical/High findings go ahead of it.  It runs in groups G0..G6 + CLOSE, a fresh
+  DeepSeek session per group, each ending on its own marker line in
+  `wave26-complete.md`.  Wave 25 was verified (gates green; one High: macOS print
+  drops the last task when the project row is shown, now G0) - see
+  `docs/handoff/wave25-verification/`.  The publication hold still applies.
 * **Wave 25 is closed on branch `wave25`** (cut from local `wave24` =
   `2561a51`) from `docs/handoff/wave25-brief.md`; the record is
   **`docs/handoff/wave25-complete.md`** (the gate).  It fixed the verifier's
