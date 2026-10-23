@@ -31,7 +31,9 @@ the wave-24 backup branches are untouched.
 
 The independent review (§11) added six follow-up commits, one finding id each:
 `a4ac887` (W25-1), `d61af79` (W25-2), `a35a01f` (W25-3), `b04b22e` (W25-6),
-`85e03d3` (W25-8), `4c28039` (W25-11); this docs commit is W25-4.
+`85e03d3` (W25-8), `4c28039` (W25-11).  A SECOND independent pass then found
+eight live issues (no Critical/High); its fixes are one response commit,
+`336ec0c` (W25-REV2), because they overlap files.  This docs commit is W25-4.
 
 Every commit carries one finding id (W25-9/W25-10 and W25-2 use a fixture-only
 commit followed by the code/test commit, as the brief requires).  Commit order
@@ -169,6 +171,11 @@ summary-line geometry), not a palette error.
   key is not committed, and re-recording needs the full export (the readable
   copy is not on this machine).  No new client-derived hash was added in wave
   25; this is wave-24 carrier state and belongs with Tim's publication decision.
+* **Fixed by the second review (W25-REV2):** a dead row's orphaned client name
+  was a plaintext string literal in `test_project_a`.  The name scanner only
+  sees LIVE rows (it dumps tasks/resources/titles), so it could not catch an
+  orphan block; this was the one real name literal left in the tree, and it is
+  removed.  The scanner's live-row blind spot is noted here for the next scrub.
 * **Residual 2 (Tim only):** the plaintext names remain in public git history
   (waves 23-24 commits).  The tree scrub cannot remove history; the publication
   hold and the rewrite/visibility decision remain Tim's.
@@ -220,8 +227,9 @@ auto-scheduled colour-only parity gate added in W25-2.
 Fresh trees, configured from scratch and built serially on 2026-10-24:
 `build/w25-fresh` (core, `-DCORE_WARNINGS_AS_ERRORS=ON`), `build/w25-fresh-app`,
 `build/w25-fresh-qt` (no Qt PATH workaround).  The numbers below are the
-post-review re-run on the final code commit **`4c28039`** (they were first run
-on `b6df460`; the review fixes changed no number).  Full log:
+post-review re-run on the final code commit **`336ec0c`** (they were first run
+on `b6df460`; the first review fixes changed no number; the second review's
+privacy/export fixes moved the reader counts to 1100/420).  Full log:
 **`build/w25/final-gates-core.log`**.  The per-commit logs are
 `build/w25/gates-<parent>-<item>.log` and are named in each commit message; the
 six review-fix logs are `build/w25/gates-<parent>-<item>-review.log`.
@@ -237,7 +245,7 @@ failing set `constraint-mso` reached -- appended to
 | `plan_recalc_tests` with corpus | **512 checks, 0 failures** |
 | `plan_recalc_tests` `MPP_NO_CORPUS=1` | **266 checks, 0 failures** |
 | M2 `recalc --compare` | **332/332** (268/268 leaves, 64/64 summaries) |
-| reader tests | **1097** with corpus, **417** without |
+| reader tests | **1100** with corpus, **420** without |
 | app ctest | **15/15** (`app_layout` 273 checks) |
 | app_qt ctest | **18/18**; `qt_stored_table_corpus` is 0 failures + **2 named expected failures** |
 | `scripts/check_fixtures.py` | **OK** (23 documented hashes, 21 tracked `.mpp`) and oracle provenance OK (8) |
@@ -307,3 +315,26 @@ W25-3 8-hex and name scans over every tree; the writer-oracle diff (only the
 Name/run_at/outline leaves changed); the W25-5 expected-failure logic; the W25-6
 body comparison; the W25-7 classifier; W25-9's flag table; W25-10's pair
 comparison; and the counter/field-name accuracy of the S13 split.
+
+### 11.1 Second independent pass (after the first review's fixes)
+
+A second read-only reviewer covered the code diff (app, app_qt, core, tools,
+tests, scripts), the final records and the logs.  It found **no Critical or
+High** issue and classified the first review's fixes as correct; eight live
+findings remained, fixed or listed in `336ec0c` (W25-REV2) except where noted.
+
+| # | sev | finding | disposition |
+|---|---|---|---|
+| 21 | Medium | an active filter that matches nothing exported every task: the subtitle said "0 of N" but the body printed all rows (`ExportRequest` could not express an empty filtered list) | **FIXED** in `336ec0c`: `rows_are_filtered` + `app::export_rows`; both shells set it; export_tests pin all/zero/one |
+| 22 | Medium | Cut and Paste bypassed the uid-0 guard (`SheetModel::cut/paste` write the RecordSet directly), so a project-row edit would show but never save | **FIXED** in `336ec0c`: Qt Cut skips uid-0 cells; Qt and macOS Paste refuse when the anchor row is uid 0 |
+| 23 | Low | manual-vs-critical precedence put the highlight colour before the manual colour, contradicting the measured "a manual bar does not change with highlighting ON" (latent: no shell enables the toggle) | **FIXED** in `336ec0c` (manual checked first for bars and links) |
+| 24 | Low | the Timeline pair compared only sizes for links/resources/assignments and a subset of task fields | **FIXED** in `336ec0c`: every exposed task field plus every link/resource/assignment field is compared |
+| 25 | Low | the golden TSV still carries unsalted name hashes (the §5 residual), and the dead row's orphaned client name was still a plaintext literal; the name scanner only sees live rows | **Orphan literal FIXED** in `336ec0c` (assert non-empty, not quoted); the golden residual is **LISTED** in §5 |
+| 26 | Low | a staged-but-uncommitted oracle with a fabricated `recording_commit` passed the provenance check (empty history made the prefix test true) | **FIXED** in `336ec0c` (no history -> failure) |
+| 27 | Low | only the +33 group (Flag11..17) has per-bit controls; the +24 and +34 groups still rely on the all-20 aggregate, so a within-group mask permutation can pass | **LISTED, DEFERRED**: the brief's W25-9 asks for Flag11..17 specifically; a complete per-bit sweep needs eight more fixtures and goes with the next flag stream |
+| 28 | Low | `parity_report --only` kept duplicate keys, making the minimum comparable unreachable | **FIXED** in `336ec0c` (deduplicated, order kept) |
+
+The second reviewer also confirmed the first review's fixed items live
+(pointer pin, smoke count, macOS subtitle body, trim relation, `--follow`,
+appended `LinkRoute::manual`, dedicated chrome colours) and re-ran the reader
+and layout tests (1100 and 273 checks) plus check_fixtures (exit 0).

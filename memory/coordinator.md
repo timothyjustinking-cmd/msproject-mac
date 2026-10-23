@@ -20,15 +20,17 @@ Wave 25 on `wave25`: cut from `2561a51`, brief in `2fd23f5`, then `b73fd26`
 `c21dd0e`+`3dddcd0` (W25-9), `65a270f`+`97433ce` (W25-10), `b6df460` (W25-11),
 then the independent review's six fixes: `a4ac887` (W25-1), `d61af79` (W25-2),
 `a35a01f` (W25-3), `b04b22e` (W25-6), `85e03d3` (W25-8), `4c28039` (W25-11),
-plus the close record's docs commit.  Review: 20 findings, all fixed or listed
-in wave25-complete §11.
+then `336ec0c` (W25-REV2, the second review's eight live findings, one response
+commit), plus the close record's docs commits.  Reviews: 20 + 8 findings, all
+fixed or listed in wave25-complete §11 and §11.1.
 
 ## Numbers (wave 25 close, fresh trees: build/w25-fresh, -fresh-app, -fresh-qt)
 
 * core ctest **51/51**; M2 **332/332**; plan_recalc **512** with corpus / **266**
   without; app **15/15**; app_qt **18/18**; reader **1097** with corpus / **417**
   without; fixtures OK (23 documented hashes, 21 tracked `.mpp`); oracle
-  provenance OK (8).
+  provenance OK (8).  (Reader 1100/420 after the second review's pair and
+  privacy checks.)
 * Engine **7/8** (`constraint-mso` deliberately left failing; the lane pins the
   failing SET by name; `save_plan` is test-only).
 * parity: wave23-outline **10/10**; the wave25-auto colour-only reference
