@@ -152,3 +152,31 @@ bar palette/critical treatment, the Indicators badges, the timeline strip's
 real content, and the status bar in a loaded file.  Project wins every
 disagreement; the default-theme reference has no bars, so these cannot be
 settled from `corpus/bench/msproject-gantt.png`.
+
+
+### Operator decisions from the Project comparison (2026-10-23)
+
+The operator then supplied MS Project 2021's own window for the SAME file.  The
+comparison settles these, and they are queued to Q6 in this order after the
+stored-table deliverable:
+
+1. **Hide the classic menu bar.**  Project 2021 has no File/Edit/View/Insert/Help
+   bar; the QActions stay alive for shortcuts, the bar is hidden, the QAT/ribbon
+   move up.
+2. **Palette from Project's rendering:** critical bars RED (even at 100 %
+   complete -- today the completion fill paints the whole body blue and hides
+   critical), summary and milestone bars near-BLACK, normal bars BLUE, selected
+   row/cell GREEN.  Exact RGBs are provisional until a clean 1920x1032 capture;
+   the green may be sampled from the reference capture.
+3. **Double-click a task opens Task Information**, not the Task Name edit.  F2
+   and typing remain the edit triggers.  The dialog is the six-tab one Project
+   shows (General, Predecessors, Resources, Advanced, Notes, Custom Fields);
+   General is functional over `app/`, the rest laid out per decision 15.
+4. **Backstage needs a top-left back arrow** (Project has one); Escape also
+   returns.
+
+Project's own table for this file is **Task Name, Duration, Start, Finish,
+% Complete, Pre, Succ, Summary, Yes** -- not Entry.  That is the decision-7
+acceptance target for this file.  Project's status bar reads "Ready" and
+"New Tasks : Auto Scheduled"; our build says "Manually Scheduled", so the
+project's new-task default may not be decoded yet (check, do not fake).
