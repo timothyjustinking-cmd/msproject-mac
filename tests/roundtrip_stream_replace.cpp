@@ -260,7 +260,7 @@ int main() {
             std::string const old_name = mppwrite::read_task_name(doc, 2);
             t.check(old_name == "Task B",
                     "B: uid 2 name is '" + old_name + "', expected 'Task B'");
-            std::string const new_name = "client-text-025 (rev B)";
+            std::string const new_name = "client-string-25d8f08b (rev B)";
             std::uint64_t const var2_before = doc.stream_size(kVar2);
             std::uint64_t const var_meta_before = doc.stream_size(kVarMeta);
 

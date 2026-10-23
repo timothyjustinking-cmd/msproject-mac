@@ -606,14 +606,30 @@ constexpr std::uint8_t kF2MetaFlagManual = 0x80;
  * only the fallback. */
 constexpr std::size_t kFixedMetaMilestoneByte = 10;
 constexpr std::uint8_t kFixedMetaFlagMilestone = 0x02;
-/* FixedMeta entry byte +24 bit 0x02 is Task Flag1 (W48, measured by
- * `oracle_w10.py flagdiff`): corpus/probe/w10-flag-off.mpp -> w10-flag-on.mpp
- * changes exactly that bit (0x00 -> 0x02) in row 1's entry, and the
- * w10-fieldvalues.mpp entry holds it for the same row whose Flag1 COM reports
- * "Yes".  Flags are NOT VarMeta blocks; Flag2..Flag20's bit positions are
- * unmeasured, so only Flag1 is decoded.  See core/mpp/field_value.h. */
-constexpr std::size_t kFixedMetaCustomFlagByte = 24;
-constexpr std::uint8_t kFixedMetaFlag1Bit = 0x02;
+/* FixedMeta entry bytes +24/+25 and +33/+34 carry Task Flag1..Flag20 as one-bit
+ * fields.  Wave 24 (W24-15) measured EVERY bit with a controlled Project save:
+ * a copy of wave23-outline.mpp with Task.FlagN = True on ID 3 (one flag at a
+ * time, control all false) changes exactly one FixedMeta byte:
+ *   Flag1..7  = byte +24, bits 0x02 0x04 0x08 0x10 0x20 0x40 0x80
+ *   Flag8..10 = byte +25, bits 0x01 0x02 0x04
+ *   Flag11..17= byte +33, bits 0x02 0x04 0x08 0x10 0x20 0x40 0x80
+ *   Flag18..20= byte +34, bits 0x01 0x02 0x04
+ * (Flag1 = +24/0x02 was first measured in W48; Flag10 = +25/0x04 in wave 23.
+ * The 11-17 group starts at +33, not +26: the two seven-bit groups are not
+ * contiguous.)  The reader names the field Flag10 (0x0b400051), not
+ * "summary_flag": Project's SUMMARY column is just Flag10's title. */
+constexpr std::size_t kFixedMetaFlagGroupBytes[4] = {24, 25, 33, 34};
+struct FlagBitPosition {
+    std::size_t group;  // index into kFixedMetaFlagGroupBytes
+    std::uint8_t mask;
+};
+constexpr FlagBitPosition kFixedMetaFlagBits[20] = {
+    {0, 0x02}, {0, 0x04}, {0, 0x08}, {0, 0x10}, {0, 0x20}, {0, 0x40}, {0, 0x80},
+    {1, 0x01}, {1, 0x02}, {1, 0x04},
+    {2, 0x02}, {2, 0x04}, {2, 0x08}, {2, 0x10}, {2, 0x20}, {2, 0x40}, {2, 0x80},
+    {3, 0x01}, {3, 0x02}, {3, 0x04},
+};
+constexpr std::size_t kFlagCountMpp14 = 20;
 /* FixedMeta entry byte +0 is the row's state: 0x00 for a live row, 0x02 for a
  * tombstone.  MEASURED 2026-10-22 (W45): corpus/probe/w10-adddel-back.mpp is
  * Project's own file after Tasks.Add and then a delete; the deleted row keeps
@@ -727,6 +743,15 @@ constexpr std::uint32_t kProjectPropsSubprojectCount = 0x02400084u;
  * says <NewTasksAreManual>0 store 0 and those that say 1 store 1.  See
  * ProjectRow in reader.h for the full evidence. */
 constexpr std::uint32_t kProjectPropsNewTasksManual = 0x024013C8u;
+/* Project VIEW props (214/212/Props) decoded in wave 24.  Both are measured
+ * record ids, not names from the decompiled table:
+ *   0x03400009  int16   project-summary row shown (1) / hidden (0)
+ *   0x03400008  string  top pane view name: "Time&line" when the Timeline strip
+ *                       is shown, empty when it is hidden.
+ * The evidence (fresh Project 2021 save pairs, every CFB stream diffed) is in
+ * ProjectRow in reader.h. */
+constexpr std::uint32_t kProjectPropsSummaryRow = 0x03400009u;
+constexpr std::uint32_t kProjectPropsTimelinePane = 0x03400008u;
 
 /* Task.Name: COM's PjFieldTaskName, the same id in analysis/field_id_map.tsv.
  * Evidence in the file header comment above. */
@@ -1001,7 +1026,7 @@ std::vector<std::uint32_t> offsets_for(const VarTable& table, std::uint32_t uid,
 
 /*
  * MS Project stores names with whatever trailing spaces the user typed (PROJECT_A
- * row 1 is "Site establishment " in the file) but its COM surface returns the
+ * row 1 is "client-string-10dbe851 " in the file) but its COM surface returns the
  * trimmed string, and tests/data/project_a_golden.tsv was exported that way.  The
  * reader trims ASCII spaces so its output is the name a user sees; without
  * this, the golden comparison disagrees on that one task and only that one.
@@ -1057,16 +1082,16 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
                                       std::vector<std::uint32_t>* entry_offsets = nullptr,
                                       std::vector<std::uint8_t>* row_flag_byte = nullptr,
                                       std::vector<std::int16_t>* row_state = nullptr,
-                                      std::vector<std::uint8_t>* row_custom_flag_byte =
-                                          nullptr,
+                                      std::vector<std::array<std::uint8_t, 4>>*
+                                          row_flag_group = nullptr,
                                       std::vector<std::uint8_t>* row_flag10_byte = nullptr,
                                       std::vector<std::uint8_t>* row_type_flag = nullptr) {
     std::vector<bool> covered(rows, false);
     if (row_flag_byte != nullptr) {
         row_flag_byte->assign(rows, 0);
     }
-    if (row_custom_flag_byte != nullptr) {
-        row_custom_flag_byte->assign(rows, 0);
+    if (row_flag_group != nullptr) {
+        row_flag_group->assign(rows, std::array<std::uint8_t, 4>{0, 0, 0, 0});
     }
     if (row_flag10_byte != nullptr) {
         row_flag10_byte->assign(rows, 0);
@@ -1176,9 +1201,13 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
         if (row_type_flag != nullptr && base + kRscFixedMetaTypeByte < meta.size()) {
             (*row_type_flag)[row] = meta[base + kRscFixedMetaTypeByte];
         }
-        if (row_custom_flag_byte != nullptr &&
-            base + kFixedMetaCustomFlagByte < meta.size()) {
-            (*row_custom_flag_byte)[row] = meta[base + kFixedMetaCustomFlagByte];
+        if (row_flag_group != nullptr) {
+            for (std::size_t group = 0; group < 4; ++group) {
+                const std::size_t byte = kFixedMetaFlagGroupBytes[group];
+                if (base + byte < meta.size()) {
+                    (*row_flag_group)[row][group] = meta[base + byte];
+                }
+            }
         }
         if (row_flag10_byte != nullptr &&
             base + kFixedMetaFlag10Byte < meta.size()) {
@@ -1689,7 +1718,7 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
     std::vector<std::uint32_t> task_meta_offsets;
     std::vector<std::uint8_t> task_meta_flag_bytes;
     std::vector<std::int16_t> task_meta_state;
-    std::vector<std::uint8_t> task_meta_custom_flag_bytes;
+    std::vector<std::array<std::uint8_t, 4>> task_flag_group;
     std::vector<std::uint8_t> task_meta_flag10_bytes;
     const bool task_has_fixed_meta = cfb.has_stream(std::string(root) +
                                                     "/TBkndTask/FixedMeta");
@@ -1698,7 +1727,17 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                             kFixedRowSize, kFixedMetaEntrySize, kFixedMetaDescriptors,
                             rows, uid_by_row, document.warnings, &task_meta_offsets,
                             &task_meta_flag_bytes, &task_meta_state,
-                            &task_meta_custom_flag_bytes, &task_meta_flag10_bytes);
+                            &task_flag_group, &task_meta_flag10_bytes);
+    /* Wave 24 (W24-9/R11): the project row's SUMMARY column is its OWN stored
+     * Flag10 bit (FixedMeta row 0, entry +25 bit 0x04), not a constant read off
+     * one capture.  A file whose row 0 does not cover the bit reports
+     * not-stored, and the sheet then leaves the cell blank. */
+    if (task_has_fixed_meta && !fixed_meta_live.empty() && fixed_meta_live[0] &&
+        !task_meta_flag10_bytes.empty()) {
+        document.project.flag10_stored = true;
+        document.project.flag10 =
+            (task_meta_flag10_bytes[0] & kFixedMetaFlag10Bit) != 0;
+    }
 
     /* Liveness, computed once.  Two facts must both hold for a task row:
      *
@@ -1854,14 +1893,8 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
             task.milestone = task.duration_ticks == 0;
             task.milestone_stored = false;
         }
-        // Wave 23 (W23-6): Flag10 / the SUMMARY column, from the same metadata
-        // entry (byte +25 bit 0x04).  A clear bit is a stored No.
-        if (task_has_fixed_meta && fixed_meta_live[row] &&
-            row < task_meta_flag10_bytes.size()) {
-            task.summary_flag =
-                (task_meta_flag10_bytes[row] & kFixedMetaFlag10Bit) != 0;
-            task.summary_flag_stored = true;
-        }
+        // Wave 24 (W24-15): Flag10 (Project's SUMMARY column) is part of the
+        // generic Flag1..Flag20 decode in the custom-fields block below.
         task.free_slack_ticks =
             static_cast<std::int32_t>(u32_at(fixed, base + kRowFreeSlack));
         task.start_slack_ticks =
@@ -1885,10 +1918,11 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
         }
         /* ---- Custom fields (W48; encodings in field_value.h).  A text/number/
          * date/duration/cost value is a VarMeta block under the field's PjTask id
-         * (Cost's key is the PjTask id itself and the f64 is hundredths, W60);
-         * Flag1 is the FixedMeta entry's +24 bit 0x02.  Only stored values are
-         * listed, and an unmeasured family (Flag2..20) is listed with
-         * storage_measured == false rather than decoded as if it were known. */
+         * (Cost's key is the PjTask id itself and the f64 is hundredths, W60).
+         * Wave 24 (W24-15): ALL TWENTY Flag fields are FixedMeta one-bit fields
+         * with the measured positions in kFixedMetaFlagBits; a clear bit is a
+         * stored False, so every flag is listed and Flag10 (Project's SUMMARY
+         * column) is also exposed as Task::flag10. */
         {
             std::unordered_set<std::uint32_t> seen_field_ids;
             for (const VarEntry& entry : table.entries) {
@@ -1959,10 +1993,25 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                 flag.present = true;
                 flag.storage_measured = true;
                 flag.flag =
-                    row < task_meta_custom_flag_bytes.size() &&
-                    (task_meta_custom_flag_bytes[row] & kFixedMetaFlag1Bit) != 0;
+                    row < task_flag_group.size() &&
+                    (task_flag_group[row][0] & kFixedMetaFlagBits[0].mask) != 0;
                 task.custom_fields.push_back(std::move(flag));
             }
+        }
+        /* Wave 24 (W24-15): Flag1..Flag20, all measured one-bit FixedMeta
+         * fields (kFixedMetaFlagBits).  They live on Task::flags rather than in
+         * custom_fields so the engine dump's custom-field set does not grow by
+         * 19 fields; Flag10 ALSO drives Task::flag10 (Project's SUMMARY). */
+        if (task_has_fixed_meta && fixed_meta_live[row] &&
+            row < task_flag_group.size()) {
+            task.flags_stored = true;
+            for (std::size_t index = 0; index < kFlagCountMpp14; ++index) {
+                const FlagBitPosition& bit = kFixedMetaFlagBits[index];
+                task.flags[index] =
+                    (task_flag_group[row][bit.group] & bit.mask) != 0;
+            }
+            task.flag10 = task.flags[9];
+            task.flag10_stored = true;
         }
         document.tasks.push_back(std::move(task));
     }
@@ -3201,6 +3250,20 @@ void parse_mpp12(const CompoundFile& cfb, std::string_view root, Document& docum
         task.custom_fields = decode_var_custom_fields(task_var, task_var2, uid);
         if (task_rows.meta_present) {
             append_mpp12_flags(task_rows, row, task.custom_fields);
+            // Wave 24 (W24-15): the same Flag1..Flag20 view as MPP14.
+            task.flags_stored = true;
+            for (const CustomFieldValue& value : task.custom_fields) {
+                if (value.field_id >= kTaskFlag1FieldId &&
+                    value.field_id <= kTaskFlag10FieldId + 10u) {
+                    const std::size_t index =
+                        static_cast<std::size_t>(value.field_id - kTaskFlag1FieldId);
+                    if (index < task.flags.size()) {
+                        task.flags[index] = value.flag;
+                    }
+                }
+            }
+            task.flag10 = task.flags[9];
+            task.flag10_stored = true;
         }
         /* Inserted-project tag: Task VarMeta key 0x0b4001ca. */
         if (task_var.usable) {
@@ -3518,7 +3581,6 @@ struct FormatInfo {
     std::string view_root;
     std::string props_stream;
 };
-
 FormatInfo detect_format(const CompoundFile& cfb, std::vector<std::string>& warnings) {
     const bool has12 = cfb.has_stream("Props12");
     const bool has14 = cfb.has_stream("Props14");
@@ -3620,29 +3682,41 @@ void resolve_resource_calendars(Document& document) {
     }
 }
 
-/* ---- The project's new-task scheduling default.  See ProjectRow in reader.h
- * for the evidence and `read_new_task_mode` at the bottom of this file for the
- * path-only accessor.
+/* ---- The project props records this reader decodes.  See ProjectRow in
+ * reader.h for the evidence.
  *
- * The project props stream uses core/props' measured framing: a 16-byte header,
- * then records back to back (u32 payload_length, u32 id, u32 kind, payload),
- * scanned until an id whose byte 2 is not 0x40 (core/props `is_props_id`).
- * Only the one 2-byte record is needed here, so core/mpp does not link
- * core/props; the framing is the same five lines core/props uses. */
-bool decode_new_tasks_manual(const CompoundFile& cfb, std::string_view root, bool& manual,
-                             std::vector<std::string>* warnings = nullptr) {
-    const std::string path = std::string(root) + "/Props";
+ * The props streams use core/props' measured framing: a 16-byte header, then
+ * records back to back (u32 payload_length, u32 id, u32 kind, payload), scanned
+ * until an id whose byte 2 is not 0x40 (core/props `is_props_id`).  The
+ * new-task default is in the TABLE props (114/112); the project-summary row and
+ * the Timeline pane name are in the VIEW props (214/212).  core/mpp does not
+ * link core/props for this, so the framing is the same five lines here. */
+struct ProjectPropsRecords {
+    bool new_tasks_manual = false;
+    bool new_tasks_manual_stored = false;
+    bool summary_row_shown = false;
+    bool summary_row_stored = false;
+    bool timeline_shown = true;
+    bool timeline_stored = false;
+};
+
+std::vector<std::uint8_t> read_props_stream(const CompoundFile& cfb,
+                                            const std::string& root) {
+    const std::string path = root + "/Props";
     if (!cfb.has_stream(path)) {
-        return false; /* an original Project 2007 MPP12 file has no such record */
+        return {};
     }
-    std::vector<std::uint8_t> props;
     try {
-        props = cfb.read_stream(path);
+        return cfb.read_stream(path);
     } catch (const Error&) {
-        return false;
+        return {};
     }
+}
+
+template <typename Visit>
+void for_each_props_record(const std::vector<std::uint8_t>& props, Visit&& visit) {
     if (props.size() < 16) {
-        return false;
+        return;
     }
     std::size_t offset = 16;
     while (offset + 12 <= props.size()) {
@@ -3654,24 +3728,76 @@ bool decode_new_tasks_manual(const CompoundFile& cfb, std::string_view root, boo
         if (static_cast<std::uint64_t>(offset) + 12u + length > props.size()) {
             break;
         }
-        if (id == kProjectPropsNewTasksManual) {
-            const std::uint32_t kind = u32_at(props, offset + 8);
-            if (kind != 2u || length < 2u) {
-                if (warnings != nullptr) {
-                    warnings->emplace_back(
-                        path + " stores the new-task scheduling default (record " +
-                        hex32(kProjectPropsNewTasksManual) + ") as kind " +
-                        std::to_string(kind) + " / " + std::to_string(length) +
-                        " bytes, not the measured kind 2 / 2 bytes; it is not decoded");
-                }
-                return false;
-            }
-            manual = u16_at(props, offset + 12) != 0;
-            return true;
-        }
+        visit(id, u32_at(props, offset + 8), offset + 12, length);
         offset += 12u + length;
     }
-    return false;
+}
+
+void warn_props_shape(std::vector<std::string>* warnings, const std::string& path,
+                      std::uint32_t id, std::uint32_t kind, std::uint32_t length,
+                      const char* expected) {
+    if (warnings == nullptr) {
+        return;
+    }
+    warnings->emplace_back(path + " stores record " + hex32(id) + " as kind " +
+                           std::to_string(kind) + " / " + std::to_string(length) +
+                           " bytes, not the measured " + expected + "; it is not decoded");
+}
+
+ProjectPropsRecords decode_project_props(const CompoundFile& cfb,
+                                         const FormatInfo& format,
+                                         std::vector<std::string>* warnings) {
+    ProjectPropsRecords out;
+    const std::string table_path = format.table_root + "/Props";
+    const std::vector<std::uint8_t> table_props = read_props_stream(cfb, format.table_root);
+    for_each_props_record(table_props, [&](std::uint32_t id, std::uint32_t kind,
+                                           std::size_t payload, std::uint32_t length) {
+        if (id != kProjectPropsNewTasksManual) {
+            return;
+        }
+        if (kind != 2u || length < 2u) {
+            warn_props_shape(warnings, table_path, id, kind, length, "kind 2 / 2 bytes");
+            return;
+        }
+        out.new_tasks_manual = u16_at(table_props, payload) != 0;
+        out.new_tasks_manual_stored = true;
+    });
+
+    const std::string view_path = format.view_root + "/Props";
+    const std::vector<std::uint8_t> view_props = read_props_stream(cfb, format.view_root);
+    for_each_props_record(view_props, [&](std::uint32_t id, std::uint32_t kind,
+                                          std::size_t payload, std::uint32_t length) {
+        if (id == kProjectPropsSummaryRow) {
+            if (kind != 2u || length < 2u) {
+                warn_props_shape(warnings, view_path, id, kind, length,
+                                 "kind 2 / 2 bytes");
+                return;
+            }
+            out.summary_row_shown = u16_at(view_props, payload) != 0;
+            out.summary_row_stored = true;
+            return;
+        }
+        if (id == kProjectPropsTimelinePane) {
+            if (kind != 0u) {
+                warn_props_shape(warnings, view_path, id, kind, length,
+                                 "kind 0 (UTF-16 text)");
+                return;
+            }
+            // "Time&line" when the strip is shown; a zero-length/zero payload
+            // when it is hidden.  Decoding stops at the first NUL.
+            std::string name;
+            for (std::size_t index = 0; index + 1u < length; index += 2u) {
+                const std::uint16_t unit = u16_at(view_props, payload + index);
+                if (unit == 0) {
+                    break;
+                }
+                name.push_back(unit < 0x80u ? static_cast<char>(unit) : '?');
+            }
+            out.timeline_shown = !name.empty();
+            out.timeline_stored = true;
+        }
+    });
+    return out;
 }
 
 Document parse_document(const CompoundFile& cfb) {
@@ -3704,16 +3830,18 @@ Document parse_document(const CompoundFile& cfb) {
     } else {
         parse_mpp14(cfb, format.table_root, document);
     }
-    /* The project-level new-task scheduling default lives in the project props,
-     * not in a task row.  Decoded for BOTH versions: an original Project 2007
-     * MPP12 file has no such record (the field reports not-stored), but a 2010+
-     * project down-saved to MPP12 keeps it in 112/Props. */
-    bool new_tasks_manual = false;
-    if (decode_new_tasks_manual(cfb, format.table_root, new_tasks_manual,
-                                &document.warnings)) {
-        document.project.new_tasks_manual = new_tasks_manual;
-        document.project.new_tasks_manual_stored = true;
-    }
+    /* The project-level records that live in props, not in a task row.
+     * Decoded for BOTH versions: an original Project 2007 MPP12 file has no
+     * new-task record (the field reports not-stored), but a 2010+ project
+     * down-saved to MPP12 keeps it in 112/Props. */
+    const ProjectPropsRecords project_props =
+        decode_project_props(cfb, format, &document.warnings);
+    document.project.new_tasks_manual = project_props.new_tasks_manual;
+    document.project.new_tasks_manual_stored = project_props.new_tasks_manual_stored;
+    document.project.summary_row_shown = project_props.summary_row_shown;
+    document.project.summary_row_stored = project_props.summary_row_stored;
+    document.project.timeline_shown = project_props.timeline_shown;
+    document.project.timeline_stored = project_props.timeline_stored;
     resolve_resource_calendars(document);
     return document;
 }
@@ -3818,10 +3946,10 @@ NewTaskMode read_new_task_mode(std::string const& path) {
         const CompoundFile file = CompoundFile::from_file(path);
         std::vector<std::string> warnings;
         const FormatInfo format = detect_format(file, warnings);
-        bool manual = false;
-        if (decode_new_tasks_manual(file, format.table_root, manual)) {
+        const ProjectPropsRecords props = decode_project_props(file, format, nullptr);
+        if (props.new_tasks_manual_stored) {
             mode.known = true;
-            mode.manual = manual;
+            mode.manual = props.new_tasks_manual;
         }
     } catch (const Error&) {
         /* Unreadable container: unknown, so the caller keeps its fallback. */

@@ -347,6 +347,7 @@
 #ifndef MPP_READER_H
 #define MPP_READER_H
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -427,7 +428,7 @@ struct Task {
     std::uint32_t row_id = 0;  /* u32 at +0: MS Project's ID column */
     std::uint32_t uid = 0;     /* u32 at +4: UniqueID */
     /* name is the display form: ASCII spaces trimmed, which is what MS Project's
-     * COM surface reports (PROJECT_A row 1 is stored as "Site establishment ").
+     * COM surface reports (PROJECT_A row 1 is stored as "client-string-10dbe851 ").
      * name_raw is the decoded block verbatim, for a writer's round trip. */
     std::string name;
     std::string name_raw;
@@ -545,20 +546,28 @@ struct Task {
      * 2026-10-23 by setting Task.Flag10 = True through COM on two different
      * rows (exactly that bit changed).  It is NOT Task::summary: the clean
      * capture's summary rows 1/2/6 read No while ID 12 reads Yes, so
-     * this is the file's own field.  `summary_flag_stored` is false when the
+     * this is the file's own field.  `flag10_stored` is false when the
      * row has no FixedMeta entry.  Exposed as a Task field -- not a
      * CustomFieldValue -- so the engine dump's custom-field set is unchanged. */
-    bool summary_flag = false;
-    bool summary_flag_stored = false;
+    bool flag10 = false;
+    bool flag10_stored = false;
+
+    /* ---- Wave 24 (W24-15): Flag1..Flag20 as measured one-bit FixedMeta
+     * fields.  `flags[i]` is Flag(i+1); `flags_stored` is true when the row's
+     * FixedMeta entry covers them (a clear bit is a stored False).  The bit
+     * positions are in reader.cpp kFixedMetaFlagBits and were measured one flag
+     * at a time through Project COM (Flag1 +24/0x02 ... Flag20 +34/0x04; see
+     * the table's comment).  Task::flag10 above is flags[9]. */
+    std::array<bool, 20> flags{};
+    bool flags_stored = false;
 
     /* ---- Custom fields (W48).  The values the file stores, decoded with the
      * measured ids/encodings in `field_value.h`: Text (UTF-16LE+NUL in
      * VarMeta), Number (f64), Date (packed u32), Duration (u32 file ticks,
      * COM minutes * 10) and Flag1 (bit 0x02 of the Task FixedMeta entry's +24
-     * byte -- a flag is NOT a VarMeta block).  Only stored fields are listed;
-     * `present` is always true here.  Cost and Flag2..20 are listed only when a
-     * block exists and carry `storage_measured == false`, because their storage
-     * is not measured (w10-oracle §2) and must not be decoded as if it were.
+     * byte -- a flag is NOT a VarMeta block).  All twenty flag bits are decoded
+     * into Task::flags (wave 24); Flag1 stays here for the engine dump's stable
+     * shape.  `present` is always true here.  Cost is decoded from its f64
      * Lookups: `custom_field(id)` returns nullptr when the file does not store
      * that field for this row.  See field_value.h for the evidence. */
     std::vector<CustomFieldValue> custom_fields;
@@ -809,6 +818,45 @@ struct ProjectRow {
      * `new_tasks_manual` as if the file had said so. */
     bool new_tasks_manual = false;
     bool new_tasks_manual_stored = false;
+
+    /* ---- The project-summary row's display setting (Format > Project Summary
+     * Task; COM's Project.DisplayProjectSummaryTask).  STORED in the project
+     * VIEW props stream (214/Props, or 212/Props in a 2010+ project saved as
+     * MPP12) as the 2-byte record 0x03400009: 0 = hidden, 1 = shown.
+     *
+     * Re-measured for wave 24 on a fresh Project 2021 save pair built through
+     * oracle_lock on a neutral path (C:/w24): summary-off stores 0, summary-on
+     * stores 1.  Project's own saves of PROJECT_A (whose capture shows the row)
+     * store 1; every committed synthetic fixture and a new project store 0.
+     * Wave 23 concluded the setting was application state from a "no 214 part
+     * differs" diff that never decoded the Props record framing -- the setting
+     * is in 214/Props, which that diff compared only as opaque bytes/time
+     * stamps.  A file with no such record is treated as Project's new-project
+     * default (hidden), and `stored` says whether the file spoke. */
+    bool summary_row_shown = false;
+    bool summary_row_stored = false;
+
+    /* ---- Timeline strip visibility.  STORED in the same view props stream as
+     * the UTF-16 record 0x03400008: "Time&line" when the strip is shown; an
+     * empty (4-byte zero) payload when it is hidden.  Measured 2026-10-23 on a
+     * shown/hidden save pair from one Project session: across all 96 CFB
+     * streams only that record and the per-save GUID record 0x03400001 differ
+     * semantically; two FRESH Project sessions then reopened the pair with the
+     * strip shown and hidden, so it is file state, not application state.
+     * PROJECT_A and PROJECT_B store the empty payload (operator's capture
+     * hides the strip), synthetic-base and wave23-outline store "Time&line".
+     * An absent record keeps Project's new-file default (shown). */
+    bool timeline_shown = true;
+    bool timeline_stored = false;
+
+    /* ---- The project ROW's own Flag10 (the SUMMARY column the port shows on
+     * synthetic row 0).  Same FixedMeta entry byte +25 bit 0x04 that a task
+     * row uses (wave 23 W23-6); the project row is FixedMeta row 0.  Wave 24
+     * (W24-9/R11): the port used to hard-code "Yes" on the project row from one
+     * capture.  The file's own bit now drives it.  `stored` is false when the
+     * file has no usable FixedMeta entry for row 0. */
+    bool flag10 = false;
+    bool flag10_stored = false;
 };
 
 /*

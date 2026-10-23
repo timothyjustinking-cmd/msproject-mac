@@ -111,6 +111,11 @@ class MainWindow final : public QMainWindow {
     std::size_t sheet_row_count() const;
     std::size_t gantt_bar_count() const;
 
+    // The plan the views draw from (file + applied structural edits + the
+    // sheet's committed cells).  Wave 24: the uid-routing gate needs the same
+    // input the print path takes.
+    const app::PlanInput& plan() const noexcept { return doc_.plan(); }
+
     // Wave 19: the active filter/view, for the offscreen tests.
     bool filter_active() const noexcept { return doc_.filter_active(); }
     app::ViewMode view_mode() const noexcept { return prefs_.view; }

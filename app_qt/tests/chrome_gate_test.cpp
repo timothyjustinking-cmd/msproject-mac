@@ -233,9 +233,9 @@ int main(int argc, char** argv) {
         gate::check(msqt::kViewLabelWidth + sheet->verticalHeader()->width() ==
                         msqt::kGutterWidth,
                     "the frozen gutter is 60 px (22 px caption + 38 px numbers)");
-        // Wave 23 (B-1): Project's project-summary row + 3 tasks.
-        gate::check(sheet->model() != nullptr && sheet->model()->rowCount() == 4,
-                    "the fixture shows the project row and three task rows");
+        // Wave 24 (W24-2): this fixture stores the project-summary row OFF.
+        gate::check(sheet->model() != nullptr && sheet->model()->rowCount() == 3,
+                    "the fixture shows its three task rows (no project row)");
         const QImage image = window.grab().toImage();
         gate::check(image.size() == QSize(window.width(), window.height()),
                     "the chrome grab is 1:1");

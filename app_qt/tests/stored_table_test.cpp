@@ -365,9 +365,10 @@ void case_synthetic_non_entry(const QString& fixture, const QString& out_dir) {
           "the stored ID column is not a scrolling display column");
 
     // Editing still works on a file-driven column: the Name column is display 0
-    // and writes the model field the Gantt/undo/save path reads.  Row 0 is the
-    // project summary row (wave 23 B-1); the first file task is row 1.
-    const QModelIndex job = model->index(1, 0);
+    // and writes the model field the Gantt/undo/save path reads.  Wave 24
+    // (W24-2): this fixture stores the project-summary row OFF, so row 0 is the
+    // first file task.
+    const QModelIndex job = model->index(0, 0);
     check(model->flags(job).testFlag(Qt::ItemIsEditable), "the renamed Task Name column is editable");
     check(model->setData(job, QStringLiteral("Renamed by the gate"), Qt::EditRole),
           "a cell edit on a file-driven column commits");
@@ -375,15 +376,15 @@ void case_synthetic_non_entry(const QString& fixture, const QString& out_dir) {
     const std::size_t name_model_column =
         window.sheet_table_model()->visible_column_for_field(name_field);
     check(name_model_column != core::sheet::kNoIndex, "the sheet model has the Name field");
-    check(window.sheet()->cell_text(1, name_model_column) == "Renamed by the gate",
+    check(window.sheet()->cell_text(0, name_model_column) == "Renamed by the gate",
           "the edit reached the core sheet model");
     check(window.sheet()->undo(), "the edit is one undo step");
-    check(window.sheet()->cell_text(1, name_model_column) != "Renamed by the gate",
+    check(window.sheet()->cell_text(0, name_model_column) != "Renamed by the gate",
           "undo restored the loaded name");
 
     // A Start edit is what the save diff collects: it must mark the document dirty.
     check(!window.document_dirty(), "a freshly loaded file has nothing pending");
-    const QModelIndex begin = model->index(1, 1);
+    const QModelIndex begin = model->index(0, 1);
     check(model->flags(begin).testFlag(Qt::ItemIsEditable), "the Begin (Start) column is editable");
     check(model->setData(begin, QStringLiteral("2026-11-02 08:00"), Qt::EditRole),
           "a date edit on the file's Begin column commits");
@@ -391,15 +392,15 @@ void case_synthetic_non_entry(const QString& fixture, const QString& out_dir) {
           "the Start edit is the pending change the save would write");
 
     // A column with no save path is read-only: no fake edit.
-    const QModelIndex discipline = model->index(1, 4);
+    const QModelIndex discipline = model->index(0, 4);
     check(!model->flags(discipline).testFlag(Qt::ItemIsEditable),
           "the Discipline (Text1) column is read-only");
     check(!model->setData(discipline, QStringLiteral("nope"), Qt::EditRole),
           "the read-only column refuses an edit");
 
     // The task/Gantt row map is untouched by the presentation change.
-    check(window.sheet_row_count() == 4,
-          "the synthetic table keeps the project row and three task rows");
+    check(window.sheet_row_count() == 3,
+          "the synthetic table keeps its three task rows (the file hides the project row)");
     check(window.gantt_bar_count() >= 1, "the Gantt still draws the plan's bars");
 
     // Wave 22: this table's "Depends On" (0x0b40002f) and "Who" (0x0b400031)
@@ -782,10 +783,12 @@ void case_corpus(const QString& corpus) {
     check(table_model->display_kind(succ_column) == msqt::EntryCellKind::successors,
           "the stored Suc column maps to the successors kind");
 
-    // Wave 23 (B-11): project_a's row 3 (ID 3) is a milestone from the stored
-    // Milestone flag; Project's stock text style renders it italic, and it is
-    // critical, so red.  (The file's own text styles -- font family/size and
-    // row highlight -- are not decoded yet; backlogged in wave23-complete.)
+    // Wave 24 (W24-13): project_a's row 3 (ID 3) is a milestone from the stored
+    // Milestone flag.  Wave 23 rendered it italic+red from THAT FILE's capture;
+    // a NEW blank Project 2021 project renders a milestone row upright and a
+    // critical row in the normal colour, so those were the file's text styles,
+    // not stock.  Until the file's text styles are decoded (backlog W24-13),
+    // the measured STOCK fallback applies: upright, normal foreground.
     const int name_display = table_model->display_column_for_field(app::name_field_id());
     check(name_display >= 0, "the corpus sheet shows a Name display column");
     if (name_display >= 0 && model->rowCount() > 3) {
@@ -793,9 +796,10 @@ void case_corpus(const QString& corpus) {
         const QFont font = model->data(milestone_cell, Qt::FontRole).value<QFont>();
         const QColor colour =
             model->data(milestone_cell, Qt::ForegroundRole).value<QColor>();
-        check(font.italic(), "project_a row 3 (a milestone) renders italic");
-        check(colour == QColor(0xb0, 0x1c, 0x1c),
-              "project_a row 3 (a critical milestone) renders red");
+        check(!font.italic(),
+              "project_a row 3 (a milestone) uses the stock upright text style");
+        check(!colour.isValid(),
+              "project_a row 3 (a critical milestone) uses the normal foreground");
     }
 
     // EVERY displayed row: % Complete is the task's stored percent, and Pre/Suc
@@ -940,9 +944,10 @@ void case_corpus(const QString& corpus) {
     }
 
     // SUMMARY is Task.Flag10 (0x0b400051).  Wave 23 (W23-6) decoded its Task
-    // FixedMeta bit (byte +25 bit 0x04, measured through COM), so the column
-    // now carries Project's Yes/No: Yes on the project row and every summary
-    // task, No elsewhere -- which is what the clean capture shows.
+    // FixedMeta bit (byte +25 bit 0x04, measured through COM).  Wave 24
+    // (W24-9/R11) also decodes the PROJECT row's own bit, so row 0 here is the
+    // file's stored flag, not a constant; the capture's values are the
+    // independent second witness.
     check(sheet.records().has_field(msqt::kSummaryFlagField),
           "the RecordSet carries the decoded Flag10 column");
     // The clean capture's first thirteen visible rows, typed from the pixels:
@@ -963,9 +968,12 @@ void case_corpus(const QString& corpus) {
         const QString text = shown_text(model, display, summary_column);
         bool stored = false;
         if (uid == 0) {
-            stored = true;  // synthetic project row: the capture's row 0 is Yes
+            // Wave 24 (W24-9/R11): the project row's own stored FixedMeta
+            // Flag10 bit, not a constant copied from the capture.  The capture
+            // comparison below is then an independent second check.
+            stored = plan.project_flag10_stored && plan.project_flag10;
         } else if (const app::TaskRow* task = task_by_uid(plan, uid)) {
-            stored = task->summary_flag_stored && task->summary_flag;
+            stored = task->flag10_stored && task->flag10;
         }
         if ((text == QStringLiteral("Yes")) != stored) {
             ++summary_wrong;

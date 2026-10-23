@@ -120,23 +120,26 @@ inline const QColor kWeekend(0xf7, 0xf7, 0xf7);           // measured (247,247,2
 inline const QColor kSelection(0xa2, 0xd3, 0xa0);
 inline const QColor kRowGutter(0xff, 0xff, 0xff);
 inline const QColor kRowGutterText(0x33, 0x33, 0x33);
-// Bar colours.  WAVE 21 (operator review, clean capture): a CRITICAL bar is pure
-// red (255,0,0) -- the previous #c0392b was a guess -- and it now WINS over the
-// completion fill (gantt_canvas.cpp), so a 100 %-complete critical bar still reads
-// red.  The normal bar keeps the shell's blue and the summary/milestone colours are
-// unchanged: the clean capture's green (#00b050) and navy (#000080) bars are the
-// FILE's own bar styles, which this port does not decode, so hard-coding them as
-// global constants would be a guess (docs/handoff/q6.md).
-inline const QColor kBarTask(0x4a, 0x7e, 0xbb);
-// Wave 23 (Q1): when a file's bar styles cannot be decoded, Project's STOCK
-// defaults are black summary bars and black milestone diamonds (the clean
-// capture's navy/green are that FILE's styles, backlogged as B-4).
-inline const QColor kBarSummary(0x00, 0x00, 0x00);
+// Bar colours.  WAVE 24 (W24-18/W24-13): MEASURED from a NEW blank Project
+// 2021 project (FileNew, two auto tasks linked FS + a milestone, captured
+// locally on 2026-10-23).  The wave-21/23 values (blue task, pure-red critical,
+// black summary) came from PROJECT_A's capture -- that FILE's own bar styles --
+// and were the same mistake as the milestone-italic attribution.  Stock:
+//   non-critical task fill (116,204,212) teal; its links (27,173,186)
+//   critical task fill     (138,187,237) light blue; its links (38,124,211)
+//   summary fill           (43,163,173) dark teal  (wave23-outline's capture,
+//                          which is also a fresh Project file)
+//   milestone diamond      black (the styles capture's diamond)
+// The FILE's own bar-style colour records are still not decoded; a file that
+// overrides them renders with these measured stock colours (backlog W24-18).
+inline const QColor kBarTask(0x74, 0xcc, 0xd4);       // (116,204,212)
+inline const QColor kBarCritical(0x8a, 0xbb, 0xed);   // (138,187,237)
+inline const QColor kBarSummary(0x2b, 0xa3, 0xad);    // (43,163,173)
 inline const QColor kBarMilestone(0x00, 0x00, 0x00);
-inline const QColor kBarCritical(0xff, 0x00, 0x00);
 inline const QColor kBarComplete(0x2f, 0x5f, 0x9a);
 inline const QColor kBarOutline(0x2b, 0x4a, 0x6f);
-inline const QColor kLinkLine(0x6a, 0x6a, 0x6a);
+inline const QColor kLinkLine(0x1b, 0xad, 0xba);       // (27,173,186)
+inline const QColor kLinkCritical(0x26, 0x7c, 0xd3);   // (38,124,211)
 inline const QColor kBodyText(0x10, 0x10, 0x10);
 inline const QColor kMutedText(0x5a, 0x5a, 0x5a);
 inline const QColor kSheetBackground(0xff, 0xff, 0xff);

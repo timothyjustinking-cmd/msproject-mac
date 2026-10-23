@@ -135,16 +135,32 @@ std::vector<PrintColumn> print_columns(const core::sheet::SheetModel& sheet, dou
 
 // Builds the Gantt the printed chart draws: the same source/style mapping
 // app/main.mm uses, with the shared print row height.
+//
+// Wave 24 (W24-1/R6): `uids` are the RecordSet rows' uids, in print order.  The
+// plan has no synthetic project row, so indexing plan.tasks with a RecordSet
+// row shifted the printed chart by one against the printed sheet whenever the
+// project row was shown (and dropped the last bar).  Looking each row's task up
+// by uid is independent of whether row 0 exists, is hidden or is filtered.
 core::gantt::GanttLayout build_print_gantt(const app::PlanInput& plan,
-                                           const std::vector<std::size_t>& rows,
+                                           const std::vector<std::uint32_t>& uids,
                                            const app::PageSpec& spec, app::ZoomLevel zoom) {
     app::PlanInput printed;
     printed.title = plan.title;
     printed.project_start = plan.project_start;
     printed.project_finish = plan.project_finish;
-    for (const std::size_t row : rows) {
-        if (row < plan.tasks.size()) {
-            printed.tasks.push_back(plan.tasks[row]);
+    for (const std::uint32_t uid : uids) {
+        if (uid == 0) {
+            // The synthetic project row prints on the sheet; give it the same
+            // summary bar the screen's Gantt draws so the two halves stay
+            // aligned row for row.
+            printed.tasks.push_back(app::project_summary_row(plan));
+            continue;
+        }
+        for (const app::TaskRow& task : plan.tasks) {
+            if (task.uid == uid) {
+                printed.tasks.push_back(task);
+                break;
+            }
         }
     }
     printed.links = plan.links;
@@ -346,14 +362,15 @@ void configure_printer(QPrinter& printer, const app::PageSpec& spec) {
 
 app::PrintJob make_print_job(const app::PlanInput& plan,
                              const std::vector<std::size_t>& rows,
+                             std::size_t printed_task_count,
                              const std::string& filter_description,
                              const std::string& date_text, app::ZoomLevel zoom) {
     app::PrintRequest request;
     request.kind = app::PrintKind::gantt;
     request.project_name = plan.title.empty() ? plan.source_name : plan.title;
     request.report_title = "Gantt report";
-    request.subtitle = app::export_subtitle(app::ReportKind::gantt, filter_description, rows.size(),
-                                            plan.tasks.size());
+    request.subtitle = app::export_subtitle(app::ReportKind::gantt, filter_description,
+                                            printed_task_count, plan.tasks.size());
     request.date_text = date_text;
     request.spec = app::PageSpec::a4_landscape();
     request.rows = rows;
@@ -373,6 +390,18 @@ std::vector<std::size_t> print_rows(std::size_t record_row_count,
         rows.push_back(row);
     }
     return rows;
+}
+
+core::gantt::GanttLayout print_gantt(const app::PlanInput& plan,
+                                     const core::sheet::SheetModel& sheet,
+                                     const std::vector<std::size_t>& rows,
+                                     const app::PageSpec& spec, app::ZoomLevel zoom) {
+    std::vector<std::uint32_t> uids;
+    uids.reserve(rows.size());
+    for (const std::size_t row : rows) {
+        uids.push_back(sheet.row_uid(row));
+    }
+    return build_print_gantt(plan, uids, spec, zoom);
 }
 
 bool print_job(QWidget* parent, const app::PrintJob& job,
@@ -399,7 +428,7 @@ bool print_job(QWidget* parent, const app::PrintJob& job,
 
     core::gantt::GanttLayout gantt;
     if (job.kind == app::PrintKind::gantt) {
-        gantt = build_print_gantt(plan, job.rows, job.spec, preferences.zoom);
+        gantt = print_gantt(plan, sheet, job.rows, job.spec, preferences.zoom);
     }
 
     QPainter painter;

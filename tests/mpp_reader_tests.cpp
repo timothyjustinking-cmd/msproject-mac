@@ -835,23 +835,24 @@ void test_project_a(TestContext& context) {
     context.equal(actual_finish_mismatch, std::size_t{0},
                   "no PROJECT_A task below 100 % stores an ActualFinish");
 
-    /* PROJECT_A row 1 is stored as "Site establishment " (trailing space); COM trims it.
-     * The display name must match the oracle, the raw block must stay verbatim
-     * for a writer's round trip. */
+    /* PROJECT_A row 1 is stored with a trailing space (the string itself is
+     * client content; wave 24 W24-26 keeps only its hash); COM trims it.  The
+     * display name must match the oracle, the raw block must stay verbatim for
+     * a writer's round trip. */
     const mpp::Task* spaced = find_task(document, 8141);
     context.check(spaced != nullptr, "uid 8141 is present");
     if (spaced != nullptr) {
-        context.equal(spaced->name_raw, std::string("Site establishment "),
+        context.equal(name_hash(spaced->name_raw), std::string("sha256:d2d31247d7563771"),
                       "uid 8141 keeps the stored trailing space in name_raw");
-        context.equal(spaced->name, std::string("Site establishment"),
+        context.equal(name_hash(spaced->name), std::string("sha256:10dbe851f0ba475d"),
                       "uid 8141's display name is trimmed like MS Project's");
     }
 
     const mpp::Task* named = find_task(document, 10733);
     context.check(named != nullptr, "uid 10733 is present");
     if (named != nullptr) {
-        context.equal(named->name,
-                      std::string("client-text-003"),
+        context.equal(name_hash(named->name),
+                      std::string("sha256:c27bd0ed6b018900"),
                       "uid 10733 name via key 0x0b40000e");
         context.equal(named->duration_minutes(), std::uint32_t{16800},
                       "uid 10733 duration in minutes");
@@ -1143,19 +1144,18 @@ void test_project_property_names(TestContext& context) {
     };
     context.check(name_at(64) == "QNEWTASKSAREMANUAL",
                   "index 64 is QNEWTASKSAREMANUAL");
-    context.equal(0x02401388u + 64u, 0x024013c8u,
-                  "the id rule (0x02401388 + index) yields the reader's record id");
-    // The same rule on names E7 checks independently against Project's files.
     context.check(name_at(2) == "QISNEWTASKSESTIMATED",
                   "index 2 is QISNEWTASKSESTIMATED");
-    context.equal(0x02401388u + 2u, 0x0240138au,
-                  "QISNEWTASKSESTIMATED maps to 0x0240138a");
     context.check(name_at(7) == "DAYSPERMONTH", "index 7 is DAYSPERMONTH");
-    context.equal(0x02401388u + 7u, 0x0240138fu,
-                  "DAYSPERMONTH maps to 0x0240138f");
 
-    // The committed fixture's 114/Props really carries 0x024013c8 with the
-    // value the reader reports, tying the TSV's id to the bytes.
+    // Wave 24 (W24-9/R13): do NOT compare the id arithmetic with constants
+    // typed from the same header comment.  Derive each id from the TSV's index
+    // and require the COMMITTED FIXTURE's props bytes to carry that record with
+    // the value the reader consumed.  The arithmetic is then tested against an
+    // independent source (the file), and a reader whose constant moved to
+    // 0x024013c8 -> ...c9 would decode a different (absent) record and fail the
+    // agreement check.
+    const auto id_at = [](std::uint32_t index) { return 0x02401388u + index; };
     const std::string fixture = (test_data_dir() / "synthetic-base.mpp").string();
     if (!file_exists(fixture)) {
         context.check(false, "synthetic-base.mpp is present for the props check");
@@ -1163,9 +1163,8 @@ void test_project_property_names(TestContext& context) {
     }
     const mpp::CompoundFile container = mpp::CompoundFile::from_file(fixture);
     const std::vector<std::uint8_t> props = container.read_stream("114/Props");
+    std::map<std::uint32_t, std::uint16_t> int16_records;
     std::size_t offset = 16;
-    bool found = false;
-    std::uint16_t value = 0;
     while (offset + 12 <= props.size()) {
         std::uint32_t length = 0;
         std::uint32_t id = 0;
@@ -1176,18 +1175,101 @@ void test_project_property_names(TestContext& context) {
         if (((id >> 16) & 0xFFu) != 0x40u || offset + 12 + length > props.size()) {
             break;
         }
-        if (id == 0x024013c8u && kind == 2 && length >= 2) {
-            found = true;
-            value = static_cast<std::uint16_t>(props[offset + 12] |
-                                               (props[offset + 13] << 8));
-            break;
+        if (kind == 2 && length >= 2) {
+            int16_records[id] = static_cast<std::uint16_t>(
+                props[offset + 12] | (props[offset + 13] << 8));
         }
         offset += 12 + length;
     }
-    context.check(found, "synthetic-base's 114/Props stores 0x024013c8 (kind 2)");
+    const auto record_at = [&int16_records](std::uint32_t id, std::uint16_t* value) {
+        const auto found = int16_records.find(id);
+        if (found == int16_records.end()) {
+            return false;
+        }
+        *value = found->second;
+        return true;
+    };
+    std::uint16_t manual_value = 0;
+    context.check(record_at(id_at(64), &manual_value),
+                  "synthetic-base's 114/Props carries the record at 0x02401388 + 64 "
+                  "(the TSV's QNEWTASKSAREMANUAL index)");
     const mpp::Document document = mpp::load_file(fixture);
-    context.equal(value != 0, document.project.new_tasks_manual,
-                  "the record's u16 and the reader's Manual flag agree");
+    context.equal(manual_value != 0, document.project.new_tasks_manual,
+                  "that record's u16 and the reader's Manual flag agree");
+    // Two more names from the same TSV, checked against DIFFERENT fixture
+    // records with independently measured values: DAYSPERMONTH is 20 (the
+    // fixture's 5-day week/month arithmetic) and QISNEWTASKSESTIMATED is 1.
+    std::uint16_t days_per_month = 0;
+    context.check(record_at(id_at(7), &days_per_month),
+                  "synthetic-base's 114/Props carries the DAYSPERMONTH record id");
+    context.equal(days_per_month, static_cast<std::uint16_t>(20),
+                  "DAYSPERMONTH at the TSV-derived id is 20 in the fixture");
+    std::uint16_t estimated = 0;
+    context.check(record_at(id_at(2), &estimated),
+                  "synthetic-base's 114/Props carries the QISNEWTASKSESTIMATED record id");
+    context.equal(estimated, static_cast<std::uint16_t>(1),
+                  "QISNEWTASKSESTIMATED at the TSV-derived id is 1 in the fixture");
+}
+
+/* ---- Wave 24 (W24-2/W24-3): the two view settings the file stores.
+ *
+ * 214/Props record 0x03400009, kind 2 (u16): the project-summary row, 1 shown
+ * / 0 hidden.  Re-measured on a fresh Project 2021 save pair (oracle_w24.py,
+ * neutral path): off = 0, on = 1, reopen agrees; a new project is 0; every
+ * committed synthetic fixture is 0; Project's own save of PROJECT_A is 1.
+ * 214/Props record 0x03400008, kind 0 (UTF-16): "Time&line" when the Timeline
+ * strip is shown, empty when hidden.  A shown/hidden pair from one session
+ * differed semantically only in this record (plus the per-save GUID), and two
+ * fresh Project sessions reopened the pair shown and hidden.
+ *
+ * The test reads the committed fixtures, so it runs in CI with no corpus. */
+void test_project_view_settings(TestContext& context) {
+    struct Case {
+        const char* name;
+        bool expect_stored;
+        bool expect_shown;
+    };
+    const Case summary_cases[] = {
+        {"wave24-summary-off.mpp", true, false},
+        {"wave24-summary-on.mpp", true, true},
+        {"synthetic-base.mpp", true, false},
+        {"wave23-outline.mpp", true, false},
+    };
+    for (const Case& item : summary_cases) {
+        const std::string path = (test_data_dir() / item.name).string();
+        if (!file_exists(path)) {
+            context.check(false, std::string(item.name) + " is present");
+            continue;
+        }
+        const mpp::Document document = mpp::load_file(path);
+        context.equal(document.project.summary_row_stored, item.expect_stored,
+                      std::string(item.name) + ": the summary-row record is stored");
+        context.equal(document.project.summary_row_shown, item.expect_shown,
+                      std::string(item.name) + ": the stored summary-row setting");
+    }
+    struct TimelineCase {
+        const char* name;
+        bool stored;
+        bool shown;
+    };
+    const TimelineCase timeline_cases[] = {
+        {"synthetic-base.mpp", true, true},
+        {"wave24-summary-on.mpp", true, true},
+        {"wave24-timeline-hidden.mpp", true, false},
+        {"wave23-outline.mpp", true, true},
+    };
+    for (const TimelineCase& item : timeline_cases) {
+        const std::string path = (test_data_dir() / item.name).string();
+        if (!file_exists(path)) {
+            context.check(false, std::string(item.name) + " is present");
+            continue;
+        }
+        const mpp::Document document = mpp::load_file(path);
+        context.equal(document.project.timeline_stored, item.stored,
+                      std::string(item.name) + ": the Timeline record is stored");
+        context.equal(document.project.timeline_shown, item.shown,
+                      std::string(item.name) + ": the stored Timeline setting");
+    }
 }
 
 /* Wave 23 (W23-6): Flag10 (0x0b400051) decodes from Task FixedMeta entry byte
@@ -1210,15 +1292,15 @@ void test_flag10(TestContext& context) {
         return nullptr;
     };
     const mpp::Task* id3 = task_of(3);
-    context.check(id3 != nullptr && id3->summary_flag_stored,
+    context.check(id3 != nullptr && id3->flag10_stored,
                   "the fixture stores Flag10 on ID 3");
-    context.check(id3 != nullptr && id3->summary_flag,
+    context.check(id3 != nullptr && id3->flag10,
                   "ID 3's Flag10 is True (Task.Flag10 set through COM)");
     const mpp::Task* id4 = task_of(4);
-    context.check(id4 != nullptr && id4->summary_flag_stored && !id4->summary_flag,
+    context.check(id4 != nullptr && id4->flag10_stored && !id4->flag10,
                   "ID 4's Flag10 is a stored False");
     const mpp::Task* id1 = task_of(1);
-    context.check(id1 != nullptr && id1->summary_flag_stored && !id1->summary_flag,
+    context.check(id1 != nullptr && id1->flag10_stored && !id1->flag10,
                   "ID 1's Flag10 is a stored False (only ID 3 changed)");
 
     // The control fixture (before the edit) has every Flag10 clear, so the
@@ -1228,12 +1310,78 @@ void test_flag10(TestContext& context) {
         const mpp::Document before = mpp::load_file(control);
         std::size_t set_count = 0;
         for (const mpp::Task& task : before.tasks) {
-            if (task.summary_flag) {
+            if (task.flag10) {
                 ++set_count;
             }
         }
         context.equal(set_count, std::size_t{0},
                       "the control fixture has no Flag10 set");
+    }
+
+    // Wave 24 (W24-15): all twenty Flag bits, measured one at a time.  The
+    // fixture sets Flag1..Flag20 on ID 3 and nothing on the other rows.
+    const std::string all_flags = (test_data_dir() / "wave24-flags20.mpp").string();
+    if (file_exists(all_flags)) {
+        const mpp::Document flag_document = mpp::load_file(all_flags);
+        const auto task_of_uid = [&flag_document](std::uint32_t uid) -> const mpp::Task* {
+            for (const mpp::Task& task : flag_document.tasks) {
+                if (task.uid == uid) {
+                    return &task;
+                }
+            }
+            return nullptr;
+        };
+        const mpp::Task* flagged = task_of_uid(3);
+        context.check(flagged != nullptr && flagged->flags_stored,
+                      "wave24-flags20 stores the Flag1..20 metadata for ID 3");
+        std::size_t set_flags = 0;
+        if (flagged != nullptr) {
+            for (const bool value : flagged->flags) {
+                if (value) {
+                    ++set_flags;
+                }
+            }
+        }
+        context.equal(set_flags, std::size_t{20},
+                      "all twenty measured flag bits decode True on ID 3");
+        context.check(flagged != nullptr && flagged->flag10,
+                      "Flag10 (flags[9]) is True on ID 3");
+        const mpp::Task* clear = task_of_uid(4);
+        std::size_t clear_flags = 0;
+        if (clear != nullptr && clear->flags_stored) {
+            for (const bool value : clear->flags) {
+                if (value) {
+                    ++clear_flags;
+                }
+            }
+        }
+        context.check(clear != nullptr && clear->flags_stored,
+                      "wave24-flags20 stores the metadata for ID 4 too");
+        context.equal(clear_flags, std::size_t{0},
+                      "ID 4's twenty flags are all stored False");
+        // The one-bit-per-flag rule: wave23-flags has ONLY Flag10 set.
+        const std::string flag10_only = (test_data_dir() / "wave23-flags.mpp").string();
+        if (file_exists(flag10_only)) {
+            const mpp::Document only = mpp::load_file(flag10_only);
+            const mpp::Task* id3_only = nullptr;
+            for (const mpp::Task& task : only.tasks) {
+                if (task.uid == 3) {
+                    id3_only = &task;
+                }
+            }
+            std::size_t set_in_control = 0;
+            if (id3_only != nullptr) {
+                for (const bool value : id3_only->flags) {
+                    if (value) {
+                        ++set_in_control;
+                    }
+                }
+            }
+            context.check(id3_only != nullptr && id3_only->flags[9],
+                          "wave23-flags sets Flag10 on ID 3");
+            context.equal(set_in_control, std::size_t{1},
+                          "wave23-flags sets no other flag bit");
+        }
     }
 }
 
@@ -2255,14 +2403,18 @@ void test_resources(TestContext& context) {
     const mpp::Resource* first = find_resource(project_a, 1);
     context.check(first != nullptr, "PROJECT_A resource uid 1 is present");
     if (first != nullptr) {
-        context.equal(first->name, std::string("client-text-102"), "PROJECT_A resource 1 name");
+        // The client resource name itself is never quoted (W24-26); the pinned
+        // hash is of the string COM reports.
+        context.equal(name_hash(first->name), std::string("sha256:184b30f76d2b8e17"),
+                      "PROJECT_A resource 1 name");
     }
     const mpp::Resource* spaced = find_resource(project_a, 3);
     context.check(spaced != nullptr, "PROJECT_A resource uid 3 is present");
     if (spaced != nullptr) {
-        context.equal(spaced->name_raw, std::string("client-text-097 "),
+        context.equal(name_hash(spaced->name_raw),
+                      std::string("sha256:339dd3e90c47ba29"),
                       "resource name_raw keeps the stored trailing space");
-        context.equal(spaced->name, std::string("client-text-097"),
+        context.equal(name_hash(spaced->name), std::string("sha256:9d2aa1ee44706c9b"),
                       "resource name is trimmed for display like COM");
     }
     context.equal(mpp::load_file(MPP_PROJECT_B_PATH).resources.size(), std::size_t{22},
@@ -3548,6 +3700,7 @@ int run_tests() {
     test_project_b(context);
     test_project_property_names(context);
     test_flag10(context);
+    test_project_view_settings(context);
     test_new_task_mode(context);
     test_outline_fixture(context);
     test_status_fixture(context);

@@ -108,6 +108,7 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     TaskRow row;
     row.uid = task.uid;
     row.id = task.row_id;
+    row.file_row = task.row;
     row.outline_number = task.outline_number;
     row.name = task.name;
     row.duration_ticks = static_cast<std::int64_t>(task.duration_ticks);
@@ -118,8 +119,8 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     row.summary = task.summary;
     row.milestone = task.is_milestone() && !task.summary;
     row.critical = task.critical;
-    row.summary_flag = task.summary_flag;
-    row.summary_flag_stored = task.summary_flag_stored;
+    row.flag10 = task.flag10;
+    row.flag10_stored = task.flag10_stored;
     // Wave 14: the manually-scheduled bit, so the app can warn that save_date_edits
     // writes an auto-scheduled pin (docs/audit-handoff.md section 4.1/4.2).
     row.manually_scheduled = task.manually_scheduled;
@@ -137,6 +138,15 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     input.project_finish = date32_from_packed(document.project.finish.raw);
     input.project_duration_ticks = static_cast<std::int64_t>(document.project.duration_ticks);
     input.project_percent_complete = document.project.percent_complete;
+    // Wave 24 (W24-2/W24-3): the two view settings the file actually stores.
+    // A file without the summary record means "hidden" (Project's new-project
+    // default); a file without the Timeline record keeps the shown default.
+    input.show_project_summary = document.project.summary_row_shown;
+    if (document.project.timeline_stored) {
+        input.show_timeline = document.project.timeline_shown;
+    }
+    input.project_flag10 = document.project.flag10;
+    input.project_flag10_stored = document.project.flag10_stored;
 
     input.tasks.reserve(document.tasks.size());
     for (const mpp::Task& task : document.tasks) {

@@ -1399,12 +1399,14 @@ void MainWindow::refresh_timeline() {
     if (timeline_ == nullptr) {
         return;
     }
-    // Wave 23 (B-2, corrected): Timeline visibility is an application setting,
-    // not file state -- COM reports the same CurrentView for the files whose
-    // captures differ, and saving the strip shown/hidden changes no direct
-    // view-state bytes.  The shell keeps Project's default (shown).  The
-    // View > Timeline checkbox is part of the split-view work (W23-20).
-    timeline_->setVisible(true);
+    // Wave 24 (W24-3): the strip's visibility is FILE state, stored in the
+    // view props as 0x03400008 ("Time&line" shown, empty hidden).  A fresh
+    // Project 2021 session reopened a shown/hidden save pair with the strip
+    // shown/hidden, and the two saves differ semantically only in that record
+    // (plus the per-save GUID).  Wave 23's "application state" conclusion came
+    // from a diff that did not decode the Props record framing.  A new project
+    // keeps Project's default (shown).
+    timeline_->setVisible(!doc_.has_document() || doc_.loaded().show_timeline);
     if (!doc_.has_document()) {
         // A new project: Start and Finish are today, and the strip shows the
         // product's prompt because nothing has been added to the timeline.
@@ -2065,8 +2067,14 @@ void MainWindow::print_plan() {
         print_rows(doc_.records().row_count(),
                    doc_.filter_active() ? doc_.filter_rows() : std::vector<std::size_t>{},
                    doc_.filter_active());
+    std::size_t printed_tasks = 0;
+    for (const std::size_t row : rows) {
+        if (doc_.records().uid(row) != 0) {
+            ++printed_tasks;
+        }
+    }
     const app::PrintJob job =
-        make_print_job(doc_.plan(), rows,
+        make_print_job(doc_.plan(), rows, printed_tasks,
                        doc_.filter_active() ? doc_.filter_description() : std::string(),
                        today_text(), prefs_.zoom);
     QString error;
@@ -2173,14 +2181,24 @@ void MainWindow::show_task_fields() {
         return;
     }
     const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
-    if (!selected.has_selection || selected.row >= doc_.plan().tasks.size()) {
+    // Wave 24 (W24-1): resolve the selection to its UID and look the task up by
+    // UID.  A RecordSet row is only the same number as a plan task index when
+    // the project row is hidden; with row 0 shown it is off by one, which used
+    // to open this dialog (and queue the save) on the task BELOW the selection.
+    const app::TaskRow* selected_task = doc_.task_by_uid(selected.uid);
+    if (!selected.has_selection) {
         set_message("select a task first", false);
+        update_status();
+        return;
+    }
+    if (selected_task == nullptr) {
+        set_message("the project summary row has no editable task fields", false);
         update_status();
         return;
     }
     std::vector<app::StructuralEdit> edits;
     QString error;
-    if (!edit_task_fields(this, doc_.plan().tasks[selected.row], doc_.format(), edits, &error)) {
+    if (!edit_task_fields(this, *selected_task, doc_.format(), edits, &error)) {
         if (!error.isEmpty()) {
             set_message(error.toStdString(), true);
             update_status();
@@ -2582,9 +2600,11 @@ void MainWindow::delete_task() {
         return;
     }
     const std::size_t dependants = app::count_delete_dependants(doc_.plan(), selected.uid);
+    // Wave 24 (W24-1): name the task the delete will actually tombstone -- the
+    // one the selected UID names, not plan().tasks[RecordSet row].
     QString name = to_q(std::to_string(selected.uid));
-    if (selected.row < doc_.plan().tasks.size()) {
-        name = to_q(doc_.plan().tasks[selected.row].name);
+    if (const app::TaskRow* task = doc_.task_by_uid(selected.uid)) {
+        name = to_q(task->name);
     }
     const QMessageBox::StandardButton choice = QMessageBox::question(
         this, QStringLiteral("Delete Task"),
@@ -2786,8 +2806,12 @@ QMenu* MainWindow::build_row_menu() {
     bool manual = true;
     if (doc_.has_document() && doc_.sheet() != nullptr) {
         const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
-        if (selected.has_selection && selected.row < doc_.plan().tasks.size()) {
-            manual = doc_.plan().tasks[selected.row].manually_scheduled;
+        // Wave 24 (W24-1): the label belongs to the selected UID's task.  The
+        // project row (uid 0) has no task and keeps the default label.
+        if (selected.has_selection) {
+            if (const app::TaskRow* task = doc_.task_by_uid(selected.uid)) {
+                manual = task->manually_scheduled;
+            }
         }
     }
     // The item reflects the selected row's current mode.
@@ -2812,7 +2836,11 @@ bool MainWindow::task_information_values(TaskInformationValues* out) const {
         return false;
     }
     const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
-    if (!selected.has_selection) {
+    // Wave 24 (W24-1/R5): the synthetic project row has no plan task.  Task
+    // Information used to write through the sheet model on RecordSet row 0 and
+    // the value was then dropped by sync_plan_from_records -- an edit that
+    // looked accepted but never reached the file.  Refuse it here.
+    if (!selected.has_selection || selected.uid == 0) {
         return false;
     }
     const std::size_t row = selected.row;
@@ -2859,6 +2887,13 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
     const app::SelectedTask selected = app::selected_task(*sheet, doc_.rows());
     if (!selected.has_selection) {
         set_message("select a task first", true);
+        update_status();
+        return false;
+    }
+    // Wave 24 (W24-1/R5): the project row is not a task and its sheet cells
+    // are dropped by sync_plan_from_records; refuse to write through it.
+    if (selected.uid == 0 || doc_.task_by_uid(selected.uid) == nullptr) {
+        set_message("the project summary row is not editable in this port", true);
         update_status();
         return false;
     }
@@ -2926,7 +2961,13 @@ void MainWindow::show_task_information() {
     }
     TaskInformationValues values;
     if (!task_information_values(&values)) {
-        set_message("select a task first", true);
+        const app::SelectedTask selected =
+            doc_.sheet() != nullptr ? app::selected_task(*doc_.sheet(), doc_.rows())
+                                    : app::SelectedTask{};
+        set_message(selected.has_selection && selected.uid == 0
+                        ? "the project summary row is not editable in this port"
+                        : "select a task first",
+                    true);
         update_status();
         return;
     }

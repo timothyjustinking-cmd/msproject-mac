@@ -380,7 +380,7 @@ void Session::apply_plan_result() {
     status_.recalc_slack_matches = 0;
     status_.recalc_critical_matches = 0;
     status_.summary_links = 0;
-    summary_flag_disagreements_ = 0;
+    flag10_disagreements_ = 0;
 
     if (!plan_ || !recalc_attempted_) {
         apply_stored_values();
@@ -431,7 +431,7 @@ void Session::apply_plan_result() {
         if (scheduled == nullptr) {
             // No result for this row: keep what the file said rather than
             // inventing a schedule.  Counted, not named.
-            ++summary_flag_disagreements_;
+            ++flag10_disagreements_;
             continue;
         }
         row.start = scheduled->start;
@@ -453,7 +453,7 @@ void Session::apply_plan_result() {
             ++status_.recalc_critical_matches;
         }
         if (scheduled->summary != row.summary) {
-            ++summary_flag_disagreements_;
+            ++flag10_disagreements_;
         }
     }
 
@@ -531,8 +531,8 @@ void Session::rebuild_warnings() {
         status_.warnings.push_back("links: " + count_text(status_.summary_links) +
                                    " link(s) touch a summary task and are not scheduled");
     }
-    if (summary_flag_disagreements_ > 0) {
-        status_.warnings.push_back("plan: " + count_text(summary_flag_disagreements_) +
+    if (flag10_disagreements_ > 0) {
+        status_.warnings.push_back("plan: " + count_text(flag10_disagreements_) +
                                    " row(s) disagree with the reader's Summary flag or have "
                                    "no schedule result");
     }

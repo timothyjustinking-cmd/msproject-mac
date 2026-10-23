@@ -25,6 +25,9 @@ get_filename_component(QT_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 # the Linux CI job: Ubuntu's `qt6-base-dev` ships Qt6PrintSupport, but a minimal
 # image needs `libqt6printsupport6`/the matching -dev package as well.
 find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets PrintSupport)
+# Wave 24 (W24-6): the dialog gate sends a REAL double-click through
+# QTest::mouseDClick instead of emitting the signal programmatically.
+find_package(Qt6 6.2 REQUIRED COMPONENTS Test)
 
 # The app/ and core/ targets must be configured before the warning function is
 # used, because CORE_WARNINGS_AS_ERRORS is an app/ option (the coordinator's CI
@@ -136,7 +139,8 @@ add_test(NAME qt_shell_offscreen
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_shell_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
-                 "${QT_TEST_OUT_DIR_CMAKE}/qt-shell-window.png")
+                 "${QT_TEST_OUT_DIR_CMAKE}/qt-shell-window.png"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave24-timeline-hidden.mpp")
 
 # Wave 17 Q2 / wave 18 Q3: the numeric parity gate.  Asserts the reference-
 # measured geometry and typography (row/header heights, the frozen 60 px gutter,
@@ -168,6 +172,21 @@ add_test(NAME qt_save_reopen
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_save_reopen_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# Wave 24 (W24-1): RecordSet row vs plan task index.  The fixture stores the
+# project row SHOWN, out-of-ID stored order and a mixed scheduling state, so
+# every uid-routed call site (Task Information, Custom Fields save, Delete,
+# the row menu, the printed Gantt, the Insert Task placeholder) is tested
+# against the task on the selected row -- row+1 arithmetic fails each one.
+add_executable(qt_uid_routing_tests tests/uid_routing_test.cpp)
+target_link_libraries(qt_uid_routing_tests PRIVATE qt_shell)
+qt_set_warnings(qt_uid_routing_tests)
+
+add_test(NAME qt_uid_routing
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_uid_routing_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave24-order.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================
@@ -219,14 +238,15 @@ add_test(NAME qt_view_gate
 # geometry, the OK/result path over app/, and Preferences persistence through
 # an explicit ini store under test-out (never the user's real settings).
 add_executable(qt_dialog_gate_tests tests/dialog_gate_test.cpp)
-target_link_libraries(qt_dialog_gate_tests PRIVATE qt_shell)
+target_link_libraries(qt_dialog_gate_tests PRIVATE qt_shell Qt6::Test)
 qt_set_warnings(qt_dialog_gate_tests)
 
 add_test(NAME qt_dialog_gate
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_dialog_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
-                 "${QT_TEST_OUT_DIR_CMAKE}")
+                 "${QT_TEST_OUT_DIR_CMAKE}"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave24-order.mpp")
 
 # Copy/Cut/Paste through SheetModel: menu enablement, range paste as one undo
 # step, Cut as copy + a clearing transaction, single-cell fallback.
@@ -286,7 +306,8 @@ add_test(NAME qt_task_order
                  $<TARGET_FILE:qt_task_order_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
-                 "${QT_TEST_DATA_DIR_CMAKE}/project_a_preds_golden.sha256")
+                 "${QT_TEST_DATA_DIR_CMAKE}/project_a_preds_golden.sha256"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave24-order.mpp")
 
 if(EXISTS "${QT_REPO_ROOT}/corpus/project_a.mpp")
     add_test(NAME qt_task_order_corpus
@@ -295,6 +316,7 @@ if(EXISTS "${QT_REPO_ROOT}/corpus/project_a.mpp")
                      "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
                      "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                      "${QT_TEST_DATA_DIR_CMAKE}/project_a_preds_golden.sha256"
+                     "${QT_TEST_DATA_DIR_CMAKE}/wave24-order.mpp"
                      "${QT_REPO_ROOT}/corpus/project_a.mpp")
 endif()
 
@@ -358,7 +380,7 @@ foreach(carlito_target
         qt_shell_tests qt_parity_tests qt_save_reopen_tests
         qt_empty_state_tests qt_chrome_gate_tests qt_view_gate_tests
         qt_dialog_gate_tests qt_clipboard_tests qt_stored_table_tests
-        qt_ux_gate_tests qt_ribbon_inventory_tests)
+        qt_ux_gate_tests qt_ribbon_inventory_tests qt_uid_routing_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 

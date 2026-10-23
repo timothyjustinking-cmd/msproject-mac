@@ -73,6 +73,13 @@ inline constexpr core::view::FieldId kUidField = 0x0b4fff01u;
 struct TaskRow {
     std::uint32_t uid = 0;
     std::uint32_t id = 0;
+    /* Wave 24 (W24-1): the task's row number in the FILE's FixedData storage
+     * order (core/mpp Task::row, project row excluded).  The adapter sorts
+     * `tasks` into Project's ID order, so vector position is no longer the
+     * stored order; the Insert Task placeholder must copy the LAST live stored
+     * row's dates (what core/mppwrite's add_task_row clones), which is the row
+     * with the largest file_row.  A pending insert has no file row (0). */
+    std::uint32_t file_row = 0;
     std::string outline_number;  // "1", "1.1" -- Project's Task.OutlineNumber
     std::string name;
     std::int64_t duration_ticks = 0;
@@ -84,11 +91,11 @@ struct TaskRow {
     bool milestone = false;
     bool critical = false;
     // Wave 23 (W23-6): Task.Flag10 (0x0b400051), Project's SUMMARY column, a
-    // stored Task FixedMeta bit (reader.h Task::summary_flag).  `stored` is
+    // stored Task FixedMeta bit (reader.h Task::flag10).  `stored` is
     // false for a row the file's metadata does not cover; the record then has
     // no value (Project's No is a stored False, not an absent field).
-    bool summary_flag = false;
-    bool summary_flag_stored = false;
+    bool flag10 = false;
+    bool flag10_stored = false;
     // Wave 14: the reader's MEASURED manually-scheduled bit (Fixed2Meta 0x80;
     // core/mpp/reader.h Task::manually_scheduled).  A pending inserted row has no
     // file row and is false.  app/start_edit_warning.h uses it to warn that a date
@@ -176,19 +183,36 @@ struct PlanInput {
     date32 project_finish = kDateNa;
     std::size_t skipped_links = 0;  // links whose endpoint the reader did not know
 
-    /* Wave 23 (B-1): Project's project-summary row, shown as ID 0 above the
-     * top-level tasks.  The values come from the file's project row.
+    /* Wave 23 (B-1) / wave 24 (W24-2): Project's project-summary row, shown as
+     * ID 0 above the top-level tasks.  The values come from the file's project
+     * row.
      *
-     * `show_project_summary` is a PRESENTATION switch, not a stored fact:
-     * `Project.DisplayProjectSummaryTask` was measured on this machine, saved
-     * off and on, and the two saves differ in no `214` part and only in the
-     * per-save handle/timestamp bytes of `114/Props` -- Project keeps this
-     * setting in the application, not in the .mpp.  The shell therefore owns
-     * the default (on, matching the clean capture) and a later Format tab
-     * toggle.  A new project has no project row. */
+     * `show_project_summary` is the FILE's stored setting (214/212/Props record
+     * 0x03400009: 1 shown, 0 hidden), decoded by the reader.  A file without
+     * the record is treated as Project's new-project default (hidden).  Wave
+     * 23 wrongly hard-coded this on after a props diff that did not decode the
+     * record framing; wave 24 re-measured a fresh Project save pair and the
+     * record goes 0 -> 1 exactly with the setting (see ProjectRow in
+     * core/mpp/reader.h).  The shell has no Format-tab toggle yet, so a file
+     * that says hidden stays hidden. */
     bool show_project_summary = false;
     std::int64_t project_duration_ticks = 0;
     std::uint16_t project_percent_complete = 0;
+
+    /* Wave 24 (W24-3): the Timeline strip's visibility, from the file's view
+     * props (214/212/Props record 0x03400008: "Time&line" shown, empty hidden).
+     * Measured on a shown/hidden save pair from one session: every semantic
+     * stream difference was that record (plus the per-save GUID), and two
+     * fresh Project sessions reopened the pair shown and hidden.  A file with
+     * no record keeps Project's new-file default (shown). */
+    bool show_timeline = true;
+
+    /* Wave 24 (W24-9/R11): the project row's own SUMMARY value -- the stored
+     * FixedMeta Flag10 bit of row 0.  Wave 23 hard-coded Yes from one capture;
+     * the reader now decodes the file's bit and the sheet shows what it says
+     * (a file without a usable entry leaves the cell blank). */
+    bool project_flag10 = false;
+    bool project_flag10_stored = false;
 };
 
 // The synthetic TaskRow make_record_set() puts at row 0 when

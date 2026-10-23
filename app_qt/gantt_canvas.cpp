@@ -276,7 +276,7 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
             polyline << QPointF(point.x, point.y + body_top);
         }
         painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(link.critical ? kBarCritical : kLinkLine, 1.0));
+        painter.setPen(QPen(link.critical ? kLinkCritical : kLinkLine, 1.0));
         painter.drawPolyline(polyline);
 
         QPolygonF arrow;
@@ -284,7 +284,7 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
               << QPointF(link.arrow.wing[0].x, link.arrow.wing[0].y + body_top)
               << QPointF(link.arrow.wing[1].x, link.arrow.wing[1].y + body_top);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(link.critical ? kBarCritical : kLinkLine);
+        painter.setBrush(link.critical ? kLinkCritical : kLinkLine);
         painter.drawPolygon(arrow);
     }
 

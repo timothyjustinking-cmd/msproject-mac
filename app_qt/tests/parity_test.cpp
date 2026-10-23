@@ -222,7 +222,10 @@ int main(int argc, char** argv) {
     // Wave 21: the selection is Project 2021's measured green (162,211,160), read
     // from the operator's clean reference capture -- not the earlier guess.
     check(msqt::kSelection == QColor(0xa2, 0xd3, 0xa0), "selection is #a2d3a0");
-    check(msqt::kBarTask == QColor(0x4a, 0x7e, 0xbb), "task bar is #4a7ebb (unmeasured)");
+    // Wave 24 (W24-18): the blank-project capture measured the stock task fill
+    // as (116,204,212); the old #4a7ebb was PROJECT_A's own style.
+    check(msqt::kBarTask == QColor(0x74, 0xcc, 0xd4),
+          "task bar is Project's measured stock teal (116,204,212)");
 
     // --- chrome ------------------------------------------------------------
     msqt::RibbonBar* ribbon = window.ribbon();
