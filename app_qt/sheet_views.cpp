@@ -545,7 +545,9 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
         // threshold above).
         const QRect box(option.rect.left() + 18, option.rect.center().y() - 6, 14, 12);
         painter->setPen(Qt::NoPen);
-        painter->setBrush(kBarTask);
+        // Wave 25 review: the pin is chrome, not a task bar -- it keeps its
+        // pre-wave-25 colour instead of following the measured task palette.
+        painter->setBrush(kTaskModePin);
         painter->drawRoundedRect(box, 2, 2);
         painter->setPen(QPen(QColor(0xff, 0xff, 0xff), 1));
         painter->drawLine(box.left() + 4, box.center().y(), box.right() - 4,

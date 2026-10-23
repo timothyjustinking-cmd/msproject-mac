@@ -153,6 +153,15 @@ inline const QColor kBarOutline(0x2b, 0x4a, 0x6f);
 inline const QColor kLinkAuto(0x26, 0x7c, 0xd3);       // (38,124,211)
 inline const QColor kLinkManual(0x1b, 0xad, 0xba);     // (27,173,186)
 inline const QColor kLinkCritical(0xdd, 0x25, 0x22);   // (221,37,34) highlight ON
+// Wave 25 review: two chrome colours that used to borrow a bar constant.  They
+// are NOT task colours; keeping them separate stops a palette change from
+// silently repainting the status marker or the Task Mode pin.
+//   Status-date marker: Project draws it as a red dashed line.  The exact red
+//   is not measured yet; this is the highlight red, reserved here explicitly.
+inline const QColor kStatusLine(0xf7, 0x8a, 0x88);     // unmeasured (W25 backlog)
+//   Task Mode pin: the pre-wave-25 visible teal.  Unmeasured chrome, carried
+//   unchanged so W25-2 does not silently recolour it.
+inline const QColor kTaskModePin(0x74, 0xcc, 0xd4);    // unmeasured chrome
 inline const QColor kBodyText(0x10, 0x10, 0x10);
 inline const QColor kMutedText(0x5a, 0x5a, 0x5a);
 inline const QColor kSheetBackground(0xff, 0xff, 0xff);

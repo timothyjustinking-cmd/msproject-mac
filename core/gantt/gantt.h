@@ -371,14 +371,15 @@ struct LinkRoute {
     std::uint32_t successor_uid = 0;
     LinkType type = LinkType::finish_to_start;
     bool critical = false;
-    // Wave 25 (W25-2/S2): copied from LinkInput::manual.
-    bool manual = false;
     // Orthogonal polyline: points.front() is on the predecessor's edge,
     // points.back() == arrow.tip is on the successor's edge.  Consecutive
     // points are never coincident.
     std::vector<Point> points;
     ArrowHead arrow;
     Rect bounds;  // tight bounding box of the polyline
+    // Wave 25 (W25-2/S2): copied from LinkInput::manual.  APPENDED so a future
+    // positional aggregate initialiser keeps its field order.
+    bool manual = false;
 };
 
 // ---------------------------------------------------------------------------

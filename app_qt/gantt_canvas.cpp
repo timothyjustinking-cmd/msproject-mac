@@ -414,7 +414,8 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
     // The status-date marker, when a layout carries one (this wave passes none).
     if (layout_.has_status_line()) {
         const int x = pixel(layout_.status_x);
-        painter.setPen(QPen(kBarCritical, 1.0));
+        // Wave 25 review: a dedicated status colour, not the critical-bar red.
+        painter.setPen(QPen(kStatusLine, 1.0));
         painter.drawLine(x, body_top, x, canvas_height);
     }
 
