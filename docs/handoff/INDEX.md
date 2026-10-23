@@ -4,7 +4,15 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Wave 24 (closed on branch `wave24` — the verify-and-fix work order)
+## Wave 25 (open on branch `wave25`)
+
+| file | what |
+|---|---|
+| `wave25-brief.md` | **the work order**: hold unchanged, tightened rules, W25-1..21 (regressions, privacy scrub done properly, record honesty, gate holes, then parity) |
+| `wave24-verification/gates.md` | the verifier's fresh-tree gate run on wave 24's tip |
+| `wave24-verification/review.md` | the independent review of `wave23..wave24`: S1..S14 |
+
+## Wave 24 (closed on branch `wave24` — verified NOT ready to merge)
 
 | file | what |
 |---|---|
