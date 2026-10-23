@@ -82,6 +82,20 @@ std::string print_footer_text(const std::string& date_text, std::size_t page,
     return text;
 }
 
+std::vector<std::size_t> print_row_list(std::size_t record_row_count,
+                                        const std::vector<std::size_t>& filter_rows,
+                                        bool filter_active) {
+    if (filter_active) {
+        return filter_rows;  // an empty active list prints nothing, not everything
+    }
+    std::vector<std::size_t> rows;
+    rows.reserve(record_row_count);
+    for (std::size_t row = 0; row < record_row_count; ++row) {
+        rows.push_back(row);
+    }
+    return rows;
+}
+
 PrintJob build_print_job(const PrintRequest& request, PrintRoute route) {
     PrintJob job;
     job.kind = request.kind;

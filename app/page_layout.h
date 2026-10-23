@@ -132,6 +132,21 @@ std::string print_header_text(const std::string& project_name,
 std::string print_footer_text(const std::string& date_text, std::size_t page,
                               std::size_t page_count);
 
+// The rows a print request covers: the filter's rows verbatim when a filter is
+// active (an empty active list is a legitimate "nothing matches"), else every
+// RecordSet row in order.
+//
+// WAVE 26 (W26-0.1).  These are RecordSet row indexes, NOT task indexes: when
+// the file shows the project row, RecordSet row 0 is uid 0 and task N is on row
+// N+1.  Building the list as `0 .. tasks.size()-1` drops the last task from the
+// printed table and chart -- the wave-25 review's High finding.  The function
+// lives here, in the shared layer, so both shells call it and the headless
+// app_layout test can fail the old arithmetic on tests/data/wave24-order.mpp
+// (macOS has no toolchain on this machine).
+std::vector<std::size_t> print_row_list(std::size_t record_row_count,
+                                        const std::vector<std::size_t>& filter_rows,
+                                        bool filter_active);
+
 // One print request: what to print and how the page looks.  `rows` are
 // RecordSet row indexes in display order (the caller applies the filter the
 // same way Export PDF does); an empty list still produces one page.

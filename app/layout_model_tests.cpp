@@ -26,6 +26,7 @@
 #include "date.h"
 #include "gantt.h"
 #include "layout_model.h"
+#include "page_layout.h"
 #include "reader_adapter.h"
 #include "sheet.h"
 
@@ -716,6 +717,37 @@ void test_displayed_rows_by_uid() {
         }
     }
     check_size(bar_mismatches, 0, "every bar names the uid of the row it is drawn on");
+
+    // Wave 26 (W26-0.1): the print row list.  The shells used to build it as
+    // `0 .. tasks.size()-1`, which is one row short when the project row is
+    // shown: row 0 is the project row, so the highest-ID task (the last
+    // RecordSet row) never printed.  Every check in this block is false under
+    // that arithmetic and true on app::print_row_list().
+    const std::vector<std::size_t> printed =
+        app::print_row_list(records.row_count(), {}, false);
+    check_size(printed.size(), records.row_count(),
+               "the print row list holds every RecordSet row, not one per task");
+    check_size(printed.size(), input.tasks.size() + 1,
+               "the print row list includes the project row as well as every task");
+    check(!printed.empty() && printed.back() + 1 == records.row_count(),
+          "the print row list ends at the last RecordSet row (the old loop stopped one short)");
+    std::size_t missing_task_rows = 0;
+    for (const app::TaskRow& task : input.tasks) {
+        bool found = false;
+        for (const std::size_t row : printed) {
+            found = found || records.uid(row) == task.uid;
+        }
+        if (!found) {
+            ++missing_task_rows;
+        }
+    }
+    check_size(missing_task_rows, 0,
+               "every task uid reaches the printer (the old arithmetic omitted the last task)");
+    const std::vector<std::size_t> filter_rows{1, 3};
+    check(app::print_row_list(records.row_count(), filter_rows, true) == filter_rows,
+          "an active filter's print rows are the filter's rows verbatim");
+    check(app::print_row_list(records.row_count(), {}, true).empty(),
+          "a zero-match filter's print row list is empty, not every row");
 
     // The edit-entry guard (R5): the project row refuses a session, a task row
     // opens one and can be cancelled cleanly.
