@@ -74,6 +74,10 @@ class ViewLabel;
 QString& ui_font_family();
 bool ui_font_is_carlito();
 
+// W26-4.2: the port's own version, shown on the Account page and in About.
+// Kept in step with the root CMakeLists project version (0.1.0).
+inline constexpr const char* kShellVersion = "0.1.0";
+
 // The whole application's look, in one place and in one order: Fusion style,
 // one palette built in code, one fixed body point size and the resolved family.
 // Call it once, after the QApplication exists and before any window is
@@ -144,6 +148,11 @@ class MainWindow final : public QMainWindow {
     // Swaps the QPalette between Office light and dark; (persist) writes the
     // choice to the preference store under its own key.
     void set_theme(Theme theme, bool persist);
+    // W26-4.2: the Account page's five-name chooser.  Only an implemented
+    // choice applies; the palette is the choice's resolution and the existing
+    // light/dark store key keeps the resolved palette.
+    ThemeChoice theme_choice() const noexcept { return theme_choice_; }
+    bool set_theme_choice(ThemeChoice choice, bool persist);
 
     // Opens/closes the File backstage.  Public so the structural gate can prove
     // the left rail and pages without clicking through a modal.
@@ -358,6 +367,9 @@ class MainWindow final : public QMainWindow {
     bool new_tasks_manual_ = true;
     bool new_tasks_manual_known_ = false;
     Theme theme_ = Theme::light;
+    // W26-4.2: the Office Theme chooser's current entry.  "Use system setting"
+    // resolves through the platform colour scheme at apply time.
+    ThemeChoice theme_choice_ = ThemeChoice::colorful;
 
     // --- wave 19: the document's pending edits and save target --------------
     std::unique_ptr<app::Document> document_;

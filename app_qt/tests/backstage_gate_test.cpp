@@ -12,9 +12,12 @@
 // parses the committed numbers, measures the LIVE widgets and the RENDERED
 // pixels, and compares.  This file grows one section per G4 item (W26-4.1..
 // 4.6); a section is added by the item's own commit.
+#include <QAbstractButton>
+#include <QAbstractItemModel>
 #include <QApplication>
 #include <QColor>
 #include <QComboBox>
+#include <QDialog>
 #include <QDir>
 #include <QFile>
 #include <QFontDatabase>
@@ -26,14 +29,16 @@
 #include <QJsonValue>
 #include <QLabel>
 #include <QList>
+#include <QMessageBox>
 #include <QPixmap>
 #include <QPoint>
 #include <QPushButton>
 #include <QRect>
 #include <QSize>
+#include <QStackedWidget>
 #include <QString>
 #include <QStringList>
-#include <QAbstractButton>
+#include <QTimer>
 #include <QToolButton>
 #include <QWidget>
 
@@ -46,8 +51,10 @@
 #include "backstage.h"
 #include "gate_util.h"
 #include "main_window.h"
+#include "preferences_store.h"
 #include "ribbon_bar.h"
 #include "shell_style.h"
+#include "theme.h"
 
 namespace {
 
@@ -317,6 +324,158 @@ void check_file_tab(msqt::MainWindow& window) {
     }
 }
 
+void check_account(msqt::MainWindow& window, const QJsonObject& measures,
+                   const QString& out_dir) {
+    msqt::Backstage* backstage = window.backstage();
+    if (backstage == nullptr) {
+        return;
+    }
+    const QJsonObject page = measures.value(QStringLiteral("account_page")).toObject();
+    const int right_left = page.value(QStringLiteral("right_column_left")).toInt();
+    const int combo_left = page.value(QStringLiteral("theme_combo_left")).toInt();
+    const int combo_width = page.value(QStringLiteral("theme_combo_width")).toInt();
+    const QJsonArray order = page.value(QStringLiteral("theme_combo_order")).toArray();
+    const QJsonArray implemented =
+        page.value(QStringLiteral("theme_choices_implemented")).toArray();
+
+    window.show_backstage(true);
+    backstage->show_page(msqt::Backstage::Page::account);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    gate::check(backstage->pages()->currentIndex() ==
+                    static_cast<int>(msqt::Backstage::Page::account),
+                "the Account page is on screen for its measurements");
+    QWidget* page_widget = backstage->pages()->currentWidget();
+
+    QComboBox* combo = backstage->theme_combo();
+    gate::check(combo != nullptr, "the Account page has the Office Theme chooser");
+    if (combo != nullptr && page_widget != nullptr) {
+        const QPoint origin = combo->mapTo(page_widget, QPoint(0, 0));
+        gate::check(origin.x() == combo_left,
+                    "the theme chooser starts at the capture's 41-px left");
+        gate::check(combo->width() == combo_width,
+                    "the theme chooser has the capture's 377-px width");
+        gate::check(combo->count() == order.size(),
+                    "the chooser offers Project's five theme names");
+        const QAbstractItemModel* model = combo->model();
+        for (int index = 0; index < order.size() && index < combo->count(); ++index) {
+            gate::check(combo->itemText(index) == order.at(index).toString(),
+                        "the theme name/order is the capture's");
+            bool want_enabled = false;
+            for (const QJsonValue& value : implemented) {
+                if (value.toString() == order.at(index).toString()) {
+                    want_enabled = true;
+                }
+            }
+            const bool live_enabled =
+                model != nullptr &&
+                (model->flags(model->index(index, 0)) & Qt::ItemIsEnabled) != 0;
+            gate::check(live_enabled == want_enabled,
+                        "only the implemented theme names are enabled");
+            if (!want_enabled) {
+                gate::check(combo->itemData(index, Qt::ToolTipRole).toString() ==
+                                QStringLiteral("not implemented in this port"),
+                            "a disabled theme item carries the exact tooltip");
+            }
+        }
+    }
+    QWidget* right = backstage->account_right_column();
+    if (right != nullptr && page_widget != nullptr) {
+        gate::check(right->mapTo(page_widget, QPoint(0, 0)).x() == right_left,
+                    "the right column starts at the capture's measured 494 px");
+    }
+
+    gate::check(backstage->product_label() != nullptr &&
+                    backstage->product_label()->text() ==
+                        page.value(QStringLiteral("product_name")).toString(),
+                "the Account page carries the port's own name");
+    const QString version = page.value(QStringLiteral("product_version")).toString();
+    gate::check(backstage->version_label() != nullptr &&
+                    backstage->version_label()->text() ==
+                        QStringLiteral("Version ") + version,
+                "the Account page carries the port's version");
+
+    // About is mouse-reachable: the Account button opens the real About box.
+    QAbstractButton* about = backstage->about_button();
+    gate::check(about != nullptr && about->isEnabled(),
+                "the Account page has an enabled About button");
+    if (about != nullptr) {
+        bool saw_dialog = false;
+        QString title;
+        QTimer::singleShot(0, [&saw_dialog, &title]() {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if (dialog != nullptr) {
+                saw_dialog = true;
+                title = dialog->windowTitle();
+                dialog->close();
+            }
+        });
+        about->click();
+        QApplication::processEvents();
+        gate::check(saw_dialog, "the About button opens a modal About box");
+        gate::check(title == QStringLiteral("About MS Project Shell"),
+                    "the About box is the port's own");
+    }
+
+    // Every other Account control is laid out and disabled with decision 9's
+    // exact tooltip (the capture's user/license services are not in this port).
+    if (page_widget != nullptr) {
+        const char* const disabled_buttons[] = {
+            "Sign out", "Switch account", "Manage Settings", "OneDrive - Personal",
+            "Add a service", "Switch License",
+        };
+        for (const char* text : disabled_buttons) {
+            QPushButton* found = nullptr;
+            for (QPushButton* button : page_widget->findChildren<QPushButton*>()) {
+                if (button != nullptr && button->text() == QString::fromUtf8(text)) {
+                    found = button;
+                    break;
+                }
+            }
+            gate::check(found != nullptr, "the Account control is laid out");
+            if (found != nullptr) {
+                gate::check(!found->isEnabled(),
+                            "the Account control is disabled (no service behind it)");
+                gate::check(found->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                            "the Account control carries the exact tooltip");
+            }
+        }
+    }
+
+    // The chooser applies the implemented palettes through the live handler and
+    // persists the resolved light/dark palette.
+    if (combo != nullptr) {
+        QDir().mkpath(out_dir);
+        const QString ini = out_dir + QStringLiteral("/backstage-gate.ini");
+        QFile::remove(ini);
+        {
+            msqt::PreferencesStore store(ini);
+            window.set_preferences_store(&store);
+            const int dark_index = static_cast<int>(msqt::ThemeChoice::dark_gray);
+            combo->setCurrentIndex(dark_index);
+            QApplication::processEvents();
+            gate::check(window.theme() == msqt::Theme::dark,
+                        "choosing Dark Gray applies the dark palette");
+            gate::check(window.theme_choice() == msqt::ThemeChoice::dark_gray,
+                        "the chooser keeps the Dark Gray choice");
+            msqt::Theme stored = msqt::Theme::light;
+            gate::check(store.load_theme(stored) && stored == msqt::Theme::dark,
+                        "the resolved palette is persisted through the store");
+            gate::check(!window.set_theme_choice(msqt::ThemeChoice::black, false),
+                        "the unimplemented Black choice is refused");
+            gate::check(window.theme() == msqt::Theme::dark,
+                        "a refused choice changes no palette");
+            combo->setCurrentIndex(static_cast<int>(msqt::ThemeChoice::colorful));
+            QApplication::processEvents();
+            gate::check(window.theme() == msqt::Theme::light,
+                        "choosing Colorful returns the parity palette");
+            window.set_preferences_store(nullptr);
+        }
+        backstage->set_theme_choice(window.theme_choice());
+    }
+}
+
 void check_document_state(msqt::MainWindow& window, const QString& fixture) {
     // No document: Save..Close disabled (the clean Account capture).
     window.show_backstage(true);
@@ -350,11 +509,13 @@ int main(int argc, char** argv) {
 
     if (argc < 3) {
         std::fprintf(stderr,
-                     "usage: backstage_gate_tests <fixture.mpp> <w26-backstage.measures.json>\n");
+                     "usage: backstage_gate_tests <fixture.mpp> <w26-backstage.measures.json> "
+                     "[out-dir]\n");
         return 2;
     }
     const QString fixture = QString::fromLocal8Bit(argv[1]);
     const QString measures_path = QString::fromLocal8Bit(argv[2]);
+    const QString out_dir = argc > 3 ? QString::fromLocal8Bit(argv[3]) : QString();
 
     QFile measures_file(measures_path);
     gate::check(measures_file.open(QIODevice::ReadOnly | QIODevice::Text),
@@ -377,9 +538,12 @@ int main(int argc, char** argv) {
     QApplication::processEvents();
 
     check_rail(window, measures);
+    check_account(window, measures, out_dir);
     check_file_tab(window);
     check_document_state(window, fixture);
 
-    std::fprintf(stderr, "note: W26-4.1 rail/File-tab checks ran on the live window\n");
+    std::fprintf(stderr,
+                 "note: W26-4.1/4.2 rail, File-tab and Account checks ran on the live "
+                 "window\n");
     return gate::finish();
 }

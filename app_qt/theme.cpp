@@ -4,8 +4,10 @@
 
 #include <QApplication>
 #include <QColor>
+#include <QGuiApplication>
 #include <QPalette>
 #include <QString>
+#include <QStyleHints>
 
 #include <string_view>
 
@@ -22,7 +24,62 @@ const QColor kDarkText(0xe6, 0xe6, 0xe6);
 const QColor kDarkButton(0x33, 0x33, 0x33);
 const QColor kDarkAccent(0x2f, 0x6b, 0xa8);
 
+// The measured drop-down order and texts (see theme.h).  Black and White are
+// laid out and disabled: the port has no palettes for them yet.
+const std::vector<ThemeChoiceSpec> kChoices = {
+    {ThemeChoice::colorful, "Colorful", "colorful", true},
+    {ThemeChoice::dark_gray, "Dark Gray", "dark_gray", true},
+    {ThemeChoice::black, "Black", "black", false},
+    {ThemeChoice::white, "White", "white", false},
+    {ThemeChoice::system, "Use system setting", "system", true},
+};
+
 }  // namespace
+
+const std::vector<ThemeChoiceSpec>& office_theme_choices() { return kChoices; }
+
+bool theme_choice_implemented(ThemeChoice choice) noexcept {
+    for (const ThemeChoiceSpec& spec : kChoices) {
+        if (spec.choice == choice) {
+            return spec.implemented;
+        }
+    }
+    return false;
+}
+
+const char* theme_choice_stable_name(ThemeChoice choice) noexcept {
+    for (const ThemeChoiceSpec& spec : kChoices) {
+        if (spec.choice == choice) {
+            return spec.stable_name;
+        }
+    }
+    return "colorful";
+}
+
+Theme theme_for_choice(ThemeChoice choice) {
+    switch (choice) {
+        case ThemeChoice::dark_gray:
+            return Theme::dark;
+        case ThemeChoice::system: {
+            // Qt 6.5's platform colour scheme.  Unknown (offscreen runners,
+            // older platforms) keeps the parity reference's light palette.
+            if (QGuiApplication::styleHints() != nullptr &&
+                QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
+                return Theme::dark;
+            }
+            return Theme::light;
+        }
+        case ThemeChoice::colorful:
+        case ThemeChoice::black:  // not implemented: never applied
+        case ThemeChoice::white:  // not implemented: never applied
+            break;
+    }
+    return Theme::light;
+}
+
+ThemeChoice theme_choice_for_theme(Theme theme) noexcept {
+    return theme == Theme::dark ? ThemeChoice::dark_gray : ThemeChoice::colorful;
+}
 
 const char* theme_name(Theme theme) noexcept {
     switch (theme) {

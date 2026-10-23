@@ -31,5 +31,19 @@
     "account_is_last_page": true,
     "options_is_action": true,
     "disabled_without_document": ["Save", "Save As", "Print", "Share", "Export", "Close"]
+  },
+  "account_page": {
+    "content_left": 41,
+    "left_column_width": 453,
+    "right_column_left": 494,
+    "theme_combo_left": 41,
+    "theme_combo_width": 377,
+    "theme_combo_order": ["Colorful", "Dark Gray", "Black", "White", "Use system setting"],
+    "theme_choices_implemented": ["Colorful", "Dark Gray", "Use system setting"],
+    "theme_choices_disabled": ["Black", "White"],
+    "product_name": "MS Project Shell",
+    "product_version": "0.1.0",
+    "source_dropdown": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744218543-obuhaj.jpg",
+    "note": "Column offsets and the theme combo's 377-px width are measured from the clean Account capture; the five names and their order from the open drop-down frame."
   }
 }

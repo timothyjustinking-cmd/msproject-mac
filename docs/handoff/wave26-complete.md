@@ -506,7 +506,7 @@ pixels against them.
 | item | finding | status | evidence |
 |---|---|---|---|
 | W26-4.1 | File tab and rail styled as the Account capture: plain File tab, light rail, back arrow, Account under Close, Options pinned | **DONE** | commit `PENDING`; gates `build/w26/gates-4ca7821-W26-4.1.log` |
-| W26-4.2 | Account page: identity, version, mouse-reachable About, Project's five Office Theme names (implemented ones enabled) | pending | - |
+| W26-4.2 | Account page: identity, version, mouse-reachable About, Project's five Office Theme names (implemented ones enabled) | **DONE** | commit `PENDING`; gates `build/w26/gates-6fb6ec5-W26-4.2.log` |
 | W26-4.3 | New page: Blank Project, New from existing, local Recent list, disabled online search with a note | pending | - |
 | W26-4.4 | Open and Save As pages: Recent, This PC, Browse; OneDrive/SharePoint laid out and disabled | pending | - |
 | W26-4.5 | Print page: copies, printer list, settings (dates, pages, orientation, paper), live preview through the shared print layout | pending | - |
