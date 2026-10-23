@@ -4,7 +4,13 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Wave 21 (closed — the current gate)
+## Wave 22 (in progress)
+
+| file | what |
+|---|---|
+| `wave22-brief.md` | the current wave: R6 ribbon inventories, S6 stored-column values, E7 new-task mode |
+
+## Wave 21 (closed — the previous gate)
 
 | file | what |
 |---|---|
@@ -63,9 +69,3 @@ scheduling, schedcore, codegen, ci, qt, f1/e2/q2/a1/b1).
   prompt; `docs/START-HERE.md` replaces it.
 * `docs/archive/WAVES-coordination-board-wave7.md` — the old branch/
   worktree coordination board (45 KB).
-
-## Wave 22 (not started)
-
-No brief yet.  Its scope comes from `wave21-complete.md` "Open items": ribbon
-inventories (decision 1) first, then stored-column values/bar styles and the
-new-task mode, then dialogs 14/15, split view 16 and dark surfaces 10.

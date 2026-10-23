@@ -1,30 +1,30 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-10-23 ~16:50, wave 21 closed.  Keep this file current at
+_Updated 2026-10-23 ~17:05, wave 22 in progress.  Keep this file current at
 every wave close; it is the only file a new session must read first._
 
 ## The 30-second state
 
-* `main` = **0f5920a** (wave 21's code; the docs close follows it), pushed.
-  **Wave 21 is closed** — `docs/handoff/wave21-complete.md` is the gate.
-* CI run **39904570421** is green on Windows, macOS and Linux (13/13 tests each)
-  with the three packages (Windows zip, macOS `.app`, Linux AppImage) and the
-  three 1920x1032 renders at 9/9 parity.
-* Engine parity **7/8**: `constraint-mso`'s save-time word is measured and
-  pinned but deliberately not scored.
-* **Wave 22 is not started.**  Its first job, from the wave-21 gate: rebuild the
-  seven ribbon tab inventories (decision 1) from the clean MS Project strips in
-  the local reference set.
+* `main` = **2911c40**, pushed.  **Wave 22 is in progress** — no
+  `docs/handoff/wave22-complete.md` yet.  Brief:
+  `docs/handoff/wave22-brief.md`.
+* Wave 21 is closed (`docs/handoff/wave21-complete.md`): stored table, operator
+  fixes, CFB slack, parallel Linux; CI run 39904570421 green on all three with
+  the three packages and 9/9 parity.
+* Wave 22 lanes: **R6** (the seven ribbon tab inventories, decision 1),
+  **S6** (stored-column values: Pre/Suc/Resource Names/% Complete/SUMMARY/Yes),
+  **E7** (the project's new-task mode, reader + status bar).
+* Engine stays **7/8** by design until the MSO save-time word reaches the
+  production save path.
 
 ## Reading order
 
-**Coordinator starting wave 22** (≈5 files, not more):
+**Coordinator for wave 22** (≈5 files, not more):
 
 1. this file;
-2. `docs/handoff/wave21-complete.md` — the last gate, the decision scoreboard and
-   the ranked open items (the wave-22 scope comes from here);
+2. `docs/handoff/wave22-brief.md` — the current wave's scope, owners and gates;
 3. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
-4. `docs/ui-reference-set.md` — where the clean per-tab captures live;
+4. `docs/ui-reference-set.md` — the clean per-tab captures R6 measures from;
 5. `memory/coordinator.md` — the compact current memory.
 
 **Lane agent** (≈4 files):
@@ -84,9 +84,10 @@ Archives (only for history): `docs/archive/coordinator-handoff-through-wave20.md
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md, then continue wave 21 from the current state.
-Wave 21 is in progress: do not close it until every lane is committed, the
-gates are green, one CI dispatch is green on Windows/macOS/Linux, and
-docs/handoff/wave21-complete.md is written.  Use docs/handoff/INDEX.md instead
+Read docs/START-HERE.md, then continue wave 22 from the current state.
+Wave 22 is in progress (R6 ribbon inventories, S6 stored-column values, E7
+new-task mode); do not close it until every lane is committed, the gates are
+green, one CI dispatch is green on Windows/macOS/Linux, and
+docs/handoff/wave22-complete.md is written.  Use docs/handoff/INDEX.md instead
 of reading all handoffs.
 ```
