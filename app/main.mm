@@ -2879,6 +2879,12 @@ static PlanView* g_view = nil;
         case app::MenuAction::task_fields:
             [self taskFields:nil];
             return;
+        case app::MenuAction::custom_fields:
+            // Wave 23 (B-13): the Task Fields dialog moved to the Custom Fields
+            // command.  The macOS shell keeps its own Task Information wiring;
+            // this case restores the existing dialog under its Project home.
+            [self taskFields:nil];
+            return;
         case app::MenuAction::predecessors:
             [self editPredecessors:nil];
             return;
