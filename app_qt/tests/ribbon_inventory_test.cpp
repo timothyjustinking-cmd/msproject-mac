@@ -669,8 +669,6 @@ int main(int argc, char** argv) {
     // W26-1.2..1.5 add the functional checks that open these fixtures; until
     // then the arguments are accepted (the CMake test entry is final) but not
     // used, and the compiler must not warn.
-    (void)timeline_hidden;
-    (void)timeline_shown;
     (void)summary_on;
     (void)summary_off;
     (void)order_fixture;
@@ -882,6 +880,53 @@ int main(int argc, char** argv) {
     }
 
     // (W26-1.4 adds the measured-palette check for the gallery's 16 swatches.)
+
+    // Timeline: the file's stored setting is the initial state and a click
+    // toggles the strip only.
+    {
+        QString open_timeline_error;
+        gate::check(window.open_file(timeline_hidden, &open_timeline_error),
+                    "the timeline-hidden fixture opens");
+        QApplication::processEvents();
+        QWidget* timeline_check = find_control(ribbon, QStringLiteral("View"),
+                                               QStringLiteral("Split View"),
+                                               QStringLiteral("Timeline"));
+        gate::check(timeline_check != nullptr, "the Timeline check box is in the page");
+        if (timeline_check != nullptr) {
+            auto* box = qobject_cast<QCheckBox*>(timeline_check);
+            gate::check(box != nullptr, "the Timeline control is a QCheckBox");
+            gate::check(!window.timeline_visible(), "the hidden file hides the strip");
+            gate::check(box != nullptr && !box->isChecked(),
+                        "the Timeline box starts unchecked for the hidden file");
+            gate::check(window.timeline() != nullptr && !window.timeline()->isVisible(),
+                        "the live strip is hidden");
+            if (box != nullptr) {
+                box->click();
+                QApplication::processEvents();
+                gate::check(box->isChecked(), "clicking Timeline checks the box");
+                gate::check(window.timeline_visible(), "clicking Timeline shows the strip");
+                gate::check(window.timeline()->isVisible(), "the live strip is shown");
+                box->click();
+                QApplication::processEvents();
+                gate::check(!box->isChecked(), "clicking Timeline again unchecks the box");
+                gate::check(!window.timeline_visible(), "clicking again hides the strip");
+                gate::check(!window.timeline()->isVisible(), "the live strip is hidden again");
+            }
+        }
+
+        QString open_timeline_shown_error;
+        gate::check(window.open_file(timeline_shown, &open_timeline_shown_error),
+                    "the timeline-shown fixture opens");
+        QApplication::processEvents();
+        timeline_check = find_control(ribbon, QStringLiteral("View"),
+                                      QStringLiteral("Split View"),
+                                      QStringLiteral("Timeline"));
+        gate::check(timeline_check != nullptr &&
+                        qobject_cast<QCheckBox*>(timeline_check) != nullptr &&
+                        qobject_cast<QCheckBox*>(timeline_check)->isChecked(),
+                    "the shown file starts with the Timeline box checked");
+        gate::check(window.timeline_visible(), "the shown file shows the strip");
+    }
 
     // %-complete buttons: the ribbon queues app::StructuralKind::set_percent
     // (app/edit_model.h), the path the save cascade writes, and the selected

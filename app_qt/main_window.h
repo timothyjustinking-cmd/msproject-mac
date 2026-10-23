@@ -193,6 +193,12 @@ class MainWindow final : public QMainWindow {
     // Measured from the live QSplitter, not from the constant.
     double split_fraction() const;
 
+    // --- wave 26: View > Split View > Timeline (W26-1.3) --------------------
+    // The initial state is the loaded file's stored setting (wave 24); a click
+    // toggles the strip only, never the file.
+    void set_timeline_visible(bool visible);
+    bool timeline_visible() const noexcept { return timeline_visible_; }
+
     // --- wave 21: Task Information (double-click) --------------------------
     // The General values the dialog edits, read from the selected task.  False
     // when no task is selected.  Public so the offscreen gate can prove the
@@ -324,6 +330,9 @@ class MainWindow final : public QMainWindow {
     std::string message_;
     bool message_is_error_ = false;
     bool splitter_user_moved_ = false;
+    // Wave 26: View > Split View > Timeline; starts at the file's stored setting
+    // (a new project keeps Project's shown default).
+    bool timeline_visible_ = true;
 
     // --- wave 20: the chrome the operator's screenshot found missing ---------
     QStackedWidget* central_stack_ = nullptr;
