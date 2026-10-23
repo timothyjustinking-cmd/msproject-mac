@@ -34,6 +34,17 @@
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QTableView>
+// Qt 6.5.3's qtestmouse.h trips MSVC /W4 C4701 (an uninitialised local in the
+// inline double-click helper).  The gate builds with /WX, so scope the warning
+// off for this third-party header only.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4701)
+#endif
+#include <QTest>
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 #include <QTimer>
 #include <QWidget>
 
@@ -207,6 +218,11 @@ int main(int argc, char** argv) {
 
     const QString fixture = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QString();
     const QString out_dir = argc > 2 ? QString::fromLocal8Bit(argv[2]) : QString();
+    // Wave 24 (W24-6): a fixture that stores the project row SHOWN, for the
+    // real-double-click gate (the project row's own click must not open an
+    // editable dialog).
+    const QString project_fixture =
+        argc > 3 ? QString::fromLocal8Bit(argv[3]) : QString();
     if (!out_dir.isEmpty()) {
         QDir().mkpath(out_dir);
     }
@@ -580,26 +596,154 @@ int main(int argc, char** argv) {
                         "the Custom Fields command still opens the Task Fields dialog");
         }
 
-        // Double-click on a task cell follows the same path.  Row 1 is the
-        // first task (row 0 is the project summary row).
+        // Wave 24 (W24-6): a REAL double-click through QTest::mouseDClick on
+        // the sheet viewport.  Wave 23 emitted the doubleClicked signal
+        // programmatically, which proved nothing about the mouse path.  This
+        // fixture hides the project row, so row 0 is the first task.
         QTableView* sheet = window.sheet_view();
         if (sheet != nullptr && sheet->model() != nullptr) {
             const int name_column =
                 window.sheet_table_model()->display_column_for_field(app::name_field_id());
-            if (name_column >= 0 && sheet->model()->rowCount() > 1) {
-                const QModelIndex index = sheet->model()->index(1, name_column);
-                Seen seen;
-                intercept(&seen);
-                QMetaObject::invokeMethod(sheet, "doubleClicked", Qt::DirectConnection,
-                                          Q_ARG(QModelIndex, index));
+            if (name_column >= 0 && sheet->model()->rowCount() > 0) {
+                const QModelIndex index = sheet->model()->index(0, name_column);
+                sheet->scrollTo(index);
                 QApplication::processEvents();
+                Seen seen;
+                QTimer timer;
+                timer.setInterval(10);
+                QObject::connect(&timer, &QTimer::timeout, [&seen, &timer]() {
+                    for (QWidget* widget : QApplication::topLevelWidgets()) {
+                        auto* dialog = qobject_cast<QDialog*>(widget);
+                        if (dialog == nullptr || !dialog->isVisible()) {
+                            continue;
+                        }
+                        seen.dialog = true;
+                        seen.title = dialog->windowTitle();
+                        if (auto* tabs = dialog->findChild<QTabWidget*>(
+                                QStringLiteral("taskInformationTabs"))) {
+                            seen.tabs = tabs->count();
+                        }
+                        dialog->reject();
+                        timer.stop();
+                        return;
+                    }
+                });
+                timer.start();
+                gate::check(sheet->indexAt(sheet->visualRect(index).center()) == index,
+                            "the double-click target resolves to the task cell");
+                int double_clicks = 0;
+                QObject::connect(sheet, &QAbstractItemView::doubleClicked,
+                                 [&double_clicks](const QModelIndex&) { ++double_clicks; });
+                // QTest::mouseDClick sends only the DblClick event; a real
+                // sequence also presses first, which is what sets the view's
+                // pressedIndex.  Send press -> dblclick -> release.
+                const QPoint target = sheet->visualRect(index).center();
+                QTest::mousePress(sheet->viewport(), Qt::LeftButton, Qt::NoModifier, target);
+                QTest::mouseDClick(sheet->viewport(), Qt::LeftButton, Qt::NoModifier, target);
+                QTest::mouseRelease(sheet->viewport(), Qt::LeftButton, Qt::NoModifier, target);
+                QApplication::processEvents();
+                timer.stop();
                 gate::check(seen.dialog && seen.title == QStringLiteral("Task Information"),
-                            "double-click opens Task Information");
+                            "a real double-click opens Task Information");
+                gate::check(double_clicks == 1,
+                            "the view emitted doubleClicked exactly once");
             } else {
                 gate::check(false, "the sheet exposes a Name column and a task row");
             }
         } else {
             gate::check(false, "the sheet view has a model for the double-click gate");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Wave 24 (W24-6/R5): a real double-click on the PROJECT row must not open
+    // an editable Task Information dialog, because its edits are dropped by
+    // sync_plan_from_records.  Uses a second fixture whose file stores the
+    // project row shown.
+    // -----------------------------------------------------------------------
+    if (!project_fixture.isEmpty()) {
+        struct Seen {
+            bool dialog = false;
+            QString title;
+        };
+        msqt::MainWindow window;
+        QString error;
+        gate::check(window.open_file(project_fixture, &error),
+                    "the project-row fixture opens");
+        window.show();
+        QApplication::processEvents();
+        QTableView* sheet = window.sheet_view();
+        gate::check(sheet != nullptr && sheet->model() != nullptr &&
+                        sheet->model()->rowCount() > 1 &&
+                        window.sheet()->row_uid(0) == 0,
+                    "the project-row fixture shows the project row first");
+        if (sheet != nullptr && sheet->model() != nullptr && sheet->model()->rowCount() > 1) {
+            const int name_column =
+                window.sheet_table_model()->display_column_for_field(app::name_field_id());
+            const QModelIndex project_index = sheet->model()->index(0, name_column);
+            sheet->scrollTo(project_index);
+            QApplication::processEvents();
+            Seen seen;
+            // A polling timer (not singleShot(0)) because QTest::mouseDClick
+            // processes events between the two clicks, which could otherwise
+            // consume the timer before the dialog's nested loop starts.
+            QTimer timer;
+            timer.setInterval(10);
+            QObject::connect(&timer, &QTimer::timeout, [&seen, &timer]() {
+                for (QWidget* widget : QApplication::topLevelWidgets()) {
+                    auto* dialog = qobject_cast<QDialog*>(widget);
+                    if (dialog == nullptr || !dialog->isVisible()) {
+                        continue;
+                    }
+                    seen.dialog = true;
+                    seen.title = dialog->windowTitle();
+                    dialog->reject();
+                    timer.stop();
+                    return;
+                }
+            });
+            timer.start();
+            const QPoint project_target = sheet->visualRect(project_index).center();
+            QTest::mousePress(sheet->viewport(), Qt::LeftButton, Qt::NoModifier,
+                              project_target);
+            QTest::mouseDClick(sheet->viewport(), Qt::LeftButton, Qt::NoModifier,
+                               project_target);
+            QTest::mouseRelease(sheet->viewport(), Qt::LeftButton, Qt::NoModifier,
+                                project_target);
+            QApplication::processEvents();
+            timer.stop();
+            gate::check(!seen.dialog,
+                        "a double-click on the project row opens no editable dialog");
+            const QModelIndex task_index = sheet->model()->index(1, name_column);
+            Seen task_seen;
+            QTimer task_timer;
+            task_timer.setInterval(10);
+            QObject::connect(&task_timer, &QTimer::timeout, [&task_seen, &task_timer]() {
+                for (QWidget* widget : QApplication::topLevelWidgets()) {
+                    auto* dialog = qobject_cast<QDialog*>(widget);
+                    if (dialog == nullptr || !dialog->isVisible()) {
+                        continue;
+                    }
+                    task_seen.dialog = true;
+                    task_seen.title = dialog->windowTitle();
+                    dialog->reject();
+                    task_timer.stop();
+                    return;
+                }
+            });
+            task_timer.start();
+            gate::check(sheet->indexAt(sheet->visualRect(task_index).center()) == task_index,
+                        "the task double-click target resolves to its cell");
+            const QPoint task_target = sheet->visualRect(task_index).center();
+            QTest::mousePress(sheet->viewport(), Qt::LeftButton, Qt::NoModifier, task_target);
+            QTest::mouseDClick(sheet->viewport(), Qt::LeftButton, Qt::NoModifier, task_target);
+            QTest::mouseRelease(sheet->viewport(), Qt::LeftButton, Qt::NoModifier,
+                                task_target);
+            QApplication::processEvents();
+            task_timer.stop();
+            gate::check(task_seen.dialog &&
+                            task_seen.title == QStringLiteral("Task Information"),
+                        "the task below the project row still opens Task Information");
         }
     }
 

@@ -73,7 +73,7 @@ side is never read by any code in the repo.
 
 The exports (all git-ignored under corpus/, .gitignore:27):
     corpus/probe/probe-export-a.xml      <NewTasksAreManual>0  (labelled as PROJECT_A, "<client project title>", 83 tasks)
-    corpus/probe/probe-export-b.xml   <NewTasksAreManual>0  (labelled as PROJECT_B, "client-text-064", 73 tasks)
+    corpus/probe/probe-export-b.xml   <NewTasksAreManual>0  (labelled as PROJECT_B, "client-string-e60eb89d", 73 tasks)
     corpus/probe/assign1.xml         <NewTasksAreManual>1
     corpus/probe/lagff1.xml          <NewTasksAreManual>1
     corpus/probe/w9-resourcetypes.xml <NewTasksAreManual>1

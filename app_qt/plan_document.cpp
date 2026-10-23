@@ -358,13 +358,12 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
     try {
         const mpp::Document document = mpp::load_file(source_path);
         loaded_ = app::plan_input_from_document(document);
-        // Wave 23 (B-1): Project's project-summary row, ID 0, is on in the
-        // clean reference capture.  It is an APPLICATION setting, not a stored
-        // one: saving the same file with DisplayProjectSummaryTask off and on
-        // produced byte-identical `214` parts and no meaningful `114/Props`
-        // difference (scripts/oracle_w23.py, 2026-10-23).  The shell owns the
-        // default until the Format tab's checkbox exists.
-        loaded_.show_project_summary = true;
+        // Wave 24 (W24-2): the project-summary row and the Timeline strip are
+        // FILE state (214/212/Props 0x03400009 and 0x03400008), decoded by the
+        // reader into PlanInput.  Wave 23's hard-coded "on" and its
+        // application-state timeline conclusion came from a props diff that
+        // never decoded the record framing; see core/mpp/reader.h ProjectRow.
+        // Nothing is forced here: a fixture that stores 0 stays hidden.
         loaded_.source_name = std::filesystem::path(source_path).filename().string();
         warnings_ = document.warnings.size();
         title_ = loaded_.title;
@@ -727,6 +726,22 @@ std::uint32_t PlanDocument::selected_uid() const {
         return 0;
     }
     return app::selected_task(*sheet_, row_map_).uid;
+}
+
+const app::TaskRow* PlanDocument::task_by_uid(std::uint32_t uid) const {
+    if (uid == 0) {
+        return nullptr;  // the synthetic project row is not a task
+    }
+    for (const app::TaskRow& task : view_.tasks) {
+        if (task.uid == uid) {
+            return &task;
+        }
+    }
+    return nullptr;
+}
+
+const app::TaskRow* PlanDocument::task_for_record_row(std::size_t row) const {
+    return row < records_.row_count() ? task_by_uid(records_.uid(row)) : nullptr;
 }
 
 }  // namespace msqt

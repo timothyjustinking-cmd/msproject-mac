@@ -43,15 +43,13 @@
  *             0x02 of byte +24 (measured by `oracle_w10.py flagdiff`: 0x00 ->
  *             0x02; the Fixed2Meta entry's +31/+61 bit 0x80 mirrors it in
  *             Project's own write, but that is the writer's business).
- *             Flag10 is bit 0x04 of byte +25 (wave 23, 2026-10-23: setting
- *             Task.Flag10 = True through COM changed exactly that bit on the
- *             edited row and nothing else; two different rows reproduced it).
- *             It is exposed as Task::summary_flag rather than a
- *             CustomFieldValue, so adding it cannot perturb the engine dump's
- *             custom-field set (the SUMMARY column reads the Task field).  The
- *             same experiment measured Flag2 = byte +24 bit 0x04 and Flag20 =
- *             byte +34 bit 0x04; those stay undecoded because no delivered
- *             column needs them.
+ *             Wave 24 (W24-15) measured EVERY flag, one Project save per flag
+ *             (control all false, one Task.FlagN = True on ID 3): Flag1..7 are
+ *             byte +24 bits 0x02..0x80, Flag8..10 byte +25 bits 0x01..0x04,
+ *             Flag11..17 byte +33 bits 0x02..0x80, Flag18..20 byte +34 bits
+ *             0x01..0x04.  The reader exposes them as Task::flags (and Flag10,
+ *             Project's SUMMARY column, as Task::flag10); Flag1 is ALSO kept in
+ *             custom_fields for the engine dump's existing shape.
  *   Cost      Cost1..Cost10; the VarMeta key IS the field id and the block is
  *             8 B little-endian f64 of the value in HUNDREDTHS (123.45 stored as
  *             12345.0).  Measured by the wave-14 oracle
@@ -60,10 +58,11 @@
  *             (`core/mppwrite/field_values.h`); this predicate reports the
  *             storage as measured.
  *
- * What is NOT measured: Flag2..Flag20's bit positions (only Flag1 = 0x02), and
- * any per-kind presence flag in the FixedMeta entry tail beyond the W48/W60
- * measured bits.  The reader therefore exposes only the values it can decode
- * and reports storage_measured = false where it cannot.
+ * What is NOT measured here: the VarMeta presence flag beyond the W48/W60
+ * measured bits (the reader reports storage_measured = false where it cannot
+ * decode).  The twenty Flag bits ARE measured now (wave 24), but only Flag1 is
+ * carried as a CustomFieldValue, for the engine dump's stable shape; all twenty
+ * are on Task::flags.
  */
 
 #ifndef MPP_FIELD_VALUE_H
@@ -198,9 +197,10 @@ constexpr unsigned custom_field_index(std::uint32_t field_id) {
 
 /*
  * True when the file storage of this field is MEASURED and may be decoded or
- * written.  Cost1..Cost10 are measured and written by W60; only Flag1's bit
- * position is measured, so Flag2..Flag20 are refused.  Everything else here has
- * a measured encoding from w10-oracle §2 / w14-oracle §4.
+ * written.  Cost1..Cost10 are measured and written by W60; Flag1's bit is
+ * measured and is the one flag carried as a CustomFieldValue (all twenty flag
+ * bits are measured and live on Task::flags).  Everything else here has a
+ * measured encoding from w10-oracle §2 / w14-oracle §4.
  */
 constexpr bool custom_field_storage_measured(FieldKind kind, unsigned index) {
     switch (kind) {

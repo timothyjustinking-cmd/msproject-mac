@@ -66,7 +66,7 @@ ctest --test-dir logs\w6\out\core_mpp -C Release    -> 1/1 passed
    rows. Liveness = "has a VarMeta group (i.e. a Name entry)".
 
 Also worth knowing: names are **trimmed for display, kept raw for round-trip**.
-PROJECT_A row 1 is stored as `"Site establishment "`; COM returns it trimmed and the
+PROJECT_A row 1 is stored as `"client-string-10dbe851 "`; COM returns it trimmed and the
 golden was exported that way, so `Task::name` is trimmed (without it one of 83
 name hashes mismatches) while `Task::name_raw` holds the stored block verbatim
 for a future writer (`ProjectRow::title` / `title_raw` likewise).

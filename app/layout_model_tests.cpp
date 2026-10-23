@@ -598,9 +598,16 @@ void test_corpus_file(const std::filesystem::path& path, const char* label,
                "milestones are exactly the zero-day non-summary rows");
 
     core::view::RecordSet records = app::make_record_set(input);
-    check_size(records.row_count(), input.tasks.size(), "corpus record set rows");
+    // Wave 24 (W24-2): the file decides whether the synthetic project row is
+    // shown; project_a stores it ON (1), so its RecordSet/sheet have one more
+    // row than the plan's task list.  The plan itself (and the Gantt built from
+    // it below) still has only the file's tasks.
+    const std::size_t project_rows = input.show_project_summary ? 1u : 0u;
+    check_size(records.row_count(), input.tasks.size() + project_rows,
+               "corpus record set rows");
     core::sheet::SheetModel sheet(records, app::default_sheet_columns());
-    check_size(sheet.row_count(), input.tasks.size(), "corpus sheet rows");
+    check_size(sheet.row_count(), input.tasks.size() + project_rows,
+               "corpus sheet rows");
     // The sheet's own formatting is non-empty for a dated first row.
     check(!sheet.cell_text(0, kStartColumn).empty(), "corpus sheet shows a start date");
 

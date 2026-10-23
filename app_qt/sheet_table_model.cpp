@@ -246,18 +246,20 @@ QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
             const core::sheet::CellStyle style = sheet_->cell_style(row, column);
             QFont font = cell_font();
             font.setBold(style.bold);
-            // Wave 23 (B-11): Project's stock milestone text style is italic
-            // (the clean capture's milestone rows are italic; red comes from
-            // the critical rule).  The FILE's own text styles are not decoded
-            // yet, so this is the documented stock fallback.
-            font.setItalic(sheet_->is_milestone(row));
+            // Wave 24 (W24-13): the wave-23 "stock milestone italic" claim was
+            // measured from PROJECT_A's capture -- the FILE's own text style.
+            // A NEW blank Project 2021 project (two auto tasks + a milestone,
+            // captured 2026-10-23) renders its milestone row UPRIGHT, so the
+            // stock fallback is not italic.  The file's own text styles are
+            // still not decoded (backlog W24-13), so no italic is invented.
             return font;
         }
         case Qt::ForegroundRole: {
-            const core::sheet::CellStyle style = sheet_->cell_style(row, column);
-            if (style.red) {
-                return QColor(0xb0, 0x1c, 0x1c);
-            }
+            // Wave 24 (W24-13): PROJECT_A's critical rows are red, but a NEW
+            // blank project renders critical rows in the ordinary text colour.
+            // The wave-23 red was that file's text style, not stock; until the
+            // file's text styles are decoded, the stock fallback is the normal
+            // foreground.
             return {};
         }
         default:

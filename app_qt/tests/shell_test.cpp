@@ -4,8 +4,8 @@
 // tests/data/synthetic-base.mpp, which is read-only here: this test never saves.
 // It asserts the three things the brief names:
 //
-//   * the fixture loads and shows the project row plus its 3 task rows (and
-//     the matching 4 Gantt bars, wave 23 B-1);
+//   * the fixture loads and shows its 3 task rows (wave 24: the file stores the
+//     project-summary row OFF, so there is no row 0) and the matching 3 bars;
 //   * the QMenuBar's command list is app::menu_specs() -- same menus, same
 //     command order, same titles, same MenuAction ids;
 //   * the window renders 900x560 and the PNG it writes reads back at 900x560.
@@ -73,17 +73,15 @@ int main(int argc, char** argv) {
     }
 
     // --- the loaded plan ---------------------------------------------------
-    // Wave 23 (B-1): the sheet shows Project's project-summary row (ID 0) ahead
-    // of the fixture's three tasks, and the Gantt draws its project bar.
-    check(window.sheet_row_count() == 4, "the fixture shows the project row + 3 task rows");
-    check(window.gantt_bar_count() == 4, "the fixture has the project bar + 3 task bars");
-    // Wave 23 (B-2, corrected): Project shows the Timeline strip for this
-    // fixture (measured in its 1920 capture) even though COM reports the same
-    // "Gantt Chart" view as project_a.  The strip is application state, so the
-    // shell keeps Project's default and lays it out (isHidden false; the
-    // offscreen window is never shown itself).
+    // Wave 24 (W24-2): the file stores 214/Props 0x03400009 = 0, so Project
+    // draws no project-summary row for it; the sheet is the three tasks.
+    check(window.sheet_row_count() == 3, "the fixture shows its three task rows");
+    check(window.gantt_bar_count() == 3, "the fixture has three task bars");
+    // Wave 24 (W24-3): the file stores 214/Props 0x03400008 = "Time&line", so
+    // Project shows the Timeline strip for this fixture; the port follows the
+    // file rather than an application default.
     check(window.timeline() != nullptr && !window.timeline()->isHidden(),
-          "the loaded fixture shows the Timeline strip (Project's default)");
+          "the loaded fixture shows the Timeline strip (the file stores it shown)");
     // --- the same-file structural gate (wave 23, A-1a) ---------------------
     // Literals typed from the clean capture / the measured reference set, never
     // production symbols: "Ready" at the left, selection #A2D3A0, stock bar
@@ -105,36 +103,52 @@ int main(int argc, char** argv) {
               "the sheet's cells are drawn in the resolved UI font family");
     }
     if (window.gantt_view() != nullptr) {
-        check(window.gantt_view()->layout().bars.size() == 4,
-              "the Gantt has the project bar and three task bars");
-        if (window.gantt_view()->layout().bars.size() == 4) {
-            check(window.gantt_view()->bar_colour(0) == QColor(0x00, 0x00, 0x00),
-                  "the project-summary bar uses Project's stock black (Q1)");
-            check(window.gantt_view()->bar_colour(1) == QColor(0x4a, 0x7e, 0xbb),
-                  "an ordinary task bar uses the stock blue");
+        check(window.gantt_view()->layout().bars.size() == 3,
+              "the Gantt has the three task bars");
+        if (window.gantt_view()->layout().bars.size() == 3) {
+            check(window.gantt_view()->bar_colour(0) == QColor(0x74, 0xcc, 0xd4),
+                  "an ordinary task bar uses Project's measured stock teal (W24-18)");
         }
     } else {
         check(false, "the window owns a Gantt canvas");
     }
     check(window.sheet_view() != nullptr, "the window owns a sheet view");
     if (window.sheet_view() != nullptr && window.sheet_view()->model() != nullptr) {
-        check(window.sheet_view()->model()->rowCount() == 4,
-              "the table model's row count is the project row + 3 tasks");
+        check(window.sheet_view()->model()->rowCount() == 3,
+              "the table model's row count is the three tasks (no project row)");
         check(window.sheet_view()->model()->columnCount() == 9,
               "the table model shows the 9 Entry columns (the gutter is the frozen row "
               "header, wave 18 Q3)");
-        // The project row is synthetic: an edit there has no writer and would be
-        // silently dropped (review finding), so the model refuses it.
+        // Wave 24 (W24-2): this file hides the project row, so row 0 is a real
+        // task and every row is editable.  (The project row's own refusal is
+        // pinned in qt_task_order_corpus / save_reopen, which use a file that
+        // stores the row shown.)
         const int name_column =
             window.sheet_table_model()->display_column_for_field(app::name_field_id());
-        const QModelIndex project_cell = window.sheet_view()->model()->index(0, name_column);
-        const QModelIndex task_cell = window.sheet_view()->model()->index(1, name_column);
-        check(!window.sheet_view()->model()->flags(project_cell).testFlag(Qt::ItemIsEditable),
-              "the project summary row is not editable");
+        const QModelIndex task_cell = window.sheet_view()->model()->index(0, name_column);
         check(window.sheet_view()->model()->flags(task_cell).testFlag(Qt::ItemIsEditable),
-              "a task row stays editable");
+              "a task row is editable");
     } else {
         check(false, "the sheet view has a model");
+    }
+
+    // --- wave 24 (W24-3): the strip is FILE state ---------------------------
+    // A second fixture is Project's save of the same plan with the Timeline
+    // hidden (214/Props 0x03400008 empty).  Its partner synthetic-base stores
+    // "Time&line" and showed the strip above; the port must follow each file.
+    if (argc > 3) {
+        msqt::MainWindow hidden_window;
+        hidden_window.resize(msqt::kWindowWidth, msqt::kWindowHeight);
+        QString hidden_error;
+        if (!hidden_window.open_file(QString::fromLocal8Bit(argv[3]), &hidden_error)) {
+            std::fprintf(stderr, "FAIL: could not open %s: %s\n", argv[3],
+                         hidden_error.toUtf8().constData());
+            return 1;
+        }
+        check(hidden_window.sheet_row_count() == 3,
+              "the Timeline-hidden fixture still shows three task rows");
+        check(hidden_window.timeline() != nullptr && hidden_window.timeline()->isHidden(),
+              "the Timeline-hidden fixture hides the strip (the file stores it hidden)");
     }
 
     // --- the menu bar is app::menu_model -----------------------------------

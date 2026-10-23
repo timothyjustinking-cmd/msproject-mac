@@ -165,13 +165,14 @@ void case_palette() {
             ++g_failures;
         }
     };
-    sample(1, "a normal bar is blue", msqt::kBarTask);
-    sample(2, "a critical bar is red", msqt::kBarCritical);
-    sample(3, "a summary bar paints the shell's summary colour", msqt::kBarSummary);
-    sample(5, "a 100 %-complete CRITICAL bar stays red (not the blue fill)",
+    sample(1, "a normal bar is Project's measured stock teal", msqt::kBarTask);
+    sample(2, "a critical bar is Project's measured stock light blue",
            msqt::kBarCritical);
-    check(msqt::kBarCritical == QColor(0xff, 0x00, 0x00),
-          "critical is the measured pure red #ff0000");
+    sample(3, "a summary bar paints the shell's summary colour", msqt::kBarSummary);
+    sample(5, "a 100 %-complete CRITICAL bar stays the critical colour",
+           msqt::kBarCritical);
+    check(msqt::kBarCritical == QColor(0x8a, 0xbb, 0xed),
+          "critical is the blank-project measured (138,187,237), not PROJECT_A's red");
     check(msqt::kSelection == QColor(0xa2, 0xd3, 0xa0),
           "the selection is Project's measured green #a2d3a0");
     // A selected row paints that green behind the whole row of the canvas.

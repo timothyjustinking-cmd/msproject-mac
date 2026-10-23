@@ -2257,9 +2257,21 @@ std::vector<PrintTableColumn> print_table_columns(const PlanState& plan, double 
         printed.title = plan->loaded.title;
         printed.project_start = plan->view.project_start;
         printed.project_finish = plan->view.project_finish;
+        // Wave 24 (W24-1/R6): the plan has no synthetic project row, so a
+        // RecordSet row index is not a task index when row 0 is shown.  Map
+        // every printed row through its uid; uid 0 prints the project bar.
         for (const std::size_t row : job.rows) {
-            if (row < plan->view.tasks.size()) {
-                printed.tasks.push_back(plan->view.tasks[row]);
+            const std::uint32_t uid =
+                row < plan->records.row_count() ? plan->records.uid(row) : 0;
+            if (uid == 0) {
+                printed.tasks.push_back(app::project_summary_row(plan->view));
+                continue;
+            }
+            for (const app::TaskRow& task : plan->view.tasks) {
+                if (task.uid == uid) {
+                    printed.tasks.push_back(task);
+                    break;
+                }
             }
         }
         printed.links = plan->view.links;

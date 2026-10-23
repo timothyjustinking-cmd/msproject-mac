@@ -309,7 +309,7 @@ Source `corpus/probe/base.mpp` (237,568 B), written into
 | case | change | file size | streams changed |
 |---|---|---|---|
 | A | FixedData rebuilt with task C priority 900 (same size) | 237,568 (**2 bytes differ**) | `114/TBkndTask/FixedData` |
-| B | task B name `Task B` → `client-text-025 (rev B)` | 238,080 (+512) | `Var2Data`, `VarMeta` |
+| B | task B name `Task B` → `client-string-25d8f08b (rev B)` | 238,080 (+512) | `Var2Data`, `VarMeta` |
 | C | task A name → 4,200 characters (forces Var2Data past 4,096 B) | 246,784 (+9,216) | `Var2Data`, `VarMeta` |
 | D | PROJECT_A `114/Props` 90,082 → 102,082 B (needs two more FAT sectors) | 1,671,168 (+103,424) | `114/Props` |
 | E | PROJECT_A `114/Props` 90,082 → 100 B (moves into the mini stream, 176 FAT sectors freed) | 1,567,744 (+0) | `114/Props` |
@@ -439,7 +439,7 @@ needed.
    ```
    inplace-patched.mpp: uid 1 prio 900 pct 50 dur 33600 start 2026-03-02 08:00
    replace-fixeddata.mpp: uid 3 prio 900
-   replace-name.mpp: uid 2 name 'client-text-025 (rev B)'
+   replace-name.mpp: uid 2 name 'client-string-25d8f08b (rev B)'
    ```
 
    Reproduce with a scratch driver (not committed):
@@ -487,7 +487,7 @@ button press):
 |---|---|
 | Priority 900 | **900** (FixedData +78 is authoritative) |
 | PercentComplete 50 | **50** (FixedData +92) |
-| Name `client-text-025 (rev B)` | **the full name** (Var2Data) |
+| Name `client-string-25d8f08b (rev B)` | **the full name** (Var2Data) |
 | Duration 33600 ticks (7 d) | **2400 minutes = 5 d** — the value the file had before the patch |
 | Start `0x3c2a12c0` (2026-03-02) | the schedule's own date, not the patched one |
 

@@ -61,6 +61,7 @@ using app::MenuAction;
 
 struct ButtonPin {
     std::string label;
+    std::string kind;  // wave 24 (W24-12/R15): the pin's kind column
     bool enabled = false;
 };
 
@@ -133,6 +134,7 @@ std::vector<TabPin> load_pin(const QString& path) {
         } else if (!tab.groups.empty()) {
             ButtonPin button;
             button.label = fields[4];
+            button.kind = fields[3];
             button.enabled = fields[5] == "1";
             tab.groups.back().buttons.push_back(button);
         }
@@ -147,6 +149,12 @@ QStringList titles_of(const std::vector<TabPin>& pins) {
     }
     return titles;
 }
+
+// The pin kinds this gate models: only a plain button.  Everything else (combo,
+// checkbox, gallery, dialog launcher) lives in ribbon_pin_unmodelled.tsv and is
+// not built; if one appears in the modelled pin, the gate must fail rather than
+// treat it as a button.
+bool pin_kind_is_button(const std::string& kind) { return kind == "button"; }
 
 // The active tab's group captions from the live captions, in page order.  Also
 // fills `boxes` with the group box that owns each caption.
@@ -189,6 +197,14 @@ void check_inventory(msqt::RibbonBar* ribbon, const TabPin& pin, int tab_index) 
         QStringList pin_labels;
         for (const ButtonPin& button : group.buttons) {
             pin_labels.push_back(QString::fromUtf8(button.label.c_str()));
+            // Wave 24 (W24-12/R15): the pin's KIND column is asserted.  The
+            // live inventory this gate compares is a list of text buttons; a
+            // pin row for a combo/checkbox/gallery must not silently pass as
+            // one.  A combo built as a button therefore turns this red.
+            gate::check(pin_kind_is_button(button.kind),
+                        (where + " / " + group.title + ": pin kind '" + button.kind +
+                         "' is a button control")
+                            .c_str());
         }
         gate::check(labels == pin_labels,
                     (where + " / " + group.title + ": button labels and order are the pin")
@@ -404,6 +420,13 @@ int main(int argc, char** argv) {
         return 2;
     }
     const QString fixture = QString::fromLocal8Bit(argv[1]);
+
+    // Wave 24 (W24-12/R15): prove the kind predicate itself -- a combo must not
+    // be accepted as a button, or the pin's kind column would be decorative.
+    gate::check(pin_kind_is_button("button"), "a button pin is a button");
+    gate::check(!pin_kind_is_button("combo"), "a combo pin is not a button");
+    gate::check(!pin_kind_is_button("checkbox"), "a checkbox pin is not a button");
+    gate::check(!pin_kind_is_button(""), "an empty kind is not a button");
 
     msqt::MainWindow window;
     window.resize(msqt::kParityWidth, msqt::kParityHeight);

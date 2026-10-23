@@ -474,11 +474,21 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
     effective.skipped_links = loaded.skipped_links + dropped_links;
 
     // The template the writer's add clones: the last live task in the FILE
-    // (deleted rows excluded), found before the inserts are placed.
+    // (deleted rows excluded), found before the inserts are placed.  Wave 24
+    // (W24-1/R7): "last in the file" is the largest FixedData row number, not
+    // the last vector element -- the adapter sorts tasks into ID order, and on
+    // a file stored out of ID order (PROJECT_A's first stored row is ID 13) the
+    // vector's last task is not the row core/mppwrite clones.  `file_row` is
+    // the reader's stored row number, captured before the sort.
     const TaskRow* template_row = nullptr;
+    std::uint32_t template_file_row = 0;
     for (const TaskRow& row : loaded.tasks) {
-        if (deleted.count(row.uid) == 0) {
+        if (deleted.count(row.uid) != 0) {
+            continue;
+        }
+        if (template_row == nullptr || row.file_row >= template_file_row) {
             template_row = &row;
+            template_file_row = row.file_row;
         }
     }
 

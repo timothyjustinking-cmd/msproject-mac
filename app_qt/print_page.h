@@ -40,8 +40,12 @@ namespace msqt {
 // The print request for the window's current state: the rows to print, the
 // project title and the caller-formatted date text.  The zoom is the Gantt
 // timescale the window is showing, so the printed chart matches the screen.
+// `printed_task_count` is how many of `rows` are real tasks (the synthetic
+// project row, uid 0, is a row but not a task), so the subtitle never reads
+// "N+1 of N" when the file shows the project row (wave 24, W24-1).
 app::PrintJob make_print_job(const app::PlanInput& plan,
                              const std::vector<std::size_t>& rows,
+                             std::size_t printed_task_count,
                              const std::string& filter_description,
                              const std::string& date_text, app::ZoomLevel zoom);
 
@@ -51,6 +55,16 @@ app::PrintJob make_print_job(const app::PlanInput& plan,
 std::vector<std::size_t> print_rows(std::size_t record_row_count,
                                     const std::vector<std::size_t>& display_rows,
                                     bool filter_active);
+
+// Wave 24 (W24-1/R6): the printed chart for `rows`, built from the RecordSet
+// rows' uids.  Row N of the result is sheet row `rows[N]` (uid 0 draws the
+// project-summary bar), so the sheet and chart halves cannot drift by one when
+// the file shows the project row.  Public so the gate can compare the two
+// without a printer.
+core::gantt::GanttLayout print_gantt(const app::PlanInput& plan,
+                                     const core::sheet::SheetModel& sheet,
+                                     const std::vector<std::size_t>& rows,
+                                     const app::PageSpec& spec, app::ZoomLevel zoom);
 
 // Opens the print dialog for a QPrinter configured from `job.spec` and paints
 // every page.  False when the user cancels or the device cannot be painted.

@@ -1,9 +1,12 @@
-// qt_task_order -- wave 23 (B-1/A-3): the loaded file's rows are Project's rows.
+// qt_task_order -- wave 23 (B-1/A-3), corrected by wave 24 (W24-2): the
+// loaded file's rows are Project's rows.
 //
 // WHAT THIS PROVES
 //   * Project displays tasks in ID order, not in the file's FixedData (creation)
-//     order, and draws the stored project-summary row as ID 0 ahead of them.
-//     corpus/project_a.mpp is the measured case: its first stored task is ID 13.
+//     order, and draws the stored project-summary row as ID 0 ahead of them
+//     ONLY when the file stores that setting (214/Props 0x03400009 = 1).
+//     corpus/project_a.mpp is the measured case: its first stored task is ID 13
+//     and it stores the row ON; every committed synthetic fixture stores it OFF.
 //   * The outline levels Project shows (the clean capture
 //     project-gantt-loaded-clean.png, rows 0-12) are the reader's stored chain,
 //     and the sheet gets them.
@@ -13,20 +16,25 @@
 // of the clean capture: (ID, indent level, name hash).  Only the HASH of a name
 // enters this file -- the names are client content and are never quoted.
 //
-// Usage: qt_task_order <outline.mpp> <synthetic-base.mpp> [corpus/project_a.mpp]
+// Usage: qt_task_order <outline.mpp> <synthetic-base.mpp> <golden.sha256>
+//                      [project_a.mpp]
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QStringList>
 
 #include <cstdint>
 #include <cstdio>
+#include <algorithm>
+#include <map>
 #include <string>
 #include <vector>
 
 #include "gantt.h"
 #include "layout_model.h"
 #include "plan_document.h"
+#include "reader.h"
 
 namespace {
 
@@ -72,20 +80,6 @@ long long row_id(const msqt::PlanDocument& document, std::size_t row) {
     }
 }
 
-void check_project_row(const msqt::PlanDocument& document, const char* what) {
-    check(document.sheet() != nullptr, what);
-    if (document.sheet() == nullptr) {
-        return;
-    }
-    check(document.sheet()->row_count() > 0, "the sheet has rows");
-    check_int(row_id(document, 0), 0, "row 0 carries the file's ID 0");
-    check_int(document.sheet()->row_uid(0), 0, "row 0 is UniqueID 0");
-    check(document.sheet()->is_summary(0), "row 0 is a summary row");
-    check(document.sheet()->has_children(0), "row 0 has children");
-    check_int(document.sheet()->outline_level(0), -1,
-              "row 0 is the outline parent of the top-level tasks");
-}
-
 void case_outline(const QString& path) {
     msqt::PlanDocument document;
     std::string error;
@@ -97,15 +91,17 @@ void case_outline(const QString& path) {
     }
     check_int(static_cast<long long>(document.loaded().tasks.size()), 6,
               "the outline fixture has six tasks");
-    check_project_row(document, "the outline fixture shows the project row");
+    // Wave 24 (W24-2): this fixture stores 214/Props 0x03400009 = 0, so Project
+    // would NOT draw a project row for it.  The port follows the file.
+    check_int(row_id(document, 0), 1, "the outline fixture has no project row; row 0 is ID 1");
 
     // ID order == row order, and the outline levels are the stored chain.
-    const long long expected_ids[] = {0, 1, 2, 3, 4, 5, 6};
-    const int expected_levels[] = {-1, 0, 1, 2, 2, 1, 0};
-    const int expected_summary[] = {1, 1, 1, 0, 0, 0, 0};
+    const long long expected_ids[] = {1, 2, 3, 4, 5, 6};
+    const int expected_levels[] = {0, 1, 2, 2, 1, 0};
+    const int expected_summary[] = {1, 1, 0, 0, 0, 0};
     const long long rows = static_cast<long long>(document.sheet()->row_count());
-    check_int(rows, 7, "the sheet shows the project row + six tasks");
-    for (long long row = 0; row < rows && row < 7; ++row) {
+    check_int(rows, 6, "the sheet shows the six tasks (no project row)");
+    for (long long row = 0; row < rows && row < 6; ++row) {
         check_int(row_id(document, static_cast<std::size_t>(row)), expected_ids[row],
                   "row order is ID order");
         check_int(document.sheet()->outline_level(static_cast<std::size_t>(row)),
@@ -113,10 +109,10 @@ void case_outline(const QString& path) {
         check_int(document.sheet()->is_summary(static_cast<std::size_t>(row)) ? 1 : 0,
                   expected_summary[row], "the row's summary flag");
     }
-    const char* expected_outline[] = {"", "1", "1.1", "1.1.1", "1.1.2", "1.2", "2"};
+    const char* expected_outline[] = {"1", "1.1", "1.1.1", "1.1.2", "1.2", "2"};
     const core::view::FieldId outline_field = app::task_field_id("OutlineNumber");
-    for (std::size_t row = 1; row < 7; ++row) {
-        check_int(row_id(document, row), static_cast<long long>(row),
+    for (std::size_t row = 0; row < 6; ++row) {
+        check_int(row_id(document, row), static_cast<long long>(row + 1),
                   "the fixture's IDs are 1..6 in order");
         check(document.sheet()->field_text(row, outline_field) == expected_outline[row],
               "the row's OutlineNumber is the stored sibling path");
@@ -210,8 +206,11 @@ void case_link_text(const QString& path) {
 }
 
 // The same-file oracle for the 83-row Predecessors/Successors sweep: Project's
-// own COM strings, hashed.  The file carries only the hash, so no client task
-// name enters the repository.  Provenance: tests/data/project_a_preds_golden.sha256.
+// own COM strings, hashed.  The file carries only hashes, so no client task
+// name enters the repository.  Wave 24 (W24-8/V): ONE HASH PER ROW (ID + Pre
+// hash + Suc hash), so a failure names the row instead of only the whole file.
+// Provenance: tests/data/project_a_preds_golden.sha256, regenerated through COM
+// by scripts/oracle_preds_golden.py.
 void case_preds_golden(const QString& path, const QString& golden_path) {
     msqt::PlanDocument document;
     std::string error;
@@ -220,19 +219,13 @@ void case_preds_golden(const QString& path, const QString& golden_path) {
     if (!error.empty()) {
         return;
     }
-    std::string lines;
-    for (const app::TaskRow& task : document.plan().tasks) {
-        lines += std::to_string(task.id);
-        lines += '\t';
-        lines += msqt::predecessors_text(document.plan(), task.uid, document.format());
-        lines += '\t';
-        lines += msqt::successors_text(document.plan(), task.uid, document.format());
-        lines += '\n';
-    }
-    const QByteArray digest =
-        QCryptographicHash::hash(QByteArray::fromStdString(lines), QCryptographicHash::Sha256)
-            .toHex()
-            .toUpper();
+    const auto digest = [](const std::string& text) {
+        return QString::fromLatin1(
+            QCryptographicHash::hash(QByteArray::fromStdString(text),
+                                     QCryptographicHash::Sha256)
+                .toHex()
+                .toUpper());
+    };
     QFile golden(golden_path);
     if (!golden.open(QIODevice::ReadOnly | QIODevice::Text)) {
         std::fprintf(stderr, "FAIL: cannot open %s\n", qPrintable(golden_path));
@@ -240,20 +233,67 @@ void case_preds_golden(const QString& path, const QString& golden_path) {
         ++g_checks;
         return;
     }
-    QString expected;
+    struct RowHashes {
+        QString predecessors;
+        QString successors;
+        bool seen = false;
+    };
+    std::map<long long, RowHashes> expected;
     for (const QByteArray& raw : golden.readAll().split('\n')) {
         const QString line = QString::fromLatin1(raw).trimmed();
-        if (!line.isEmpty() && !line.startsWith('#')) {
-            expected = line;
-            break;
+        if (line.isEmpty() || line.startsWith('#')) {
+            continue;
         }
+        const QStringList cells = line.split('\t');
+        if (cells.size() != 3) {
+            std::fprintf(stderr, "FAIL: golden line is not ID\\tpre\\tsuc: %s\n",
+                         qPrintable(line));
+            ++g_failures;
+            ++g_checks;
+            continue;
+        }
+        bool ok = false;
+        const long long id = cells[0].toLongLong(&ok);
+        if (!ok) {
+            ++g_failures;
+            ++g_checks;
+            continue;
+        }
+        expected[id] = RowHashes{cells[1], cells[2], false};
     }
-    check(QString::fromLatin1(digest) == expected,
-          "the 83-row Predecessors/Successors text matches Project's COM strings");
-    if (QString::fromLatin1(digest) != expected) {
-        std::fprintf(stderr, "note: port %s, golden %s\n", digest.constData(),
-                     qPrintable(expected));
+    check(expected.size() == 83, "the golden carries one line per live task (83)");
+    long long matched = 0;
+    for (const app::TaskRow& task : document.plan().tasks) {
+        const auto found = expected.find(static_cast<long long>(task.id));
+        if (found == expected.end()) {
+            std::fprintf(stderr, "FAIL: golden has no row for ID %u\n", task.id);
+            ++g_failures;
+            ++g_checks;
+            continue;
+        }
+        found->second.seen = true;
+        const QString predecessors =
+            QString::fromStdString(msqt::predecessors_text(document.plan(), task.uid,
+                                                           document.format()));
+        const QString successors =
+            QString::fromStdString(msqt::successors_text(document.plan(), task.uid,
+                                                         document.format()));
+        if (digest(predecessors.toStdString()) != found->second.predecessors) {
+            std::fprintf(stderr,
+                         "FAIL: ID %u Predecessors differ from Project's COM text\n",
+                         task.id);
+            ++g_failures;
+        } else if (digest(successors.toStdString()) != found->second.successors) {
+            std::fprintf(stderr,
+                         "FAIL: ID %u Successors differ from Project's COM text\n",
+                         task.id);
+            ++g_failures;
+        } else {
+            ++matched;
+        }
+        ++g_checks;
     }
+    check(matched == 83, "all 83 rows' Pre/Suc text match Project's COM strings");
 }
 
 void case_synthetic(const QString& path) {
@@ -265,14 +305,16 @@ void case_synthetic(const QString& path) {
         std::fprintf(stderr, "note: load error: %s\n", error.c_str());
         return;
     }
-    check_project_row(document, "the synthetic fixture shows the project row");
-    check_int(static_cast<long long>(document.sheet()->row_count()), 4,
-              "the synthetic sheet is the project row + three tasks");
-    for (std::size_t row = 1; row < 4; ++row) {
-        check_int(row_id(document, row), static_cast<long long>(row),
+    // Wave 24 (W24-2): synthetic-base stores 0x03400009 = 0 -- Project shows
+    // three task rows, no project row.  The port follows the file.
+    check_int(row_id(document, 0), 1, "the synthetic fixture has no project row; row 0 is ID 1");
+    check_int(static_cast<long long>(document.sheet()->row_count()), 3,
+              "the synthetic sheet is three tasks (no project row)");
+    for (std::size_t row = 0; row < 3; ++row) {
+        check_int(row_id(document, row), static_cast<long long>(row + 1),
                   "synthetic rows are ID order");
         check_int(document.sheet()->outline_level(row), 0,
-                  "the synthetic fixture is flat (level 0 under the project row)");
+                  "the synthetic fixture is flat (level 0)");
     }
 }
 
@@ -314,24 +356,76 @@ void case_corpus(const QString& path) {
     }
 }
 
+// Wave 24 (W24-5/R8): the ID sort is actually EXERCISED in CI.  Both older
+// committed fixtures are already stored in ID order, so deleting the adapter's
+// sort left qt_task_order green.  wave24-order.mpp is Project's own save after
+// a task was inserted above row 1: FixedData order is Alpha, Bravo, Charlie,
+// Delta, Inserted Row, while the displayed IDs are 1..5 with Inserted Row as
+// ID 2.  The first assertion reads the STORED order from the reader directly
+// (independent of the adapter) and requires it to differ; the second requires
+// the sheet to be in ID order.
+void case_order(const QString& path) {
+    const mpp::Document stored = mpp::load_file(path.toStdString());
+    std::vector<long long> stored_ids;
+    for (const mpp::Task& task : stored.tasks) {
+        stored_ids.push_back(static_cast<long long>(task.row_id));
+    }
+    std::vector<long long> sorted_ids = stored_ids;
+    std::sort(sorted_ids.begin(), sorted_ids.end());
+    check_int(static_cast<long long>(stored_ids.size()), 5,
+              "the order fixture has five tasks");
+    ++g_checks;
+    if (stored_ids == sorted_ids) {
+        ++g_failures;
+        std::fprintf(stderr,
+                     "FAIL: the order fixture's STORED order is already ID order; "
+                     "deleting the sort would not be caught\n");
+    }
+
+    msqt::PlanDocument document;
+    std::string error;
+    check(document.load(path.toStdString(), app::ZoomLevel::week, error),
+          "the order fixture loads");
+    if (!error.empty()) {
+        return;
+    }
+    // The file stores the project row shown, so its sheet starts with ID 0.
+    check_int(row_id(document, 0), 0, "the order fixture shows the project row");
+    check_int(static_cast<long long>(document.sheet()->row_count()), 6,
+              "the order fixture shows the project row + five tasks");
+    const long long expected_ids[] = {0, 1, 2, 3, 4, 5};
+    for (std::size_t row = 0; row < 6; ++row) {
+        check_int(row_id(document, row), expected_ids[row],
+                  "the sheet is in ID order although the file stores it out of order");
+    }
+    const core::view::FieldId name_field = app::task_field_id("Name");
+    const char* expected_names[] = {"", "Alpha", "Inserted Row", "Bravo", "Charlie",
+                                    "Delta"};
+    for (std::size_t row = 1; row < 6; ++row) {
+        check(document.sheet()->field_text(row, name_field) == expected_names[row],
+              "the ID-order task is on its displayed row");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
-    if (argc < 4) {
+    if (argc < 5) {
         std::fprintf(stderr,
                      "usage: %s <outline.mpp> <synthetic-base.mpp> <golden.sha256> "
-                     "[project_a.mpp]\n",
+                     "<wave24-order.mpp> [project_a.mpp]\n",
                      argv[0]);
         return 2;
     }
     case_outline(QString::fromLocal8Bit(argv[1]));
     case_synthetic(QString::fromLocal8Bit(argv[2]));
+    case_order(QString::fromLocal8Bit(argv[4]));
     case_link_text(QString::fromLocal8Bit(argv[1]));
-    if (argc >= 5) {
-        case_preds_golden(QString::fromLocal8Bit(argv[4]),
+    if (argc >= 6) {
+        case_preds_golden(QString::fromLocal8Bit(argv[5]),
                           QString::fromLocal8Bit(argv[3]));
-        case_corpus(QString::fromLocal8Bit(argv[4]));
+        case_corpus(QString::fromLocal8Bit(argv[5]));
     }
     std::printf("qt_task_order: %d checks, %d failure(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

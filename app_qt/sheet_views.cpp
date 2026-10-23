@@ -484,7 +484,7 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
     //
     // WAVE 22: Predecessors/Successors/Resource Names are NOT painted here.  They
     // are computed TEXT cells (plan_document.h derives "9FS+50 days", "18,33" and
-    // "client-text-102, client-text-104"), so they must take the ordinary styled-item path
+    // "client-string-184b30f7, client-text-104"), so they must take the ordinary styled-item path
     // below: the model's DisplayRole is the whole product behaviour, exactly as
     // Project renders them left-aligned with its own grid.
     EntryCellKind kind = EntryCellKind::data;
