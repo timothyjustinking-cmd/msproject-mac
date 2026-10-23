@@ -1738,6 +1738,18 @@ class Applier {
             mppwrite::PlannedRow row;
             row.uid = task.uid;
             row.values = mppwrite::read_task_values(doc_, task.row);
+            /* The stored values, before this row is overwritten: the late pair is
+             * a DERIVED field (+112/+116) that the dump does not compare and
+             * Project recomputes on open.  Writing a plan late date that moves
+             * alone is the single-copy split the writer refuses (measured wave
+             * 19 on a Project-written auto row whose stored late pair predates
+             * the fixture's conversion), so the pair is written only when the
+             * row's own dates move with it. */
+            mppwrite::TaskValues const stored = row.values;
+            bool const dates_move =
+                start != stored.start || finish != stored.finish ||
+                kept_start != stored.project_start ||
+                kept_finish != stored.project_finish;
             row.values.manual_dates = planned.manually_scheduled;
             row.values.start = start;              /* +96  calculated */
             row.values.finish = finish;            /* +100 calculated */
@@ -1747,7 +1759,7 @@ class Applier {
                 planned.start_anchor == core::sched::kDateNa
                     ? mppwrite::kInherit                /* an auto row: keep stored */
                     : packed(planned.start_anchor);     /* +174 a manual row's start */
-            if (planned.manually_scheduled) {
+            if (planned.manually_scheduled || !dates_move) {
                 /* A manual row's +112/+116 is the INVERSE of its boundary
                  * arithmetic -- Project's stored Late* pair is the start whose
                  * manual finish lands on the project finish, which is why its
@@ -1756,7 +1768,9 @@ class Applier {
                  * pair, so keep the stored pair: Project recomputes it on open,
                  * and leaving it alone keeps the writer's copy families
                  * consistent (the kept dates that DO move also move +108 and
-                 * Fixed2Data +54, so no single-copy write is attempted). */
+                 * Fixed2Data +54, so no single-copy write is attempted).  An
+                 * auto row whose dates do not move gets the same treatment, for
+                 * the same reason. */
             } else {
                 row.values.late_start = late_start;
                 row.values.late_finish = late_finish;

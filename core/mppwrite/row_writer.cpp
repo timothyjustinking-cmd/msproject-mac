@@ -306,16 +306,42 @@ TaskValues resolve_task_values(CfbDocument const& doc, std::size_t row,
             }
             return value;
         };
-        v.fixed2_start = keep_copy(v.fixed2_start, old.fixed2_start,
-                                   old.project_start, v.project_start);
-        v.fixed2_finish = keep_copy(v.fixed2_finish, old.fixed2_finish,
-                                    old.project_finish, v.project_finish);
-        v.fixed2_duration = keep_copy(v.fixed2_duration, old.fixed2_duration,
-                                      old.duration, v.duration);
-        if (!is_valid_date(v.fixed2_start) || !is_valid_date(v.fixed2_finish)) {
+        /* Project writes NO Fixed2Data block on an AUTO-scheduled MPP14 row:
+         * measured wave 19, PROJECT_A stores 0xFFFFFFFF at +46 and +50 and 0 at
+         * +58 on all 85 task rows, and an auto fixture saved by Project from
+         * synthetic-base does the same (start/finish 0xFFFFFFFF, +58 0) -- while
+         * its MANUAL rows store real copies in all three (synthetic-base:
+         * 24000/14400/9600).  A COM Duration edit on the auto row saves it back
+         * as 0.  Absence is therefore a state to PRESERVE, not a missing copy to
+         * materialise: writing +46 alone is exactly the single-copy split the
+         * refusal below exists to stop, and it rewrites words Project leaves
+         * empty.  An explicit caller value still wins (w3-o1.mpp stores 0 in
+         * +54/+58, so the derivation cannot be unconditional). */
+        bool const fixed2_absent =
+            !(is_valid_date(old.fixed2_start) && is_valid_date(old.fixed2_finish));
+        if (fixed2_absent) {
+            v.fixed2_start = (values.fixed2_start == kInherit)
+                                 ? old.fixed2_start
+                                 : v.fixed2_start;
+            v.fixed2_finish = (values.fixed2_finish == kInherit)
+                                  ? old.fixed2_finish
+                                  : v.fixed2_finish;
+            v.fixed2_duration = (values.fixed2_duration == kInherit)
+                                    ? old.fixed2_duration
+                                    : v.fixed2_duration;
+        } else {
+            v.fixed2_start = keep_copy(v.fixed2_start, old.fixed2_start,
+                                       old.project_start, v.project_start);
+            v.fixed2_finish = keep_copy(v.fixed2_finish, old.fixed2_finish,
+                                        old.project_finish, v.project_finish);
+            v.fixed2_duration = keep_copy(v.fixed2_duration, old.fixed2_duration,
+                                          old.duration, v.duration);
+        }
+        if (!fixed2_absent &&
+            (!is_valid_date(v.fixed2_start) || !is_valid_date(v.fixed2_finish))) {
             throw Error("write_task_row: " + row_label(row, uid) +
-                        ": Fixed2Data date copy is missing (every measured task "
-                        "row stores +46/+50 and +54)");
+                        ": Fixed2Data date copy is missing (a row that stores "
+                        "Fixed2Data stores +46/+50 and +54)");
         }
     }
 
@@ -346,7 +372,14 @@ TaskValues resolve_task_values(CfbDocument const& doc, std::size_t row,
                            {"+100 (task finish)", "+108 (project-frame finish)",
                             "+116 (late finish)", "Fixed2Data +54"});
     }
-    if (row != 0) {
+    /* The duration family has the same "absent copy" case: a Project-written
+     * AUTO row stores 0 at Fixed2Data +58 (see 5. above), so writing +84 alone
+     * is not a split -- it is the only word that exists.  A row that stores a
+     * real Fixed2Data block (every manual fixture) still goes through the
+     * refusal. */
+    bool const fixed2_absent =
+        !(is_valid_date(old.fixed2_start) && is_valid_date(old.fixed2_finish));
+    if (row != 0 && !fixed2_absent) {
         refuse_single_copy("duration", row, uid,
                            {old.duration, old.fixed2_duration},
                            {v.duration, v.fixed2_duration},
@@ -441,7 +474,11 @@ RowWriteReport write_task_row(CfbDocument& doc, std::size_t row,
             "late start " + format_date(v.late_start) + " is after late finish " +
                 format_date(v.late_finish));
     if (row != 0) {
-        warn_if(v.fixed2_duration != v.duration,
+        /* An absent Fixed2Data block (a Project-written AUTO row) has no +58 to
+         * disagree with +84; warning there would fire on every such row. */
+        bool const fixed2_absent =
+            !(is_valid_date(v.fixed2_start) && is_valid_date(v.fixed2_finish));
+        warn_if(!fixed2_absent && v.fixed2_duration != v.duration,
                 "Fixed2Data +58 (" + std::to_string(v.fixed2_duration) +
                     ") disagrees with FixedData +84 (" +
                     std::to_string(v.duration) + ")");
