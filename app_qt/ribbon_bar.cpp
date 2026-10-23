@@ -4,18 +4,23 @@
 
 #include <QColor>
 #include <QFont>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLayoutItem>
+#include <QMargins>
 #include <QPainter>
 #include <QPen>
+#include <QResizeEvent>
 #include <QSizePolicy>
 #include <QString>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <algorithm>
+#include <cstddef>
 #include <utility>
 #include <vector>
 
@@ -157,6 +162,17 @@ QFont ribbon_font(int point_size, bool bold = false) {
     return font;
 }
 
+// A ribbon button's stylesheet is `padding: 1px 4px` plus a 1 px transparent
+// border, i.e. 5 px on each side of the label.  12 px therefore covers the whole
+// style budget and leaves a pixel of slack each side, so a fixed width taken from
+// the label's own metrics can never clip it (Qt clips QToolButton text from both
+// ends).  It is deliberately not generous: the Task tab must still fit the
+// reference's 1920 px with a wide fallback font (DejaVu is ~10 % wider than
+// Calibri).
+constexpr int kButtonTextPadding = 12;
+// The separator after each group is 1 px wide (below).
+constexpr int kGroupSeparatorWidth = 1;
+
 }  // namespace
 
 RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
@@ -164,9 +180,8 @@ RibbonBar::RibbonBar(QWidget* parent) : QWidget(parent) {
     setFixedHeight(kRibbonHeight + 1);
     // Ignored horizontally: the ribbon's natural width is the full 1920-px
     // reference's group row, far wider than the 900-px test window.  Ignoring
-    // the size hint keeps the WINDOW at 900x560 (the pinned render size) while
-    // the groups keep their order; anything past the right edge is clipped,
-    // exactly as a ribbon does at a narrow width.
+    // the size hint keeps the WINDOW at 900x560; groups that do not fit are
+    // dropped whole by layout_page_groups().
     setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     setMinimumWidth(0);
     setAutoFillBackground(false);
@@ -258,6 +273,7 @@ void RibbonBar::build_tabs() {
 }
 
 void RibbonBar::clear_page() {
+    page_groups_.clear();
     if (page_layout_ == nullptr) {
         return;
     }
@@ -276,13 +292,15 @@ void RibbonBar::build_page(int tab_index) {
     if (tab_index < 0 || static_cast<std::size_t>(tab_index) >= tabs.size()) {
         return;
     }
-    active_tab_ = tab_index;
     clear_page();
     button_count_ = 0;
 
     const TabSpec& tab = tabs[static_cast<std::size_t>(tab_index)];
+    const QFont button_font = ribbon_font(kRibbonPointSize);
+    const QFontMetrics button_metrics(button_font);
     for (const GroupSpec& group : tab.groups) {
         auto* box = new QWidget(page_);
+        box->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
         auto* box_layout = new QVBoxLayout(box);
         box_layout->setContentsMargins(4, 0, 8, 0);
         box_layout->setSpacing(1);
@@ -294,12 +312,21 @@ void RibbonBar::build_page(int tab_index) {
         for (const ButtonSpec& spec : group.buttons) {
             auto* button = new QToolButton(buttons);
             button->setObjectName(QStringLiteral("ribbonButton"));
-            button->setText(QString::fromUtf8(spec.label));
+            const QString label = QString::fromUtf8(spec.label);
+            button->setText(label);
             button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            button->setFont(ribbon_font(kRibbonPointSize));
+            button->setFont(button_font);
             button->setAutoRaise(true);
             button->setFixedHeight(24);
             button->setFocusPolicy(Qt::NoFocus);
+            // The width is the LABEL's, from the same font metrics that will
+            // draw it, plus the stylesheet's padding/border.  Never narrower
+            // than the style's own hint.  This is what stops "Cut"/"Copy"/
+            // "Format Painter" from being clipped to "Cu"/"op"/"t F".
+            const int label_width =
+                button_metrics.horizontalAdvance(label) + kButtonTextPadding;
+            button->setFixedWidth(std::max(label_width, button->sizeHint().width()));
+            button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
             const app::MenuAction action = spec.action;
             connect(button, &QToolButton::clicked, this, [this, action](bool) {
                 if (handler_) {
@@ -318,16 +345,83 @@ void RibbonBar::build_page(int tab_index) {
         caption->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
         caption->setFixedHeight(14);
         box_layout->addWidget(caption);
+
+        // The group's width follows its widest child (the button row or the
+        // caption); the box layout's minimum already reports that, so a narrower
+        // page cannot squeeze the buttons below their labels.
+        box->setMinimumWidth(box->sizeHint().width());
         page_layout_->addWidget(box);
 
         auto* separator = new QFrame(page_);
         separator->setFrameShape(QFrame::VLine);
         separator->setFrameShadow(QFrame::Plain);
-        separator->setFixedWidth(1);
+        separator->setFixedWidth(kGroupSeparatorWidth);
         separator->setStyleSheet(QStringLiteral("background: #dcdcdc;"));
         page_layout_->addWidget(separator);
+
+        GroupWidgets widgets;
+        widgets.box = box;
+        widgets.separator = separator;
+        page_groups_.push_back(widgets);
     }
     page_layout_->addStretch(1);
+    layout_page_groups();
+}
+
+void RibbonBar::layout_page_groups() {
+    if (page_layout_ == nullptr) {
+        return;
+    }
+    const QMargins margins = page_layout_->contentsMargins();
+    const int available = width() - margins.left() - margins.right();
+    if (available < 200) {
+        // The ribbon has not been laid out yet (construction).  Show everything
+        // and let the first resize settle it; hiding here would hide the whole
+        // page at width 0.
+        for (GroupWidgets& group : page_groups_) {
+            if (group.box != nullptr) {
+                group.box->setVisible(true);
+            }
+            if (group.separator != nullptr) {
+                group.separator->setVisible(true);
+            }
+        }
+        return;
+    }
+    int used = 0;
+    bool overflow = false;
+    for (GroupWidgets& group : page_groups_) {
+        if (group.box == nullptr || group.separator == nullptr) {
+            continue;
+        }
+        const int wanted = group.box->sizeHint().width() + kGroupSeparatorWidth;
+        const bool fits = !overflow && used + wanted <= available;
+        group.box->setVisible(fits);
+        group.separator->setVisible(fits);
+        if (fits) {
+            used += wanted;
+        } else {
+            // Ribbon order is preserved: once a group does not fit, nothing
+            // after it is shown either.
+            overflow = true;
+        }
+    }
+    page_layout_->invalidate();
+}
+
+int RibbonBar::visible_group_count() const {
+    int count = 0;
+    for (const GroupWidgets& group : page_groups_) {
+        if (group.box != nullptr && group.box->isVisible()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void RibbonBar::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    layout_page_groups();
 }
 
 int RibbonBar::tab_count() const { return static_cast<int>(tab_specs().size()); }

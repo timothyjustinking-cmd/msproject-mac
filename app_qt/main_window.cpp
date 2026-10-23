@@ -19,6 +19,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMetaObject>
 #include <QModelIndex>
 #include <QPalette>
 #include <QResizeEvent>
@@ -200,7 +201,7 @@ void MainWindow::build_central_widget() {
     connect(splitter_, &QSplitter::splitterMoved, this,
             [this](int, int) { splitter_user_moved_ = true; });
 
-    sheet_view_ = new QTableView(splitter_);
+    sheet_view_ = new SheetView(splitter_);
     sheet_view_->setModel(&sheet_model_);
     // Q1 shows the sheet; cell editing is Q2+ work, so no edit trigger is on.
     sheet_view_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -223,19 +224,20 @@ void MainWindow::build_central_widget() {
         " selection-background-color: #dce9f5; selection-color: #101010; }"));
 
     // The 42 px caption band (paint-only; the model still owns the section
-    // sizes).  The row-number gutter is model column 0, so the vertical header
-    // is hidden: the gutter scrolls with the columns and its cell borders join
-    // the sheet's grid, which is what the parity harness detects as the sheet's
-    // left edge.
+    // sizes).  The row-number gutter is the FROZEN vertical header
+    // (SheetRowHeader): MS Project's row numbers do not scroll horizontally
+    // with the sheet, and a model column cannot express that.  The sheet's left
+    // border (x = 60) is painted on the viewport by SheetView, which is the
+    // line P1's harness takes as the sheet's left edge.
     auto* header = new SheetHeaderView(Qt::Horizontal, sheet_view_);
     header->setFixedHeight(kSheetHeaderHeight);
     header->setSectionResizeMode(QHeaderView::Interactive);
     header->setStretchLastSection(false);
     sheet_view_->setHorizontalHeader(header);
-    sheet_view_->verticalHeader()->setVisible(false);
-    sheet_view_->verticalHeader()->setDefaultSectionSize(kRowHeight);
-    sheet_view_->verticalHeader()->setMinimumSectionSize(kRowHeight);
-    sheet_view_->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+
+    auto* row_header = new SheetRowHeader(sheet_view_);
+    sheet_view_->setVerticalHeader(row_header);
+    sheet_view_->verticalHeader()->setVisible(true);
 
     QPalette sheet_palette = sheet_view_->palette();
     sheet_palette.setColor(QPalette::Base, kSheetBackground);
@@ -411,8 +413,22 @@ void MainWindow::apply_split_fraction() {
     }
     // The split's centre line sits at 43 % of the client width: the sheet is
     // that width less half the handle, so the draggable thumb straddles 43 %.
-    const int sheet = std::max(160, static_cast<int>(std::lround(total * kSplitFraction)) -
-                                        kSplitHandleWidth / 2);
+    int sheet = std::max(160, static_cast<int>(std::lround(total * kSplitFraction)) -
+                                  kSplitHandleWidth / 2);
+    // The measured reference's split is the TABLE's own right edge: gutter +
+    // nine Entry columns = 879 px, with the 6 px handle after it, which at 1920
+    // is 881 = 0.45885 of the width.  The 0.459 fraction lands 1 px short of
+    // that at 1920, which would clip the ninth column's last pixel; when the
+    // shortfall is no more than one handle and the chart keeps its minimum
+    // width, snap the sheet to the whole table.  On a narrower window the table
+    // cannot fit and the fraction governs (the last columns clip, as Project
+    // clips at a narrow width).
+    const int table_width = kGutterWidth + entry_content_width();
+    if (sheet < table_width && table_width - sheet <= kSplitHandleWidth &&
+        gantt_canvas_ != nullptr &&
+        total - kSplitHandleWidth - table_width >= gantt_canvas_->minimumWidth()) {
+        sheet = table_width;
+    }
     const int gantt = std::max(160, total - kSplitHandleWidth - sheet);
     splitter_->setSizes(QList<int>{sheet, gantt});
 }
@@ -438,7 +454,20 @@ double MainWindow::split_fraction() const {
 void MainWindow::resizeEvent(QResizeEvent* event) {
     QMainWindow::resizeEvent(event);
     if (!splitter_user_moved_) {
+        // The central layout runs after this event, so the splitter still has
+        // its old width here.  Apply now (cheap and right when the width did not
+        // change) and once more after the layout has resized the splitter, so
+        // the table-edge snap is decided from the new width rather than the old
+        // one (queued: a resize event must not re-enter the layout).
         apply_split_fraction();
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                if (!splitter_user_moved_) {
+                    apply_split_fraction();
+                }
+            },
+            Qt::QueuedConnection);
     }
 }
 
@@ -522,7 +551,6 @@ void MainWindow::configure_sheet() {
     // The stock Entry character widths are the fallback when the file has no
     // CTable for the field (entry_columns.h).
     sheet_view_->setMinimumWidth(0);
-    sheet_view_->setColumnWidth(kGutterColumn, kGutterWidth);
     const std::vector<EntryColumn>& columns = entry_columns();
     for (std::size_t index = 0; index < columns.size(); ++index) {
         int chars = doc_.table_column_chars(columns[index].table_field);
@@ -533,7 +561,7 @@ void MainWindow::configure_sheet() {
         if (width <= 0) {
             width = columns[index].width;
         }
-        sheet_view_->setColumnWidth(static_cast<int>(index) + 1, width);
+        sheet_view_->setColumnWidth(static_cast<int>(index), width);
     }
     sheet_view_->verticalHeader()->setDefaultSectionSize(kRowHeight);
 }
@@ -553,9 +581,9 @@ void MainWindow::sync_view_selection() {
     if (ordinal == core::sheet::kNoIndex) {
         return;
     }
-    const int name_column = entry_column_index(EntryCellKind::name) + 1;  // + gutter
+    const int name_column = entry_column_index(EntryCellKind::name);
     sheet_view_->setCurrentIndex(
-        sheet_model_.index(static_cast<int>(ordinal), std::max(1, name_column)));
+        sheet_model_.index(static_cast<int>(ordinal), std::max(0, name_column)));
 }
 
 // ---------------------------------------------------------------------------

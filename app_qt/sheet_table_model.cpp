@@ -70,15 +70,14 @@ std::size_t SheetTableModel::visible_column_for_field(core::view::FieldId field)
 }
 
 std::size_t SheetTableModel::model_column(int display_column) const {
-    if (sheet_ == nullptr || display_column <= kGutterColumn) {
-        return core::sheet::kNoIndex;  // the gutter has no model column
-    }
-    const std::vector<EntryColumn>& columns = entry_columns();
-    const int entry = display_column - 1;
-    if (entry < 0 || static_cast<std::size_t>(entry) >= columns.size()) {
+    if (sheet_ == nullptr || display_column < 0) {
         return core::sheet::kNoIndex;
     }
-    return visible_column_for_field(columns[static_cast<std::size_t>(entry)].field);
+    const std::vector<EntryColumn>& columns = entry_columns();
+    if (static_cast<std::size_t>(display_column) >= columns.size()) {
+        return core::sheet::kNoIndex;
+    }
+    return visible_column_for_field(columns[static_cast<std::size_t>(display_column)].field);
 }
 
 int SheetTableModel::rowCount(const QModelIndex& parent) const {
@@ -92,26 +91,13 @@ int SheetTableModel::columnCount(const QModelIndex& parent) const {
     if (sheet_ == nullptr || parent.isValid()) {
         return 0;
     }
-    return static_cast<int>(entry_columns().size()) + 1;  // + the 60 px gutter
+    // The row-number gutter is the view's frozen vertical header, not a column.
+    return static_cast<int>(entry_columns().size());
 }
 
 QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
     if (sheet_ == nullptr || !index.isValid()) {
         return {};
-    }
-    if (index.column() == kGutterColumn) {
-        // The row-number gutter: display ordinals 1..n, right-aligned like the
-        // reference's numbers at x ~ 44 of the 60 px gutter.
-        switch (role) {
-            case Qt::DisplayRole:
-                return index.row() + 1;
-            case Qt::TextAlignmentRole:
-                return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
-            case Qt::FontRole:
-                return cell_font();
-            default:
-                return {};
-        }
     }
     const std::size_t row = record_row(index.row());
     const std::size_t column = model_column(index.column());
@@ -152,21 +138,19 @@ QVariant SheetTableModel::headerData(int section, Qt::Orientation orientation, i
     }
     if (orientation == Qt::Horizontal) {
         if (role == Qt::DisplayRole) {
-            if (section == kGutterColumn) {
-                return QString();  // the gutter's header cell is blank
-            }
             const std::vector<EntryColumn>& columns = entry_columns();
-            const int entry = section - 1;
-            if (entry < 0 || static_cast<std::size_t>(entry) >= columns.size()) {
+            if (section < 0 || static_cast<std::size_t>(section) >= columns.size()) {
                 return {};
             }
-            return QString::fromUtf8(columns[static_cast<std::size_t>(entry)].title);
+            return QString::fromUtf8(columns[static_cast<std::size_t>(section)].title);
         }
         if (role == Qt::TextAlignmentRole) {
             return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
         }
         return {};
     }
+    // The row header (SheetRowHeader) paints the numbers itself; this is the
+    // fallback the base class would use.
     if (role == Qt::DisplayRole) {
         return section + 1;
     }

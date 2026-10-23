@@ -2,11 +2,13 @@
 
 #include "sheet_views.h"
 
+#include <QApplication>
 #include <QColor>
 #include <QFont>
 #include <QFontMetrics>
 #include <QModelIndex>
 #include <QPainter>
+#include <QPalette>
 #include <QPen>
 #include <QPoint>
 #include <QRect>
@@ -19,7 +21,6 @@
 #include <cstddef>
 
 #include "entry_columns.h"
-#include "sheet_table_model.h"
 #include "shell_style.h"
 
 namespace msqt {
@@ -28,6 +29,12 @@ namespace {
 QFont header_font() {
     QFont font;
     font.setPointSize(kHeaderPointSize);
+    return font;
+}
+
+QFont body_font() {
+    QFont font = QApplication::font();
+    font.setPointSize(kBodyPointSize);
     return font;
 }
 
@@ -73,11 +80,15 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
     // harness's band top by a pixel and lengthen the measured header.
     painter->setPen(QPen(kHeaderSeparator, 1));
     painter->drawLine(rect.right(), rect.top(), rect.right(), rect.bottom());
+    // The sheet's left border (the frozen gutter's right edge) also runs through
+    // the caption band, so the first column's left edge is ruled too.
+    if (logicalIndex == 0) {
+        painter->drawLine(rect.left(), rect.top(), rect.left(), rect.bottom());
+    }
 
     const std::vector<EntryColumn>& columns = entry_columns();
-    const int entry = logicalIndex - 1;
-    if (entry >= 0 && static_cast<std::size_t>(entry) < columns.size()) {
-        const EntryColumn& column = columns[static_cast<std::size_t>(entry)];
+    if (logicalIndex >= 0 && static_cast<std::size_t>(logicalIndex) < columns.size()) {
+        const EntryColumn& column = columns[static_cast<std::size_t>(logicalIndex)];
         const bool stub = column.kind == EntryCellKind::stub;
 
         QFont font = header_font();
@@ -108,6 +119,110 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
 }
 
 // ---------------------------------------------------------------------------
+// SheetRowHeader -- the FROZEN row-number gutter
+// ---------------------------------------------------------------------------
+
+SheetRowHeader::SheetRowHeader(QWidget* parent) : QHeaderView(Qt::Vertical, parent) {
+    setSectionsMovable(false);
+    setSectionsClickable(false);
+    setHighlightSections(false);
+    setStretchLastSection(false);
+    setSectionResizeMode(QHeaderView::Fixed);
+    setDefaultSectionSize(kRowHeight);
+    setMinimumSectionSize(kRowHeight);
+    setFixedWidth(kGutterWidth);
+    setFont(body_font());
+    // The gutter is white like the sheet, with no frame: its right edge is the
+    // sheet's first grid line, painted by SheetView.
+    setStyleSheet(QStringLiteral("QHeaderView { background: #ffffff; border: none; }"));
+    QPalette palette = QHeaderView::palette();
+    palette.setColor(QPalette::Base, kRowGutter);
+    palette.setColor(QPalette::Window, kRowGutter);
+    palette.setColor(QPalette::Button, kRowGutter);
+    palette.setColor(QPalette::WindowText, kRowGutterText);
+    palette.setColor(QPalette::ButtonText, kRowGutterText);
+    setPalette(palette);
+    setAutoFillBackground(true);
+}
+
+QSize SheetRowHeader::sizeHint() const {
+    // QTableView asks the header for its width; pin the measured 60 px rather
+    // than the width of a two-digit number.
+    return QSize(kGutterWidth, QHeaderView::sizeHint().height());
+}
+
+void SheetRowHeader::paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const {
+    if (painter == nullptr || !rect.isValid()) {
+        return;
+    }
+    painter->save();
+    painter->fillRect(rect, kRowGutter);
+    painter->setFont(font());
+    painter->setPen(kRowGutterText);
+    // Right-aligned like the reference's numbers, which stop ~16 px short of
+    // the sheet's left edge.
+    const QRect text_rect = rect.adjusted(0, 0, -8, 0);
+    painter->drawText(text_rect, static_cast<int>(Qt::AlignRight | Qt::AlignVCenter),
+                      QString::number(logicalIndex + 1));
+    // The caption band's bottom rule (the first row's top edge) starts in the
+    // gutter; the delegate draws it from x = 60 on.
+    if (logicalIndex == 0) {
+        painter->setPen(QPen(kGridLine, 1));
+        painter->drawLine(rect.left(), rect.top(), rect.right(), rect.top());
+    }
+    painter->restore();
+}
+
+void SheetRowHeader::paintEvent(QPaintEvent* event) {
+    {
+        QPainter painter(this);
+        painter.fillRect(rect(), kRowGutter);
+    }
+    QHeaderView::paintEvent(event);
+}
+
+// ---------------------------------------------------------------------------
+// SheetView
+// ---------------------------------------------------------------------------
+
+SheetView::SheetView(QWidget* parent) : QTableView(parent) {
+    // The caption band's top-left corner is white, not the style's grey corner
+    // panel.  It is a real child widget at the view's origin, sized from the two
+    // fixed header constants; QTableView lays the vertical header out below it
+    // and the horizontal header out to its right, so the rectangle is free.
+    corner_ = new QWidget(this);
+    corner_->setObjectName(QStringLiteral("sheetCorner"));
+    corner_->setAutoFillBackground(true);
+    QPalette corner_palette = corner_->palette();
+    corner_palette.setColor(QPalette::Window, kHeaderBackground);
+    corner_->setPalette(corner_palette);
+    corner_->setFixedSize(kGutterWidth, kSheetHeaderHeight);
+    corner_->move(0, 0);
+    corner_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    corner_->show();
+    // QTableView owns a corner button in the same place (disabled by
+    // setCornerButtonEnabled(false), but still painted); this widget is created
+    // after it, and raising it makes the white corner unconditionally topmost.
+    corner_->raise();
+}
+
+void SheetView::paintEvent(QPaintEvent* event) {
+    QTableView::paintEvent(event);
+
+    // The sheet's left border (the frozen gutter's right edge), painted on the
+    // viewport so it stays at x = 60 while the columns scroll under it.  P1's
+    // harness takes this line as the sheet's left edge and measures the nine
+    // column widths from it.  The viewport is the device QTableView paints its
+    // cells on, so this is the same painter target, not a second one.
+    if (viewport() != nullptr && verticalHeader() != nullptr &&
+        verticalHeader()->isVisible()) {
+        QPainter painter(viewport());
+        painter.setPen(QPen(kGridLine, 1));
+        painter.drawLine(0, 0, 0, viewport()->height() - 1);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // EntryItemDelegate
 // ---------------------------------------------------------------------------
 
@@ -118,12 +233,12 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
     if (painter == nullptr) {
         return;
     }
-    const int indicators = entry_column_index(EntryCellKind::indicators) + 1;
-    const int mode = entry_column_index(EntryCellKind::mode) + 1;
+    const int indicators = entry_column_index(EntryCellKind::indicators);
+    const int mode = entry_column_index(EntryCellKind::mode);
     const bool custom = index.column() == indicators || index.column() == mode;
     if (!custom) {
-        // The row-number gutter and the data columns are ordinary styled items:
-        // the model's alignment, font and the selection palette do the work.
+        // The data columns are ordinary styled items: the model's alignment,
+        // font and the selection palette do the work.
         QStyledItemDelegate::paint(painter, option, index);
     } else {
         const bool selected = (option.state & QStyle::State_Selected) != 0;

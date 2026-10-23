@@ -98,6 +98,22 @@ add_test(NAME qt_render_document
 set_tests_properties(qt_render_document PROPERTIES
                      PASS_REGULAR_EXPRESSION "rendered 900x560")
 
+# Wave 18 Q3: the parity render.  Same window, the REFERENCE capture's own
+# client size (1920x1032, docs/parity.md section 2), so all nine Entry columns
+# fit and P1's harness can compare the column widths (at 900 it reports them
+# N/A).  This is the image the CI artifact carries as qt-render-parity.png:
+#   python scripts/parity_report.py corpus/bench/msproject-gantt.png \
+#          build-qt/test-out/qt-render-parity.png
+# The default window remains 900x560; --parity changes the render size only.
+add_test(NAME qt_render_parity
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:msproject_qt>
+                 --open "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 --render "${QT_TEST_OUT_DIR_CMAKE}/qt-render-parity.png"
+                 --parity)
+set_tests_properties(qt_render_parity PROPERTIES
+                     PASS_REGULAR_EXPRESSION "rendered 1920x1032")
+
 # The headless shell test: loads the committed fixture, asserts the row count and
 # the whole menu command list against app::menu_model, then renders and reads the
 # PNG back.  The fixture is opened read-only; nothing here writes tests/data/.
@@ -111,11 +127,12 @@ add_test(NAME qt_shell_offscreen
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}/qt-shell-window.png")
 
-# Wave 17 Q2: the numeric parity gate.  Asserts the reference-measured geometry
-# and typography (row/header heights, the eight Entry column widths, the 43 %
-# splitter, 11 px/day, the two timescale tiers), the pinned colours, and the
-# ribbon/timeline/status chrome.  No PNG is written; the PNGs stay with the Q1
-# render tests above and the Q4 golden harness.
+# Wave 17 Q2 / wave 18 Q3: the numeric parity gate.  Asserts the reference-
+# measured geometry and typography (row/header heights, the frozen 60 px gutter,
+# the nine Entry column widths, the 0.459 splitter, 24 px/day, the two timescale
+# tiers), the pinned colours, the ribbon (no clipped labels) / timeline / status
+# chrome, and that all nine columns fit at the reference's 1920x1032.  No PNG is
+# written; the PNGs stay with the render tests above and the Q4 golden harness.
 add_executable(qt_parity_tests tests/parity_test.cpp)
 target_link_libraries(qt_parity_tests PRIVATE qt_shell)
 qt_set_warnings(qt_parity_tests)

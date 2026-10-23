@@ -33,6 +33,10 @@ const QColor kGanttHeaderText(0x33, 0x33, 0x33);  // distinct from shell_style's
 const QColor kMonthRule(0x9a, 0x9a, 0x9a);
 
 constexpr int kLabelInset = 3;
+// The bar-label padding budget on EACH side of the text: the model's
+// GanttStyle::label_gap (4 px) is what decides whether a label fits inside a
+// bar, so the renderer uses the same number rather than its own.
+constexpr double kBarLabelPadding = 4.0;
 constexpr int kMaxDayCells = 4096;
 
 const char* const kMonthShort[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -327,19 +331,49 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
             }
         }
 
-        // The bar label: text and placement are the model's; this only elides it
-        // to the rectangle the model allocated.
+        // The bar label.  The model decides WHETHER and WHAT to label; the
+        // shell decides WHERE, because only the shell has the real font.  The
+        // model measures with a 7 px/char fallback (GanttStyle::
+        // label_char_width), so its rect is a conservative guess: eliding to it
+        // cut "Task A" to "Ta..." even inside a 5-day bar.  MS Project draws a
+        // short label inside the bar and a long one to its right, so:
+        //   * inside (centred, white) when the label plus kBarLabelPadding on
+        //     each side fits the bar -- "Task A" (~36 px) fits a 5-day bar at
+        //     24 px/day (120 px) with 4 px of padding either side;
+        //   * otherwise to the right of the bar in body text, elided only when
+        //     it would run past the canvas edge.
         if (bar.label.visible && !bar.label_text.empty()) {
-            const QRectF label_rect(bar.label.rect.x, bar.label.rect.y + body_top,
-                                    bar.label.rect.w, bar.label.rect.h);
-            if (label_rect.width() > 1.0 && label_rect.height() > 1.0) {
-                const QFontMetricsF metrics(font());
-                const QString text = metrics.elidedText(
-                    QString::fromStdString(bar.label_text), Qt::ElideRight,
-                    label_rect.width() - 2.0 * kLabelInset);
-                painter.setPen(bar.label.inside ? QColor(0xff, 0xff, 0xff) : kBodyText);
-                painter.drawText(label_rect.adjusted(kLabelInset, 0.0, -kLabelInset, 0.0),
-                                 static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter), text);
+            const QFontMetricsF metrics(font());
+            const QString text = QString::fromStdString(bar.label_text);
+            const double text_width = metrics.horizontalAdvance(text);
+            const double bar_left = bar.rect.x;
+            const double bar_right = bar.rect.x + bar.rect.w;
+            const bool milestone = bar.shape == core::gantt::BarShape::diamond ||
+                                   bar.kind == core::gantt::BarKind::milestone;
+            const bool fits_inside =
+                !milestone && text_width + 2.0 * kBarLabelPadding <= bar.rect.w;
+            double label_x = 0.0;
+            double label_width = 0.0;
+            if (fits_inside) {
+                label_x = bar_left + (bar.rect.w - text_width) / 2.0;
+                label_width = text_width;
+            } else {
+                label_x = bar_right + kBarLabelPadding;
+                label_width = std::min(text_width,
+                                       static_cast<double>(canvas_width) - label_x -
+                                           kBarLabelPadding);
+            }
+            if (label_width > 1.0 && label_x < static_cast<double>(canvas_width)) {
+                const QRectF label_rect(label_x, bar.rect.y + body_top, label_width,
+                                        bar.rect.h);
+                const QString shown = text_width > label_width
+                                          ? metrics.elidedText(text, Qt::ElideRight,
+                                                               label_width)
+                                          : text;
+                painter.setPen(fits_inside ? QColor(0xff, 0xff, 0xff) : kBodyText);
+                painter.drawText(label_rect,
+                                 static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter),
+                                 shown);
             }
         }
     }

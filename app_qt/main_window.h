@@ -4,9 +4,12 @@
 //
 // Q1 built the skeleton.  Q2 makes it look like the MS Project reference: the
 // ribbon-like toolbar, the timeline strip, the Entry table's column set, the
-// dark 40 px header, the 40 px row-number gutter, the 43 % splitter with a drag
-// thumb, the two-tier weekly timescale, and a status bar with view buttons and a
-// zoom slider wired to the existing zoom actions.
+// 42 px caption band, the 60 px row-number gutter, the 0.459 splitter with a
+// drag thumb, the two-tier weekly timescale, and a status bar with view buttons
+// and a zoom slider wired to the existing zoom actions.  Q3 freezes the gutter
+// (it is the sheet view's vertical header now, so it does not scroll sideways),
+// sizes the ribbon buttons from their labels, and can render at the reference's
+// own 1920x1032 for the parity harness.
 //
 // No Q_OBJECT: the shell has no custom signals; every connection is a lambda on
 // a Qt signal, so CMake does not need AUTOMOC.

@@ -1,12 +1,14 @@
-// app_qt/sheet_views.h -- the sheet's chrome: the caption band, the icon / grid
-// cell painter and the splitter handle.
+// app_qt/sheet_views.h -- the sheet's chrome: the caption band, the frozen
+// row-number gutter, the icon / grid cell painter and the splitter handle.
 //
-// Q1 used a plain QHeaderView; Q2 replaces it with a paint-only subclass so the
+// Q1 used a plain QHeaderView; Q2 replaced it with a paint-only subclass so the
 // caption band matches the measured reference (white fill, dark caption, the
-// column separators, the sort chevron and a visible resize grip).  The
-// row-number gutter is display column 0 of SheetTableModel (60 px), so it gets
-// the ordinary cell painter and the row selection tint; only the two icon
-// columns need a custom paint.
+// column separators, the sort chevron and a visible resize grip).
+//
+// WAVE 18 Q3 makes the row-number gutter FROZEN, as MS Project's is: it is the
+// view's vertical header (SheetRowHeader), not a model column, so it cannot
+// scroll horizontally with the columns.  The model therefore exposes only the
+// nine Entry columns (sheet_table_model.h) and the gutter holds no data.
 //
 // None of these classes declares a signal or a slot, so no Q_OBJECT / AUTOMOC.
 #pragma once
@@ -17,6 +19,7 @@
 #include <QSplitterHandle>
 #include <QStyleOptionViewItem>
 #include <QStyledItemDelegate>
+#include <QTableView>
 #include <QWidget>
 
 class QPainter;
@@ -34,6 +37,42 @@ class SheetHeaderView final : public QHeaderView {
 
   protected:
     void paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const override;
+};
+
+// The row-number gutter: the view's vertical header, 60 px, frozen.  QTableView
+// scrolls the rows vertically through it (so the numbers stay on their rows) but
+// never scrolls it horizontally, which is the product's frozen gutter.  The
+// numbers are display ordinals: the model has no gutter column.
+class SheetRowHeader final : public QHeaderView {
+  public:
+    explicit SheetRowHeader(QWidget* parent = nullptr);
+
+    QSize sizeHint() const override;
+
+  protected:
+    void paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const override;
+    void paintEvent(QPaintEvent* event) override;
+};
+
+// The sheet view: a QTableView whose top-left corner (left of the column
+// captions, above the frozen gutter) is a white child widget instead of the
+// style's grey corner panel, and which paints the sheet's own left border on
+// the viewport so the frozen gutter keeps a border while the columns scroll
+// under it.
+class SheetView final : public QTableView {
+  public:
+    explicit SheetView(QWidget* parent = nullptr);
+
+  protected:
+    void paintEvent(QPaintEvent* event) override;
+
+  private:
+    // The caption band's top-left corner: kGutterWidth x kSheetHeaderHeight at
+    // the view's origin, i.e. exactly the cell QTableView leaves between the two
+    // headers.  A child widget rather than a painted rectangle, because a
+    // QTableView paints its cells on the viewport and a second painter on the
+    // view from inside that paint event is not a supported device.
+    QWidget* corner_ = nullptr;
 };
 
 // Cell painter: the Indicators column draws a small (i) badge, Task Mode a pin;

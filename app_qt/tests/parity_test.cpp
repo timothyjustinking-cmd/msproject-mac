@@ -1,16 +1,19 @@
-// app_qt/tests/parity_test.cpp -- wave 17 Q2's numeric acceptance test.
+// app_qt/tests/parity_test.cpp -- the numeric acceptance test for the Qt shell
+// against P1's measured baseline (docs/parity.md section 2).
 //
-// Runs the real MainWindow offscreen against the committed fixture and asserts
-// the reference-measured targets P1's harness scores (docs/parity.md section 2):
+// Runs the real MainWindow offscreen against the committed fixture and asserts:
 //
-//   row height 22, sheet header 42, row-number gutter 60,
+//   row height 22, sheet header 42, the FROZEN row-number gutter 60 px,
 //   Entry column widths 39/57/147/81/81/81/105/105/123 within 2 px each,
 //   splitter at 881/1920 = 0.459 with a visible horizontal scrollbar,
 //   24 px per day, a two-tier 21+21 timescale with a weekly label above
 //   single-letter day cells,
 //   the measured colours and Calibri-11 typography,
-//   the ribbon (7 tabs incl. "Gantt Chart Format"), the timeline strip and the
-//   status bar's zoom slider (wired to the zoom actions).
+//   the ribbon (7 tabs incl. "Gantt Chart Format"), every visible button wide
+//   enough for its whole label, the timeline strip and the status bar's zoom
+//   slider (wired to the zoom actions),
+//   and the 1920x1032 parity size: all nine Entry columns fit, so P1's
+//   column-width comparison becomes comparable (wave 18 Q3).
 //
 // Run it with QT_QPA_PLATFORM=offscreen (app_qt/CMakeLists.txt does).
 #include <QAbstractItemView>
@@ -19,10 +22,13 @@
 #include <QColor>
 #include <QFont>
 #include <QHeaderView>
+#include <QList>
+#include <QPoint>
 #include <QScrollBar>
 #include <QSlider>
 #include <QString>
 #include <QTableView>
+#include <QToolButton>
 
 #include <cmath>
 #include <cstdio>
@@ -68,6 +74,28 @@ bool family_is_pinned(const QString& family) {
 
 bool is_day_letter(const std::string& text) {
     return text.size() == 1 && text.find_first_of("SMTWFS") != std::string::npos;
+}
+
+// Every visible ribbon button must be at least as wide as its whole label (plus
+// a pixel of slack) and must lie wholly inside the ribbon: Qt clips a
+// QToolButton's text from both ends when the button is narrower ("Cu", "t F").
+void check_ribbon_labels(msqt::RibbonBar* ribbon, int& visible_buttons) {
+    if (ribbon == nullptr) {
+        return;
+    }
+    const QList<QToolButton*> buttons = ribbon->findChildren<QToolButton*>();
+    for (QToolButton* button : buttons) {
+        if (button == nullptr || button->objectName() != QStringLiteral("ribbonButton") ||
+            !button->isVisible()) {
+            continue;
+        }
+        ++visible_buttons;
+        const int label_width = button->fontMetrics().horizontalAdvance(button->text());
+        check(button->width() >= label_width + 2, "a visible ribbon button fits its label");
+        const QPoint top_left = button->mapTo(ribbon, QPoint(0, 0));
+        check(top_left.x() >= 0 && top_left.x() + button->width() <= ribbon->width(),
+              "a visible ribbon button is wholly inside the ribbon");
+    }
 }
 
 }  // namespace
@@ -116,11 +144,13 @@ int main(int argc, char** argv) {
     if (sheet->verticalHeader() != nullptr) {
         check(sheet->verticalHeader()->defaultSectionSize() == msqt::kRowHeight,
               "row height is 22 px");
+        // The row-number gutter is the FROZEN row header (wave 18 Q3): it must
+        // be visible, 60 px, and must not scroll horizontally with the columns.
+        check(sheet->verticalHeader()->isVisible(),
+              "the row-number gutter is a visible, frozen row header");
+        check(sheet->verticalHeader()->width() == msqt::kGutterWidth,
+              "row-number gutter is 60 px");
     }
-    // The row-number gutter is display column 0 (60 px), so the sheet's first
-    // grid line lands at x = 60 as docs/parity.md section 2.1 measures.
-    check(sheet->columnWidth(msqt::kGutterColumn) == msqt::kGutterWidth,
-          "row-number gutter is 60 px");
     if (sheet->horizontalHeader() != nullptr) {
         check(sheet->horizontalHeader()->height() == msqt::kSheetHeaderHeight,
               "sheet header band is 42 px");
@@ -129,8 +159,8 @@ int main(int argc, char** argv) {
     // --- Entry columns, each within 2 px of the reference -------------------
     const std::vector<msqt::EntryColumn>& columns = msqt::entry_columns();
     check(columns.size() == 9, "the Entry table shows its 9 measured columns");
-    check(sheet->model() != nullptr && sheet->model()->columnCount() == 10,
-          "the table model exposes the gutter plus the 9 Entry columns");
+    check(sheet->model() != nullptr && sheet->model()->columnCount() == 9,
+          "the table model exposes the 9 Entry columns (the gutter is the row header)");
 
     // The widths come from the file's `214/CTable` width bytes, through MS
     // Project's character rule (6 px/char + 3): 24 chars -> 147 px.
@@ -141,7 +171,7 @@ int main(int argc, char** argv) {
     check(msqt::entry_width_px(24) == 147, "24 characters -> 147 px (6 px + 3 padding)");
 
     for (std::size_t index = 0; index < columns.size(); ++index) {
-        const int width = sheet->columnWidth(static_cast<int>(index) + 1);
+        const int width = sheet->columnWidth(static_cast<int>(index));
         if (std::abs(width - columns[index].width) > 2) {
             std::fprintf(stderr, "FAIL: column %s width %d, want %d +/- 2\n",
                          columns[index].title[0] ? columns[index].title : "(indicators)", width,
@@ -186,6 +216,7 @@ int main(int argc, char** argv) {
     // --- chrome ------------------------------------------------------------
     msqt::RibbonBar* ribbon = window.ribbon();
     check(ribbon != nullptr, "the window has a ribbon bar");
+    int visible_buttons_900 = 0;
     if (ribbon != nullptr) {
         check(ribbon->tab_count() == 7, "the ribbon has 7 tabs");
         check(ribbon->tab_titles().contains(QStringLiteral("Task")),
@@ -194,6 +225,10 @@ int main(int argc, char** argv) {
               "the ribbon has the contextual Gantt Chart Format tab");
         check(ribbon->button_count() > 0, "the active ribbon tab shows its buttons");
         check(!ribbon->group_titles().isEmpty(), "ribbon groups have captions");
+        check(ribbon->visible_group_count() > 0,
+              "at 900 px the ribbon still shows at least one whole group");
+        check_ribbon_labels(ribbon, visible_buttons_900);
+        check(visible_buttons_900 > 0, "at 900 px at least one ribbon button is visible");
     }
     check(window.timeline() != nullptr, "the window has a timeline strip");
     if (window.timeline() != nullptr) {
@@ -220,6 +255,51 @@ int main(int argc, char** argv) {
             check_near(gantt->header_info(gantt->width()).day_width, msqt::kPixelsPerDay, 0.51,
                        "the slider returns the Gantt to the measured 24 px/day");
         }
+    }
+
+    // --- the gutter is frozen, not a scrolling column ----------------------
+    if (sheet->horizontalScrollBar() != nullptr && sheet->verticalHeader() != nullptr) {
+        sheet->horizontalScrollBar()->setValue(120);
+        QApplication::processEvents();
+        check(sheet->verticalHeader()->isVisible() &&
+                  sheet->verticalHeader()->width() == msqt::kGutterWidth,
+              "the row-number gutter stays put when the sheet scrolls sideways");
+        check(sheet->columnViewportPosition(0) < 0,
+              "the sheet's columns scroll under the frozen gutter");
+        sheet->horizontalScrollBar()->setValue(0);
+        QApplication::processEvents();
+    }
+
+    // --- the reference's own size: the whole Entry table must fit ----------
+    // At 900 px only four columns fit, which is why P1's harness reports the
+    // column widths N/A.  At the reference's 1920x1032 all nine must be on
+    // screen, so the comparison is 9 columns against 9.
+    window.resize(msqt::kParityWidth, msqt::kParityHeight);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    check(window.splitter() != nullptr, "the splitter survives the resize");
+    if (window.splitter() != nullptr && sheet->verticalHeader() != nullptr) {
+        const int sheet_pane = window.splitter()->sizes().value(0);
+        check(sheet_pane >= msqt::kGutterWidth + msqt::entry_content_width() - 1,
+              "at 1920x1032 the sheet pane holds the whole Entry table");
+        check_near(window.split_fraction(), msqt::kSplitFraction, 0.02,
+                   "the splitter still holds 0.459 at the reference size");
+        const int content_right = sheet->columnViewportPosition(columns.size() - 1) +
+                                  sheet->columnWidth(static_cast<int>(columns.size()) - 1);
+        std::fprintf(stderr, "note: 1920 pane %d, viewport %d, table right %d\n", sheet_pane,
+                     sheet->viewport()->width(), content_right);
+        check(content_right <= sheet->viewport()->width() + 1,
+              "all nine Entry columns are visible at 1920x1032");
+        check(sheet->verticalHeader()->width() == msqt::kGutterWidth,
+              "the frozen gutter is still 60 px at 1920x1032");
+    }
+    int visible_buttons_1920 = 0;
+    check_ribbon_labels(ribbon, visible_buttons_1920);
+    if (ribbon != nullptr) {
+        check(ribbon->visible_group_count() >= 1,
+              "at 1920 the ribbon shows whole groups, never a cut label");
+        std::fprintf(stderr, "note: visible ribbon groups %d at 1920, buttons %d\n",
+                     ribbon->visible_group_count(), visible_buttons_1920);
     }
 
     std::printf("qt_parity_geometry: %d failure(s)\n", g_failures);

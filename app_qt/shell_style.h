@@ -35,6 +35,13 @@ namespace msqt {
 inline constexpr int kWindowWidth = 900;
 inline constexpr int kWindowHeight = 560;
 
+// The reference capture's client size (docs/parity.md section 2).  `--render
+// --parity` renders at exactly this size so P1's harness can compare the sheet
+// columns: at 1920 px all nine Entry columns fit, at 900 only the first four do
+// and the harness reports the widths N/A.
+inline constexpr int kParityWidth = 1920;
+inline constexpr int kParityHeight = 1032;
+
 // ---------------------------------------------------------------------------
 // Typography
 // ---------------------------------------------------------------------------
@@ -60,7 +67,7 @@ inline constexpr int kFontFamilyCount = 6;
 
 inline constexpr int kRowHeight = 22;
 inline constexpr int kSheetHeaderHeight = 42;  // caption band, top rule included
-inline constexpr int kGutterWidth = 60;        // row-number gutter (sheet edge 60)
+inline constexpr int kGutterWidth = 60;        // frozen row-number gutter (sheet edge 60)
 inline constexpr int kSplitHandleWidth = 6;    // visible drag thumb
 inline constexpr double kSplitFraction = 0.459;  // 881 / 1920, docs/parity.md
 inline constexpr int kSheetSpan = 819;         // 9 columns, 60 .. 879

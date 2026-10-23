@@ -6,9 +6,10 @@
 //   row-number gutter | Indicators | Task Mode | Task Name | Duration | Start |
 //   Finish | Predecessors | Resource Names | Add New Column
 //
-// The row-number gutter is display column 0 of SheetTableModel (60 px); this
-// table lists the nine *sheet* columns that follow it, in order, with the
-// measured boundaries 60, 99, 156, 303, 384, 465, 546, 651, 756, 879.
+// The row-number gutter is the sheet view's FROZEN vertical header (60 px,
+// SheetRowHeader in sheet_views.h); this table lists the nine *sheet* columns
+// that follow it, in order, with the measured boundaries
+// 60, 99, 156, 303, 384, 465, 546, 651, 756, 879.
 //
 // WHERE THE WIDTHS COME FROM
 //   MS Project stores a column's width in the `214/CTable` column record: the
