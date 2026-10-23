@@ -23,6 +23,8 @@
 // No Q_OBJECT: buttons and combos use lambdas over std::function handlers.
 #pragma once
 
+#include <QImage>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QWidget>
@@ -33,11 +35,14 @@
 #include "theme.h"
 
 class QAbstractButton;
+class QCheckBox;
 class QComboBox;
 class QLabel;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
+class QResizeEvent;
+class QSpinBox;
 class QStackedWidget;
 class QToolButton;
 
@@ -98,6 +103,25 @@ class Backstage final : public QWidget {
     QLabel* online_note() const noexcept { return online_note_; }
     QListWidget* new_recent_list() const noexcept { return new_recent_; }
 
+    // W26-4.5: the Print page and its live preview.  The provider renders one
+    // page of the CURRENT document through the shared print layout (MainWindow
+    // owns the document); `landscape`/`letter` are the live settings.
+    using PrintPreviewProvider =
+        std::function<QImage(const QSize& target, bool landscape, bool letter)>;
+    void set_print_preview_provider(PrintPreviewProvider provider);
+    void refresh_print_preview();
+    // The live Print settings, read by MainWindow's print command.
+    bool print_landscape() const;
+    bool print_paper_letter() const;
+    int print_copies() const;
+    QString print_printer_name() const;
+    QLabel* print_preview() const noexcept { return print_preview_; }
+    QAbstractButton* print_button() const noexcept { return print_button_; }
+    QSpinBox* print_copies_spin() const noexcept { return print_copies_; }
+    QComboBox* print_printer_combo() const noexcept { return print_printer_; }
+    QCheckBox* print_landscape_check() const noexcept { return print_landscape_; }
+    QComboBox* print_paper_combo() const noexcept { return print_paper_; }
+
     // W26-4.1: the rail's command entries follow the document state.  With no
     // document open the clean Account capture shows Save..Close disabled.
     void set_document_state(bool has_document);
@@ -145,11 +169,16 @@ class Backstage final : public QWidget {
     static constexpr int kBackArrowLeft = 10;
     static constexpr int kBackArrowTop = 14;
 
+  protected:
+    // W26-4.5: the preview pane re-renders at the label's new size.
+    void resizeEvent(QResizeEvent* event) override;
+
   private:
     QWidget* build_page(Page page, const QString& title, const QString& body,
                         const QString& command_label, const QString& command);
     QWidget* build_new_page();
     QWidget* build_location_page(Page page);
+    QWidget* build_print_page();
     QWidget* build_account_page();
     void set_nav_checked(int page_index);
     void rebuild_recent_lists();
@@ -183,6 +212,13 @@ class Backstage final : public QWidget {
     QListWidget* new_recent_ = nullptr;
     QListWidget* open_recent_ = nullptr;
     QListWidget* save_as_recent_ = nullptr;
+    QLabel* print_preview_ = nullptr;
+    QAbstractButton* print_button_ = nullptr;
+    QSpinBox* print_copies_ = nullptr;
+    QComboBox* print_printer_ = nullptr;
+    QCheckBox* print_landscape_ = nullptr;
+    QComboBox* print_paper_ = nullptr;
+    PrintPreviewProvider print_provider_;
     bool has_document_ = false;
 };
 

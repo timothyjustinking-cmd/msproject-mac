@@ -509,5 +509,5 @@ pixels against them.
 | W26-4.2 | Account page: identity, version, mouse-reachable About, Project's five Office Theme names (implemented ones enabled) | **DONE** | commit `PENDING`; gates `build/w26/gates-6fb6ec5-W26-4.2.log` |
 | W26-4.3 | New page: Blank Project, New from existing, local Recent list, disabled online search with a note | **DONE** | commit `PENDING`; gates `build/w26/gates-fb5d37c-W26-4.3.log` |
 | W26-4.4 | Open and Save As pages: Recent, This PC, Browse; OneDrive/SharePoint laid out and disabled | **DONE** | commit `PENDING`; gates `build/w26/gates-0102e8b-W26-4.4.log` |
-| W26-4.5 | Print page: copies, printer list, settings (dates, pages, orientation, paper), live preview through the shared print layout | pending | - |
+| W26-4.5 | Print page: copies, printer list, settings (dates, pages, orientation, paper), live preview through the shared print layout | **DONE** | commit `PENDING`; gates `build/w26/gates-50204c6-W26-4.5.log` |
 | W26-4.6 | Options: the 11-page dialog; General and the Schedule new-task mode functional; every other control laid out and disabled with the exact tooltip | pending | - |

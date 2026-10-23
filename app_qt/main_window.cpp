@@ -552,6 +552,21 @@ void MainWindow::build_central_widget() {
             update_status();
         }
     });
+    // W26-4.5: the Print page's preview is one page of the CURRENT document
+    // through the shared page layout -- never a second page arithmetic.
+    backstage_->set_print_preview_provider(
+        [this](const QSize& size, bool landscape, bool letter) -> QImage {
+            if (!doc_.has_document() || doc_.sheet() == nullptr) {
+                return QImage();
+            }
+            app::PageSpec spec = letter ? app::PageSpec::letter_landscape()
+                                        : app::PageSpec::a4_landscape();
+            if (!landscape) {
+                std::swap(spec.width, spec.height);
+            }
+            const app::PrintJob job = current_print_job(spec);
+            return render_print_page(job, 0, *doc_.sheet(), doc_.plan(), prefs_, size);
+        });
     central_stack_ = new QStackedWidget(this);
     central_stack_->addWidget(central);
     central_stack_->addWidget(backstage_);
@@ -2311,6 +2326,10 @@ bool MainWindow::confirm_proceed_with_discard() {
 // ---------------------------------------------------------------------------
 
 app::PrintJob MainWindow::current_print_job() const {
+    return current_print_job(app::PageSpec::a4_landscape());
+}
+
+app::PrintJob MainWindow::current_print_job(const app::PageSpec& spec) const {
     if (!doc_.has_document()) {
         return {};
     }
@@ -2326,7 +2345,7 @@ app::PrintJob MainWindow::current_print_job() const {
     }
     return make_print_job(doc_.plan(), rows, printed_tasks,
                           doc_.filter_active() ? doc_.filter_description() : std::string(),
-                          today_text(), prefs_.zoom);
+                          today_text(), prefs_.zoom, spec);
 }
 
 void MainWindow::print_plan() {
@@ -2335,9 +2354,28 @@ void MainWindow::print_plan() {
         update_status();
         return;
     }
-    const app::PrintJob job = current_print_job();
+    // W26-4.5: the backstage Print page's live settings choose the paper,
+    // orientation, copies and printer; the page geometry stays the shared
+    // PageSpec.
+    bool landscape = true;
+    bool letter = false;
+    int copies = 1;
+    QString printer_name;
+    if (backstage_ != nullptr) {
+        landscape = backstage_->print_landscape();
+        letter = backstage_->print_paper_letter();
+        copies = backstage_->print_copies();
+        printer_name = backstage_->print_printer_name();
+    }
+    app::PageSpec spec = letter ? app::PageSpec::letter_landscape()
+                                : app::PageSpec::a4_landscape();
+    if (!landscape) {
+        std::swap(spec.width, spec.height);
+    }
+    const app::PrintJob job = current_print_job(spec);
     QString error;
-    if (!print_job(this, job, *doc_.sheet(), doc_.plan(), prefs_, &error)) {
+    if (!print_job(this, job, *doc_.sheet(), doc_.plan(), prefs_, &error, copies,
+                   printer_name)) {
         if (!error.isEmpty()) {
             QMessageBox::warning(this, QStringLiteral("Could not print"), error);
             set_message("print failed: " + error.toStdString(), true);
