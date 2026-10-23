@@ -162,6 +162,14 @@ class MainWindow final : public QMainWindow {
     ThemeChoice theme_choice() const noexcept { return theme_choice_; }
     bool set_theme_choice(ThemeChoice choice, bool persist);
 
+    // W26-4.6: Project Options.  General's date format/theme and the Schedule
+    // page's new-task mode apply on OK; every other control is laid out and
+    // disabled.  The gate drives the dialog directly and the two apply paths
+    // below.
+    void show_options();
+    void set_new_task_mode(bool manual);
+    bool new_tasks_manual() const noexcept { return new_tasks_manual_; }
+
     // Opens/closes the File backstage.  Public so the structural gate can prove
     // the left rail and pages without clicking through a modal.
     void show_backstage(bool open);

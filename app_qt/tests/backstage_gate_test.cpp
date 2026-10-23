@@ -72,6 +72,7 @@
 #include "backstage.h"
 #include "gate_util.h"
 #include "main_window.h"
+#include "options_dialog.h"
 #include "preferences_store.h"
 #include "print_page.h"
 #include "ribbon_bar.h"
@@ -854,6 +855,150 @@ void check_print(msqt::MainWindow& window) {
     window.show_backstage(false);
 }
 
+void check_options(msqt::MainWindow& window, const QJsonObject& measures) {
+    const QJsonObject options = measures.value(QStringLiteral("options")).toObject();
+    const QJsonArray titles = options.value(QStringLiteral("titles")).toArray();
+    const QJsonArray counts = options.value(QStringLiteral("control_counts")).toArray();
+    const QJsonArray functional =
+        options.value(QStringLiteral("functional_counts")).toArray();
+    const double list_ratio =
+        options.value(QStringLiteral("page_list_width_ratio")).toDouble();
+
+    app::Preferences start;
+    msqt::OptionsDialog dialog(start, msqt::ThemeChoice::colorful, false,
+                               QStringLiteral("project_a"));
+    gate::check(dialog.windowTitle() == QStringLiteral("Project Options"),
+                "the dialog is Project Options");
+    gate::check(dialog.page_count() == titles.size(),
+                "the Options dialog has the capture's eleven pages");
+    if (dialog.page_list() != nullptr && dialog.width() > 0) {
+        const double live = static_cast<double>(dialog.page_list()->width()) /
+                            static_cast<double>(dialog.width());
+        gate::check(std::abs(live - list_ratio) < 0.01,
+                    "the page list has the capture's 17.5 % width");
+    }
+
+    int total_controls = 0;
+    int total_functional = 0;
+    for (int index = 0; index < titles.size() && index < dialog.page_count(); ++index) {
+        gate::check(dialog.page_title(index) == titles.at(index).toString(),
+                    "the Options page is the capture's title in order");
+        QWidget* page = dialog.page_widget(index);
+        gate::check(page != nullptr, "the Options page has a laid-out content widget");
+        if (page == nullptr) {
+            continue;
+        }
+        int controls = 0;
+        int live_controls = 0;
+        for (QWidget* control : page->findChildren<QWidget*>()) {
+            if (control == nullptr || !control->property("optionControl").toBool()) {
+                continue;
+            }
+            ++controls;
+            const bool is_functional = control->property("optionFunctional").toBool();
+            if (is_functional) {
+                ++live_controls;
+                gate::check(control->isEnabled(),
+                            "the functional Options control is enabled");
+            } else {
+                gate::check(!control->isEnabled(),
+                            "every other Options control is laid out and disabled");
+                gate::check(control->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                            "the disabled Options control carries the exact tooltip");
+            }
+        }
+        gate::check(controls == counts.at(index).toInt(),
+                    "the Options page has the capture's control count");
+        if (controls != counts.at(index).toInt()) {
+            std::fprintf(stderr, "note: page %s controls %d, want %d\n",
+                         titles.at(index).toString().toLocal8Bit().constData(), controls,
+                         counts.at(index).toInt());
+        }
+        gate::check(live_controls == functional.at(index).toInt(),
+                    "the Options page has the capture's functional count");
+        total_controls += controls;
+        total_functional += live_controls;
+    }
+    std::fprintf(stderr, "note: Options controls %d, functional %d\n", total_controls,
+                 total_functional);
+
+    // General: the date format and the five Office Theme names are live.
+    QComboBox* date = dialog.date_format_combo();
+    gate::check(date != nullptr && date->isEnabled() && date->count() == 3,
+                "General offers the port's three date formats");
+    if (date != nullptr) {
+        date->setCurrentIndex(2);
+        gate::check(dialog.preferences().date_style == app::DateStyle::iso,
+                    "the General date format is applied to the result");
+    }
+    QComboBox* theme = dialog.theme_combo();
+    gate::check(theme != nullptr && theme->isEnabled() && theme->count() == 5,
+                "General offers Project's five Office Theme names");
+    if (theme != nullptr) {
+        const QAbstractItemModel* model = theme->model();
+        gate::check(model != nullptr &&
+                        (model->flags(model->index(0, 0)) & Qt::ItemIsEnabled) != 0,
+                    "General enables Colorful");
+        gate::check(model != nullptr &&
+                        (model->flags(model->index(2, 0)) & Qt::ItemIsEnabled) == 0,
+                    "General disables the unimplemented Black");
+        theme->setCurrentIndex(static_cast<int>(msqt::ThemeChoice::dark_gray));
+        gate::check(dialog.theme_choice() == msqt::ThemeChoice::dark_gray,
+                    "the General theme choice is read back");
+    }
+
+    // Schedule: the new-task mode is the one functional control.
+    QComboBox* new_tasks = dialog.new_tasks_combo();
+    gate::check(new_tasks != nullptr && new_tasks->isEnabled() &&
+                    new_tasks->count() == 2,
+                "Schedule offers the two new-task modes");
+    if (new_tasks != nullptr) {
+        new_tasks->setCurrentIndex(1);
+        gate::check(dialog.new_tasks_manual(),
+                    "Schedule's Manually Scheduled is applied to the result");
+        new_tasks->setCurrentIndex(0);
+        gate::check(!dialog.new_tasks_manual(),
+                    "Schedule's Auto Scheduled is applied to the result");
+    }
+
+    // The shell's live mode follows the same state the dialog returns.
+    window.set_new_task_mode(true);
+    gate::check(window.new_tasks_manual() &&
+                    window.status_mode_label() != nullptr &&
+                    window.status_mode_label()->text().contains(
+                        QStringLiteral("Manually Scheduled")),
+                "the shell's new-task mode follows the Options result");
+    window.set_new_task_mode(false);
+    gate::check(!window.new_tasks_manual() &&
+                    window.status_mode_label() != nullptr &&
+                    window.status_mode_label()->text().contains(
+                        QStringLiteral("Auto Scheduled")),
+                "the shell's auto mode follows the Options result");
+
+    // The rail's Options entry opens the same dialog.
+    window.show_backstage(true);
+    QApplication::processEvents();
+    bool saw_dialog = false;
+    QString title;
+    QTimer::singleShot(0, [&saw_dialog, &title]() {
+        auto* opened = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (opened != nullptr) {
+            saw_dialog = true;
+            title = opened->windowTitle();
+            opened->close();
+        }
+    });
+    if (window.backstage() != nullptr && window.backstage()->options_button() != nullptr) {
+        window.backstage()->options_button()->click();
+    }
+    QApplication::processEvents();
+    gate::check(saw_dialog, "the backstage Options entry opens the dialog");
+    gate::check(title == QStringLiteral("Project Options"),
+                "the rail opens Project Options");
+    window.show_backstage(false);
+}
+
 void check_document_state(msqt::MainWindow& window, const QString& fixture) {
     // No document: Save..Close disabled (the clean Account capture).
     window.show_backstage(true);
@@ -922,9 +1067,10 @@ int main(int argc, char** argv) {
     check_new(window, fixture, out_dir);
     check_locations(window, fixture, out_dir);
     check_print(window);
+    check_options(window, measures);
 
     std::fprintf(stderr,
-                 "note: W26-4.1..4.5 rail, File-tab, Account, New, location and Print "
-                 "checks ran on the live window\n");
+                 "note: W26-4.1..4.6 rail, File-tab, Account, New, location, Print and "
+                 "Options checks ran on the live window\n");
     return gate::finish();
 }

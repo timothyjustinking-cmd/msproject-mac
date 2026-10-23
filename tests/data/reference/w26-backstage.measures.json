@@ -45,5 +45,12 @@
     "product_version": "0.1.0",
     "source_dropdown": "corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744218543-obuhaj.jpg",
     "note": "Column offsets and the theme combo's 377-px width are measured from the clean Account capture; the five names and their order from the open drop-down frame."
+  },
+  "options": {
+    "titles": ["General", "Display", "Schedule", "Proofing", "Save", "Language", "Advanced", "Customize Ribbon", "Quick Access Toolbar", "Add-ins", "Trust Center"],
+    "control_counts": [9, 12, 21, 17, 18, 10, 18, 11, 12, 3, 1],
+    "functional_counts": [2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+    "page_list_width_ratio": 0.1748,
+    "source": "corpus/reference/2026-10-23-audit frames 1792744193979-* .. 1792744193980-* (General, Display, Add-ins, Trust Center, Save, Schedule, Advanced, Language, QAT, Customize Ribbon) and 1792744193980-yo98d5.jpg (Proofing); the page list is 100 px of a 572-px dialog."
   }
 }

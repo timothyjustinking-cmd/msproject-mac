@@ -505,9 +505,124 @@ pixels against them.
 
 | item | finding | status | evidence |
 |---|---|---|---|
-| W26-4.1 | File tab and rail styled as the Account capture: plain File tab, light rail, back arrow, Account under Close, Options pinned | **DONE** | commit `PENDING`; gates `build/w26/gates-4ca7821-W26-4.1.log` |
-| W26-4.2 | Account page: identity, version, mouse-reachable About, Project's five Office Theme names (implemented ones enabled) | **DONE** | commit `PENDING`; gates `build/w26/gates-6fb6ec5-W26-4.2.log` |
-| W26-4.3 | New page: Blank Project, New from existing, local Recent list, disabled online search with a note | **DONE** | commit `PENDING`; gates `build/w26/gates-fb5d37c-W26-4.3.log` |
-| W26-4.4 | Open and Save As pages: Recent, This PC, Browse; OneDrive/SharePoint laid out and disabled | **DONE** | commit `PENDING`; gates `build/w26/gates-0102e8b-W26-4.4.log` |
-| W26-4.5 | Print page: copies, printer list, settings (dates, pages, orientation, paper), live preview through the shared print layout | **DONE** | commit `PENDING`; gates `build/w26/gates-50204c6-W26-4.5.log` |
-| W26-4.6 | Options: the 11-page dialog; General and the Schedule new-task mode functional; every other control laid out and disabled with the exact tooltip | pending | - |
+| W26-4.1 | File tab and rail styled as the Account capture: plain File tab, light rail, back arrow, Account under Close, Options pinned | **DONE** | commit `6fb6ec5`; gates `build/w26/gates-4ca7821-W26-4.1.log` |
+| W26-4.2 | Account page: identity, version, mouse-reachable About, Project's five Office Theme names (implemented ones enabled) | **DONE** | commit `fb5d37c`; gates `build/w26/gates-6fb6ec5-W26-4.2.log` |
+| W26-4.3 | New page: Blank Project, New from existing, local Recent list, disabled online search with a note | **DONE** | commit `0102e8b`; gates `build/w26/gates-fb5d37c-W26-4.3.log` |
+| W26-4.4 | Open and Save As pages: Recent, This PC, Browse; OneDrive/SharePoint laid out and disabled | **DONE** | commit `50204c6`; gates `build/w26/gates-0102e8b-W26-4.4.log` |
+| W26-4.5 | Print page: copies, printer list, settings (dates, pages, orientation, paper), live preview through the shared print layout | **DONE** | commit `73da8b7`; gates `build/w26/gates-50204c6-W26-4.5.log` |
+| W26-4.6 | Options: the 11-page dialog; General and the Schedule new-task mode functional; every other control laid out and disabled with the exact tooltip | **DONE** | commit `PENDING`; gates `build/w26/gates-73da8b7-W26-4.6.log` |
+
+### W26-4.1 detail -- the File tab and the rail
+
+- The rail is Project's, measured from the clean 1903x1033 Account capture:
+  133 px wide, #F0F0F0 on the #F5F5F5 content, the 21x21 circular back arrow
+  at (10, 14) below the shell top, 40-px entries, text at 38, the two 100-px
+  #D1D1D1 separators, enabled ink #242424, disabled #999999 and the selected
+  Account green #0F703B.  The numbers are in
+  `tests/data/reference/w26-backstage.measures.json`; the capture is local
+  only.
+- The nav rows are our own `RailButton` painting because a QToolButton centres
+  its text (measured: Info landed at x=74, not the capture's 38).
+- The rail is Home, New, Open, Info, Save, Save As, Print, Share, Export,
+  Close, Account (a page), and Options (an action pinned at the bottom that
+  opens the Options dialog).  Save..Close are disabled while no document is
+  open, exactly as the clean capture shows.
+- The File tab is plain (`ribbon_bar.cpp`); audit B-7's dark-blue tile is gone.
+- `empty_state_test` moves from eleven rail entries to twelve and from an
+  Options page to the Account page.
+
+### W26-4.2 detail -- Account
+
+- The page carries the port's own identity -- "MS Project Shell", version
+  0.1.0 (kept with the root CMake project version) -- never Microsoft's, and
+  an enabled About button that opens the real About box (mouse-reachable for
+  the first time).
+- The Office Theme chooser offers Project's five measured names in drop-down
+  order: Colorful, Dark Gray, Black, White, Use system setting.  Colorful and
+  Dark Gray are the two palettes the port paints; Use system setting resolves
+  through `QStyleHints::colorScheme()` (light when unknown).  Black and White
+  are laid out and disabled with the exact tooltip.
+- Every other service control (Sign out, Switch account, Manage Settings,
+  Office Background, OneDrive, Add a service, Switch License) is laid out and
+  disabled with the same tooltip.
+- `theme.h` owns the choice list and its stable names; the resolved light/dark
+  palette persists under the existing store key.
+
+### W26-4.3 detail -- New
+
+- Blank Project and New from existing project are the capture's two local
+  templates; the existing project opens through the local file picker and the
+  reader never modifies it in place.  The online-template search is laid out
+  and disabled with the exact tooltip and a visible note; the online template
+  grid the capture also shows is not offered.
+- The Recent list is the port's own local store: `PreferencesStore` keeps a
+  capped list under its own key, MainWindow adds a path after a successful
+  open or save, and a row opens the file through the same `open_file()` path
+  as File > Open.  URLs are refused.
+
+### W26-4.4 detail -- Open and Save As
+
+- Both pages carry Recent, This PC and Browse.  On Open a real double-click
+  opens the local recent file; on Save As the recent list is shown for
+  reference (Save As never overwrites a file from a list row).  This PC starts
+  the local dialog at the computer root; Browse keeps the dialog's location.
+- OneDrive - Personal, SharePoint and Add a Place are laid out and disabled
+  with the exact tooltip.
+
+### W26-4.5 detail -- Print
+
+- Copies and the printer list (QPrinterInfo; "Print to PDF" only when the
+  machine has no printer) are live and reach QPrinter.  Landscape and the
+  A4/Letter paper choice re-render the preview; the date range, page range and
+  Page Setup are laid out and disabled with the exact tooltip because the
+  shared print job has no date/page selection.
+- The preview is `render_print_page()`, the SAME `draw_page()` painter the
+  printer route uses.  The gate compares the live preview pixmap with the
+  shared renderer pixel for pixel and measures the white page rectangle's
+  aspect against the PageSpec (A4 842x595).
+
+### W26-4.6 detail -- Options
+
+- `OptionsDialog` lays out Project's eleven pages in the capture's order and
+  every control the captures show: 132 controls across the pages (General 9,
+  Display 12, Schedule 21, Proofing 17, Save 18, Language 10, Advanced 18,
+  Customize Ribbon 11, Quick Access Toolbar 12, Add-ins 3, Trust Center 1).
+  Three are functional: General's Date format and Office Theme, and Schedule's
+  "New tasks created".
+- Everything else is disabled with decision 9's exact tooltip.  The page list
+  is the measured 17.5 % of the dialog width (100 of 572 px in the capture).
+- The shell's new-task mode follows the Schedule result (`set_new_task_mode`
+  updates the status bar and the new-project callout); General's date format
+  applies to the sheet preferences and its theme choice to the palette.
+- The rail's Options entry opens this dialog; the application-menu Preferences
+  dialog (wave 20) is unchanged and still carries the port-only
+  duration/timescale/shading choices.
+
+### G4 gates
+
+Every commit ran the full gate set; the numbers are identical on each log:
+core 51/51 (no `plan_recalc`), `plan_recalc` 512 checks with corpus / 266 with
+`MPP_NO_CORPUS=1`, reader 1100 / 420, M2 `recalc --compare` 332/332, app 16/16,
+app_qt 20/20 (the new `qt_backstage_gate` is the twentieth test), fixtures OK
+(25 documented hashes, 21 tracked `.mpp`), parity wave23-outline 10 comparable
+/ 0 failing and wave25-auto 1 / 0, client-name scan 0 hits on HEAD and on the
+working-tree content, and the 8-hex grep with no matches.  Log paths:
+`build/w26/gates-4ca7821-W26-4.1.log`, `gates-6fb6ec5-W26-4.2.log`,
+`gates-fb5d37c-W26-4.3.log`, `gates-0102e8b-W26-4.4.log`,
+`gates-50204c6-W26-4.5.log`, `gates-73da8b7-W26-4.6.log`.
+
+## Found, not fixed
+
+No new Critical or High finding in G4.  Deliberate notes:
+
+- The Account page has no Microsoft account, license or cloud service; every
+  such control is laid out and disabled rather than faked.
+- Black and White remain disabled until a later wave paints them; the W26-6.2
+  dark-theme item is the natural place for Black.
+- The Print page's date/page-range controls and Page Setup are disabled: the
+  shared print job has no date filter or page selection, and the port's page
+  geometry is fixed by `app::PageSpec`.
+- The Options dialog's proofing, cache, add-in, ribbon-customisation, language
+  and cloud-store controls have no engine behind them and are laid out only.
+- The file dialogs are Qt's (`DontUseNativeDialog`), and the printer list comes
+  from the host's QPrinterInfo; neither is a Microsoft surface.
