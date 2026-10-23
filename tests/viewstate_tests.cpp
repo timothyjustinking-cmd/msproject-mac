@@ -964,9 +964,11 @@ void test_text_helpers() {
 // Wave 26 (W26-3.1): the Gantt view's style record
 //
 // The two committed blobs are the `0x22400008` record and the `214/Props`
-// FONT_BASES payload of tests/data/synthetic-base.mpp's applied Gantt view
-// ("&Gantt Chart", view 2).  They are Project 2021's own MPP14 bytes; no client
-// content (synthetic-base is neutral and the blobs carry no path or name).
+// FONT_BASES payload of tests/data/synthetic-base.mpp's first decodable Gantt
+// view ("Gantt &with Timeline"; the applied-view selection itself is exercised
+// by app_view_style on the same file).  They are Project 2021's own MPP14
+// bytes; no client content (synthetic-base is neutral and the blobs carry no
+// path or name).
 //
 // The offsets are MPXJ's GanttChartView14.processViewProperties layout, then
 // verified by scripts/oracle_w26.py's one-change-per-save session: the font
@@ -1070,6 +1072,28 @@ void test_gantt_style() {
                   "gantt style: the stock Progress colour");
         }
     }
+
+    // Wave 26 (W26-3.3): the timescale tiers.  The committed record is the
+    // synthetic fixture's first decodable Gantt view ("Gantt &with Timeline"),
+    // which stores Project's stock two-tier week/day scale with no top tier.
+    using msproject::viewstate::TimescaleUnit;
+    check(style.top.unit == TimescaleUnit::none,
+          "gantt style: the stock top tier is absent (stored 255)");
+    check(style.middle.unit == TimescaleUnit::weeks,
+          "gantt style: the stock middle tier is weeks");
+    check_eq(style.middle.count, 1, "gantt style: the stock middle tier count");
+    check_eq(style.middle.format, 13, "gantt style: the stock week format");
+    check_eq(style.middle.align, 0, "gantt style: the stock week labels are left aligned");
+    check(style.bottom.unit == TimescaleUnit::days,
+          "gantt style: the stock bottom tier is days");
+    check_eq(style.bottom.count, 1, "gantt style: the stock bottom tier count");
+    check_eq(style.bottom.format, 20,
+             "gantt style: the stock day format is single letters");
+    check_eq(style.bottom.align, 1, "gantt style: the stock day labels are centred");
+    check_eq(style.view_flags, 0x1f, "gantt style: the stock view flags");
+    check(style.middle.tick_lines && style.bottom.tick_lines,
+          "gantt style: both stock tiers draw tick lines");
+    check_eq(style.timescale_size, 100, "gantt style: the stock timescale size");
 
     // A record shorter than the measured minimum is refused, not read past.
     const std::vector<std::uint8_t> short_record(style_bytes.begin(),

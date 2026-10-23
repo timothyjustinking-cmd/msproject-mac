@@ -207,6 +207,23 @@ void check_corpus_fixture() {
           "view style: PROJECT_A's progress fill is (0,176,80)");
     check(palette.has_finished && palette.finished == (Rgb{0, 176, 80}),
           "view style: PROJECT_A's finished fill is (0,176,80)");
+
+    // Wave 26 (W26-3.3): the file's three timescale tiers -- year, quarter
+    // and month, exactly the capture's rows ("2026" / "Qtr 2, 2026" / "Apr").
+    using msproject::viewstate::TimescaleUnit;
+    check(style.top.unit == TimescaleUnit::years,
+          "view style: PROJECT_A's top tier is years");
+    check(style.top.format == 0, "view style: PROJECT_A's year format is YYYY");
+    check(style.middle.unit == TimescaleUnit::quarters,
+          "view style: PROJECT_A's middle tier is quarters");
+    check(style.middle.format == 3,
+          "view style: PROJECT_A's quarter format is 'Qtr 1, 2002'");
+    check(style.bottom.unit == TimescaleUnit::months,
+          "view style: PROJECT_A's bottom tier is months");
+    check(style.bottom.format == 10,
+          "view style: PROJECT_A's month format is 'Jan, Feb, ...'");
+    check(style.top.count == 1 && style.middle.count == 1 && style.bottom.count == 1,
+          "view style: every PROJECT_A tier stores count 1");
 }
 
 void test_refusals() {

@@ -265,19 +265,200 @@ std::vector<GanttCanvas::WeekCell> GanttCanvas::visible_weeks(double x0, double 
 GanttHeaderInfo GanttCanvas::header_info(int width) const {
     GanttHeaderInfo info;
     info.header_height = kGanttHeaderHeight;
-    info.tier_height = kGanttTierHeight;
     info.day_width = layout_.timescale.valid() ? layout_.timescale.pixels_per_day() : 0.0;
     const std::vector<DayCell> days = visible_days(0.0, static_cast<double>(width));
     const std::vector<WeekCell> weeks = visible_weeks(0.0, static_cast<double>(width));
-    info.major_cells = static_cast<int>(weeks.size());
-    info.minor_cells = static_cast<int>(days.size());
-    if (!weeks.empty()) {
-        info.first_major_label = week_label(weeks.front().label_date);
+    const std::vector<HeaderTier> tiers = header_tiers(days, weeks);
+    info.tier_height = tiers.empty() ? kGanttTierHeight
+                                     : kGanttHeaderHeight / static_cast<int>(tiers.size());
+    if (tiers.size() >= 2) {
+        const HeaderTier& major = tiers[tiers.size() - 2];
+        info.major_cells = static_cast<int>(major.cells.size());
+        if (!major.cells.empty()) {
+            info.first_major_label = major.cells.front().label;
+        }
     }
-    if (!days.empty() && days.front().weekday >= 0) {
-        info.first_minor_label = kDayLetter[days.front().weekday % 7];
+    if (!tiers.empty()) {
+        const HeaderTier& minor = tiers.back();
+        info.minor_cells = static_cast<int>(minor.cells.size());
+        if (!minor.cells.empty()) {
+            info.first_minor_label = minor.cells.front().label;
+        }
     }
     return info;
+}
+
+// ---------------------------------------------------------------------------
+// Wave 26 (W26-3.3): the stored timescale tiers
+// ---------------------------------------------------------------------------
+
+namespace {
+
+long long unit_key(core::sched::date32 date, msproject::viewstate::TimescaleUnit unit) {
+    const core::sched::CivilDate civil = core::sched::to_civil(date);
+    switch (unit) {
+        case msproject::viewstate::TimescaleUnit::years:
+            return civil.year;
+        case msproject::viewstate::TimescaleUnit::half_years:
+            return static_cast<long long>(civil.year) * 2 + (civil.month - 1) / 6;
+        case msproject::viewstate::TimescaleUnit::quarters:
+            return static_cast<long long>(civil.year) * 4 + (civil.month - 1) / 3;
+        case msproject::viewstate::TimescaleUnit::months:
+            return static_cast<long long>(civil.year) * 12 + (civil.month - 1);
+        case msproject::viewstate::TimescaleUnit::thirds_of_months:
+            return (static_cast<long long>(civil.year) * 12 + (civil.month - 1)) * 3 +
+                   (civil.day - 1) / 10;
+        default:
+            return civil.day;
+    }
+}
+
+const char* const kMonthLong[12] = {"January", "February", "March",     "April",
+                                    "May",     "June",     "July",      "August",
+                                    "September", "October", "November", "December"};
+
+std::string tier_label(core::sched::date32 date,
+                       const msproject::viewstate::TimescaleTier& spec) {
+    const core::sched::CivilDate civil = core::sched::to_civil(date);
+    switch (spec.unit) {
+        case msproject::viewstate::TimescaleUnit::years:
+            return std::to_string(civil.year);
+        case msproject::viewstate::TimescaleUnit::half_years:
+            return civil.month <= 6 ? "H1" : "H2";
+        case msproject::viewstate::TimescaleUnit::quarters: {
+            const int quarter = (civil.month - 1) / 3 + 1;
+            if (spec.format == 2) {
+                static const char* const kOrdinal[4] = {"1st Quarter", "2nd Quarter",
+                                                        "3rd Quarter", "4th Quarter"};
+                return kOrdinal[quarter - 1];
+            }
+            if (spec.format == 6) {
+                return "Q" + std::to_string(quarter);
+            }
+            // Format 3 ("Qtr 1, 2002") is the measured PROJECT_A format.
+            return "Qtr " + std::to_string(quarter) + ", " + std::to_string(civil.year);
+        }
+        case msproject::viewstate::TimescaleUnit::months:
+            if (spec.format == 9) {
+                return kMonthLong[(civil.month - 1) % 12];
+            }
+            if (spec.format == 7) {
+                return std::string(kMonthLong[(civil.month - 1) % 12]) + " " +
+                       std::to_string(civil.year);
+            }
+            if (spec.format == 11) {
+                return std::string(1, kMonthLong[(civil.month - 1) % 12][0]);
+            }
+            return kMonthShort[(civil.month - 1) % 12];
+        default:
+            break;
+    }
+    return week_label(date);
+}
+
+}  // namespace
+
+std::vector<GanttCanvas::HeaderTier> GanttCanvas::header_tiers(
+    const std::vector<DayCell>& days, const std::vector<WeekCell>& weeks) const {
+    using msproject::viewstate::TextStyleItem;
+    using msproject::viewstate::TimescaleTier;
+    using msproject::viewstate::TimescaleUnit;
+
+    std::vector<HeaderTier> tiers;
+    const bool file = style_ != nullptr && style_->decoded;
+
+    const auto add = [&](const TimescaleTier& spec, TextStyleItem item) {
+        HeaderTier tier;
+        tier.spec = spec;
+        if (spec.count <= 0) {
+            tier.spec.count = 1;
+        }
+        if (file) {
+            const auto index = static_cast<std::size_t>(item);
+            if (index < style_->text.size() && style_->text[index].valid) {
+                tier.has_text_style = true;
+                tier.text = style_->text[index];
+            }
+        }
+        if (spec.unit == TimescaleUnit::days) {
+            // One cell per day; a count > 1 groups that many day columns.
+            for (std::size_t index = 0; index < days.size();) {
+                TierCell cell;
+                cell.x = days[index].x;
+                cell.weekday = days[index].weekday;
+                std::size_t end = index;
+                for (int taken = 0; taken < tier.spec.count && end < days.size();
+                     ++taken, ++end) {
+                }
+                cell.width = days[end - 1].x + days[end - 1].width - cell.x;
+                if (cell.weekday >= 0) {
+                    cell.label = kDayLetter[cell.weekday % 7];
+                }
+                tier.cells.push_back(std::move(cell));
+                index = end;
+            }
+        } else if (spec.unit == TimescaleUnit::weeks) {
+            // Reuse visible_weeks (Sunday-first weeks labelled with the Monday),
+            // which is the measured stock rendering, then merge `count` weeks.
+            for (std::size_t index = 0; index < weeks.size();) {
+                TierCell cell;
+                cell.x = weeks[index].x;
+                cell.label = week_label(weeks[index].label_date);
+                std::size_t end = index;
+                for (int taken = 0; taken < tier.spec.count && end < weeks.size();
+                     ++taken, ++end) {
+                }
+                cell.width = weeks[end - 1].x + weeks[end - 1].width - cell.x;
+                tier.cells.push_back(std::move(cell));
+                index = end;
+            }
+        } else if (!days.empty()) {
+            std::size_t index = 0;
+            while (index < days.size()) {
+                const long long start = unit_key(days[index].date, spec.unit);
+                std::size_t end = index + 1;
+                while (end < days.size() &&
+                       unit_key(days[end].date, spec.unit) - start < tier.spec.count) {
+                    ++end;
+                }
+                TierCell cell;
+                cell.x = days[index].x;
+                cell.width = days[end - 1].x + days[end - 1].width - cell.x;
+                cell.label = tier_label(days[index].date, tier.spec);
+                tier.cells.push_back(std::move(cell));
+                index = end;
+            }
+        }
+        tiers.push_back(std::move(tier));
+    };
+
+    if (file) {
+        if (style_->top.unit != TimescaleUnit::none) {
+            add(style_->top, TextStyleItem::top_timescale);
+        }
+        if (style_->middle.unit != TimescaleUnit::none) {
+            add(style_->middle, TextStyleItem::middle_timescale);
+        }
+        if (style_->bottom.unit != TimescaleUnit::none) {
+            add(style_->bottom, TextStyleItem::bottom_timescale);
+        }
+    }
+    if (tiers.empty()) {
+        // The measured stock scale: weekly labels over single-letter days.
+        TimescaleTier weekly;
+        weekly.unit = TimescaleUnit::weeks;
+        weekly.count = 1;
+        weekly.format = 13;
+        weekly.align = 0;
+        add(weekly, TextStyleItem::middle_timescale);
+        TimescaleTier daily;
+        daily.unit = TimescaleUnit::days;
+        daily.count = 1;
+        daily.format = 20;
+        daily.align = 1;
+        add(daily, TextStyleItem::bottom_timescale);
+    }
+    return tiers;
 }
 
 // ---------------------------------------------------------------------------
@@ -517,59 +698,80 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
 
 void GanttCanvas::paint_header(QPainter& painter, const std::vector<DayCell>& days,
                                const std::vector<WeekCell>& weeks, int canvas_width) const {
-    const int tier = kGanttTierHeight;
-    painter.fillRect(QRect(0, 0, canvas_width, tier), kHeaderMajor);
-    painter.fillRect(QRect(0, tier, canvas_width, tier), kHeaderMinor);
-
-    QFont header_font = font();
-    header_font.setPointSize(kTimescalePointSize);
-    painter.setFont(header_font);
-
-    // Tier 0: weekly labels ("12 Oct '26"), left aligned inside their week.
-    const QFontMetrics metrics(painter.font());
-    for (const WeekCell& week : weeks) {
-        const int x = pixel(week.x);
-        painter.setPen(QPen(kGridLineStrong, 1));
-        painter.drawLine(x, 0, x, tier);
-        const std::string label = week_label(week.label_date);
-        if (label.empty()) {
-            continue;
-        }
-        const int text_x = std::max(x, 0) + kLabelInset;
-        const int available = pixel(week.x + week.width) - text_x - kLabelInset;
-        if (available <= 4) {
-            continue;
-        }
-        const QString text = metrics.elidedText(QString::fromStdString(label), Qt::ElideRight,
-                                                available);
-        painter.setPen(kGanttHeaderText);
-        painter.drawText(QRect(text_x, 0, available, tier),
-                         static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter), text);
+    using msproject::viewstate::TimescaleUnit;
+    const std::vector<HeaderTier> tiers = header_tiers(days, weeks);
+    if (tiers.empty()) {
+        return;
     }
-    painter.setPen(QPen(kGridLine, 1));
-    painter.drawLine(0, tier - 1, canvas_width, tier - 1);
+    const int tier_height =
+        std::max(1, kGanttHeaderHeight / static_cast<int>(tiers.size()));
+    int top = 0;
+    for (std::size_t tier_index = 0; tier_index < tiers.size(); ++tier_index) {
+        const HeaderTier& tier = tiers[tier_index];
+        painter.fillRect(QRect(0, top, canvas_width, tier_height),
+                         tier_index == 0 ? kHeaderMajor : kHeaderMinor);
 
-    // Tier 1: single-letter day cells, weekends shaded, Monday edges strong.
-    for (const DayCell& day : days) {
-        const int x = pixel(day.x);
-        const int w = std::max(1, pixel(day.x + day.width) - x);
-        if (day.weekday == 0 || day.weekday == 6) {
-            painter.fillRect(QRect(x, tier, w, tier), kWeekend);
-        }
-        if (day.weekday == 1) {
-            painter.setPen(QPen(kGridLineStrong, 1));
+        QFont tier_font = font();
+        if (tier.has_text_style) {
+            if (!tier.text.font_name.empty()) {
+                tier_font.setFamily(QString::fromStdString(tier.text.font_name));
+            }
+            if (tier.text.point_size > 0) {
+                tier_font.setPointSize(tier.text.point_size);
+            }
+            tier_font.setBold(tier.text.bold);
+            tier_font.setItalic(tier.text.italic);
         } else {
-            painter.setPen(QPen(kGridLine, 1));
+            tier_font.setPointSize(kTimescalePointSize);
         }
-        painter.drawLine(x, tier, x, tier * 2);
-        if (day.weekday >= 0 && w >= 4) {
-            painter.setPen(kGanttHeaderText);
-            painter.drawText(QRect(x, tier, w, tier), Qt::AlignCenter,
-                             QString::fromUtf8(kDayLetter[day.weekday % 7]));
+        painter.setFont(tier_font);
+        QColor text_colour = kGanttHeaderText;
+        if (tier.has_text_style && tier.text.has_colour) {
+            text_colour = QColor(tier.text.colour.red, tier.text.colour.green,
+                                 tier.text.colour.blue);
         }
+        const QFontMetrics metrics(painter.font());
+
+        for (const TierCell& cell : tier.cells) {
+            const int x = pixel(cell.x);
+            const int w = std::max(1, pixel(cell.x + cell.width) - x);
+            if (tier.spec.unit == TimescaleUnit::days) {
+                if (cell.weekday == 0 || cell.weekday == 6) {
+                    painter.fillRect(QRect(x, top, w, tier_height), kWeekend);
+                }
+                painter.setPen(QPen(cell.weekday == 1 ? kGridLineStrong : kGridLine, 1));
+                painter.drawLine(x, top, x, top + tier_height);
+                if (cell.weekday >= 0 && w >= 4) {
+                    painter.setPen(text_colour);
+                    painter.drawText(QRect(x, top, w, tier_height), Qt::AlignCenter,
+                                     QString::fromStdString(cell.label));
+                }
+                continue;
+            }
+            painter.setPen(QPen(kGridLineStrong, 1));
+            painter.drawLine(x, top, x, top + tier_height);
+            const int text_x = x + kLabelInset;
+            const int available = w - 2 * kLabelInset;
+            if (available <= 4 || cell.label.empty()) {
+                continue;
+            }
+            Qt::Alignment alignment = Qt::AlignLeft;
+            if (tier.spec.align == 1) {
+                alignment = Qt::AlignHCenter;
+            } else if (tier.spec.align == 2) {
+                alignment = Qt::AlignRight;
+            }
+            const QString text = metrics.elidedText(QString::fromStdString(cell.label),
+                                                    Qt::ElideRight, available);
+            painter.setPen(text_colour);
+            painter.drawText(QRect(text_x, top, available, tier_height),
+                             static_cast<int>(alignment | Qt::AlignVCenter), text);
+        }
+        painter.setPen(QPen(kGridLineStrong, 1));
+        painter.drawLine(0, top + tier_height - 1, canvas_width,
+                         top + tier_height - 1);
+        top += tier_height;
     }
-    painter.setPen(QPen(kGridLineStrong, 1));
-    painter.drawLine(0, tier * 2 - 1, canvas_width, tier * 2 - 1);
 }
 
 }  // namespace msqt

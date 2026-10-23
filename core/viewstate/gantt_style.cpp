@@ -86,10 +86,43 @@ bool is_gantt_style(const ViewState& state, const ViewDef& view) {
     return data.size() >= kGanttStyleMinSize;
 }
 
+TimescaleUnit decode_timescale_unit(std::uint8_t byte) {
+    // MPXJ's TimescaleUnitsHelper: stored byte + 1 indexes
+    // [NONE, MINUTES, HOURS, DAYS, WEEKS, THIRDS_OF_MONTHS, MONTHS, QUARTERS,
+    //  HALF_YEARS, YEARS].  255 ("none") and anything past the table map to
+    // none.
+    constexpr TimescaleUnit kUnits[] = {
+        TimescaleUnit::none,     TimescaleUnit::minutes,    TimescaleUnit::hours,
+        TimescaleUnit::days,     TimescaleUnit::weeks,      TimescaleUnit::thirds_of_months,
+        TimescaleUnit::months,   TimescaleUnit::quarters,   TimescaleUnit::half_years,
+        TimescaleUnit::years,
+    };
+    const int index = static_cast<int>(byte) + 1;
+    if (index < 0 || index >= static_cast<int>(std::size(kUnits))) {
+        return TimescaleUnit::none;
+    }
+    return kUnits[index];
+}
+
 }  // namespace
 
-const char* text_style_item_name(TextStyleItem item) noexcept {
-    switch (item) {
+const char* timescale_unit_name(TimescaleUnit unit) noexcept {
+    switch (unit) {
+        case TimescaleUnit::none: return "none";
+        case TimescaleUnit::minutes: return "minutes";
+        case TimescaleUnit::hours: return "hours";
+        case TimescaleUnit::days: return "days";
+        case TimescaleUnit::weeks: return "weeks";
+        case TimescaleUnit::thirds_of_months: return "thirds of months";
+        case TimescaleUnit::months: return "months";
+        case TimescaleUnit::quarters: return "quarters";
+        case TimescaleUnit::half_years: return "half years";
+        case TimescaleUnit::years: return "years";
+    }
+    return "none";
+}
+
+const char* text_style_item_name(TextStyleItem item) noexcept {    switch (item) {
         case TextStyleItem::highlighted: return "highlighted";
         case TextStyleItem::row_column_titles: return "row and column titles";
         case TextStyleItem::non_critical: return "noncritical";
@@ -225,6 +258,28 @@ bool parse_gantt_style(std::span<const std::uint8_t> style_data,
         bar.inside_text = read_u32(style_data, base + 83);
         out.bars.push_back(std::move(bar));
     }
+
+    out.view_flags = style_data[kGanttViewFlagsOffset];
+    out.timescale_show = style_data[kGanttShowTiersOffset];
+    out.timescale_size = style_data[kGanttTimescaleSizeOffset];
+    out.top.unit = decode_timescale_unit(style_data[kGanttTopUnitsOffset]);
+    out.top.count = style_data[kGanttTopCountOffset];
+    out.top.format = read_u16(style_data, kGanttTopFormatOffset);
+    out.top.align = style_data[kGanttTopAlignOffset];
+    out.top.tick_lines = style_data[kGanttTopTicksOffset] != 0;
+    out.top.fiscal_year = (style_data[kGanttTopFiscalOffset] & 0x01u) != 0;
+    out.middle.unit = decode_timescale_unit(style_data[kGanttMiddleUnitsOffset]);
+    out.middle.count = style_data[kGanttMiddleCountOffset];
+    out.middle.format = read_u16(style_data, kGanttMiddleFormatOffset);
+    out.middle.align = style_data[kGanttMiddleAlignOffset];
+    out.middle.tick_lines = (out.view_flags & 0x01) != 0;
+    out.middle.fiscal_year = (out.view_flags & 0x08) != 0;
+    out.bottom.unit = decode_timescale_unit(style_data[kGanttBottomUnitsOffset]);
+    out.bottom.count = style_data[kGanttBottomCountOffset];
+    out.bottom.format = read_u16(style_data, kGanttBottomFormatOffset);
+    out.bottom.align = style_data[kGanttBottomAlignOffset];
+    out.bottom.tick_lines = (out.view_flags & 0x02) != 0;
+    out.bottom.fiscal_year = (out.view_flags & 0x10) != 0;
     out.decoded = true;
     return true;
 }
