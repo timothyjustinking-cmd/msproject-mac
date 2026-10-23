@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "command_status.h"
+#include "ribbon_glyphs.h"
 #include "shell_icons.h"
 #include "shell_style.h"
 
@@ -98,6 +99,10 @@ struct ControlSpec {
     int checked = 0;                    // checkbox: 0/1, -1 = document state
     bool enabled = false;
     bool icon_only = false;             // small button: no visible text
+    // W26-2: the pin's icon key (ribbon_pin.tsv, icon column).  Every command
+    // control carries one; the icon gate hashes the live widget's rendered
+    // glyph and the inventory gate compares this key with the pin.
+    const char* icon = nullptr;
 };
 
 struct GroupSpec {
@@ -123,7 +128,8 @@ GroupSpec& add_group(TabSpec& tab, const char* title, int width) {
 
 ControlSpec& add(GroupSpec& group, const char* label, Kind kind, int width, int row, int col,
                  int row_span, int col_span, app::MenuAction action, RibbonCommand command,
-                 const char* items, int checked, bool enabled, bool icon_only) {
+                 const char* items, int checked, bool enabled, bool icon_only,
+                 const char* icon = nullptr) {
     group.controls.push_back(ControlSpec{});
     ControlSpec& control = group.controls.back();
     control.label = label;
@@ -139,34 +145,37 @@ ControlSpec& add(GroupSpec& group, const char* label, Kind kind, int width, int 
     control.checked = checked;
     control.enabled = enabled;
     control.icon_only = icon_only;
+    control.icon = icon;
     return control;
 }
 
 GroupSpec& large(GroupSpec& group, const char* label, app::MenuAction action, int width, int col,
-                 bool enabled = false) {
+                 bool enabled = false, const char* icon = nullptr) {
     add(group, label, Kind::button, width, 0, col, 3, 1, action, RibbonCommand::none, nullptr, 0,
-        enabled, false);
+        enabled, false, icon);
     return group;
 }
 
 GroupSpec& split(GroupSpec& group, const char* label, int width, int row, int col,
-                 int row_span = 3) {
+                 int row_span = 3, const char* icon = nullptr) {
     add(group, label, Kind::split, width, row, col, row_span, 1, app::MenuAction::none,
-        RibbonCommand::none, nullptr, 0, false, false);
+        RibbonCommand::none, nullptr, 0, false, false, icon);
     return group;
 }
 
 GroupSpec& small(GroupSpec& group, const char* label, app::MenuAction action, int width, int row,
-                 int col, bool enabled = false, int col_span = 1) {
+                 int col, bool enabled = false, int col_span = 1, bool icon_only = false,
+                 const char* icon = nullptr) {
     add(group, label, Kind::small, width, row, col, 1, col_span, action, RibbonCommand::none,
-        nullptr, 0, enabled, false);
+        nullptr, 0, enabled, icon_only, icon);
     return group;
 }
 
 GroupSpec& small_cmd(GroupSpec& group, const char* label, RibbonCommand command, int width,
-                     int row, int col, bool enabled = false, bool icon_only = false) {
+                     int row, int col, bool enabled = false, bool icon_only = false,
+                     const char* icon = nullptr) {
     add(group, label, Kind::small, width, row, col, 1, 1, app::MenuAction::none, command,
-        nullptr, 0, enabled, icon_only);
+        nullptr, 0, enabled, icon_only, icon);
     return group;
 }
 
@@ -217,12 +226,13 @@ const std::vector<TabSpec>& tab_specs() {
         TabSpec task;
         task.title = "Task";
         GroupSpec& task_view = add_group(task, "View", 58);
-        large(task_view, "Gantt\nChart", app::MenuAction::none, 50, 0);
+        large(task_view, "Gantt\nChart", app::MenuAction::none, 50, 0, false, "view.gantt");
         GroupSpec& clipboard = add_group(task, "Clipboard", 171);
-        large(clipboard, "Paste", app::MenuAction::paste, 38, 0, true);
-        large(clipboard, "Cut", app::MenuAction::cut, 36, 1, true);
-        large(clipboard, "Copy", app::MenuAction::copy, 38, 2, true);
-        large(clipboard, "Format\nPainter", app::MenuAction::none, 48, 3);
+        large(clipboard, "Paste", app::MenuAction::paste, 38, 0, true, "clipboard.paste");
+        large(clipboard, "Cut", app::MenuAction::cut, 36, 1, true, "clipboard.cut");
+        large(clipboard, "Copy", app::MenuAction::copy, 38, 2, true, "clipboard.copy");
+        large(clipboard, "Format\nPainter", app::MenuAction::none, 48, 3, false,
+             "clipboard.painter");
         GroupSpec& font = add_group(task, "Font", 177);
         // W26-1.1: the font value displays are the FILE's default text style
         // when decoded (G3-3.1), else Project's new-project default.  The text
@@ -231,47 +241,71 @@ const std::vector<TabSpec>& tab_specs() {
         // shown; the values are displays, not an edit of the file.
         combo(font, "font name", "Calibri", 66, 0, 0);
         combo(font, "font size", "11", 34, 0, 1);
-        small(font, "B", app::MenuAction::none, 20, 0, 2);
-        small(font, "I", app::MenuAction::none, 20, 0, 3);
-        small(font, "U", app::MenuAction::none, 20, 0, 4);
-        split(font, "highlight colour", 26, 1, 0, 1);
-        split(font, "font colour", 26, 1, 1, 1);
+        // W26-2.1: B/I/U are icon-only, like the letters Project shows: the
+        // glyph is the letter, so the label is the accessible name only.
+        small(font, "B", app::MenuAction::none, 20, 0, 2, false, 1, true, "font.bold");
+        small(font, "I", app::MenuAction::none, 20, 0, 3, false, 1, true, "font.italic");
+        small(font, "U", app::MenuAction::none, 20, 0, 4, false, 1, true, "font.underline");
+        split(font, "highlight colour", 26, 1, 0, 1, "font.highlight");
+        split(font, "font colour", 26, 1, 1, 1, "font.color");
         launcher(font, "Font");
         GroupSpec& schedule = add_group(task, "Schedule", 282);
-        small_cmd(schedule, "0%", RibbonCommand::percent_0, 18, 0, 0, true);
-        small_cmd(schedule, "25%", RibbonCommand::percent_25, 20, 0, 1, true);
-        small_cmd(schedule, "50%", RibbonCommand::percent_50, 20, 0, 2, true);
-        small_cmd(schedule, "75%", RibbonCommand::percent_75, 20, 0, 3, true);
-        small_cmd(schedule, "100%", RibbonCommand::percent_100, 26, 0, 4, true);
-        split(schedule, "Mark on Track", 64, 0, 5, 3);
-        small(schedule, "Respect Links", app::MenuAction::none, 96, 0, 6);
-        small(schedule, "Inactivate", app::MenuAction::none, 96, 1, 6);
-        small_cmd(schedule, "outdent", RibbonCommand::outdent, 18, 1, 0, false, true);
-        small_cmd(schedule, "indent", RibbonCommand::indent, 20, 1, 1, false, true);
-        small_cmd(schedule, "link tasks", RibbonCommand::link_tasks, 20, 1, 2, true, true);
-        small_cmd(schedule, "unlink tasks", RibbonCommand::unlink_tasks, 20, 1, 3, true, true);
-        small_cmd(schedule, "split task", RibbonCommand::split_task, 26, 1, 4, false, true);
+        // The five percentage buttons are icon-only like the readback's [s]
+        // marks; each glyph is a ring filled to its percentage.
+        small_cmd(schedule, "0%", RibbonCommand::percent_0, 18, 0, 0, true, true,
+                  "schedule.percent_0");
+        small_cmd(schedule, "25%", RibbonCommand::percent_25, 20, 0, 1, true, true,
+                  "schedule.percent_25");
+        small_cmd(schedule, "50%", RibbonCommand::percent_50, 20, 0, 2, true, true,
+                  "schedule.percent_50");
+        small_cmd(schedule, "75%", RibbonCommand::percent_75, 20, 0, 3, true, true,
+                  "schedule.percent_75");
+        small_cmd(schedule, "100%", RibbonCommand::percent_100, 26, 0, 4, true, true,
+                  "schedule.percent_100");
+        split(schedule, "Mark on Track", 64, 0, 5, 3, "schedule.mark_on_track");
+        small(schedule, "Respect Links", app::MenuAction::none, 96, 0, 6, false, 1, false,
+              "schedule.respect_links");
+        small(schedule, "Inactivate", app::MenuAction::none, 96, 1, 6, false, 1, false,
+              "schedule.inactivate");
+        small_cmd(schedule, "outdent", RibbonCommand::outdent, 18, 1, 0, false, true,
+                  "schedule.outdent");
+        small_cmd(schedule, "indent", RibbonCommand::indent, 20, 1, 1, false, true,
+                  "schedule.indent");
+        small_cmd(schedule, "link tasks", RibbonCommand::link_tasks, 20, 1, 2, true, true,
+                  "schedule.link");
+        small_cmd(schedule, "unlink tasks", RibbonCommand::unlink_tasks, 20, 1, 3, true, true,
+                  "schedule.unlink");
+        small_cmd(schedule, "split task", RibbonCommand::split_task, 26, 1, 4, false, true,
+                  "schedule.split");
         GroupSpec& tasks = add_group(task, "Tasks", 269);
-        large(tasks, "Manually\nSchedule", app::MenuAction::none, 52, 0);
-        large(tasks, "Auto\nSchedule", app::MenuAction::none, 50, 1);
-        large(tasks, "Inspect", app::MenuAction::none, 52, 2);
-        large(tasks, "Move", app::MenuAction::none, 38, 3);
-        large(tasks, "Mode", app::MenuAction::none, 40, 4);
+        large(tasks, "Manually\nSchedule", app::MenuAction::none, 52, 0, false, "tasks.manual");
+        large(tasks, "Auto\nSchedule", app::MenuAction::none, 50, 1, false, "tasks.auto");
+        large(tasks, "Inspect", app::MenuAction::none, 52, 2, false, "tasks.inspect");
+        large(tasks, "Move", app::MenuAction::none, 38, 3, false, "tasks.move");
+        large(tasks, "Mode", app::MenuAction::none, 40, 4, false, "tasks.mode");
         GroupSpec& insert = add_group(task, "Insert", 240);
-        large(insert, "Task", app::MenuAction::insert_task, 48, 0, true);
-        large(insert, "Summary", app::MenuAction::none, 56, 1);
-        large(insert, "Milestone", app::MenuAction::none, 58, 2);
-        large(insert, "Deliverable", app::MenuAction::none, 58, 3);
+        large(insert, "Task", app::MenuAction::insert_task, 48, 0, true, "insert.task");
+        large(insert, "Summary", app::MenuAction::none, 56, 1, false, "insert.summary");
+        large(insert, "Milestone", app::MenuAction::none, 58, 2, false, "insert.milestone");
+        large(insert, "Deliverable", app::MenuAction::none, 58, 3, false, "insert.deliverable");
         GroupSpec& properties = add_group(task, "Properties", 204);
-        large(properties, "Information", app::MenuAction::task_fields, 58, 0, true);
-        small(properties, "Notes", app::MenuAction::none, 130, 0, 1);
-        small(properties, "Details", app::MenuAction::none, 130, 1, 1);
-        small(properties, "Add to Timeline", app::MenuAction::none, 130, 2, 1);
+        large(properties, "Information", app::MenuAction::task_fields, 58, 0, true,
+              "properties.information");
+        small(properties, "Notes", app::MenuAction::none, 130, 0, 1, false, 1, false,
+              "properties.notes");
+        small(properties, "Details", app::MenuAction::none, 130, 1, 1, false, 1, false,
+              "properties.details");
+        small(properties, "Add to Timeline", app::MenuAction::none, 130, 2, 1, false, 1, false,
+              "properties.add_to_timeline");
         GroupSpec& editing = add_group(task, "Editing", 140);
-        large(editing, "Scroll\nto Task", app::MenuAction::none, 66, 0);
-        small(editing, "Find", app::MenuAction::show_filter, 60, 0, 1, true);
-        small(editing, "Clear", app::MenuAction::clear_filter, 60, 1, 1, true);
-        small(editing, "Fill", app::MenuAction::none, 60, 2, 1);
+        large(editing, "Scroll\nto Task", app::MenuAction::none, 66, 0, false,
+              "editing.scroll_to_task");
+        small(editing, "Find", app::MenuAction::show_filter, 60, 0, 1, true, 1, false,
+              "editing.find");
+        small(editing, "Clear", app::MenuAction::clear_filter, 60, 1, 1, true, 1, false,
+              "editing.clear");
+        small(editing, "Fill", app::MenuAction::none, 60, 2, 1, false, 1, false,
+              "editing.fill");
         tabs.push_back(std::move(task));
 
         // --- Resource -------------------------------------------------------
@@ -518,14 +552,18 @@ void build_small_button(RibbonSmallButton* button, const ControlSpec& spec, QWid
     button->setFocusPolicy(Qt::NoFocus);
     button->setAutoRaise(true);
     button->setAccessibleName(QString::fromUtf8(spec.label));
+    // W26-2: every command's icon is the pin's key resolved through the
+    // ribbon glyph library; an unknown/empty key draws the neutral placeholder,
+    // which the icon gate rejects by pixel hash.
+    const QString icon_key = QString::fromUtf8(spec.icon != nullptr ? spec.icon : "");
     if (spec.icon_only) {
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-        button->setIcon(shell_action_icon(spec.action, 16));
+        button->setIcon(shell_ribbon_icon(icon_key, 16));
         button->setIconSize(QSize(16, 16));
         button->setText(QString());
     } else {
         button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        button->setIcon(shell_action_icon(spec.action, 16));
+        button->setIcon(shell_ribbon_icon(icon_key, 16));
         button->setIconSize(QSize(16, 16));
         button->setText(QString::fromUtf8(spec.label));
     }
@@ -787,6 +825,7 @@ void RibbonBar::clear_page() {
     page_controls_.clear();
     page_actions_.clear();
     page_commands_.clear();
+    page_icons_.clear();
     page_rows_.clear();
     if (page_layout_ == nullptr) {
         return;
@@ -815,6 +854,7 @@ void RibbonBar::build_page(int tab_index) {
         std::vector<QWidget*> group_controls;
         std::vector<app::MenuAction> group_actions;
         std::vector<RibbonCommand> group_commands;
+        std::vector<QString> group_icons;
         std::vector<int> group_rows;
         auto* box = new QWidget(page_);
         box->setFixedSize(group.width - 1, kGroupBandHeight);
@@ -834,6 +874,7 @@ void RibbonBar::build_page(int tab_index) {
 
         for (const ControlSpec& spec : group.controls) {
             const QString label = QString::fromUtf8(spec.label);
+            const QString icon_key = QString::fromUtf8(spec.icon != nullptr ? spec.icon : "");
             const QString tip = spec.enabled ? label : QString::fromUtf8(kNotImplemented);
             QWidget* control = nullptr;
             switch (spec.kind) {
@@ -841,7 +882,7 @@ void RibbonBar::build_page(int tab_index) {
                     auto* button = new QToolButton(host);
                     button->setObjectName(QStringLiteral("ribbonButton"));
                     button->setText(label);
-                    button->setIcon(shell_action_icon(spec.action, kRibbonIconPx));
+                    button->setIcon(shell_ribbon_icon(icon_key, kRibbonIconPx));
                     button->setIconSize(QSize(kRibbonIconPx, kRibbonIconPx));
                     button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
                     button->setFont(ribbon_font(kRibbonPointSize));
@@ -864,14 +905,15 @@ void RibbonBar::build_page(int tab_index) {
                     auto* button = new RibbonSplitButton(host);
                     button->setObjectName(QStringLiteral("ribbonSplitButton"));
                     button->setText(label);
-                    button->setIcon(shell_action_icon(spec.action, kRibbonIconPx));
                     button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
                     if (spec.row_span == 1) {
+                        button->setIcon(shell_ribbon_icon(icon_key, 16));
                         button->setIconSize(QSize(16, 16));
                         button->setFixedSize(spec.width, kStackRowHeight);
                         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
                         button->setAccessibleName(label);
                     } else {
+                        button->setIcon(shell_ribbon_icon(icon_key, kRibbonIconPx));
                         button->setIconSize(QSize(kRibbonIconPx, kRibbonIconPx));
                         button->setFixedSize(spec.width, kLargeHeight);
                     }
@@ -1038,6 +1080,7 @@ void RibbonBar::build_page(int tab_index) {
             group_controls.push_back(control);
             group_actions.push_back(spec.action);
             group_commands.push_back(spec.command);
+            group_icons.push_back(icon_key);
             group_rows.push_back(spec.row_span == 1 ? spec.row : -1);
         }
         box_layout->addWidget(host);
@@ -1067,6 +1110,7 @@ void RibbonBar::build_page(int tab_index) {
             group_controls.push_back(launcher_button);
             group_actions.push_back(app::MenuAction::none);
             group_commands.push_back(RibbonCommand::none);
+            group_icons.push_back(QString());
             group_rows.push_back(-1);
         }
         box_layout->addWidget(bottom);
@@ -1087,6 +1131,7 @@ void RibbonBar::build_page(int tab_index) {
         page_controls_.push_back(std::move(group_controls));
         page_actions_.push_back(std::move(group_actions));
         page_commands_.push_back(std::move(group_commands));
+        page_icons_.push_back(std::move(group_icons));
         page_rows_.push_back(std::move(group_rows));
     }
     page_layout_->addStretch(1);
@@ -1293,6 +1338,18 @@ RibbonCommand RibbonBar::group_control_command(int group_index, int control_inde
         return RibbonCommand::none;
     }
     return commands[static_cast<std::size_t>(control_index)];
+}
+
+QString RibbonBar::group_control_icon_key(int group_index, int control_index) const {
+    if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_icons_.size()) {
+        return QString();
+    }
+    const std::vector<QString>& icons =
+        page_icons_[static_cast<std::size_t>(group_index)];
+    if (control_index < 0 || static_cast<std::size_t>(control_index) >= icons.size()) {
+        return QString();
+    }
+    return icons[static_cast<std::size_t>(control_index)];
 }
 
 int RibbonBar::group_control_row(int group_index, int control_index) const {

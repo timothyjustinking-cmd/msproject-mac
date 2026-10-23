@@ -45,26 +45,26 @@ Task	0	Clipboard	button	Format Painter	0	clipboard.painter	0	-
 Task	0	Font	group	-	-	-	-	-
 Task	0	Font	combo	font name	0	-	0	Calibri
 Task	0	Font	combo	font size	0	-	0	11
-Task	0	Font	small	B	0	-	0	-
-Task	0	Font	small	I	0	-	0	-
-Task	0	Font	small	U	0	-	0	-
-Task	0	Font	split	highlight colour	0	-	1	-
-Task	0	Font	split	font colour	0	-	1	-
+Task	0	Font	small	B	0	font.bold	0	-
+Task	0	Font	small	I	0	font.italic	0	-
+Task	0	Font	small	U	0	font.underline	0	-
+Task	0	Font	split	highlight colour	0	font.highlight	1	-
+Task	0	Font	split	font colour	0	font.color	1	-
 Task	0	Font	launcher	Font	0	-	2	-
 Task	0	Schedule	group	-	-	-	-	-
-Task	0	Schedule	small	0%	1	-	0	-
-Task	0	Schedule	small	25%	1	-	0	-
-Task	0	Schedule	small	50%	1	-	0	-
-Task	0	Schedule	small	75%	1	-	0	-
-Task	0	Schedule	small	100%	1	-	0	-
-Task	0	Schedule	split	Mark on Track	0	-	0	-
-Task	0	Schedule	small	Respect Links	0	-	0	-
-Task	0	Schedule	small	Inactivate	0	-	1	-
-Task	0	Schedule	small	outdent	0	-	1	-
-Task	0	Schedule	small	indent	0	-	1	-
-Task	0	Schedule	small	link tasks	1	-	1	-
-Task	0	Schedule	small	unlink tasks	1	-	1	-
-Task	0	Schedule	small	split task	0	-	1	-
+Task	0	Schedule	small	0%	1	schedule.percent_0	0	-
+Task	0	Schedule	small	25%	1	schedule.percent_25	0	-
+Task	0	Schedule	small	50%	1	schedule.percent_50	0	-
+Task	0	Schedule	small	75%	1	schedule.percent_75	0	-
+Task	0	Schedule	small	100%	1	schedule.percent_100	0	-
+Task	0	Schedule	split	Mark on Track	0	schedule.mark_on_track	0	-
+Task	0	Schedule	small	Respect Links	0	schedule.respect_links	0	-
+Task	0	Schedule	small	Inactivate	0	schedule.inactivate	1	-
+Task	0	Schedule	small	outdent	0	schedule.outdent	1	-
+Task	0	Schedule	small	indent	0	schedule.indent	1	-
+Task	0	Schedule	small	link tasks	1	schedule.link	1	-
+Task	0	Schedule	small	unlink tasks	1	schedule.unlink	1	-
+Task	0	Schedule	small	split task	0	schedule.split	1	-
 Task	0	Tasks	group	-	-	-	-	-
 Task	0	Tasks	button	Manually Schedule	0	tasks.manual	0	-
 Task	0	Tasks	button	Auto Schedule	0	tasks.auto	0	-
@@ -78,14 +78,14 @@ Task	0	Insert	button	Milestone	0	insert.milestone	0	-
 Task	0	Insert	button	Deliverable	0	insert.deliverable	0	-
 Task	0	Properties	group	-	-	-	-	-
 Task	0	Properties	button	Information	1	properties.information	0	-
-Task	0	Properties	small	Notes	0	-	0	-
-Task	0	Properties	small	Details	0	-	1	-
-Task	0	Properties	small	Add to Timeline	0	-	2	-
+Task	0	Properties	small	Notes	0	properties.notes	0	-
+Task	0	Properties	small	Details	0	properties.details	1	-
+Task	0	Properties	small	Add to Timeline	0	properties.add_to_timeline	2	-
 Task	0	Editing	group	-	-	-	-	-
 Task	0	Editing	button	Scroll to Task	0	editing.scroll_to_task	0	-
-Task	0	Editing	small	Find	1	-	0	-
-Task	0	Editing	small	Clear	1	-	1	-
-Task	0	Editing	small	Fill	0	-	2	-
+Task	0	Editing	small	Find	1	editing.find	0	-
+Task	0	Editing	small	Clear	1	editing.clear	1	-
+Task	0	Editing	small	Fill	0	editing.fill	2	-
 Resource	0	View	group	-	-	-	-	-
 Resource	0	View	button	Team Planner	0	view.team_planner	0	-
 Resource	0	Assignments	group	-	-	-	-	-
