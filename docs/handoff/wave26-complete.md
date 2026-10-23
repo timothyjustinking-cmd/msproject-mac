@@ -191,3 +191,106 @@ No new Critical or High finding in G1.  Notes for later work, all deliberate:
 
 WAVE-26-G1-COMPLETE
 
+## G2 - icons
+
+Every item is DONE; nothing in G2 is deferred.  The glyph library
+(`app_qt/ribbon_glyphs.{h,cpp}`) paints each command's mark on a 32-unit grid
+with ONE ink colour: a 2 px stroke at the 32 px large size and the same
+drawing at half scale (1 px) at the 16 px one-row size.  Nothing is copied
+from Microsoft: the shapes are our own geometric marks.  Every command
+control (button/small/split) carries the pin's icon key; the ribbon resolves
+the key through the library, and an empty or unknown key draws the neutral
+placeholder so the gate fails on it instead of passing silently.
+
+| item | tab / commands | status | evidence |
+|---|---|---|---|
+| W26-2.1 | Task tab: 40 commands, glyph library + gate + contact sheet | **DONE** | commit `e83e66b`; gates `build/w26/gates-d4be89a-W26-2.1.log` |
+| W26-2.2 | Resource tab: 13 commands | **DONE** | commit `7729ef2`; gates `build/w26/gates-e83e66b-W26-2.2.log` |
+| W26-2.3 | Report tab: 10 commands | **DONE** | commit `98602a7`; gates `build/w26/gates-7729ef2-W26-2.3.log` |
+| W26-2.4 | Project tab: 13 commands | **DONE** | commit `2ade1d3`; gates `build/w26/gates-98602a7-W26-2.4.log` |
+| W26-2.5 | View tab: 20 commands (the one expected same-tab reuse) | **DONE** | commit `d5a1cce`; gates `build/w26/gates-2ade1d3-W26-2.5.log` |
+| W26-2.6 | Help tab: 3 commands | **DONE** | commit `de787e7`; gates `build/w26/gates-d5a1cce-W26-2.6.log` |
+| W26-2.7 | Gantt Chart Format tab: 15 commands; the all-tabs assertion | **DONE** | commit `e8d0520`; gates `build/w26/gates-de787e7-W26-2.7.log` |
+
+Acceptance:
+
+- **No command shows the placeholder.**  The new `qt_icon_gate`
+  (`app_qt/tests/icon_gate_test.cpp`, ctest `qt_icon_gate`) walks the LIVE
+  ribbon widgets of every finished tab in pin order, reads each button's own
+  icon at its own icon size, and hashes the pixels.  Every command's glyph at
+  32 px and at 16 px is non-empty and differs from the rendered
+  `MenuAction::none` placeholder.  The final item also asserts the pin's icon
+  column has no `-` left on any `button`/`small`/`split` row: 114 command
+  controls across seven tabs (Task 40, Resource 13, Report 10, Project 13,
+  View 20, Help 3, Gantt Chart Format 15), 0 without a key.
+- **Uniqueness gate.**  The same gate hashes every glyph on the tab at both
+  sizes and fails on a duplicate unless the pin lists the reuse with its exact
+  count.  The only same-tab reuse is View's two `Other Views` entries
+  (`view.other` x2) - Project uses one glyph in Task Views and Resource Views.
+  Two DIFFERENT keys that render identical bytes also fail; no such collision
+  exists.
+- **Monochrome.**  The gate starts from the premultiplied render and requires
+  every visible pixel to be the single ink colour blended by its alpha (a
+  deviation of more than 5/255 fails).  This is measured from the pixels, not
+  the drawing code.
+- **Two sizes, Office-like weight.**  Large buttons carry the 32 px glyph and
+  one-row buttons the 16 px one (the gate reads the live `iconSize`); every
+  glyph is also rendered and checked at the other size.
+- **Human-review contact sheets** (not committed; `build/` is git-ignored):
+  `build/w26/icons-task.png`, `icons-resource.png`, `icons-report.png`,
+  `icons-project.png`, `icons-view.png`, `icons-help.png`,
+  `icons-gantt-chart-format.png` - each command's 32 px and 16 px glyph with
+  its group/label/key, for Tim.
+
+Glyph reuse, cross-tab (allowed only where Project reuses the mark):
+`properties.information` (Task/Resource Information), `properties.notes` and
+`properties.details` (Task/Resource), `view.gantt` (Task/View Task Views),
+`view.team_planner` (Resource/View Resource Views), `properties.custom_fields`
+(Project/Gantt Chart Format).  `properties.project_information` draws the same
+information page as `properties.information`, as Project does for Task
+Information and Project Information.
+
+Deliberate presentation decisions: B/I/U and the five %-complete buttons are
+icon-only (their pin labels remain as accessible names), matching the
+readback's `[s]` classification and their small fixed widths; the Task tab's
+Other bands are unchanged.  `app_qt/ribbon_pin.tsv` fills the independent
+pin's icon column for every command row; the live key is compared with it, so
+a command cannot draw one glyph while the pin names another.
+`app_qt/ribbon_pin_unmodelled.tsv` remains empty and the existing inventory
+gate still passes.
+
+Gates per commit (each log is on that commit's parent tree, quoted from the
+log):
+
+| item | log | core | plan_recalc | reader | M2 | app | app_qt | fixtures | parity |
+|---|---|---|---|---|---|---|---|---|---|
+| W26-2.1 | `gates-d4be89a-W26-2.1.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
+| W26-2.2 | `gates-e83e66b-W26-2.2.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
+| W26-2.3 | `gates-7729ef2-W26-2.3.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
+| W26-2.4 | `gates-98602a7-W26-2.4.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
+| W26-2.5 | `gates-2ade1d3-W26-2.5.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
+| W26-2.6 | `gates-d5a1cce-W26-2.6.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
+| W26-2.7 | `gates-de787e7-W26-2.7.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
+
+Every log also carries `check_fixtures.py` (23 documented hashes, 21 tracked
+`.mpp`), oracle provenance (8), the client-name scan (0 hits on HEAD and on
+the working-tree content) and the 8-hex grep (no matches).  `app_qt` is 19/19
+from W26-2.1 on: the new `qt_icon_gate` is the nineteenth test.  Two transient
+MSBuild link-log locks hit during the stage builds; the builds were retried,
+not changed.
+
+## Found, not fixed
+
+No new Critical or High finding in G2.  Notes for later work, all deliberate:
+
+- The menu-bar and quick-access icons still use the older `shell_action_icon`
+  drawings; G2's brief and gate cover the ribbon's commands.  A coherent
+  pass over the menu/QAT artwork is not part of this group.
+- The large split buttons (Mark on Track, Bar Styles Format, Drawing) remain
+  disabled with the exact decision-9 tooltip, as G1 left them; the glyph does
+  not change their wiring.
+- The contact sheets are local review artifacts under `build/w26/` and are
+  deliberately not committed (the publication hold and the git-ignored
+  `build/`).
+
+WAVE-26-G2-COMPLETE
