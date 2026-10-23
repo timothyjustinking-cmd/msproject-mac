@@ -23,6 +23,11 @@
 // derived CEdl records before and after and the byte delta.  It never writes a
 // file: on a tree Project re-saved the run is a no-op, while on a tree whose
 // CEdl is stale relative to its CTable it reports the records it would refresh.
+//
+// --diff OTHER compares this tree with another extracted tree part by part and
+// prints the changed byte ranges.  It is the tool for an oracle measurement:
+// extract the control .mpp and the re-saved .mpp, then diff them (docs/handoff/
+// f2.md has the row-height/splitter recipe).
 
 #include "viewstate.h"
 
@@ -34,6 +39,7 @@
 #include <fstream>
 #include <initializer_list>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -157,6 +163,7 @@ int main(int argc, char** argv) {
     bool roundtrip = false;
     bool regenerate = false;
     std::string only_class;
+    fs::path diff_root;
     fs::path root;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -168,6 +175,12 @@ int main(int argc, char** argv) {
             roundtrip = true;
         } else if (arg == "--regenerate-edl") {
             regenerate = true;
+        } else if (arg == "--diff") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "viewstate_report: --diff needs an extracted tree\n");
+                return 2;
+            }
+            diff_root = argv[++i];
         } else if (arg == "--class") {
             if (i + 1 >= argc) {
                 std::fprintf(stderr, "viewstate_report: --class needs a name\n");
@@ -176,13 +189,15 @@ int main(int argc, char** argv) {
             only_class = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             std::printf("usage: viewstate_report [--dump] [--inventory] [--roundtrip]\n"
-                        "                       [--regenerate-edl] [--class NAME] <root>\n"
+                        "                       [--regenerate-edl] [--diff OTHER] [--class NAME]\n"
+                        "                       <root>\n"
                         "  <root>       directory holding 214/<Class>/<Part> files\n"
                         "  --dump       print every column/block (default truncates at 6)\n"
                         "  --inventory  print sizes/FNV only, skip decoding\n"
                         "  --roundtrip  re-encode each class and require byte-identical parts\n"
                         "  --regenerate-edl  link CTable/CV_iew/CEdl, run regenerate_edl()\n"
                         "                    with no table edits and print the byte delta\n"
+                        "  --diff OTHER compare this extracted tree with OTHER, part by part\n"
                         "  --class N    decode one class only\n");
             return 0;
         } else if (root.empty()) {
@@ -246,6 +261,77 @@ int main(int argc, char** argv) {
             relative.parent_path().generic_string().find('/') == std::string::npos) {
             classes[relative.parent_path().generic_string()][part_name(path)] = path;
         }
+    }
+
+
+    if (!diff_root.empty()) {
+        std::error_code diff_error;
+        fs::path other_class_root = diff_root;
+        if (fs::is_directory(diff_root / "214", diff_error)) {
+            other_class_root = diff_root / "214";
+        }
+        if (!fs::is_directory(other_class_root, diff_error)) {
+            std::fprintf(stderr, "viewstate_report: --diff root %s is not a directory\n",
+                         other_class_root.string().c_str());
+            return 1;
+        }
+        std::set<std::string> names;
+        for (const auto& entry : fs::directory_iterator(class_root, diff_error)) {
+            if (entry.is_directory(diff_error)) {
+                names.insert(entry.path().filename().generic_string());
+            }
+        }
+        for (const auto& entry : fs::directory_iterator(other_class_root, diff_error)) {
+            if (entry.is_directory(diff_error)) {
+                names.insert(entry.path().filename().generic_string());
+            }
+        }
+        static constexpr const char* kParts[4] = {"FixedData", "FixedMeta", "VarMeta",
+                                                  "Var2Data"};
+        std::size_t differing_parts = 0;
+        for (const auto& name : names) {
+            for (const char* part : kParts) {
+                std::vector<std::uint8_t> a;
+                std::vector<std::uint8_t> b;
+                read_file(class_root / name / part, a);
+                read_file(other_class_root / name / part, b);
+                if (a == b) {
+                    continue;
+                }
+                ++differing_parts;
+                std::printf("%s/%s: %zu vs %zu bytes\n", name.c_str(), part, a.size(),
+                            b.size());
+                const std::size_t common = std::min(a.size(), b.size());
+                std::size_t runs = 0;
+                std::size_t at = 0;
+                while (at < common && runs < 40) {
+                    if (a[at] == b[at]) {
+                        ++at;
+                        continue;
+                    }
+                    std::size_t end = at + 1;
+                    while (end < common && a[end] != b[end]) {
+                        ++end;
+                    }
+                    std::printf("  %zu..%zu (%zu byte(s)):", at, end - 1, end - at);
+                    for (std::size_t i = at; i < end && i < at + 16; ++i) {
+                        std::printf(" %02x/%02x", a[i], b[i]);
+                    }
+                    std::printf("%s\n", end - at > 16 ? " ..." : "");
+                    ++runs;
+                    at = end;
+                }
+                if (runs == 40 && at < common) {
+                    std::printf("  ... further changes not listed\n");
+                }
+                if (a.size() != b.size()) {
+                    std::printf("  length differs after %zu byte(s)\n", common);
+                }
+            }
+        }
+        std::printf("diff: %zu differing part(s), classes compared=%zu\n", differing_parts,
+                    names.size());
+        return g_exit;
     }
 
     if (regenerate) {

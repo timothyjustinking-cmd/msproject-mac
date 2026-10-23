@@ -131,10 +131,31 @@
 //                   "Task", "Split", "Milestone", ...).  Opaque.
 //       0x2240002f  timeline XML.  Opaque.
 //
-//   NOT decoded: row height and splitter position.  They are not in any item
-//   this stream can name, and no measured save changes them.  Column widths are
-//   not in CV_iew either: the width is the first of the nine opaque bytes of a
-//   `214/CTable` column record (see the column record note above).
+//   ROW HEIGHT AND SPLITTER POSITION ARE STILL NOT LOCATED (wave 18, F2
+//   re-checked every candidate the corpus and the 14 fixture trees expose):
+//
+//     - not in `214/CTable`: the column block is exactly 12 + 115*columns bytes
+//       on every measured table (8/8 corpus rows), so it has no free field;
+//     - not in `214/CEdl`: all 14 records are decoded to their payloads; the
+//       only numeric records are the 0x2aXX field-id lists (0x26400024/35), one
+//       4-byte word (0x26400028 = 8), a two-word record (0x26400026 = 0,
+//       0x032f0780) and three per-save changing handles (0x2640002a/b/d).  None
+//       changes with geometry in any measured file;
+//     - not in the CV_iew item inventory: the only small items are
+//       0x22400007 (37 B, per-view flags), 0x2240000f (6 B, calendar view
+//       only), 0x22400010 (4 B, calendar view only), 0x22400015/0x22400037
+//       (20 B window state with a per-save timestamp), 0x2240001d/0x22400038
+//       (12 B caches of the CGrouping/definition blocks, proved by byte
+//       equality) and 0x2240001f (2 B, the filter-criteria word, 0 in every
+//       view).  No item carries a plausible point size or splitter ratio;
+//     - the 970-byte 0x22400009 template varies per view (its first four u32
+//       are 500/500/500/500 on the Gantt view, 750/750/1000/1000 on Task Sheet,
+//       1910/1910/2540/2540 on Resource Sheet), so it holds per-view geometry,
+//       but no field inside it can be named without a controlled save.  That is
+//       the remaining lead; the exact oracle recipe is in docs/handoff/f2.md.
+//
+//   Column widths are not in CV_iew: the width is the first of the nine opaque
+//   bytes of a `214/CTable` column record (see the column record note above).
 //
 //   A block whose item walk does not validate is left opaque with a warning;
 //   the collection still parses, and the encoder still copies it verbatim.
@@ -143,6 +164,36 @@
 //   complete Props-format document (14 records in the prefs base fixture, 15 in
 //   the two later saves).  This module parses it with core/props
 //   (props::parse_props) rather than re-implementing the framing.
+//
+//   CORPUS CEdl Var2Data IS A CUMULATIVE CACHE, NOT A PURE BLOCK WALK (wave 18,
+//   F2).  `corpus/project_a.mpp`'s CEdl is 9,932 B: a strict walk finds 8
+//   documents and then a u32 of 10,846 at 7,780 with only 2,148 B left.  The
+//   remaining region is not opaque: it holds TWO more complete Props documents
+//   (blocks at 7,784 and 8,856, both 1,068 B) separated from their neighbours by
+//   four-byte residue (a stale 0x2a5e word at 7,780 and a stale 0xffffffff at
+//   9,928).  Only TWO of the ten documents are named by VarMeta (uid 6 -> 968,
+//   uid 1 -> 8,856 in project_a; uid 6 -> 786, uid 1 -> 1,296 in project_b): the
+//   other documents are older copies kept in the stream, i.e. a per-save append
+//   cache.  Measured shape:
+//
+//       block.offset         length word, payload, then usually the next block
+//       residue              at most 4 bytes of an older document between blocks
+//       VarMeta offset       names the live document for a row ordinal
+//
+//   parse_var2() stays strict.  `parse_view_state()` uses it first and, for
+//   class "CEdl" only, falls back to parse_var2_edl_cache(), which walks with a
+//   four-byte resync step, requires every candidate payload to be a complete
+//   Props document, requires every VarMeta offset to be a block start, and keeps
+//   the skipped bytes as Var2Stream::gaps.  encode_view_state() writes the gaps
+//   back in stream order, so a no-op re-encode of the corpus CEdl is
+//   byte-identical.  If the rule does not hold (a VarMeta offset is not a block
+//   start, or no Props document can be recovered) parsing is refused with an
+//   error naming the offset, the declared length and the remaining bytes.
+//
+//   Reproduced shape on the two corpus files: project_a 10 blocks + 8 residue
+//   bytes, project_b 3 blocks + 0 residue.  The eight unreferenced documents in
+//   project_a are older saves of the same current-view document (same
+//   &Gantt Chart / &Entry names, growing record sizes).
 //
 //   Wave 17 (F1) decodes the CEdl record set as a TYPED view:
 //
@@ -168,11 +219,87 @@
 //   `214/CFilter` / `214/CGrouping` rows are decoded at the FRAMING level:
 //   the 230-byte row's inline record set (above) and the Var2Data block named
 //   by key 0x20400006.  The ...0009 row record is the display name; the
-//   ...0007 row record is the criteria blob (opaque).  For CFilter the block's
-//   u32 at payload +16 is the offset of a UTF-16 "tasks"/"resources" string
-//   (the filter's applies-to kind), measured on every synthetic view and on the
-//   corpus file.  Everything else in a CFilter/CGrouping block is opaque,
-//   including CGrouping's non-zero words at +8 in some fixtures.
+//   ...0007 row record is decoded here as well (wave 18, F2): a u16 word that
+//   is 0 in all 30 measured rows that carry the record, followed by an optional
+//   NUL-terminated UTF-16 label.  20 of those rows have a non-empty label, and
+//   it equals the ...0009 display name in all 20.  The other 10 carry only the
+//   2-byte word (corpus rows 9..11 are three of them); corpus rows 23/24 carry a
+//   4-byte `00000000` record (zero word + empty label).  The actual criteria are
+//   NOT in the row: they are in the block.
+//
+//   The CFilter block (measured on all 53 blocks of the 14 trees that carry a
+//   CFilter: 12 synthetic fixtures and the two corpus files):
+//
+//       +0  u32  row ordinal (matches FixedData +0 and the VarMeta uid)
+//       +4  u32  flags/format word: 0x100 on every synthetic block, 0 or 1 on
+//                the corpus blocks.  Meaning not established; preserved.
+//       +8  u16  0 (reserved in every measured block)
+//       +10 u16  0 (reserved)
+//       +12 u16  0 (reserved)
+//       +14 u16  criterion record count N
+//       +16 u32  string-table offset S; S == 20 + 36*N on every measured block
+//       +20      N * 36-byte criterion records (framing decoded; fields below)
+//       +S       NUL-terminated UTF-16 string table: the applies-to kind first
+//                ("tasks"/"resources"), then prompts such as "Group name:" or
+//                "Enter Task Name Here".
+//
+//   Criterion record (+0 u32 tag, +4 u32 operator index, +8 u32 field id or 0;
+//   the other 24 bytes are opaque and preserved):
+//
+//       tag 11 (0x0b)   list/AND group start (first record of every block)
+//       tag 6           group end / OR marker
+//       tag 7           field test; +8 is a 0x0b40xxxx / 0x0c40xxxx field id
+//       tags 1, 0x19, 0x1a, 0x1c, 0x27, 0x3ed, 0x3ee, 0x3ef
+//                       operands/markers; meaning not established
+//
+//   Fields understood on all 53 measured blocks: the 20-byte header, the
+//   count/offset identity (53/53), the record stride, every string table and the
+//   tag/operator/field words where the tag is 7 (40/40 field ids are plausible
+//   0x0b40xxxx / 0x0c40xxxx ids; validated against CTable field ids: 0x0b40000e Task
+//   Name, 0x0b400018 Milestone, 0x0b400021 Predecessors, 0x0b400033 Text1,
+//   0x0b4004ff Active, 0x0c400003 Resource Group).  What a criterion means
+//   (which operator value is "contains", how the operand records pair with the
+//   tests) is NOT established.  Everything is copied verbatim by the encoder.
+//
+//   The CGrouping block is the same kind of structure but its body is NOT
+//   decoded:
+//
+//       +0  u32  row ordinal
+//       +4  u32  flags word (0 in the synthetic rows and the 12-byte corpus
+//                rows; 0x100 in the corpus "Status" row)
+//       +8  u16  0x100 in the empty shape / 0 in the "Status" shape
+//       +10 u16  0 / 1
+//       +12      body: absent (12-byte block) or 71 bytes (83-byte block).
+//                In the corpus "Status" row the first u32 of the body is
+//                0x0b40021f (a field id), but no grouping-key layout is claimed.
+//
+//   Measured grouping block sizes: 83 B (synthetic "No Group" rows, all-zero
+//   body), 12 B (corpus "No Group" rows, header only) and 83 B (corpus "Status"
+//   row).  A 12-byte block is therefore the measured "no stored definition"
+//   shape; the 83-byte body is opaque apart from the ordinal/flags words.
+//
+//   `0x2240001d` and `0x22400038` in CV_iew are caches of these definitions,
+//   not view geometry: corpus view 1 (Gantt Chart) carries
+//   0x2240001d = 090000000000000000010000, byte-identical to the CGrouping
+//   block for the "No Task Group" row (uid 9).  A 12-byte 0x2240001d has the
+//   same shape as a 12-byte CGrouping block and an 83-byte one the same as the
+//   83-byte block.  They are inventory only; nothing writes them.
+//
+//   `214/CDrawing`, `214/CMap` and `214/CReport` (wave 18 inventory, F2):
+//
+//       class      corpus FixedData  rows  corpus Var2Data  blocks  synthetic
+//       CDrawing          690        3       42,476          3      empty
+//       CMap                0        0            0          0      empty
+//       CReport             0        0            0          0      empty
+//
+//   CDrawing is empty in every synthetic fixture and carries three drawings in
+//   the corpus file (Var2Data blocks 19,420 / 10,982 / 12,062 bytes at
+//   0 / 19,424 / 30,410).  Its rows are 230 bytes but are NOT the inline record
+//   set (their +0x6e bytes are not a record set and stay unparsed, as wave 17
+//   established).  The three blocks are named by VarMeta and are copied
+//   verbatim; no drawing layout is decoded.  CMap and CReport are header-only
+//   collections (FixedMeta/VarMeta, no rows, no blocks) in every measured tree
+//   including both corpus files.
 //
 //   `214/Props` is a normal Props stream and is decoded by core/props directly;
 //   this module does not duplicate that.
@@ -251,10 +378,15 @@
 //   * editing CFilter/CGrouping row record sets or block payloads, and editing
 //     CDrawing/CMap/CReport payload bodies.  They are decoded at the framing
 //     level and copied verbatim by the encoder.
+//   * decoding the CFilter criterion semantics (operator values, operand
+//     pairing) or the CGrouping body; only their framing, field ids and string
+//     table are named.
 //   * regenerating the CEdl host path, the CEdl opaque records (0x26400022,
 //     0x26400026, 0x26400024, 0x26400027, 0x26400028, 0x2640002a/b/d,
 //     0x26400035, 0x26400036, 0x2640003d) or the 0x26400031 host path.
 //   * deriving a CV_iew display name from a renamed caption.
+//   * locating sheet row height or sheet/Gantt splitter position.  No measured
+//     byte; the oracle recipe is in docs/handoff/f2.md.
 //   * generating Project identity/GUID values.  Every row/entry identity is
 //     preserved verbatim because Project regenerates it on each save.
 
@@ -346,6 +478,41 @@ inline constexpr std::size_t kViewOptionsSize = 970;
 inline constexpr std::size_t kViewOptionsMarginOffset = 0;
 inline constexpr std::size_t kViewOptionsMarginSize = 16;
 
+// CV_iew item ids that the wave-18 inventory names but does not write.  The
+// payloads are preserved verbatim; the meanings are the ones proved in the file
+// header (the 0x2240001d/0x22400038 byte-equality with CGrouping blocks is the
+// strongest evidence).
+inline constexpr std::uint32_t kViewFlagsKey = 0x22400007u;        // 37 B, per-view
+inline constexpr std::uint32_t kViewCalendarAKey = 0x2240000Fu;    // 6 B, calendar
+inline constexpr std::uint32_t kViewCalendarBKey = 0x22400010u;    // 4 B, calendar
+inline constexpr std::uint32_t kViewWindowStateKey = 0x22400015u;  // 20 B
+inline constexpr std::uint32_t kViewAppliedGroupKey = 0x2240001Du; // grouping cache
+inline constexpr std::uint32_t kViewCriteriaWordKey = 0x2240001Fu; // 2 B, 0
+inline constexpr std::uint32_t kViewWindowState2Key = 0x22400037u; // 20 B
+inline constexpr std::uint32_t kViewAppliedStateKey = 0x22400038u; // 12 B
+
+// CFilter block framing (wave 18, F2).  The string-table offset is exactly
+// kFilterBlockHeaderSize + criterion_count * kFilterCriterionSize on every
+// measured block (9 synthetic rows, 16 corpus rows).
+inline constexpr std::size_t kFilterBlockHeaderSize = 20;
+inline constexpr std::size_t kFilterCriterionSize = 36;
+inline constexpr std::size_t kFilterTagOffset = 0;       // u32 tag
+inline constexpr std::size_t kFilterOperatorOffset = 4;  // u32 operator index
+inline constexpr std::size_t kFilterFieldOffset = 8;     // u32 field id or 0
+inline constexpr std::uint32_t kFilterTagFieldTest = 7u;
+// CGrouping block: 12-byte header; a 12-byte block is the measured "no stored
+// definition" shape (corpus "No Group" rows) and 83 B is a stored body.
+inline constexpr std::size_t kGroupingBlockHeaderSize = 12;
+inline constexpr std::size_t kGroupingBlockEmptySize = 12;
+inline constexpr std::size_t kGroupingBlockBodySize = 83;
+
+// 214/CEdl cache walk (wave 18, F2).  When a length word is not a valid block,
+// the walk may skip at most this many bytes to the next block start; the tail
+// after the last block may be at most the same size.  Both measured residue
+// runs are 4 bytes.
+inline constexpr std::size_t kEdlCacheMaxResidue = 8;
+inline constexpr std::uint32_t kEdlCacheResyncStep = 4;
+
 struct ParseError {
     std::string message;
     std::size_t offset = 0;
@@ -394,9 +561,21 @@ struct VarBlock {
     std::uint32_t payload_length = 0;
 };
 
+// Bytes of a `214/CEdl` Var2Data cache that no block covers (stale residue from
+// an older document).  `offset` is the position in the original stream; the bytes
+// are preserved and written back in front of the block that followed them.
+struct Var2Gap {
+    std::uint32_t offset = 0;
+    std::vector<std::uint8_t> bytes;
+};
+
 struct Var2Stream {
     std::uint32_t size = 0;
     std::vector<VarBlock> blocks;
+    // Non-empty only for the cache-tolerant CEdl walk; `cache_tolerant` marks a
+    // stream that needed the four-byte resync rule.
+    std::vector<Var2Gap> gaps;
+    bool cache_tolerant = false;
 };
 
 // One decoded CTable column record.  Only the field id and the UTF-16 title are
@@ -546,6 +725,21 @@ struct FilterDef {
     bool applies_to_decoded = false;
     std::uint32_t applies_to_offset = 0;
     std::string applies_to;
+
+    // Wave 18 (F2): the decoded block header and criterion framing.
+    std::uint32_t block_flags = 0;          // payload +4 (0x100 synthetic, 0/1 corpus)
+    std::uint16_t criterion_count = 0;      // payload +14
+    std::uint32_t string_table_offset = 0;  // payload +16
+    bool criteria_decoded = false;          // 20 + 36*count == offset, in range
+    // NUL-terminated UTF-16 strings from `string_table_offset` to the payload
+    // end, in order; the first one is `applies_to`.  Empty when malformed.
+    std::vector<std::string> string_table;
+
+    // Row record ...0007: a u16 word (0 in every measured row) followed by an
+    // optional UTF-16 label.  The label equals `display_name` where both exist.
+    bool criteria_record_decoded = false;
+    std::uint16_t criteria_record_word = 0;
+    std::string criteria_record_label;
 };
 
 // A CGrouping row (214/CGrouping), decoded at the framing level.
@@ -560,6 +754,16 @@ struct GroupingDef {
     std::uint32_t block_offset = 0;
     std::uint32_t block_length = 0;
     std::uint32_t block_ordinal = 0;
+
+    // Wave 18 (F2) framing only (the body stays opaque).
+    std::uint32_t block_flags = 0;      // payload +4
+    std::uint16_t header_word_8 = 0;    // payload +8
+    std::uint16_t header_word_10 = 0;   // payload +10
+    bool has_body = false;              // block longer than the 12-byte header
+    // The first u32 of the body when it is a plausible property id (corpus
+    // "Status" row: 0x0b40021f).  No grouping-key semantics are claimed.
+    bool body_field_decoded = false;
+    std::uint32_t body_field_id = 0;
 };
 
 // One record of the Props document embedded in a CEdl block, in the typed form
@@ -872,6 +1076,10 @@ using TableEdits = std::span<const TableEdit>;
 // report hint only; no payload layout is claimed for any of these keys.
 [[nodiscard]] std::string_view block_kind(std::string_view klass, std::uint32_t key);
 
+// Stable short label for a CV_iew main-block item id, from the wave-18 inventory
+// ("view-name", "applied-grouping", "opaque", ...).  A report hint only.
+[[nodiscard]] std::string_view view_item_kind(std::uint32_t id);
+
 [[nodiscard]] bool parse_fixed_meta(std::span<const std::uint8_t> data,
                                     FixedMetaStream& out,
                                     ParseError* error = nullptr);
@@ -881,6 +1089,28 @@ using TableEdits = std::span<const TableEdit>;
 [[nodiscard]] bool parse_var2(std::span<const std::uint8_t> data,
                               Var2Stream& out,
                               ParseError* error = nullptr);
+
+// Cache-tolerant Var2Data walk for `214/CEdl` (wave 18, F2).  Project keeps one
+// Props document per save in this stream and repoints VarMeta; between two
+// documents there can be up to kEdlCacheMaxResidue bytes of the older document,
+// so the corpus file's stream is not a strict block walk.
+//
+// The rule, in order:
+//   1. from the current offset, if the u32 is a valid block length and the
+//      payload parses as a complete Props document, it is a block;
+//   2. otherwise skip 4 bytes (up to kEdlCacheMaxResidue in total), record the
+//      skipped bytes as a Var2Gap, and retry;
+//   3. after the last block, up to kEdlCacheMaxResidue trailing bytes are kept
+//      as a gap;
+//   4. every VarMeta entry offset must be a discovered block start.
+// Failing 3 the call fails with a message naming the offset, the declared
+// length and how many bytes remain; failing 4 it names the VarMeta uid/key and
+// offset.  `out.cache_tolerant` is true on success.  A stream that already walks
+// strictly must be parsed with parse_var2() instead.
+[[nodiscard]] bool parse_var2_edl_cache(std::span<const std::uint8_t> data,
+                                        std::span<const VarMetaEntry> var_meta_entries,
+                                        Var2Stream& out,
+                                        ParseError* error = nullptr);
 
 // Parses a CV_iew main (`0x20400006`) block payload into its item list.  The
 // header's item count must match the walk, every id must carry the 0x0040 byte

@@ -248,6 +248,12 @@ bool replace_block_payload(ViewState& state,
                     static_cast<std::int64_t>(embedded.block_offset) + delta);
             }
         }
+        for (auto& gap : state.var2.gaps) {
+            if (gap.offset > block_offset) {
+                gap.offset = static_cast<std::uint32_t>(
+                    static_cast<std::int64_t>(gap.offset) + delta);
+            }
+        }
     }
     // block_refs are index-aligned with the block walk (built that way by the
     // parser); keep their offsets in step after the shift.
@@ -454,6 +460,45 @@ std::string_view block_kind(std::string_view klass, std::uint32_t key) {
     return "opaque";
 }
 
+std::string_view view_item_kind(std::uint32_t id) {
+    switch (id) {
+        case kViewNameKey:
+            return "view-name";
+        case kViewTableKey:
+            return "table-or-top-pane";
+        case kViewFilterKey:
+            return "filter-or-bottom-pane";
+        case kViewGroupKey:
+            return "grouping-name";
+        case kViewOptionsKey:
+            return "view-options-970";
+        case kViewFormatKey:
+            return "gantt-bar-styles";
+        case kTimelineViewKey:
+            return "timeline-xml";
+        case kViewNotesKey:
+            return "view-notes";
+        case kViewFlagsKey:
+            return "view-flags-37";
+        case kViewCalendarAKey:
+            return "calendar-6";
+        case kViewCalendarBKey:
+            return "calendar-4";
+        case kViewWindowStateKey:
+            return "window-state-20";
+        case kViewWindowState2Key:
+            return "window-state-20b";
+        case kViewAppliedGroupKey:
+            return "applied-grouping-cache";
+        case kViewCriteriaWordKey:
+            return "criteria-word-2";
+        case kViewAppliedStateKey:
+            return "applied-state-cache-12";
+        default:
+            return "opaque";
+    }
+}
+
 std::string utf16_ascii(std::span<const std::uint8_t> data,
                         std::size_t offset,
                         std::size_t max_units) {
@@ -647,6 +692,106 @@ bool parse_var2(std::span<const std::uint8_t> data,
         block.payload_length = length;
         out.blocks.push_back(block);
         offset += 4 + static_cast<std::size_t>(length);
+    }
+    return true;
+}
+
+// Cache-tolerant `214/CEdl` walk (wave 18, F2).  See the header comment: a
+// document may be followed by up to kEdlCacheMaxResidue stale bytes before the
+// next document, and every candidate payload must parse as a Props document.
+bool parse_var2_edl_cache(std::span<const std::uint8_t> data,
+                          std::span<const VarMetaEntry> var_meta_entries,
+                          Var2Stream& out,
+                          ParseError* error) {
+    out = Var2Stream{};
+    out.size = static_cast<std::uint32_t>(data.size());
+    out.cache_tolerant = true;
+    const auto is_document = [data](std::size_t payload_offset, std::uint32_t length) {
+        props::PropsDocument document;
+        props::ParseError ignored;
+        return props::parse_props(data.subspan(payload_offset, length), document, &ignored);
+    };
+    std::size_t offset = 0;
+    while (offset < data.size()) {
+        bool have_block = false;
+        for (std::size_t skip = 0; skip <= kEdlCacheMaxResidue;
+             skip += kEdlCacheResyncStep) {
+            const std::size_t candidate = offset + skip;
+            if (candidate + 4 > data.size()) {
+                break;
+            }
+            const std::uint32_t length = read_u32(data, candidate);
+            if (static_cast<std::size_t>(length) > data.size() - candidate - 4) {
+                continue;
+            }
+            if (!is_document(candidate + 4, length)) {
+                continue;
+            }
+            if (skip != 0) {
+                Var2Gap gap;
+                gap.offset = static_cast<std::uint32_t>(offset);
+                gap.bytes.assign(data.begin() + static_cast<std::ptrdiff_t>(offset),
+                                 data.begin() + static_cast<std::ptrdiff_t>(candidate));
+                out.gaps.push_back(std::move(gap));
+            }
+            VarBlock block;
+            block.offset = static_cast<std::uint32_t>(candidate);
+            block.payload_length = length;
+            out.blocks.push_back(block);
+            offset = candidate + 4 + length;
+            have_block = true;
+            break;
+        }
+        if (have_block) {
+            continue;
+        }
+        // Trailing residue after the last document is the measured shape
+        // (project_a: four bytes at 9,928).  Nothing else is accepted.
+        const std::size_t remaining = data.size() - offset;
+        if (!out.blocks.empty() && remaining <= kEdlCacheMaxResidue) {
+            Var2Gap gap;
+            gap.offset = static_cast<std::uint32_t>(offset);
+            gap.bytes.assign(data.begin() + static_cast<std::ptrdiff_t>(offset), data.end());
+            out.gaps.push_back(std::move(gap));
+            break;
+        }
+        if (error != nullptr) {
+            const std::uint32_t declared = read_u32(data, offset);
+            error->message = "214/CEdl Var2Data is not a Props-document cache walk at offset " +
+                             std::to_string(offset) + ": it declares " +
+                             std::to_string(declared) + " payload bytes, " +
+                             std::to_string(data.size() - offset - 4) +
+                             " remain, and no document starts within " +
+                             std::to_string(kEdlCacheMaxResidue) + " bytes";
+            error->offset = offset;
+        }
+        return false;
+    }
+    if (out.blocks.empty()) {
+        if (error != nullptr) {
+            error->message = "214/CEdl Var2Data holds no Props-document block";
+            error->offset = 0;
+        }
+        return false;
+    }
+    for (const auto& entry : var_meta_entries) {
+        bool found = false;
+        for (const auto& block : out.blocks) {
+            if (block.offset == entry.offset) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            if (error != nullptr) {
+                error->message = "VarMeta entry (uid " + std::to_string(entry.uid) + ", key " +
+                                 hex32(entry.key) + ") points at offset " +
+                                 std::to_string(entry.offset) +
+                                 ", which is not a 214/CEdl document block start";
+                error->offset = entry.offset;
+            }
+            return false;
+        }
     }
     return true;
 }
@@ -879,7 +1024,34 @@ bool parse_view_state(std::string_view klass,
         return false;
     }
     if (!parse_var2(out.var2_data, out.var2, error)) {
-        return false;
+        // 214/CEdl keeps one Props document per save and repoints VarMeta, so a
+        // strict walk can stop on stale residue.  Every other class must walk
+        // strictly (wave 18, F2).
+        if (klass != "CEdl") {
+            return false;
+        }
+        ParseError strict_error;
+        if (error != nullptr) {
+            strict_error = *error;
+        }
+        ParseError cache_error;
+        if (!parse_var2_edl_cache(out.var2_data, out.var_meta.entries, out.var2,
+                                  &cache_error)) {
+            if (error != nullptr) {
+                *error = cache_error;
+            }
+            return false;
+        }
+        std::size_t residue = 0;
+        for (const auto& gap : out.var2.gaps) {
+            residue += gap.bytes.size();
+        }
+        out.warnings.push_back(
+            "214/CEdl Var2Data is a cumulative document cache: " +
+            std::to_string(out.var2.blocks.size()) + " Props-document block(s), " +
+            std::to_string(out.var2.gaps.size()) + " residue run(s) / " +
+            std::to_string(residue) + " byte(s); strict walk stopped at " +
+            std::to_string(strict_error.offset) + " (" + strict_error.message + ")");
     }
 
     if (out.var_meta.var2_size != out.var2.size) {
@@ -1253,7 +1425,7 @@ bool parse_view_state(std::string_view klass,
                 if (var_block != nullptr) {
                     def.block_offset = var_block->offset;
                     def.block_length = var_block->payload_length;
-                    def.block_decoded = payload.size() >= 20;
+                    def.block_decoded = payload.size() >= kFilterBlockHeaderSize;
                     def.block_ordinal = read_u32(payload, 0);
                     if (def.block_ordinal != def.ordinal) {
                         out.warnings.push_back("filter row " + std::to_string(i + 1) +
@@ -1261,14 +1433,78 @@ bool parse_view_state(std::string_view klass,
                                                " disagrees with block ordinal " +
                                                std::to_string(def.block_ordinal));
                     }
-                    const std::uint32_t offset = read_u32(payload, 16);
-                    if (offset >= 20 && offset + 4 <= payload.size() && (offset & 1u) == 0) {
-                        std::string applies_to =
-                            utf16_ascii(payload, offset, (payload.size() - offset) / 2);
-                        if (!applies_to.empty()) {
-                            def.applies_to_decoded = true;
-                            def.applies_to_offset = offset;
-                            def.applies_to = std::move(applies_to);
+                    if (payload.size() >= 8) {
+                        def.block_flags = read_u32(payload, 4);
+                    }
+                    if (payload.size() >= kFilterBlockHeaderSize) {
+                        def.criterion_count = read_u16(payload, 14);
+                        def.string_table_offset = read_u32(payload, 16);
+                        const std::size_t expected =
+                            kFilterBlockHeaderSize +
+                            static_cast<std::size_t>(def.criterion_count) *
+                                kFilterCriterionSize;
+                        if (def.string_table_offset == expected &&
+                            def.string_table_offset <= payload.size() &&
+                            (def.string_table_offset & 1u) == 0) {
+                            def.criteria_decoded = true;
+                        } else {
+                            out.warnings.push_back(
+                                "filter row " + std::to_string(i + 1) +
+                                " block header does not satisfy string-table offset == "
+                                "20 + 36*criterion_count (offset " +
+                                std::to_string(def.string_table_offset) + ", count " +
+                                std::to_string(def.criterion_count) + ")");
+                        }
+                        // The string table is NUL-terminated UTF-16; the first
+                        // string is the applies-to kind, the rest are prompts.
+                        std::size_t at = def.string_table_offset;
+                        std::vector<std::string> strings;
+                        bool terminated = true;
+                        while (at < payload.size()) {
+                            std::size_t end = at;
+                            bool found = false;
+                            while (end + 1 < payload.size()) {
+                                if (payload[end] == 0 && payload[end + 1] == 0) {
+                                    found = true;
+                                    break;
+                                }
+                                end += 2;
+                            }
+                            if (!found) {
+                                terminated = false;
+                                break;
+                            }
+                            strings.push_back(utf16_ascii(payload, at, (end - at) / 2));
+                            at = end + 2;
+                        }
+                        if (terminated) {
+                            def.string_table = std::move(strings);
+                            if (!def.string_table.empty() &&
+                                !def.string_table.front().empty()) {
+                                def.applies_to_decoded = true;
+                                def.applies_to_offset = def.string_table_offset;
+                                def.applies_to = def.string_table.front();
+                            }
+                        }
+                    }
+                }
+                // The row's ...0007 record is a u16 word followed by an optional
+                // UTF-16 label (wave 18, F2).  It holds no criteria in any
+                // measured row; the criteria live in the block.
+                if (row.definition.decoded && out.row_size > kRowRecordSetOffset) {
+                    const RowRecord* criteria = row.definition.find(kFilterCriteriaKey);
+                    if (criteria != nullptr && criteria->payload_length >= 2) {
+                        const std::size_t base =
+                            static_cast<std::size_t>(row.row_index) * out.row_size +
+                            kRowRecordSetOffset + criteria->payload_offset;
+                        if (base + criteria->payload_length <= out.fixed_data.size()) {
+                            def.criteria_record_decoded = true;
+                            def.criteria_record_word = read_u16(out.fixed_data, base);
+                            if (criteria->payload_length > 2) {
+                                def.criteria_record_label =
+                                    utf16_ascii(out.fixed_data, base + 2,
+                                                (criteria->payload_length - 2) / 2);
+                            }
                         }
                     }
                 }
@@ -1290,6 +1526,19 @@ bool parse_view_state(std::string_view klass,
                                                " ordinal " + std::to_string(def.ordinal) +
                                                " disagrees with block ordinal " +
                                                std::to_string(def.block_ordinal));
+                    }
+                    if (payload.size() >= 8) {
+                        def.block_flags = read_u32(payload, 4);
+                    }
+                    if (payload.size() >= kGroupingBlockHeaderSize) {
+                        def.header_word_8 = read_u16(payload, 8);
+                        def.header_word_10 = read_u16(payload, 10);
+                    }
+                    def.has_body = payload.size() > kGroupingBlockHeaderSize;
+                    if (payload.size() >= kGroupingBlockHeaderSize + 4 &&
+                        props::is_props_id(read_u32(payload, kGroupingBlockHeaderSize))) {
+                        def.body_field_decoded = true;
+                        def.body_field_id = read_u32(payload, kGroupingBlockHeaderSize);
                     }
                 }
                 out.groupings.push_back(std::move(def));
@@ -1316,7 +1565,19 @@ std::string describe_view_state(const ViewState& state,
         << " var2_size=" << state.var_meta.var2_size
         << " trailing=" << state.var_meta.trailing_bytes << "\n";
     out << "  blocks=" << state.blocks.size() << " rows=" << state.rows.size()
-        << " row_size=" << state.row_size << "\n";
+        << " row_size=" << state.row_size;
+    if (state.var2.cache_tolerant) {
+        std::size_t residue = 0;
+        for (const auto& gap : state.var2.gaps) {
+            residue += gap.bytes.size();
+        }
+        out << " cache-tolerant=1 residue=" << residue << " byte(s) in "
+            << state.var2.gaps.size() << " run(s)";
+    }
+    out << "\n";
+    for (const auto& gap : state.var2.gaps) {
+        out << "  residue off=" << gap.offset << " len=" << gap.bytes.size() << "\n";
+    }
     for (const auto& warning : state.warnings) {
         out << "  warning: " << warning << "\n";
     }
@@ -1421,6 +1682,12 @@ std::string describe_view_state(const ViewState& state,
         } else {
             out << " undecoded";
         }
+        if (filter.block_decoded) {
+            out << " flags=" << filter.block_flags
+                << " criteria=" << filter.criterion_count
+                << " string-table=" << filter.string_table_offset
+                << (filter.criteria_decoded ? "" : " (unframed)");
+        }
         if (filter.applies_to_decoded) {
             out << " applies-to=\"" << filter.applies_to << "\"@" << filter.applies_to_offset;
         }
@@ -1428,7 +1695,16 @@ std::string describe_view_state(const ViewState& state,
         if (filter.definition.decoded) {
             out << " name=\"" << filter.definition.name << "\"";
         }
+        if (filter.criteria_record_decoded) {
+            out << " criteria-record-word=" << filter.criteria_record_word;
+            if (!filter.criteria_record_label.empty()) {
+                out << " label=\"" << filter.criteria_record_label << "\"";
+            }
+        }
         out << "\n";
+        for (std::size_t s = 0; s < filter.string_table.size(); ++s) {
+            out << "    string[" << s << "]=\"" << filter.string_table[s] << "\"\n";
+        }
     }
     for (const auto& grouping : state.groupings) {
         out << "  grouping " << grouping.ordinal << " \"" << grouping.caption << "\"";
@@ -1440,6 +1716,15 @@ std::string describe_view_state(const ViewState& state,
             out << " block-ordinal=" << grouping.block_ordinal;
         } else {
             out << " undecoded";
+        }
+        if (grouping.block_decoded) {
+            out << " flags=" << grouping.block_flags
+                << " word8=" << grouping.header_word_8
+                << " word10=" << grouping.header_word_10
+                << (grouping.has_body ? " body=stored" : " body=none");
+            if (grouping.body_field_decoded) {
+                out << " body-field=" << hex32(grouping.body_field_id);
+            }
         }
         out << " records=" << grouping.definition.records.size();
         if (grouping.definition.decoded) {
@@ -1583,7 +1868,8 @@ bool encode_view_state(const ViewState& state, EncodedParts& out, WriteError* er
                   fixed_meta.begin() + static_cast<std::ptrdiff_t>(base + 8));
     }
 
-    // Var2Data: re-frame every block in stream order.  The new offsets are the
+    // Var2Data: re-frame every block in stream order, writing any cache residue
+    // back immediately before the block it preceded.  The new offsets are the
     // positions the length words land at, so VarMeta offsets below are derived
     // from the bytes rather than trusted from the input.
     if (state.block_refs.size() != state.blocks.size()) {
@@ -1592,8 +1878,27 @@ bool encode_view_state(const ViewState& state, EncodedParts& out, WriteError* er
     std::vector<std::uint8_t> var2_data;
     var2_data.reserve(state.var2_data.size());
     std::vector<std::uint32_t> new_offsets(state.blocks.size(), 0);
+    std::size_t next_gap = 0;
+    const auto append_gap = [&](const Var2Gap& gap) {
+        if (gap.offset > state.var2_data.size() ||
+            gap.bytes.size() > state.var2_data.size() - gap.offset) {
+            return false;
+        }
+        var2_data.insert(var2_data.end(), gap.bytes.begin(), gap.bytes.end());
+        return true;
+    };
     for (std::size_t i = 0; i < state.blocks.size(); ++i) {
         const VarBlock& block = state.blocks[i];
+        while (next_gap < state.var2.gaps.size() &&
+               state.var2.gaps[next_gap].offset < block.offset) {
+            if (!append_gap(state.var2.gaps[next_gap])) {
+                return write_fail(error, "Var2Data cache residue at offset " +
+                                             std::to_string(
+                                                 state.var2.gaps[next_gap].offset) +
+                                             " lies outside the stream");
+            }
+            ++next_gap;
+        }
         const std::size_t start = static_cast<std::size_t>(block.offset) + 4;
         if (start > state.var2_data.size() ||
             static_cast<std::size_t>(block.payload_length) >
@@ -1612,6 +1917,14 @@ bool encode_view_state(const ViewState& state, EncodedParts& out, WriteError* er
             state.var2_data.begin() + static_cast<std::ptrdiff_t>(start),
             state.var2_data.begin() +
                 static_cast<std::ptrdiff_t>(start + block.payload_length));
+    }
+    while (next_gap < state.var2.gaps.size()) {
+        if (!append_gap(state.var2.gaps[next_gap])) {
+            return write_fail(error, "Var2Data trailing cache residue at offset " +
+                                         std::to_string(state.var2.gaps[next_gap].offset) +
+                                         " lies outside the stream");
+        }
+        ++next_gap;
     }
     if (var2_data.size() > kMaxU32) {
         return write_fail(error, "Var2Data is too large to describe with a u32 size");

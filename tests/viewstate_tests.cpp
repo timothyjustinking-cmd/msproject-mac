@@ -2431,6 +2431,337 @@ void test_regenerate_view_state() {
     check(error.message.find("CTable") != std::string::npos, "seam: CTable message");
 }
 
+
+// ---------------------------------------------------------------------------
+// Wave 18 (F2): the CEdl cumulative-document cache, the CFilter criterion
+// framing / ...0007 record, the CGrouping body framing and the
+// CDrawing/CMap/CReport inventory.
+// ---------------------------------------------------------------------------
+
+struct FilterCriterionSpec {
+    std::uint32_t tag = 0;
+    std::uint32_t op = 0;
+    std::uint32_t field = 0;
+};
+
+std::vector<std::uint8_t> make_filter_block_full(
+    std::uint32_t ordinal,
+    std::uint32_t flags,
+    const std::vector<FilterCriterionSpec>& criteria,
+    const std::vector<std::string>& strings) {
+    const std::size_t table = msproject::viewstate::kFilterBlockHeaderSize +
+                              criteria.size() * msproject::viewstate::kFilterCriterionSize;
+    std::size_t total = table;
+    for (const auto& text : strings) {
+        total += text.size() * 2 + 2;
+    }
+    std::vector<std::uint8_t> payload(total, 0);
+    put_u32(payload, 0, ordinal);
+    put_u32(payload, 4, flags);
+    put_u16(payload, 14, static_cast<std::uint16_t>(criteria.size()));
+    put_u32(payload, 16, static_cast<std::uint32_t>(table));
+    for (std::size_t i = 0; i < criteria.size(); ++i) {
+        const std::size_t base = msproject::viewstate::kFilterBlockHeaderSize +
+                                 i * msproject::viewstate::kFilterCriterionSize;
+        put_u32(payload, base, criteria[i].tag);
+        put_u32(payload, base + 4, criteria[i].op);
+        put_u32(payload, base + 8, criteria[i].field);
+    }
+    std::size_t at = table;
+    for (const auto& text : strings) {
+        put_utf16(payload, at, text);
+        at += text.size() * 2 + 2;
+    }
+    return payload;
+}
+
+void test_edl_cache_residue() {
+    using namespace msproject::viewstate;
+    const std::vector<std::uint8_t> doc_a = make_edl_document(
+        {{0x26400018u, utf16_item("&Gantt Chart")},
+         {0x26400019u, utf16_item("Entry")},
+         {0x26400017u, field_list_bytes({0x0b40000eu, 0x0b400017u}, true)}});
+    const std::vector<std::uint8_t> doc_b = make_edl_document(
+        {{0x26400018u, utf16_item("&Tracking Gantt")},
+         {0x26400019u, utf16_item("Entry")},
+         {0x26400017u, field_list_bytes({0x0b40000eu}, false)}});
+
+    Parts parts = build_parts(160, {{"", ""}}, {});
+    parts.var2.clear();
+    append_block(parts.var2, doc_a);
+    const std::size_t block_b_offset = parts.var2.size() + 4;
+    parts.var2.insert(parts.var2.end(), {0x5e, 0x2a, 0x00, 0x00});
+    append_block(parts.var2, doc_b);
+    parts.var2.insert(parts.var2.end(), {0xff, 0xff, 0xff, 0xff});
+    parts.var_meta.assign(36, 0);
+    put_u32(parts.var_meta, 0, 0xFADFADBAu);
+    put_u32(parts.var_meta, 8, 1);
+    put_u32(parts.var_meta, 20, static_cast<std::uint32_t>(parts.var2.size()));
+    put_u32(parts.var_meta, 24, 1);
+    put_u32(parts.var_meta, 28, static_cast<std::uint32_t>(block_b_offset));
+    put_u32(parts.var_meta, 32, 0x20400006u);
+
+    Var2Stream strict;
+    ParseError strict_error;
+    check(!parse_var2(parts.var2, strict, &strict_error),
+          "CEdl cache: strict walk refuses the residue");
+    check(strict_error.message.find("remain") != std::string::npos,
+          "CEdl cache: strict message names the remainder");
+
+    const auto state = parse_or_fail("CEdl", parts);
+    check_eq(state.blocks.size(), std::size_t{2}, "CEdl cache: two document blocks");
+    check_eq(state.var2.gaps.size(), std::size_t{2}, "CEdl cache: two residue runs");
+    check(state.var2.cache_tolerant, "CEdl cache: marked cache-tolerant");
+    std::size_t residue = 0;
+    for (const auto& gap : state.var2.gaps) {
+        residue += gap.bytes.size();
+    }
+    check_eq(residue, std::size_t{8}, "CEdl cache: eight residue bytes");
+    if (state.var2.gaps.size() == 2) {
+        check_eq(state.var2.gaps[0].offset,
+                 static_cast<std::uint32_t>(block_b_offset - 4),
+                 "CEdl cache: first residue offset");
+        check_eq(state.var2.gaps[1].bytes.size(), std::size_t{4},
+                 "CEdl cache: trailing residue size");
+    }
+    check_eq(state.embedded_props.size(), std::size_t{2},
+             "CEdl cache: two documents decoded");
+    if (state.embedded_props.size() == 2) {
+        check_eq(state.embedded_props[1].view_name, std::string("&Tracking Gantt"),
+                 "CEdl cache: live document is the second");
+    }
+    check_eq(state.block_refs.size(), std::size_t{2}, "CEdl cache: block refs");
+    if (state.block_refs.size() == 2) {
+        check_eq(state.block_refs[1].uid, 1u, "CEdl cache: VarMeta names the second block");
+    }
+    check(has_warning(state, "cumulative document cache"), "CEdl cache: warning posted");
+    EncodedParts encoded;
+    check(encode_view_state(state, encoded, nullptr), "CEdl cache: encode");
+    check_same_parts(encoded, parts, "CEdl cache: no-op round-trip keeps the residue");
+
+    // A VarMeta offset that is not a block start is refused by the documented rule.
+    Parts bad_meta = parts;
+    put_u32(bad_meta.var_meta, 28, static_cast<std::uint32_t>(block_b_offset + 2));
+    ParseError error;
+    ViewState refused;
+    const PartSet bad_set{bad_meta.fixed_data, bad_meta.fixed_meta, bad_meta.var_meta,
+                          bad_meta.var2};
+    check(!parse_view_state("CEdl", bad_set, refused, &error),
+          "CEdl cache: VarMeta offset that is not a block start refused");
+    check(error.message.find("not a 214/CEdl document block start") != std::string::npos,
+          "CEdl cache: bad offset message");
+
+    // More than the bounded residue is refused too.
+    Parts too_far = build_parts(160, {{"", ""}}, {});
+    too_far.var2.clear();
+    append_block(too_far.var2, doc_a);
+    too_far.var2.insert(too_far.var2.end(), 12, std::uint8_t{0xAA});
+    append_block(too_far.var2, doc_b);
+    too_far.var_meta.assign(36, 0);
+    put_u32(too_far.var_meta, 0, 0xFADFADBAu);
+    put_u32(too_far.var_meta, 8, 1);
+    put_u32(too_far.var_meta, 20, static_cast<std::uint32_t>(too_far.var2.size()));
+    put_u32(too_far.var_meta, 24, 1);
+    put_u32(too_far.var_meta, 28,
+            static_cast<std::uint32_t>(doc_a.size() + 4 + 12));
+    put_u32(too_far.var_meta, 32, 0x20400006u);
+    error = ParseError{};
+    ViewState refused2;
+    const PartSet far_set{too_far.fixed_data, too_far.fixed_meta, too_far.var_meta,
+                          too_far.var2};
+    check(!parse_view_state("CEdl", far_set, refused2, &error),
+          "CEdl cache: residue over the bound refused");
+    check(error.message.find("not a Props-document cache walk") != std::string::npos,
+          "CEdl cache: over-bound message");
+
+    // The tolerance is CEdl-only: the same stream still fails as another class.
+    error = ParseError{};
+    ViewState not_edl;
+    const PartSet other_set{parts.fixed_data, parts.fixed_meta, parts.var_meta, parts.var2};
+    check(!parse_view_state("CGrouping", other_set, not_edl, &error),
+          "CEdl cache: tolerance is CEdl-only");
+    check(error.message.find("declares") != std::string::npos,
+          "CEdl cache: strict error kept for another class");
+
+    // Regenerating the live document inside a cache stream shifts the trailing
+    // residue and keeps it verbatim (the block before the gap grows).
+    Parts ctable_parts;
+    if (!make_ctable_parts("synthetic-viewstate-ctable-base.bin", ctable_parts)) {
+        return;
+    }
+    const Parts view_parts = make_view_parts();
+    auto ctable = parse_or_fail("CTable", ctable_parts);
+    auto views = parse_or_fail("CV_iew", view_parts);
+    auto cache_edl = parse_or_fail("CEdl", parts);
+    check(append_table_column(ctable, 0, 0x0b400057u, "Number1", nullptr),
+          "CEdl cache: append column");
+    WriteError regen_error;
+    check(regenerate_edl(cache_edl, ctable, &regen_error),
+          "CEdl cache: regenerate the live document");
+    EncodedParts regen_out;
+    check(encode_view_state(cache_edl, regen_out, nullptr),
+          "CEdl cache: encode after regeneration");
+    check(regen_out.var2_data.size() > parts.var2.size(),
+          "CEdl cache: regenerated stream grows");
+    if (regen_out.var2_data.size() > parts.var2.size()) {
+        const std::vector<std::uint8_t> tail_residue = {0xff, 0xff, 0xff, 0xff};
+        const bool kept =
+            std::search(regen_out.var2_data.begin(), regen_out.var2_data.end(),
+                        tail_residue.begin(), tail_residue.end()) != regen_out.var2_data.end();
+        check(kept, "CEdl cache: trailing residue preserved verbatim");
+    }
+    Parts regenerated_parts;
+    regenerated_parts.fixed_data = regen_out.fixed_data;
+    regenerated_parts.fixed_meta = regen_out.fixed_meta;
+    regenerated_parts.var_meta = regen_out.var_meta;
+    regenerated_parts.var2 = regen_out.var2_data;
+    const auto reparsed = parse_or_fail("CEdl", regenerated_parts);
+    check_eq(reparsed.blocks.size(), std::size_t{2}, "CEdl cache: re-parse keeps both blocks");
+    check_eq(reparsed.var2.gaps.size(), std::size_t{2},
+             "CEdl cache: re-parse keeps both residue runs");
+    if (reparsed.embedded_props.size() == 2 && !ctable.tables.empty()) {
+        const std::size_t expected_ids = ctable.tables[0].columns.size() - 1;
+        check_eq(reparsed.embedded_props[1].field_ids.size(), expected_ids,
+                 "CEdl cache: live field list regenerated from the table");
+        check_eq(reparsed.embedded_props[1].field_ids.back(), 0x0b400057u,
+                 "CEdl cache: appended field id is in the live field list");
+    }
+    if (reparsed.embedded_props.size() == 2 && state.embedded_props.size() == 2) {
+        check(reparsed.embedded_props[0].document.bytes ==
+                  state.embedded_props[0].document.bytes,
+              "CEdl cache: the stale document is left byte-identical");
+    }
+}
+
+void test_filter_criteria_payload() {
+    using namespace msproject::viewstate;
+    const std::vector<FilterCriterionSpec> criteria = {{11, 0, 0}, {7, 3, 0x0b40000eu}};
+    Parts parts = build_parts(
+        230, {{"&All Tasks", "All Tasks"}},
+        {{1, 0x20400006u,
+          make_filter_block_full(1, 0x100u, criteria, {"tasks", "Enter Task Name Here"})}});
+    std::vector<std::uint8_t> criteria_record = {0x00, 0x00};
+    const std::vector<std::uint8_t> label = utf16_item("All Tasks");
+    criteria_record.insert(criteria_record.end(), label.begin(), label.end());
+    attach_row_records(parts, 0, 230,
+                       {{0x20400007u, criteria_record},
+                        {0x20400009u, utf16_item("All Tasks")}});
+    const auto state = parse_or_fail("CFilter", parts);
+    check_eq(state.filters.size(), std::size_t{1}, "filter payload: row count");
+    if (state.filters.size() == 1) {
+        const auto& filter = state.filters[0];
+        check(filter.criteria_decoded, "filter payload: criterion framing decoded");
+        check_eq(filter.criterion_count, std::uint16_t{2}, "filter payload: criterion count");
+        check_eq(filter.block_flags, 0x100u, "filter payload: flags word");
+        check_eq(filter.string_table_offset, 92u, "filter payload: string table offset");
+        check_eq(filter.string_table.size(), std::size_t{2}, "filter payload: string count");
+        if (filter.string_table.size() == 2) {
+            check_eq(filter.string_table[0], std::string("tasks"),
+                     "filter payload: first string");
+            check_eq(filter.string_table[1], std::string("Enter Task Name Here"),
+                     "filter payload: prompt string");
+        }
+        check_eq(filter.applies_to, std::string("tasks"), "filter payload: applies-to");
+        check(filter.criteria_record_decoded, "filter payload: ...0007 decoded");
+        check_eq(filter.criteria_record_word, std::uint16_t{0},
+                 "filter payload: ...0007 word");
+        check_eq(filter.criteria_record_label, std::string("All Tasks"),
+                 "filter payload: ...0007 label");
+    }
+    EncodedParts encoded;
+    check(encode_view_state(state, encoded, nullptr), "filter payload: encode");
+    check_same_parts(encoded, parts, "filter payload: no-op round-trip");
+
+    // A count/offset disagreement keeps the framing opaque but still parses.
+    Parts bad = build_parts(
+        230, {{"&All Tasks", "All Tasks"}},
+        {{1, 0x20400006u, make_filter_block_full(1, 0x100u, criteria, {"tasks"})}});
+    put_u16(bad.var2, 4 + 14, 3);
+    const auto bad_state = parse_or_fail("CFilter", bad);
+    check_eq(bad_state.filters.size(), std::size_t{1}, "filter payload: bad count row");
+    if (bad_state.filters.size() == 1) {
+        check(!bad_state.filters[0].criteria_decoded,
+              "filter payload: mismatched count leaves the framing opaque");
+        check_eq(bad_state.filters[0].applies_to, std::string("tasks"),
+                 "filter payload: string table still decoded");
+    }
+    check(has_warning(bad_state, "string-table offset"), "filter payload: mismatch warning");
+}
+
+void test_grouping_body_framing() {
+    using namespace msproject::viewstate;
+    std::vector<std::uint8_t> stored(83, 0);
+    put_u32(stored, 0, 11);
+    put_u32(stored, 4, 0x100u);
+    put_u16(stored, 10, 1);
+    put_u32(stored, 12, 0x0b40021fu);
+    std::vector<std::uint8_t> empty(12, 0);
+    put_u32(empty, 0, 9);
+    put_u32(empty, 8, 0x100u);
+    Parts parts = build_parts(230,
+                              {{"&No Group", "No Task Group"}, {"Status", "Status"}},
+                              {{1, 0x20400006u, empty}, {2, 0x20400006u, stored}});
+    attach_row_records(parts, 0, 230, {{0x2D400009u, utf16_item("No Task Group")}});
+    attach_row_records(parts, 1, 230, {{0x2D400009u, utf16_item("Status")}});
+    const auto state = parse_or_fail("CGrouping", parts);
+    check_eq(state.groupings.size(), std::size_t{2}, "grouping body: row count");
+    if (state.groupings.size() == 2) {
+        check(!state.groupings[0].has_body, "grouping body: 12-byte block has no body");
+        check_eq(state.groupings[0].block_length, 12u, "grouping body: empty block size");
+        check(state.groupings[1].has_body, "grouping body: stored block has a body");
+        check_eq(state.groupings[1].block_length, 83u, "grouping body: stored block size");
+        check_eq(state.groupings[1].block_flags, 0x100u, "grouping body: flags word");
+        check_eq(state.groupings[1].header_word_8, 0u, "grouping body: word at +8");
+        check_eq(state.groupings[1].header_word_10, 1u, "grouping body: word at +10");
+        check(state.groupings[1].body_field_decoded, "grouping body: field id decoded");
+        check_eq(state.groupings[1].body_field_id, 0x0b40021fu,
+                 "grouping body: field id value");
+    }
+    EncodedParts encoded;
+    check(encode_view_state(state, encoded, nullptr), "grouping body: encode");
+    check_same_parts(encoded, parts, "grouping body: no-op round-trip");
+}
+
+void test_drawing_inventory() {
+    using namespace msproject::viewstate;
+    std::vector<std::uint8_t> body(64, 0x5a);
+    Parts drawing = build_parts(230,
+                                {{"Drawing 1", ""}, {"Drawing 2", ""}, {"Drawing 3", ""}},
+                                {{1, 0x2040000bu, body}});
+    const auto state = parse_or_fail("CDrawing", drawing);
+    check_eq(state.row_size, 230u, "drawing: row size");
+    check_eq(state.rows.size(), std::size_t{3}, "drawing: three rows");
+    check_eq(state.blocks.size(), std::size_t{1}, "drawing: one block");
+    check_eq(state.block_refs.size(), std::size_t{1}, "drawing: one block ref");
+    if (!state.rows.empty()) {
+        check(!state.rows[0].definition.decoded,
+              "drawing: row is not an inline record set");
+    }
+    if (!state.block_refs.empty()) {
+        check_eq(state.block_refs[0].kind, std::string("opaque"), "drawing: block stays opaque");
+    }
+    EncodedParts encoded;
+    check(encode_view_state(state, encoded, nullptr), "drawing: encode");
+    check_same_parts(encoded, drawing, "drawing: no-op round-trip");
+
+    // CMap and CReport are header-only in every measured tree.
+    for (const char* klass : {"CMap", "CReport"}) {
+        Parts empty;
+        empty.fixed_meta.assign(16, 0);
+        put_u32(empty.fixed_meta, 0, 0xFADFADBAu);
+        put_u32(empty.fixed_meta, 4, 4);
+        empty.var_meta.assign(24, 0);
+        put_u32(empty.var_meta, 0, 0xFADFADBAu);
+        const auto empty_state = parse_or_fail(klass, empty);
+        check_eq(empty_state.rows.size(), std::size_t{0}, "empty inventory: no rows");
+        check_eq(empty_state.blocks.size(), std::size_t{0}, "empty inventory: no blocks");
+        EncodedParts empty_encoded;
+        check(encode_view_state(empty_state, empty_encoded, nullptr),
+              "empty inventory: encode");
+        check_same_parts(empty_encoded, empty, "empty inventory: no-op round-trip");
+    }
+}
+
 void test_writer() {
     test_writer_roundtrip();
     test_writer_date_format();
@@ -2450,6 +2781,11 @@ void test_writer() {
     test_view_margin_edit();
     test_edl_regenerate();
     test_regenerate_view_state();
+    // Wave 18 (F2)
+    test_edl_cache_residue();
+    test_filter_criteria_payload();
+    test_grouping_body_framing();
+    test_drawing_inventory();
 }
 
 }  // namespace
@@ -2488,6 +2824,11 @@ int main(int argc, char** argv) {
     run("view-margins", test_view_margin_edit);
     run("edl-regenerate", test_edl_regenerate);
     run("regenerate", test_regenerate_view_state);
+    // Wave 18 (F2)
+    run("edl-cache", test_edl_cache_residue);
+    run("filter-payload", test_filter_criteria_payload);
+    run("grouping-payload", test_grouping_body_framing);
+    run("drawing-inventory", test_drawing_inventory);
     // The group name is for the separate ctest entries; the default run above
     // already covers every case individually.
     if (only == "writer") {
