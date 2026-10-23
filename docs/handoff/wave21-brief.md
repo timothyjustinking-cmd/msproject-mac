@@ -104,3 +104,51 @@ Each lane writes `docs/handoff/<lane>.md` (what changed, what was measured, what
 is inference) and `memory/<lane>.md` (short durable facts + traps), then reports
 to the coordinator with: files changed, exact commands, numbers, and anything it
 could not verify.  No git commands; the coordinator commits.
+
+
+## Visual review — operator's Windows build on a real file (2026-10-23)
+
+The operator ran the packaged Windows build (run 39898703443) on a real 83-task
+construction programme at a 1914x1008 client and sent screenshots, including the
+column-header and row context menus open.
+
+**Working, seen in the capture:** the file opens with its 30 reader warnings
+surfaced honestly; 88 links, 16 summaries, 10 milestones and 35 critical are
+reported; summary bars, task bars, milestone diamonds with labels, link lines,
+the week/month timescale, the caption strip, timeline Start/Finish, four view
+buttons and both context menus are present. This is the first real-project
+capture of the shell, not a fixture.
+
+**Verified mismatches (shot, not inferred):**
+
+1. **Painted header captions clip.**  "Task Mode" renders as "Task / Mod"
+   because the sort chevron overlaps the final letter at the DEFAULT 57 px
+   width; at the file's stored widths "Duration" renders "Dura" and
+   "Predecessors" "Predecess…".  The reference fits "Task"/"Mode" + arrow in
+   57 px.  Assigned to Q6 (caption layout + a painted gate), after the column
+   work.
+2. **The status bar's left segment is not "Ready".**  A loaded file shows the
+   diagnostic summary there ("83 tasks, 88 links … 30 reader warnings … Entry
+   widths …").  Decision 8 says "Ready left".  Assigned to Q6: keep Ready (or
+   the active message), move the summary to a tooltip/right detail, keep the
+   warning count visible.
+3. **The timeline strip draws EVERY task**, not the tasks added to the timeline
+   (`MainWindow::refresh_timeline` iterates `doc_.plan().tasks`).  On a real file
+   that reads as a segmented bar.  Decision 5 asks for the tasks added to the
+   timeline; until the file's timeline entries are decoded (or add-to-timeline
+   works), an honest empty prompt is better than all tasks.  Not in Q6's scope.
+4. **A classic menu bar is present** (File Edit View Insert Help) above the QAT;
+   the reference capture has none.  The spec allows the OS's native menu-bar
+   placement but does not ask for a desktop menu bar.  Operator decision needed.
+5. **Bar palette in this file:** normal bars are painted with the completion
+   colour (`#2f5f9a`) across their full width, so no critical red is visible even
+   though 35 tasks are critical.  This is expected if the tasks are 100 %
+   complete (the fill covers the body), but it cannot be judged without MS
+   Project's own rendering of this file.  Do NOT change bar colours on the
+   strength of this shot.
+
+**Needs Project's own capture of the same file** (oracle lock, copy first): the
+bar palette/critical treatment, the Indicators badges, the timeline strip's
+real content, and the status bar in a loaded file.  Project wins every
+disagreement; the default-theme reference has no bars, so these cannot be
+settled from `corpus/bench/msproject-gantt.png`.
