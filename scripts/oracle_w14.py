@@ -39,13 +39,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
-from oracle_lock import log, oracle_session                    # noqa: E402
+from oracle_lock import log, oracle_session, working_copy     # noqa: E402
 from oracle_w3 import (Guard, add_task, calc, new_project,     # noqa: E402
                        save, utc, val)
 
 PROBE = os.path.join(ROOT, "corpus", "probe")
-BASE = os.environ.get("W14_BASE",
-                      os.path.join(ROOT, "tests", "data", "synthetic-base.mpp"))
+BASE_SOURCE = os.environ.get(
+    "W14_BASE", os.path.join(ROOT, "tests", "data", "synthetic-base.mpp"))
+# Wave 23 (A-7b): every FileOpen below uses this working COPY.  The committed
+# fixture is never opened in place (Project rewrites a file it opens).
+BASE = working_copy(BASE_SOURCE, "w14")
 START = dt.datetime(2026, 10, 19, 8)
 
 TASK_NUMBER1 = 0x0B400057

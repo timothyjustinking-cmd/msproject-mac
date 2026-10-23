@@ -27,6 +27,7 @@ CLI
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -42,6 +43,24 @@ STALE_AFTER = 45 * 60          # a lock older than this is considered abandoned
 
 def log(msg):
     print(f"[oracle] {msg}", flush=True)
+
+
+WORK_DIR = os.path.join(ROOT, "build", "oracle-work")
+
+
+def working_copy(path, tag=""):
+    """Copy `path` under build/oracle-work and return the copy's path.
+
+    Wave 23 (A-7b): Project rewrites a file it opens (ReadOnly=False), and the
+    sync client has resurrected committed fixtures before.  Every oracle script
+    opens a COPY; the committed fixture is never handed to FileOpen.
+    """
+    os.makedirs(WORK_DIR, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(path))[0]
+    suffix = f"-{tag}" if tag else ""
+    target = os.path.join(WORK_DIR, f"{stem}{suffix}.mpp")
+    shutil.copyfile(path, target)
+    return target
 
 
 def project_pids():

@@ -173,16 +173,13 @@ fuzz_add_target(fuzz_parsers fuzz_parsers_main.cpp
 # History: core/formula's recursive-descent parser and evaluator had no nesting
 # guard, so 256 nested IIf calls / 384 nested parentheses overflowed the stack
 # (0xC00000FD on MSVC Release; 128 nested parentheses under ASan Debug).
-# FIXED 2026-10-22 in core/formula: kMaxFormulaDepth = 160, enforced in both
-# parse() (expr.cpp) and evaluate() (eval.cpp) with a positioned error.  These
-# two tests pin the refusal at 256 and 1024 levels; they were registered DISABLED
-# while the bug was open and are enabled now that the guard has landed.
-#
-# RESIDUAL: under MSVC ASan Debug the 160-level guard is still above the
-# sanitizer's stack limit (64/72 nested levels parse; 80+ overflows), so these
-# two tests fail in build\vs-w57-asan until kMaxFormulaDepth is lowered (to 64)
-# or the parser is made iterative.  They pass in Release.  Do not re-disable them
-# to make the ASan gate green -- that would hide the residual.
+# FIXED 2026-10-22 in core/formula, residual closed in wave 23:
+# kMaxFormulaDepth = 64, enforced in both parse() (expr.cpp) and evaluate()
+# (eval.cpp) with a positioned error.  These two tests pin the refusal at 256
+# and 1024 levels.  The wave-23 audit (A-8) found this comment and README still
+# said 160; the constant has been 64 since W57 F1 was closed, and at 64 the
+# guard is inside the MSVC ASan Debug stack limit, so these tests pass both in
+# Release and in build\vs-w57-asan.  Do not re-disable them.
 # ---------------------------------------------------------------------------
 foreach(depth 256 1024)
     add_test(NAME fuzz_deep_nesting_guard_${depth}

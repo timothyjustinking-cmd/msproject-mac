@@ -15,7 +15,7 @@ never written. Build trees: `build\vs-w57` (Release) and `build\vs-w57-asan`
 
 | id | severity | area | status |
 |---|---|---|---|
-| F1 | **Medium (product)** | `core/formula` recursion | **Release FIXED** (`kMaxFormulaDepth = 160`); **residual open**: the guard is too deep for ASan/small-stack builds (crash at 80 levels) |
+| F1 | **Medium (product)** | `core/formula` recursion | **FIXED** (`kMaxFormulaDepth = 64`; wave 23 corrected the stale 160 text and the ASan residual is closed at 64) |
 | F2 | Info (tooling) | the documented ASan configure command | worked around here, documentation bug in the brief |
 | F3 | Low (data provenance) | `tests/data/README.md` hash vs the committed fixture | open, coordinator action |
 | F4 | Info (tree) | `tests/fuzz` not wired into the top-level build | fixed by the coordinator during this audit |
@@ -26,15 +26,14 @@ F1.
 
 ---
 
-## F1 — `core/formula` recursion: the original crash is FIXED in Release, but the guard depth is still too deep for ASan / small stacks
+## F1 — `core/formula` recursion: FIXED at `kMaxFormulaDepth = 64`
 
-**Status.** FIXED for Release on 2026-10-22: W44 added
-`core::formula::kMaxFormulaDepth = 160`, enforced in `parse()`
-(`core/formula/expr.cpp`) and `evaluate()` (`core/formula/eval.cpp`) with a
-positioned error. Residual **open** problem: 160 levels cannot be reached under
-MSVC ASan Debug (the stack overflows at ~80 levels of ASan frames), so the
-sanitizer gate and `formula_tests` are still red. Severity stays **Medium** until
-the constant is lowered or the parser/evaluator is made iterative.
+**Status (wave-23 correction).** W44 added the guard on 2026-10-22 and it is
+**64**, not the 160 this file and the fuzz docs said; `tests/fuzz/README.md`,
+`tests/fuzz/CMakeLists.txt` and this file were stale (audit A-8).  At 64 the
+guard is inside the MSVC ASan Debug stack limit, so `formula_tests` and the two
+guard tests pass in Release and under ASan; the residual recorded below is
+closed.  The paragraph is kept for history with the corrected constant.
 
 **Severity: Medium.** A `.mpp` whose `114/Props` carries a deeply nested formula
 could kill the app with `0xC00000FD` (STATUS_STACK_OVERFLOW) when the file

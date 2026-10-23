@@ -5,7 +5,7 @@ checkout. Nothing here is client data.
 
 | file | what it is |
 |---|---|
-| `synthetic-base.mpp` | **synthetic** MPP14 fixture, 237,568 bytes, 3 tasks + project row. The only `.mpp` that may be committed. |
+| `synthetic-base.mpp` | **synthetic** MPP14 fixture, 237,568 bytes, 3 tasks + project row. Only synthetic `.mpp` files may be committed. |
 | `project_a_golden.tsv` | MS Project's own COM export of the PROJECT_A corpus file (83 live tasks), used as the oracle. See `project_a_golden.md`. |
 | `project_a_golden.md` | how the golden TSV was produced and what its columns mean |
 | `wave23-outline.mpp` | **synthetic** MPP14 fixture built by Project 2021 for wave 23: 3-level outline, FS+2 d / SS+1 d / FF links, one resource. See its provenance below. |
@@ -28,6 +28,40 @@ checkout. Nothing here is client data.
 - Regenerate with `python scripts/oracle_w23.py` (Project must be closed); the
   script writes to `build/w23/`, so copy the file here and update the hash only
   after a deliberate review of the reader dump.
+
+## Every tracked file and its SHA-256 (wave 23, A-8/A-7d)
+
+`scripts/check_fixtures.py` pins the four files whose content is quoted in
+docs or used as an oracle reference; this table is the complete inventory so a
+silent substitution is visible even for the small binaries.  These are the
+hashes at the wave-23 close (commit `e00e910`); regenerate the table in the
+same commit as any deliberate change -- never edit a fixture to make a test
+pass.  `README.md` cannot carry its own hash (it changes when this table does).
+
+| file | SHA-256 |
+|---|---|
+| `project_a_golden.md` | `03BA7AB54910BB8A766E69326A0C61ED9F14C18DDD5295C1EF1326B570A01DEC` |
+| `project_a_golden.tsv` | `A1B57D7E48E86B3A0536562521ED9962F34D3BDD2DE768FA86BEBD86830769B6` |
+| `project_a_links_golden.tsv` | `8C38C4F09CEC09028DA61BBBFA24EA1FD47D29452CE77D3E5AD2E9828B60FAD6` |
+| `project_a_preds_golden.sha256` | `E6F607073BAF551F2932330707D32A294085FFE2A4008139225597427C4D3CBB` |
+| `project_a_recalc_golden.tsv` | `36F156F618C94C92D70FBA6D754340D374DDE72E7D2FF136D1E22DBEE5400DB8` |
+| `reference/README.md` | `0357BFF58DDA4FF2FF59AB2CC788FF656588D28B5DD560B6547EB12AC150E1C0` |
+| `reference/wave23-outline-project.png` | `65463C83E7B5BA9C962D71231A72EB28F1B1D3D145AADE063FFCE36ABD137805` |
+| `scenarios/assignment-50pct.oracle.json` | `F569449EE16C92FB964DBE65760DC4623928D74F8E3601269292AB6B0A9D309A` |
+| `scenarios/constraint-mso.oracle.json` | `075FE8D6FA1624453B3D70C61224E5147DC7D65C2ABDB4A3BEF36995DEF291B9` |
+| `scenarios/constraint-snet.oracle.json` | `37F8963B5AE84CB426035FD893A13743224DC7B98F211906FDA3E62585651769` |
+| `scenarios/delete-task-with-successor.oracle.json` | `DDD9B9BF829AA0A02E4D3A28EBE90A9751370EF12471D37425D7EF932359FA96` |
+| `scenarios/duration-change.oracle.json` | `74644C7F4F7F838B5EDC0ACB1A7CB0A91F4F5EA72CBDF3A5ACE689AF468224BC` |
+| `scenarios/link-fs-lag.oracle.json` | `54F7B89CD8C88238DE82F70B2D264F03D13934526D82E79B0E1972E79691E76D` |
+| `scenarios/recalculate.oracle.json` | `43A9CE25C560530F4790206ECDDB1A1EB82702FD106CA7EEA2C8D09050025F2D` |
+| `scenarios/task-calendar.oracle.json` | `0F53B1F1565E1A5D29B3C1875EB120423C526951A29849E8BC439D0127E043F9` |
+| `synthetic-base.mpp` | `55C109F2F62FD6B9F05789AB002C35991A424AAB18C78F92E4200DF7B3FC6069` |
+| `synthetic-calendars.mpp` | `F486F0C3235BD8A592542E942141FE873C4262E6AFA19E029A9C4C79386017CA` |
+| `synthetic-props.bin` | `8739CDB83D96210ED3874AD14055F02C88B97F9C5FF74C343AD04D548B8E0334` |
+| `synthetic-viewstate-ctable-base.bin` | `80573060BBACC24B656F9A6FF70BF907A421BEE0677C2F99A8F7D3AB5993F4B9` |
+| `synthetic-viewstate-ctable-col.bin` | `7B753DFE1C930CF95C6C2E3D75A821505A2B6F43C35FB42C30979D824E5FF52E` |
+| `synthetic-viewstate-ctable-date.bin` | `E106E86452C37F4EA73263F043AE5EF1280BEEF46999C62271933960705EB3CB` |
+| `wave23-outline.mpp` | `055721FF07E93F8C8C06B8428E9EF3495D10A38BE8C432506FCB5FF3A786DA20` |
 
 ## `synthetic-base.mpp` — provenance
 

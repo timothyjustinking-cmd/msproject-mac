@@ -105,14 +105,12 @@ deterministic. A per-case 2 s ceiling fails a slow case with its seed.
 `core/formula`'s recursive-descent parser and evaluator originally had no
 nesting guard: 256 nested `IIf` calls or 384 nested parentheses overflowed the
 stack (`0xC00000FD` on MSVC Release; 128 nested parentheses under ASan Debug).
-**FIXED in Release on 2026-10-22**: `core::formula::kMaxFormulaDepth = 160` is
-enforced by `parse()` and `evaluate()` with a positioned error, and the guard
-tests at 256/1024 levels pass. **Residual open issue:** 160 levels are still
-deeper than an MSVC ASan Debug stack survives (ASan overflows at ~80), so
-`formula_tests` and the two guard tests fail in `build\vs-w57-asan` even though
-Release is green. Suggested fix: lower the constant to 64 or make the parser
-iterative. Full detail and repros: `docs/audit-findings.md` (F1). The default
-fuzz run deliberately stays at depth ≤ 64 so it is safe under ASan.
+**FIXED in Release on 2026-10-22**, and the ASan residual was closed in wave 23:
+`core::formula::kMaxFormulaDepth = 64` is enforced by `parse()` and
+`evaluate()` with a positioned error, and the guard tests at 256/1024 levels
+pass in Release and under MSVC ASan Debug (the old 160-level guard was deeper
+than an ASan stack survives).  The default fuzz run stays at depth ≤ 64, which is
+now exactly the guard.  Full detail and repros: `docs/audit-findings.md` (F1).
 
 ## What this lane does not cover
 

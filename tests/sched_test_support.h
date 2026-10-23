@@ -81,6 +81,11 @@ class TestContext {
                   << expected << "\")\n";
     }
 
+    // Wave 23 (A-7a): a caller that writes committed data must be able to ask
+    // whether anything has already failed, so it never rewrites a golden after
+    // a failed assertion.
+    bool failed() const noexcept { return failures_ != 0; }
+
     int finish(const std::string& name) const {
         if (failures_ == 0) {
             std::cout << name << ": " << checks_ << " checks passed\n";

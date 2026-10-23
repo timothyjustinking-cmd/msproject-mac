@@ -22,7 +22,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
-from oracle_lock import oracle_session
+from oracle_lock import oracle_session, working_copy
 from oracle_w3 import Guard, calc, val
 
 BENCH = os.path.join(ROOT, "corpus", "bench")
@@ -60,8 +60,10 @@ def capture(path):
 
 
 def main():
-    fixture = sys.argv[1] if len(sys.argv) > 1 else FIXTURE
-    out = {"fixture": os.path.relpath(fixture, ROOT)}
+    source = sys.argv[1] if len(sys.argv) > 1 else FIXTURE
+    # Wave 23 (A-7b): open a COPY under build/, never the committed fixture.
+    fixture = working_copy(source, "msproj-bench")
+    out = {"fixture": os.path.relpath(source, ROOT)}
     with oracle_session() as app:
         with Guard(300):
             app.FileOpen(Name=fixture, ReadOnly=False)
