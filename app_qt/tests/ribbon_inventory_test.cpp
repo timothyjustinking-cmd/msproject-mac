@@ -32,10 +32,13 @@
 // switching back shows it (through the real menu QAction path).
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QFile>
 #include <QFontMetrics>
 #include <QLabel>
 #include <QList>
+#include <QMenu>
 #include <QPoint>
 #include <QRect>
 #include <QString>
@@ -150,11 +153,10 @@ QStringList titles_of(const std::vector<TabPin>& pins) {
     return titles;
 }
 
-// The pin kinds this gate models: only a plain button.  Everything else (combo,
-// checkbox, gallery, dialog launcher) lives in ribbon_pin_unmodelled.tsv and is
-// not built; if one appears in the modelled pin, the gate must fail rather than
-// treat it as a button.
-bool pin_kind_is_button(const std::string& kind) { return kind == "button"; }
+// Wave 25 (W25-7/S9): the kind comparison is pin-kind vs LIVE WIDGET CLASS, not
+// pin-kind vs the string "button".  The classifier is RibbonBar::control_kind;
+// a pin row that says combo while the port builds a QToolButton (or a live
+// combo where the pin says button) turns the inventory check red.
 
 // The active tab's group captions from the live captions, in page order.  Also
 // fills `boxes` with the group box that owns each caption.
@@ -195,15 +197,20 @@ void check_inventory(msqt::RibbonBar* ribbon, const TabPin& pin, int tab_index) 
         const GroupPin& group = pin.groups[group_index];
         const QStringList labels = ribbon->group_button_labels(static_cast<int>(group_index));
         QStringList pin_labels;
-        for (const ButtonPin& button : group.buttons) {
+        for (std::size_t button_index = 0; button_index < group.buttons.size();
+             ++button_index) {
+            const ButtonPin& button = group.buttons[button_index];
             pin_labels.push_back(QString::fromUtf8(button.label.c_str()));
-            // Wave 24 (W24-12/R15): the pin's KIND column is asserted.  The
-            // live inventory this gate compares is a list of text buttons; a
-            // pin row for a combo/checkbox/gallery must not silently pass as
-            // one.  A combo built as a button therefore turns this red.
-            gate::check(pin_kind_is_button(button.kind),
+            // Wave 25 (W25-7/S9): compare the pin's KIND column with the kind
+            // of the LIVE control, classified from its QWidget class.  A pin
+            // that says combo/checkbox/gallery where the port builds a plain
+            // button fails, and (once a combo exists) the reverse fails too.
+            const QString live_kind = ribbon->group_control_kind(
+                static_cast<int>(group_index), static_cast<int>(button_index));
+            gate::check(live_kind == QString::fromUtf8(button.kind.c_str()),
                         (where + " / " + group.title + ": pin kind '" + button.kind +
-                         "' is a button control")
+                         "' is the live control's kind (live: " +
+                         live_kind.toStdString() + ")")
                             .c_str());
         }
         gate::check(labels == pin_labels,
@@ -421,12 +428,31 @@ int main(int argc, char** argv) {
     }
     const QString fixture = QString::fromLocal8Bit(argv[1]);
 
-    // Wave 24 (W24-12/R15): prove the kind predicate itself -- a combo must not
-    // be accepted as a button, or the pin's kind column would be decorative.
-    gate::check(pin_kind_is_button("button"), "a button pin is a button");
-    gate::check(!pin_kind_is_button("combo"), "a combo pin is not a button");
-    gate::check(!pin_kind_is_button("checkbox"), "a checkbox pin is not a button");
-    gate::check(!pin_kind_is_button(""), "an empty kind is not a button");
+    // Wave 25 (W25-7/S9): prove the classifier on REAL widgets of each class --
+    // a string comparison against the pin would stay green when the port built
+    // a combo as a button.
+    {
+        QWidget parent;
+        QToolButton plain_button(&parent);
+        QToolButton gallery_button(&parent);
+        QMenu gallery_menu(&gallery_button);
+        gallery_button.setMenu(&gallery_menu);
+        QComboBox combo(&parent);
+        QCheckBox checkbox(&parent);
+        gate::check(msqt::RibbonBar::control_kind(&plain_button) ==
+                        QStringLiteral("button"),
+                    "a QToolButton with no menu is a button");
+        gate::check(msqt::RibbonBar::control_kind(&gallery_button) ==
+                        QStringLiteral("gallery"),
+                    "a QToolButton with a menu is a gallery control");
+        gate::check(msqt::RibbonBar::control_kind(&combo) == QStringLiteral("combo"),
+                    "a QComboBox is a combo, not a button");
+        gate::check(msqt::RibbonBar::control_kind(&checkbox) ==
+                        QStringLiteral("checkbox"),
+                    "a QCheckBox is a checkbox, not a button");
+        gate::check(msqt::RibbonBar::control_kind(nullptr) == QStringLiteral("none"),
+                    "no widget has no kind");
+    }
 
     msqt::MainWindow window;
     window.resize(msqt::kParityWidth, msqt::kParityHeight);

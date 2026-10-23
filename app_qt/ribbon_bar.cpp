@@ -2,7 +2,9 @@
 
 #include "ribbon_bar.h"
 
+#include <QCheckBox>
 #include <QColor>
+#include <QComboBox>
 #include <QFont>
 #include <QFontMetrics>
 #include <QFrame>
@@ -690,6 +692,38 @@ void RibbonBar::set_active_tab(int index) {
         }
     }
     build_page(index);
+}
+
+QString RibbonBar::control_kind(const QWidget* control) {
+    if (control == nullptr) {
+        return QStringLiteral("none");
+    }
+    if (qobject_cast<const QComboBox*>(control) != nullptr) {
+        return QStringLiteral("combo");
+    }
+    if (qobject_cast<const QCheckBox*>(control) != nullptr) {
+        return QStringLiteral("checkbox");
+    }
+    if (const auto* button = qobject_cast<const QToolButton*>(control)) {
+        // A tool button that opens a menu is the gallery/drop-down shape; a
+        // plain one is the command button.
+        return button->menu() != nullptr ? QStringLiteral("gallery")
+                                         : QStringLiteral("button");
+    }
+    return QStringLiteral("unknown");
+}
+
+QString RibbonBar::group_control_kind(int group_index, int button_index) const {
+    if (group_index < 0 ||
+        static_cast<std::size_t>(group_index) >= page_buttons_.size()) {
+        return QStringLiteral("none");
+    }
+    const std::vector<QToolButton*>& group =
+        page_buttons_[static_cast<std::size_t>(group_index)];
+    if (button_index < 0 || static_cast<std::size_t>(button_index) >= group.size()) {
+        return QStringLiteral("none");
+    }
+    return control_kind(group[static_cast<std::size_t>(button_index)]);
 }
 
 QStringList RibbonBar::group_button_labels(int group_index) const {

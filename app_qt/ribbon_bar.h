@@ -62,6 +62,11 @@ class RibbonBar final : public QWidget {
     // outside the current page returns empty.
     QStringList group_button_labels(int group_index) const;
     app::MenuAction group_button_action(int group_index, int button_index) const;
+    // Wave 25 (W25-7/S9): the kind of a live control, read from the WIDGET's
+    // class -- never from the pin file.  `control_kind` is public and static so
+    // the inventory gate can prove the classifier with real QWidgets.
+    static QString control_kind(const QWidget* control);
+    QString group_control_kind(int group_index, int button_index) const;
 
     // Buttons with a modelled command call the handler; the rest report through
     // the same handler with MenuAction::none (MainWindow shows "not wired").
