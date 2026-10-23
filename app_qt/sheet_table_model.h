@@ -98,6 +98,11 @@ class SheetTableModel final : public QAbstractTableModel {
     // The SheetModel column showing `field`, or kNoIndex.
     std::size_t visible_column_for_field(core::view::FieldId field) const;
 
+    // Wave 23 (B-1): the frozen gutter's caption for a displayed row -- the
+    // file's own ID column value, including the project row's "0".  Falls back
+    // to the display ordinal when the row has no stored ID.
+    QString row_number_text(int display_row) const;
+
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     int columnCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;

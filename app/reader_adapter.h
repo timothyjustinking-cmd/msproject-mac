@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -132,11 +133,24 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     input.title = document.project.title;
     input.project_start = date32_from_packed(document.project.start.raw);
     input.project_finish = date32_from_packed(document.project.finish.raw);
+    input.project_duration_ticks = static_cast<std::int64_t>(document.project.duration_ticks);
+    input.project_percent_complete = document.project.percent_complete;
 
     input.tasks.reserve(document.tasks.size());
     for (const mpp::Task& task : document.tasks) {
         input.tasks.push_back(task_row_from_mpp(task));
     }
+    // Wave 23 (B-1): Project displays tasks in ID order (the ID column is the
+    // row order), while the file stores them in FixedData/creation order -- on
+    // corpus/project_a.mpp the first stored row is ID 13.  The reader already
+    // decodes the stored ID (+0) and the outline chain; sorting here makes the
+    // RecordSet, the sheet, the Gantt and every row-wise gate consume Project's
+    // order.  Equal IDs keep the reader's order (a file cannot normally have
+    // two live rows with the same ID).
+    std::stable_sort(input.tasks.begin(), input.tasks.end(),
+                     [](const TaskRow& left, const TaskRow& right) {
+                         return left.id < right.id;
+                     });
 
     input.links.reserve(document.links.size());
     for (const mpp::Link& link : document.links) {

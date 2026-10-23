@@ -31,6 +31,7 @@
 
 #include "entry_columns.h"  // DisplayColumn / EntryCellKind (wave 21)
 
+class QEvent;
 class QMenu;
 class QPainter;
 class QPaintEvent;
@@ -146,6 +147,22 @@ class EntryItemDelegate final : public QStyledItemDelegate {
     // resource/usage grids are ordinary text cells.
     void set_entry_mode(bool enabled) { entry_mode_ = enabled; }
 
+    // Wave 23 (B-1): the outline the Name cell draws -- text indent per level,
+    // a collapse/expand triangle on summary rows, and a click on it toggles.
+    // The lookups take a DISPLAY row (the adapter's row, after any filter).
+    using OutlineLevelLookup = std::function<int(int display_row)>;
+    using ChildrenLookup = std::function<bool(int display_row)>;
+    using CollapsedLookup = std::function<bool(int display_row)>;
+    using ToggleHandler = std::function<void(int display_row)>;
+    void set_hierarchy_column(int display_column) { hierarchy_column_ = display_column; }
+    void set_outline_lookups(OutlineLevelLookup level, ChildrenLookup children,
+                             CollapsedLookup collapsed, ToggleHandler toggle) {
+        level_lookup_ = std::move(level);
+        children_lookup_ = std::move(children);
+        collapsed_lookup_ = std::move(collapsed);
+        toggle_handler_ = std::move(toggle);
+    }
+
     // Wave 21: which column carries the Task Mode pin (and which is the Add New
     // Column stub) is the live presentation's business -- a loaded file's table
     // can put Task Mode anywhere, or not have it at all.  The window points this
@@ -157,8 +174,18 @@ class EntryItemDelegate final : public QStyledItemDelegate {
     void paint(QPainter* painter, const QStyleOptionViewItem& option,
                const QModelIndex& index) const override;
 
+    // Wave 23: a click in the outline triangle toggles the row.
+    bool editorEvent(QEvent* event, QAbstractItemModel* model,
+                     const QStyleOptionViewItem& option,
+                     const QModelIndex& index) override;
+
   private:
     bool entry_mode_ = true;
+    int hierarchy_column_ = -1;
+    OutlineLevelLookup level_lookup_;
+    ChildrenLookup children_lookup_;
+    CollapsedLookup collapsed_lookup_;
+    ToggleHandler toggle_handler_;
     std::function<EntryCellKind(int)> kind_lookup_;
 };
 

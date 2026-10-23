@@ -579,6 +579,10 @@ class SheetModel {
      * invalid coordinate (a blank cell, not an error). */
     std::string cell_text(std::size_t row, std::size_t column) const;
 
+    /* One field's display text regardless of whether a column shows it --
+     * the frozen row-number gutter reads the stored ID this way (wave 23). */
+    std::string field_text(std::size_t row, FieldId field) const;
+
     CellStyle cell_style(std::size_t row, std::size_t column) const;
 
     /* The same rendering the model uses, for the shell's own use (a formatter

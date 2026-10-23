@@ -195,6 +195,13 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
     try {
         const mpp::Document document = mpp::load_file(source_path);
         loaded_ = app::plan_input_from_document(document);
+        // Wave 23 (B-1): Project's project-summary row, ID 0, is on in the
+        // clean reference capture.  It is an APPLICATION setting, not a stored
+        // one: saving the same file with DisplayProjectSummaryTask off and on
+        // produced byte-identical `214` parts and no meaningful `114/Props`
+        // difference (scripts/oracle_w23.py, 2026-10-23).  The shell owns the
+        // default until the Format tab's checkbox exists.
+        loaded_.show_project_summary = true;
         loaded_.source_name = std::filesystem::path(source_path).filename().string();
         warnings_ = document.warnings.size();
         title_ = loaded_.title;
@@ -256,9 +263,16 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
         row_map_ = std::move(filtered);
     }
     // The Gantt is rebuilt from exactly the displayed rows, never panned, so
-    // Gantt row N is displayed ordinal N (app/selection_model.h).
+    // Gantt row N is displayed ordinal N (app/selection_model.h).  The display
+    // plan carries the synthetic project row (wave 23) so a RecordSet row index
+    // and a plan task index are the same number.
+    app::PlanInput display = view_;
+    if (base_.show_project_summary) {
+        display.tasks.insert(display.tasks.begin(),
+                             app::project_summary_row(display));
+    }
     const core::gantt::GanttSource source =
-        app::make_gantt_source_for_rows(view_, row_map_.rows, {}, core::gantt::kDateNa);
+        app::make_gantt_source_for_rows(display, row_map_.rows, {}, core::gantt::kDateNa);
     // No status-date marker: app::today_date32() would make the offscreen render
     // change every day, and this wave's render must be deterministic.
     core::gantt::Timescale timescale = app::timescale_for_zoom(view_, app::gantt_zoom(zoom));

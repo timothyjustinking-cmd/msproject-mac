@@ -4,7 +4,8 @@
 // tests/data/synthetic-base.mpp, which is read-only here: this test never saves.
 // It asserts the three things the brief names:
 //
-//   * the fixture loads and shows its 3 task rows (and 3 Gantt bars);
+//   * the fixture loads and shows the project row plus its 3 task rows (and
+//     the matching 4 Gantt bars, wave 23 B-1);
 //   * the QMenuBar's command list is app::menu_specs() -- same menus, same
 //     command order, same titles, same MenuAction ids;
 //   * the window renders 900x560 and the PNG it writes reads back at 900x560.
@@ -68,12 +69,14 @@ int main(int argc, char** argv) {
     }
 
     // --- the loaded plan ---------------------------------------------------
-    check(window.sheet_row_count() == 3, "the fixture shows 3 sheet rows");
-    check(window.gantt_bar_count() == 3, "the fixture has 3 Gantt bars");
+    // Wave 23 (B-1): the sheet shows Project's project-summary row (ID 0) ahead
+    // of the fixture's three tasks, and the Gantt draws its project bar.
+    check(window.sheet_row_count() == 4, "the fixture shows the project row + 3 task rows");
+    check(window.gantt_bar_count() == 4, "the fixture has the project bar + 3 task bars");
     check(window.sheet_view() != nullptr, "the window owns a sheet view");
     if (window.sheet_view() != nullptr && window.sheet_view()->model() != nullptr) {
-        check(window.sheet_view()->model()->rowCount() == 3,
-              "the table model's row count is 3");
+        check(window.sheet_view()->model()->rowCount() == 4,
+              "the table model's row count is the project row + 3 tasks");
         check(window.sheet_view()->model()->columnCount() == 9,
               "the table model shows the 9 Entry columns (the gutter is the frozen row "
               "header, wave 18 Q3)");

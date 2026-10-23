@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "entry_columns.h"
+#include "layout_model.h"  // app::task_field_id (the stored ID field)
 #include "shell_style.h"
 
 namespace msqt {
@@ -137,6 +138,25 @@ std::size_t SheetTableModel::visible_column_for_field(core::view::FieldId field)
         }
     }
     return core::sheet::kNoIndex;
+}
+
+QString SheetTableModel::row_number_text(int display_row) const {
+    if (sheet_ == nullptr || display_row < 0) {
+        return {};
+    }
+    const std::size_t row = record_row(display_row);
+    if (row == core::sheet::kNoIndex) {
+        return {};
+    }
+    // Project's ID column is the frozen gutter.  It is read from the RecordSet
+    // by field, not by looking for a visible column: the stored table for a
+    // loaded file does not carry ID as a scrolling column.
+    const core::view::FieldId id_field = app::task_field_id("ID");
+    const std::string text = sheet_->field_text(row, id_field);
+    if (!text.empty()) {
+        return QString::fromStdString(text);
+    }
+    return QString::number(display_row + 1);
 }
 
 std::size_t SheetTableModel::column_for_display(int display_column) const {

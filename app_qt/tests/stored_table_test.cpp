@@ -361,8 +361,9 @@ void case_synthetic_non_entry(const QString& fixture, const QString& out_dir) {
           "the stored ID column is not a scrolling display column");
 
     // Editing still works on a file-driven column: the Name column is display 0
-    // and writes the model field the Gantt/undo/save path reads.
-    const QModelIndex job = model->index(0, 0);
+    // and writes the model field the Gantt/undo/save path reads.  Row 0 is the
+    // project summary row (wave 23 B-1); the first file task is row 1.
+    const QModelIndex job = model->index(1, 0);
     check(model->flags(job).testFlag(Qt::ItemIsEditable), "the renamed Task Name column is editable");
     check(model->setData(job, QStringLiteral("Renamed by the gate"), Qt::EditRole),
           "a cell edit on a file-driven column commits");
@@ -370,15 +371,15 @@ void case_synthetic_non_entry(const QString& fixture, const QString& out_dir) {
     const std::size_t name_model_column =
         window.sheet_table_model()->visible_column_for_field(name_field);
     check(name_model_column != core::sheet::kNoIndex, "the sheet model has the Name field");
-    check(window.sheet()->cell_text(0, name_model_column) == "Renamed by the gate",
+    check(window.sheet()->cell_text(1, name_model_column) == "Renamed by the gate",
           "the edit reached the core sheet model");
     check(window.sheet()->undo(), "the edit is one undo step");
-    check(window.sheet()->cell_text(0, name_model_column) != "Renamed by the gate",
+    check(window.sheet()->cell_text(1, name_model_column) != "Renamed by the gate",
           "undo restored the loaded name");
 
     // A Start edit is what the save diff collects: it must mark the document dirty.
     check(!window.document_dirty(), "a freshly loaded file has nothing pending");
-    const QModelIndex begin = model->index(0, 1);
+    const QModelIndex begin = model->index(1, 1);
     check(model->flags(begin).testFlag(Qt::ItemIsEditable), "the Begin (Start) column is editable");
     check(model->setData(begin, QStringLiteral("2026-11-02 08:00"), Qt::EditRole),
           "a date edit on the file's Begin column commits");
@@ -386,14 +387,15 @@ void case_synthetic_non_entry(const QString& fixture, const QString& out_dir) {
           "the Start edit is the pending change the save would write");
 
     // A column with no save path is read-only: no fake edit.
-    const QModelIndex discipline = model->index(0, 4);
+    const QModelIndex discipline = model->index(1, 4);
     check(!model->flags(discipline).testFlag(Qt::ItemIsEditable),
           "the Discipline (Text1) column is read-only");
     check(!model->setData(discipline, QStringLiteral("nope"), Qt::EditRole),
           "the read-only column refuses an edit");
 
     // The task/Gantt row map is untouched by the presentation change.
-    check(window.sheet_row_count() == 3, "the synthetic table keeps the three task rows");
+    check(window.sheet_row_count() == 4,
+          "the synthetic table keeps the project row and three task rows");
     check(window.gantt_bar_count() >= 1, "the Gantt still draws the plan's bars");
 
     // Wave 22: this table's "Depends On" (0x0b40002f) and "Who" (0x0b400031)
@@ -789,8 +791,14 @@ void case_corpus(const QString& corpus) {
             continue;
         }
         const std::uint32_t uid = sheet.row_uid(record);
+        if (uid == 0) {
+            // Wave 23 (B-1): the synthetic project-summary row, ID 0, always
+            // first and never a live task of the file.
+            check(display == 0, "the project summary row is the first displayed row");
+            continue;
+        }
         const app::TaskRow* task = task_by_uid(plan, uid);
-        check(task != nullptr, "every displayed row is a live task of the file");
+        check(task != nullptr, "every displayed task row is a live task of the file");
         if (task == nullptr) {
             continue;
         }
