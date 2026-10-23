@@ -10,6 +10,11 @@ checkout. Nothing here is client data.
 | `project_a_golden.md` | how the golden TSV was produced and what its columns mean |
 | `wave23-outline.mpp` | **synthetic** MPP14 fixture built by Project 2021 for wave 23: 3-level outline, FS+2 d / SS+1 d / FF links, one resource. See its provenance below. |
 | `wave23-flags.mpp` | the same fixture after Project set Task.Flag10 (0x0b400051) True on ID 3; the measured byte for the SUMMARY column (W23-6). SHA256 `6B74A9DA…F1B80958`. |
+| `wave24-summary-off.mpp` | synthetic-base saved by Project 2021 with the project-summary row OFF (214/Props 0x03400009 = 0); wave 24 W24-2. |
+| `wave24-summary-on.mpp` | the same file with the row ON (0x03400009 = 1); the only difference from the off save is that record and per-save handles. |
+| `wave24-timeline-hidden.mpp` | synthetic-base saved with the Timeline strip hidden (214/Props 0x03400008 empty); `synthetic-base.mpp` is its shown partner ("Time&line"). |
+| `wave24-order.mpp` | FileNew project Alpha..Delta, then a task inserted above row 1 and saved; stored order differs from ID order (W24-5). |
+| `wave24-flags20.mpp` | wave23-outline.mpp with Task.Flag1..Flag20 all True on ID 3 (wave 24 W24-15); the generic flag decode's fixture. |
 | `synthetic-calendars.mpp` | synthetic two-calendar fixture (wave 19, `scripts/build_calendar_fixture.py`) |
 
 ## `wave23-outline.mpp` — provenance (wave 23)
@@ -47,7 +52,7 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `project_a_preds_golden.sha256` | `E6F607073BAF551F2932330707D32A294085FFE2A4008139225597427C4D3CBB` |
 | `project_a_recalc_golden.tsv` | `36F156F618C94C92D70FBA6D754340D374DDE72E7D2FF136D1E22DBEE5400DB8` |
 | `reference/README.md` | `0357BFF58DDA4FF2FF59AB2CC788FF656588D28B5DD560B6547EB12AC150E1C0` |
-| `reference/wave23-outline-project.measures.json` | `121A594A256078F4AF16669E3390822A8899E8B44526A2E7C26C1FD44404C290` |
+| `reference/wave23-outline-project.measures.json` | `3CA8261885BD930F234149C8C65894B892F797A89FAE0DFB249FEA85271D60E0` |
 | `scenarios/assignment-50pct.oracle.json` | `F569449EE16C92FB964DBE65760DC4623928D74F8E3601269292AB6B0A9D309A` |
 | `scenarios/constraint-mso.oracle.json` | `075FE8D6FA1624453B3D70C61224E5147DC7D65C2ABDB4A3BEF36995DEF291B9` |
 | `scenarios/constraint-snet.oracle.json` | `37F8963B5AE84CB426035FD893A13743224DC7B98F211906FDA3E62585651769` |
@@ -64,6 +69,11 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `synthetic-viewstate-ctable-date.bin` | `E106E86452C37F4EA73263F043AE5EF1280BEEF46999C62271933960705EB3CB` |
 | `wave23-outline.mpp` | `055721FF07E93F8C8C06B8428E9EF3495D10A38BE8C432506FCB5FF3A786DA20` |
 | `wave23-flags.mpp` | `6B74A9DAEA67F0759A6A465BAD63D20556C8A06EFFFEDCE3EBF71CF4F1B80958` |
+| `wave24-order.mpp` | `515537D2B86415F85A3D15FB320C3F5A0EBB7A0951FF43CBCD00DC6B2BF6DDAF` |
+| `wave24-summary-off.mpp` | `0EF4DE69CC9C2CF6D3C6568C86B9A8B708DE6E8CCC8D404BC4FBE82AE4A6C391` |
+| `wave24-summary-on.mpp` | `90BF1055E1FF415E453208C04123C2A2F869E38D950237DF116D59D2E53C7C05` |
+| `wave24-timeline-hidden.mpp` | `9BE6D2E9343149F58DE7800F3F840B158AC90C4F0403423BF8167396EC2E61E4` |
+| `wave24-flags20.mpp` | `1C74D403B7EB5280D57F1D6264D6A17B28A2F9578AF15F40282FDDC44CC471FF` |
 
 ## `synthetic-base.mpp` — provenance
 

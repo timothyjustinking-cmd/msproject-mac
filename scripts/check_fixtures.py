@@ -37,12 +37,37 @@ DOCUMENTED = {
     # fixture.  The screenshot itself stays local (operator ruling 2026-10-23);
     # only the numbers are committed, and this is the CI parity reference.
     "tests/data/reference/wave23-outline-project.measures.json":
-        "121A594A256078F4AF16669E3390822A8899E8B44526A2E7C26C1FD44404C290",
+        "3CA8261885BD930F234149C8C65894B892F797A89FAE0DFB249FEA85271D60E0",
     # Wave 23 (W23-6): wave23-outline.mpp opened by Project 2021 on a copy,
     # Task.Flag10 set True on ID 3 and saved (the control save first).  The
     # reader's Flag10 decode is checked against this file.
     "tests/data/wave23-flags.mpp":
         "6B74A9DAEA67F0759A6A465BAD63D20556C8A06EFFFEDCE3EBF71CF4F1B80958",
+    # Wave 24 (W24-2): Project 2021's own save of synthetic-base with Format >
+    # Project Summary Task OFF and ON, built by scripts/oracle_w24.py under a
+    # neutral path with neutral Author/Manager/Company/UserName.  The reader
+    # decodes 214/Props 0x03400009 (0/1) from them; both fixtures store the
+    # Timeline shown (0x03400008 = "Time&line").
+    "tests/data/wave24-summary-off.mpp":
+        "0EF4DE69CC9C2CF6D3C6568C86B9A8B708DE6E8CCC8D404BC4FBE82AE4A6C391",
+    "tests/data/wave24-summary-on.mpp":
+        "90BF1055E1FF415E453208C04123C2A2F869E38D950237DF116D59D2E53C7C05",
+    # Wave 24 (W24-3): the same synthetic project saved with the Timeline strip
+    # hidden in Project (214/Props 0x03400008 = empty).  Its shown partner is
+    # synthetic-base.mpp, whose record is "Time&line".
+    "tests/data/wave24-timeline-hidden.mpp":
+        "9BE6D2E9343149F58DE7800F3F840B158AC90C4F0403423BF8167396EC2E61E4",
+    # Wave 24 (W24-5): a FileNew project with four tasks, then a task inserted
+    # above row 1 and saved.  Project appends the new FixedData row but displays
+    # it as ID 2, so the stored order (Alpha, Bravo, Charlie, Delta, Inserted
+    # Row) differs from ID order -- deleting the adapter's ID sort now fails CI.
+    "tests/data/wave24-order.mpp":
+        "515537D2B86415F85A3D15FB320C3F5A0EBB7A0951FF43CBCD00DC6B2BF6DDAF",
+    # Wave 24 (W24-15): wave23-outline.mpp with Task.Flag1..Flag20 all True on
+    # ID 3, built by the one-flag-at-a-time measurement (measure_flags.py).
+    # The reader's generic flag table is checked against this file.
+    "tests/data/wave24-flags20.mpp":
+        "1C74D403B7EB5280D57F1D6264D6A17B28A2F9578AF15F40282FDDC44CC471FF",
 }
 
 

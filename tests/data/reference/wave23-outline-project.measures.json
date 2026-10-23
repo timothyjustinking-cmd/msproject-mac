@@ -1,9 +1,9 @@
 {
   "image": {
-    "path": "local-only Project capture of tests/data/wave23-outline.mpp (not committed; operator ruling 2026-10-23)",
+    "path": "local-only Project capture of tests/data/wave23-outline.mpp with Scroll to Task applied (bars in view); not committed; operator ruling 2026-10-23.  Recaptured for wave 24 (W24-11) so colour.task_bar is found.",
     "width": 1920,
-    "height": 1040,
-    "sha256": "65463c83e7b5ba9c962d71231a72eb28f1b1d3d145aade063ffce36abd137805"
+    "height": 1032,
+    "sha256": "3f447ca01831529a74ebab0effcd444dd77bbae6c7f5d6bcc1ed6917d6a3bf92"
   },
   "background": [
     255,
@@ -17,7 +17,7 @@
         1051
       ],
       [
-        1171,
+        1172,
         1219
       ],
       [
@@ -95,7 +95,7 @@
     "row_height_fraction": {
       "found": true,
       "unit": "fraction of image height",
-      "value": 0.02115
+      "value": 0.02132
     },
     "header_height_px": {
       "found": true,
@@ -174,12 +174,14 @@
       ]
     },
     "colour.task_bar": {
-      "found": false,
+      "found": true,
       "unit": "rgb",
-      "value": null
+      "value": [
+        116,
+        204,
+        212
+      ]
     }
   },
-  "notes": [
-    "colour.task_bar: not found"
-  ]
+  "notes": []
 }
