@@ -27,6 +27,12 @@ DOCUMENTED = {
         "F486F0C3235BD8A592542E942141FE873C4262E6AFA19E029A9C4C79386017CA",
     "tests/data/project_a_recalc_golden.tsv":
         "36F156F618C94C92D70FBA6D754340D374DDE72E7D2FF136D1E22DBEE5400DB8",
+    # Wave 23 (W23-1/W23-7/W23-8): the 3-level outline fixture built through
+    # Project 2021 by scripts/oracle_w23.py -- six synthetic tasks, an FS+2 d
+    # link, an SS+1 d link, an FF link and "Resource A" assigned to the last
+    # task.  No client content.
+    "tests/data/wave23-outline.mpp":
+        "055721FF07E93F8C8C06B8428E9EF3495D10A38BE8C432506FCB5FF3A786DA20",
 }
 
 
