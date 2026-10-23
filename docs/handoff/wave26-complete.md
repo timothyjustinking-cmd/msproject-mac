@@ -453,7 +453,7 @@ Every log also carries `check_fixtures.py` (25 documented hashes, 21 tracked
 and on the working-tree content) and the 8-hex grep (no matches).  `app` is
 16/16 from W26-3.1 on: the new `app_view_style` is the sixteenth test (29
 checks at 3.1, 47 at 3.2, 54 at 3.3).  The core `viewstate` test grew from 791
-to 844 checks.
+checks to 820 (W26-3.1), 832 (W26-3.2) and 844 (W26-3.3).
 
 ## Found, not fixed
 
