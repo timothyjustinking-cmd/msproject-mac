@@ -459,7 +459,8 @@ checks to 820 (W26-3.1), 832 (W26-3.2) and 844 (W26-3.3).
 
 No new Critical or High finding in G3.  Notes for later work, all deliberate:
 
-- **PROJECT_A's yellow row.**  The capture's row "client-text-032" has a yellow cell fill.  The file's Highlighted text-style
+- **PROJECT_A's yellow row.**  The capture's row 10 (a milestone) has a
+  yellow cell fill.  The file's Highlighted text-style
   record carries no background (its colour flag is 0xFF = automatic), so the
   fill is a per-row cell format that neither the style record nor the reader
   decodes.  The decoder and renderer DO support a stored highlight fill
