@@ -108,6 +108,16 @@ DOCUMENTED = {
         "0D1F5FF13FB55F98D3AAE8647FB7FAA725C5B85E561B92B99A3D78E5065A92AE",
     "tests/data/wave25-flag17.mpp":
         "B7F9EDF6A35D61E6B17FEBFFC8FB6378325CD29E9F01FAB9D8002A23330AC0EB",
+    # Wave 26 (W26-3.1): the applied Gantt view's style record and the 214/Props
+    # FONT_BASES payload, extracted read-only from tests/data/synthetic-base.mpp
+    # (view 2, "&Gantt Chart").  Project 2021's own MPP14 bytes; the blobs carry
+    # no path, host name or task text (checked by the name/path scan).  The
+    # decoder's offsets are pinned by scripts/oracle_w26.py's one-change-per-save
+    # session (build/w26/g3/), so these are a real file's bytes, not synthetic.
+    "tests/data/synthetic-gantt-style.bin":
+        "B9FD3240CCB0EBD7B94AF17824C1FE104F44BC860AD4DCE093AF7BFD75B23CF4",
+    "tests/data/synthetic-gantt-fonts.bin":
+        "BEC0B057A37AE959A123BBC28C052366C6134DCC7DF6C5DE308FA897C568F478",
 }
 
 
