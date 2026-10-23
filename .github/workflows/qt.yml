@@ -183,10 +183,9 @@ jobs:
         shell: bash
         run: cmake --build build-qt --config Release
 
-      # A RUNNABLE Windows build, not only the render PNGs.  windeployqt copies
-      # the Qt DLLs and plugins next to the exe (and --compiler-runtime the MSVC
-      # runtime), so the zip runs on a machine with no Qt installed.  The macOS
-      # and Linux jobs get the equivalent below: a .app bundle and an AppImage.
+      # The tests set QT_QPA_PLATFORM=offscreen and QT_SCALE_FACTOR=1 themselves
+      # (${CMAKE_COMMAND} -E env in app_qt/CMakeLists.txt).  Deliberately not
+      # repeated here: a test that forgot them must fail, not inherit a pass.
       - name: Test (offscreen renders + parity geometry)
         shell: bash
         run: ctest --test-dir build-qt --output-on-failure --timeout 60
@@ -201,11 +200,10 @@ jobs:
           test -s build-qt/test-out/qt-render-parity.png
           ls -l build-qt/test-out/qt-render-parity.png
 
-      # Prove the AppImage is a program, not just a file: run the packaged file
-      # itself (not build-qt/msproject_qt).  --render is offscreen and writes a
-      # PNG, so no window server is needed; it exits non-zero if the bundled Qt
-      # or the offscreen plugin did not make it into the AppImage.  Deliberately
-      # after ctest, so a packaging smoke cannot hide the UI gate's result.
+      # A RUNNABLE Windows build, not only the render PNGs.  windeployqt copies
+      # the Qt DLLs and plugins next to the exe (and --compiler-runtime the MSVC
+      # runtime), so the zip runs on a machine with no Qt installed.  The macOS
+      # and Linux jobs get the equivalent below: a .app bundle and an AppImage.
       - name: Package the Windows build
         if: runner.os == 'Windows'
         shell: bash
@@ -367,9 +365,11 @@ jobs:
           test -s dist/msproject-linux-x86_64.AppImage
           ls -l dist/msproject-linux-x86_64.AppImage
 
-      # The tests set QT_QPA_PLATFORM=offscreen and QT_SCALE_FACTOR=1 themselves
-      # (${CMAKE_COMMAND} -E env in app_qt/CMakeLists.txt).  Deliberately not
-      # repeated here: a test that forgot them must fail, not inherit a pass.
+      # Prove the AppImage is a program, not just a file: run the packaged file
+      # itself (not build-qt/msproject_qt).  --render is offscreen and writes a
+      # PNG, so no window server is needed; it exits non-zero if the bundled Qt
+      # or the offscreen plugin did not make it into the AppImage.  Deliberately
+      # after ctest, so a packaging smoke cannot hide the UI gate's result.
       - name: Run the packaged Linux AppImage (offscreen smoke)
         if: runner.os == 'Linux'
         shell: bash

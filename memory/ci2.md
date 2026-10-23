@@ -18,7 +18,7 @@ that two more platforms get a runnable package and Linux gets a post-test smoke.
 | `ubuntu-latest` | `linux-qt` | new | `msproject-linux-<sha>` | AppImage (linuxdeploy + plugin-qt) |
 | all | — | unchanged | `qt-window-<os>-<sha>` | the four render PNGs |
 
-Steps 10 → 17. File 428 lines, 20,920 bytes, LF-only, no tabs. Triggers
+Steps 10 → 17. File 428 lines, 21,363 bytes, LF-only, no tabs. Triggers
 (`workflow_dispatch` + `v*` tags), `permissions: contents: read`, concurrency,
 matrix, Qt 6.5.3, configure flags, the pin guard, ctest and the render artifact
 are unchanged. No caching anywhere (`cache: 'false'` on install-qt still, no
@@ -98,14 +98,17 @@ are unchanged. No caching anywhere (`cache: 'false'` on install-qt still, no
     the value to appimagetool as its output argument, so both are exported with
     the same value: `mv msproject-linux-x86_64.AppImage dist/` is deterministic
     and does not guess appimagetool's default name.
-12. **Smoke run is a separate step after ctest.** It executes the AppImage
-    itself (`APPIMAGE_EXTRACT_AND_RUN=1 QT_QPA_PLATFORM=offscreen
+12. **Smoke run is a separate step, and the whole packaging phase is after the
+    test gate.** The smoke executes the AppImage itself
+    (`APPIMAGE_EXTRACT_AND_RUN=1 QT_QPA_PLATFORM=offscreen
     ./dist/... --render ... | tee`) and greps `rendered 900x560`, i.e. the same
-    contract the CMake test uses. It was originally inside the packaging step;
-    splitting it means a speculative runtime check cannot suppress ctest and the
-    render upload. The packaging steps themselves stay before ctest, where the
-    Windows step already was (wave 19), to keep the diff minimal; the trade-off
-    is recorded in the handoff.
+    contract the CMake test uses. Per the wave-20 coordinator decision, the
+    order is now `Build → ctest → parity render → Package Windows → Package
+    macOS → Package Linux → smoke → uploads`: ctest always runs before any
+    speculative packaging, so a macdeployqt/linuxdeploy problem cannot hide the
+    concurrent app_qt test results. Because the package steps keep the default
+    success condition, a red test/parity run skips packaging and the package
+    uploads warn; that is the intended "no package for a red run".
 13. **`libxcb-cursor0` added to the Linux apt line.** Qt 6.5's `libqxcb.so` links
     `libxcb-cursor.so.0`; Ubuntu's `qt6-base-dev` (distro Qt 6.4) does not pull
     it. linuxdeploy copies the plugin and resolves its dependencies, so without
@@ -205,10 +208,11 @@ asserted in the validator, not just intended.
 - **`continuous` floats.** Unlike the Qt pin, linuxdeploy/plugin-qt/appimagetool
   move under you. If the packaging step starts failing for no code reason, pin
   the two URLs to a dated release tag; do not switch to distro `linuxdeployqt`.
-- **The packaging steps run before ctest.** A red packaging step skips the tests
-  and makes the render upload red (missing files). If that becomes annoying, move
-  the three `Package ...` steps below the parity gate; the smoke step is already
-  after ctest for this reason.
+- **Ordering is the point: packaging runs after the test gate.** Do not move the
+  `Package ...` steps back above `Test` — the coordinator explicitly ordered
+  `Build → ctest → parity → packages → smoke → uploads` so a speculative
+  macdeployqt/linuxdeploy failure cannot skip ctest. The consequence to accept:
+  a red test/parity run skips packaging (the package uploads then warn).
 - **Render artifact globs.** Anything named `build-qt/*.png` or
   `build-qt/test-out/*.png` joins the render artifact. The AppImage work writes
   under `build-qt/appimage/` deliberately; keep new packaging output out of

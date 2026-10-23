@@ -28,9 +28,12 @@ every platform has one download a user can run:
 - **Windows package is byte-for-byte the same commands**; only its comment
   changed.
 - **A new smoke step** (`Run the packaged Linux AppImage (offscreen smoke)`)
-  executes the AppImage after `ctest` and before the uploads. It is separate from
-  the packaging step on purpose: a packaging smoke must not be able to hide the
-  UI gate's result.
+  executes the AppImage after the test gate and before the uploads.
+- **Ordering**: all three package steps and the smoke step run after the test
+  gate (`Build → ctest → parity render → Package Windows/macOS/Linux → smoke →
+  uploads`), so a packaging problem cannot skip ctest and hide the concurrent
+  app_qt tests. A red test/parity run therefore skips packaging (the package
+  uploads warn); the render artifact still uploads.
 - **Unchanged on purpose**: the three-row matrix (`ubuntu-latest`,
   `windows-2022`, `macos-14`), Qt `6.5.3` via `jurplel/install-qt-action@v4`
   with the same arches, the same configure flags, the pinned-Qt guard, the
@@ -122,7 +125,7 @@ distro Qt. `EXTRA_PLATFORM_PLUGINS` adds the offscreen plugin next to the xcb
 plugin linuxdeploy deploys by default; it is only there so the smoke run needs no
 window server.
 
-Smoke step (after `ctest`):
+Smoke step (after the test gate and the three package steps):
 
 ```bash
 APPIMAGE_EXTRACT_AND_RUN=1 QT_QPA_PLATFORM=offscreen \
@@ -162,7 +165,8 @@ writes no PNGs.
 
 `python build/ci2-w20/validate-workflow.py` parses the file (normalising the
 YAML 1.1 `on:` → `True` trap) and asserts triggers, permissions, concurrency,
-matrix, Qt pin, cache-off, configure/guard/ctest/parity, the three package steps
+matrix, Qt pin, cache-off, configure/guard/ctest/parity, the exact step order
+(`Build → ctest → parity → packages → smoke → uploads`), the three package steps
 and the four uploads. Output (exit 0):
 
 ```
@@ -179,11 +183,11 @@ steps: 17
   - Configure
   - Prove configure used the pinned Qt
   - Build
+  - Test (offscreen renders + parity geometry)
+  - The 1920x1032 parity render was written [if: always()]
   - Package the Windows build [if: runner.os == 'Windows']
   - Package the macOS build as a .app bundle [if: runner.os == 'macOS']
   - Package the Linux build as an AppImage [if: runner.os == 'Linux']
-  - Test (offscreen renders + parity geometry)
-  - The 1920x1032 parity render was written [if: always()]
   - Run the packaged Linux AppImage (offscreen smoke) [if: runner.os == 'Linux']
   - Upload the Windows build [if: always() && runner.os == 'Windows']
   - Upload the macOS bundle [if: always() && runner.os == 'macOS']
@@ -274,13 +278,15 @@ no `git`, no dispatch, no installs.
    `codesign --force --deep --sign - "$app"`, and note that an unsigned arm64
    bundle will not launch.
 
-Known trade-off, stated rather than discovered: the package steps sit before
-`ctest` (where the original Windows step already was), so a packaging failure
-skips the test step and the render upload is red for missing files. To change
-that, move the three `Package ...` steps below
-`The 1920x1032 parity render was written`; their commands need no edit. The new
-Linux smoke deliberately runs after `ctest` already, so the AppImage packaging
-itself is the only new pre-test gate.
+Ordering (wave-20 coordinator decision): the package steps sit **after**
+`The 1920x1032 parity render was written`, i.e. `Build → ctest → parity render →
+Package Windows → Package macOS → Package Linux → AppImage smoke → uploads`.
+ctest always runs first, so a speculative macdeployqt/linuxdeploy failure cannot
+skip it and hide the concurrent app_qt test results. The package steps keep the
+default success condition, so a red ctest or parity gate skips packaging and the
+package uploads warn (no artifact) — that is the intended "do not publish a
+package of a red run"; the render artifact still uploads, because its upload is
+`always()`.
 
 ## (g) User-facing notes (put these in the release text if there is one)
 
