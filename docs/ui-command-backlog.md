@@ -72,7 +72,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Project | Schedule | Calculate Project | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Project | Schedule | Set Baseline | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Project | Schedule | Move Project | disabled | future: the ribbon command is not modelled by app::MenuAction |
-| Project | Status | Status Date | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Project | Status | Update Project | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | Project | Proofing | Spelling | disabled | future: the ribbon command is not modelled by app::MenuAction |
 | View | Task Views | Gantt Chart | disabled | future: the ribbon command is not modelled by app::MenuAction |
@@ -161,6 +160,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 101 (89 disabled)
+* ribbon commands: 100 (88 disabled)
 * menu commands: 44 (2 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

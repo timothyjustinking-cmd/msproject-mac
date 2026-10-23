@@ -703,8 +703,7 @@ int main(int argc, char** argv) {
                 ++rows;
             }
         }
-        gate::check(rows == 1,
-                    "only the Project Status Date field is still unmodelled (W26-1.5)");
+        gate::check(rows == 0, "ribbon_pin_unmodelled.tsv is empty");
         std::fprintf(stderr, "note: unmodelled backlog rows: %d\n", rows);
     }
 
@@ -842,7 +841,7 @@ int main(int argc, char** argv) {
     gate::check(live_launcher >= 2, "the group dialog launchers are live");
     gate::check(live_checkbox >= 8, "the check boxes are live");
     gate::check(live_combo >= 7, "the combos are live");
-    // (W26-1.5 adds the Status Date field and its live-kind check.)
+    gate::check(live_field >= 1, "the Status Date field is live");
     gate::check(overflow_tabs_1920 == 0,
                 "at 1920 every tab shows its whole measured inventory");
 

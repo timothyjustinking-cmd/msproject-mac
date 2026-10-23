@@ -184,7 +184,7 @@ GroupSpec& check(GroupSpec& group, const char* label, RibbonCommand command, int
     return group;
 }
 
-[[maybe_unused]] GroupSpec& field(GroupSpec& group, const char* label, int width, int row,
+GroupSpec& field(GroupSpec& group, const char* label, int width, int row,
                                  int col) {
     add(group, label, Kind::field, width, row, col, 1, 1, app::MenuAction::none,
         RibbonCommand::none, "NA", 0, false, false);
@@ -334,9 +334,8 @@ const std::vector<TabSpec>& tab_specs() {
         large(project_schedule, "Set\nBaseline", app::MenuAction::none, 48, 1);
         large(project_schedule, "Move\nProject", app::MenuAction::none, 46, 2);
         GroupSpec& status = add_group(project, "Status", 133);
-        // W26-1.5 (next commit in this group): the measured Status Date field.
-        large(status, "Status\nDate", app::MenuAction::none, 58, 0);
-        large(status, "Update\nProject", app::MenuAction::none, 68, 1);
+        field(status, "Status Date", 126, 0, 0);
+        small(status, "Update Project", app::MenuAction::none, 100, 1, 0);
         GroupSpec& proofing = add_group(project, "Proofing", 63);
         large(proofing, "Spelling", app::MenuAction::none, 52, 0);
         tabs.push_back(std::move(project));

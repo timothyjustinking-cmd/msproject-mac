@@ -12,8 +12,7 @@
 # button), `small` (one 22-px stack row), `split` (a button with a drop-down),
 # `combo`, `checkbox`, `field` (a date field) and `gallery` (the Gantt Chart
 # Style 16-swatch palette).  `launcher` is the group's dialog launcher.
-# app_qt/ribbon_pin_unmodelled.tsv carries only the Project Status Date field,
-# which W26-1.5 (the last item of this group) turns into a date field.
+# app_qt/ribbon_pin_unmodelled.tsv is now empty (header only).
 #
 # Format: tab, contextual(0/1), group, kind, label, enabled(0/1), icon key,
 #         stack row (0..2; -1 = not a stack row), state.
@@ -134,8 +133,8 @@ Project	0	Schedule	button	Calculate Project	0	schedule.calculate	0	-
 Project	0	Schedule	button	Set Baseline	0	schedule.set_baseline	0	-
 Project	0	Schedule	button	Move Project	0	schedule.move	0	-
 Project	0	Status	group	-	-	-	-	-
-Project	0	Status	button	Status Date	0	status.date	0	-
-Project	0	Status	button	Update Project	0	status.update	0	-
+Project	0	Status	field	Status Date	0	-	0	NA
+Project	0	Status	small	Update Project	0	-	1	-
 Project	0	Proofing	group	-	-	-	-	-
 Project	0	Proofing	button	Spelling	0	proofing.spelling	0	-
 View	0	Task Views	group	-	-	-	-	-
