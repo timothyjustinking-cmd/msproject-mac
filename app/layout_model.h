@@ -164,7 +164,28 @@ struct PlanInput {
     date32 project_start = kDateNa;
     date32 project_finish = kDateNa;
     std::size_t skipped_links = 0;  // links whose endpoint the reader did not know
+
+    /* Wave 23 (B-1): Project's project-summary row, shown as ID 0 above the
+     * top-level tasks.  The values come from the file's project row.
+     *
+     * `show_project_summary` is a PRESENTATION switch, not a stored fact:
+     * `Project.DisplayProjectSummaryTask` was measured on this machine, saved
+     * off and on, and the two saves differ in no `214` part and only in the
+     * per-save handle/timestamp bytes of `114/Props` -- Project keeps this
+     * setting in the application, not in the .mpp.  The shell therefore owns
+     * the default (on, matching the clean capture) and a later Format tab
+     * toggle.  A new project has no project row. */
+    bool show_project_summary = false;
+    std::int64_t project_duration_ticks = 0;
+    std::uint16_t project_percent_complete = 0;
 };
+
+// The synthetic TaskRow make_record_set() puts at row 0 when
+// `input.show_project_summary` is set.  Its outline_level is -1: the project
+// row and Project's top-level tasks share the same text indent in the clean
+// capture, while the row is still the parent whose collapse hides everything.
+// uid and id are 0 in Project; `summary` is true and `critical` false.
+TaskRow project_summary_row(const PlanInput& input);
 
 // ---------------------------------------------------------------------------
 // Conversions

@@ -264,6 +264,24 @@ core::view::Value value_of_custom_field(const mpp::CustomFieldValue& field) {
     return custom_field_value(field);
 }
 
+TaskRow project_summary_row(const PlanInput& input) {
+    TaskRow row;
+    row.uid = 0;  // Project's project row is UniqueID/ID 0
+    row.id = 0;
+    row.name = input.title;
+    row.duration_ticks = input.project_duration_ticks;
+    row.percent_complete = input.project_percent_complete;
+    row.start = input.project_start;
+    row.finish = input.project_finish;
+    // -1: same text indent as Project's top-level tasks (the clean capture), and
+    // still the parent of every level-0 task, so collapsing it hides the plan.
+    row.outline_level = -1;
+    row.summary = true;
+    row.milestone = false;
+    row.critical = false;
+    return row;
+}
+
 core::view::RecordSet make_record_set(const PlanInput& input) {
     const TaskFields& field = task_fields();
     core::view::RecordSet records(core::model::RecordType::Task);
@@ -290,7 +308,7 @@ core::view::RecordSet make_record_set(const PlanInput& input) {
         }
     }
 
-    for (const TaskRow& row : input.tasks) {
+    auto write_row = [&records, &field](const TaskRow& row) {
         const std::size_t index = records.add_row(row.uid);
         auto put = [&records, index](FieldId id, Value value) {
             if (id != 0) {
@@ -332,6 +350,14 @@ core::view::RecordSet make_record_set(const PlanInput& input) {
                 put(custom.field_id, std::move(value));
             }
         }
+    };
+
+    // Wave 23 (B-1): Project's project-summary row, ID 0, ahead of the tasks.
+    if (input.show_project_summary) {
+        write_row(project_summary_row(input));
+    }
+    for (const TaskRow& row : input.tasks) {
+        write_row(row);
     }
     return records;
 }
@@ -343,52 +369,60 @@ core::view::FieldId task_field_id(std::string_view field_name) {
 PlanInput sync_plan_from_records(const PlanInput& base, const core::view::RecordSet& records) {
     PlanInput input = base;
     const TaskFields& field = task_fields();
-    const std::size_t rows = std::min(input.tasks.size(), records.row_count());
+    // Wave 23 (B-1): the RecordSet carries the synthetic project row (uid 0)
+    // ahead of the tasks when the presentation shows it; the plan itself does
+    // not, so index 0 of the task list is RecordSet row 1 in that case.
+    const std::size_t offset =
+        (base.show_project_summary && records.row_count() > 0 && records.uid(0) == 0) ? 1 : 0;
+    const std::size_t rows =
+        std::min(input.tasks.size(), records.row_count() - offset);
     for (std::size_t index = 0; index < rows; ++index) {
         TaskRow& row = input.tasks[index];
-        row.uid = records.uid(index);
+        const std::size_t record = index + offset;
+        row.uid = records.uid(record);
 
-        if (const Value* value = records.get(index, field.name);
+        if (const Value* value = records.get(record, field.name);
             value != nullptr && value->kind == core::view::ValueKind::Text) {
             row.name = value->text;
         }
         // A Null date is a cleared cell, not "leave the old value": clearing a
         // start makes the task undated, which the Gantt then draws no bar for.
-        if (const Value* value = records.get(index, field.start); value != nullptr) {
+        if (const Value* value = records.get(record, field.start); value != nullptr) {
             row.start = value->kind == core::view::ValueKind::Date
                             ? date32_from_date_value(value->date)
                             : kDateNa;
         }
-        if (const Value* value = records.get(index, field.finish); value != nullptr) {
+        if (const Value* value = records.get(record, field.finish); value != nullptr) {
             row.finish = value->kind == core::view::ValueKind::Date
                              ? date32_from_date_value(value->date)
                              : kDateNa;
         }
-        if (const Value* value = records.get(index, field.duration); value != nullptr &&
+        if (const Value* value = records.get(record, field.duration); value != nullptr &&
             (value->kind == core::view::ValueKind::Duration ||
              value->kind == core::view::ValueKind::Integer)) {
             row.duration_ticks = value->integer;
         }
-        if (const Value* value = records.get(index, field.percent_complete);
+        if (const Value* value = records.get(record, field.percent_complete);
             value != nullptr && value->kind == core::view::ValueKind::Integer) {
             const std::int64_t percent = std::clamp<std::int64_t>(value->integer, 0, 100);
             row.percent_complete = static_cast<std::uint16_t>(percent);
         }
-        if (const Value* value = records.get(index, field.summary);
+        if (const Value* value = records.get(record, field.summary);
             value != nullptr && value->kind == core::view::ValueKind::Bool) {
             row.summary = value->boolean;
         }
-        if (const Value* value = records.get(index, field.milestone);
+        if (const Value* value = records.get(record, field.milestone);
             value != nullptr && value->kind == core::view::ValueKind::Bool) {
             row.milestone = value->boolean;
         }
-        if (const Value* value = records.get(index, field.critical);
+        if (const Value* value = records.get(record, field.critical);
             value != nullptr && value->kind == core::view::ValueKind::Bool) {
             row.critical = value->boolean;
         }
-        if (const Value* value = records.get(index, field.outline_level);
+        if (const Value* value = records.get(record, field.outline_level);
             value != nullptr && value->kind == core::view::ValueKind::Integer) {
-            row.outline_level = static_cast<int>(std::max<std::int64_t>(value->integer, 0));
+            // -1 is the project-summary row (wave 23); every task level is >= 0.
+            row.outline_level = static_cast<int>(std::max<std::int64_t>(value->integer, -1));
         }
     }
     input.skipped_links = base.skipped_links;

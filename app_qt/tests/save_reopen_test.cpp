@@ -125,8 +125,10 @@ int main(int argc, char** argv) {
         return 1;
     }
     QApplication::processEvents();
-    check(window.sheet_row_count() == 3, "the copied fixture shows 3 sheet rows");
-    check(window.gantt_bar_count() == 3, "the copied fixture has 3 Gantt bars");
+    // Wave 23 (B-1): the sheet and Gantt show the project-summary row (ID 0)
+    // ahead of the fixture's three tasks.
+    check(window.sheet_row_count() == 4, "the copied fixture shows the project row + 3 tasks");
+    check(window.gantt_bar_count() == 4, "the copied fixture has the project bar + 3 task bars");
     check(!window.document_dirty(), "a freshly opened plan is not dirty");
 
     QTableView* sheet = window.sheet_view();
@@ -159,7 +161,8 @@ int main(int argc, char** argv) {
     check(edited_uid != 0, "the fixture's first task has a UniqueID");
 
     // --- Undo/Redo through the real sheet stack and the menu actions ---------
-    const QModelIndex duration_index = model->index(1, duration_column);
+    // Row 1 is the fixture's first task (row 0 is the project summary row).
+    const QModelIndex duration_index = model->index(2, duration_column);
     const QString duration_before = model->data(duration_index, Qt::DisplayRole).toString();
     check(model->setData(duration_index, QStringLiteral("5d"), Qt::EditRole),
           "a Duration edit commits through the shell's model path");
@@ -191,7 +194,7 @@ int main(int argc, char** argv) {
     }
 
     // --- A Start edit: the one cell edit the file writer persists ------------
-    const QModelIndex start_index = model->index(0, start_column);
+    const QModelIndex start_index = model->index(1, start_column);
     check(model->setData(start_index, QStringLiteral("2026-03-02 08:00"), Qt::EditRole),
           "a Start edit commits through the shell's model path");
     check(window.pending_start_edits() == 1, "exactly one start edit is pending");
@@ -214,8 +217,10 @@ int main(int argc, char** argv) {
         ++g_failures;
     } else {
         QApplication::processEvents();
-        check(window.sheet_row_count() == 3, "the saved file reopens with 3 sheet rows");
-        check(window.gantt_bar_count() == 3, "the saved file reopens with 3 Gantt bars");
+        check(window.sheet_row_count() == 4,
+              "the saved file reopens with the project row + 3 task rows");
+        check(window.gantt_bar_count() == 4,
+              "the saved file reopens with the project bar + 3 task bars");
         check(window.loaded_task_count() == 3, "the saved file reopens with 3 tasks");
         check(!window.document_dirty(), "the reopened file has no pending edits");
         check(window.table_widths_read(), "the saved file keeps its 214/CTable widths");

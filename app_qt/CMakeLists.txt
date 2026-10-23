@@ -272,6 +272,31 @@ else()
 endif()
 
 # ===========================================================================
+# WAVE 23 (B-1/A-3): the loaded file's rows are Project's rows -- ID order with
+# the outline and the project-summary row 0.  The committed fixtures run in CI;
+# the corpus case pins the clean capture's first thirteen rows (ID, indent
+# level, name HASH only) and is registered only where the corpus exists.
+# ===========================================================================
+add_executable(qt_task_order_tests tests/task_order_test.cpp)
+target_link_libraries(qt_task_order_tests PRIVATE qt_shell)
+qt_set_warnings(qt_task_order_tests)
+
+add_test(NAME qt_task_order
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_task_order_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
+
+if(EXISTS "${QT_REPO_ROOT}/corpus/project_a.mpp")
+    add_test(NAME qt_task_order_corpus
+             COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                     $<TARGET_FILE:qt_task_order_tests>
+                     "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
+                     "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                     "${QT_REPO_ROOT}/corpus/project_a.mpp")
+endif()
+
+# ===========================================================================
 # WAVE 21 operator review: the menu bar hidden, the backstage back arrow, the
 # double-click Task Information dialog, the measured bar/selection palette, the
 # header caption layout and the status bar's Ready.  Offscreen; writes one

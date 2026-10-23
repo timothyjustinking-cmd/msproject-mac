@@ -330,6 +330,36 @@ void MainWindow::build_central_widget() {
     auto* entry_delegate = new EntryItemDelegate(sheet_view_);
     entry_delegate->set_kind_lookup(
         [this](int column) { return sheet_model_.display_kind(column); });
+    // Wave 23 (B-1): the Name cell draws the outline (indent, symbol, collapse
+    // on click).  The lookups translate the adapter's DISPLAY row to the
+    // SheetModel row, so a filter cannot make the triangle act on the wrong row.
+    entry_delegate->set_hierarchy_column(
+        sheet_model_.display_column_for_field(app::name_field_id()));
+    entry_delegate->set_outline_lookups(
+        [this](int display_row) {
+            const std::size_t row = sheet_model_.record_row(display_row);
+            return row == core::sheet::kNoIndex || doc_.sheet() == nullptr
+                       ? 0
+                       : doc_.sheet()->outline_level(row);
+        },
+        [this](int display_row) {
+            const std::size_t row = sheet_model_.record_row(display_row);
+            return row != core::sheet::kNoIndex && doc_.sheet() != nullptr &&
+                   doc_.sheet()->has_children(row);
+        },
+        [this](int display_row) {
+            const std::size_t row = sheet_model_.record_row(display_row);
+            return row != core::sheet::kNoIndex && doc_.sheet() != nullptr &&
+                   doc_.sheet()->is_collapsed(row);
+        },
+        [this](int display_row) {
+            const std::size_t row = sheet_model_.record_row(display_row);
+            if (row == core::sheet::kNoIndex || doc_.sheet() == nullptr) {
+                return;
+            }
+            doc_.sheet()->toggle_collapsed(row);
+            after_model_change();
+        });
     sheet_view_->setItemDelegate(entry_delegate);
     // Wave 21: the selected row/cell is Project's measured green (162,211,160),
     // the same value the delegate and the Gantt row highlight use (kSelection).

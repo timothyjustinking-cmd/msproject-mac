@@ -1708,6 +1708,17 @@ std::string SheetModel::format_value_as(const Value& value, CellKind kind) const
     return format_value_text(value, kind, format_);
 }
 
+std::string SheetModel::field_text(std::size_t row, FieldId field) const {
+    if (row >= records_.row_count() || field == 0) {
+        return {};
+    }
+    const Value* value = records_.get(row, field);
+    if (value == nullptr || value->is_null()) {
+        return {};
+    }
+    return format_value_text(*value, value_cell_kind(*value), format_);
+}
+
 bool SheetModel::is_critical(std::size_t row) const noexcept {
     return critical_field_ != 0 && field_flag(row, critical_field_);
 }
@@ -2946,7 +2957,10 @@ int SheetModel::field_outline_level(std::size_t row) const noexcept {
         case core::view::ValueKind::Bool: level = value->boolean ? 1 : 0; break;
         default: return 0;
     }
-    return level < 0 ? 0 : level;
+    // -1 is the project-summary row (wave 23): same text indent as a top-level
+    // task but the parent of every level-0 task.  Anything below that is not a
+    // level this model produces and clamps back to -1.
+    return level < -1 ? -1 : level;
 }
 
 bool SheetModel::field_summary(std::size_t row) const noexcept {

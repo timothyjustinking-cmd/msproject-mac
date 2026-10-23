@@ -11,6 +11,7 @@
 #include <QHBoxLayout>
 #include <QMenu>
 #include <QModelIndex>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
 #include <QPen>
@@ -30,9 +31,15 @@
 
 #include "entry_columns.h"
 #include "shell_style.h"
+#include "sheet_table_model.h"
 
 namespace msqt {
 namespace {
+
+// Wave 23 (B-1): Project's outline step and glyph colour, measured from the
+// clean capture (row 0 and row 1 text at the same x; each level +16 px).
+constexpr int kOutlineIndent = 16;
+const QColor kOutlineGlyph(0x5a, 0x5a, 0x5a);
 
 QFont header_font() {
     QFont font;
@@ -379,10 +386,19 @@ void SheetRowHeader::paintSection(QPainter* painter, const QRect& rect, int logi
     painter->setFont(font());
     painter->setPen(kRowGutterText);
     // Right-aligned like the reference's numbers, which stop ~16 px short of
-    // the sheet's left edge.
+    // the sheet's left edge.  Wave 23 (B-1): the number is the FILE's ID column
+    // (computed by the model), not the display ordinal -- project_a's rows are
+    // stored out of ID order, and the project row is ID 0.
     const QRect text_rect = rect.adjusted(0, 0, -8, 0);
+    QString number = QString::number(logicalIndex + 1);
+    if (auto* table_model = dynamic_cast<SheetTableModel*>(model()); table_model != nullptr) {
+        const QString id_text = table_model->row_number_text(logicalIndex);
+        if (!id_text.isEmpty()) {
+            number = id_text;
+        }
+    }
     painter->drawText(text_rect, static_cast<int>(Qt::AlignRight | Qt::AlignVCenter),
-                      QString::number(logicalIndex + 1));
+                      number);
     // The caption band's bottom rule (the first row's top edge) starts in the
     // gutter; the delegate draws it from x = 60 on.
     if (logicalIndex == 0) {
@@ -477,7 +493,45 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
     } else if (index.column() == entry_column_index(EntryCellKind::mode)) {
         kind = EntryCellKind::mode;
     }
-    if (!entry_mode_ || kind != EntryCellKind::mode) {
+    // Wave 23 (B-1): the outline.  Project reserves one symbol column before
+    // every Name cell and one 16 px step per outline level above it; the
+    // project summary row (-1) shares the top-level tasks' text x, which is
+    // what the clean capture shows (row 0 and row 1 both start at x = 82).
+    const bool hierarchy =
+        entry_mode_ && level_lookup_ != nullptr && index.column() == hierarchy_column_;
+    if (hierarchy) {
+        const bool selected = (option.state & QStyle::State_Selected) != 0;
+        const int level = level_lookup_(index.row());
+        const int indent = kOutlineIndent + (level > 0 ? level * kOutlineIndent : 0);
+        const bool children = children_lookup_ && children_lookup_(index.row());
+        painter->save();
+        painter->fillRect(option.rect, selected ? kSelection : kSheetBackground);
+        QStyleOptionViewItem text_option = option;
+        text_option.rect.setLeft(text_option.rect.left() + indent);
+        QStyledItemDelegate::paint(painter, text_option, index);
+        if (children) {
+            // Project's grey outline glyph: down when expanded, right when
+            // collapsed, sitting in the symbol column just left of the text.
+            const QRect symbol(option.rect.left() + indent - kOutlineIndent + 5,
+                               option.rect.center().y() - 4, 9, 8);
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(kOutlineGlyph);
+            QPolygon points;
+            if (collapsed_lookup_ && collapsed_lookup_(index.row())) {
+                points << QPoint(symbol.left() + 2, symbol.top())
+                       << QPoint(symbol.left() + 2, symbol.bottom())
+                       << QPoint(symbol.right(), symbol.center().y());
+            } else {
+                points << QPoint(symbol.left(), symbol.top() + 2)
+                       << QPoint(symbol.right(), symbol.top() + 2)
+                       << QPoint(symbol.center().x(), symbol.bottom());
+            }
+            painter->drawPolygon(points);
+            painter->setRenderHint(QPainter::Antialiasing, false);
+        }
+        painter->restore();
+    } else if (!entry_mode_ || kind != EntryCellKind::mode) {
         // The data columns and the blank Indicators cells are ordinary styled
         // items: the model's text/alignment/font and the selection palette do
         // the work, and Qt draws the grid over them.
@@ -507,6 +561,27 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
         painter->drawLine(option.rect.left(), option.rect.top(), option.rect.right(),
                           option.rect.top());
     }
+}
+
+bool EntryItemDelegate::editorEvent(QEvent* event, QAbstractItemModel* model,
+                                    const QStyleOptionViewItem& option,
+                                    const QModelIndex& index) {
+    if (event != nullptr && event->type() == QEvent::MouseButtonRelease && entry_mode_ &&
+        level_lookup_ != nullptr && toggle_handler_ != nullptr &&
+        index.column() == hierarchy_column_ &&
+        children_lookup_ && children_lookup_(index.row())) {
+        const auto* mouse = static_cast<const QMouseEvent*>(event);
+        const int level = level_lookup_(index.row());
+        const int indent = kOutlineIndent + (level > 0 ? level * kOutlineIndent : 0);
+        const int left = option.rect.left() + indent - kOutlineIndent;
+        if (mouse->position().x() >= left &&
+            mouse->position().x() <= left + kOutlineIndent &&
+            option.rect.contains(mouse->position().toPoint())) {
+            toggle_handler_(index.row());
+            return true;
+        }
+    }
+    return QStyledItemDelegate::editorEvent(event, model, option, index);
 }
 
 // ---------------------------------------------------------------------------
