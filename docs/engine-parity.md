@@ -581,3 +581,47 @@ Measured COM surface (this build): `Application.BaseCalendarCreate`,
 pinned with the fixture and used only by the COM half (`--record`).  The
 scenario JSON stays ids-only.  `--check` maps uid 4 -> task `+178`, builds the
 calendar through `core/cal`, and the whole state dump matches Project exactly.
+
+## Wave 20 (E4): schema 2 — the wider dump found the late pair
+
+The dump now also compares `tasks[].late_start/late_finish` (`+112/+116`, MPP12
+`+12/+152`) and `resources[].calendar_uid` (from `TBkndCal`).  All eight oracles
+were re-recorded against schema 2.
+
+### Score: 4 pass / 4 fail (247/247/254/247/247/247/253/209 fields)
+
+| scenario | result | what differs |
+|---|---|---|
+| recalculate | **PASS** (247) | - |
+| duration-change | FAIL (5/247) | late pair, tasks 1-3 |
+| link-fs-lag | FAIL (5/254) | late pair |
+| constraint-snet | **PASS** (247) | - |
+| constraint-mso | FAIL (1/247) | `task 3 duration_ticks` 9600 vs 12000 (unchanged) |
+| assignment-50pct | **PASS** (247) | - |
+| task-calendar | **PASS** (253) | - |
+| delete-task-with-successor | FAIL (4/209) | late pair |
+
+This is a **measurement increase, not a new defect**: the wave-19 7/8 came from a
+dump that did not compare the late pair.  Example: after `duration-change`, the
+oracle stores late finish `2026-01-07 12:00` for tasks 1/2/3 while our saved file
+stores `2026-01-09 12:00`; after `delete-task-with-successor` the oracle stores
+`2026-01-16 12:00` where ours stores `2026-01-09 12:00`.
+
+### The cause
+
+For a **manual** row, Project's stored `+112/+116` is not the CPM late pair: E2
+measured it as the inverse of the manual boundary arithmetic (the start whose
+manual finish lands on the project finish), which is why the row's StartSlack
+equals its TotalSlack.  Our planner computes CPM late dates and the applier
+writes them when the row's dates move; on rows whose dates do not move it keeps
+the stored pair, which is why `recalculate`, `constraint-snet`,
+`assignment-50pct` and `task-calendar` still match.  `constraint-mso`'s only
+remaining field is the duration word described above.
+
+### Next action (engine, not UI)
+
+Either compute Project's inverse late pair for manual rows in the applier (the
+four failing scenarios become the regression), or stop comparing the late pair
+for manual rows with that reason written here.  Do not fit a formula to one
+scenario: the four cases disagree in both directions (ours later by 2 days in
+duration-change, earlier by 7 days in delete).
