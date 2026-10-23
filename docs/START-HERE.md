@@ -7,8 +7,11 @@ first._
 ## The 30-second state
 
 * `main` = **488481f** (wave-22 docs close); the wave-23 code is on **`wave23`**,
-  pushed, **not merged**.  Tim merges after reading
-  `docs/handoff/wave23-complete.md` (the wave-23 gate).
+  **not merged**.  Remote `wave23` = `63cd087` (qt-shell green, core red on a
+  GCC comment since fixed); the review-fix and docs-close commits are LOCAL
+  only because the push was held by the client-name policy classifier — see
+  wave23-complete §6 "Publication hold".  **This first needs Tim's decision.**
+  Then he merges after reading `docs/handoff/wave23-complete.md` (the gate).
 * Wave 23 answered the audit: **ID-order rows with the outline and project
   row 0** (B-1), **SUMMARY decoded** (Flag10 = FixedMeta +25 bit 0x04), the
   **link text pinned from Project's COM strings**, an **independent ribbon

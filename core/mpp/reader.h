@@ -544,7 +544,7 @@ struct Task {
      * STORED: bit 0x04 of the Task FixedMeta entry's byte +25, MEASURED on
      * 2026-10-23 by setting Task.Flag10 = True through COM on two different
      * rows (exactly that bit changed).  It is NOT Task::summary: the clean
-     * capture's summary rows 1/2/6 read No while CONSTRUCTION reads Yes, so
+     * capture's summary rows 1/2/6 read No while ID 12 reads Yes, so
      * this is the file's own field.  `summary_flag_stored` is false when the
      * row has no FixedMeta entry.  Exposed as a Task field -- not a
      * CustomFieldValue -- so the engine dump's custom-field set is unchanged. */
