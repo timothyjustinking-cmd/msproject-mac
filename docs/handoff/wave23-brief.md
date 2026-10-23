@@ -270,4 +270,68 @@ exists at `tools/deepseek/relay.py` and the CLI launcher at
 `tools/deepseek/deepseek-claude.cmd` (reads the key from
 `%LOCALAPPDATA%\deepseek\api_key.txt` or `DEEPSEEK_API_KEY`).  Questions about a
 finding go in `wave23-complete.md` under "Questions for the auditor" with the default
-you took.
+you took.  The first round of questions was answered below (section 8).
+
+## 8. Auditor answers to the fix session's read-back (2026-10-23, Fable)
+
+DeepSeek's read-back of this brief raised 18 questions and 9 feasibility notes.
+Answers are binding; where a default was proposed and is not corrected here, the
+default stands.
+
+Q1 bar palette fallback: when a file's bar styles cannot be decoded, use Project's
+STOCK defaults (blue task bars, black summary bars, black milestone diamonds) keyed
+off summary/critical/complete flags, with "decoded-from-file" in the backlog.  Never
+the clean capture's green/navy: those are that file's styles.
+Q2 timeline: a new project (File > New, no file) shows the Timeline because Project's
+default view is "Gantt with Timeline" (Options > General capture); a loaded file
+follows its stored view state, which for project_a hides it.
+Q3 yes: `PLAN_RECALC_UPDATE_GOLDEN=1`, exact name, documented in build.md and ci.yml.
+Q4/Q5 one new synthetic fixture serves W23-1, W23-7(d) and W23-8(d): built in
+Project 2021 through `oracle_lock.py` on a COPY, 3-level outline, one FS+lag link,
+one SS link, one FF link, one synthetic resource ("Resource A") assigned, saved by
+Project, committed under tests/data with its hash in check_fixtures.py and README.
+Q6 yes: if the app's save path cannot be wired this wave, say "test-only", leave
+constraint-mso failing, backlog it.  Never write "deliberately not scored".
+Q7 JSON, keyed tab > group > control (kind, label, order, enabled, icon key), read
+by both the builder and the gate.
+Q8 ci.yml already has `workflow_dispatch`; it is simply never dispatched.  Dispatch
+both workflows at wave end (budget: one dispatch per workflow, two runs recorded).
+Q9 do not commit bytes from Microsoft's binary.  Commit a derived TSV of the
+property-name table (index, name) under analysis/ as the other derived tables are,
+with the generating script under scripts/, and test the reader against that TSV.
+Q10 migrate "Task Fields" to the Custom Fields command where Project has it:
+Project > Properties > Custom Fields and Gantt Chart Format > Columns > Custom
+Fields; nothing else opens it.
+Q11 Task Form docked below, splitter from the stored view state; View > Details
+toggles it.
+Q12 separate sub-item in the same commit; backlog with reason if undecodable.
+Q13 report-only, per-region percentages (title, ribbon, timeline, sheet, chart,
+status), no CI failure this wave.
+Q14 confirmed from this audit's captures: in Black and Dark Gray only the chrome
+darkens; sheet and chart keep the file's colours.  Assert chrome palette swap and
+sheet/chart pixels unchanged, tolerance 0.
+Q15 a synthetic resource name is acceptable; the check is non-empty and equal to
+Project's own Resource Names string for that row (read through COM when the fixture
+is built).
+Q16 all three: Project version string, recorded-at (UTC ISO-8601), sha256 of the
+source .mpp.
+Q17 restore each command to Project's actual home: Save as PDF = File > Export >
+Create PDF/XPS and File > Print; Task Sheet, Resource Sheet, Resource Usage = the
+View > Task Views / Resource Views drop-downs ("Other Views" where Project puts
+them).  No extra ribbon buttons.
+Q18 literal "Ready", shown in every theme (the Black-theme capture shows it).
+
+Feasibility notes, answered:
+- parity in CI: per-OS references, or gate the Windows runner only and report the
+  other two; say which in wave23-complete.md.
+- `--apply-bin`: use `$<TARGET_FILE:engine_diff_tests>` in CMake; agreed.
+- macOS: CI-only, reported as a gap; agreed.
+- 8/8: Q6 default applies.
+- 900 px: a self-consistency check, not parity; label it so.
+- lag labels: settle with COM `Task.Predecessors` strings on at least four unit
+  variants before touching the formatter; agreed.
+- decision 12: add an "audit note" line under the decision in ui-parity-spec.md
+  stating what is implemented (report-only score); do not rewrite the operator's
+  decision text.
+- Options and ribbon enabled sets both read the independent pin file; agreed.
+- gates: once per commit, per-lane commits; record exact counts each time.
