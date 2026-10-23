@@ -35,8 +35,9 @@
 
 namespace msqt {
 
-// What a column shows.  `indicators` and `mode` are icon columns; `stub` is
-// Add New Column.
+// What a column shows.  `indicators` is blank unless a task has an indicator
+// (the fixture's tasks have none, like the reference capture); `mode` is the one
+// painted icon column; `stub` is Add New Column.
 enum class EntryCellKind : std::uint8_t {
     indicators = 0,
     mode,

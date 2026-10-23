@@ -634,10 +634,19 @@ void test_manual_oracle(TestContext& context) {
         }
     }
 
-    /* constraint-mso.oracle.json: MSO 2026-01-20 08:00 on uid 3.  Same shape; the
-     * oracle's stored Duration 12000 is a Project-side edit the engine does not
-     * perform (it is not a scheduling rule and the scenario half does not write
-     * it), so only the dates/slack are compared here. */
+    /* constraint-mso.oracle.json: MSO 2026-01-20 08:00 on uid 3.  Dates, the
+     * calculated pair and slack are the same shape as SNET.  The oracle ALSO
+     * stores Duration 12000 for that row, where the fixture stores 9600 and the
+     * row's own calculated span is 9600 (2 d) -- so Project's stored duration
+     * word does not describe either its kept dates (span 9600 under the measured
+     * manual rule) or its calculated dates (9600).  The two candidate readouts of
+     * 12000 are both one-row generalisations: (a) calculated span + the manual
+     * start-day tail = 9600 + 2400, (b) the span with the finish day counted in
+     * full = 240 + 480 + 480 minutes.  SNET on uid 2 does NOT rewrite its
+     * duration, so this is an edit-time side effect of a HARD constraint on a
+     * manual row, not a scheduling rule the engine can own; docs/engine-parity.md
+     * "Wave 18" records the single differing field and the decision.  Only the
+     * dates/slack are compared here. */
     {
         plan::PlanInput constrained = input;
         for (plan::PlanTask& task : constrained.tasks) {
