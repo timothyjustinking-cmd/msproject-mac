@@ -9,8 +9,8 @@ force.**
 
 **Branch state.** `wave24` was cut from local `wave23` = `d236f91`; before this
 session it carried the brief and two tools commits (`552aaf4`, `394d69a`,
-`763bbc5`).  This session added five commits on top (`ca9e7d7`..`39d11b4`),
-plus this record's final docs-only commit:
+`763bbc5`).  This session added five substantive commits on top
+(`ca9e7d7`..`39d11b4`), plus this record's final docs-only commits:
 
 | commit | what |
 |---|---|
