@@ -790,6 +790,22 @@ class Analysis:
 
 # --------------------------------------------------------------- comparison --
 
+class JsonReference:
+    """A reference supplied as parity_report's own JSON (wave 23).
+
+    The operator's ruling keeps the Project screenshot local and allows only the
+    NUMBERS measured from it in the repository, so CI compares the render to
+    this committed measurement file instead of a PNG.  `compare()` only needs
+    `.measures`.
+    """
+
+    def __init__(self, report):
+        self.measures = report.get("measures", {})
+        self.path = report.get("image", {}).get("path", "(committed measures)")
+        self.width = report.get("image", {}).get("width", 0)
+        self.height = report.get("image", {}).get("height", 0)
+
+
 def _measure_meta(key):
     for item in MEASURES:
         if item[0] == key:
@@ -1262,6 +1278,10 @@ def main(argv=None):
                         help="run the synthetic self-check")
     parser.add_argument("--score", action="store_true",
                         help="decision-12 pixel score (report only, two images)")
+    parser.add_argument("--reference-json", metavar="PATH",
+                        help="compare ONE candidate image to a committed "
+                             "parity_report JSON (the numbers measured from a "
+                             "local Project capture; wave-23 operator ruling)")
     parser.add_argument("--quiet", action="store_true",
                         help="suppress the human table")
     args = parser.parse_args(argv)
@@ -1285,6 +1305,35 @@ def main(argv=None):
         except Exception as exc:                      # noqa: BLE001
             print(f"error: cannot read {path}: {exc}", file=sys.stderr)
             return 2
+
+    if args.reference_json:
+        if len(paths) != 1:
+            print("error: --reference-json compares exactly ONE candidate image",
+                  file=sys.stderr)
+            return 2
+        try:
+            report = json.loads(open(args.reference_json, encoding="utf-8").read())
+        except (OSError, ValueError) as exc:               # noqa: BLE001
+            print(f"error: cannot read {args.reference_json}: {exc}", file=sys.stderr)
+            return 2
+        reference = JsonReference(report)
+        candidate = Analysis(paths[0])
+        rows, summary = compare(reference, candidate)
+        if not args.quiet:
+            print_compare(rows, summary, reference, candidate)
+        if args.json:
+            payload = {"reference": args.reference_json, "comparison": rows,
+                       "summary": summary}
+            text = json.dumps(payload, indent=2, sort_keys=False)
+            if args.json == "-":
+                print(text)
+            else:
+                os.makedirs(os.path.dirname(os.path.abspath(args.json)),
+                            exist_ok=True)
+                with open(args.json, "w", encoding="utf-8") as handle:
+                    handle.write(text + "\n")
+                print(f"\nwrote {args.json}")
+        return 0 if summary["verdict"] == "PASS" else 1
 
     if len(paths) == 1 and not args.compare:
         analysis = Analysis(paths[0])
