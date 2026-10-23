@@ -98,6 +98,51 @@ struct CpmTask {
     // unmeasured extension.  The alternative reading of the row -- a stale saved
     // value -- is listed as open in memory/schedcore.md.
     date32 actual_finish = kDateNa;
+
+    // A MANUALLY SCHEDULED task (Project's `Manual`; the reader's
+    // `manually_scheduled`, Fixed2Meta per-row flags byte +8 bit 0x80).
+    // MEASURED (docs/engine-parity.md "First recording", the seven recorded
+    // oracles): Project does NOT schedule such a row.  It keeps its stored
+    // effective Start (+104) and the Finish that Start + Duration implies, its
+    // own constraints do not move it (constraint-snet / constraint-mso keep the
+    // dates while the *calculated* pair jumps to the constraint date), and it is
+    // never reported Critical even at zero slack.  Its successors are still
+    // driven from it, and its TotalSlack is still LF - EF with LF from the
+    // successors or the project finish (link-fs-lag uid 1 = 0; recalculate uid 2
+    // = 9600, both pinned by tests/plan_recalc_tests.cpp).
+    //
+    // `manual_start` is the stored Start (+104) and `manual_finish` the finish
+    // the CALLER computed for it (core/plan does the calendar arithmetic; it is
+    // not plain AddWork in the one measured boundary case -- see plan.h "MANUAL
+    // SCHEDULING").  When set, the engine treats both as facts:
+    //   * forward pass: ES = manual_start, EF = manual_finish (the row's own
+    //     constraint, deadline, links and actuals do not move it);
+    //   * backward pass: the row's own constraint does not pin its late dates;
+    //     LF comes from the successors or the project finish, and LS is pinned
+    //     to ES (the start is a user fact), so TotalSlack is LF - EF;
+    //   * StartSlack is reported equal to TotalSlack (measured: all three slack
+    //     words are equal on every manual row of every oracle);
+    //   * Critical is always false.
+    // Leaving both kDateNa is the normal auto-scheduled path: every measured
+    // corpus programme (PROJECT_A/B, schedin, holiday1, w9-elapsedlag) stores
+    // the manual bit clear on every row, so this field cannot move M2.
+    // [I] scope: a manual task that ALSO has actuals, a different task calendar,
+    // an elapsed duration or a deadline has no oracle row (core/plan refuses to
+    // pin an elapsed-duration manual row and notes it).
+    date32 manual_start = kDateNa;
+    date32 manual_finish = kDateNa;
+
+    // The dates a SUCCESSOR's link bound reads for this task when they must
+    // differ from this task's own early dates.  MEASURED need: Project computes a
+    // manual successor's CALCULATED pair (+96/+100) from its predecessor's
+    // EFFECTIVE finish, not from the predecessor's own calculated finish.
+    // link-fs-lag: uid 1 stores calculated finish 2026-01-09 17:00 and kept
+    // finish 01-09 12:00; uid 2's calculated start is 01-12 13:00, the FS+1d
+    // bound of the KEPT finish (the calculated one would give 01-13 08:00).
+    // core/plan sets these on manual rows for its calculated pass only; leaving
+    // them kDateNa (the whole auto path) changes nothing.
+    date32 link_anchor_start = kDateNa;
+    date32 link_anchor_finish = kDateNa;
 };
 
 // A predecessor -> successor link.  `lag` is in working ticks on the successor's

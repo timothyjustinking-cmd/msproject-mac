@@ -73,6 +73,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -1213,10 +1214,26 @@ class Applier {
                 throw Error("add_link: link type " + std::to_string(type) +
                             " is outside 0..3 (0 FF, 1 FS, 2 SF, 3 SS)");
             }
+            /* The lag reaches COM as "<minutes>m" (scripts/engine_diff.py
+             * `_lag_text`), so Project stores LagFormat 3 (minutes); the
+             * link-fs-lag oracle stores 3 where the writer used to store 7. */
             const mppwrite::AddedLink added = mppwrite::add_task_link(
                 doc_, predecessor, successor, static_cast<std::uint16_t>(type),
-                lag, work_path_);
+                lag, work_path_, mppwrite::kLinkLagFormatMinutes);
             report("add_link", added.warnings);
+            /* Project recalculates after a structural edit: the COM half calls
+             * calc(app) after add_link/delete_task/add_assignment/set_calendar
+             * (`_apply_com_operation`).  The recalculated dates are part of the
+             * measured state -- a MANUAL successor's kept start is moved by the
+             * new link and then SAVED (link-fs-lag uid 2 = 01-12 13:00,
+             * delete-task-with-successor uid 3 = 01-14 13:00), so without this
+             * pass the final recalculation would start from the old stored dates
+             * and could not reproduce the oracle.  A link ADD is also the one
+             * edit that moves a manual successor (plan.h
+             * PlanInput::manual_rows_follow_links); a recalculation does not. */
+            manual_follow_links_ = true;
+            recalculate(work_path_);
+            manual_follow_links_ = false;
             return;
         }
         if (operation.name == "delete_task") {
@@ -1224,6 +1241,7 @@ class Applier {
             const mppwrite::DeletedRow deleted = mppwrite::delete_task_row(
                 doc_, parse_u32(operation.args[0], "uid"), work_path_);
             report("delete_task", deleted.warnings);
+            recalculate(work_path_); /* calc(app) on Project's side */
             return;
         }
         if (operation.name == "add_assignment") {
@@ -1236,12 +1254,14 @@ class Applier {
             const mppwrite::AddedAssignment added =
                 mppwrite::add_assignment_row(doc_, spec, work_path_);
             report("add_assignment", added.warnings);
+            recalculate(work_path_); /* calc(app) on Project's side */
             return;
         }
         if (operation.name == "set_calendar") {
             require_arity(operation, 2);
             set_calendar(parse_u32(operation.args[0], "task uid"),
                          parse_u32(operation.args[1], "calendar uid"));
+            recalculate(work_path_); /* calc(app) on Project's side */
             return;
         }
         throw Error("unknown operation '" + operation.name + "'");
@@ -1286,8 +1306,20 @@ class Applier {
                             " is not a valid duration");
             }
             duration_override_[uid] = ticks;
+            /* COM is given a duration in MINUTES (`task.Duration = "<n>m"`), and
+             * Project stores the unit of the edit: duration-change.oracle.json
+             * records task 1 DurationFormat 3 (minutes) while the fixture stores
+             * 7 (days).  Writing only the ticks left that word at 7. */
+            {
+                mppwrite::TaskTable table =
+                    mppwrite::TaskTable::from_document(doc_);
+                table.set_u16(row, mppwrite::task_row::kDurationFormat,
+                              mppwrite::kFormatUnitMinutes);
+                table.store_into(doc_);
+            }
             std::cerr << "engine_diff: set_task_field: uid " << uid
-                      << " Duration -> " << ticks << " ticks\n";
+                      << " Duration -> " << ticks << " ticks (and DurationFormat "
+                      << mppwrite::kFormatUnitMinutes << ")\n";
             return;
         }
         if (field_id == kFieldConstraintType) {
@@ -1453,6 +1485,96 @@ class Applier {
         return core::sched::is_na(date) ? kInvalidDate : date;
     }
 
+    /* An assignment row has no schedule of its own: Project recomputes its work
+     * and dates from its task on every save.  MEASURED: in duration-change the
+     * placeholder assignment of task 1 stores work 14400 and finish 01-07 12:00
+     * (the edited task's dates), and in link-fs-lag/delete the placeholder of the
+     * moved task stores its new Start/Resume/Finish.  The applier wrote the task
+     * rows only, so ours kept the fixture's values.  Layout: 110-byte rows, no
+     * header (core/mppwrite/add_delete.h "assignment rows"); +12 units x100,
+     * +20/+36/+44 work as minutes x1000, +52/+56/+60 Start/Finish/Resume,
+     * +104 a second Start copy. */
+    void update_assignment_copies(
+        std::map<std::int32_t, core::plan::PlanTaskResult const*> const& by_uid,
+        std::string const& path) {
+        std::string const stream = "114/TBkndAssn/FixedData";
+        if (!doc_.has_stream(stream)) {
+            return;
+        }
+        std::vector<std::uint8_t> before;
+        try {
+            before = doc_.read_stream(stream);
+        } catch (std::exception const&) {
+            return;
+        }
+        std::vector<std::uint8_t> rows = before;
+        const auto u32_at = [](std::vector<std::uint8_t> const& b, std::size_t o) {
+            return static_cast<std::uint32_t>(b[o]) |
+                   (static_cast<std::uint32_t>(b[o + 1]) << 8) |
+                   (static_cast<std::uint32_t>(b[o + 2]) << 16) |
+                   (static_cast<std::uint32_t>(b[o + 3]) << 24);
+        };
+        const auto f64_at = [](std::vector<std::uint8_t> const& b, std::size_t o) {
+            std::uint64_t bits = 0;
+            for (int i = 7; i >= 0; --i) {
+                bits = (bits << 8) | b[o + static_cast<std::size_t>(i)];
+            }
+            double value = 0.0;
+            std::memcpy(&value, &bits, sizeof(value));
+            return value;
+        };
+        const auto put_u32 = [](std::vector<std::uint8_t>& b, std::size_t o,
+                                std::uint32_t v) {
+            for (int i = 0; i < 4; ++i) {
+                b[o + static_cast<std::size_t>(i)] =
+                    static_cast<std::uint8_t>((v >> (8 * i)) & 0xFFu);
+            }
+        };
+        const auto put_f64 = [](std::vector<std::uint8_t>& b, std::size_t o, double v) {
+            std::uint64_t bits = 0;
+            std::memcpy(&bits, &v, sizeof(bits));
+            for (int i = 0; i < 8; ++i) {
+                b[o + static_cast<std::size_t>(i)] =
+                    static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFFu);
+            }
+        };
+        std::size_t updated = 0;
+        for (std::size_t base = 0; base + 110 <= rows.size(); base += 110) {
+            const std::uint32_t task_uid = u32_at(rows, base + 4);
+            const auto found = by_uid.find(static_cast<std::int32_t>(task_uid));
+            if (found == by_uid.end()) {
+                continue;
+            }
+            const core::plan::PlanTaskResult& planned = *found->second;
+            const std::uint32_t start = packed(planned.display_start);
+            const std::uint32_t finish = packed(planned.display_finish);
+            if (start == kInvalidDate || finish == kInvalidDate) {
+                continue;
+            }
+            const double units_x100 = f64_at(rows, base + 12);
+            const double fraction = units_x100 > 0.0 ? units_x100 / 10000.0 : 1.0;
+            /* FixedData +20 is minutes x1000; the engine's duration is 6-second
+             * ticks (600 per minute), so ticks * 100 is minutes x1000. */
+            const double work =
+                static_cast<double>(planned.duration) * 100.0 * fraction;
+            put_f64(rows, base + 20, work);
+            put_f64(rows, base + 36, work);
+            put_f64(rows, base + 44, work);
+            put_u32(rows, base + 52, start);
+            put_u32(rows, base + 56, finish);
+            put_u32(rows, base + 60, start);
+            put_u32(rows, base + 104, start);
+            ++updated;
+        }
+        if (rows == before) {
+            return;
+        }
+        doc_.replace_stream(stream, std::move(rows));
+        doc_.save(path);
+        std::cerr << "engine_diff: save: maintained the work/dates of " << updated
+                  << " assignment row(s) from their tasks\n";
+    }
+
     void recalculate(std::string const& out_path) {
         flush_all_constraints();
         try {
@@ -1470,6 +1592,7 @@ class Applier {
                         error.what());
         }
         core::plan::PlanInput input = core::plan::from_mpp(model);
+        input.manual_rows_follow_links = manual_follow_links_;
         try {
             const core::cal::CalendarTable table =
                 core::cal::decode_file(work_path_);
@@ -1513,6 +1636,17 @@ class Applier {
         project.values.project_finish = project_finish;
         project.values.late_start = project_start;
         project.values.late_finish = project_finish;
+        /* The project row's Duration (+84).  Project recomputes it as the
+         * working time between the project start and finish (MEASURED on the
+         * seven oracles: 21600 / 12000 / 40800 / 21600 / 21600 / 21600 / 45600,
+         * plan.h PlanResult::project_duration).  Leaving the stored word alone
+         * was why a Duration edit moved the oracle's project duration and not
+         * ours. */
+        project.values.duration =
+            static_cast<std::uint32_t>(result.project_duration);
+        project.values.remaining_duration = mppwrite::kInherit;
+        project.values.actual_duration = mppwrite::kInherit;
+        project.values.fixed2_duration = mppwrite::kInherit;
         project.values.total_slack = 0;
         project.values.start_slack = 0;
         rows.push_back(project);
@@ -1526,9 +1660,21 @@ class Applier {
             const core::plan::PlanTaskResult& planned = *found->second;
             const std::uint32_t start = packed(planned.start);
             const std::uint32_t finish = packed(planned.finish);
+            /* The KEPT/effective pair (+104/+108).  For an auto-scheduled row it
+             * equals start/finish; for a MANUAL row it does not: Project stores
+             * the calculated pair at +96/+100 and keeps the row's own dates at
+             * +104/+108 (docs/engine-parity.md "Wave 18", plan.h "MANUAL
+             * SCHEDULING").  Writing one pair into both was the applier bug that
+             * made a manual scenario unsaveable: the writer refuses a
+             * single-copy start write, and overwriting the kept dates on the
+             * first save of the two the scenario performs changed what the second
+             * recalculation saw. */
+            const std::uint32_t kept_start = packed(planned.display_start);
+            const std::uint32_t kept_finish = packed(planned.display_finish);
             std::uint32_t late_start = packed(planned.late_start);
             std::uint32_t late_finish = packed(planned.late_finish);
-            if (start == kInvalidDate || finish == kInvalidDate) {
+            if (start == kInvalidDate || finish == kInvalidDate ||
+                kept_start == kInvalidDate || kept_finish == kInvalidDate) {
                 throw Error("our engine produced no start/finish for uid " +
                             std::to_string(task.uid));
             }
@@ -1539,18 +1685,41 @@ class Applier {
             mppwrite::PlannedRow row;
             row.uid = task.uid;
             row.values = mppwrite::read_task_values(doc_, task.row);
-            row.values.start = start;
-            row.values.finish = finish;
-            row.values.project_start = start;
-            row.values.project_finish = finish;
-            row.values.late_start = late_start;
-            row.values.late_finish = late_finish;
+            row.values.manual_dates = planned.manually_scheduled;
+            row.values.start = start;              /* +96  calculated */
+            row.values.finish = finish;            /* +100 calculated */
+            row.values.project_start = kept_start;   /* +104 effective */
+            row.values.project_finish = kept_finish; /* +108 effective */
+            row.values.start_anchor =
+                planned.start_anchor == core::sched::kDateNa
+                    ? mppwrite::kInherit                /* an auto row: keep stored */
+                    : packed(planned.start_anchor);     /* +174 a manual row's start */
+            if (planned.manually_scheduled) {
+                /* A manual row's +112/+116 is the INVERSE of its boundary
+                 * arithmetic -- Project's stored Late* pair is the start whose
+                 * manual finish lands on the project finish, which is why its
+                 * StartSlack equals its TotalSlack.  The planner does not
+                 * compute that inverse, and the dump does not compare the late
+                 * pair, so keep the stored pair: Project recomputes it on open,
+                 * and leaving it alone keeps the writer's copy families
+                 * consistent (the kept dates that DO move also move +108 and
+                 * Fixed2Data +54, so no single-copy write is attempted). */
+            } else {
+                row.values.late_start = late_start;
+                row.values.late_finish = late_finish;
+            }
             row.values.duration =
                 static_cast<std::uint32_t>(planned.duration);
             row.values.remaining_duration = mppwrite::kInherit;
             row.values.actual_duration = mppwrite::kInherit;
             /* The writer stores slack as i32 ticks; the engine's tick type is
-             * int64.  A slack beyond i32 is not a value the file can hold. */
+             * int64.  A slack beyond i32 is not a value the file can hold.
+             * The THREE words are distinct (W30): +74 FreeSlack, +186 StartSlack,
+             * +190 TotalSlack.  The writer used to put TotalSlack at +74, which
+             * the reader reports as FreeSlack, so free could never differ from
+             * total; each word is now passed separately. */
+            row.values.free_slack =
+                static_cast<std::int32_t>(planned.free_slack);
             row.values.total_slack =
                 static_cast<std::int32_t>(planned.total_slack);
             row.values.start_slack =
@@ -1566,6 +1735,7 @@ class Applier {
         for (std::string const& warning : saved.warnings) {
             std::cerr << "engine_diff: save: " << warning << "\n";
         }
+        update_assignment_copies(by_uid, out_path);
         std::cerr << "engine_diff: recalculate: wrote " << saved.rows_written
                   << " row(s) to " << out_path << "\n";
     }
@@ -1578,6 +1748,10 @@ class Applier {
     bool saved_ = false;
     std::map<std::uint32_t, std::uint32_t> duration_override_;
     std::map<std::uint32_t, PendingConstraint> pending_;
+    /* Set for the one recalculation that follows an add_link: Project moves a
+     * manually scheduled successor when the link is ADDED (measured; see
+     * core/plan/plan.h PlanInput::manual_rows_follow_links). */
+    bool manual_follow_links_ = false;
 };
 
 /* ------------------------------------------------------------------------- */

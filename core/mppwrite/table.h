@@ -101,7 +101,15 @@ inline constexpr std::size_t kRowId = 0;              /* u32, table order */
 inline constexpr std::size_t kUniqueId = 4;           /* u32 */
 inline constexpr std::size_t kConstraintType = 64;    /* u16, PjConstraint */
 inline constexpr std::size_t kConstraintDate = 66;    /* u32 packed date */
-inline constexpr std::size_t kTotalSlack = 74;        /* i32 ticks (W18) */
+/* The three slack words.  MEASURED (W30, corrected; spec/mpp-records.md):
+ *   +74  FreeSlack   -- what core/mpp reads as Task::free_slack_ticks
+ *   +186 StartSlack  -- COM StartSlack
+ *   +190 TotalSlack  -- COM TotalSlack (was called TotalSlackCopy before W30)
+ * milestone1.mpp ID 6 separates them (+74 = 0, +186 = +190 = 220800), which is
+ * the row that fixes the mapping.  `kTotalSlack` used to name +74 (W18); it now
+ * names +190 and `kFreeSlack` names +74, so a writer cannot put TotalSlack
+ * where the reader reads FreeSlack by accident. */
+inline constexpr std::size_t kFreeSlack = 74;         /* i32 ticks, COM FreeSlack */
 inline constexpr std::size_t kPriority = 78;          /* u16, default 500 */
 inline constexpr std::size_t kActualDuration = 80;    /* u32 ticks */
 inline constexpr std::size_t kDuration = 84;          /* u32 ticks */
@@ -114,7 +122,14 @@ inline constexpr std::size_t kFinish2 = 108;
 inline constexpr std::size_t kStart3 = 112;           /* third date copy */
 inline constexpr std::size_t kFinish3 = 116;
 inline constexpr std::size_t kStartSlack = 186;       /* i32 ticks, = COM StartSlack */
-inline constexpr std::size_t kTotalSlackCopy = 190;   /* i32 ticks, == +74 */
+inline constexpr std::size_t kTotalSlack = 190;       /* i32 ticks, = COM TotalSlack */
+/* Legacy name for +190, kept so existing callers/tests that spelt it this way
+ * still compile; it is the same word as kTotalSlack. */
+inline constexpr std::size_t kTotalSlackCopy = 190;
+/* +0xa4: DurationFormat, a PjFormatUnit (reader: Task.duration_format; 7 = days,
+ * 8 = elapsed days, 3 = minutes).  MEASURED: the duration-change oracle stores 3
+ * on the edited row after COM was given a duration in minutes. */
+inline constexpr std::size_t kDurationFormat = 164;   /* u16 */
 /*
  * +174 is the row's packed-date "start anchor" (spec/mpp-records.md §2).  W29
  * measured what Project does with it on its own save of a manual task: after
@@ -126,6 +141,10 @@ inline constexpr std::size_t kTotalSlackCopy = 190;   /* i32 ticks, == +74 */
 inline constexpr std::size_t kStartAnchor = 174;      /* u32 packed date */
 
 } /* namespace task_row */
+/* The PjFormatUnit value a duration/lag edit in MINUTES stores (measured on the
+ * duration-change oracle's DurationFormat and the link-fs-lag oracle's
+ * LagFormat).  INFERENCE that the number is "minutes", from those two files. */
+inline constexpr std::uint16_t kFormatUnitMinutes = 3;
 
 /* Number of rows in a FixedData stream; throws when the size is not
  * 48 + 202 * n. */

@@ -85,6 +85,63 @@ core::sched::CpmError map_rollup_error(core::sched::RollupError error) noexcept 
     return core::sched::CpmError::invalid_option;
 }
 
+// ---- MANUAL SCHEDULING: the finish a manual row keeps ---------------------
+// MEASURED RULE (plan.h "MANUAL SCHEDULING").  A manual row's stored Start is a
+// user fact even when it falls in non-working time: the fixture's Start is
+// 2026-01-04 13:00, a SUNDAY the project calendar does not work.  Project's
+// stored Finish is Start + Duration counted as if the 13:00-17:00 tail of that
+// afternoon were working (5 d -> Fri 01-09 12:00, 3 d -> 01-07 12:00,
+// 2 d -> 01-06 12:00), which is why calendar-correct AddWork from the aligned
+// Monday 08:00 gives the CALCULATED pair's 17:00 finishes instead.
+//
+// This helper returns the working ticks the start's own day contributes before
+// the walk reaches a real working day: 0 when the start is a working instant,
+// otherwise the standard-day working time between the start's CLOCK time and
+// that day's end, read from the first day at or after the start with a pattern.
+ticks manual_partial_day_charge(const core::sched::Calendar& calendar, date32 start) {
+    if (is_na(start) || calendar.is_working_instant(start)) {
+        return 0;
+    }
+    const std::int32_t clock = core::sched::time_of(start);
+    const std::int32_t day = core::sched::day_of(start);
+    for (std::int32_t offset = 0; offset < core::sched::kDaysPerWeek; ++offset) {
+        const core::sched::DayPattern& pattern = calendar.pattern_for_day(day + offset);
+        if (pattern.empty()) {
+            continue;
+        }
+        ticks charge = 0;
+        for (std::size_t i = 0; i < pattern.count; ++i) {
+            const std::int32_t begin = pattern.start_ticks(i);
+            const std::int32_t end = pattern.end_ticks(i);
+            if (end <= clock) {
+                continue;
+            }
+            charge += end - std::max(begin, clock);
+        }
+        return charge;
+    }
+    return 0;
+}
+
+// The Finish a manual row keeps: Start + Duration under the measured boundary
+// rule above.  `duration == 0` finishes at the Start (a milestone).
+date32 manual_finish_of(const core::sched::Calendar& calendar, date32 start,
+                        ticks duration) {
+    if (is_na(start)) {
+        return kDateNa;
+    }
+    if (duration <= 0) {
+        return start;
+    }
+    const ticks charge = manual_partial_day_charge(calendar, start);
+    if (charge >= duration) {
+        // [I] A duration shorter than the start day's tail has no oracle row;
+        // keep the row at its start rather than walking into the calendar.
+        return start;
+    }
+    return calendar.add_work(start, duration - charge);
+}
+
 }  // namespace
 
 core::sched::Calendar standard_calendar() {
@@ -140,6 +197,8 @@ PlanInput from_mpp(const mpp::Document& document) {
     std::size_t derived_started = 0;
     std::size_t derived_finished = 0;
     std::size_t elapsed_duration_rows = 0;
+    std::size_t manual_rows = 0;
+    std::size_t manual_without_start = 0;
 
     for (const mpp::Task& task : document.tasks) {
         if (!fits_int32(task.uid)) {
@@ -221,6 +280,25 @@ PlanInput from_mpp(const mpp::Document& document) {
             }
             if (mapped.actuals_from_reader) {
                 ++stored_actuals;
+            }
+        }
+
+        // ---- manual scheduling (see MANUAL SCHEDULING in plan.h) -----------
+        // The stored bit is the only driver: no caller flag, no name, no guess.
+        mapped.manually_scheduled = task.manually_scheduled;
+        if (task.start.valid()) {
+            mapped.stored_start = task.start.raw;
+        }
+        if (task.finish.valid()) {
+            mapped.stored_finish = task.finish.raw;
+        }
+        if (task.start_anchor.valid()) {
+            mapped.start_anchor = task.start_anchor.raw;
+        }
+        if (task.manually_scheduled) {
+            ++manual_rows;
+            if (!task.start.valid()) {
+                ++manual_without_start;
             }
         }
 
@@ -314,6 +392,19 @@ PlanInput from_mpp(const mpp::Document& document) {
         " completed tasks derive them from PercentComplete > 0 and the stored dates "
         "(INFERENCE, spec/scheduling.md §2.4); a started task keeps its start and a "
         "completed task its finish, and their successors are driven from those dates");
+    input.notes.emplace_back(
+        "manual scheduling: " + std::to_string(manual_rows) + " of " +
+        std::to_string(input.tasks.size()) +
+        " task rows store the manual bit (Fixed2Meta +8 0x80).  Such a row keeps its "
+        "stored Start (+104) and the Finish its Duration implies, its own constraint "
+        "does not move it, its slack is computed on those dates and it is never "
+        "critical (MEASURED, docs/engine-parity.md); the CPM dates Project keeps at "
+        "+96/+100 are reported separately as start/finish and the kept dates as "
+        "display_start/display_finish" +
+        (manual_without_start == 0
+             ? std::string()
+             : "; " + std::to_string(manual_without_start) +
+                   " manual rows store no Start and fall back to the CPM path"));
 
     // ---- links ------------------------------------------------------------
     std::sort(known_uids.begin(), known_uids.end());
@@ -481,6 +572,13 @@ PlanResult recalculate(const PlanInput& input) {
     std::vector<std::size_t> cpm_input_index;
     cpm_tasks.reserve(count - result.summaries);
     cpm_input_index.reserve(count - result.summaries);
+    // Manual rows the effective pass saw, pinned, and could not pin.  An unpinned
+    // manual row (no stored Start, an elapsed duration or actuals) is scheduled
+    // like an auto row, which must be visible in PlanResult rather than silently
+    // assumed away.
+    std::size_t manual_rows = 0;
+    std::size_t manual_pinned = 0;
+    std::size_t manual_pin_failures = 0;
     for (std::size_t index = 0; index < count; ++index) {
         if (is_summary[index] != 0) {
             continue;
@@ -524,6 +622,40 @@ PlanResult recalculate(const PlanInput& input) {
                 mapped.actual_finish = task.actual_finish;
             } else {
                 mapped.actual_start = task.actual_start;
+            }
+        }
+        // MANUAL SCHEDULING (plan.h): a stored-manual row is pinned to its stored
+        // Start and to the Finish its Duration implies, and the engine ignores the
+        // row's own constraint for it.  An elapsed duration has no measured manual
+        // rule (the finish is wall-clock, the calendar is not walked), so such a
+        // row keeps the CPM path and is counted; a row with actuals also keeps the
+        // actuals path (an in-progress manual row has no oracle row).
+        if (task.manually_scheduled) {
+            ++manual_rows;
+        }
+        /* An EDIT-TIME link add moves a manual successor (PlanInput::
+         * manual_rows_follow_links); a recalculation does not.  "Moves" means
+         * the graph places the row for this pass, so it is not pinned. */
+        const bool follow_links =
+            input.manual_rows_follow_links && !is_na(task.stored_start) &&
+            std::any_of(input.links.begin(), input.links.end(), [&task](const PlanLink& link) {
+                return link.successor == task.uid;
+            });
+        if (task.manually_scheduled && !follow_links && !task.elapsed_duration &&
+            is_na(task.actual_start) && is_na(task.actual_finish) &&
+            !is_na(task.stored_start)) {
+            mapped.manual_start = task.stored_start;
+            mapped.manual_finish = manual_finish_of(
+                mapped.calendar != nullptr ? *mapped.calendar : input.calendar,
+                task.stored_start, task.duration);
+            if (is_na(mapped.manual_finish)) {
+                // add_work ran off the calendar domain; fall back rather than pin
+                // an unset date (the engine would report overflow on a bad pin).
+                mapped.manual_start = kDateNa;
+                mapped.manual_finish = kDateNa;
+                ++manual_pin_failures;
+            } else {
+                ++manual_pinned;
             }
         }
         cpm_tasks.push_back(mapped);
@@ -570,6 +702,10 @@ PlanResult recalculate(const PlanInput& input) {
     options.critical_slack_limit_days = input.critical_slack_limit_days;
     options.duration = input.duration;
 
+    // ---- the EFFECTIVE pass (manual rows pinned) -------------------------
+    // This is the schedule the result's start/finish, late dates, slack and
+    // project finish report.  For an auto-scheduled programme it is the only pass
+    // and is exactly the pre-wave-18 behaviour.
     const core::sched::CpmResult scheduled =
         core::sched::schedule_tasks(cpm_tasks, links, input.calendar, options);
     result.error = scheduled.error;
@@ -580,10 +716,58 @@ PlanResult recalculate(const PlanInput& input) {
         return result;
     }
 
+    // ---- the CALCULATED pass (Project's +96/+100) ------------------------
+    // MEASURED (plan.h "MANUAL SCHEDULING"): a manual row's +96/+100 pair is the
+    // date a CPM pass WOULD place it at -- the row's own constraint included,
+    // its stored Start ignored.  That is this second run with the pins cleared.
+    // It is skipped when nothing is manual, so an auto-scheduled programme pays
+    // nothing and cannot change (M2).  A failure here is a failure of the whole
+    // recalculation: no partial schedule is claimed.
+    bool have_calculated = false;
+    core::sched::CpmResult calculated;
+    if (manual_pinned > 0) {
+        std::vector<core::sched::CpmTask> calculated_tasks = cpm_tasks;
+        for (std::size_t i = 0; i < calculated_tasks.size(); ++i) {
+            core::sched::CpmTask& task = calculated_tasks[i];
+            const core::sched::CpmTaskResult& effective_row = scheduled.tasks[i];
+            const PlanTask& row = input.tasks[cpm_input_index[i]];
+            task.manual_start = kDateNa;
+            task.manual_finish = kDateNa;
+            // A manual predecessor still drives a successor from its KEPT dates:
+            // Project's calculated pair for the successor is the bound of the
+            // predecessor's effective finish (link-fs-lag uid 2).  See
+            // CpmTask::link_anchor_start.
+            if (row.manually_scheduled) {
+                task.link_anchor_start = effective_row.start;
+                task.link_anchor_finish = effective_row.finish;
+            }
+        }
+        calculated =
+            core::sched::schedule_tasks(calculated_tasks, links, input.calendar, options);
+        if (!calculated.ok()) {
+            result.error = calculated.error;
+            result.message = "recalculate: calculated (non-manual) pass failed: " +
+                             calculated.message;
+            result.tasks.clear();
+            return result;
+        }
+        have_calculated = true;
+    }
+    result.manual_pinned = manual_pinned;
+    result.manual_unpinned = manual_rows - manual_pinned;
+
     // ---- summary rollup (§3.7) -------------------------------------------
     std::vector<const core::sched::CpmTaskResult*> leaf_result(count, nullptr);
     for (std::size_t i = 0; i < cpm_tasks.size(); ++i) {
         leaf_result[cpm_input_index[i]] = &scheduled.tasks[i];
+    }
+    // The calculated pair per leaf, indexed like cpm_tasks.  Empty when every
+    // row is auto-scheduled: the effective pair IS the calculated pair then.
+    std::vector<const core::sched::CpmTaskResult*> calculated_result(count, nullptr);
+    if (have_calculated) {
+        for (std::size_t i = 0; i < cpm_tasks.size(); ++i) {
+            calculated_result[cpm_input_index[i]] = &calculated.tasks[i];
+        }
     }
 
     std::vector<core::sched::RollupTask> tree;
@@ -646,28 +830,53 @@ PlanResult recalculate(const PlanInput& input) {
             (constraint_needs_date(task.constraint) && !is_na(task.constraint_date)) ||
             !is_na(task.deadline);
         out.has_predecessor = has_predecessor[index] != 0;
+        out.manually_scheduled = task.manually_scheduled;
         if (!out.summary) {
-            const core::sched::CpmTaskResult& cpm = *leaf_result[index];
-            // A leaf's displayed dates are the CPM dates, except that an actual
-            // date is never overwritten by the recalculation (§2.4).
-            out.start = is_na(task.actual_start) ? cpm.start : task.actual_start;
-            out.finish = is_na(task.actual_finish) ? cpm.finish : task.actual_finish;
-            out.early_start = cpm.early_start;
-            out.early_finish = cpm.early_finish;
-            out.late_start = cpm.late_start;
-            out.late_finish = cpm.late_finish;
-            out.start_slack = cpm.start_slack;
-            out.finish_slack = cpm.finish_slack;
-            out.free_slack = cpm.free_slack;
-            out.total_slack = cpm.total_slack;
-            out.critical = cpm.critical;
-            out.constraint = cpm.constraint;
+            const core::sched::CpmTaskResult& effective = *leaf_result[index];
+            // The KEPT/effective pair (+104/+108): an actual date is never
+            // overwritten by the recalculation (§2.4), a manual row keeps its
+            // stored dates, and every other row is the CPM result.
+            out.display_start =
+                is_na(task.actual_start) ? effective.start : task.actual_start;
+            out.display_finish =
+                is_na(task.actual_finish) ? effective.finish : task.actual_finish;
+            out.early_start = effective.early_start;
+            out.early_finish = effective.early_finish;
+            // Project's CALCULATED pair (+96/+100): the pin-free pass.  When no
+            // row is manual there is only one pass and the two pairs coincide.
+            const core::sched::CpmTaskResult& calculated_row =
+                (have_calculated && calculated_result[index] != nullptr)
+                    ? *calculated_result[index]
+                    : effective;
+            out.start = calculated_row.start;
+            out.finish = calculated_row.finish;
+            // Late dates belong to the EFFECTIVE schedule (Project's +112/+116):
+            // they pair with display_* and with the slack below.  An auto row's
+            // late pair is the CPM pair; a manual row's is the kept pair, which is
+            // what Project stores (every measured manual row has +112/+116 equal
+            // to its kept dates when slack is 0).
+            out.late_start = effective.late_start;
+            out.late_finish = effective.late_finish;
+            // +174: every measured manual row stores its KEPT start there.  An
+            // auto row's anchor is the bound its Start was aligned from, which the
+            // engine does not report; leave it unset so a writer inherits.
+            out.start_anchor = task.manually_scheduled ? out.display_start : kDateNa;
+            out.start_slack = effective.start_slack;
+            out.finish_slack = effective.finish_slack;
+            out.free_slack = effective.free_slack;
+            out.total_slack = effective.total_slack;
+            out.critical = effective.critical;
+            out.constraint = effective.constraint;
             out.start_is_actual = !is_na(task.actual_start);
             out.finish_is_actual = !is_na(task.actual_finish);
         } else {
             // A summary has no constraint of its own (§3.7) and no free slack.
             out.early_start = row.start;
             out.early_finish = row.finish;
+            // Project stores the same rolled-up span at +96/+100 and +104/+108
+            // for a summary.
+            out.display_start = row.start;
+            out.display_finish = row.finish;
             out.start_slack = row.start_slack;
             out.finish_slack = row.finish_slack;
             out.free_slack = row.free_slack;
@@ -676,12 +885,26 @@ PlanResult recalculate(const PlanInput& input) {
             out.constraint = ConstraintType::as_soon_as_possible;
         }
         // The project finish must include a summary's rolled-up finish and an
-        // actual finish the forward pass did not see.
-        if (!is_na(out.finish) &&
-            (is_na(result.project_finish) || out.finish > result.project_finish)) {
-            result.project_finish = out.finish;
+        // actual finish the forward pass did not see.  It is the latest KEPT
+        // finish (Project's project row), so a manual row's kept finish counts,
+        // not its calculated one.
+        if (!is_na(out.display_finish) &&
+            (is_na(result.project_finish) || out.display_finish > result.project_finish)) {
+            result.project_finish = out.display_finish;
         }
         result.tasks.push_back(out);
+    }
+    // The project row's duration (+84): the working time between the project
+    // start and finish on the project calendar.  MEASURED on the seven oracles --
+    // 21600 / 12000 / 40800 / 21600 / 21600 / 21600 / 45600 -- each equal to
+    // work_time_between(project_start, project_finish), with the Sunday 13:00
+    // start contributing nothing (plan.h).
+    if (!is_na(result.project_start) && !is_na(result.project_finish)) {
+        result.project_duration =
+            input.calendar.work_time_between(result.project_start, result.project_finish);
+        if (result.project_duration < 0) {
+            result.project_duration = 0;
+        }
     }
     return result;
 }

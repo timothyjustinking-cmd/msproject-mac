@@ -2,20 +2,25 @@
 // a real programme from the reader's task/link tables reproduces the dates and
 // slack MS Project stored in the file.
 //
-// Three tests:
+// The tests:
 //
 // 1. base.mpp (committed as tests/data/synthetic-base.mpp, so this runs on a CI
 //    runner with no corpus/): 3 tasks, 5/3/2 working days, no links, project
-//    start 2026-01-05.  The recalculation must reproduce the stored dates
-//    exactly (2026-01-05 08:00 .. 2026-01-09 17:00 etc.) and the stored slack.
-//    Every expected value is written out; a failure names the task.
-//
-// 2. PROJECT_A (corpus-gated, SKIP when corpus/ or corpus/probe/project_a-recalc.mpp is
+//    start 2026-01-04 13:00.  All three rows are stored MANUALLY SCHEDULED, so
+//    the recalculation must keep their dates (2026-01-04 13:00 ->
+//    01-09/01-07/01-06 12:00), report the CPM pair Project stores at +96/+100,
+//    and reproduce the stored slack (0 / 9600 / 14400).  An auto-cleared control
+//    in the same test proves the CPM path is unchanged.
+// 2. The manual-scheduling rules on hand-built inputs, the recorded oracles
+//    replayed through the plan (duration-change, constraint-snet/mso,
+//    link-fs-lag), and free-vs-total slack on a known chain.
+// 3. PROJECT_A (corpus-gated, SKIP when corpus/ or corpus/probe/project_a-recalc.mpp is
 //    absent, and also skipped when MPP_NO_CORPUS=1): load
 //    corpus/project_a.mpp, map it onto the CPM engine and compare
 //    every task's start, finish, slack and critical with the values stored in
 //    corpus/probe/project_a-recalc.mpp -- Project's own CalculateProject + Save As
-//    output.  The bridge now maps constraints, deadlines and actual dates and
+//    output.  Every stored row is auto-scheduled, so the manual rule never
+//    applies there: the bridge maps constraints, deadlines and actual dates and
 //    rolls summaries up after the CPM passes; the counts are printed per field
 //    and per leaf/summary, the first divergence is printed with both values,
 //    and the fully matching uids are written to tests/data/project_a_recalc_golden.tsv
@@ -182,22 +187,42 @@ void test_base(TestContext& context) {
     }
     context.equal(result.tasks.size(), std::size_t{3}, "base.mpp result has 3 rows");
     context.equal(result.summaries, std::size_t{0}, "base.mpp has no summary in the result");
-    context.equal_date(result.project_finish, sched::from_ymd(2026, 1, 9, 17, 0),
-                       "base.mpp project finish is Fri 2026-01-09 17:00");
+    /* MANUAL SCHEDULING (wave 18, docs/engine-parity.md "First recording").  All
+     * three fixture rows store the manual bit, so Project keeps their dates: the
+     * project finish is the latest KEPT finish (Fri 2026-01-09 12:00), not the
+     * CPM latest (17:00).  The oracle records exactly this. */
+    context.equal(result.manual_pinned, std::size_t{3},
+                  "base.mpp pins all three manual rows in the effective pass");
+    context.equal(result.manual_unpinned, std::size_t{0},
+                  "base.mpp leaves no manual row on the auto path");
+    context.equal_date(result.project_finish, sched::from_ymd(2026, 1, 9, 12, 0),
+                       "base.mpp project finish is Fri 2026-01-09 12:00");
 
     /* Values MS Project stored in base.mpp (tests/data/synthetic-base.mpp is the
-     * identical committed copy; see tests/data/README.md). */
+     * identical committed copy; see tests/data/README.md) and the values the
+     * seven recorded oracles carry for this fixture.  For a manual row:
+     *   display_start/finish = the stored effective pair (+104/+108), where the
+     *                          finish is Start + Duration under the measured
+     *                          manual rule (the Sunday 13:00 start charges
+     *                          13:00-17:00);
+     *   start/finish         = the CPM pair Project stores at +96/+100;
+     *   slack                = LF - EF on the kept dates, all three words equal;
+     *   critical             = false. */
     struct Expected {
         std::int32_t uid;
-        sched::date32 start;
-        sched::date32 finish;
+        sched::date32 kept_start;
+        sched::date32 kept_finish;
+        sched::date32 calculated_start;
+        sched::date32 calculated_finish;
         sched::ticks total_slack;
-        bool critical;
     };
     const Expected expected[] = {
-        {1, sched::from_ymd(2026, 1, 5, 8, 0), sched::from_ymd(2026, 1, 9, 17, 0), 0, true},
-        {2, sched::from_ymd(2026, 1, 5, 8, 0), sched::from_ymd(2026, 1, 7, 17, 0), 9600, false},
-        {3, sched::from_ymd(2026, 1, 5, 8, 0), sched::from_ymd(2026, 1, 6, 17, 0), 14400, false},
+        {1, sched::from_ymd(2026, 1, 4, 13, 0), sched::from_ymd(2026, 1, 9, 12, 0),
+         sched::from_ymd(2026, 1, 5, 8, 0), sched::from_ymd(2026, 1, 9, 17, 0), 0},
+        {2, sched::from_ymd(2026, 1, 4, 13, 0), sched::from_ymd(2026, 1, 7, 12, 0),
+         sched::from_ymd(2026, 1, 5, 8, 0), sched::from_ymd(2026, 1, 7, 17, 0), 9600},
+        {3, sched::from_ymd(2026, 1, 4, 13, 0), sched::from_ymd(2026, 1, 6, 12, 0),
+         sched::from_ymd(2026, 1, 5, 8, 0), sched::from_ymd(2026, 1, 6, 17, 0), 14400},
     };
 
     for (const Expected& row : expected) {
@@ -207,39 +232,522 @@ void test_base(TestContext& context) {
         if (actual == nullptr) {
             continue;
         }
-        context.equal_date(actual->start, row.start, label + " recalculated start");
-        context.equal_date(actual->finish, row.finish, label + " recalculated finish");
-        context.equal(actual->total_slack, row.total_slack, label + " recalculated total slack");
-        context.equal(actual->critical, row.critical, label + " recalculated critical");
+        context.check(actual->manually_scheduled, label + " is reported manually scheduled");
+        context.equal_date(actual->display_start, row.kept_start, label + " kept start");
+        context.equal_date(actual->display_finish, row.kept_finish, label + " kept finish");
+        context.equal_date(actual->start, row.calculated_start,
+                           label + " calculated (CPM) start");
+        context.equal_date(actual->finish, row.calculated_finish,
+                           label + " calculated (CPM) finish");
+        context.equal_date(actual->start_anchor, row.kept_start,
+                           label + " start anchor is the kept start");
+        context.equal(actual->total_slack, row.total_slack, label + " total slack");
+        /* MEASURED: the three slack words are one number on a manual row. */
+        context.equal(actual->start_slack, actual->total_slack,
+                      label + " start slack equals total slack");
+        context.equal(actual->free_slack, actual->total_slack,
+                      label + " free slack equals total slack");
+        context.check(!actual->critical, label + " is never critical when manual");
         context.check(!actual->start_is_actual && !actual->finish_is_actual,
                       label + " has no actual dates to keep");
 
-        /* And the same values as the file stores them (mpp::Task now exposes
-         * both the dates and the row's total slack). */
+        /* And the same values as the file stores them (mpp::Task exposes both
+         * the effective and the calculated pair). */
         const mpp::Task* stored = find_task(document, static_cast<std::uint32_t>(row.uid));
         context.check(stored != nullptr, label + " is in the stored task table");
         if (stored != nullptr) {
+            context.check(stored->manually_scheduled,
+                          label + " stores the manual bit (the only driver of the pin)");
+            context.equal_date(actual->display_start, stored->start.raw,
+                               label + " kept start equals the stored effective pair");
+            context.equal_date(actual->display_finish, stored->finish.raw,
+                               label + " kept finish equals the stored effective pair");
             context.equal_date(actual->start, stored->calculated_start.raw,
-                               label + " start equals the calculated pair");
+                               label + " start equals the stored +96");
             context.equal_date(actual->finish, stored->calculated_finish.raw,
-                               label + " finish equals the calculated pair");
+                               label + " finish equals the stored +100");
             context.equal(actual->total_slack,
                           static_cast<sched::ticks>(stored->total_slack_ticks),
                           label + " total slack equals the stored value");
-            /* base.mpp was built with manual scheduling, and Project never calls
-             * a manually scheduled task critical even at zero slack (the reader
-             * derives Critical as !manually_scheduled && slack <= 0).  The
-             * bridge has no manual flag, so it applies the slack rule; compare
-             * against the stored flag only where manual scheduling cannot
-             * interfere, and say so otherwise. */
-            if (!stored->manually_scheduled) {
-                context.equal(actual->critical, stored->critical,
-                              label + " critical equals stored");
-            } else {
-                std::cout << "note: base uid " << row.uid
-                          << " is manually scheduled (stored critical=no, slack rule=yes)\n";
+            context.equal(actual->critical, stored->critical,
+                          label + " critical equals the stored flag");
+        }
+    }
+
+    /* THE AUTO PATH IS UNCHANGED.  Clearing the stored bit on a COPY of the same
+     * mapping must reproduce the pre-wave-18 CPM result (the values this test
+     * asserted before manual scheduling existed): every row is scheduled from the
+     * aligned project start, all three rows are critical-or-slack by the CPM rule
+     * and the calculated pair equals the effective pair.  The bit is the only
+     * driver, so this is the regression that a manual-mode change cannot silently
+     * move an auto-scheduled programme (M2's 332/332 lives on that path). */
+    plan::PlanInput auto_input = input;
+    for (plan::PlanTask& task : auto_input.tasks) {
+        task.manually_scheduled = false;
+        task.stored_start = sched::kDateNa;
+        task.stored_finish = sched::kDateNa;
+        task.start_anchor = sched::kDateNa;
+    }
+    const plan::PlanResult auto_result = plan::recalculate(auto_input);
+    context.check(auto_result.ok(), "the auto control recalculation succeeds");
+    if (auto_result.ok()) {
+        context.equal(auto_result.manual_pinned, std::size_t{0},
+                      "the auto control pins no row");
+        context.equal_date(auto_result.project_finish, sched::from_ymd(2026, 1, 9, 17, 0),
+                           "the auto control project finish is the CPM Fri 17:00");
+        struct AutoExpected {
+            std::int32_t uid;
+            sched::date32 start;
+            sched::date32 finish;
+            sched::ticks total_slack;
+            bool critical;
+        };
+        const AutoExpected auto_expected[] = {
+            {1, sched::from_ymd(2026, 1, 5, 8, 0), sched::from_ymd(2026, 1, 9, 17, 0), 0, true},
+            {2, sched::from_ymd(2026, 1, 5, 8, 0), sched::from_ymd(2026, 1, 7, 17, 0), 9600, false},
+            {3, sched::from_ymd(2026, 1, 5, 8, 0), sched::from_ymd(2026, 1, 6, 17, 0), 14400, false},
+        };
+        for (const AutoExpected& row : auto_expected) {
+            const std::string label = "auto control uid " + std::to_string(row.uid);
+            const plan::PlanTaskResult* actual = find_result(auto_result, row.uid);
+            context.check(actual != nullptr, label + " is in the control");
+            if (actual == nullptr) {
+                continue;
+            }
+            context.equal_date(actual->start, row.start, label + " CPM start");
+            context.equal_date(actual->finish, row.finish, label + " CPM finish");
+            context.equal(actual->total_slack, row.total_slack, label + " CPM total slack");
+            context.equal(actual->critical, row.critical, label + " CPM critical");
+            context.equal_date(actual->display_start, actual->start,
+                               label + " the kept pair equals the CPM pair when auto");
+            context.equal_date(actual->display_finish, actual->finish,
+                               label + " the kept pair equals the CPM pair when auto (finish)");
+        }
+    }
+}
+
+/* ---- 1b. MANUAL SCHEDULING: the rules on hand-built inputs --------------- */
+/* The bit is the only driver: these inputs carry no .mpp at all, so a pass here
+ * cannot be the fixture's stored dates leaking through. */
+plan::PlanTask synthetic_task(std::int32_t uid, sched::ticks duration) {
+    plan::PlanTask task;
+    task.uid = uid;
+    task.duration = duration;
+    return task;
+}
+
+plan::PlanLink synthetic_link(std::int32_t predecessor, std::int32_t successor,
+                              sched::LinkType type = sched::LinkType::finish_to_start,
+                              sched::ticks lag = 0) {
+    plan::PlanLink link;
+    link.predecessor = predecessor;
+    link.successor = successor;
+    link.type = type;
+    link.lag = lag;
+    return link;
+}
+
+void test_manual_scheduling(TestContext& context) {
+    /* (a) The pin, the boundary finish rule and the calculated pair.
+     * MEASURED (recalculate oracle): a manual start of Sun 2026-01-04 13:00 is
+     * kept, and 5/3/2 working days from it finish Fri 01-09 12:00 / Wed 01-07
+     * 12:00 / Tue 01-06 12:00 -- the 13:00-17:00 tail of the Sunday counts as
+     * working, so these are NOT AddWork(Monday 08:00, d) (that is the CPM pair
+     * 17:00 the calculated fields carry). */
+    {
+        plan::PlanInput input;
+        input.calendar = plan::standard_calendar();
+        input.project_start = sched::from_ymd(2026, 1, 4, 13, 0);
+        struct Row {
+            std::int32_t uid;
+            sched::ticks duration;
+            sched::date32 finish;
+            sched::ticks slack;
+        };
+        const Row rows[] = {
+            {1, 24000, sched::from_ymd(2026, 1, 9, 12, 0), 0},
+            {2, 14400, sched::from_ymd(2026, 1, 7, 12, 0), 9600},
+            {3, 9600, sched::from_ymd(2026, 1, 6, 12, 0), 14400},
+        };
+        for (const Row& row : rows) {
+            plan::PlanTask task = synthetic_task(row.uid, row.duration);
+            task.manually_scheduled = true;
+            task.stored_start = sched::from_ymd(2026, 1, 4, 13, 0);
+            input.tasks.push_back(task);
+        }
+        const plan::PlanResult result = plan::recalculate(input);
+        context.check(result.ok(), "synthetic manual input recalculates (" + describe(result) + ")");
+        context.equal(result.manual_pinned, std::size_t{3}, "the three manual rows are pinned");
+        context.equal_date(result.project_finish, sched::from_ymd(2026, 1, 9, 12, 0),
+                           "manual rows: project finish is the latest kept finish");
+        for (const Row& row : rows) {
+            const std::string label = "synthetic manual uid " + std::to_string(row.uid);
+            const plan::PlanTaskResult* actual = find_result(result, row.uid);
+            context.check(actual != nullptr, label + " is in the result");
+            if (actual == nullptr) {
+                continue;
+            }
+            context.equal_date(actual->display_start, sched::from_ymd(2026, 1, 4, 13, 0),
+                               label + " keeps its stored start (a non-working instant)");
+            context.equal_date(actual->display_finish, row.finish,
+                               label + " finish (manual rule)");
+            context.equal_date(actual->start, sched::from_ymd(2026, 1, 5, 8, 0),
+                               label + " calculated start is the aligned CPM start");
+            context.equal(actual->total_slack, row.slack, label + " total slack");
+            context.equal(actual->start_slack, row.slack, label + " start slack = total slack");
+            context.equal(actual->free_slack, row.slack, label + " free slack = total slack");
+            context.check(!actual->critical, label + " is not critical");
+            context.equal_date(actual->start_anchor, actual->display_start,
+                               label + " start anchor is the kept start");
+        }
+    }
+
+    /* (b) A manual successor keeps its dates when its predecessor moves; the same
+     * graph with the bit clear reschedules.  This is the "manual task keeps its
+     * dates when a predecessor moves" regression, and its auto control. */
+    {
+        const auto build = [](bool manual_successor) {
+            plan::PlanInput input;
+            input.calendar = plan::standard_calendar();
+            input.project_start = sched::from_ymd(2026, 1, 5, 8, 0);
+            input.tasks.push_back(synthetic_task(1, 9600));  // 2 working days
+            plan::PlanTask successor = synthetic_task(2, 4800);  // 1 working day
+            if (manual_successor) {
+                successor.manually_scheduled = true;
+                successor.stored_start = sched::from_ymd(2026, 2, 2, 8, 0);
+            }
+            input.tasks.push_back(successor);
+            input.links.push_back(synthetic_link(1, 2));
+            return input;
+        };
+        plan::PlanInput manual_input = build(true);
+        const plan::PlanResult short_run = plan::recalculate(manual_input);
+        context.check(short_run.ok(), "manual successor: first recalculation succeeds");
+        if (short_run.ok()) {
+            const plan::PlanTaskResult* successor = find_result(short_run, 2);
+            context.check(successor != nullptr, "manual successor is in the first result");
+            if (successor != nullptr) {
+                context.equal_date(successor->display_start, sched::from_ymd(2026, 2, 2, 8, 0),
+                                   "manual successor ignores the link for its kept start");
+                context.equal_date(successor->display_finish,
+                                   sched::from_ymd(2026, 2, 2, 17, 0),
+                                   "manual successor keeps its own finish");
+            }
+            const plan::PlanTaskResult* predecessor = find_result(short_run, 1);
+            context.check(predecessor != nullptr, "predecessor is in the first result");
+            if (predecessor != nullptr) {
+                context.equal_date(predecessor->finish, sched::from_ymd(2026, 1, 6, 17, 0),
+                                   "predecessor finishes after 2 working days");
             }
         }
+        // The predecessor grows by three days.  The manual successor does not move.
+        manual_input.tasks[0].duration = 24000;  // 5 working days
+        const plan::PlanResult long_run = plan::recalculate(manual_input);
+        context.check(long_run.ok(), "manual successor: second recalculation succeeds");
+        if (long_run.ok()) {
+            const plan::PlanTaskResult* predecessor = find_result(long_run, 1);
+            context.check(predecessor != nullptr, "predecessor is in the second result");
+            if (predecessor != nullptr) {
+                context.equal_date(predecessor->finish, sched::from_ymd(2026, 1, 9, 17, 0),
+                                   "the auto predecessor moved to Fri 2026-01-09 17:00");
+            }
+            const plan::PlanTaskResult* successor = find_result(long_run, 2);
+            context.check(successor != nullptr, "manual successor is in the second result");
+            if (successor != nullptr) {
+                context.equal_date(successor->display_start,
+                                   sched::from_ymd(2026, 2, 2, 8, 0),
+                                   "manual successor still starts 2026-02-02 after the move");
+                context.equal_date(successor->display_finish,
+                                   sched::from_ymd(2026, 2, 2, 17, 0),
+                                   "manual successor still finishes 2026-02-02 after the move");
+            }
+        }
+        // Control: the same graph, auto-scheduled, does move with the predecessor.
+        plan::PlanInput auto_input = build(false);
+        const plan::PlanResult auto_short = plan::recalculate(auto_input);
+        if (auto_short.ok()) {
+            const plan::PlanTaskResult* successor = find_result(auto_short, 2);
+            context.check(successor != nullptr, "auto control successor is in the short result");
+            if (successor != nullptr) {
+                context.equal_date(successor->start, sched::from_ymd(2026, 1, 7, 8, 0),
+                                   "auto successor starts after the 2-day predecessor");
+            }
+        }
+        auto_input.tasks[0].duration = 24000;
+        const plan::PlanResult auto_long = plan::recalculate(auto_input);
+        if (auto_long.ok()) {
+            const plan::PlanTaskResult* successor = find_result(auto_long, 2);
+            context.check(successor != nullptr, "auto control successor is in the long result");
+            if (successor != nullptr) {
+                context.equal_date(successor->start, sched::from_ymd(2026, 1, 12, 8, 0),
+                                   "auto successor moved with the predecessor (M2 path)");
+            }
+        }
+    }
+
+    /* (c) A manual predecessor still drives an auto successor. */
+    {
+        plan::PlanInput input;
+        input.calendar = plan::standard_calendar();
+        input.project_start = sched::from_ymd(2026, 1, 12, 8, 0);
+        plan::PlanTask predecessor = synthetic_task(1, 4800);
+        predecessor.manually_scheduled = true;
+        predecessor.stored_start = sched::from_ymd(2026, 1, 12, 8, 0);
+        input.tasks.push_back(predecessor);
+        input.tasks.push_back(synthetic_task(2, 4800));
+        input.links.push_back(synthetic_link(1, 2));
+        const plan::PlanResult result = plan::recalculate(input);
+        context.check(result.ok(), "manual -> auto recalculation succeeds");
+        if (result.ok()) {
+            const plan::PlanTaskResult* successor = find_result(result, 2);
+            context.check(successor != nullptr, "auto successor of a manual row is in the result");
+            if (successor != nullptr) {
+                context.equal_date(successor->start, sched::from_ymd(2026, 1, 13, 8, 0),
+                                   "successors still respect a manual row's finish");
+                context.equal_date(successor->finish, sched::from_ymd(2026, 1, 13, 17, 0),
+                                   "auto successor finishes its working day");
+            }
+            const plan::PlanTaskResult* manual = find_result(result, 1);
+            if (manual != nullptr) {
+                context.equal_date(manual->display_finish,
+                                   sched::from_ymd(2026, 1, 12, 17, 0),
+                                   "the manual row keeps its finish");
+                context.equal(manual->total_slack, 0,
+                              "a manual row followed immediately has no slack");
+            }
+        }
+    }
+
+    /* (d) A manual row's own constraint is stored but does not move it; the
+     * calculated pair moves instead (constraint-snet / constraint-mso oracles). */
+    {
+        plan::PlanInput input;
+        input.calendar = plan::standard_calendar();
+        input.project_start = sched::from_ymd(2026, 1, 4, 13, 0);
+        plan::PlanTask task = synthetic_task(1, 9600);
+        task.manually_scheduled = true;
+        task.stored_start = sched::from_ymd(2026, 1, 4, 13, 0);
+        task.constraint = sched::ConstraintType::start_no_earlier_than;
+        task.constraint_date = sched::from_ymd(2026, 2, 2, 8, 0);
+        input.tasks.push_back(task);
+        const plan::PlanResult result = plan::recalculate(input);
+        context.check(result.ok(), "manual row with an SNET constraint recalculates");
+        if (result.ok()) {
+            const plan::PlanTaskResult* actual = find_result(result, 1);
+            context.check(actual != nullptr, "the constrained manual row is in the result");
+            if (actual != nullptr) {
+                context.equal_date(actual->display_start, sched::from_ymd(2026, 1, 4, 13, 0),
+                                   "SNET does not move a manual row's start");
+                context.equal_date(actual->display_finish, sched::from_ymd(2026, 1, 6, 12, 0),
+                                   "SNET does not move a manual row's finish");
+                context.equal_date(actual->start, sched::from_ymd(2026, 2, 2, 8, 0),
+                                   "the calculated pair does take the SNET date");
+                context.check(actual->constraint == sched::ConstraintType::as_soon_as_possible,
+                              "the applied constraint of a manual row is ASAP");
+            }
+        }
+    }
+}
+
+/* ---- 1c. The recorded oracles: plan-visible edits on the fixture --------- */
+void test_manual_oracle(TestContext& context) {
+    const std::string path = PLAN_BASE_PATH;
+    if (!file_exists(path)) {
+        context.check(false, "committed fixture is missing: " + std::string(PLAN_BASE_PATH));
+        return;
+    }
+    const mpp::Document document = mpp::load_file(path);
+    plan::PlanInput input = from_mpp_with_calendar(document, path);
+
+    /* duration-change.oracle.json: task 1 Duration -> 14400 ticks (3 d).  The
+     * manual finish is recomputed from the KEPT start, so the oracle's task
+     * dates/slack are 01-07 12:00 / 01-07 12:00 / 01-06 12:00 with slack
+     * 0 / 0 / 4800 and project finish 01-07 12:00. */
+    {
+        plan::PlanInput changed = input;
+        for (plan::PlanTask& task : changed.tasks) {
+            if (task.uid == 1) {
+                task.duration = 14400;
+            }
+        }
+        const plan::PlanResult result = plan::recalculate(changed);
+        context.check(result.ok(), "duration-change oracle: recalculation succeeds");
+        if (result.ok()) {
+            struct Row {
+                std::int32_t uid;
+                sched::date32 finish;
+                sched::ticks slack;
+            };
+            const Row rows[] = {
+                {1, sched::from_ymd(2026, 1, 7, 12, 0), 0},
+                {2, sched::from_ymd(2026, 1, 7, 12, 0), 0},
+                {3, sched::from_ymd(2026, 1, 6, 12, 0), 4800},
+            };
+            for (const Row& row : rows) {
+                const std::string label = "duration-change uid " + std::to_string(row.uid);
+                const plan::PlanTaskResult* actual = find_result(result, row.uid);
+                context.check(actual != nullptr, label + " is in the result");
+                if (actual == nullptr) {
+                    continue;
+                }
+                context.equal_date(actual->display_start, sched::from_ymd(2026, 1, 4, 13, 0),
+                                   label + " kept start is unchanged");
+                context.equal_date(actual->display_finish, row.finish, label + " kept finish");
+                context.equal(actual->total_slack, row.slack, label + " total slack");
+            }
+            context.equal_date(result.project_finish, sched::from_ymd(2026, 1, 7, 12, 0),
+                               "duration-change project finish");
+        }
+    }
+
+    /* constraint-snet.oracle.json: SNET 2026-02-02 08:00 on uid 2.  The row keeps
+     * 01-04 13:00 / 01-07 12:00 and slack 9600; the calculated pair jumps. */
+    {
+        plan::PlanInput constrained = input;
+        for (plan::PlanTask& task : constrained.tasks) {
+            if (task.uid == 2) {
+                task.constraint = sched::ConstraintType::start_no_earlier_than;
+                task.constraint_date = sched::from_ymd(2026, 2, 2, 8, 0);
+            }
+        }
+        const plan::PlanResult result = plan::recalculate(constrained);
+        context.check(result.ok(), "constraint-snet oracle: recalculation succeeds");
+        if (result.ok()) {
+            const plan::PlanTaskResult* actual = find_result(result, 2);
+            context.check(actual != nullptr, "constraint-snet uid 2 is in the result");
+            if (actual != nullptr) {
+                context.equal_date(actual->display_start, sched::from_ymd(2026, 1, 4, 13, 0),
+                                   "constraint-snet: the manual start is kept");
+                context.equal_date(actual->display_finish, sched::from_ymd(2026, 1, 7, 12, 0),
+                                   "constraint-snet: the manual finish is kept");
+                context.equal(actual->total_slack, 9600,
+                              "constraint-snet: slack is the manual LF - EF (9600)");
+                context.equal_date(actual->start,
+                                   sched::from_ymd(2026, 2, 2, 8, 0),
+                                   "constraint-snet: the calculated start is the SNET date");
+                context.equal_date(actual->finish,
+                                   sched::from_ymd(2026, 2, 4, 17, 0),
+                                   "constraint-snet: the calculated finish is 3 d later");
+            }
+            context.equal_date(result.project_finish, sched::from_ymd(2026, 1, 9, 12, 0),
+                               "constraint-snet: project finish is the kept latest finish");
+        }
+    }
+
+    /* constraint-mso.oracle.json: MSO 2026-01-20 08:00 on uid 3.  Same shape; the
+     * oracle's stored Duration 12000 is a Project-side edit the engine does not
+     * perform (it is not a scheduling rule and the scenario half does not write
+     * it), so only the dates/slack are compared here. */
+    {
+        plan::PlanInput constrained = input;
+        for (plan::PlanTask& task : constrained.tasks) {
+            if (task.uid == 3) {
+                task.constraint = sched::ConstraintType::must_start_on;
+                task.constraint_date = sched::from_ymd(2026, 1, 20, 8, 0);
+            }
+        }
+        const plan::PlanResult result = plan::recalculate(constrained);
+        context.check(result.ok(), "constraint-mso oracle: recalculation succeeds");
+        if (result.ok()) {
+            const plan::PlanTaskResult* actual = find_result(result, 3);
+            context.check(actual != nullptr, "constraint-mso uid 3 is in the result");
+            if (actual != nullptr) {
+                context.equal_date(actual->display_start, sched::from_ymd(2026, 1, 4, 13, 0),
+                                   "constraint-mso: the manual start is kept");
+                context.equal_date(actual->display_finish, sched::from_ymd(2026, 1, 6, 12, 0),
+                                   "constraint-mso: the manual finish is kept");
+                context.equal(actual->total_slack, 14400,
+                              "constraint-mso: slack stays the unconstrained 14400");
+                context.equal_date(actual->start,
+                                   sched::from_ymd(2026, 1, 20, 8, 0),
+                                   "constraint-mso: the calculated start is the MSO date");
+                context.equal_date(actual->finish,
+                                   sched::from_ymd(2026, 1, 21, 17, 0),
+                                   "constraint-mso: calculated finish from the 2 d duration");
+            }
+            context.equal_date(result.project_finish, sched::from_ymd(2026, 1, 9, 12, 0),
+                               "constraint-mso: project finish is the kept latest finish");
+        }
+    }
+
+    /* link-fs-lag.oracle.json: link 1 -> 2 FS+4800.  Both rows are manual, so the
+     * kept dates do not move in a pure recalculation (Project's KEPT dates,
+     * 01-12/01-15, were written when the link was ADDED and saved; the scenario
+     * half applies add_link without that intermediate pass, so the plan cannot
+     * reproduce them -- plan.h "MANUAL SCHEDULING" says so).
+     *
+     * The CALCULATED pair is where this fixture pins the second pass.  Project
+     * stores uid 2 calculated 2026-01-12 13:00 -> 01-15 12:00, the FS+1d bound of
+     * uid 1's EFFECTIVE finish Fri 01-09 12:00 (the bound of its calculated
+     * finish 17:00 would be 01-13 08:00).  So a manual successor's calculated
+     * pair is computed from its predecessor's KEPT dates, which is what the
+     * engine's CpmTask::link_anchor_start/finish encode and the plan sets for a
+     * manual row in the calculated pass. */
+    {
+        plan::PlanInput linked = input;
+        linked.links.push_back(synthetic_link(1, 2, sched::LinkType::finish_to_start, 4800));
+        const plan::PlanResult result = plan::recalculate(linked);
+        context.check(result.ok(), "link-fs-lag oracle: recalculation succeeds");
+        if (result.ok()) {
+            const plan::PlanTaskResult* actual = find_result(result, 2);
+            context.check(actual != nullptr, "link-fs-lag uid 2 is in the result");
+            if (actual != nullptr) {
+                context.equal_date(actual->start,
+                                   sched::from_ymd(2026, 1, 12, 13, 0),
+                                   "link-fs-lag: calculated start matches the oracle");
+                context.equal_date(actual->finish,
+                                   sched::from_ymd(2026, 1, 15, 12, 0),
+                                   "link-fs-lag: calculated finish matches the oracle");
+                context.equal_date(actual->display_start, sched::from_ymd(2026, 1, 4, 13, 0),
+                                   "link-fs-lag: a recalculation alone keeps the stored start");
+            }
+        }
+    }
+}
+
+/* ---- 1d. Free vs total slack on a known chain (auto-scheduled) ----------- */
+void test_free_vs_total_slack(TestContext& context) {
+    /* Two independent chains.  Chain 1 is 2 d + 1 d, chain 2 is one 4 d task, so
+     * the project finish is chain 2's.  Chain 1's first task can slip a day
+     * without moving anything (total slack 4800) but its successor starts the
+     * next morning, so it has no free slack: free 0 < total 4800.  MEASURED
+     * convention: FreeSlack is task row +74, StartSlack +186, TotalSlack +190
+     * (spec/mpp-records.md; milestone1.mpp ID 6 stores 0 / 220800 / 220800), and
+     * this is the shape M2's auto-scheduled corpus never exercises because its
+     * stored rows have the three words equal. */
+    plan::PlanInput input;
+    input.calendar = plan::standard_calendar();
+    input.project_start = sched::from_ymd(2026, 1, 5, 8, 0);
+    input.tasks.push_back(synthetic_task(1, 9600));  // 2 d
+    input.tasks.push_back(synthetic_task(2, 4800));  // 1 d
+    input.tasks.push_back(synthetic_task(3, 19200)); // 4 d, the long chain
+    input.links.push_back(synthetic_link(1, 2));
+    const plan::PlanResult result = plan::recalculate(input);
+    context.check(result.ok(), "free/total slack chain recalculates (" + describe(result) + ")");
+    if (!result.ok()) {
+        return;
+    }
+    context.equal_date(result.project_finish, sched::from_ymd(2026, 1, 8, 17, 0),
+                       "the 4-day task sets the project finish");
+    const plan::PlanTaskResult* first = find_result(result, 1);
+    const plan::PlanTaskResult* second = find_result(result, 2);
+    const plan::PlanTaskResult* long_chain = find_result(result, 3);
+    context.check(first != nullptr && second != nullptr && long_chain != nullptr,
+                  "all three slack-chain rows are in the result");
+    if (first != nullptr && second != nullptr && long_chain != nullptr) {
+        context.equal(first->total_slack, 4800, "chain head total slack is one day");
+        context.equal(first->free_slack, 0,
+                      "chain head free slack is 0 (its successor starts the next morning)");
+        context.equal(first->start_slack, 4800,
+                      "chain head start slack equals total slack (LS - ES)");
+        context.check(first->free_slack < first->total_slack,
+                      "free slack is smaller than total slack on a linked chain");
+        context.equal(second->total_slack, 4800, "chain tail total slack equals free slack");
+        context.equal(second->free_slack, 4800, "chain tail free slack (no successors)");
+        context.equal(long_chain->total_slack, 0, "the longest chain is critical");
+        context.check(long_chain->critical, "the longest chain's task is critical");
+        context.check(!first->critical && !second->critical,
+                      "the short chain is not critical");
     }
 }
 
@@ -1056,6 +1564,9 @@ int main() {
     sched_test::TestContext context;
     try {
         test_base(context);
+        test_manual_scheduling(context);
+        test_manual_oracle(context);
+        test_free_vs_total_slack(context);
         test_project_a(context);
         test_schedin(context);
         test_elapsed_lag(context);

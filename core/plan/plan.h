@@ -99,6 +99,95 @@
 // comes from an actual is a copy of a stored value, so those matches are not
 // independent evidence about the graph.
 //
+// --------------------------------------------------------- MANUAL SCHEDULING --
+// MEASURED (wave 18, docs/engine-parity.md "First recording"): the eight
+// synthetic scenarios and their seven recorded oracles.  The fixture's three
+// tasks are stored `Manually Scheduled` (Fixed2Meta per-row flags byte +8 bit
+// 0x80; `mpp::Task::manually_scheduled`, and the dump carries it).  Project does
+// NOT reschedule such a row, and the oracles show exactly what it does instead:
+//
+//   * EFFECTIVE dates = stored.  recalculate: all three rows keep
+//     Start 2026-01-04 13:00 (the project start, a Sunday afternoon) and store
+//     2026-01-09 12:00 / 2026-01-07 12:00 / 2026-01-06 12:00 as Finish, while
+//     the CALCULATED pair (+96/+100) holds the CPM dates 01-05 08:00 ->
+//     01-09 17:00 / 01-07 17:00 / 01-06 17:00.  Our engine mapped every row onto
+//     CPM, which is why its start was 01-05 08:00 and the project finish
+//     01-09 17:00 instead of 01-09 12:00.
+//   * the row's own CONSTRAINT is stored but ignored: constraint-snet keeps
+//     Start/Finish at 01-04 13:00 / 01-07 12:00 on the SNET row (2026-02-02)
+//     while its calculated pair jumps to 02-02 08:00 -> 02-04 17:00;
+//     constraint-mso does the same at 2026-01-20.  The constraint still reaches
+//     the *calculated* pass, so this is not a mapping bug: it is two schedules.
+//   * SLACK is computed on the effective dates.  recalculate stores
+//     0 / 9600 / 14400 (LF - EF with LF = the project's latest effective finish);
+//     in constraint-snet the SNET row keeps 9600 even though its calculated
+//     dates are in February (our CPM gave it 0 / 86400 / 100800).
+//   * the three slack words are ONE number on every manual row of every oracle
+//     (+74 FreeSlack, +186 StartSlack, +190 TotalSlack are 0/0/0, 9600, 14400,
+//     24000 and 33600 in the measurements).  The start is a user fact, the whole
+//     row moves with the slack, so StartSlack is reported equal to TotalSlack.
+//   * CRITICAL is always false for a manual row (all 18 manual rows of the seven
+//     oracles), which is the same rule core/mpp derives for the stored bit.
+//   * SUCCESSORS still respect it: link-fs-lag's manual uid 2 starts
+//     2026-01-12 13:00, the FS+1d bound of uid 1's *effective* finish
+//     01-09 12:00 (its calculated finish 01-09 17:00 would give Mon 17:00 + 1 d).
+//
+// WHAT THE BRIDGE DOES NOW.  `recalculate()` runs two CPM passes over the same
+// graph:
+//
+//   1. the EFFECTIVE pass, in which a manual row is pinned to its stored Start
+//      and the Finish its Duration implies (CpmTask::manual_start/manual_finish).
+//      Its dates are PlanTaskResult::display_start/display_finish, its late dates
+//      and the three slack words come from it, and its rolled-up finish is the
+//      project finish the result reports;
+//   2. the CALCULATED pass, with the pins cleared, whose early dates are the pair
+//      Project stores at +96/+100 and which PlanTaskResult::start/finish report
+//      (see that field's comment: it is the pair the current scenario applier
+//      maps onto every date copy).  It runs only when the input has a manual row,
+//      so an auto-scheduled programme (PROJECT_A/B, schedin, holiday1,
+//      w9-elapsedlag -- every measured corpus file has the bit clear) is
+//      scheduled exactly once and M2 cannot move.
+//
+// THE MANUAL FINISH IS NOT PLAIN AddWork.  MEASURED on the one boundary case in
+// the corpus: Project's stored Start is 2026-01-04 13:00, a SUNDAY that the
+// project calendar does not work, and the stored finishes are exactly Start +
+// Duration counted as if the 13:00-17:00 tail of that afternoon were working:
+// 5 d -> Fri 01-09 12:00, 3 d -> Wed 01-07 12:00, 2 d -> Tue 01-06 12:00
+// (calendar-correct AddWork from the aligned Monday 08:00 would give 17:00
+// finishes, which is the CALCULATED pair, not these).  duration-change
+// reproduces the same rule after a Duration edit: 3 d from 01-04 13:00 is
+// 01-07 12:00, not 01-07 17:00.  So `manual_finish_of()` charges the working
+// time between the start's CLOCK time and the end of the standard working day
+// (240 min for 13:00) before walking the calendar from the next working instant.
+// For a start that already is a working instant the charge is 0 and the finish
+// is calendar-correct AddWork (link-fs-lag uid 2 Mon 13:00 -> Thu 12:00;
+// delete uid 3 Wed 13:00 -> Fri 12:00, both match the oracles).
+// [I] scope: one non-working start instant (a Sunday 13:00) is measured.  A
+// manual start at any other non-working instant has no oracle row, and the
+// charge rule is the [I] generalisation; `notes` says how many rows used it.
+//
+// WHAT THE BRIDGE CANNOT DO (stated, not hidden).  Two things:
+//   * Project persisted the moved dates of a manual successor at LINK-ADD time:
+//     link-fs-lag's uid 2 and delete-task-with-successor's uid 3 store
+//     2026-01-12 / 2026-01-14 13:00 because Project recalculated when the link
+//     was added and then saved those dates.  Our scenario half applies
+//     add_link/delete_task to the file without an intermediate recalculation, so
+//     by the time the planner runs the link is gone and the stored start is still
+//     01-04 13:00.  The plan therefore cannot reproduce those two rows; the fix
+//     belongs to the scenario applier (recalculate and persist the plan after
+//     each structural edit), not to the engine.
+//   * The scenario applier (tests/engine_diff_tests.cpp) maps ONE PlanTaskResult
+//     date pair onto all six stored date words, so a file it writes cannot hold
+//     the calculated pair at +96/+100 AND the kept pair at +104/+108; core/
+//     mppwrite even refuses that as a "single-copy start write".  The bridge
+//     therefore reports the CALCULATED pair as start/finish (saveable, and what
+//     Project stores at +96/+100) and the KEPT pair as display_start/
+//     display_finish (Project's +104/+108), plus start_anchor for +174.  Making
+//     the file correct needs three lines in the applier (start/finish ->
+//     calculated pair, display_* -> project_start/project_finish, start_anchor ->
+//     +174); until then a scenario dump compares the calculated pair against the
+//     oracle's +104/+108 and differs on every manual row.
+//
 // --------------------------------------------------------------- SUMMARIES --
 // MS Project recomputes every summary bottom-up after the CPM passes
 // (XP_RecomputeOutline, spec §3.1/§3.7).  The bridge now does the same:
@@ -190,6 +279,20 @@ struct PlanTask {
     // True when the dates above came from mpp::Task's own ActualStart/ActualFinish
     // rather than the PercentComplete fallback.  Reporting only.
     bool actuals_from_reader = false;
+    // ---- MANUAL SCHEDULING (see the header section above) -------------------
+    // True when mpp::Task::manually_scheduled is set (Fixed2Meta bit 0x80).
+    // Project keeps such a row's dates, ignores its own constraint for them and
+    // never calls it critical; recalculate() pins it instead of scheduling it.
+    bool manually_scheduled = false;
+    // The row's stored EFFECTIVE dates, reader +104/+108: what Project displays
+    // and, for a manual row, the Start it keeps.  kDateNa when the row stores
+    // none (the row then falls back to the CPM path and is counted in `notes`).
+    core::sched::date32 stored_start = core::sched::kDateNa;
+    core::sched::date32 stored_finish = core::sched::kDateNa;
+    // Reader +174, the start anchor: for a manual row it is the manual Start, for
+    // an auto row the bound its Start was aligned from.  Carried to the result so
+    // a writer can store it (the oracle's manual rows all keep anchor == Start).
+    core::sched::date32 start_anchor = core::sched::kDateNa;
 };
 
 // One predecessor -> successor link.  `lag` is signed working ticks (negative =
@@ -231,6 +334,15 @@ struct PlanInput {
     // PROJECT_A summary 8141; it remains selectable for comparison.
     core::sched::SummaryCriticalMode summary_critical_mode =
         core::sched::SummaryCriticalMode::recompute;
+    // EDIT-TIME RULE for a link add (not a recalculation rule).  MEASURED
+    // (link-fs-lag, delete-task-with-successor): when a link is ADDED to a
+    // manually scheduled successor, Project moves that successor to the link
+    // bound and SAVES it (uid 2 stores 2026-01-12 13:00, uid 3 2026-01-14
+    // 13:00).  A plain recalculation does NOT move a manual row.  A caller that
+    // is applying "add a link" sets this before recalculate() so the manual
+    // successors of an incoming link are placed by the graph for that one pass;
+    // the normal case (false) keeps every manual row on its stored dates.
+    bool manual_rows_follow_links = false;
     // What the mapping had to assume or skip, in order.  Always non-empty.
     std::vector<std::string> notes;
     // Links in the reader's table that named a deleted/unknown task or itself.
@@ -256,12 +368,46 @@ struct PlanTaskResult {
     // Copied from the reader/PlanTask: +178 and the elapsed-duration flag.
     std::int32_t calendar_uid = -1;
     bool elapsed_duration = false;
+    // The pair a WRITER that fills every date copy from one value must store: for
+    // an auto-scheduled row the CPM schedule (which is also what +104/+108 hold);
+    // for a MANUAL row Project's CALCULATED pair (+96/+100), because the kept
+    // dates are display_start/display_finish and the row's own copies disagree.
+    // MEASURED: recalculate stores +96/+100 = 2026-01-05 08:00 -> 2026-01-09 17:00
+    // for a manual row whose +104/+108 are 2026-01-04 13:00 -> 2026-01-09 12:00.
+    // This is the pair the current scenario applier (tests/engine_diff_tests.cpp)
+    // maps onto all six date words; see "WHAT THE BRIDGE CANNOT DO" in the header.
     core::sched::date32 start = core::sched::kDateNa;
     core::sched::date32 finish = core::sched::kDateNa;
+    // The KEPT/effective pair (Project's +104/+108): what the UI shows and what a
+    // manual row's dates are.  Equal to start/finish for every row that is not
+    // manually scheduled.  A writer that can address the six copies separately
+    // must store this pair at +104/+108/Fixed2Data +50/+54 and start/finish at
+    // +96/+100.
+    core::sched::date32 display_start = core::sched::kDateNa;
+    core::sched::date32 display_finish = core::sched::kDateNa;
+    // The EFFECTIVE schedule's early dates.  Equal to display_start/display_finish
+    // for every row (the effective early dates ARE the kept dates), and kept as a
+    // separate field because that is the pair the slack is computed on.
     core::sched::date32 early_start = core::sched::kDateNa;
     core::sched::date32 early_finish = core::sched::kDateNa;
+    // Late dates, in the SAME frame as start/finish (the calculated pass).  For an
+    // auto-scheduled row that is Project's +112/+116 pair.  For a manual row
+    // Project stores the EFFECTIVE late pair instead; the bridge cannot report
+    // that here because the current scenario applier writes one date frame into
+    // every copy and saves twice -- a mixed frame is refused by core/mppwrite as a
+    // single-copy write.  The effective late dates are the ones the slack below
+    // describes.
     core::sched::date32 late_start = core::sched::kDateNa;
     core::sched::date32 late_finish = core::sched::kDateNa;
+    // ---- MANUAL SCHEDULING (see the header section) -------------------------
+    // True when this row is stored manually scheduled.  Its display_* dates are
+    // then the dates Project KEEPS, its slack is computed on them and critical is
+    // false.
+    bool manually_scheduled = false;
+    // +174 start anchor.  For a manual row: its kept start (every measured manual
+    // row stores anchor == Start).  kDateNa for a row where the bridge has nothing
+    // to say, so a writer inherits the stored value instead of inventing one.
+    core::sched::date32 start_anchor = core::sched::kDateNa;
     core::sched::ticks total_slack = 0;
     core::sched::ticks start_slack = 0;
     core::sched::ticks finish_slack = 0;
@@ -293,11 +439,26 @@ struct PlanResult {
     std::vector<PlanTaskResult> tasks;      // same order as PlanInput::tasks
     core::sched::date32 project_start = core::sched::kDateNa;
     core::sched::date32 project_finish = core::sched::kDateNa;
+    // The project row's duration (+84): the working time between the project
+    // start and finish on the project calendar.  MEASURED (the seven oracles):
+    // recalculate 21600 = Mon 08:00 -> Fri 12:00 (the Sunday 13:00 start adds no
+    // working time), duration-change 12000, link-fs-lag 40800, delete 45600 --
+    // every one equals `calendar.work_time_between(project_start,
+    // project_finish)`.  The reader exposes no project duration and the applier
+    // used to leave the stored word alone, which is why a duration edit changed
+    // the project finish in the oracle but not the project duration in ours.
+    core::sched::ticks project_duration = 0;
     // Kept so a caller can report the gap between "what the file linked" and
     // "what the engine could schedule".
     std::size_t skipped_links = 0;
     std::size_t summary_links = 0;
     std::size_t summaries = 0;
+    // Manual leaf rows the effective pass pinned, and manual leaves it could not
+    // pin (no stored Start, an elapsed duration, actuals, or a calendar overflow).
+    // An unpinned manual row is scheduled like an auto row; this count is how a
+    // caller learns that instead of discovering it in a date.
+    std::size_t manual_pinned = 0;
+    std::size_t manual_unpinned = 0;
 
     bool ok() const noexcept { return error == core::sched::CpmError::none; }
 };

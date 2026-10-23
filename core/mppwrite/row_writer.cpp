@@ -117,6 +117,7 @@ bool operator==(TaskValues const& a, TaskValues const& b) {
            a.duration == b.duration &&
            a.remaining_duration == b.remaining_duration &&
            a.actual_duration == b.actual_duration &&
+           a.free_slack == b.free_slack &&
            a.total_slack == b.total_slack && a.start_slack == b.start_slack &&
            a.priority == b.priority &&
            a.percent_complete == b.percent_complete &&
@@ -145,6 +146,8 @@ TaskValues read_task_values(CfbDocument const& doc, std::size_t row,
     v.duration = t.u32(row, task_row::kDuration);
     v.remaining_duration = t.u32(row, task_row::kRemainingDuration);
     v.actual_duration = t.u32(row, task_row::kActualDuration);
+    v.free_slack = read_slack(t.fixed_data(), task_row_offset(row) +
+                                                   task_row::kFreeSlack);
     v.total_slack = read_slack(t.fixed_data(), task_row_offset(row) +
                                                     task_row::kTotalSlack);
     v.start_slack = read_slack(t.fixed_data(), task_row_offset(row) +
@@ -234,12 +237,16 @@ TaskValues resolve_task_values(CfbDocument const& doc, std::size_t row,
                     std::to_string(v.duration));
     }
 
-    /* 3. Slack: +74 and +190 carry TotalSlack, +186 StartSlack.
+    /* 3. Slack: +74 FreeSlack, +186 StartSlack, +190 TotalSlack (W30, corrected;
+     *    see table.h).  FreeSlack is reported by the reader independently, so it
+     *    is inherited or written as given and never derived here.
      *
-     * Same "keep a copy a copy" rule as Fixed2Data below: +186 equals +74 on
-     * every measured TASK row (base/w3-o1/outline1/resaved-base) but differs on
-     * w3-o1's project row (0 vs 4800), so it follows TotalSlack only when it
-     * already did and the caller has not overridden it. */
+     * Same "keep a copy a copy" rule as Fixed2Data below for StartSlack: +186
+     * equals +190 on every measured TASK row (base/w3-o1/outline1/resaved-base)
+     * but differs on w3-o1's project row (0 vs 4800), so it follows TotalSlack
+     * only when it already did and the caller has not overridden it. */
+    v.free_slack = (values.free_slack == kInheritSlack) ? old.free_slack
+                                                        : values.free_slack;
     std::int32_t const total =
         (values.total_slack == kInheritSlack) ? old.total_slack : values.total_slack;
     v.total_slack = total;
@@ -316,20 +323,29 @@ TaskValues resolve_task_values(CfbDocument const& doc, std::size_t row,
      *    Fixed2Data words are members of their families: a change that moves
      *    +104 but leaves +46/+50 behind is the same hazard as one that moves
      *    +96 alone. */
-    refuse_single_copy("start", row, uid,
-                       {old.start, old.project_start, old.late_start,
-                        old.fixed2_start},
-                       {v.start, v.project_start, v.late_start,
-                        v.fixed2_start},
-                       {"+96 (task start)", "+104 (project-frame start)",
-                        "+112 (late start)", "Fixed2Data +46/+50"});
-    refuse_single_copy("finish", row, uid,
-                       {old.finish, old.project_finish, old.late_finish,
-                        old.fixed2_finish},
-                       {v.finish, v.project_finish, v.late_finish,
-                        v.fixed2_finish},
-                       {"+100 (task finish)", "+108 (project-frame finish)",
-                        "+116 (late finish)", "Fixed2Data +54"});
+    /* A MANUAL row is the one case where Project itself stores a split date
+     * pair: +96/+100 is its calculated schedule and +104/+108 the dates it
+     * keeps (plan.h "MANUAL SCHEDULING"; the recalculate and delete oracles
+     * both store the split).  The single-copy refusal is about a split AUTO row,
+     * which Project recalculates away, so it is skipped when the caller says the
+     * row is manually scheduled.  The duration family is still checked: no
+     * measured manual row splits it. */
+    if (!v.manual_dates) {
+        refuse_single_copy("start", row, uid,
+                           {old.start, old.project_start, old.late_start,
+                            old.fixed2_start},
+                           {v.start, v.project_start, v.late_start,
+                            v.fixed2_start},
+                           {"+96 (task start)", "+104 (project-frame start)",
+                            "+112 (late start)", "Fixed2Data +46/+50"});
+        refuse_single_copy("finish", row, uid,
+                           {old.finish, old.project_finish, old.late_finish,
+                            old.fixed2_finish},
+                           {v.finish, v.project_finish, v.late_finish,
+                            v.fixed2_finish},
+                           {"+100 (task finish)", "+108 (project-frame finish)",
+                            "+116 (late finish)", "Fixed2Data +54"});
+    }
     if (row != 0) {
         refuse_single_copy("duration", row, uid,
                            {old.duration, old.fixed2_duration},
@@ -372,9 +388,9 @@ RowWriteReport write_task_row(CfbDocument& doc, std::size_t row,
     put_u32(fixed, p + task_row::kFinish2, v.project_finish);
     put_u32(fixed, p + task_row::kStart3, v.late_start);
     put_u32(fixed, p + task_row::kFinish3, v.late_finish);
-    write_slack(fixed, p + task_row::kTotalSlack, v.total_slack);
+    write_slack(fixed, p + task_row::kFreeSlack, v.free_slack);
     write_slack(fixed, p + task_row::kStartSlack, v.start_slack);
-    write_slack(fixed, p + task_row::kTotalSlackCopy, v.total_slack);
+    write_slack(fixed, p + task_row::kTotalSlack, v.total_slack);
     put_u16(fixed, p + task_row::kPriority, v.priority);
     put_u16(fixed, p + task_row::kPercentComplete, v.percent_complete);
     put_u16(fixed, p + task_row::kConstraintType, v.constraint_type);
@@ -607,6 +623,7 @@ TaskConstraint write_task_constraint(CfbDocument& doc, std::size_t row,
         after_values.duration != before.duration ||
         after_values.remaining_duration != before.remaining_duration ||
         after_values.actual_duration != before.actual_duration ||
+        after_values.free_slack != before.free_slack ||
         after_values.total_slack != before.total_slack ||
         after_values.start_slack != before.start_slack ||
         after_values.start_anchor != before.start_anchor ||

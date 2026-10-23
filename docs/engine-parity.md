@@ -111,6 +111,10 @@ numbers only; no names.
 
 ### Current score
 
+The wave-17 table below is superseded by the wave-18 measurement at the end of
+this document; the score has not moved (0 passed, 7 recorded, 1 unrecorded), but
+the causes are now known precisely and the planner side is closed.
+
 | scenario | status | compared fields |
 |---|---|---|
 | recalculate | UNRECORDED | 0 |
@@ -353,3 +357,80 @@ M2 remains 332/332 against the auto-scheduled corpus file, so the CPM path is
 sound; this fixture's manual tasks are what expose the family gap. The next
 recording should use an **auto-scheduled** base so the score measures the engine
 rather than manual-mode semantics.
+
+## Wave 18 (E2): manual scheduling implemented — 5 of 7 scenarios down to `file.*`
+
+Stream E2 closed the three causes above **in the planner** and then, under
+coordinator exceptions, in the scenario applier (`tests/engine_diff_tests.cpp`)
+and the writer (`core/mppwrite`). Full evidence, code map and verification
+commands: `docs/handoff/e2.md`.
+
+### Score (re-measured 2026-10-23, `build\e2`, Release, sizes still compared)
+
+| scenario | before | after | what still differs |
+|---|---|---|---|
+| recalculate | FAIL 15/240 | FAIL 8/240 | `file.*` only |
+| duration-change | FAIL 19/240 | FAIL 8/240 | `file.*` only |
+| link-fs-lag | FAIL 25/247 | FAIL 10/247 | `file.*` only |
+| constraint-snet | FAIL 24/240 | FAIL 8/240 | `file.*` only |
+| constraint-mso | FAIL 25/240 | FAIL 9/240 | `file.*` + `task 3 duration_ticks` 9600 vs 12000 |
+| assignment-50pct | FAIL 22/247 | FAIL 15/247 | `file.*` + the null-resource placeholder assignment Project tombstoned |
+| task-calendar | UNRECORDED | UNRECORDED | needs the coordinator's fixture |
+| delete-task-with-successor | FAIL 25/204 | FAIL 9/204 | `file.*` only |
+
+**Suite: 0 passed, 7 recorded (7 fail), 1 unrecorded** — because the `file.*`
+sizes are still compared. Five scenarios have *no* non-file difference left;
+the coordinator's planned change from sizes to a change-set comparison is the
+gate for them (note: our save of `recalculate` now changes no bytes at all,
+while Project's save churns eight streams, so a change-set comparison still
+needs a writer stream or a spec decision for that family). **M2 332/332**
+(`recalc --compare`), cpm 1321, rollup 155, attribution 54, plan 206, writer
+760/446/304/101.
+
+### What was wrong, and is now fixed
+
+1. **Manual scheduling** (the family gap). Project keeps a manual row's dates,
+   ignores its own constraint for them, stores a second (calculated) date pair at
+   +96/+100, reports one slack number (`+74 = +186 = +190`), never calls the row
+   critical, and still drives its successors from the kept dates. Implemented as
+   two CPM passes (`core/sched` `CpmTask::manual_start/manual_finish`,
+   `link_anchor_*`; `core/plan` `manual_finish_of()` and the two-pass result),
+   with the measured boundary rule that makes a Sunday 13:00 start finish at
+   12:00 rather than 17:00.
+2. **Manual successors move when a link is ADDED**, not on recalculation: the
+   applier now recalcs-and-persists after structural edits, with
+   `PlanInput::manual_rows_follow_links` for the link add. This is what makes
+   `link-fs-lag` uid 2 (`01-12 13:00`) and `delete` uid 3 (`01-14 13:00`) match,
+   and the calculated pair for a manual successor is now the bound of the
+   predecessor's *kept* finish (`link-fs-lag` calculated `01-12 13:00`).
+3. **Free vs total slack was a WRITER defect.** The reader's mapping is right
+   (+74 FreeSlack, +186 StartSlack, +190 TotalSlack; milestone1.mpp ID 6 =
+   0/220800/220800), but `TaskValues` had no free-slack field and
+   `write_task_row` put TotalSlack at +74, so a saved file could never hold
+   free < total. Fixed, with a writer regression that stores and reads back
+   free 0 / start 4800 / total 4800 at the three offsets.
+4. **Applier mapping.** It wrote one plan date pair into all six stored date
+   words, which is why a manual scenario could not be saved either way. It now
+   maps the calculated pair to +96/+100, the kept pair to +104/+108 and the
+   start anchor to +174, writes the project row's duration
+   (`work_time_between(project start, finish)`; measured
+   21600/12000/40800/21600/21600/21600/45600), writes DurationFormat with a
+   Duration edit (COM was given minutes -> 3), passes the minutes lag format
+   (LagFormat 3), and maintains the assignment rows' work/dates from their tasks.
+5. **Start anchor**: +174 is written from the plan for manual rows (anchor =
+   kept start on every measured row), including the link-moved ones.
+
+### Still open (each with its cause)
+
+1. `file.*`: Project's save churn (8–10 streams per scenario), writer-owned;
+   see the note above.
+2. `constraint-mso` `task 3 duration_ticks` 9600 vs 12000: Project rewrote the
+   stored Duration when MSO was set on the manual row while its calculated span
+   stayed 2 d — an edit-time recompute, not a scheduling rule.
+3. `assignment-50pct`: Project tombstones the null-resource placeholder of a
+   task when an assignment is added (measured, `core/mppwrite/add_delete.h`); our
+   `add_assignment_row` leaves it, so the placeholder row is still there.
+4. `task-calendar` unrecorded (no `Project.Calendars` in this build).
+5. Manual rows with actuals, an elapsed duration, a task calendar or a deadline
+   have no oracle row; the bridge falls back to the CPM path and counts them in
+   `PlanResult::manual_unpinned`.

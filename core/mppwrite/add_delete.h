@@ -345,8 +345,17 @@ inline constexpr std::uint16_t kLinkTypeSS = 3; /* start-to-start   */
 
 /* The lag format unit every live row of Project's link1.mpp stores.  The spec
  * calls it the likely PjFormatUnit (7 = working days), but LagFormat is not
- * proven; add_task_link writes this constant and takes no format argument. */
+ * proven.  `add_task_link` writes it by default.
+ *
+ * kLinkLagFormatMinutes = 3 is what Project stores when the lag was expressed in
+ * MINUTES: the scenario applier passes COM a lag as "480m" (scripts/
+ * engine_diff.py `_lag_text`), and the link-fs-lag oracle stores LagFormat 3
+ * where our writer wrote 7.  The same PjFormatUnit numbering shows up as
+ * Task.DurationFormat 3 after a "1440m" duration edit (duration-change oracle).
+ * INFERENCE that 3 = minutes, from those two measured files; the value is
+ * written only when the caller says the edit was in minutes. */
 inline constexpr std::uint16_t kLinkLagFormatWorkingDays = 7;
+inline constexpr std::uint16_t kLinkLagFormatMinutes = 3;
 
 /* WRITER POLICY, not a measured Project limit: the file field is a signed i32 of
  * 6-second ticks, so every int32 is representable, but a lag beyond ~100 years is
@@ -430,7 +439,8 @@ struct DeletedLink {
  */
 AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
                         std::uint32_t successor_uid, std::uint16_t type,
-                        std::int32_t lag_ticks, std::string const& path);
+                        std::int32_t lag_ticks, std::string const& path,
+                        std::uint16_t lag_format = kLinkLagFormatWorkingDays);
 
 /*
  * Tombstone the link row whose uid is `link_uid`: its FixedMeta entry

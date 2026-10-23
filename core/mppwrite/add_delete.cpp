@@ -317,6 +317,7 @@ void merge_values(TaskValues& destination, TaskValues const& supplied) {
             out = in;
         }
     };
+    slack(destination.free_slack, supplied.free_slack);
     slack(destination.total_slack, supplied.total_slack);
     slack(destination.start_slack, supplied.start_slack);
     auto single = [](std::uint16_t& out, std::uint16_t in) {
@@ -1740,7 +1741,8 @@ std::string link_type_name(std::uint16_t type) {
 
 AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
                         std::uint32_t successor_uid, std::uint16_t type,
-                        std::int32_t lag_ticks, std::string const& path) {
+                        std::int32_t lag_ticks, std::string const& path,
+                        std::uint16_t lag_format) {
     std::string const function = "add_task_link";
     check_output_path(path, function);
     if (type > kLinkTypeSS) {
@@ -1851,7 +1853,7 @@ AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
     put_u32(row_bytes, kConsSuccessor, successor_uid);
     put_u16(row_bytes, kLinkRowType, type);
     put_u32(row_bytes, kLinkRowLag, static_cast<std::uint32_t>(lag_ticks));
-    put_u16(row_bytes, kLinkRowLagUnits, kLinkLagFormatWorkingDays);
+    put_u16(row_bytes, kLinkRowLagUnits, lag_format);
     fixed.insert(fixed.end(), row_bytes.begin(), row_bytes.end());
 
     std::vector<std::uint8_t> entry(kLinkMetaEntrySize, 0);
@@ -1933,7 +1935,7 @@ AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
         static_cast<std::int32_t>(get_u32(fixed_after, new_base + kLinkRowLag)) !=
             lag_ticks ||
         get_u16(fixed_after, new_base + kLinkRowLagUnits) !=
-            kLinkLagFormatWorkingDays) {
+            lag_format) {
         throw Error(function + ": the new link row does not read back as written");
     }
     if (meta_after[new_entry_base + kLinkEntryState] != kStateLive ||
@@ -1972,7 +1974,7 @@ AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
     result.successor_uid = successor_uid;
     result.type = type;
     result.lag_ticks = lag_ticks;
-    result.lag_format = kLinkLagFormatWorkingDays;
+    result.lag_format = lag_format;
     result.row = new_row;
     result.warnings.push_back(
         "re-read from disk: link uid " + std::to_string(uid) + " (" +

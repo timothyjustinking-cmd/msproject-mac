@@ -172,6 +172,10 @@ struct Node {
     date32 deadline = kDateNa;
     date32 actual_start = kDateNa;   // a started task's fact (see CpmTask)
     date32 actual_finish = kDateNa;  // a completed task's fact (see CpmTask)
+    date32 manual_start = kDateNa;   // a manual row's stored Start (see CpmTask)
+    date32 manual_finish = kDateNa;  // a manual row's planned Finish (see CpmTask)
+    date32 link_anchor_start = kDateNa;   // what a successor reads (see CpmTask)
+    date32 link_anchor_finish = kDateNa;  // what a successor reads (see CpmTask)
 
     std::vector<std::size_t> incoming;   // indices into links
     std::vector<std::size_t> outgoing;   // indices into links
@@ -318,6 +322,10 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
         node.deadline = task.deadline;
         node.actual_start = task.actual_start;
         node.actual_finish = task.actual_finish;
+        node.manual_start = task.manual_start;
+        node.manual_finish = task.manual_finish;
+        node.link_anchor_start = task.link_anchor_start;
+        node.link_anchor_finish = task.link_anchor_finish;
         if (constraint_needs_date(node.constraint) && !is_set(node.constraint_date)) {
             return make_error(CpmError::constraint_date_missing,
                               "schedule_tasks: task " + std::to_string(task.id) +
@@ -444,6 +452,13 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                 const CpmLink& link = links[link_index];
                 const Node& pred = nodes[pred_index[link_index]];
                 const Calendar& pred_cal = *pred.calendar;
+                /* The dates the successor's bound reads (see CpmTask::
+                 * link_anchor_*): a manual predecessor contributes its KEPT
+                 * dates even when the pass computes its own early dates. */
+                const date32 pred_es =
+                    is_set(pred.link_anchor_start) ? pred.link_anchor_start : pred.es;
+                const date32 pred_ef =
+                    is_set(pred.link_anchor_finish) ? pred.link_anchor_finish : pred.ef;
                 date32 candidate = kDateNa;
                 switch (link.type) {
                     case LinkType::finish_to_start: {
@@ -468,11 +483,11 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // working-day lag keeps the next_start anchor (measured
                         // w3-o3/w3-o4).
                         const date32 fs_anchor =
-                            link.elapsed_lag ? pred.ef : pred_cal.next_start(pred.ef);
+                            link.elapsed_lag ? pred_ef : pred_cal.next_start(pred_ef);
                         candidate =
                             consumes_time
                                 ? align_start_bound(cal, add_link_lag(cal, fs_anchor, link), true)
-                                : add_link_lag(cal, pred.ef, link);
+                                : add_link_lag(cal, pred_ef, link);
                         break;
                     }
                     case LinkType::start_to_start:
@@ -482,7 +497,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // bound instant (milestone-probe ID 5: SS+0 -> Mon 08:00;
                         // that bound is already a working instant, so the shape of
                         // the rule, not a second row, is what is measured here).
-                        candidate = align_start_bound(cal, add_link_lag(cal, pred.es, link),
+                        candidate = align_start_bound(cal, add_link_lag(cal, pred_es, link),
                                                       consumes_time);
                         break;
                     case LinkType::finish_to_finish:
@@ -496,7 +511,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // finishes Thu 22 17:00, FF-3d Tue 20 17:00, FF-6d Thu
                         // 10/15 17:00 (see add_finish_lag above).
                         has_ff_link = true;
-                        candidate = add_finish_link_lag(cal, pred.ef, link);
+                        candidate = add_finish_link_lag(cal, pred_ef, link);
                         break;
                     case LinkType::start_to_finish:
                         // MEASURED (w3-o3 SF): the anchor is the predecessor's
@@ -506,7 +521,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                         // so this side does NOT go through add_finish_lag.  SF+1d
                         // is not anomalous: AddWork(Mon 08:00, 1 d) = Mon 17:00,
                         // so the placed finish is Mon 08:00-17:00.
-                        candidate = add_link_lag(cal, pred.es, link);
+                        candidate = add_link_lag(cal, pred_es, link);
                         break;
                 }
                 if (!is_set(candidate)) {
@@ -562,66 +577,76 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             node.link_es = es;
 
             date32 ef = kDateNa;
-            switch (node.constraint) {
-                case ConstraintType::must_start_on:
-                    // MEASURED (§3.6, w3-o4 MSO rows): pin the start exactly, even
-                    // when the constraint date is mid-day and even when the links
-                    // want a later date.  A pin on a non-working instant snaps
-                    // forward like any start bound (no fixture yet; [I]).
-                    es = align_start_bound(cal, node.constraint_date, true);
-                    break;
-                case ConstraintType::start_no_earlier_than:
-                    // MEASURED: a floor; it never pulls a task earlier.
-                    //
-                    // The milestone no-snap rule above is a LINK-bound rule here:
-                    // the one measured milestone constraint (ID 4) stores a date
-                    // that MSP had already normalised (an assigned start of Wed
-                    // 17:00 was rewritten to Thu 08:00 and stored as SNET 08:00),
-                    // so aligning a raw 17:00 SNET date and keeping it are
-                    // indistinguishable from the oracle.  Keep the alignment; the
-                    // raw case is listed as open in core/sched/README.md.
-                    es = align_start_bound(cal, std::max(es, node.constraint_date), true);
-                    break;
-                case ConstraintType::start_no_later_than:
-                    // MEASURED (w3-o4/10d/SNLT): the ceiling is applied in the
-                    // forward pass -- the task is placed at the constraint when the
-                    // links want a later date, and the violation shows as negative
-                    // slack.
-                    if (node.constraint_date < es) {
+            // MEASURED (docs/engine-parity.md "First recording"): a manual row's
+            // own constraint is stored but does not move it.  constraint-snet
+            // stores SNET 2026-02-02 08:00 on uid 2 and the task keeps
+            // 2026-01-04 13:00 / 2026-01-07 12:00 while the CALCULATED pair
+            // (+96/+100) jumps to 02-02/02-04; the same for MSO.  So a manual pin
+            // suppresses the constraint here and in the backward pass; the
+            // caller runs a second, pin-free pass to obtain the calculated pair.
+            const bool manual = is_set(node.manual_start);
+            if (!manual) {
+                switch (node.constraint) {
+                    case ConstraintType::must_start_on:
+                        // MEASURED (§3.6, w3-o4 MSO rows): pin the start exactly, even
+                        // when the constraint date is mid-day and even when the links
+                        // want a later date.  A pin on a non-working instant snaps
+                        // forward like any start bound (no fixture yet; [I]).
                         es = align_start_bound(cal, node.constraint_date, true);
-                    }
-                    break;
-                case ConstraintType::must_finish_on:
-                    ef = node.constraint_date;
-                    es = sub_duration(cal, ef, node);
-                    break;
-                case ConstraintType::finish_no_earlier_than: {
-                    const date32 natural = add_duration(cal, es, node);
-                    if (!is_set(natural)) {
-                        return fail_overflow(node.id);
-                    }
-                    if (natural < node.constraint_date) {
+                        break;
+                    case ConstraintType::start_no_earlier_than:
+                        // MEASURED: a floor; it never pulls a task earlier.
+                        //
+                        // The milestone no-snap rule above is a LINK-bound rule here:
+                        // the one measured milestone constraint (ID 4) stores a date
+                        // that MSP had already normalised (an assigned start of Wed
+                        // 17:00 was rewritten to Thu 08:00 and stored as SNET 08:00),
+                        // so aligning a raw 17:00 SNET date and keeping it are
+                        // indistinguishable from the oracle.  Keep the alignment; the
+                        // raw case is listed as open in core/sched/README.md.
+                        es = align_start_bound(cal, std::max(es, node.constraint_date), true);
+                        break;
+                    case ConstraintType::start_no_later_than:
+                        // MEASURED (w3-o4/10d/SNLT): the ceiling is applied in the
+                        // forward pass -- the task is placed at the constraint when the
+                        // links want a later date, and the violation shows as negative
+                        // slack.
+                        if (node.constraint_date < es) {
+                            es = align_start_bound(cal, node.constraint_date, true);
+                        }
+                        break;
+                    case ConstraintType::must_finish_on:
                         ef = node.constraint_date;
                         es = sub_duration(cal, ef, node);
+                        break;
+                    case ConstraintType::finish_no_earlier_than: {
+                        const date32 natural = add_duration(cal, es, node);
+                        if (!is_set(natural)) {
+                            return fail_overflow(node.id);
+                        }
+                        if (natural < node.constraint_date) {
+                            ef = node.constraint_date;
+                            es = sub_duration(cal, ef, node);
+                        }
+                        break;
                     }
-                    break;
+                    case ConstraintType::finish_no_later_than: {
+                        const date32 natural = add_duration(cal, es, node);
+                        if (!is_set(natural)) {
+                            return fail_overflow(node.id);
+                        }
+                        // MEASURED (w3-o4/10d/FNLT): a hard ceiling applied in the
+                        // forward pass, exactly like SNLT on the finish side.
+                        if (node.constraint_date < natural) {
+                            ef = node.constraint_date;
+                            es = sub_duration(cal, ef, node);
+                        }
+                        break;
+                    }
+                    case ConstraintType::as_soon_as_possible:
+                    case ConstraintType::as_late_as_possible:
+                        break;
                 }
-                case ConstraintType::finish_no_later_than: {
-                    const date32 natural = add_duration(cal, es, node);
-                    if (!is_set(natural)) {
-                        return fail_overflow(node.id);
-                    }
-                    // MEASURED (w3-o4/10d/FNLT): a hard ceiling applied in the
-                    // forward pass, exactly like SNLT on the finish side.
-                    if (node.constraint_date < natural) {
-                        ef = node.constraint_date;
-                        es = sub_duration(cal, ef, node);
-                    }
-                    break;
-                }
-                case ConstraintType::as_soon_as_possible:
-                case ConstraintType::as_late_as_possible:
-                    break;
             }
             if (!is_set(ef)) {
                 // MEASURED (w3-o3 SF+0/SF+2h): a finish-side bound is a PLACED
@@ -660,6 +685,22 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             if (is_set(node.actual_start)) {
                 es = node.actual_start;
                 ef = add_duration(cal, es, node);
+                if (!is_set(ef)) {
+                    return fail_overflow(node.id);
+                }
+            }
+            // MEASURED (docs/engine-parity.md "First recording"; every recorded
+            // oracle): a MANUAL row's early dates are its stored Start and the
+            // Finish the caller derived from it.  Neither the project-start floor
+            // (the stored Start is 2026-01-04 13:00, a Sunday, BEFORE the aligned
+            // Monday 08:00) nor a link nor its own constraint moves them, so this
+            // override comes last and uses the manual pair verbatim.  The CALLER
+            // computes manual_finish, because it is not plain AddWork in the one
+            // measured boundary case (plan.h "MANUAL SCHEDULING").
+            if (manual) {
+                es = node.manual_start;
+                ef = is_set(node.manual_finish) ? node.manual_finish
+                                                : add_duration(cal, es, node);
                 if (!is_set(ef)) {
                     return fail_overflow(node.id);
                 }
@@ -759,7 +800,13 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             }
 
             bool pinned = false;
-            switch (node.constraint) {
+            // MEASURED (docs/engine-parity.md "First recording"): a manual row's
+            // stored constraint does not define its late dates either -- uid 3 of
+            // the constraint-mso oracle keeps ConstraintType 2 and TotalSlack
+            // 14400 (the unconstrained value).  Treat it as ASAP here; the
+            // backward pass then bounds it like any other row.
+            const bool manual = is_set(node.manual_start);
+            switch (manual ? ConstraintType::as_soon_as_possible : node.constraint) {
                 case ConstraintType::must_start_on:
                 case ConstraintType::must_finish_on:
                     // §3.4: pinned tasks have late == early.
@@ -804,10 +851,12 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
                     }
                     break;
             }
-            if (is_set(node.deadline)) {
+            if (!manual && is_set(node.deadline)) {
                 // MEASURED (w3-o4b deadlines): the deadline is an upper bound on
                 // the late finish, aligned like a successor start -- deadline
                 // Mon 19 17:00 clamps LF to Mon 19 17:00 and the slack is -480.
+                // A manual row's deadline is a status field, not a bound: the row
+                // keeps its dates whatever the deadline says ([I], no fixture).
                 const date32 bound = cal.align_back(node.deadline);
                 if (!is_set(bound)) {
                     return fail_overflow(node.id);
@@ -828,6 +877,17 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             }
             node.lf = lf;
             node.ls = ls;
+            // MEASURED (docs/engine-parity.md "First recording"): a manual row's
+            // start is a user fact, so its LATE START is its own start and the
+            // whole row moves with the slack.  Every manual row of every oracle
+            // stores the same number at +74/+186/+190 (0/0/0, 9600, 14400,
+            // 24000, 33600 ...), which is exactly this: StartSlack is reported
+            // equal to TotalSlack, and TotalSlack is LF - EF.  Doing it here
+            // (rather than LS = LF - duration, which can land before a manual
+            // start that sits in non-working time) is what reproduces the rows.
+            if (manual) {
+                node.ls = node.es;
+            }
             // MEASURED RULE (project_a-recalc.mpp uids 10849/10851): a started task's
             // LATE START is its actual start -- StartSlack is 0 even though the
             // successor-derived late finish is later.  Only the start is pinned;
@@ -868,6 +928,7 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
         options.duration.minutes_per_day() * kTicksPerMinute;
     for (Node& node : nodes) {
         const Calendar& cal = *node.calendar;
+        const bool manual = is_set(node.manual_start);
         const ticks start_raw = duration_delta(cal, node.es, node.ls, node);
         const ticks finish_raw = duration_delta(cal, node.ef, node.lf, node);
         // MEASURED RULE (project_a-recalc.mpp rows +190, uids 10849/10851; summary
@@ -886,8 +947,9 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
         // constraint places the task away from where its links want it, the
         // difference is the total slack -- -2400 for MSO/SNLT, -2880 for
         // MFO/FNLT -- and the start slack carries it while the finish slack stays
-        // at LF-EF.
-        if (is_set(node.constraint_date)) {
+        // at LF-EF.  A manual row ignores its own constraint (see the forward
+        // pass), so no constraint slack is counted for it.
+        if (!manual && is_set(node.constraint_date)) {
             ticks constraint_slack = 0;
             bool have = false;
             switch (node.constraint) {
@@ -914,7 +976,13 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             }
         }
         node.total_slack = total;
-        node.start_slack = std::min(start_raw, total);
+        // MEASURED (every manual row of every recorded oracle: recalculate 0 /
+        // 9600 / 14400, constraint-snet the same, constraint-mso the same,
+        // link-fs-lag 0 / 0 / 33600, delete 24000 / 0): the three slack words are
+        // ONE number on a manual row, because the whole row moves -- the start is
+        // pinned (LS = ES) and the finish carries the slack.  So StartSlack is
+        // reported equal to TotalSlack, not LS - ES.
+        node.start_slack = manual ? total : std::min(start_raw, total);
         node.finish_slack = finish_raw;
         // MEASURED (wave 9b; corpus/probe/schedin.mpp uid 2, the ALAP row, storage
         // words only): an ALAP task is PLACED at its late start, so it has no
@@ -924,8 +992,10 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
         // this engine reports).  That is why the three words differ on this one
         // row and nowhere else in the corpus.
         // [I] scope: one measured row; the task has no successors and no links,
-        // and the rule is applied to every ALAP task.
-        const bool alap = node.constraint == ConstraintType::as_late_as_possible;
+        // and the rule is applied to every ALAP task.  A manual row's own
+        // constraint is ignored (forward pass), so it is never ALAP-placed here.
+        const bool alap =
+            !manual && node.constraint == ConstraintType::as_late_as_possible;
         if (node.outgoing.empty()) {
             // MEASURED (w3-o1): a task with no successors reports free slack equal
             // to its total slack, clamped at zero (w3-o4 pinned rows report 0).
@@ -984,7 +1054,10 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
             node.start_slack = std::min<ticks>(0, total);
             node.free_slack = std::min<ticks>(0, node.free_slack);
         }
-        node.critical = node.total_slack <= critical_limit;
+        // MEASURED (every manual row of every oracle; core/mpp derives Critical
+        // the same way and cites base.mpp Task A): a manually scheduled row is
+        // never Critical, even at zero slack.
+        node.critical = !manual && node.total_slack <= critical_limit;
     }
 
     // --- results, in input order -------------------------------------------
@@ -1008,7 +1081,10 @@ CpmResult schedule_tasks(const std::vector<CpmTask>& tasks, const std::vector<Cp
         out.total_slack = node.total_slack;
         out.critical = node.critical;
         out.elapsed_duration = task.elapsed_duration;
-        out.constraint = node.constraint;
+        // A manual row's stored constraint is never applied (see the forward
+        // pass), so report the constraint that WAS applied: ASAP.
+        out.constraint = is_set(node.manual_start) ? ConstraintType::as_soon_as_possible
+                                                   : node.constraint;
         result.tasks.push_back(out);
     }
     result.error = CpmError::none;

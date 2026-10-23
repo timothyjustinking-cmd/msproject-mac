@@ -531,15 +531,16 @@ int main() {
                             now.start_slack == was.start_slack,
                         "uid " + std::to_string(uid) + " slack changed");
             }
-            /* +74 is set, not merely copied: check it through the raw row. */
+            /* The slack words are set, not merely copied: check them through the
+             * raw row (+74 FreeSlack, +186 StartSlack, +190 TotalSlack, W30). */
             mppwrite::TaskTable const table =
                 mppwrite::TaskTable::from_document(plan_doc);
-            t.check(table.u32(2, mppwrite::task_row::kTotalSlack) == 9600,
-                    "row 2 TotalSlack at +74 is " +
+            t.check(table.u32(2, mppwrite::task_row::kFreeSlack) == 9600,
+                    "row 2 FreeSlack at +74 is " +
                         std::to_string(
-                            table.u32(2, mppwrite::task_row::kTotalSlack)) +
+                            table.u32(2, mppwrite::task_row::kFreeSlack)) +
                         ", expected 9600");
-            t.check(table.u32(2, mppwrite::task_row::kTotalSlackCopy) == 9600,
+            t.check(table.u32(2, mppwrite::task_row::kTotalSlack) == 9600,
                     "row 2 TotalSlack at +190 is not 9600");
             t.check(table.u32(2, mppwrite::task_row::kStartSlack) == 9600,
                     "row 2 StartSlack at +186 is not 9600");
@@ -554,6 +555,46 @@ int main() {
             plan_doc.save(out);
             t.check(read_file(out) == plan_doc.to_bytes(),
                     "recalculate: saved file differs");
+        }
+
+        /* ======== 3b. the three slack words are three values (W30) =========
+         * REGRESSION (docs/engine-parity.md "Wave 18"): TaskValues had no
+         * free-slack field and write_task_row put TotalSlack at +74, where the
+         * reader reads FreeSlack, so a saved file could never hold a free slack
+         * different from the total.  milestone1.mpp ID 6 separates the words
+         * (+74 0, +186 = +190 220800); this pins the writer to the same mapping
+         * on a row whose free is SMALLER than its total -- the shape a linked
+         * chain has and every fixture row happens to lack. */
+        {
+            mppwrite::CfbDocument slack_doc =
+                mppwrite::CfbDocument::from_file(source);
+            mppwrite::TaskValues slack_values =
+                mppwrite::read_task_values(slack_doc, 1);
+            slack_values.free_slack = 0;
+            slack_values.start_slack = 4800;
+            slack_values.total_slack = 4800;
+            mppwrite::TaskValues const slack_resolved =
+                mppwrite::resolve_task_values(slack_doc, 1, slack_values);
+            t.check(slack_resolved.free_slack == 0 && slack_resolved.start_slack == 4800 &&
+                        slack_resolved.total_slack == 4800,
+                    "resolve keeps free 0 / start 4800 / total 4800 apart");
+            mppwrite::write_task_row(slack_doc, 1, slack_resolved);
+            mppwrite::TaskValues const after =
+                mppwrite::read_task_values(slack_doc, 1);
+            t.check(after.free_slack == 0 && after.start_slack == 4800 &&
+                        after.total_slack == 4800,
+                    "read back FreeSlack 0, StartSlack 4800, TotalSlack 4800 (got " +
+                        std::to_string(after.free_slack) + "/" +
+                        std::to_string(after.start_slack) + "/" +
+                        std::to_string(after.total_slack) + ")");
+            mppwrite::TaskTable const table =
+                mppwrite::TaskTable::from_document(slack_doc);
+            t.check(table.u32(1, mppwrite::task_row::kFreeSlack) == 0,
+                    "raw +74 is FreeSlack (0)");
+            t.check(table.u32(1, mppwrite::task_row::kStartSlack) == 4800,
+                    "raw +186 is StartSlack (4800)");
+            t.check(table.u32(1, mppwrite::task_row::kTotalSlack) == 4800,
+                    "raw +190 is TotalSlack (4800)");
         }
 
         /* ======== 4. oracle-recalc.mpp for the MS Project run ============ */

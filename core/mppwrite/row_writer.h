@@ -147,12 +147,23 @@ struct TaskValues {
     std::uint32_t remaining_duration = kInherit; /* +88 */
     std::uint32_t actual_duration = kInherit;    /* +80 */
 
-    /* Slack family, 6-second ticks.  total_slack goes to +74 and +190;
-     * start_slack to +186.  start_slack follows total_slack when it already did
-     * (every measured task row) and is kept otherwise (w3-o1's project row
-     * stores 0 at +74 and 4800 at +186). */
-    std::int32_t total_slack = kInheritSlack;
-    std::int32_t start_slack = kInheritSlack;
+    /* Slack family, 6-second ticks.  THE THREE WORDS ARE THREE VALUES (W30,
+     * corrected): +74 FreeSlack, +186 StartSlack, +190 TotalSlack.  The reader
+     * maps them the same way (mpp::Task::free_slack_ticks/start_slack_ticks/
+     * total_slack_ticks), so a writer that puts TotalSlack at +74 makes the
+     * reader report free == total for ever -- which was this writer's bug
+     * (docs/engine-parity.md "Wave 18").  Every measured TASK row in
+     * base/w3-o1/outline1/resaved-base happens to have free == total, which is
+     * why it went unnoticed; milestone1.mpp ID 6 (+74 0, +186/+190 220800) is the
+     * row that separates them.
+     *
+     * Inheritance: kInheritSlack keeps the stored word.  `start_slack` follows
+     * `total_slack` when it already did and the caller did not override it (the
+     * "keep a copy a copy" rule), so an existing no-op save stays byte-identical;
+     * `free_slack` is never derived, because the reader reports it independently. */
+    std::int32_t free_slack = kInheritSlack;   /* +74  COM FreeSlack */
+    std::int32_t total_slack = kInheritSlack;  /* +190 COM TotalSlack */
+    std::int32_t start_slack = kInheritSlack;  /* +186 COM StartSlack */
 
     /* Single-copy fields: written only when supplied, so a date-only update
      * cannot accidentally reset them. */
@@ -185,6 +196,17 @@ struct TaskValues {
     std::uint32_t fixed2_start = kInherit;
     std::uint32_t fixed2_finish = kInherit;
     std::uint32_t fixed2_duration = kInherit;
+
+    /* INSTRUCTION, NOT A STORED VALUE: "this row is MANUALLY SCHEDULED, so its
+     * calculated pair (+96/+100) is allowed to differ from its effective pair
+     * (+104/+108)".  MEASURED on Project's own saves (docs/engine-parity.md
+     * "Wave 18"): recalculate stores +96/+100 = 2026-01-05 08:00/17:00 with
+     * +104/+108 = 2026-01-04 13:00/01-09 12:00, and delete-task-with-successor
+     * stores the same split for uid 3.  `write_task_row`'s "single-copy start
+     * write" refusal exists because Project recalculates a split AUTO row away;
+     * for a manual row Project itself stores the split, so the refusal is skipped.
+     * It is deliberately excluded from operator== (it is not in the file). */
+    bool manual_dates = false;
 };
 
 /* Exact field-by-field equality, including the Fixed2Data copies. */

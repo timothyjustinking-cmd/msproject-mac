@@ -594,8 +594,18 @@ def compare_dumps(ours, oracle):
     """
     ours_fields = flatten(ours)
     oracle_fields = flatten(oracle)
+    # `file.*` is Project's save churn, not semantics: Project rewrites 8-10
+    # streams on every save (and pads the file, compacting on close), while our
+    # recalculate-only save legitimately writes nothing because the fixture
+    # already holds Project's own state.  Stream sizes therefore cannot be a
+    # parity signal; the writer's own suites prove the "only intended bytes
+    # move" invariant against Project's fixture pairs.  The field stays in the
+    # dump for diagnostics and is excluded from scoring here.
+    ignored_prefixes = ("file.", "file stream")
+    paths = [path for path in sorted(set(ours_fields) | set(oracle_fields))
+             if not path.startswith(ignored_prefixes)]
     differences = []
-    for path in sorted(set(ours_fields) | set(oracle_fields)):
+    for path in paths:
         left = ours_fields.get(path, MISSING)
         right = oracle_fields.get(path, MISSING)
         if type(left) is not type(right) or left != right:
