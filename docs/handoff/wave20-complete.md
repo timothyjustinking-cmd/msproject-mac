@@ -174,3 +174,25 @@ was re-dispatched unchanged.
    `docs/ui-command-backlog.md` as each laid-out-only dialog lands.
 3. Theme-aware custom surfaces (decision 10) once the operator's dark capture
    exists; then decision 16's Timeline/Details split.
+
+
+## Post-close correction (2026-10-23, clean MS Project captures)
+
+The operator supplied clean MS Project 2021 captures (saved locally and
+documented in `docs/ui-reference-set.md`; they are git-ignored and never
+committed).  They correct two statuses above:
+
+* **Decision 1 is PARTIAL, not DONE.**  Our tabs are populated, but not with
+  Project's group/button inventory.  Measured examples: our Resource tab has
+  3 groups against Project's 5 (Team Planner; Assignments with 3 commands;
+  Insert; Properties with Details; Level with 6 commands), and our View tab has
+  Task Views/Zoom/Data against Project's Task Views, Resource Views, Data,
+  **Split View**, Window and Macros.  The wave gate checked our own spec's
+  counts, not Project's inventory.
+* **Decision 10's selection colour** is measured as `#A2D3A0` in Project; ours
+  is `#DCE9F5` (light blue).
+
+It also confirms decision 16's target (Project's View tab carries Timeline and
+Details checkboxes in a Split View group) and the real file's stored table
+(Task Name, Duration, Start, Finish, % Complete, Pre, Succ, Summary, Yes), which
+is decision 7's acceptance target.

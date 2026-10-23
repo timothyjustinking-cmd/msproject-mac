@@ -433,3 +433,18 @@ app_qt 11/11, parity 9/9, fixtures OK.  Local Qt is in
 **Coordinator**: verify each lane's tests, commit each separately, then ONE
 dispatch for the wave (Linux should be faster); the wave gate goes in
 `docs/handoff/wave21-complete.md`.
+
+### Reference set saved (2026-10-23 ~15:55)
+
+`corpus/reference/2026-10-23-msproject/` (git-ignored; README + manifest.json)
+holds 27 captures: six clean ribbon strips (Resource/Report/Project/View/Help/
+Gantt Format), the clean Account backstage (back arrow, rail), Gantt/table/
+Task Information Task Usage/Team Planner/Resource Sheet/Report photos of the
+real file, and our build's screenshots.  Rules and findings:
+`docs/ui-reference-set.md`.
+
+Corrections: **decision 1 is PARTIAL** (Resource 3 groups vs Project's 5; View 3
+vs 7 -- missing Resource Views, Split View, Window, Macros, Data's
+Sort/Outline/Tables/Group by/Highlight).  Project's selection green is
+`#A2D3A0` (ours `#DCE9F5`).  The clean ribbon strips are the wave-22 per-tab
+inventory target.
