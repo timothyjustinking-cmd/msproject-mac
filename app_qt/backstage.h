@@ -35,6 +35,8 @@
 class QAbstractButton;
 class QComboBox;
 class QLabel;
+class QLineEdit;
+class QListWidget;
 class QPushButton;
 class QStackedWidget;
 class QToolButton;
@@ -79,6 +81,17 @@ class Backstage final : public QWidget {
                           const QString& detail);
     // Selects the chooser's current theme without emitting the handler.
     void set_theme_choice(ThemeChoice choice);
+
+    // W26-4.3: the local recent-file list (New page; Open/Save As add their own
+    // views in W26-4.4).  The caller supplies local paths only.
+    void set_recent_files(const QStringList& files);
+    void set_recent_open_handler(std::function<void(const QString&)> handler);
+    // W26-4.3 accessors for the structural gate: the live New page controls.
+    QAbstractButton* new_blank_button() const noexcept { return new_blank_; }
+    QAbstractButton* new_from_existing_button() const noexcept { return new_existing_; }
+    QLineEdit* online_search() const noexcept { return online_search_; }
+    QLabel* online_note() const noexcept { return online_note_; }
+    QListWidget* new_recent_list() const noexcept { return new_recent_; }
 
     // W26-4.1: the rail's command entries follow the document state.  With no
     // document open the clean Account capture shows Save..Close disabled.
@@ -130,8 +143,10 @@ class Backstage final : public QWidget {
   private:
     QWidget* build_page(Page page, const QString& title, const QString& body,
                         const QString& command_label, const QString& command);
+    QWidget* build_new_page();
     QWidget* build_account_page();
     void set_nav_checked(int page_index);
+    void rebuild_recent_lists();
 
     QWidget* nav_rail_ = nullptr;
     QToolButton* back_button_ = nullptr;
@@ -153,6 +168,13 @@ class Backstage final : public QWidget {
     std::function<void()> options_handler_;
     std::function<void(ThemeChoice)> theme_choice_handler_;
     std::function<void()> about_handler_;
+    std::function<void(const QString&)> recent_open_handler_;
+    QStringList recent_files_;
+    QAbstractButton* new_blank_ = nullptr;
+    QAbstractButton* new_existing_ = nullptr;
+    QLineEdit* online_search_ = nullptr;
+    QLabel* online_note_ = nullptr;
+    QListWidget* new_recent_ = nullptr;
     bool has_document_ = false;
 };
 

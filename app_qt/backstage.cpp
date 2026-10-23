@@ -7,10 +7,15 @@
 #include <QComboBox>
 #include <QEnterEvent>
 #include <QEvent>
+#include <QFileInfo>
 #include <QFont>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QListWidgetItem>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -186,6 +191,42 @@ class RailButton final : public QAbstractButton {
     bool bottom_ = false;
 };
 
+// The New page's two template tiles, drawn on a 32-unit grid: a blank page with
+// a plus, and two stacked pages for "New from existing project".  Our artwork.
+QPixmap draw_template_glyph(bool existing) {
+    QPixmap pixmap(32, 32);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(kNavText);
+    pen.setWidthF(1.6);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    if (!existing) {
+        QPainterPath page;
+        page.moveTo(7.0, 3.0);
+        page.lineTo(19.0, 3.0);
+        page.lineTo(25.0, 9.0);
+        page.lineTo(25.0, 27.0);
+        page.lineTo(7.0, 27.0);
+        page.closeSubpath();
+        painter.drawPath(page);
+        QPainterPath fold;
+        fold.moveTo(19.0, 3.0);
+        fold.lineTo(19.0, 9.0);
+        fold.lineTo(25.0, 9.0);
+        painter.drawPath(fold);
+        painter.setPen(QPen(QColor(0x0f, 0x70, 0x3b), 2.4));
+        painter.drawLine(QPointF(16.0, 14.0), QPointF(16.0, 22.0));
+        painter.drawLine(QPointF(12.0, 18.0), QPointF(20.0, 18.0));
+    } else {
+        painter.drawRect(QRectF(4.0, 7.0, 15.0, 20.0));
+        painter.drawRect(QRectF(10.0, 4.0, 15.0, 20.0));
+    }
+    painter.end();
+    return pixmap;
+}
+
 // A one-pixel rule inset the measured 15 px from the rail's left and 18 px from
 // its right (the Account capture's separators at y=207 and y=914).
 QWidget* make_separator(QWidget* parent, int top_margin, int bottom_margin) {
@@ -343,10 +384,8 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
          "This is a local project file viewer and writer. Open a project, or start "
          "from today's date. Nothing here is synced to a cloud service.",
          "Open a project...", "open"},
-        {Page::create_new, "New",
-         "Create a new project that opens on today's date, in Manually Scheduled "
-         "mode, with the Entry table and an empty first row.",
-         "Create a new project", "new"},
+        // W26-4.3: the New page is built by build_new_page() below (templates,
+        // the disabled online search and the local Recent list).
         {Page::open, "Open",
          "Open an .mpp file from this computer. The file is read through the shared "
          "portable reader; it is never modified in place.",
@@ -379,6 +418,14 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
                                    QString::fromUtf8(spec.command_label),
                                    QString::fromUtf8(spec.command));
         ordered[static_cast<std::size_t>(spec.page)] = page;
+        page_widgets_.push_back(page);
+    }
+
+    // W26-4.3: New -- two template tiles, the disabled online search and the
+    // local Recent list (the capture's page; no online templates in this port).
+    {
+        QWidget* page = build_new_page();
+        ordered[static_cast<std::size_t>(Page::create_new)] = page;
         page_widgets_.push_back(page);
     }
 
@@ -443,6 +490,27 @@ void Backstage::set_theme_choice_handler(std::function<void(ThemeChoice)> handle
 
 void Backstage::set_about_handler(std::function<void()> handler) {
     about_handler_ = std::move(handler);
+}
+
+void Backstage::set_recent_files(const QStringList& files) {
+    recent_files_ = files;
+    rebuild_recent_lists();
+}
+
+void Backstage::set_recent_open_handler(std::function<void(const QString&)> handler) {
+    recent_open_handler_ = std::move(handler);
+}
+
+void Backstage::rebuild_recent_lists() {
+    if (new_recent_ == nullptr) {
+        return;
+    }
+    new_recent_->clear();
+    for (const QString& path : recent_files_) {
+        auto* item = new QListWidgetItem(QFileInfo(path).fileName(), new_recent_);
+        item->setData(Qt::UserRole, path);
+        item->setToolTip(path);
+    }
 }
 
 void Backstage::set_info_text(const QString& title, const QString& detail) {
@@ -582,6 +650,99 @@ QWidget* Backstage::build_page(Page page, const QString& title, const QString& b
     }
     layout->addStretch(1);
     return widget;
+}
+
+QWidget* Backstage::build_new_page() {
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(41, 27, 41, 27);
+    layout->setSpacing(12);
+    auto* title = new QLabel(QStringLiteral("New"), page);
+    title->setFont(backstage_font(15, true));
+    title->setStyleSheet(QStringLiteral("color: #202020;"));
+    layout->addWidget(title);
+
+    auto make_tile = [this, page](const QString& label, bool existing,
+                                  const char* object_name,
+                                  const char* command) -> QToolButton* {
+        auto* tile = new QToolButton(page);
+        tile->setObjectName(QString::fromUtf8(object_name));
+        tile->setText(label);
+        tile->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        tile->setIcon(QIcon(draw_template_glyph(existing)));
+        tile->setIconSize(QSize(32, 32));
+        tile->setFixedSize(190, 96);
+        tile->setFont(backstage_font(kBodyPointSize));
+        tile->setToolTip(label);
+        tile->setStyleSheet(QStringLiteral(
+            "QToolButton { background: #ffffff; border: 1px solid #c8c8c8;"
+            " color: #242424; padding: 4px; }"
+            "QToolButton:hover { background: #eef5fb; border-color: #9db8d2; }"));
+        connect(tile, &QToolButton::clicked, this, [this, command](bool) {
+            if (command_handler_) {
+                command_handler_(QString::fromUtf8(command));
+            }
+        });
+        return tile;
+    };
+
+    auto* tiles = new QHBoxLayout();
+    tiles->setContentsMargins(0, 0, 0, 0);
+    tiles->setSpacing(20);
+    // The capture's two local templates.  "New from existing project" opens a
+    // project as the starting point (the reader never modifies it in place);
+    // the online/SharePoint templates the capture also shows are not offered.
+    new_blank_ = make_tile(QStringLiteral("Blank Project"), false, "newBlankProject",
+                           "new");
+    new_existing_ = make_tile(QStringLiteral("New from existing project"), true,
+                              "newFromExisting", "new_from_existing");
+    tiles->addWidget(new_blank_);
+    tiles->addWidget(new_existing_);
+    tiles->addStretch(1);
+    layout->addLayout(tiles);
+
+    auto* search_row = new QHBoxLayout();
+    search_row->setContentsMargins(0, 0, 0, 0);
+    search_row->setSpacing(8);
+    online_search_ = new QLineEdit(page);
+    online_search_->setObjectName(QStringLiteral("newOnlineSearch"));
+    online_search_->setPlaceholderText(QStringLiteral("Search for online templates"));
+    online_search_->setFixedWidth(300);
+    online_search_->setFixedHeight(24);
+    online_search_->setEnabled(false);
+    online_search_->setToolTip(QStringLiteral("not implemented in this port"));
+    search_row->addWidget(online_search_);
+    search_row->addStretch(1);
+    layout->addLayout(search_row);
+    online_note_ = new QLabel(
+        QStringLiteral("Online templates are not available in this port; the search is "
+                       "disabled."),
+        page);
+    online_note_->setObjectName(QStringLiteral("newOnlineNote"));
+    online_note_->setFont(backstage_font(kBodyPointSize));
+    online_note_->setStyleSheet(QStringLiteral("color: #4a4a4a;"));
+    layout->addWidget(online_note_);
+
+    auto* recent_title = new QLabel(QStringLiteral("Recent"), page);
+    recent_title->setFont(backstage_font(kBodyPointSize, true));
+    recent_title->setStyleSheet(QStringLiteral("color: #202020;"));
+    layout->addWidget(recent_title);
+    new_recent_ = new QListWidget(page);
+    new_recent_->setObjectName(QStringLiteral("newRecentList"));
+    new_recent_->setFixedHeight(240);
+    new_recent_->setFont(backstage_font(kBodyPointSize));
+    connect(new_recent_, &QListWidget::itemActivated, this,
+            [this](QListWidgetItem* item) {
+                if (item != nullptr && recent_open_handler_) {
+                    recent_open_handler_(item->data(Qt::UserRole).toString());
+                }
+            });
+    layout->addWidget(new_recent_);
+    layout->addWidget(make_body(
+        page, QStringLiteral("Recent lists local files only. Nothing here is synced to "
+                             "a cloud service.")));
+    layout->addStretch(1);
+    return page;
 }
 
 QWidget* Backstage::build_account_page() {

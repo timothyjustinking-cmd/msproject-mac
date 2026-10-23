@@ -21,6 +21,7 @@
 
 #include <QMainWindow>
 #include <QString>
+#include <QStringList>
 
 #include <cstddef>
 #include <memory>
@@ -138,6 +139,11 @@ class MainWindow final : public QMainWindow {
     // native QSettings store; the offscreen tests install an explicit ini file.
     // nullptr means "apply in memory only" (the measured test default).
     void set_preferences_store(PreferencesStore* store) noexcept { preferences_store_ = store; }
+    // W26-4.3: the local recent-file list the New/Open/Save As pages show.  It
+    // is read from the installed store (empty without one) and updated on a
+    // successful open/save; nothing here is synced anywhere.
+    QStringList recent_files() const;
+    void note_recent_file(const QString& path);
     // Applies `preferences` to the sheet/Gantt and (when persist) writes them to
     // the installed store.  This is the exact path Preferences [OK] runs; the
     // per-screen gate calls it without a modal widget.

@@ -20,6 +20,8 @@
 #include <QDialog>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <QFrame>
 #include <QImage>
@@ -28,7 +30,9 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLabel>
+#include <QLineEdit>
 #include <QList>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QPixmap>
 #include <QPoint>
@@ -41,6 +45,18 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QWidget>
+
+// Qt 6.5.3's qtestmouse.h trips MSVC /W4 C4701 (an uninitialised local in the
+// inline double-click helper).  The gate builds with /WX, so scope the warning
+// off for this third-party header only (same rule as dialog_gate_test.cpp).
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4701)
+#endif
+#include <QTest>
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -476,6 +492,106 @@ void check_account(msqt::MainWindow& window, const QJsonObject& measures,
     }
 }
 
+void check_new(msqt::MainWindow& window, const QString& fixture, const QString& out_dir) {
+    msqt::Backstage* backstage = window.backstage();
+    if (backstage == nullptr) {
+        return;
+    }
+    QDir().mkpath(out_dir);
+    const QString ini = out_dir + QStringLiteral("/backstage-new.ini");
+    QFile::remove(ini);
+    msqt::PreferencesStore store(ini);
+    store.add_recent_file(fixture);
+    window.set_preferences_store(&store);
+
+    window.show_backstage(true);
+    backstage->show_page(msqt::Backstage::Page::create_new);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    gate::check(backstage->pages()->currentIndex() ==
+                    static_cast<int>(msqt::Backstage::Page::create_new),
+                "the New page is on screen");
+    QWidget* page = backstage->pages()->currentWidget();
+
+    QAbstractButton* blank = backstage->new_blank_button();
+    QAbstractButton* existing = backstage->new_from_existing_button();
+    gate::check(blank != nullptr && blank->isEnabled() &&
+                    blank->text() == QStringLiteral("Blank Project"),
+                "the New page offers the enabled Blank Project tile");
+    gate::check(existing != nullptr && existing->isEnabled() &&
+                    existing->text() == QStringLiteral("New from existing project"),
+                "the New page offers the enabled New-from-existing tile");
+    QLineEdit* search = backstage->online_search();
+    gate::check(search != nullptr && !search->isEnabled(),
+                "the online-template search is laid out and disabled");
+    if (search != nullptr) {
+        gate::check(search->toolTip() == QStringLiteral("not implemented in this port"),
+                    "the online-template search carries the exact tooltip");
+        gate::check(search->placeholderText().contains(QStringLiteral("online templates"),
+                                                       Qt::CaseInsensitive),
+                    "the search box names the online templates");
+    }
+    QLabel* note = backstage->online_note();
+    gate::check(note != nullptr && note->isVisible() &&
+                    note->text().contains(QStringLiteral("Online templates")),
+                "the disabled search carries the visible local-only note");
+
+    QListWidget* recent = backstage->new_recent_list();
+    gate::check(recent != nullptr && recent->count() == 1,
+                "the New page lists the local recent file");
+    if (recent != nullptr && recent->count() > 0) {
+        QListWidgetItem* item = recent->item(0);
+        gate::check(item->text() == QFileInfo(fixture).fileName(),
+                    "the recent row shows the local file's name");
+        gate::check(item->toolTip() == fixture &&
+                        !item->toolTip().contains(QStringLiteral("://")),
+                    "the recent row is a local path, never a URL");
+        // A real double-click through the live view (the connection, not a copy
+        // of the rule).  QTest::mouseDClick sends only the DblClick event, so
+        // press/release surround it as in dialog_gate_test.cpp.
+        const QPoint centre = recent->visualItemRect(item).center();
+        QTest::mousePress(recent->viewport(), Qt::LeftButton, Qt::NoModifier, centre);
+        QTest::mouseDClick(recent->viewport(), Qt::LeftButton, Qt::NoModifier, centre);
+        QTest::mouseRelease(recent->viewport(), Qt::LeftButton, Qt::NoModifier, centre);
+        QApplication::processEvents();
+        QApplication::processEvents();
+        gate::check(!window.backstage_open(),
+                    "the Recent row closes the backstage and opens the project");
+        gate::check(window.loaded_task_count() > 0,
+                    "the Recent row really loads the local file");
+    }
+
+    // Blank Project resets to the new-project state (the same command as the
+    // page's main action).
+    window.show_backstage(true);
+    backstage->show_page(msqt::Backstage::Page::create_new);
+    QApplication::processEvents();
+    if (blank != nullptr) {
+        blank->click();
+        QApplication::processEvents();
+        gate::check(window.loaded_task_count() == 0,
+                    "Blank Project starts an empty project");
+    }
+
+    // New from existing is wired to the file picker; the offscreen gate closes
+    // the modal without choosing a file.
+    bool saw_dialog = false;
+    QTimer::singleShot(0, [&saw_dialog]() {
+        if (QApplication::activeModalWidget() != nullptr) {
+            saw_dialog = true;
+            QApplication::activeModalWidget()->close();
+        }
+    });
+    if (existing != nullptr) {
+        existing->click();
+        QApplication::processEvents();
+        gate::check(saw_dialog,
+                    "New from existing opens the local file picker");
+    }
+    (void)page;
+    window.set_preferences_store(nullptr);
+}
+
 void check_document_state(msqt::MainWindow& window, const QString& fixture) {
     // No document: Save..Close disabled (the clean Account capture).
     window.show_backstage(true);
@@ -541,9 +657,10 @@ int main(int argc, char** argv) {
     check_account(window, measures, out_dir);
     check_file_tab(window);
     check_document_state(window, fixture);
+    check_new(window, fixture, out_dir);
 
     std::fprintf(stderr,
-                 "note: W26-4.1/4.2 rail, File-tab and Account checks ran on the live "
-                 "window\n");
+                 "note: W26-4.1/4.2/4.3 rail, File-tab, Account and New checks ran on "
+                 "the live window\n");
     return gate::finish();
 }

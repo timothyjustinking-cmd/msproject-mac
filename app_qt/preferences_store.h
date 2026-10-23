@@ -23,6 +23,7 @@
 
 #include <QSettings>
 #include <QString>
+#include <QStringList>
 
 #include <memory>
 
@@ -50,6 +51,14 @@ class PreferencesStore {
     // model); it lives under its own key beside the preference line.
     bool load_theme(Theme& out) const;
     void save_theme(Theme theme);
+
+    // W26-4.3: the local recent-file list the New/Open/Save As pages show.  It
+    // is a plain list of local paths (no cloud entries, no URLs) under its own
+    // key; add_recent_file() moves an existing path to the front and keeps at
+    // most kRecentFileLimit entries.
+    static constexpr int kRecentFileLimit = 10;
+    QStringList load_recent_files() const;
+    void add_recent_file(const QString& path);
 
     // True when the backend could be opened for writing (a read-only store
     // reports false so the shell can say persistence failed).

@@ -397,7 +397,7 @@ add_test(NAME qt_icon_gate
 # pixels against them.  It grows one section per G4 item.
 # ===========================================================================
 add_executable(qt_backstage_gate_tests tests/backstage_gate_test.cpp)
-target_link_libraries(qt_backstage_gate_tests PRIVATE qt_shell)
+target_link_libraries(qt_backstage_gate_tests PRIVATE qt_shell Qt6::Test)
 qt_set_warnings(qt_backstage_gate_tests)
 
 add_test(NAME qt_backstage_gate
