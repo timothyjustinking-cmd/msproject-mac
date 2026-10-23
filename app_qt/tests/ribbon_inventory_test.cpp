@@ -297,6 +297,11 @@ void check_inventory(msqt::RibbonBar* ribbon, const TabPin& pin, const QJsonObje
                         (where + " / " + group.title + " / " + expected.label +
                          ": enabled state is the independent pin's")
                             .c_str());
+            if (live->isEnabled() != expected.enabled) {
+                std::fprintf(stderr, "  live enabled %d, pin %d (%s)\n",
+                             live->isEnabled() ? 1 : 0, expected.enabled ? 1 : 0,
+                             expected.label.c_str());
+            }
             const QString tip = live->toolTip();
             if (expected.enabled) {
                 gate::check(!tip.isEmpty(),
@@ -497,6 +502,7 @@ const EnabledWiring kEnabledWiring[] = {
     {"View", "Resource Views", "Resource Sheet", "view_resource_sheet", ""},
     {"Project", "Properties", "Custom Fields", "custom_fields", ""},
     {"Project", "Properties", "Project Information", "", "project_information"},
+    {"Project", "Properties", "Change Working Time", "", "change_working_time"},
     {"Gantt Chart Format", "Columns", "Custom Fields", "custom_fields", ""},
     {"Task", "Schedule", "0%", "", "percent_0"},
     {"Task", "Schedule", "25%", "", "percent_25"},

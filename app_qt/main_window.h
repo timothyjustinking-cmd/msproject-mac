@@ -178,6 +178,9 @@ class MainWindow final : public QMainWindow {
     // field and its OK queues a StructuralEdits set_project_priority.  Public
     // so the offscreen gate can drive the real path without a modal.
     void show_project_information();
+    // Change Working Time: the file's calendars are decoded and rendered
+    // read-only; the port has no calendar writer.
+    void show_change_working_time();
 
     // Opens/closes the File backstage.  Public so the structural gate can prove
     // the left rail and pages without clicking through a modal.

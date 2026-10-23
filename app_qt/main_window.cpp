@@ -1882,6 +1882,8 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             show_project_information();
             return;
         case RibbonCommand::change_working_time:
+            show_change_working_time();
+            return;
         case RibbonCommand::links_between_projects:
         case RibbonCommand::update_project:
         case RibbonCommand::move_project:
@@ -2686,6 +2688,26 @@ void MainWindow::show_project_information() {
     after_structural_change();
     set_message("queued project priority " + std::to_string(priority) +
                     "; File > Save writes it",
+                false);
+    update_status();
+}
+
+void MainWindow::show_change_working_time() {
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    const app::date32 today = app::today_date32();
+    const core::sched::CivilDate civil = core::sched::to_civil(today);
+    ChangeWorkingTimeDialog dialog(doc_.path(), doc_.format(), civil.year, civil.month,
+                                   civil.day, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        set_message("change working time cancelled", false);
+        update_status();
+        return;
+    }
+    set_message("change working time: the port has no calendar writer, nothing was changed",
                 false);
     update_status();
 }

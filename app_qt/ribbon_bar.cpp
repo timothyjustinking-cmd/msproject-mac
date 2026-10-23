@@ -387,8 +387,9 @@ const std::vector<TabSpec>& tab_specs() {
         large(project_properties, "Links Between\nProjects", app::MenuAction::none, 68, 2, false,
               "properties.links_between");
         large(project_properties, "WBS", app::MenuAction::none, 40, 3, false, "properties.wbs");
-        large(project_properties, "Change\nWorking Time", app::MenuAction::none, 68, 4, false,
-              "properties.change_working_time");
+        add(project_properties, "Change\nWorking Time", Kind::button, 68, 0, 4, 3, 1,
+            app::MenuAction::none, RibbonCommand::change_working_time, nullptr, 0, true,
+            false, "properties.change_working_time");
         GroupSpec& project_schedule = add_group(project, "Schedule", 175);
         large(project_schedule, "Calculate\nProject", app::MenuAction::none, 52, 0, false,
               "schedule.calculate");

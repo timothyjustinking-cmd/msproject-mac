@@ -127,7 +127,7 @@ Project	0	Properties	button	Project Information	1	properties.project_information
 Project	0	Properties	button	Custom Fields	1	properties.custom_fields	0	-
 Project	0	Properties	button	Links Between Projects	0	properties.links_between	0	-
 Project	0	Properties	button	WBS	0	properties.wbs	0	-
-Project	0	Properties	button	Change Working Time	0	properties.change_working_time	0	-
+Project	0	Properties	button	Change Working Time	1	properties.change_working_time	0	-
 Project	0	Schedule	group	-	-	-	-	-
 Project	0	Schedule	button	Calculate Project	0	schedule.calculate	0	-
 Project	0	Schedule	button	Set Baseline	0	schedule.set_baseline	0	-

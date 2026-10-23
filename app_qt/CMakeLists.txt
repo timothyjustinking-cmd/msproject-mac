@@ -422,7 +422,8 @@ qt_set_warnings(qt_project_dialog_gate_tests)
 add_test(NAME qt_project_dialog_gate
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_project_dialog_gate_tests>
-                 "${QT_REPO_ROOT}/tests/data/reference/w26-project-dialogs.measures.json")
+                 "${QT_REPO_ROOT}/tests/data/reference/w26-project-dialogs.measures.json"
+                 "${QT_TEST_DATA_DIR_CMAKE}")
 
 # ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
