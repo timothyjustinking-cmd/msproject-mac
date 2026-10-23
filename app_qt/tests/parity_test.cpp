@@ -241,6 +241,10 @@ int main(int argc, char** argv) {
           "an auto link is the measured (38,124,211)");
     check(msqt::kLinkManual == QColor(0x1b, 0xad, 0xba),
           "a manual link is the measured (27,173,186)");
+    // Wave 25 review: the highlight-ON link colour is a measured constant too;
+    // leaving it unpinned let a typo pass every Qt test.
+    check(msqt::kLinkCritical == QColor(0xdd, 0x25, 0x22),
+          "Critical Tasks highlighting links are the measured (221,37,34)");
 
     // --- chrome ------------------------------------------------------------
     msqt::RibbonBar* ribbon = window.ribbon();
