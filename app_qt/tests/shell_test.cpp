@@ -17,7 +17,9 @@
 #include <QAction>
 #include <QApplication>
 #include <QByteArray>
+#include <QColor>
 #include <QImage>
+#include <QPalette>
 #include <QMenu>
 #include <QMenuBar>
 #include <QModelIndex>
@@ -29,6 +31,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "gantt_canvas.h"
 #include "main_window.h"
 #include "menu_model.h"
 #include "shell_style.h"
@@ -74,11 +77,39 @@ int main(int argc, char** argv) {
     // of the fixture's three tasks, and the Gantt draws its project bar.
     check(window.sheet_row_count() == 4, "the fixture shows the project row + 3 task rows");
     check(window.gantt_bar_count() == 4, "the fixture has the project bar + 3 task bars");
-    // Wave 23 (B-2): the fixture's stored view is the plain Gantt, so the
-    // Timeline strip must not be in the window's layout (isHidden, not
-    // isVisible: the offscreen window is never shown).
-    check(window.timeline() != nullptr && window.timeline()->isHidden(),
-          "the loaded fixture hides the Timeline strip its view does not have");
+    // Wave 23 (B-2, corrected): Project shows the Timeline strip for this
+    // fixture (measured in its 1920 capture) even though COM reports the same
+    // "Gantt Chart" view as project_a.  The strip is application state, so the
+    // shell keeps Project's default and lays it out (isHidden false; the
+    // offscreen window is never shown itself).
+    check(window.timeline() != nullptr && !window.timeline()->isHidden(),
+          "the loaded fixture shows the Timeline strip (Project's default)");
+    // --- the same-file structural gate (wave 23, A-1a) ---------------------
+    // Literals typed from the clean capture / the measured reference set, never
+    // production symbols: "Ready" at the left, selection #A2D3A0, stock bar
+    // colours (black summary because the file's styles are not decoded, Q1).
+    check(window.status_left_text() == QStringLiteral("Ready"),
+          "the status bar's left segment says Ready");
+    if (window.sheet_view() != nullptr) {
+        check(window.sheet_view()->palette().color(QPalette::Highlight) ==
+                  QColor(0xa2, 0xd3, 0xa0),
+              "the selection colour is Project's measured #A2D3A0");
+        check(window.sheet_view()->font().family() == QApplication::font().family() &&
+                  !window.sheet_view()->font().family().isEmpty(),
+              "the sheet's cells are drawn in the resolved UI font family");
+    }
+    if (window.gantt_view() != nullptr) {
+        check(window.gantt_view()->layout().bars.size() == 4,
+              "the Gantt has the project bar and three task bars");
+        if (window.gantt_view()->layout().bars.size() == 4) {
+            check(window.gantt_view()->bar_colour(0) == QColor(0x00, 0x00, 0x00),
+                  "the project-summary bar uses Project's stock black (Q1)");
+            check(window.gantt_view()->bar_colour(1) == QColor(0x4a, 0x7e, 0xbb),
+                  "an ordinary task bar uses the stock blue");
+        }
+    } else {
+        check(false, "the window owns a Gantt canvas");
+    }
     check(window.sheet_view() != nullptr, "the window owns a sheet view");
     if (window.sheet_view() != nullptr && window.sheet_view()->model() != nullptr) {
         check(window.sheet_view()->model()->rowCount() == 4,

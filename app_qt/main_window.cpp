@@ -1363,10 +1363,12 @@ void MainWindow::refresh_timeline() {
     if (timeline_ == nullptr) {
         return;
     }
-    // Wave 23 (B-2): the strip is a pane of the file's stored view.  Project's
-    // clean capture of project_a (applied view "&Gantt Chart") has none; a new
-    // project opens on the default "Gantt Chart with Timeline" (operator Q2).
-    timeline_->setVisible(!doc_.has_document() || doc_.timeline_visible());
+    // Wave 23 (B-2, corrected): Timeline visibility is an application setting,
+    // not file state -- COM reports the same CurrentView for the files whose
+    // captures differ, and saving the strip shown/hidden changes no direct
+    // view-state bytes.  The shell keeps Project's default (shown).  The
+    // View > Timeline checkbox is part of the split-view work (W23-20).
+    timeline_->setVisible(true);
     if (!doc_.has_document()) {
         // A new project: Start and Finish are today, and the strip shows the
         // product's prompt because nothing has been added to the timeline.
