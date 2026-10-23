@@ -211,6 +211,7 @@ placeholder so the gate fails on it instead of passing silently.
 | W26-2.5 | View tab: 20 commands (the one expected same-tab reuse) | **DONE** | commit `d5a1cce`; gates `build/w26/gates-2ade1d3-W26-2.5.log` |
 | W26-2.6 | Help tab: 3 commands | **DONE** | commit `de787e7`; gates `build/w26/gates-d5a1cce-W26-2.6.log` |
 | W26-2.7 | Gantt Chart Format tab: 15 commands; the all-tabs assertion | **DONE** | commit `e8d0520`; gates `build/w26/gates-de787e7-W26-2.7.log` |
+| W26-2.8 | correction: the capture's cross-tab reuse (Resource Information/Details, Project Information, Custom Fields redraw) | **DONE** | commit `fde3186`; gates `build/w26/gates-2d1448a-W26-2.8.log` |
 
 Acceptance:
 
@@ -243,12 +244,19 @@ Acceptance:
   its group/label/key, for Tim.
 
 Glyph reuse, cross-tab (allowed only where Project reuses the mark):
-`properties.information` (Task/Resource Information), `properties.notes` and
-`properties.details` (Task/Resource), `view.gantt` (Task/View Task Views),
+`properties.notes` (Task/Resource Notes), `view.gantt` (Task/View Task Views),
 `view.team_planner` (Resource/View Resource Views), `properties.custom_fields`
-(Project/Gantt Chart Format).  `properties.project_information` draws the same
-information page as `properties.information`, as Project does for Task
-Information and Project Information.
+(Project/Gantt Chart Format).  Re-reading the clean strips before hand-off
+found three of these were wrong and they are corrected in W26-2.8: Resource
+Information is a person with the info badge (its own
+`properties.resource_information`), Resource Details is a page with value
+boxes (`properties.resource_details`), and Project Information is a
+table/window with the info badge (its own drawing under
+`properties.project_information`).  The Custom Fields glyph was also redrawn
+as the field grid with the add badge the capture shows on both tabs.  The
+gate's same-tab reuse list still contains only View's two `Other Views`
+entries; cross-tab reuse is not gated (it is the capture's evidence above),
+which is why W26-2.8 exists: the strips, not the gate, caught it.
 
 Deliberate presentation decisions: B/I/U and the five %-complete buttons are
 icon-only (their pin labels remain as accessible names), matching the
@@ -271,6 +279,7 @@ log):
 | W26-2.5 | `gates-2ade1d3-W26-2.5.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
 | W26-2.6 | `gates-d5a1cce-W26-2.6.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
 | W26-2.7 | `gates-de787e7-W26-2.7.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
+| W26-2.8 | `gates-2d1448a-W26-2.8.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 15/15 | 19/19 | OK | 10/0, 1/0 |
 
 Every log also carries `check_fixtures.py` (23 documented hashes, 21 tracked
 `.mpp`), oracle provenance (8), the client-name scan (0 hits on HEAD and on
