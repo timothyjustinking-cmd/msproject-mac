@@ -312,23 +312,35 @@ const std::vector<TabSpec>& tab_specs() {
         TabSpec resource;
         resource.title = "Resource";
         GroupSpec& resource_view = add_group(resource, "View", 66);
-        large(resource_view, "Team\nPlanner", app::MenuAction::none, 55, 0);
+        large(resource_view, "Team\nPlanner", app::MenuAction::none, 55, 0, false,
+              "view.team_planner");
         GroupSpec& assignments = add_group(resource, "Assignments", 129);
-        large(assignments, "Assign\nResources", app::MenuAction::none, 58, 0);
-        large(assignments, "Resource\nPool", app::MenuAction::none, 58, 1);
+        large(assignments, "Assign\nResources", app::MenuAction::none, 58, 0, false,
+              "assignments.assign");
+        large(assignments, "Resource\nPool", app::MenuAction::none, 58, 1, false,
+              "assignments.pool");
         GroupSpec& resource_insert = add_group(resource, "Insert", 85);
-        large(resource_insert, "Add\nResources", app::MenuAction::insert_resource, 74, 0);
+        large(resource_insert, "Add\nResources", app::MenuAction::insert_resource, 74, 0, false,
+              "insert.add_resources");
         GroupSpec& resource_properties = add_group(resource, "Properties", 172);
-        large(resource_properties, "Information", app::MenuAction::none, 58, 0);
-        small(resource_properties, "Notes", app::MenuAction::none, 100, 0, 1);
-        small(resource_properties, "Details", app::MenuAction::none, 100, 1, 1);
+        large(resource_properties, "Information", app::MenuAction::none, 58, 0, false,
+              "properties.information");
+        small(resource_properties, "Notes", app::MenuAction::none, 100, 0, 1, false, 1, false,
+              "properties.notes");
+        small(resource_properties, "Details", app::MenuAction::none, 100, 1, 1, false, 1, false,
+              "properties.details");
         GroupSpec& level = add_group(resource, "Level", 307);
-        large(level, "Level\nSelection", app::MenuAction::none, 60, 0);
-        large(level, "Level\nResource", app::MenuAction::none, 56, 1);
-        large(level, "Level\nAll", app::MenuAction::none, 46, 2);
-        small(level, "Leveling Options", app::MenuAction::none, 100, 0, 3);
-        small(level, "Clear Leveling", app::MenuAction::none, 100, 1, 3);
-        small(level, "Next Overallocation", app::MenuAction::none, 100, 2, 3);
+        large(level, "Level\nSelection", app::MenuAction::none, 60, 0, false,
+              "level.selection");
+        large(level, "Level\nResource", app::MenuAction::none, 56, 1, false,
+              "level.resource");
+        large(level, "Level\nAll", app::MenuAction::none, 46, 2, false, "level.all");
+        small(level, "Leveling Options", app::MenuAction::none, 100, 0, 3, false, 1, false,
+              "level.options");
+        small(level, "Clear Leveling", app::MenuAction::none, 100, 1, 3, false, 1, false,
+              "level.clear");
+        small(level, "Next Overallocation", app::MenuAction::none, 100, 2, 3, false, 1, false,
+              "level.next_overallocation");
         tabs.push_back(std::move(resource));
 
         // --- Report ---------------------------------------------------------

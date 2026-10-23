@@ -98,6 +98,15 @@ void filled_polygon(QPainter& painter, std::initializer_list<QPointF> points) {
     painter.drawPolygon(polygon(points));
 }
 
+// A head-and-shoulders person mark: the resource commands' common motif.
+void person(QPainter& painter, qreal cx, qreal head_y, qreal radius = 3.0) {
+    outline_circle(painter, cx, head_y, radius);
+    painter.setPen(ink_pen(2.0));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawArc(QRectF(cx - 2 * radius, head_y + radius + 1, 4 * radius, 2.2 * radius),
+                    0, 180 * 16);
+}
+
 // A document page with a folded top-right corner.  The base silhouette most of
 // the page commands build on.
 void page(QPainter& painter, qreal x = 5.0, qreal y = 3.0, qreal w = 22.0, qreal h = 26.0) {
@@ -107,6 +116,72 @@ void page(QPainter& painter, qreal x = 5.0, qreal y = 3.0, qreal w = 22.0, qreal
                                  QPointF(x + w, y + h), QPointF(x, y + h)}));
     line(painter, x + w - 7, y, x + w - 7, y + 7);
     line(painter, x + w - 7, y + 7, x + w, y + 7);
+}
+
+// --- Resource tab (W26-2.2) ------------------------------------------------
+// True when `key` belongs to this tab and was drawn.  Information/Notes/
+// Details are Task-tab keys too: Project reuses those glyphs, and the Task
+// function above owns them.
+bool draw_resource_glyph(QPainter& painter, const QString& key) {
+    if (key == QStringLiteral("view.team_planner")) {
+        page(painter);
+        person(painter, 12, 12, 3.0);
+        person(painter, 21, 15, 3.0);
+    } else if (key == QStringLiteral("assignments.assign")) {
+        person(painter, 11, 14, 3.5);
+        person(painter, 21, 16, 3.5);
+        line(painter, 21, 5, 29, 5, 2.5);
+        line(painter, 25, 1, 25, 9, 2.5);
+    } else if (key == QStringLiteral("assignments.pool")) {
+        person(painter, 11, 12, 3.5);
+        person(painter, 21, 14, 3.5);
+        filled_rect(painter, 6, 26, 20, 3);
+    } else if (key == QStringLiteral("insert.add_resources")) {
+        person(painter, 13, 13, 3.5);
+        line(painter, 19, 7, 27, 7, 2.5);
+        line(painter, 23, 3, 23, 11, 2.5);
+    } else if (key == QStringLiteral("level.selection")) {
+        // A short list with a large pointing cursor: the marker, not the rows,
+        // is what tells the five Level commands apart at 16 px.
+        outline_rect(painter, 3, 7, 13, 4);
+        outline_rect(painter, 3, 21, 13, 4);
+        filled_polygon(painter, {QPointF(19, 6), QPointF(31, 16), QPointF(25, 17),
+                                 QPointF(29, 25), QPointF(25, 27), QPointF(21, 18),
+                                 QPointF(17, 17)});
+    } else if (key == QStringLiteral("level.resource")) {
+        outline_rect(painter, 3, 7, 13, 4);
+        outline_rect(painter, 3, 21, 13, 4);
+        line(painter, 23, 4, 23, 15, 3);
+        filled_polygon(painter, {QPointF(15, 14), QPointF(31, 14), QPointF(23, 28)});
+    } else if (key == QStringLiteral("level.all")) {
+        outline_rect(painter, 3, 7, 13, 4);
+        outline_rect(painter, 3, 14, 13, 4);
+        outline_rect(painter, 3, 21, 13, 4);
+        line(painter, 25, 5, 25, 27, 3);
+        line(painter, 25, 5, 20, 5, 2.5);
+        line(painter, 25, 16, 20, 16, 2.5);
+        line(painter, 25, 27, 20, 27, 2.5);
+    } else if (key == QStringLiteral("level.options")) {
+        page(painter);
+        outline_circle(painter, 20, 20, 4.5);
+        line(painter, 20, 13, 20, 16);
+        line(painter, 20, 24, 20, 27);
+        line(painter, 13, 20, 16, 20);
+        line(painter, 24, 20, 27, 20);
+    } else if (key == QStringLiteral("level.clear")) {
+        outline_rect(painter, 3, 7, 13, 4);
+        outline_rect(painter, 3, 21, 13, 4);
+        line(painter, 19, 9, 30, 23, 3);
+        line(painter, 30, 9, 19, 23, 3);
+    } else if (key == QStringLiteral("level.next_overallocation")) {
+        outline_rect(painter, 3, 6, 13, 4);
+        outline_rect(painter, 3, 13, 13, 4);
+        line(painter, 5, 27, 27, 27, 3);
+        filled_polygon(painter, {QPointF(20, 19), QPointF(31, 27), QPointF(20, 31)});
+    } else {
+        return false;
+    }
+    return true;
 }
 
 // --- Task tab (W26-2.1) ----------------------------------------------------
@@ -310,7 +385,7 @@ QIcon shell_ribbon_icon(const QString& key, int pixels) {
     painter.scale(static_cast<double>(pixels) / 32.0, static_cast<double>(pixels) / 32.0);
     painter.setPen(ink_pen(2.0));
     painter.setBrush(Qt::NoBrush);
-    if (!draw_task_glyph(painter, key)) {
+    if (!draw_task_glyph(painter, key) && !draw_resource_glyph(painter, key)) {
         painter.end();
         // A key with no drawing is the neutral placeholder, never a blank
         // icon: the gate's placeholder hash then fails on it.
@@ -326,7 +401,7 @@ bool shell_ribbon_glyph_known(const QString& key) {
     QPainter painter(&probe);
     painter.setPen(ink_pen(2.0));
     painter.setBrush(Qt::NoBrush);
-    const bool known = draw_task_glyph(painter, key);
+    const bool known = draw_task_glyph(painter, key) || draw_resource_glyph(painter, key);
     painter.end();
     return known;
 }

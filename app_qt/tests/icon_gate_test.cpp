@@ -82,6 +82,7 @@ struct TabPlan {
 // one also flips kAllTabsChecked.
 const std::vector<TabPlan> kPlan = {
     {"Task", {}},
+    {"Resource", {}},
 };
 constexpr bool kAllTabsChecked = false;
 
