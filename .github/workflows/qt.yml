@@ -203,6 +203,34 @@ jobs:
         shell: bash
         run: ctest --test-dir build-qt --output-on-failure --timeout 60
 
+      # Wave 23 (A-1d / A-7c): the committed fixtures match their pinned hashes,
+      # and the Windows job compares the 1920 render to a committed PROJECT
+      # capture of the client-free oracle fixture -- the verifier's "our own
+      # earlier render is not a reference".  The pixel score is printed in the
+      # same run and never gates (decision 12); the structural comparison does.
+      - name: Committed fixtures match their pinned hashes
+        shell: bash
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            python3 scripts/check_fixtures.py
+          else
+            python scripts/check_fixtures.py
+          fi
+
+      - name: Parity gate against Project's capture of the synthetic fixture
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet numpy pillow
+          QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1 \
+            ./build-qt/msproject_qt.exe --open tests/data/wave23-outline.mpp \
+            --render build-qt/wave23-port.png --parity
+          python scripts/parity_report.py --score \
+            tests/data/reference/wave23-outline-project.png build-qt/wave23-port.png
+          python scripts/parity_report.py --compare \
+            tests/data/reference/wave23-outline-project.png build-qt/wave23-port.png
+
       # The 1920x1032 PNG is the image P1's harness scores against the reference
       # capture; a green build that lost it would still upload a plausible 900px
       # artifact, so fail loudly and say which file is missing.

@@ -29,6 +29,12 @@ This file is the record of a structured interview with the operator on
 | 15 | Dialog semantics | Where the engine exists, the dialog is **fully functional**. Where it does not (e.g. Compare Projects, Visual Reports), the dialog is **laid out with its primary action disabled** and an inline note, Cancel works, and the gap is in the backlog. No fake success. |
 | 16 | Split view | View ▸ **Timeline** toggles the strip; View ▸ **Details** docks a task form at the bottom, synchronised with the selection, resizable splitter. |
 
+**Audit note (wave 23, decision 12).**  The pixel-difference score wave 20
+claimed did not exist (A-1).  It is implemented in `scripts/parity_report.py
+--score`: per-region changed-pixel percentages (title, ribbon, timeline, sheet,
+chart, status) plus a total, reported against a reference and never gating.
+Decision 12's text above is the operator's and is unchanged.
+
 ## Build order
 
 1. Empty state + chrome structure: ribbon (geometry and icons), timeline, table
