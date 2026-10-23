@@ -5,8 +5,12 @@
  * re-checked by docs/analysis/writer/cfb_assumptions.py over the whole corpus
  * and by tests/roundtrip_cfb.cpp over every file in corpus/probe:
  *
- *   - every sector of an .mpp file is reachable from a chain (no orphans), so a
- *     sector never has to be invented;
+ *   - every sector of a file this writer RE-EMITS is reachable from a chain (no
+ *     orphans), so a sector never has to be invented.  Files that carry
+ *     unreferenced trailing sectors exist (MS Project writes them: sf248 has 768
+ *     FAT entries for 959 sectors); those are readable with a warning but are
+ *     not round-tripped through to_bytes(), whose FAT is derived from the
+ *     chains.  A chain that walks past the FAT is fatal;
  *   - the FAT is exactly the chain layout plus FATSECT/DIFSECT marks, so it can
  *     be derived instead of copied;
  *   - the mini FAT is exactly the mini chains;
@@ -279,6 +283,7 @@ CfbDocument CfbDocument::from_bytes(std::vector<std::uint8_t> bytes) {
 
 void CfbDocument::parse() {
     std::vector<std::uint8_t> const& b = source_;
+    warnings_.clear();
     if (b.size() < kHeaderSize) {
         throw Error("smaller than one CFB header");
     }
@@ -373,10 +378,19 @@ void CfbDocument::parse() {
             fat_.push_back(read_u32(b, base + 4 * i));
         }
     }
+    /* Unreferenced sectors.  A FAT shorter than the file is SLACK, not
+     * truncation, when every chain ends inside the FAT: MS Project writes files
+     * like that (corpus/imported/sf248.mpp has 959 sectors and a 768-entry FAT).
+     * Report it and keep going; chain_from() below still refuses a chain that
+     * points past the FAT, so real truncation stays fatal.  Mirrors
+     * core/mpp/cfb.cpp's rule (wave 20 M6). */
     if (fat_.size() < sector_total) {
-        throw Error("FAT covers " + std::to_string(fat_.size()) +
-                    " sectors but the file has " +
-                    std::to_string(sector_total));
+        warnings_.push_back(
+            std::to_string(sector_total - fat_.size()) +
+            " unreferenced sectors: the FAT describes " +
+            std::to_string(fat_.size()) + " of the file's " +
+            std::to_string(sector_total) +
+            " sectors; the remainder is not part of any chain");
     }
 
     /* directory chain and entries */
@@ -1032,6 +1046,20 @@ struct Owner {
 } /* namespace */
 
 std::vector<std::uint8_t> CfbDocument::to_bytes() const {
+    /* A document parsed with unreferenced sectors cannot be reproduced: the
+     * unreferenced sectors are not part of any chain, and this writer derives
+     * the FAT from the chains it knows (see FAT SLACK in the header).  Refuse
+     * rather than silently emit a different file.  Reading, including every
+     * stream, still works. */
+    if (!warnings_.empty()) {
+        throw Error(
+            "refusing to re-emit a container with " +
+            std::to_string(warnings_.size()) +
+            " recoverable warning(s): " + warnings_.front() +
+            ".  The unreferenced sectors are not part of any chain, so the "
+            "derived FAT cannot reproduce this file; parse it for reading "
+            "only");
+    }
     Layout const L = layout();
     std::size_t const ss = sector_size_;
     std::size_t const eps = L.entries_per_sector;
@@ -1245,6 +1273,9 @@ void CfbDocument::save(std::string const& path) const {
 
 std::string CfbDocument::check() const {
     try {
+        if (!warnings_.empty()) {
+            return "not round-trippable: " + warnings_.front();
+        }
         if (!modified_) {
             Layout const L = layout();
             if (L.fat.size() != fat_.size()) {

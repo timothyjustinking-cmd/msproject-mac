@@ -142,6 +142,175 @@ std::string first_difference(std::vector<std::uint8_t> const& a,
     return "identical";
 }
 
+/* ---- synthetic FAT slack (no corpus needed) ------------------------------
+ * A file may carry trailing sectors that no chain references: MS Project writes
+ * them (corpus/imported/sf248.mpp has a 768-entry FAT for 959 sectors, so 191
+ * sectors are slack).  The rule under test mirrors core/mpp/cfb.cpp: a FAT
+ * shorter than the file is a WARNING and the read continues; a chain that
+ * points past the FAT is a positioned Error.  The base below is a minimal valid
+ * CFB built from bytes here -- 3 sectors (directory, FAT, one 512-byte stream)
+ * -- so the test also runs on a machine with no corpus. */
+void put_u16(std::vector<std::uint8_t>& bytes, std::size_t offset,
+             std::uint16_t value) {
+    bytes[offset] = static_cast<std::uint8_t>(value & 0xFFu);
+    bytes[offset + 1] = static_cast<std::uint8_t>(value >> 8);
+}
+
+void put_u32(std::vector<std::uint8_t>& bytes, std::size_t offset,
+             std::uint32_t value) {
+    for (int i = 0; i < 4; ++i) {
+        bytes[offset + static_cast<std::size_t>(i)] =
+            static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu);
+    }
+}
+
+/* UTF-16LE name plus the u16 byte count at +64 (terminating NUL included). */
+void put_name(std::vector<std::uint8_t>& bytes, std::size_t entry,
+              std::string_view name) {
+    for (std::size_t i = 0; i < name.size(); ++i) {
+        bytes[entry + 2 * i] = static_cast<std::uint8_t>(name[i]);
+        bytes[entry + 2 * i + 1] = 0;
+    }
+    put_u16(bytes, entry + 64,
+            static_cast<std::uint16_t>(2 * (name.size() + 1)));
+}
+
+std::vector<std::uint8_t> minimal_cfb() {
+    constexpr std::size_t kSector = 512;
+    std::vector<std::uint8_t> bytes(512 + 3 * kSector, 0);
+
+    /* header */
+    std::uint8_t const signature[8] = {0xD0, 0xCF, 0x11, 0xE0,
+                                       0xA1, 0xB1, 0x1A, 0xE1};
+    std::copy(std::begin(signature), std::end(signature), bytes.begin());
+    put_u16(bytes, 0x18, 0x003E);       /* minor version */
+    put_u16(bytes, 0x1A, 3);            /* major version */
+    put_u16(bytes, 0x1C, 0xFFFE);       /* little-endian */
+    put_u16(bytes, 0x1E, 9);            /* 512-byte sectors */
+    put_u16(bytes, 0x20, 6);            /* 64-byte mini sectors */
+    put_u32(bytes, 0x2C, 1);            /* one FAT sector */
+    put_u32(bytes, 0x30, 0);            /* directory starts at sector 0 */
+    put_u32(bytes, 0x38, 4096);         /* mini cutoff */
+    put_u32(bytes, 0x3C, 0xFFFFFFFEu);  /* no mini FAT */
+    put_u32(bytes, 0x44, 0xFFFFFFFEu);  /* no DIFAT continuation */
+    for (std::size_t i = 0; i < 109; ++i) {
+        put_u32(bytes, 0x4C + 4 * i, 0xFFFFFFFFu);
+    }
+    put_u32(bytes, 0x4C, 1); /* the FAT lives in sector 1 */
+
+    /* directory: sector 0.  Root entry -> one stream entry -> two free slots. */
+    std::size_t const dir = kSector;
+    put_name(bytes, dir, "Root Entry");
+    bytes[dir + 66] = 5; /* root storage */
+    bytes[dir + 67] = 1; /* black */
+    put_u32(bytes, dir + 68, 0xFFFFFFFFu);
+    put_u32(bytes, dir + 72, 0xFFFFFFFFu);
+    put_u32(bytes, dir + 76, 1);             /* child: entry 1 */
+    put_u32(bytes, dir + 116, 0xFFFFFFFEu);  /* no regular chain */
+    std::size_t const stream = dir + 128;
+    put_name(bytes, stream, "Stream");
+    bytes[stream + 66] = 2; /* stream */
+    bytes[stream + 67] = 1;
+    put_u32(bytes, stream + 68, 0xFFFFFFFFu);
+    put_u32(bytes, stream + 72, 0xFFFFFFFFu);
+    put_u32(bytes, stream + 76, 0xFFFFFFFFu);
+    put_u32(bytes, stream + 116, 2); /* data sector */
+    put_u32(bytes, stream + 120, kSector);
+
+    /* FAT: sector 1. */
+    std::size_t const fat = 512 + kSector;
+    for (std::size_t i = 0; i < 128; ++i) {
+        put_u32(bytes, fat + 4 * i, 0xFFFFFFFFu);
+    }
+    put_u32(bytes, fat + 0, 0xFFFFFFFEu); /* directory chain ends */
+    put_u32(bytes, fat + 4, 0xFFFFFFFDu); /* FAT sector mark */
+    put_u32(bytes, fat + 8, 0xFFFFFFFEu); /* stream chain ends */
+
+    /* payload: sector 2. */
+    std::size_t const data = 512 + 2 * kSector;
+    std::fill(bytes.begin() + static_cast<std::ptrdiff_t>(data),
+              bytes.begin() + static_cast<std::ptrdiff_t>(data + kSector),
+              std::uint8_t{0xAB});
+    return bytes;
+}
+
+void test_fat_slack(TestContext& t) {
+    std::vector<std::uint8_t> const valid = minimal_cfb();
+    std::vector<std::uint8_t> const payload(512, std::uint8_t{0xAB});
+
+    mppwrite::CfbDocument const compact =
+        mppwrite::CfbDocument::from_bytes(valid);
+    t.check(compact.warnings().empty(),
+            "slack: a compact CFB reports no warning (no false positive)");
+    t.check(compact.read_stream("Stream") == payload,
+            "slack: the synthetic stream reads back");
+    t.check(compact.to_bytes() == valid,
+            "slack: a compact CFB re-emits byte-identically (the writer's byte "
+            "output is unchanged)");
+
+    /* Append 140 unreferenced sectors: 3 + 140 = 143 sectors against a
+     * 128-entry FAT, so 15 are slack. */
+    std::vector<std::uint8_t> slack = valid;
+    slack.resize(valid.size() + 140 * 512, 0);
+    mppwrite::CfbDocument const doc = mppwrite::CfbDocument::from_bytes(slack);
+    t.check(doc.sector_count() == 143, "slack: the file has 143 sectors");
+    t.check(doc.warnings().size() == 1,
+            "slack: a short FAT reports exactly one warning");
+    if (!doc.warnings().empty()) {
+        std::string const& warning = doc.warnings().front();
+        t.check(warning.find("15 unreferenced sectors") != std::string::npos &&
+                    warning.find("FAT describes 128") != std::string::npos &&
+                    warning.find("file's 143") != std::string::npos,
+                "slack: the warning counts the 15 slack sectors: " + warning);
+    }
+    t.check(doc.read_stream("Stream") == payload,
+            "slack: the stream still reads when the FAT is short");
+
+    /* A slack container is readable, not round-trippable: the writer derives
+     * the FAT from the chains it knows, so it must refuse rather than emit a
+     * different file (the header's FAT SLACK contract). */
+    t.check(!doc.check().empty() &&
+                doc.check().find("not round-trippable") != std::string::npos,
+            "slack: check() reports the file as not round-trippable: " +
+                doc.check());
+    bool reemit_refused = false;
+    try {
+        std::vector<std::uint8_t> const emitted = doc.to_bytes();
+        (void)emitted;
+    } catch (mppwrite::Error const& error) {
+        reemit_refused =
+            std::string(error.what()).find("unreferenced sectors") !=
+            std::string::npos;
+    } catch (std::exception const&) {
+        reemit_refused = false;
+    }
+    t.check(reemit_refused,
+            "slack: to_bytes() refuses rather than emit a different file");
+
+    /* The fatal half: point the stream's start at sector 130, which exists
+     * physically (the file has 143 sectors) but has no FAT entry. */
+    std::vector<std::uint8_t> broken = slack;
+    put_u32(broken, 512 + 128 + 116, 130);
+    bool threw = false;
+    std::string message;
+    try {
+        mppwrite::CfbDocument const bad =
+            mppwrite::CfbDocument::from_bytes(broken);
+        (void)bad;
+    } catch (mppwrite::Error const& error) {
+        threw = true;
+        message = error.what();
+    } catch (std::exception const& error) {
+        threw = true;
+        message = std::string("non-mppwrite exception: ") + error.what();
+    }
+    t.check(threw, "slack: a chain that walks past the FAT is still fatal");
+    t.check(message.find("130") != std::string::npos &&
+                message.find("allocation table") != std::string::npos,
+            "slack: the error names sector 130 and the allocation table: " +
+                message);
+}
+
 /* Everything that must hold for one file.  Returns false when the document
  * could not be parsed at all, so a corrupt file is a failure rather than a
  * crash. */
@@ -317,11 +486,14 @@ void check_base_fixture(TestContext& t, std::string const& path) {
 int main(int argc, char** argv) {
     TestContext t;
     try {
+        /* Corpus-free: the FAT-slack rule and the fatal chain are synthetic. */
+        test_fat_slack(t);
+
         std::string missing;
         if (!corpus_available(missing)) {
             std::cout << "SKIP: corpus not present (" << missing
                       << " is missing; corpus/ is git-ignored)\n";
-            return 0;
+            return t.report();
         }
         std::vector<std::string> files = mpp_files_in(MPPWRITE_PROBE_DIR);
         if (files.empty()) {

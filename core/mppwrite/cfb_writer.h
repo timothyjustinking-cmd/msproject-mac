@@ -39,6 +39,19 @@
  *   - It does not repair damage.  PROJECT_A's duplicate FixedMeta offsets and
  *     declared-vs-actual entry counts are carried through unchanged.
  *
+ * FAT SLACK (measured on corpus/imported/sf248.mpp, wave 20 M6).  A file may
+ * carry trailing sectors that no chain references: sf248 has 959 sectors and a
+ * 768-entry FAT.  That is not damage -- every chain ends inside the FAT -- so
+ * parse() records "N unreferenced sectors: ..." in warnings() and continues; a
+ * chain that does point past the FAT is still fatal (chain_from() refuses the
+ * lookup).  Such a file is READABLE but not RE-EMITTABLE byte-identically:
+ * to_bytes() derives the FAT from the chains the model knows (the header's
+ * sector-placement claim), so the slack sectors cannot be carried through.
+ * to_bytes() therefore refuses such a document and check() reports it as "not
+ * round-trippable", rather than silently emitting a different file.  Every file
+ * this writer round-trips covers all its sectors; the round-trip tests feed only
+ * those.
+ *
  * NAMES.  MS Project right-aligns storage names in a 6-character field, so the
  * real path is "   114/TBkndTask/FixedData" (three leading spaces).  Lookups
  * compare each component with ASCII spaces stripped, like the reader does, so
@@ -151,6 +164,17 @@ class CfbDocument {
     /* The allocation table as read: one u32 per sector, holding either a next
      * sector id, kFatSector, kDifatSector, kFreeSector or kEndOfChain. */
     std::vector<std::uint32_t> const& fat() const { return fat_; }
+
+    /*
+     * Container anomalies that are recoverable, in the order they were found.
+     * The one this parser reports is FAT slack: a file may carry sectors that no
+     * chain references (MS Project writes such files; corpus/imported/sf248.mpp
+     * has 959 sectors and a 768-entry FAT).  Every chain still ends inside the
+     * FAT, so the read continues; a chain that points past the FAT is fatal and
+     * throws Error.  See FAT SLACK in the file comment: a document with
+     * warnings is readable but not byte-identically re-emittable.
+     */
+    std::vector<std::string> const& warnings() const { return warnings_; }
 
     /* Every sector id the document claims, sorted and unique.  Used by the
      * round-trip test to prove that nothing in the file is unexplained. */
@@ -270,6 +294,9 @@ class CfbDocument {
     std::vector<std::uint8_t> dir_bytes_;      /* directory sectors, verbatim */
     std::vector<DirectoryEntry> entries_;
     std::vector<Stream> streams_;
+    /* Recoverable container anomalies (currently only FAT slack), see
+     * warnings().  Never fatal; a chain past the FAT throws from chain_from(). */
+    std::vector<std::string> warnings_;
 
     bool modified_ = false;
 };

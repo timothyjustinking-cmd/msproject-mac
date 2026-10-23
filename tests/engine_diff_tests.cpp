@@ -717,6 +717,15 @@ void dump_file(std::string const& mpp_path, std::string const& json_path) {
                     error.what());
     }
 
+    /* Recoverable container facts, not failures.  core/mpp loads a file whose
+     * FAT is shorter than its sector count with a warning (sf248: 191
+     * unreferenced of 959 sectors); mppwrite::CfbDocument now mirrors that rule,
+     * so the dump must say what it tolerated.  stderr only: the JSON is
+     * compared field by field and gains no new leaf. */
+    for (std::string const& warning : container.warnings()) {
+        std::cerr << "engine_diff: container warning: " << warning << "\n";
+    }
+
     bool calendars_decoded = true;
     core::cal::CalendarTable calendar_table;
     try {
@@ -1136,6 +1145,84 @@ void require_arity(Operation const& operation, std::size_t expected) {
     }
 }
 
+/* ------------------------------------------------------------------------- */
+/* Project's save-time duration word for an off-calendar start               */
+/*                                                                           */
+/* MEASURED (docs/engine-parity.md "Wave 20", nine rows): when a MANUAL row  */
+/* that carries a Must Start On constraint is saved, Project's +84 duration  */
+/* word gains the remaining work windows of the START DAY when that day is   */
+/* not a working day for the row's calendar; a working-day start gains 0.    */
+/* Project's COM Task.Duration stays 960 min (9600 ticks) throughout, so only */
+/* the stored +84 word moves: the kept dates, the calculated pair, the late  */
+/* pair, the slack and the assignment work are the plan's.                   */
+/*                                                                           */
+/* Scope measured: MSO only.  constraint-snet applies an SNET constraint to  */
+/* another manual row whose start is the same off-calendar Sunday and its    */
+/* stored duration stays 14400 (no bump), so SNET is a negative control, not */
+/* a second trigger.  The four starts a fixture row cannot be moved to (the  */
+/* manual start write path is unsupported, row_writer.h) are exercised       */
+/* through off_calendar_start_bump() directly; the five the applier reaches   */
+/* are end-to-end in run_self_test().                                        */
+/* ------------------------------------------------------------------------- */
+
+/* PjConstraint 2: Must Start On (row_writer.h documents SNET = 4). */
+constexpr std::uint16_t kConstraintMso = 2u;
+
+/*
+ * Working ticks in the row's start day at/after the start clock, using the
+ * calendar's STANDARD DAY WINDOWS.  Zero on a working day (measured: Fri 13:00
+ * gains nothing).  The window template is the first non-empty day pattern in
+ * the calendar's default week: every measured row is on synthetic-base, whose
+ * five working weekdays share 08:00-12:00 + 13:00-17:00, so the template for a
+ * non-working day is INFERRED (next working weekday's shape), not measured
+ * across calendars.
+ */
+core::sched::ticks off_calendar_start_bump(core::sched::Calendar const& calendar,
+                                           core::sched::date32 start) {
+    if (core::sched::is_na(start) || core::sched::is_overflow(start)) {
+        return 0;
+    }
+    std::int32_t const day = core::sched::day_of(start);
+    if (!calendar.pattern_for_day(day).empty()) {
+        return 0; /* a working day: measured increment 0 */
+    }
+    core::sched::DayPattern const* standard = nullptr;
+    for (core::sched::DayPattern const& pattern : calendar.default_week()) {
+        if (!pattern.empty()) {
+            standard = &pattern;
+            break;
+        }
+    }
+    if (standard == nullptr) {
+        return 0;
+    }
+    std::int32_t const clock = core::sched::time_of(start);
+    core::sched::ticks total = 0;
+    for (std::size_t i = 0; i < standard->count; ++i) {
+        std::int32_t const window_start = standard->start_ticks(i);
+        std::int32_t const window_end = standard->end_ticks(i);
+        if (clock < window_start) {
+            total += window_end - window_start;
+        } else if (clock < window_end) {
+            total += window_end - clock;
+        }
+    }
+    return total;
+}
+
+core::sched::Calendar const& calendar_for(core::plan::PlanInput const& input,
+                                          std::int32_t uid) {
+    if (uid > 0) {
+        for (core::plan::TaskCalendar const& task_calendar :
+             input.task_calendars) {
+            if (task_calendar.uid == uid) {
+                return task_calendar.calendar;
+            }
+        }
+    }
+    return input.calendar;
+}
+
 class Applier {
   public:
     Applier(std::string const& base_path, std::string const& out_path,
@@ -1162,6 +1249,12 @@ class Applier {
         }
         doc_ = mppwrite::CfbDocument::from_file(base_path_);
     }
+
+    /* Opt-in: model Project's save-time duration word (the measured MSO rule)
+     * in the file this applier writes.  OFF for every scenario the differential
+     * suite scores -- that file must be what the production save path writes.
+     * The self-test sets it to exercise the rule end to end. */
+    void model_project_save(bool enabled) { model_project_save_ = enabled; }
 
     void run(std::vector<Operation> const& operations) {
         if (operations.empty()) {
@@ -1208,7 +1301,13 @@ class Applier {
         }
         if (operation.name == "save") {
             require_arity(operation, 0);
-            recalculate(out_path_);
+            /* The compared state is the save.  Project's save-time duration
+             * word (off_calendar_start_bump) is NOT applied unless the caller
+             * opted in: a scored scenario's file must be exactly what the
+             * production save path writes.  The self-test opts in to exercise
+             * the measured rule end to end (never on an intermediate pass, so
+             * the bumped word cannot feed back into the plan). */
+            recalculate(out_path_, model_project_save_);
             saved_ = true;
             return;
         }
@@ -1645,7 +1744,12 @@ class Applier {
                   << " assignment row(s) from their tasks\n";
     }
 
-    void recalculate(std::string const& out_path) {
+    /* `model_project_save` is set only by the self-test: it is the only pass
+     * that applies Project's save-time duration word for a manual MSO row
+     * (off_calendar_start_bump).  The intermediate recalculation must keep the
+     * plan duration, because its output is re-read by the next pass and a
+     * bumped word there would be planned as if it were the duration. */
+    void recalculate(std::string const& out_path, bool project_save = false) {
         flush_all_constraints();
         try {
             doc_.save(work_path_);
@@ -1792,8 +1896,28 @@ class Applier {
                 row.values.late_start = late_start;
                 row.values.late_finish = late_finish;
             }
-            row.values.duration =
+            /* Project's save-time duration WORD for a manual row carrying MSO
+             * and starting on a non-working day (off_calendar_start_bump).  It
+             * moves +84 only; the dates, late pair and slack above are the
+             * plan's, which is the incoherent state Project itself saves. */
+            std::uint32_t duration_word =
                 static_cast<std::uint32_t>(planned.duration);
+            if (project_save && !planned.summary && planned.manually_pinned &&
+                stored.constraint_type == kConstraintMso &&
+                mppwrite::is_date(stored.constraint_date)) {
+                core::sched::ticks const bump = off_calendar_start_bump(
+                    calendar_for(input, planned.calendar_uid), kept_start);
+                if (bump > 0) {
+                    duration_word += static_cast<std::uint32_t>(bump);
+                    std::cerr << "engine_diff: save: uid " << task.uid
+                              << " duration word gains " << bump
+                              << " ticks: the remaining work windows of the "
+                                 "off-calendar start "
+                              << date_text(kept_start)
+                              << " (Project's save-time rule)\n";
+                }
+            }
+            row.values.duration = duration_word;
             row.values.remaining_duration = mppwrite::kInherit;
             row.values.actual_duration = mppwrite::kInherit;
             /* The writer stores slack as i32 ticks; the engine's tick type is
@@ -1836,6 +1960,9 @@ class Applier {
      * manually scheduled successor when the link is ADDED (measured; see
      * core/plan/plan.h PlanInput::manual_rows_follow_links). */
     bool manual_follow_links_ = false;
+    /* Self-test only: model Project's save-time duration word.  Never set by
+     * the scenario runner (see recalculate). */
+    bool model_project_save_ = false;
 };
 
 /* ------------------------------------------------------------------------- */
@@ -1961,6 +2088,125 @@ struct BuiltInCase {
     char const* name;
     char const* operations;
 };
+
+/* ------------------------------------------------------------------------- */
+/* constraint-mso: the nine-row regression                                   */
+/*                                                                           */
+/* docs/engine-parity.md "Wave 20" records nine measurements of Project's     */
+/* stored +84 word on synthetic-base task 3 (2 d) unless noted.  The five rows */
+/* the applier can reach end-to-end (the fixture already starts task 3 on the */
+/* off-calendar Sunday 13:00, and a Duration edit reaches the other planned   */
+/* durations) are asserted from the saved file; the four starts a manual row  */
+/* cannot be moved to (row_writer.h: the manual Start write path is not       */
+/* supported) are asserted against the rule itself, together with the table's */
+/* stored total.  The no-constraint control is end-to-end.                   */
+/* ------------------------------------------------------------------------- */
+void check_mso_duration_table(TestContext& context, std::string const& fixture,
+                              std::string const& out_dir) {
+    core::sched::Calendar calendar;
+    try {
+        core::cal::CalendarTable const table = core::cal::decode_file(fixture);
+        calendar = core::cal::build_project_calendar(table);
+    } catch (std::exception const& error) {
+        context.check(false,
+                      std::string("mso table: cannot build the fixture's "
+                                  "calendar: ") +
+                          error.what());
+        return;
+    }
+
+    /* 2026-01-04 is a Sunday, 01-03 a Saturday, 01-02 a Friday. */
+    struct IncrementRow {
+        std::int32_t year;
+        std::int32_t month;
+        std::int32_t day;
+        std::int32_t hour;
+        std::int32_t minute;
+        core::sched::ticks increment;     /* table "increment" */
+        core::sched::ticks plan_duration; /* the row's Duration */
+        std::uint32_t stored_total;       /* table "stored duration" */
+        char const* label;
+    };
+    IncrementRow const rows[] = {
+        {2026, 1, 4, 13, 0, 2400, 9600, 12000, "Sun 13:00, 2 d"},
+        {2026, 1, 4, 13, 0, 2400, 4800, 7200, "Sun 13:00, 1 d"},
+        {2026, 1, 4, 8, 0, 4800, 4800, 9600, "Sun 08:00, 1 d"},
+        {2026, 1, 4, 10, 0, 3600, 4800, 8400, "Sun 10:00, 1 d"},
+        {2026, 1, 4, 15, 0, 1200, 4800, 6000, "Sun 15:00, 1 d"},
+        {2026, 1, 3, 9, 0, 4200, 4800, 9000, "Sat 09:00, 1 d"},
+        {2026, 1, 2, 13, 0, 0, 4800, 4800, "Fri 13:00, 1 d (working day)"},
+        {2026, 1, 4, 13, 0, 2400, 14400, 16800, "task 2, 3 d, Sun 13:00"},
+        {2026, 1, 4, 13, 0, 2400, 24000, 26400, "task 1, 5 d, Sun 13:00"},
+    };
+    for (IncrementRow const& row : rows) {
+        core::sched::date32 const start = core::sched::from_ymd(
+            row.year, row.month, row.day, row.hour, row.minute);
+        core::sched::ticks const bump = off_calendar_start_bump(calendar, start);
+        std::string const label = std::string("mso table: ") + row.label;
+        context.equal(bump, row.increment, label + " increment");
+        context.equal(static_cast<std::uint32_t>(row.plan_duration + bump),
+                      row.stored_total, label + " stored duration");
+    }
+
+    struct ApplyRow {
+        char const* name;
+        std::uint32_t uid;
+        char const* duration_ticks; /* "" keeps the fixture row's duration */
+        bool mso;
+        std::uint32_t expected; /* the stored +84 word */
+    };
+    ApplyRow const cases[] = {
+        {"mso-sun13-2d", 3, "", true, 12000},
+        {"mso-sun13-1d", 3, "4800", true, 7200},
+        {"mso-task2-3d", 2, "14400", true, 16800},
+        {"mso-task1-5d", 1, "24000", true, 26400},
+        {"mso-control", 3, "", false, 9600},
+    };
+    for (ApplyRow const& test_case : cases) {
+        std::string const stem =
+            join_path(out_dir, std::string("selftest-") + test_case.name);
+        std::string const base = stem + "-base.mpp";
+        std::string const ops = stem + ".ops";
+        std::string const out = stem + ".mpp";
+        try {
+            std::filesystem::copy_file(
+                fixture, base,
+                std::filesystem::copy_options::overwrite_existing);
+            std::string text;
+            std::string const uid = std::to_string(test_case.uid);
+            if (test_case.duration_ticks[0] != '\0') {
+                text += "set_task_field\t" + uid + "\t188743709\t" +
+                        test_case.duration_ticks + "\n";
+            }
+            if (test_case.mso) {
+                text += "set_task_field\t" + uid + "\t188743697\t2\n";
+                text += "set_task_field\t" + uid +
+                        "\t188743698\t2026-01-20 08:00\n";
+            }
+            text += "recalculate\nsave\n";
+            write_text(ops, text);
+            Applier applier(base, out);
+            /* This table is the measured rule's end-to-end regression: opt in
+             * to modelling Project's save-time word.  The scored scenarios do
+             * not (they compare the production save path). */
+            applier.model_project_save(true);
+            applier.run(read_operations(ops));
+            mpp::Document const document = mpp::load_file(out);
+            mpp::Task const* task = find_task(document, test_case.uid);
+            std::string const label =
+                std::string("mso table: ") + test_case.name;
+            context.check(task != nullptr, label + ": the row exists");
+            if (task != nullptr) {
+                context.equal(task->duration_ticks, test_case.expected,
+                              label + " stored duration (+84)");
+            }
+        } catch (std::exception const& error) {
+            context.check(false, std::string("mso table: ") +
+                                     test_case.name + " threw " +
+                                     error.what());
+        }
+    }
+}
 
 int run_self_test() {
     TestContext context;
@@ -2152,6 +2398,13 @@ int run_self_test() {
                                   std::string("2026-01-04 13:00"),
                                   "constraint: a manual row stores the SNET date but "
                                   "keeps its own dates (Project does not reschedule it)");
+                    /* NEGATIVE CONTROL for Project's save-time duration word:
+                     * the same off-calendar Sunday start with an SNET
+                     * constraint does NOT gain the remaining day windows
+                     * (constraint-snet.oracle.json stores 14400, not 16800). */
+                    context.equal(task->duration_ticks, std::uint32_t{14400},
+                                  "constraint: an SNET row's stored duration is "
+                                  "unchanged (the save-time bump is MSO-only)");
                 }
                 /* A manual row's own constraint does not move its stored late pair
                  * either: uid 2's +112/+116 are the same as in recalculate. */
@@ -2222,6 +2475,9 @@ int run_self_test() {
                                      ": threw " + failure.what());
         }
     }
+    /* constraint-mso's measured save-time duration word, with the nine-row
+     * table as the regression (docs/engine-parity.md "Wave 20"). */
+    check_mso_duration_table(context, fixture, out_dir);
     /* ---- the late pair is a SEPARATE stored field, not a date copy --------
      * Dumping the fixture itself (to build/, never over it) proves the new
      * leaves carry values that are not derivable from start/finish: uid 2's
