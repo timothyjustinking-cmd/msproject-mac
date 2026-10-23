@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
     const QString fixture = QString::fromLocal8Bit(argv[1]);
 
     msqt::MainWindow window;
-    window.resize(msqt::kWindowWidth, msqt::kWindowHeight);
+    window.resize(900, 560);
 
     QString error;
     if (!window.open_file(fixture, &error)) {
@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
     QApplication::processEvents();
 
     // --- typography --------------------------------------------------------
-    check(QApplication::font().pointSize() == msqt::kBodyPointSize,
+    check(QApplication::font().pointSize() == 11,
           "application font is the pinned 11 pt");
     check(!msqt::ui_font_family().isEmpty(), "a UI font family was resolved");
     // Carlito first, then the fixed list; a minimal container may have none of
@@ -146,22 +146,22 @@ int main(int argc, char** argv) {
     }
     check(sheet->verticalHeader() != nullptr, "the sheet keeps its row-height source");
     check(sheet->horizontalHeader() != nullptr, "the sheet has a horizontal header");
+    // WAVE 23 (A-1c): these numbers are TYPED FROM THE CLEAN CAPTURE
+    // (project-gantt-loaded-clean.png, 1910x1027: row pitch 22, caption band 42,
+    // gutter 60 = 22 px view caption + 38 px numbers, splitter 881/1920).
+    // Deliberately literals, not shell_style.h symbols: the old checks compared
+    // production to the same constants production reads.
     if (sheet->verticalHeader() != nullptr) {
-        check(sheet->verticalHeader()->defaultSectionSize() == msqt::kRowHeight,
-              "row height is 22 px");
+        check(sheet->verticalHeader()->defaultSectionSize() == 22, "row height is 22 px");
         // The row-number gutter is the FROZEN row header (wave 18 Q3): it must
         // be visible, 60 px, and must not scroll horizontally with the columns.
         check(sheet->verticalHeader()->isVisible(),
               "the row-number gutter is a visible, frozen row header");
-        // The measured 60 px gutter is the 22 px rotated view caption plus the
-        // 38 px number column; the first grid line therefore stays at x=60.
-        check(msqt::kViewLabelWidth + sheet->verticalHeader()->width() ==
-                  msqt::kGutterWidth,
-              "row-number gutter is 60 px including the view caption");
+        check(22 + sheet->verticalHeader()->width() == 60,
+              "row-number gutter is 60 px including the 22 px view caption");
     }
     if (sheet->horizontalHeader() != nullptr) {
-        check(sheet->horizontalHeader()->height() == msqt::kSheetHeaderHeight,
-              "sheet header band is 42 px");
+        check(sheet->horizontalHeader()->height() == 42, "sheet header band is 42 px");
     }
 
     // --- Entry columns, each within 2 px of the reference -------------------
@@ -191,7 +191,8 @@ int main(int argc, char** argv) {
 
     // --- splitter ----------------------------------------------------------
     check(window.splitter() != nullptr, "the window has a sheet/Gantt splitter");
-    check_near(window.split_fraction(), msqt::kSplitFraction, 0.02,
+    // Literal from the capture: the divider is at x = 881 of a 1920 px client.
+    check_near(window.split_fraction(), 881.0 / 1920.0, 0.02,
                "splitter is at 881/1920 = 0.459 of the client width");
     check(sheet->horizontalScrollBar() != nullptr &&
               sheet->horizontalScrollBar()->isVisible(),
@@ -202,10 +203,10 @@ int main(int argc, char** argv) {
     check(gantt != nullptr, "the window owns a Gantt canvas");
     if (gantt != nullptr) {
         const msqt::GanttHeaderInfo info = gantt->header_info(gantt->width());
-        check(info.header_height == msqt::kGanttHeaderHeight, "Gantt header band is 42 px");
-        check(info.tier_height == msqt::kGanttTierHeight, "each timescale tier is 21 px");
-        check(info.header_height == info.tier_height * 2, "the timescale has two tiers");
-        check_near(info.day_width, msqt::kPixelsPerDay, 0.51, "day width is 24 px");
+        check(info.header_height == 42, "Gantt header band is 42 px");
+        check(info.tier_height == 21, "each timescale tier is 21 px");
+        check(info.header_height == 21 * 2, "the timescale has two tiers");
+        check_near(info.day_width, 24.0, 0.51, "day width is 24 px");
         check(info.major_cells >= 1, "at least one weekly tier label is visible");
         check(info.minor_cells >= 7, "at least one full week of day cells is visible");
         check(info.first_major_label.find('\'') != std::string::npos,
@@ -242,8 +243,12 @@ int main(int argc, char** argv) {
     }
     check(window.timeline() != nullptr, "the window has a timeline strip");
     if (window.timeline() != nullptr) {
-        check(window.timeline()->height() == msqt::kTimelineHeight,
-              "the timeline strip is 44 px tall");
+        // Wave 23 (B-2, corrected): Project's own capture of this fixture
+        // shows the strip; visibility is application state, not file state.
+        check(!window.timeline()->isHidden(),
+              "the loaded fixture lays out the timeline strip (Project's default)");
+        check(window.timeline()->height() == 54,
+              "the timeline strip is 54 px tall");
         check(window.timeline()->centre_text().contains(QStringLiteral("timeline")),
               "the timeline prompts for tasks with dates");
     }
@@ -262,7 +267,7 @@ int main(int argc, char** argv) {
             check_near(day_width, 20.0, 0.51, "the day zoom is 20 px/day");
             zoom->setValue(static_cast<int>(app::ZoomLevel::week));
             QApplication::processEvents();
-            check_near(gantt->header_info(gantt->width()).day_width, msqt::kPixelsPerDay, 0.51,
+            check_near(gantt->header_info(gantt->width()).day_width, 24.0, 0.51,
                        "the slider returns the Gantt to the measured 24 px/day");
         }
     }
@@ -273,7 +278,7 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
         check(sheet->verticalHeader()->isVisible() &&
                   sheet->verticalHeader()->width() ==
-                      msqt::kGutterWidth - msqt::kViewLabelWidth,
+                      60 - 22,
               "the row-number gutter stays put when the sheet scrolls sideways");
         check(sheet->columnViewportPosition(0) < 0,
               "the sheet's columns scroll under the frozen gutter");
@@ -285,15 +290,15 @@ int main(int argc, char** argv) {
     // At 900 px only four columns fit, which is why P1's harness reports the
     // column widths N/A.  At the reference's 1920x1032 all nine must be on
     // screen, so the comparison is 9 columns against 9.
-    window.resize(msqt::kParityWidth, msqt::kParityHeight);
+    window.resize(1920, 1032);
     QApplication::processEvents();
     QApplication::processEvents();
     check(window.splitter() != nullptr, "the splitter survives the resize");
     if (window.splitter() != nullptr && sheet->verticalHeader() != nullptr) {
         const int sheet_pane = window.splitter()->sizes().value(0);
-        check(sheet_pane >= msqt::kGutterWidth + msqt::entry_content_width() - 1,
+        check(sheet_pane >= 60 + 819 - 1,
               "at 1920x1032 the sheet pane holds the whole Entry table");
-        check_near(window.split_fraction(), msqt::kSplitFraction, 0.02,
+        check_near(window.split_fraction(), 881.0 / 1920.0, 0.02,
                    "the splitter still holds 0.459 at the reference size");
         const int last_column = static_cast<int>(columns.size()) - 1;
         const int content_right = sheet->columnViewportPosition(last_column) +
@@ -302,8 +307,7 @@ int main(int argc, char** argv) {
                      sheet->viewport()->width(), content_right);
         check(content_right <= sheet->viewport()->width() + 1,
               "all nine Entry columns are visible at 1920x1032");
-        check(msqt::kViewLabelWidth + sheet->verticalHeader()->width() ==
-                  msqt::kGutterWidth,
+        check(22 + sheet->verticalHeader()->width() == 60,
               "the frozen gutter is still 60 px at 1920x1032");
     }
     int visible_buttons_1920 = 0;
@@ -343,8 +347,8 @@ int main(int argc, char** argv) {
                 continue;
             }
             // Inside the row: skip the top rule and the bottom grid line.
-            const int top = viewport_origin.y() + row * msqt::kRowHeight + 2;
-            const int bottom = viewport_origin.y() + (row + 1) * msqt::kRowHeight - 2;
+            const int top = viewport_origin.y() + row * 22 + 2;
+            const int bottom = viewport_origin.y() + (row + 1) * 22 - 2;
             for (int x = viewport_origin.x() + 2;
                  x < viewport_origin.x() + column_width - 2 && blank; ++x) {
                 for (int y = top; y < bottom; ++y) {

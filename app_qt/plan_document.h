@@ -27,7 +27,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -89,11 +88,6 @@ std::string successors_text(const app::PlanInput& plan, std::uint32_t task_uid,
                             const core::sheet::SheetFormat& format);
 std::string resource_names_text(const app::PlanInput& plan, std::uint32_t task_uid);
 
-// Wave 23 (B-2): does the stored applied-view name name a combination view with
-// the Timeline pane?  Accelerator-insensitive ("Gantt &with Timeline" is a
-// Project name; "Gantt Chart with Timeline" is the combination view's display
-// name), case-insensitive.  An empty/undecoded name is false.
-bool view_shows_timeline(std::string_view applied_view_name);
 
 class PlanDocument {
   public:
@@ -180,14 +174,18 @@ class PlanDocument {
     // this reader cannot decode), and the sheet keeps app::default_sheet_columns().
     const msproject::viewstate::TableDef& table() const noexcept { return table_; }
 
-    // Wave 23 (B-2): true when the FILE's stored applied view is a combination
-    // view with the Timeline pane ("Gantt Chart with Timeline").  Read from
-    // CEdl's applied-view record (0x26400018); corpus/project_a.mpp stores
-    // "&Gantt Chart", which is why Project's clean capture has no strip.  A
-    // file whose CEdl cannot be decoded stays false: the file has not been
-    // shown to carry the pane.  A NEW project has no document; the window
-    // shows the strip for it (operator answer Q2).
-    bool timeline_visible() const noexcept { return timeline_visible_; }
+    // Wave 23 (B-2, corrected): the Timeline strip is an APPLICATION setting,
+    // not file state.  Measured 2026-10-23:
+    //   * COM reports CurrentView "Gantt Chart" for project_a.mpp,
+    //     synthetic-base.mpp and wave23-outline.mpp alike, yet Project shows
+    //     the strip for the fixture and not in the operator's project_a
+    //     capture -- so no stored view name explains the difference;
+    //   * saving the same file with the strip shown and hidden changes no
+    //     `214` part (viewstate_report --diff) and no Props record.
+    // The shell therefore keeps Project's default (shown, operator Q2) and
+    // will offer View > Timeline when the split-view work lands.  The applied
+    // view name is still exposed for diagnostics: it is real, it just does not
+    // control the strip.
     const std::string& applied_view_name() const noexcept { return applied_view_; }
 
     const std::string& path() const noexcept { return path_; }
@@ -229,7 +227,6 @@ class PlanDocument {
     // part of the save diff.
     msproject::viewstate::TableDef table_;
     std::string applied_view_;
-    bool timeline_visible_ = false;
     std::string path_;
     std::string title_;
     std::size_t warnings_ = 0;

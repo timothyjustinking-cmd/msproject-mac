@@ -293,15 +293,6 @@ std::string successors_text(const app::PlanInput& plan, std::uint32_t task_uid,
     return link_list_text(plan, task_uid, false, format);
 }
 
-bool view_shows_timeline(std::string_view applied_view_name) {
-    std::string lower;
-    lower.reserve(applied_view_name.size());
-    for (const char c : applied_view_name) {
-        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-    }
-    return lower.find("timeline") != std::string::npos;
-}
-
 std::string resource_names_text(const app::PlanInput& plan, std::uint32_t task_uid) {
     if (task_uid == 0) {
         return {};
@@ -344,7 +335,6 @@ void PlanDocument::reset() {
     filter_active_ = false;
     table_ = msproject::viewstate::TableDef{};
     applied_view_.clear();
-    timeline_visible_ = false;
     path_.clear();
     title_.clear();
     warnings_ = 0;
@@ -659,7 +649,6 @@ void PlanDocument::read_table(const std::string& source_path) {
 
 void PlanDocument::read_applied_view(const std::string& source_path) {
     applied_view_.clear();
-    timeline_visible_ = false;
     try {
         const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(source_path);
         std::array<std::vector<std::uint8_t>, 4> raw;
@@ -689,10 +678,9 @@ void PlanDocument::read_applied_view(const std::string& source_path) {
         }
     } catch (...) {
         // View state is presentation metadata; a decode failure never fails the
-        // load.  The strip stays hidden (the file has not been shown to have it).
+        // load.
         return;
     }
-    timeline_visible_ = view_shows_timeline(applied_view_);
 }
 
 std::vector<core::sheet::SheetColumn> PlanDocument::stored_columns() const {
