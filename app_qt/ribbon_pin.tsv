@@ -191,7 +191,7 @@ Gantt Chart Format	1	Columns	small	Column Settings	0	-	1	-
 Gantt Chart Format	1	Columns	small	Custom Fields	1	-	2	-
 Gantt Chart Format	1	Bar Styles	group	-	-	-	-	-
 Gantt Chart Format	1	Bar Styles	split	Format	0	-	0	-
-Gantt Chart Format	1	Bar Styles	checkbox	Critical Tasks	0	-	0	unchecked
+Gantt Chart Format	1	Bar Styles	checkbox	Critical Tasks	1	-	0	unchecked
 Gantt Chart Format	1	Bar Styles	checkbox	Slack	0	-	1	unchecked
 Gantt Chart Format	1	Bar Styles	checkbox	Late Tasks	0	-	2	unchecked
 Gantt Chart Format	1	Bar Styles	button	Task Path	0	bar_styles.task_path	0	-
@@ -202,7 +202,7 @@ Gantt Chart Format	1	Gantt Chart Style	gallery	Gantt Chart Style	0	-	0	16
 Gantt Chart Format	1	Gantt Chart Style	launcher	Gantt Chart Style	0	-	2	-
 Gantt Chart Format	1	Show/Hide	group	-	-	-	-	-
 Gantt Chart Format	1	Show/Hide	checkbox	Outline Number	0	-	0	unchecked
-Gantt Chart Format	1	Show/Hide	checkbox	Project Summary Task	0	-	1	file
+Gantt Chart Format	1	Show/Hide	checkbox	Project Summary Task	1	-	1	file
 Gantt Chart Format	1	Show/Hide	checkbox	Summary Tasks	0	-	2	checked
 Gantt Chart Format	1	Drawings	group	-	-	-	-	-
 Gantt Chart Format	1	Drawings	split	Drawing	0	-	0	-

@@ -609,6 +609,25 @@ void check_action_wiring(msqt::RibbonBar* ribbon, const TabPin& pin) {
     return true;
 }
 
+QWidget* find_by_accessibility(msqt::RibbonBar* ribbon, const QString& tab,
+                               const QString& accessible_name) {    const QStringList tabs = ribbon->tab_titles();
+    const int tab_index = tabs.indexOf(tab);
+    if (tab_index < 0) {
+        return nullptr;
+    }
+    ribbon->set_active_tab(tab_index);
+    QApplication::processEvents();
+    for (int group = 0; group < ribbon->group_titles().size(); ++group) {
+        for (int control = 0; control < ribbon->group_control_count(group); ++control) {
+            QWidget* live = ribbon->group_control(group, control);
+            if (live != nullptr && live->accessibleName() == accessible_name) {
+                return live;
+            }
+        }
+    }
+    return nullptr;
+}
+
 // Selects the RecordSet row whose uid is `uid` on the Name column (or column 0).
 [[maybe_unused]] bool select_uid(msqt::MainWindow& window, std::uint32_t uid) {
     core::sheet::SheetModel* sheet = window.sheet();
@@ -669,8 +688,6 @@ int main(int argc, char** argv) {
     // W26-1.2..1.5 add the functional checks that open these fixtures; until
     // then the arguments are accepted (the CMake test entry is final) but not
     // used, and the compiler must not warn.
-    (void)summary_on;
-    (void)summary_off;
     (void)order_fixture;
 
     // The unmodelled backlog is empty (brief: it shrinks to empty or to items
@@ -763,6 +780,18 @@ int main(int argc, char** argv) {
     const QJsonObject measures = measures_document.object();
     const int top_offset = measures.value(QStringLiteral("controls_top_offset")).toInt(5);
     const int row_height = measures.value(QStringLiteral("stack_row_height")).toInt(22);
+
+    std::vector<int> palette;
+    {
+        const QJsonArray colours = measures.value(QStringLiteral("palette")).toArray();
+        for (const QJsonValue& value : colours) {
+            const QJsonArray rgb = value.toArray();
+            palette.push_back((rgb.at(0).toInt() << 16) | (rgb.at(1).toInt() << 8) |
+                              rgb.at(2).toInt());
+        }
+    }
+    gate::check(palette.size() == 16, "the measured Gantt Chart Style palette has 16 colours");
+
 
     // --- every tab's inventory, measured geometry and 1920 layout ----------
     int overflow_tabs_1920 = 0;
@@ -879,7 +908,35 @@ int main(int argc, char** argv) {
         }
     }
 
-    // (W26-1.4 adds the measured-palette check for the gallery's 16 swatches.)
+    // --- the gallery's measured palette -------------------------------------
+    {
+        ribbon->set_active_tab(6);
+        QApplication::processEvents();
+        QWidget* gallery = find_by_accessibility(ribbon, QStringLiteral("Gantt Chart Format"),
+                                                 QStringLiteral("Gantt Chart Style"));
+        gate::check(gallery != nullptr, "the Gantt Chart Style gallery is in the page");
+        if (gallery != nullptr) {
+            const QList<QToolButton*> swatches =
+                gallery->findChildren<QToolButton*>(QStringLiteral("ribbonSwatch"));
+            gate::check(swatches.size() == 16, "the gallery has 16 swatches");
+            for (int index = 0; index < swatches.size() && index < 16; ++index) {
+                const QPixmap pixmap = swatches[index]->icon().pixmap(52, 30);
+                const QColor colour = pixmap.toImage().pixelColor(30, 13);
+                const int rgb = (colour.red() << 16) | (colour.green() << 8) | colour.blue();
+                gate::check(rgb == palette[static_cast<std::size_t>(index)],
+                            "a gallery swatch carries the measured palette colour");
+                if (rgb != palette[static_cast<std::size_t>(index)]) {
+                    std::fprintf(stderr, "  swatch %d live %06x measured %06x\n", index, rgb,
+                                 palette[static_cast<std::size_t>(index)]);
+                }
+            }
+            gate::check(gallery->findChildren<QToolButton*>(
+                            QStringLiteral("ribbonGalleryExpander"))
+                            .size() == 1,
+                        "the gallery has its expander");
+        }
+    }
+
 
     // Timeline: the file's stored setting is the initial state and a click
     // toggles the strip only.
@@ -926,6 +983,95 @@ int main(int argc, char** argv) {
                         qobject_cast<QCheckBox*>(timeline_check)->isChecked(),
                     "the shown file starts with the Timeline box checked");
         gate::check(window.timeline_visible(), "the shown file shows the strip");
+    }
+
+    // Project Summary Task: the file state is the initial state; a click adds or
+    // removes row 0 and nothing else.
+    {
+        QString open_summary_error;
+        gate::check(window.open_file(summary_on, &open_summary_error),
+                    "the summary-on fixture opens");
+        QApplication::processEvents();
+        QWidget* summary_check = find_control(ribbon, QStringLiteral("Gantt Chart Format"),
+                                              QStringLiteral("Show/Hide"),
+                                              QStringLiteral("Project Summary Task"));
+        gate::check(summary_check != nullptr,
+                    "the Project Summary Task check box is in the page");
+        const std::size_t rows_with_project = window.sheet_row_count();
+        gate::check(window.project_summary_visible(),
+                    "the summary-on file starts with the project row shown");
+        if (summary_check != nullptr) {
+            auto* box = qobject_cast<QCheckBox*>(summary_check);
+            gate::check(box != nullptr && box->isChecked(),
+                        "the Project Summary Task box starts checked for the file");
+            if (box != nullptr) {
+                box->click();
+                QApplication::processEvents();
+                gate::check(!window.project_summary_visible(),
+                            "clicking hides the project row");
+                gate::check(window.sheet_row_count() + 1 == rows_with_project,
+                            "the project row is the one row removed");
+                gate::check(!box->isChecked(), "the box follows the off state");
+                box->click();
+                QApplication::processEvents();
+                gate::check(window.project_summary_visible(),
+                            "clicking again shows the project row");
+                gate::check(window.sheet_row_count() == rows_with_project,
+                            "the project row is restored");
+            }
+        }
+
+        QString open_summary_off_error;
+        gate::check(window.open_file(summary_off, &open_summary_off_error),
+                    "the summary-off fixture opens");
+        QApplication::processEvents();
+        summary_check = find_control(ribbon, QStringLiteral("Gantt Chart Format"),
+                                     QStringLiteral("Show/Hide"),
+                                     QStringLiteral("Project Summary Task"));
+        gate::check(summary_check != nullptr &&
+                        qobject_cast<QCheckBox*>(summary_check) != nullptr &&
+                        !qobject_cast<QCheckBox*>(summary_check)->isChecked(),
+                    "the summary-off file starts unchecked");
+        gate::check(!window.project_summary_visible(),
+                    "the summary-off file starts with the project row hidden");
+        if (summary_check != nullptr) {
+            const std::size_t rows_without_project = window.sheet_row_count();
+            auto* off_box = qobject_cast<QCheckBox*>(summary_check);
+            if (off_box != nullptr) {
+                off_box->click();
+                QApplication::processEvents();
+            }
+            gate::check(window.sheet_row_count() == rows_without_project + 1,
+                        "clicking shows row 0 on a file that stores it hidden");
+        }
+    }
+
+    // Critical Tasks drives the Gantt highlight.
+    {
+        QString open_critical_error;
+        gate::check(window.open_file(summary_on, &open_critical_error),
+                    "the fixture reopens for the Critical Tasks check");
+        QApplication::processEvents();
+        QWidget* critical = find_control(ribbon, QStringLiteral("Gantt Chart Format"),
+                                         QStringLiteral("Bar Styles"),
+                                         QStringLiteral("Critical Tasks"));
+        gate::check(critical != nullptr, "the Critical Tasks check box is in the page");
+        gate::check(!window.critical_tasks_highlight(),
+                    "Critical Tasks highlighting starts OFF (the measured default)");
+        if (critical != nullptr) {
+            auto* box = qobject_cast<QCheckBox*>(critical);
+            gate::check(box != nullptr && !box->isChecked(), "the box starts unchecked");
+            if (box != nullptr) {
+                box->click();
+                QApplication::processEvents();
+                gate::check(window.critical_tasks_highlight(),
+                            "clicking Critical Tasks turns the highlight on");
+                box->click();
+                QApplication::processEvents();
+                gate::check(!window.critical_tasks_highlight(),
+                            "clicking again turns the highlight off");
+            }
+        }
     }
 
     // %-complete buttons: the ribbon queues app::StructuralKind::set_percent

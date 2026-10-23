@@ -227,9 +227,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         refresh_timeline();
         update_chrome();
     }
-    // Wave 26: a new project uses Project's defaults (Timeline shown).
+    // Wave 26: a new project uses Project's defaults (Timeline shown, project
+    // row hidden, Critical Tasks OFF).
     ribbon_->set_document_state(doc_.has_document(), timeline_visible_,
-                                doc_.loaded().show_project_summary);
+                                doc_.project_summary_visible());
+    ribbon_->set_critical_tasks(false);
     update_menu_state();
     update_status();
 }
@@ -888,9 +890,12 @@ bool MainWindow::open_file(const QString& path, QString* error) {
         configure_task_columns();
         // Back to a NEW project: current week, Entry headers, today's Start and
         // Finish -- not the engine's 1984 default axis.  Wave 26: Project's
-        // ribbon defaults apply (Timeline shown).
+        // ribbon defaults apply (Timeline shown, project row hidden, Critical
+        // Tasks OFF).
         timeline_visible_ = true;
+        gantt_canvas_->set_critical_highlight(false);
         ribbon_->set_document_state(false, timeline_visible_, false);
+        ribbon_->set_critical_tasks(false);
         doc_.build_empty_view(prefs_.zoom, app::today_date32());
         gantt_canvas_->set_layout(doc_.gantt());
         gantt_canvas_->set_selected_uid(0);
@@ -956,9 +961,13 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     gantt_canvas_->set_selected_uid(doc_.selected_uid());
     gantt_canvas_->set_shading(prefs_.working_day_shading);
 
-    // Wave 26: the file's stored view state drives the ribbon's Timeline box.
+    // Wave 26: the file's stored view state drives the ribbon check boxes
+    // (Timeline and Project Summary Task); Critical Tasks is Project's default
+    // OFF for every document.
     timeline_visible_ = doc_.loaded().show_timeline;
-    ribbon_->set_document_state(true, timeline_visible_, doc_.loaded().show_project_summary);
+    gantt_canvas_->set_critical_highlight(false);
+    ribbon_->set_document_state(true, timeline_visible_, doc_.project_summary_visible());
+    ribbon_->set_critical_tasks(false);
 
     refresh_timeline();
 
@@ -1269,7 +1278,9 @@ void MainWindow::new_project() {
     gantt_canvas_->set_selected_uid(0);
     // Wave 26: a new project uses Project's defaults.
     timeline_visible_ = true;
+    gantt_canvas_->set_critical_highlight(false);
     ribbon_->set_document_state(false, timeline_visible_, false);
+    ribbon_->set_critical_tasks(false);
     refresh_timeline();
     setWindowTitle(QStringLiteral("MS Project Shell"));
     refresh_view_buttons();
@@ -1763,14 +1774,48 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             set_timeline_visible(checked);
             return;
         case RibbonCommand::toggle_critical_tasks:
-        case RibbonCommand::toggle_project_summary:
+            if (gantt_canvas_ != nullptr) {
+                gantt_canvas_->set_critical_highlight(checked);
+            }
+            set_message(checked ? "critical tasks highlighting on"
+                                : "critical tasks highlighting off",
+                        false);
+            update_status();
+            return;
+        case RibbonCommand::toggle_project_summary: {
+            if (!doc_.has_document() || doc_.sheet() == nullptr) {
+                set_message("open a project first", false);
+                update_status();
+                return;
+            }
+            // The RecordSet is rebuilt, so detach the adapter first -- the same
+            // rule after_structural_change() follows.
+            sheet_model_.set_sheet(nullptr);
+            doc_.set_project_summary_visible(checked, prefs_.zoom);
+            rebind_sheet();
+            sync_view_selection();
+            gantt_canvas_->set_layout(doc_.gantt());
+            gantt_canvas_->set_selected_uid(doc_.selected_uid());
+            refresh_timeline();
+            update_window_title();
+            update_menu_state();
+            set_message(checked ? "project summary task shown"
+                                : "project summary task hidden",
+                        false);
+            update_status();
+            return;
+        }
         case RibbonCommand::toggle_details:
         case RibbonCommand::outdent:
         case RibbonCommand::indent:
         case RibbonCommand::split_task:
-            // Not wired yet (W26-1.4); the controls are disabled until then.
+            // Not wired (W26-6.3 / no engine edit); disabled until then.
             return;
     }
+}
+
+bool MainWindow::critical_tasks_highlight() const noexcept {
+    return gantt_canvas_ != nullptr && gantt_canvas_->critical_highlight();
 }
 
 void MainWindow::set_timeline_visible(bool visible) {

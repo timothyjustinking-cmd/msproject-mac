@@ -349,6 +349,8 @@ void PlanDocument::reset() {
     path_.clear();
     title_.clear();
     warnings_ = 0;
+    show_project_summary_ = false;
+    project_summary_override_ = false;
 }
 
 bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
@@ -370,6 +372,10 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         path_ = source_path;
         // No pending structural edits yet: the display plan starts as the file.
         base_ = loaded_;
+        // Wave 26: the Project Summary Task toggle starts at the file's stored
+        // state (a new load discards an earlier toggle).
+        show_project_summary_ = loaded_.show_project_summary;
+        project_summary_override_ = false;
 
         // Wave 21 (operator decision 7): the file's own table decides the sheet's
         // columns/order/titles/widths.  Reading it BEFORE the sheet is built is
@@ -586,7 +592,25 @@ void PlanDocument::apply_structural_edits(const app::StructuralEdits& edits, app
     // apply() then re-applies this edit list on top without double-counting.
     const app::PlanInput edited = edits.without_structural_edits(view_, loaded_);
     base_ = edits.apply(edited);
+    // Wave 26: a ribbon toggle outranks the file's stored setting across a
+    // structural rebuild, which re-derives `base_` from `loaded_`.
+    if (project_summary_override_) {
+        base_.show_project_summary = show_project_summary_;
+    }
     rebuild_from_base(zoom, keep_uid);
+}
+
+void PlanDocument::set_project_summary_visible(bool visible, app::ZoomLevel zoom) {
+    show_project_summary_ = visible;
+    project_summary_override_ = true;
+    if (sheet_ == nullptr) {
+        return;
+    }
+    // The RecordSet (and so the sheet, the Gantt rows and every uid lookup) is
+    // built from `base_`: flipping this presentation flag and rebuilding is the
+    // same path a structural edit takes.
+    base_.show_project_summary = visible;
+    rebuild_from_base(zoom, 0);
 }
 
 void PlanDocument::accept_start_edits(const std::vector<app::StartEdit>& edits) {
