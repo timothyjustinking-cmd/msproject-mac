@@ -1,72 +1,107 @@
-# memory — coordinator (2026-10-24, wave 25 closed on branch)
+# memory — coordinator (2026-10-24, wave 26 closed on branch)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
-`docs/handoff/wave25-complete.md`.  History:
+`docs/handoff/wave26-complete.md`.  History:
 `memory/archive/coordinator-through-wave20-full.md`.
 
 ## Where the branches are
 
-`main` = **488481f** (wave-22 docs close).  **`wave23`**, **`wave24`** and
-**`wave25`** are NOT merged and NOT pushed (remote `wave23` = `63cd087`; no
-`origin/wave24`, no `origin/wave25`).  The push is held by the client-name
-policy decision — see wave25-complete §7 and brief section 0.  The local
-`wave23-with-screenshot` / `wave23-pre-push` branches are unpushed backups;
-**never push them**.  Tim decides whether the public repo becomes private or
-its history is rewritten.
+`main` = **3f973d5** (origin/main; the driver commit).  **`wave23`** (d236f91),
+**`wave24`** (2561a51), **`wave25`** (3b4da5f) and **`wave26`** (the CLOSE
+commit after `3d78191`) are NOT merged and NOT pushed.  Remote `wave23` =
+`63cd087`; there is no `origin/wave24`, `origin/wave25` or `origin/wave26`.
+The push is held by the client-name policy decision — see wave25-complete §5
+and brief section 0.  The local `wave23-with-screenshot` / `wave23-pre-push`
+branches are unpushed backups; **never push them**.  Tim decides whether the
+public repo becomes private or its history is rewritten.
 
-Wave 25 on `wave25`: cut from `2561a51`, brief in `2fd23f5`, then `b73fd26`
-(W25-1), `5f3a12d`+`9ec15a8` (W25-2), `7a64baf` (W25-3), `f96cfcf` (W25-4),
-`cbf80ef` (W25-5), `a77779f` (W25-6), `33217e2` (W25-7), `02ecf98` (W25-8),
-`c21dd0e`+`3dddcd0` (W25-9), `65a270f`+`97433ce` (W25-10), `b6df460` (W25-11),
-then the independent review's six fixes: `a4ac887` (W25-1), `d61af79` (W25-2),
-`a35a01f` (W25-3), `b04b22e` (W25-6), `85e03d3` (W25-8), `4c28039` (W25-11),
-then `336ec0c` (W25-REV2, the second review's eight live findings, one response
-commit), plus the close record's docs commits.  Reviews: 20 + 8 findings, all
-fixed or listed in wave25-complete §11 and §11.1.
+Wave 26 on `wave26`: cut from `3b4da5f`; the brief `8ac3137`; the driver fix
+`a5dff41`; then `28a9f9b` (W26-0.1), `853e2d3` (G0 record),
+`3142c60`..`b868aff` (W26-1.1..1.5), `d4be89a` (G1 record),
+`e83e66b`..`e8d0520` (W26-2.1..2.7), `2d1448a` (G2 record), `fde3186`
+(W26-2.8), `85ad836` (G2 correction), `a70a0c7`+`cd727ad` (W26-3.1),
+`40c1ad2` (3.2), `f7962e7` (3.3), `99304ad`+`4ca7821` (G3 records),
+`6fb6ec5`..`6cc5181` (W26-4.1..4.6), `aa10b3d` (G4), `7b2268e`..`712535a`
+(W26-5.1..5.4), `4e76142` (G5), `279d44f`..`7eb911c` (W26-6.1..6.3),
+`ebb835d` (G6), `759a856` (W26-REV-1, the client-name removal), `3d78191`
+(W26-REV-2, the review's four remaining High fixes), then the CLOSE docs
+commit.  Every group marker (`WAVE-26-G0-COMPLETE` ..
+`WAVE-26-G6-COMPLETE`, then `WAVE-26-COMPLETE`) is in `wave26-complete.md`.
 
-## Numbers (wave 25 close, fresh trees: build/w25-fresh, -fresh-app, -fresh-qt)
+## Numbers (wave 26 close, fresh trees build/w26-fresh, -app, -qt, final tree 3d78191)
 
-* core ctest **51/51**; M2 **332/332**; plan_recalc **512** with corpus / **266**
-  without; app **15/15**; app_qt **18/18**; reader **1097** with corpus / **417**
-  without; fixtures OK (23 documented hashes, 21 tracked `.mpp`); oracle
-  provenance OK (8).  (Reader 1100/420 after the second review's pair and
-  privacy checks.)
-* Engine **7/8** (`constraint-mso` deliberately left failing; the lane pins the
-  failing SET by name; `save_plan` is test-only).
-* parity: wave23-outline **10/10**; the wave25-auto colour-only reference
-  **PASS** (task bar (138,187,237)); setting the old manual teal makes it FAIL
-  (delta 25 > 24) — the falsification is in the W25-2 log.
-* client-name scan: **0 hits** on every wave-25 commit tree, 0 commit messages.
-  8-hex `client-string-` grep: clean from `7a64baf` onward (the four earlier
-  wave-25 commits inherit wave-24 labels; they add none).
+* core ctest **51/51**; M2 **332/332** (268 leaf fields, 64 summary fields from
+  16 summaries); plan_recalc **512** with corpus / **266** without; reader
+  **1100** with corpus / **420** without; app **17/17**; app_qt **23/23**;
+  fixtures OK (**25** documented hashes, **21** tracked `.mpp`); oracle
+  provenance OK (8).  The single log is `build/w26/final-gates.log`.
+* Engine **7/8** (`constraint-mso` deliberately expected-failing;
+  `mppwrite::save_plan` is test-only); the suite is in the same log.
+* parity: wave23-outline **10/10**; wave25-auto colour-only **PASS** (1/0).
+* client-name scan: the line-based pass is **0** on all 42 trees and 0 commit
+  messages, but it is a **false negative for a wrapped name**: the normalised
+  pass found a PROJECT_A task name over two lines in the G3 record on 18 trees
+  (`99304ad`..`ebb835d`).  It is removed in `759a856`; the normalised scan is 0
+  on the close tree and messages.  The name remains in those 18 commits'
+  history (Tim's rewrite decision).  **Always run both scans.**  8-hex token
+  grep 0 trees; positive control on `wave23` finds 14 files.
 * CI: **not run — publication hold**.  No push.
 
-## Wave 25 result (what a later session must not re-break)
+## Wave 26 result (what a later session must not re-break)
 
-* **Displayed rows are resolved by uid**: `app::make_gantt_source_for_displayed_rows`
-  takes the RecordSet and maps every row through `records.uid(row)` (uid 0 =
-  project bar); never index `plan.tasks` with a RecordSet row.  `app::begin_cell_edit`
-  refuses uid 0 (project row) on both shells.
-* **Stock bar palette by scheduling mode**, measured in Project with Critical
-  Tasks OFF/ON: auto (138,187,237), manual (116,204,212), auto summary
-  (84,84,84), manual summary (43,163,173), milestone black; highlight-ON
-  critical (247,138,136), links auto (38,124,211)/manual (27,173,186)/critical
-  (221,37,34).  The wave-24 palette was manual-vs-auto, not task-vs-critical.
-  `GanttCanvas::set_critical_highlight` defaults OFF.
-* **Privacy**: no client names or invertible hash pins in the tree; opaque
-  `client-name-NN` labels and structural assertions only.  The writer oracle is
-  synthetic and regenerated.  Residual: the golden TSV's 16-hex task-name
-  hashes and all pre-wave-25 history (Tim's decision).
-* **Gates that now test something**: ribbon kind reads live QWidget classes;
-  corpus row count pinned by fixture label; missing flag fixtures FAIL; Flag11..17
-  single-bit controls committed with `scripts/measure_flags.py`; the Timeline
-  shown/hidden pair decodes identically except `timeline_shown`; oracle
-  provenance is recomputed from git by `check_fixtures.py`.
-* **Known gap by name**: `qt_stored_table_corpus` lists PROJECT_A row 3's
-  italic/red text as two EXPECTED failures until W25-12.
+* **Print rows come from the RecordSet** through `app::print_row_list()`
+  (`app/page_layout.h`): the filter's rows when active, every RecordSet row
+  otherwise; macOS, Qt and the headless tests share it.  Never use
+  `plan.view.tasks.size()` as the row list.  `app_layout` / `app_smoke` run the
+  row-shown `wave24-order.mpp`; the smoke leaves the fixture byte-identical.
+* **Saveable structural edits**: `StructuralKind::set_percent` (ribbon % buttons)
+  and `set_project_priority` (Project Information) are written by step 5a of
+  `save_structural_edits` (one `mppwrite::TaskTable` write) and re-read by tests
+  (40 %, 750).  `TaskTable::row_for_uid` throws for an unknown uid, so a refused
+  save leaves the target untouched.  The stored % Complete column stays
+  presentation-only.
+* **The FILE's own view state now renders**: `core/viewstate/gantt_style.*`
+  decodes the applied Gantt view's `0x22400008` record (17 text-style slots,
+  FONT_BASES from `214/Props`, 195-byte bar records, three timescale tiers);
+  `app/view_style.*` is the headless read seam.  PROJECT_A renders its italic
+  red milestones, navy/red/green bars and year/quarter/month tiers.  The two
+  W25-5 expected failures are ordinary checks now.  Do not "correct" the
+  TextStyles slots from COM's `PjTextItem` numbers (G3 errata: COM Item=3 wrote
+  +506, not MPXJ's +186; the slot order is what the capture pins).
+* **Ribbon**: `app_qt/ribbon_bar.*` models button/small/split/combo/checkbox/
+  field/gallery/launcher; `control_kind()` reads the LIVE QWidget class.  The
+  pin is 9 columns; `ribbon_pin_unmodelled.tsv` is empty.  114 command controls
+  on seven tabs have unique one-ink glyphs at 32/16 px.
+* **Backstage**: 12 rail entries (Account page + pinned Options action), all 11
+  pages; the 11-page Options dialog has 3 functional controls.  Black is
+  implemented (White remains disabled).
+* **Dark themes**: `chrome_palette(theme)` owns the ribbon/QAT/timeline/status
+  surfaces and `set_theme()` repaints live; `qt_theme_gate` requires the exact
+  measured dark fills and byte-identical sheet/chart (tolerance 0).  Sheet/chart
+  header bands and the ribbon ink stay light (recorded).
+* **Split view**: a vertical `detailsSplitter` under the sheet/Gantt splitter;
+  the Task Form is display-only and follows the selection by RecordSet row; a
+  6-px draggable handle; the preference survives a view switch.
+* **Review fixes (W26-REV-1/2, `759a856`/`3d78191`)**: the project-summary
+  toggle folds `records_` into `base_` before rebuilding (a pending Start
+  survives); Blank Project and a Backstage Recent row run the File > Open
+  discard guard; the Font name/size combos are file-driven (first FONT_BASES
+  entry on load, Calibri 11 for a new project; the pin marks them `file`); and
+  `qt_stored_table_corpus` reads PAINTED canvas/sheet pixels, not only model
+  roles.  Both data-loss fixes have falsifying tests.
+* **Privacy**: no new name/hash in the close tree, but the line-based scanner
+  is blind to a name wrapped across lines; the normalised pass found one in the
+  G3 record (18 trees) and it is removed.  The golden TSV's unsalted name
+  hashes and pre-wave-25 history remain Tim's.  Run BOTH scans.
 
 ## Next
 
-wave25-complete §3: the FILE's text styles (W25-12, closes the two expected
-failures), file bar styles (W25-13), timescale tiers (W25-14), then W25-15..21.
-Keep §9's gates green before each commit; no push until Tim rules.
+`wave26-complete.md` CLOSE "Found, not fixed": the stored sheet column widths,
+PROJECT_A's yellow per-row fill, bar-label coverage, the dark themes' light
+header bands, the menu/QAT/status-bar artwork, the display-only Task Form, the
+stored combination view, the White theme, the six still-disabled dialogs and
+the no-writer engines.  The review's remaining Mediums: ribbon check-box
+accessible-name sync, Task Information validate-then-commit, Options
+new-task mode not reaching `insert_task()`, and the pending-insert % edit.  Also
+normalise the two new CRLF files and correct the `scripts/oracle_w26.py`
+pointer.  Keep the CLOSE gates green; no push until Tim rules.
