@@ -57,9 +57,15 @@ if(MPP_BUILD_TESTS)
     # Project's assignment dates, uids/dates only (W40 oracle artifact).
     set(MPP_ASSIGNMENT_GOLDEN_PATH
         "${MPP_REPO_ROOT}/tests/mpp_assignment_dates_golden.tsv")
+    # Wave 23 (W23-13): the derived project-property name table (index -> name)
+    # generated from the local-only decompiled binary by
+    # scripts/gen_project_property_names.py.  The reader test checks its record
+    # id arithmetic against this committed TSV.
+    set(MPP_PROPERTY_NAMES_PATH
+        "${MPP_REPO_ROOT}/analysis/project_property_names.tsv")
     # Forward slashes only: these become C string literals.
     foreach(path_var MPP_PROJECT_A_PATH MPP_PROJECT_B_PATH MPP_PROBE_DIR MPP_GOLDEN_PATH
-                     MPP_ASSIGNMENT_GOLDEN_PATH)
+                     MPP_ASSIGNMENT_GOLDEN_PATH MPP_PROPERTY_NAMES_PATH)
         file(TO_CMAKE_PATH "${${path_var}}" ${path_var})
     endforeach()
 
@@ -82,6 +88,7 @@ if(MPP_BUILD_TESTS)
         MPP_PROBE_DIR="${MPP_PROBE_DIR}"
         MPP_GOLDEN_PATH="${MPP_GOLDEN_PATH}"
         MPP_ASSIGNMENT_GOLDEN_PATH="${MPP_ASSIGNMENT_GOLDEN_PATH}"
+        MPP_PROPERTY_NAMES_PATH="${MPP_PROPERTY_NAMES_PATH}"
     )
 
     add_test(NAME mpp_reader COMMAND mpp_reader_tests)
