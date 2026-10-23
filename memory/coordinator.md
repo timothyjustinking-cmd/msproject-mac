@@ -279,3 +279,20 @@ on macOS.
 2. ONE CI dispatch when Q5's chrome/backstage cut + CI2's packaging are both in:
    it must be green on all three, produce the three zips, and keep the renders.
 3. Then Q5's dialog cut; then wave-20 handoff (`wave20-complete.md`).
+
+### Goal round 1 close (2026-10-23 ~14:35)
+
+* `main` at `7f536a3`: M6 (CFB slack, 206-byte tables refused, MPP12 recalc verified),
+  E5 (manual late pair modelled, **engine 7/8**), CI2 (three packages).  Tree clean.
+* Q5 was stopped before reporting but had produced a full cut.  It is committed on
+  branch **`w20-q5`** (backstage, light+dark themes, icon set, timeline, status bar,
+  five structural gates, generated backlog, handoff `docs/handoff/qt2.md`).
+  CI runs against it: **39895551240** (`--ref w20-q5`).  Merge only if green; if red,
+  the failures are the first thing to fix.  `main` does not contain it.
+* Packaging run **39894203777**: Windows and macOS SUCCESS, **Linux FAILED** (the
+  AppImage step or its smoke; triage with `docs/handoff/ci2.md` §(e)/(f)).  The
+  Windows and macOS packages from it are downloadable now.
+* Still open for wave 20: Linux package fix; merge/repair `w20-q5`; dialogs second
+  cut (all-tab scope + laid-out-only ones); `constraint-mso` decision (documented,
+  not implemented); wave-20 gate re-run on a fresh `build\vs-w20`; then
+  `docs/handoff/wave20-complete.md`.
