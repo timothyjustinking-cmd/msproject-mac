@@ -52,6 +52,17 @@ class RibbonBar final : public QWidget {
     // window drops whole groups rather than clipping their labels.
     int visible_group_count() const;
 
+    // WAVE 22: the measured inventory, for app_qt/tests/ribbon_inventory_test.cpp.
+    // The active tab can be selected without a mouse click so the gate can pin
+    // every one of the seven tabs, and the live page can be read back group by
+    // group in ribbon order (hidden groups included).
+    int active_tab_index() const noexcept { return active_tab_; }
+    void set_active_tab(int index);
+    // One group's button labels / modelled commands, in ribbon order.  An index
+    // outside the current page returns empty.
+    QStringList group_button_labels(int group_index) const;
+    app::MenuAction group_button_action(int group_index, int button_index) const;
+
     // Buttons with a modelled command call the handler; the rest report through
     // the same handler with MenuAction::none (MainWindow shows "not wired").
     void set_action_handler(std::function<void(app::MenuAction)> handler);
@@ -107,8 +118,13 @@ class RibbonBar final : public QWidget {
     bool contextual_enabled_ = true;
     QLabel* tell_me_ = nullptr;
     std::vector<GroupWidgets> page_groups_;
+    // WAVE 22: per group of the active page, its buttons and their modelled
+    // commands, in ribbon order.  Same shape/order as page_groups_.
+    std::vector<std::vector<QToolButton*>> page_buttons_;
+    std::vector<std::vector<app::MenuAction>> page_actions_;
     std::function<void(app::MenuAction)> handler_;
     std::function<void()> file_handler_;
+    int active_tab_ = 0;
     int button_count_ = 0;
 };
 

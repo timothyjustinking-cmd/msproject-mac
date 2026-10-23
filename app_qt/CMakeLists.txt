@@ -288,6 +288,24 @@ add_test(NAME qt_ux_gate
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================
+# WAVE 22 (operator decision 1): the seven ribbon tabs carry MS Project 2021's
+# measured group/button inventory.  The gate pins tab -> group -> button order
+# for EVERY tab (against the local clean captures, recorded in
+# docs/handoff/r6.md), proves the decision-9 enabled/tooltip rule on every
+# button, the prefix/fit contract and the >> chevron at 1920 and 900, the
+# seven-tab count, and that the contextual Gantt Chart Format tab is shown only
+# in the Gantt view (through the real view QActions).
+# ===========================================================================
+add_executable(qt_ribbon_inventory_tests tests/ribbon_inventory_test.cpp)
+target_link_libraries(qt_ribbon_inventory_tests PRIVATE qt_shell)
+qt_set_warnings(qt_ribbon_inventory_tests)
+
+add_test(NAME qt_ribbon_inventory
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_ribbon_inventory_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
+
+# ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
 # four OFL faces live in app_qt/fonts/ and are compiled into each executable as
 # Qt resources, so the shell never depends on the host having the font and the
@@ -312,6 +330,6 @@ foreach(carlito_target
         qt_shell_tests qt_parity_tests qt_save_reopen_tests
         qt_empty_state_tests qt_chrome_gate_tests qt_view_gate_tests
         qt_dialog_gate_tests qt_clipboard_tests qt_stored_table_tests
-        qt_ux_gate_tests)
+        qt_ux_gate_tests qt_ribbon_inventory_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()

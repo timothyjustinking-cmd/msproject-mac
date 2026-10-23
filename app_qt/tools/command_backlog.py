@@ -70,7 +70,9 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
             else:
                 group = name_match.group(1)
             continue
-        group_match = re.match(r'^\{"([^"]+)",\s*\{\{', stripped)
+        # A group either opens its button list on the same line ("{{") or has
+        # none at all ("{}" -- the Gantt Chart Style swatch palette, wave 22).
+        group_match = re.match(r'^\{"([^"]+)",\s*\{\{?', stripped)
         if group_match:
             group = group_match.group(1)
         for label, action in re.findall(
@@ -137,7 +139,9 @@ def main() -> int:
         "`MainWindow::handle_action()`."
     )
     lines.append("")
-    OUT.write_text("\n".join(lines), encoding="utf-8")
+    # newline="\n": keep the generated doc LF like the rest of docs/ (a Windows
+    # default text write would turn every line into CRLF).
+    OUT.write_text("\n".join(lines), encoding="utf-8", newline="\n")
     print(f"wrote {OUT.relative_to(ROOT)}: {len(ribbon)} ribbon, {len(menus)} menu rows")
     return 0
 

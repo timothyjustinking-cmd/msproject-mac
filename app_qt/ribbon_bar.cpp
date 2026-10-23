@@ -52,9 +52,23 @@ struct TabSpec {
 
 // The ribbon structure and order: Task first (the reference's active tab), then
 // Resource, Report, Project, View, Help, and the contextual Gantt Chart Format.
-// Labels are the product's group captions; the buttons are the commands that
-// group offers.  Only the modelled ones carry a MenuAction; the rest are shown
-// and report as "not wired" when clicked, so no button is silent.
+// WAVE 22 (operator decision 1): every group and every text-labelled button is
+// the inventory MEASURED from MS Project 2021's clean ribbon captures (local,
+// git-ignored; see docs/handoff/r6.md for the per-tab source file).  Group
+// order is left to right; within a group the order is the tab order of the
+// capture.  Only exact command matches keep a MenuAction: everything MS Project
+// shows that this port does not model is `none`, so it is disabled with the
+// exact "not implemented in this port" tooltip.
+//
+// Notes on the shape of this model:
+//   * the port's ribbon is text-labelled commands only.  The Font group's
+//     family/size entries are value displays carried as buttons (Arial/8 are the
+//     values in the clean capture); colour pickers, the five quick %-complete
+//     buttons, the indent/outdent arrows and the Gantt Chart Style swatch
+//     palette have no text label, so they are not modelled.  "Gantt Chart Style"
+//     is kept as a caption-only group so the measured group order is complete.
+//   * the Task tab is deliberately unchanged in width so the 9/9 UI parity
+//     fixture and the empty-state gate keep their measured fit at 1920.
 const std::vector<TabSpec>& tab_specs() {
     static const std::vector<TabSpec> kTabs = {
         {"Task",
@@ -66,8 +80,8 @@ const std::vector<TabSpec>& tab_specs() {
                {"Cut", app::MenuAction::cut},
                {"Copy", app::MenuAction::copy},
                {"Format Painter", app::MenuAction::none}}},
-             {"Font", {{"Calibri", app::MenuAction::none},
-                       {"11", app::MenuAction::none},
+             {"Font", {{"Arial", app::MenuAction::none},
+                       {"8", app::MenuAction::none},
                        {"B", app::MenuAction::none},
                        {"I", app::MenuAction::none},
                        {"U", app::MenuAction::none}}},
@@ -100,61 +114,132 @@ const std::vector<TabSpec>& tab_specs() {
         {"Resource",
          false,
          {
-             {"View", {{"Resource Sheet", app::MenuAction::view_resource_sheet},
-                       {"Resource Usage", app::MenuAction::view_resource_usage}}},
-             {"Insert", {{"Add Resources", app::MenuAction::insert_resource},
-                         {"Assign Resources", app::MenuAction::none}}},
-             {"Properties", {{"Information", app::MenuAction::none},
-                             {"Resource Notes", app::MenuAction::none}}},
+             {"View", {{"Team Planner", app::MenuAction::none}}},
+             {"Assignments",
+              {{"Assign Resources", app::MenuAction::none},
+               {"Resource Pool", app::MenuAction::none}}},
+             {"Insert", {{"Add Resources", app::MenuAction::insert_resource}}},
+             {"Properties",
+              {{"Information", app::MenuAction::none},
+               {"Notes", app::MenuAction::none},
+               {"Details", app::MenuAction::none}}},
+             {"Level",
+              {{"Level Selection", app::MenuAction::none},
+               {"Level Resource", app::MenuAction::none},
+               {"Level All", app::MenuAction::none},
+               {"Leveling Options", app::MenuAction::none},
+               {"Clear Leveling", app::MenuAction::none},
+               {"Next Overallocation", app::MenuAction::none}}},
          }},
         {"Report",
          false,
          {
-             {"Project", {{"Reports", app::MenuAction::none},
-                          {"New Report", app::MenuAction::none}}},
-             {"Export", {{"Save as PDF", app::MenuAction::save_as_pdf},
-                         {"Export PDF (Sheet)", app::MenuAction::export_pdf_sheet},
-                         {"Export PDF (Gantt)", app::MenuAction::export_pdf_gantt}}},
+             {"Project", {{"Compare Projects", app::MenuAction::none}}},
+             {"View Reports",
+              {{"New Report", app::MenuAction::none},
+               {"Dashboards", app::MenuAction::none},
+               {"Resources", app::MenuAction::none},
+               {"Costs", app::MenuAction::none},
+               {"In Progress", app::MenuAction::none},
+               {"Getting Started", app::MenuAction::none},
+               {"Custom", app::MenuAction::none},
+               {"Recent", app::MenuAction::none}}},
+             {"Export", {{"Visual Reports", app::MenuAction::none}}},
          }},
         {"Project",
          false,
          {
-             {"Properties", {{"Project Information", app::MenuAction::none},
-                             {"Change Working Time", app::MenuAction::none}}},
-             {"Status", {{"Update Project", app::MenuAction::none},
-                         {"Update Tasks", app::MenuAction::none}}},
-             {"Insert", {{"Insert Project", app::MenuAction::none}}},
+             {"Insert", {{"Subproject", app::MenuAction::none}}},
+             {"Add-ins",
+              {{"Get Add-ins", app::MenuAction::none},
+               {"My Add-ins", app::MenuAction::none}}},
+             {"Properties",
+              {{"Project Information", app::MenuAction::none},
+               {"Custom Fields", app::MenuAction::none},
+               {"Links Between Projects", app::MenuAction::none},
+               {"WBS", app::MenuAction::none},
+               {"Change Working Time", app::MenuAction::none}}},
+             {"Schedule",
+              {{"Calculate Project", app::MenuAction::none},
+               {"Set Baseline", app::MenuAction::none},
+               {"Move Project", app::MenuAction::none}}},
+             {"Status",
+              {{"Status Date", app::MenuAction::none},
+               {"Update Project", app::MenuAction::none}}},
+             {"Proofing", {{"Spelling", app::MenuAction::none}}},
          }},
         {"View",
          false,
          {
-             {"Task Views", {{"Gantt Chart", app::MenuAction::none},
-                             {"Task Sheet", app::MenuAction::view_task_sheet}}},
-             {"Zoom", {{"Zoom In", app::MenuAction::zoom_in},
-                       {"Zoom Out", app::MenuAction::zoom_out},
-                       {"Days", app::MenuAction::zoom_day},
-                       {"Weeks", app::MenuAction::zoom_week},
-                       {"Months", app::MenuAction::zoom_month}}},
-             {"Data", {{"Filter", app::MenuAction::show_filter},
-                       {"Clear Filter", app::MenuAction::clear_filter},
-                       {"Collapse All", app::MenuAction::collapse_all},
-                       {"Expand All", app::MenuAction::expand_all}}},
+             {"Task Views",
+              {{"Gantt Chart", app::MenuAction::none},
+               {"Task Usage", app::MenuAction::view_task_usage},
+               {"Network Diagram", app::MenuAction::none},
+               {"Calendar", app::MenuAction::none},
+               {"Other Views", app::MenuAction::none}}},
+             {"Resource Views",
+              {{"Team Planner", app::MenuAction::none},
+               {"Resource Usage", app::MenuAction::view_resource_usage},
+               {"Resource Sheet", app::MenuAction::view_resource_sheet},
+               {"Other Views", app::MenuAction::none}}},
+             {"Data",
+              {{"Sort", app::MenuAction::none},
+               {"Outline", app::MenuAction::none},
+               {"Tables", app::MenuAction::none},
+               // The clean capture stacks Highlight ABOVE Filter above Group by
+               // (the pencil row, then the funnel row, then the group row).
+               {"Highlight", app::MenuAction::none},
+               {"Filter", app::MenuAction::show_filter},
+               {"Group by", app::MenuAction::none}}},
+             {"Zoom",
+              {{"Timescale", app::MenuAction::none},
+               {"Zoom", app::MenuAction::none},
+               {"Entire Project", app::MenuAction::none},
+               {"Selected Tasks", app::MenuAction::none}}},
+             {"Split View",
+              {{"Timeline", app::MenuAction::none}, {"Details", app::MenuAction::none}}},
+             {"Window",
+              {{"New Window", app::MenuAction::none},
+               {"Switch Windows", app::MenuAction::none},
+               {"Arrange All", app::MenuAction::none},
+               {"Hide", app::MenuAction::none}}},
+             {"Macros", {{"Macros", app::MenuAction::none}}},
          }},
         {"Help",
          false,
          {
-             {"Help", {{"Help", app::MenuAction::none},
-                       {"Keyboard Shortcuts", app::MenuAction::keyboard_shortcuts},
-                       {"About", app::MenuAction::about}}},
+             {"Help",
+              {{"Help", app::MenuAction::none},
+               {"Feedback", app::MenuAction::none},
+               {"Show Training", app::MenuAction::none}}},
          }},
         {"Gantt Chart Format",
          true,
          {
-             {"Format", {{"Bar Styles", app::MenuAction::none},
-                         {"Gridlines", app::MenuAction::none},
-                         {"Layout", app::MenuAction::none}}},
-             {"Show/Hide", {{"Columns", app::MenuAction::none},
-                            {"Shading", app::MenuAction::toggle_shading}}},
+             {"Format",
+              {{"Text Styles", app::MenuAction::none},
+               {"Gridlines", app::MenuAction::none},
+               {"Layout", app::MenuAction::none}}},
+             {"Columns",
+              {{"Insert Column", app::MenuAction::none},
+               {"Column Settings", app::MenuAction::none},
+               {"Custom Fields", app::MenuAction::none}}},
+             {"Bar Styles",
+              {{"Format", app::MenuAction::none},
+               {"Critical Tasks", app::MenuAction::none},
+               {"Slack", app::MenuAction::none},
+               {"Late Tasks", app::MenuAction::none},
+               {"Task Path", app::MenuAction::none},
+               {"Baseline", app::MenuAction::none},
+               {"Slippage", app::MenuAction::none}}},
+             // The 16 bar-colour swatches + preset drop-down: a palette, not
+             // text commands.  The caption keeps the measured group in order.
+             {"Gantt Chart Style", {}},
+             {"Show/Hide",
+              {{"Outline Number", app::MenuAction::none},
+               {"Project Summary Task", app::MenuAction::none},
+               {"Summary Tasks", app::MenuAction::none}}},
+             {"Drawings", {{"Drawing", app::MenuAction::none}}},
          }},
     };
     return kTabs;
@@ -351,8 +436,10 @@ void RibbonBar::build_tabs() {
         button->setFont(ribbon_font(kBodyPointSize - 1));
         button->setFixedHeight(kRibbonTabHeight - 4);
         button->setFocusPolicy(Qt::NoFocus);
-        connect(button, &QToolButton::clicked, this,
-                [this, tab = static_cast<int>(index)](bool) { build_page(tab); });
+        connect(button, &QToolButton::clicked, this, [this, tab = static_cast<int>(index)](bool) {
+            active_tab_ = tab;
+            build_page(tab);
+        });
         if (tabs[index].contextual) {
             contextual_tab_ = button;
         }
@@ -372,6 +459,8 @@ void RibbonBar::build_tabs() {
 
 void RibbonBar::clear_page() {
     page_groups_.clear();
+    page_buttons_.clear();
+    page_actions_.clear();
     if (page_layout_ == nullptr) {
         return;
     }
@@ -392,11 +481,16 @@ void RibbonBar::build_page(int tab_index) {
     }
     clear_page();
     button_count_ = 0;
+    active_tab_ = tab_index;
 
     const TabSpec& tab = tabs[static_cast<std::size_t>(tab_index)];
     const QFont button_font = ribbon_font(kRibbonPointSize);
     const QFontMetrics button_metrics(button_font);
     for (const GroupSpec& group : tab.groups) {
+        std::vector<QToolButton*> group_buttons;
+        std::vector<app::MenuAction> group_actions;
+        group_buttons.reserve(group.buttons.size());
+        group_actions.reserve(group.buttons.size());
         auto* box = new QWidget(page_);
         box->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
         auto* box_layout = new QVBoxLayout(box);
@@ -446,6 +540,8 @@ void RibbonBar::build_page(int tab_index) {
                 }
             });
             row->addWidget(button);
+            group_buttons.push_back(button);
+            group_actions.push_back(action);
             ++button_count_;
         }
         row->addStretch(1);
@@ -475,6 +571,8 @@ void RibbonBar::build_page(int tab_index) {
         widgets.box = box;
         widgets.separator = separator;
         page_groups_.push_back(widgets);
+        page_buttons_.push_back(std::move(group_buttons));
+        page_actions_.push_back(std::move(group_actions));
     }
     page_layout_->addStretch(1);
     layout_page_groups();
@@ -578,6 +676,46 @@ QStringList RibbonBar::group_titles() const {
 }
 
 int RibbonBar::button_count() const { return button_count_; }
+
+// WAVE 22: the inventory read-back the ribbon gate pins.  Switching tabs goes
+// through the same build_page() a tab click uses, so the checked tab button and
+// the page cannot drift apart.
+void RibbonBar::set_active_tab(int index) {
+    if (index < 0 || index >= tab_count()) {
+        return;
+    }
+    for (std::size_t button = 0; button < tab_buttons_.size(); ++button) {
+        if (tab_buttons_[button] != nullptr) {
+            tab_buttons_[button]->setChecked(static_cast<int>(button) == index);
+        }
+    }
+    build_page(index);
+}
+
+QStringList RibbonBar::group_button_labels(int group_index) const {
+    QStringList labels;
+    if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_buttons_.size()) {
+        return labels;
+    }
+    for (const QToolButton* button : page_buttons_[static_cast<std::size_t>(group_index)]) {
+        if (button != nullptr) {
+            labels.push_back(button->text());
+        }
+    }
+    return labels;
+}
+
+app::MenuAction RibbonBar::group_button_action(int group_index, int button_index) const {
+    if (group_index < 0 || static_cast<std::size_t>(group_index) >= page_actions_.size()) {
+        return app::MenuAction::none;
+    }
+    const std::vector<app::MenuAction>& actions =
+        page_actions_[static_cast<std::size_t>(group_index)];
+    if (button_index < 0 || static_cast<std::size_t>(button_index) >= actions.size()) {
+        return app::MenuAction::none;
+    }
+    return actions[static_cast<std::size_t>(button_index)];
+}
 
 void RibbonBar::paintEvent(QPaintEvent*) {
     QPainter painter(this);
