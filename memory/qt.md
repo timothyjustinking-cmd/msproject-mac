@@ -83,6 +83,12 @@ warnings).  Do not re-implement one of those in `app_qt/`.
 
 ## Traps paid for
 
+* **Detach the Qt adapter before a core SheetModel is replaced.**  `SheetModel`
+  is owned by `PlanDocument`/`view_sheet_`; `SheetTableModel` holds a raw pointer.
+  `PlanDocument::apply_structural_edits`, `PlanDocument::load` and
+  `rebuild_generic_view` destroy it.  Call `sheet_model_.set_sheet(nullptr)`
+  FIRST (open_file, after_structural_change, show_view all do), or a model reset
+  inside a later `set_sheet`/`set_generic` asks the view for rows on freed memory.
 * **Dropbox touches mtimes**: the editing tools report "file changed since it
   was read" constantly.  Re-read the file immediately before writing/editing.
 * **MSVC/Application Control** transiently blocked a freshly linked
@@ -94,6 +100,11 @@ warnings).  Do not re-implement one of those in `app_qt/`.
   opens; never open the committed fixture in place.
 * `QFileDialog` statics need `DontUseNativeDialog` for the fidelity contract.
 * The row-number gutter is the view's vertical header; it is not a model column.
+* CI pins **Qt 6.5.3** (Windows/Linux/macOS `qt-shell` workflow).  Write
+  conservative Qt 6.2-compatible Widgets code; the Windows job runs `/W4 /WX`,
+  so keep C4267 (size_t -> int), C4244 (double -> int) and C4100 (unused
+  parameter) out of new code.  `parity_test.cpp`'s `columnViewportPosition(
+  columns.size() - 1)` was the first C4267 the Windows job caught.
 
 ## Next three actions
 

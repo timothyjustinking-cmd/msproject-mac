@@ -484,3 +484,100 @@ rollup 155, attribution 54, plan 206, writer 760/446/304/101.
 * **assignment-50pct**: the placeholder tombstone matched the earlier recording;
   with clean oracles the row identity differs and needs a real fix.
 * `task-calendar` stays unrecorded until the named-calendar fixture exists.
+
+## Wave 19: clean re-record, 7 of 8 — and what the two open fields really are
+
+### Score (2026-10-23, `build\vs-w19`, Release)
+
+| scenario | result | what differs |
+|---|---|---|
+| recalculate | **PASS** (240 fields) | - |
+| duration-change | **PASS** (240) | - |
+| link-fs-lag | **PASS** (247) | - |
+| constraint-snet | **PASS** (240) | - |
+| constraint-mso | **FAIL** (1/240) | `task 3 duration_ticks` 9600 vs 12000 |
+| assignment-50pct | **PASS** (240) | - (was 7 fields) |
+| task-calendar | **PASS** (246) | recorded for the first time |
+| delete-task-with-successor | **PASS** (204) | - |
+
+`python scripts/engine_diff.py --suite --apply-bin build\vs-w19\Release\engine_diff_tests.exe`
+prints **8 recorded (7 pass, 1 fail), 0 unrecorded** (wave 18: 5 pass, 1 fail, 1
+unrecorded).  M2 stays 332/332.
+
+### The clean re-record proved the old oracles were faithful
+
+All eight scenarios were re-recorded from clean bases (the recorder copies the
+base into `build/` first).  Diffing the new JSONs against the previous ones field
+by field: **0 semantic fields changed in seven scenarios, 1 in `link-fs-lag`
+(one `file.streams` size, a family that is excluded from scoring)**.  So
+`constraint-mso`'s stored 12000 is reproducible Project output, not a recording
+artefact, and no oracle needed hand-editing.
+
+### `constraint-mso`: measured, reproducible, and NOT a scheduling rule
+
+The stored `+84` duration disagrees with **both** of Project's own date pairs
+(9600) while Project's COM surface reports `Task.Duration = 960` minutes
+throughout -- before the constraint, after `ConstraintType=2`, after
+`ConstraintDate`, after `CalculateProject`, and after `FileSaveAs`.  A probe
+without the harness reproduces the same file word.  What changes it is the
+constraint application on a **manual** row whose start is **off-calendar**.
+
+Nine measurements (`synthetic-base`, task 3 = 2 d unless noted; MSO 2026-01-20
+08:00 unless noted), kept start -> stored `+84`:
+
+| kept start | stored duration | ticks | increment |
+|---|---|---|---|
+| Sun 13:00 (base row, 2 d) | 12000 | 12000 | +2400 (4 h) |
+| Sun 13:00, 1 d | 7200 | 7200 | +2400 |
+| Sun 08:00, 1 d | 9600 | 9600 | +4800 (8 h) |
+| Sun 10:00, 1 d | 8400 | 8400 | +3600 (6 h) |
+| Sun 15:00, 1 d | 6000 | 6000 | +1200 (2 h) |
+| Sat 09:00, 1 d | 9000 | 9000 | +4200 (7 h) |
+| Fri 13:00, 1 d (working day) | 4800 | 4800 | 0 |
+| task 2 (3 d), Sun 13:00 | 16800 | 16800 | +2400 |
+| task 1 (5 d), Sun 13:00 | 26400 | 26400 | +2400 |
+| no constraint (control) | 9600 | 9600 | 0 |
+
+The increment equals the **remaining working windows of the start day** when
+that day is not a working day for the calendar (Sun 08:00 -> 08:00-12:00 +
+13:00-17:00 = 8 h; Sun 10:00 -> 6 h; Sun 15:00 -> 2 h; Sat 09:00 -> 7 h; Fri
+13:00, a working day -> 0).  It is independent of the task, its duration and the
+distance to the MSO date, and it appears only when a constraint is applied.
+
+Conclusion for the engine: this is a **Project save-time recomputation**, not
+CPM.  Our writer stores the plan's duration (9600) and is one field away.  It is
+left failing deliberately this wave: the rule above is measured on nine rows,
+but its cause is not understood well enough to be sure it generalises to every
+manual/constraint/calendar combination, and the brief's rule is "do not fit a
+rule to one row".  The next wave can implement it in the applier with this table
+as the regression, or decide the dump should compare a duration Project itself
+does not report through COM.
+
+### `assignment-50pct` was a writer bug, not an oracle artefact
+
+A Project-written **auto** MPP14 row stores no Fixed2Data block at all:
+`+46/+50 = 0xFFFFFFFF` and `+58 = 0` on all 85 PROJECT_A task rows, while `+84`
+holds the duration; a COM duration edit saves it back as 0.  Manual rows (every
+other fixture) store real copies in all three.  `resolve_task_values()`
+materialised copies from `+84/+104/+108` and then refused its own write as a
+"single-copy split" -- so a duration or date edit on a real auto file could not
+be saved.  Absence is now preserved (and the false refusal/warning skipped);
+rows with a coherent Fixed2Data block are unchanged.  That fix is what turns
+`assignment-50pct` green, because its placeholder row had the same absent-copy
+shape.
+
+### `task-calendar` is now recorded and passing
+
+`tests/data/synthetic-calendars.mpp` (new, committed, SHA-256 pinned in
+`engine_diff.py` and `scripts/check_fixtures.py`) is `synthetic-base` with its
+three tasks converted to automatic scheduling plus a second **named** base
+calendar, uid 4 "Shift A" (Mon-Fri 09:00-13:00 + 14:00-18:00), built by
+`scripts/build_calendar_fixture.py`.
+
+Measured COM surface (this build): `Application.BaseCalendarCreate`,
+`BaseCalendarEditDays`, `BaseCalendarRename`, `Application.BaseCalendars` and
+`Project.BaseCalendars` all exist; `Project.Calendars` does not; and
+`Project.BaseCalendars` has **no UniqueID** property, so the uid -> name map is
+pinned with the fixture and used only by the COM half (`--record`).  The
+scenario JSON stays ids-only.  `--check` maps uid 4 -> task `+178`, builds the
+calendar through `core/cal`, and the whole state dump matches Project exactly.

@@ -28,7 +28,7 @@ render exposed.  The numbers are P1's measurements, not estimates:
 | `main_window.{h,cpp}` | the window: Fusion palette, font resolution, ribbon + timeline + splitter, sheet, Gantt, status bar, menus, command dispatch, `--open`, the 0.459/table-edge split, data-driven column widths |
 | `shell_style.h` | the fidelity contract's fixed numbers and colours, in one place (`kParityWidth`/`kParityHeight` included) |
 | `entry_columns.{h,cpp}` | the nine Entry columns: titles, model fields, stock character widths, `214/CTable` field ids, `chars*6+3` rule |
-| `sheet_table_model.{h,cpp}` | `QAbstractTableModel` over `core::sheet::SheetModel`: exactly the nine Entry columns (the gutter is the row header) |
+| `sheet_table_model.{h,cpp}` | `QAbstractTableModel` over `core::sheet::SheetModel`: the nine Entry columns (the gutter is the row header), cell editing through `begin_edit`/`commit_edit`, a filtered display-row list, and a generic read-only presentation for the resource/usage grids |
 | `sheet_views.{h,cpp}` | 42 px caption-band painter, the FROZEN `SheetRowHeader` gutter, the white top-left corner, the Task Mode pin delegate (Indicators cells stay blank), splitter handle with a visible drag thumb |
 | `ribbon_bar.{h,cpp}` | tabs (Task/Resource/Report/Project/View/Help + contextual Gantt Chart Format), groups, buttons sized from their labels, 105 px, whole-group overflow |
 | `timeline_strip.{h,cpp}` | Start/Finish labels + "Add tasks with dates to the timeline", 44 px |

@@ -56,8 +56,13 @@ Nothing under `app/`, `core/`, `tests/data/`, `.github/` or the top-level
 
 ## Needs CI
 
-1. **Compile** the Qt target on `qt-linux` (and the new Windows/macOS jobs).
-   Expect the first CI run to find API slips; the next iteration fixes them.
+1. **Compile** the Qt target on the `qt-shell` workflow (Qt 6.5.3, Linux/Windows/
+   macOS).  The Windows job runs `/W4 /WX`: the first run already caught C4267 in
+   the wave-18 `parity_test.cpp`, now fixed
+   (`columnViewportPosition(static_cast<int>(columns.size()) - 1)` became an
+   `int last_column`).  Expect the next run to find the API slips in the new
+   code; keep them isolated in `print_page.cpp` (QPrinter/QPage*) and
+   `dialogs.cpp` (dialog widgets).
 2. **`Qt6PrintSupport` must be installed** in the Linux job (Ubuntu:
    `qt6-base-dev` normally carries it; a slim image also needs
    `libqt6printsupport6`).  `app_qt/CMakeLists.txt` now requires the component.
@@ -65,6 +70,14 @@ Nothing under `app/`, `core/`, `tests/data/`, `.github/` or the top-level
    `qt_render_parity` (must still print `rendered 1920x1032`), `qt_shell_offscreen`,
    `qt_parity_geometry`, `qt_save_reopen`.
 4. P1's harness on the 1920x1032 render: expect 9/9 unchanged.
+
+## A lifecycle rule the next stream must keep
+
+`SheetTableModel` holds a raw `core::sheet::SheetModel*`; `PlanDocument` (and
+`view_sheet_`) own the model.  **Detach the Qt adapter (`set_sheet(nullptr)`)
+before anything replaces or destroys the SheetModel** -- `open_file`,
+`after_structural_change` and `show_view` all do.  Without it a model reset asks
+the view for rows on freed memory.
 
 ## Known open / deliberate gaps
 

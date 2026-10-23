@@ -254,3 +254,34 @@ fraction, day width and tier count to ±1 px (fractions to 0.002) and the four
 colours exactly (largest channel difference ≤ 1).  It also proves the blank and
 single-colour cases report "not found" instead of failing, and that compare mode
 returns 0 for identical images and 1 for a real difference.
+
+## 8. Wave 19: the same score on all three platforms
+
+The Qt shell now builds and renders on Linux, Windows and macOS (`.github/workflows/qt.yml`,
+pinned Qt 6.5.3).  Each job uploads its 1920x1032 `--parity` render; each was scored
+against the same git-ignored reference with the command from section 1:
+
+| platform | run | comparable | failing | row | header | splitter | day | tiers | columns |
+|---|---|---|---|---|---|---|---|---|---|
+| Linux (ubuntu-latest) | 39888287026 | 9 | 0 | 22 | 43 | 0.45924 | 24 | 2 | 9, deltas -1/+1 |
+| Windows (windows-2022) | 39888287026 | 9 | 0 | 22 | 43 | 0.45925 | 24 | 2 | 9, deltas -1/+1 |
+| macOS (macos-14, arm64) | 39888287026 | 9 | 0 | 22 | 43 | 0.45924 | 24 | 2 | 9, deltas -1/+1 |
+
+All three report the reference-measured geometry: header `(255,255,255)`, grid
+`(212,212,212)`, weekend `(247,247,247)` exact; the per-column deltas are the
+documented gutter-border (-1) and splitter-line (+1) conventions, not a different
+column set.  The platform font stacks differ (Calibri/Arial on Windows/macOS,
+Liberation/DejaVu on Linux) and the measured geometry is still identical, which is
+the point of pinning the point sizes and integer row/column metrics.
+
+`task bar colour` stays `N/A`: the reference capture has no bars (section 2.3).
+The three jobs' artifacts are `qt-window-<OS>-<sha>` containing
+`qt-render-smoke.png` and `qt-render-document.png` (900x560),
+`qt-shell-window.png` (900x560) and `test-out/qt-render-parity.png` (1920x1032).
+
+Behaviour is now covered by six offscreen tests on every platform
+(`qt_render_smoke`, `qt_render_document`, `qt_render_parity`, `qt_shell_offscreen`,
+`qt_parity_geometry`, `qt_save_reopen`): 6/6 passed on all three in that run.
+`qt_save_reopen` edits Duration and Start through the shell's own model, undoes and
+redoes through the menu actions, saves through `app::Document` to a build-local
+file, reopens it and asserts the edit persisted.
