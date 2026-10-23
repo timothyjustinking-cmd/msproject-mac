@@ -85,6 +85,25 @@ DOCUMENTED = {
         "BD8503EE4BDF7E117491E3C245D1A84E64ECF91F51B1AA0625AE4F064E96ED16",
     "tests/data/reference/wave25-auto.measures.json":
         "054CDBFAA0048F8FAECC20FD73A431E0CB0F57F919B27585351270CA0F8E7637",
+    # Wave 25 (W25-9/S11): ONE single-bit control per flag in the +33 group
+    # (Flag11..Flag17).  Built by the committed scripts/measure_flags.py from a
+    # copy of wave23-outline.mpp: every flag False on ID 3, then only that flag
+    # True, saved through Project 2021.  They pin the bit ORDER inside the
+    # group, which the all-20 aggregate cannot.
+    "tests/data/wave25-flag11.mpp":
+        "A420D4C1639DCB8E1C16F6606417E7DBD48A0A95D444C64CF8889C5092E06965",
+    "tests/data/wave25-flag12.mpp":
+        "AD0C9F7A588F6A89945A0A3EBAD3B53D7DA1B7C522A1157B44A928FBA9151987",
+    "tests/data/wave25-flag13.mpp":
+        "023D40E4E568C244C3F3319FC64605BBFF52C31F75794FAFD1CDCDA4615DF521",
+    "tests/data/wave25-flag14.mpp":
+        "736090E534CC69AF08EB467D672B985E901C2B0F96A1C4720555D020862F22D4",
+    "tests/data/wave25-flag15.mpp":
+        "9873616512655C002AE9D0FAEC172D46E7D85216F4D259323616E6D82DBD36AB",
+    "tests/data/wave25-flag16.mpp":
+        "0D1F5FF13FB55F98D3AAE8647FB7FAA725C5B85E561B92B99A3D78E5065A92AE",
+    "tests/data/wave25-flag17.mpp":
+        "B7F9EDF6A35D61E6B17FEBFFC8FB6378325CD29E9F01FAB9D8002A23330AC0EB",
 }
 
 

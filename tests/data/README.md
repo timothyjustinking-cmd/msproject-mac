@@ -18,6 +18,7 @@ checkout. Nothing here is client data.
 | `wave24-flag2.mpp` | the same measurement's single-bit control: only Flag2 True on ID 3 (byte +24 bit 0x04). |
 | `wave24-flag20.mpp` | only Flag20 True on ID 3 (byte +34 bit 0x04), pinning the non-contiguous id/bit position. |
 | `wave25-auto.mpp` | **synthetic** `wave23-outline.mpp` with every task switched to automatic scheduling (`Manual = False`) and saved by Project 2021 with neutral metadata; the parity reference that distinguishes an auto task bar from a manual one (W25-2). |
+| `wave25-flag11.mpp` … `wave25-flag17.mpp` | seven single-bit controls, one per flag in the +33 group: wave23-outline.mpp with every flag False on ID 3, then ONLY that flag True, saved through Project 2021 by the committed `scripts/measure_flags.py` (W25-9).  They pin the bit order the all-20 fixture cannot. |
 | `synthetic-calendars.mpp` | synthetic two-calendar fixture (wave 19, `scripts/build_calendar_fixture.py`) |
 
 ## `wave23-outline.mpp` — provenance (wave 23)
@@ -43,7 +44,8 @@ checkout. Nothing here is client data.
 `scripts/check_fixtures.py` pins the six files whose content is quoted in
 docs or used as an oracle reference; this table is the complete inventory so a
 silent substitution is visible even for the small binaries.  These are the
-hashes at the wave-23 close (branch `wave23`); regenerate the table in the
+hashes updated at the wave-25 close (branch `wave25`; the wave-23 originals for
+the files wave 25 did not touch); regenerate the table in the
 same commit as any deliberate change -- never edit a fixture to make a test
 pass.  `README.md` cannot carry its own hash (it changes when this table does).
 
@@ -81,6 +83,13 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `wave24-flag20.mpp` | `1C1C9F2433962AFE309535074D92CAEAFA8052572B7AA7AFEC22541F7479F64F` |
 | `wave25-auto.mpp` | `BD8503EE4BDF7E117491E3C245D1A84E64ECF91F51B1AA0625AE4F064E96ED16` |
 | `reference/wave25-auto.measures.json` | `054CDBFAA0048F8FAECC20FD73A431E0CB0F57F919B27585351270CA0F8E7637` |
+| `wave25-flag11.mpp` | `A420D4C1639DCB8E1C16F6606417E7DBD48A0A95D444C64CF8889C5092E06965` |
+| `wave25-flag12.mpp` | `AD0C9F7A588F6A89945A0A3EBAD3B53D7DA1B7C522A1157B44A928FBA9151987` |
+| `wave25-flag13.mpp` | `023D40E4E568C244C3F3319FC64605BBFF52C31F75794FAFD1CDCDA4615DF521` |
+| `wave25-flag14.mpp` | `736090E534CC69AF08EB467D672B985E901C2B0F96A1C4720555D020862F22D4` |
+| `wave25-flag15.mpp` | `9873616512655C002AE9D0FAEC172D46E7D85216F4D259323616E6D82DBD36AB` |
+| `wave25-flag16.mpp` | `0D1F5FF13FB55F98D3AAE8647FB7FAA725C5B85E561B92B99A3D78E5065A92AE` |
+| `wave25-flag17.mpp` | `B7F9EDF6A35D61E6B17FEBFFC8FB6378325CD29E9F01FAB9D8002A23330AC0EB` |
 
 ## `synthetic-base.mpp` — provenance
 
