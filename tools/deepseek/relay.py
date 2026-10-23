@@ -60,8 +60,10 @@ def save_session(name, data):
 
 def call(key, model, messages, thinking, max_tokens, timeout):
     body = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": False}
-    if thinking:
-        body["thinking"] = {"type": "enabled"}
+    # deepseek-flash thinks by default and the hidden reasoning counts against
+    # max_tokens (a 4000-token budget came back empty, finish=length), so thinking
+    # is off unless --thinking is passed.
+    body["thinking"] = {"type": "enabled" if thinking else "disabled"}
     req = urllib.request.Request(
         API_URL,
         data=json.dumps(body).encode("utf-8"),
