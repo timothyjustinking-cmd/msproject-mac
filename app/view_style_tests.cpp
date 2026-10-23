@@ -124,6 +124,29 @@ void check_stock_fixture() {
     check(project_summary.valid && project_summary.point_size == 12 &&
               project_summary.bold,
           "view style: synthetic-base's project summary is Calibri 12 bold");
+
+    // Wave 26 (W26-3.2): the stock bar palette.  A stock project has no
+    // critical-specific, summary-critical or finished bar style; the shell
+    // keeps its stock fallbacks for those roles.
+    const app::BarPalette palette = app::bar_palette_from(style);
+    check(palette.decoded, "view style: the stock bar palette decodes");
+    check(palette.has_normal && palette.normal == (Rgb{138, 187, 237}),
+          "view style: stock auto Task bar is (138,187,237)");
+    check(palette.has_manual_normal &&
+              palette.manual_normal == (Rgb{116, 204, 212}),
+          "view style: stock Manual Task bar is (116,204,212)");
+    check(palette.has_summary && palette.summary == (Rgb{84, 84, 84}),
+          "view style: stock Summary bar is (84,84,84)");
+    check(palette.has_milestone && palette.milestone == (Rgb{99, 99, 99}),
+          "view style: stock Milestone diamond is the start colour (99,99,99)");
+    check(palette.has_progress && palette.progress == (Rgb{59, 135, 212}),
+          "view style: stock Progress bar is (59,135,212)");
+    check(!palette.has_critical,
+          "view style: a stock project defines no critical-specific bar style");
+    check(!palette.has_summary_critical,
+          "view style: a stock project defines no summary-critical bar style");
+    check(!palette.has_finished,
+          "view style: a stock project defines no finished bar style");
 }
 
 void check_corpus_fixture() {
@@ -159,6 +182,31 @@ void check_corpus_fixture() {
         style.text[static_cast<std::size_t>(TextStyleItem::project_summary)];
     check(project_summary.has_colour && project_summary.colour == (Rgb{0, 0, 128}),
           "view style: PROJECT_A's project summary colour is recorded navy");
+
+    // PROJECT_A's own bar palette: the 10 active styles it keeps, with the
+    // colours the clean capture shows (navy summaries, red critical bars,
+    // dark-blue noncritical bars, green progress).  The file has no light-red
+    // "Critical" bar in use: the capture contains zero (247,138,136) pixels.
+    const app::BarPalette palette = app::bar_palette_from(style);
+    check(palette.decoded, "view style: PROJECT_A's bar palette decodes");
+    check(palette.has_normal && palette.normal == (Rgb{0, 32, 96}),
+          "view style: PROJECT_A's noncritical bar is (0,32,96)");
+    check(palette.has_critical && palette.critical == (Rgb{255, 0, 0}),
+          "view style: PROJECT_A's critical bar is (255,0,0)");
+    check(palette.has_summary && palette.summary == (Rgb{0, 0, 128}),
+          "view style: PROJECT_A's summary bar is (0,0,128)");
+    check(palette.has_summary_critical &&
+              palette.summary_critical == (Rgb{255, 0, 0}),
+          "view style: PROJECT_A's critical summary bar is (255,0,0)");
+    check(palette.has_milestone && palette.milestone == (Rgb{255, 0, 0}),
+          "view style: PROJECT_A's milestone diamond is (255,0,0)");
+    check(palette.has_project_summary &&
+              palette.project_summary == (Rgb{0, 0, 128}),
+          "view style: PROJECT_A's project summary bar is (0,0,128)");
+    check(palette.has_progress && palette.progress == (Rgb{0, 176, 80}),
+          "view style: PROJECT_A's progress fill is (0,176,80)");
+    check(palette.has_finished && palette.finished == (Rgb{0, 176, 80}),
+          "view style: PROJECT_A's finished fill is (0,176,80)");
 }
 
 void test_refusals() {

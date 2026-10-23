@@ -216,6 +216,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // PlanDocument::load() replaces in place.
     sheet_model_.set_gantt_style(&doc_.gantt_style());
     build_central_widget();
+    // Wave 26 (W26-3.2): the same stable pointer for the Gantt's bar palette.
+    // GanttCanvas::set_layout() re-reads it on every rebuild.
+    gantt_canvas_->set_gantt_style(&doc_.gantt_style());
     build_menus();
     build_quick_access();
     // The File tab opens the backstage shell (operator decision 2).

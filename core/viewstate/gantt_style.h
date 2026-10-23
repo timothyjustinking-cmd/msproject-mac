@@ -116,10 +116,40 @@ struct TextStyle {
 
 // The decoded style record.  `decoded` is true only when parse_gantt_style()
 // validated the measured minimum size and every record it reads.
+// One Gantt bar style of the active view.  The field layout is MPXJ's
+// GanttBarStyleFactory14 and was verified by wave 26's controlled saves
+// (GanttBarStyleEdit changed exactly the summary and milestone records'
+// middle/start/end colours and start shape in build/w26/g3/trees4).
+struct BarStyle {
+    std::string name;
+    std::uint16_t id = 0;
+    std::uint16_t row = 0;
+    std::uint8_t middle_shape = 0;    // GanttBarMiddleShape (MPXJ's naming)
+    std::uint8_t middle_pattern = 0;  // ChartPattern
+    bool has_middle_colour = false;
+    Rgb middle_colour{};
+    std::uint8_t start_shape = 0;     // byte % 25
+    std::uint8_t start_type = 0;      // byte / 25
+    bool has_start_colour = false;
+    Rgb start_colour{};
+    std::uint8_t end_shape = 0;
+    std::uint8_t end_type = 0;
+    bool has_end_colour = false;
+    Rgb end_colour{};
+    std::uint64_t show_for = 0;       // GanttBarShowForTasks bits
+    std::uint64_t show_for_not = 0;
+    std::uint32_t left_text = 0;
+    std::uint32_t right_text = 0;
+    std::uint32_t top_text = 0;
+    std::uint32_t bottom_text = 0;
+    std::uint32_t inside_text = 0;
+};
+
 struct GanttStyle {
     bool decoded = false;
     std::vector<FontBase> fonts;
     std::array<TextStyle, kTextStyleItemCount> text{};
+    std::vector<BarStyle> bars;
     std::vector<std::string> warnings;
 };
 
@@ -132,6 +162,15 @@ inline constexpr std::size_t kGanttFontStyleStride = 32;
 inline constexpr std::size_t kGanttFontBaseHeaderSize = 2;
 inline constexpr std::size_t kGanttFontBaseRecordSize = 68;
 inline constexpr std::size_t kGanttFontBaseNameBytes = 64;
+
+// The bar style array, measured from the same record:
+//   +2243 u8   style count (MPPUtility.getByte)
+//   +2255      first 195-byte record
+inline constexpr std::size_t kGanttBarCountOffset = 2243;
+inline constexpr std::size_t kGanttBarFirstOffset = 2255;
+inline constexpr std::size_t kGanttBarStride = 195;
+inline constexpr std::size_t kGanttBarNameOffset = 91;   // NUL-terminated UTF-16
+inline constexpr std::size_t kGanttBarNameBytes = kGanttBarStride - kGanttBarNameOffset;
 
 // Decodes the `214/Props` FONT_BASES payload (record id 0x03400000).  The
 // table's declared count must fit the payload; a count that does not is a

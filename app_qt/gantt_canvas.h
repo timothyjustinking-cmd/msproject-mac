@@ -29,6 +29,8 @@
 #include <vector>
 
 #include "gantt.h"
+#include "gantt_style.h"
+#include "view_style.h"
 
 class QPainter;
 class QPaintEvent;
@@ -65,6 +67,13 @@ class GanttCanvas final : public QWidget {
     // The ribbon action is still unimplemented, so the shell passes nothing.
     void set_critical_highlight(bool enabled);
     bool critical_highlight() const noexcept { return critical_highlight_; }
+
+    // Wave 26 (W26-3.2): the loaded file's Gantt style record.  When it
+    // decodes, the bars use the FILE's bar-style colours and the completion
+    // fill uses its Progress/Finished style; otherwise the wave-25 measured
+    // stock palette stands.  The pointer must outlive the canvas.
+    void set_gantt_style(const msproject::viewstate::GanttStyle* style);
+    bool uses_file_style() const noexcept { return palette_.decoded; }
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -103,11 +112,15 @@ class GanttCanvas final : public QWidget {
     std::vector<WeekCell> visible_weeks(double x0, double x1) const;
     void paint_header(QPainter& painter, const std::vector<DayCell>& days,
                       const std::vector<WeekCell>& weeks, int canvas_width) const;
+    // Wave 26 (W26-3.2): the fill colour for a bar, file palette first.
+    QColor bar_colour_for(const core::gantt::Bar& bar) const;
 
     core::gantt::GanttLayout layout_;
     std::uint32_t selected_uid_ = 0;
     bool shading_ = true;
     bool critical_highlight_ = false;  // Project's default: Critical Tasks OFF
+    const msproject::viewstate::GanttStyle* style_ = nullptr;
+    app::BarPalette palette_;  // cached from style_ by set_gantt_style()
 };
 
 }  // namespace msqt

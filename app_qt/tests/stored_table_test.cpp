@@ -56,12 +56,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "cfb_writer.h"
 #include "entry_columns.h"
+#include "gantt_canvas.h"
 #include "main_window.h"
 #include "reader_adapter.h"
 #include "shell_style.h"
@@ -801,6 +803,34 @@ void case_corpus(const QString& corpus) {
         check(font.italic(), "project_a row 3 (a milestone) is italic as Project shows");
         check(colour == QColor(0xff, 0x00, 0x00),
               "project_a row 3 (a critical milestone) is Project's stored red 0xFF0000");
+    }
+
+    // Wave 26 (W26-3.2): the Gantt bars use PROJECT_A's own 10-style palette.
+    // The colours asserted are the decoded ones the clean capture shows:
+    // noncritical (0,32,96), critical (255,0,0), summary (0,0,128); the
+    // capture contains 0 pixels of the file's unused light-red "Critical"
+    // style, so no bar may take it.
+    if (window.gantt_view() != nullptr) {
+        msqt::GanttCanvas* gantt = window.gantt_view();
+        check(gantt->uses_file_style(), "the corpus Gantt uses the file's bar palette");
+        std::set<QRgb> bar_colours;
+        bool project_row_red = false;
+        for (std::size_t index = 0; index < gantt->layout().bars.size(); ++index) {
+            const QRgb rgb = gantt->bar_colour(index).rgb();
+            bar_colours.insert(rgb);
+            if (gantt->layout().bars[index].task_uid == 0) {
+                project_row_red = rgb == qRgb(0xff, 0x00, 0x00);
+            }
+        }
+        check(bar_colours.count(qRgb(0x00, 0x20, 0x60)) != 0,
+              "project_a's noncritical bars are (0,32,96)");
+        check(bar_colours.count(qRgb(0xff, 0x00, 0x00)) != 0,
+              "project_a's critical bars are (255,0,0)");
+        check(bar_colours.count(qRgb(0x00, 0x00, 0x80)) != 0,
+              "project_a's summary bars are (0,0,128)");
+        check(bar_colours.count(qRgb(0xf7, 0x8a, 0x88)) == 0,
+              "project_a never paints the unused light-red 'Critical' bar style");
+        check(project_row_red, "project_a's project-summary bar is its red summary style");
     }
 
     // EVERY displayed row: % Complete is the task's stored percent, and Pre/Suc

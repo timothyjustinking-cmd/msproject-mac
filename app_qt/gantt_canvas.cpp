@@ -61,6 +61,9 @@ std::string week_label(core::sched::date32 monday) {
 // its critical flag: Project's default has Critical Tasks highlighting OFF, so
 // a critical auto task is painted like any auto task.  kBarCritical is only for
 // the highlight-ON state (the measured (247,138,136)).
+//
+// Wave 26 (W26-3.2): this is the STOCK fallback.  A file whose Gantt style
+// record decodes uses GanttCanvas::bar_colour_for()'s file palette instead.
 QColor bar_color(const core::gantt::Bar& bar, bool critical_highlight) {
     switch (bar.kind) {
         case core::gantt::BarKind::summary:
@@ -77,13 +80,74 @@ QColor bar_color(const core::gantt::Bar& bar, bool critical_highlight) {
     return bar.critical && critical_highlight ? kBarCritical : kBarTask;
 }
 
+QColor to_qcolor(const msproject::viewstate::Rgb& colour) {
+    return QColor(colour.red, colour.green, colour.blue);
+}
+
 }  // namespace
 
 QColor GanttCanvas::bar_colour(std::size_t index) const {
     if (index >= layout_.bars.size()) {
         return {};
     }
-    return bar_color(layout_.bars[index], critical_highlight_);
+    return bar_colour_for(layout_.bars[index]);
+}
+
+QColor GanttCanvas::bar_colour_for(const core::gantt::Bar& bar) const {
+    // Critical Tasks highlighting ON keeps its wave-25 measured override: an
+    // auto critical bar is red along its whole length whatever the file says.
+    if (critical_highlight_ && bar.critical &&
+        bar.kind == core::gantt::BarKind::normal) {
+        return kBarCritical;
+    }
+    if (palette_.decoded) {
+        switch (bar.kind) {
+            case core::gantt::BarKind::summary:
+                // The project row is a summary too.  Its synthetic TaskRow is
+                // not a live task (uid 0), so the reader carries no critical
+                // flag for it; PROJECT_A's clean capture shows its project bar
+                // in the file's summary+critical red, so that style is used
+                // when the file defines one.  A critical summary uses the same
+                // style; a noncritical summary the Summary style.
+                if (bar.task_uid == 0) {
+                    if (palette_.has_summary_critical) {
+                        return to_qcolor(palette_.summary_critical);
+                    }
+                    if (palette_.has_project_summary) {
+                        return to_qcolor(palette_.project_summary);
+                    }
+                } else if (bar.critical && palette_.has_summary_critical) {
+                    return to_qcolor(palette_.summary_critical);
+                }
+                if (palette_.has_summary) {
+                    return to_qcolor(palette_.summary);
+                }
+                break;
+            case core::gantt::BarKind::milestone:
+                if (palette_.has_milestone) {
+                    return to_qcolor(palette_.milestone);
+                }
+                break;
+            case core::gantt::BarKind::normal:
+                if (bar.manual && palette_.has_manual_normal) {
+                    return to_qcolor(palette_.manual_normal);
+                }
+                if (bar.critical && palette_.has_critical) {
+                    return to_qcolor(palette_.critical);
+                }
+                if (palette_.has_normal) {
+                    return to_qcolor(palette_.normal);
+                }
+                break;
+        }
+    }
+    return bar_color(bar, critical_highlight_);
+}
+
+void GanttCanvas::set_gantt_style(const msproject::viewstate::GanttStyle* style) {
+    style_ = style;
+    palette_ = style != nullptr ? app::bar_palette_from(*style) : app::BarPalette{};
+    update();
 }
 
 GanttCanvas::GanttCanvas(QWidget* parent) : QWidget(parent) {
@@ -96,6 +160,10 @@ GanttCanvas::GanttCanvas(QWidget* parent) : QWidget(parent) {
 
 void GanttCanvas::set_layout(const core::gantt::GanttLayout& layout) {
     layout_ = layout;
+    // Wave 26 (W26-3.2): PlanDocument replaces its decoded style in place on
+    // every load, so re-reading the palette here keeps the canvas in step
+    // without the shell calling both setters at every layout change.
+    palette_ = style_ != nullptr ? app::bar_palette_from(*style_) : app::BarPalette{};
     update();
 }
 
@@ -313,8 +381,9 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
     // Bars, completion fills, summary caps and milestones, all from the layout.
     for (const core::gantt::Bar& bar : layout_.bars) {
         const QRectF bar_rect(bar.rect.x, bar.rect.y + body_top, bar.rect.w, bar.rect.h);
+        const QColor base_colour = bar_colour_for(bar);
         painter.setPen(QPen(kBarOutline, 1.0));
-        painter.setBrush(bar_color(bar, critical_highlight_));
+        painter.setBrush(base_colour);
 
         QPolygonF diamond;
         if (bar.shape == core::gantt::BarShape::diamond) {
@@ -328,7 +397,7 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
                 // The model leaves the cap points at the origin when a bar is too
                 // short for a cap; check the width before drawing a degenerate
                 // triangle at (0, 0).
-                painter.setBrush(bar_color(bar, critical_highlight_));
+                painter.setBrush(base_colour);
                 if (bar.cap_left[1].x > bar.cap_left[0].x) {
                     QPolygonF cap;
                     for (const core::gantt::Point& point : bar.cap_left) {
@@ -344,15 +413,33 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
                     painter.drawPolygon(cap);
                 }
             } else if (bar.fill.w > 0.0 && !(bar.critical && critical_highlight_)) {
-                // The completion fill is the normal bar's darker blue.  With
-                // Critical Tasks highlighting ON it must NOT cover a critical
-                // bar (Project keeps it red along its whole length, even at
-                // 100 % complete; wave 21 decision 4).  With highlighting OFF
-                // -- Project's default -- a critical bar is an ordinary bar and
-                // takes the fill like any other.
-                painter.fillRect(
-                    QRectF(bar.fill.x, bar.fill.y + body_top, bar.fill.w, bar.fill.h),
-                    kBarComplete);
+                // The completion fill.  Wave 26 (W26-3.2): the FILE's Progress
+                // style supplies the colour, and the Finished style takes over
+                // when the bar is complete; a stock fallback keeps the wave-21
+                // blue.  A summary's progress is the thin line along the top,
+                // which is how the capture shows it; a task's is the filled
+                // portion.  With Critical Tasks highlighting ON the fill is
+                // suppressed so a critical bar stays red along its whole
+                // length (wave 21 decision 4).
+                QColor fill_colour = kBarComplete;
+                if (palette_.decoded && palette_.has_progress) {
+                    fill_colour = to_qcolor(palette_.progress);
+                }
+                const bool complete = bar.fill.w >= bar.rect.w - 0.5;
+                if (palette_.decoded && complete && palette_.has_finished) {
+                    fill_colour = to_qcolor(palette_.finished);
+                }
+                if (bar.kind == core::gantt::BarKind::summary) {
+                    const double line_height = std::min(3.0, bar.rect.h);
+                    painter.fillRect(
+                        QRectF(bar.fill.x, bar.fill.y + body_top, bar.fill.w,
+                               line_height),
+                        fill_colour);
+                } else {
+                    painter.fillRect(
+                        QRectF(bar.fill.x, bar.fill.y + body_top, bar.fill.w, bar.fill.h),
+                        fill_colour);
+                }
             }
         }
 
