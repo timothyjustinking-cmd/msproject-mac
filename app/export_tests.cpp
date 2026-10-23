@@ -229,6 +229,18 @@ void test_helpers() {
     check_text(app::export_subtitle(ReportKind::sheet, "", 1, 1),
                "Sheet report - 1 of 1 task", "a single task is singular");
 
+    // Wave 25 (W25-11/S14): uid 0 is the project-summary row, not a task.
+    core::view::RecordSet records(core::model::RecordType::Task);
+    records.add_row(0);  // the project row
+    records.add_row(5);
+    records.add_row(9);
+    check_size(app::task_row_count(records, {}), 2,
+               "the PDF task count excludes the project-summary row");
+    check_size(app::task_row_count(records, {0, 1}), 1,
+               "a filtered row list is counted the same way");
+    check_size(app::task_row_count(records, {0}), 0,
+               "the project row alone is no task");
+
     check_text(app::export_footer(prefs, ""), app::preferences_summary(prefs),
                "the footer without a selection is the preference summary");
     const std::string footer = app::export_footer(prefs, "Two");

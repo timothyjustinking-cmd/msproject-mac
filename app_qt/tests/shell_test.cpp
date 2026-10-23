@@ -123,9 +123,10 @@ int main(int argc, char** argv) {
               "the table model shows the 9 Entry columns (the gutter is the frozen row "
               "header, wave 18 Q3)");
         // Wave 24 (W24-2): this file hides the project row, so row 0 is a real
-        // task and every row is editable.  (The project row's own refusal is
-        // pinned in qt_task_order_corpus / save_reopen, which use a file that
-        // stores the row shown.)
+        // task and every row is editable.  Wave 25 (W25-11/S14): the project
+        // row's own refusal is pinned in qt_uid_routing (a file that stores the
+        // row shown), not here, in qt_task_order_corpus or in save_reopen
+        // (both use files that hide it).
         const int name_column =
             window.sheet_table_model()->display_column_for_field(app::name_field_id());
         const QModelIndex task_cell = window.sheet_view()->model()->index(0, name_column);

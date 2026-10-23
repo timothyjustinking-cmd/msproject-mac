@@ -482,7 +482,10 @@ int run(const std::string& path, const std::string& compare_path, const std::str
     std::size_t summary_rows = 0;
     std::size_t actual_starts = 0;
     std::size_t actual_finishes = 0;
-    std::size_t flag10_disagreements = 0;
+    // Wave 25 (W25-11/S13): the scheduled Summary flag vs the stored one.  This
+    // was mis-renamed flag10_disagreements by wave 24's blanket rename; it has
+    // nothing to do with Task.Flag10.
+    std::size_t summary_disagreements = 0;
     for (const core::plan::PlanTaskResult& task : result.tasks) {
         const auto found = by_uid.find(task.uid);
         if (found == by_uid.end()) {
@@ -499,7 +502,7 @@ int run(const std::string& path, const std::string& compare_path, const std::str
             ++summary_rows;
         }
         if (is_summary != task.summary) {
-            ++flag10_disagreements;
+            ++summary_disagreements;
         }
         if (task.start_is_actual) {
             ++actual_starts;
@@ -591,8 +594,8 @@ int run(const std::string& path, const std::string& compare_path, const std::str
               << ", missing " << missing << ", summaries " << summary_rows
               << ", rows with an actual start " << actual_starts << ", with an actual finish "
               << actual_finishes << '\n';
-    if (flag10_disagreements != 0) {
-        std::cout << "  note: " << flag10_disagreements
+    if (summary_disagreements != 0) {
+        std::cout << "  note: " << summary_disagreements
                   << " rows disagree with the stored Summary flag\n";
     }
     print_table("  all rows:", fields, false);
