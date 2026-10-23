@@ -42,6 +42,12 @@ env:
   # to it; change it here and the three jobs change together.
   QT_VERSION: "6.5.3"
 
+concurrency:
+  # One run per ref: repeated dispatches cancel the superseded run instead of
+  # stacking (every superseded run that fails emails the operator).
+  group: qt-shell-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-qt:
     name: ${{ matrix.name }}
