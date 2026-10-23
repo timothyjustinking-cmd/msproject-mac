@@ -410,3 +410,26 @@ table's own arithmetic (the old ~83% was inconsistent with its rows).
 2. Decision 14/15 dialog inventory with generated dialog backlog rows.
 3. Dark custom-painted palette once the operator's capture exists; then the
    Timeline/Details split.
+
+## Wave 21 in progress (2026-10-23 ~15:40)
+
+Brief: `docs/handoff/wave21-brief.md`.  `main` = **22a765a**, clean; wave 20
+closed (`docs/handoff/wave20-complete.md`).
+
+**Scope**: build-order step 3 (decision 7, stored-table rendering) is the wave's
+main deliverable.  Two independent lanes ride with it.  NOT in this wave:
+dialogs (14/15), split view (16), dark custom surfaces (10) -- those are wave 22.
+
+| lane | owns | goal |
+|---|---|---|
+| Q6 | `app/view_model.*`, `app/document.*` (read), `app/CMakeLists.txt`, `app_qt/**` | the loaded task table's column set/order/titles/widths come from `214/CTable`; Entry only for a new/empty project |
+| E6 | `core/mppwrite/**`, `core/plan/**` (only if the MSO rule is implemented), `tests/mppwrite_*`, `tests/engine_diff_tests.cpp` (dump) | mirror CFB slack tolerance in `mppwrite::CfbDocument::parse` so `--dump sf248` loads with a warning; decide `constraint-mso` |
+| C6 | `.github/workflows/qt.yml` | parallel Linux Make build; no dispatch |
+
+**Gates**: root ctest 50/50 (serial, `-E plan_recalc`), M2 332/332, engine 7/8,
+app_qt 11/11, parity 9/9, fixtures OK.  Local Qt is in
+`build/Qt/6.5.3/6.5.3/msvc2019_64`; builds serial, redirected to a file.
+
+**Coordinator**: verify each lane's tests, commit each separately, then ONE
+dispatch for the wave (Linux should be faster); the wave gate goes in
+`docs/handoff/wave21-complete.md`.
