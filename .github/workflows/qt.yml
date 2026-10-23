@@ -155,6 +155,24 @@ jobs:
         shell: bash
         run: cmake --build build-qt --config Release
 
+      # A RUNNABLE Windows build, not only the render PNGs.  windeployqt copies
+      # the Qt DLLs and plugins next to the exe (and --compiler-runtime the MSVC
+      # runtime), so the zip runs on a machine with no Qt installed.  The macOS
+      # and Linux jobs still publish images only: a macOS .app bundle and an
+      # AppImage are packaging work (docs/ui-qt-port.md Q5), not a side effect.
+      - name: Package the Windows build
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp build-qt/msproject_qt.exe dist/
+          windeployqt --release --compiler-runtime --no-translations dist/msproject_qt.exe
+          # CMake ships its own zip writer, so the step does not depend on
+          # 7-Zip being on PATH on the runner image.
+          cmake -E tar cf msproject-windows.zip --format=zip dist
+          ls -l dist/msproject_qt.exe msproject-windows.zip
+
       # The tests set QT_QPA_PLATFORM=offscreen and QT_SCALE_FACTOR=1 themselves
       # (${CMAKE_COMMAND} -E env in app_qt/CMakeLists.txt).  Deliberately not
       # repeated here: a test that forgot them must fail, not inherit a pass.
@@ -178,6 +196,14 @@ jobs:
       # if-no-files-found is per step, not per path, so "error" covers the whole
       # set; on a configure failure this step is red too, which is the honest
       # state of the artifact.
+      - name: Upload the Windows build
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: msproject-windows-${{ github.sha }}
+          if-no-files-found: warn
+          path: msproject-windows.zip
+
       - name: Upload the 900x560 and 1920x1032 renders
         if: always()
         uses: actions/upload-artifact@v4
