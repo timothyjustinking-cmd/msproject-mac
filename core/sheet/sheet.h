@@ -536,6 +536,9 @@ class SheetModel {
     int outline_level(std::size_t row) const noexcept;
     bool is_summary(std::size_t row) const noexcept;
     bool has_children(std::size_t row) const noexcept;
+    // Wave 23 (B-11): the row's Milestone flag, for Project's stock italic
+    // milestone text style.
+    bool is_milestone(std::size_t row) const noexcept;
     /* Per-row override for producers that do not supply OutlineLevel/Summary. */
     void set_outline_level(std::size_t row, int level, bool summary);
     void clear_outline_level(std::size_t row);
@@ -842,6 +845,7 @@ class SheetModel {
 
     FieldId outline_level_field_ = 0;
     FieldId summary_field_ = 0;
+    FieldId milestone_field_ = 0;
     FieldId critical_field_ = 0;
     FieldId finish_field_ = 0;
     FieldId percent_field_ = 0;
