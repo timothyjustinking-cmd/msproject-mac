@@ -182,14 +182,14 @@ Gantt Chart Format	1	Format	button	Gridlines	0	format.gridlines	0	-
 Gantt Chart Format	1	Format	button	Layout	0	format.layout	0	-
 Gantt Chart Format	1	Columns	group	-	-	-	-	-
 Gantt Chart Format	1	Columns	button	Insert Column	0	columns.insert	0	-
-Gantt Chart Format	1	Columns	small	align left	0	-	0	-
-Gantt Chart Format	1	Columns	small	align centre	0	-	0	-
-Gantt Chart Format	1	Columns	small	align right	0	-	0	-
-Gantt Chart Format	1	Columns	small	wrap text	0	-	0	-
-Gantt Chart Format	1	Columns	small	Column Settings	0	-	1	-
-Gantt Chart Format	1	Columns	small	Custom Fields	1	-	2	-
+Gantt Chart Format	1	Columns	small	align left	0	columns.align_left	0	-
+Gantt Chart Format	1	Columns	small	align centre	0	columns.align_centre	0	-
+Gantt Chart Format	1	Columns	small	align right	0	columns.align_right	0	-
+Gantt Chart Format	1	Columns	small	wrap text	0	columns.wrap	0	-
+Gantt Chart Format	1	Columns	small	Column Settings	0	columns.settings	1	-
+Gantt Chart Format	1	Columns	small	Custom Fields	1	properties.custom_fields	2	-
 Gantt Chart Format	1	Bar Styles	group	-	-	-	-	-
-Gantt Chart Format	1	Bar Styles	split	Format	0	-	0	-
+Gantt Chart Format	1	Bar Styles	split	Format	0	bar_styles.format	0	-
 Gantt Chart Format	1	Bar Styles	checkbox	Critical Tasks	1	-	0	unchecked
 Gantt Chart Format	1	Bar Styles	checkbox	Slack	0	-	1	unchecked
 Gantt Chart Format	1	Bar Styles	checkbox	Late Tasks	0	-	2	unchecked
@@ -204,4 +204,4 @@ Gantt Chart Format	1	Show/Hide	checkbox	Outline Number	0	-	0	unchecked
 Gantt Chart Format	1	Show/Hide	checkbox	Project Summary Task	1	-	1	file
 Gantt Chart Format	1	Show/Hide	checkbox	Summary Tasks	0	-	2	checked
 Gantt Chart Format	1	Drawings	group	-	-	-	-	-
-Gantt Chart Format	1	Drawings	split	Drawing	0	-	0	-
+Gantt Chart Format	1	Drawings	split	Drawing	0	drawings.drawing	0	-

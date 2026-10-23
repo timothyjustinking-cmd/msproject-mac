@@ -468,26 +468,37 @@ const std::vector<TabSpec>& tab_specs() {
         format.title = "Gantt Chart Format";
         format.contextual = true;
         GroupSpec& format_group = add_group(format, "Format", 153);
-        large(format_group, "Text\nStyles", app::MenuAction::none, 48, 0);
-        large(format_group, "Gridlines", app::MenuAction::none, 48, 1);
-        large(format_group, "Layout", app::MenuAction::none, 44, 2);
+        large(format_group, "Text\nStyles", app::MenuAction::none, 48, 0, false,
+              "format.text_styles");
+        large(format_group, "Gridlines", app::MenuAction::none, 48, 1, false,
+              "format.gridlines");
+        large(format_group, "Layout", app::MenuAction::none, 44, 2, false, "format.layout");
         GroupSpec& columns = add_group(format, "Columns", 198);
-        large(columns, "Insert\nColumn", app::MenuAction::none, 56, 0);
-        small_cmd(columns, "align left", RibbonCommand::none, 24, 0, 1, false, true);
-        small_cmd(columns, "align centre", RibbonCommand::none, 24, 0, 2, false, true);
-        small_cmd(columns, "align right", RibbonCommand::none, 24, 0, 3, false, true);
-        small_cmd(columns, "wrap text", RibbonCommand::none, 24, 0, 4, false, true);
-        small(columns, "Column Settings", app::MenuAction::none, 102, 1, 1, false, 4);
-        small(columns, "Custom Fields", app::MenuAction::custom_fields, 102, 2, 1, true, 4);
+        large(columns, "Insert\nColumn", app::MenuAction::none, 56, 0, false, "columns.insert");
+        small_cmd(columns, "align left", RibbonCommand::none, 24, 0, 1, false, true,
+                  "columns.align_left");
+        small_cmd(columns, "align centre", RibbonCommand::none, 24, 0, 2, false, true,
+                  "columns.align_centre");
+        small_cmd(columns, "align right", RibbonCommand::none, 24, 0, 3, false, true,
+                  "columns.align_right");
+        small_cmd(columns, "wrap text", RibbonCommand::none, 24, 0, 4, false, true,
+                  "columns.wrap");
+        small(columns, "Column Settings", app::MenuAction::none, 102, 1, 1, false, 4, false,
+              "columns.settings");
+        small(columns, "Custom Fields", app::MenuAction::custom_fields, 102, 2, 1, true, 4, false,
+              "properties.custom_fields");
         GroupSpec& bar_styles = add_group(format, "Bar Styles", 307);
-        split(bar_styles, "Format", 50, 0, 0, 3);
+        split(bar_styles, "Format", 50, 0, 0, 3, "bar_styles.format");
         check(bar_styles, "Critical Tasks", RibbonCommand::toggle_critical_tasks, 96, 0, 1,
               true);
         check(bar_styles, "Slack", RibbonCommand::none, 96, 1, 1);
         check(bar_styles, "Late Tasks", RibbonCommand::none, 96, 2, 1);
-        large(bar_styles, "Task Path", app::MenuAction::none, 46, 2);
-        large(bar_styles, "Baseline", app::MenuAction::none, 46, 3);
-        large(bar_styles, "Slippage", app::MenuAction::none, 46, 4);
+        large(bar_styles, "Task Path", app::MenuAction::none, 46, 2, false,
+              "bar_styles.task_path");
+        large(bar_styles, "Baseline", app::MenuAction::none, 46, 3, false,
+              "bar_styles.baseline");
+        large(bar_styles, "Slippage", app::MenuAction::none, 46, 4, false,
+              "bar_styles.slippage");
         GroupSpec& style = add_group(format, "Gantt Chart Style", 933);
         gallery(style, 920, 0);
         launcher(style, "Gantt Chart Style");
@@ -497,7 +508,7 @@ const std::vector<TabSpec>& tab_specs() {
               true, -1);
         check(show_hide, "Summary Tasks", RibbonCommand::none, 150, 2, 0, false, 1);
         GroupSpec& drawings = add_group(format, "Drawings", 65);
-        split(drawings, "Drawing", 54, 0, 0, 3);
+        split(drawings, "Drawing", 54, 0, 0, 3, "drawings.drawing");
         tabs.push_back(std::move(format));
 
         return tabs;
