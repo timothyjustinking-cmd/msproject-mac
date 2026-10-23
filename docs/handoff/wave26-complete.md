@@ -510,7 +510,7 @@ pixels against them.
 | W26-4.3 | New page: Blank Project, New from existing, local Recent list, disabled online search with a note | **DONE** | commit `0102e8b`; gates `build/w26/gates-fb5d37c-W26-4.3.log` |
 | W26-4.4 | Open and Save As pages: Recent, This PC, Browse; OneDrive/SharePoint laid out and disabled | **DONE** | commit `50204c6`; gates `build/w26/gates-0102e8b-W26-4.4.log` |
 | W26-4.5 | Print page: copies, printer list, settings (dates, pages, orientation, paper), live preview through the shared print layout | **DONE** | commit `73da8b7`; gates `build/w26/gates-50204c6-W26-4.5.log` |
-| W26-4.6 | Options: the 11-page dialog; General and the Schedule new-task mode functional; every other control laid out and disabled with the exact tooltip | **DONE** | commit `PENDING`; gates `build/w26/gates-73da8b7-W26-4.6.log` |
+| W26-4.6 | Options: the 11-page dialog; General and the Schedule new-task mode functional; every other control laid out and disabled with the exact tooltip | **DONE** | commit `6cc5181`; gates `build/w26/gates-73da8b7-W26-4.6.log` |
 
 ### W26-4.1 detail -- the File tab and the rail
 
@@ -626,3 +626,5 @@ No new Critical or High finding in G4.  Deliberate notes:
   and cloud-store controls have no engine behind them and are laid out only.
 - The file dialogs are Qt's (`DontUseNativeDialog`), and the printer list comes
   from the host's QPrinterInfo; neither is a Microsoft surface.
+
+WAVE-26-G4-COMPLETE
