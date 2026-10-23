@@ -4,8 +4,12 @@
 
 #include <QApplication>
 #include <QColor>
+#include <QComboBox>
+#include <QCursor>
 #include <QFont>
 #include <QFontMetrics>
+#include <QHBoxLayout>
+#include <QMenu>
 #include <QModelIndex>
 #include <QPainter>
 #include <QPalette>
@@ -16,9 +20,13 @@
 #include <QString>
 #include <QStyle>
 #include <QStyleOptionViewItem>
+#include <QToolButton>
+#include <QWidget>
+#include <QWidgetAction>
 
 #include <algorithm>
 #include <cstddef>
+#include <utility>
 
 #include "entry_columns.h"
 #include "shell_style.h"
@@ -57,11 +65,123 @@ void paint_resize_grip(QPainter& painter, const QRect& rect) {
 SheetHeaderView::SheetHeaderView(Qt::Orientation orientation, QWidget* parent)
     : QHeaderView(orientation, parent) {
     setSectionsMovable(false);
-    setSectionsClickable(false);
+    setSectionsClickable(true);
     setHighlightSections(false);
     setStretchLastSection(false);
     setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     setFixedHeight(kSheetHeaderHeight);
+    // The product opens the column menu from the caption/arrow.
+    connect(this, &QHeaderView::sectionClicked, this,
+            [this](int logical_index) { show_column_menu(logical_index); });
+    setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        show_column_menu(sectionAt(pos));
+    });
+}
+
+void SheetHeaderView::set_column_command_handler(
+    std::function<void(const QString&, int)> handler) {
+    column_handler_ = std::move(handler);
+}
+
+QMenu* SheetHeaderView::build_column_menu(int logical_index) {
+    auto* menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("columnHeaderMenu"));
+
+    // The compact format mini-bar at the top of the menu: family, size, B/I/U
+    // and alignment.  The controls are laid out and editable; applying a font to
+    // a column is not wired yet (backlog), so they do not fake an edit.
+    auto* format_bar = new QWidget(menu);
+    format_bar->setObjectName(QStringLiteral("columnFormatBar"));
+    auto* bar_layout = new QHBoxLayout(format_bar);
+    bar_layout->setContentsMargins(6, 3, 6, 3);
+    bar_layout->setSpacing(3);
+    auto* family = new QComboBox(format_bar);
+    family->setObjectName(QStringLiteral("columnFontFamily"));
+    family->addItem(QStringLiteral("Arial"));
+    family->addItem(QStringLiteral("Calibri"));
+    family->setFixedWidth(96);
+    bar_layout->addWidget(family);
+    auto* size = new QComboBox(format_bar);
+    size->setObjectName(QStringLiteral("columnFontSize"));
+    for (int point = 8; point <= 24; ++point) {
+        size->addItem(QString::number(point));
+    }
+    size->setCurrentText(QStringLiteral("11"));
+    size->setFixedWidth(48);
+    bar_layout->addWidget(size);
+    for (const char* letter : {"B", "I", "U"}) {
+        auto* button = new QToolButton(format_bar);
+        button->setObjectName(QStringLiteral("columnFormatButton"));
+        button->setText(QString::fromLatin1(letter));
+        button->setCheckable(true);
+        button->setFixedSize(22, 22);
+        bar_layout->addWidget(button);
+    }
+    for (const char* align : {"L", "C", "R"}) {
+        auto* button = new QToolButton(format_bar);
+        button->setObjectName(QStringLiteral("columnAlignButton"));
+        button->setText(QString::fromLatin1(align));
+        button->setCheckable(true);
+        button->setFixedSize(22, 22);
+        bar_layout->addWidget(button);
+    }
+    bar_layout->addStretch(1);
+    auto* format_action = new QWidgetAction(menu);
+    format_action->setDefaultWidget(format_bar);
+    menu->addAction(format_action);
+
+    auto add_command = [this, menu, logical_index](const QString& text, const QString& command) {
+        QAction* action = menu->addAction(text);
+        const int column = logical_index;
+        if (command.isEmpty()) {
+            action->setEnabled(false);
+            action->setToolTip(QStringLiteral("not implemented in this port"));
+            return action;
+        }
+        connect(action, &QAction::triggered, this, [this, command, column](bool) {
+            if (column_handler_) {
+                column_handler_(command, column);
+            }
+        });
+        return action;
+    };
+    add_command(QStringLiteral("Cut"), QStringLiteral("cut"));
+    add_command(QStringLiteral("Copy"), QStringLiteral("copy"));
+    add_command(QStringLiteral("Paste"), QStringLiteral("paste"));
+    add_command(QStringLiteral("Paste Special..."), QString());
+    menu->addSeparator();
+    add_command(QStringLiteral("Wrap Text"), QString());
+    menu->addSeparator();
+    add_command(QStringLiteral("Insert Column"), QStringLiteral("insert_column"));
+    add_command(QStringLiteral("Hide Column"), QStringLiteral("hide_column"));
+    menu->addSeparator();
+    add_command(QStringLiteral("Font..."), QString());
+    add_command(QStringLiteral("Text Styles..."), QString());
+    menu->addSeparator();
+    add_command(QStringLiteral("Field Settings"), QString());
+    auto* custom = menu->addMenu(QStringLiteral("Custom Fields"));
+    for (const char* name : {"Text1", "Number1", "Date1"}) {
+        QAction* action = custom->addAction(QString::fromLatin1(name));
+        action->setEnabled(false);
+        action->setToolTip(QStringLiteral("not implemented in this port"));
+    }
+    auto* data_type = menu->addMenu(QStringLiteral("Data Type"));
+    for (const char* name : {"Text", "Number", "Date", "Duration", "Flag"}) {
+        QAction* action = data_type->addAction(QString::fromLatin1(name));
+        action->setEnabled(false);
+        action->setToolTip(QStringLiteral("not implemented in this port"));
+    }
+    return menu;
+}
+
+void SheetHeaderView::show_column_menu(int logical_index) {
+    if (logical_index < 0) {
+        return;
+    }
+    QMenu* menu = build_column_menu(logical_index);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->popup(QCursor::pos());
 }
 
 QSize SheetHeaderView::sizeHint() const { return QSize(120, kSheetHeaderHeight); }

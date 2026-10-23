@@ -59,10 +59,25 @@ class PlanDocument {
 
     bool has_document() const noexcept { return sheet_ != nullptr; }
 
+    // Forgets the open document (the File > New page).  The caller then builds an
+    // empty view; nothing is written.
+    void clear() { reset(); }
+
     // Re-derives the plan from the RecordSet (a cell edit, undo or a collapse),
     // the displayed row map (which a collapse or the filter changes) and the
     // Gantt.
     void rebuild_views(app::ZoomLevel zoom);
+
+    // Wave 20: applies the presentation preferences to the loaded format (the
+    // date style, through app::apply_preferences) and the sheet's formatter.  The
+    // caller then rebuilds the views at the preference's zoom.  A no-op without a
+    // document.
+    void apply_preferences(const app::Preferences& preferences);
+
+    // Wave 20 empty project: a Gantt whose axis starts at `today` (the week
+    // containing it at the weekly zoom), because a new project must open on the
+    // current week, not the engine's 1984 epoch.  No rows, no bars.
+    void build_empty_view(app::ZoomLevel zoom, core::sched::date32 today);
 
     // Wave 19: applies the pending Insert/Delete/Task Fields/Predecessors edits
     // to the loaded plan and rebuilds from the result.  `keep_uid` is selected

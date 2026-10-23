@@ -82,11 +82,25 @@ inline constexpr double kPixelsPerWeek = kPixelsPerDay * 7.0;  // 168
 // Chrome heights
 // ---------------------------------------------------------------------------
 
-inline constexpr int kRibbonTabHeight = 26;
-inline constexpr int kRibbonGroupHeight = 78;
+// Project 2021's measured chrome metrics (operator decision 4, wave 20):
+//   tab row ~30 px, ribbon content ~95 px, a 32x32 icon over a two-line label,
+//   group caption at the bottom, a 24 px quick-access strip before the title.
+inline constexpr int kRibbonTabHeight = 30;
+inline constexpr int kRibbonGroupHeight = 95;
 inline constexpr int kRibbonHeight = kRibbonTabHeight + kRibbonGroupHeight;
-inline constexpr int kTimelineHeight = 44;
+inline constexpr int kRibbonButtonHeight = 64;
+inline constexpr int kRibbonIconPx = 32;
+inline constexpr int kRibbonGroupLabelHeight = 14;
+inline constexpr int kQuickAccessHeight = 24;
+inline constexpr int kTimelineHeight = 54;
 inline constexpr int kStatusHeight = 24;
+// The information callout under the ribbon ("New tasks are created in Manually
+// Scheduled mode"), drawn only for a new/empty project.
+inline constexpr int kInfoCalloutHeight = 24;
+// The rotated view caption inside the chart pane, and the vertical TIMELINE
+// label at the left of the timeline strip.
+inline constexpr int kViewLabelWidth = 22;
+inline constexpr int kTimelineLabelWidth = 22;
 
 // ---------------------------------------------------------------------------
 // Colours (the measured reference values, docs/parity.md section 2.3)

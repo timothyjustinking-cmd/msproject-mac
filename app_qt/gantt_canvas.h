@@ -56,6 +56,8 @@ class GanttCanvas final : public QWidget {
     void set_selected_uid(std::uint32_t uid);
     // Working-day shading on/off (the preference; it never moves a bar).
     void set_shading(bool enabled);
+    // The current preference, for the preferences gate and the status line.
+    bool shading() const noexcept { return shading_; }
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;

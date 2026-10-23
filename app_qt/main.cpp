@@ -31,15 +31,18 @@
 
 #include <QApplication>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QPixmap>
 #include <QString>
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 
 #include "main_window.h"
+#include "preferences_store.h"
 #include "shell_style.h"
 
 namespace {
@@ -119,6 +122,12 @@ bool parse_options(int argc, char** argv, Options& out) {
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
+    // One QSettings domain on every platform.  On macOS this is the
+    // CFPreferences family NSUserDefaults uses; the stored payload and key are
+    // app::serialize_preferences()/app::kPreferencesDefaultsKey (see
+    // app_qt/preferences_store.h).
+    QCoreApplication::setOrganizationName(QStringLiteral("com.msprojectdecompile"));
+    QCoreApplication::setApplicationName(QStringLiteral("shell"));
     // Fusion style, one palette, one fixed body point size -- the same call the
     // offscreen test makes, so the two renders cannot drift.
     msqt::configure_application();
@@ -130,6 +139,22 @@ int main(int argc, char** argv) {
     }
 
     msqt::MainWindow window;
+    // Only the interactive window reads the user's preferences: --render is a
+    // deterministic test mode, and a developer's saved date/zoom choice must not
+    // reach a render or a parity artifact.
+    std::unique_ptr<msqt::PreferencesStore> preferences_store;
+    if (options.render_path.empty()) {
+        preferences_store = std::make_unique<msqt::PreferencesStore>();
+        app::Preferences initial = window.preferences();
+        if (preferences_store->load(initial)) {
+            window.apply_preferences(initial, false);
+        }
+        msqt::Theme initial_theme = window.theme();
+        if (preferences_store->load_theme(initial_theme)) {
+            window.set_theme(initial_theme, false);
+        }
+        window.set_preferences_store(preferences_store.get());
+    }
     if (!options.open_path.empty()) {
         QString error;
         const QString path = QString::fromLocal8Bit(options.open_path.c_str());

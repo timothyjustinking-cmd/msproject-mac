@@ -22,13 +22,18 @@
 #include <QTableView>
 #include <QWidget>
 
+#include <functional>
+
+class QMenu;
 class QPainter;
 class QPaintEvent;
 
 namespace msqt {
 
-// The sheet's column header: 42 px, white fill, dark caption, separators,
-// chevron and grip (docs/parity.md section 2.1/2.3).
+// Wave 20: the column header's arrow menu -- a compact format mini-bar
+// (font family/size, B/I/U, alignment) followed by the product's measured
+// command order (Cut/Copy/Paste, Wrap Text, Insert/Hide Column, Font/Text
+// Styles, Field Settings, Custom Fields, Data Type).
 class SheetHeaderView final : public QHeaderView {
   public:
     explicit SheetHeaderView(Qt::Orientation orientation, QWidget* parent = nullptr);
@@ -40,11 +45,18 @@ class SheetHeaderView final : public QHeaderView {
     // nine Entry titles.
     void set_model_titles(bool enabled) { model_titles_ = enabled; }
 
+    // The arrow menu for `logical_index`, built and returned (not exec'd) so the
+    // structural gate can inspect its items and mini format bar.
+    QMenu* build_column_menu(int logical_index);
+    void show_column_menu(int logical_index);
+    void set_column_command_handler(std::function<void(const QString&, int)> handler);
+
   protected:
     void paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const override;
 
   private:
     bool model_titles_ = false;
+    std::function<void(const QString&, int)> column_handler_;
 };
 
 // The row-number gutter: the view's vertical header, 60 px, frozen.  QTableView

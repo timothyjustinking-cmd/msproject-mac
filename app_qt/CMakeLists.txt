@@ -64,6 +64,11 @@ add_library(qt_shell STATIC
     timeline_strip.cpp
     dialogs.cpp
     print_page.cpp
+    preferences_store.cpp
+    shell_icons.cpp
+    view_label.cpp
+    backstage.cpp
+    theme.cpp
 )
 target_compile_features(qt_shell PUBLIC cxx_std_20)
 set_target_properties(qt_shell PROPERTIES CXX_EXTENSIONS OFF)
@@ -164,3 +169,72 @@ add_test(NAME qt_save_reopen
                  $<TARGET_FILE:qt_save_reopen_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
+
+# ===========================================================================
+# WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
+# the loaded Task Sheet's geometry; these gate the empty project, the chrome,
+# each dialog and the two grid view families.  All offscreen, fixed scale.
+# ===========================================================================
+
+# The empty project at 1920x1032 AND 900x560: current-week timescale (never the
+# 1984 epoch), the Entry header band, the timeline's Start/Finish block, the
+# status bar's four view buttons + zoom slider/percentage, the quick-access
+# toolbar, the rotated view caption, and ribbon groups/buttons with icons and
+# no clipped labels.  Writes qt-empty-1920.png / qt-empty-900.png under test-out.
+add_executable(qt_empty_state_tests tests/empty_state_test.cpp)
+target_link_libraries(qt_empty_state_tests PRIVATE qt_shell)
+qt_set_warnings(qt_empty_state_tests)
+
+add_test(NAME qt_empty_state
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_empty_state_tests> "${QT_TEST_OUT_DIR_CMAKE}")
+
+# The loaded project's chrome: document name in the title, painted row numbers,
+# quick-access toolbar, status-bar icons/percentage, rotated view caption, and
+# the callout hidden once a file is open.
+add_executable(qt_chrome_gate_tests tests/chrome_gate_test.cpp)
+target_link_libraries(qt_chrome_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_chrome_gate_tests)
+
+add_test(NAME qt_chrome_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_chrome_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# Resource Sheet + Task/Resource Usage: gutter, 42 px header, 22 px row pitch,
+# column set and measured column widths, period Day/Week/Month widths, and the
+# chart pane hidden in every grid view.
+add_executable(qt_view_gate_tests tests/view_gate_test.cpp)
+target_link_libraries(qt_view_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_view_gate_tests)
+
+add_test(NAME qt_view_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_view_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
+
+# Each dialog (Preferences, Table/Date Format, Custom Formula, Task Fields,
+# Predecessors, Filter): fixed size, margin/spacing contract, measured control
+# geometry, the OK/result path over app/, and Preferences persistence through
+# an explicit ini store under test-out (never the user's real settings).
+add_executable(qt_dialog_gate_tests tests/dialog_gate_test.cpp)
+target_link_libraries(qt_dialog_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_dialog_gate_tests)
+
+add_test(NAME qt_dialog_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_dialog_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# Copy/Cut/Paste through SheetModel: menu enablement, range paste as one undo
+# step, Cut as copy + a clearing transaction, single-cell fallback.
+add_executable(qt_clipboard_tests tests/clipboard_test.cpp)
+target_link_libraries(qt_clipboard_tests PRIVATE qt_shell)
+qt_set_warnings(qt_clipboard_tests)
+
+add_test(NAME qt_clipboard
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_clipboard_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")

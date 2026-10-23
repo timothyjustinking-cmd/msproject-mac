@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 
+#include "prefs.h"
 #include "sheet.h"
 
 namespace msqt {
@@ -61,6 +62,12 @@ class SheetTableModel final : public QAbstractTableModel {
     void set_display_rows(std::vector<std::size_t> rows, bool active);
 
     void set_commit_handler(CommitHandler handler);
+
+    // Wave 20: the preferences whose date/duration rendering the cells use
+    // (app::cell_text, app/prefs.h).  The pointer must outlive the adapter; the
+    // shell points it at its own app::Preferences member.  nullptr falls back to
+    // the sheet's own cell_text() (the wave-19 behaviour).
+    void set_preferences(const app::Preferences* preferences) { preferences_ = preferences; }
 
     core::sheet::SheetModel* sheet() const noexcept { return sheet_; }
 
@@ -90,6 +97,7 @@ class SheetTableModel final : public QAbstractTableModel {
     void report_commit(bool ok, const std::string& message);
 
     core::sheet::SheetModel* sheet_ = nullptr;
+    const app::Preferences* preferences_ = nullptr;
     bool generic_ = false;
     bool filter_active_ = false;
     std::vector<std::size_t> display_rows_;

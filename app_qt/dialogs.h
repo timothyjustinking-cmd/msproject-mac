@@ -1,31 +1,60 @@
-// app_qt/dialogs.h -- the wave-19 command dialogs, as Qt dialogs over the
+// app_qt/dialogs.h -- the shell's dialogs as fixed-geometry Qt widgets over the
 // portable app/ models.
 //
-// Every decision these dialogs make lives in app/ and is headless-tested there
-// (app/field_link_edits.h, app/filter_model.h); this file only builds controls,
-// reads their strings and calls those functions.  That is the fidelity contract
-// (docs/ui-qt-port.md section 2.4/2.5): one model, one behaviour, three shells.
+// Every decision a dialog makes lives in app/ and is headless-tested there
+// (app/field_link_edits.h, app/filter_model.h, app/document.h); this file only
+// builds controls, reads their strings and calls those functions.  That is the
+// fidelity contract (docs/ui-qt-port.md section 2.4/2.5): one model, one
+// behaviour, three shells.
 //
-//   * Task Fields...   -- app::task_field_specs / field_value_text /
-//                         make_task_field_edits (the six measured custom fields)
-//   * Predecessors...  -- app::predecessors_of / make_link_add / make_link_delete
-//   * Filter...        -- app::filter_fields / filter_operators / build_filter
+// WAVE 20 Q5 turns each dialog into a class so a per-screen gate can MEASURE it
+// before it is shown modally (app_qt/tests/dialog_gate_test.cpp).  The free
+// functions at the bottom keep the wave-19 call sites:
+//
+//   * Preferences...       -- app::Preferences (date/duration/zoom/shading)
+//   * Table Date Format... -- app::ViewStateEdits (214/CTable date byte and one
+//                             column replacement), written by app::Document::save
+//   * Custom Field Formula -- app::CustomFormulaEdit (114/Props), written by
+//                             app::Document::save
+//   * Task Fields...       -- app::task_field_specs / make_task_field_edits
+//   * Predecessors...      -- app::predecessors_of / make_link_add/delete
+//   * Filter...            -- app::filter_fields / filter_operators / build_filter
 //
 // All are plain QDialog/QMessageBox: no native panels, no Q_OBJECT (connections
 // are lambdas on Qt signals), so the target stays moc-free.
+//
+// GEOMETRY CONTRACT
+//   The constants in dialog_geometry are the dialog gate's asserted values:
+//   every dialog calls setFixedSize() with its Size, the outer layout uses
+//   kMargin/kSpacing, every form label is kLabelWidth wide, every form field is
+//   kFieldWidth x kControlHeight, and buttons are kButtonHeight tall.  The gate
+//   still measures the resulting widget tree; these are the design values it
+//   compares against, not guesses read back from one platform.
 #pragma once
 
+#include <QDialog>
 #include <QString>
 
 #include <cstdint>
 #include <string>
 #include <vector>
 
-#include "edit_model.h"
+#include "document.h"      // app::ViewStateEdits / CustomFormulaEdit
+#include "edit_model.h"    // app::StructuralEdit(s)
 #include "filter.h"
-#include "layout_model.h"
+#include "layout_model.h"  // app::PlanInput / TaskRow
 #include "sheet.h"
+#include "theme.h"
 
+class QCheckBox;
+class QComboBox;
+class QDialogButtonBox;
+class QFormLayout;
+class QLabel;
+class QLineEdit;
+class QListWidget;
+class QPushButton;
+class QSpinBox;
 class QWidget;
 
 namespace app {
@@ -34,23 +63,246 @@ struct FilterField;
 
 namespace msqt {
 
-// Edit > Task Fields...  Prefilled from `row`'s stored values.  On OK, `edits`
-// holds only the fields whose value changed (make_task_field_edits).  A parse
-// error keeps the dialog open and shows the field's message.
+// ---------------------------------------------------------------------------
+// The fixed geometry contract (see the header comment)
+// ---------------------------------------------------------------------------
+
+namespace dialog_geometry {
+
+inline constexpr int kMargin = 12;
+inline constexpr int kSpacing = 8;
+inline constexpr int kLabelWidth = 120;
+inline constexpr int kFieldWidth = 280;
+inline constexpr int kControlHeight = 24;
+inline constexpr int kCheckHeight = 22;
+inline constexpr int kButtonHeight = 26;
+
+// One size per dialog.  The heights leave explicit slack for a wrapped hint at
+// the widest fallback font; the gate also checks that no child escapes the
+// contents rectangle, so a too-small height is caught rather than hidden.
+struct DialogSize {
+    int width = 0;
+    int height = 0;
+};
+
+inline constexpr DialogSize kPreferencesSize{480, 360};
+inline constexpr DialogSize kTableDateFormatSize{500, 340};
+inline constexpr DialogSize kCustomFormulaSize{520, 280};
+inline constexpr DialogSize kTaskFieldsSize{480, 400};
+inline constexpr DialogSize kPredecessorsSize{640, 420};
+inline constexpr DialogSize kFilterSize{520, 300};
+
+}  // namespace dialog_geometry
+
+// ---------------------------------------------------------------------------
+// Preferences
+// ---------------------------------------------------------------------------
+
+class PreferencesDialog final : public QDialog {
+  public:
+    PreferencesDialog(const app::Preferences& current, Theme current_theme = Theme::light,
+                      QWidget* parent = nullptr);
+
+    // The values the controls show.  Read on OK by the shell, which applies and
+    // persists them through app::apply_preferences() + PreferencesStore.
+    app::Preferences preferences() const;
+    Theme theme() const;
+
+    // Accessors for the per-screen gate and for a caller that wants to preset a
+    // control (the tests set them; the dialog itself only reads them).
+    QComboBox* date_style_combo() const noexcept { return date_style_; }
+    QComboBox* duration_style_combo() const noexcept { return duration_style_; }
+    QComboBox* timescale_combo() const noexcept { return timescale_; }
+    QCheckBox* shading_check() const noexcept { return shading_; }
+    QComboBox* theme_combo() const noexcept { return theme_combo_; }
+
+  private:
+    app::Preferences original_;
+    Theme original_theme_ = Theme::light;
+    QComboBox* date_style_ = nullptr;
+    QComboBox* duration_style_ = nullptr;
+    QComboBox* timescale_ = nullptr;
+    QCheckBox* shading_ = nullptr;
+    QComboBox* theme_combo_ = nullptr;
+};
+
+// Applies on OK: shows the dialog and writes the chosen preferences to `prefs`.
+bool edit_preferences(QWidget* parent, app::Preferences* prefs);
+
+// ---------------------------------------------------------------------------
+// Table / Date Format (214/CTable through app::Document::save)
+// ---------------------------------------------------------------------------
+
+class TableDateFormatDialog final : public QDialog {
+  public:
+    explicit TableDateFormatDialog(const app::ViewStateEdits& current,
+                                   QWidget* parent = nullptr);
+
+    // The request the controls describe.  Only valid after accept() succeeded;
+    // `ok()` says whether it did.
+    const app::ViewStateEdits& edits() const noexcept { return edits_; }
+    bool ok() const noexcept { return ok_; }
+
+    // QDialog::accept is virtual: this validates the column fields and keeps the
+    // dialog open (with a message) when they are malformed.
+    void accept() override;
+
+    QComboBox* date_format_combo() const noexcept { return date_format_; }
+    QCheckBox* replace_column_check() const noexcept { return replace_column_; }
+    QSpinBox* column_index_spin() const noexcept { return column_index_; }
+    QLineEdit* field_id_edit() const noexcept { return field_id_; }
+    QLineEdit* title_edit() const noexcept { return title_; }
+
+  private:
+    void update_enabled();
+    app::ViewStateEdits current_;
+    app::ViewStateEdits edits_;
+    bool ok_ = false;
+    QComboBox* date_format_ = nullptr;
+    QCheckBox* replace_column_ = nullptr;
+    QSpinBox* column_index_ = nullptr;
+    QLineEdit* field_id_ = nullptr;
+    QLineEdit* title_ = nullptr;
+};
+
+// Shows the dialog; on OK writes the request to `out` and returns true.
+bool edit_table_date_format(QWidget* parent, const app::ViewStateEdits& current,
+                            app::ViewStateEdits* out);
+
+// ---------------------------------------------------------------------------
+// Custom Field Formula (114/Props through app::Document::save)
+// ---------------------------------------------------------------------------
+
+class CustomFormulaDialog final : public QDialog {
+  public:
+    explicit CustomFormulaDialog(const app::CustomFormulaEdit& current,
+                                 QWidget* parent = nullptr);
+
+    app::CustomFormulaEdit result() const { return result_; }
+    bool accepted_result() const noexcept { return accepted_; }
+
+    void accept() override;
+
+    QComboBox* field_combo() const noexcept { return field_; }
+    QLineEdit* formula_edit() const noexcept { return formula_; }
+    QPushButton* clear_button() const noexcept { return clear_; }
+
+  private:
+    app::CustomFormulaEdit result_;
+    bool accepted_ = false;
+    QComboBox* field_ = nullptr;
+    QLineEdit* formula_ = nullptr;
+    QPushButton* clear_ = nullptr;
+};
+
+// Shows the dialog; on OK writes the request (set or clear) to `out`.
+bool edit_custom_formula(QWidget* parent, const app::CustomFormulaEdit& current,
+                         app::CustomFormulaEdit* out);
+
+// ---------------------------------------------------------------------------
+// Task Fields
+// ---------------------------------------------------------------------------
+
+class TaskFieldsDialog final : public QDialog {
+  public:
+    TaskFieldsDialog(const app::TaskRow& row, const core::sheet::SheetFormat& format,
+                     QWidget* parent = nullptr);
+
+    // Only the fields whose value changed; valid after accept() succeeded.
+    const std::vector<app::StructuralEdit>& edits() const noexcept { return edits_; }
+    // The six value controls, in app::task_field_specs() order (the gate fills
+    // one and proves the accept path; the dialog itself only reads them).
+    const std::vector<QLineEdit*>& inputs() const noexcept { return inputs_; }
+
+    void accept() override;
+
+  private:
+    const app::TaskRow& row_;
+    core::sheet::SheetFormat format_;
+    std::vector<app::StructuralEdit> edits_;
+    std::vector<QLineEdit*> inputs_;
+};
+
 bool edit_task_fields(QWidget* parent, const app::TaskRow& row,
                       const core::sheet::SheetFormat& format,
                       std::vector<app::StructuralEdit>& edits, QString* error);
 
-// Edit > Predecessors...  `edits` is the current pending stack; the dialog works
-// on a copy and assigns it to `out_edits` only when the user accepts, so a
-// cancelled dialog queues nothing.  `loaded` is the file baseline the display
-// plan is rebuilt from after each pending add/delete.
+// ---------------------------------------------------------------------------
+// Predecessors
+// ---------------------------------------------------------------------------
+
+class PredecessorsDialog final : public QDialog {
+  public:
+    PredecessorsDialog(const app::PlanInput& loaded, const app::StructuralEdits& edits,
+                       std::uint32_t successor_uid, QWidget* parent = nullptr);
+
+    // The pending stack after the user's add/delete operations (a copy of the
+    // incoming stack until one is made).
+    const app::StructuralEdits& pending_edits() const noexcept { return local_; }
+
+    // Accessors for the per-screen gate.
+    QListWidget* list() const noexcept { return list_; }
+    QPushButton* delete_button() const noexcept { return delete_button_; }
+    QComboBox* predecessor_combo() const noexcept { return predecessor_; }
+    QComboBox* type_combo() const noexcept { return type_; }
+    QLineEdit* lag_edit() const noexcept { return lag_; }
+    QPushButton* add_button() const noexcept { return add_button_; }
+
+  private:
+    void rebuild();
+
+    const app::PlanInput& loaded_;
+    app::StructuralEdits local_;
+    std::uint32_t successor_uid_ = 0;
+    QListWidget* list_ = nullptr;
+    QPushButton* delete_button_ = nullptr;
+    QComboBox* predecessor_ = nullptr;
+    QComboBox* type_ = nullptr;
+    QLineEdit* lag_ = nullptr;
+    QPushButton* add_button_ = nullptr;
+};
+
 bool edit_predecessors(QWidget* parent, const app::PlanInput& loaded,
                        const app::StructuralEdits& edits, std::uint32_t successor_uid,
                        app::StructuralEdits& out_edits, QString* error);
 
-// View > Filter...  One comparison rule (field, operator, value); Apply returns
-// the built definition, Clear sets `cleared` and writes nothing.
+// ---------------------------------------------------------------------------
+// Filter
+// ---------------------------------------------------------------------------
+
+class FilterDialog final : public QDialog {
+  public:
+    FilterDialog(const std::vector<app::FilterField>& fields,
+                 const core::sheet::SheetFormat& format, QWidget* parent = nullptr);
+
+    bool cleared() const noexcept { return cleared_; }
+    const core::view::FilterDefinition& definition() const noexcept { return definition_; }
+    const std::string& description() const noexcept { return description_; }
+
+    QComboBox* field_combo() const noexcept { return field_; }
+    QComboBox* operator_combo() const noexcept { return op_; }
+    QLineEdit* value_edit() const noexcept { return value_; }
+    QPushButton* apply_button() const noexcept { return apply_; }
+    QPushButton* clear_button() const noexcept { return clear_; }
+    QPushButton* cancel_button() const noexcept { return cancel_; }
+
+  private:
+    void apply();
+    void clear();
+
+    std::vector<app::FilterField> fields_;
+    core::sheet::SheetFormat format_;
+    core::view::FilterDefinition definition_{};
+    std::string description_;
+    bool cleared_ = false;
+    QComboBox* field_ = nullptr;
+    QComboBox* op_ = nullptr;
+    QLineEdit* value_ = nullptr;
+    QPushButton* apply_ = nullptr;
+    QPushButton* clear_ = nullptr;
+    QPushButton* cancel_ = nullptr;
+};
+
 bool edit_filter(QWidget* parent, const std::vector<app::FilterField>& fields,
                  const core::sheet::SheetFormat& format,
                  core::view::FilterDefinition* definition, std::string* description,
