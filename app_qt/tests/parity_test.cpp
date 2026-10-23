@@ -16,6 +16,7 @@
 //   column-width comparison becomes comparable (wave 18 Q3).
 //
 // Run it with QT_QPA_PLATFORM=offscreen (app_qt/CMakeLists.txt does).
+#include <QSplitter>
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QByteArray>
