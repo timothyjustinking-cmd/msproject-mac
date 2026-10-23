@@ -239,3 +239,43 @@ compile fixes.
    regression, or record why the dump should ignore it.
 2. Add `--parallel` to the qt.yml build and one more dispatch.
 3. Start MPP12 write-path work in its own lane (calendars are done).
+
+## Wave 20 in progress (2026-10-23 ~14:10) — FOUR PARALLEL STREAMS
+
+**Operator agreed the UI spec** (`docs/ui-parity-spec.md`, commit `fc5d07b`): all
+seven tabs; full backstage; original icons; measured chrome metrics; real
+timeline; Entry table + stored-table rendering; status bar; disabled commands +
+generated backlog; light AND dark themes; new-project defaults (today, manual);
+structural gates; bundled Carlito; every dialog on every tab; laid-out dialogs
+where the engine is missing; View split (Timeline + Details).  Six defaults were
+accepted: Office dark values, Customize-QAT edits the QAT, Page Setup + Print
+preview in scope, type/F2 edit + Enter/Tab + per-edit undo (no drag-fill), zoom
+slider maps to Days/Weeks/Months with no percentage, Office accelerators with Cmd
+on macOS.
+
+### Running now (owners are disjoint)
+
+| stream | owns | goal |
+|---|---|---|
+| Q5 | `app_qt/**`, backlog doc | empty state + chrome (ribbon metrics/icons, timeline, table, status, QAT/title/Tell-me), both themes, backstage FIRST; dialogs second cut |
+| E5 | `tests/engine_diff_tests.cpp`, `core/plan/**` | close the manual-row late-pair gap (4 scenarios) |
+| M6 | `core/mpp/cfb.*`, `core/mpp/reader.*`, `core/plan` table-root, `tools/recalc` | MPP12 recalc path, CFB FAT slack tolerance, subproject probe decode |
+| CI2 | `.github/workflows/qt.yml` | macOS .app zip + Linux AppImage/tar package; keep Windows zip |
+
+### Facts established this wave
+
+* Dump schema 2 (task late pair, resource calendar_uid); all eight oracles
+  re-recorded; **score 4 pass / 4 fail**, because the late pair was never
+  compared before. constraint-mso is back to 1 field (its duration).
+* Real `.mpp` corpus imported (12 files MPP8/9/12/14, MPXJ LGPL) with inventory +
+  robustness tooling (`scripts/import_corpus.py`, `scripts/import_robustness.py`,
+  `docs/import-corpus.md`); 60 mutated runs, no crash.
+* `tools/recalc` hard-codes 114/ (all 15 MPP12 probe files fail there); the CFB
+  check rejects the real file `sf248.mpp` for unreferenced FAT slack.
+
+### Next coordinator actions
+
+1. Commit each stream as it reports (verify its tests first).
+2. ONE CI dispatch when Q5's chrome/backstage cut + CI2's packaging are both in:
+   it must be green on all three, produce the three zips, and keep the renders.
+3. Then Q5's dialog cut; then wave-20 handoff (`wave20-complete.md`).
