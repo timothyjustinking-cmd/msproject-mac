@@ -402,7 +402,13 @@ SmokeReport smoke_plan(const SmokeOptions& options) {
         const core::gantt::GanttLayout chart = core::gantt::build_gantt(
             display_source, app::default_gantt_style(),
             app::timescale_for_zoom(plan.loaded, app::gantt_zoom(preferences.zoom)));
-        step.count(chart.bars.size(), display_source.tasks.size(),
+        // Wave 25 review: compare against an INDEPENDENT expectation (the
+        // fixture's tasks plus the project row when the file shows it), not
+        // against display_source.tasks.size() -- a source that drops a task
+        // would otherwise agree with itself.
+        const std::size_t expected_bars =
+            plan.loaded.tasks.size() + (plan.loaded.show_project_summary ? 1u : 0u);
+        step.count(chart.bars.size(), expected_bars,
                    "the Gantt builds one bar per displayed task");
         step.check(chart.content_width > 0.0, "the Gantt has a non-zero content width",
                    "got " + std::to_string(chart.content_width));
