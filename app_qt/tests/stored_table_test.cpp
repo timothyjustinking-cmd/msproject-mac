@@ -916,11 +916,13 @@ void case_corpus(const QString& corpus) {
         const char* text;
     };
     const PinnedPercent kPinnedPercent[] = {
-        {13, "57%"},  // "Site establishment", the summary row the operator saw
-        {1, "99%"},   // "PRE-CONSTRUCTION"
-        {12, "29%"},  // "CONSTRUCTION"
-        {5, "100%"},  // "client-text-025"
-        {10, "0%"},   // "client-text-032"
+        // Identified by the file's ID column only: task names are client data
+        // and are not quoted in the repository.
+        {13, "57%"},  // ID 13
+        {1, "99%"},   // ID 1
+        {12, "29%"},  // ID 12
+        {5, "100%"},  // ID 5
+        {10, "0%"},   // ID 10
     };
     for (const PinnedPercent& pinned : kPinnedPercent) {
         const app::TaskRow* task = task_by_id(plan, pinned.id);
@@ -944,7 +946,7 @@ void case_corpus(const QString& corpus) {
     check(sheet.records().has_field(msqt::kSummaryFlagField),
           "the RecordSet carries the decoded Flag10 column");
     // The clean capture's first thirteen visible rows, typed from the pixels:
-    // only the project summary row (0) and CONSTRUCTION (12) read Yes.  Flag10
+    // only the project summary row (0) and ID 12 read Yes.  Flag10
     // is the FILE's own field, NOT Task.Summary -- the capture's summary rows
     // 1/2/6 read No, which is exactly why the column is a stored flag.
     const char* captured_summary[13] = {"Yes", "No", "No", "No", "No", "No", "No",

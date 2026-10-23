@@ -287,7 +287,7 @@ void case_corpus(const QString& path) {
         std::fprintf(stderr, "note: load error: %s\n", error.c_str());
         return;
     }
-    // ID 5 is a milestone CHILD of ID 2 ("Stage 1 ..."), not of ID 3/4: the
+    // ID 5 is a milestone CHILD of ID 2 (a summary), not of ID 3/4: the
     // reader's stored chain (level 2 -> 0-based 1) and the capture's indent
     // agree.  The earlier 2 here was a transcription slip the gate caught.
     const int expected_levels[] = {-1, 0, 1, 2, 2, 1, 1, 2, 2, 2, 2, 2, 0};

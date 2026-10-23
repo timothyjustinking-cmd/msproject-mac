@@ -178,12 +178,37 @@ CRLF clone reproduces the pinned hash; tree not blanket-normalised because
 
 | workflow | run | result |
 |---|---|---|
-| ci | **39945764244** | _pending_ |
-| qt-shell | **39945768811** | _pending_ |
+| ci | **39945764244** | **RED on ubuntu-gcc only**: a pre-existing nested comment start in `tests/engine_diff_tests.cpp:15` (`scenarios/*.json` inside a block comment) fails `-Werror=comment` now that A-9 makes the core lane actually run.  Fixed in the review-fix commit.  The Windows and macOS core jobs, the 51 tests, the suite and the fixtures passed. |
+| qt-shell | **39945768811** | **GREEN on Windows, macOS and Linux**, packages built, and the Windows parity gate passed against the measured Project reference. |
 
 `ci.yml` also gained a `workflow_run` trigger on qt-shell (A-9), so qt-shell's
 completion produces one additional ci run; that run and its id are recorded
 here rather than counted as another dispatch.
+
+### Publication hold (unresolved at hand-over)
+
+The push carrying the review-fix and docs-close commits was **refused by the
+automated policy classifier**: it found client task names quoted in the branch
+(comments in `app_qt/tests/stored_table_test.cpp` and
+`app_qt/tests/task_order_test.cpp`, and the W23-6 commit message).  The names
+introduced by this wave have been removed from the working tree in a follow-up
+commit (IDs only), but
+
+* several client names were already on `main` before this wave (the same test
+  file's pinned-percent comments, `tests/mpp_reader_tests.cpp`, `docs/s6.md`,
+  `docs/analysis/oracle/writer-name.json`), and
+* the earlier wave-23 commits (through `63cd087`) were already pushed and
+  contain some of them.
+
+Removing them from the **history** needs a rewrite and a force-push, which the
+brief forbids and the harness blocks.  That decision is Tim's.  Until it is
+made, the final review-fix/docs commits are local only, and CI has not run on
+the final sha.  The honest state at hand-over:
+
+* branch `wave23` on the remote = `63cd087` (qt-shell green, core red for the
+  GCC comment fixed locally);
+* local `wave23` = the review-fix + docs-close commits on top;
+* `wave23-with-screenshot` = the pre-ruling local history, never pushed.
 
 ## 7. The 16 decisions re-scored (audit §4 column as the starting point)
 

@@ -6,11 +6,14 @@
 
 ## Where the branches are
 
-`main` = **488481f** (wave-22 docs close).  **`wave23`** is pushed and NOT
-merged: 19 commits, one per finding plus two fixture commits and the rebuilt
-reference commit.  The local `wave23-with-screenshot` branch is an unpushed
-backup whose history contains a Project screenshot — **never push it** (the
-pre-push guard refuses it; the operator's 2026-10-23 ruling is numbers-only).
+`main` = **488481f** (wave-22 docs close).  **`wave23`** is NOT merged.  Remote
+`wave23` = `63cd087` (qt-green, core red on a GCC comment, fixed locally); the
+review-fix and docs-close commits are LOCAL because the push was held by the
+client-name policy classifier — see wave23-complete §6 "Publication hold".
+Client task names exist on `main` and in the already-pushed early commits;
+purging them needs Tim's decision on a history rewrite.  The local
+`wave23-with-screenshot` branch is an unpushed backup whose history contains a
+Project screenshot — **never push it**.
 
 ## Numbers (wave 23 on `wave23`)
 
