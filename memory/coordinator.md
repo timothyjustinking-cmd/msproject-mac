@@ -335,3 +335,77 @@ docs/handoff/qt2.md + docs/ui-command-backlog.md.
 State at close: `main` = 85d4418 (qmake fix, engine 7/8, M6/E5/CI2 merged), clean.
 The one dispatch that still needs to happen after the branch is green: `main` with
 the qmake fix, which also produces the Linux AppImage.
+
+
+## Wave 20 final (2026-10-23 ~15:25)
+
+Successor: read `docs/handoff/wave20-complete.md` (the wave gate) and
+`docs/handoff/coordinator.md` "Wave 20 final", then this.
+
+### Where main is
+
+`main` = **6a506cd**, pushed to the public repo; clean tree.  CI run
+**39898703443** succeeded on `windows-qt`, `macos-qt` and `linux-qt`; the three
+packages and the render artifacts are downloadable (`gh run download`,
+**fresh directory** — it will not overwrite).
+
+### The numbers
+
+* `build\vs-w20`: ctest `-E plan_recalc` **50/50**; M2 **332/332**;
+  `plan_recalc_tests` **266** (`MPP_NO_CORPUS=1`; ctest excludes it because it
+  writes the golden); engine self-test **236**; reader **984**; cal **785**.
+* Engine parity **7/8**.  UI parity **9/9 on all three platforms**
+  (splitter 0.45924).  app_qt **11/11 on all three**.
+* Packages: `msproject-windows-<sha>` (48.1 MB zip, exe + Qt DLLs),
+  `msproject-macos-<sha>` (21.5 MB zip → `MS Project Shell.app`, ad-hoc signed),
+  `msproject-linux-<sha>` (32.8 MB type-2 AppImage, smoke-rendered offscreen).
+
+### What is actually done in the UI contract
+
+Build-order steps 1–2: seven tabs + File, measured ribbon metrics with our icons,
+QAT, timeline strip, Entry headers on an empty project (today, manual, never
+1984), four status view buttons + zoom, full backstage (11 entries, Options
+pinned), light/dark **palettes**, bundled Carlito, five structural gates,
+generated command backlog, six functional dialogs.
+
+**Not done** (do not describe the contract as complete): decision **7**
+(stored-table columns from `214/CTable`), **14** (dialog inventory), **16**
+(View ▸ Timeline / Details); **10** partial (custom-painted surfaces stay light;
+operator owes a dark capture); **12** partial (no per-screen pixel-diff run).
+
+### Facts this wave established
+
+1. **Project's stored manual late pair** = row placed at its latest: LF = min(PF,
+   successor's KEPT start − lag [FF: kept finish − lag]); LS = max(kept start,
+   plain `sub_work` back from LF).  SS/SF do not bound LF.  Auto rows and slack
+   words untouched.  `docs/handoff/e5.md` has 19 measured rows.
+2. **MPP12 recalc works** through the reader's detected table root; the 15-file
+   probe sweep has no "no Task table" failures.  MPXJ's 206-byte task layout is
+   refused, not guessed.
+3. **sf248 loads with a warning** (191 of 768 of 959 sectors unreferenced), but
+   `mppwrite::CfbDocument::parse` still rejects it for `--dump` — open.
+4. **Qt 6 offscreen has no fonts**; bundle (decision 13) and gate the family.
+5. **The view caption belongs in the sheet band's left 22 px**, white and
+   borderless (gutter 22+38=60) or P1's splitter detection collapses to 0.398.
+
+### Traps
+
+* Sandbox: `cmake --build --parallel` (MSBuild `/m`) fails on named pipes; piped
+  `cmake --build` fails too.  Build serially, redirect to a file.
+* Python text writes default to CRLF — use `newline="\n"`.
+* `gh run download` will not overwrite; use a fresh directory.
+* Static-library Qt resources are dropped; add them per executable.
+* Dropbox mtime churn makes `edit` refuse after a read; retry or patch in Python.
+
+### Counters
+
+This wave: 1 agent session (Q5, stopped) + ~4 coordinator rounds (two sessions);
+**~$0.30 at ~$0.077/session (estimate, not metered)**.  Roadmap ~78% by the
+table's own arithmetic (the old ~83% was inconsistent with its rows).
+
+### Next three actions
+
+1. Build-order step 3: `214/CTable`-driven columns and stored-table rendering.
+2. Decision 14/15 dialog inventory with generated dialog backlog rows.
+3. Dark custom-painted palette once the operator's capture exists; then the
+   Timeline/Details split.
