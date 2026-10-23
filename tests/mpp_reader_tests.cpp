@@ -1321,6 +1321,9 @@ void test_flag10(TestContext& context) {
         }
         context.equal(set_count, std::size_t{0},
                       "the control fixture has no Flag10 set");
+    } else {
+        context.check(false,
+                      "wave23-outline.mpp is missing; the Flag10 control cannot run");
     }
 
     // Wave 24 (W24-15): all twenty Flag bits, measured one at a time.  The
@@ -1386,6 +1389,9 @@ void test_flag10(TestContext& context) {
                           "wave23-flags sets Flag10 on ID 3");
             context.equal(set_in_control, std::size_t{1},
                           "wave23-flags sets no other flag bit");
+        } else {
+            context.check(false,
+                          "wave23-flags.mpp is missing; the single-bit control cannot run");
         }
         // Single-bit controls for the non-contiguous groups: Flag2 (+24/0x04)
         // and Flag20 (+34/0x04).  A swapped mask table still passes the all-20
@@ -1426,6 +1432,13 @@ void test_flag10(TestContext& context) {
             context.equal(total_set, std::size_t{1},
                           std::string(item.file) + " sets exactly one flag bit");
         }
+    } else {
+        // Wave 25 (W25-8/S10): a missing fixture must FAIL this test, not skip
+        // fifteen checks.  check_fixtures catches the absent file too, but this
+        // gate must not go green on its own when the file is gone.
+        context.check(false,
+                      "wave24-flags20.mpp is missing; the Flag1..20 decode cannot "
+                      "be verified");
     }
 }
 
