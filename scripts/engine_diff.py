@@ -1042,6 +1042,7 @@ def cmd_suite(args):
     recorded = 0
     failed = 0
     unrecorded = 0
+    failed_names = []
     for path in scenarios:
         scenario = load_scenario(path)
         status, differences, field_count, message, oracle_path = check_scenario(
@@ -1052,6 +1053,7 @@ def cmd_suite(args):
         elif status == "fail":
             recorded += 1
             failed += 1
+            failed_names.append(scenario["name"])
             rows.append(f"{scenario['name']}: FAIL "
                         f"({len(differences)}/{field_count} fields differ)")
             for diff_path, ours, oracle in differences:
@@ -1072,6 +1074,21 @@ def cmd_suite(args):
             if not oracle.is_file():
                 print(f"  python scripts/engine_diff.py --record "
                       f"{rel(path)}")
+    if getattr(args, "expect_fail", None):
+        # Wave 24 (W24-7/R10/V): pin the FAILING SET BY NAME.  `--expect 7/8`
+        # only counted passing scenarios, so constraint-mso starting to pass
+        # while another scenario broke would still be green.  The set is
+        # compared exactly, and every other scenario must PASS.
+        wanted = {name.strip() for name in args.expect_fail.split(",")
+                  if name.strip()}
+        actual_failures = set(failed_names)
+        if unrecorded == 0 and actual_failures == wanted:
+            print(f"suite: expected failing set reached ({', '.join(sorted(wanted))})")
+            return 0
+        print(f"suite: expected failing {sorted(wanted)}, got "
+              f"{sorted(actual_failures)} with {failed} failing and "
+              f"{unrecorded} unrecorded")
+        return 1
     if expected is not None:
         actual = (recorded - failed, len(scenarios))
         if unrecorded == 0 and actual == expected:
@@ -1340,8 +1357,14 @@ def main(argv=None):
                             "against the recorded oracle (no COM)")
     parser.add_argument("--expect", metavar="PASS/TOTAL",
                         help="with --suite: the exact recorded state to accept, "
-                             "e.g. 7/8 for the deliberately-left-failing "
-                             "constraint-mso scenario (the ctest lane uses it)")
+                             "e.g. 7/8 (kept for old commands; the ctest lane "
+                             "now uses --expect-fail, which names the scenario)")
+    parser.add_argument("--expect-fail", metavar="SCENARIOS",
+                        help="with --suite: the exact comma-separated set of "
+                             "scenarios expected to FAIL (wave 24: "
+                             "'constraint-mso').  Every other scenario must "
+                             "pass, and the set is compared by name, not by "
+                             "count")
     group.add_argument("--suite", action="store_true",
                        help="every scenario, PASS/FAIL/UNRECORDED and a summary")
     group.add_argument("--selftest", action="store_true",
