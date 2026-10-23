@@ -1261,6 +1261,8 @@ void test_project_view_settings(TestContext& context) {
         {"synthetic-base.mpp", true, true},
         {"wave24-summary-on.mpp", true, true},
         {"wave24-timeline-hidden.mpp", true, false},
+        // Wave 25 (W25-10/S12): the shown half of the SAME session's pair.
+        {"wave24-timeline-shown.mpp", true, true},
         {"wave23-outline.mpp", true, true},
     };
     for (const TimelineCase& item : timeline_cases) {
@@ -1275,6 +1277,62 @@ void test_project_view_settings(TestContext& context) {
         context.equal(document.project.timeline_shown, item.shown,
                       std::string(item.name) + ": the stored Timeline setting");
     }
+
+    /* Wave 25 (W25-10/S12): the "only that record differs" claim, reproduced
+     * from the repo.  The two files are the SAME session's save before and
+     * after TimelineViewToggle, so Project's per-save bookkeeping (GUIDs, the
+     * edit list, cached view state) changes on every save no matter what the
+     * user did; the claim the port consumes is that the DECODED plan is
+     * identical except for timeline_shown.  Compare every value the reader
+     * exposes, task by task. */
+    const std::string shown_path =
+        (test_data_dir() / "wave24-timeline-shown.mpp").string();
+    const std::string hidden_path =
+        (test_data_dir() / "wave24-timeline-hidden.mpp").string();
+    if (!file_exists(shown_path) || !file_exists(hidden_path)) {
+        context.check(false, "the Timeline shown/hidden pair is present");
+        return;
+    }
+    const mpp::Document shown = mpp::load_file(shown_path);
+    const mpp::Document hidden = mpp::load_file(hidden_path);
+    context.equal(shown.project.timeline_shown, true,
+                  "the pair's shown save decodes Timeline shown");
+    context.equal(hidden.project.timeline_shown, false,
+                  "the pair's hidden save decodes Timeline hidden");
+    context.equal(shown.project.start.raw, hidden.project.start.raw,
+                  "the pair agrees on the project start");
+    context.equal(shown.project.finish.raw, hidden.project.finish.raw,
+                  "the pair agrees on the project finish");
+    context.equal(shown.project.duration_ticks, hidden.project.duration_ticks,
+                  "the pair agrees on the project duration");
+    context.equal(shown.tasks.size(), hidden.tasks.size(),
+                  "the pair has the same task count");
+    bool same_tasks = shown.tasks.size() == hidden.tasks.size();
+    if (same_tasks) {
+        for (std::size_t index = 0; index < shown.tasks.size(); ++index) {
+            const mpp::Task& left = shown.tasks[index];
+            const mpp::Task& right = hidden.tasks[index];
+            if (left.uid != right.uid || left.row_id != right.row_id ||
+                left.name != right.name || left.start.raw != right.start.raw ||
+                left.finish.raw != right.finish.raw ||
+                left.duration_ticks != right.duration_ticks ||
+                left.percent_complete != right.percent_complete ||
+                left.summary != right.summary ||
+                left.is_milestone() != right.is_milestone() ||
+                left.flags != right.flags) {
+                same_tasks = false;
+                break;
+            }
+        }
+    }
+    context.check(same_tasks,
+                  "every decoded task row is identical in the shown/hidden pair");
+    context.equal(shown.links.size(), hidden.links.size(),
+                  "the pair has the same link rows");
+    context.equal(shown.resources.size(), hidden.resources.size(),
+                  "the pair has the same resource rows");
+    context.equal(shown.assignments.size(), hidden.assignments.size(),
+                  "the pair has the same assignment rows");
 }
 
 /* Wave 23 (W23-6): Flag10 (0x0b400051) decodes from Task FixedMeta entry byte
