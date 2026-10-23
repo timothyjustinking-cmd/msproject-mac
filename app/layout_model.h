@@ -314,29 +314,50 @@ PlanInput sync_plan_from_records(const PlanInput& base, const core::view::Record
 // the headless test asserts it.
 void apply_edit_policy(core::sheet::SheetModel& sheet);
 
+// Wave 25 (W25-1/S1, the R5 guard): the one edit-entry decision every shell
+// uses for a displayed sheet row.  A uid-0 row is the synthetic project-summary
+// row: it has no file row, and sync_plan_from_records deliberately skips it, so
+// an edit there would be accepted and then silently dropped -- refuse it before
+// a session opens.  Any other row goes through core::sheet, which refuses a
+// declared read-only column.  `error` is the status message on a refusal.
+bool begin_cell_edit(core::sheet::SheetModel& sheet, std::size_t row, std::size_t column,
+                     std::string& error);
+
 // ---------------------------------------------------------------------------
 // Gantt mapping
 // ---------------------------------------------------------------------------
 
-// One Gantt row per PlanInput task, in the same order, so
-// GanttSource::tasks index == RecordSet row index == sheet row.  `holidays` is
-// extra non-working shading on top of Saturday/Sunday; it never moves a bar.
-// `status_date` draws the status marker (kDateNa for none).
+// One Gantt row per PlanInput task, in the same order, for a caller that draws
+// every task (print, the whole-plan chart).  It carries no project row: a
+// displayed view must use make_gantt_source_for_displayed_rows() instead, which
+// resolves each RecordSet row through its uid.  `holidays` is extra non-working
+// shading on top of Saturday/Sunday; it never moves a bar.  `status_date` draws
+// the status marker (kDateNa for none).
 core::gantt::GanttSource make_gantt_source(const PlanInput& input,
                                            const std::vector<date32>& holidays = {},
                                            date32 status_date = kDateNa);
 
-// As make_gantt_source(), but only the tasks named by `rows` get a Gantt row, in
-// that order.  `rows` are RecordSet row indexes -- the app passes
-// SheetModel::visible_rows() (app::RowMap::rows), so after a collapse Gantt row
-// N is visible ordinal N, a hidden task has no bar, and a link whose endpoint is
-// hidden is dropped by build_gantt() (it skips a link with no bar).  This is the
-// whole of "the Gantt follows the visible row list": the chart is rebuilt, never
-// panned or blanked.
-core::gantt::GanttSource make_gantt_source_for_rows(const PlanInput& input,
-                                                    const std::vector<std::size_t>& rows,
-                                                    const std::vector<date32>& holidays = {},
-                                                    date32 status_date = kDateNa);
+// As make_gantt_source(), but only the DISPLAYED rows get a Gantt row, in that
+// order.  `rows` are RecordSet row indexes (SheetModel::visible_rows() /
+// app::RowMap::rows), and every one is resolved through its uid in `records`:
+// uid 0 is the synthetic project row (project_summary_row()), any other uid is
+// looked up in input.tasks.  A row index outside the RecordSet, or a uid with
+// no task, gets no bar.
+//
+// WHY BY UID (wave 25, W25-1/S1).  The RecordSet may carry the project row
+// ahead of the tasks (a file whose 0x03400009 is set), so RecordSet row N is
+// task N only when that row is hidden.  Indexing input.tasks with a RecordSet
+// row shifts every bar and drops the last one -- on the macOS screen Gantt and
+// the smoke sequence, which both see the adapters's row now.
+//
+// After a collapse Gantt row N is still visible ordinal N, a hidden task has no
+// bar, and a link whose endpoint is hidden is dropped by build_gantt() (it skips
+// a link with no bar).  This is the whole of "the Gantt follows the visible row
+// list": the chart is rebuilt, never panned or blanked.
+core::gantt::GanttSource make_gantt_source_for_displayed_rows(
+    const PlanInput& input, const core::view::RecordSet& records,
+    const std::vector<std::size_t>& rows, const std::vector<date32>& holidays = {},
+    date32 status_date = kDateNa);
 
 // Day columns at `pixels_per_day`, Monday-first weeks, origin replaced by
 // build_gantt()'s backward snap.

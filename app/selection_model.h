@@ -19,7 +19,8 @@
 //
 // COLLAPSE CHANGES THE MAPPING, NOT JUST THE PICTURE
 //   The Gantt is rebuilt from the visible rows (main.mm calls
-//   layout_model.h's make_gantt_source_for_rows with RowMap::rows), so Gantt row
+//   layout_model.h's make_gantt_source_for_displayed_rows with RowMap::rows, which
+//   resolves each RecordSet row through its uid, so Gantt row
 //   N is visible ordinal N.  A collapsed summary hides its descendants from both
 //   views; links to a hidden task are dropped by build_gantt() (it skips a link
 //   whose endpoint has no bar).  RowMap is what makes `ordinal_of` and

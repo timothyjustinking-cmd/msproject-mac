@@ -457,6 +457,23 @@ void apply_edit_policy(core::sheet::SheetModel& sheet) {
     }
 }
 
+bool begin_cell_edit(core::sheet::SheetModel& sheet, std::size_t row, std::size_t column,
+                     std::string& error) {
+    // Wave 25 (W25-1/S1): uid 0 is the synthetic project-summary row.  It has
+    // no row in the plan the save diff compares (sync_plan_from_records skips
+    // it), so accepting an edit would lose it silently.  The check is here, in
+    // the shared layer, because the macOS and Qt shells both open sessions.
+    if (row < sheet.row_count() && sheet.row_uid(row) == 0) {
+        error = "the project summary row is read-only";
+        return false;
+    }
+    if (!sheet.begin_edit(row, column)) {
+        error = "cell is read-only";
+        return false;
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Gantt
 // ---------------------------------------------------------------------------
@@ -512,15 +529,28 @@ core::gantt::GanttSource make_gantt_source(const PlanInput& input,
     return source;
 }
 
-core::gantt::GanttSource make_gantt_source_for_rows(const PlanInput& input,
-                                                    const std::vector<std::size_t>& rows,
-                                                    const std::vector<date32>& holidays,
-                                                    date32 status_date) {
+core::gantt::GanttSource make_gantt_source_for_displayed_rows(
+    const PlanInput& input, const core::view::RecordSet& records,
+    const std::vector<std::size_t>& rows, const std::vector<date32>& holidays,
+    date32 status_date) {
     core::gantt::GanttSource source;
     source.tasks.reserve(rows.size());
     for (const std::size_t row : rows) {
-        if (row < input.tasks.size()) {
-            source.tasks.push_back(bar_input_for(input.tasks[row]));
+        if (row >= records.row_count()) {
+            continue;
+        }
+        // Wave 25 (W25-1/S1): RecordSet row -> uid -> plan row.  Never index
+        // input.tasks with the RecordSet row: the synthetic project row shifts
+        // every task by one when the file shows it.
+        const std::uint32_t uid = records.uid(row);
+        if (uid == 0) {
+            source.tasks.push_back(bar_input_for(project_summary_row(input)));
+            continue;
+        }
+        const auto found = std::find_if(input.tasks.begin(), input.tasks.end(),
+                                        [uid](const TaskRow& task) { return task.uid == uid; });
+        if (found != input.tasks.end()) {
+            source.tasks.push_back(bar_input_for(*found));
         }
     }
     // Links stay in the source; build_gantt() skips one whose endpoint has no

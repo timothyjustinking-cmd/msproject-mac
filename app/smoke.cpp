@@ -392,13 +392,18 @@ SmokeReport smoke_plan(const SmokeOptions& options) {
         // DRAWS this layout, so building it here means the AppKit step's bar-count
         // check is not a guess (and a task with no date gets no bar, which is why
         // the count is checked against the task count on Windows first).
+        // Wave 25 (W25-1/S1): displayed rows are RecordSet rows and are
+        // resolved through their uid.  When the file shows the project row the
+        // chart has one more bar than plan.loaded.tasks, so the expectation is
+        // the number of DISPLAYED rows whose row carries a task or uid 0.
+        const core::gantt::GanttSource display_source =
+            app::make_gantt_source_for_displayed_rows(plan.loaded, plan.records,
+                                                      plan.sheet->visible_rows(), {}, kDateNa);
         const core::gantt::GanttLayout chart = core::gantt::build_gantt(
-            app::make_gantt_source_for_rows(plan.loaded, plan.sheet->visible_rows(), {},
-                                            kDateNa),
-            app::default_gantt_style(),
+            display_source, app::default_gantt_style(),
             app::timescale_for_zoom(plan.loaded, app::gantt_zoom(preferences.zoom)));
-        step.count(chart.bars.size(), plan.loaded.tasks.size(),
-                   "the Gantt builds one bar per task");
+        step.count(chart.bars.size(), display_source.tasks.size(),
+                   "the Gantt builds one bar per displayed task");
         step.check(chart.content_width > 0.0, "the Gantt has a non-zero content width",
                    "got " + std::to_string(chart.content_width));
     }

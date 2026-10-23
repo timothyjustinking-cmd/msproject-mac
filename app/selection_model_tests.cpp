@@ -168,7 +168,7 @@ struct Fixture {
     void rebuild(const app::PlanInput& input) {
         map = app::build_row_map(*sheet);
         const core::gantt::GanttSource source =
-            app::make_gantt_source_for_rows(input, map.rows, {}, kDateNa);
+            app::make_gantt_source_for_displayed_rows(input, records, map.rows, {}, kDateNa);
         gantt = core::gantt::build_gantt(source, app::default_gantt_style(),
                                          app::timescale_for_plan(input, 12.0));
     }

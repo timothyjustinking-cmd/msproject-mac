@@ -651,8 +651,11 @@ void rebuild_view(PlanState& plan) {
     plan.columns = plan.sheet->layout_columns(plan.metrics, 0);
     plan.sheet_width = static_cast<double>(plan.sheet->sheet_width_points(plan.metrics, 0));
 
-    core::gantt::GanttSource source = app::make_gantt_source_for_rows(
-        plan.view, plan.row_map.rows, {}, app::today_date32());
+    // Wave 25 (W25-1/S1): the displayed rows are RecordSet rows; the source
+    // resolves each through its uid (the file may show the project row, which
+    // plan.view does not carry).
+    core::gantt::GanttSource source = app::make_gantt_source_for_displayed_rows(
+        plan.view, plan.records, plan.row_map.rows, {}, app::today_date32());
     core::gantt::GanttStyle style = app::default_gantt_style();
     // A real font metric, so "does this label fit inside the bar?" is decided by
     // the font actually drawn (gantt.h leaves this to the shell).
@@ -1327,8 +1330,12 @@ bool commit_open_edit(PlanState& plan) {
 
 bool begin_edit_at(PlanState& plan, std::size_t row, std::size_t column) {
     // commit_open_edit() has already run if an edit was open.
-    if (!plan.sheet->begin_edit(row, column)) {
-        note(plan, "cell is read-only", true);
+    // Wave 25 (W25-1/S1, the R5 guard): app::begin_cell_edit refuses the
+    // project-summary row (uid 0) and a declared read-only column.  Every macOS
+    // edit path (double-click, Return, typing, Backspace) enters here.
+    std::string error;
+    if (!app::begin_cell_edit(*plan.sheet, row, column, error)) {
+        note(plan, error, true);
         return false;
     }
     note(plan, "editing " + plan.sheet->column_title(column), false);
