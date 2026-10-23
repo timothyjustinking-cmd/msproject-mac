@@ -415,6 +415,31 @@ Value coerce_value(const Value& value, ValueKind target) noexcept {
         if (value.kind != ValueKind::Text) {
             return Value{};
         }
+        /* std::from_chars(double) is DELETED in libc++ (measured wave 19: the
+         * Qt shell's macOS job fails to compile the two calls below with "call
+         * to deleted function 'from_chars'"), and GCC's libstdc++ only grew the
+         * floating-point overload in GCC 11.  One strict strtod path is used on
+         * every platform instead of a platform split, so a cell coerces the same
+         * way on Windows, macOS and Linux: whole string consumed, finite, and a
+         * leading character the integer overload would accept (no whitespace,
+         * no "inf"/"nan" from strtod's looser grammar). */
+        auto parse_real = [](std::string const& text, double& out) {
+            if (text.empty()) {
+                return false;
+            }
+            const char first = text.front();
+            if (!(first == '-' || first == '+' || first == '.' ||
+                  (first >= '0' && first <= '9'))) {
+                return false;
+            }
+            char* end = nullptr;
+            const double parsed = std::strtod(text.c_str(), &end);
+            if (end != text.c_str() + text.size() || !std::isfinite(parsed)) {
+                return false;
+            }
+            out = parsed;
+            return true;
+        };
         if (kind == ValueKind::Integer) {
             std::int64_t parsed = 0;
             const char* begin = value.text.data();
@@ -423,8 +448,7 @@ Value coerce_value(const Value& value, ValueKind target) noexcept {
             if (result.ec != std::errc{} || result.ptr != end) {
                 /* Accept "8.0" when the fraction is zero. */
                 double as_double = 0.0;
-                auto dresult = std::from_chars(begin, end, as_double);
-                if (dresult.ec != std::errc{} || dresult.ptr != end ||
+                if (!parse_real(value.text, as_double) ||
                     std::floor(as_double) != as_double ||
                     as_double < static_cast<double>(std::numeric_limits<std::int64_t>::min()) ||
                     as_double > static_cast<double>(std::numeric_limits<std::int64_t>::max())) {
@@ -436,10 +460,7 @@ Value coerce_value(const Value& value, ValueKind target) noexcept {
         }
         if (kind == ValueKind::Number) {
             double parsed = 0.0;
-            const char* begin = value.text.data();
-            const char* end = begin + value.text.size();
-            auto result = std::from_chars(begin, end, parsed);
-            if (result.ec != std::errc{} || result.ptr != end) {
+            if (!parse_real(value.text, parsed)) {
                 return Value{};
             }
             return Value::of_number(parsed);
