@@ -1556,6 +1556,11 @@ void MainWindow::handle_action(app::MenuAction action) {
             delete_task();
             return;
         case app::MenuAction::task_fields:
+            // Wave 23 (B-13): Task > Information is Task Information now; the
+            // old Task Fields dialog is the Custom Fields command.
+            show_task_information();
+            return;
+        case app::MenuAction::custom_fields:
             show_task_fields();
             return;
         case app::MenuAction::predecessors:

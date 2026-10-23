@@ -121,6 +121,19 @@ QIcon shell_action_icon(app::MenuAction action, int pixels) {
             painter.drawLine(3, 8, 13, 8);
             break;
         }
+        case app::MenuAction::custom_fields: {
+            // Wave 23 (B-13): Custom Fields has its own page-with-grid glyph;
+            // Task Information (task_fields) keeps the page.
+            painter.setPen(QPen(kInk, 1));
+            painter.setBrush(kPaper);
+            draw_page(painter, QRect(2, 2, 12, 12));
+            painter.setPen(QPen(kAccent, 1));
+            painter.drawLine(5, 4, 12, 4);
+            painter.drawLine(5, 7, 12, 7);
+            painter.drawLine(5, 10, 12, 10);
+            painter.drawLine(5, 4, 5, 10);
+            break;
+        }
         case app::MenuAction::task_fields:
         case app::MenuAction::predecessors:
         case app::MenuAction::custom_field_formula: {

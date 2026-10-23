@@ -28,9 +28,13 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMargins>
+#include <QMetaObject>
 #include <QPushButton>
 #include <QSize>
 #include <QSpinBox>
+#include <QTabWidget>
+#include <QTableView>
+#include <QTimer>
 #include <QWidget>
 
 #include <algorithm>
@@ -514,6 +518,89 @@ int main(int argc, char** argv) {
                         read_back.zoom == app::ZoomLevel::day &&
                         !read_back.working_day_shading,
                     "the stored preference round-trips every changed field");
+    }
+
+    // -----------------------------------------------------------------------
+    // Wave 23 (B-13, W23-19): Task Information is reachable through the ACTION
+    // and through DOUBLE-CLICK, not only by constructing the dialog.  A
+    // zero-delay timer finds the modal dialog, records its tabs/title and
+    // rejects it, so the action's blocking exec() returns.
+    // -----------------------------------------------------------------------
+    if (!fixture.isEmpty()) {
+        struct Seen {
+            bool dialog = false;
+            QString title;
+            int tabs = 0;
+        };
+        const auto intercept = [](Seen* seen) {
+            QTimer::singleShot(0, [seen]() {
+                for (QWidget* widget : QApplication::topLevelWidgets()) {
+                    auto* dialog = qobject_cast<QDialog*>(widget);
+                    if (dialog == nullptr || !dialog->isVisible()) {
+                        continue;
+                    }
+                    seen->dialog = true;
+                    seen->title = dialog->windowTitle();
+                    if (auto* tabs = dialog->findChild<QTabWidget*>(
+                            QStringLiteral("taskInformationTabs"))) {
+                        seen->tabs = tabs->count();
+                    }
+                    dialog->reject();
+                    return;
+                }
+            });
+        };
+
+        msqt::MainWindow window;
+        QString error;
+        gate::check(window.open_file(fixture, &error), "the fixture opens for the action gate");
+        window.show();
+        QApplication::processEvents();
+
+        QAction* information = gate::find_action(window, app::MenuAction::task_fields);
+        gate::check(information != nullptr, "Task > Information is a command");
+        if (information != nullptr) {
+            Seen seen;
+            intercept(&seen);
+            information->trigger();
+            QApplication::processEvents();
+            gate::check(seen.dialog && seen.title == QStringLiteral("Task Information"),
+                        "the Information ACTION opens Task Information");
+            gate::check(seen.tabs == 6, "the dialog has Project's six tabs");
+        }
+
+        QAction* custom = gate::find_action(window, app::MenuAction::custom_fields);
+        gate::check(custom != nullptr, "Custom Fields is its own command (Q10)");
+        if (custom != nullptr) {
+            Seen seen;
+            intercept(&seen);
+            custom->trigger();
+            QApplication::processEvents();
+            gate::check(seen.dialog && seen.title == QStringLiteral("Task Fields"),
+                        "the Custom Fields command still opens the Task Fields dialog");
+        }
+
+        // Double-click on a task cell follows the same path.  Row 1 is the
+        // first task (row 0 is the project summary row).
+        QTableView* sheet = window.sheet_view();
+        if (sheet != nullptr && sheet->model() != nullptr) {
+            const int name_column =
+                window.sheet_table_model()->display_column_for_field(app::name_field_id());
+            if (name_column >= 0 && sheet->model()->rowCount() > 1) {
+                const QModelIndex index = sheet->model()->index(1, name_column);
+                Seen seen;
+                intercept(&seen);
+                QMetaObject::invokeMethod(sheet, "doubleClicked", Qt::DirectConnection,
+                                          Q_ARG(QModelIndex, index));
+                QApplication::processEvents();
+                gate::check(seen.dialog && seen.title == QStringLiteral("Task Information"),
+                            "double-click opens Task Information");
+            } else {
+                gate::check(false, "the sheet exposes a Name column and a task row");
+            }
+        } else {
+            gate::check(false, "the sheet view has a model for the double-click gate");
+        }
     }
 
     std::printf("qt_dialog_gate: ");

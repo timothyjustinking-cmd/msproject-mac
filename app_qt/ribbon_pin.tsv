@@ -90,7 +90,7 @@ Project	0	Add-ins	button	Get Add-ins	0	addins.get
 Project	0	Add-ins	button	My Add-ins	0	addins.my
 Project	0	Properties	group	-	-	-
 Project	0	Properties	button	Project Information	0	properties.project_information
-Project	0	Properties	button	Custom Fields	0	properties.custom_fields
+Project	0	Properties	button	Custom Fields	1	properties.custom_fields
 Project	0	Properties	button	Links Between Projects	0	properties.links_between
 Project	0	Properties	button	WBS	0	properties.wbs
 Project	0	Properties	button	Change Working Time	0	properties.change_working_time
@@ -147,7 +147,7 @@ Gantt Chart Format	1	Format	button	Layout	0	format.layout
 Gantt Chart Format	1	Columns	group	-	-	-
 Gantt Chart Format	1	Columns	button	Insert Column	0	columns.insert
 Gantt Chart Format	1	Columns	button	Column Settings	0	columns.settings
-Gantt Chart Format	1	Columns	button	Custom Fields	0	columns.custom_fields
+Gantt Chart Format	1	Columns	button	Custom Fields	1	columns.custom_fields
 Gantt Chart Format	1	Bar Styles	group	-	-	-
 Gantt Chart Format	1	Bar Styles	button	Format	0	bar_styles.format
 Gantt Chart Format	1	Bar Styles	button	Critical Tasks	0	bar_styles.critical

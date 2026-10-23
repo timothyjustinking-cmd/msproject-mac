@@ -65,7 +65,11 @@ std::vector<MenuSpec> build_menu_specs() {
         item(MenuAction::delete_task, "Delete Task", "\b", false, false, true),
         // Wave 13: the two pending-edit dialogs.  They act on the selected task;
         // no key equivalents (they are forms, not blind commands).
-        item(MenuAction::task_fields, "Task Fields...", "", false, false, true),
+        // Wave 23 (B-13): Task > Information opens the six-tab Task Information
+        // dialog.  The old Task Fields dialog moves to its Project home,
+        // Custom Fields... (operator Q10).
+        item(MenuAction::task_fields, "Task Information...", "", false, false, true),
+        item(MenuAction::custom_fields, "Custom Fields...", "", false, false, true),
         item(MenuAction::predecessors, "Predecessors..."),
         // Wave 16: set/clear a `114/Props` custom-field formula.  There is no
         // Task/Field menu in this shell; this and Task Fields are its two
@@ -170,6 +174,7 @@ const std::vector<MenuAction>& all_menu_actions() {
         MenuAction::insert_task,
         MenuAction::delete_task,
         MenuAction::task_fields,
+        MenuAction::custom_fields,
         MenuAction::predecessors,
         MenuAction::table_date_format,
         MenuAction::custom_field_formula,
@@ -285,6 +290,7 @@ bool menu_item_enabled(MenuAction action, const MenuState& state) noexcept {
         case MenuAction::insert_task:
         case MenuAction::delete_task:
         case MenuAction::task_fields:
+        case MenuAction::custom_fields:
         case MenuAction::predecessors:
             // A structural edit is a Task Sheet command: it needs a document, a
             // row to work from and no open cell edit.  The three selection
@@ -350,6 +356,7 @@ const char* menu_action_name(MenuAction action) noexcept {
         case MenuAction::insert_task: return "insert_task";
         case MenuAction::delete_task: return "delete_task";
         case MenuAction::task_fields: return "task_fields";
+        case MenuAction::custom_fields: return "custom_fields";
         case MenuAction::predecessors: return "predecessors";
         case MenuAction::table_date_format: return "table_date_format";
         case MenuAction::custom_field_formula: return "custom_field_formula";

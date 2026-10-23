@@ -41,6 +41,7 @@ inline bool shell_implements(app::MenuAction action) noexcept {
         case app::MenuAction::select_all:
         case app::MenuAction::delete_task:
         case app::MenuAction::task_fields:
+        case app::MenuAction::custom_fields:
         case app::MenuAction::predecessors:
         case app::MenuAction::custom_field_formula:
         // View / zoom / filter / views.
