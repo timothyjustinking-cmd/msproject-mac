@@ -791,3 +791,165 @@ No new Critical or High finding in G5.  Deliberate notes:
   compares proportions and the live inventory, not an absolute pixel table.
 
 WAVE-26-G5-COMPLETE
+
+## G6 - views and theme
+
+Every item is DONE; nothing in G6 is deferred.  The three commits are one
+finding id each on branch `wave26`.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W26-6.1 | View > Task Views / Resource Views drop-downs with Project's entries; the `app::MenuSpec` submenu axis W25-15 named as the obstacle | **DONE** | commit `279d44f`; gates `build/w26/gates-4e76142-W26-6.1.log` |
+| W26-6.2 | Dark Gray and Black darken the chrome only, applied live; a gate renders both and asserts the chrome palette changed and the sheet/chart pixels did not (tolerance 0) | **DONE** | commit `e6388ea`; gates `build/w26/gates-279d44f-W26-6.2.log` |
+| W26-6.3 | View > Details docks the Task Form below the Gantt, synchronised with the selection, resizable splitter | **DONE** | commit `7eb911c`; gates `build/w26/gates-e6388ea-W26-6.3.log` |
+
+### W26-6.1 detail -- the View drop-downs
+
+- `app::MenuItemSpec` gained `children` + `is_submenu()`; a container has no
+  action or key of its own.  The View menu now carries Project's two entries in
+  the clean strip's order (`docs/handoff/audit-w22/A2-fable-readback.md` lines
+  35-36, operator Q17):
+  * **Task Views**: Gantt Chart (Cmd-Option-1, the port's Task Sheet view),
+    Task Usage (Cmd-Option-3), Network Diagram, Calendar, Other Views;
+  * **Resource Views**: Team Planner, Resource Usage (Cmd-Option-4), Resource
+    Sheet (Cmd-Option-2), Other Views.
+  The four views the port has keep their wave-11 keys; the four it does not
+  build are present, unsupported and disabled with decision 9's exact tooltip
+  (`menu_disabled_reason(MenuAction::none)` is now that text).
+- Both builders walk the tree.  `app/main.mm` creates real NSMenus through
+  `append_menu_items()` and its enablement/check walk is recursive
+  (`refresh_menu_items()`); the old top-level walk would have left every
+  submenu entry in AppKit's default enabled state.  `app_qt/main_window.cpp`
+  builds QMenus on the same action table, so the hidden bar, the QAT and the
+  shortcut keys keep working; `shortcuts_text()` lists the children too.  The
+  action lookup in `app_qt/tests/gate_util.h` is recursive, so every gate that
+  triggers a view action still finds the live QAction.
+- Tests: `app/menu_tests.cpp` pins the two drop-downs' titles, entries and
+  order, the four key equivalents, the unsupported entries and the container
+  rules; `app_qt/tests/shell_test.cpp` compares the live QMenu tree with
+  `menu_specs()` recursively and checks the drop-down labels in order.
+- `docs/ui-command-backlog.md` is regenerated (`python
+  app_qt/tools/command_backlog.py`): 49 menu rows, 7 disabled; 95 ribbon rows,
+  83 disabled.  The `none` reason was made neutral because it now covers both
+  menu entries and ribbon commands with no `MenuAction`.
+- `app/main.mm` is macOS-only and is not compiled on this machine (the shared
+  menu model + the Qt builder are the tested half; the AppKit additions are
+  written for CI, as in every earlier wave).
+
+### W26-6.2 detail -- the two dark themes
+
+- `Theme` gained `black` beside `light` and `dark` (Dark Gray); `ThemeChoice::
+  black` is implemented, so the Account page and Options > General now ENABLE
+  Black (White remains laid out and disabled).  The compact Preferences dialog
+  offers the three implemented palettes.  This supersedes G4's note that Black
+  and White stay disabled: G4 recorded the state at its own commit.
+- `chrome_palette(theme)` now owns every shell-painted chrome surface: the
+  ribbon (tab row and group row as two surfaces, with separate label colours --
+  the Dark Gray capture has light text on the dark tab row and dark text on the
+  light group row), the quick-access strip, the timeline strip and the status
+  bar.  `MainWindow::set_theme()` reapplies it live; the ribbon's stylesheet,
+  the separator/rule colours, the QAT and status stylesheets and the timeline
+  painter all repaint without a restart.
+- Measured values are committed in
+  `tests/data/reference/w26-theme.measures.json`.  The light values are the
+  parity measurement (#F7F7F7 ribbon, #F0F0F0 status); the dark values are the
+  dominant flat fills of the local audit frames
+  `...-1792744264666-4mp1fn.jpg` (Dark Gray) and `...-ekrn72.jpg` (Black):
+  * Dark Gray: group row `#BDBDBD`, tab row `#52575A`, status `#545454`;
+  * Black: group row `#292929`, tab row `#192028`, status `#151515`.
+  The captures stay local; only the numbers are committed.
+- The new `qt_theme_gate` (22nd `app_qt` test) renders Colorful, Dark Gray and
+  Black on `tests/data/synthetic-base.mpp`.  For each theme it takes the
+  dominant colour of the LIVE ribbon and QStatusBar widgets and requires an
+  exact match with the committed measurements (each must also cover at least
+  30 % of the surface), proves the committed dark values ARE the capture's
+  sampled group-row/status fills, and asserts light -> Dark Gray -> Black gets
+  darker on both surfaces.  It then compares the sheet viewport and the Gantt
+  canvas as images across all three themes: byte-identical, tolerance 0 (the
+  `QImage` equality operator).
+- Human-review renders (not committed, `build/` is git-ignored):
+  `build/w26/theme-{colorful,dark-gray,black}-ribbon.png`.
+- The gate's dark numbers are JPEG-sampled modes from 874x491 scaled frames;
+  the capture tab-row samples are recorded beside them in the JSON so a later
+  session can tell which values were sampled and which were derived (active
+  tab, hover, field borders, the timeline strip, which the capture predates).
+
+### W26-6.3 detail -- the split view
+
+- `TaskForm` (`app_qt/task_form.{h,cpp}`) shows the selected task's Name,
+  Duration, Start, Finish, % Complete, Predecessors and Resources.  The last
+  two are the COMPUTED columns `PlanDocument::fill_computed_columns()` writes
+  into the RecordSet, read through the same selected RecordSet row as the other
+  fields (never a plan index).  The fields are read-only display fields this
+  wave; Task Information remains the editable path.
+- `MainWindow` now puts the sheet/Gantt splitter inside a second, VERTICAL
+  QSplitter (`detailsSplitter`) whose second pane is the form.  With Details
+  off the pair fills the splitter exactly, so the measured 0.459 sheet fraction
+  and every parity rectangle are unchanged (the parity gates still read
+  0.45885 vs 0.45924).  The handle is the measured 6 px and the pane is
+  resizable (children are not collapsible).
+- The View tab's Details check box is live: `RibbonCommand::toggle_details`
+  calls `set_details_visible()`, which docks the pane below the Gantt, applies
+  a 3:1 split and refreshes the form; the pin's enabled column is updated.
+  The form follows the selection on every path that re-derives it: load,
+  click, model rebuild, structural edit and cell edit all pass through
+  `sync_view_selection()`/`refresh_task_form()`.  The Details preference
+  survives a view switch: the pane is hidden in the non-task views and
+  re-docks when the task view returns.  Nothing is written to the file.
+- The new `qt_split_view_gate` (23rd `app_qt` test) drives the LIVE check box,
+  proves the form starts hidden/unchecked (Project's measured default), that
+  it docks below the Gantt in a vertical splitter with a draggable 6-px handle,
+  that the form's name/duration/start follow two real QTest mouse selections in
+  the live sheet, that setting the splitter sizes 3/4 then 1/2 changes the
+  pane's height (both directions, restored afterwards), and that the second
+  click undocks it and leaves the document clean.  A human-review render is at
+  `build/w26/split-view-details.png`.
+
+### Gates per commit (each log is on that commit's parent tree)
+
+| item | log | core | plan_recalc | reader | M2 | app | app_qt | fixtures | parity |
+|---|---|---|---|---|---|---|---|---|---|
+| W26-6.1 | `gates-4e76142-W26-6.1.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 17/17 | 21/21 | OK | 10/0, 1/0 |
+| W26-6.2 | `gates-279d44f-W26-6.2.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 17/17 | 22/22 | OK | 10/0, 1/0 |
+| W26-6.3 | `gates-e6388ea-W26-6.3.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 17/17 | 23/23 | OK | 10/0, 1/0 |
+
+Every log also carries `check_fixtures.py` (25 documented hashes, 21 tracked
+`.mpp`), the oracle-provenance check (8), the client-name scan (0 hits on HEAD
+and on the working-tree content), and the 8-hex grep (no matches).  A
+post-commit scan was appended to each log: `279d44f`, `e6388ea` and `7eb911c`
+each report **0 files / 0 name hits**, and `4e76142..7eb911c` reports **0
+commits quoting a name**.  Two transient MSBuild file locks (MSB6003) hit
+during the stage builds; they were retried, not worked around.
+
+## Found, not fixed
+
+No new Critical or High finding in G6.  Deliberate limits, recorded rather than
+claimed:
+
+- **Dark themes leave the sheet/chart HEADER bands light.**  The audit captures
+  show Project also darkening the column-header/timescale bands, but W26-6.2's
+  acceptance is "the sheet/chart pixels did not change, tolerance 0", so the
+  gate treats the whole sheet viewport and Gantt canvas (headers included) as
+  the file-coloured surface.  Darkening the headers later means narrowing that
+  gate's compared region and plumbing the palette into `SheetHeaderView` /
+  `SheetRowHeader` / `GanttCanvas`'s timescale painter; it is a visible
+  difference from the captures and belongs to a follow-up.
+- **Ribbon glyphs keep the fixed dark ink in the dark themes.**  The Black
+  capture shows light icons; ours are the G2 monochrome drawings with their
+  light-theme ink, so Black's contrast is weaker than Project's.  Recolouring
+  them per theme touches `shell_ribbon_icon()` and the G2 uniqueness/monochrome
+  gate (which hashes the ink), so it was not folded into this item.
+- **The Task Form is display-only.**  W26-6.3 asks for the docked,
+  selection-synchronised, resizable form; editing from it (Task Form's fields
+  in Project are editable) would need its own save path and is not claimed.
+- **The stored combination view is not decoded.**  Details starts unchecked
+  (Project's measured default and the clean View capture's state).  The file
+  stores a top/bottom pane pair in `0x2240000a/0x2240000b`; a later wave could
+  start the pane docked from that state (operator Q11's "splitter from the
+  stored view state").
+- **White remains an unimplemented Office Theme name** (laid out, disabled with
+  the exact tooltip), unchanged from G4.
+- The View drop-downs' Network Diagram, Calendar, Team Planner and both Other
+  Views entries are honest disabled entries: this port has no such views.
+
+WAVE-26-G6-COMPLETE
