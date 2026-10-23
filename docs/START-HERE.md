@@ -6,6 +6,12 @@ session must read first._
 
 ## The 30-second state
 
+* **Wave 25 is running on branch `wave25`** (cut from local `wave24` 2561a51)
+  from `docs/handoff/wave25-brief.md`.  The verifier found wave 24 **not ready to
+  merge**: the project-row fix regressed the shared/macOS Gantt path (rows indexed
+  by sheet row again), the "stock" bar colours are probably manual-vs-auto rather
+  than task-vs-critical, and the privacy scrub's 8-hex hashes are invertible - see
+  `docs/handoff/wave24-verification/`.  The publication hold still applies.
 * **Wave 24 is closed on branch `wave24`** from `docs/handoff/wave24-brief.md`;
   the record is **`docs/handoff/wave24-complete.md`** (the gate).  The branch
   was cut from local `wave23` = `d236f91` and already carried the brief and two
