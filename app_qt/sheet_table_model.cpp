@@ -198,8 +198,11 @@ QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
     const std::size_t row = record_row(index.row());
     const std::size_t column = column_for_display(index.column());
     if (row == core::sheet::kNoIndex || column == core::sheet::kNoIndex) {
-        // Indicators, Task Mode, Predecessors, Resource Names and the Add New
-        // Column stub hold no SheetModel value; the delegate paints the icons.
+        // A cell with no SheetModel column: Indicators and Task Mode (painted by
+        // the delegate) and the Add New Column stub.  Since wave 22 Predecessors,
+        // Successors and Resource Names are NOT in this set -- PlanDocument fills
+        // their derived text into the RecordSet, so they have a real column and
+        // reach the DisplayRole path below like any other text cell.
         return {};
     }
     switch (role) {

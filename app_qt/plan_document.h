@@ -46,6 +46,47 @@ class StructuralEdits;
 
 namespace msqt {
 
+// ---------------------------------------------------------------------------
+// Wave 22 (the other half of decision 7): the columns Project COMPUTES
+// ---------------------------------------------------------------------------
+//
+// A `214/CTable` record for Predecessors/Successors/Resource Names stores a field
+// id (0x0b40002f / 0x0b400030 / 0x0b400031) that the descriptor table gives no
+// name and the reader produces no value for: Project does not store those texts,
+// it derives them from the plan's link and assignment tables.  These functions
+// do that derivation.  PlanDocument writes the three results into the RecordSet
+// under those same ids, so the sheet model and the delegate paint them exactly
+// like any other text column.
+//
+// The syntax is MEASURED from the clean MS Project capture
+// (corpus/reference/2026-10-23-msproject/project-gantt-loaded-clean.png):
+//   * entries are comma separated with NO space -- "18,33FS+20", "40,36";
+//   * a plain finish-to-start link with NO lag is the bare id -- "9", "33";
+//   * a LAGGED finish-to-start link keeps its letters -- "9FS+50 d",
+//     "17FS+20 d" -- so the letters are dropped only for the bare case;
+//   * the other three types always print theirs -- the capture's task 42 has an
+//     SS predecessor and shows "33SS";
+//   * the list is in the FILE's link order, NOT sorted by ID: the capture's task
+//     35 shows "40,36", task 36 "39,37" and task 17 "18,33..." -- the first two
+//     are not ascending, and all three are exactly the stored link order.
+// Measured but NOT reproduced here: the lag's unit text, which is printed through
+// the sheet's OWN duration formatter -- so it comes out "50 days" under
+// core::sheet's default labels while Project's capture (whose file uses the
+// abbreviated "d") prints "50 d".  FF/SF letters are Project's documented display
+// syntax, not seen in that capture (it contains no such link on a visible row).
+// Resource Names are comma+space separated with no unit suffix; a file that
+// assigns a resource at other than 100 % renders "name[50%]" in Project, which no
+// corpus file proves, so the units are NOT invented here.
+//
+// An endpoint with no live task row contributes nothing (the adapter has already
+// dropped such links from the plan, and a structural rebuild keeps that rule); a
+// uid the plan does not know gives an empty string rather than a guess.
+std::string predecessors_text(const app::PlanInput& plan, std::uint32_t task_uid,
+                              const core::sheet::SheetFormat& format);
+std::string successors_text(const app::PlanInput& plan, std::uint32_t task_uid,
+                            const core::sheet::SheetFormat& format);
+std::string resource_names_text(const app::PlanInput& plan, std::uint32_t task_uid);
+
 class PlanDocument {
   public:
     PlanDocument() = default;
@@ -141,6 +182,11 @@ class PlanDocument {
     void rebuild_from_base(app::ZoomLevel zoom, std::uint32_t keep_uid);
     void refresh_filter_rows();
     void read_table(const std::string& source_path);
+    // Wave 22: writes the three computed texts (predecessors_text() and friends)
+    // into the RecordSet for every row, from the CURRENT view plan.  Runs at the
+    // end of build_gantt(), i.e. after view_ has been re-derived, so a structural
+    // link edit is reflected in the sheet in the same rebuild.
+    void fill_computed_columns();
     // The columns the sheet is built from: the file's stored table when it has
     // one, else app::default_sheet_columns().
     std::vector<core::sheet::SheetColumn> stored_columns() const;

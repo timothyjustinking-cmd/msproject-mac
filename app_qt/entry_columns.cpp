@@ -29,9 +29,10 @@ const std::vector<EntryColumn>& columns() {
          0x0b400505u},
         {"Finish", model_field("Finish"), 13, entry_width_px(13), EntryCellKind::finish,
          0x0b400506u},
-        {"Predecessors", 0u, 17, entry_width_px(17), EntryCellKind::predecessors,
-         0x0b40002fu},
-        {"Resource Names", 0u, 17, entry_width_px(17), EntryCellKind::resources, 0x0b400031u},
+        {"Predecessors", kPredecessorsField, 17, entry_width_px(17),
+         EntryCellKind::predecessors, 0x0b40002fu},
+        {"Resource Names", kResourceNamesField, 17, entry_width_px(17),
+         EntryCellKind::resources, 0x0b400031u},
         {"Add New Column", 0u, 20, entry_width_px(20), EntryCellKind::stub, 0u},
     };
     return kColumns;
@@ -92,8 +93,9 @@ EntryCellKind display_kind_for_field(core::view::FieldId field) {
     switch (field) {
         case 0x0b4000cdu: return EntryCellKind::indicators;   // Indicators (no model field)
         case 0x0b400500u: return EntryCellKind::mode;         // Task.Manual = Task Mode
-        case 0x0b40002fu: return EntryCellKind::predecessors;
-        case 0x0b400031u: return EntryCellKind::resources;
+        case kPredecessorsField: return EntryCellKind::predecessors;
+        case kSuccessorsField: return EntryCellKind::successors;
+        case kResourceNamesField: return EntryCellKind::resources;
         default: break;
     }
     return EntryCellKind::data;

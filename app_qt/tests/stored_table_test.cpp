@@ -20,6 +20,22 @@
 //      file's stored Entry table is not the stock one ("Dur", "Pre", "Suc",
 //      "SUMMARY", widths 70/9/19/21/...), so this is the real-file proof.
 //
+// WAVE 22 adds the COLUMN VALUES:
+//   D. case_computed_text_rules(): the format rules of the three columns Project
+//      computes (Predecessors, Successors, Resource Names) on a CONSTRUCTED plan
+//      -- the bare id for a lag-free FS link, "FS+50 days" for a lagged one,
+//      "33SS" for a type that is not FS, ", " inside Resource Names, and dead
+//      endpoints / unassigned rows / unknown uids skipped.
+//   E. The same text reaches the sheet: on the synthetic table's "Depends On"
+//      (0x0b40002f) and "Who" (0x0b400031) columns -- that part runs in CI -- and
+//      on every row of the corpus file's Pre (0x0b40002f), Suc (0x0b400030) and
+//      % Complete (0x0b400020) columns, with exact strings pinned for the rows
+//      the clean MS Project capture shows.
+//   F. The columns that legitimately stay blank: SUMMARY (Task.Flag10,
+//      0x0b400051 -- nothing decodes it) and Resource Names on these files (their
+//      assignment rows store the null resource id).  Both are asserted blank WITH
+//      the byte reason, never filled with an invented value.
+//
 // Every write goes under the output directory passed as argv[2]: never
 // tests/data/, never corpus/.
 #include <QAbstractItemModel>
@@ -43,6 +59,7 @@
 #include "cfb_writer.h"
 #include "entry_columns.h"
 #include "main_window.h"
+#include "reader_adapter.h"
 #include "shell_style.h"
 #include "sheet.h"
 #include "viewstate.h"
@@ -284,6 +301,10 @@ void case_fixture_is_entry(const QString& fixture) {
           "the fixture's sheet model keeps all nine stored columns");
 }
 
+// Wave 22: the computed-column checks for the synthetic table.  Declared here and
+// defined after the wave-22 helpers (load_plan/shown_text), which it needs.
+void check_computed_columns_synthetic(msqt::MainWindow& window, const QString& path);
+
 void case_synthetic_non_entry(const QString& fixture, const QString& out_dir) {
     const QString target = QDir(out_dir).filePath(QStringLiteral("stored-table.mpp"));
     QFile::remove(target);
@@ -374,6 +395,283 @@ void case_synthetic_non_entry(const QString& fixture, const QString& out_dir) {
     // The task/Gantt row map is untouched by the presentation change.
     check(window.sheet_row_count() == 3, "the synthetic table keeps the three task rows");
     check(window.gantt_bar_count() >= 1, "the Gantt still draws the plan's bars");
+
+    // Wave 22: this table's "Depends On" (0x0b40002f) and "Who" (0x0b400031)
+    // columns are the two computed fields, on a COMMITTED fixture -- so the value
+    // rendering is gated in CI (13/13) as well as on the corpus.  The checker is
+    // defined after the wave-22 helpers (it needs them).
+    check_computed_columns_synthetic(window, target);
+}
+
+// --- wave 22: the columns Project fills with values --------------------------
+
+void check_std_text(const std::string& got, const std::string& want, const char* what) {
+    if (got != want) {
+        std::fprintf(stderr, "FAIL: %s (got \"%s\", want \"%s\")\n", what, got.c_str(),
+                     want.c_str());
+        ++g_failures;
+    }
+}
+
+// The file's plan read straight from its bytes by the SAME reader the window
+// used.  This is the gate's oracle: the assertion is "the sheet shows this file's
+// links and assignments", not "the sheet agrees with itself".  The two raw-word
+// counters are byte-level evidence for Resource Names: an assignment row that
+// stores 0 or mpxj's ASSIGNMENT_NULL_RESOURCE_ID at +8 names no resource, so the
+// column has nothing to show.
+struct PlanOracle {
+    bool ok = false;
+    app::PlanInput plan;
+    std::size_t null_resource_word_rows = 0;  // raw == mpp::kNullResourceUid
+    std::size_t zero_resource_word_rows = 0;  // raw == 0
+    std::string error;
+};
+
+PlanOracle load_plan(const QString& path) {
+    PlanOracle oracle;
+    try {
+        const mpp::Document document = mpp::load_file(path.toStdString());
+        for (const mpp::Assignment& assignment : document.assignments) {
+            if (assignment.resource_uid_raw == mpp::kNullResourceUid) {
+                ++oracle.null_resource_word_rows;
+            } else if (assignment.resource_uid_raw == 0) {
+                ++oracle.zero_resource_word_rows;
+            }
+        }
+        oracle.plan = app::plan_input_from_document(document);
+        oracle.ok = true;
+    } catch (const std::exception& failure) {
+        oracle.error = failure.what();
+    }
+    return oracle;
+}
+
+const app::TaskRow* task_by_id(const app::PlanInput& plan, std::uint32_t id) {
+    for (const app::TaskRow& row : plan.tasks) {
+        if (row.id == id) {
+            return &row;
+        }
+    }
+    return nullptr;
+}
+
+const app::TaskRow* task_by_uid(const app::PlanInput& plan, std::uint32_t uid) {
+    for (const app::TaskRow& row : plan.tasks) {
+        if (row.uid == uid) {
+            return &row;
+        }
+    }
+    return nullptr;
+}
+
+// The first `214/CTable` table of a file (read-only), for the field-id evidence
+// lines and the "which column is which field id" assertions.
+bool read_first_table(const QString& path, msproject::viewstate::TableDef& out) {
+    try {
+        const mppwrite::CfbDocument document =
+            mppwrite::CfbDocument::from_file(path.toStdString());
+        const char* const names[4] = {kFixedData, kFixedMeta, kVarMeta, kVar2Data};
+        std::array<std::vector<std::uint8_t>, 4> raw;
+        for (std::size_t index = 0; index < raw.size(); ++index) {
+            if (!document.has_stream(names[index])) {
+                return false;
+            }
+            raw[index] = document.read_stream(names[index]);
+        }
+        msproject::viewstate::PartSet parts;
+        parts.fixed_data = raw[0];
+        parts.fixed_meta = raw[1];
+        parts.var_meta = raw[2];
+        parts.var2_data = raw[3];
+        msproject::viewstate::ViewState state;
+        if (!msproject::viewstate::parse_view_state("CTable", parts, state, nullptr) ||
+            state.tables.empty()) {
+            return false;
+        }
+        out = state.tables.front();
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+// Wave 22: the FORMAT of the three computed columns, on a constructed plan.  This
+// is where the syntax is pinned; the corpus case then proves the same text
+// reaches the sheet from the file's own links.
+//
+// The shape is measured from the clean MS Project capture
+// (corpus/reference/2026-10-23-msproject/project-gantt-loaded-clean.png): the
+// bare id for a finish-to-start link with NO lag ("9"), "FS" plus a signed lag
+// when an FS link carries one ("9FS+50 d"), a type that is not FS always printed
+// ("33SS"), and a comma with NO space between entries ("18,33FS+20").
+void case_computed_text_rules() {
+    app::PlanInput plan;
+    for (std::uint32_t index = 1; index <= 5; ++index) {
+        app::TaskRow row;
+        row.uid = 100 + index;  // uids do not have to equal IDs
+        row.id = index;
+        row.name = "Task " + std::to_string(index);
+        plan.tasks.push_back(row);
+    }
+    auto add_link = [&plan](std::uint32_t predecessor, std::uint32_t successor,
+                            core::gantt::LinkType type, std::int32_t lag_ticks) {
+        app::LinkRow link;
+        link.predecessor_uid = predecessor;
+        link.successor_uid = successor;
+        link.type = type;
+        link.lag_ticks = lag_ticks;
+        plan.links.push_back(link);
+    };
+    // In plan (file) order, which is the order Project lists them in.
+    add_link(101, 103, core::gantt::LinkType::finish_to_start, 0);      // task 3 <- 1
+    add_link(102, 103, core::gantt::LinkType::start_to_start, 9600);    // 2SS+2 days
+    add_link(103, 104, core::gantt::LinkType::finish_to_finish, -9600);  // 4FF-2 days
+    add_link(104, 103, core::gantt::LinkType::start_to_finish, 0);      // 4SF
+    add_link(105, 103, core::gantt::LinkType::finish_to_start, 24000);  // 5FS+5 days
+    add_link(999, 103, core::gantt::LinkType::finish_to_start, 0);      // dead: no such task
+    app::ResourceRow alice;
+    alice.uid = 5;
+    alice.name = "Alice";
+    app::ResourceRow bob;
+    bob.uid = 6;
+    bob.name = "Bob";
+    app::ResourceRow nameless;
+    nameless.uid = 7;
+    plan.resources = {alice, bob, nameless};
+    auto add_assignment = [&plan](std::uint32_t task_uid, std::uint32_t resource_uid) {
+        app::AssignmentRow assignment;
+        assignment.task_uid = task_uid;
+        assignment.resource_uid = resource_uid;
+        plan.assignments.push_back(assignment);
+    };
+    add_assignment(103, 5);   // Alice
+    add_assignment(103, 6);   // Bob
+    add_assignment(103, 0);   // unassigned row: names nothing
+    add_assignment(103, 77);  // a resource the plan does not know: no invented name
+    add_assignment(103, 7);   // a resource with no name: skipped
+    add_assignment(102, 5);   // a different task's assignment
+
+    const core::sheet::SheetFormat format;  // the shell's default duration labels
+    // Two days of lag is 2 * 4800 ticks, rendered by the sheet's own formatter
+    // (so the unit text follows the shell's labels, "days" by default).
+    check_std_text(msqt::predecessors_text(plan, 103, format), "1,2SS+2 days,4SF,5FS+5 days",
+                   "predecessors: file order, bare FS, SS+lag, SF, lagged FS, dead endpoint dropped");
+    check_std_text(msqt::successors_text(plan, 103, format), "4FF-2 days",
+                   "successors: FF with a negative lag");
+    check_std_text(msqt::predecessors_text(plan, 104, format), "3FF-2 days",
+                   "a successor's row lists the same link from the other end");
+    check_std_text(msqt::successors_text(plan, 101, format), "3",
+                   "a plain FS successor is the bare id");
+    check_std_text(msqt::predecessors_text(plan, 101, format), "",
+                   "a task with no incoming link is empty (never a placeholder)");
+    check_std_text(msqt::successors_text(plan, 104, format), "3SF",
+                   "a task that is a predecessor lists its successor");
+    check_std_text(msqt::predecessors_text(plan, 12345, format), "",
+                   "an unknown uid is empty, not a guess");
+    check_std_text(msqt::resource_names_text(plan, 103), "Alice, Bob",
+                   "resource names: assignment order, ', ' separated, unknown/empty/unassigned skipped");
+    check_std_text(msqt::resource_names_text(plan, 102), "Alice",
+                   "each row names only its own assignments");
+    check_std_text(msqt::resource_names_text(plan, 101), "",
+                   "a task with no assignment is empty");
+    check_std_text(msqt::resource_names_text(plan, 12345), "", "an unknown uid is empty");
+}
+
+// The per-row text a display row shows for `column`.
+QString shown_text(QAbstractItemModel* model, int display_row, int column) {
+    if (model == nullptr || column < 0) {
+        return {};
+    }
+    return model->index(display_row, column).data(Qt::DisplayRole).toString();
+}
+
+// The display ordinal of the row whose task uid is `uid`, or -1.
+int display_row_of_uid(msqt::MainWindow& window, std::uint32_t uid) {
+    msqt::SheetTableModel* model = window.sheet_table_model();
+    core::sheet::SheetModel* sheet = window.sheet();
+    if (model == nullptr || sheet == nullptr || window.sheet_view() == nullptr) {
+        return -1;
+    }
+    QAbstractItemModel* table = window.sheet_view()->model();
+    if (table == nullptr) {
+        return -1;
+    }
+    for (int display = 0; display < table->rowCount(); ++display) {
+        const std::size_t record = model->record_row(display);
+        if (record != core::sheet::kNoIndex && sheet->row_uid(record) == uid) {
+            return display;
+        }
+    }
+    return -1;
+}
+
+// Wave 22: the synthetic table's "Depends On" (0x0b40002f) and "Who" (0x0b400031)
+// columns on the COMMITTED fixture, so the derived-value rendering is gated in CI
+// (13/13) and not only on this box's corpus.  The fixture's own plan is the oracle.
+void check_computed_columns_synthetic(msqt::MainWindow& window, const QString& path) {
+    if (window.sheet() == nullptr || window.sheet_view() == nullptr ||
+        window.sheet_view()->model() == nullptr) {
+        check(false, "the synthetic window has a sheet model");
+        return;
+    }
+    QAbstractItemModel* model = window.sheet_view()->model();
+    const int depends_column =
+        window.sheet_table_model()->display_column_for_field(msqt::kPredecessorsField);
+    const int who_column =
+        window.sheet_table_model()->display_column_for_field(msqt::kResourceNamesField);
+    check(depends_column == 6, "Depends On is display column 6 (0x0b40002f)");
+    check(who_column == 7, "Who is display column 7 (0x0b400031)");
+    if (depends_column < 0 || who_column < 0) {
+        return;
+    }
+    const PlanOracle fixture_plan = load_plan(path);
+    check(fixture_plan.ok, "the synthetic copy's plan reads back for the derived columns");
+    if (!fixture_plan.ok) {
+        return;
+    }
+    const core::sheet::SheetFormat format;
+    const app::PlanInput& plan = fixture_plan.plan;
+    std::printf("note: synthetic fixture plan tasks=%zu links=%zu resources=%zu assignments=%zu\n",
+                plan.tasks.size(), plan.links.size(), plan.resources.size(),
+                plan.assignments.size());
+    int rows_with_links = 0;
+    int rows_with_resources = 0;
+    for (int display = 0; display < model->rowCount(); ++display) {
+        const std::size_t record = window.sheet_table_model()->record_row(display);
+        if (record == core::sheet::kNoIndex) {
+            continue;
+        }
+        const std::uint32_t uid = window.sheet()->row_uid(record);
+        const QString shown = shown_text(model, display, depends_column);
+        check_text(shown, QString::fromStdString(msqt::predecessors_text(plan, uid, format)),
+                   "Depends On shows the fixture plan's predecessors", display);
+        if (!shown.isEmpty()) {
+            ++rows_with_links;
+        }
+        // Who shows whatever the fixture's own assignment rows name, and nothing
+        // when they name nothing (the derivation is the answer, not a blank cell).
+        const QString shown_who = shown_text(model, display, who_column);
+        check_text(shown_who,
+                   QString::fromStdString(msqt::resource_names_text(plan, uid)),
+                   "Who shows the fixture plan's resource names", display);
+        if (!shown_who.isEmpty()) {
+            ++rows_with_resources;
+        }
+    }
+    std::printf("note: fixture columns: %d row(s) with a predecessor, %d with a resource name\n",
+                rows_with_links, rows_with_resources);
+    if (!plan.links.empty()) {
+        check(rows_with_links > 0, "a fixture with links shows at least one predecessor value");
+    }
+    if (!plan.assignments.empty()) {
+        // Not every assignment names a resource (a probe row may store the null id),
+        // so this is a report, not a requirement; the corpus case gates the reason
+        // for a blank Resource Names column.
+        std::printf("note: fixture assignments=%zu (%zu null-word, %zu zero-word), rows showing "
+                    "a resource name=%d\n",
+                    plan.assignments.size(), fixture_plan.null_resource_word_rows,
+                    fixture_plan.zero_resource_word_rows, rows_with_resources);
+    }
 }
 
 // Optional: a real corpus file (read-only).  Its stored table is not Entry.
@@ -381,6 +679,22 @@ void case_corpus(const QString& corpus) {
     if (!QFileInfo::exists(corpus)) {
         std::fprintf(stderr, "note: no corpus file at %s; skipped\n", corpus.toUtf8().constData());
         return;
+    }
+    // --- wave 22: the field-id map of the file's own table -------------------
+    // Printed (not only asserted) because the ids ARE the evidence for which
+    // column carries which value: the descriptor table names none of the three
+    // computed fields, so the ids -- not names -- are the contract.
+    msproject::viewstate::TableDef table;
+    if (read_first_table(corpus, table)) {
+        std::printf("note: %s first 214/CTable table \"%s\" (%zu columns):\n",
+                    QFileInfo(corpus).fileName().toUtf8().constData(), table.caption.c_str(),
+                    table.columns.size());
+        for (const msproject::viewstate::ColumnDef& column : table.columns) {
+            std::printf("note:   0x%08x  \"%s\"  %u chars\n", column.field_id,
+                        column.title.c_str(), column.opaque_header[0]);
+        }
+    } else {
+        check(false, "the corpus file's first 214/CTable table reads back");
     }
     msqt::MainWindow window;
     window.resize(msqt::kWindowWidth, msqt::kWindowHeight);
@@ -424,11 +738,225 @@ void case_corpus(const QString& corpus) {
         check(!window.sheet()->cell_text(0, duration).empty(),
               "the corpus Duration column shows the task's duration");
     }
+
+    // --- wave 22: the columns Project fills with values ----------------------
+    if (window.sheet() == nullptr || window.sheet_view() == nullptr ||
+        window.sheet_view()->model() == nullptr) {
+        check(false, "the corpus window has a sheet model");
+        return;
+    }
+    QAbstractItemModel* model = window.sheet_view()->model();
+    msqt::SheetTableModel* table_model = window.sheet_table_model();
+    const core::sheet::SheetModel& sheet = *window.sheet();
+    const PlanOracle oracle = load_plan(corpus);
+    if (!oracle.ok) {
+        std::fprintf(stderr, "FAIL: the corpus plan does not read back: %s\n",
+                     oracle.error.c_str());
+        ++g_failures;
+        return;
+    }
+    const app::PlanInput& plan = oracle.plan;
+    std::printf("note: corpus plan tasks=%zu links=%zu resources=%zu assignments=%zu\n",
+                plan.tasks.size(), plan.links.size(), plan.resources.size(),
+                plan.assignments.size());
+
+    const int pred_column = table_model->display_column_for_field(msqt::kPredecessorsField);
+    const int succ_column = table_model->display_column_for_field(msqt::kSuccessorsField);
+    const int pct_column = table_model->display_column_for_field(msqt::kPercentCompleteField);
+    const int summary_column = table_model->display_column_for_field(msqt::kSummaryFlagField);
+    const int resources_column = table_model->display_column_for_field(msqt::kResourceNamesField);
+    check(pred_column >= 0, "the corpus table's Pre column is a display column (0x0b40002f)");
+    check(succ_column >= 0, "the corpus table's Suc column is a display column (0x0b400030)");
+    check(pct_column >= 0, "% Complete is a display column (0x0b400020)");
+    check(summary_column >= 0, "the SUMMARY column is a display column (0x0b400051 = Flag10)");
+    check(resources_column == -1,
+          "the corpus table stores no Resource Names column (0x0b400031)");
+    check(table_model->display_kind(pred_column) == msqt::EntryCellKind::predecessors,
+          "the stored Pre column maps to the predecessors kind");
+    check(table_model->display_kind(succ_column) == msqt::EntryCellKind::successors,
+          "the stored Suc column maps to the successors kind");
+
+    // EVERY displayed row: % Complete is the task's stored percent, and Pre/Suc
+    // are the plan's link text (the format itself is pinned by
+    // case_computed_text_rules; this proves the file's links reach the sheet).
+    const core::sheet::SheetFormat format;
+    int rows_checked = 0;
+    int rows_with_links = 0;
+    int blank_predecessors = 0;
+    for (int display = 0; display < model->rowCount(); ++display) {
+        const std::size_t record = table_model->record_row(display);
+        if (record == core::sheet::kNoIndex) {
+            continue;
+        }
+        const std::uint32_t uid = sheet.row_uid(record);
+        const app::TaskRow* task = task_by_uid(plan, uid);
+        check(task != nullptr, "every displayed row is a live task of the file");
+        if (task == nullptr) {
+            continue;
+        }
+        ++rows_checked;
+        // Project prints the percent sign (the capture reads "57%", "100%", "0%");
+        // PlanDocument::stored_columns() declares the column CellKind::Percent.
+        check_text(shown_text(model, display, pct_column),
+                   QString::number(static_cast<unsigned>(task->percent_complete)) +
+                       QStringLiteral("%"),
+                   "% Complete shows the task's stored percent", display);
+        const QString shown_predecessors = shown_text(model, display, pred_column);
+        const QString shown_successors = shown_text(model, display, succ_column);
+        check_text(shown_predecessors,
+                   QString::fromStdString(msqt::predecessors_text(plan, uid, format)),
+                   "Pre shows the plan's predecessor list", display);
+        check_text(shown_successors,
+                   QString::fromStdString(msqt::successors_text(plan, uid, format)),
+                   "Suc shows the plan's successor list", display);
+        if (shown_predecessors.isEmpty()) {
+            ++blank_predecessors;
+        }
+        if (!shown_predecessors.isEmpty() || !shown_successors.isEmpty()) {
+            ++rows_with_links;
+        }
+    }
+    check(rows_checked == static_cast<int>(plan.tasks.size()),
+          "the gate checks every task of the file (83 rows)");
+    check(rows_with_links >= 60, "most tasks show a predecessor or a successor");
+    check(blank_predecessors > 0, "a task with no incoming link keeps an empty Pre cell");
+    std::printf("note: %d rows checked, %d with a predecessor/successor, %d blank Pre\n",
+                rows_checked, rows_with_links, blank_predecessors);
+
+    // Exact strings, cross-checked against the clean MS Project capture
+    // (corpus/reference/2026-10-23-msproject/project-gantt-loaded-clean.png).  The
+    // number is the file's own task ID (the column Project prints):
+    //   3 -> 4, 4 <- 3 -> 5, 5 <- 4;
+    //   9 <- 8 -> 10FS+50 days, 10 <- 9FS+50 days (240000 ticks = 50 days) -> 11;
+    //   17 -> 18,33FS+20 days,56,57,25 (the capture's 13-char column shows only
+    //     "18,33FS+20 d": Project CLIPS there, so the frame is the pin, not the PNG);
+    //   33 <- 17FS+20 days -> 42SS,34; 34 <- 33 -> 39;
+    //   35 <- 46 -> 40,36 and 36 <- 52,35 -> 39,37 and 37 <- 36 -> 38: the capture
+    //     shows those two multi-entry lists in exactly this order, which is the
+    //     FILE's link order and NOT ascending ID -- the strongest evidence that the
+    //     list order is the stored one;
+    //   42 <- 33SS, 57.
+    struct PinnedText {
+        std::uint32_t id;
+        const char* predecessors;
+        const char* successors;
+    };
+    const PinnedText kPinned[] = {
+        {3, "", "4"},
+        {4, "3", "5"},
+        {5, "4", ""},
+        {9, "8", "10FS+50 days"},
+        {10, "9FS+50 days", "11"},
+        {17, "15", "18,33FS+20 days,56,57,25"},
+        {33, "17FS+20 days", "42SS,34"},
+        {34, "33", "39"},
+        {35, "46", "40,36"},
+        {36, "52,35", "39,37"},
+        {37, "36", "38"},
+        {42, "33SS,57", nullptr},
+    };
+    for (const PinnedText& pinned : kPinned) {
+        const app::TaskRow* task = task_by_id(plan, pinned.id);
+        check(task != nullptr, "the pinned task id is in the file");
+        if (task == nullptr) {
+            continue;
+        }
+        const int display = display_row_of_uid(window, task->uid);
+        check(display >= 0, "the pinned task has a displayed row");
+        if (display < 0) {
+            continue;
+        }
+        check_text(shown_text(model, display, pred_column),
+                   QString::fromUtf8(pinned.predecessors), "the pinned Pre text",
+                   static_cast<int>(pinned.id));
+        if (pinned.successors != nullptr) {
+            check_text(shown_text(model, display, succ_column),
+                       QString::fromUtf8(pinned.successors), "the pinned Suc text",
+                       static_cast<int>(pinned.id));
+        }
+    }
+
+    // % Complete: the exact strings the coordinator's render of this file reported
+    // (the file's own stored percents, printed with Project's sign).
+    struct PinnedPercent {
+        std::uint32_t id;
+        const char* text;
+    };
+    const PinnedPercent kPinnedPercent[] = {
+        {13, "57%"},  // "Site establishment", the summary row the operator saw
+        {1, "99%"},   // "PRE-CONSTRUCTION"
+        {12, "29%"},  // "CONSTRUCTION"
+        {5, "100%"},  // "client-text-025"
+        {10, "0%"},   // "client-text-032"
+    };
+    for (const PinnedPercent& pinned : kPinnedPercent) {
+        const app::TaskRow* task = task_by_id(plan, pinned.id);
+        check(task != nullptr, "the pinned percent's task id is in the file");
+        if (task == nullptr) {
+            continue;
+        }
+        const int display = display_row_of_uid(window, task->uid);
+        check(display >= 0, "the pinned percent's task has a displayed row");
+        if (display < 0) {
+            continue;
+        }
+        check_text(shown_text(model, display, pct_column), QString::fromUtf8(pinned.text),
+                   "the pinned % Complete text", static_cast<int>(pinned.id));
+    }
+
+    // SUMMARY is Task.Flag10 (0x0b400051).  The reader decodes Flag1 only (its Task
+    // FixedMeta bit is measured); the Flag2..20 bit positions are unmeasured
+    // (core/mpp/field_value.h), so the RecordSet has no Flag10 value and the column
+    // is honestly blank.  Assert BOTH halves: the column exists in the file's
+    // table, and no value reaches it.
+    check(!sheet.records().has_field(msqt::kSummaryFlagField),
+          "the RecordSet carries no Flag10 column: no Flag2..20 bit is decoded");
+    int summary_values = 0;
+    for (int display = 0; display < model->rowCount(); ++display) {
+        if (!shown_text(model, display, summary_column).isEmpty()) {
+            ++summary_values;
+        }
+    }
+    check(summary_values == 0,
+          "the SUMMARY (Flag10) column is blank on every row: no decoded value");
+
+    // Resource Names: the file's table stores no such column, and none of its 67
+    // live assignment rows names a resource -- every row's raw +8 word is the null
+    // sentinel 0xFFFF0001 (mpxj's ASSIGNMENT_NULL_RESOURCE_ID).  Both facts are read
+    // from the bytes, so "blank" here is correct rather than a gap.
+    std::size_t assignments_with_resource = 0;
+    for (const app::AssignmentRow& assignment : plan.assignments) {
+        if (assignment.resource_uid != 0) {
+            ++assignments_with_resource;
+        }
+    }
+    check(plan.assignments.size() == 67, "the corpus has 67 live assignment rows");
+    check(assignments_with_resource == 0,
+          "no corpus assignment row names a resource (mapped resource_uid == 0)");
+    check(oracle.null_resource_word_rows + oracle.zero_resource_word_rows ==
+              plan.assignments.size(),
+          "every corpus assignment row stores 0xFFFF0001 or 0 in its resource word");
+    bool any_resource_name = false;
+    for (const app::TaskRow& task : plan.tasks) {
+        if (!msqt::resource_names_text(plan, task.uid).empty()) {
+            any_resource_name = true;
+            break;
+        }
+    }
+    check(!any_resource_name, "Resource Names has no source in this file");
+    std::printf("note: Resource Names: %zu resource rows, %zu assignments (%zu with the "
+                "0xFFFF0001 null word, %zu with 0), %zu naming a resource -> no text\n",
+                plan.resources.size(), plan.assignments.size(),
+                oracle.null_resource_word_rows, oracle.zero_resource_word_rows,
+                assignments_with_resource);
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
+    // Unbuffered stdout: the gate's `note:` evidence lines must survive to the log
+    // even if a check aborts.
+    setvbuf(stdout, nullptr, _IONBF, 0);
     QApplication app(argc, argv);
     msqt::configure_application();
 
@@ -441,6 +969,7 @@ int main(int argc, char** argv) {
     const QString out_dir = QString::fromLocal8Bit(argv[2]);
     const QString corpus = argc >= 4 ? QString::fromLocal8Bit(argv[3]) : QString();
 
+    case_computed_text_rules();
     case_fixture_is_entry(fixture);
     case_synthetic_non_entry(fixture, out_dir);
     if (!corpus.isEmpty()) {

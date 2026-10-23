@@ -90,7 +90,9 @@ class SheetTableModel final : public QAbstractTableModel {
     // Displayed row -> RecordSet row.  core::sheet::kNoIndex when out of range.
     std::size_t record_row(int display_row) const;
     // Displayed column -> SheetModel column; kNoIndex for a synthetic column
-    // (Indicators, Task Mode, Predecessors, Resources, stub).
+    // (Indicators, Task Mode, the stub).  Wave 22: Predecessors/Successors/
+    // Resource Names have a real model column when the file's table stores their
+    // field id -- their text is derived into the RecordSet by PlanDocument.
     std::size_t model_column(int display_column) const;
 
     // The SheetModel column showing `field`, or kNoIndex.

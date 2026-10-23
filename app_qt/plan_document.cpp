@@ -13,6 +13,7 @@
 
 #include "cfb_writer.h"
 #include "edit_model.h"
+#include "entry_columns.h"  // kPredecessorsField/kSuccessorsField/kResourceNamesField
 #include "filter_model.h"
 #include "reader_adapter.h"
 #include "selection_model.h"
@@ -37,7 +38,136 @@ std::size_t name_column_of(const core::sheet::SheetModel& sheet) {
 const char* const kTableParts[4] = {"214/CTable/FixedData", "214/CTable/FixedMeta",
                                     "214/CTable/VarMeta", "214/CTable/Var2Data"};
 
+// Wave 22: the task a uid names, or nullptr when the plan has no live row for it
+// (the reader drops links with a dead endpoint, and a structural rebuild keeps
+// that rule, so this is a guard rather than a normal path).
+const app::TaskRow* task_row_of(const app::PlanInput& plan, std::uint32_t uid) {
+    if (uid == 0) {
+        return nullptr;
+    }
+    for (const app::TaskRow& row : plan.tasks) {
+        if (row.uid == uid) {
+            return &row;
+        }
+    }
+    return nullptr;
+}
+
+// The display id of a link's other endpoint: Project's Predecessors/Successors
+// text names a task by its ID column (not its UniqueID).  Empty when the plan has
+// no live row, which SKIPS that entry rather than printing an invented uid.
+std::string endpoint_id(const app::PlanInput& plan, std::uint32_t uid) {
+    const app::TaskRow* row = task_row_of(plan, uid);
+    return row != nullptr ? std::to_string(row->id) : std::string();
+}
+
+// Project's link-type suffix.  MEASURED from the clean capture: a plain
+// finish-to-start link with no lag is the BARE id ("9", "33"), but a
+// finish-to-start link with a lag prints FS too ("9FS+50 d", "17FS+20 d"), and
+// the other three types always print their letters -- the capture shows
+// "33SS" for a lag-free SS predecessor (task 42's Pre in the reference file).
+const char* link_type_suffix(core::gantt::LinkType type) {
+    switch (type) {
+        case core::gantt::LinkType::finish_to_start: return "FS";
+        case core::gantt::LinkType::start_to_start: return "SS";
+        case core::gantt::LinkType::finish_to_finish: return "FF";
+        case core::gantt::LinkType::start_to_finish: return "SF";
+    }
+    return "FS";
+}
+
+// The lag text of one link, or "" for a zero lag: "+" / "-" and the sheet's own
+// duration rendering of the stored tick count, exactly as Project prints the
+// signed lag after the type letters ("9FS+50 days").
+std::string link_lag_text(std::int32_t lag_ticks, const core::sheet::SheetFormat& format) {
+    if (lag_ticks == 0) {
+        return {};
+    }
+    const std::string magnitude =
+        core::sheet::format_duration_text(lag_ticks < 0 ? -static_cast<std::int64_t>(lag_ticks)
+                                                        : lag_ticks,
+                                          format);
+    return (lag_ticks < 0 ? "-" : "+") + magnitude;
+}
+
+// One link's entry in the predecessor/successor list: the other endpoint's ID,
+// the type letters and the lag.  The letters are dropped only for the measured
+// bare case -- finish-to-start AND no lag -- so "3" is a plain FS link while
+// "5FS+5 days" and "33SS" both keep theirs.
+std::string link_entry(const app::PlanInput& plan, std::uint32_t other_uid,
+                       core::gantt::LinkType type, std::int32_t lag_ticks,
+                       const core::sheet::SheetFormat& format) {
+    const std::string id = endpoint_id(plan, other_uid);
+    if (id.empty()) {
+        return {};
+    }
+    const std::string lag = link_lag_text(lag_ticks, format);
+    const bool bare = type == core::gantt::LinkType::finish_to_start && lag.empty();
+    return id + (bare ? std::string() : std::string(link_type_suffix(type))) + lag;
+}
+
+// The comma-separated list of one side of every link touching `task_uid`, in the
+// plan's own link order -- the order the capture shows ("18,33FS+20").
+std::string link_list_text(const app::PlanInput& plan, std::uint32_t task_uid, bool incoming,
+                           const core::sheet::SheetFormat& format) {
+    std::string text;
+    for (const app::LinkRow& link : plan.links) {
+        const std::uint32_t mine = incoming ? link.successor_uid : link.predecessor_uid;
+        if (mine != task_uid) {
+            continue;
+        }
+        const std::uint32_t other =
+            incoming ? link.predecessor_uid : link.successor_uid;
+        const std::string entry = link_entry(plan, other, link.type, link.lag_ticks, format);
+        if (entry.empty()) {
+            continue;
+        }
+        if (!text.empty()) {
+            text += ",";  // Project's list separator in these two columns: no space
+        }
+        text += entry;
+    }
+    return text;
+}
+
 }  // namespace
+
+std::string predecessors_text(const app::PlanInput& plan, std::uint32_t task_uid,
+                              const core::sheet::SheetFormat& format) {
+    return link_list_text(plan, task_uid, true, format);
+}
+
+std::string successors_text(const app::PlanInput& plan, std::uint32_t task_uid,
+                            const core::sheet::SheetFormat& format) {
+    return link_list_text(plan, task_uid, false, format);
+}
+
+std::string resource_names_text(const app::PlanInput& plan, std::uint32_t task_uid) {
+    if (task_uid == 0) {
+        return {};
+    }
+    std::string text;
+    for (const app::AssignmentRow& assignment : plan.assignments) {
+        if (assignment.task_uid != task_uid || assignment.resource_uid == 0) {
+            continue;  // an unassigned row names no resource (the corpus's case)
+        }
+        std::string name;
+        for (const app::ResourceRow& resource : plan.resources) {
+            if (resource.uid == assignment.resource_uid) {
+                name = resource.name;
+                break;
+            }
+        }
+        if (name.empty()) {
+            continue;  // a resource the plan does not know: no invented "resource N"
+        }
+        if (!text.empty()) {
+            text += ", ";  // Project's Resource Names separator
+        }
+        text += name;
+    }
+    return text;
+}
 
 void PlanDocument::reset() {
     sheet_.reset();
@@ -145,6 +275,47 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
     core::gantt::GanttStyle style = app::default_gantt_style();
     style.row_height = static_cast<double>(kRowHeight);
     gantt_ = core::gantt::build_gantt(source, style, timescale);
+
+    // Wave 22: `view_` is now the current plan (file + structural edits + the
+    // sheet's committed cells), so this is the one place where the computed
+    // column texts can be refreshed without a second derivation path.
+    fill_computed_columns();
+}
+
+void PlanDocument::fill_computed_columns() {
+    // The three columns Project computes from the link/assignment tables.  The
+    // reader never produces them (no descriptor name, no RecordSet column; see
+    // entry_columns.h), so the sheet's stored column for one of those ids would
+    // otherwise render blank.  Filling the RecordSet is what makes the model and
+    // the delegate paint them like any other text cell -- no special case in the
+    // view layer.  A row with nothing to show keeps Null (not ""), so the cell is
+    // empty rather than "a value that is the empty string".
+    if (records_.row_count() == 0) {
+        return;
+    }
+    for (const core::view::FieldId field : {kPredecessorsField, kSuccessorsField,
+                                            kResourceNamesField}) {
+        records_.add_field(field);  // a no-op when the file's table already made it
+    }
+    const std::size_t rows = records_.row_count();
+    for (std::size_t row = 0; row < rows; ++row) {
+        const std::uint32_t uid = records_.uid(row);
+        std::string predecessors = predecessors_text(view_, uid, format_);
+        if (!predecessors.empty()) {
+            records_.set_field(row, kPredecessorsField,
+                               core::view::Value::of_text(std::move(predecessors)));
+        }
+        std::string successors = successors_text(view_, uid, format_);
+        if (!successors.empty()) {
+            records_.set_field(row, kSuccessorsField,
+                               core::view::Value::of_text(std::move(successors)));
+        }
+        std::string resources = resource_names_text(view_, uid);
+        if (!resources.empty()) {
+            records_.set_field(row, kResourceNamesField,
+                               core::view::Value::of_text(std::move(resources)));
+        }
+    }
 }
 
 void PlanDocument::rebuild_views(app::ZoomLevel zoom) { build_gantt(zoom); }
@@ -305,7 +476,19 @@ void PlanDocument::read_table(const std::string& source_path) {
 }
 
 std::vector<core::sheet::SheetColumn> PlanDocument::stored_columns() const {
-    return app::table_sheet_columns(table_);
+    std::vector<core::sheet::SheetColumn> columns = app::table_sheet_columns(table_);
+    // Wave 22: % Complete (0x0b400020) is a PERCENT, and Project prints the sign
+    // -- the clean capture's column reads "57%", "100%", "0%".  app::
+    // table_sheet_columns gives a field it does not know the sheet's default kind
+    // (Auto), which would print the bare stored integer ("57").  Declaring the
+    // kind here fixes the display, the clipboard text and any other consumer of
+    // the sheet at once, instead of special-casing one painter.
+    for (core::sheet::SheetColumn& column : columns) {
+        if (column.field == kPercentCompleteField) {
+            column.kind = core::sheet::CellKind::Percent;
+        }
+    }
+    return columns;
 }
 
 int PlanDocument::table_column_chars(std::uint32_t table_field) const {

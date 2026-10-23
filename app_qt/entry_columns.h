@@ -42,6 +42,16 @@ namespace msqt {
 // (the fixture's tasks have none, like the reference capture); `mode` is the one
 // painted icon column; `stub` is Add New Column; `data` is an ordinary data
 // column of a loaded file's table (wave 21) with no Entry-specific painting.
+//
+// WAVE 22: `predecessors`, `successors` and `resources` are the stored columns
+// whose value Project COMPUTES from the plan (the link and assignment tables)
+// rather than reading from a task record -- the `214/CTable` records for them
+// carry no storable Task field (0x0b40002f/0x0b400030/0x0b400031 have no
+// descriptor name and no RecordSet column).  The text is derived in
+// plan_document.{h,cpp} and lives in the RecordSet under those same ids, so the
+// model and the delegate paint it exactly like any other text cell; the kind is
+// kept so the column layer (and a gate) can tell the three apart from an
+// ordinary `data` column.
 enum class EntryCellKind : std::uint8_t {
     indicators = 0,
     mode,
@@ -50,10 +60,27 @@ enum class EntryCellKind : std::uint8_t {
     start,
     finish,
     predecessors,
+    successors,
     resources,
     stub,
     data,
 };
+
+// The `214/CTable` field ids of the columns Project computes (wave 22).  They are
+// the ids the stored tables carry for Predecessors/Successors/Resource Names --
+// measured, not looked up by name: the descriptor table has no name for the first
+// three (core/model/field_table.gen.cpp leaves them ""), which is why they never
+// reach the RecordSet from the reader and are derived here.
+inline constexpr core::view::FieldId kPredecessorsField = 0x0b40002fu;
+inline constexpr core::view::FieldId kSuccessorsField = 0x0b400030u;
+inline constexpr core::view::FieldId kResourceNamesField = 0x0b400031u;
+// PercentComplete (0x0b400020) IS a stored Task field and is already in the
+// RecordSet; it is named here so the gate can assert the sheet column shows it.
+inline constexpr core::view::FieldId kPercentCompleteField = 0x0b400020u;
+// Task.Flag10 (0x0b400051): the corpus file's "SUMMARY" column.  A flag, and NOT
+// one the reader decodes -- see docs/handoff/s6.md.
+inline constexpr core::view::FieldId kSummaryFlagField = 0x0b400051u;
+
 
 // MS Project's column width unit: one stored character is 6 px and every
 // column carries 3 px of padding.  The rule was derived from the reference and
@@ -113,7 +140,11 @@ int display_content_width(const std::vector<DisplayColumn>& columns);
 
 // The EntryCellKind a loaded table's column is painted as, from its model field:
 // the Indicators field stays blank, Task Mode keeps the pin, the four stock data
-// fields keep their kinds and everything else is an ordinary data column.
+// fields keep their kinds, the three computed fields
+// (0x0b40002f/0x0b400030/0x0b400031) get their own kinds and everything else is an
+// ordinary data column.  Every one of those kinds except `mode` is painted as a
+// plain text cell (sheet_views.cpp): the kind exists so the column layer and the
+// gates can name the column, not because the delegate draws something else.
 EntryCellKind display_kind_for_field(core::view::FieldId field);
 
 // Index of the first column with `kind`, or -1.
