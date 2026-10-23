@@ -223,6 +223,196 @@
  * link.  The reader keeps those two rows (their bytes are real) and reports
  * them through Link::endpoints_live() and
  * Document::link_count_with_*_endpoints().  PROJECT_A is 88/88 and link1 5/5.
+ *
+ * ==========================================================================
+ * MPP12 (Project 2007).  Wave 18/G1, 2026-10-23.  Everything below was measured
+ * on the five fixtures the coordinator placed in corpus/probe/ --
+ * mpp12task.mpp, mpp12header.mpp, mpp12relations.mpp, mpp12resource.mpp,
+ * mpp12splittask.mpp -- plus mpp12subproject.mpp, mpp12nulltasks.mpp,
+ * mpp12duration.mpp, mpp12calendar.mpp, mpp12recurring.mpp,
+ * mpp12timephased.mpp, mpp12viewstate.mpp and tf2007-mpp12.mpp, which this
+ * stream downloaded from the same MPXJ test corpus.  No oracle (COM) run backs
+ * these offsets: the independent check is MS Project's own content as MPXJ
+ * asserts it (junit MppTaskTest/MppSubprojectTest expectations for the same
+ * files) and the internal consistency of every row.
+ *
+ * WHERE THE VERSION COMES FROM.  A top-level `Props12` stream means MPP12, a
+ * top-level `Props14` means MPP14/16; when neither exists the storage root that
+ * holds `TBkndTask/FixedData` decides ("112" or "114"), with a warning.  The
+ * version string lives in that props block at key 0x3540000c: every MPP12
+ * fixture stores UTF-16 "12,0,4017,1004" (Project 2007, build 4017), a
+ * Project-16 MPP14 file stores "16,0,20430,20182".  The same props block's
+ * PASSWORD_FLAG (key 0x35400000) is the read/modify password flag; see
+ * "PASSWORD" below.
+ *
+ * TABLE GEOMETRY.  Same four-part framing (FixedData/FixedMeta/VarMeta/
+ * Var2Data), same FixedMeta 16-byte header (magic 0xBAADFADB read as
+ * 0xFADFADBA, version 4, entry count, FixedData size), same VarMeta 24-byte
+ * header + 12-byte (uid, offset, key) entries, same Var2Data length-prefixed
+ * blocks.  What differs is the fixed row size and the field offsets:
+ *
+ *   table        MPP12                                MPP14 (this reader, above)
+ *   TBkndTask    48 + 264*rows, FixedMeta 16+47*(rows+3)   48 + 202*rows
+ *   TBkndRsc     48 + 188*rows, FixedMeta 16+37*(rows+3)   48 + 172*rows
+ *   TBkndCons    20*rows, no header, FixedMeta 16+10*n      same
+ *   TBkndAssn    142*rows, no header, FixedMeta 16+34*n     110*rows
+ *   TBkndCal     64 + 12*rows, FixedMeta 16+10*(rows+4)     same
+ *   Task Fixed2  176*rows, Fixed2Meta 16+86*(rows+3)        64*rows, 96*(rows+3)
+ *   Rsc Fixed2   16+49*(rows+3)                        16+51*(rows+3)
+ *
+ * FixedMeta still starts with the same three 16-byte descriptors (offsets 0,
+ * 16, 32); data rows are entries 3.. .  The row stride above is what the
+ * entries produce, not an assumption: mpp12task's offsets are 0,16,32,48,312
+ * and its FixedData is 576 = 48 + 264*2.  Rows are read BY ENTRY OFFSET (the
+ * next entry's offset bounds each row), because MPP12 has 16-byte "null task"
+ * blocks in the middle of the table: mpp12nulltasks has entries at
+ * 48,312,576(16),592,856,1120(16),1136,1400(16),1416, i.e. three real tasks
+ * followed/preceded by 16-byte placeholder rows whose FixedMeta state byte is
+ * 0x04.  A MPP12 task row is therefore: size 16 -> null-task placeholder (not a
+ * task); size 264 and FixedMeta +0 == 0x00 -> live; +0 == 0x02 -> deleted
+ * tombstone (the MPP12 form of the W45 flag); anything else -> refused with a
+ * warning naming the row, never guessed at.
+ *
+ * MPP12 TASK ROW (264 bytes; uid at +0 and ID at +4, the REVERSE of MPP14 --
+ * proved by mpp12resource/mpp12calendar, whose first task has uid 2 / ID 1, and
+ * by mpp12viewstate, uid 5 / ID 1):
+ *
+ *   +0    u32  UniqueID
+ *   +4    u32  ID
+ *   +8    u32  EarlyFinish        +12  u32 LateStart
+ *   +16   u32  Stop               +20  u32 Resume
+ *   +24   i32  FreeSlack (ticks)  +28  i32 StartSlack   +32  i32 FinishSlack
+ *   +36   u32  parent row UniqueID (0xffffffff on the project row; the
+ *              project row itself is uid 0, so a top-level task stores 0)
+ *   +40   u16  OutlineLevel (STORED here, unlike MPP14; 0 on the project row)
+ *   +58   u16  unused (0 in every row of every fixture)
+ *   +60   u32  Duration in 6-second ticks
+ *   +64   u16  DurationFormat: PjFormatUnit + 0x20 when estimated.  MEASURED
+ *              on mpp12duration.mpp, whose ten tasks are one minute/hour/day/
+ *              week/month and the elapsed variants: +64 = 3,5,7,9,11 and
+ *              4,6,8,10,12 with ticks 10,600,4800,24000,96000 / 10,600,
+ *              14400,100800,432000.  Despite the MPP14 name "actual duration
+ *              units", this is the task's duration display unit (a fresh 0 %
+ *              task stores it and ActualDuration is 0).
+ *   +66   u32  ActualDuration (ticks)
+ *   +70   u32  RemainingDuration  +74 u32 BaselineDuration
+ *   +80   u16  ConstraintType (PjConstraint 0..7)
+ *   +88   u32  Start (packed)     +92  u32 Finish (packed)   <- effective pair
+ *   +96   u32  ActualStart        +100 u32 ActualFinish
+ *   +104  u32  BaselineStart      +108 u32 BaselineFinish
+ *   +112  u32  ConstraintDate     +116 u32 ResumeNoEarlierThan
+ *   +120  u16  Priority           +122 u16 PercentComplete
+ *   +126  u16  Type               +128 u16 FixedCostAccrual
+ *   +130  u32  Created            +136 u32 PreleveledStart +140 PreleveledFinish
+ *   +148  u32  EarlyStart         +152 u32 LateFinish
+ *   +156  u32  SummaryProgress    +160 i32 CalendarUniqueID (-1 = none)
+ *   +164  u32  Deadline
+ *   +168  f64 Work (minutes x1000)  +200 f64 Cost (hundredths)
+ *   (the 8-byte Work/Cost doubles at +168 and +200 are cross-checked against
+ *   MPXJ's expectations: mpp12task Task #1 Work = 2,400,000 -> 40 h, Cost =
+ *   500,000 -> 5000, ActualCost = 280,000 -> 2800, FixedCost = 100,000 -> 1000.)
+ *
+ * There is NO calculated Start/Finish pair in an MPP12 row: +96/+100 are the
+ * actuals.  `calculated_start/finish` are therefore set equal to
+ * start/finish for MPP12 (documented in reader.h) and `start_anchor` stays
+ * kDateNa -- MPP12 has no measured equivalent of MPP14's +174.
+ *
+ * MPP12 RESOURCE ROW (188 bytes): uid +0, ID +4, MaxUnits double +44 (x100,
+ * 10000.0 = 100 %).  Resource Type is metadata, as in MPP14, but at different
+ * bits: FixedMeta entry +9 bit 0x02 = Work; when clear, Fixed2Meta entry +8
+ * bit 0x10 = Cost, else Material.  MEASURED on
+ * corpus/probe/resource-type-project2007-mpp12.mpp (downloaded here), whose 15
+ * resources are five Cost, five Material and five Work: all five Cost rows have
+ * fm+9 = 0x20 and f2+8 = 0x83 (0x10 set), the five Material rows fm+9 = 0x20 /
+ * f2+8 = 0x43, and the five Work rows fm+9 = 0x32 (0x02 set).  Name/Initials/
+ * MaterialLabel are the same VarMeta keys as MPP14 (0x0c400001/2/0x12b).
+ * MPP12 Fixed2Meta entries are 49 bytes (16+49*(rows+3)), not 51.
+ *
+ * MPP12 LINK ROW (20 bytes, no header): uid +0, predecessor +4, successor +8,
+ * type u16 +12 (PjRelationType 0=FF..3=SS), LagFormat u16 +14, lag i32 +16.
+ * That is the SAME 20-byte row as MPP14 with the last two words SWAPPED:
+ * MPP14 stores lag i32 at +14 and format u16 at +18.  Evidence:
+ * mpp12relations.mpp's four links are 1->2 FS, 2->3 SS+1 day, 3->4 FF, 4->5 SF
+ * (MPXJ's own test asserts exactly those); the SS row stores +14 = 7 (days) and
+ * +16 = 4800 ticks = 1 day, while reading +14 as the lag would give 1,228,807
+ * ticks.  Link liveness is FixedMeta coverage + state byte as for MPP14.
+ *
+ * MPP12 ASSIGNMENT ROW (142 bytes, no header): uid +0, task uid +4, resource
+ * uid +8 (0xffff0001 = "no resource", same sentinel as MPP14), Start u32 +12,
+ * Finish u32 +16, Units double +54 (x100), Work double +62 (minutes x1000).
+ * Measured on mpp12resource.mpp: assignment Start/Finish equal the task's
+ * effective Start/Finish on all 5 rows, and the two unassigned rows of
+ * mpp12duration.mpp store 0xffff0001.  MPP12 DOES NOT STORE a Resume date for
+ * an assignment (there is no such field in the 142-byte row), so
+ * Assignment::resume stays kDateNa for MPP12.
+ *
+ * MPP12 OUTLINE is STORED, not derived: parent uid +36 and OutlineLevel +40.
+ * mpp12recurring.mpp is the proof of the chain: its eight summary rows are
+ * level 1 with parent 0 (the project row) and their children level 2 with the
+ * summary's uid, across uid gaps (uids 1,4,10,16,... because recurring child
+ * rows have their own ids).  The reader uses the stored level for
+ * outline_level and still derives OutlineNumber from the parent links (sibling
+ * index path), so the two agree by construction; a stored level that differs
+ * from the chain depth is reported as damage and the stored level wins.
+ * Summary = child_count > 0.  Critical: MPP12 has no manual scheduling, so
+ * `critical` is simply TotalSlack <= 0; the third slack word (+32) is what
+ * MPXJ calls Finish Slack and there is no separate total word, so the reader
+ * exposes +32 as total_slack (they coincide for an unconstrained task) and
+ * documents that mapping here rather than inventing a field.
+ *
+ * MPP12 MILESTONE is FixedMeta entry byte +8 bit 0x20 (MPP14 uses +10 bit
+ * 0x02).  Evidence: mpp12task.mpp Task #1 has +8 = 0x63 (bit set) and MPXJ's
+ * MppTaskTest asserts that task is a milestone despite its 5-day duration;
+ * tf2007-mpp12.mpp's 20 flag rows all have +8 = 0x43 (bit clear, not
+ * milestones).  Flag1..Flag20 are FixedMeta entry bits starting at byte 37 bit
+ * 0x20 and running contiguously through byte 40: MEASURED on
+ * tf2007-mpp12.mpp, whose Task "Flag1" sets byte 37 bit 0x20, "Flag2" 0x40,
+ * "Flag3" 0x80, "Flag4" byte 38 0x01, ... "Flag20" byte 40 0x01.  The reader
+ * exposes all twenty for MPP12 (all bit positions measured); MPP14 exposes
+ * Flag1 only (its other bits are still unmeasured).
+ *
+ * MASTER/SUBPROJECT (MPP12).  An inserted project is a normal task row plus:
+ *   - Task VarMeta key 0x0b4001ca (field id 458,
+ *     PjTaskSubprojectTasksUniqueIDOffset), a u32 base added to the
+ *     subproject's ids: mpp12subproject.mpp stores 0x00800000 on the
+ *     "SubprojectA-9" row and 0x00c00000 on "SubprojectB-9".
+ *   - The project props' SUBPROJECT_DATA record (112/Props key 0x024000a2),
+ *     which lists each inserted source.  Each item is a 20-byte header (16-byte
+ *     GUID + 4 flag bytes; the type byte is header+16) followed by offset
+ *     words; the source path is a nested block: +18, u32 string-size, ASCII
+ *     DOS path (NUL-terminated), +24, u32 block size; when that size is
+ *     non-zero a u32 UTF-16 byte length follows at +2, then the full path.
+ *     mpp12subproject.mpp decodes to uid 2 -> D:\java\mpxj\junit\data\
+ *     SubprojectA-9.mpp and uid 3 -> ...\SubprojectB-9.mpp.  Only the
+ *     per-item layout with type byte 0x01/0x08 is implemented (the one on
+ *     disk); every other type is reported with its offset and skipped, not
+ *     guessed.  The children of the inserted row live in the subproject file
+ *     and are NOT in this document: the master stores the summary row only.
+ *
+ * PASSWORD.  Both props formats store the same record layout: a 16-byte header
+ * with the record count as u16 at +12, then (u32 data length, u32 key, u32
+ * unused, data), padded to an even length.  Key 0x35400000 is PASSWORD_FLAG
+ * (0x00 none, 0x01 read password, 0x02 write reservation, 0x03 both);
+ * 0x35400004 is the read-protection hash, 0x35400005 the write-reservation
+ * hash, 0x35400007 the single-byte XOR encryption code.  All 12 fixtures on
+ * disk store flag 0x00 and no hash record.  The container itself is plain
+ * OLE2: the flag does not encrypt anything by itself.  This reader refuses a
+ * read-password file (bit 0x01) and any flagged file with a nonzero encryption
+ * code (the table streams would be XOR-masked; MPXJ's
+ * DocumentInputStreamFactory), reads a write-reservation-only file (bit 0x02)
+ * and reports it as read-only via Document::password_required_to_modify.
+ *
+ * CALENDARS.  Both formats use the same `TBkndCal` geometry (64 + 12*rows)
+ * but the 12-byte row's columns are ordered differently: MPP12 is (calendar
+ * uid, base uid, resource uid), MPP14 is (base uid, resource uid, calendar
+ * uid).  MPXJ's MPP12CalendarFactory declares exactly that (+0 calendar id,
+ * +4 base, +8 resource) and the MPP14 factory the reverse; the rows confirm it
+ * (mpp12task (1,-1,-1),(2,1,0),(3,1,1) vs base (0,-1,1),(1,0,2),(1,1,3)).
+ * Names are VarMeta key 0x0d400001.  The reader exposes the identities only
+ * (Document::calendars); core/cal owns the work-week/exception decode and
+ * still hard-codes "114/" and the MPP14 column order, so it must take
+ * Document::table_root and the version before it can read an MPP12 file;
+ * core/mpp does not modify another stream's files.
  */
 
 #include "reader.h"
@@ -418,6 +608,85 @@ constexpr std::uint8_t kFixedMetaStateDeleted = 0x02;
  * group alone decides liveness then, as it did before W45. */
 constexpr std::int16_t kStateNoMetaEntry = -1;
 constexpr std::int16_t kStateNoMetaStream = -2;
+
+/* ---- MPP12 (Project 2007) geometry.  Every constant below is measured on the
+ * fixtures named in the file comment; the row layouts are listed there.  The
+ * three descriptors and the 16-byte null-task block are MPP12's own features,
+ * not MPP14's, so they are separate constants rather than parameters. */
+constexpr std::size_t k12TaskRowSize = 264;
+constexpr std::size_t k12TaskNullRowSize = 16; /* FixedMeta state 0x04, no name */
+constexpr std::size_t k12TaskUid = 0;
+constexpr std::size_t k12TaskId = 4;
+constexpr std::size_t k12TaskFreeSlack = 24;
+constexpr std::size_t k12TaskStartSlack = 28;
+/* The third stored slack word.  MPXJ calls it FinishSlack; it is exposed as
+ * total_slack because MPP12 has no separate total word and the two coincide on
+ * an unconstrained task (see "MPP12 OUTLINE" in the file comment). */
+constexpr std::size_t k12TaskTotalSlack = 32;
+constexpr std::size_t k12TaskParentUid = 36;
+constexpr std::size_t k12TaskOutlineLevel = 40;
+constexpr std::size_t k12TaskDuration = 60;
+constexpr std::size_t k12TaskDurationFormat = 64; /* PjFormatUnit (+0x20 est.) */
+constexpr std::size_t k12TaskActualDuration = 66;
+constexpr std::size_t k12TaskConstraintType = 80;
+constexpr std::size_t k12TaskStart = 88;
+constexpr std::size_t k12TaskFinish = 92;
+constexpr std::size_t k12TaskActualStart = 96;
+constexpr std::size_t k12TaskActualFinish = 100;
+constexpr std::size_t k12TaskConstraintDate = 112;
+constexpr std::size_t k12TaskPriority = 120;
+constexpr std::size_t k12TaskPercent = 122;
+constexpr std::size_t k12TaskCalendarUid = 160;
+constexpr std::size_t k12TaskDeadline = 164;
+/* Milestone is a metadata bit, as in MPP14, at a different place. */
+constexpr std::size_t k12FixedMetaMilestoneByte = 8;
+constexpr std::uint8_t k12FixedMetaFlagMilestone = 0x20;
+/* Flag1..Flag20 are a contiguous bit field starting at entry byte 37 bit 0x20
+ * (measured on tf2007-mpp12.mpp: Flag1 = byte 37/0x20 ... Flag20 = byte 40/0x01). */
+constexpr std::size_t k12FixedMetaFlagFirstByte = 37;
+constexpr unsigned k12FixedMetaFlagFirstBitIndex = 5; /* 0x20 in the first byte */
+
+constexpr std::size_t k12RscRowSize = 188;
+constexpr std::size_t k12RscUid = 0;
+constexpr std::size_t k12RscId = 4;
+constexpr std::size_t k12RscMaxUnits = 44; /* double, x100 */
+constexpr std::size_t k12RscFixedMetaWorkByte = 9;
+constexpr std::uint8_t k12RscFixedMetaWorkFlag = 0x02;
+constexpr std::uint8_t k12RscFixed2MetaCostFlag = 0x10;
+
+constexpr std::size_t k12ConsRowSize = 20; /* same as MPP14 */
+constexpr std::size_t k12ConsType = 12;
+constexpr std::size_t k12ConsLagUnits = 14; /* SWAPPED vs MPP14: units first */
+constexpr std::size_t k12ConsLag = 16;
+
+constexpr std::size_t k12AssnRowSize = 142;
+constexpr std::size_t k12AssnUid = 0;
+constexpr std::size_t k12AssnTaskUid = 4;
+constexpr std::size_t k12AssnResourceUid = 8;
+constexpr std::size_t k12AssnStart = 12;
+constexpr std::size_t k12AssnFinish = 16;
+constexpr std::size_t k12AssnUnits = 54; /* double, x100 */
+constexpr std::size_t k12AssnWork = 62;  /* double, minutes x1000 */
+
+/* Calendar table: both formats, 64-byte header then 12-byte rows.  core/cal
+ * documents the same geometry; the reader only needs uid + name. */
+constexpr std::size_t kCalHeaderSize = 64;
+constexpr std::size_t kCalRowSize = 12;
+constexpr std::uint32_t kFieldCalName = 0x0D400001u;
+
+/* Task VarMeta key for the inserted-project UniqueID offset (field id 458,
+ * PjTaskSubprojectTasksUniqueIDOffset). */
+constexpr std::uint32_t kFieldSubprojectUidOffset = 0x0B4001CAu;
+
+/* ---- Top-level props record keys (Props12/Props14 share the block layout). */
+constexpr std::uint32_t kPropsPasswordFlag = 0x35400000u;
+constexpr std::uint32_t kPropsProtectionHash = 0x35400004u;
+constexpr std::uint32_t kPropsWriteReservationHash = 0x35400005u;
+constexpr std::uint32_t kPropsEncryptionCode = 0x35400007u;
+constexpr std::uint32_t kPropsVersion = 0x3540000Cu;
+/* Project props (112/114/Props): the inserted-project table and its counts. */
+constexpr std::uint32_t kProjectPropsSubprojectData = 0x024000A2u;
+constexpr std::uint32_t kProjectPropsSubprojectCount = 0x02400084u;
 
 /* Task.Name: COM's PjFieldTaskName, the same id in analysis/field_id_map.tsv.
  * Evidence in the file header comment above. */
@@ -738,7 +1007,8 @@ bool read_text_field(const VarTable& table, const std::vector<std::uint8_t>& var
  * Task table uses that to attach each row's Fixed2Data outline record. */
 constexpr std::uint32_t kNoOffset = 0xFFFFFFFFu;
 
-std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view table,
+std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view root,
+                                      std::string_view table,
                                       std::string_view label, std::size_t header_size,
                                       std::size_t row_size, std::size_t entry_size,
                                       std::size_t descriptors, std::uint32_t rows,
@@ -763,7 +1033,7 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
     if (row_state != nullptr) {
         row_state->assign(rows, kStateNoMetaEntry);
     }
-    const std::string path = "114/" + std::string(table) + "/FixedMeta";
+    const std::string path = std::string(root) + "/" + std::string(table) + "/FixedMeta";
     if (!cfb.has_stream(path)) {
         warnings.emplace_back(std::string(label) +
                               " table has no FixedMeta stream; every row is "
@@ -929,13 +1199,14 @@ std::string orphan_name_for_row(const VarTable& table,
     return decode_utf16_block(payload);
 }
 
-std::vector<std::uint8_t> read_optional_stream(const CompoundFile& cfb,
+std::vector<std::uint8_t> read_optional_stream(const CompoundFile& cfb, std::string_view root,
                                                std::string_view table,
                                                std::string_view name,
                                                std::vector<std::string>& warnings) {
-    const std::string path = "114/" + std::string(table) + "/" + std::string(name);
+    const std::string path = std::string(root) + "/" + std::string(table) + "/" +
+                             std::string(name);
     if (!cfb.has_stream(path)) {
-        warnings.emplace_back("114/" + std::string(table) + " has no " +
+        warnings.emplace_back(std::string(root) + "/" + std::string(table) + " has no " +
                               std::string(name) + " stream; reading without it");
         return {};
     }
@@ -951,11 +1222,11 @@ std::vector<std::uint8_t> read_optional_stream(const CompoundFile& cfb,
 /* Reads an optional FixedData table.  Returns false when the stream is absent,
  * unreadable or has no complete row.  For Link and Assignment header_size is 0
  * and rows == 0 is a valid empty table (no links / no assignments). */
-bool read_table_fixed(const CompoundFile& cfb, std::string_view table,
+bool read_table_fixed(const CompoundFile& cfb, std::string_view root, std::string_view table,
                       std::string_view label, std::size_t header_size,
                       std::size_t row_size, std::vector<std::uint8_t>& fixed,
                       std::uint32_t& rows, std::vector<std::string>& warnings) {
-    const std::string path = "114/" + std::string(table) + "/FixedData";
+    const std::string path = std::string(root) + "/" + std::string(table) + "/FixedData";
     rows = 0;
     if (!cfb.has_stream(path)) {
         warnings.emplace_back("the " + std::string(label) +
@@ -1054,7 +1325,7 @@ struct Outline {
     bool usable = false;
 };
 
-Outline read_outline(const CompoundFile& cfb, std::uint32_t rows,
+Outline read_outline(const CompoundFile& cfb, std::string_view root, std::uint32_t rows,
                      const std::vector<std::uint32_t>& meta_offsets,
                      const std::vector<bool>& live_row,
                      std::vector<std::string>& warnings) {
@@ -1068,9 +1339,9 @@ Outline read_outline(const CompoundFile& cfb, std::uint32_t rows,
     }
 
     const std::vector<std::uint8_t> fixed2 =
-        read_optional_stream(cfb, "TBkndTask", "Fixed2Data", warnings);
+        read_optional_stream(cfb, root, "TBkndTask", "Fixed2Data", warnings);
     const std::vector<std::uint8_t> fixed2_meta =
-        read_optional_stream(cfb, "TBkndTask", "Fixed2Meta", warnings);
+        read_optional_stream(cfb, root, "TBkndTask", "Fixed2Meta", warnings);
     if (fixed2.size() < kFixed2RowSize || fixed2_meta.size() < kFixedMetaHeaderSize ||
         u32_at(fixed2_meta, 0) != kMetaMagic) {
         warnings.emplace_back(
@@ -1244,21 +1515,23 @@ Outline read_outline(const CompoundFile& cfb, std::uint32_t rows,
     return outline;
 }
 
-Document parse_document(const CompoundFile& cfb) {
-    Document document;
-
+/* MPP14 (Project 2010+) task/resource/link/assignment tables.  `root` is the
+ * table storage the container carries ("114" for every MPP14 file measured);
+ * the caller has already put the format metadata in `document`. */
+void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& document) {
     /* ---- Task table (required).  Geometry: 48 + 202*rows, FixedMeta 47. */
     std::vector<std::uint8_t> fixed;
     try {
-        fixed = cfb.read_stream("114/TBkndTask/FixedData");
+        fixed = cfb.read_stream(std::string(root) + "/TBkndTask/FixedData");
     } catch (const Error& error) {
         throw Error(std::string("no Task table: ") + error.what() +
-                    " (an MPP14 file stores it at 114/TBkndTask/FixedData)");
+                    " (an MPP14 file stores it at " + std::string(root) +
+                    "/TBkndTask/FixedData)");
     }
     const std::vector<std::uint8_t> var_meta =
-        read_optional_stream(cfb, "TBkndTask", "VarMeta", document.warnings);
+        read_optional_stream(cfb, root, "TBkndTask", "VarMeta", document.warnings);
     const std::vector<std::uint8_t> var2 =
-        read_optional_stream(cfb, "TBkndTask", "Var2Data", document.warnings);
+        read_optional_stream(cfb, root, "TBkndTask", "Var2Data", document.warnings);
 
     if (fixed.size() < kFixedHeaderSize) {
         throw Error("TBkndTask/FixedData is " + std::to_string(fixed.size()) +
@@ -1276,7 +1549,7 @@ Document parse_document(const CompoundFile& cfb) {
     if (rows == 0) {
         document.warnings.emplace_back("TBkndTask/FixedData has no rows, not even the "
                                        "project row");
-        return document;
+        return;
     }
 
     const std::vector<std::uint32_t> uid_by_row =
@@ -1288,12 +1561,14 @@ Document parse_document(const CompoundFile& cfb) {
     std::vector<std::uint8_t> task_meta_flag_bytes;
     std::vector<std::int16_t> task_meta_state;
     std::vector<std::uint8_t> task_meta_custom_flag_bytes;
-    const bool task_has_fixed_meta = cfb.has_stream("114/TBkndTask/FixedMeta");
+    const bool task_has_fixed_meta = cfb.has_stream(std::string(root) +
+                                                    "/TBkndTask/FixedMeta");
     const std::vector<bool> fixed_meta_live =
-        fixed_meta_coverage(cfb, "TBkndTask", "Task", kFixedHeaderSize, kFixedRowSize,
-                            kFixedMetaEntrySize, kFixedMetaDescriptors, rows, uid_by_row,
-                            document.warnings, &task_meta_offsets, &task_meta_flag_bytes,
-                            &task_meta_state, &task_meta_custom_flag_bytes);
+        fixed_meta_coverage(cfb, root, "TBkndTask", "Task", kFixedHeaderSize,
+                            kFixedRowSize, kFixedMetaEntrySize, kFixedMetaDescriptors,
+                            rows, uid_by_row, document.warnings, &task_meta_offsets,
+                            &task_meta_flag_bytes, &task_meta_state,
+                            &task_meta_custom_flag_bytes);
 
     /* Liveness, computed once.  Two facts must both hold for a task row:
      *
@@ -1332,7 +1607,7 @@ Document parse_document(const CompoundFile& cfb) {
 
     /* ---- Outline: Fixed2Data's stored parent links -> level, number, summary. */
     const Outline outline =
-        read_outline(cfb, rows, task_meta_offsets, live_row, document.warnings);
+        read_outline(cfb, root, rows, task_meta_offsets, live_row, document.warnings);
 
     /* ---- Row 0: the project row. */
     {
@@ -1568,24 +1843,27 @@ Document parse_document(const CompoundFile& cfb) {
     {
         std::vector<std::uint8_t> rsc_fixed;
         std::uint32_t rsc_rows = 0;
-        if (read_table_fixed(cfb, "TBkndRsc", "Resource", kRscHeaderSize, kRscRowSize,
-                             rsc_fixed, rsc_rows, document.warnings) &&
+        if (read_table_fixed(cfb, root, "TBkndRsc", "Resource", kRscHeaderSize,
+                             kRscRowSize, rsc_fixed, rsc_rows, document.warnings) &&
             rsc_rows > 0) {
             const std::vector<std::uint32_t> rsc_uid_by_row =
                 uids_by_row(rsc_fixed, kRscHeaderSize, kRscRowSize, rsc_rows,
                             kRscRowUid);
             warn_duplicate_uids(rsc_uid_by_row, "Resource", false, document.warnings);
             const std::vector<std::uint8_t> rsc_var_meta =
-                read_optional_stream(cfb, "TBkndRsc", "VarMeta", document.warnings);
+                read_optional_stream(cfb, root, "TBkndRsc", "VarMeta",
+                                     document.warnings);
             const std::vector<std::uint8_t> rsc_var2 =
-                read_optional_stream(cfb, "TBkndRsc", "Var2Data", document.warnings);
+                read_optional_stream(cfb, root, "TBkndRsc", "Var2Data",
+                                     document.warnings);
             const VarTable rsc_table =
                 parse_var_meta(rsc_var_meta, rsc_var2, "Resource", document.warnings);
-            const bool rsc_meta_stream = cfb.has_stream("114/TBkndRsc/FixedMeta");
+            const bool rsc_meta_stream =
+                cfb.has_stream(std::string(root) + "/TBkndRsc/FixedMeta");
             std::vector<std::uint32_t> rsc_meta_offsets;
             std::vector<std::uint8_t> rsc_meta_type;
             const std::vector<bool> rsc_live =
-                fixed_meta_coverage(cfb, "TBkndRsc", "Resource", kRscHeaderSize,
+                fixed_meta_coverage(cfb, root, "TBkndRsc", "Resource", kRscHeaderSize,
                                     kRscRowSize, kRscFixedMetaEntrySize,
                                     kFixedMetaDescriptors, rsc_rows, rsc_uid_by_row,
                                     document.warnings, &rsc_meta_offsets, nullptr,
@@ -1596,7 +1874,8 @@ Document parse_document(const CompoundFile& cfb) {
             std::vector<std::uint8_t> rsc_fixed2_type(rsc_rows, 0);
             std::vector<bool> rsc_fixed2_known(rsc_rows, false);
             const std::vector<std::uint8_t> rsc_fixed2_meta =
-                read_optional_stream(cfb, "TBkndRsc", "Fixed2Meta", document.warnings);
+                read_optional_stream(cfb, root, "TBkndRsc", "Fixed2Meta",
+                                     document.warnings);
             if (rsc_fixed2_meta.size() >= kFixedMetaHeaderSize &&
                 u32_at(rsc_fixed2_meta, 0) == kMetaMagic) {
                 const std::uint32_t declared = u32_at(rsc_fixed2_meta, 8);
@@ -1708,15 +1987,15 @@ Document parse_document(const CompoundFile& cfb) {
     {
         std::vector<std::uint8_t> cons_fixed;
         std::uint32_t cons_rows = 0;
-        if (read_table_fixed(cfb, "TBkndCons", "Link", 0, kConsRowSize, cons_fixed,
-                             cons_rows, document.warnings) &&
+        if (read_table_fixed(cfb, root, "TBkndCons", "Link", 0, kConsRowSize,
+                             cons_fixed, cons_rows, document.warnings) &&
             cons_rows > 0) {
             const std::vector<std::uint32_t> cons_uid_by_row =
                 uids_by_row(cons_fixed, 0, kConsRowSize, cons_rows, kConsRowUid);
             warn_duplicate_uids(cons_uid_by_row, "Link", false, document.warnings);
             std::vector<std::int16_t> cons_state;
             const std::vector<bool> cons_live =
-                fixed_meta_coverage(cfb, "TBkndCons", "Link", 0, kConsRowSize,
+                fixed_meta_coverage(cfb, root, "TBkndCons", "Link", 0, kConsRowSize,
                                     kConsFixedMetaEntrySize, 0, cons_rows,
                                     cons_uid_by_row, document.warnings, nullptr,
                                     nullptr, &cons_state);
@@ -1827,7 +2106,7 @@ Document parse_document(const CompoundFile& cfb) {
     {
         std::vector<std::uint8_t> assn_fixed;
         std::uint32_t assn_rows = 0;
-        if (read_table_fixed(cfb, "TBkndAssn", "Assignment", 0, kAssnRowSize,
+        if (read_table_fixed(cfb, root, "TBkndAssn", "Assignment", 0, kAssnRowSize,
                              assn_fixed, assn_rows, document.warnings) &&
             assn_rows > 0) {
             const std::vector<std::uint32_t> assn_uid_by_row =
@@ -1835,10 +2114,10 @@ Document parse_document(const CompoundFile& cfb) {
             warn_duplicate_uids(assn_uid_by_row, "Assignment", false, document.warnings);
             std::vector<std::int16_t> assn_state;
             const std::vector<bool> assn_live =
-                fixed_meta_coverage(cfb, "TBkndAssn", "Assignment", 0, kAssnRowSize,
-                                    kAssnFixedMetaEntrySize, 0, assn_rows,
-                                    assn_uid_by_row, document.warnings, nullptr,
-                                    nullptr, &assn_state);
+                fixed_meta_coverage(cfb, root, "TBkndAssn", "Assignment", 0,
+                                    kAssnRowSize, kAssnFixedMetaEntrySize, 0,
+                                    assn_rows, assn_uid_by_row, document.warnings,
+                                    nullptr, nullptr, &assn_state);
             std::size_t assn_tombstoned = 0;
             for (std::uint32_t row = 0; row < assn_rows; ++row) {
                 const std::size_t base = row * kAssnRowSize;
@@ -1908,7 +2187,1289 @@ Document parse_document(const CompoundFile& cfb) {
             }
         }
     }
+}
 
+/* ---------------------------------------------------------------------------
+ * MPP12 (Project 2007) table reading.  Geometry and evidence: "MPP12" in the
+ * file comment.  FixedData rows are bounded by the NEXT FixedMeta entry's
+ * offset (not by a fixed stride) because MPP12 mixes 264-byte task rows with
+ * 16-byte null-task placeholders.
+ * ------------------------------------------------------------------------- */
+
+/* One FixedData row, recovered from FixedMeta's entry offsets.  `entry` holds
+ * the matching FixedMeta entry verbatim (its +0 state byte and the flag bytes
+ * are read from it). */
+struct RowTable {
+    bool usable = false;
+    bool meta_present = false;
+    std::size_t entry_size = 0;
+    std::size_t descriptors = 0;       /* FixedMeta entries before data row 0 */
+    std::vector<std::uint32_t> offset; /* absolute FixedData offset per row */
+    std::vector<std::uint32_t> size;   /* bytes, bounded by the next entry */
+    std::vector<std::uint8_t> entries; /* n * entry_size, FixedMeta entries */
+    std::uint32_t declared = 0;
+
+    /* A byte of the FixedMeta entry that describes DATA row `row` (entry
+     * descriptors + row).  Zero when the metadata stream is absent. */
+    std::uint8_t meta_byte(std::size_t row, std::size_t at) const {
+        const std::size_t index = (row + descriptors) * entry_size + at;
+        return index < entries.size() ? entries[index] : 0;
+    }
+    std::uint8_t state(std::size_t row) const { return meta_byte(row, 0); }
+    std::size_t count() const { return offset.size(); }
+};
+
+/* Reads FixedData+FixMeta for one MPP12 table.  `descriptors` is 3 for the
+ * tables whose FixedData starts with the three 16-byte descriptor slots
+ * (Task, Resource) and 0 for Link/Assignment.  When FixedMeta is absent or
+ * unusable the rows are recovered arithmetically from the FixedData size and
+ * every row is assumed live -- the same fallback the MPP14 path uses. */
+bool read_row_table(const CompoundFile& cfb, std::string_view root, std::string_view table,
+                    std::string_view label, std::size_t header_size, std::size_t row_size,
+                    std::size_t entry_size, std::size_t descriptors, RowTable& out,
+                    std::vector<std::string>& warnings) {
+    std::vector<std::uint8_t> fixed;
+    try {
+        fixed = cfb.read_stream(std::string(root) + "/" + std::string(table) + "/FixedData");
+    } catch (const Error& error) {
+        warnings.emplace_back(std::string(root) + "/" + std::string(table) +
+                              "/FixedData is unreadable: " + error.what() +
+                              "; the table is skipped");
+        return false;
+    }
+    out = RowTable{};
+    out.entry_size = entry_size;
+    out.descriptors = descriptors;
+    if (fixed.size() < header_size) {
+        warnings.emplace_back(std::string(label) + " FixedData is " +
+                              std::to_string(fixed.size()) +
+                              " bytes, smaller than its " + std::to_string(header_size) +
+                              "-byte header; the table is skipped");
+        return false;
+    }
+
+    std::vector<std::uint8_t> meta;
+    try {
+        if (cfb.has_stream(std::string(root) + "/" + std::string(table) + "/FixedMeta")) {
+            meta = cfb.read_stream(std::string(root) + "/" + std::string(table) +
+                                   "/FixedMeta");
+        }
+    } catch (const Error& error) {
+        warnings.emplace_back(std::string(label) + " FixedMeta is unreadable: " +
+                              error.what() + "; row sizes are assumed");
+    }
+    if (meta.size() >= kFixedMetaHeaderSize && u32_at(meta, 0) == kMetaMagic) {
+        out.meta_present = true;
+        out.declared = u32_at(meta, 8);
+        const std::size_t available = meta.size() - kFixedMetaHeaderSize;
+        const std::size_t count = available / entry_size;
+        if (available % entry_size != 0) {
+            warnings.emplace_back(std::string(label) + " FixedMeta is " +
+                                  std::to_string(meta.size()) + " bytes, not 16 + " +
+                                  std::to_string(entry_size) + "*n; trailing bytes ignored");
+        }
+        if (out.declared != count) {
+            warnings.emplace_back(std::string(label) + " FixedMeta header declares " +
+                                  std::to_string(out.declared) +
+                                  " entries but the stream holds " + std::to_string(count) +
+                                  "; the stream wins");
+        }
+        if (count < descriptors) {
+            warnings.emplace_back(std::string(label) + " FixedMeta holds " +
+                                  std::to_string(count) + " entries, fewer than its " +
+                                  std::to_string(descriptors) +
+                                  " header descriptors; the table is skipped");
+            return false;
+        }
+        out.entries.assign(meta.begin() + static_cast<std::ptrdiff_t>(kFixedMetaHeaderSize),
+                           meta.end());
+        out.offset.reserve(count - descriptors);
+        std::vector<std::uint32_t> entry_offsets;
+        entry_offsets.reserve(count);
+        for (std::size_t i = 0; i < count; ++i) {
+            entry_offsets.push_back(u32_at(meta, kFixedMetaHeaderSize + i * entry_size + 4));
+        }
+        for (std::size_t i = descriptors; i < count; ++i) {
+            const std::uint32_t begin = entry_offsets[i];
+            const std::uint32_t end =
+                i + 1 < count ? entry_offsets[i + 1]
+                              : static_cast<std::uint32_t>(fixed.size());
+            if (begin < header_size || begin > fixed.size() || end < begin ||
+                end > fixed.size()) {
+                warnings.emplace_back(std::string(label) + " FixedMeta entry " +
+                                      std::to_string(i) + " has the invalid FixedData "
+                                      "range [" + std::to_string(begin) + ", " +
+                                      std::to_string(end) + "); the table is skipped");
+                return false;
+            }
+            out.offset.push_back(begin);
+            out.size.push_back(end - begin);
+        }
+        out.usable = true;
+        return true;
+    }
+
+    /* No usable metadata: fall back to the row stride. */
+    if (meta.size() != 0) {
+        warnings.emplace_back(std::string(label) + " FixedMeta has magic " +
+                              hex32(u32_at(meta, 0)) +
+                              " instead of 0xfadfadba; row sizes are assumed");
+    }
+    if ((fixed.size() - header_size) % row_size != 0) {
+        warnings.emplace_back(std::string(label) + " FixedData is " +
+                              std::to_string(fixed.size()) + " bytes = " +
+                              std::to_string(header_size) + " + " +
+                              std::to_string(row_size) + "*n + " +
+                              std::to_string((fixed.size() - header_size) % row_size) +
+                              "; the trailing bytes are ignored");
+    }
+    const std::size_t rows = (fixed.size() - header_size) / row_size;
+    out.offset.reserve(rows);
+    out.size.reserve(rows);
+    for (std::size_t i = 0; i < rows; ++i) {
+        out.offset.push_back(static_cast<std::uint32_t>(header_size + i * row_size));
+        out.size.push_back(static_cast<std::uint32_t>(row_size));
+    }
+    out.usable = true;
+    return true;
+}
+
+/* The raw bytes of one row, or empty when the row's block is shorter than the
+ * caller needs.  Never reads past FixedData. */
+std::vector<std::uint8_t> row_bytes(const std::vector<std::uint8_t>& fixed,
+                                    const RowTable& table, std::size_t row,
+                                    std::size_t need) {
+    if (row >= table.offset.size()) {
+        return {};
+    }
+    const std::uint32_t begin = table.offset[row];
+    const std::uint32_t size = table.size[row];
+    if (begin > fixed.size() || size > fixed.size() - begin || size < need) {
+        return {};
+    }
+    return std::vector<std::uint8_t>(fixed.begin() + begin, fixed.begin() + begin + size);
+}
+
+/* Decodes the VarMeta custom-field block set for one uid (Text/Number/Date/
+ * Duration/Cost).  Shared by both formats: the key is the PjField id in both.
+ * Flag values are NOT here -- they are FixedMeta bits, and their position
+ * differs by format. */
+std::vector<CustomFieldValue> decode_var_custom_fields(const VarTable& table,
+                                                       const std::vector<std::uint8_t>& var2,
+                                                       std::uint32_t uid) {
+    std::vector<CustomFieldValue> fields;
+    std::unordered_set<std::uint32_t> seen_field_ids;
+    for (const VarEntry& entry : table.entries) {
+        if (entry.uid != uid && entry.uid != (uid | kSecondaryUidFamily)) {
+            continue;
+        }
+        const FieldKind kind = custom_field_kind(entry.key);
+        if (kind == FieldKind::unknown) {
+            continue;
+        }
+        /* A repeated (uid, key) pair reads its first entry, as Name does. */
+        if (!seen_field_ids.insert(entry.key).second) {
+            continue;
+        }
+        CustomFieldValue field;
+        field.field_id = entry.key;
+        field.kind = kind;
+        field.present = true;
+        field.storage_measured = custom_field_storage_measured(
+            kind, custom_field_index(entry.key));
+        if (field.storage_measured) {
+            std::vector<std::uint8_t> payload;
+            bool decoded = read_block(var2, entry.offset, payload);
+            std::size_t const expected =
+                kind == FieldKind::number || kind == FieldKind::cost
+                    ? 8u
+                    : (kind == FieldKind::date || kind == FieldKind::duration ? 4u : 0u);
+            if (decoded && expected != 0 && payload.size() != expected) {
+                decoded = false;
+            }
+            if (!decoded) {
+                field.storage_measured = false;
+            } else {
+                switch (kind) {
+                    case FieldKind::text:
+                        field.text = decode_utf16_block(payload);
+                        break;
+                    case FieldKind::number:
+                        field.number = f64_at(payload, 0);
+                        break;
+                    case FieldKind::date:
+                        field.packed_date = u32_at(payload, 0);
+                        break;
+                    case FieldKind::duration:
+                        field.duration_ticks = u32_at(payload, 0);
+                        break;
+                    case FieldKind::cost:
+                        /* Stored as an f64 in hundredths (123.45 -> 12345.0). */
+                        field.cost = f64_at(payload, 0) / 100.0;
+                        break;
+                    default:
+                        field.storage_measured = false;
+                        break;
+                }
+            }
+        }
+        fields.push_back(std::move(field));
+    }
+    return fields;
+}
+
+/* MPP12 Flag1..Flag20: one contiguous bit field starting at FixedMeta entry
+ * byte 37 bit 0x20 (measured on tf2007-mpp12.mpp; see the file comment).  A
+ * clear bit is a stored False, so every flag is reported present, as MPP14
+ * does for Flag1. */
+void append_mpp12_flags(const RowTable& table, std::size_t row,
+                        std::vector<CustomFieldValue>& fields) {
+    for (unsigned index = 1; index <= kFlagFieldCount; ++index) {
+        const unsigned bit_index =
+            (index - 1u) + k12FixedMetaFlagFirstBitIndex;
+        const std::size_t byte = k12FixedMetaFlagFirstByte + bit_index / 8u;
+        const std::uint8_t mask = static_cast<std::uint8_t>(1u << (bit_index % 8u));
+        CustomFieldValue flag;
+        flag.field_id = custom_field_id(FieldKind::flag, index);
+        flag.kind = FieldKind::flag;
+        flag.present = true;
+        flag.storage_measured = true;
+        flag.flag = (table.meta_byte(row, byte) & mask) != 0;
+        fields.push_back(std::move(flag));
+    }
+}
+
+/* Applies the top-level props records: version string, password flag and the
+ * encryption code.  See "PASSWORD" in the file comment. */
+void read_version_and_password(const CompoundFile& cfb, std::string_view props_stream,
+                               Document& document) {
+    if (!cfb.has_stream(std::string(props_stream))) {
+        document.warnings.emplace_back("no top-level " + std::string(props_stream) +
+                                       " stream; the writer version and the password "
+                                       "flag are unknown");
+        return;
+    }
+    std::vector<std::uint8_t> props;
+    try {
+        props = cfb.read_stream(std::string(props_stream));
+    } catch (const Error& error) {
+        document.warnings.emplace_back(std::string(props_stream) + " is unreadable: " +
+                                       error.what());
+        return;
+    }
+    if (props.size() < 16) {
+        document.warnings.emplace_back(std::string(props_stream) + " is " +
+                                       std::to_string(props.size()) +
+                                       " bytes, too short for its 16-byte header");
+        return;
+    }
+    const std::size_t count = u16_at(props, 12);
+    std::size_t offset = 16;
+    for (std::size_t i = 0; i < count; ++i) {
+        if (offset + 12 > props.size()) {
+            document.warnings.emplace_back(std::string(props_stream) + " ends after " +
+                                           std::to_string(i) + " of " +
+                                           std::to_string(count) + " props records");
+            return;
+        }
+        const std::uint32_t length = u32_at(props, offset);
+        const std::uint32_t key = u32_at(props, offset + 4);
+        if (offset + 12u + length > props.size()) {
+            document.warnings.emplace_back(std::string(props_stream) + " record " +
+                                           std::to_string(i) + " (key " + hex32(key) +
+                                           ") claims " + std::to_string(length) +
+                                           " bytes past the stream; ignored");
+            return;
+        }
+        const std::uint8_t* data = props.data() + offset + 12;
+        if (key == kPropsVersion && length >= 2 && (length % 2) == 0) {
+            std::vector<std::uint8_t> text(data, data + length);
+            document.version_string = decode_utf16_block(text);
+        } else if (key == kPropsPasswordFlag && length >= 1) {
+            document.password_flag = data[0];
+        } else if (key == kPropsEncryptionCode && length >= 1) {
+            document.encryption_code = data[0];
+        } else if (key == kPropsProtectionHash) {
+            document.password_hash_present = true;
+        } else if (key == kPropsWriteReservationHash) {
+            document.write_reservation_hash_present = true;
+        }
+        offset += 12u + length + (length % 2u);
+    }
+    document.password_required_to_read = (document.password_flag & 0x01u) != 0;
+    document.password_required_to_modify = (document.password_flag & 0x02u) != 0;
+    document.streams_encrypted =
+        document.password_flag != 0 && document.encryption_code != 0;
+    if (document.password_required_to_read) {
+        throw Error(std::string(props_stream) + " stores PASSWORD_FLAG = " +
+                    hex32(document.password_flag) + " (key 0x35400000): a password is "
+                    "required to read this file and this reader cannot authenticate "
+                    "one.  The container is not encrypted by the flag alone; the "
+                    "table streams would be XOR-masked by the code in key 0x35400007.");
+    }
+    if (document.streams_encrypted) {
+        throw Error(std::string(props_stream) + " stores PASSWORD_FLAG = " +
+                    hex32(document.password_flag) + " with ENCRYPTION_CODE = " +
+                    hex32(document.encryption_code) +
+                    ": the table streams are encrypted (single-byte XOR), which this "
+                    "reader refuses rather than decoding without evidence.");
+    }
+    if (document.password_required_to_modify) {
+        document.warnings.emplace_back(
+            std::string(props_stream) + " stores PASSWORD_FLAG = " +
+            hex32(document.password_flag) +
+            " (write-reservation password): the file is read-only, not encrypted");
+    }
+}
+
+/* Calendar identities for both formats (see Calendar in reader.h).  The
+ * 12-byte row is the same SIZE but not the same column order: MPP12 stores
+ * (calendar uid, base uid, resource uid) while MPP14 stores
+ * (base uid, resource uid, calendar uid).  Evidence: MPXJ's
+ * MPP12CalendarFactory.getCalendarIDOffset() = 0 / getBaseIDOffset() = 4 /
+ * getResourceIDOffset() = 8, versus the MPP14 factory's calendar uid at +8;
+ * and mpp12task.mpp's rows (1,-1,-1), (2,1,0), (3,1,1) name calendar 1, while
+ * base.mpp's (0,-1,1), (1,0,2), (1,1,3) name calendars 1,2,3. */
+void parse_calendars(const CompoundFile& cfb, std::string_view root, MppVersion version,
+                     Document& document) {
+    const std::string path = std::string(root) + "/TBkndCal/FixedData";
+    if (!cfb.has_stream(path)) {
+        document.warnings.emplace_back(std::string(root) +
+                                       "/TBkndCal has no FixedData stream; no calendars "
+                                       "are reported");
+        return;
+    }
+    std::vector<std::uint8_t> fixed;
+    try {
+        fixed = cfb.read_stream(path);
+    } catch (const Error& error) {
+        document.warnings.emplace_back("TBkndCal/FixedData is unreadable: " +
+                                       std::string(error.what()));
+        return;
+    }
+    if (fixed.size() < kCalHeaderSize ||
+        (fixed.size() - kCalHeaderSize) % kCalRowSize != 0) {
+        document.warnings.emplace_back(
+            "TBkndCal/FixedData is " + std::to_string(fixed.size()) +
+            " bytes, not 64 + 12*n; calendars are not reported");
+        return;
+    }
+    const std::vector<std::uint8_t> cal_var_meta =
+        read_optional_stream(cfb, root, "TBkndCal", "VarMeta", document.warnings);
+    const std::vector<std::uint8_t> cal_var2 =
+        read_optional_stream(cfb, root, "TBkndCal", "Var2Data", document.warnings);
+    const VarTable table = parse_var_meta(cal_var_meta, cal_var2, "Calendar",
+                                          document.warnings);
+    const std::size_t rows = (fixed.size() - kCalHeaderSize) / kCalRowSize;
+    for (std::size_t row = 0; row < rows; ++row) {
+        const std::size_t base = kCalHeaderSize + row * kCalRowSize;
+        Calendar calendar;
+        if (version == MppVersion::mpp12) {
+            calendar.uid = static_cast<std::int32_t>(u32_at(fixed, base));
+            calendar.base_uid = static_cast<std::int32_t>(u32_at(fixed, base + 4));
+            calendar.resource_uid = static_cast<std::int32_t>(u32_at(fixed, base + 8));
+        } else {
+            calendar.base_uid = static_cast<std::int32_t>(u32_at(fixed, base));
+            calendar.resource_uid = static_cast<std::int32_t>(u32_at(fixed, base + 4));
+            calendar.uid = static_cast<std::int32_t>(u32_at(fixed, base + 8));
+        }
+        if (calendar.uid <= 0) {
+            continue; /* placeholder row; core/cal skips the same rows */
+        }
+        if (table.usable) {
+            std::string raw;
+            if (read_text_field(table, cal_var2, static_cast<std::uint32_t>(calendar.uid),
+                                kFieldCalName, raw)) {
+                calendar.name = trim_ascii_spaces(raw);
+            }
+        }
+        document.calendars.push_back(std::move(calendar));
+    }
+}
+
+/* MASTER/SUBPROJECT: the project props' SUBPROJECT_DATA record.  See the file
+ * comment for the byte layout.  Only the item layout with type byte 0x01/0x08
+ * is decoded; every other type is reported with its offset and skipped. */
+void parse_subprojects_mpp12(const CompoundFile& cfb, std::string_view root,
+                             Document& document) {
+    const std::string path = std::string(root) + "/Props";
+    if (!cfb.has_stream(path)) {
+        return; /* no project props: no inserted-project table */
+    }
+    std::vector<std::uint8_t> props;
+    try {
+        props = cfb.read_stream(path);
+    } catch (const Error& error) {
+        document.warnings.emplace_back(std::string(root) + "/Props is unreadable: " +
+                                       error.what() + "; subprojects are not reported");
+        return;
+    }
+    if (props.size() < 16) {
+        return;
+    }
+    const std::size_t count = u16_at(props, 12);
+    std::size_t offset = 16;
+    const std::vector<std::uint8_t>* subproject_data = nullptr;
+    std::vector<std::uint8_t> data_holder;
+    std::uint32_t declared_count = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        if (offset + 12 > props.size()) {
+            break;
+        }
+        const std::uint32_t length = u32_at(props, offset);
+        const std::uint32_t key = u32_at(props, offset + 4);
+        if (offset + 12u + length > props.size()) {
+            break;
+        }
+        if (key == kProjectPropsSubprojectData) {
+            data_holder.assign(props.begin() + static_cast<std::ptrdiff_t>(offset + 12),
+                               props.begin() +
+                                   static_cast<std::ptrdiff_t>(offset + 12 + length));
+            subproject_data = &data_holder;
+        } else if (key == kProjectPropsSubprojectCount && length >= 4) {
+            declared_count = u32_at(props, offset + 12);
+        }
+        offset += 12u + length + (length % 2u);
+    }
+    if (subproject_data == nullptr) {
+        return;
+    }
+    const std::vector<std::uint8_t>& data = *subproject_data;
+    if (data.size() < 12) {
+        document.warnings.emplace_back("112/Props SUBPROJECT_DATA is " +
+                                       std::to_string(data.size()) +
+                                       " bytes, too short for its header");
+        return;
+    }
+    const std::size_t item_count_offset = u32_at(data, 8);
+    if (item_count_offset > data.size() || item_count_offset < 12) {
+        document.warnings.emplace_back(
+            "112/Props SUBPROJECT_DATA names item table offset " +
+            std::to_string(item_count_offset) + ", outside the record; ignored");
+        return;
+    }
+    std::size_t at = 12;
+    std::size_t items = 0;
+    while (at + 4 <= item_count_offset) {
+        const std::uint32_t header =
+            u32_at(data, at) & 0x1FFFFu; /* the record masks the offset */
+        at += 4;
+        ++items;
+        if (static_cast<std::size_t>(header) + 20 > data.size()) {
+            document.warnings.emplace_back(
+                "112/Props SUBPROJECT_DATA item " + std::to_string(items) +
+                " names header offset " + std::to_string(header) +
+                ", outside the record; it is skipped");
+            break;
+        }
+        const std::uint8_t type = data[header + 16];
+        if (type == 0x00 || type == 0x10) {
+            at += 8; /* deleted/placeholder entry, no path */
+            continue;
+        }
+        if (type != 0x01 && type != 0x08) {
+            document.warnings.emplace_back(
+                "112/Props SUBPROJECT_DATA item " + std::to_string(items) +
+                " uses layout type " + hex32(type) +
+                " (item header at offset " + std::to_string(header) +
+                "); only type 0x01/0x08 is implemented, so its source path is not "
+                "reported and the remaining items are not parsed");
+            break;
+        }
+        if (at + 12 > data.size()) {
+            document.warnings.emplace_back(
+                "112/Props SUBPROJECT_DATA item " + std::to_string(items) +
+                " is truncated before its offsets; it is skipped");
+            break;
+        }
+        const std::uint32_t uid_offset = u32_at(data, at) & 0x1FFFFu;
+        const std::uint32_t path_offset = u32_at(data, at + 4) & 0x1FFFFu;
+        at += 12;
+        /* The uids whose rows are inserted run from uid_offset up to
+         * path_offset; each is a 4-byte UniqueID followed by its type word. */
+        std::string full_path;
+        bool path_failed = false;
+        auto decode_path = [&]() -> std::string {
+            if (static_cast<std::size_t>(path_offset) + 22 > data.size()) {
+                path_failed = true;
+                return {};
+            }
+            /* Layout (MPXJ MPP12Reader.readSubProject): +18 = the DOS string's
+             * byte length, then the NUL-terminated DOS path, +24, a u32 nested
+             * block size (0 = no Unicode copy), a u32 UTF-16 byte length, two
+             * bytes, then the UTF-16 path. */
+            std::size_t cursor = path_offset + 18;
+            const std::uint32_t dos_size = u32_at(data, cursor);
+            cursor += 4;
+            if (dos_size == 0 || cursor + dos_size > data.size()) {
+                path_failed = true;
+                return {};
+            }
+            std::string dos;
+            for (std::size_t i = 0; i < dos_size; ++i) {
+                const char ch = static_cast<char>(data[cursor + i]);
+                if (ch == '\0') {
+                    break;
+                }
+                dos.push_back(ch);
+            }
+            cursor += dos_size;
+            cursor += 24;
+            if (cursor + 8 > data.size()) {
+                path_failed = true;
+                return {};
+            }
+            const std::uint32_t nested_size = u32_at(data, cursor);
+            cursor += 4;
+            if (nested_size == 0) {
+                return dos;
+            }
+            const std::uint32_t unicode_size = u32_at(data, cursor);
+            cursor += 4;
+            cursor += 2;
+            if (cursor + unicode_size > data.size()) {
+                path_failed = true;
+                return {};
+            }
+            std::vector<std::uint8_t> text(data.begin() +
+                                               static_cast<std::ptrdiff_t>(cursor),
+                                           data.begin() + static_cast<std::ptrdiff_t>(
+                                                               cursor + unicode_size));
+            return decode_utf16_block(text);
+        };
+        full_path = decode_path();
+        if (path_failed) {
+            document.warnings.emplace_back(
+                "112/Props SUBPROJECT_DATA item " + std::to_string(items) +
+                " (type 0x01/0x08) has a path block this reader cannot decode "
+                "(item header " + std::to_string(header) + ", path offset " +
+                std::to_string(path_offset) + "); it is skipped");
+            continue;
+        }
+        std::size_t uid_at = uid_offset;
+        while (uid_at + 8 <= path_offset && uid_at + 8 <= data.size()) {
+            const std::uint32_t task_uid = u32_at(data, uid_at);
+            if (task_uid != 0 && task_uid <= 0x3FFFFFFFu) {
+                SubprojectRecord record;
+                record.task_uid = task_uid;
+                record.path = full_path;
+                document.subprojects.push_back(std::move(record));
+            }
+            uid_at += 4;
+        }
+    }
+    if (declared_count != 0 && document.subprojects.empty()) {
+        document.warnings.emplace_back(
+            "112/Props says the file has " + std::to_string(declared_count) +
+            " subprojects but SUBPROJECT_DATA yielded no readable record");
+    }
+}
+
+/* Sibling-index outline numbers over MPP12's STORED parent links (row +36) and
+ * outline levels (row +40).  The stored level is authoritative; a disagreement
+ * with the chain depth is reported. */
+void number_mpp12_outline(Document& document) {
+    std::unordered_map<std::uint32_t, std::size_t> row_by_uid;
+    row_by_uid.reserve(document.tasks.size());
+    for (std::size_t i = 0; i < document.tasks.size(); ++i) {
+        row_by_uid[document.tasks[i].uid] = i;
+    }
+    std::vector<std::vector<std::size_t>> children(document.tasks.size() + 1);
+    std::vector<std::size_t> top_level;
+    std::size_t unknown_parents = 0;
+    for (std::size_t i = 0; i < document.tasks.size(); ++i) {
+        const std::uint32_t parent = document.tasks[i].parent_uid;
+        if (parent == 0 || parent == 0xFFFFFFFFu) {
+            if (parent == 0xFFFFFFFFu) {
+                ++unknown_parents;
+            }
+            top_level.push_back(i);
+            continue;
+        }
+        const auto found = row_by_uid.find(parent);
+        if (found == row_by_uid.end() || found->second == i) {
+            ++unknown_parents;
+            top_level.push_back(i);
+            continue;
+        }
+        children[found->second + 1].push_back(i);
+    }
+    for (std::vector<std::size_t>& kids : children) {
+        std::sort(kids.begin(), kids.end());
+    }
+    std::vector<bool> reached(document.tasks.size(), false);
+    struct Pending {
+        std::size_t row;
+        std::size_t level;
+        std::string prefix;
+    };
+    std::vector<Pending> stack;
+    for (std::size_t i = top_level.size(); i-- > 0;) {
+        stack.push_back(Pending{top_level[i], 1, std::to_string(i + 1)});
+    }
+    std::size_t mismatched_levels = 0;
+    while (!stack.empty()) {
+        const Pending node = stack.back();
+        stack.pop_back();
+        if (node.row >= document.tasks.size() || reached[node.row]) {
+            continue;
+        }
+        reached[node.row] = true;
+        Task& task = document.tasks[node.row];
+        /* The stored +40 level is authoritative; the parent chain supplies the
+         * number.  A disagreement is reported once below. */
+        task.outline_level = task.stored_outline_level != 0
+                                 ? task.stored_outline_level
+                                 : static_cast<std::uint32_t>(node.level);
+        task.outline_number = node.prefix;
+        if (task.stored_outline_level != 0 &&
+            task.stored_outline_level != node.level) {
+            ++mismatched_levels;
+        }
+        task.child_count = static_cast<std::uint32_t>(children[node.row + 1].size());
+        task.summary = task.child_count > 0;
+        const std::vector<std::size_t>& kids = children[node.row + 1];
+        for (std::size_t i = kids.size(); i-- > 0;) {
+            const std::string part = std::to_string(i + 1);
+            stack.push_back(Pending{kids[i], node.level + 1,
+                                    node.prefix + "." + part});
+        }
+    }
+    std::size_t unreachable = 0;
+    for (std::size_t i = 0; i < document.tasks.size(); ++i) {
+        if (!reached[i]) {
+            ++unreachable;
+        }
+    }
+    if (mismatched_levels > 0) {
+        document.warnings.emplace_back(
+            "MPP12 Task rows store an OutlineLevel at +40 that disagrees with the "
+            "parent-uid chain on " + std::to_string(mismatched_levels) +
+            " row(s); the stored level is reported and the chain is used for "
+            "OutlineNumber");
+    }
+    if (unknown_parents > 0) {
+        document.warnings.emplace_back(
+            "MPP12 Task rows name a parent UniqueID that no live task holds on " +
+            std::to_string(unknown_parents) +
+            " row(s); those rows are numbered as top level");
+    }
+    if (unreachable > 0) {
+        document.warnings.emplace_back(
+            std::to_string(unreachable) +
+            " MPP12 task row(s) are not reachable from the project row through the "
+            "stored parent links; they are still returned and numbered by their "
+            "stored Level");
+        for (std::size_t i = 0; i < document.tasks.size(); ++i) {
+            if (reached[i]) {
+                continue;
+            }
+            Task& task = document.tasks[i];
+            task.outline_level = task.stored_outline_level != 0
+                                     ? task.stored_outline_level
+                                     : 1u;
+        }
+    }
+}
+
+void parse_mpp12(const CompoundFile& cfb, std::string_view root, Document& document) {
+    /* ---- Task table (required).  Geometry: 48 + 264*rows but rows are read by
+     * FixedMeta entry offset because 16-byte null-task blocks are interleaved. */
+    RowTable task_rows;
+    if (!read_row_table(cfb, root, "TBkndTask", "Task", kFixedHeaderSize,
+                        k12TaskRowSize, kFixedMetaEntrySize, kFixedMetaDescriptors,
+                        task_rows, document.warnings)) {
+        throw Error("no MPP12 Task table at " + std::string(root) +
+                    "/TBkndTask/FixedData");
+    }
+    if (task_rows.count() == 0) {
+        throw Error(std::string(root) +
+                    "/TBkndTask/FixedMeta describes no data rows (an MPP12 file "
+                    "carries at least the project row)");
+    }
+    std::vector<std::uint8_t> task_fixed;
+    try {
+        task_fixed = cfb.read_stream(std::string(root) + "/TBkndTask/FixedData");
+    } catch (const Error& error) {
+        throw Error(std::string("no MPP12 Task table: ") + error.what());
+    }
+    const std::vector<std::uint8_t> task_var_meta =
+        read_optional_stream(cfb, root, "TBkndTask", "VarMeta", document.warnings);
+    const std::vector<std::uint8_t> task_var2 =
+        read_optional_stream(cfb, root, "TBkndTask", "Var2Data", document.warnings);
+    const VarTable task_var =
+        parse_var_meta(task_var_meta, task_var2, "Task", document.warnings);
+
+    /* Descriptor rows (entries 0..2) are not tasks; data row 0 is the project
+     * row.  The three descriptor blocks are 16 bytes each and their FixedMeta
+     * state is 0x04; warn if that is not what the file holds. */
+    if (task_rows.meta_present && task_rows.entries.size() >= task_rows.entry_size) {
+        const std::uint8_t descriptor_state = task_rows.entries[0];
+        if (descriptor_state != 0x04) {
+            document.warnings.emplace_back(
+                "MPP12 Task FixedMeta descriptor state is " + hex32(descriptor_state) +
+                " instead of 0x04; the first three entries are still treated as "
+                "descriptors");
+        }
+    }
+
+    /* ---- Row 0: the project row. */
+    {
+        const std::vector<std::uint8_t> row =
+            row_bytes(task_fixed, task_rows, 0, k12TaskRowSize);
+        if (row.empty()) {
+            document.warnings.emplace_back(
+                "MPP12 Task row 0 (the project row) is shorter than 264 bytes; the "
+                "project summary is empty");
+        } else {
+            document.project.uid = u32_at(row, k12TaskUid);
+            document.project.row_id = u32_at(row, k12TaskId);
+            document.project.duration_ticks = u32_at(row, k12TaskDuration);
+            document.project.priority = u16_at(row, k12TaskPriority);
+            document.project.percent_complete = u16_at(row, k12TaskPercent);
+            document.project.start.raw = u32_at(row, k12TaskStart);
+            document.project.finish.raw = u32_at(row, k12TaskFinish);
+            if (task_var.usable &&
+                read_text_field(task_var, task_var2, document.project.uid,
+                                kFieldTaskName, document.project.title_raw)) {
+                document.project.title = trim_ascii_spaces(document.project.title_raw);
+            }
+        }
+    }
+
+    /* ---- Rows 1..: live tasks, null-task placeholders and tombstones. */
+    std::size_t unsupported_size_rows = 0;
+    std::uint32_t first_unsupported_size = 0;
+    for (std::size_t row = 1; row < task_rows.count(); ++row) {
+        const std::uint8_t state = task_rows.state(row);
+        const std::uint32_t size = task_rows.size[row];
+        if (size == k12TaskNullRowSize) {
+            const std::vector<std::uint8_t> bytes =
+                row_bytes(task_fixed, task_rows, row, k12TaskNullRowSize);
+            SkippedRow skipped;
+            skipped.row = static_cast<std::uint32_t>(row);
+            skipped.uid = bytes.empty() ? 0 : u32_at(bytes, 0);
+            skipped.reason = "16-byte null-task block (FixedMeta state 0x04)";
+            document.skipped_rows.push_back(std::move(skipped));
+            continue;
+        }
+        if (size < k12TaskRowSize) {
+            if (unsupported_size_rows == 0) {
+                first_unsupported_size = size;
+            }
+            ++unsupported_size_rows;
+            document.warnings.emplace_back(
+                "MPP12 Task row " + std::to_string(row) + " is " +
+                std::to_string(size) + " bytes, neither a 16-byte null-task block "
+                "nor a 264-byte task row; it is skipped rather than guessed at");
+            SkippedRow skipped;
+            skipped.row = static_cast<std::uint32_t>(row);
+            skipped.uid = 0;
+            skipped.reason = "unsupported row size " + std::to_string(size);
+            document.skipped_rows.push_back(std::move(skipped));
+            continue;
+        }
+        const std::vector<std::uint8_t> row_bytes_value =
+            row_bytes(task_fixed, task_rows, row, k12TaskRowSize);
+        const std::uint32_t uid = u32_at(row_bytes_value, k12TaskUid);
+        if (state == kFixedMetaStateDeleted) {
+            SkippedRow skipped;
+            skipped.row = static_cast<std::uint32_t>(row);
+            skipped.uid = uid;
+            skipped.reason = "FixedMeta entry is a tombstone (+0 = 0x02): deleted row";
+            document.skipped_rows.push_back(std::move(skipped));
+            document.warnings.emplace_back(
+                "MPP12 Task row " + std::to_string(row) + " (uid " +
+                std::to_string(uid) +
+                ") has FixedMeta's tombstone flag (+0 = 0x02) and is treated as a "
+                "deleted row slot, not a task");
+            continue;
+        }
+        if (state != 0) {
+            SkippedRow skipped;
+            skipped.row = static_cast<std::uint32_t>(row);
+            skipped.uid = uid;
+            skipped.reason = "FixedMeta state byte " + hex32(state) +
+                             " is not a live row (0x00) or a tombstone (0x02)";
+            document.skipped_rows.push_back(std::move(skipped));
+            document.warnings.emplace_back(
+                "MPP12 Task row " + std::to_string(row) + " (uid " +
+                std::to_string(uid) + ") has FixedMeta state " + hex32(state) +
+                "; it is skipped rather than read as a task");
+            continue;
+        }
+        Task task;
+        task.row = static_cast<std::uint32_t>(row);
+        task.uid = uid;
+        task.row_id = u32_at(row_bytes_value, k12TaskId);
+        task.duration_ticks = u32_at(row_bytes_value, k12TaskDuration);
+        task.duration_format = u16_at(row_bytes_value, k12TaskDurationFormat);
+        task.priority = u16_at(row_bytes_value, k12TaskPriority);
+        task.percent_complete = u16_at(row_bytes_value, k12TaskPercent);
+        task.start.raw = u32_at(row_bytes_value, k12TaskStart);
+        task.finish.raw = u32_at(row_bytes_value, k12TaskFinish);
+        /* MPP12 has no calculated pair (+96/+100 are the actuals); report the
+         * effective pair twice rather than invent a second date. */
+        task.calculated_start = task.start;
+        task.calculated_finish = task.finish;
+        const std::uint16_t constraint_type =
+            u16_at(row_bytes_value, k12TaskConstraintType);
+        if (constraint_type <= kConstraintFnlt) {
+            task.constraint_type = constraint_type;
+            task.constraint_date.raw = u32_at(row_bytes_value, k12TaskConstraintDate);
+        } else {
+            document.warnings.emplace_back(
+                "MPP12 Task row " + std::to_string(row) + " (uid " +
+                std::to_string(uid) + ") stores constraint type " +
+                std::to_string(constraint_type) +
+                " at +80; PjConstraint is 0..7, so it is reported as ASAP with no "
+                "constraint date");
+        }
+        task.deadline.raw = u32_at(row_bytes_value, k12TaskDeadline);
+        task.actual_duration_ticks = u32_at(row_bytes_value, k12TaskActualDuration);
+        task.actual_start.raw = u32_at(row_bytes_value, k12TaskActualStart);
+        task.actual_finish.raw = u32_at(row_bytes_value, k12TaskActualFinish);
+        task.calendar_uid =
+            static_cast<std::int32_t>(u32_at(row_bytes_value, k12TaskCalendarUid));
+        task.start_anchor.raw = kDateNa; /* no measured MPP12 equivalent */
+        task.parent_uid = u32_at(row_bytes_value, k12TaskParentUid);
+        task.stored_outline_level = u16_at(row_bytes_value, k12TaskOutlineLevel);
+        task.free_slack_ticks =
+            static_cast<std::int32_t>(u32_at(row_bytes_value, k12TaskFreeSlack));
+        task.start_slack_ticks =
+            static_cast<std::int32_t>(u32_at(row_bytes_value, k12TaskStartSlack));
+        task.total_slack_ticks =
+            static_cast<std::int32_t>(u32_at(row_bytes_value, k12TaskTotalSlack));
+        /* Project 2007 has no manual scheduling, so nothing gates critical. */
+        task.manually_scheduled = false;
+        task.critical = task.total_slack_ticks <= 0;
+        if (task_rows.meta_present) {
+            task.milestone =
+                (task_rows.meta_byte(row, k12FixedMetaMilestoneByte) &
+                 k12FixedMetaFlagMilestone) != 0;
+            task.milestone_stored = true;
+        } else {
+            task.milestone = task.duration_ticks == 0;
+            task.milestone_stored = false;
+        }
+        if (task_var.usable &&
+            read_text_field(task_var, task_var2, uid, kFieldTaskName, task.name_raw)) {
+            task.name = trim_ascii_spaces(task.name_raw);
+        }
+        task.custom_fields = decode_var_custom_fields(task_var, task_var2, uid);
+        if (task_rows.meta_present) {
+            append_mpp12_flags(task_rows, row, task.custom_fields);
+        }
+        /* Inserted-project tag: Task VarMeta key 0x0b4001ca. */
+        if (task_var.usable) {
+            for (const std::uint32_t offset : offsets_for(task_var, uid,
+                                                          kFieldSubprojectUidOffset)) {
+                std::vector<std::uint8_t> payload;
+                if (read_block(task_var2, offset, payload) && payload.size() == 4) {
+                    task.subproject_uid_offset = u32_at(payload, 0);
+                    task.subproject_uid_offset_present = true;
+                    break;
+                }
+            }
+        }
+        document.tasks.push_back(std::move(task));
+    }
+
+    /* If EVERY data row is an unsupported size, this is not the Project 2007
+     * task layout at all: refuse with a positioned error instead of returning a
+     * project with no tasks.  (MPXJ-written "MPP12" files are such a variant:
+     * they carry 206-byte task rows.  A real Project 2007 file with no tasks
+     * has only the project row, so it does not trip this.) */
+    if (unsupported_size_rows > 0 && unsupported_size_rows == task_rows.count() - 1) {
+        throw Error("MPP12 Task table at " + std::string(root) +
+                    "/TBkndTask/FixedData holds " +
+                    std::to_string(unsupported_size_rows) +
+                    " data rows of " + std::to_string(first_unsupported_size) +
+                    " bytes each (row 0 is the project row); the Project-2007 "
+                    "layout this reader implements is 264 bytes.  The file may be "
+                    "an MPXJ-written MPP12 or a different variant; its record size "
+                    "is not guessed at.");
+    }
+
+    /* Sibling numbering + stored-level cross-check. */
+    number_mpp12_outline(document);
+
+    /* The subproject source paths, matched to the rows by task UniqueID. */
+    parse_subprojects_mpp12(cfb, root, document);
+    for (Task& task : document.tasks) {
+        for (const SubprojectRecord& record : document.subprojects) {
+            if (record.task_uid == task.uid) {
+                task.subproject_file = record.path;
+                break;
+            }
+        }
+    }
+
+    std::unordered_set<std::uint32_t> live_task_uids;
+    live_task_uids.reserve(document.tasks.size());
+    for (const Task& task : document.tasks) {
+        live_task_uids.insert(task.uid);
+    }
+
+    /* ---- Resources: 48 + 188*rows, FixedMeta 37*(rows+3).  Row 0 is the uid-0
+     * placeholder. */
+    {
+        RowTable rsc_rows;
+        if (read_row_table(cfb, root, "TBkndRsc", "Resource", kRscHeaderSize,
+                           k12RscRowSize, kRscFixedMetaEntrySize,
+                           kFixedMetaDescriptors, rsc_rows, document.warnings) &&
+            rsc_rows.count() > 1) {
+            std::vector<std::uint8_t> rsc_fixed;
+            try {
+                rsc_fixed = cfb.read_stream(std::string(root) + "/TBkndRsc/FixedData");
+            } catch (const Error&) {
+                rsc_fixed.clear();
+            }
+            std::vector<std::uint8_t> rsc_var2 =
+                read_optional_stream(cfb, root, "TBkndRsc", "Var2Data",
+                                     document.warnings);
+            const VarTable rsc_var = parse_var_meta(
+                read_optional_stream(cfb, root, "TBkndRsc", "VarMeta",
+                                     document.warnings),
+                rsc_var2, "Resource", document.warnings);
+            /* Resource type: FixedMeta +9 bit 0x02 = Work; when clear, the
+             * Fixed2Meta entry's +8 bit 0x10 = Cost, else Material.  The two
+             * metadata streams pair by ENTRY INDEX (as in MPP14). */
+            std::vector<std::uint8_t> rsc_fixed2_type(rsc_rows.count(), 0);
+            std::vector<bool> rsc_fixed2_known(rsc_rows.count(), false);
+            const std::vector<std::uint8_t> rsc_fixed2_meta =
+                read_optional_stream(cfb, root, "TBkndRsc", "Fixed2Meta",
+                                     document.warnings);
+            if (rsc_fixed2_meta.size() >= kFixedMetaHeaderSize &&
+                u32_at(rsc_fixed2_meta, 0) == kMetaMagic) {
+                const std::uint32_t declared = u32_at(rsc_fixed2_meta, 8);
+                const std::size_t available =
+                    rsc_fixed2_meta.size() - kFixedMetaHeaderSize;
+                const std::size_t count =
+                    declared != 0 ? declared : available / kRscFixed2MetaEntrySize;
+                /* The entries include the three descriptors (as FixedMeta does),
+                 * so data row `row` is entry row + 3. */
+                if (count != 0 && available % count == 0 &&
+                    count >= rsc_rows.count() + kFixedMetaDescriptors) {
+                    const std::size_t stride = available / count;
+                    for (std::size_t row = 0; row < rsc_rows.count(); ++row) {
+                        const std::size_t entry =
+                            kFixedMetaHeaderSize +
+                            (row + kFixedMetaDescriptors) * stride;
+                        if (entry + 8 >= rsc_fixed2_meta.size()) {
+                            continue;
+                        }
+                        rsc_fixed2_type[row] = rsc_fixed2_meta[entry + 8];
+                        rsc_fixed2_known[row] = true;
+                    }
+                } else if (count != 0) {
+                    document.warnings.emplace_back(
+                        "MPP12 Resource Fixed2Meta holds " + std::to_string(count) +
+                        " entries for " + std::to_string(rsc_rows.count()) +
+                        " rows (expected " +
+                        std::to_string(rsc_rows.count() + kFixedMetaDescriptors) +
+                        "); Resource Type is reported as Work with "
+                        "type_stored=false");
+                }
+            }
+            for (std::size_t row = 1; row < rsc_rows.count(); ++row) {
+                const std::vector<std::uint8_t> bytes =
+                    row_bytes(rsc_fixed, rsc_rows, row, k12RscRowSize);
+                const std::uint32_t uid = u32_at(bytes, k12RscUid);
+                const std::uint8_t state = rsc_rows.state(row);
+                if (bytes.empty() || uid == 0 || state != 0) {
+                    SkippedRow skipped;
+                    skipped.row = static_cast<std::uint32_t>(row);
+                    skipped.uid = uid;
+                    skipped.reason = uid == 0 ? "UniqueID 0" : "not live";
+                    document.skipped_resources.push_back(std::move(skipped));
+                    continue;
+                }
+                Resource resource;
+                resource.row = static_cast<std::uint32_t>(row);
+                resource.uid = uid;
+                resource.row_id = u32_at(bytes, k12RscId);
+                resource.max_units_x100 = f64_at(bytes, k12RscMaxUnits);
+                const bool work_bit =
+                    rsc_rows.meta_present &&
+                    (rsc_rows.meta_byte(row, k12RscFixedMetaWorkByte) &
+                     k12RscFixedMetaWorkFlag) != 0;
+                if (!rsc_rows.meta_present) {
+                    resource.type = ResourceType::work;
+                    resource.type_stored = false;
+                } else if (work_bit) {
+                    resource.type = ResourceType::work;
+                    resource.type_stored = true;
+                } else if (rsc_fixed2_known[row]) {
+                    resource.type =
+                        (rsc_fixed2_type[row] & k12RscFixed2MetaCostFlag) != 0
+                            ? ResourceType::cost
+                            : ResourceType::material;
+                    resource.type_stored = true;
+                } else {
+                    resource.type = ResourceType::work;
+                    resource.type_stored = false;
+                    document.warnings.emplace_back(
+                        "MPP12 Resource row " + std::to_string(row) + " (uid " +
+                        std::to_string(uid) + ") is non-Work in FixedMeta but has no "
+                        "Fixed2Meta type word; its type is reported as Work with "
+                        "type_stored=false");
+                }
+                if (rsc_var.usable &&
+                    read_text_field(rsc_var, rsc_var2, uid, kFieldRscName,
+                                    resource.name_raw)) {
+                    resource.name = trim_ascii_spaces(resource.name_raw);
+                }
+                std::string initials;
+                if (rsc_var.usable &&
+                    read_text_field(rsc_var, rsc_var2, uid, kFieldRscInitials,
+                                    initials)) {
+                    resource.initials = trim_ascii_spaces(initials);
+                }
+                if (rsc_var.usable &&
+                    read_text_field(rsc_var, rsc_var2, uid, kFieldRscMaterialLabel,
+                                    resource.material_label_raw)) {
+                    resource.material_label =
+                        trim_ascii_spaces(resource.material_label_raw);
+                }
+                document.resources.push_back(std::move(resource));
+            }
+        }
+    }
+
+    /* ---- Links: 20-byte rows, no header.  type +12, LagFormat +14, lag +16
+     * (MPP14 swaps the last two). */
+    {
+        RowTable cons_rows;
+        if (read_row_table(cfb, root, "TBkndCons", "Link", 0, k12ConsRowSize,
+                           kConsFixedMetaEntrySize, 0, cons_rows,
+                           document.warnings) &&
+            cons_rows.count() > 0) {
+            std::vector<std::uint8_t> cons_fixed;
+            try {
+                cons_fixed = cfb.read_stream(std::string(root) +
+                                             "/TBkndCons/FixedData");
+            } catch (const Error&) {
+                cons_fixed.clear();
+            }
+            for (std::size_t row = 0; row < cons_rows.count(); ++row) {
+                const std::vector<std::uint8_t> bytes =
+                    row_bytes(cons_fixed, cons_rows, row, k12ConsRowSize);
+                const std::uint32_t predecessor = u32_at(bytes, 4);
+                const std::uint32_t successor = u32_at(bytes, 8);
+                const std::uint8_t state = cons_rows.state(row);
+                if (predecessor == 0 && successor == 0) {
+                    SkippedRow skipped;
+                    skipped.row = static_cast<std::uint32_t>(row);
+                    skipped.uid = u32_at(bytes, 0);
+                    skipped.reason = "predecessor and successor are both 0";
+                    document.skipped_links.push_back(std::move(skipped));
+                    continue;
+                }
+                if (cons_rows.meta_present && state == kFixedMetaStateDeleted) {
+                    SkippedRow skipped;
+                    skipped.row = static_cast<std::uint32_t>(row);
+                    skipped.uid = u32_at(bytes, 0);
+                    skipped.reason = "FixedMeta entry is a tombstone (+0 = 0x02)";
+                    document.skipped_links.push_back(std::move(skipped));
+                    continue;
+                }
+                Link link;
+                link.row = static_cast<std::uint32_t>(row);
+                link.uid = u32_at(bytes, 0);
+                link.predecessor_uid = predecessor;
+                link.successor_uid = successor;
+                link.type_raw = u16_at(bytes, k12ConsType);
+                link.lag_units = u16_at(bytes, k12ConsLagUnits);
+                link.lag_ticks =
+                    static_cast<std::int32_t>(u32_at(bytes, k12ConsLag));
+                link.predecessor_known = live_task_uids.count(predecessor) != 0;
+                link.successor_known = live_task_uids.count(successor) != 0;
+                document.links.push_back(link);
+            }
+            for (const Link& link : document.links) {
+                if (!link.predecessor_known) {
+                    document.warnings.emplace_back(
+                        "Link uid " + std::to_string(link.uid) +
+                        " names predecessor task " +
+                        std::to_string(link.predecessor_uid) +
+                        ", which no live task holds");
+                }
+                if (!link.successor_known) {
+                    document.warnings.emplace_back(
+                        "Link uid " + std::to_string(link.uid) +
+                        " names successor task " +
+                        std::to_string(link.successor_uid) +
+                        ", which no live task holds");
+                }
+            }
+        }
+    }
+
+    /* ---- Assignments: 142-byte rows, no header.  uid +0, task +4, resource
+     * +8, Start +12, Finish +16, Units +54, Work +62.  MPP12 stores no Resume
+     * date in the row: Assignment::resume stays kDateNa. */
+    {
+        RowTable assn_rows;
+        if (read_row_table(cfb, root, "TBkndAssn", "Assignment", 0, k12AssnRowSize,
+                           kAssnFixedMetaEntrySize, 0, assn_rows,
+                           document.warnings) &&
+            assn_rows.count() > 0) {
+            std::vector<std::uint8_t> assn_fixed;
+            try {
+                assn_fixed = cfb.read_stream(std::string(root) +
+                                             "/TBkndAssn/FixedData");
+            } catch (const Error&) {
+                assn_fixed.clear();
+            }
+            for (std::size_t row = 0; row < assn_rows.count(); ++row) {
+                const std::vector<std::uint8_t> bytes =
+                    row_bytes(assn_fixed, assn_rows, row, k12AssnRowSize);
+                const std::uint8_t state = assn_rows.state(row);
+                if (state != 0) {
+                    SkippedRow skipped;
+                    skipped.row = static_cast<std::uint32_t>(row);
+                    skipped.uid = u32_at(bytes, k12AssnUid);
+                    skipped.reason = state == kFixedMetaStateDeleted
+                                         ? "FixedMeta entry is a tombstone (+0 = 0x02)"
+                                         : "FixedMeta state " + hex32(state);
+                    document.skipped_assignments.push_back(std::move(skipped));
+                    continue;
+                }
+                Assignment assignment;
+                assignment.row = static_cast<std::uint32_t>(row);
+                assignment.uid = u32_at(bytes, k12AssnUid);
+                assignment.task_uid = u32_at(bytes, k12AssnTaskUid);
+                assignment.resource_uid_raw = u32_at(bytes, k12AssnResourceUid);
+                assignment.units_x100 = f64_at(bytes, k12AssnUnits);
+                assignment.work_x1000 = f64_at(bytes, k12AssnWork);
+                assignment.start.raw = u32_at(bytes, k12AssnStart);
+                assignment.finish.raw = u32_at(bytes, k12AssnFinish);
+                assignment.resume.raw = kDateNa;
+                if (assignment.task_uid == 0) {
+                    SkippedRow skipped;
+                    skipped.row = static_cast<std::uint32_t>(row);
+                    skipped.uid = assignment.uid;
+                    skipped.reason = "placeholder row with task UniqueID 0";
+                    document.skipped_assignments.push_back(std::move(skipped));
+                    continue;
+                }
+                if (live_task_uids.count(assignment.task_uid) == 0) {
+                    document.warnings.emplace_back(
+                        "Assignment uid " + std::to_string(assignment.uid) +
+                        " names task " + std::to_string(assignment.task_uid) +
+                        ", which no live task holds");
+                }
+                document.assignments.push_back(assignment);
+            }
+        }
+    }
+}
+
+/* Version detection.  Never assume a root: the props stream says which format,
+ * and the storage that actually holds TBkndTask/FixedData is the fallback.  A
+ * disagreement is a warning plus the storage root winning, because that is
+ * where the bytes are. */
+struct FormatInfo {
+    MppVersion version = MppVersion::mpp14;
+    std::string table_root;
+    std::string view_root;
+    std::string props_stream;
+};
+
+FormatInfo detect_format(const CompoundFile& cfb, std::vector<std::string>& warnings) {
+    const bool has12 = cfb.has_stream("Props12");
+    const bool has14 = cfb.has_stream("Props14");
+    const bool tables12 = cfb.has_stream("112/TBkndTask/FixedData") ||
+                          cfb.has_stream("112/TBkndTask/FixedMeta");
+    const bool tables14 = cfb.has_stream("114/TBkndTask/FixedData") ||
+                          cfb.has_stream("114/TBkndTask/FixedMeta");
+    FormatInfo info;
+    if (has12 && !has14) {
+        info.version = MppVersion::mpp12;
+        info.table_root = "112";
+        info.view_root = "212";
+        info.props_stream = "Props12";
+    } else if (has14 && !has12) {
+        info.version = MppVersion::mpp14;
+        info.table_root = "114";
+        info.view_root = "214";
+        info.props_stream = "Props14";
+    } else if (has12 && has14) {
+        warnings.emplace_back("the file carries both Props12 and Props14; the table "
+                              "storage decides the format");
+        if (tables12 && !tables14) {
+            info = {MppVersion::mpp12, "112", "212", "Props12"};
+        } else {
+            info = {MppVersion::mpp14, "114", "214", "Props14"};
+        }
+    } else {
+        warnings.emplace_back(
+            "the file has neither Props12 nor Props14; the table storage decides "
+            "the format");
+        if (tables12 && !tables14) {
+            info = {MppVersion::mpp12, "112", "212", "Props12"};
+        } else if (tables14) {
+            info = {MppVersion::mpp14, "114", "214", "Props14"};
+        } else {
+            throw Error("not a readable .mpp container: no Props12/Props14 stream and "
+                        "no 112/TBkndTask or 114/TBkndTask table");
+        }
+    }
+    const std::string expected_root = info.version == MppVersion::mpp12 ? "112" : "114";
+    const std::string other_root = info.version == MppVersion::mpp12 ? "114" : "112";
+    if (!cfb.has_stream(expected_root + "/TBkndTask/FixedData") &&
+        cfb.has_stream(other_root + "/TBkndTask/FixedData")) {
+        warnings.emplace_back(
+            "the props stream says " + std::string(version_name(info.version)) +
+            " but only the " + other_root +
+            "/ table tree exists; the tree decides the format");
+        if (other_root == "112") {
+            info = {MppVersion::mpp12, "112", "212", "Props12"};
+        } else {
+            info = {MppVersion::mpp14, "114", "214", "Props14"};
+        }
+    }
+    return info;
+}
+
+/* True when the container has a STORAGE (not a stream) with this name, e.g.
+ * "214".  CompoundFile::has_stream only matches stream entries. */
+bool has_storage(const CompoundFile& cfb, std::string_view name) {
+    const std::string prefix = std::string(name) + "/";
+    for (const std::string& path : cfb.stream_paths()) {
+        if (path.size() > prefix.size() &&
+            cfb_path_matches(path.substr(0, path.find('/')), name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Document parse_document(const CompoundFile& cfb) {
+    Document document;
+    const FormatInfo format = detect_format(cfb, document.warnings);
+    document.version = format.version;
+    document.table_root = format.table_root;
+    document.view_root = format.view_root;
+    if (!has_storage(cfb, format.view_root)) {
+        document.warnings.emplace_back("the file has no " + format.view_root +
+                                       "/ view-state storage (it is opaque to this "
+                                       "reader either way)");
+    }
+    if (cfb.has_stream(format.props_stream)) {
+        read_version_and_password(cfb, format.props_stream, document);
+    } else {
+        document.warnings.emplace_back("no top-level " + format.props_stream +
+                                       " stream; the writer version and the password "
+                                       "flag are unknown");
+    }
+    parse_calendars(cfb, format.table_root, format.version, document);
+    if (format.version == MppVersion::mpp12) {
+        parse_mpp12(cfb, format.table_root, document);
+    } else {
+        parse_mpp14(cfb, format.table_root, document);
+    }
     return document;
 }
 

@@ -71,6 +71,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <set>
 #include <string>
@@ -79,6 +80,10 @@
 #include <vector>
 
 #include "reader.h"
+/* The container round-trip test (MPP12 fixtures) uses the writer's read/write
+ * container model; see test_mpp12_container().  Compiling cfb_writer.cpp into
+ * this test keeps the reader test binary self-contained. */
+#include "cfb_writer.h"
 
 /* Optional: the CMake-configured test paths (tests/test_paths.h.in).  Present
  * only when a build puts the generated header on this target's include path; in
@@ -1691,6 +1696,14 @@ void test_probe_fixtures(TestContext& context) {
             continue;
         }
         const std::string name = item.path().filename().string();
+        /* The "-from14" family in this directory is written by MPXJ's own
+         * writer, not by Microsoft Project: its MPP12 variant uses 206-byte
+         * task rows instead of Project 2007's 264, and the reader refuses it
+         * with a positioned error on purpose (test_mpp12 pins that). */
+        if (name.size() > 11 && name.compare(name.size() - 11, 11, "-from14.mpp") == 0) {
+            std::cout << "SKIP (MPXJ-written variant): " << name << "\n";
+            continue;
+        }
         try {
             const mpp::Document document = mpp::load_file(item.path().string());
             ++loaded;
@@ -2465,6 +2478,735 @@ void test_assignments(TestContext& context) {
                   "Start or Finish)");
 }
 
+/* ---------------------------------------------------------------------------
+ * MPP12 (Project 2007) and the format metadata.  G1, wave 18.
+ *
+ * Every expectation below is measured on the fixture bytes (the byte tables are
+ * in core/mpp/reader.cpp's "MPP12" comment and docs/handoff/g1.md); the
+ * independent check is MS Project's own content as MPXJ's JUnit expectations
+ * record it for the same files (MppTaskTest: 2 tasks, Task #1 = 1 week from
+ * 23/08/2006 to 29/08/2006, 45 %, 40 h, 5000/2800/1000 cost, milestone, priority
+ * 600; MppTaskTest.testRelations: task2 <- 1 FS, task3 <- 2 SS+1 day,
+ * task4 <- 3 FF; MppSubprojectTest: uid 2 "SubprojectA-9" with UniqueID offset
+ * 8388608).  All corpus-dependent checks SKIP when corpus/ is absent.
+ * ------------------------------------------------------------------------- */
+
+std::vector<std::uint8_t> read_file_bytes(const std::string& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input),
+                                     std::istreambuf_iterator<char>());
+}
+
+/* Byte offset of the DATA of props record `key` in a Props12/Props14 stream, or
+ * 0 when the record is absent.  The block layout (16-byte header, u16 count at
+ * +12, then u32 length/u32 key/u32 unused + data padded to even) is the same in
+ * both formats. */
+std::size_t props_record_data_offset(const std::vector<std::uint8_t>& props,
+                                     std::uint32_t key) {
+    if (props.size() < 16) {
+        return 0;
+    }
+    auto u16 = [&props](std::size_t at) {
+        return static_cast<std::uint32_t>(props[at]) |
+               (static_cast<std::uint32_t>(props[at + 1]) << 8);
+    };
+    auto u32 = [&props](std::size_t at) {
+        return static_cast<std::uint32_t>(props[at]) |
+               (static_cast<std::uint32_t>(props[at + 1]) << 8) |
+               (static_cast<std::uint32_t>(props[at + 2]) << 16) |
+               (static_cast<std::uint32_t>(props[at + 3]) << 24);
+    };
+    const std::size_t count = u16(12);
+    std::size_t at = 16;
+    for (std::size_t i = 0; i < count && at + 12 <= props.size(); ++i) {
+        const std::uint32_t length = u32(at);
+        const std::uint32_t record_key = u32(at + 4);
+        if (at + 12u + length > props.size()) {
+            return 0;
+        }
+        if (record_key == key) {
+            return at + 12;
+        }
+        at += 12u + length + (length % 2u);
+    }
+    return 0;
+}
+
+void test_mpp12(TestContext& context) {
+    const std::string directory = MPP_PROBE_DIR;
+    const auto exists = [&directory](const std::string& name) {
+        return !corpus_hidden() && file_exists(directory + "/" + name);
+    };
+    if (corpus_hidden() || !file_exists(directory + "/mpp12task.mpp")) {
+        std::cout << "SKIP: corpus/probe/mpp12*.mpp is not present\n";
+        return;
+    }
+
+    const auto iso = [](const mpp::PackedDate& date) {
+        std::string text = mpp::format_date(date);
+        return text;
+    };
+
+    /* ---- Format detection and the shared metadata, on the primary fixture. */
+    {
+        const mpp::Document document =
+            mpp::load_file(directory + "/mpp12task.mpp");
+        context.equal(std::string(mpp::version_name(document.version)),
+                      std::string("MPP12"),
+                      "mpp12task is detected as MPP12");
+        context.equal(document.table_root, std::string("112"),
+                      "MPP12 tables are read from the 112/ storage");
+        context.equal(document.view_root, std::string("212"),
+                      "MPP12 view state is the 212/ storage");
+        context.equal(document.version_string, std::string("12,0,4017,1004"),
+                      "Props12 stores the writer version 12,0,4017,1004");
+        context.equal(document.password_flag, std::uint8_t{0},
+                      "mpp12task stores no password flag");
+        context.check(!document.password_required_to_read &&
+                          !document.password_required_to_modify &&
+                          !document.password_hash_present &&
+                          !document.write_reservation_hash_present &&
+                          document.encryption_code == 0,
+                      "mpp12task has no password/encryption records");
+        context.equal(document.project.title, std::string("MPP12 Test"),
+                      "mpp12task project title");
+        context.equal(iso(document.project.start), std::string("2006-08-23 08:00"),
+                      "mpp12task project start is +88");
+        context.equal(iso(document.project.finish), std::string("2006-08-29 17:00"),
+                      "mpp12task project finish is +92");
+        context.equal(document.project.uid, std::uint32_t{0},
+                      "MPP12 project row uid is +0");
+        context.equal(document.project.row_id, std::uint32_t{0},
+                      "MPP12 project row ID is +4");
+        context.equal(document.tasks.size(), std::size_t{1},
+                      "mpp12task has one task (plus the project row)");
+        context.equal(document.skipped_rows.size(), std::size_t{0},
+                      "mpp12task has no null-task or tombstone rows");
+        context.check(document.warnings.empty(),
+                      "mpp12task parses without warnings");
+        context.equal(document.calendars.size(), std::size_t{3},
+                      "mpp12task reports its three calendar rows");
+        if (!document.calendars.empty()) {
+            context.equal(document.calendars.front().uid, std::int32_t{1},
+                          "MPP12 calendar uid is the FIRST word of the 12-byte row");
+            context.equal(document.calendars.front().name, std::string("Standard"),
+                          "mpp12task calendar 1 is Standard");
+        }
+
+        const mpp::Task* task = find_task(document, 1);
+        context.check(task != nullptr, "mpp12task uid 1 is present");
+        if (task != nullptr) {
+            context.equal(task->row_id, std::uint32_t{1}, "mpp12task uid 1 ID");
+            context.equal(task->name, std::string("Task #1"), "mpp12task uid 1 name");
+            context.equal(task->duration_ticks, std::uint32_t{24000},
+                          "mpp12task uid 1 duration is 24000 ticks (1 week)");
+            context.equal(task->duration_format, std::uint16_t{9},
+                          "MPP12 duration format is +64 (9 = weeks)");
+            context.equal(task->percent_complete, std::uint16_t{45},
+                          "MPP12 percent complete is +122");
+            context.equal(task->priority, std::uint16_t{600},
+                          "MPP12 priority is +120");
+            context.equal(iso(task->start), std::string("2006-08-23 08:00"),
+                          "MPP12 task Start is +88");
+            context.equal(iso(task->finish), std::string("2006-08-29 17:00"),
+                          "MPP12 task Finish is +92");
+            context.equal(task->calculated_start.raw, task->start.raw,
+                          "MPP12 has no calculated pair; calculated_start = start");
+            context.equal(task->constraint_type, std::uint16_t{2},
+                          "MPP12 constraint type is +80");
+            context.equal(iso(task->constraint_date),
+                          std::string("2006-08-23 08:00"),
+                          "MPP12 constraint date is +112");
+            context.equal(iso(task->deadline), std::string("2006-08-30 17:00"),
+                          "MPP12 deadline is +164");
+            context.equal(task->calendar_uid, std::int32_t{-1},
+                          "MPP12 task calendar uid is +160 (-1 = project calendar)");
+            context.check(!task->start_anchor.valid(),
+                          "MPP12 leaves start_anchor unset (no measured equivalent)");
+            context.check(task->milestone && task->milestone_stored,
+                          "MPP12 milestone is the FixedMeta +8 bit 0x20 (stored)");
+            context.equal(task->outline_level, std::uint32_t{1},
+                          "MPP12 outline level is stored at +40");
+            context.equal(task->parent_uid, std::uint32_t{0},
+                          "MPP12 parent uid is stored at +36 (0 = project row)");
+            context.check(!task->manually_scheduled,
+                          "Project 2007 has no manual scheduling");
+            /* Custom fields: the stored PjField ids are the same as MPP14. */
+            context.equal(document.custom_field(1, 0x0B400033u).text,
+                          std::string("1"), "MPP12 Text1 = 0x0b400033");
+            context.equal(document.custom_field(1, 0x0B400057u).number, 1.0,
+                          "MPP12 Number1 = 0x0b400057");
+            context.equal(document.custom_field(1, 0x0B400067u).duration_ticks,
+                          std::uint32_t{4800}, "MPP12 Duration1 = 0x0b400067");
+            context.equal(document.custom_field(1, 0x0B400109u).packed_date,
+                          std::uint32_t{0x205112C0u}, "MPP12 Date1 = 0x0b400109");
+            context.equal(document.custom_field(1, 0x0B40006Au).cost, 1.0,
+                          "MPP12 Cost1 = 0x0b40006a (hundredths)");
+            context.check(document.custom_field(1, 0x0B400048u).flag,
+                          "MPP12 Flag1 is the FixedMeta +37 bit 0x20");
+            /* All twenty flags are measurable in MPP12; MPP14 exposes Flag1 only. */
+            context.check(task->has_custom_field(0x0B400124u),
+                          "MPP12 also reports Flag11 (all twenty bit positions measured)");
+        }
+        const mpp::Assignment* assignment = find_assignment(document, 1);
+        context.check(assignment != nullptr, "mpp12task has its one assignment");
+        if (assignment != nullptr) {
+            context.equal(assignment->task_uid, std::uint32_t{1},
+                          "MPP12 assignment task uid is +4");
+            context.equal(assignment->resource_uid_raw, std::uint32_t{1},
+                          "MPP12 assignment resource uid is +8");
+            context.equal(assignment->units_percent(), std::uint32_t{100},
+                          "MPP12 assignment units are the +54 double x100");
+            context.equal(assignment->work_minutes(), std::uint32_t{2400},
+                          "MPP12 assignment work is the +62 double (minutes x1000)");
+            context.check(!assignment->resume.valid(),
+                          "MPP12 stores no assignment Resume date");
+            context.equal(iso(assignment->start), std::string("2006-08-23 08:00"),
+                          "MPP12 assignment start is +12");
+        }
+    }
+
+    /* ---- Links: type +12, LagFormat +14, lag +16 (swapped vs MPP14). */
+    if (exists("mpp12relations.mpp")) {
+        const mpp::Document document =
+            mpp::load_file(directory + "/mpp12relations.mpp");
+        context.equal(document.tasks.size(), std::size_t{5},
+                      "mpp12relations has five tasks");
+        context.equal(document.links.size(), std::size_t{4},
+                      "mpp12relations has four links");
+        const std::uint16_t expected_types[] = {1, 3, 0, 2}; /* FS, SS, FF, SF */
+        for (std::size_t i = 0; i < document.links.size() && i < 4; ++i) {
+            context.equal(document.links[i].type_raw, expected_types[i],
+                          "mpp12relations link " + std::to_string(i) +
+                              " type (+12)");
+            context.equal(document.links[i].predecessor_uid,
+                          static_cast<std::uint32_t>(i + 1),
+                          "mpp12relations link " + std::to_string(i) + " predecessor");
+            context.equal(document.links[i].successor_uid,
+                          static_cast<std::uint32_t>(i + 2),
+                          "mpp12relations link " + std::to_string(i) + " successor");
+        }
+        if (document.links.size() >= 2) {
+            context.equal(document.links[1].lag_units, std::uint16_t{7},
+                          "MPP12 LagFormat is +14 (7 = days)");
+            context.equal(document.links[1].lag_ticks, std::int32_t{4800},
+                          "MPP12 lag is the +16 i32 (4800 = one day)");
+            context.check(document.links[1].endpoints_live(),
+                          "mpp12relations SS+1d link has both endpoints live");
+        }
+    }
+
+    /* ---- Resources: 188-byte rows, MaxUnits +44, type bits +9/+8. */
+    if (exists("mpp12resource.mpp")) {
+        const mpp::Document document =
+            mpp::load_file(directory + "/mpp12resource.mpp");
+        context.equal(document.tasks.size(), std::size_t{3},
+                      "mpp12resource has three tasks");
+        /* uid 2 / ID 1 is the proof that MPP12 puts uid at +0 and ID at +4. */
+        const mpp::Task* first = find_task(document, 2);
+        context.check(first != nullptr, "mpp12resource uid 2 is present");
+        if (first != nullptr) {
+            context.equal(first->row_id, std::uint32_t{1},
+                          "mpp12resource uid 2 has ID 1 (uid at +0, ID at +4)");
+            context.equal(first->name, std::string("Task A"),
+                          "mpp12resource uid 2 is Task A");
+        }
+        context.equal(document.resources.size(), std::size_t{4},
+                      "mpp12resource has four live resources");
+        const mpp::Resource* r1 = find_resource(document, 1);
+        context.check(r1 != nullptr, "mpp12resource uid 1 is present");
+        if (r1 != nullptr) {
+            context.equal(r1->max_units_percent(), std::uint32_t{100},
+                          "MPP12 MaxUnits is the +44 double x100");
+            context.equal(r1->name, std::string("Wade Golden"),
+                          "MPP12 resource name uses VarMeta 0x0c400001");
+            context.equal(r1->initials, std::string("WG"),
+                          "MPP12 resource initials use VarMeta 0x0c400002");
+            context.check(r1->type == mpp::ResourceType::work && r1->type_stored,
+                          "MPP12 Work type is FixedMeta +9 bit 0x02");
+        }
+        context.equal(document.assignments.size(), std::size_t{5},
+                      "mpp12resource has five assignments");
+        const mpp::Assignment* a9 = find_assignment(document, 9);
+        context.check(a9 != nullptr, "mpp12resource assignment uid 9 is present");
+        if (a9 != nullptr) {
+            context.equal(a9->task_uid, std::uint32_t{4},
+                          "mpp12resource assignment uid 9 names task 4");
+            context.equal(a9->units_percent(), std::uint32_t{100},
+                          "mpp12resource assignment units");
+        }
+    }
+
+    /* ---- Resource Type discriminator: 5 Cost + 5 Material + 5 Work. */
+    if (exists("resource-type-project2007-mpp12.mpp")) {
+        const mpp::Document document =
+            mpp::load_file(directory + "/resource-type-project2007-mpp12.mpp");
+        std::size_t cost = 0;
+        std::size_t material = 0;
+        std::size_t work = 0;
+        for (const mpp::Resource& resource : document.resources) {
+            if (resource.type == mpp::ResourceType::cost) {
+                ++cost;
+            } else if (resource.type == mpp::ResourceType::material) {
+                ++material;
+            } else if (resource.type == mpp::ResourceType::work) {
+                ++work;
+            }
+            context.check(resource.type_stored,
+                          "MPP12 resource " + std::to_string(resource.uid) +
+                              " type is stored metadata");
+        }
+        context.equal(cost, std::size_t{5}, "MPP12 five Cost resources");
+        context.equal(material, std::size_t{5}, "MPP12 five Material resources");
+        context.equal(work, std::size_t{5}, "MPP12 five Work resources");
+    }
+
+    /* ---- 16-byte null-task blocks are skipped, not read as tasks. */
+    if (exists("mpp12nulltasks.mpp")) {
+        const mpp::Document document =
+            mpp::load_file(directory + "/mpp12nulltasks.mpp");
+        context.equal(document.tasks.size(), std::size_t{5},
+                      "mpp12nulltasks returns five live tasks");
+        context.equal(document.skipped_rows.size(), std::size_t{3},
+                      "mpp12nulltasks' three 16-byte null-task blocks are skipped");
+        context.check(!document.skipped_rows.empty() &&
+                          document.skipped_rows.front().reason.find("null-task") !=
+                              std::string::npos,
+                      "the skipped rows are reported as null-task blocks");
+        const std::uint32_t expected[] = {1, 3, 4, 6, 8};
+        for (const std::uint32_t uid : expected) {
+            context.check(find_task(document, uid) != nullptr,
+                          "mpp12nulltasks uid " + std::to_string(uid) + " is present");
+        }
+        context.check(find_task(document, 2) == nullptr &&
+                          find_task(document, 5) == nullptr &&
+                          find_task(document, 7) == nullptr,
+                      "mpp12nulltasks' null uids are not tasks");
+    }
+
+    /* ---- Duration units: ten tasks, ten PjFormatUnit values. */
+    if (exists("mpp12duration.mpp")) {
+        const mpp::Document document =
+            mpp::load_file(directory + "/mpp12duration.mpp");
+        context.equal(document.tasks.size(), std::size_t{10},
+                      "mpp12duration has ten tasks");
+        const std::uint32_t ticks[] = {10,    600,   4800,   24000,  96000,
+                                       10,    600,   14400,  100800, 432000};
+        const std::uint16_t formats[] = {3, 5, 7, 9, 11, 4, 6, 8, 10, 12};
+        for (std::size_t i = 0; i < 10; ++i) {
+            const mpp::Task* task = find_task(document, static_cast<std::uint32_t>(i + 1));
+            context.check(task != nullptr,
+                          "mpp12duration task " + std::to_string(i + 1) + " is present");
+            if (task == nullptr) {
+                continue;
+            }
+            context.equal(task->duration_ticks, ticks[i],
+                          "mpp12duration task " + std::to_string(i + 1) + " duration");
+            context.equal(task->duration_format, formats[i],
+                          "mpp12duration task " + std::to_string(i + 1) + " format");
+            context.equal(task->duration_is_elapsed(), formats[i] % 2 == 0 &&
+                                                          formats[i] >= 4,
+                          "mpp12duration task " + std::to_string(i + 1) +
+                              " elapsed flag");
+        }
+    }
+
+    /* ---- Stored outline: parent uid +36, level +40, numbering from the chain. */
+    if (exists("mpp12recurring.mpp")) {
+        const mpp::Document document =
+            mpp::load_file(directory + "/mpp12recurring.mpp");
+        context.equal(document.tasks.size(), std::size_t{27},
+                      "mpp12recurring has 27 tasks (recurring summaries + children)");
+        const mpp::Task* summary = find_task(document, 1);
+        const mpp::Task* child1 = find_task(document, 2);
+        const mpp::Task* child2 = find_task(document, 3);
+        const mpp::Task* second_summary = find_task(document, 4);
+        const mpp::Task* second_child = find_task(document, 7);
+        context.check(summary != nullptr && child1 != nullptr && child2 != nullptr &&
+                          second_summary != nullptr && second_child != nullptr,
+                      "mpp12recurring's hierarchy rows are present");
+        if (summary != nullptr && child1 != nullptr && second_summary != nullptr &&
+            second_child != nullptr) {
+            context.equal(summary->outline_level, std::uint32_t{1},
+                          "mpp12recurring uid 1 stored level 1");
+            context.equal(summary->outline_number, std::string("1"),
+                          "mpp12recurring uid 1 outline number");
+            context.check(summary->summary && summary->child_count == 2,
+                          "mpp12recurring uid 1 is a summary with two children");
+            context.equal(child1->outline_level, std::uint32_t{2},
+                          "mpp12recurring uid 2 stored level 2");
+            context.equal(child1->outline_number, std::string("1.1"),
+                          "mpp12recurring uid 2 outline number");
+            context.equal(child1->parent_uid, std::uint32_t{1},
+                          "mpp12recurring uid 2 stored parent uid 1");
+            context.equal(second_summary->outline_number, std::string("2"),
+                          "mpp12recurring uid 4 outline number");
+            context.equal(second_child->outline_number, std::string("2.1"),
+                          "mpp12recurring uid 7 outline number");
+        }
+    }
+
+    /* ---- Calendar table: MPP12 puts the calendar uid FIRST in the row. */
+    if (exists("mpp12calendar.mpp")) {
+        const mpp::Document document =
+            mpp::load_file(directory + "/mpp12calendar.mpp");
+        context.equal(document.calendars.size(), std::size_t{8},
+                      "mpp12calendar reports all eight calendar rows");
+        bool found_standard = false;
+        bool found_test = false;
+        for (const mpp::Calendar& calendar : document.calendars) {
+            if (calendar.uid == 1 && calendar.name == "Standard") {
+                found_standard = true;
+            }
+            if (calendar.uid == 5 && calendar.name == "Test Calendar") {
+                found_test = true;
+            }
+        }
+        context.check(found_standard, "mpp12calendar calendar 1 is Standard");
+        context.check(found_test,
+                      "mpp12calendar calendar 5 is Test Calendar (uid at +0)");
+    }
+
+    /* ---- Master/subproject: inserted rows, uid offsets and source paths. */
+    if (exists("mpp12subproject.mpp")) {
+        const mpp::Document document =
+            mpp::load_file(directory + "/mpp12subproject.mpp");
+        context.equal(document.tasks.size(), std::size_t{3},
+                      "mpp12subproject has three tasks");
+        context.equal(document.subprojects.size(), std::size_t{2},
+                      "mpp12subproject's SUBPROJECT_DATA lists two sources");
+        const mpp::Task* a = find_task(document, 2);
+        const mpp::Task* b = find_task(document, 3);
+        context.check(a != nullptr && b != nullptr,
+                      "mpp12subproject's inserted rows uid 2/3 are present");
+        if (a != nullptr) {
+            context.equal(a->name, std::string("SubprojectA-9"),
+                          "mpp12subproject uid 2 name");
+            context.check(a->subproject_uid_offset_present,
+                          "mpp12subproject uid 2 stores the UniqueID offset key");
+            context.equal(a->subproject_uid_offset, std::uint32_t{0x00800000u},
+                          "mpp12subproject uid 2 UniqueID offset is 8388608");
+            context.check(a->subproject_file.find("SubprojectA-9.mpp") !=
+                              std::string::npos,
+                          "mpp12subproject uid 2 source path ends SubprojectA-9.mpp "
+                          "(got '" + a->subproject_file + "')");
+            context.check(a->subproject_file.find("D:\\java\\mpxj") !=
+                              std::string::npos,
+                          "the stored path is the full DOS path");
+        }
+        if (b != nullptr) {
+            context.check(b->subproject_file.find("SubprojectB-9.mpp") !=
+                              std::string::npos,
+                          "mpp12subproject uid 3 source path ends SubprojectB-9.mpp");
+            context.equal(b->subproject_uid_offset, std::uint32_t{0x00C00000u},
+                          "mpp12subproject uid 3 UniqueID offset is 12582912");
+        }
+    }
+
+    /* ---- uid/ID order, on a file whose IDs are a dense 1..n sequence. */
+    if (exists("mpp12viewstate.mpp")) {
+        const mpp::Document document =
+            mpp::load_file(directory + "/mpp12viewstate.mpp");
+        context.equal(document.tasks.size(), std::size_t{50},
+                      "mpp12viewstate has 50 tasks");
+        if (!document.tasks.empty()) {
+            context.equal(document.tasks.front().uid, std::uint32_t{5},
+                          "mpp12viewstate's first task uid is +0 (it is 5)");
+            context.equal(document.tasks.front().row_id, std::uint32_t{1},
+                          "mpp12viewstate's first task ID is +4 (it is 1)");
+        }
+    }
+
+    /* ---- .mpt: a template is the same container.  Copy the fixture to a
+     * .mpt name and prove the reader returns the same document. */
+    if (exists("mpp12task.mpp")) {
+        const std::vector<std::uint8_t> bytes =
+            read_file_bytes(directory + "/mpp12task.mpp");
+        /* Written under build/g1/test-out (this stream's output area), never
+         * into corpus/ or tests/data/. */
+        std::error_code directory_error;
+        const std::filesystem::path output_directory =
+            std::filesystem::current_path() / "build" / "g1" / "test-out";
+        std::filesystem::create_directories(output_directory, directory_error);
+        const std::filesystem::path template_path =
+            output_directory / "g1-mpp12-template.mpt";
+        {
+            std::ofstream out(template_path, std::ios::binary);
+            out.write(reinterpret_cast<const char*>(bytes.data()),
+                      static_cast<std::streamsize>(bytes.size()));
+        }
+        context.check(file_exists(template_path.string()),
+                      "the .mpt fixture was written under build/g1/test-out");
+        if (file_exists(template_path.string())) {
+            const mpp::Document from_mpt = mpp::load_file(template_path.string());
+            const mpp::Document from_mpp =
+                mpp::load_file(directory + "/mpp12task.mpp");
+            context.equal(std::string(mpp::version_name(from_mpt.version)),
+                          std::string(mpp::version_name(from_mpp.version)),
+                          ".mpt is detected as the same format as .mpp");
+            context.equal(from_mpt.table_root, from_mpp.table_root,
+                          ".mpt uses the same table storage");
+            context.equal(from_mpt.tasks.size(), from_mpp.tasks.size(),
+                          ".mpt yields the same task count");
+            context.equal(from_mpt.project.title, from_mpp.project.title,
+                          ".mpt yields the same project title");
+            context.check(!from_mpt.tasks.empty() && !from_mpp.tasks.empty() &&
+                              from_mpt.tasks.front().name ==
+                                  from_mpp.tasks.front().name &&
+                              from_mpt.tasks.front().duration_ticks ==
+                                  from_mpp.tasks.front().duration_ticks,
+                          ".mpt and .mpp decode the same first task");
+        }
+    }
+
+    /* ---- Password flag: the byte is Props12 key 0x35400000, 0x00 on every
+     * fixture.  The flag is patched inside the CFB through CfbDocument (no COM
+     * run): 0x02 = write reservation (readable, reported), 0x01 = read password
+     * (refused), and a nonzero encryption code with any flag is refused as
+     * encryption. */
+    {
+        const std::string path = directory + "/mpp12task.mpp";
+        const std::vector<std::uint8_t> original = read_file_bytes(path);
+        mppwrite::CfbDocument container = mppwrite::CfbDocument::from_bytes(original);
+        const std::vector<std::uint8_t> props = container.read_stream("Props12");
+        /* The flag record's data byte, located through the props block parser. */
+        const std::size_t flag_at = props_record_data_offset(props, 0x35400000u);
+        /* key 0x35400001's record: only its key and data are reused for the
+         * encryption-code case (the fixture has no 0x35400007 record). */
+        const std::size_t spare_key_at =
+            props_record_data_offset(props, 0x35400001u);
+        context.check(flag_at != 0, "Props12 has a PASSWORD_FLAG record (offset " +
+                                       std::to_string(flag_at) + " of " +
+                                       std::to_string(props.size()) + " bytes)");
+        context.check(spare_key_at != 0, "Props12 has the spare record used for "
+                                        "the encryption-code case");
+        const auto load_with_props = [&container](std::vector<std::uint8_t> patched) {
+            container.replace_stream("Props12", std::move(patched));
+            return container.to_bytes();
+        };
+        if (flag_at != 0 && flag_at < props.size()) {
+            std::vector<std::uint8_t> flag_props = props;
+            flag_props[flag_at] = 0x02;
+            const mpp::Document document =
+                mpp::load_bytes(load_with_props(flag_props));
+            context.equal(document.password_flag, std::uint8_t{0x02},
+                          "a write-reservation flag byte is reported");
+            context.check(document.password_required_to_modify &&
+                              !document.password_required_to_read,
+                          "0x02 is password-to-modify, not password-to-read");
+            context.check(has_warning(document, "write-reservation"),
+                          "0x02 is reported as read-only, not refused");
+            context.equal(document.tasks.size(), std::size_t{1},
+                          "the write-reserved file still reads its task table");
+
+            flag_props[flag_at] = 0x01;
+            bool threw = false;
+            try {
+                (void)mpp::load_bytes(load_with_props(flag_props));
+            } catch (const mpp::Error& error) {
+                threw = std::string(error.what()).find("PASSWORD_FLAG") !=
+                        std::string::npos;
+            }
+            context.check(threw, "a read-password flag (0x01) is refused explicitly");
+
+            flag_props[flag_at] = 0x03;
+            bool threw_both = false;
+            try {
+                (void)mpp::load_bytes(load_with_props(flag_props));
+            } catch (const mpp::Error&) {
+                threw_both = true;
+            }
+            context.check(threw_both, "flag 0x03 (both passwords) is refused");
+
+            /* 0x02 + a nonzero ENCRYPTION_CODE = encrypted streams: refused. */
+            if (spare_key_at >= 8 && spare_key_at < props.size()) {
+                std::vector<std::uint8_t> encrypted_props = props;
+                encrypted_props[flag_at] = 0x02;
+                encrypted_props[spare_key_at] = 0x5A; /* encryption code */
+                encrypted_props[spare_key_at - 8] = 0x07;
+                encrypted_props[spare_key_at - 7] = 0x00;
+                encrypted_props[spare_key_at - 6] = 0x40;
+                encrypted_props[spare_key_at - 5] = 0x35; /* key 0x35400007 */
+                bool threw_encrypted = false;
+                try {
+                    (void)mpp::load_bytes(load_with_props(encrypted_props));
+                } catch (const mpp::Error& error) {
+                    threw_encrypted =
+                        std::string(error.what()).find("ENCRYPTION_CODE") !=
+                        std::string::npos;
+                }
+                context.check(threw_encrypted,
+                              "a flagged file with an encryption code is refused");
+            }
+            /* The unpatched bytes still load (control). */
+            const mpp::Document clean = mpp::load_bytes(original);
+            context.equal(clean.tasks.size(), std::size_t{1},
+                          "the unpatched fixture still loads");
+        }
+    }
+
+    /* ---- Refusals: a broken FixedMeta row offset must fail cleanly (no read
+     * past the buffer, no guessed row size), a subproject item layout this
+     * reader does not implement must be reported and skipped, and an
+     * MPXJ-written MPP12 (206-byte task rows) must be refused with a positioned
+     * error rather than returned as a project with no tasks. */
+    if (exists("mpp12subproject-from14.mpp")) {
+        bool refused = false;
+        std::string message;
+        try {
+            (void)mpp::load_file(directory + "/mpp12subproject-from14.mpp");
+        } catch (const mpp::Error& error) {
+            message = error.what();
+            refused = message.find("264") != std::string::npos &&
+                      message.find("206") != std::string::npos;
+        }
+        context.check(refused,
+                      "an MPXJ-written MPP12 (206-byte task rows) is refused with "
+                      "both sizes named: " + message);
+    }
+    if (exists("mpp12relations.mpp")) {
+        const std::string path = directory + "/mpp12relations.mpp";
+        const std::vector<std::uint8_t> original = read_file_bytes(path);
+
+        /* FixedMeta entry 5's FixedData offset -> 0x00ffffff. */
+        mppwrite::CfbDocument broken = mppwrite::CfbDocument::from_bytes(original);
+        std::vector<std::uint8_t> meta =
+            broken.read_stream("112/TBkndTask/FixedMeta");
+        const std::size_t entry5 = 16 + 5 * 47;
+        if (entry5 + 8 <= meta.size()) {
+            meta[entry5 + 4] = 0xFF;
+            meta[entry5 + 5] = 0xFF;
+            meta[entry5 + 6] = 0xFF;
+            meta[entry5 + 7] = 0x00;
+            broken.replace_stream("112/TBkndTask/FixedMeta", std::move(meta));
+            bool refused = false;
+            try {
+                (void)mpp::load_bytes(broken.to_bytes());
+            } catch (const mpp::Error& error) {
+                refused = std::string(error.what()).find("Task table") !=
+                          std::string::npos;
+            }
+            context.check(refused,
+                          "a MPP12 FixedMeta row offset past FixedData is refused");
+        } else {
+            context.check(false, "mpp12relations Task FixedMeta has entry 5");
+        }
+
+        /* SUBPROJECT_DATA item 1's type byte 0x01 -> 0x02 in 112/Props. */
+        if (exists("mpp12subproject.mpp")) {
+            const std::string sub_path = directory + "/mpp12subproject.mpp";
+            const std::vector<std::uint8_t> sub_original =
+                read_file_bytes(sub_path);
+            mppwrite::CfbDocument sub =
+                mppwrite::CfbDocument::from_bytes(sub_original);
+            std::vector<std::uint8_t> props = sub.read_stream("112/Props");
+            const std::size_t data_at =
+                props_record_data_offset(props, 0x024000A2u);
+            const std::size_t header_at =
+                data_at == 0 ? 0 : data_at + 48; /* first item header */
+            if (header_at != 0 && header_at + 17 <= props.size()) {
+                props[header_at + 16] = 0x02; /* unsupported layout type */
+                sub.replace_stream("112/Props", std::move(props));
+                const mpp::Document document = mpp::load_bytes(sub.to_bytes());
+                context.check(has_warning(document, "uses layout type"),
+                              "an unimplemented SUBPROJECT_DATA layout is reported");
+                context.check(document.subprojects.empty(),
+                              "no subproject source is guessed for an unimplemented "
+                              "layout");
+                context.equal(document.tasks.size(), std::size_t{3},
+                              "the rest of the file still reads");
+            } else {
+                context.check(false, "mpp12subproject's SUBPROJECT_DATA is locatable");
+            }
+        }
+    }
+
+    /* ---- MPP14 metadata must be unchanged: base.mpp is still MPP14/114/214
+     * with three calendars, and its calendars still use the +8 uid column. */
+    if (exists("base.mpp")) {
+        const mpp::Document document = mpp::load_file(directory + "/base.mpp");
+        context.equal(std::string(mpp::version_name(document.version)),
+                      std::string("MPP14"),
+                      "base.mpp is still detected as MPP14");
+        context.equal(document.table_root, std::string("114"),
+                      "MPP14 tables are still read from 114/");
+        context.equal(document.view_root, std::string("214"),
+                      "MPP14 view state is still 214/");
+        context.check(document.version_string.find("16,0") == 0,
+                      "Props14 stores a 16.x version string");
+        context.equal(document.calendars.size(), std::size_t{3},
+                      "base.mpp reports its three calendars");
+        if (!document.calendars.empty()) {
+            context.equal(document.calendars.front().uid, std::int32_t{1},
+                          "MPP14 calendar uid is the THIRD word of the row");
+            context.equal(document.calendars.front().name, std::string("Standard"),
+                          "base.mpp calendar 1 is Standard");
+        }
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * Container round-trip and the stream inventory G1 must report.  CfbDocument
+ * (core/mppwrite, another stream's file) is included here as a second
+ * translation unit rather than linked, so this stays one reader test binary.
+ * The five MPP12 fixtures must re-emit byte for byte; the streams the reader
+ * reads are listed, everything else is deliberately opaque.
+ * ------------------------------------------------------------------------- */
+void test_mpp12_container(TestContext& context) {
+    const std::string directory = MPP_PROBE_DIR;
+    if (corpus_hidden() || !file_exists(directory + "/mpp12task.mpp")) {
+        std::cout << "SKIP: corpus/probe/mpp12*.mpp is not present\n";
+        return;
+    }
+    const char* names[] = {"mpp12task.mpp", "mpp12header.mpp", "mpp12relations.mpp",
+                           "mpp12resource.mpp", "mpp12splittask.mpp"};
+    for (const char* name : names) {
+        const std::string path = directory + "/" + name;
+        if (!file_exists(path)) {
+            std::cout << "SKIP: " << path << " is not present\n";
+            continue;
+        }
+        const std::vector<std::uint8_t> original = read_file_bytes(path);
+        context.check(!original.empty(), std::string(name) + " is readable");
+        mppwrite::CfbDocument container = mppwrite::CfbDocument::from_bytes(original);
+        const std::vector<std::uint8_t> emitted = container.to_bytes();
+        context.equal(emitted.size(), original.size(),
+                      std::string(name) + ": CfbDocument re-emits the same length");
+        context.check(emitted == original,
+                      std::string(name) + ": CfbDocument is byte-identical");
+        context.equal(container.check(), std::string(),
+                      std::string(name) + ": CfbDocument self-check is clean");
+        context.equal(container.major_version(), std::uint16_t{3},
+                      std::string(name) + ": CFB major version 3");
+        context.check(container.has_stream("112/TBkndTask/FixedData"),
+                      std::string(name) + ": the container model sees 112/TBkndTask");
+        context.check(container.has_stream("212/Props"),
+                      std::string(name) + ": the container model sees 212/Props");
+        /* The reader's read set: the four task-table parts, the resource,
+         * link and assignment tables, the calendar table and the top-level
+         * props.  Everything else (the 212/ view documents, 112/Props beyond
+         * the subproject record, SummaryInformation, CompObj) stays opaque. */
+        const char* read_streams[] = {
+            "112/TBkndTask/FixedData", "112/TBkndTask/FixedMeta",
+            "112/TBkndTask/VarMeta",   "112/TBkndTask/Var2Data",
+            "112/TBkndRsc/FixedData",  "112/TBkndAssn/FixedData",
+            "112/TBkndCal/FixedData",  "112/Props",
+            "Props12"};
+        for (const char* stream : read_streams) {
+            context.check(container.has_stream(stream),
+                          std::string(name) + " carries " + stream);
+        }
+        const mpp::Document document = mpp::load_file(path);
+        context.equal(std::string(mpp::version_name(document.version)),
+                      std::string("MPP12"),
+                      std::string(name) + " loads as MPP12");
+        context.check(document.version_string.rfind("12,0,", 0) == 0,
+                      std::string(name) + " carries a Project-2007 (12.0) writer "
+                      "version: " + document.version_string);
+    }
+}
+
+
 int run_tests() {
     TestContext context;
     test_formatting(context);
@@ -2481,6 +3223,8 @@ int run_tests() {
     test_resources(context);
     test_links(context);
     test_assignments(context);
+    test_mpp12(context);
+    test_mpp12_container(context);
 
     if (context.failures() != 0) {
         std::cerr << "FAIL: " << context.failures() << " failed of " << context.checks()

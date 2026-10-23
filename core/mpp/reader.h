@@ -2,15 +2,19 @@
  * reader.h -- read the Task, Resource, Link and Assignment tables of a
  * Microsoft Project .mpp file.
  *
- * SCOPE.  Reader v1: open a real MPP14 file and return one record per *live*
+ * SCOPE.  Open a real MPP14 (Project 2010+) or MPP12 (Project 2007) file and
+ * return one record per *live*
  * task (UniqueID, ID, Name, Duration, Start, Finish, Priority,
  * PercentComplete, OutlineLevel, OutlineNumber, Summary, Milestone, Critical,
  * ConstraintType, ConstraintDate, Deadline, the actual dates/duration, the
  * start anchor and the task-calendar uid), one per live resource (UniqueID, ID,
- * Name, Initials, MaxUnits), one per live link (UniqueID, predecessor/successor,
- * type, lag) and one per live assignment (UniqueID, task UniqueID, Units, Work,
- * Start/Finish/Stop), plus the project row's title, start and finish.  No
- * calendars, baselines or writing.
+ * Name, Initials, MaxUnits, Type), one per live link (UniqueID,
+ * predecessor/successor, type, lag) and one per live assignment (UniqueID, task
+ * UniqueID, Units, Work, Start/Finish/Resume), plus the project row's title,
+ * start and finish, the calendar identities, the password/read-only flags and
+ * (MPP12) the inserted-project sources.  The work-week/exception contents of a
+ * calendar are core/cal's job, not this reader's; baselines and writing are out
+ * of scope.
  *
  * WHERE THE BYTES COME FROM.  Container layout: `spec/mpp-container.md`.
  * Task layout: `spec/mpp-records.md` (W1), with three corrections this stream
@@ -334,6 +338,33 @@
 
 namespace mpp {
 
+/*
+ * Which Microsoft Project file format the document was written in.  The
+ * container is the same OLE2/CFB in both, but the engine tables live in a
+ * different storage and the fixed records have different layouts:
+ *
+ *   mpp12  Project 2007 (12.0)   tables under `112/`, view state under `212/`,
+ *                                top-level `Props12`, 264-byte Task rows,
+ *                                188-byte Resource rows, 142-byte Assignment
+ *                                rows, 20-byte Link rows.
+ *   mpp14  Project 2010+ (14.x)  tables under `114/`, view state under `214/`,
+ *                                top-level `Props14`, 202-byte Task rows,
+ *                                172-byte Resource rows, 110-byte Assignment
+ *                                rows, 20-byte Link rows.
+ *
+ * The names are not counters: a 2019-saved file still says 114/214 (see
+ * spec/mpp-container.md).  Detection is in `detect_version()`, reader.cpp:
+ * it looks at the props stream and the table storage that actually exists,
+ * never at the stream count.  The `Task`/`Resource`/`Assignment` offsets below
+ * are per version and are listed in the file comment of reader.cpp.
+ */
+enum class MppVersion : std::uint8_t { mpp12 = 0, mpp14 = 1 };
+
+/* "MPP12" / "MPP14", for diagnostics. */
+inline const char* version_name(MppVersion version) {
+    return version == MppVersion::mpp12 ? "MPP12" : "MPP14";
+}
+
 /* One 8-hour working day, in 6-second ticks (W1, spec/mpp-records.md §4). */
 constexpr std::uint32_t kTicksPerDay = 4800;
 /* Ten ticks make one minute: MS Project's internal duration unit is 0.1 min. */
@@ -427,13 +458,19 @@ struct Task {
     PackedDate actual_finish{0xFFFFFFFFu};
     std::uint32_t actual_duration_ticks = 0;   /* +80 */
 
-    /* ---- Outline.  Derived from the stored parent links in Fixed2Data; see
-     * "OUTLINE" in the file comment.  outline_level is MS Project's
-     * Task.OutlineLevel (1 for a top-level task, 0 only for the project row),
-     * outline_number its "1"/"1.1"/"1.2" sibling path.  Both stay at the flat
-     * default when a file has no usable Fixed2Data. */
+    /* ---- Outline.  MPP14: derived from the stored parent links in Fixed2Data;
+     * MPP12: STORED in the fixed row (parent UniqueID +36, OutlineLevel +40).
+     * outline_level is MS Project's Task.OutlineLevel (1 for a top-level task, 0
+     * only for the project row), outline_number its "1"/"1.1"/"1.2" sibling
+     * path.  Both stay at the flat default when a file has no usable outline
+     * data.  `parent_uid` is the MPP12 stored parent (0 = the project row,
+     * 0xffffffff = the project row itself); it stays 0 for MPP14, where the
+     * parent is an opaque identity in Fixed2Data.  `stored_outline_level` is the
+     * MPP12 +40 word (0 for MPP14, which stores no level). */
     std::uint32_t outline_level = 1;
     std::string outline_number;
+    std::uint32_t parent_uid = 0;
+    std::uint16_t stored_outline_level = 0;
     /* Rows whose stored parent is this task.  summary == child_count > 0. */
     std::uint32_t child_count = 0;
     bool summary = false;
@@ -489,6 +526,21 @@ struct Task {
     bool has_custom_field(std::uint32_t field_id) const {
         return custom_field(field_id) != nullptr;
     }
+
+    /* ---- Master/subproject (MPP12; the SUBPROJECT_DATA props record).  An
+     * inserted-project row is an ordinary summary task whose children live in
+     * another file; Project records the source path in the project props and
+     * tags the row with a UniqueID offset so the merged ids cannot collide.
+     * `subproject_file` is the source path exactly as stored (a Windows path
+     * from the file that created the master; it may not exist on this machine).
+     * `subproject_uid_offset` is the MPP12 Task VarMeta key 0x0b4001ca (field
+     * id 458, PjTaskSubprojectTasksUniqueIDOffset): the base added to the
+     * subproject's own UniqueIDs when merged.  Both stay empty/0 for an ordinary
+     * task and for every MPP14 file (no fixture measures the MPP14 record yet).
+     * See "MASTER/SUBPROJECT" in reader.cpp. */
+    std::string subproject_file;
+    std::uint32_t subproject_uid_offset = 0;
+    bool subproject_uid_offset_present = false;
 
     bool duration_is_elapsed() const { return format_unit_is_elapsed(duration_format); }
     double duration_days() const {
@@ -676,6 +728,46 @@ struct SkippedRow {
     std::string orphan_name;
 };
 
+/*
+ * One row of `112|114/TBkndCal/FixedData`: a calendar definition.  The reader
+ * exposes the identity only -- the work week, exceptions and base-calendar
+ * inheritance are decoded by core/cal (`mpp::cal`), which owns that layout.
+ * This list exists so a caller can see that the file carries calendars and
+ * which uids/names they have without pulling in core/cal, and so the MPP12
+ * table root can be proved to hold the same calendar table as MPP14.
+ *
+ * MEASURED on both formats: FixedData is 64 + 12*rows (four 16-byte
+ * descriptors, then three u32 per row).  The columns are the same size but a
+ * DIFFERENT ORDER per format: MPP12 rows are (calendar uid, base uid, resource
+ * uid) and MPP14 rows are (base uid, resource uid, calendar uid) -- MPXJ's
+ * MPP12CalendarFactory declares calendar id at +0 and base at +4, the MPP14
+ * factory the reverse.  A row whose uid is 0 or -1 is a placeholder
+ * (core/cal skips the same rows).  Names are VarMeta key 0x0d400001
+ * (UTF-16LE).  mpp12task.mpp: 3 rows, calendars 1/2/3, uid 1 named
+ * "Standard"; mpp12calendar.mpp: 8 rows, calendars 1/2/4/5/6/7/8/9 with names
+ * on 1 ("Standard"), 5, 6, 7 and 9.
+ */
+struct Calendar {
+    std::int32_t uid = 0;          /* the calendar's own UniqueID */
+    std::int32_t base_uid = 0;     /* the base calendar it derives from */
+    std::int32_t resource_uid = 0; /* -1 for a base calendar */
+    std::string name;              /* VarMeta 0x0d400001, trimmed */
+};
+
+/*
+ * One inserted-project row's source, from the project props'
+ * SUBPROJECT_DATA record (MPP12 `112/Props` key 0x024000a2).  `task_uid` names
+ * the master's summary row whose children are the subproject's tasks;
+ * `path` is the full source path stored in the record.  Only the layout whose
+ * per-item type byte is 0x01/0x08 is decoded (the one on disk); other layouts
+ * are reported in Document::warnings and produce no record rather than a
+ * guessed path.  See reader.cpp "MASTER/SUBPROJECT".
+ */
+struct SubprojectRecord {
+    std::uint32_t task_uid = 0;
+    std::string path;
+};
+
 struct Document {
     ProjectRow project;
     std::vector<Task> tasks;           /* live task rows, FixedData order */
@@ -687,6 +779,43 @@ struct Document {
     std::vector<SkippedRow> skipped_links;
     std::vector<SkippedRow> skipped_assignments;
     std::vector<std::string> warnings; /* recoverable anomalies, in file order */
+
+    /* ---- Which format, and where its tables live.  `version` is detected
+     * from the container (never assumed); `table_root`/`view_root` are the
+     * storage names the reader actually used ("112"/"212" for MPP12,
+     * "114"/"214" for MPP14, with the leading padding spaces stripped).
+     * `version_string` is the writer version stored in the top-level props
+     * (Props12/Props14 key 0x3540000c): "12,0,4017,1004" for the MPP12
+     * fixtures, "16,0,20430,20182" for a Project-16 MPP14 file. */
+    MppVersion version = MppVersion::mpp14;
+    std::string version_string;
+    std::string table_root = "114";
+    std::string view_root = "214";
+
+    /* ---- Password protection / read-only.  MEASURED in both formats: the
+     * top-level props block (Props12/Props14) carries PASSWORD_FLAG key
+     * 0x35400000 as ONE byte, and optional hash records at 0x35400004
+     * (read-protection hash) and 0x35400005 (write-reservation hash).  The
+     * bytes of the container are NOT encrypted by bit 0x1 or 0x2 on their own;
+     * a separate ENCRYPTION_CODE record (0x35400007) holds a single-byte XOR
+     * mask that MS Project applies to the table streams when a password flag
+     * is set (MPXJ `DocumentInputStreamFactory`).  This reader implements the
+     * flag: bit 0x1 (a password is required to read) is refused with an
+     * mpp::Error, bit 0x2 (write reservation = "password to modify") is read
+     * normally and reported here, and a nonzero encryption code on a flagged
+     * file is refused as encryption rather than decoded without evidence.
+     * Every fixture on disk has flag 0x00 and no hash records. */
+    std::uint8_t password_flag = 0;
+    bool password_required_to_read = false;   /* flag & 0x01 */
+    bool password_required_to_modify = false; /* flag & 0x02, read-only file */
+    bool password_hash_present = false;       /* 0x35400004 record present */
+    bool write_reservation_hash_present = false; /* 0x35400005 record present */
+    std::uint8_t encryption_code = 0;         /* 0x35400007, 0 = none */
+    bool streams_encrypted = false;           /* flag != 0 && code != 0 */
+
+    /* Calendar identities, and inserted-project sources; see above. */
+    std::vector<Calendar> calendars;
+    std::vector<SubprojectRecord> subprojects;
 
     /* Link liveness split: a link is counted "live" only when BOTH endpoints
      * name a live task (Link::endpoints_live()).  PROJECT_B: 72 links, 70 live,

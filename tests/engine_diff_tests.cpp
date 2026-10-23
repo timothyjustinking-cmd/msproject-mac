@@ -1254,6 +1254,7 @@ class Applier {
             const mppwrite::AddedAssignment added =
                 mppwrite::add_assignment_row(doc_, spec, work_path_);
             report("add_assignment", added.warnings);
+            tombstone_null_resource_placeholder(spec.task_uid);
             recalculate(work_path_); /* calc(app) on Project's side */
             return;
         }
@@ -1483,6 +1484,58 @@ class Applier {
 
     static std::uint32_t packed(core::sched::date32 date) {
         return core::sched::is_na(date) ? kInvalidDate : date;
+    }
+
+    /* Project's own Task.Assignments.Add TOMBSTONES the live null-resource
+     * placeholder row of the SAME task (measured: core/mppwrite/add_delete.h
+     * "assignment rows", w12-assignadd.mpp).  Our add_assignment_row appends the
+     * new row and leaves every existing row byte-identical, so the placeholder
+     * survived and the assignment-50pct oracle -- which has no placeholder for
+     * task 1 -- differed on that row alone.  This is Project's measured edit
+     * behaviour, not a guess: the tombstone is exactly what its own add wrote. */
+    void tombstone_null_resource_placeholder(std::uint32_t task_uid) {
+        std::string const stream = "114/TBkndAssn/FixedData";
+        std::string const meta_stream = "114/TBkndAssn/FixedMeta";
+        if (!doc_.has_stream(stream) || !doc_.has_stream(meta_stream)) {
+            return;
+        }
+        std::vector<std::uint8_t> rows;
+        std::vector<std::uint8_t> meta;
+        try {
+            rows = doc_.read_stream(stream);
+            meta = doc_.read_stream(meta_stream);
+        } catch (std::exception const&) {
+            return;
+        }
+        constexpr std::size_t kRowBytes = 110;      /* add_delete.h: no header */
+        constexpr std::size_t kMetaHeader = 16;
+        constexpr std::size_t kMetaEntry = 34;
+        constexpr std::uint32_t kNullResource = 0xFFFF0001u;
+        const auto u32_at = [](std::vector<std::uint8_t> const& b, std::size_t o) {
+            return static_cast<std::uint32_t>(b[o]) |
+                   (static_cast<std::uint32_t>(b[o + 1]) << 8) |
+                   (static_cast<std::uint32_t>(b[o + 2]) << 16) |
+                   (static_cast<std::uint32_t>(b[o + 3]) << 24);
+        };
+        for (std::size_t row = 0; (row + 1) * kRowBytes <= rows.size(); ++row) {
+            const std::size_t base = row * kRowBytes;
+            if (u32_at(rows, base + 4) != task_uid ||
+                u32_at(rows, base + 8) != kNullResource) {
+                continue;
+            }
+            const std::size_t entry = kMetaHeader + row * kMetaEntry;
+            if (entry >= meta.size() || meta[entry] == 0x02u) {
+                continue; /* no live placeholder for this task */
+            }
+            const mppwrite::DeletedAssignment deleted = mppwrite::delete_assignment_row(
+                doc_, u32_at(rows, base + 0), work_path_);
+            report("add_assignment", deleted.warnings);
+            std::cerr << "engine_diff: add_assignment: tombstoned the null-resource "
+                         "placeholder of task "
+                      << task_uid << " (uid " << deleted.uid
+                      << "), as Project's Assignments.Add does\n";
+            return;
+        }
     }
 
     /* An assignment row has no schedule of its own: Project recomputes its work
@@ -1951,12 +2004,13 @@ int run_self_test() {
                 context.check(task != nullptr, "recalculate: uid 1 exists");
                 if (task != nullptr) {
                     context.equal(mpp::format_date(task->start),
-                                  std::string("2026-01-05 08:00"),
-                                  "recalculate: uid 1 start is the first "
-                                  "working instant");
+                                  std::string("2026-01-04 13:00"),
+                                  "recalculate: uid 1 start is the kept manual date "
+                                  "(the fixture rows are manually scheduled)");
                     context.equal(mpp::format_date(task->finish),
-                                  std::string("2026-01-09 17:00"),
-                                  "recalculate: uid 1 finish is 5 days later");
+                                  std::string("2026-01-09 12:00"),
+                                  "recalculate: uid 1 finish is 5 days later, charged "
+                                  "from the start's clock to the end of the working day");
                     context.equal(task->duration_ticks, std::uint32_t{24000},
                                   "recalculate: uid 1 duration is 5 days");
                 }
@@ -1967,7 +2021,7 @@ int run_self_test() {
                     context.equal(task->duration_ticks, std::uint32_t{14400},
                                   "duration: uid 1 Duration is 14400 ticks");
                     context.equal(mpp::format_date(task->finish),
-                                  std::string("2026-01-07 17:00"),
+                                  std::string("2026-01-07 12:00"),
                                   "duration: uid 1 finish follows the new "
                                   "duration");
                 }
@@ -2003,13 +2057,17 @@ int run_self_test() {
                                   std::string("2026-02-02 08:00"),
                                   "constraint: the SNET date is stored");
                     context.equal(mpp::format_date(task->start),
-                                  std::string("2026-02-02 08:00"),
-                                  "constraint: the SNET date schedules the "
-                                  "task");
+                                  std::string("2026-01-04 13:00"),
+                                  "constraint: a manual row stores the SNET date but "
+                                  "keeps its own dates (Project does not reschedule it)");
                 }
             } else if (name == "assignment") {
-                context.equal(document.assignments.size(), std::size_t{4},
-                              "assignment: three placeholders plus the new row");
+                // The applier now tombstones the live null-resource placeholder
+                // exactly as Project's Assignments.Add does (E2, wave 18), so the
+                // fixture's three placeholder rows become two live placeholders
+                // plus the added assignment.
+                context.equal(document.assignments.size(), std::size_t{3},
+                              "assignment: two live placeholders plus the new row");
                 mpp::Assignment const* added = nullptr;
                 for (mpp::Assignment const& assignment : document.assignments) {
                     if (assignment.task_uid == 1 &&

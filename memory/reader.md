@@ -480,3 +480,127 @@ committed); W48's `tests/roundtrip_add_delete.cpp` owns its own expectations.
 The reader test pins the PROJECT_B/PROJECT_A counts; `mpp_reader_tests` is 685 checks
 after this change.
 
+## G1 / wave 18 addendum (2026-10-23) — MPP12 (Project 2007) is supported
+
+Owned files touched: `core/mpp/reader.h`, `core/mpp/reader.cpp`,
+`core/mpp/CMakeLists.txt`, `tests/mpp_reader_tests.cpp`, this file,
+`docs/handoff/g1.md`.  Full byte tables and the fixture inventory are in
+`docs/handoff/g1.md`; the same tables are in reader.cpp's "MPP12" comment.
+`mpp_reader_tests` is now **958 checks with corpus / 324 with
+`MPP_NO_CORPUS=1`** (was 683/324).  `ctest -E plan_recalc` is 49/50: the one
+red test, `engine_diff_apply`, is another lane's (mppwrite add_delete tombstones
+the placeholder while tests/engine_diff_tests.cpp still expects 4 assignments);
+it is not a reader failure — see docs/handoff/g1.md §5.
+
+### Format detection (do not hard-code 114/)
+
+`mpp::MppVersion { mpp12, mpp14 }` in `Document::version`.  `detect_format()`
+reads the top-level props stream name (`Props12` vs `Props14`), falls back to
+the storage that actually holds `TBkndTask/FixedData` (`112/` vs `114/`), warns
+on a disagreement and lets the storage win.  `Document::table_root` is
+`"112"`/`"114"`, `Document::view_root` `"212"`/`"214"`, `Document::version_string`
+is the JSON-ish writer version (`"12,0,4017,1004"`; `mpp12resource` is
+`"12,0,6423,1000"`; Project 16 is `"16,0,20430,20182"`).  Every table helper
+takes the root; nothing in reader.cpp assumes 114 any more.
+
+### MPP12 geometry (measured; fixture names in docs/handoff/g1.md)
+
+| table | MPP12 | MPP14 |
+|---|---|---|
+| Task | 48 + 264·rows, FixedMeta 16+47·(rows+3) | 48 + 202 |
+| Rsc | 48 + 188 | 48 + 172 |
+| Cons | 20·rows | same |
+| Assn | 142·rows | 110·rows |
+| Cal | 64 + 12·rows | same |
+| Task Fixed2 | 176·rows / 16+86·entries | 64 / 16+96 |
+| Rsc Fixed2Meta | 16+49·(rows+3) | 16+51·(rows+3) |
+
+VarMeta (24-byte header, 12-byte (uid, offset, key)) and Var2Data blocks are
+UNCHANGED.  Task rows are read BY FixedMeta ENTRY OFFSET, not by stride:
+MPP12 interleaves 16-byte null-task blocks (`mpp12nulltasks` offsets
+`48,312,576,592,856,1120,1136,1400,1416`).  A task row must be 264 B and its
+FixedMeta +0 state 0x00; 16 B blocks are skipped as null tasks, 0x02 is a
+tombstone, any other size is refused with a warning naming the row.
+
+### MPP12 task row (264 B) — the offsets are NOT MPP14's
+
+uid **+0**, ID **+4** (REVERSED; proved by uid 2/ID 1 in mpp12resource,
+mpp12viewstate uid 5/ID 1), duration +60, duration format **+64** (PjFormatUnit
++ 0x20 estimated; proved by mpp12duration's ten units), actual duration +66,
+start/finish +88/+92 (there is NO calculated pair; +96/+100 are actuals, so
+`calculated_*` is set equal and `start_anchor` stays kDateNa), constraint
++80/+112, priority +120, percent +122, calendar uid +160, deadline +164,
+parent uid **+36**, OutlineLevel **+40** (STORED).  Free/Start/Finish slack at
++24/+28/+32; +32 is MPXJ's FinishSlack and is exposed as `total_slack`
+[inference].  Project row = data row 0, same field offsets as a task.
+
+### MPP12 metadata bits
+
+* Milestone = FixedMeta entry byte **+8 bit 0x20** (MPP14: +10/0x02).  Proof:
+  mpp12task Task #1 (+8=0x63) is a milestone per MPXJ's MppTaskTest despite a
+  5-day duration.
+* Flag1..Flag20 = a contiguous bit field from entry byte **+37 bit 0x20**
+  through byte +40 bit 0x01.  All twenty are MEASURED on
+  `task-flags-project2007-mpp12.mpp` (tasks named "Flag1".."Flag20", one bit
+  each) and the reader returns all twenty for MPP12; MPP14 still returns Flag1
+  only.
+* Row state +0 is the same 0x00/0x02 tombstone; descriptors and null tasks are
+  0x04.  There is no manual-scheduling bit (Project 2007 has no manual mode).
+
+### MPP12 resources, links, assignments
+
+* Resource: uid +0, ID +4, MaxUnits f64 **+44** (x100).  Type: FixedMeta
+  **+9 bit 0x02** = Work; else Fixed2Meta **+8 bit 0x10** = Cost, else Material.
+  Measured on `resource-type-project2007-mpp12.mpp` (5 Cost / 5 Material /
+  5 Work, self-labelled).
+* Link: type +12, **LagFormat u16 +14, lag i32 +16** — MPP14 has these two
+  SWAPPED (lag +14, format +18).  Proof: mpp12relations' SS+1d row stores
+  +14=7 and +16=4800, and MPXJ's test asserts the four relation types/1-day lag.
+* Assignment: 142 B; uid +0, task +4, resource +8, Start +12, Finish +16,
+  Units f64 +54, Work f64 +62.  No Resume/Stop field exists ⇒
+  `Assignment::resume` stays kDateNa.
+
+### Calendars, subprojects, password
+
+* Calendar rows: MPP12 is (calendar uid, base uid, resource uid) at +0/+4/+8;
+  MPP14 is (base, resource, calendar) — MPXJ's MPP12CalendarFactory confirms.
+  `Document::calendars` (new, both formats) exposes uid/base/resource/name.
+  **core/cal still hard-codes 114/ and the MPP14 column order** — it must take
+  `Document::table_root` + `Document::version`.  Do not change core/cal from
+  this lane; it is flagged in docs/handoff/g1.md §7.
+* Subproject: Task VarMeta key **0x0b4001ca** = UniqueID offset (mpp12subproject
+  uid 2 = 0x00800000, uid 3 = 0x00c00000; MPXJ asserts 8388608).  The source
+  path is in `112/Props` key **0x024000a2** (SUBPROJECT_DATA), parsed per
+  reader.cpp §MASTER/SUBPROJECT; only item type 0x01/0x08 is decoded, other
+  types are warned and stop the parse.  The master carries the summary row
+  only; the subproject's tasks are in the other file.
+* Password: Props12/Props14 key **0x35400000** is a one-byte flag (0x01 read
+  password, 0x02 write reservation, 0x03 both), 0x35400004/5 are hash records,
+  **0x35400007** is a one-byte XOR mask.  All 12 fixtures: flag 0, no hashes,
+  code 0.  Reader: 0x02 reads + reports read-only; 0x01/0x03 refused; a
+  nonzero mask with any flag refused as encryption.  Tested by patching the
+  byte in memory through `CfbDocument` (no committed .mpp, no COM).
+
+### Container round-trip
+
+`tests/mpp_reader_tests.cpp` now also compiles `core/mppwrite/cfb_writer.cpp`
+(no library link, no add_subdirectory ordering) and `test_mpp12_container`
+proves `CfbDocument` re-emits all five fixtures **byte-identically** and the
+reader still loads each as MPP12.  `.mpt` is proved to be the same container:
+a byte copy of `mpp12task.mpp` named `.mpt` (written under
+`build/g1/test-out/`) decodes identically.
+
+### What remains open for MPP12
+
+1. No COM oracle (oracle is coordinator-only): slack word names, the stored
+   project dates, and the password flag semantics rest on MPXJ + the bytes.
+2. `core/cal` must be taught the table root + MPP12 calendar column order.
+3. Baseline fields, timephased data, recurring-task parameters and the `212/`
+   view state stay opaque (same scope as MPP14's baselines/`214/`).
+4. Subproject read-only flag has no located byte; other subproject item layouts
+   are refused.
+5. Optional extra fixtures: a MPP12 file with a write-reservation password and
+   one with a read password (none exists on disk).
+
+
+

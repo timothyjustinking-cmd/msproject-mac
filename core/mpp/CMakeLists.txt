@@ -63,8 +63,16 @@ if(MPP_BUILD_TESTS)
         file(TO_CMAKE_PATH "${${path_var}}" ${path_var})
     endforeach()
 
-    add_executable(mpp_reader_tests "${MPP_REPO_ROOT}/tests/mpp_reader_tests.cpp")
+    add_executable(mpp_reader_tests
+        "${MPP_REPO_ROOT}/tests/mpp_reader_tests.cpp"
+        # G1: the MPP12 container round-trip test (test_mpp12_container) uses
+        # the writer's CFB read/write model.  cfb_writer.cpp depends only on the
+        # C++20 standard library, so the reader test binary stays self-contained
+        # and no order-dependent link to core_mppwrite is needed.
+        "${MPP_REPO_ROOT}/core/mppwrite/cfb_writer.cpp")
     target_link_libraries(mpp_reader_tests PRIVATE core_mpp)
+    target_include_directories(mpp_reader_tests PRIVATE
+        "${MPP_REPO_ROOT}/core/mppwrite")
     target_compile_features(mpp_reader_tests PRIVATE cxx_std_20)
     set_target_properties(mpp_reader_tests PROPERTIES CXX_EXTENSIONS OFF)
     mpp_set_warnings(mpp_reader_tests)
