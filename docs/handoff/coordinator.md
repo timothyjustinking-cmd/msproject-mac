@@ -1,4 +1,4 @@
-# Coordinator handoff — current (wave 21 closed)
+# Coordinator handoff — current (wave 22 closed)
 
 _The full coordinator history (waves 7–20) is archived at
 docs/archive/coordinator-handoff-through-wave20.md.  This file keeps the last two
@@ -125,3 +125,66 @@ operator fixes, not the whole UI contract.
   critical red were adopted.
 * The Linux job's wall clock is dominated by apt when the runner is slow — use
   the Build-step duration (2m55s → 1m42s), not the job total.
+
+
+---
+
+# Wave 22 final (2026-10-23 ~17:50) — HEAD `abeafd2`
+
+The wave gate is `docs/handoff/wave22-complete.md`; the entry point is
+`docs/START-HERE.md`.  One line: **the measured seven-tab ribbon, the stored
+columns' values and the project's new-task mode landed**, and CI run 39912313201
+is green on all three with the three packages.
+
+## Numbers
+
+* ctest `-E plan_recalc` **50/50**; M2 **332/332**; plan_recalc_tests **266**;
+  engine self-test **265**; writer **1693**; reader **1016** (+32); cal **785**.
+* Engine **7/8** (the MSO save-time word stays measured/pinned, not scored).
+* app_qt **15/15** locally, **14/14** in CI; UI parity **9/9 on all three**.
+* Packages: Windows 48.2 MB zip, macOS 21.6 MB zip, Linux 32.8 MB AppImage
+  (smoke-rendered 900x560).  Linux Build **2m10s** parallel on this tree.
+
+## Lanes
+
+* **R6**: every tab carries Project's measured group/button inventory and order
+  (Task 8/30, Resource 5/13, Report 3/10, Project 6/14, View 7/26, Help 1/3,
+  Gantt Format 6/17); two capture corrections; `qt_ribbon_inventory` pins it;
+  backlog 113 ribbon + 43 menu rows.
+* **S6**: stored Predecessors/Successors/Resource Names/% Complete values render
+  (link syntax from the capture); SUMMARY (Flag10) and Resource Names (null
+  assignment word) stay blank with byte reasons.
+* **E7**: props record `0x024013c8` decoded (0 = Auto, 1 = Manual), exposed on
+  `ProjectRow`, wired into the status centre; 133 files scanned, 10/10 MSPDI
+  exports agree; no writer yet.
+
+## Honest shortfall
+
+Decision 1 is **DONE** but introduced reachability caveats (About/Keyboard
+Shortcuts left Help and the menu bar is hidden, so **About is mouse-unreachable**;
+Save-as-PDF/Export-PDF, zoom, shading and three view buttons left their ribbon
+groups).  Decision 7 is still **PARTIAL** (SUMMARY Flag10 undecoded, bar styles
+not decoded).  **16** still not done; 10/12/14/15 partial.
+
+## Open, ranked
+
+1. Restore reachability through the backstage (About, shortcuts, PDF export,
+   zoom/shading/view commands), and decide the Font box's Arial-8-vs-Carlito
+   value.
+2. Decode Flag10 in `core/mpp` (SUMMARY/Yes columns); add a link+assignment
+   fixture through the coordinator oracle so CI shows non-empty Predecessors.
+3. Dialogs 14/15 and the split view 16; then dark surfaces 10 and per-screen
+   pixel diff 12.
+4. Bar-style decoding, clipboard display order, render selection.
+5. New-task writer (needs a Project acceptance fixture); macOS smoke/notarization;
+   sf248 task recovery.
+
+## Traps added
+
+* Pixel beats prose: the brief's starting inventory was wrong twice; the strips
+  won.  Re-read the capture.
+* `Task.Flag10 0x0b400051` is the file's SUMMARY, not `Task.Summary`; a blank
+  column is better than a wrong one.
+* A file's table can be wider than the 1920 pane: project_a clips Pre/Suc at
+  1920 (the 2680 render shows them) - not a regression.
+* CI has no corpus, so app_qt is 14 there and 15 here.

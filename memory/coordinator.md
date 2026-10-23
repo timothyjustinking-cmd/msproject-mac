@@ -1,67 +1,52 @@
-# memory — coordinator (2026-10-23, wave 22 in progress)
+# memory — coordinator (2026-10-23, wave 22 closed)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
-`docs/handoff/wave21-complete.md`.  Full pre-wave-21 history:
+`docs/handoff/wave22-complete.md`.  History:
 `memory/archive/coordinator-through-wave20-full.md`.
 
 ## Where main is
 
-`main` = **2911c40**, pushed and clean.  Wave 21 is closed (gate
-`docs/handoff/wave21-complete.md`; CI 39904570421 green on three, three
-packages).  **Wave 22 is in progress**: R6 (ribbon inventories), S6 (stored
-column values), E7 (new-task mode); brief `docs/handoff/wave22-brief.md`.
+`main` = **abeafd2**, pushed (the docs close follows).  Wave 22 lanes R6
+(`a60453b`), E7 (`f7f168b`), S6 (`abeafd2`) all committed.  CI run
+**39912313201** green on Windows, macOS and Linux (14/14 each), three packages.
 
-## The numbers
+## Numbers
 
-* ctest `-E plan_recalc` **50/50**; M2 **332/332**; plan_recalc_tests **266**
-  (no corpus); engine self-test **265**; mppwrite CFB **1693**; reader **984**;
-  cal **785**; fixtures OK.
-* Engine **7/8** — `constraint-mso` is measured/pinned but not scored; the
-  production save still writes 9600.
-* app_qt **14/14** local / **13/13** CI; UI parity **9/9 on all three**.
-* Packages: Windows 48.1 MB, macOS 21.5 MB, Linux 32.8 MB AppImage; Linux Build
-  2m55s → **1m42s** with `--parallel 2`.
+* ctest **50/50**; M2 **332/332**; plan 266; engine self-test 265; writer 1693;
+  reader **1016**; cal **785**; app_qt **15/15** local / 14 CI; parity **9/9**.
+* Engine **7/8** (MSO word measured/pinned, not scored).
+* Packages: Windows 48.2 MB, macOS 21.6 MB, Linux 32.8 MB AppImage; Linux Build
+  2m10s parallel.
 
-## Wave 21 result (short)
+## Wave 22 result
 
-Decision 7 substantially landed: the loaded sheet uses the file's `214/CTable`
-columns/order/titles/widths; Name/Duration/Start/Finish editable, everything else
-read-only.  Operator fixes: menu bar hidden, backstage back arrow, double-click →
-six-tab Task Information, selection `#A2D3A0`, critical `#FF0000`, header
-captions, status Ready.  CFB slack fixed in `mppwrite`; Linux CI parallel.
-
-**Not done:** decision 1 (ribbon inventories; Resource 3/5 groups, View 3/7),
-stored-column values for synthetic fields, bar-style decoding, the loaded file's
-new-task mode, dialogs 14/15, split view 16, dark custom surfaces (10), per-screen
-pixel diff (12).
+* Decision 1 **DONE**: seven tabs carry the measured inventory/order; gate
+  `qt_ribbon_inventory`; backlog 113 ribbon + 43 menu rows.
+* Stored-column values: Pre/Suc/Resource Names/% Complete from the plan; SUMMARY
+  (Flag10) and Resource Names (null assignments) blank with evidence.
+* New-task mode: props `0x024013c8` (0 Auto/1 Manual), reader + status bar.
+* Reachability caveat: About/Keyboard Shortcuts left Help and the menu bar is
+  hidden -> About mouse-unreachable; Save-as-PDF/Export-PDF, zoom, shading and
+  three view buttons left their ribbon groups.
 
 ## Open, ranked
 
-1. Ribbon inventories from the clean `project-ribbon-*.png` strips (wave 22 first).
-2. Stored-column values + bar styles + the new-task mode reader field.
+1. Restore reachability via the backstage; decide the Font box (Arial 8 vs Carlito).
+2. Decode Flag10; a link/assignment fixture for CI.
 3. Dialogs 14/15, split view 16, dark surfaces 10, pixel diff 12.
-4. Non-Start edits in a save; clipboard display order; render selection.
-5. macOS smoke/notarization; sf248 task recovery.
+4. Bar styles, clipboard order, render selection, new-task writer.
+5. macOS smoke/notarization; sf248.
 
 ## Traps
 
-* Qt 6 offscreen has no fonts; Carlito is bundled per executable.
-* P1 reads the green selection band as a grid rule; `--render` clears it.
-* Green/navy bars are file bar styles, not defaults.
-* Never run `plan_recalc_tests` with the corpus (rewrites the golden).
-* Serial builds; `newline="\n"`; `gh run download` fresh dir.
-
-## Wave 22 (in progress)
-
-* **R6**: the seven ribbon tabs' group/button inventories from the clean strips;
-  regenerate the backlog; a per-tab inventory gate.
-* **S6**: stored-column values (Predecessors, Successors, Resource Names,
-  % Complete, SUMMARY/Yes) on `corpus/project_a.mpp` read-only.
-* **E7**: the project's new-task scheduling default (reader field + status bar).
-* Not this wave: dialogs 14/15, split view 16, dark surfaces 10, pixel diff 12.
+* Pixel beats prose; re-read the capture.
+* Flag10 is the file's SUMMARY, not Task.Summary.
+* A wide stored table clips at 1920 (project_a) — not a regression.
+* CI has no corpus: app_qt 14 there, 15 here.
+* Serial builds, newline="\n", gh download fresh dir, plan_recalc never with corpus.
 
 ## Next three actions
 
-1. Commit each wave-22 lane as it reports; re-run app_qt/parity/root gates.
-2. One CI dispatch; verify the packages and the three renders.
-3. `docs/handoff/wave22-complete.md`, coordinator/roadmap updates, push.
+1. Wave 23: reachability (About/shortcuts/PDF/zoom) through the backstage.
+2. Flag10 decode + a link/assignment fixture through the oracle.
+3. Dialogs 14/15 and the split view 16.

@@ -1,30 +1,33 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-10-23 ~17:05, wave 22 in progress.  Keep this file current at
+_Updated 2026-10-23 ~17:55, wave 22 closed.  Keep this file current at
 every wave close; it is the only file a new session must read first._
 
 ## The 30-second state
 
-* `main` = **2911c40**, pushed.  **Wave 22 is in progress** — no
-  `docs/handoff/wave22-complete.md` yet.  Brief:
-  `docs/handoff/wave22-brief.md`.
-* Wave 21 is closed (`docs/handoff/wave21-complete.md`): stored table, operator
-  fixes, CFB slack, parallel Linux; CI run 39904570421 green on all three with
-  the three packages and 9/9 parity.
-* Wave 22 lanes: **R6** (the seven ribbon tab inventories, decision 1),
-  **S6** (stored-column values: Pre/Suc/Resource Names/% Complete/SUMMARY/Yes),
-  **E7** (the project's new-task mode, reader + status bar).
+* `main` = **abeafd2** (the code CI validated; the docs close follows), pushed.
+  **Wave 22 is closed** — `docs/handoff/wave22-complete.md` is the gate.
+* CI run **39912313201** green on Windows, macOS and Linux (14/14 each) with the
+  three packages and 9/9 parity on all three renders.
+* Wave 22 landed: the **measured seven-tab ribbon**, the **stored columns'
+  values** (Pre/Suc/Resource Names/% Complete) and the **new-task scheduling
+  mode** decoded from props `0x024013c8`.
 * Engine stays **7/8** by design until the MSO save-time word reaches the
   production save path.
+* **Wave 23 is not started.**  Its first job: restore reachability through the
+  backstage (About and Keyboard Shortcuts are mouse-unreachable after the
+  inventory change), then Flag10/SUMMARY, the dialog inventory and the split
+  view.
 
 ## Reading order
 
-**Coordinator for wave 22** (≈5 files, not more):
+**Coordinator starting wave 23** (≈5 files, not more):
 
 1. this file;
-2. `docs/handoff/wave22-brief.md` — the current wave's scope, owners and gates;
+2. `docs/handoff/wave22-complete.md` — the last gate, the scoreboard and the
+   ranked open items (wave 23's scope comes from here);
 3. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
-4. `docs/ui-reference-set.md` — the clean per-tab captures R6 measures from;
+4. `docs/ui-reference-set.md` — the clean per-tab captures and palettes;
 5. `memory/coordinator.md` — the compact current memory.
 
 **Lane agent** (≈4 files):
@@ -84,10 +87,10 @@ Archives (only for history): `docs/archive/coordinator-handoff-through-wave20.md
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md, then continue wave 22 from the current state.
-Wave 22 is in progress (R6 ribbon inventories, S6 stored-column values, E7
-new-task mode); do not close it until every lane is committed, the gates are
-green, one CI dispatch is green on Windows/macOS/Linux, and
-docs/handoff/wave22-complete.md is written.  Use docs/handoff/INDEX.md instead
-of reading all handoffs.
+Read docs/START-HERE.md, then start wave 23 from the open items in
+docs/handoff/wave22-complete.md.  Wave 22 is closed; do not re-open it.  Write
+the wave-23 brief before launching lanes, keep owners disjoint, and do not close
+the wave until every lane is committed, the gates are green, one CI dispatch is
+green on Windows/macOS/Linux, and docs/handoff/wave23-complete.md is written.
+Use docs/handoff/INDEX.md instead of reading all handoffs.
 ```

@@ -4,13 +4,14 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Wave 22 (in progress)
+## Wave 22 (closed — the current gate)
 
 | file | what |
 |---|---|
-| `wave22-brief.md` | the current wave: R6 ribbon inventories, S6 stored-column values, E7 new-task mode |
+| `wave22-complete.md` | **the wave-22 gate**: the measured ribbon, stored-column values, new-task mode, packages, open items |
+| `wave22-brief.md` | wave-22 scope and owners |
 
-## Wave 21 (closed — the previous gate)
+## Wave 21 (closed — previous gate)
 
 | file | what |
 |---|---|
@@ -69,3 +70,10 @@ scheduling, schedcore, codegen, ci, qt, f1/e2/q2/a1/b1).
   prompt; `docs/START-HERE.md` replaces it.
 * `docs/archive/WAVES-coordination-board-wave7.md` — the old branch/
   worktree coordination board (45 KB).
+
+## Wave 23 (not started)
+
+No brief yet.  Scope from `wave22-complete.md` "Open items": reachability through
+the backstage first (About/Keyboard Shortcuts, PDF export, zoom/shading), then
+Flag10/SUMMARY and a link/assignment fixture, then dialogs 14/15, split view 16,
+dark surfaces 10 and the pixel diff 12.
