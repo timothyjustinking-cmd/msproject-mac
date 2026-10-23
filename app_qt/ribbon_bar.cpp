@@ -457,9 +457,10 @@ const std::vector<TabSpec>& tab_specs() {
         TabSpec help;
         help.title = "Help";
         GroupSpec& help_group = add_group(help, "Help", 156);
-        large(help_group, "Help", app::MenuAction::none, 48, 0);
-        large(help_group, "Feedback", app::MenuAction::none, 50, 1);
-        large(help_group, "Show\nTraining", app::MenuAction::none, 48, 2);
+        large(help_group, "Help", app::MenuAction::none, 48, 0, false, "help.help");
+        large(help_group, "Feedback", app::MenuAction::none, 50, 1, false, "help.feedback");
+        large(help_group, "Show\nTraining", app::MenuAction::none, 48, 2, false,
+              "help.training");
         tabs.push_back(std::move(help));
 
         // --- Gantt Chart Format (contextual) -------------------------------

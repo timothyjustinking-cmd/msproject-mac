@@ -127,6 +127,36 @@ void info_page(QPainter& painter) {
     line(painter, 20, 19, 20, 23);
 }
 
+// --- Help tab (W26-2.6) ----------------------------------------------------
+bool draw_help_glyph(QPainter& painter, const QString& key) {
+    if (key == QStringLiteral("help.help")) {
+        outline_circle(painter, 16, 16, 12, 2.5);
+        polyline(painter, {QPointF(11, 14), QPointF(11, 11), QPointF(14, 7), QPointF(19, 7),
+                           QPointF(22, 10), QPointF(22, 12), QPointF(16, 17),
+                           QPointF(16, 20)},
+                 2.5);
+        filled_circle(painter, 16, 24, 1.7);
+    } else if (key == QStringLiteral("help.feedback")) {
+        outline_circle(painter, 16, 16, 12, 2.5);
+        filled_circle(painter, 12, 13, 1.7);
+        filled_circle(painter, 20, 13, 1.7);
+        painter.setPen(ink_pen(2.5));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawArc(QRectF(9, 9, 14, 14), 200 * 16, 140 * 16);
+    } else if (key == QStringLiteral("help.training")) {
+        filled_polygon(painter, {QPointF(3, 14), QPointF(16, 7), QPointF(29, 14),
+                                 QPointF(16, 21)});
+        polyline(painter, {QPointF(10, 18), QPointF(10, 23), QPointF(22, 23),
+                           QPointF(22, 18)},
+                 2.5);
+        line(painter, 27, 15, 27, 22, 2.5);
+        filled_circle(painter, 27, 24, 1.7);
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // --- View tab (W26-2.5) ----------------------------------------------------
 // Gantt Chart and Team Planner are the Task/Resource keys reused here (Project
 // reuses both); "Other Views" appears in both View groups and is the wave's
@@ -647,7 +677,7 @@ QIcon shell_ribbon_icon(const QString& key, int pixels) {
     painter.setBrush(Qt::NoBrush);
     if (!draw_task_glyph(painter, key) && !draw_resource_glyph(painter, key) &&
         !draw_report_glyph(painter, key) && !draw_project_tab_glyph(painter, key) &&
-        !draw_view_glyph(painter, key)) {
+        !draw_view_glyph(painter, key) && !draw_help_glyph(painter, key)) {
         painter.end();
         // A key with no drawing is the neutral placeholder, never a blank
         // icon: the gate's placeholder hash then fails on it.
@@ -665,7 +695,7 @@ bool shell_ribbon_glyph_known(const QString& key) {
     painter.setBrush(Qt::NoBrush);
     const bool known = draw_task_glyph(painter, key) || draw_resource_glyph(painter, key) ||
                        draw_report_glyph(painter, key) || draw_project_tab_glyph(painter, key) ||
-                       draw_view_glyph(painter, key);
+                       draw_view_glyph(painter, key) || draw_help_glyph(painter, key);
     painter.end();
     return known;
 }
