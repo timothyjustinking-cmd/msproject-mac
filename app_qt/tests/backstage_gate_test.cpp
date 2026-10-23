@@ -61,6 +61,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -592,6 +593,127 @@ void check_new(msqt::MainWindow& window, const QString& fixture, const QString& 
     window.set_preferences_store(nullptr);
 }
 
+QPushButton* button_named(QWidget* page, const char* name) {
+    return page != nullptr ? page->findChild<QPushButton*>(QString::fromUtf8(name)) : nullptr;
+}
+
+void check_locations(msqt::MainWindow& window, const QString& fixture, const QString& out_dir) {
+    msqt::Backstage* backstage = window.backstage();
+    if (backstage == nullptr) {
+        return;
+    }
+    QDir().mkpath(out_dir);
+    const QString ini = out_dir + QStringLiteral("/backstage-locations.ini");
+    QFile::remove(ini);
+    msqt::PreferencesStore store(ini);
+    store.add_recent_file(fixture);
+    window.set_preferences_store(&store);
+
+    window.show_backstage(true);
+    backstage->show_page(msqt::Backstage::Page::open);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    QWidget* open_page = backstage->pages()->currentWidget();
+
+    // The capture's Open page: Recent, This PC and Browse are live; the cloud
+    // entries are laid out and disabled with the exact tooltip.
+    QPushButton* open_pc = button_named(open_page, "openThisPc");
+    QPushButton* open_browse = button_named(open_page, "openBrowse");
+    gate::check(open_pc != nullptr && open_pc->isEnabled(),
+                "Open > This PC is laid out and enabled");
+    gate::check(open_browse != nullptr && open_browse->isEnabled(),
+                "Open > Browse is laid out and enabled");
+    for (const char* name : {"openOneDrive", "openSharePoint", "openAddPlace"}) {
+        QPushButton* button = button_named(open_page, name);
+        gate::check(button != nullptr && !button->isEnabled(),
+                    "the Open cloud/placeholder entry is disabled");
+        if (button != nullptr) {
+            gate::check(button->toolTip() ==
+                            QStringLiteral("not implemented in this port"),
+                        "the Open disabled entry carries the exact tooltip");
+        }
+    }
+    QListWidget* open_recent =
+        open_page != nullptr
+            ? open_page->findChild<QListWidget*>(QStringLiteral("openRecentList"))
+            : nullptr;
+    gate::check(open_recent != nullptr && open_recent->count() == 1,
+                "the Open page lists the local recent file");
+    if (open_recent != nullptr && open_recent->count() > 0) {
+        QListWidgetItem* item = open_recent->item(0);
+        gate::check(item->text() == QFileInfo(fixture).fileName(),
+                    "the Open recent row shows the local file's name");
+        const QPoint centre = open_recent->visualItemRect(item).center();
+        QTest::mousePress(open_recent->viewport(), Qt::LeftButton, Qt::NoModifier, centre);
+        QTest::mouseDClick(open_recent->viewport(), Qt::LeftButton, Qt::NoModifier, centre);
+        QTest::mouseRelease(open_recent->viewport(), Qt::LeftButton, Qt::NoModifier,
+                            centre);
+        QApplication::processEvents();
+        QApplication::processEvents();
+        gate::check(!window.backstage_open() && window.loaded_task_count() > 0,
+                    "the Open recent row opens the local file");
+    }
+
+    // Save As: the same locations, with its own recent list.  The two live
+    // buttons' commands are proved through a recording handler (the real ones
+    // open the modal save panel, which an offscreen gate cannot drive).
+    window.show_backstage(true);
+    backstage->show_page(msqt::Backstage::Page::save_as);
+    QApplication::processEvents();
+    QWidget* save_page = backstage->pages()->currentWidget();
+    QPushButton* save_pc = button_named(save_page, "saveAsThisPc");
+    QPushButton* save_browse = button_named(save_page, "saveAsBrowse");
+    gate::check(save_pc != nullptr && save_pc->isEnabled(),
+                "Save As > This PC is laid out and enabled");
+    gate::check(save_browse != nullptr && save_browse->isEnabled(),
+                "Save As > Browse is laid out and enabled");
+    for (const char* name : {"saveAsOneDrive", "saveAsSharePoint", "saveAsAddPlace"}) {
+        QPushButton* button = button_named(save_page, name);
+        gate::check(button != nullptr && !button->isEnabled(),
+                    "the Save As cloud/placeholder entry is disabled");
+        if (button != nullptr) {
+            gate::check(button->toolTip() ==
+                            QStringLiteral("not implemented in this port"),
+                        "the Save As disabled entry carries the exact tooltip");
+        }
+    }
+    QListWidget* save_recent =
+        save_page != nullptr
+            ? save_page->findChild<QListWidget*>(QStringLiteral("saveAsRecentList"))
+            : nullptr;
+    gate::check(save_recent != nullptr && save_recent->count() == 1,
+                "the Save As page lists the local recent files for reference");
+
+    {
+        const std::function<void(const QString&)> original =
+            backstage->command_handler();
+        QStringList recorded;
+        backstage->set_command_handler(
+            [&recorded](const QString& command) { recorded << command; });
+        if (open_pc != nullptr) {
+            open_pc->click();
+        }
+        if (open_browse != nullptr) {
+            open_browse->click();
+        }
+        if (save_pc != nullptr) {
+            save_pc->click();
+        }
+        if (save_browse != nullptr) {
+            save_browse->click();
+        }
+        const QStringList expected = {
+            QStringLiteral("open_this_pc"), QStringLiteral("open"),
+            QStringLiteral("save_as_this_pc"), QStringLiteral("save_as"),
+        };
+        gate::check(recorded == expected,
+                    "This PC/Browse ask the shell for the measured local commands");
+        backstage->set_command_handler(original);
+    }
+    window.show_backstage(false);
+    window.set_preferences_store(nullptr);
+}
+
 void check_document_state(msqt::MainWindow& window, const QString& fixture) {
     // No document: Save..Close disabled (the clean Account capture).
     window.show_backstage(true);
@@ -658,9 +780,10 @@ int main(int argc, char** argv) {
     check_file_tab(window);
     check_document_state(window, fixture);
     check_new(window, fixture, out_dir);
+    check_locations(window, fixture, out_dir);
 
     std::fprintf(stderr,
-                 "note: W26-4.1/4.2/4.3 rail, File-tab, Account and New checks ran on "
-                 "the live window\n");
+                 "note: W26-4.1..4.4 rail, File-tab, Account, New and location checks ran "
+                 "on the live window\n");
     return gate::finish();
 }
