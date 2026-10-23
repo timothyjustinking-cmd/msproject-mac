@@ -140,14 +140,14 @@ Project	0	Proofing	button	Spelling	0	proofing.spelling	0	-
 View	0	Task Views	group	-	-	-	-	-
 View	0	Task Views	button	Gantt Chart	0	view.gantt	0	-
 View	0	Task Views	button	Task Usage	1	view.task_usage	0	-
-View	0	Task Views	small	Network Diagram	0	-	0	-
-View	0	Task Views	small	Calendar	0	-	1	-
-View	0	Task Views	small	Other Views	0	-	2	-
+View	0	Task Views	small	Network Diagram	0	view.network_diagram	0	-
+View	0	Task Views	small	Calendar	0	view.calendar	1	-
+View	0	Task Views	small	Other Views	0	view.other	2	-
 View	0	Resource Views	group	-	-	-	-	-
 View	0	Resource Views	button	Team Planner	0	view.team_planner	0	-
-View	0	Resource Views	small	Resource Usage	1	-	0	-
-View	0	Resource Views	small	Resource Sheet	1	-	1	-
-View	0	Resource Views	small	Other Views	0	-	2	-
+View	0	Resource Views	small	Resource Usage	1	view.resource_usage	0	-
+View	0	Resource Views	small	Resource Sheet	1	view.resource_sheet	1	-
+View	0	Resource Views	small	Other Views	0	view.other	2	-
 View	0	Data	group	-	-	-	-	-
 View	0	Data	button	Sort	0	data.sort	0	-
 View	0	Data	button	Outline	0	data.outline	0	-
@@ -167,9 +167,9 @@ View	0	Split View	checkbox	Details	0	-	1	unchecked
 View	0	Split View	combo	Details options	0	-	1	-
 View	0	Window	group	-	-	-	-	-
 View	0	Window	button	New Window	0	window.new	0	-
-View	0	Window	small	Switch Windows	0	-	0	-
-View	0	Window	small	Arrange All	0	-	1	-
-View	0	Window	small	Hide	0	-	2	-
+View	0	Window	small	Switch Windows	0	window.switch	0	-
+View	0	Window	small	Arrange All	0	window.arrange	1	-
+View	0	Window	small	Hide	0	window.hide	2	-
 View	0	Macros	group	-	-	-	-	-
 View	0	Macros	button	Macros	0	macros.macros	0	-
 Help	0	Help	group	-	-	-	-	-

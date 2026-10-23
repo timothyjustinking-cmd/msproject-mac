@@ -407,42 +407,50 @@ const std::vector<TabSpec>& tab_specs() {
         TabSpec view;
         view.title = "View";
         GroupSpec& task_views = add_group(view, "Task Views", 264);
-        large(task_views, "Gantt\nChart", app::MenuAction::none, 64, 0);
-        large(task_views, "Task\nUsage", app::MenuAction::view_task_usage, 58, 1, true);
-        small(task_views, "Network Diagram", app::MenuAction::none, 130, 0, 2);
-        small(task_views, "Calendar", app::MenuAction::none, 130, 1, 2);
-        small(task_views, "Other Views", app::MenuAction::none, 130, 2, 2);
+        large(task_views, "Gantt\nChart", app::MenuAction::none, 64, 0, false, "view.gantt");
+        large(task_views, "Task\nUsage", app::MenuAction::view_task_usage, 58, 1, true,
+              "view.task_usage");
+        small(task_views, "Network Diagram", app::MenuAction::none, 130, 0, 2, false, 1, false,
+              "view.network_diagram");
+        small(task_views, "Calendar", app::MenuAction::none, 130, 1, 2, false, 1, false,
+              "view.calendar");
+        small(task_views, "Other Views", app::MenuAction::none, 130, 2, 2, false, 1, false,
+              "view.other");
         GroupSpec& resource_views = add_group(view, "Resource Views", 214);
-        large(resource_views, "Team\nPlanner", app::MenuAction::none, 64, 0);
+        large(resource_views, "Team\nPlanner", app::MenuAction::none, 64, 0, false,
+              "view.team_planner");
         small(resource_views, "Resource Usage", app::MenuAction::view_resource_usage, 138, 0, 1,
-              true);
+              true, 1, false, "view.resource_usage");
         small(resource_views, "Resource Sheet", app::MenuAction::view_resource_sheet, 138, 1, 1,
-              true);
-        small(resource_views, "Other Views", app::MenuAction::none, 138, 2, 1);
+              true, 1, false, "view.resource_sheet");
+        small(resource_views, "Other Views", app::MenuAction::none, 138, 2, 1, false, 1, false,
+              "view.other");
         GroupSpec& data = add_group(view, "Data", 323);
-        large(data, "Sort", app::MenuAction::none, 50, 0);
-        large(data, "Outline", app::MenuAction::none, 50, 1);
-        large(data, "Tables", app::MenuAction::none, 50, 2);
+        large(data, "Sort", app::MenuAction::none, 50, 0, false, "data.sort");
+        large(data, "Outline", app::MenuAction::none, 50, 1, false, "data.outline");
+        large(data, "Tables", app::MenuAction::none, 50, 2, false, "data.tables");
         combo(data, "Highlight", "No Highlight", 156, 0, 3);
         combo(data, "Filter", "No Filter", 156, 1, 3);
         combo(data, "Group by", "No Group", 156, 2, 3);
         GroupSpec& zoom = add_group(view, "Zoom", 248);
         combo(zoom, "Timescale", "Days", 96, 0, 0);
-        large(zoom, "Zoom", app::MenuAction::none, 46, 1);
-        large(zoom, "Entire\nProject", app::MenuAction::none, 42, 2);
-        large(zoom, "Selected\nTasks", app::MenuAction::none, 50, 3);
+        large(zoom, "Zoom", app::MenuAction::none, 46, 1, false, "zoom.zoom");
+        large(zoom, "Entire\nProject", app::MenuAction::none, 42, 2, false, "zoom.entire");
+        large(zoom, "Selected\nTasks", app::MenuAction::none, 50, 3, false, "zoom.selected");
         GroupSpec& split_view = add_group(view, "Split View", 185);
         check(split_view, "Timeline", RibbonCommand::toggle_timeline, 64, 0, 0, true, -1);
         combo(split_view, "Timeline options", "Timeline", 112, 0, 1);
         check(split_view, "Details", RibbonCommand::toggle_details, 64, 1, 0, false, 0);
         combo(split_view, "Details options", "", 112, 1, 1);
         GroupSpec& window = add_group(view, "Window", 198);
-        large(window, "New\nWindow", app::MenuAction::none, 62, 0);
-        small(window, "Switch\nWindows", app::MenuAction::none, 128, 0, 1);
-        small(window, "Arrange All", app::MenuAction::none, 128, 1, 1);
-        small(window, "Hide", app::MenuAction::none, 128, 2, 1);
+        large(window, "New\nWindow", app::MenuAction::none, 62, 0, false, "window.new");
+        small(window, "Switch\nWindows", app::MenuAction::none, 128, 0, 1, false, 1, false,
+              "window.switch");
+        small(window, "Arrange All", app::MenuAction::none, 128, 1, 1, false, 1, false,
+              "window.arrange");
+        small(window, "Hide", app::MenuAction::none, 128, 2, 1, false, 1, false, "window.hide");
         GroupSpec& macros = add_group(view, "Macros", 60);
-        large(macros, "Macros", app::MenuAction::none, 50, 0);
+        large(macros, "Macros", app::MenuAction::none, 50, 0, false, "macros.macros");
         tabs.push_back(std::move(view));
 
         // --- Help -----------------------------------------------------------
