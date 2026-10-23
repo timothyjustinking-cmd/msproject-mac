@@ -140,7 +140,9 @@ def _oracle_body(text):
 
 def _last_body_commit(rel):
     """The newest commit whose measured body differs from its predecessor's."""
-    commits = git("log", "--format=%h", "--", rel).stdout.split()
+    # --follow, per the brief: a renamed oracle must keep the commit that last
+    # changed its body, not restart at the rename.
+    commits = git("log", "--follow", "--format=%h", "--", rel).stdout.split()
     previous = None
     previous_sha = None
     for sha in commits:
