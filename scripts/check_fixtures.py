@@ -20,6 +20,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCUMENTED = {
     "tests/data/synthetic-base.mpp":
         "55C109F2F62FD6B9F05789AB002C35991A424AAB18C78F92E4200DF7B3FC6069",
+    # Wave 19: synthetic-base's tasks converted to automatic scheduling plus a
+    # second named base calendar ("Shift A", Mon-Fri 09:00-13:00 + 14:00-18:00).
+    # Built by scripts/build_calendar_fixture.py; pinned in engine_diff.py too.
+    "tests/data/synthetic-calendars.mpp":
+        "F486F0C3235BD8A592542E942141FE873C4262E6AFA19E029A9C4C79386017CA",
     "tests/data/project_a_recalc_golden.tsv":
         "36F156F618C94C92D70FBA6D754340D374DDE72E7D2FF136D1E22DBEE5400DB8",
 }

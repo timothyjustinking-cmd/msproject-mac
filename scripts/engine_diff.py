@@ -115,6 +115,18 @@ BASE_FILES = {
         "path": ROOT / "tests" / "data" / "synthetic-base.mpp",
         "sha256": "55c109f2f62fd6b9f05789ab002c35991a424aab18c78f92e4200df7b3fc6069",
     },
+    "synthetic-calendars": {
+        "path": ROOT / "tests" / "data" / "synthetic-calendars.mpp",
+        "sha256": "f486f0c3235bd8a592542e942141fe873c4262e6afa19e029a9c4c79386017ca",
+        # calendar uid -> name.  Built by scripts/build_calendar_fixture.py:
+        # synthetic-base's three tasks converted to automatic scheduling and a
+        # second NAMED base calendar added (Mon-Fri 09:00-13:00 + 14:00-18:00).
+        # Project.BaseCalendars can be searched by name but exposes NO UniqueID
+        # property (measured wave 19), so the uid->name map is pinned here with
+        # the fixture hash -- the name is synthetic, never client data, and the
+        # scenario JSON keeps ids only.
+        "calendars": {4: "Shift A"},
+    },
 }
 
 # Every generated .mpp / dump / .ops file must stay under build/.
@@ -830,24 +842,26 @@ def _apply_com_operation(app, proj, operation, calc, utc, mpp_out, state):
         return
     if kind == "set_calendar":
         task = _task_by_uid(proj, operation["task_uid"])
-        # This Project build has no `Project.Calendars`; the base-calendar
-        # collection is `proj.BaseCalendars` when present.  Task.Calendar is a
-        # NAME (get/put), so the name comes from the collection entry.
-        calendar = None
-        for accessor in ("BaseCalendars", "Calendars"):
-            collection = getattr(proj, accessor, None)
-            if collection is None:
-                continue
-            try:
-                calendar = collection(operation["calendar_uid"])
-                break
-            except Exception:                       # noqa: BLE001
-                continue
-        if calendar is None:
+        uid = operation["calendar_uid"]
+        # Task.Calendar is a NAME (get/put) and this Project build has no
+        # `Project.Calendars`.  `Project.BaseCalendars` exists but carries no
+        # UniqueID (measured wave 19), so the uid->name map is pinned with the
+        # fixture in BASE_FILES[...]["calendars"].
+        name = (state.get("calendars") or {}).get(uid)
+        if not name:
             raise HarnessError(
-                "set_calendar: this Project build exposes no calendar collection "
-                "on Project (needs Task.Calendar by name); scenario left unrecorded")
-        task.Calendar = calendar.Name
+                f"set_calendar: no calendar uid {uid} in the pinned calendar map "
+                f"for base '{state.get('base')}' (Project.BaseCalendars has no "
+                "UniqueID, so the map comes from the fixture registry)")
+        base_calendars = proj.BaseCalendars
+        names = [base_calendars(i).Name
+                 for i in range(1, base_calendars.Count + 1)]
+        if name not in names:
+            raise HarnessError(
+                f"set_calendar: the pinned name for uid {uid} is not among "
+                f"Project's base calendars {names}; the fixture and the pinned "
+                "map disagree")
+        task.Calendar = name
         calc(app)
         return
     raise HarnessError(f"unhandled operation '{kind}'")
@@ -894,7 +908,9 @@ def cmd_record(args):
     print("record: the base hash is pinned; a changed fixture is refused "
           "before MS Project is opened and re-checked after the save")
 
-    state = {}
+    state = {"base": scenario["base"],
+             "calendars": {int(uid): str(name) for uid, name in
+                           base_entry(scenario["base"]).get("calendars", {}).items()}}
     # MS Project rewrites a file it opens (observed three times: the committed
     # fixture came back with a different hash after a session).  Record from a
     # copy under build/, never from the committed fixture.
