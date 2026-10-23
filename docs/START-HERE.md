@@ -24,8 +24,10 @@ session must read first._
   "task".
 * **W25-3**: every `client-string-<hex8>` label and every person-name hash pin
   is gone from the tree; the writer oracle is regenerated from a synthetic
-  fixture.  The name scan and the 8-hex grep are clean from the scrub commit
-  onward.  **Residual:** `tests/data/project_a_golden.tsv` still carries an
+  fixture.  The second review found and the wave removed the one remaining
+  plaintext client name (a dead row's orphaned name block in the reader test;
+  the scanner only sees live rows).  The name scan and the 8-hex grep are clean
+  from the scrub commit onward.  **Residual:** `tests/data/project_a_golden.tsv` still carries an
   unsalted 16-hex hash of each task name (the reader's oracle) -- wave25-complete
   §5 records why it was not replaced and that it is Tim's call with the hold.
 * **W25-4..W25-11**: wave-24 errata recorded, the PROJECT_A text-style gap is
@@ -44,7 +46,7 @@ session must read first._
 * Gates at the wave-25 close (fresh trees, final commit): core **51/51**,
   plan_recalc **512** with corpus / **266** without, M2 **332/332**, engine
   **7 pass + `constraint-mso` expected**, app **15/15**, app_qt **18/18**,
-  reader **1097** with corpus / **417** without, fixtures **OK** (23 documented
+  reader **1100** with corpus / **420** without, fixtures **OK** (23 documented
   hashes, 21 tracked `.mpp`), parity **10/10** plus the auto-scheduled
   colour-only **PASS**, client-name scan **0 hits** on every wave-25 commit.
 * Engine stays **7/8** (`constraint-mso` deliberately left failing;
