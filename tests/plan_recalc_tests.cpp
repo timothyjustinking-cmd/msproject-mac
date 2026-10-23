@@ -714,6 +714,233 @@ void test_manual_oracle(TestContext& context) {
     }
 }
 
+/* ---- 1e. Project's STORED late pair for a manual row (+112/+116) --------- */
+/* MEASURED RULE (plan.h "MANUAL LATE PAIR", docs/engine-parity.md "Wave 20"):
+ * a manual row stores the row PLACED AT ITS LATEST -- the project finish capped
+ * by each successor's KEPT start (minus the link lag), and that finish walked
+ * back by the row's Duration, clamped to never precede the kept start.  These
+ * are the four schema-2 oracles' stored pairs.  Every input below is built from
+ * the committed fixture, so this is the recorded data, not a formula fitted to
+ * the code. */
+void test_manual_late_pair(TestContext& context) {
+    const std::string path = PLAN_BASE_PATH;
+    if (!file_exists(path)) {
+        context.check(false, "committed fixture is missing: " + std::string(PLAN_BASE_PATH));
+        return;
+    }
+    const mpp::Document document = mpp::load_file(path);
+    plan::PlanInput input = from_mpp_with_calendar(document, path);
+
+    struct Pair {
+        sched::date32 start;
+        sched::date32 finish;
+    };
+    const auto expect_pair = [&context](const plan::PlanResult& result, std::int32_t uid,
+                                        Pair pair, const std::string& label) {
+        const std::string which = label + " uid " + std::to_string(uid);
+        const plan::PlanTaskResult* row = find_result(result, uid);
+        context.check(row != nullptr, which + " is in the result");
+        if (row == nullptr) {
+            return;
+        }
+        context.equal_date(row->late_start, pair.start, which + " stored late start (+112)");
+        context.equal_date(row->late_finish, pair.finish,
+                           which + " stored late finish (+116)");
+    };
+
+    /* (1) recalculate.oracle.json: no edit; every row is placed at the project
+     * finish 01-09 12:00, so uid 2's latest start is 01-06 13:00 (not its kept
+     * 01-04 13:00) and uid 3's is 01-07 13:00. */
+    {
+        const plan::PlanResult result = plan::recalculate(input);
+        context.check(result.ok(), "manual late pair: recalculate succeeds (" + describe(result) + ")");
+        if (result.ok()) {
+            context.equal(result.manual_late_unmodelled, std::size_t{0},
+                          "recalculate: every manual late pair is modelled (no fallback)");
+            expect_pair(result, 1, {sched::from_ymd(2026, 1, 4, 13, 0),
+                                    sched::from_ymd(2026, 1, 9, 12, 0)},
+                        "recalculate");
+            expect_pair(result, 2, {sched::from_ymd(2026, 1, 6, 13, 0),
+                                    sched::from_ymd(2026, 1, 9, 12, 0)},
+                        "recalculate");
+            expect_pair(result, 3, {sched::from_ymd(2026, 1, 7, 13, 0),
+                                    sched::from_ymd(2026, 1, 9, 12, 0)},
+                        "recalculate");
+        }
+    }
+
+    /* (2) duration-change.oracle.json: uid 1 5 d -> 3 d, project finish
+     * 01-07 12:00.  uid 1/2 (both 3 d) store 01-04 13:00 / 01-07 12:00 and uid 3
+     * (2 d) 01-05 13:00 / 01-07 12:00. */
+    {
+        plan::PlanInput changed = input;
+        for (plan::PlanTask& task : changed.tasks) {
+            if (task.uid == 1) {
+                task.duration = 14400;
+            }
+        }
+        const plan::PlanResult result = plan::recalculate(changed);
+        context.check(result.ok(), "manual late pair: duration-change succeeds");
+        if (result.ok()) {
+            context.equal_date(result.project_finish, sched::from_ymd(2026, 1, 7, 12, 0),
+                               "duration-change project finish");
+            expect_pair(result, 1, {sched::from_ymd(2026, 1, 4, 13, 0),
+                                    sched::from_ymd(2026, 1, 7, 12, 0)},
+                        "duration-change");
+            expect_pair(result, 2, {sched::from_ymd(2026, 1, 4, 13, 0),
+                                    sched::from_ymd(2026, 1, 7, 12, 0)},
+                        "duration-change");
+            expect_pair(result, 3, {sched::from_ymd(2026, 1, 5, 13, 0),
+                                    sched::from_ymd(2026, 1, 7, 12, 0)},
+                        "duration-change");
+            /* The slack words are the effective pass's: uid 3 is one day late-able
+             * (LF - EF) and the pair above does not move them. */
+            const plan::PlanTaskResult* third = find_result(result, 3);
+            if (third != nullptr) {
+                context.equal(third->total_slack, 4800,
+                              "duration-change uid 3 total slack is LF - EF");
+            }
+        }
+    }
+
+    /* (3) link-fs-lag.oracle.json: link 1 -> 2 FS+1d.  Project stores uid 1's
+     * late finish 01-09 13:00 (uid 2's KEPT start 01-12 13:00 minus the lag under
+     * the calendar walk; a finish-side alignment would say 12:00) and uid 2's pair
+     * 01-12 13:00 / 01-15 12:00.  The link ADD moves manual uid 2 to its bound
+     * (PlanInput::manual_rows_follow_links), and the applier's second save starts
+     * from that moved state: both runs must store the same pair. */
+    plan::PlanInput settled = input;
+    {
+        plan::PlanInput linked = input;
+        linked.links.push_back(
+            synthetic_link(1, 2, sched::LinkType::finish_to_start, 4800));
+        linked.manual_rows_follow_links = true;
+        const plan::PlanResult moved = plan::recalculate(linked);
+        context.check(moved.ok(), "manual late pair: link add succeeds");
+        if (moved.ok()) {
+            const plan::PlanTaskResult* second = find_result(moved, 2);
+            context.check(second != nullptr, "link-fs-lag uid 2 is in the link-add result");
+            if (second != nullptr) {
+                context.equal_date(second->display_start,
+                                   sched::from_ymd(2026, 1, 12, 13, 0),
+                                   "link add moves manual uid 2 to its bound");
+            }
+            expect_pair(moved, 1, {sched::from_ymd(2026, 1, 4, 13, 0),
+                                   sched::from_ymd(2026, 1, 9, 13, 0)},
+                        "link-fs-lag (link-add pass)");
+            expect_pair(moved, 2, {sched::from_ymd(2026, 1, 12, 13, 0),
+                                   sched::from_ymd(2026, 1, 15, 12, 0)},
+                        "link-fs-lag (link-add pass)");
+            expect_pair(moved, 3, {sched::from_ymd(2026, 1, 13, 13, 0),
+                                   sched::from_ymd(2026, 1, 15, 12, 0)},
+                        "link-fs-lag (link-add pass)");
+        }
+        /* The save that follows pins uid 2 at the moved stored start. */
+        settled = linked;
+        settled.manual_rows_follow_links = false;
+        for (plan::PlanTask& task : settled.tasks) {
+            if (task.uid == 2) {
+                task.stored_start = sched::from_ymd(2026, 1, 12, 13, 0);
+            }
+        }
+        const plan::PlanResult saved = plan::recalculate(settled);
+        context.check(saved.ok(), "manual late pair: the settle pass succeeds");
+        if (saved.ok()) {
+            expect_pair(saved, 1, {sched::from_ymd(2026, 1, 4, 13, 0),
+                                   sched::from_ymd(2026, 1, 9, 13, 0)},
+                        "link-fs-lag (settle pass)");
+            expect_pair(saved, 2, {sched::from_ymd(2026, 1, 12, 13, 0),
+                                   sched::from_ymd(2026, 1, 15, 12, 0)},
+                        "link-fs-lag (settle pass)");
+        }
+    }
+
+    /* (4) delete-task-with-successor.oracle.json: links 1->2 and 2->3 (FS+0)
+     * first move uid 3 to 01-14 13:00, then deleting uid 2 leaves project finish
+     * 01-16 12:00; uid 1 (5 d) stores 01-09 13:00 / 01-16 12:00 and uid 3 (2 d)
+     * 01-14 13:00 / 01-16 12:00. */
+    {
+        plan::PlanInput chained = input;
+        chained.links.push_back(synthetic_link(1, 2, sched::LinkType::finish_to_start, 0));
+        chained.links.push_back(synthetic_link(2, 3, sched::LinkType::finish_to_start, 0));
+        chained.manual_rows_follow_links = true;
+        const plan::PlanResult moved = plan::recalculate(chained);
+        context.check(moved.ok(), "manual late pair: the 2->3 link add succeeds");
+        plan::PlanInput pinned = chained;
+        pinned.manual_rows_follow_links = false;
+        for (plan::PlanTask& task : pinned.tasks) {
+            if (task.uid == 2) {
+                task.stored_start = sched::from_ymd(2026, 1, 9, 13, 0);
+            }
+            if (task.uid == 3) {
+                task.stored_start = sched::from_ymd(2026, 1, 14, 13, 0);
+            }
+        }
+        if (moved.ok()) {
+            const plan::PlanTaskResult* third = find_result(moved, 3);
+            context.check(third != nullptr, "delete uid 3 is in the link-add result");
+            if (third != nullptr) {
+                context.equal_date(third->display_start,
+                                   sched::from_ymd(2026, 1, 14, 13, 0),
+                                   "the 2->3 link add moves manual uid 3 to 01-14 13:00");
+            }
+        }
+        const plan::PlanResult staged = plan::recalculate(pinned);
+        context.check(staged.ok(), "manual late pair: the post-link state settles");
+        if (staged.ok()) {
+            context.equal_date(staged.project_finish,
+                               sched::from_ymd(2026, 1, 16, 12, 0),
+                               "delete: the staged project finish is 01-16 12:00");
+        }
+        plan::PlanInput deleted = pinned;
+        deleted.tasks.erase(
+            std::remove_if(deleted.tasks.begin(), deleted.tasks.end(),
+                           [](const plan::PlanTask& task) { return task.uid == 2; }),
+            deleted.tasks.end());
+        deleted.links.erase(
+            std::remove_if(deleted.links.begin(), deleted.links.end(),
+                           [](const plan::PlanLink& link) {
+                               return link.predecessor == 2 || link.successor == 2;
+                           }),
+            deleted.links.end());
+        const plan::PlanResult result = plan::recalculate(deleted);
+        context.check(result.ok(), "manual late pair: delete recalculates (" + describe(result) + ")");
+        if (result.ok()) {
+            context.equal_date(result.project_finish,
+                               sched::from_ymd(2026, 1, 16, 12, 0),
+                               "delete: project finish is uid 3's kept finish");
+            expect_pair(result, 1, {sched::from_ymd(2026, 1, 9, 13, 0),
+                                    sched::from_ymd(2026, 1, 16, 12, 0)},
+                        "delete");
+            expect_pair(result, 3, {sched::from_ymd(2026, 1, 14, 13, 0),
+                                    sched::from_ymd(2026, 1, 16, 12, 0)},
+                        "delete");
+        }
+    }
+
+    /* (5) The AUTO path is unchanged: clearing the manual bit on the same mapping
+     * must report the CPM pair (project finish 01-09 17:00, uid 2's latest start
+     * 01-07 08:00), NOT the manual rule's values. */
+    {
+        plan::PlanInput auto_input = input;
+        for (plan::PlanTask& task : auto_input.tasks) {
+            task.manually_scheduled = false;
+            task.stored_start = sched::kDateNa;
+            task.stored_finish = sched::kDateNa;
+            task.start_anchor = sched::kDateNa;
+        }
+        const plan::PlanResult result = plan::recalculate(auto_input);
+        context.check(result.ok(), "manual late pair: the auto control succeeds");
+        if (result.ok()) {
+            context.equal(result.manual_late_unmodelled, std::size_t{0},
+                          "the auto control models no manual late pair");
+            expect_pair(result, 2, {sched::from_ymd(2026, 1, 7, 8, 0),
+                                    sched::from_ymd(2026, 1, 9, 17, 0)},
+                        "auto control");
+        }
+    }
+}
+
 /* ---- 1d. Free vs total slack on a known chain (auto-scheduled) ----------- */
 void test_free_vs_total_slack(TestContext& context) {
     /* Two independent chains.  Chain 1 is 2 d + 1 d, chain 2 is one 4 d task, so
@@ -1575,6 +1802,7 @@ int main() {
         test_base(context);
         test_manual_scheduling(context);
         test_manual_oracle(context);
+        test_manual_late_pair(context);
         test_free_vs_total_slack(context);
         test_project_a(context);
         test_schedin(context);

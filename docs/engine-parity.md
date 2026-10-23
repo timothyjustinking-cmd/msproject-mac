@@ -625,3 +625,21 @@ four failing scenarios become the regression), or stop comparing the late pair
 for manual rows with that reason written here.  Do not fit a formula to one
 scenario: the four cases disagree in both directions (ours later by 2 days in
 duration-change, earlier by 7 days in delete).
+
+### Update (E5, same day): the late pair is modelled — 7 pass / 1 fail
+
+E5 measured Project's stored late pair for manual rows and implemented it, so the
+four wave-20 failures above now pass:
+
+* `late finish = min(project finish, over outgoing FS links: successor KEPT start
+  - lag, over FF: successor kept finish - lag)`
+* `late start = max(kept start, plain Calendar::sub_work(late finish, duration))`
+* successor bounds read the successor's EARLY/KEPT date, not its late date;
+  FS subtraction is the plain walk (not `align_back`); SS/SF do not bound the
+  late finish; elapsed lags fall back to the CPM pair and are counted.
+
+Evidence: the eight schema-2 oracles, `w12-linkadd.mpp` (Project's own save after
+two COM link adds), `manual-start-edited.mpp`, and PROJECT_B's manual rows
+10762/10775/10805.  The four failing cases needed moves in BOTH directions, so
+this is a rule, not a fit.  Suite: **7 pass, 1 fail** (`constraint-mso`, the
+duration word only).  `ctest -E plan_recalc` 50/50; M2 332/332.

@@ -500,7 +500,10 @@ void attach_task_calendars(PlanInput& input, core::cal::CalendarTable const& tab
         "task calendars: " + std::to_string(named_rows) +
         " task rows name a +178 calendar uid; " + std::to_string(built) +
         " distinct calendars built; " + std::to_string(missing) +
-        " uids are absent from 114/TBkndCal and " + std::to_string(failed) +
+        " uids are absent from " +
+        (table.table_root.empty() ? std::string("TBkndCal")
+                                  : table.table_root + "/TBkndCal") +
+        " and " + std::to_string(failed) +
         " failed to build (those rows use the project calendar)");
 }
 
@@ -579,6 +582,10 @@ PlanResult recalculate(const PlanInput& input) {
     std::size_t manual_rows = 0;
     std::size_t manual_pinned = 0;
     std::size_t manual_pin_failures = 0;
+    // Which input rows the effective pass pinned (indexed like input.tasks).  The
+    // stored late pair's manual rule (MANUAL LATE PAIR, plan.h) applies only to a
+    // pinned row: an unpinned manual row is scheduled like an auto row.
+    std::vector<char> pinned_row(count, 0);
     for (std::size_t index = 0; index < count; ++index) {
         if (is_summary[index] != 0) {
             continue;
@@ -656,6 +663,7 @@ PlanResult recalculate(const PlanInput& input) {
                 ++manual_pin_failures;
             } else {
                 ++manual_pinned;
+                pinned_row[index] = 1;
             }
         }
         cpm_tasks.push_back(mapped);
@@ -851,12 +859,14 @@ PlanResult recalculate(const PlanInput& input) {
             out.start = calculated_row.start;
             out.finish = calculated_row.finish;
             // Late dates belong to the EFFECTIVE schedule (Project's +112/+116):
-            // they pair with display_* and with the slack below.  An auto row's
-            // late pair is the CPM pair; a manual row's is the kept pair, which is
-            // what Project stores (every measured manual row has +112/+116 equal
-            // to its kept dates when slack is 0).
+            // they pair with display_* and with the slack below.  For an AUTO row
+            // this is the CPM late pair (unchanged since wave 3).  For a MANUAL
+            // row Project stores a different pair; the measured rule is applied
+            // after this loop (search "MANUAL LATE PAIR"), where every row's kept
+            // dates are known.
             out.late_start = effective.late_start;
             out.late_finish = effective.late_finish;
+            out.manually_pinned = pinned_row[index] != 0;
             // +174: every measured manual row stores its KEPT start there.  An
             // auto row's anchor is the bound its Start was aligned from, which the
             // engine does not report; leave it unset so a writer inherits.
@@ -893,6 +903,83 @@ PlanResult recalculate(const PlanInput& input) {
             result.project_finish = out.display_finish;
         }
         result.tasks.push_back(out);
+    }
+
+    // ---- MANUAL LATE PAIR: Project's stored +112/+116 -----------------------
+    // plan.h "MANUAL LATE PAIR" carries the evidence and the rule.  A manual row
+    // is stored as "the row placed at its latest": the late finish is the project
+    // finish capped by each successor's KEPT date (minus the link lag), and the
+    // late start is that finish walked back by the row's Duration, never before
+    // the start the row keeps.  It is deliberately NOT the CPM late pair (the
+    // engine's manual rule forces late start = early start for the slack words)
+    // and NOT `manual_finish_of()` inverted (that has no solution for a late
+    // finish whose clock is not the finish family's).  Auto rows are untouched;
+    // the slack words above are untouched too, so M2 cannot move.
+    for (std::size_t index = 0; index < count; ++index) {
+        PlanTaskResult& out = result.tasks[index];
+        if (!out.manually_pinned) {
+            continue;
+        }
+        const PlanTask& task = input.tasks[index];
+        const core::sched::Calendar* calendar = &input.calendar;
+        if (task.calendar_uid > 0) {
+            const auto found = calendar_by_uid.find(task.calendar_uid);
+            if (found != calendar_by_uid.end()) {
+                calendar = found->second;
+            }
+        }
+        // The project finish is the bound a manual row without successors stores
+        // (recalculate / duration-change / delete / constraint-* oracles).
+        date32 finish = result.project_finish;
+        bool modelled = !is_na(finish);
+        for (const PlanLink& link : input.links) {
+            if (link.predecessor != task.uid) {
+                continue;
+            }
+            const auto successor = index_of.find(link.successor);
+            if (successor == index_of.end() || is_summary[successor->second] != 0) {
+                continue;  // not in the graph (mirrors the link mapping above)
+            }
+            // FS bounds the row's finish from the successor's kept START, FF from
+            // its kept FINISH.  SS/SF bound the successor's own placement and are
+            // not measured to bound this row's late finish (w12-linkadd uid 1).
+            date32 anchor = kDateNa;
+            if (link.type == LinkType::finish_to_start) {
+                anchor = result.tasks[successor->second].display_start;
+            } else if (link.type == LinkType::finish_to_finish) {
+                anchor = result.tasks[successor->second].display_finish;
+            } else {
+                continue;
+            }
+            // An elapsed lag is wall-clock in the engine; the manual rule is only
+            // measured on working-time lags, so such a row falls back whole.
+            if (link.elapsed_lag || is_na(anchor)) {
+                modelled = false;
+                continue;
+            }
+            const date32 bound =
+                link.lag >= 0 ? calendar->sub_work(anchor, link.lag)
+                              : calendar->add_work(anchor, -link.lag);
+            if (is_na(bound) || core::sched::is_overflow(bound)) {
+                modelled = false;
+                continue;
+            }
+            if (is_na(finish) || bound < finish) {
+                finish = bound;
+            }
+        }
+        const date32 start =
+            modelled ? calendar->sub_work(finish, out.duration) : kDateNa;
+        if (is_na(start) || core::sched::is_overflow(start)) {
+            ++result.manual_late_unmodelled;  // keeps the CPM pair
+            continue;
+        }
+        // The clamp: a manual row's latest start never precedes the start it
+        // keeps (link-fs-lag uid 1 / w12-linkadd uid 1-2 store their kept start).
+        out.late_start =
+            (!is_na(out.display_start) && start < out.display_start) ? out.display_start
+                                                                     : start;
+        out.late_finish = finish;
     }
     // The project row's duration (+84): the working time between the project
     // start and finish on the project calendar.  MEASURED on the seven oracles --

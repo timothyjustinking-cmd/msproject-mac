@@ -1755,13 +1755,7 @@ class Applier {
             mppwrite::PlannedRow row;
             row.uid = task.uid;
             row.values = mppwrite::read_task_values(doc_, task.row);
-            /* The stored values, before this row is overwritten: the late pair is
-             * a DERIVED field (+112/+116) that the dump does not compare and
-             * Project recomputes on open.  Writing a plan late date that moves
-             * alone is the single-copy split the writer refuses (measured wave
-             * 19 on a Project-written auto row whose stored late pair predates
-             * the fixture's conversion), so the pair is written only when the
-             * row's own dates move with it. */
+            /* The stored values, before this row is overwritten. */
             mppwrite::TaskValues const stored = row.values;
             bool const dates_move =
                 start != stored.start || finish != stored.finish ||
@@ -1776,19 +1770,25 @@ class Applier {
                 planned.start_anchor == core::sched::kDateNa
                     ? mppwrite::kInherit                /* an auto row: keep stored */
                     : packed(planned.start_anchor);     /* +174 a manual row's start */
-            if (planned.manually_scheduled || !dates_move) {
-                /* A manual row's +112/+116 is the INVERSE of its boundary
-                 * arithmetic -- Project's stored Late* pair is the start whose
-                 * manual finish lands on the project finish, which is why its
-                 * StartSlack equals its TotalSlack.  The planner does not
-                 * compute that inverse, and the dump does not compare the late
-                 * pair, so keep the stored pair: Project recomputes it on open,
-                 * and leaving it alone keeps the writer's copy families
-                 * consistent (the kept dates that DO move also move +108 and
-                 * Fixed2Data +54, so no single-copy write is attempted).  An
-                 * auto row whose dates do not move gets the same treatment, for
-                 * the same reason. */
-            } else {
+            /* The stored late pair (+112/+116).
+             * A MANUAL row: Project stores the row PLACED AT ITS LATEST, not the
+             * CPM late pair and not a copy of the kept dates (recalculate uid 2
+             * keeps a 01-04 13:00 start and stores 01-06 13:00 here).  The
+             * planner computes that pair by the measured rule (plan.h "MANUAL
+             * LATE PAIR"), so it is written like any other planned field; the
+             * row's manual_dates flag lets the writer hold the split.  Wave 20
+             * fixed the four scenarios that compared this field: the applier used
+             * to keep the stored pair on every manual row and wrote the CPM pair
+             * whenever a row's dates moved, which was right in neither frame.
+             * An unpinned manual row (no stored start, elapsed duration, actuals)
+             * has no measured rule: keep the stored pair, as before.
+             * An AUTO row: write the CPM pair only when its dates move with it.
+             * Project recomputes +112/+116 on open, and a late date that moves
+             * alone is the single-copy split the writer refuses (measured wave 19
+             * on a Project-written auto row whose stored late pair predates the
+             * fixture's conversion). */
+            if (planned.manually_pinned ||
+                (!planned.manually_scheduled && dates_move)) {
                 row.values.late_start = late_start;
                 row.values.late_finish = late_finish;
             }
@@ -1902,6 +1902,21 @@ mpp::Task const* find_task(mpp::Document const& document, std::uint32_t uid) {
     return nullptr;
 }
 
+void check_late_pair(TestContext& context, mpp::Document const& document,
+                     std::uint32_t uid, char const* late_start,
+                     char const* late_finish, std::string const& label) {
+    mpp::Task const* task = find_task(document, uid);
+    const std::string which = label + " uid " + std::to_string(uid);
+    context.check(task != nullptr, which + " exists");
+    if (task == nullptr) {
+        return;
+    }
+    context.equal(mpp::format_date(task->late_start), std::string(late_start),
+                  which + " stored late start (+112)");
+    context.equal(mpp::format_date(task->late_finish), std::string(late_finish),
+                  which + " stored late finish (+116)");
+}
+
 void dump_check(TestContext& context, std::string const& mpp_path,
                 std::string const& label) {
     const std::string json_path = mpp_path + ".json";
@@ -1917,22 +1932,16 @@ void dump_check(TestContext& context, std::string const& mpp_path,
                       label + ": the dump carries the " + family + " family");
     }
     /* Schema 2 adds the stored late pair on every task and the resource calendar
-     * uid.  Every built-in case starts from synthetic-base, whose uid 1 is a
-     * manual row that keeps its late pair (2026-01-04 13:00 / 2026-01-09 12:00,
-     * the stored +112/+116 words) and whose one resource's calendar is the
-     * TBkndCal row (resource 1 -> uid 3). */
+     * uid.  The pair is a stored field, not a copy of start/finish: on
+     * synthetic-base, uid 2 stores 2026-01-06 13:00 at +112 while its start is
+     * 2026-01-04 13:00 (the base block below pins the measured values; each
+     * built-in case pins the pair it must store). */
     for (char const* key : {"late_start", "late_finish"}) {
-        context.check(text.find(std::string("\"") + key + "\"") !=
-                          std::string::npos,
-                      label + ": the dump carries " + key +
-                          " (the stored +112/+116 late pair)");
+        context.check(
+            text.find(std::string("\"") + key + "\": \"20") != std::string::npos,
+            label + ": the dump carries a non-empty " + key +
+                " (the stored +112/+116 late pair)");
     }
-    context.check(text.find("\"late_start\": \"2026-01-04 13:00:00+00:00\"") !=
-                      std::string::npos,
-                  label + ": uid 1's late start is the stored +112 word");
-    context.check(text.find("\"late_finish\": \"2026-01-09 12:00:00+00:00\"") !=
-                      std::string::npos,
-                  label + ": uid 1's late finish is the stored +116 word");
     context.check(text.find("\"calendar_uid\": 3") != std::string::npos,
                   label + ": the resource calendar uid is derived from the "
                           "calendar table (resource 1 -> calendar 3)");
@@ -2067,6 +2076,15 @@ int run_self_test() {
                     context.equal(task->duration_ticks, std::uint32_t{24000},
                                   "recalculate: uid 1 duration is 5 days");
                 }
+                /* THE MEASURED MANUAL LATE PAIR (plan.h "MANUAL LATE PAIR"):
+                 * the row placed at its latest.  uid 2's +112 is 01-06 13:00, not
+                 * its kept 01-04 13:00 and not a CPM date. */
+                check_late_pair(context, document, 1, "2026-01-04 13:00",
+                                "2026-01-09 12:00", name);
+                check_late_pair(context, document, 2, "2026-01-06 13:00",
+                                "2026-01-09 12:00", name);
+                check_late_pair(context, document, 3, "2026-01-07 13:00",
+                                "2026-01-09 12:00", name);
             } else if (name == "duration") {
                 mpp::Task const* task = find_task(document, 1);
                 context.check(task != nullptr, "duration: uid 1 exists");
@@ -2078,6 +2096,17 @@ int run_self_test() {
                                   "duration: uid 1 finish follows the new "
                                   "duration");
                 }
+                /* The duration-change oracle's stored late pair: the project
+                 * finish moved to 01-07 12:00 and uid 3's latest start is
+                 * 01-05 13:00 (the row placed at that finish).  The old applier
+                 * kept the fixture's 01-09 12:00 here, which is the wave-20
+                 * duration-change failure in one direction. */
+                check_late_pair(context, document, 1, "2026-01-04 13:00",
+                                "2026-01-07 12:00", name);
+                check_late_pair(context, document, 2, "2026-01-04 13:00",
+                                "2026-01-07 12:00", name);
+                check_late_pair(context, document, 3, "2026-01-05 13:00",
+                                "2026-01-07 12:00", name);
             } else if (name == "link") {
                 context.equal(document.links.size(), std::size_t{1},
                               "link: one live link");
@@ -2100,6 +2129,16 @@ int run_self_test() {
                                   "link: the successor starts after the "
                                   "predecessor finishes");
                 }
+                /* FS+1d: uid 1's stored late finish is 01-09 13:00 -- uid 2's
+                 * KEPT start 01-12 13:00 minus the lag under the calendar walk.
+                 * Aligning that bound back to a finish instant would give 12:00,
+                 * which is the wave-20 link-fs-lag failure in the other
+                 * direction.  uid 2's own latest pair is 01-12 13:00 ->
+                 * 01-15 12:00. */
+                check_late_pair(context, document, 1, "2026-01-04 13:00",
+                                "2026-01-09 13:00", name);
+                check_late_pair(context, document, 2, "2026-01-12 13:00",
+                                "2026-01-15 12:00", name);
             } else if (name == "constraint-snet") {
                 mpp::Task const* task = find_task(document, 2);
                 context.check(task != nullptr, "constraint: uid 2 exists");
@@ -2114,6 +2153,10 @@ int run_self_test() {
                                   "constraint: a manual row stores the SNET date but "
                                   "keeps its own dates (Project does not reschedule it)");
                 }
+                /* A manual row's own constraint does not move its stored late pair
+                 * either: uid 2's +112/+116 are the same as in recalculate. */
+                check_late_pair(context, document, 2, "2026-01-06 13:00",
+                                "2026-01-09 12:00", name);
             } else if (name == "assignment") {
                 // The applier now tombstones the live null-resource placeholder
                 // exactly as Project's Assignments.Add does (E2, wave 18), so the
@@ -2136,6 +2179,8 @@ int run_self_test() {
                     context.equal(added->work_ticks(), std::uint32_t{12000},
                                   "assignment: work is half the task duration");
                 }
+                check_late_pair(context, document, 1, "2026-01-04 13:00",
+                                "2026-01-09 12:00", name);
             } else if (name == "calendar") {
                 mpp::Task const* task = find_task(document, 1);
                 context.check(task != nullptr, "calendar: uid 1 exists");
@@ -2143,6 +2188,8 @@ int run_self_test() {
                     context.equal(task->calendar_uid, std::int32_t{2},
                                   "calendar: uid 1 names calendar 2");
                 }
+                check_late_pair(context, document, 1, "2026-01-04 13:00",
+                                "2026-01-09 12:00", name);
             } else if (name == "delete") {
                 context.equal(document.tasks.size(), std::size_t{2},
                               "delete: two live tasks remain");
@@ -2158,6 +2205,16 @@ int run_self_test() {
                     context.check(assignment.task_uid != 2,
                                   "delete: no live assignment names uid 2");
                 }
+                /* After the delete the project finish is uid 3's 01-16 12:00, so
+                 * BOTH remaining manual rows are placed at that finish: uid 1
+                 * (5 d) stores 01-09 13:00 / 01-16 12:00 and uid 3 (2 d)
+                 * 01-14 13:00 / 01-16 12:00.  The old applier kept the fixture's
+                 * 01-09 12:00 pair, which is the wave-20 delete failure (ours
+                 * EARLIER by a week). */
+                check_late_pair(context, document, 1, "2026-01-09 13:00",
+                                "2026-01-16 12:00", name);
+                check_late_pair(context, document, 3, "2026-01-14 13:00",
+                                "2026-01-16 12:00", name);
             }
             dump_check(context, out_path, name);
         } catch (std::exception const& failure) {

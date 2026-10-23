@@ -137,9 +137,11 @@
 //
 //   1. the EFFECTIVE pass, in which a manual row is pinned to its stored Start
 //      and the Finish its Duration implies (CpmTask::manual_start/manual_finish).
-//      Its dates are PlanTaskResult::display_start/display_finish, its late dates
-//      and the three slack words come from it, and its rolled-up finish is the
-//      project finish the result reports;
+//      Its dates are PlanTaskResult::display_start/display_finish, its late
+//      finish and the three slack words come from it, and its rolled-up finish is
+//      the project finish the result reports.  A manual row's STORED late pair is
+//      then derived from those dates by the measured rule under MANUAL LATE PAIR
+//      (below), because Project's stored pair is not the CPM one there;
 //   2. the CALCULATED pass, with the pins cleared, whose early dates are the pair
 //      Project stores at +96/+100 and which PlanTaskResult::start/finish report
 //      (see that field's comment: it is the pair the current scenario applier
@@ -166,7 +168,7 @@
 // manual start at any other non-working instant has no oracle row, and the
 // charge rule is the [I] generalisation; `notes` says how many rows used it.
 //
-// WHAT THE BRIDGE CANNOT DO (stated, not hidden).  Two things:
+// WHAT THE BRIDGE CANNOT DO (stated, not hidden).  One thing:
 //   * Project persisted the moved dates of a manual successor at LINK-ADD time:
 //     link-fs-lag's uid 2 and delete-task-with-successor's uid 3 store
 //     2026-01-12 / 2026-01-14 13:00 because Project recalculated when the link
@@ -175,18 +177,60 @@
 //     by the time the planner runs the link is gone and the stored start is still
 //     01-04 13:00.  The plan therefore cannot reproduce those two rows; the fix
 //     belongs to the scenario applier (recalculate and persist the plan after
-//     each structural edit), not to the engine.
-//   * The scenario applier (tests/engine_diff_tests.cpp) maps ONE PlanTaskResult
-//     date pair onto all six stored date words, so a file it writes cannot hold
-//     the calculated pair at +96/+100 AND the kept pair at +104/+108; core/
-//     mppwrite even refuses that as a "single-copy start write".  The bridge
-//     therefore reports the CALCULATED pair as start/finish (saveable, and what
-//     Project stores at +96/+100) and the KEPT pair as display_start/
-//     display_finish (Project's +104/+108), plus start_anchor for +174.  Making
-//     the file correct needs three lines in the applier (start/finish ->
-//     calculated pair, display_* -> project_start/project_finish, start_anchor ->
-//     +174); until then a scenario dump compares the calculated pair against the
-//     oracle's +104/+108 and differs on every manual row.
+//     each structural edit), not to the engine -- and it is now done there.
+//
+// ------------------------------------------------------------ MANUAL LATE PAIR --
+// Wave 20 added the stored +112/+116 pair to the engine dump and four scenarios
+// failed on it (docs/engine-parity.md "Wave 20").  The pair is a real Project
+// computation for a manual row, and it is NOT the CPM late pair, NOT the kept
+// pair, and NOT the inverse of `manual_finish_of()` either.  MEASURED on every
+// Project-written manual row available (base.mpp/synthetic-base; the eight
+// schema-2 oracles -- recalculate, duration-change, link-fs-lag, constraint-snet,
+// constraint-mso, assignment-50pct, delete-task-with-successor;
+// corpus/probe/w12-linkadd.mpp, Project's own save after two COM link adds;
+// corpus/probe/manual-start-edited.mpp, Project's own save after a manual Start
+// edit; PROJECT_B's manual rows 10762/10775/10805):
+//
+//   late finish = min( project finish,
+//                      min over outgoing FS/FF links of
+//                          successor date - link lag )
+//   late start  = max( kept start,
+//                      late finish walked back by the row's Duration )
+//
+// with these details, each measured:
+//   * the successor date is its KEPT/EARLY date (+104/+108), not its late date:
+//     link-fs-lag uid 1 stores late finish 01-09 13:00, which is uid 2's kept
+//     start 01-12 13:00 minus the 1 d lag under the calendar walk (13:00 start ->
+//     the walk begins at 12:00 and lands on Fri 13:00); PROJECT_B uid 10775
+//     stores 08-26 08:00 = its auto successor's EARLY start while that
+//     successor's late start is 09-10 08:00.  For FS the subtraction is the
+//     plain calendar walk -- it is NOT aligned back to a finish instant the way
+//     an auto row's predecessor bound is (that would give 01-09 12:00 here and
+//     is the wave-19 mismatch in the other direction);
+//   * the walk back by the Duration is the same calendar walk, so the pair is
+//     the "row placed at its latest": recalculate uid 2 -> 01-06 13:00 /
+//     01-09 12:00 (3 d), uid 3 -> 01-07 13:00 / 01-09 12:00 (2 d);
+//     duration-change -> 01-04 13:00 / 01-07 12:00 for uid 1/2 and 01-05 13:00
+//     for uid 3; delete -> 01-09 13:00 / 01-16 12:00 (uid 1) and 01-14 13:00 /
+//     01-16 12:00 (uid 3);
+//   * `max(kept start, ...)` is the clamp that reproduces the rows whose walk
+//     would start before the kept start: link-fs-lag uid 1 keeps 01-04 13:00
+//     (the walk gives 01-02 13:00), duration-change uid 1/2 keep 01-04 13:00,
+//     and w12-linkadd uid 1/2 keep their start as their late start;
+//   * a duration of 0 makes late start == late finish (PROJECT_B uid 10805:
+//     10-15 17:00 / 10-15 17:00);
+//   * an SS or SF outgoing link does not bound the row's late finish (it bounds
+//     the successor's placement); w12-linkadd uid 1's SS+1d link to uid 3 leaves
+//     its late finish at the FS bound 01-09 13:00.  FF uses the successor's kept
+//     finish by the same "early successor" principle -- [I], no measured row;
+//   * an elapsed lag has no measured manual row; such a row keeps the CPM pair
+//     and is counted in PlanResult::manual_late_unmodelled.
+//
+// The three slack words do NOT change: they are still the effective pass's
+// (TotalSlack = late finish - early finish on the effective dates, StartSlack =
+// TotalSlack).  The stored late pair differs from the CPM pair by at most the
+// lunch break there, so the two are consistent.
+
 //
 // --------------------------------------------------------------- SUMMARIES --
 // MS Project recomputes every summary bottom-up after the CPM passes
@@ -390,13 +434,18 @@ struct PlanTaskResult {
     // separate field because that is the pair the slack is computed on.
     core::sched::date32 early_start = core::sched::kDateNa;
     core::sched::date32 early_finish = core::sched::kDateNa;
-    // Late dates, in the SAME frame as start/finish (the calculated pass).  For an
-    // auto-scheduled row that is Project's +112/+116 pair.  For a manual row
-    // Project stores the EFFECTIVE late pair instead; the bridge cannot report
-    // that here because the current scenario applier writes one date frame into
-    // every copy and saves twice -- a mixed frame is refused by core/mppwrite as a
-    // single-copy write.  The effective late dates are the ones the slack below
-    // describes.
+    // The stored late pair (+112/+116), in the row's own frame.
+    //   * an AUTO row: the CPM late pair of the effective schedule (unchanged
+    //     since wave 3; M2 reads these);
+    //   * a MANUAL row: Project's stored pair, which is NOT the CPM pair and not a
+    //     copy of the kept dates either.  It is the measured rule documented under
+    //     MANUAL LATE PAIR in the header: late finish = the project finish capped
+    //     by each successor's KEPT start minus the link lag; late start = that
+    //     finish walked back by the Duration on the calendar, never earlier than
+    //     the kept start.  A manual row the effective pass could not pin
+    //     (`manually_pinned` false) keeps the CPM pair.
+    // The slack fields below are computed on the EFFECTIVE schedule exactly as
+    // before: this pair is a stored-field mapping, not a slack input.
     core::sched::date32 late_start = core::sched::kDateNa;
     core::sched::date32 late_finish = core::sched::kDateNa;
     // ---- MANUAL SCHEDULING (see the header section) -------------------------
@@ -404,6 +453,11 @@ struct PlanTaskResult {
     // then the dates Project KEEPS, its slack is computed on them and critical is
     // false.
     bool manually_scheduled = false;
+    // True when the EFFECTIVE pass pinned this row to its stored Start/Finish (a
+    // manual row with a stored start, no actuals and no elapsed duration).  Only
+    // such a row's late pair follows Project's measured manual rule; an unpinned
+    // manual row is scheduled like an auto row and reports the CPM pair.
+    bool manually_pinned = false;
     // +174 start anchor.  For a manual row: its kept start (every measured manual
     // row stores anchor == Start).  kDateNa for a row where the bridge has nothing
     // to say, so a writer inherits the stored value instead of inventing one.
@@ -459,6 +513,12 @@ struct PlanResult {
     // caller learns that instead of discovering it in a date.
     std::size_t manual_pinned = 0;
     std::size_t manual_unpinned = 0;
+    // Manual rows whose stored late pair the bridge could NOT model and therefore
+    // left at the CPM pair: an elapsed lag on an outgoing link, or a calendar
+    // overflow while walking the finish back by the duration.  No measured row
+    // takes this path; the count exists so a caller can tell a fallback from a
+    // modelled pair instead of discovering it in a date.
+    std::size_t manual_late_unmodelled = 0;
 
     bool ok() const noexcept { return error == core::sched::CpmError::none; }
 };
