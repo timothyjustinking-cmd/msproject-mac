@@ -1190,6 +1190,53 @@ void test_project_property_names(TestContext& context) {
                   "the record's u16 and the reader's Manual flag agree");
 }
 
+/* Wave 23 (W23-6): Flag10 (0x0b400051) decodes from Task FixedMeta entry byte
+ * +25 bit 0x04.  wave23-flags.mpp is Project's own save of wave23-outline.mpp
+ * with Task.Flag10 = True on ID 3 only, so the test is the controlled
+ * single-variable measurement, committed. */
+void test_flag10(TestContext& context) {
+    const std::string fixture = (test_data_dir() / "wave23-flags.mpp").string();
+    if (!file_exists(fixture)) {
+        context.check(false, "wave23-flags.mpp is present");
+        return;
+    }
+    const mpp::Document document = mpp::load_file(fixture);
+    const auto task_of = [&document](std::uint32_t uid) -> const mpp::Task* {
+        for (const mpp::Task& task : document.tasks) {
+            if (task.uid == uid) {
+                return &task;
+            }
+        }
+        return nullptr;
+    };
+    const mpp::Task* id3 = task_of(3);
+    context.check(id3 != nullptr && id3->summary_flag_stored,
+                  "the fixture stores Flag10 on ID 3");
+    context.check(id3 != nullptr && id3->summary_flag,
+                  "ID 3's Flag10 is True (Task.Flag10 set through COM)");
+    const mpp::Task* id4 = task_of(4);
+    context.check(id4 != nullptr && id4->summary_flag_stored && !id4->summary_flag,
+                  "ID 4's Flag10 is a stored False");
+    const mpp::Task* id1 = task_of(1);
+    context.check(id1 != nullptr && id1->summary_flag_stored && !id1->summary_flag,
+                  "ID 1's Flag10 is a stored False (only ID 3 changed)");
+
+    // The control fixture (before the edit) has every Flag10 clear, so the
+    // single changed bit really is the one the experiment set.
+    const std::string control = (test_data_dir() / "wave23-outline.mpp").string();
+    if (file_exists(control)) {
+        const mpp::Document before = mpp::load_file(control);
+        std::size_t set_count = 0;
+        for (const mpp::Task& task : before.tasks) {
+            if (task.summary_flag) {
+                ++set_count;
+            }
+        }
+        context.equal(set_count, std::size_t{0},
+                      "the control fixture has no Flag10 set");
+    }
+}
+
 void test_new_task_mode(TestContext& context) {
     const std::string fixture = (test_data_dir() / "synthetic-base.mpp").string();
     if (!file_exists(fixture)) {
@@ -3500,6 +3547,7 @@ int run_tests() {
     test_project_a(context);
     test_project_b(context);
     test_project_property_names(context);
+    test_flag10(context);
     test_new_task_mode(context);
     test_outline_fixture(context);
     test_status_fixture(context);

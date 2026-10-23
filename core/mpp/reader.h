@@ -540,6 +540,16 @@ struct Task {
      * duration fallback was used.  See "Milestone" in the file comment. */
     bool milestone = false;
     bool milestone_stored = false;
+    /* Wave 23 (W23-6): `Task.Flag10` (0x0b400051), Project's SUMMARY column.
+     * STORED: bit 0x04 of the Task FixedMeta entry's byte +25, MEASURED on
+     * 2026-10-23 by setting Task.Flag10 = True through COM on two different
+     * rows (exactly that bit changed).  It is NOT Task::summary: the clean
+     * capture's summary rows 1/2/6 read No while CONSTRUCTION reads Yes, so
+     * this is the file's own field.  `summary_flag_stored` is false when the
+     * row has no FixedMeta entry.  Exposed as a Task field -- not a
+     * CustomFieldValue -- so the engine dump's custom-field set is unchanged. */
+    bool summary_flag = false;
+    bool summary_flag_stored = false;
 
     /* ---- Custom fields (W48).  The values the file stores, decoded with the
      * measured ids/encodings in `field_value.h`: Text (UTF-16LE+NUL in

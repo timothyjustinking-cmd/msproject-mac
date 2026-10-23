@@ -75,6 +75,9 @@ const TaskFields& task_fields() {
     return fields;
 }
 
+// Wave 23 (W23-6): Task.Flag10, Project's SUMMARY column.
+constexpr core::view::FieldId kSummaryFlagFieldId = 0x0B400051u;
+
 core::sheet::SheetColumn make_column(FieldId field, const char* title, int width,
                                      core::view::ColumnAlign align, core::sheet::CellKind kind) {
     core::sheet::SheetColumn column;
@@ -279,6 +282,11 @@ TaskRow project_summary_row(const PlanInput& input) {
     row.summary = true;
     row.milestone = false;
     row.critical = false;
+    // Wave 23 (W23-6): Project's SUMMARY column (Flag10, 0x0b400051) reads Yes
+    // on the project row in the clean capture; the row is synthetic, so state
+    // the flag it would show.
+    row.summary_flag = true;
+    row.summary_flag_stored = true;
     return row;
 }
 
@@ -292,7 +300,8 @@ core::view::RecordSet make_record_set(const PlanInput& input) {
                                field.duration, field.percent_complete,
                                field.summary,  field.milestone,
                                field.critical, field.outline_level,
-                               field.start_text, field.finish_text};
+                               field.start_text, field.finish_text,
+                               kSummaryFlagFieldId};
     for (const FieldId id : columns) {
         if (id != 0) {
             records.add_field(id);
@@ -344,6 +353,9 @@ core::view::RecordSet make_record_set(const PlanInput& input) {
         put(field.milestone, Value::of_bool(row.milestone));
         put(field.critical, Value::of_bool(row.critical));
         put(field.outline_level, Value::of_int(static_cast<std::int64_t>(row.outline_level)));
+        if (row.summary_flag_stored) {
+            put(kSummaryFlagFieldId, Value::of_bool(row.summary_flag));
+        }
         for (const mpp::CustomFieldValue& custom : row.custom_fields) {
             Value value = custom_field_value(custom);
             if (!value.is_null()) {
@@ -423,6 +435,11 @@ PlanInput sync_plan_from_records(const PlanInput& base, const core::view::Record
             value != nullptr && value->kind == core::view::ValueKind::Integer) {
             // -1 is the project-summary row (wave 23); every task level is >= 0.
             row.outline_level = static_cast<int>(std::max<std::int64_t>(value->integer, -1));
+        }
+        if (const Value* value = records.get(record, kSummaryFlagFieldId);
+            value != nullptr && value->kind == core::view::ValueKind::Bool) {
+            row.summary_flag = value->boolean;
+            row.summary_flag_stored = true;
         }
     }
     input.skipped_links = base.skipped_links;

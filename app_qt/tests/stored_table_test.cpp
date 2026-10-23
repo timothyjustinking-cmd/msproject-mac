@@ -32,10 +32,11 @@
 //      on every row of the corpus file's Pre (0x0b40002f), Suc (0x0b400030) and
 //      % Complete (0x0b400020) columns, with exact strings pinned for the rows
 //      the clean MS Project capture shows.
-//   F. The columns that legitimately stay blank: SUMMARY (Task.Flag10,
-//      0x0b400051 -- nothing decodes it) and Resource Names on these files (their
-//      assignment rows store the null resource id).  Both are asserted blank WITH
-//      the byte reason, never filled with an invented value.
+//   F. SUMMARY (Task.Flag10, 0x0b400051) is DECODED as of wave 23 (W23-6) from
+//      the Task FixedMeta bit, so the corpus's SUMMARY column is asserted to
+//      hold Project's Yes/No against the plan's summary flags.  Resource Names
+//      on these files stays blank: their assignment rows store the null
+//      resource id, asserted blank WITH that byte reason.
 //
 // Every write goes under the output directory passed as argv[2]: never
 // tests/data/, never corpus/.
@@ -936,21 +937,52 @@ void case_corpus(const QString& corpus) {
                    "the pinned % Complete text", static_cast<int>(pinned.id));
     }
 
-    // SUMMARY is Task.Flag10 (0x0b400051).  The reader decodes Flag1 only (its Task
-    // FixedMeta bit is measured); the Flag2..20 bit positions are unmeasured
-    // (core/mpp/field_value.h), so the RecordSet has no Flag10 value and the column
-    // is honestly blank.  Assert BOTH halves: the column exists in the file's
-    // table, and no value reaches it.
-    check(!sheet.records().has_field(msqt::kSummaryFlagField),
-          "the RecordSet carries no Flag10 column: no Flag2..20 bit is decoded");
-    int summary_values = 0;
+    // SUMMARY is Task.Flag10 (0x0b400051).  Wave 23 (W23-6) decoded its Task
+    // FixedMeta bit (byte +25 bit 0x04, measured through COM), so the column
+    // now carries Project's Yes/No: Yes on the project row and every summary
+    // task, No elsewhere -- which is what the clean capture shows.
+    check(sheet.records().has_field(msqt::kSummaryFlagField),
+          "the RecordSet carries the decoded Flag10 column");
+    // The clean capture's first thirteen visible rows, typed from the pixels:
+    // only the project summary row (0) and CONSTRUCTION (12) read Yes.  Flag10
+    // is the FILE's own field, NOT Task.Summary -- the capture's summary rows
+    // 1/2/6 read No, which is exactly why the column is a stored flag.
+    const char* captured_summary[13] = {"Yes", "No", "No", "No", "No", "No", "No",
+                                        "No",  "No", "No", "No", "No", "Yes"};
+    int summary_yes = 0;
+    int summary_no = 0;
+    int summary_wrong = 0;
     for (int display = 0; display < model->rowCount(); ++display) {
-        if (!shown_text(model, display, summary_column).isEmpty()) {
-            ++summary_values;
+        const std::size_t record = table_model->record_row(display);
+        if (record == core::sheet::kNoIndex) {
+            continue;
+        }
+        const std::uint32_t uid = sheet.row_uid(record);
+        const QString text = shown_text(model, display, summary_column);
+        bool stored = false;
+        if (uid == 0) {
+            stored = true;  // synthetic project row: the capture's row 0 is Yes
+        } else if (const app::TaskRow* task = task_by_uid(plan, uid)) {
+            stored = task->summary_flag_stored && task->summary_flag;
+        }
+        if ((text == QStringLiteral("Yes")) != stored) {
+            ++summary_wrong;
+            std::fprintf(stderr, "  SUMMARY row uid %u: got %s want %s\n", uid,
+                         text.toUtf8().constData(), stored ? "Yes" : "No");
+        } else if (stored) {
+            ++summary_yes;
+        } else {
+            ++summary_no;
+        }
+        if (display < 13 && text != QString::fromLatin1(captured_summary[display])) {
+            ++summary_wrong;
+            std::fprintf(stderr, "  SUMMARY capture row %d: got %s want %s\n", display,
+                         text.toUtf8().constData(), captured_summary[display]);
         }
     }
-    check(summary_values == 0,
-          "the SUMMARY (Flag10) column is blank on every row: no decoded value");
+    check(summary_wrong == 0,
+          "SUMMARY equals the stored Flag10 and the capture's first thirteen rows");
+    check(summary_yes > 0 && summary_no > 0, "SUMMARY has both values in the file");
 
     // Resource Names: the file's table stores no such column, and none of its 67
     // live assignment rows names a resource -- every row's raw +8 word is the null

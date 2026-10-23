@@ -39,10 +39,19 @@
  *   Duration  VarMeta key 0x0b400067, block = 4 B u32 **file ticks**; 4800 =
  *             one 8-hour day.  COM's Task.Duration1 reports 480 minutes for the
  *             same value, so file ticks = COM minutes * 10.
- *   Flag      NOT in VarMeta: bit 0x02 of byte +24 of the Task FixedMeta entry
- *             (measured by `oracle_w10.py flagdiff`: 0x00 -> 0x02; the
- *             Fixed2Meta entry's +31/+61 bit 0x80 mirrors it in Project's own
- *             write, but that is the writer's business).
+ *   Flag      NOT in VarMeta: a bit in the Task FixedMeta entry.  Flag1 is bit
+ *             0x02 of byte +24 (measured by `oracle_w10.py flagdiff`: 0x00 ->
+ *             0x02; the Fixed2Meta entry's +31/+61 bit 0x80 mirrors it in
+ *             Project's own write, but that is the writer's business).
+ *             Flag10 is bit 0x04 of byte +25 (wave 23, 2026-10-23: setting
+ *             Task.Flag10 = True through COM changed exactly that bit on the
+ *             edited row and nothing else; two different rows reproduced it).
+ *             It is exposed as Task::summary_flag rather than a
+ *             CustomFieldValue, so adding it cannot perturb the engine dump's
+ *             custom-field set (the SUMMARY column reads the Task field).  The
+ *             same experiment measured Flag2 = byte +24 bit 0x04 and Flag20 =
+ *             byte +34 bit 0x04; those stay undecoded because no delivered
+ *             column needs them.
  *   Cost      Cost1..Cost10; the VarMeta key IS the field id and the block is
  *             8 B little-endian f64 of the value in HUNDREDTHS (123.45 stored as
  *             12345.0).  Measured by the wave-14 oracle
@@ -235,12 +244,15 @@ struct CustomFieldValue {
     std::uint32_t duration_minutes() const { return duration_ticks / 10u; }
 };
 
-/* The task custom-field id of the one flag whose bit position is measured:
- * Flag1 = 0x0b400048 at Task FixedMeta entry byte +24 bit 0x02. */
+/* The two flags whose bit positions are measured.
+ *   Flag1  = 0x0b400048 at Task FixedMeta entry byte +24 bit 0x02.
+ *   Flag10 = 0x0b400051 at Task FixedMeta entry byte +25 bit 0x04 (wave 23). */
 constexpr std::uint32_t kTaskFlag1FieldId = 0x0B400048u;
-/* The same measured bit, named for the writer/reader pair. */
+constexpr std::uint32_t kTaskFlag10FieldId = 0x0B400051u;
 constexpr std::size_t kFixedMetaFlag1Byte = 24;
 constexpr std::uint8_t kFixedMetaFlag1Bit = 0x02;
+constexpr std::size_t kFixedMetaFlag10Byte = 25;
+constexpr std::uint8_t kFixedMetaFlag10Bit = 0x04;
 
 } /* namespace mpp */
 
