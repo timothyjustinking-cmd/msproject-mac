@@ -303,3 +303,194 @@ No new Critical or High finding in G2.  Notes for later work, all deliberate:
   `build/`).
 
 WAVE-26-G2-COMPLETE
+
+## G3 - render what the file stores (controlled-save decoding, the flag method)
+
+Every item is DONE; nothing in G3 is deferred.  All three decode from the
+applied Gantt view's `0x22400008` record (a Props document inside the CV_iew
+main block) plus the `214/Props` FONT_BASES payload, and all three render in
+the Qt shell through the shared `app/view_style` seam.  The record layout is
+MPXJ's MPP14 layout (`GanttChartView14`, `GanttBarStyleFactory14`), then
+verified against Project 2021's own controlled saves.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W26-3.1 | text styles: font family/size, bold/italic/underline, colour, highlight fill; the two named expected failures turn green | **DONE** | fixtures `a70a0c7`, code `cd727ad`; gates `build/w26/gates-a70a0c7-W26-3.1.log`; controlled saves `build/w26/g3/trees4/t3-*` |
+| W26-3.2 | bar styles: the file's palette (task/summary/critical/milestone/progress/finished); PROJECT_A's own summary/critical/complete colours | **DONE** | commit `40c1ad2`; gates `build/w26/gates-cd727ad-W26-3.2.log`; controlled saves `build/w26/g3/trees3/b2-*`, `build/w26/g3/trees4/b3-*` |
+| W26-3.3 | timescale: the stored tier units/counts/formats; PROJECT_A's year/quarter/month tiers render | **DONE** | commit `f7962e7`; gates `build/w26/gates-40c1ad2-W26-3.3.log`; controlled saves `build/w26/g3/trees2/ts-*`, `build/w26/g3/trees4/ts3-*` |
+
+### W26-3.1 detail -- text styles
+
+- **Decode.**  `core/viewstate/gantt_style.{h,cpp}` reads 17 records of 32
+  bytes from +26, stride 32: font index +0, style bits +3 (0x01 bold, 0x02
+  italic, 0x04 underline, 0x08 strike), foreground RGB + automatic flag at
+  +4, background at +16, pattern u16 at +28.  The font index resolves through
+  the `214/Props` record `0x03400000`: u16 count, then 68-byte records (u16
+  opaque, u16 point size, 64-byte UTF-16 family).  A record shorter than
+  41,362 bytes is refused; a bad font index marks that one style invalid and
+  warns instead of losing the view.
+- **Controlled saves (one change per save).**  The working calls are in
+  `build/w26/g3/oracle_styles.py` (font family and size, first session) and
+  `build/w26/g3/oracle_probe3.py` (colour, italic, highlight fill), each on a
+  fresh copy of `tests/data/synthetic-base.mpp`: font family
+  (`TextStyles(0, "Arial", ...)`) moves every style's font index; size
+  (`TextStyles(0, "Calibri", 8, ...)`) rewrites the FONT_BASES entry the
+  index names; the critical colour save (`PjColor pjBlue = 5`) writes RGB
+  (0,0,255) in the three colour bytes with flag 0; the italic save sets bit
+  0x02; the highlight fill (`TextStylesEx(7, ..., pjYellow, solid)`) writes
+  the background colour and pattern.  Colour arguments are `PjColor` enums,
+  not RGB longs (an RGB long is rejected with "argument value is not valid").
+  Passing `pythoncom.Missing` for optional arguments wedged Project's modal
+  state (probe 2's Guard killed it); every working call passes all arguments
+  explicitly.  The saves are local-only, under git-ignored `build/w26/g3/`
+  (`trees2/t-all-*`, `trees4/t3-*`, logs `oracle-styles.log`,
+  `oracle-probe3.log`).
+- **Rendering.**  `app/view_style.{h,cpp}` maps a row to the Text Styles item,
+  most specific first: project summary, summary, milestone, critical,
+  noncritical.  The precedence is measured from PROJECT_A's capture: row 3 is
+  both critical and a milestone and renders with the MILESTONE style (italic
+  red), and the file's critical style is upright black.  `app/view_style.cpp`
+  is also the headless read seam (FONT_BASES + CV_iew + the CEdl applied-view
+  name); `PlanDocument` reads it at load and `SheetTableModel` applies family,
+  size, bold/italic/underline/strike, foreground and background.
+- **The two W25-5 expected failures are now ordinary checks and pass**
+  (`qt_stored_table_corpus`: 0 failures, 0 expected failures).  The milestone
+  red is Project's stored RGB (255,0,0).  The old 0xB01C1C was a wave-23
+  sampling error: the decoded record stores (255,0,0) and the clean capture
+  contains 10,858 pure-red pixels and zero 0xB01C1C pixels.
+- **Fixture errata.**  The committed style blob is synthetic-base's FIRST
+  decodable Gantt view, "Gantt &with Timeline", not the applied view 2 as the
+  `a70a0c7` message said.  The extraction selects the first Gantt view; the
+  applied-view selection (CEdl `0x26400018`) is exercised by `app_view_style`
+  on the same file.  The fixture bytes and SHA-256 are unchanged; the comment
+  is corrected in `f7962e7` and `scripts/check_fixtures.py`.
+
+### W26-3.2 detail -- bar styles
+
+- **Decode.**  Count byte at +2243, then 195-byte records from +2255:
+  middle shape/pattern/colour +0/+1/+2, start shape+type +15 and colour +16,
+  end shape+type +28 and colour +29, ShowFor u64s +49/+57, row +65, the five
+  text field ids +67..+86, id +89 and the NUL-terminated UTF-16 name +91.
+  The controlled `GanttBarStyleEdit` saves changed exactly those fields:
+  Summary middle/start/end colours and shapes
+  (`build/w26/g3/trees4/b3-summary-green`) and Milestone start shape/colour
+  (`b3-milestone-blue`).
+- **Palette.**  `app::bar_palette_from` resolves roles by the file's own
+  names and ShowFor bits: normal ("Task" or "Non-Critical Task"), manual
+  normal ("Manual Task"), critical ("Critical Task", else first Normal +
+  Critical style), summary ("Summary"), summary+critical (first Summary +
+  Critical style -- PROJECT_A's unnamed 2+3 record), milestone (its start
+  colour when the middle shape is none), project summary, progress and
+  finished.  A stock project has no critical/summary-critical/finished style
+  and keeps the wave-25 measured fallbacks.  PROJECT_A's 10 active styles are
+  the capture's palette: noncritical (0,32,96), critical (255,0,0), summary
+  (0,0,128), project-summary red, milestone (255,0,0), progress/finished
+  (0,176,80).  Its unused light-red "Critical" (247,138,136) is never painted
+  -- the capture has zero pixels of it.
+- **Rendering.**  `GanttCanvas::bar_colour_for` paints the palette; the
+  completion fill is the file's Progress colour (Finished when complete; a
+  summary's progress is the thin top line) instead of the stock blue.
+  Critical Tasks highlighting ON keeps its wave-25 measured override.
+  `qt_stored_table_corpus` asserts that the rendered bars include
+  (0,32,96)/(255,0,0)/(0,0,128), exclude (247,138,136) and paint the project
+  row red.
+
+### W26-3.3 detail -- timescale
+
+- **Decode.**  Top units +41311, count +41313, format u16 +41315, align
+  +41317, tick lines +41349, fiscal-year bit 0 of +41361; middle
+  +1152/+1156/+1160/+1166 and bottom +1154/+1158/+1162/+1164; tick lines and
+  fiscal bits in the view-flags byte +1086 (0x01/0x08 middle, 0x02/0x10
+  bottom).  The stored unit byte maps through MPXJ's TimescaleUnitsHelper
+  (byte+1 -> none/minutes/hours/days/weeks/thirds of months/months/quarters/
+  half years/years); 255 is none.  PROJECT_A stores years/quarters/months,
+  formats 0/3/10, all counts 1 -- exactly the capture's "2026" /
+  "Qtr 2, 2026" / "Apr".
+- **Controlled saves.**  Four TimescaleEdit variants
+  (`build/w26/g3/trees2/ts-yqm, ts-ymd, ts-2tier, ts-yhq`, log
+  `oracle-probe3`/`oracle-probe` results) changed the middle and bottom units
+  and formats at exactly +1152/+1154/+1160/+1162.  The SIX wave-23 variants
+  in `build/w23/` are byte-identical: their oracle passed the arguments by
+  keyword, which the late-bound COM call rejected (the scripts logged the
+  failure and saved unchanged copies), so they were not used and are recorded
+  here as an errata.
+- **Measurement limits (honest).**  Project 2021's TimescaleEdit did not
+  change the TOP tier in any controlled save: `TopUnits=0, TierCount=3` left
+  the stored top bytes untouched, and explicit TopLabel strings were rejected
+  as invalid arguments.  A `MajorCount=2` save was byte-identical to count=1
+  (`ts3-count2` == `ts-yqm`).  The top-tier fields and the count fields are
+  therefore decoded from PROJECT_A's own saved record (a Project measurement)
+  and rendered; the controlled saves prove the middle/bottom unit and format
+  offsets.
+- **Rendering.**  `GanttCanvas` builds one tier per stored unit and divides
+  the fixed 42-px header between them: a stock file keeps its measured 2 x
+  21 px week/day header, PROJECT_A gets 3 x 14 px, so the sheet and chart rows
+  stay aligned.  Labels implement the measured formats (YYYY; "Qtr n, YYYY";
+  short/full month names; the measured "12 Oct '26" week label; single-letter
+  days), honour the stored alignment and use each tier's own text style.  The
+  live render of PROJECT_A shows 2025/2026, "Qtr 4, 2025"/"Qtr 1, 2026" and
+  Dec/Jan at the port's scroll position; the capture shows the same formats
+  at its own scroll position.
+
+### Live same-file comparison (PROJECT_A, local)
+
+| row | Project 2021 (clean capture) | the port | verdict |
+|---|---|---|---|
+| text style | row 3 milestone italic red; summary bold blue 0x3366FF | decoded milestone slot italic + RGB(255,0,0), summary bold + RGB(51,102,255); rendered in the Qt sheet | **match** (format/colour); 0xB01C1C was never Project's colour |
+| bar palette | navy summaries, red critical bars, dark-blue noncritical, green progress; 0 light-red pixels | decoded 10-style palette paints (0,0,128), (255,0,0), (0,32,96), (0,176,80); the port render contains the same roles and no (247,138,136) | **match** |
+| timescale | year "2026" / quarter "Qtr 2, 2026" / month "Apr" | stored years/quarters/months formats 0/3/10 render as "2025 / Qtr 4, 2025 / Dec" at the port's scroll origin | **match** in tiers and label format; the visible date range/zoom still differs (the port keeps its own scroll origin) |
+
+### Gates per commit (each log is on that commit's parent tree)
+
+| item | log | core | plan_recalc | reader | M2 | app | app_qt | fixtures | parity |
+|---|---|---|---|---|---|---|---|---|---|
+| W26-3.1 | `gates-a70a0c7-W26-3.1.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 16/16 | 19/19 | OK | 10/0, 1/0 |
+| W26-3.2 | `gates-cd727ad-W26-3.2.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 16/16 | 19/19 | OK | 10/0, 1/0 |
+| W26-3.3 | `gates-40c1ad2-W26-3.3.log` | 51/51 | 512 / 266 | 1100 / 420 | 332/332 | 16/16 | 19/19 | OK | 10/0, 1/0 |
+
+Every log also carries `check_fixtures.py` (25 documented hashes, 21 tracked
+`.mpp`), the oracle-provenance check (8), the client-name scan (0 hits on HEAD
+and on the working-tree content) and the 8-hex grep (no matches).  `app` is
+16/16 from W26-3.1 on: the new `app_view_style` is the sixteenth test (29
+checks at 3.1, 47 at 3.2, 54 at 3.3).  The core `viewstate` test grew from 791
+to 844 checks.
+
+## Found, not fixed
+
+No new Critical or High finding in G3.  Notes for later work, all deliberate:
+
+- **PROJECT_A's yellow row.**  The capture's row "client-text-032" has a yellow cell fill.  The file's Highlighted text-style
+  record carries no background (its colour flag is 0xFF = automatic), so the
+  fill is a per-row cell format that neither the style record nor the reader
+  decodes.  The decoder and renderer DO support a stored highlight fill
+  (synthetic-base's pale yellow (255,255,102) is in the committed fixture and
+  asserted), but PROJECT_A's yellow row is not reproduced.  Its text still
+  renders with the milestone style, as the capture shows.
+- **TextStyles' COM Item numbering.**  The controlled saves prove the record
+  layout, but Project's `TextStyles(Item=3)` wrote the style record at +506
+  (MPXJ's "external" slot) rather than MPXJ's milestone slot at +186;
+  `Item=7` wrote +90.  The mapping between the COM `PjTextItem` value and the
+  file slot is therefore not established.  The decoder and renderer use the
+  SLOT order, which the capture pins (the only italic-red slot is +186's, and
+  it is the style Project draws on the milestone row); a later session should
+  not "correct" the slots from the COM numbers.
+- **Timescale top tier and counts.**  The controlled saves could not move the
+  top tier or a count > 1 (see W26-3.3 detail); both fields are decoded from
+  PROJECT_A's own record and rendered, but a COM-driven >1-count fixture does
+  not exist.
+- **GanttBarStyleEdit on "Task".**  Two saves naming the "Task" style (by
+  index and by name) left the record byte-identical, while "Summary" and
+  "Milestone" applied.  The bar record layout is proven on those two styles;
+  the Task slot is the same stride and its decoded (138,187,237) is the
+  colour the wave25-auto parity gate matches.
+- **The port's timescale origin/zoom** still differs from the capture's
+  scroll position.  G3's acceptance is the stored tiers' units, counts and
+  formats, which match; the visible date range remains the zoom stream's
+  work.
+- The controlled-save probe scripts are local under `build/w26/g3/`
+  (git-ignored) and cited by path; the committed fixtures reproduce from
+  `tests/data/synthetic-base.mpp`, and the offsets are re-checkable from
+  those saves.  Committing a generator script was not required for a DONE
+  item and was not done.
+
+WAVE-26-G3-COMPLETE
