@@ -52,7 +52,7 @@ void PlanDocument::reset() {
     filter_rows_.clear();
     filter_description_.clear();
     filter_active_ = false;
-    table_widths_.clear();
+    table_ = msproject::viewstate::TableDef{};
     path_.clear();
     title_.clear();
     warnings_ = 0;
@@ -72,11 +72,16 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         // No pending structural edits yet: the display plan starts as the file.
         base_ = loaded_;
 
+        // Wave 21 (operator decision 7): the file's own table decides the sheet's
+        // columns/order/titles/widths.  Reading it BEFORE the sheet is built is
+        // what makes the presentation the file's rather than the Entry default.
+        // A decode failure only means the sheet keeps app::default_sheet_columns().
+        read_table(source_path);
+
         // The RecordSet is a stable member: SheetModel holds a reference to it,
         // so assignment (not replacement) is what keeps that reference valid.
         records_ = app::make_record_set(base_);
-        sheet_ = std::make_unique<core::sheet::SheetModel>(records_,
-                                                           app::default_sheet_columns());
+        sheet_ = std::make_unique<core::sheet::SheetModel>(records_, stored_columns());
         // The date format is the SheetFormat default this wave; the preference
         // panel that changes it is a later stream (app/prefs.h's
         // apply_preferences()).
@@ -91,10 +96,6 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         if (sheet_->visible_row_count() != 0) {
             sheet_->select_cell(sheet_->visible_row(0), name_column_of(*sheet_));
         }
-
-        // Read the persisted column widths (read-only; a decode failure only
-        // means the status line has no stored widths to report).
-        read_table_column_widths(source_path);
 
         build_gantt(zoom);
         return true;
@@ -202,8 +203,7 @@ void PlanDocument::rebuild_from_base(app::ZoomLevel zoom, std::uint32_t keep_uid
     }
 
     records_ = app::make_record_set(base_);
-    sheet_ = std::make_unique<core::sheet::SheetModel>(records_,
-                                                       app::default_sheet_columns());
+    sheet_ = std::make_unique<core::sheet::SheetModel>(records_, stored_columns());
     sheet_->set_format(format_);
     app::apply_edit_policy(*sheet_);
     refresh_filter_rows();
@@ -268,8 +268,8 @@ std::vector<std::size_t> PlanDocument::display_rows() const {
     return rows;
 }
 
-void PlanDocument::read_table_column_widths(const std::string& source_path) {
-    table_widths_.clear();
+void PlanDocument::read_table(const std::string& source_path) {
+    table_ = msproject::viewstate::TableDef{};
     try {
         const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(source_path);
         std::array<std::vector<std::uint8_t>, 4> raw;
@@ -292,23 +292,29 @@ void PlanDocument::read_table_column_widths(const std::string& source_path) {
         if (state.tables.empty()) {
             return;
         }
-        for (const msproject::viewstate::ColumnDef& column : state.tables.front().columns) {
-            if (column.field_id == 0) {
-                continue;
-            }
-            table_widths_.emplace_back(column.field_id,
-                                       static_cast<int>(column.opaque_header[0]));
-        }
+        // The file's FIRST table is the one the Gantt view applies (the measured
+        // fixture and both corpus files put the task Entry table first).  Keeping
+        // the whole TableDef -- caption, date format and every ColumnDef in file
+        // order -- is what the sheet, the status line and a later CTable write
+        // need; only the column set is used today.
+        table_ = state.tables.front();
     } catch (...) {
         // A view-state decode is presentation metadata: never fail the load.
-        table_widths_.clear();
+        table_ = msproject::viewstate::TableDef{};
     }
 }
 
+std::vector<core::sheet::SheetColumn> PlanDocument::stored_columns() const {
+    return app::table_sheet_columns(table_);
+}
+
 int PlanDocument::table_column_chars(std::uint32_t table_field) const {
-    for (const std::pair<std::uint32_t, int>& entry : table_widths_) {
-        if (entry.first == table_field) {
-            return entry.second;
+    if (table_field == 0) {
+        return 0;
+    }
+    for (const msproject::viewstate::ColumnDef& column : table_.columns) {
+        if (column.field_id == table_field) {
+            return static_cast<int>(column.opaque_header[0]);
         }
     }
     return 0;

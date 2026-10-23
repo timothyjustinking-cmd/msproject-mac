@@ -57,6 +57,9 @@ class SheetModel;
 
 namespace msqt {
 
+// Wave 21: the six-tab Task Information dialog's General payload (dialogs.h).
+struct TaskInformationValues;
+
 class GanttCanvas;
 class Backstage;
 class PreferencesStore;
@@ -177,16 +180,49 @@ class MainWindow final : public QMainWindow {
     // Measured from the live QSplitter, not from the constant.
     double split_fraction() const;
 
+    // --- wave 21: Task Information (double-click) --------------------------
+    // The General values the dialog edits, read from the selected task.  False
+    // when no task is selected.  Public so the offscreen gate can prove the
+    // dialog and the apply path without a modal window.
+    bool task_information_values(TaskInformationValues* out) const;
+    // Applies Name/Duration/Start/Finish through the sheet's edit model -- the
+    // same begin_edit/commit_edit path a typed cell edit uses, so undo and the
+    // save diff see them.  True when every applied field committed.
+    bool apply_task_information(const TaskInformationValues& values);
+    // Shows the six-tab dialog for the selected task, then applies OK.
+    void show_task_information();
+
+    // Wave 21: the --render/--parity artifact is a STRUCTURAL snapshot.  Project's
+    // measured green selection band (162,211,160) has a luminance below P1's
+    // background threshold, so the harness's rule scan reads the selected row as a
+    // full-width grid rule and loses the 22 px row chain.  The render path
+    // therefore clears the cell/row selection first (main.cpp); the interactive
+    // window -- and qt_ux_gate's palette check -- keep it.
+    void clear_render_selection();
+
+    // The status bar's LEFT label: "Ready" unless a command message is active
+    // (operator decision 8; the diagnostic detail moved to the right segment).
+    QString status_left_text() const;
+    // The right segment's text (task/link/warning counts; the full diagnostic is
+    // its tooltip).
+    QString status_detail_text() const;
+
   protected:
     void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
+    // Escape leaves the backstage (Project's own behaviour; wave 21 defect: the
+    // backstage had no keyboard way back either).
+    void keyPressEvent(QKeyEvent* event) override;
 
   private:
     void build_central_widget();
     void build_menus();
     void build_status_bar();
     void build_quick_access();
+    // Wave 21: installs the live task-sheet presentation (the file's stored table
+    // when a document is open, the Entry list otherwise) and its widths.
+    void configure_task_columns();
     void configure_sheet();
     void apply_split_fraction();
     void sync_view_selection();

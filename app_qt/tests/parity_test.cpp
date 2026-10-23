@@ -218,7 +218,9 @@ int main(int argc, char** argv) {
     check(msqt::kHeaderBackground == QColor(0xff, 0xff, 0xff), "header fill is white");
     check(msqt::kGridLine == QColor(0xd4, 0xd4, 0xd4), "grid line is (212,212,212)");
     check(msqt::kWeekend == QColor(0xf7, 0xf7, 0xf7), "weekend shading is (247,247,247)");
-    check(msqt::kSelection == QColor(0xdc, 0xe9, 0xf5), "selection is #dce9f5");
+    // Wave 21: the selection is Project 2021's measured green (162,211,160), read
+    // from the operator's clean reference capture -- not the earlier guess.
+    check(msqt::kSelection == QColor(0xa2, 0xd3, 0xa0), "selection is #a2d3a0");
     check(msqt::kBarTask == QColor(0x4a, 0x7e, 0xbb), "task bar is #4a7ebb (unmeasured)");
 
     // --- chrome ------------------------------------------------------------
@@ -330,7 +332,16 @@ int main(int argc, char** argv) {
         const QPoint viewport_origin = sheet->viewport()->mapTo(&window, QPoint(0, 0));
         const int column_width = sheet->columnWidth(0);
         bool blank = true;
+        // The selected row is painted Project's green (wave 21), so it is skipped:
+        // the check is about INDICATOR glyphs in the unselected body band.
+        const std::size_t selected_record =
+            (window.sheet() != nullptr && window.sheet()->has_selection())
+                ? window.sheet()->anchor().row
+                : core::sheet::kNoIndex;
         for (int row = 0; row < sheet->model()->rowCount() && blank; ++row) {
+            if (window.sheet_table_model()->record_row(row) == selected_record) {
+                continue;
+            }
             // Inside the row: skip the top rule and the bottom grid line.
             const int top = viewport_origin.y() + row * msqt::kRowHeight + 2;
             const int bottom = viewport_origin.y() + (row + 1) * msqt::kRowHeight - 2;

@@ -56,6 +56,7 @@ class QLineEdit;
 class QListWidget;
 class QPushButton;
 class QSpinBox;
+class QTabWidget;
 class QWidget;
 
 namespace app {
@@ -92,6 +93,8 @@ inline constexpr DialogSize kCustomFormulaSize{520, 280};
 inline constexpr DialogSize kTaskFieldsSize{480, 400};
 inline constexpr DialogSize kPredecessorsSize{640, 420};
 inline constexpr DialogSize kFilterSize{520, 300};
+// Wave 21: the six-tab Task Information dialog.
+inline constexpr DialogSize kTaskInformationSize{560, 520};
 
 }  // namespace dialog_geometry
 
@@ -266,6 +269,62 @@ class PredecessorsDialog final : public QDialog {
 bool edit_predecessors(QWidget* parent, const app::PlanInput& loaded,
                        const app::StructuralEdits& edits, std::uint32_t successor_uid,
                        app::StructuralEdits& out_edits, QString* error);
+
+// ---------------------------------------------------------------------------
+// Task Information (wave 21; the operator's Project capture shows six tabs)
+//
+// GENERAL is functional over app/: Name, Duration, Start and Finish are the four
+// task fields the sheet's edit model writes (Start is also what a save collects).
+// Estimated, Percent complete, Priority, Schedule mode and the Display on Timeline
+// options have no writer in this port, so they are shown READ-ONLY with an inline
+// note -- decision 15, no fake success.  PREDECESSORS and RESOURCES state that the
+// task's links/assignments are edited by their own commands; ADVANCED, NOTES and
+// CUSTOM FIELDS are laid out with their primary action disabled and the note.
+// Cancel always discards.
+// ---------------------------------------------------------------------------
+
+struct TaskInformationValues {
+    std::string name;
+    std::string duration_text;
+    std::string start_text;
+    std::string finish_text;
+    std::string percent_text;
+    bool manually_scheduled = false;
+};
+
+class TaskInformationDialog final : public QDialog {
+  public:
+    explicit TaskInformationDialog(const TaskInformationValues& current,
+                                   QWidget* parent = nullptr);
+
+    // Read on OK: the four editable texts, as typed.
+    const TaskInformationValues& values() const noexcept { return values_; }
+
+    QTabWidget* tabs() const noexcept { return tabs_; }
+    QLineEdit* name_edit() const noexcept { return name_; }
+    QLineEdit* duration_edit() const noexcept { return duration_; }
+    QLineEdit* start_edit() const noexcept { return start_; }
+    QLineEdit* finish_edit() const noexcept { return finish_; }
+    QCheckBox* hide_bar_check() const noexcept { return hide_bar_; }
+    QCheckBox* rollup_check() const noexcept { return rollup_; }
+
+    void accept() override;
+
+  private:
+    TaskInformationValues values_;
+    QTabWidget* tabs_ = nullptr;
+    QLineEdit* name_ = nullptr;
+    QLineEdit* duration_ = nullptr;
+    QLineEdit* start_ = nullptr;
+    QLineEdit* finish_ = nullptr;
+    QCheckBox* hide_bar_ = nullptr;
+    QCheckBox* rollup_ = nullptr;
+};
+
+// Shows the dialog modally.  True when OK was pressed, with `values` replaced by
+// the edited set; the caller applies the four texts through the sheet's edit
+// model (the same begin_edit/commit_edit path a typed cell edit uses).
+bool edit_task_information(QWidget* parent, TaskInformationValues* values);
 
 // ---------------------------------------------------------------------------
 // Filter

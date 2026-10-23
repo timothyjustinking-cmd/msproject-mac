@@ -113,15 +113,24 @@ inline const QColor kHeaderSeparator(0xd4, 0xd4, 0xd4);   // measured (212,212,2
 inline const QColor kGridLine(0xd4, 0xd4, 0xd4);          // measured (212,212,212)
 inline const QColor kGridLineStrong(0xb0, 0xb0, 0xb0);    // month/week boundary
 inline const QColor kWeekend(0xf7, 0xf7, 0xf7);           // measured (247,247,247)
-inline const QColor kSelection(0xdc, 0xe9, 0xf5);
+// WAVE 21 (operator decision 8, measured from Project 2021): the selected row and
+// cell are GREEN (162,211,160), read from the clean Resource capture the operator
+// supplied (corpus/reference/2026-10-23-msproject/).  The previous #dce9f5 was a
+// guess; the selection colour is now measured.
+inline const QColor kSelection(0xa2, 0xd3, 0xa0);
 inline const QColor kRowGutter(0xff, 0xff, 0xff);
 inline const QColor kRowGutterText(0x33, 0x33, 0x33);
-// Not measurable from the current reference (no bars visible); kept from the
-// shell palette until the coordinator re-captures an auto-scheduled fixture.
+// Bar colours.  WAVE 21 (operator review, clean capture): a CRITICAL bar is pure
+// red (255,0,0) -- the previous #c0392b was a guess -- and it now WINS over the
+// completion fill (gantt_canvas.cpp), so a 100 %-complete critical bar still reads
+// red.  The normal bar keeps the shell's blue and the summary/milestone colours are
+// unchanged: the clean capture's green (#00b050) and navy (#000080) bars are the
+// FILE's own bar styles, which this port does not decode, so hard-coding them as
+// global constants would be a guess (docs/handoff/q6.md).
 inline const QColor kBarTask(0x4a, 0x7e, 0xbb);
 inline const QColor kBarSummary(0x1f, 0x38, 0x64);
 inline const QColor kBarMilestone(0x1f, 0x38, 0x64);
-inline const QColor kBarCritical(0xc0, 0x39, 0x2b);
+inline const QColor kBarCritical(0xff, 0x00, 0x00);
 inline const QColor kBarComplete(0x2f, 0x5f, 0x9a);
 inline const QColor kBarOutline(0x2b, 0x4a, 0x6f);
 inline const QColor kLinkLine(0x6a, 0x6a, 0x6a);

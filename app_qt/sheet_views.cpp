@@ -59,11 +59,85 @@ void paint_resize_grip(QPainter& painter, const QRect& rect) {
 }  // namespace
 
 // ---------------------------------------------------------------------------
+// HeaderCaptionLayout (wave 21, operator defect)
+// ---------------------------------------------------------------------------
+
+HeaderCaptionLayout layout_header_caption(const QRect& section, const QString& title,
+                                          const QFontMetrics& metrics) {
+    HeaderCaptionLayout layout;
+    layout.line_height = metrics.height();
+    // The chevron: 10 px wide, 4 px from the section's right edge, vertically
+    // centred.  Reserved BEFORE the text rect is derived from it.
+    const int arrow_width = 8;
+    const int arrow_right = section.right() - 3;
+    const int arrow_left = arrow_right - arrow_width + 1;
+    layout.arrow_rect = QRect(arrow_left, section.center().y() - 3, arrow_width, 6);
+    // The caption starts 4 px in (the reference's own padding) and stops 1 px
+    // short of the chevron, so even an antialiased glyph cannot reach the arrow.
+    // `Duration` (55 px at 11 pt Carlito) fits an 81 px column; `Elapsed` (46 px)
+    // fits the stored-table gate's 63 px column.
+    const int text_left = section.left() + 4;
+    const int text_right = arrow_left - 1;
+    layout.text_rect = QRect(text_left, section.top() + 2,
+                             std::max(0, text_right - text_left + 1),
+                             std::max(0, section.height() - 4));
+    if (title.isEmpty() || layout.text_rect.width() <= 0) {
+        return layout;
+    }
+
+    // Break opportunities: spaces, and after a hyphen (a hyphen stays with the
+    // fragment it ends).  Nothing else breaks a word.
+    struct Token {
+        QString text;
+        bool space_before = false;
+    };
+    std::vector<Token> tokens;
+    QString current;
+    bool current_space = false;
+    auto flush = [&]() {
+        if (!current.isEmpty()) {
+            tokens.push_back(Token{current, current_space});
+            current.clear();
+        }
+    };
+    for (int index = 0; index < title.size(); ++index) {
+        const QChar character = title.at(index);
+        if (character == QLatin1Char(' ')) {
+            flush();
+            current_space = true;
+            continue;
+        }
+        current += character;
+        if (character == QLatin1Char('-')) {
+            flush();
+            current_space = false;
+        }
+    }
+    flush();
+
+    QString line;
+    for (const Token& token : tokens) {
+        const QString candidate =
+            line.isEmpty() ? token.text : line + (token.space_before ? " " : "") + token.text;
+        if (!line.isEmpty() && metrics.horizontalAdvance(candidate) > layout.text_rect.width()) {
+            layout.lines.push_back(line);
+            line = token.text;
+        } else {
+            line = candidate;
+        }
+    }
+    if (!line.isEmpty()) {
+        layout.lines.push_back(line);
+    }
+    return layout;
+}
+
+// ---------------------------------------------------------------------------
 // SheetHeaderView
 // ---------------------------------------------------------------------------
 
 SheetHeaderView::SheetHeaderView(Qt::Orientation orientation, QWidget* parent)
-    : QHeaderView(orientation, parent) {
+    : QHeaderView(orientation, parent), display_columns_(entry_display_columns()) {
     setSectionsMovable(false);
     setSectionsClickable(true);
     setHighlightSections(false);
@@ -206,7 +280,6 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
         painter->drawLine(rect.left(), rect.top(), rect.left(), rect.bottom());
     }
 
-    const std::vector<EntryColumn>& columns = entry_columns();
     QString title;
     bool stub = false;
     if (model_titles_) {
@@ -217,10 +290,12 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
             title = model()->headerData(logicalIndex, Qt::Horizontal, Qt::DisplayRole).toString();
         }
     } else if (logicalIndex >= 0 &&
-               static_cast<std::size_t>(logicalIndex) < columns.size()) {
-        const EntryColumn& column = columns[static_cast<std::size_t>(logicalIndex)];
+               static_cast<std::size_t>(logicalIndex) < display_columns_.size()) {
+        // Wave 21: the live presentation -- the Entry list for a new/empty
+        // project, the file's own stored columns for a loaded file.
+        const DisplayColumn& column = display_columns_[static_cast<std::size_t>(logicalIndex)];
         stub = column.kind == EntryCellKind::stub;
-        title = QString::fromUtf8(column.title);
+        title = QString::fromStdString(column.title);
     }
 
     QFont font = header_font();
@@ -228,20 +303,31 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
     painter->setFont(font);
     painter->setPen(stub ? kHeaderTextMuted : kHeaderText);
 
-    // Reserve the right ~19 px for the chevron/grip, and let a narrow header
-    // wrap ("Task" / "Mode") exactly as the reference does.
-    const QRect text_rect = rect.adjusted(8, 2, -19, -2);
-    const int text_flags = static_cast<int>(Qt::AlignLeft) |
-                           static_cast<int>(Qt::AlignVCenter) |
-                           static_cast<int>(Qt::TextWordWrap);
-    painter->drawText(text_rect, text_flags, title);
+    // Wave 21: the chevron's rect is reserved before wrapping, the text is
+    // wrapped by layout_header_caption() (spaces/hyphens only) and every line is
+    // painted inside its own rect, so a caption can never run under the arrow or
+    // be clipped to "Dura".
+    const QFontMetrics metrics(font);
+    const HeaderCaptionLayout layout = layout_header_caption(rect, title, metrics);
+    const int block = layout.line_height * static_cast<int>(layout.lines.size());
+    int line_top = layout.text_rect.center().y() - block / 2;
+    for (const QString& line : layout.lines) {
+        const QRect line_rect(layout.text_rect.left(), line_top, layout.text_rect.width(),
+                              layout.line_height);
+        painter->drawText(line_rect,
+                          static_cast<int>(Qt::AlignLeft) |
+                              static_cast<int>(Qt::AlignVCenter),
+                          line);
+        line_top += layout.line_height;
+    }
 
     if (!title.isEmpty() && !model_titles_) {
         // Every titled Entry header carries the sort chevron, the reference's
-        // "Add New Column" stub included (muted, like its caption).
+        // "Add New Column" stub included (muted, like its caption).  Its rect is
+        // the one the layout reserved.
         painter->setPen(QPen(stub ? kHeaderTextMuted : QColor(0x6a, 0x6a, 0x6a), 1));
-        const int arrow_y = rect.center().y();
-        const int arrow_x = rect.right() - 12;
+        const int arrow_y = layout.arrow_rect.center().y();
+        const int arrow_x = layout.arrow_rect.center().x();
         painter->drawLine(arrow_x - 3, arrow_y - 1, arrow_x, arrow_y + 2);
         painter->drawLine(arrow_x, arrow_y + 2, arrow_x + 3, arrow_y - 1);
     }
@@ -379,8 +465,13 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
     // edge as an extra vertical grid line and reports 10 sheet columns instead
     // of 9 (wave 18, CI run f4a4e4a).  Keep every non-boundary column of the
     // body band under that threshold: no tall glyphs, no full-height rules.
-    const int mode = entry_column_index(EntryCellKind::mode);
-    if (!entry_mode_ || index.column() != mode) {
+    EntryCellKind kind = EntryCellKind::data;
+    if (kind_lookup_) {
+        kind = kind_lookup_(index.column());
+    } else if (index.column() == entry_column_index(EntryCellKind::mode)) {
+        kind = EntryCellKind::mode;
+    }
+    if (!entry_mode_ || kind != EntryCellKind::mode) {
         // The data columns and the blank Indicators cells are ordinary styled
         // items: the model's text/alignment/font and the selection palette do
         // the work, and Qt draws the grid over them.

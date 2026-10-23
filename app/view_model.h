@@ -55,6 +55,13 @@
 #include "usage.h"
 #include "value.h"
 
+namespace msproject::viewstate {
+// core/viewstate's decoded `214/CTable` table (viewstate.h).  Forward-declared so
+// this header does not drag the whole view-state decoder into every consumer;
+// view_model.cpp includes it.
+struct TableDef;
+}  // namespace msproject::viewstate
+
 namespace app {
 
 // ---------------------------------------------------------------------------
@@ -218,10 +225,67 @@ const std::vector<FormulaColumnSpec>& formula_column_specs();
 int formula_column_index(core::view::FieldId field) noexcept;
 
 // default_sheet_columns() plus one column per formula spec, hidden/shown by the
-// caller and declared read-only here.  The task sheet's column set is FIXED
-// (the same 9 columns on every load), so the View > Columns submenu's tag =
-// model column index stays valid across loads and view switches.
+// caller and declared read-only here.  This is the SHEET's own fixed default set
+// (UID/ID/Outline/Name/Start/Finish/Duration); since wave 21 a LOADED file's
+// sheet uses app::table_sheet_columns() instead (operator decision 7), so the
+// View > Columns submenu's tag = model column index is only stable for the
+// default set.
 std::vector<core::sheet::SheetColumn> task_sheet_columns();
+
+// ---------------------------------------------------------------------------
+// Wave 21 (operator decision 7): the file's stored `214/CTable` table
+// ---------------------------------------------------------------------------
+
+// The task field a stored `214/CTable` column record refers to.
+//
+// The three computed columns are stored as their TEXT variants -- Task.
+// DurationText 0x0b400507, StartText 0x0b400505, FinishText 0x0b400506 -- and
+// every other column stores its own field id (measured: the synthetic Entry
+// table and both corpus Entry tables; docs/handoff/q6.md).  The sheet's model
+// uses the BASE task fields, because those are the ones make_record_set() fills,
+// sync_plan_from_records() reads back and the writer saves; DurationText is not
+// even in the RecordSet, so a column left on it would render blank.  The three
+// are mapped here and every other id is returned unchanged.
+core::view::FieldId table_column_field(std::uint32_t table_field_id) noexcept;
+
+// The stock caption for a stored column whose record carries no title.
+//
+// Project writes "" for a column that shows its field's own caption, so an empty
+// stored title is not "no heading".  The captions come from the measured table
+// resource (core/view's registry Entry/Tracking columns) and from the sheet's own
+// default set; an unlabelled task field keeps an EMPTY caption (Indicators, which
+// the reference capture shows with no text) rather than inventing one, and a
+// field nothing names also stays empty rather than printing "0x...".
+std::string task_column_caption(core::view::FieldId field);
+
+// True for the four task fields a save can write back -- Name, Start, Finish and
+// Duration, exactly the editable columns of app::default_sheet_columns() after
+// app::apply_edit_policy().  Every other field the table can name (Indicators,
+// Task Mode, Predecessors, % Complete, custom fields, ...) is presentation only
+// in this app, so a loaded table's column for it is declared read-only rather
+// than offering an edit whose value a save would silently drop.
+bool task_column_editable(core::view::FieldId field) noexcept;
+
+// The task sheet's column set from the file's stored `214/CTable` table.
+//
+// Order is `table.columns` (file order).  Per record:
+//   field      table_column_field(record.field_id); a record with field id 0 is
+//              not a column and is skipped
+//   title      the stored UTF-16 title, else task_column_caption(field)
+//   width      opaque_header[0] -- the stored character width (the same byte the
+//              Qt shell already converts with its 6 px/char + 3 rule); 0 means
+//              the file stores no width, so the sheet's own default width for
+//              that field is used (0 = auto when it has none either)
+//   align/kind copied from default_sheet_columns() for the stock fields so a
+//              loaded sheet renders exactly like the default one; Auto otherwise
+//   read_only  !task_column_editable(field) -- see above
+//
+// A table with no usable column (missing/unreadable CTable, every record field 0)
+// returns default_sheet_columns(), which is also what a new/empty project shows.
+// Duplicate fields are kept: a file may show one field in two columns, and the
+// sheet's display maps each column independently.
+std::vector<core::sheet::SheetColumn> table_sheet_columns(
+    const msproject::viewstate::TableDef& table);
 
 // Registers every formula spec in `out`.  False when a spec does not parse (the
 // caller reports `error`; the app should keep going with the columns that did

@@ -14,6 +14,8 @@
 
 #include "date.h"
 #include "field_ref.h"
+#include "layout_model.h"  // task_field_id()
+#include "viewstate.h"     // msproject::viewstate::TableDef / ColumnDef
 
 namespace app {
 namespace {
@@ -460,6 +462,131 @@ void apply_computed_read_only(core::sheet::SheetModel& sheet) {
             sheet.set_column_read_only(column, true);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Wave 21: the file's stored `214/CTable` table (operator decision 7)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The task fields the sheet's default set is built from, resolved once through
+// the descriptor table (a table regeneration moves an id, never this code).
+struct StockFields {
+    core::view::FieldId name = task_field_id("Name");
+    core::view::FieldId start = task_field_id("Start");
+    core::view::FieldId finish = task_field_id("Finish");
+    core::view::FieldId duration = task_field_id("Duration");
+};
+
+const StockFields& stock_fields() {
+    static const StockFields fields;
+    return fields;
+}
+
+// The stock captions for stored columns that carry no title.  Measured: the
+// synthetic fixture and both corpus Entry tables leave exactly these fields
+// unlabelled, and core/view's registry (PJINTL RT_RCDATA 330, the table resource
+// Project itself ships) carries the captions while the descriptor table does not
+// name four of the fields at all.  Indicators keeps an EMPTY caption: the
+// reference capture's Indicators header has no text (docs/handoff/qt2.md), and a
+// caption here would put a word in the band that the product does not.
+struct CaptionEntry {
+    std::uint32_t field = 0;
+    const char* caption = "";
+};
+
+const CaptionEntry kStoredCaptions[] = {
+    {0x0b4000cdu, ""},            // Indicators (unnamed in the descriptor table)
+    {0x0b400500u, "Task Mode"},   // Task.Manual, the Entry table's mode column
+    {0x0b40002fu, "Predecessors"},
+    {0x0b400030u, "Successors"},
+    {0x0b400031u, "Resource Names"},
+    {0x0b400020u, "% Complete"},  // Task.PercentComplete
+};
+
+// The sheet's own default column for `field`, or nullptr (its align/kind/width
+// are the ones a loaded sheet copies so it renders exactly like the default set).
+const core::sheet::SheetColumn* stock_column(core::view::FieldId field) {
+    static const std::vector<core::sheet::SheetColumn> stock = default_sheet_columns();
+    for (const core::sheet::SheetColumn& column : stock) {
+        if (column.field == field) {
+            return &column;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+core::view::FieldId table_column_field(std::uint32_t table_field_id) noexcept {
+    // The three measured text variants (see view_model.h).
+    if (table_field_id == 0x0b400507u) {  // Task.DurationText
+        return stock_fields().duration;
+    }
+    if (table_field_id == 0x0b400505u) {  // Task.StartText
+        return stock_fields().start;
+    }
+    if (table_field_id == 0x0b400506u) {  // Task.FinishText
+        return stock_fields().finish;
+    }
+    return static_cast<core::view::FieldId>(table_field_id);
+}
+
+std::string task_column_caption(core::view::FieldId field) {
+    if (const core::sheet::SheetColumn* stock = stock_column(field); stock != nullptr) {
+        return stock->title;
+    }
+    for (const CaptionEntry& entry : kStoredCaptions) {
+        if (entry.field == field) {
+            return entry.caption;
+        }
+    }
+    // The descriptor table's own name, or "" for a field it never named.
+    return core::view::field_name(field, core::model::RecordType::Task);
+}
+
+bool task_column_editable(core::view::FieldId field) noexcept {
+    const StockFields& stock = stock_fields();
+    return field != 0 && (field == stock.name || field == stock.start || field == stock.finish ||
+                          field == stock.duration);
+}
+
+std::vector<core::sheet::SheetColumn> table_sheet_columns(
+    const msproject::viewstate::TableDef& table) {
+    std::vector<core::sheet::SheetColumn> columns;
+    columns.reserve(table.columns.size());
+    for (const msproject::viewstate::ColumnDef& record : table.columns) {
+        if (record.field_id == 0) {
+            continue;  // not a column
+        }
+        const core::view::FieldId field = table_column_field(record.field_id);
+        if (field == 0) {
+            continue;  // the table lost the field the record pointed at
+        }
+        core::sheet::SheetColumn column;
+        column.field = field;
+        column.title = record.title.empty() ? task_column_caption(field) : record.title;
+        // The stored character width: the first of the nine opaque header bytes.
+        column.width = static_cast<int>(record.opaque_header[0]);
+        if (const core::sheet::SheetColumn* stock = stock_column(field); stock != nullptr) {
+            column.align = stock->align;
+            column.kind = stock->kind;
+            if (column.width <= 0) {
+                column.width = stock->width;  // the file stores no width for it
+            }
+        }
+        column.visible = true;
+        // Read-only unless the save path can write the field back (see the header).
+        column.read_only = !task_column_editable(field);
+        columns.push_back(std::move(column));
+    }
+    if (columns.empty()) {
+        // No usable column: a new/empty project's table, and the fallback for a
+        // file whose CTable is missing or unreadable.
+        return default_sheet_columns();
+    }
+    return columns;
 }
 
 }  // namespace app

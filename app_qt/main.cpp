@@ -169,6 +169,10 @@ int main(int argc, char** argv) {
     }
 
     if (!options.render_path.empty()) {
+        // Wave 21: the selection band is Project's measured green, which P1's rule
+        // scan would read as a grid rule; a render is a structural snapshot, so it
+        // is taken with nothing selected (the window itself keeps the selection).
+        window.clear_render_selection();
         window.resize(options.render_width, options.render_height);
         window.show();
         QApplication::processEvents();

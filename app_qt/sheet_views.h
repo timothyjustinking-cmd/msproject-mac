@@ -13,8 +13,11 @@
 // None of these classes declares a signal or a slot, so no Q_OBJECT / AUTOMOC.
 #pragma once
 
+#include <QFontMetrics>
 #include <QHeaderView>
 #include <QModelIndex>
+#include <QRect>
+#include <QString>
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QStyleOptionViewItem>
@@ -23,12 +26,39 @@
 #include <QWidget>
 
 #include <functional>
+#include <utility>
+#include <vector>
+
+#include "entry_columns.h"  // DisplayColumn / EntryCellKind (wave 21)
 
 class QMenu;
 class QPainter;
 class QPaintEvent;
 
 namespace msqt {
+
+// Wave 21 (operator defect): the caption band's text/arrow geometry as a PURE
+// function, so a gate can prove the layout for any width without painting.
+//
+// The defect it fixes: the band reserved its chevron space and then let Qt wrap
+// with a bounding rect, so a caption could run under the sort chevron ("Task /
+// Mod") and a single-word caption was clipped ("Duration" -> "Dura" at the
+// measured 81 px).  This layout:
+//   * reserves the chevron rect FIRST and derives the text rect from it, so no
+//     line can ever intersect the arrow;
+//   * wraps at spaces and after hyphens only, greedily;
+//   * never elides or shortens a caption -- a line is the text as authored, and a
+//     single word wider than the column is wrapped or clipped at the TEXT rect's
+//     edge, never under the arrow.
+struct HeaderCaptionLayout {
+    std::vector<QString> lines;
+    QRect text_rect;   // where the lines are painted
+    QRect arrow_rect;  // the sort chevron / column-menu arrow
+    int line_height = 0;
+};
+
+HeaderCaptionLayout layout_header_caption(const QRect& section, const QString& title,
+                                          const QFontMetrics& metrics);
 
 // Wave 20: the column header's arrow menu -- a compact format mini-bar
 // (font family/size, B/I/U, alignment) followed by the product's measured
@@ -45,6 +75,14 @@ class SheetHeaderView final : public QHeaderView {
     // nine Entry titles.
     void set_model_titles(bool enabled) { model_titles_ = enabled; }
 
+    // Wave 21 (operator decision 7): the captions and the Add New Column hint the
+    // band paints.  Defaults to the Entry list; a loaded file's window sets the
+    // file's own stored columns (entry_columns.h, display_columns_for_sheet()).
+    void set_display_columns(std::vector<DisplayColumn> columns) {
+        display_columns_ = std::move(columns);
+    }
+    const std::vector<DisplayColumn>& display_columns() const { return display_columns_; }
+
     // The arrow menu for `logical_index`, built and returned (not exec'd) so the
     // structural gate can inspect its items and mini format bar.
     QMenu* build_column_menu(int logical_index);
@@ -56,6 +94,7 @@ class SheetHeaderView final : public QHeaderView {
 
   private:
     bool model_titles_ = false;
+    std::vector<DisplayColumn> display_columns_;
     std::function<void(const QString&, int)> column_handler_;
 };
 
@@ -107,11 +146,20 @@ class EntryItemDelegate final : public QStyledItemDelegate {
     // resource/usage grids are ordinary text cells.
     void set_entry_mode(bool enabled) { entry_mode_ = enabled; }
 
+    // Wave 21: which column carries the Task Mode pin (and which is the Add New
+    // Column stub) is the live presentation's business -- a loaded file's table
+    // can put Task Mode anywhere, or not have it at all.  The window points this
+    // at SheetTableModel::display_kind(); without a lookup the Entry index is used.
+    void set_kind_lookup(std::function<EntryCellKind(int)> lookup) {
+        kind_lookup_ = std::move(lookup);
+    }
+
     void paint(QPainter* painter, const QStyleOptionViewItem& option,
                const QModelIndex& index) const override;
 
   private:
     bool entry_mode_ = true;
+    std::function<EntryCellKind(int)> kind_lookup_;
 };
 
 // A splitter whose handle paints a visible drag thumb (three dots) on white, so

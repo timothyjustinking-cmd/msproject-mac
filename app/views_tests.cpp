@@ -32,6 +32,7 @@
 #include "usage.h"
 #include "value.h"
 #include "view_model.h"
+#include "viewstate.h"  // msproject::viewstate::TableDef (wave 21)
 
 namespace {
 
@@ -505,6 +506,133 @@ void test_view_modes_and_preferences() {
           "a column past the two formula columns is always visible");
 }
 
+// ---------------------------------------------------------------------------
+// Wave 21 (operator decision 7): the file's stored `214/CTable` table
+// ---------------------------------------------------------------------------
+
+msproject::viewstate::ColumnDef stored_column(std::uint32_t field_id, const char* title,
+                                              std::uint8_t width) {
+    msproject::viewstate::ColumnDef column;
+    column.field_id = field_id;
+    column.opaque_header[0] = width;
+    column.title = title;
+    return column;
+}
+
+// A CONSTRUCTED non-Entry table: a different order, different titles and
+// different widths from the Entry presentation, one field the app cannot write
+// (Text1), one field with no descriptor name (% Complete) and a non-column.
+msproject::viewstate::TableDef test_table() {
+    msproject::viewstate::TableDef table;
+    table.caption = "&Wave 21 Test";
+    table.columns.push_back(stored_column(0x0b400017u, "", 6));             // ID
+    table.columns.push_back(stored_column(0x0b40000eu, "Job", 30));         // Name, renamed
+    table.columns.push_back(stored_column(0x0b400505u, "Begin", 18));       // StartText
+    table.columns.push_back(stored_column(0x0b400507u, "Elapsed", 10));     // DurationText
+    table.columns.push_back(stored_column(0x0b400033u, "Discipline", 22));  // Text1
+    table.columns.push_back(stored_column(0x0b400020u, "", 8));             // % Complete
+    table.columns.push_back(stored_column(0x0b40002fu, "Depends On", 20));  // Predecessors
+    table.columns.push_back(stored_column(0u, "not a column", 3));          // field id 0
+    return table;
+}
+
+void test_table_sheet_columns() {
+    const std::vector<core::sheet::SheetColumn> columns = app::table_sheet_columns(test_table());
+
+    // The seven real records survive, in FILE order (not the Entry order), and
+    // the field-id-0 record is not a column.
+    check_size(columns.size(), 7, "the stored table's seven real columns survive, in order");
+    if (columns.size() != 7) {
+        return;
+    }
+    const char* const titles[] = {"ID",        "Job",          "Begin", "Elapsed",
+                                  "Discipline", "% Complete", "Depends On"};
+    const int widths[] = {6, 30, 18, 10, 22, 8, 20};
+    for (std::size_t index = 0; index < columns.size(); ++index) {
+        check_text(columns[index].title, titles[index], "a stored column keeps its title");
+        check(columns[index].width == widths[index],
+              "a stored column keeps its stored character width");
+    }
+
+    // The stored TEXT variants map onto the base task fields the sheet fills,
+    // edits and saves; every other id is used as-is.
+    check(columns[2].field == app::task_field_id("Start"),
+          "the stored StartText column maps to Task.Start");
+    check(columns[3].field == app::task_field_id("Duration"),
+          "the stored DurationText column maps to Task.Duration");
+    check(columns[5].field == 0x0b400020u, "an unmapped field id is used as-is");
+    check(app::table_column_field(0x0b40000eu) == app::task_field_id("Name"),
+          "a plain field id passes through table_column_field()");
+
+    // Captions: the file's own title wins, "" resolves to the stock caption, an
+    // unnamed field stays empty rather than printing its hex id.
+    check_text(app::task_column_caption(app::task_field_id("Start")), "Start",
+               "Start falls back to its stock caption");
+    check_text(app::task_column_caption(0x0b400500u), "Task Mode",
+               "the Task Mode column has a caption the descriptor table lacks");
+    check_text(app::task_column_caption(0x0b40002fu), "Predecessors",
+               "Predecessors has a caption");
+    check_text(app::task_column_caption(0x0b400031u), "Resource Names",
+               "Resource Names has a caption");
+    check_text(app::task_column_caption(0x0b4000cdu), "",
+               "Indicators stays unlabelled (the reference shows no caption)");
+    check_text(app::task_column_caption(0x0b400020u), "% Complete", "% Complete has a caption");
+
+    // The read-only policy: only the four writable task fields edit.
+    check(columns[0].read_only, "the ID column is read-only (identity)");
+    check(!columns[1].read_only, "Task Name is editable");
+    check(!columns[2].read_only, "Start is editable");
+    check(!columns[3].read_only, "Duration is editable");
+    check(columns[4].read_only, "Text1 is read-only (no save path)");
+    check(columns[5].read_only, "% Complete is read-only (no save path)");
+    check(columns[6].read_only, "Predecessors is read-only (no save path)");
+
+    // The stock align/kind are copied so a loaded sheet renders like the default.
+    check(columns[1].kind == core::sheet::CellKind::Text, "Name keeps the stock Text kind");
+    check(columns[2].kind == core::sheet::CellKind::Date, "Start keeps the stock Date kind");
+    check(columns[3].kind == core::sheet::CellKind::Duration,
+          "Duration keeps the stock Duration kind");
+    check(columns[2].align == core::view::ColumnAlign::Left, "Start keeps the stock alignment");
+
+    // A table with nothing usable is the sheet's default set (a new/empty
+    // project, and the fallback for a file whose CTable is missing).
+    msproject::viewstate::TableDef empty_table;
+    const std::vector<core::sheet::SheetColumn> defaults = app::table_sheet_columns(empty_table);
+    check_size(defaults.size(), app::default_sheet_columns().size(),
+               "an empty table falls back to the sheet's default column set");
+    check_text(defaults[0].title, "UID", "the fallback is the default set, not an empty table");
+    msproject::viewstate::TableDef zero_only;
+    zero_only.columns.push_back(stored_column(0u, "not a column", 5));
+    check_size(app::table_sheet_columns(zero_only).size(), defaults.size(),
+               "a table of only field-id-0 records falls back too");
+
+    // The model really uses the set: the file's order, its captions, values in
+    // the mapped fields, and the read-only columns refusing an edit.
+    PlanInput input = make_plan();
+    core::view::RecordSet records = app::make_record_set(input);
+    core::sheet::SheetModel sheet(records, columns);
+    check_size(sheet.column_count(), 7, "the sheet keeps the file's seven columns");
+    check_text(sheet.column_title(2), "Begin", "the author's stored title is the header");
+    check_text(sheet.column_title(3), "Elapsed", "the second renamed header is kept");
+    check_text(sheet.cell_text(0, 2), "Mon 19/10/26",
+               "the mapped Start column renders the task's start");
+    check_text(sheet.cell_text(0, 3), "5 days",
+               "the mapped Duration column renders the task's duration");
+    check(!sheet.begin_edit(0, 4), "the read-only Text1 column refuses an edit");
+    check(sheet.begin_edit(0, 2), "the Start column opens an edit session");
+    sheet.set_edit_text("2026-11-02 08:00");
+    const core::sheet::EditOutcome outcome = sheet.commit_edit(false);
+    check(outcome.ok && outcome.changed, "the Start edit commits");
+    check_text(sheet.cell_text(0, 2), "Mon 02/11/26", "the edited Start is the cell text");
+    check(sheet.undo(), "the edit is one undo step");
+    check_text(sheet.cell_text(0, 2), "Mon 19/10/26", "undo restores the loaded Start");
+    // The edit reached the RecordSet, which is what the Gantt and the save diff
+    // read (the sheet is not a display-only copy).
+    const Value* start = records.get(0, app::task_field_id("Start"));
+    check(start != nullptr && start->kind == ValueKind::Date,
+          "the mapped column writes the model field the app reads back");
+}
+
 }  // namespace
 
 int main() {
@@ -514,6 +642,7 @@ int main() {
     test_usage_day_and_week();
     test_formula_columns();
     test_view_modes_and_preferences();
+    test_table_sheet_columns();
 
     if (g_failures != 0) {
         std::printf("FAIL: %d of %d checks failed\n", g_failures, g_checks);

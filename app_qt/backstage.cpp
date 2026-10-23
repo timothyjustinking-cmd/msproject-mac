@@ -72,6 +72,33 @@ Backstage::Backstage(QWidget* parent) : QWidget(parent) {
     rail_layout->setContentsMargins(0, 10, 0, 0);
     rail_layout->setSpacing(0);
 
+    // Wave 21: the circular BACK arrow at the very top of the rail, above Home --
+    // Project 2021's position.  Before this the backstage had no way back except
+    // the Close nav entry; the button calls the same close handler as Escape.
+    back_button_ = new QToolButton(nav_rail_);
+    back_button_->setObjectName(QStringLiteral("backstageBack"));
+    back_button_->setText(QString::fromUtf8("\xE2\x86\x90"));  // U+2190 leftwards arrow
+    back_button_->setToolTip(QStringLiteral("Back (Esc)"));
+    back_button_->setAccessibleName(QStringLiteral("Back"));
+    back_button_->setCursor(Qt::PointingHandCursor);
+    back_button_->setFixedSize(28, 28);
+    back_button_->setFont(backstage_font(12, true));
+    back_button_->setStyleSheet(QStringLiteral(
+        "QToolButton#backstageBack { color: #ffffff; background: #2b578a;"
+        " border: 1px solid #ffffff; border-radius: 14px; }"
+        "QToolButton#backstageBack:hover { background: #3a6aa3; }"));
+    connect(back_button_, &QToolButton::clicked, this, [this](bool) {
+        if (close_handler_) {
+            close_handler_();
+        }
+    });
+    auto* back_row = new QHBoxLayout();
+    back_row->setContentsMargins(14, 0, 0, 8);
+    back_row->setSpacing(0);
+    back_row->addWidget(back_button_);
+    back_row->addStretch(1);
+    rail_layout->addLayout(back_row);
+
     struct NavSpec {
         const char* label;
         Page page;

@@ -14,8 +14,10 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QFont>
 #include <QSpinBox>
 #include <QString>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QVariant>
 #include <QWidget>
@@ -789,6 +791,171 @@ bool ask_task_name(QWidget* parent, QString* name) {
         return false;
     }
     *name = trimmed;
+    return true;
+}
+
+
+// ---------------------------------------------------------------------------
+// Task Information (wave 21)
+// ---------------------------------------------------------------------------
+
+TaskInformationDialog::TaskInformationDialog(const TaskInformationValues& current,
+                                             QWidget* parent)
+    : QDialog(parent), values_(current) {
+    setWindowTitle(QStringLiteral("Task Information"));
+    const dialog_geometry::DialogSize size = dialog_geometry::kTaskInformationSize;
+    auto* outer = make_outer(*this, size);
+
+    tabs_ = new QTabWidget(this);
+    tabs_->setObjectName(QStringLiteral("taskInformationTabs"));
+
+    // --- General -----------------------------------------------------------
+    auto* general = new QWidget(tabs_);
+    auto* general_layout = new QVBoxLayout(general);
+    general_layout->setContentsMargins(kMargin / 2, kMargin / 2, kMargin / 2, kMargin / 2);
+    general_layout->setSpacing(kSpacing);
+    QFormLayout* form = make_form();
+
+    name_ = make_line_edit(general);
+    name_->setText(to_q(current.name));
+    form->addRow(make_form_label(general, QStringLiteral("&Name:")), name_);
+
+    duration_ = make_line_edit(general);
+    duration_->setText(to_q(current.duration_text));
+    form->addRow(make_form_label(general, QStringLiteral("D&uration:")), duration_);
+
+    // Estimated has no writer in this port: shown, disabled (decision 15).
+    auto* estimated = new QCheckBox(QStringLiteral("&Estimated"), general);
+    estimated->setFixedHeight(kCheckHeight);
+    estimated->setEnabled(false);
+    estimated->setToolTip(QStringLiteral("not implemented in this port"));
+    form->addRow(make_form_label(general, QStringLiteral("Estimated:")), estimated);
+
+    auto* percent = make_line_edit(general);
+    percent->setText(to_q(current.percent_text));
+    percent->setEnabled(false);
+    percent->setToolTip(QStringLiteral("not implemented in this port"));
+    form->addRow(make_form_label(general, QStringLiteral("Percent c&omplete:")), percent);
+
+    auto* priority = make_spin_box(general);
+    priority->setRange(0, 1000);
+    priority->setEnabled(false);
+    priority->setToolTip(QStringLiteral("not implemented in this port"));
+    form->addRow(make_form_label(general, QStringLiteral("&Priority:")), priority);
+
+    auto* schedule = make_combo(general);
+    schedule->addItem(QStringLiteral("Manually Scheduled"));
+    schedule->addItem(QStringLiteral("Auto Scheduled"));
+    schedule->setCurrentIndex(current.manually_scheduled ? 0 : 1);
+    schedule->setEnabled(false);
+    schedule->setToolTip(QStringLiteral("not implemented in this port"));
+    form->addRow(make_form_label(general, QStringLiteral("Schedule &mode:")), schedule);
+
+    start_ = make_line_edit(general);
+    start_->setText(to_q(current.start_text));
+    form->addRow(make_form_label(general, QStringLiteral("S&tart:")), start_);
+
+    finish_ = make_line_edit(general);
+    finish_->setText(to_q(current.finish_text));
+    form->addRow(make_form_label(general, QStringLiteral("&Finish:")), finish_);
+    general_layout->addLayout(form);
+
+    auto* timeline_label = new QLabel(QStringLiteral("Display on Timeline"), general);
+    QFont group_font = timeline_label->font();
+    group_font.setBold(true);
+    timeline_label->setFont(group_font);
+    general_layout->addWidget(timeline_label);
+    auto* timeline_row = new QHBoxLayout();
+    timeline_row->setContentsMargins(0, 0, 0, 0);
+    timeline_row->setSpacing(kSpacing);
+    hide_bar_ = new QCheckBox(QStringLiteral("Hide &Bar"), general);
+    hide_bar_->setFixedHeight(kCheckHeight);
+    hide_bar_->setEnabled(false);
+    hide_bar_->setToolTip(QStringLiteral("not implemented in this port"));
+    rollup_ = new QCheckBox(QStringLiteral("&Rollup"), general);
+    rollup_->setFixedHeight(kCheckHeight);
+    rollup_->setEnabled(false);
+    rollup_->setToolTip(QStringLiteral("not implemented in this port"));
+    timeline_row->addWidget(hide_bar_);
+    timeline_row->addWidget(rollup_);
+    timeline_row->addStretch(1);
+    general_layout->addLayout(timeline_row);
+    general_layout->addWidget(make_hint(
+        general, size,
+        QStringLiteral("Name, Duration, Start and Finish are written through the sheet's "
+                       "edit model.  Estimated, Percent complete, Priority, Schedule mode "
+                       "and the Display on Timeline options are read-only in this port: "
+                       "there is no writer for them yet (decision 15).")));
+    general_layout->addStretch(1);
+    tabs_->addTab(general, QStringLiteral("General"));
+
+    // --- the five laid-out-only tabs (decision 15) --------------------------
+    struct TabSpec {
+        const char* title;
+        const char* body;
+        const char* action;
+    };
+    const TabSpec specs[] = {
+        {"Predecessors",
+         "This task's links are edited by Task > Predecessors...; the six-tab "
+         "form does not write them yet.",
+         "Add Predecessor"},
+        {"Resources",
+         "Resource assignments are edited by the Assign Resources command; this "
+         "port does not write assignments from Task Information.",
+         "Assign Resources"},
+        {"Advanced",
+         "Constraint type, deadline, task calendar, effort-driven and the WBS code "
+         "are not decoded into an editable model yet.",
+         "Set Constraint"},
+        {"Notes", "Task notes are not written by this port yet.", "Add Notes"},
+        {"Custom Fields",
+         "Custom field values are edited by Task > Custom Fields...; this tab is "
+         "read-only.",
+         "Custom Fields"},
+    };
+    for (const TabSpec& spec : specs) {
+        auto* page = new QWidget(tabs_);
+        auto* page_layout = new QVBoxLayout(page);
+        page_layout->setContentsMargins(kMargin / 2, kMargin / 2, kMargin / 2, kMargin / 2);
+        page_layout->setSpacing(kSpacing);
+        auto* body = new QLabel(QString::fromUtf8(spec.body), page);
+        body->setWordWrap(true);
+        body->setTextFormat(Qt::PlainText);
+        page_layout->addWidget(body);
+        QPushButton* action = make_button(page, QString::fromUtf8(spec.action));
+        action->setEnabled(false);
+        action->setToolTip(QStringLiteral("not implemented in this port"));
+        page_layout->addWidget(action, 0, Qt::AlignLeft);
+        page_layout->addWidget(
+            make_hint(page, size,
+                      QStringLiteral("Laid out only: the engine for this tab does not exist "
+                                     "in this port yet (decision 15).  Cancel works.")));
+        page_layout->addStretch(1);
+        tabs_->addTab(page, QString::fromUtf8(spec.title));
+    }
+
+    outer->addWidget(tabs_, 1);
+    outer->addWidget(make_button_box(*this));
+}
+
+void TaskInformationDialog::accept() {
+    values_.name = name_->text().toStdString();
+    values_.duration_text = duration_->text().toStdString();
+    values_.start_text = start_->text().toStdString();
+    values_.finish_text = finish_->text().toStdString();
+    QDialog::accept();
+}
+
+bool edit_task_information(QWidget* parent, TaskInformationValues* values) {
+    if (values == nullptr) {
+        return false;
+    }
+    TaskInformationDialog dialog(*values, parent);
+    if (dialog.exec() != QDialog::Accepted) {
+        return false;
+    }
+    *values = dialog.values();
     return true;
 }
 

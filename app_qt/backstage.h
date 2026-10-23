@@ -57,6 +57,12 @@ class Backstage final : public QWidget {
 
     QStackedWidget* pages() const noexcept { return pages_; }
     const std::vector<QToolButton*>& nav_buttons() const noexcept { return nav_buttons_; }
+    // Wave 21 (operator defect): the circular back arrow at the very top-left,
+    // above Home and left of the rail, exactly where Project 2021 puts it
+    // (corpus/reference/2026-10-23-msproject/project-backstage-account.png).  It
+    // calls the same close handler the Close page uses, so there is always a way
+    // back to the project chrome (Escape does the same).
+    QToolButton* back_button() const noexcept { return back_button_; }
     QComboBox* theme_combo() const noexcept { return theme_combo_; }
     QPushButton* options_button() const noexcept { return options_button_; }
     int nav_count() const;
@@ -69,6 +75,7 @@ class Backstage final : public QWidget {
                         const QString& command_label, const QString& command);
 
     QWidget* nav_rail_ = nullptr;
+    QToolButton* back_button_ = nullptr;
     QStackedWidget* pages_ = nullptr;
     std::vector<QToolButton*> nav_buttons_;
     std::vector<QWidget*> page_widgets_;

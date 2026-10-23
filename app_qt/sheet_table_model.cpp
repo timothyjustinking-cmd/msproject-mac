@@ -51,7 +51,33 @@ int alignment_for(core::view::ColumnAlign align) {
 
 }  // namespace
 
-SheetTableModel::SheetTableModel(QObject* parent) : QAbstractTableModel(parent) {}
+SheetTableModel::SheetTableModel(QObject* parent)
+    : QAbstractTableModel(parent), display_columns_(entry_display_columns()) {}
+
+void SheetTableModel::set_display_columns(std::vector<DisplayColumn> columns) {
+    beginResetModel();
+    display_columns_ = std::move(columns);
+    endResetModel();
+}
+
+int SheetTableModel::display_column_for_field(core::view::FieldId field) const {
+    if (field == 0) {
+        return -1;
+    }
+    for (std::size_t index = 0; index < display_columns_.size(); ++index) {
+        if (display_columns_[index].field == field) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
+}
+
+EntryCellKind SheetTableModel::display_kind(int display_column) const {
+    if (display_column < 0 || static_cast<std::size_t>(display_column) >= display_columns_.size()) {
+        return EntryCellKind::data;
+    }
+    return display_columns_[static_cast<std::size_t>(display_column)].kind;
+}
 
 void SheetTableModel::set_sheet(core::sheet::SheetModel* model) {
     beginResetModel();
@@ -127,11 +153,13 @@ std::size_t SheetTableModel::model_column(int display_column) const {
     if (sheet_ == nullptr || display_column < 0) {
         return core::sheet::kNoIndex;
     }
-    const std::vector<EntryColumn>& columns = entry_columns();
-    if (static_cast<std::size_t>(display_column) >= columns.size()) {
+    if (static_cast<std::size_t>(display_column) >= display_columns_.size()) {
         return core::sheet::kNoIndex;
     }
-    return visible_column_for_field(columns[static_cast<std::size_t>(display_column)].field);
+    // A synthetic column (field 0: Indicators, Task Mode, Add New Column) has no
+    // model column; the delegate paints it or leaves it blank.
+    return visible_column_for_field(
+        display_columns_[static_cast<std::size_t>(display_column)].field);
 }
 
 int SheetTableModel::rowCount(const QModelIndex& parent) const {
@@ -158,8 +186,9 @@ int SheetTableModel::columnCount(const QModelIndex& parent) const {
     }
     // The row-number gutter is the view's frozen vertical header, not a column.
     // An EMPTY project still presents the nine Entry columns: the caption band
-    // must exist with its titles (wave 20), and only the row count is zero.
-    return static_cast<int>(entry_columns().size());
+    // must exist with its titles (wave 20), and only the row count is zero.  A
+    // LOADED file presents its own stored table (wave 21).
+    return static_cast<int>(display_columns_.size());
 }
 
 QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
@@ -223,12 +252,13 @@ QVariant SheetTableModel::headerData(int section, Qt::Orientation orientation, i
                 return QString::fromStdString(sheet_->column_title(column));
             }
             // An empty project keeps the Entry captions: the header band is part
-            // of the shell's structure, not of the loaded document.
-            const std::vector<EntryColumn>& columns = entry_columns();
-            if (section < 0 || static_cast<std::size_t>(section) >= columns.size()) {
+            // of the shell's structure, not of the loaded document.  A loaded
+            // file's captions are its stored `214/CTable` titles (wave 21).
+            if (section < 0 || static_cast<std::size_t>(section) >= display_columns_.size()) {
                 return {};
             }
-            return QString::fromUtf8(columns[static_cast<std::size_t>(section)].title);
+            return QString::fromStdString(
+                display_columns_[static_cast<std::size_t>(section)].title);
         }
         if (role == Qt::TextAlignmentRole) {
             return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);

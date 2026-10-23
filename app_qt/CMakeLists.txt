@@ -240,6 +240,54 @@ add_test(NAME qt_clipboard
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
 
 # ===========================================================================
+# WAVE 21 (operator decision 7): a loaded file's own `214/CTable` column set.
+#   * the committed fixture's stored table IS the Entry table, so the window must
+#     still show the nine measured columns (the parity screen cannot move);
+#   * a synthetic NON-Entry table is written under test-out (the fixture copy's
+#     CTable records are rewritten in place) and loaded through open_file();
+#   * an optional third argument reads a corpus file read-only -- its stored
+#     Entry table is not the stock one.  The corpus is git-ignored, so that entry
+#     is only registered when the file is present on the machine.
+# ===========================================================================
+add_executable(qt_stored_table_tests tests/stored_table_test.cpp)
+target_link_libraries(qt_stored_table_tests PRIVATE qt_shell)
+qt_set_warnings(qt_stored_table_tests)
+
+add_test(NAME qt_stored_table
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_stored_table_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+if(EXISTS "${QT_REPO_ROOT}/corpus/project_a.mpp")
+    add_test(NAME qt_stored_table_corpus
+             COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                     $<TARGET_FILE:qt_stored_table_tests>
+                     "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                     "${QT_TEST_OUT_DIR_CMAKE}"
+                     "${QT_REPO_ROOT}/corpus/project_a.mpp")
+    message(STATUS "app_qt: corpus/project_a.mpp found -- qt_stored_table_corpus enabled")
+else()
+    message(STATUS "app_qt: no corpus/project_a.mpp -- qt_stored_table_corpus not registered")
+endif()
+
+# ===========================================================================
+# WAVE 21 operator review: the menu bar hidden, the backstage back arrow, the
+# double-click Task Information dialog, the measured bar/selection palette, the
+# header caption layout and the status bar's Ready.  Offscreen; writes one
+# painted header band under test-out for human review.
+# ===========================================================================
+add_executable(qt_ux_gate_tests tests/ux_gate_test.cpp)
+target_link_libraries(qt_ux_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_ux_gate_tests)
+
+add_test(NAME qt_ux_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_ux_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
 # four OFL faces live in app_qt/fonts/ and are compiled into each executable as
 # Qt resources, so the shell never depends on the host having the font and the
@@ -263,6 +311,7 @@ qt_bundle_carlito(msproject_qt)
 foreach(carlito_target
         qt_shell_tests qt_parity_tests qt_save_reopen_tests
         qt_empty_state_tests qt_chrome_gate_tests qt_view_gate_tests
-        qt_dialog_gate_tests qt_clipboard_tests)
+        qt_dialog_gate_tests qt_clipboard_tests qt_stored_table_tests
+        qt_ux_gate_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()

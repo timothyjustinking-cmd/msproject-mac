@@ -21,6 +21,7 @@
 #include <QHeaderView>
 #include <QItemSelection>
 #include <QItemSelectionModel>
+#include <QKeyEvent>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLayout>
@@ -212,7 +213,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // Start/Finish block and the manual-scheduling callout -- never the engine's
     // 1984 epoch and never an empty caption band.
     if (!doc_.has_document()) {
-        configure_sheet();
+        configure_task_columns();
         doc_.build_empty_view(prefs_.zoom, app::today_date32());
         gantt_canvas_->set_layout(doc_.gantt());
         refresh_timeline();
@@ -281,8 +282,35 @@ void MainWindow::build_central_widget() {
     // Wave 19: cells edit through SheetTableModel -> SheetModel's real edit
     // model.  Double-click and Return (the product's triggers); a rejected value
     // is reported in the status line.
-    sheet_view_->setEditTriggers(QAbstractItemView::DoubleClicked |
+    // Wave 21 (operator defect): a DOUBLE-CLICK must not start a cell edit --
+    // it opens Task Information, as Project does.  Typing-to-edit (AnyKeyPressed)
+    // and F2 (EditKeyPressed) stay the edit triggers, so cell editing is intact.
+    sheet_view_->setEditTriggers(QAbstractItemView::AnyKeyPressed |
                                  QAbstractItemView::EditKeyPressed);
+    connect(sheet_view_, &QTableView::doubleClicked, this, [this](const QModelIndex& index) {
+        if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+            !index.isValid()) {
+            return;
+        }
+        const std::size_t row = sheet_model_.record_row(index.row());
+        if (row == core::sheet::kNoIndex) {
+            return;
+        }
+        // Select the row on its Name column (whatever position the file's table
+        // gives it), then open the dialog for that task.
+        const core::view::FieldId name_field = app::name_field_id();
+        std::size_t column = core::sheet::kNoIndex;
+        for (std::size_t candidate = 0; candidate < doc_.sheet()->column_count(); ++candidate) {
+            if (doc_.sheet()->column(candidate).field == name_field) {
+                column = candidate;
+                break;
+            }
+        }
+        app::select_cell(*doc_.sheet(), row,
+                         column == core::sheet::kNoIndex ? 0 : column);
+        gantt_canvas_->set_selected_uid(doc_.selected_uid());
+        show_task_information();
+    });
     sheet_view_->setSelectionBehavior(QAbstractItemView::SelectRows);
     sheet_view_->setSelectionMode(QAbstractItemView::SingleSelection);
     sheet_view_->setWordWrap(false);
@@ -296,10 +324,17 @@ void MainWindow::build_central_widget() {
     sheet_view_->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     sheet_view_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     sheet_view_->setFont(fixed_font(kBodyPointSize));
-    sheet_view_->setItemDelegate(new EntryItemDelegate(sheet_view_));
+    // Wave 21: the cell painter's Task Mode pin follows the live presentation
+    // (a loaded file's table can put that column anywhere, or not have one).
+    auto* entry_delegate = new EntryItemDelegate(sheet_view_);
+    entry_delegate->set_kind_lookup(
+        [this](int column) { return sheet_model_.display_kind(column); });
+    sheet_view_->setItemDelegate(entry_delegate);
+    // Wave 21: the selected row/cell is Project's measured green (162,211,160),
+    // the same value the delegate and the Gantt row highlight use (kSelection).
     sheet_view_->setStyleSheet(QStringLiteral(
         "QTableView { background: #ffffff; gridline-color: #d4d4d4;"
-        " selection-background-color: #dce9f5; selection-color: #101010; }"));
+        " selection-background-color: #a2d3a0; selection-color: #101010; }"));
 
     // The 42 px caption band (paint-only; the model still owns the section
     // sizes).  The row-number gutter is the FROZEN vertical header
@@ -522,6 +557,11 @@ void MainWindow::build_menus() {
             actions_.push_back(action);
         }
     }
+    // Wave 21 (operator decision: "hide it for parity"): Project 2021 has no
+    // classic menu bar -- its commands live on the ribbon and the QAT.  The bar
+    // and every QAction stay alive (shortcuts, enablement, the gate's action
+    // lookups); only the bar itself is hidden, so the QAT/ribbon move up.
+    bar->setVisible(false);
 }
 
 void MainWindow::build_status_bar() {
@@ -675,7 +715,8 @@ void MainWindow::apply_split_fraction() {
     // that at 1920, which would clip the ninth column's last pixel; when the
     // shortfall is no more than one handle and the chart keeps its minimum
     // width, snap the sheet to the whole table.
-    const int table_width = kGutterWidth + entry_content_width();
+    const int table_width =
+        kGutterWidth + display_content_width(sheet_model_.display_columns());
     if (sheet < table_width && table_width - sheet <= kSplitHandleWidth &&
         chart_panel_ != nullptr &&
         total - kSplitHandleWidth - table_width >= chart_panel_->minimumWidth()) {
@@ -728,6 +769,15 @@ void MainWindow::showEvent(QShowEvent* event) {
     }
 }
 
+void MainWindow::keyPressEvent(QKeyEvent* event) {
+    if (event != nullptr && event->key() == Qt::Key_Escape && backstage_open_) {
+        show_backstage(false);
+        event->accept();
+        return;
+    }
+    QMainWindow::keyPressEvent(event);
+}
+
 void MainWindow::closeEvent(QCloseEvent* event) {
     if (!confirm_proceed_with_discard()) {
         event->ignore();
@@ -768,7 +818,7 @@ bool MainWindow::open_file(const QString& path, QString* error) {
         if (chart_panel_ != nullptr) {
             chart_panel_->setVisible(true);
         }
-        configure_sheet();
+        configure_task_columns();
         // Back to a NEW project: current week, Entry headers, today's Start and
         // Finish -- not the engine's 1984 default axis.
         doc_.build_empty_view(prefs_.zoom, app::today_date32());
@@ -811,7 +861,7 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     if (delegate != nullptr) {
         delegate->set_entry_mode(true);
     }
-    sheet_view_->setEditTriggers(QAbstractItemView::DoubleClicked |
+    sheet_view_->setEditTriggers(QAbstractItemView::AnyKeyPressed |
                                  QAbstractItemView::EditKeyPressed);
     if (chart_panel_ != nullptr) {
         chart_panel_->setVisible(true);
@@ -819,7 +869,7 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     update_chrome();
 
     rebind_sheet();
-    configure_sheet();
+    configure_task_columns();
     sync_view_selection();
     gantt_canvas_->set_layout(doc_.gantt());
     gantt_canvas_->set_selected_uid(doc_.selected_uid());
@@ -828,10 +878,10 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     refresh_timeline();
 
     update_window_title();
-    set_message("loaded " + std::to_string(doc_.loaded().tasks.size()) + " task(s), " +
-                    std::to_string(doc_.loaded().resources.size()) + " resource(s), " +
-                    std::to_string(doc_.loaded().assignments.size()) + " assignment(s)",
-                false);
+    // Operator decision 8 / the reference: the LEFT status segment is "Ready",
+    // not the load diagnostic (wave 21: the summary moved to the right segment and
+    // its tooltip, which also keeps the reader-warning count visible).
+    set_message(std::string(), false);
     update_zoom_slider();
     refresh_view_buttons();
     update_menu_state();
@@ -863,27 +913,44 @@ void MainWindow::apply_filter_to_sheet_model() {
     sheet_model_.set_display_rows(doc_.display_rows(), doc_.filter_active());
 }
 
+void MainWindow::configure_task_columns() {
+    if (sheet_view_ == nullptr) {
+        return;
+    }
+    // Wave 21 (operator decision 7): a LOADED file's sheet shows the columns its
+    // own `214/CTable` stores -- set, order, titles and widths -- and only a
+    // new/empty project shows the fixed Entry presentation.  PlanDocument built
+    // the SheetModel from the same table (app::table_sheet_columns), so display
+    // column N maps to a real model column and editing keeps working.
+    std::vector<DisplayColumn> columns;
+    if (doc_.has_document() && doc_.sheet() != nullptr) {
+        columns = display_columns_for_sheet(*doc_.sheet());
+    } else {
+        columns = entry_display_columns();
+    }
+    sheet_model_.set_display_columns(std::move(columns));
+    auto* header = static_cast<SheetHeaderView*>(sheet_view_->horizontalHeader());
+    if (header != nullptr) {
+        header->set_display_columns(sheet_model_.display_columns());
+    }
+    configure_sheet();
+}
+
 void MainWindow::configure_sheet() {
     if (sheet_view_ == nullptr || prefs_.view != app::ViewMode::task_sheet) {
         return;
     }
-    // Column widths come from the DATA when a file is open: the file's
-    // `214/CTable` stores each column's width in characters (the first of its
-    // nine opaque bytes), and MS Project's column rule is one character = 6 px
-    // plus 3 px of padding.  An EMPTY project uses the same stock Entry widths,
-    // so its caption band is the product's, not a blank strip.
+    // The widths ARE the presentation's: the Entry list's measured 39/57/147/81/
+    // 81/81/105/105/123 for a new/empty project, the file's stored character
+    // widths (chars * 6 + 3) for a loaded one.  A stored width of 0 already fell
+    // back to the stock width in display_columns_for_sheet(), so every column has
+    // a positive width here.
     sheet_view_->setMinimumWidth(0);
-    const std::vector<EntryColumn>& columns = entry_columns();
+    const std::vector<DisplayColumn>& columns = sheet_model_.display_columns();
     for (std::size_t index = 0; index < columns.size(); ++index) {
-        int chars = doc_.has_document() ? doc_.table_column_chars(columns[index].table_field) : 0;
-        if (chars <= 0) {
-            chars = columns[index].default_chars;
+        if (columns[index].width > 0) {
+            sheet_view_->setColumnWidth(static_cast<int>(index), columns[index].width);
         }
-        int width = entry_width_px(chars);
-        if (width <= 0) {
-            width = columns[index].width;
-        }
-        sheet_view_->setColumnWidth(static_cast<int>(index), width);
     }
     sheet_view_->verticalHeader()->setDefaultSectionSize(kRowHeight);
 }
@@ -922,7 +989,7 @@ void MainWindow::sync_view_selection() {
     if (ordinal == core::sheet::kNoIndex) {
         return;
     }
-    const int name_column = entry_column_index(EntryCellKind::name);
+    const int name_column = sheet_model_.display_column_for_field(app::name_field_id());
     sheet_view_->setCurrentIndex(
         sheet_model_.index(static_cast<int>(ordinal), std::max(0, name_column)));
 }
@@ -935,14 +1002,56 @@ void MainWindow::update_status() {
     if (status_summary_ == nullptr) {
         return;
     }
-    status_summary_->setText(QString::fromStdString(summary_text()));
+    // Wave 21 (operator decision 8, the reference capture): the LEFT segment is
+    // "Ready" -- or the command message/error that is active right now.  The
+    // diagnostic summary that used to sit here (counts, Entry widths, warnings)
+    // moved to the RIGHT segment, whose tooltip carries the whole thing, so the
+    // reader-warning count stays visible without taking the Ready slot.
+    status_summary_->setText(QString::fromStdString(
+        message_.empty() ? std::string("Ready") : message_));
+    QPalette left_palette = status_summary_->palette();
+    left_palette.setColor(QPalette::WindowText,
+                          message_is_error_ ? QColor(0xb0, 0x1c, 0x1c)
+                                            : QColor(0x20, 0x20, 0x20));
+    status_summary_->setPalette(left_palette);
     if (status_message_ != nullptr) {
-        status_message_->setText(QString::fromStdString(message_));
-        QPalette palette = status_message_->palette();
-        palette.setColor(QPalette::WindowText,
-                         message_is_error_ ? QColor(0xb0, 0x1c, 0x1c) : QColor(0x20, 0x20, 0x20));
-        status_message_->setPalette(palette);
+        status_message_->setText(status_detail_text());
+        status_message_->setToolTip(QString::fromStdString(summary_text()));
     }
+}
+
+void MainWindow::clear_render_selection() {
+    if (doc_.sheet() != nullptr) {
+        doc_.sheet()->clear_selection();
+    }
+    if (sheet_view_ != nullptr) {
+        sheet_view_->clearSelection();
+        sheet_view_->setCurrentIndex(QModelIndex());
+    }
+    if (gantt_canvas_ != nullptr) {
+        gantt_canvas_->set_selected_uid(0);
+    }
+}
+
+QString MainWindow::status_left_text() const {
+    return status_summary_ != nullptr ? status_summary_->text() : QString();
+}
+
+QString MainWindow::status_detail_text() const {
+    if (!doc_.has_document()) {
+        return QString();
+    }
+    const app::PlanSummary summary = doc_.summary();
+    QString text = QString::number(static_cast<qulonglong>(summary.tasks)) +
+                   QStringLiteral(" tasks, ") +
+                   QString::number(static_cast<qulonglong>(summary.links)) +
+                   QStringLiteral(" links, ") +
+                   QString::number(static_cast<qulonglong>(doc_.warnings())) +
+                   QStringLiteral(" warnings");
+    if (doc_.filter_active()) {
+        text += QStringLiteral(", filtered");
+    }
+    return text;
 }
 
 void MainWindow::set_message(std::string text, bool is_error) {
@@ -1005,9 +1114,8 @@ void MainWindow::show_backstage(bool open) {
     if (statusBar() != nullptr) {
         statusBar()->setVisible(!open);
     }
-    if (menuBar() != nullptr) {
-        menuBar()->setVisible(!open);
-    }
+    // The menu bar stays hidden in both states (wave 21 parity decision); it
+    // exists only as the QAction owner the shortcuts and tests use.
     if (open) {
         refresh_backstage_info();
         backstage_->show_page(Backstage::Page::home);
@@ -1043,7 +1151,7 @@ void MainWindow::new_project() {
     if (chart_panel_ != nullptr) {
         chart_panel_->setVisible(true);
     }
-    configure_sheet();
+    configure_task_columns();
     doc_.build_empty_view(prefs_.zoom, app::today_date32());
     gantt_canvas_->set_layout(doc_.gantt());
     gantt_canvas_->set_selected_uid(0);
@@ -2571,12 +2679,142 @@ QMenu* MainWindow::build_row_menu() {
     disabled(menu->addAction(QStringLiteral("Fill Down")));
     disabled(menu->addAction(QStringLiteral("Clear Contents")));
     menu->addSeparator();
-    command(QStringLiteral("Information..."), app::MenuAction::task_fields);
+    QAction* information = menu->addAction(QStringLiteral("Information..."));
+    connect(information, &QAction::triggered, this, [this](bool) { show_task_information(); });
     disabled(menu->addAction(QStringLiteral("Notes...")));
     menu->addSeparator();
     disabled(menu->addAction(QStringLiteral("Add to Timeline")));
     command(QStringLiteral("Link"), app::MenuAction::predecessors);
     return menu;
+}
+
+bool MainWindow::task_information_values(TaskInformationValues* out) const {
+    if (out == nullptr || doc_.sheet() == nullptr) {
+        return false;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (!selected.has_selection) {
+        return false;
+    }
+    const std::size_t row = selected.row;
+    if (row >= doc_.records().row_count()) {
+        return false;
+    }
+    auto cell_text = [this, row](std::string_view field_name) {
+        const core::view::FieldId field = app::task_field_id(field_name);
+        for (std::size_t column = 0; column < doc_.sheet()->column_count(); ++column) {
+            if (doc_.sheet()->column(column).field == field) {
+                return app::cell_text(*doc_.sheet(), row, column, prefs_);
+            }
+        }
+        return std::string();
+    };
+    out->name = cell_text("Name");
+    out->duration_text = cell_text("Duration");
+    out->start_text = cell_text("Start");
+    out->finish_text = cell_text("Finish");
+    out->percent_text = cell_text("PercentComplete");
+    if (out->percent_text.empty()) {
+        for (const app::TaskRow& task : doc_.plan().tasks) {
+            if (task.uid == selected.uid) {
+                out->percent_text = std::to_string(task.percent_complete) + "%";
+                break;
+            }
+        }
+    }
+    out->manually_scheduled = false;
+    for (const app::TaskRow& task : doc_.plan().tasks) {
+        if (task.uid == selected.uid) {
+            out->manually_scheduled = task.manually_scheduled;
+            break;
+        }
+    }
+    return true;
+}
+
+bool MainWindow::apply_task_information(const TaskInformationValues& values) {
+    if (doc_.sheet() == nullptr) {
+        return false;
+    }
+    core::sheet::SheetModel* sheet = doc_.sheet();
+    const app::SelectedTask selected = app::selected_task(*sheet, doc_.rows());
+    if (!selected.has_selection) {
+        set_message("select a task first", true);
+        update_status();
+        return false;
+    }
+    struct FieldEdit {
+        const char* name;
+        const std::string* text;
+    };
+    const FieldEdit edits[] = {{"Name", &values.name},
+                               {"Duration", &values.duration_text},
+                               {"Start", &values.start_text},
+                               {"Finish", &values.finish_text}};
+    bool ok = true;
+    bool applied = false;
+    for (const FieldEdit& edit : edits) {
+        const core::view::FieldId field = app::task_field_id(edit.name);
+        std::size_t column = core::sheet::kNoIndex;
+        for (std::size_t candidate = 0; candidate < sheet->column_count(); ++candidate) {
+            if (sheet->column(candidate).field == field) {
+                column = candidate;
+                break;
+            }
+        }
+        if (column == core::sheet::kNoIndex) {
+            continue;  // the file's table does not show this field
+        }
+        // Only a CHANGED field is written: an untouched field keeps whatever
+        // rendering the sheet gave it, so a formatted value the edit parser does
+        // not accept can never turn an untouched field into an apply failure.
+        if (sheet->cell_text(selected.row, column) == *edit.text) {
+            continue;
+        }
+        if (!sheet->begin_edit(selected.row, column)) {
+            ok = false;
+            set_message(std::string("task information: the ") + edit.name +
+                            " column is read-only",
+                        true);
+            continue;
+        }
+        sheet->set_edit_text(*edit.text);
+        const core::sheet::EditOutcome outcome = sheet->commit_edit(false);
+        if (!outcome.ok) {
+            sheet->cancel_edit();
+            ok = false;
+            set_message("task information: " + outcome.error, true);
+            continue;
+        }
+        applied = applied || outcome.changed;
+    }
+    if (ok) {
+        if (applied) {
+            structural_.clear_redo();
+            after_cell_change();
+        }
+        set_message("task information applied", false);
+    }
+    update_status();
+    return ok;
+}
+
+void MainWindow::show_task_information() {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
+        set_message("Task Information is available in the Task Sheet view", true);
+        update_status();
+        return;
+    }
+    TaskInformationValues values;
+    if (!task_information_values(&values)) {
+        set_message("select a task first", true);
+        update_status();
+        return;
+    }
+    if (!edit_task_information(this, &values)) {
+        return;  // Cancel: nothing applied, nothing recorded
+    }
+    apply_task_information(values);
 }
 
 void MainWindow::show_filter_dialog() {
@@ -2677,14 +2915,14 @@ void MainWindow::show_view(app::ViewMode mode) {
         view_records_.clear();
         header->set_model_titles(false);
         delegate->set_entry_mode(true);
-        sheet_view_->setEditTriggers(QAbstractItemView::DoubleClicked |
+        sheet_view_->setEditTriggers(QAbstractItemView::AnyKeyPressed |
                                      QAbstractItemView::EditKeyPressed);
         gantt_canvas_->setVisible(true);
         if (chart_panel_ != nullptr) {
             chart_panel_->setVisible(true);
         }
         rebind_sheet();
-        configure_sheet();
+        configure_task_columns();
         if (!splitter_user_moved_) {
             apply_split_fraction();
         }

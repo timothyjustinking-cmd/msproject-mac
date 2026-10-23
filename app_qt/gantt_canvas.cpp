@@ -314,7 +314,12 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
                     }
                     painter.drawPolygon(cap);
                 }
-            } else if (bar.fill.w > 0.0) {
+            } else if (bar.fill.w > 0.0 && !bar.critical) {
+                // The completion fill is the normal bar's darker blue.  It must NOT
+                // cover a CRITICAL bar: Project keeps a critical task red along its
+                // whole length even at 100 % complete, and the operator's capture
+                // showed our blue fill making critical invisible (wave 21, decision
+                // 4 of the operator review).
                 painter.fillRect(
                     QRectF(bar.fill.x, bar.fill.y + body_top, bar.fill.w, bar.fill.h),
                     kBarComplete);

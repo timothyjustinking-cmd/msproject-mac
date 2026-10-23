@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 
+#include "entry_columns.h"  // DisplayColumn (wave 21)
 #include "prefs.h"
 #include "sheet.h"
 
@@ -55,6 +56,21 @@ class SheetTableModel final : public QAbstractTableModel {
     // sheet's visible columns (read-only); the default is the Entry table.
     void set_generic(bool generic);
     bool generic() const noexcept { return generic_; }
+
+    // Wave 21 (operator decision 7): the live task-sheet presentation.  The
+    // default is entry_display_columns(); a loaded file sets its own stored
+    // table's columns (app_qt/entry_columns.h, display_columns_for_sheet()).  The
+    // generic (resource/usage) presentation ignores this list and keeps showing
+    // the sheet's own columns.
+    void set_display_columns(std::vector<DisplayColumn> columns);
+    const std::vector<DisplayColumn>& display_columns() const noexcept {
+        return display_columns_;
+    }
+    // The display ordinal showing `field`, or -1 when the presentation has none.
+    int display_column_for_field(core::view::FieldId field) const;
+    // What the cell painter draws for a display column (the Task Mode pin, the
+    // blank Indicators cell, the Add New Column stub, ordinary data).
+    EntryCellKind display_kind(int display_column) const;
 
     // Wave 19: the filtered display list (RecordSet rows in display order).
     // `active == false` means "no filter" and falls back to the sheet's own
@@ -99,6 +115,9 @@ class SheetTableModel final : public QAbstractTableModel {
     core::sheet::SheetModel* sheet_ = nullptr;
     const app::Preferences* preferences_ = nullptr;
     bool generic_ = false;
+    // The task-sheet presentation, in display order.  Initialised to the Entry
+    // list, replaced by a loaded file's own table.
+    std::vector<DisplayColumn> display_columns_;
     bool filter_active_ = false;
     std::vector<std::size_t> display_rows_;
     CommitHandler commit_handler_;

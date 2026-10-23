@@ -38,6 +38,7 @@
 #include "record_set.h"
 #include "selection_model.h"  // app::RowMap
 #include "sheet.h"
+#include "viewstate.h"  // msproject::viewstate::TableDef (wave 21)
 
 namespace app {
 class StructuralEdits;
@@ -121,7 +122,14 @@ class PlanDocument {
     // The stored character width of the `214/CTable` column whose field id is
     // `table_field` (0 when the table/file does not carry it).
     int table_column_chars(std::uint32_t table_field) const;
-    bool table_widths_read() const noexcept { return !table_widths_.empty(); }
+    bool table_widths_read() const noexcept { return !table_.columns.empty(); }
+
+    // Wave 21 (operator decision 7): the file's own first `214/CTable` table.
+    // The SheetModel is built from it through app::table_sheet_columns(), so the
+    // sheet's column set, order, titles and widths are the file's.  An empty
+    // TableDef means the file has no readable CTable (a new project, or a stream
+    // this reader cannot decode), and the sheet keeps app::default_sheet_columns().
+    const msproject::viewstate::TableDef& table() const noexcept { return table_; }
 
     const std::string& path() const noexcept { return path_; }
     const std::string& title() const noexcept { return title_; }
@@ -132,7 +140,10 @@ class PlanDocument {
     void build_gantt(app::ZoomLevel zoom);
     void rebuild_from_base(app::ZoomLevel zoom, std::uint32_t keep_uid);
     void refresh_filter_rows();
-    void read_table_column_widths(const std::string& source_path);
+    void read_table(const std::string& source_path);
+    // The columns the sheet is built from: the file's stored table when it has
+    // one, else app::default_sheet_columns().
+    std::vector<core::sheet::SheetColumn> stored_columns() const;
 
     app::PlanInput loaded_;
     // The plan the current RecordSet was built from: `loaded_` plus any applied
@@ -149,7 +160,9 @@ class PlanDocument {
     std::vector<std::size_t> filter_rows_;
     std::string filter_description_;
     bool filter_active_ = false;
-    std::vector<std::pair<std::uint32_t, int>> table_widths_;
+    // The file's stored `214/CTable` table (wave 21): presentation metadata, never
+    // part of the save diff.
+    msproject::viewstate::TableDef table_;
     std::string path_;
     std::string title_;
     std::size_t warnings_ = 0;
