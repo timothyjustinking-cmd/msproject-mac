@@ -225,6 +225,7 @@ if(APP_BUILD_TESTS)
     target_link_libraries(layout_model_tests PRIVATE app_layout)
     target_compile_definitions(layout_model_tests PRIVATE
         APP_CORPUS_PROBE_DIR="${APP_CORPUS_PROBE_DIR_CMAKE}"
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
     )
     app_set_warnings(layout_model_tests)
 

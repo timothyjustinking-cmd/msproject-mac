@@ -634,6 +634,99 @@ void test_corpus_file(const std::filesystem::path& path, const char* label,
                 static_cast<unsigned long long>(summary.critical));
 }
 
+// Wave 25 (W25-1/S1): the displayed-row Gantt and the edit-entry guard on a
+// file that SHOWS the project row and stores its tasks out of ID order.
+// tests/data/wave24-order.mpp stores FixedData rows 1..5 as IDs 1,3,4,5,2, and
+// its 214/Props record 0x03400009 is 1 (row shown), so RecordSet row 0 is the
+// project row and row 1 is the task with ID 2 (uid 5).
+//
+// Under the old row arithmetic (input.tasks[row]) the project row took the
+// first task's bar, every other bar belonged to the task one sheet row below,
+// and the last displayed row produced no bar.  Each check below is false on
+// that code and true on the uid-resolved source the shells now call.
+void test_displayed_rows_by_uid() {
+#if defined(APP_TEST_DATA_DIR)
+    const std::filesystem::path path =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave24-order.mpp";
+    if (!std::filesystem::exists(path)) {
+        check(false, "the committed W25-1 fixture wave24-order.mpp is present");
+        return;
+    }
+    const mpp::Document document = mpp::load_file(path.string());
+    const app::PlanInput input = app::plan_input_from_document(document);
+    check(input.show_project_summary, "wave24-order.mpp stores the project row SHOWN");
+    check_size(input.tasks.size(), 5, "wave24-order.mpp has five tasks");
+
+    // The adapter sorts by ID, so vector position is not the stored order.
+    bool order_differs = false;
+    for (std::size_t index = 0; index < input.tasks.size(); ++index) {
+        if (static_cast<std::size_t>(input.tasks[index].file_row) != index + 1) {
+            order_differs = true;
+        }
+    }
+    check(order_differs, "wave24-order.mpp's stored order differs from its ID order");
+    check(input.tasks.size() > 1 && input.tasks[0].uid != 0 && input.tasks[1].uid != 0,
+          "the plan's task list carries real uids");
+
+    core::view::RecordSet records = app::make_record_set(input);
+    check_size(records.row_count(), input.tasks.size() + 1,
+               "the RecordSet carries one row more than the plan (the project row)");
+    check_size(records.uid(0), 0, "RecordSet row 0 is the project row");
+    check(records.uid(1) == input.tasks[0].uid, "RecordSet row 1 is the first ID-sorted task");
+
+    core::sheet::SheetModel sheet(records, app::default_sheet_columns());
+    app::apply_edit_policy(sheet);
+    const std::vector<std::size_t> rows = sheet.visible_rows();
+    check_size(rows.size(), records.row_count(), "every displayed row is visible");
+
+    const core::gantt::GanttSource source =
+        app::make_gantt_source_for_displayed_rows(input, records, rows, {}, kDateNa);
+    check_size(source.tasks.size(), rows.size(),
+               "the Gantt source has one task per displayed row (row arithmetic drops the last)");
+    std::size_t source_mismatches = 0;
+    for (std::size_t index = 0; index < source.tasks.size() && index < rows.size(); ++index) {
+        if (source.tasks[index].uid != sheet.row_uid(rows[index])) {
+            ++source_mismatches;
+        }
+    }
+    check_size(source_mismatches, 0,
+               "every Gantt task carries its displayed row's uid, not input.tasks[row]");
+    if (!source.tasks.empty()) {
+        check_size(source.tasks.front().uid, 0,
+                   "the first displayed row draws the project bar (uid 0)");
+    }
+
+    // The layout the window draws: one bar per displayed row, in row order.
+    const core::gantt::GanttLayout layout = core::gantt::build_gantt(
+        source, app::default_gantt_style(),
+        app::timescale_for_zoom(input, core::gantt::GanttZoom::week));
+    check_size(layout.bars.size(), rows.size(),
+               "the chart has one bar per displayed row (the smoke path's count)");
+    std::size_t bar_mismatches = 0;
+    for (const core::gantt::Bar& bar : layout.bars) {
+        if (bar.row < 0 || static_cast<std::size_t>(bar.row) >= rows.size() ||
+            bar.task_uid != sheet.row_uid(rows[static_cast<std::size_t>(bar.row)])) {
+            ++bar_mismatches;
+        }
+    }
+    check_size(bar_mismatches, 0, "every bar names the uid of the row it is drawn on");
+
+    // The edit-entry guard (R5): the project row refuses a session, a task row
+    // opens one and can be cancelled cleanly.
+    const std::size_t name_column = sheet.column_of_field(app::name_field_id());
+    std::string error;
+    check(!app::begin_cell_edit(sheet, 0, name_column, error),
+          "uid 0 (the project row) refuses an edit session");
+    check(!sheet.editing(), "no edit session is left open after the refusal");
+    check(app::begin_cell_edit(sheet, 1, name_column, error),
+          "a task row opens an edit session");
+    sheet.cancel_edit();
+    check(!sheet.editing(), "the task-row session can be cancelled");
+#else
+    std::printf("SKIP: APP_TEST_DATA_DIR is not defined; W25-1 fixture test not run\n");
+#endif
+}
+
 void test_corpus() {
 #if defined(APP_CORPUS_PROBE_DIR)
     const std::filesystem::path probe{APP_CORPUS_PROBE_DIR};
@@ -664,6 +757,7 @@ int main() {
     test_gantt();
     test_undated_row();
     test_empty();
+    test_displayed_rows_by_uid();
     test_corpus();
 
     if (g_failures != 0) {

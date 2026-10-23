@@ -338,16 +338,15 @@ bool SheetTableModel::setData(const QModelIndex& index, const QVariant& value, i
         report_commit(false, "this cell is not editable");
         return false;
     }
-    if (sheet_->row_uid(row) == 0) {
-        report_commit(false, "the project summary row is read-only");
-        return false;
-    }
     // Move the sheet's own selection to the edited cell first: the selection is
     // the single source of truth the Gantt and the Save diff derive from, and a
     // double-click on another row must move it.
     sheet_->select_cell(row, column);
-    if (!sheet_->begin_edit(row, column)) {
-        report_commit(false, "this column is read-only");
+    // Wave 25 (W25-1/S1): the uid-0 refusal is app::begin_cell_edit's, so the
+    // macOS and Qt shells share one edit-entry policy.
+    std::string edit_error;
+    if (!app::begin_cell_edit(*sheet_, row, column, edit_error)) {
+        report_commit(false, edit_error);
         return false;
     }
     sheet_->set_edit_text(value.toString().toStdString());
