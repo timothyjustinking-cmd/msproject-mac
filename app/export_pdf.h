@@ -111,10 +111,15 @@ std::shared_ptr<const core::sched::Calendar> shading_calendar(bool working_day_s
 std::string export_subtitle(ReportKind kind, const std::string& filter_description,
                             std::size_t shown, std::size_t total);
 
-// Wave 25 (W25-11/S14): how many of `rows` are TASKS.  The synthetic
-// project-summary row (uid 0) is a displayed row, not a task, and both Print
-// and the PDF subtitle say "N of N tasks" -- so the PDF must not count it.
-// An empty `rows` means every RecordSet row.
+// Wave 25 (W25-11/S14): task rows, excluding the synthetic project-summary
+// row (uid 0) -- a displayed row, not a task, in both Print's "N of N" and the
+// PDF subtitle.
+//
+// TWO overloads, deliberately: a FILTERED list is counted exactly (an EMPTY
+// list is zero tasks -- a filter that matches nothing must read "0 of N"), and
+// the unfiltered case is a separate call.  One "empty means all" function made
+// a zero-match filter indistinguishable from no filter.
+std::size_t task_row_count(const core::view::RecordSet& records);
 std::size_t task_row_count(const core::view::RecordSet& records,
                            const std::vector<std::size_t>& rows);
 

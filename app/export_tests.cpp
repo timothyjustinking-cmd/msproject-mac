@@ -234,12 +234,14 @@ void test_helpers() {
     records.add_row(0);  // the project row
     records.add_row(5);
     records.add_row(9);
-    check_size(app::task_row_count(records, {}), 2,
+    check_size(app::task_row_count(records), 2,
                "the PDF task count excludes the project-summary row");
     check_size(app::task_row_count(records, {0, 1}), 1,
                "a filtered row list is counted the same way");
     check_size(app::task_row_count(records, {0}), 0,
                "the project row alone is no task");
+    check_size(app::task_row_count(records, {}), 0,
+               "an active filter that matches nothing is 0 of N, not all rows");
 
     check_text(app::export_footer(prefs, ""), app::preferences_summary(prefs),
                "the footer without a selection is the preference summary");
