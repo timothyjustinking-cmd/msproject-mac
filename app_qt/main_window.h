@@ -181,6 +181,12 @@ class MainWindow final : public QMainWindow {
     // Change Working Time: the file's calendars are decoded and rendered
     // read-only; the port has no calendar writer.
     void show_change_working_time();
+    // W26-5.4: Links Between Projects (laid out, Close only), Update Project
+    // (laid out, no actuals writer) and Move Project (Project's actual-values
+    // prompt, then an honest refusal: the port cannot move a project).
+    void show_links_between_projects();
+    void show_update_project();
+    void show_move_project();
 
     // Opens/closes the File backstage.  Public so the structural gate can prove
     // the left rail and pages without clicking through a modal.

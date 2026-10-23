@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "command_status.h"
+#include "project_dialogs.h"  // app::wbs_menu_items / baseline_menu_items
 #include "ribbon_glyphs.h"
 #include "shell_icons.h"
 #include "shell_style.h"
@@ -157,9 +158,10 @@ GroupSpec& large(GroupSpec& group, const char* label, app::MenuAction action, in
 }
 
 GroupSpec& split(GroupSpec& group, const char* label, int width, int row, int col,
-                 int row_span = 3, const char* icon = nullptr) {
+                 int row_span = 3, const char* icon = nullptr, bool enabled = false,
+                 RibbonCommand command = RibbonCommand::none) {
     add(group, label, Kind::split, width, row, col, row_span, 1, app::MenuAction::none,
-        RibbonCommand::none, nullptr, 0, false, false, icon);
+        command, nullptr, 0, enabled, false, icon);
     return group;
 }
 
@@ -384,23 +386,26 @@ const std::vector<TabSpec>& tab_specs() {
             false, "properties.project_information");
         large(project_properties, "Custom\nFields", app::MenuAction::custom_fields, 50, 1, true,
               "properties.custom_fields");
-        large(project_properties, "Links Between\nProjects", app::MenuAction::none, 68, 2, false,
-              "properties.links_between");
-        large(project_properties, "WBS", app::MenuAction::none, 40, 3, false, "properties.wbs");
+        add(project_properties, "Links Between\nProjects", Kind::button, 68, 0, 2, 3, 1,
+            app::MenuAction::none, RibbonCommand::links_between_projects, nullptr, 0, true,
+            false, "properties.links_between");
+        split(project_properties, "WBS", 40, 0, 3, 3, "properties.wbs", true,
+              RibbonCommand::wbs_menu);
         add(project_properties, "Change\nWorking Time", Kind::button, 68, 0, 4, 3, 1,
             app::MenuAction::none, RibbonCommand::change_working_time, nullptr, 0, true,
             false, "properties.change_working_time");
         GroupSpec& project_schedule = add_group(project, "Schedule", 175);
         large(project_schedule, "Calculate\nProject", app::MenuAction::none, 52, 0, false,
               "schedule.calculate");
-        large(project_schedule, "Set\nBaseline", app::MenuAction::none, 48, 1, false,
-              "schedule.set_baseline");
-        large(project_schedule, "Move\nProject", app::MenuAction::none, 46, 2, false,
-              "schedule.move");
+        split(project_schedule, "Set\nBaseline", 48, 0, 1, 3, "schedule.set_baseline", true,
+              RibbonCommand::set_baseline_menu);
+        add(project_schedule, "Move\nProject", Kind::button, 46, 0, 2, 3, 1,
+            app::MenuAction::none, RibbonCommand::move_project, nullptr, 0, true, false,
+            "schedule.move");
         GroupSpec& status = add_group(project, "Status", 133);
         field(status, "Status Date", 126, 0, 0);
-        small(status, "Update Project", app::MenuAction::none, 100, 1, 0, false, 1, false,
-              "status.update");
+        small_cmd(status, "Update Project", RibbonCommand::update_project, 100, 1, 0, true,
+                  false, "status.update");
         GroupSpec& proofing = add_group(project, "Proofing", 63);
         large(proofing, "Spelling", app::MenuAction::none, 52, 0, false, "proofing.spelling");
         tabs.push_back(std::move(project));
@@ -985,11 +990,39 @@ void RibbonBar::build_page(int tab_index) {
                     button->setFont(ribbon_font(kRibbonPointSize));
                     button->setFocusPolicy(Qt::NoFocus);
                     auto* menu = new QMenu(button);
-                    QAction* entry = menu->addAction(QStringLiteral("not implemented in this port"));
-                    entry->setEnabled(false);
-                    button->setMenu(menu);
-                    button->setEnabled(false);  // decision 9: never a dead click
-                    button->setToolTip(QString::fromUtf8(kNotImplemented));
+                    menu->setToolTipsVisible(true);
+                    if (spec.enabled && (spec.command == RibbonCommand::wbs_menu ||
+                                         spec.command == RibbonCommand::set_baseline_menu)) {
+                        // W26-5.4: the captured drop-down menus.  Every item has
+                        // no engine in this port, so each is disabled with the
+                        // exact decision-9 tooltip; opening the menu is live.
+                        const std::vector<std::string>& items =
+                            spec.command == RibbonCommand::wbs_menu
+                                ? app::wbs_menu_items()
+                                : app::baseline_menu_items();
+                        for (const std::string& item : items) {
+                            QAction* action = menu->addAction(QString::fromStdString(item));
+                            action->setEnabled(false);
+                            action->setToolTip(QString::fromUtf8(kNotImplemented));
+                        }
+                        button->setMenu(menu);
+                        button->setPopupMode(QToolButton::MenuButtonPopup);
+                        button->setEnabled(true);
+                        button->setToolTip(label);
+                        const RibbonCommand command = spec.command;
+                        connect(button, &QToolButton::clicked, this, [this, command](bool) {
+                            if (command_handler_) {
+                                command_handler_(command, false);
+                            }
+                        });
+                    } else {
+                        QAction* entry =
+                            menu->addAction(QStringLiteral("not implemented in this port"));
+                        entry->setEnabled(false);
+                        button->setMenu(menu);
+                        button->setEnabled(false);  // decision 9: never a dead click
+                        button->setToolTip(QString::fromUtf8(kNotImplemented));
+                    }
                     control = button;
                     break;
                 }

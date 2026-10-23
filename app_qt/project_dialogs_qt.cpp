@@ -14,6 +14,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMouseEvent>
 #include <QPainter>
@@ -863,6 +864,189 @@ void CustomFieldsDialog::edit_formula() {
     formula_edit_.formula = field.formula;
     has_formula_edit_ = true;
     refresh_details();
+}
+
+// ---------------------------------------------------------------------------
+// Update Project (wave 26, W26-5.4)
+// ---------------------------------------------------------------------------
+UpdateProjectDialog::UpdateProjectDialog(QWidget* parent) : QDialog(parent) {
+    setWindowTitle(QStringLiteral("Update Project"));
+    setFixedSize(project_dialog_geometry::kUpdateProjectWidth,
+                 project_dialog_geometry::kUpdateProjectHeight);
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(project_dialog_geometry::kMargin,
+                              project_dialog_geometry::kMargin,
+                              project_dialog_geometry::kMargin,
+                              project_dialog_geometry::kMargin);
+    outer->setSpacing(4);
+
+    const auto add_radio = [this, outer](const QString& text, bool checked,
+                                         QWidget* parent_widget) {
+        auto* radio = new QRadioButton(text, parent_widget);
+        radio->setChecked(checked);
+        radios_.push_back(radio);
+        outer->addWidget(radio);
+        return radio;
+    };
+
+    auto* through_row = new QHBoxLayout();
+    through_row->setContentsMargins(0, 0, 0, 0);
+    through_row->setSpacing(6);
+    auto* through_label = new QLabel(QStringLiteral("Update work as complete through:"), this);
+    through_row->addWidget(through_label);
+    through_ = new QDateEdit(this);
+    through_->setObjectName(QStringLiteral("throughDate"));
+    through_->setDisplayFormat(QStringLiteral("dd/MM/yy"));
+    through_->setFixedWidth(90);
+    through_->setDate(QDate::currentDate());
+    through_row->addWidget(through_);
+    through_row->addStretch(1);
+    outer->addLayout(through_row);
+
+    add_radio(QStringLiteral("0% - 100% complete"), false, this);
+    add_radio(QStringLiteral("100% complete"), false, this);
+
+    auto* after_row = new QHBoxLayout();
+    after_row->setContentsMargins(0, 0, 0, 0);
+    after_row->setSpacing(6);
+    auto* after_radio = new QRadioButton(
+        QStringLiteral("Reschedule uncompleted work to start after:"), this);
+    radios_.push_back(after_radio);
+    after_row->addWidget(after_radio);
+    after_ = new QDateEdit(this);
+    after_->setObjectName(QStringLiteral("afterDate"));
+    after_->setDisplayFormat(QStringLiteral("dd/MM/yy"));
+    after_->setFixedWidth(90);
+    after_->setDate(QDate::currentDate());
+    after_row->addWidget(after_);
+    after_row->addStretch(1);
+    outer->addLayout(after_row);
+
+    auto* for_row = new QHBoxLayout();
+    for_row->setContentsMargins(0, 0, 0, 0);
+    for_row->setSpacing(8);
+    for_row->addWidget(new QLabel(QStringLiteral("For:"), this));
+    auto* entire = new QRadioButton(QStringLiteral("Entire project"), this);
+    entire->setChecked(true);
+    radios_.push_back(entire);
+    auto* selected = new QRadioButton(QStringLiteral("Selected tasks"), this);
+    radios_.push_back(selected);
+    for_row->addWidget(entire);
+    for_row->addWidget(selected);
+    for_row->addStretch(1);
+    outer->addLayout(for_row);
+
+    auto* note = new QLabel(
+        QStringLiteral("This port has no actuals writer, so Update Project changes "
+                       "nothing (decision 15)."),
+        this);
+    note->setWordWrap(true);
+    outer->addWidget(note);
+    outer->addStretch(1);
+
+    auto* bottom = new QHBoxLayout();
+    bottom->setContentsMargins(0, 0, 0, 0);
+    bottom->setSpacing(6);
+    bottom->addStretch(1);
+    ok_ = make_button(this, QStringLiteral("OK"));
+    ok_->setObjectName(QStringLiteral("okButton"));
+    ok_->setEnabled(false);
+    ok_->setToolTip(kDisabledTip);
+    cancel_ = make_button(this, QStringLiteral("Cancel"));
+    cancel_->setObjectName(QStringLiteral("cancelButton"));
+    bottom->addWidget(ok_);
+    bottom->addWidget(cancel_);
+    outer->addLayout(bottom);
+
+    connect(cancel_, &QPushButton::clicked, this, &QDialog::reject);
+}
+
+// ---------------------------------------------------------------------------
+// Links Between Projects (wave 26, W26-5.4)
+// ---------------------------------------------------------------------------
+LinksBetweenProjectsDialog::LinksBetweenProjectsDialog(std::string project_path,
+                                                       QWidget* parent)
+    : QDialog(parent) {
+    setWindowTitle(QStringLiteral("Links Between Projects in %1")
+                       .arg(QString::fromStdString(project_path)));
+    setFixedSize(project_dialog_geometry::kLinksWidth, project_dialog_geometry::kLinksHeight);
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(project_dialog_geometry::kMargin,
+                              project_dialog_geometry::kMargin,
+                              project_dialog_geometry::kMargin,
+                              project_dialog_geometry::kMargin);
+    outer->setSpacing(6);
+
+    tabs_ = new QTabWidget(this);
+    tabs_->setObjectName(QStringLiteral("externalLinkTabs"));
+    external_ = new QTableWidget(0, 5, tabs_);
+    external_->setObjectName(QStringLiteral("externalLinkTable"));
+    external_->setHorizontalHeaderLabels({QStringLiteral("Task"), QStringLiteral("Type"),
+                                          QStringLiteral("Date"), QStringLiteral("% Comp"),
+                                          QStringLiteral("Differ...")});
+    external_->horizontalHeader()->setStretchLastSection(true);
+    external_->verticalHeader()->setVisible(false);
+    tabs_->addTab(external_, QStringLiteral("External Predecessors"));
+    // The capture's second tab shares the same five columns.
+    auto* successors = new QTableWidget(0, 5, tabs_);
+    successors->setObjectName(QStringLiteral("externalSuccessorTable"));
+    successors->setHorizontalHeaderLabels({QStringLiteral("Task"), QStringLiteral("Type"),
+                                           QStringLiteral("Date"), QStringLiteral("% Comp"),
+                                           QStringLiteral("Differ...")});
+    successors->horizontalHeader()->setStretchLastSection(true);
+    successors->verticalHeader()->setVisible(false);
+    tabs_->addTab(successors, QStringLiteral("External Successors"));
+    outer->addWidget(tabs_, 1);
+
+    auto* links_box = new QGroupBox(QStringLiteral("Links"), this);
+    auto* links_layout = new QVBoxLayout(links_box);
+    links_layout->setContentsMargins(6, 12, 6, 6);
+    links_ = new QTableWidget(0, 4, links_box);
+    links_->setObjectName(QStringLiteral("projectLinksTable"));
+    links_->setHorizontalHeaderLabels({QStringLiteral("ID"), QStringLiteral("Unique ID"),
+                                       QStringLiteral("Predecessors"),
+                                       QStringLiteral("Successors")});
+    links_->horizontalHeader()->setStretchLastSection(true);
+    links_->verticalHeader()->setVisible(false);
+    links_layout->addWidget(links_, 1);
+    outer->addWidget(links_box, 1);
+
+    auto* path_row = new QHBoxLayout();
+    path_row->setContentsMargins(0, 0, 0, 0);
+    path_row->setSpacing(6);
+    path_row->addWidget(new QLabel(QStringLiteral("Path:"), this));
+    path_ = new QLineEdit(this);
+    path_->setObjectName(QStringLiteral("linksPathEdit"));
+    path_->setEnabled(false);
+    path_->setToolTip(kDisabledTip);
+    path_row->addWidget(path_, 1);
+    outer->addLayout(path_row);
+
+    auto* bottom = new QHBoxLayout();
+    bottom->setContentsMargins(0, 0, 0, 0);
+    bottom->setSpacing(6);
+    help_ = make_button(this, QStringLiteral("Help"));
+    show_ = make_button(this, QStringLiteral("Show"));
+    open_ = make_button(this, QStringLiteral("Open"));
+    refresh_ = make_button(this, QStringLiteral("Refresh"));
+    details_ = make_button(this, QStringLiteral("Details..."));
+    options_ = make_button(this, QStringLiteral("Options..."));
+    QPushButton* const disabled[] = {help_, show_, open_, refresh_, details_, options_};
+    const char* const names[] = {"helpButton", "showButton", "openButton",
+                                 "refreshButton", "detailsButton", "optionsButton"};
+    for (int index = 0; index < 6; ++index) {
+        disabled[index]->setObjectName(QString::fromLatin1(names[index]));
+        disabled[index]->setEnabled(false);
+        disabled[index]->setToolTip(kDisabledTip);
+        bottom->addWidget(disabled[index]);
+    }
+    bottom->addStretch(1);
+    close_ = make_button(this, QStringLiteral("Close"));
+    close_->setObjectName(QStringLiteral("closeButton"));
+    close_->setDefault(true);
+    bottom->addWidget(close_);
+    outer->addLayout(bottom);
+    connect(close_, &QPushButton::clicked, this, &QDialog::accept);
 }
 
 }  // namespace msqt

@@ -1890,11 +1890,21 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             show_change_working_time();
             return;
         case RibbonCommand::links_between_projects:
+            show_links_between_projects();
+            return;
         case RibbonCommand::update_project:
+            show_update_project();
+            return;
         case RibbonCommand::move_project:
+            show_move_project();
+            return;
         case RibbonCommand::wbs_menu:
+            set_message("WBS: no command is implemented in this port", false);
+            update_status();
+            return;
         case RibbonCommand::set_baseline_menu:
-            // W26-5.2..5.4 wire these; until then the controls stay disabled.
+            set_message("Set Baseline: no command is implemented in this port", false);
+            update_status();
             return;
     }
 }
@@ -2752,6 +2762,62 @@ void MainWindow::show_project_information() {
     set_message("queued project priority " + std::to_string(priority) +
                     "; File > Save writes it",
                 false);
+    update_status();
+}
+
+void MainWindow::show_links_between_projects() {
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    LinksBetweenProjectsDialog dialog(doc_.path(), this);
+    dialog.exec();
+    set_message("links between projects: this port decodes no external project links, "
+                "nothing was changed",
+                false);
+    update_status();
+}
+
+void MainWindow::show_update_project() {
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    UpdateProjectDialog dialog(this);
+    dialog.exec();
+    set_message("update project: this port has no actuals writer, nothing was changed",
+                false);
+    update_status();
+}
+
+void MainWindow::show_move_project() {
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    if (!app::project_has_actual_values(doc_.plan())) {
+        set_message("this project has no tasks with actual values; Project would not ask "
+                    "to move it",
+                    false);
+        update_status();
+        return;
+    }
+    // Project's prompt, verbatim (the title is the port's own: no Microsoft
+    // identity, decision on identity).  Moving a project is not implemented:
+    // Yes is answered honestly, never as a fake success.
+    QMessageBox prompt(QMessageBox::Question, QStringLiteral("Move Project"),
+                       QString::fromUtf8(app::move_project_prompt_text()),
+                       QMessageBox::Yes | QMessageBox::No, this);
+    const int choice = prompt.exec();
+    if (choice == QMessageBox::Yes) {
+        set_message("moving a project is not implemented in this port; the file was not changed",
+                    false);
+    } else {
+        set_message("move project cancelled", false);
+    }
     update_status();
 }
 

@@ -323,6 +323,29 @@ int main() {
     }
 
     // -----------------------------------------------------------------------
+    // W26-5.4: the captured vocabulary of the Project tab's static commands
+    // -----------------------------------------------------------------------
+    {
+        check_text(app::move_project_prompt_text(),
+                   "This project contains tasks with actual values.\nDo you still want "
+                   "to move it?",
+                   "Move Project carries Project's prompt text verbatim");
+        check(app::wbs_menu_items().size() == 2 &&
+                  app::wbs_menu_items()[0] == "Define Code..." &&
+                  app::wbs_menu_items()[1] == "Renumber...",
+              "the WBS menu is Define Code... / Renumber...");
+        check(app::baseline_menu_items().size() == 2 &&
+                  app::baseline_menu_items()[0] == "Set Baseline..." &&
+                  app::baseline_menu_items()[1] == "Clear Baseline...",
+              "the Set Baseline menu is Set Baseline... / Clear Baseline...");
+        const std::vector<std::string>& captions = app::update_project_captions();
+        check(captions.size() == 6 &&
+                  captions.front() == "Update work as complete through:" &&
+                  captions.back() == "Selected tasks",
+              "Update Project's captured captions are in order");
+    }
+
+    // -----------------------------------------------------------------------
     // Move Project's actual-values predicate
     // -----------------------------------------------------------------------
     {
