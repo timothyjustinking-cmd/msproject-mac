@@ -217,7 +217,11 @@ jobs:
             python scripts/check_fixtures.py
           fi
 
-      - name: Parity gate against Project's capture of the synthetic fixture
+      # Wave 23 (A-1d): Project's own capture stays local (operator ruling
+      # 2026-10-23); the committed reference is the NUMBERS measured from it.
+      # The pixel score is report-only and needs the local PNG, so it runs in
+      # the wave close, not here.
+      - name: Parity gate against Project's measured capture
         if: runner.os == 'Windows'
         shell: bash
         run: |
@@ -226,10 +230,9 @@ jobs:
           QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1 \
             ./build-qt/msproject_qt.exe --open tests/data/wave23-outline.mpp \
             --render build-qt/wave23-port.png --parity
-          python scripts/parity_report.py --score \
-            tests/data/reference/wave23-outline-project.png build-qt/wave23-port.png
-          python scripts/parity_report.py --compare \
-            tests/data/reference/wave23-outline-project.png build-qt/wave23-port.png
+          python scripts/parity_report.py \
+            --reference-json tests/data/reference/wave23-outline-project.measures.json \
+            build-qt/wave23-port.png
 
       # The 1920x1032 PNG is the image P1's harness scores against the reference
       # capture; a green build that lost it would still upload a plausible 900px

@@ -33,6 +33,11 @@ DOCUMENTED = {
     # task.  No client content.
     "tests/data/wave23-outline.mpp":
         "055721FF07E93F8C8C06B8428E9EF3495D10A38BE8C432506FCB5FF3A786DA20",
+    # Wave 23 (A-1d): the MEASUREMENTS of Project 2021's own capture of that
+    # fixture.  The screenshot itself stays local (operator ruling 2026-10-23);
+    # only the numbers are committed, and this is the CI parity reference.
+    "tests/data/reference/wave23-outline-project.measures.json":
+        "121A594A256078F4AF16669E3390822A8899E8B44526A2E7C26C1FD44404C290",
     # Wave 23 (W23-6): wave23-outline.mpp opened by Project 2021 on a copy,
     # Task.Flag10 set True on ID 3 and saved (the control save first).  The
     # reader's Flag10 decode is checked against this file.
