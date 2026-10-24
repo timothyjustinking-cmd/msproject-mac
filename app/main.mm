@@ -275,6 +275,10 @@ std::size_t name_column_of(const PlanState& plan);
 // them, so they need the declarations here.
 void build_editor(PlanState& plan);
 void apply_structural_change(PlanState& plan);
+// Defined with the model actions further down, but outline_selected_task() below
+// uses it first: clang (the macOS CI job) rejects a call above the definition,
+// while MSVC never compiles this file so the Windows gates cannot see it (W29-1.0a).
+void note(PlanState& plan, std::string message, bool is_error);
 
 // The TaskRow a pending edit/display plan holds for `uid`, or nullptr.  Used by
 // the two wave-13 dialogs to prefill from the plan the editor is built from.

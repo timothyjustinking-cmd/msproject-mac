@@ -305,12 +305,6 @@ std::string hex_tag(std::uint32_t tag) {
     return buffer;
 }
 
-std::string describe(std::string const& label, std::string const& path,
-                     std::size_t actual, std::size_t expected) {
-    return label + ": " + path + " is " + std::to_string(actual) +
-           " bytes, expected " + std::to_string(expected);
-}
-
 void require_same_streams(TestContext& ctx, std::string const& label,
                           CfbDocument const& expected,
                           CfbDocument const& actual) {
