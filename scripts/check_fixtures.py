@@ -151,6 +151,30 @@ DOCUMENTED = {
         "5ACA3BBA6E4B49CF6E91F8E582F1E1DCF45E23CFC0C424C3632E10A2F2C72152",
     "tests/data/wave27-priority-750.mpp":
         "C5A6F06E39665323323BE796EA484FDBD1C0ED2CF9261F4F104565DA48FB6252",
+    # Wave 28 (W28-1.1): four same-session Project 2021 save pairs for
+    # PercentComplete, built by scripts/oracle_w28_actuals.py on copies under
+    # C:/w28 with neutral Author/Manager/Company/UserName/Title.  The first
+    # three pairs are one continuous session on a synthetic-base copy whose
+    # Task ID 1 was switched to Manual=False first: 0 -> 40, 40 -> 100 and
+    # 100 -> 0.  The fourth pair is a fresh copy of the fixture's own manual
+    # row, 0 -> 40.  The edited files are the field-by-field oracles the
+    # port's actuals writer is compared with (W28-1.2).
+    "tests/data/wave28-percent-auto0-control.mpp":
+        "69BC2E31A7663479109F6137E92EFAA99426C576224EEF78373B18112915E974",
+    "tests/data/wave28-percent-auto40.mpp":
+        "079ECF4A2B402FBF819A4DE28EFF6F2A334F850369724D2FC778C52C72DF3024",
+    "tests/data/wave28-percent-auto40-control.mpp":
+        "174CC3E3E56A793215BC9D5FD6928A199FEB2C20523C8C1D828AA4D0DBE09EF4",
+    "tests/data/wave28-percent-auto100.mpp":
+        "B72297F7DE3E320008C34FC5E3755A23987B734773565CCD08982CD2469E211A",
+    "tests/data/wave28-percent-auto100-control.mpp":
+        "E37F8ECD42FC56C91FD341DAA7BC20CB54CF71F971EEDC5A12E291B9F828F10F",
+    "tests/data/wave28-percent-auto0.mpp":
+        "0978235B44C99C82F8943DC74DFF86D39B1C5F9FE7E88427E63B156ED8F9C93E",
+    "tests/data/wave28-percent-manual0-control.mpp":
+        "17BA9E3FEC598ABB736FB6723E50A331E29FBEA447FB21EDD1F05493743774A9",
+    "tests/data/wave28-percent-manual40.mpp":
+        "4EF4CB7FD7B115E7FDB2F9F2CC02EC026FBD73E3E28F78725E84B1F0230438C7",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
