@@ -455,3 +455,83 @@ is the wave-level blocker inherited from G0 (an intermediate blob history
 cannot rewrite), not a G3 failure.
 
 WAVE-28-G3-COMPLETE
+
+## G4 - the Task Form edits
+
+W28-4.1 is DONE.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W28-4.1 | Make the docked Task Form's fields editable through the same edit model and save paths as the sheet (no new write path; disabled where the sheet's is). Selection sync and undo covered | **DONE** | commit `167beea`; gates `build/w28/gates-c233ac8-W28-4.1-app-build-all.log`, `-app-ctest-all.log`, `-qt-build-all.log`, `-qt-ctest-all.log`, `-app-ctest.log`, `-qt-gate-final.log`; fresh `build/w28/g4-fresh-gates.log` |
+
+W28-4.1 detail:
+
+- The form reports a committed field; it never writes. `TaskForm` gained a
+  `TaskFormField` enum and a `CommitHandler`. Return, or focus leaving a field,
+  calls back into `MainWindow::commit_task_form_field`, which builds the same
+  `TaskInformationValues` Task Information's OK builds and passes it to
+  `apply_task_information(values, "task form")` -- the path that already exists.
+  That method IS the sheet's edit model: Name/Duration/Start/Finish go through
+  `SheetModel::begin_edit`/`set_edit_text`/`commit_edit(false)`, so they share
+  the sheet's undo stack and the Start save diff; a changed percent is parsed and
+  queued as the measured `StructuralKind::set_percent` edit (W28-1.2). No writer
+  was added. `apply_task_information`'s new `source` parameter defaults to
+  "task information", so the dialog's status messages are unchanged.
+- Enabled exactly where the sheet is: `refresh_task_form` looks up each field's
+  column in the live `SheetModel` and enables the field only when the column
+  exists and is not read-only (`set_field_enabled` sets both the read-only and
+  the enabled state). Predecessors and Resources stay disabled in the widget:
+  the stored table declares those columns read-only, link edits are the Link
+  dialog, and there is no assignment writer; each carries a tooltip saying so.
+  Percent has no sheet cell but keeps its measured structural path, so it stays
+  enabled.
+- Selection sync and stale commits: `refresh_task_form` now records the uid the
+  texts were populated for (`task_form_uid_`) and clears it before every early
+  return. A commit is applied only while the live selection is still that uid;
+  otherwise it is dropped and the form re-populates. A programmatic `setText`
+  never emits `editingFinished`, so a refresh cannot queue an edit, and a commit
+  equal to the task's current value is a no-op (no undo step and no identical
+  percent save).
+- Undo is proved through the real Edit > Undo action in the split-view gate: a
+  renamed Name commits through the sheet model and is reversed; a Start commits
+  (exactly one pending start edit, document dirty) and is reversed; typing 50 %
+  queues exactly one `set_percent` edit (`percent == 50`) and is reversed. Each
+  time the sheet cell and the form are checked before and after. An unchanged
+  Name committed with Return adds no edit and no undo step.
+- The percent undo exposed a display-plan gap: `StructuralEdits::apply` writes
+  `percent_complete` from a `set_percent`/`update_actuals` edit, but an UNDONE
+  edit is not replayed and `without_structural_edits` copied the shown row's
+  value, so the sheet (and the form) kept showing the percent the file no longer
+  had. It now restores the file's stored `percent_complete` for every uid a
+  percent edit in the redo list touched -- the same shape as the W28-2.1 outline
+  restore. This also fixes the ribbon, Mark on Track and Update Project undo
+  display; it changes no save.
+- Tests: `app_edit_tests` gains the undone-percent display check; the
+  split-view gate gains the enabled/disabled matrix, the three commit/undo
+  cycles and the unchanged-value no-op. Full app ctest 20/20 and app_qt ctest
+  24/24 pass, including `qt_ux_gate` (Task Information's apply still uses the
+  same path).
+
+Group gates (fresh trees configured from scratch under
+`build/w28-fresh{,-app,-qt}`, serial, tree `167beea`, log
+`build/w28/g4-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks passed |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded, 7 pass, 1 expected fail |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks passed |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match |
+| app ctest / app_qt ctest | 20/20 / 24/24 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (70 documented hashes, 50 tracked `.mpp`); paths OK (92 files); provenance OK (8 oracles) |
+| client-name scan on HEAD / `guard_names` wave range / G4 range | 0 files / 0 hits; `wave27..HEAD` refuses only the 076438f intermediate blob (exit 1); `c233ac8..HEAD` 0 hits (exit 0); hex grep no matches (exit 1, expected) |
+
+The gate script's own exit code is 1 because its last command is the hex grep
+(no matches is its success); every numbered stage above exited 0, including the
+52 core, 20 app and 24 app_qt tests. The `guard_names` wave-range refusal is the
+wave-level blocker inherited from G0 (an intermediate blob history cannot be
+rewritten), not a G4 failure.
+
+WAVE-28-G4-COMPLETE
