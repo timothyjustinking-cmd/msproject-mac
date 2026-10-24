@@ -1,96 +1,107 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-10-24, wave 26 closed on branch `wave26` (not merged, not
-pushed).  Keep this file current at every wave close; it is the only file a new
+_Updated 2026-10-24, wave 27 closed on branch `wave27` (pushed; CI on all three
+OSs).  Keep this file current at every wave close; it is the only file a new
 session must read first._
 
 ## The 30-second state
 
-* **Wave 26 is closed on branch `wave26`** (cut from local `wave25` = 3b4da5f)
-  from `docs/handoff/wave26-brief.md`.  It ran as groups G0..G6 + CLOSE, one
-  fresh session each; the record is **`docs/handoff/wave26-complete.md`** (the
-  gate).  Every group's items are DONE; nothing is deferred.  G0 fixed the one
-  High from the wave-25 review; G1..G6 did the parity work waves 23-25 had
-  deferred.  The publication hold still applies: nothing is pushed or merged.
-* **Parity landed this wave**: the ribbon's real control kinds (combos, split
-  buttons, check boxes, a date field, a 16-swatch gallery, launchers) with live
-  widget-class and measured-geometry gates (G1); an original one-ink glyph for
-  all 114 command controls on the seven tabs with uniqueness and monochrome
-  gates (G2); the FILE's text styles, bar styles and timescale tiers decoded
-  from the `0x22400008` Gantt view and rendered — PROJECT_A's italic red
-  milestones, navy/red/green bars and year/quarter/month tiers (G3); the File
-  rail/backstage pages and the 11-page Options dialog (G4); Project Information
-  with a saveable Priority, read-only Change Working Time, the Custom Fields
-  definition dialog plus Task Information's Custom Fields tab, and the
-  Update/Move/Baseline/WBS/Links dialogs (G5); the View task/resource
-  drop-downs, the Dark Gray/Black chrome themes and the docked Task Form split
-  view (G6).
-* **Fresh-tree gates at the close** (final tree `3d78191`, after the review's
-  High fixes; configured from scratch): core **51/51**, `plan_recalc` **512**
-  with corpus / **266** without, M2 **332/332**, engine **7 pass +
-  `constraint-mso` expected**, reader **1100** with corpus / **420** without,
-  app **17/17**, app_qt **23/23**, fixtures **OK** (25 documented hashes, 21
-  tracked `.mpp`), parity **10/10** plus the colour-only **1/0**.  The single
-  log is `build/w26/final-gates.log`.
-* **W26-0.1**: the print row list comes from the RecordSet through
-  `app::print_row_list()` (the filter's rows when a filter is active, every
-  RecordSet row otherwise) and is shared by the macOS, Qt and headless paths;
-  `app_layout` and `app_smoke` run it on the row-shown
-  `tests/data/wave24-order.mpp`, and the smoke round-trip leaves the fixture
-  byte-identical.
-* **New saveable edits**: the ribbon's % Complete buttons use
-  `StructuralKind::set_percent` and Project Information's Priority uses
-  `set_project_priority`; both are written by step 5a of
-  `save_structural_edits` (one `mppwrite::TaskTable` write) and the headless
-  tests re-read 40 % and 750 from the saved file.  The stored table's % Complete
-  column remains presentation-only; a typed cell edit is refused, never
-  silently dropped.
-* **Privacy**: the line-based scan reports 0 hits on every wave-26 tree, but the
-  independent review showed that pass is a **false negative for a wrapped
-  name**: a PROJECT_A task name was quoted across two lines in the G3 record.
-  A whitespace-normalised scan found it on 18 commit trees; it is removed in
-  `759a856` and the normalised scan is clean on the close tree and on every
-  commit message.  The name remains in those 18 commits' history — removing it
-  needs a rewrite, which the hold leaves to Tim, as with the wave-23/24 names.
-  **Run the normalised pass, not only `git grep -F`.**  Residuals:
-  `tests/data/project_a_golden.tsv` still carries an unsalted 16-hex hash of
-  each task name (the reader's oracle), and the plaintext names in waves 23-24
-  history remain — both are Tim's decision with the hold.
-* **Publication hold still in force:** client data is already on the public
-  repo; do not push anything and do not rewrite history until Tim rules (brief
-  section 0).  CI was therefore **not dispatched** for wave 26; the local
-  fresh-tree gates are the evidence.
-* **Still open** (wave26-complete CLOSE "Found, not fixed"): the stored sheet
-  column widths, PROJECT_A's yellow per-row fill (decode-only highlight), the
-  bar-label coverage, the dark themes' light sheet/chart header bands and fixed
-  ribbon ink, the menu-bar/QAT/status-bar artwork, the display-only Task Form,
-  the undecoded stored combination view, the White theme, six dialogs still
-  disabled (Text Styles, Gridlines, Bar Styles, Page Setup, Visual Reports,
-  Compare Projects), the engines with no writer (actuals, project move,
-  baselines, WBS, calendars), and the review's remaining Mediums: the
-  ribbon check-box accessible-name sync, the Task Information
-  validate-then-commit ordering, the Options new-task mode not reaching
-  `insert_task()`, and the pending-insert % edit that poisons a save.
-* **Wave 25 is closed on branch `wave25`** (cut from local `wave24` =
-  `2561a51`), record `docs/handoff/wave25-complete.md`; `wave23` and `wave24`
-  are closed, verified and not merged.  `main` = **3f973d5**.  `origin/wave23` =
-  `63cd087`; remote `wave24`/`wave25`/`wave26` do not exist.
+* **Wave 27 is closed on branch `wave27`** (cut from local `wave26` = `1299cc7`)
+  from `docs/handoff/wave27-brief.md`.  It ran as G0..G3 + CLOSE, one fresh
+  session each; the record is **`docs/handoff/wave27-complete.md`** (the gate).
+  Every item is DONE; nothing is deferred.  The wave made the save safe and got
+  CI green on all three OSs; the publication hold is **lifted** (history scrubbed
+  24 Oct 2026), and `wave27` is pushed.
+* **The % Complete buttons are DISABLED** (exact decision-9 tooltip "not
+  implemented in this port") until wave 28's actuals writer.  Project's own 50 %
+  save (`tests/data/wave27-percent-actuals.mpp`) writes Actual Duration,
+  Remaining Duration, % Complete, Actual Start, two date words, a progress flag,
+  the project row's roll-up and Var2Data field 0x0B40015E; the old port wrote +92
+  only.  No UI path may queue `StructuralKind::set_percent` before wave 28.
+  The edit kind, save path and tests are kept, marked NOT ENABLED.
+* **The edit model owns the percent rules** (W27-0.2): `app::make_percent_edit`
+  refuses uid 0, an unknown uid, a value above 100 and any summary row;
+  `StructuralEdits::push(edit, const PlanInput*)` REQUIRES the plan for a
+  percent edit and refuses a plan-less one.  Step 5a of `save_structural_edits`
+  refuses one stale percent edit with a warning instead of throwing, so it
+  cannot fail every later save (W27-3.1).
+* **Project Priority 750 is measured and KEPT** (W27-0.3): the Project pair
+  `tests/data/wave27-priority-control.mpp` / `-750.mpp` differs in exactly row
+  0's +78 word; `app/project_dialogs_tests.cpp` saves from the control fixture
+  and compares the saved `114/TBkndTask/FixedData` byte-for-byte with Project's
+  750 save.
+* **Other wave-27 fixes**: delete/undo restores the field/percent/link edits a
+  delete displaces (W27-3.2); Unlink removes BOTH links touching the task and
+  its link table matches Project's own UnlinkTasks save (W27-3.3,
+  `wave27-unlink*.mpp`; the task table is not compared -- Project's Unlink also
+  reschedules, which the port does not); the
+  real save tests fail on a failed or empty load (W27-3.4); the 13 invertible
+  FNV-1a name hashes are gone, replaced by ID/level/summary/OutlineNumber
+  structure (W27-3.5); the three wholly-CRLF sources are LF (W27-3.6).  The
+  wave-26 Gantt style/font controlled saves are committed fixtures with one
+  decoder test per change (W27-2.1).
+* **Fresh-tree gates at the close** (final code tree **9323db2**; configured
+  from scratch under `build/w27-fresh{,-app,-qt}`, built serially):
+  core **51/51**, `plan_recalc` **512** with corpus / **266** without, M2
+  **332/332**, engine **7 pass + `constraint-mso` expected**, reader **1100**
+  with corpus / **420** without, app **17/17**, app_qt **23/23**, fixtures **OK**
+  (46 documented hashes, 26 tracked `.mpp`), oracle provenance **OK (8)**,
+  parity **10/10** plus the colour-only **1/0**.  Logs
+  `build/w27/close-fresh-gates.log` (and the core re-run at its end).
+* **CI**: `wave27` **9323db2** green on qt-shell (Linux/Windows/macOS; run
+  40064777633), ci (Windows/Linux; 40064779873) and app-macos (40064782094),
+  first dispatch, no re-run.
+* **Privacy**: the line-based scan reports **0** on HEAD and **0** commit
+  messages on `wave26..HEAD`; the whitespace-normalised `guard_names.py` is
+  **0** on `c632c8f..HEAD` **and on the whole `main..wave27` ancestry (137
+  commits)**; the `client-string-<8 hex>` grep has no matches.  The scrubbed
+  ancestry adds no name.  A coverage gap found at this close: the 156-name
+  list is built from live rows, so a deleted row's name printed by a
+  corpus-backed reader warning into the local gate log is not in it; nothing
+  tracked quotes it and `build/` is local-only (the warning and the scanner are
+  a wave-28 fix, listed).  Residuals: the **13 unsalted FNV-1a name hashes
+  removed by W27-3.5 remain in the older wave-26 commits** (`912b3fa`..
+  `c7283d7`), and `tests/data/project_a_golden.tsv` still carries unsalted
+  16-hex name hashes (the reader's oracle).  The brief forbids rewriting
+  history; both are Tim's decision.  **Run BOTH scans** (line-based and
+  normalised).
+* **Still open** (wave27-complete CLOSE "Found, not fixed"): the stored sheet
+  column widths, PROJECT_A's yellow per-row fill, bar-label coverage, the dark
+  themes' light sheet/chart header bands and fixed ribbon ink, the
+  menu-bar/QAT/status-bar artwork, the display-only Task Form, the undecoded
+  stored combination view, the White theme, six dialogs still disabled (Text
+  Styles, Gridlines, Bar Styles, Page Setup, Visual Reports, Compare Projects),
+  the engines with no writer (actuals, project move, baselines, WBS, calendars),
+  the wave-26 review's remaining Mediums (the ribbon check-box accessible-name
+  sync, the Task Information validate-then-commit ordering, the Options
+  new-task mode not reaching `insert_task()`, the 0xFFFF stored point size
+  reaching Qt, multi-row Unlink), this wave's review (the latent percent
+  pending-insert refusal; Low: the Unlink test comment, the SKIP-on-missing
+  blocks, the operator path inside the new fixtures, `mpp_diff.py`'s
+  ten-offset truncation), the name-scan coverage gap above (skipped-row names;
+  print the uid/row only), two process items (five G3 messages omit their gate
+  log's name; fixture commits also carry the hash registry and provenance),
+  and the repo-wide CRLF grandfathered files.
+* **Branch state**: `main` = **fcb1c10** = `origin/main`.  `wave23`
+  (`e1d40b8` = `origin/wave23`), `wave24` (`6dbf126`), `wave25` (`c012813`),
+  `wave26` (`1299cc7` = `origin/wave26`) and `wave27` (the CLOSE commit after
+  `9323db2` = `origin/wave27`) are closed and **not merged**.  No remote
+  `wave24`/`wave25`.
 * Engine stays **7/8** (`constraint-mso` deliberately left failing;
   `mppwrite::save_plan` is test-only).
-* Parity still deferred/remaining (wave26-complete CLOSE): the items in the
-  "Still open" bullet above; the wave-25 deferred list (W25-12..W25-21) is
-  closed by wave 26 except for those residuals.
+* Parity still deferred/remaining: the "Still open" bullet above; the wave-25
+  deferred list (W25-12..W25-21) is closed by wave 26 except for those residuals.
 
 ## Reading order
 
-**Coordinator starting wave 27** (≈5 files):
+**Coordinator starting wave 28** (≈5 files):
 
 1. this file;
-2. `docs/handoff/wave26-complete.md` — the gate: G0..G6 + CLOSE, the fresh-tree
-   gates, the independent review, the live comparison, the re-scored 16
-   decisions, "Found, not fixed";
-3. `docs/handoff/wave26-brief.md` (the work order) and
-   `docs/handoff/wave25-verification/` (what G0 answered);
+2. `docs/handoff/wave27-complete.md` — the gate: G0..G3 + CLOSE, the fresh-tree
+   gates, the two privacy scans, the review passes, the CI runs, the re-scored
+   16 decisions, "Found, not fixed";
+3. `docs/handoff/wave27-brief.md` (the work order); a verifier's
+   `docs/handoff/wave27-verification/` may follow this close;
 4. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
 5. `docs/ui-reference-set.md` — the local captures and palettes (git-ignored);
 6. `memory/coordinator.md` — the compact current memory.
@@ -98,7 +109,7 @@ session must read first._
 **Lane agent** (≈4 files):
 
 1. this file;
-2. `docs/handoff/wave26-brief.md`;
+2. `docs/handoff/wave27-brief.md`;
 3. your lane's `docs/handoff/<lane>.md` and `memory/<lane>.md`;
 4. the code you own.
 
@@ -140,21 +151,24 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
   comment, test or commit message.  Refer to rows by ID and strings by opaque
   label (`client-name-NN`) or structural relation — never by an unsalted hash,
   which a guess inverts.  Run
-  `python -I build/audit-w22/scan_client_names.py HEAD` before every commit and
+  `python -I build/audit-w22/scan_client_names.py HEAD` and
+  `python -I build/audit-w22/guard_names.py <range>` before every commit and
   expect 0 hits; also `git grep -nE "client-string-[0-9a-f]{8}"` expect none.
 * **Fixtures:** never open a committed fixture in place (Project rewrites files
   it opens); oracle scripts use `oracle_lock.working_copy()`.  Run
   `python scripts/check_fixtures.py` before every commit (it also checks the
   scenario oracle provenance).  Nothing under `tests/data` is written by a lane.
-  New fixtures are built through Project on a NEUTRAL path (`C:/w25`) with
+  New fixtures are built through Project on a NEUTRAL path (`C:/w27`) with
   neutral Author/Manager/Company/UserName.
 * **Displayed rows resolve through their uid** (wave 25): `app::print_row_list`
   takes RecordSet rows; never index `plan.tasks` with a RecordSet row; uid 0 is
   the project row and refuses task edits.
-* **Saveable structural edits** (wave 26): % Complete and project Priority go
-  through `save_structural_edits` step 5a (`mppwrite::TaskTable`), not the
-  presentation-only sheet column.  Every new edit path needs a save-and-reopen
-  test.
+* **Saveable structural edits** (waves 26-27): Priority is measured against
+  Project and enabled; PercentComplete is NOT enabled — the five % buttons are
+  disabled and no UI path may queue `set_percent` until wave 28's actuals
+  writer.  A percent edit needs the loaded plan at `push()`; step 5a refuses one
+  stale percent edit instead of failing the save.  Every enabled new edit path
+  needs a save-and-reopen test AND the standing-rule-1 Project measurement.
 * **`plan_recalc`** never rewrites the golden by default; refreshing needs the
   exact value `PLAN_RECALC_UPDATE_GOLDEN=1`, and the local/CI gate runs
   `ctest -E plan_recalc` plus the corpus-free binary/step.
@@ -165,28 +179,23 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
 * **Builds:** serial only; local Qt 6.5.3 in `build/Qt/6.5.3/6.5.3/msvc2019_64`.
   Qt ctest prepends its own DLL directory.  Transient Dropbox/MSBuild file locks
   are common; retry the build rather than changing CMake.  Text files are UTF-8
-  with LF line endings (two wave-26 dialog files landed CRLF; normalise when
-  touched).
+  with LF line endings (173 grandfathered CRLF files remain; do not add more).
 * **CI:** one dispatch per milestone; red runs are triaged, fixed and dispatched
-  again with the reason recorded.  **Wave 26's end-of-wave CI was not run
-  because of the publication hold.**
+  again with the reason recorded.  `wave27`'s close runs are recorded in
+  wave27-complete.
 * **Commits:** one finding id per commit; honest numbers; a gate number must
-  belong to the tree it is written in and name its log under `build/w26/`; no
+  belong to the tree it is written in and name its log under `build/w27/`; no
   test claimed unless run.  A known gap is an expected failure **by name**, never
   an assertion of the wrong output.
 
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md and docs/handoff/wave26-complete.md.  Wave 26 is closed
-on branch wave26 (not merged, not pushed; publication hold).  If Tim has ruled
-on the client data, merge/handle the branches as he directs; otherwise continue
-wave26-complete's CLOSE "Found, not fixed" list: the stored sheet column widths,
-PROJECT_A's yellow per-row fill, the dark themes' light header bands, the
-menu/QAT/status-bar artwork, the stored combination view, the six dialogs still
-disabled (Text Styles, Gridlines, Bar Styles, Page Setup, Visual Reports,
-Compare Projects), and the review's four Mediums (ribbon check-box sync, Task
-Information ordering, the Options new-task mode, the pending-insert % edit).
-Keep every gate in wave26-complete CLOSE green before each commit and run BOTH
-the line-based and the whitespace-normalised client-name scans.
+Read docs/START-HERE.md and docs/handoff/wave27-complete.md.  Wave 27 is closed
+on branch wave27 (pushed; CI green on all three OSs; not merged).  Continue
+wave27-complete's CLOSE "Found, not fixed" list, or start wave 28's plan
+(docs/handoff/plan-waves27-30.md): the actuals writer and the % buttons, outline
+editing, the Options new-task mode, the editable Task Form.  Keep every gate in
+wave27-complete CLOSE green before each commit and run BOTH the line-based and
+the whitespace-normalised client-name scans.
 ```

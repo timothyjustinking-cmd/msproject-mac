@@ -173,8 +173,8 @@ two the standing rules name.  It found two real breaks.  Dispatch series
   flake, not a code defect: the core sources at `1d0a92a` are identical to
   the green ci run `40055405582` at `07f67b6` (the only change between them
   is `app_qt/tests/backstage_gate_test.cpp`, outside the root project), and
-  `cal` passed 20/20 local repeats on MSVC.  Re-dispatch `40056462711` was
-  green on both OSs.
+  `cal` passed repeated local MSVC runs (the repeat count was not logged).
+  Re-dispatch `40056462711` was green on both OSs.
 
 Group gates on the final commit `1d0a92a`, fresh trees configured from
 scratch under `build/w27-fresh{,-app,-qt}` and built serially (log
@@ -205,9 +205,10 @@ Per-commit gate logs: `build/w27/gates-8e7895f-W27-1.1.log`,
   run carries; the gate now asserts the box's text and prints the title as
   a note.  This is a platform difference in Qt, not a port defect.
 - ci run `40056062664`'s `cal` SEGFAULT happened once on an unchanged core
-  tree and did not reproduce (20/20 local repeats, green re-dispatch).  If
-  it recurs, treat it as a runner-memory symptom and add the `cal` binary to
-  the triage, not a scheduling change.
+  tree and did not reproduce in repeated local MSVC runs (the count was not
+  logged); the re-dispatch `40056462711` was green.  If it recurs, treat it
+  as a runner-memory symptom and add the `cal` binary to the triage, not a
+  scheduling change.
 
 WAVE-27-G1-COMPLETE
 
@@ -284,8 +285,9 @@ scratch under `build/w27-fresh{,-app,-qt}` and built serially (log
   provenance OK (8)
 - client-name scan 0 hits on HEAD; whitespace-normalised `guard_names.py` 0
   on `c632c8f..HEAD`; client-string hex grep no matches
-- The script's exit code is 1 because its last command is the expected-empty
-  hex grep.  Clearing `build/w27-fresh-app` also hit a transient
+- The log's privacy line records the hex grep's exit 1 (no matches,
+  expected); the script itself ends normally.  Clearing `build/w27-fresh-app`
+  also hit a transient
   directory-handle lock; CMake then re-ran compiler detection and every source
   compiled, so that tree was still configured and built from scratch (the core
   and app_qt trees were cleared normally).
@@ -369,10 +371,17 @@ W27-3.3 detail:
   `tests/data/wave27-unlink-control.mpp` / `wave27-unlink.mpp` (synthetic,
   neutral metadata; SHA-256s in `tests/data/README.md` and
   `scripts/check_fixtures.py`).
-- On disk the link `FixedData` stream is byte-identical between the pair;
-  `FixedMeta` tombstones entries 0 and 2 (state byte +0 00 -> 02) and sets the
-  header flags word 4 -> 6.  The `Fixed2Data`/`Fixed2Meta` differences are
-  per-save GUID bookkeeping: the control already differs from the base there.
+- On disk the link `FixedData` stream is byte-identical in the base, control
+  and unlinked saves; `FixedMeta` tombstones entries 0 and 2 (state byte
+  +0 00 -> 02) and sets the header flags word 4 -> 6.  `Fixed2Data` carries
+  per-save GUIDs (the control already differs from the base and the unlinked
+  save differs from both); `Fixed2Meta` is byte-identical in all three.
+  Project's own save also moves task-table bytes (`TBkndTask/FixedData` 11
+  bytes, `FixedMeta` 3) because its Unlink reschedules, while the port's
+  no-CPM save leaves them unchanged; the test therefore compares the three
+  link-table streams only.  (Corrected in the CLOSE pass: this paragraph
+  previously said `Fixed2Meta` differed per save; a direct CFB comparison of
+  the three fixtures shows it does not.)
 - Port change.  `app::saved_links_touching(plan, edits, uid)` returns every
   saved link naming the task at either end, skipping a link a pending
   `delete_link` already removes; a pending add has no saved row (uid 0) and is
@@ -392,11 +401,15 @@ W27-3.4 detail:
 - A failed load already counted one failed check through `load()`, but the
   wave-26 blocks asserted only inside `if (load.ok)`, so a failure skipped the
   body without adding a second check; a successful load with an empty plan
-  skipped it with no failure at all.  Every `Loaded` the real save test uses now
-  has its own named check before the dependent body: `after_add`,
+  skipped it with no failure at all.  Every later `Loaded` the real save test
+  uses has its own named check before the dependent body: `after_add`,
   `after_delete`, `combined_base` and its non-empty task list, the combined
   re-read, `percent_base` and its non-empty task list, `percent_reread` and
-  `own_loaded`.  A failed or empty load is now a reported failure.
+  `own_loaded`.  The first load, `base`, keeps its earlier
+  `if (!base.ok || base.plan.tasks.empty()) return;`: a failed load still
+  counts through `load()`, but an ok-but-empty plan returns without a named
+  check (a one-line check is queued as a Low).  Every other failed or empty
+  load is now a reported failure.
 - app_edit 186 checks (was 177; the nine new load checks).  The first W27-3.4
   gate run (`gates-8fe6c18-W27-3.4.log`) also built an uncommitted W27-3.5 draft
   and failed `qt_task_order_corpus` on that draft's wrong outline numbers; the
@@ -405,7 +418,9 @@ W27-3.4 detail:
 
 W27-3.5 detail:
 
-- `fnv1a64` and all 13 unsalted hashes are deleted.  The corpus case now
+- The task-order test's `fnv1a64` helper and all 13 unsalted hashes are
+  deleted.  (The unrelated `fnv1a64` helpers in `core/viewstate/report_main.cpp`
+  and the fuzz harness hash bytes, not names, and remain.)  The corpus case now
   asserts, all read from `project_a.mpp` at test time, the ID order 0..12, each
   row's indent level, its summary flag and Project's `OutlineNumber`; no
   display name is read or stored.
@@ -413,8 +428,9 @@ W27-3.5 detail:
   outline order in this file (ID 1's top-level task is outline 2, ID 12's is
   outline 1), ID 12 is a summary whose children lie beyond the 13 captured
   rows, and row 0 is the project row (level -1, empty outline, summary).
-- `qt_task_order` and `qt_task_order_corpus` pass with the corpus present (217
-  checks).
+- `qt_task_order` (77 checks) and `qt_task_order_corpus` (217 checks) pass
+  with the corpus present (direct-run counts; the CLOSE re-run is in
+  `build/w27/direct-counters.log`).
 
 W27-3.6 detail:
 
@@ -441,8 +457,8 @@ scratch under `build/w27-fresh{,-app,-qt}` and built serially (log
   provenance OK (8)
 - client-name scan 0 hits on HEAD; whitespace-normalised `guard_names.py` 0
   on `c632c8f..HEAD`; client-string hex grep no matches
-- The script's exit code is 1 because its last command is the expected-empty
-  hex grep.
+- The log's hex-grep line records exit 1 (no matches, expected); the script
+  itself ends normally.
 
 Per-commit gate logs (each: core 51/51, app 17/17, app_qt 23/23, fixtures OK,
 HEAD and working-tree name scans 0, `guard_names` 0, hex grep none):
@@ -478,3 +494,301 @@ HEAD and working-tree name scans 0, `guard_names` 0, hex grep none):
   this wave's diff and belongs to a dedicated cleanup.
 
 WAVE-27-G3-COMPLETE
+
+## CLOSE - the wave record
+
+The wave ran as four groups plus this close, one fresh session each.  Every
+item in G0..G3 is DONE; nothing is deferred.  The group marker lines end each
+section above.  The CLOSE work is the fresh-tree gate run, the privacy scans,
+the independent review pass over `git diff wave26..wave27` (two read-only
+reviewers), the push and the CI dispatch, the START-HERE / INDEX / memory update
+and the re-scored 16 decisions.
+
+### Fresh-tree gates (final code commit `9323db2`)
+
+Three trees were configured FROM SCRATCH on 2026-10-24 and built serially:
+`build/w27-fresh` (core, `-DCORE_WARNINGS_AS_ERRORS=ON`),
+`build/w27-fresh-app` (headless app tests) and `build/w27-fresh-qt` (Qt shell
+and its 23 tests).  The numbers and the engine scenario suite are in
+**`build/w27/close-fresh-gates.log`**; the engine harness is
+`scripts/engine_diff.py --suite --expect-fail constraint-mso`.
+
+One qualification, stated because the gate must be from scratch: the first
+pass's cleanup could not delete `build/w27-fresh` (a transient file handle from
+an earlier recursive search held a subdirectory), so CMake configured over the
+old cache and that section is not from-scratch evidence.  The tree was then
+deleted for real and **every core stage was re-run from scratch** in the
+`CORE RE-RUN` section at the end of the same log (identical numbers); that
+section is the core gate of record.  The app and app_qt trees were cleared
+normally on the first pass.
+
+| gate | result |
+|---|---|
+| core ctest `-E plan_recalc` | **51/51** |
+| `plan_recalc` with corpus | **512 checks**, 0 failures |
+| `plan_recalc` `MPP_NO_CORPUS=1` | **266 checks**, 0 failures |
+| engine scenario suite | 8 recorded, **7 pass / 1 fail**, 0 unrecorded; expected failing set `constraint-mso` reached; exit 0 |
+| engine `--selftest` | **53 checks, 0 failures** |
+| reader with corpus | **1100 checks** |
+| reader `MPP_NO_CORPUS=1` | **420 checks** |
+| M2 `recalc --compare` | **332/332** (268/268 leaf, 64/64 summary) |
+| app ctest | **17/17** |
+| app_qt ctest | **23/23** |
+| `check_fixtures.py` / oracle provenance | **OK** (46 documented hashes, 26 tracked `.mpp`); provenance OK (8) |
+| parity wave23-outline | **10 comparable, 0 failing** |
+| parity wave25-auto `--only colour.task_bar` | **1 comparable, 0 failing** |
+| client-name line scan | HEAD at `9323db2` **0 files / 0 hits**; commit messages on `wave26..9323db2` **0** (`build/w27/close-privacy-head-messages.log`); the normalised pass prints **no labels and exits 0** on `c632c8f..9323db2` and on the whole `main..9323db2` ancestry, 137 commits (`close-privacy-normalised.log`, `close-privacy-ancestry.log`) |
+| `client-string-<8 hex>` grep | **none** |
+| pixel score | not run: no PROJECT_A reference PNG locally (unchanged from wave 26) |
+
+The log's line `wave26..HEAD: 0 file(s)` is **not** evidence: `scan_client_names.py`
+treats every argv as a revision and `git grep` against the range fails silently;
+the separate `--messages wave26..9323db2` run is the evidence of record.  The
+numbers belong to `9323db2`; the CLOSE docs commit that follows is docs-only.
+
+One citation note: the per-test check counts quoted in G0..G3 are direct-run
+figures (ctest prints pass/fail only).  They were re-corroborated at `9323db2`
+in `build/w27/direct-counters.log` (app_edit 186, app_edits_links 200,
+qt_task_order 77, qt_task_order_corpus 217, the whole viewstate suite 1,042).
+
+### Privacy (brief section 0)
+
+The publication hold was LIFTED (history scrubbed 24 Oct 2026); `wave27` is
+pushed and the pre-push guard (which fails closed) passed.  Both scans ran:
+
+- line-based `scan_client_names.py HEAD --messages wave26..HEAD` at `9323db2`:
+  156 corpus names; **0 files / 0 hits** on HEAD and **0 commits** whose
+  message quotes a name (`build/w27/close-privacy-head-messages.log`);
+- whitespace-normalised `guard_names.py`: **no labels and exit 0** on
+  `c632c8f..9323db2` (`build/w27/close-privacy-normalised.log`) and on
+  `fcb1c10..9323db2` (`main..wave27`, 137 commits;
+  `close-privacy-ancestry.log`), so the scrubbed history reachable from this
+  branch adds no name (the script prints labels only on a refusal, so the log
+  now records its range and exit code);
+- `git grep -nE "client-string-[0-9a-f]{8}"`: no matches.
+
+A raw line scan of `main`'s tree reports 12 hits in 8 older files; the three
+labels are all in `guard_names`'s `GENERIC` set (generic section words that also
+occur as task names), so they identify nobody and the normalised guard ignores
+them.
+HEAD itself is 0.  The pre-scrub commits are no longer reachable (the old
+objects are pruned), so this wave has no positive control; the wave-26 positive
+control on the pre-scrub `wave23` tree (14 files) remains the scanners'
+detection evidence.
+
+One local-log caveat, found in this close: the corpus-backed reader and M2
+runs print a PROJECT_A task name from a row the reader skips (the orphaned
+Var2Data block of a deleted row) into `build/w27/close-fresh-gates.log`.  The
+156-name list is built from live `reader_dump` rows, so it does not contain
+that deleted row's name, and neither scan would catch a committed copy.  No
+name is quoted here or in any tracked file; `build/` is neither tracked nor
+Dropbox-synced, and every committed tree and message (and the whole
+`main..wave27` ancestry) is clean.  The warning should print the uid and row
+only, and the scanner should include skipped-row names, in wave 28 (listed in
+Found, not fixed).  The same warning is in the wave-26 log, so this is a
+coverage gap in the tooling, not a new exposure.
+
+Residuals: the first is in history, which the brief and the standing rules
+forbid rewriting; the second is a committed oracle the reader still reads:
+
+- the **13 unsalted FNV-1a display-name hashes** wave 26 added in `912b3fa`
+  and wave 27 removed in `c7283d7` remain in the wave-26 commits reachable from
+  `wave27`; they are hashes, not names, but a guessed name inverts them;
+- `tests/data/project_a_golden.tsv` still carries unsalted 16-hex name hashes
+  (the reader's oracle), unchanged since wave 25;
+- the wave-23/24 plaintext names are gone from every reachable tree and message
+  (the scrub); no name is added by any commit in `main..wave27`.
+
+### Independent review of `wave26..wave27`
+
+Two independent reviewers with fresh contexts (neither an author) read the
+wave's diff, the record and the gate/privacy evidence on 2026-10-24; both were
+read-only and quoted no client data.  One reviewed the code diff; the other
+audited the record against the logs and re-measured the fixtures.
+
+**No Critical and no confirmed High finding.**  The record auditor raised one
+High -- that the W27-0.1 percent-actuals offsets were false -- and a
+byte-level re-measurement disproved it (R1): its tool prints only ten
+differing offsets per row.  The code review found one Medium and five Low; the
+record audit found four Medium and five Low.  Every item and disposition is
+below; the record corrections are in this commit.
+
+**Code review**
+
+| # | sev | finding | disposition |
+|---|---|---|---|
+| 1 | Medium | `make_percent_edit` treats "pending insert" as a uid absent from the plan it is handed; on the display plan a pending insert is a real row (uid != 0, `file_row` 0, summary false), so a wave-28 caller passing `doc_.plan()` would be accepted.  The save layer still refuses the row with a warning, so no data loss, and no UI caller exists today (the % buttons are disabled). | **LISTED** for wave 28: reject `file_row == 0` explicitly and add a display-plan pending-insert test before the buttons are re-enabled. |
+| 2 | Low | The Unlink save test's comment says comparing with the unlinked save compares "Unlink's bytes only"; Project's Unlink also reschedules, so its save moves `TBkndTask` bytes (`FixedData` 11, `FixedMeta` 3) that the port's no-CPM save leaves unchanged.  The test compares the link table only, so its assertions are correct. | **LISTED**: a comment fix with the no-CPM work; no gate effect. |
+| 3 | Low | The G3 note said `Fixed2Meta` differed per save; a direct CFB comparison shows it is byte-identical in the base, control and unlinked saves (only `Fixed2Data` carries per-save GUIDs). | **CORRECTED** in this commit (G3 "W27-3.3 detail"). |
+| 4 | Low | Each of the five new `.mpp` fixtures embeds its own absolute save path (UTF-16LE in `214/CEdl/Var2Data` and `Props14`); it is the operator's local path, not a client name, and the pattern pre-exists in `synthetic-calendars.mpp` and `wave23-flags.mpp`. | **LISTED**: these are the oracle evidence and their bytes are pinned; rebuilding them through the neutral path with new hashes is a later fixture task. |
+| 5 | Low | The Unlink real-save test (and two older blocks) prints SKIP and returns without a failing check if a fixture is missing, so it can pass without measuring; the fixture-hash check is the only backstop. | **LISTED**: a missing-fixture `check()` belongs to the test-hardening pass; the pattern pre-dates wave 27. |
+| 6 | Low | The CLOSE work was not yet on the tree when the reviewer read it (no marker, START-HERE/INDEX/memory unchanged, CI citations stopping at G1). | **Resolved by this commit**: the CLOSE section, the START-HERE / INDEX / memory update and the runs at `9323db2` are all here. |
+
+**Record audit**
+
+| # | sev | finding | disposition |
+|---|---|---|---|
+| R1 | High (raised) - **not a defect** | The W27-0.1 note's offsets were called false: the auditor's `mpp_diff.py` output stopped at +132 and showed no +136..139 and no +168/+169. | **DISPROVED**: a full byte diff shows uid 0 differs in 17 bytes (+80/+81, +88/+89, +92, +120..123, +132..139) and uid 1 in 18 (the same plus +169: 00 -> 90), with Var2Data key 0x0B40015E -- exactly the record's list.  `scripts/mpp_diff.py` truncates at ten differing offsets per row (`first_diffs(..., limit=10)`) without a marker, which hid them; evidence `build/w27/diff-task-rows-full.log`. |
+| R2 | Medium | The W27-3.4 sentence "Every `Loaded` ... has its own named check" omitted `base` at the top of `test_real_save_round_trip`, which returns on an ok-but-empty plan without a named check (a failed load still counts through `load()`). | **CORRECTED** in this commit (W27-3.4 detail); a one-line check for `base` is queued as a Low. |
+| R3 | Medium | The per-test check counts in G0..G3 (148/177/186, 200, 198, 217) are not printed by the named ctest gate logs. | **EXPLAINED** in this commit: they are direct-run figures, re-corroborated at `9323db2` in `build/w27/direct-counters.log`; no count withdrawn. |
+| R4 | Medium | Five G3 commit messages (`8cad902`, `8fe6c18`, `c7679bc`, `c7283d7`, `1bf7b99`) quote numbers without naming the gate log their rule 3 requires. | **RECORDED** (Found, not fixed): the commits and their green logs stand; rewriting history is forbidden. |
+| R5 | Medium | Four fixture commits (`d30c2e8`, `a40ef6d`, `7a6ec96`, `8cad902`) also carry `scripts/check_fixtures.py`, `tests/data/README.md` and the oracle script, though rule 6 says a fixture commit carries fixtures only; two of them say "Fixture only". | **RECORDED** (Found, not fixed): the hash registry and provenance are what make a fixture checkable, so the rule text and the practice need reconciling; no client data and the scans are clean. |
+| R6 | Low | The G3 note paired `Fixed2Data`/`Fixed2Meta` as per-save GUID differences. | **CORRECTED** in this commit: `Fixed2Meta` is byte-identical in all three saves; the Project save also moves task-table bytes (11 + 3) that the port's no-CPM save does not; the test compares the link table only. |
+| R7 | Low | "`cal` passed 20/20 local repeats" is in no log. | **CORRECTED** in this commit (G1 and its Found-not-fixed): the repeat count was not logged; the green re-dispatch is the evidence. |
+| R8 | Low | "The script's exit code is 1": the gate scripts do not exit with the hex grep's code. | **CORRECTED** in this commit (G1 and G3 gate notes): the log records the hex grep's exit 1; the script ends normally. |
+| R9 | Low | `app_edits_links_tests.cpp` silently returns on a shape mismatch (two blocks), the same ok-but-skipped shape as `base`. | **LISTED** (Found, not fixed): the W27-3.4 fix covered `app_edit_tests.cpp` only. |
+| R10 | Low (tooling) | `mpp_diff.py` prints at most ten differing offsets per row with no truncation marker; it under-read the percent fixture in the G0 log too. | **LISTED** (Found, not fixed): print a marker (or every offset) in the next script change. |
+
+The audit also verified clean: the 27 commits in `wave26..wave27`; every commit
+id cited in the record is an ancestor of `wave27`, and every `gates-*.log` is
+parent-named; the group gate numbers match the four fresh logs; the marker
+lines; the percent refusal, priority measurement, delete/undo, Unlink pair and
+task-order tests; the G2 blobs and fixture hashes; and the privacy scans (line
+0, guard exit 0, no hex token, no names in the new fixtures or blobs).
+
+One further record sentence was corrected in this pass, not from a reviewer's
+list: the W27-3.5 note said "`fnv1a64` ... deleted", but only the task-order
+test's helper is gone -- the unrelated `fnv1a64` helpers in
+`core/viewstate/report_main.cpp` and the fuzz harness hash bytes, not names,
+and remain, so the sentence now says which helper went.
+
+### Push and CI
+
+`wave27` was pushed at the final code commit `9323db2` on 2026-10-24 (the
+pre-push guard passed) and the three workflows were dispatched on the branch
+with `gh workflow run <file> --ref wave27`.  All of them completed **green on
+`9323db2`** on the first dispatch, so no re-dispatch was needed:
+
+| workflow | run | jobs (all success) |
+|---|---|---|
+| `qt.yml` (qt-shell) | [40064777633](https://github.com/timothyjustinking-cmd/msproject-mac/actions/runs/40064777633) | `windows-qt`, `linux-qt`, `macos-qt` |
+| `ci.yml` (ci) | [40064779873](https://github.com/timothyjustinking-cmd/msproject-mac/actions/runs/40064779873) | `windows-msvc`, `ubuntu-gcc` |
+| `app-macos.yml` (app-macos) | [40064782094](https://github.com/timothyjustinking-cmd/msproject-mac/actions/runs/40064782094) | `macos-appkit` |
+
+The watcher log is `build/w27/close-ci-watch.log` (each run
+`completed success` at `9323db2`).  The Linux and macOS Qt jobs are what the
+G1 fix was for: `widest_line` was an error under GCC/Clang, and both now build
+the Qt shell and run its test suite, alongside the Windows MSVC job.
+
+### The 16 decisions re-scored (wave-26 close as the starting point)
+
+| # | decision | wave 26 | after wave 27 | why |
+|---|---|---|---|---|
+| 1 | all seven tabs | DONE | **DONE** | unchanged: every tab's groups are pinned and the live-kind gate reads the real widget classes (Task 8/8, Resource 5/5, Report 3/3, Project 6/6, View 7/7, Help 1/1, Gantt Chart Format 6/6 at 1920); the five % buttons keep their measured layout but are disabled |
+| 2 | full backstage | DONE | **DONE** | unchanged: the Project rail and all eleven pages exist; the online entries stay laid out and disabled |
+| 3 | original icon set | DONE | **DONE** | unchanged: 114 command controls carry the one-ink glyphs; menu/QAT/status-bar artwork still uses the older drawings (listed) |
+| 4 | measured chrome metrics | DONE (stronger) | **DONE (stronger)** | unchanged: the measured rectangles/rows/gallery colours are committed; parity is still 10/10 plus the colour-only 1/0 |
+| 5 | timeline strip | DONE | **DONE** | unchanged |
+| 6 | real Entry table | DONE | **DONE** | unchanged |
+| 7 | render what the file says | PARTIAL (stronger) | **PARTIAL (stronger)** | W27-2.1 committed the Project one-change-per-save evidence and 13 decoder tests for the text/bar/timescale styles; no renderer changed.  Still open: stored sheet column widths (5 vs 8), PROJECT_A's yellow row fill, bar-label coverage, timescale origin/zoom |
+| 8 | status bar | PARTIAL | **PARTIAL** | unchanged |
+| 9 | disabled commands + backlog | DONE | **DONE (stronger)** | the five %-complete commands are now disabled with the exact decision-9 tooltip and no route can queue the edit; the live ribbon gate and the pin agree.  The generated backlog covers menu commands; the ribbon-only % controls are recorded by the pin and the live gate, not the backlog (listed Low) |
+| 10 | light and dark themes | PARTIAL (stronger) | **PARTIAL (stronger)** | unchanged: Dark Gray and Black darken the chrome and the gate matches the measured fills; the sheet/chart header bands and ribbon ink stay light (listed) |
+| 11 | new-project defaults | DONE | **DONE** | unchanged; the Options new-task mode still does not reach `insert_task()` (Medium, wave 28 G3) |
+| 12 | structural measurement | PARTIAL (stronger) | **PARTIAL (stronger)** | W27-2.1's 13 decoder tests and W27-3.5's structure-only corpus case add structural checks, but no new screen is measured; the pixel score is not re-run (no reference PNG locally) |
+| 13 | Carlito bundled | DONE | **DONE** | unchanged |
+| 14 | every dialog on every tab | PARTIAL (stronger) | **PARTIAL (stronger)** | unchanged: Text Styles, Gridlines, Bar Styles, Page Setup, Visual Reports and Compare Projects are still disabled backlog entries |
+| 15 | dialog semantics | PARTIAL | **PARTIAL (stronger)** | Project Information's Priority save is now measured against Project's own save (W27-0.3), so that functional control is proven, not just wired; the other gaps are unchanged |
+| 16 | split view | DONE | **DONE** | unchanged: the Task Form is display-only (listed) |
+
+## Found, not fixed
+
+The reviews' Medium/Low items are listed with their dispositions above; the
+not-fixed ones are the first part of this list.  The wave's deliberate limits,
+none Critical and no confirmed High (the one High raised was disproved, R1):
+
+* **Stored sheet columns** (decision 7): at 1920 the port shows the five columns
+  that fit its splitter; Project shows eight.  The stored widths are a wave-25
+  carry.  [Medium - decision 7]
+* **PROJECT_A's yellow row**, the **bar-label coverage**, the **dark themes'
+  light sheet/chart header bands and fixed ribbon ink**, the **menu-bar / QAT /
+  status-bar artwork**, the **display-only Task Form**, the **undecoded stored
+  combination view** and the **White theme**: unchanged from the wave-26 CLOSE
+  list, each with the same reason.  [Low]
+* **Six dialogs are still disabled backlog entries** (decision 14): Text
+  Styles, Gridlines, Bar Styles, Page Setup, Visual Reports, Compare Projects.
+  [Medium - decision 14 remains PARTIAL]
+* **No-writer engines** (actuals/Update Project, Move Project, baselines, WBS
+  codes, calendars) are laid out and honestly inert.  [Low]
+* **Custom Fields** covers the six measured families; Start/Finish custom fields
+  and the Resource/Project scopes are not in the port's field table.  [Low]
+* **Timescale origin/zoom** still differs from Project's scroll position.
+  [Low]
+* **The pixel score is not re-run**: no PROJECT_A reference PNG is local.
+  [Low]
+* **A point size of 0xFFFF** reaches Qt unguarded in `app_qt/gantt_canvas.cpp`
+  and `app_qt/sheet_table_model.cpp` when a file stores a family-only text
+  change (the W27-2.1 `arial` evidence); a sanity bound belongs to the
+  rendering work.  [Medium - G2]
+* **Unlink acts on the one selected task**; Project's Unlink Tasks acts on a
+  multi-row selection.  [Medium - W27-3.3]
+* **A pending link ADD naming an unlinked task survives Unlink** (it has no
+  saved row to tombstone); undo is its removal path today.  [Low - W27-3.3]
+* **A percent edit on a pending inserted task is refused only while the uid is
+  absent from the plan handed to `make_percent_edit`**; a wave-28 caller
+  passing the display plan (where the insert is a real row with `file_row` 0)
+  would be accepted, though step 5a still refuses the write with a warning.
+  Fix this and add the display-plan test before the % buttons are re-enabled.
+  [Medium - review item 1, latent]
+* **The Unlink save test's comment** says comparing with the unlinked save is
+  "Unlink's bytes only", but Project's Unlink reschedules and so also moves
+  `TBkndTask` bytes; the test compares the link table only and its assertions
+  are correct.  [Low - review item 2]
+* **Three real-save fixture blocks print SKIP and pass** when a fixture is
+  missing (the Unlink block is the newest); a missing fixture needs a failing
+  check.  [Low - review item 5, pattern pre-dates this wave]
+* **The five new `.mpp` fixtures embed the operator's absolute save path**
+  (UTF-16LE in `214/CEdl/Var2Data` and `Props14`), as `synthetic-calendars.mpp`
+  and `wave23-flags.mpp` already do.  It is not a client name and the name
+  guards do not look for paths; the fixtures are pinned oracle bytes, so a
+  rebuild through the neutral path (and new hashes) is a later fixture task.
+  [Low - review item 4]
+* **The first load in `test_real_save_round_trip` (`base`) has no named check**
+  before its `return` on an ok-but-empty plan; one line fixes it.
+  [Low - record audit R2]
+* **Two `app_edits_links_tests.cpp` blocks return silently on a shape
+  mismatch** (ok load, wrong task count), the same skippable shape.
+  [Low - record audit R9]
+* **Five G3 commit messages quote numbers without naming their gate log**
+  (`8cad902`, `8fe6c18`, `c7679bc`, `c7283d7`, `1bf7b99`), against standing
+  rule 3; the logs exist and are green, and history cannot be rewritten.
+  [Medium - record audit R4, process]
+* **Four fixture commits also carry the hash registry, the provenance README
+  and the oracle script**, and two say "Fixture only"; the rule text and the
+  practice need reconciling by Tim.  No client data.
+  [Medium - record audit R5, process]
+* **`scripts/mpp_diff.py` truncates its per-row diff at ten offsets** with no
+  marker; it hid the date words from a reviewer and from the G0 log.
+  [Low - record audit R10, tooling]
+* **173 tracked text files still contain CRLF lines** (grandfathered analysis
+  output and a few sources); the three files W27-3.6 owned are clean, and a
+  repo-wide normalisation belongs to a dedicated change.  [Low]
+* **The 13 unsalted FNV-1a display-name hashes** the wave removed from the tree
+  remain in the wave-26 history reachable from `wave27` (`912b3fa`..`c7283d7`),
+  and `tests/data/project_a_golden.tsv` still carries unsalted 16-hex name
+  hashes.  Rewriting history is forbidden by the brief; both remain Tim's
+  decision.  [Privacy - recorded in the Privacy section]
+* **`app_qt/CMakeLists.txt:302` is stale**: the comment still says the corpus
+  task-order case records a "name HASH only", which W27-3.5 removed.  It is a
+  comment, not a gate, and the CLOSE gate numbers belong to the tree that still
+  contains it.  [Low - found in this close]
+* **The generated backlog does not list the five %-complete ribbon controls**:
+  `docs/ui-command-backlog.md` is generated from the menu/ribbon command model,
+  which does not carry those dynamic buttons; `ribbon_pin.tsv` and the live
+  ribbon gate carry them instead.  [Low - decision 9's backlog is incomplete
+  for five disabled commands]
+* **The 156-name list is built from live rows, so a deleted row's name is not
+  in it**: a corpus-backed reader warning prints a PROJECT_A task name from an
+  orphaned Var2Data block (uid 10856, a row the reader skips) into
+  `build/w27/close-fresh-gates.log`, and the same warning is in the wave-26
+  log; neither scan would catch a committed copy of such a name.  No tracked
+  file quotes it, and `build/` is neither tracked nor Dropbox-synced.  The
+  warning should print the uid and row only, and the scanner should include
+  skipped-row names.  [Low - tooling/privacy, found in this close]
+* **The CLOSE gate script's range scan is not evidence**: `scan_client_names.py`
+  takes revisions, not ranges, and its `git grep` against `wave26..HEAD` fails
+  silently, printing "0 file(s)"; the separate `--messages` run is used instead.
+  The tool's contract should reject a range (or accept one) in a later cleanup.
+  [Low - tooling, found in this close]
+
+WAVE-27-COMPLETE
