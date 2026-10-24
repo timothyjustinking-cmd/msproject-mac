@@ -147,6 +147,17 @@ struct StructuralEdit {
 // Flag2..20, an unknown id) is refused rather than guessed.
 bool is_measured_task_field(std::uint32_t field_id) noexcept;
 
+// Wave 27 (W27-0.2): plan-aware validation for a %-complete edit, in the edit
+// MODEL rather than the shell.  A task's own % is meaningful only on a leaf:
+// Project computes a summary's % from its children's actual and total durations
+// and distributes a summary edit to them, while this port could only write +92
+// on the summary row -- a shape Project recalculates away.  uid 0 (the
+// project-summary row), an unknown uid and a row that is not a live file task
+// (a pending insert) are refused too.  On acceptance `out` is a ready-to-push
+// set_percent edit; on refusal `error` names the reason.
+bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t percent,
+                       StructuralEdit& out, std::string& error);
+
 // The pending edits, in application order, with an undo/redo cursor.
 class StructuralEdits {
   public:
@@ -164,15 +175,19 @@ class StructuralEdits {
     // (predecessor, successor, type) add, a duplicate link delete, or a link
     // whose endpoint has a pending task delete.  A push clears the redo list.
     //
-    // Push is plan-free: it can only refuse what the edit itself proves.  The
-    // duplicate-against-the-file and live-endpoint checks need the plan, so the
-    // shell calls app::validate_link_add() first (app/field_link_edits.h).
+    // Push is plan-free for the edit kinds whose refusal the edit itself proves.
+    // The duplicate-against-the-file and live-endpoint checks need the plan, so
+    // the shell calls app::validate_link_add() first (app/field_link_edits.h).
+    //
+    // A set_percent edit REQUIRES `plan` (W27-0.2): the row must be a live,
+    // non-summary file task (make_percent_edit), and a plan-less set_percent is
+    // refused rather than trusted.  `plan` is ignored for the other kinds.
     //
     // Pushing a delete_task also drops the set/clear field edits and add_link
     // edits that name the task: those could never reach the file (the writer
     // writes the fields/links before the delete, and the delete cascade would
     // tombstone the link again).  Documented in app/README.md.
-    bool push(StructuralEdit edit);
+    bool push(StructuralEdit edit, const PlanInput* plan = nullptr);
 
     bool undo();
     bool redo();
