@@ -8,7 +8,6 @@
 #include <QDate>
 #include <QDateEdit>
 #include <QFont>
-#include <QFontMetrics>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -30,7 +29,6 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -534,16 +532,6 @@ QFont ribbon_font(int point_size, bool bold = false) {
     font.setPointSize(point_size);
     font.setBold(bold);
     return font;
-}
-
-// The longest line of a label: a two-line ribbon label is measured line by
-// line so a fixed width can be checked, and never clips, either line.
-int widest_line(const QFontMetrics& metrics, const QString& text) {
-    int widest = 0;
-    for (const QString& line : text.split(QLatin1Char('\n'))) {
-        widest = std::max(widest, metrics.horizontalAdvance(line));
-    }
-    return widest;
 }
 
 // A small square glyph for the dialog launcher (an expand arrow), drawn by us.
