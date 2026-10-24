@@ -764,6 +764,17 @@ void test_real_unlink_matches_project() {
     // Unlink's bytes only.  Fixed2Data is deliberately excluded: Project
     // rewrites its three link GUIDs on every save (the control already differs
     // from the base), which is per-save bookkeeping, not Unlink.
+    //
+    // W28-0.4: Project's Unlink save also reschedules rows 3 and 4 (their
+    // stored start/finish, anchor and slack move) and the port's no-CPM save
+    // leaves those bytes as the base has them.  That difference is invisible
+    // to Project: reopening the PORT's save with automatic calculation shows
+    // the same dates, links and outline numbers as reopening Project's own
+    // save -- 0 differing fields over the project row and IDs 1..6, before and
+    // after an explicit CalculateAll (build/w28/W28-0.4-project-reopen.json,
+    // scripts/oracle_w28_unlink.py).  Unlink therefore stays enabled with the
+    // no-reschedule save, and these assertions stay scoped to the link table:
+    // it is the only table Unlink is responsible for.
     const char* const link_streams[] = {"114/TBkndCons/FixedData",
                                         "114/TBkndCons/FixedMeta",
                                         "114/TBkndCons/Fixed2Meta"};
