@@ -1404,6 +1404,7 @@ struct Outline {
 };
 
 Outline read_outline(const CompoundFile& cfb, std::string_view root, std::uint32_t rows,
+                     const std::vector<std::uint32_t>& id_by_row,
                      const std::vector<std::uint32_t>& meta_offsets,
                      const std::vector<bool>& live_row,
                      std::vector<std::string>& warnings) {
@@ -1507,8 +1508,19 @@ Outline read_outline(const CompoundFile& cfb, std::string_view root, std::uint32
         }
         children[found->second].push_back(row);
     }
+    /* Project numbers each sibling group by the ID column, not by the order the
+     * rows happen to be stored in.  W28-0.2 measured this on the corpus capture
+     * through COM: ID 1 is OutlineNumber "1" and ID 12 is "2", although the
+     * stored row order puts ID 12's subtree first.  Sort by the +0 ID; the row
+     * index is only a tie-breaker (IDs are unique in a valid file). */
     for (std::vector<std::uint32_t>& kids : children) {
-        std::sort(kids.begin(), kids.end());
+        std::sort(kids.begin(), kids.end(),
+                  [&id_by_row](std::uint32_t a, std::uint32_t b) {
+                      if (id_by_row[a] != id_by_row[b]) {
+                          return id_by_row[a] < id_by_row[b];
+                      }
+                      return a < b;
+                  });
     }
 
     /* Depth-first from the project row, numbering each row by its 1-based index
@@ -1776,8 +1788,12 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
     }
 
     /* ---- Outline: Fixed2Data's stored parent links -> level, number, summary. */
-    const Outline outline =
-        read_outline(cfb, root, rows, task_meta_offsets, live_row, document.warnings);
+    std::vector<std::uint32_t> id_by_row(rows, 0);
+    for (std::uint32_t row = 0; row < rows; ++row) {
+        id_by_row[row] = u32_at(fixed, kFixedHeaderSize + row * kFixedRowSize + kRowId);
+    }
+    const Outline outline = read_outline(cfb, root, rows, id_by_row, task_meta_offsets,
+                                         live_row, document.warnings);
 
     /* ---- Row 0: the project row. */
     {
@@ -2957,13 +2973,24 @@ void parse_subprojects_mpp12(const CompoundFile& cfb, std::string_view root,
 
 /* Sibling-index outline numbers over MPP12's STORED parent links (row +36) and
  * outline levels (row +40).  The stored level is authoritative; a disagreement
- * with the chain depth is reported. */
+ * with the chain depth is reported.  Sibling order is the ID column (row +0),
+ * not the stored row order: Project numbers each child by its displayed ID.
+ * Measured on the corpus capture through COM (W28-0.2): ID 1 is "1" and ID 12
+ * is "2" even though the file stores ID 12's subtree first. */
 void number_mpp12_outline(Document& document) {
     std::unordered_map<std::uint32_t, std::size_t> row_by_uid;
     row_by_uid.reserve(document.tasks.size());
     for (std::size_t i = 0; i < document.tasks.size(); ++i) {
         row_by_uid[document.tasks[i].uid] = i;
     }
+    /* The ID column orders siblings; the stored index is only a tie-breaker
+     * (IDs are unique in a valid file, so it is never reached in practice). */
+    const auto by_id = [&document](std::size_t a, std::size_t b) {
+        if (document.tasks[a].row_id != document.tasks[b].row_id) {
+            return document.tasks[a].row_id < document.tasks[b].row_id;
+        }
+        return a < b;
+    };
     std::vector<std::vector<std::size_t>> children(document.tasks.size() + 1);
     std::vector<std::size_t> top_level;
     std::size_t unknown_parents = 0;
@@ -2984,8 +3011,9 @@ void number_mpp12_outline(Document& document) {
         }
         children[found->second + 1].push_back(i);
     }
+    std::sort(top_level.begin(), top_level.end(), by_id);
     for (std::vector<std::size_t>& kids : children) {
-        std::sort(kids.begin(), kids.end());
+        std::sort(kids.begin(), kids.end(), by_id);
     }
     std::vector<bool> reached(document.tasks.size(), false);
     struct Pending {

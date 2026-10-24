@@ -329,17 +329,20 @@ void case_corpus(const QString& path) {
     // reader's stored chain (level 2 -> 0-based 1) and the capture's indent
     // agree.  The earlier 2 here was a transcription slip the gate caught.
     //
-    // The project row (ID 0) is level -1 and has NO OutlineNumber; the task
-    // rows follow Project's own sibling path.  ID order is not outline order:
-    // ID 1's top-level task is outline 2 and ID 12's is outline 1, so the
-    // numbers start at 2 in the captured ID window.  A row is a summary exactly
-    // when a deeper row follows it in its subtree; ID 12 is a summary whose
-    // children lie beyond the 13 captured rows.
+    // The project row (ID 0) is level -1 and the port gives it no
+    // OutlineNumber; the task rows follow Project's own sibling path.  W28-0.2
+    // read Tasks(1).OutlineNumber and Tasks(12).OutlineNumber through COM
+    // on a copy of this file: Project says "1" and "2".  Project numbers
+    // siblings by the ID column, not by the stored row order -- the file
+    // stores ID 12's subtree first, and the old stored-order derivation
+    // produced the impossible pair ID 1 = "2", ID 12 = "1".  A row is a
+    // summary exactly when a deeper row follows it in its subtree; ID 12 is a
+    // summary whose children lie beyond the 13 captured rows.
     const int expected_levels[] = {-1, 0, 1, 2, 2, 1, 1, 2, 2, 2, 2, 2, 0};
     const int expected_summary[] = {1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1};
-    const char* expected_outline[] = {"", "2", "2.2", "2.2.1", "2.2.2", "2.1",
-                                      "2.3", "2.3.1", "2.3.2", "2.3.3", "2.3.4",
-                                      "2.3.5", "1"};
+    const char* expected_outline[] = {"", "1", "1.1", "1.1.1", "1.1.2", "1.2",
+                                      "1.3", "1.3.1", "1.3.2", "1.3.3", "1.3.4",
+                                      "1.3.5", "2"};
     const core::view::FieldId outline_field = app::task_field_id("OutlineNumber");
     check(document.sheet() != nullptr && document.sheet()->row_count() >= 13,
           "project_a.mpp has at least the capture's 13 visible rows");
@@ -413,6 +416,25 @@ void case_order(const QString& path) {
     for (std::size_t row = 1; row < 6; ++row) {
         check(document.sheet()->field_text(row, name_field) == expected_names[row],
               "the ID-order task is on its displayed row");
+    }
+    // W28-0.2: the same rule in CI.  Project measured this flat file's
+    // OutlineNumber as 1..5 by ID (COM, on a copy), while the stored order is
+    // Alpha, Bravo, Charlie, Delta, Inserted: a stored-order derivation would
+    // number Inserted last.  The corpus case cannot run in CI, so this
+    // committed fixture pins the ID-column order in qt_task_order.
+    const core::view::FieldId outline_field = app::task_field_id("OutlineNumber");
+    for (std::size_t row = 1; row < 6; ++row) {
+        const std::string outline =
+            document.sheet()->field_text(row, outline_field);
+        const std::string want = std::to_string(row);
+        if (outline != want) {
+            std::fprintf(stderr,
+                         "FAIL: wave24-order OutlineNumber row %zu (got \"%s\", "
+                         "want \"%s\")\n",
+                         row, outline.c_str(), want.c_str());
+            ++g_failures;
+        }
+        ++g_checks;
     }
 }
 
