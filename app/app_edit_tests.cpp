@@ -488,6 +488,7 @@ void test_real_save_round_trip() {
           "no intermediate file is left behind");
 
     Loaded after_add = load(added);
+    check(after_add.ok, "the file after the insert re-loads");
     if (!after_add.ok) {
         return;
     }
@@ -559,6 +560,7 @@ void test_real_save_round_trip() {
     check_size(bytes_on_disk(deleted) != 0 ? 1u : 0u, 1u, "the delete wrote a file");
 
     Loaded after_delete = load(deleted);
+    check(after_delete.ok, "the file after the delete re-loads");
     if (!after_delete.ok) {
         return;
     }
@@ -574,7 +576,14 @@ void test_real_save_round_trip() {
     }
 
     // ---- structural + start-date edits in one save ------------------------
+    // W27-3.4: every load below is checked explicitly.  A block wrapped only in
+    // `if (load.ok)` used to skip all its assertions on a load failure (and a
+    // successful load with an empty plan skipped them with no failure either),
+    // so the save tests could pass without checking anything.
     Loaded combined_base = load(copy);
+    check(combined_base.ok, "the source re-loads for the combined save");
+    check(!combined_base.plan.tasks.empty(),
+          "the source has a task for the combined save");
     if (combined_base.ok && !combined_base.plan.tasks.empty()) {
         app::StructuralEdits combined;
         check(combined.push(insert_after("Combined", combined.next_placeholder_uid(combined_base.plan),
@@ -600,6 +609,7 @@ void test_real_save_round_trip() {
             check(!std::filesystem::exists(both.string() + ".w51-structural-tmp"),
                   "the intermediate file is removed");
             Loaded reread = load(both);
+            check(reread.ok, "the combined save re-loads");
             if (reread.ok) {
                 check_size(reread.plan.tasks.size(), 4, "the combined file has four tasks");
                 for (const mpp::Task& task : mpp::load_file(both.string()).tasks) {
@@ -621,6 +631,9 @@ void test_real_save_round_trip() {
     // the edit last-one-wins and the save cascade writes
     // mppwrite::TaskTable::set_percent_complete in the one final container.
     Loaded percent_base = load(copy);
+    check(percent_base.ok, "the source re-loads for the percent save");
+    check(!percent_base.plan.tasks.empty(),
+          "the source has a task for the percent save");
     if (percent_base.ok && !percent_base.plan.tasks.empty()) {
         const std::uint32_t percent_uid = percent_base.plan.tasks.front().uid;
         app::StructuralEdits percent_edits;
@@ -650,6 +663,7 @@ void test_real_save_round_trip() {
         check(!std::filesystem::exists(percent_path.string() + ".w51-structural-tmp"),
               "the percent save leaves no intermediate file");
         Loaded percent_reread = load(percent_path);
+        check(percent_reread.ok, "the percent save re-loads");
         if (percent_reread.ok) {
             bool percent_found = false;
             for (const app::TaskRow& row : percent_reread.plan.tasks) {
@@ -767,6 +781,7 @@ void test_real_save_round_trip() {
                                error);
     app::StructuralEdits own_edits;
     Loaded own_loaded = load(own);
+    check(own_loaded.ok, "the in-place source re-loads");
     if (own_loaded.ok) {
         check(own_edits.push(insert_after("In Place", own_edits.next_placeholder_uid(own_loaded.plan),
                                           0)),
