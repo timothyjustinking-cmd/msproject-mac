@@ -128,6 +128,15 @@ app::StructuralEdit delete_uid(std::uint32_t uid) {
     return edit;
 }
 
+app::StructuralEdit set_text1(std::uint32_t uid, const std::string& text) {
+    app::StructuralEdit edit;
+    edit.kind = app::StructuralKind::set_field;
+    edit.uid = uid;
+    edit.field_id = mpp::custom_field_id(mpp::FieldKind::text, 1);
+    edit.field_value.text = text;
+    return edit;
+}
+
 // ---------------------------------------------------------------------------
 // The pending-edit model
 // ---------------------------------------------------------------------------
@@ -227,6 +236,61 @@ void test_percent_edit_model() {
     check(accepted.push(edit, &plan), "push with the plan accepts a leaf task");
     check(accepted.apply(plan).tasks[0].percent_complete == 50,
           "the display plan shows the accepted 50 %");
+}
+
+void test_delete_undo_restores_edits() {
+    // W27-3.2: a delete removes the pending field/percent/link-add edits for
+    // its task (they could never reach the file), but undo must restore them.
+    const app::PlanInput plan = make_plan();
+    app::StructuralEdits edits;
+
+    app::StructuralEdit percent_edit;
+    std::string error;
+    check(app::make_percent_edit(plan, 1, 40, percent_edit, error),
+          "the percent edit is built for the delete/undo test");
+    check(edits.push(percent_edit, &plan), "the percent edit is queued");
+    check(edits.push(set_text1(1, "note")), "a field edit for the same task is queued");
+    app::StructuralEdit link;
+    link.kind = app::StructuralKind::add_link;
+    link.uid = 1;
+    link.predecessor_uid = 3;
+    check(edits.push(link), "a link add naming the task is queued");
+    check(edits.field_edit_count() == 1 && edits.link_edit_count() == 1,
+          "the task's field and link edits are applied");
+    check(edits.apply(plan).tasks[0].percent_complete == 40,
+          "the display plan carries the queued percent");
+
+    check(edits.push(delete_uid(1)), "deleting the task is accepted");
+    check(edits.field_edit_count() == 0 && edits.link_edit_count() == 0,
+          "the delete displaces the task's field and link edits");
+    check_size(edits.size(), 1, "only the delete remains applied");
+    const app::StructuralEdit* deleted = edits.next_undo();
+    check(deleted != nullptr && deleted->displaced.size() == 3,
+          "the delete keeps all three displaced edits");
+    check_size(edits.apply(plan).tasks.size(), 2,
+               "the display plan hides the deleted task");
+
+    check(edits.undo(), "undoing the delete works");
+    check(edits.field_edit_count() == 1 && edits.link_edit_count() == 1,
+          "undo restores the displaced field and link edits");
+    check_size(edits.size(), 3, "the three displaced edits are applied again");
+    const app::PlanInput restored = edits.apply(plan);
+    check(restored.tasks[0].percent_complete == 40,
+          "the restored percent edit shows again");
+    bool restored_link = false;
+    for (const app::LinkRow& row : restored.links) {
+        if (row.predecessor_uid == 3 && row.successor_uid == 1) {
+            restored_link = true;
+        }
+    }
+    check(restored_link, "the restored link add shows again");
+
+    check(edits.redo(), "redoing the delete works");
+    check(edits.field_edit_count() == 0 && edits.link_edit_count() == 0,
+          "redo displaces the edits again");
+    check_size(edits.size(), 1, "only the delete is applied after redo");
+    check(edits.undo(), "undo after redo works");
+    check_size(edits.size(), 3, "undo after redo restores them again");
 }
 
 void test_without_structural_edits() {
@@ -633,6 +697,39 @@ void test_real_save_round_trip() {
             stale_edits, {}, copy.string(), stale_path.string(), false);
         check(stale_again.ok,
               "the same queue saves again: the refused edit blocks no later Save");
+
+        // W27-3.2: 25 %, delete the task, undo the delete, Save -> the saved
+        // file has the percent (the delete used to discard the edit for good).
+        app::StructuralEdits undo_edits;
+        app::StructuralEdit undo_percent;
+        undo_percent.kind = app::StructuralKind::set_percent;
+        undo_percent.uid = percent_uid;
+        undo_percent.percent = 25;
+        check(undo_edits.push(undo_percent, &percent_base.plan),
+              "the percent-before-delete edit is queued");
+        check(undo_edits.push(delete_uid(percent_uid)), "the task is deleted");
+        check(undo_edits.undo(), "the delete is undone");
+        const std::filesystem::path undo_path =
+            std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-percent-undo.mpp";
+        std::filesystem::remove(undo_path, error);
+        const app::StructuralSaveResult undo_outcome = app::save_structural_edits(
+            undo_edits, {}, copy.string(), undo_path.string(), false);
+        check(undo_outcome.ok, "the restored percent edit saves");
+        check_size(undo_outcome.percent_rows_written, 1,
+                   "the restored percent edit reached the writer");
+        Loaded undo_reread = load(undo_path);
+        check(undo_reread.ok, "the undo-save re-reads");
+        if (undo_reread.ok) {
+            bool undo_found = false;
+            for (const app::TaskRow& row : undo_reread.plan.tasks) {
+                if (row.uid == percent_uid) {
+                    undo_found = true;
+                    check_size(row.percent_complete, 25,
+                               "the saved file has the percent from before the delete");
+                }
+            }
+            check(undo_found, "the task survives the delete/undo save");
+        }
     }
 
     // ---- refusals ---------------------------------------------------------
@@ -713,6 +810,7 @@ int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     test_push_and_undo();
     test_percent_edit_model();
+    test_delete_undo_restores_edits();
     test_without_structural_edits();
     test_apply_placement();
     test_real_save_round_trip();
