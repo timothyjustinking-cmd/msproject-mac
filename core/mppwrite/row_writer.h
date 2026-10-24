@@ -6,8 +6,12 @@
  * copies and recomputes the rest on open.  spec/mpp-writer.md §8.1 measured what
  * that means in practice:
  *
- *   - Priority (+78) and PercentComplete (+92) survive an open, because they
- *     have exactly one stored copy;
+ *   - Priority (+78) survives an open, because it has exactly one stored copy;
+ *   - PercentComplete (+92) is NOT single-copy -- Project's own 50 % save
+ *     (tests/data/wave27-percent-actuals.mpp) also writes the actuals, the
+ *     actual start, two dates, a progress flag, the project row's roll-up and a
+ *     Var2Data field -- so +92 alone is the same kind of partial write as a
+ *     start pin and is not offered by this writer;
  *   - a patched Start or Duration does NOT, because the row carries several
  *     copies and the file it was patched in was left self-inconsistent;
  *   - a single-copy start patch (+96 only) leaves +104/+112 stale and is exactly

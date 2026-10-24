@@ -51,11 +51,11 @@ Task	0	Font	split	highlight colour	0	font.highlight	1	-
 Task	0	Font	split	font colour	0	font.color	1	-
 Task	0	Font	launcher	Font	0	-	2	-
 Task	0	Schedule	group	-	-	-	-	-
-Task	0	Schedule	small	0%	1	schedule.percent_0	0	-
-Task	0	Schedule	small	25%	1	schedule.percent_25	0	-
-Task	0	Schedule	small	50%	1	schedule.percent_50	0	-
-Task	0	Schedule	small	75%	1	schedule.percent_75	0	-
-Task	0	Schedule	small	100%	1	schedule.percent_100	0	-
+Task	0	Schedule	small	0%	0	schedule.percent_0	0	-
+Task	0	Schedule	small	25%	0	schedule.percent_25	0	-
+Task	0	Schedule	small	50%	0	schedule.percent_50	0	-
+Task	0	Schedule	small	75%	0	schedule.percent_75	0	-
+Task	0	Schedule	small	100%	0	schedule.percent_100	0	-
 Task	0	Schedule	split	Mark on Track	0	schedule.mark_on_track	0	-
 Task	0	Schedule	small	Respect Links	0	schedule.respect_links	0	-
 Task	0	Schedule	small	Inactivate	0	schedule.inactivate	1	-

@@ -25,7 +25,8 @@
 //   * the enabled controls are wired: the pin's enabled set matches the live
 //     enabled state and the action/command each one runs, and the functional
 //     controls change the window (Timeline strip, Project Summary row, Critical
-//     Tasks highlight, % Complete on the selection, Unlink);
+//     Tasks highlight, Unlink); the five %-complete buttons are DISABLED
+//     (W27-0.1: no measured actuals writer) and clicking one queues nothing;
 //   * the gallery's 16 swatches carry the measured palette colours.
 //
 // The fixtures the functional checks open are copies of committed files; nothing
@@ -510,11 +511,8 @@ const EnabledWiring kEnabledWiring[] = {
     {"Project", "Schedule", "Move Project", "", "move_project"},
     {"Project", "Status", "Update Project", "", "update_project"},
     {"Gantt Chart Format", "Columns", "Custom Fields", "custom_fields", ""},
-    {"Task", "Schedule", "0%", "", "percent_0"},
-    {"Task", "Schedule", "25%", "", "percent_25"},
-    {"Task", "Schedule", "50%", "", "percent_50"},
-    {"Task", "Schedule", "75%", "", "percent_75"},
-    {"Task", "Schedule", "100%", "", "percent_100"},
+    // W27-0.1: the five %-complete buttons are disabled until the actuals
+    // writer exists, so they are no longer in the enabled wiring set.
     {"Task", "Schedule", "link tasks", "", "link_tasks"},
     {"Task", "Schedule", "unlink tasks", "", "unlink_tasks"},
     {"View", "Split View", "Timeline", "", "toggle_timeline"},
@@ -707,8 +705,10 @@ int main(int argc, char** argv) {
     const QString corpus_path = argc > 11 ? QString::fromLocal8Bit(argv[11]) : QString();
     // W26-1.2..1.5 add the functional checks that open these fixtures; until
     // then the arguments are accepted (the CMake test entry is final) but not
-    // used, and the compiler must not warn.
+    // used, and the compiler must not warn.  W27-0.1 removed the corpus
+    // %-complete check (the buttons are disabled), so corpus_path is unused.
     (void)order_fixture;
+    (void)corpus_path;
 
     // The unmodelled backlog is empty (brief: it shrinks to empty or to items
     // deferred under rule 4).
@@ -1093,15 +1093,18 @@ int main(int argc, char** argv) {
         }
     }
 
-    // %-complete buttons: the ribbon queues app::StructuralKind::set_percent
-    // (app/edit_model.h), the path the save cascade writes, and the selected
-    // task's plan value changes immediately.
+    // W27-0.1: the five %-complete buttons are DISABLED with the exact
+    // decision-9 tooltip.  Project's own 50 % save also writes ActualDuration,
+    // RemainingDuration, ActualStart, two dates, a progress flag and the project
+    // row's roll-up (tests/data/wave27-percent-actuals.mpp), so this port has no measured
+    // writer for the edit yet.  The controls stay laid out for the measured
+    // strip, and clicking one must not queue app::StructuralKind::set_percent
+    // through any route.
     {
         QString open_percent_error;
         gate::check(window.open_file(fixture, &open_percent_error),
-                    "the fixture reopens for the %-complete edit");
+                    "the fixture reopens for the %-button state check");
         QApplication::processEvents();
-        const std::size_t rows = window.sheet_row_count();
         std::uint32_t uid = 0;
         for (std::size_t row = 0; row < window.sheet()->row_count(); ++row) {
             const std::uint32_t candidate = window.sheet()->row_uid(row);
@@ -1111,89 +1114,29 @@ int main(int argc, char** argv) {
             }
         }
         gate::check(uid != 0, "the fixture has a task row");
-        gate::check(uid == 0 || select_uid(window, uid),
-                    "a task row is selected for the %-complete edit");
+        gate::check(uid == 0 || select_uid(window, uid), "a task row is selected");
+        const app::TaskRow* before = uid != 0 ? plan_task(window, uid) : nullptr;
+        const std::uint16_t percent_before =
+            before != nullptr ? before->percent_complete : 0;
         // NOTE: find_control() rebuilds the ribbon page, so a control pointer
         // from an earlier call must never be used after another one.
-        QWidget* percent = find_control(ribbon, QStringLiteral("Task"),
-                                        QStringLiteral("Schedule"), QStringLiteral("25%"));
-        gate::check(percent != nullptr, "the 25% button is in the page");
-        if (percent != nullptr && uid != 0) {
-            click_control(percent);
-            QApplication::processEvents();
-            const app::TaskRow* task = plan_task(window, uid);
-            gate::check(task != nullptr && task->percent_complete == 25,
-                        "the 25% button sets the selected task's % Complete");
-            if (task != nullptr && task->percent_complete != 25) {
-                std::fprintf(stderr, "  task uid %u percent_complete %u\n", uid,
-                             static_cast<unsigned>(task->percent_complete));
-            }
-            QWidget* hundred = find_control(ribbon, QStringLiteral("Task"),
+        for (const char* label : {"0%", "25%", "50%", "75%", "100%"}) {
+            QWidget* control = find_control(ribbon, QStringLiteral("Task"),
                                             QStringLiteral("Schedule"),
-                                            QStringLiteral("100%"));
-            gate::check(hundred != nullptr, "the 100% button is in the page");
-            if (hundred != nullptr) {
-                click_control(hundred);
-                QApplication::processEvents();
-                const app::TaskRow* done = plan_task(window, uid);
-                gate::check(done != nullptr && done->percent_complete == 100,
-                            "the 100% button overrides the earlier value (last edit wins)");
+                                            QString::fromUtf8(label));
+            gate::check(control != nullptr, "a %-complete button is in the page");
+            gate::check(control != nullptr && !control->isEnabled() &&
+                            control->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                        "a %-complete button is disabled with the exact decision-9 tooltip");
+            if (control != nullptr) {
+                click_control(control);
             }
         }
-        gate::check(window.sheet_row_count() == rows,
-                    "the %-complete edit never adds or removes a row");
-
-        // On the corpus file the stored table SHOWS % Complete: the rebuilt
-        // RecordSet must make the read-only display cell follow the edit (the
-        // edit itself never goes through that column).
-        if (!corpus_path.isEmpty()) {
-            QString open_corpus_error;
-            gate::check(window.open_file(corpus_path, &open_corpus_error),
-                        "the corpus file (stored table with % Complete) opens");
-            QApplication::processEvents();
-            std::uint32_t corpus_uid = 0;
-            std::size_t corpus_row = 0;
-            for (std::size_t row = 0; row < window.sheet()->row_count(); ++row) {
-                const std::uint32_t candidate = window.sheet()->row_uid(row);
-                if (candidate != 0) {
-                    corpus_uid = candidate;
-                    corpus_row = row;
-                    break;
-                }
-            }
-            gate::check(corpus_uid != 0 && select_uid(window, corpus_uid),
-                        "a corpus task row is selected");
-            percent = find_control(ribbon, QStringLiteral("Task"),
-                                   QStringLiteral("Schedule"), QStringLiteral("25%"));
-            if (percent != nullptr && corpus_uid != 0) {
-                click_control(percent);
-                QApplication::processEvents();
-                const app::TaskRow* task = plan_task(window, corpus_uid);
-                gate::check(task != nullptr && task->percent_complete == 25,
-                            "the corpus task's plan value is 25 % complete");
-                std::size_t percent_column = core::sheet::kNoIndex;
-                for (std::size_t candidate = 0; candidate < window.sheet()->column_count();
-                     ++candidate) {
-                    if (window.sheet()->column(candidate).field ==
-                        app::task_field_id("PercentComplete")) {
-                        percent_column = candidate;
-                        break;
-                    }
-                }
-                gate::check(percent_column != core::sheet::kNoIndex,
-                            "the corpus stored table shows % Complete");
-                if (percent_column != core::sheet::kNoIndex && task != nullptr) {
-                    const std::string text = app::cell_text(*window.sheet(), corpus_row,
-                                                            percent_column,
-                                                            window.preferences());
-                    gate::check(text == "25%",
-                                "the displayed % Complete cell follows the edit");
-                    if (text != "25%") {
-                        std::fprintf(stderr, "  displayed %% Complete: '%s'\n", text.c_str());
-                    }
-                }
-            }
-        }
+        QApplication::processEvents();
+        const app::TaskRow* after = uid != 0 ? plan_task(window, uid) : nullptr;
+        gate::check(after != nullptr && after->percent_complete == percent_before,
+                    "clicking a disabled %-button queues no percent edit");
     }
 
     // Unlink removes the selected task's saved predecessor links through the
