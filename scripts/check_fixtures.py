@@ -129,6 +129,19 @@ DOCUMENTED = {
         "B9DEFD444DF39CCCEB11DA61FA020E74E462CAC4693CBB372402F4BCF7219E17",
     "tests/data/wave27-priority-750.mpp":
         "0AD24ADCE21D9907052A056A9637F6823069190C2921974FF3FFDC1446E1F49D",
+    # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
+    # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
+    # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
+    # 4 -> 6 FF), with neutral metadata, built by the committed
+    # scripts/oracle_w27_unlink.py.  Project removes BOTH links touching the
+    # task (TaskDependencies 3 -> 1; 3 -> 5 SS+1 d survives; still 1 after
+    # reopen).  The link FixedData stays byte-identical, FixedMeta tombstones
+    # entries 0 and 2 and sets header flags 4 -> 6.  The unlinked file is the
+    # oracle the port's Unlink save is compared with.
+    "tests/data/wave27-unlink-control.mpp":
+        "973D376ACC6B180F58A40952FDA1C00649710720221121A8A6AD78B22AC47F5E",
+    "tests/data/wave27-unlink.mpp":
+        "8249D54946BA0443ED2CBFE4006104BD226217807F97CC3A30637FAB1446559E",
     # Wave 26 (W26-3.1): the Gantt view's style record and the 214/Props
     # FONT_BASES payload, extracted read-only from tests/data/synthetic-base.mpp
     # (its first decodable Gantt view, "Gantt &with Timeline"; the W26-3.1

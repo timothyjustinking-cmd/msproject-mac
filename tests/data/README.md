@@ -22,6 +22,7 @@ checkout. Nothing here is client data.
 | `wave25-flag11.mpp` … `wave25-flag17.mpp` | seven single-bit controls, one per flag in the +33 group: wave23-outline.mpp with every flag False on ID 3, then ONLY that flag True, saved through Project 2021 by the committed `scripts/measure_flags.py` (W25-9).  They pin the bit order the all-20 fixture cannot. |
 | `wave27-percent-actuals.mpp` | **synthetic** synthetic-base with Task ID 1 set to 50 % PercentComplete by Project 2021, saved with neutral metadata by `scripts/oracle_w27.py`.  Project's own % edit writes the actuals, dates, progress flag, project-row roll-up and Var2Data field 0x0B40015E as well as FixedData +92 (W27-0.1 evidence); also the project-with-actuals fixture the Move Project gate opens. |
 | `wave27-priority-control.mpp` / `wave27-priority-750.mpp` | the SAME Project 2021 session's save of synthetic-base before and after the project summary task's Priority was set to 750, with neutral metadata (`scripts/oracle_w27.py`).  Task FixedData differs in exactly the project row's +78 word (500 -> 750); the other stream differences are per-save bookkeeping.  The 750 file is the field-by-field oracle the port's priority save is compared with (W27-0.3). |
+| `wave27-unlink-control.mpp` / `wave27-unlink.mpp` | the SAME Project 2021 session's save of synthetic `wave23-outline.mpp` before and after Task > Unlink Tasks on the one task with BOTH a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and 4 -> 6 FF), with neutral metadata (`scripts/oracle_w27_unlink.py`).  Project removes BOTH links touching the task: TaskDependencies 3 -> 1 (the unrelated 3 -> 5 SS+1 d survives, and the count is still 1 after reopen).  The link table's FixedData is untouched; FixedMeta tombstones entries 0 and 2 and sets header flags 4 -> 6.  The pair is the oracle the port's Unlink save is compared with (W27-3.3). |
 | `synthetic-calendars.mpp` | synthetic two-calendar fixture (wave 19, `scripts/build_calendar_fixture.py`) |
 | `synthetic-gantt-style.bin` / `synthetic-gantt-fonts.bin` | the wave-26 Gantt-style decoder's first fixtures: one Gantt view's `0x22400008` record and its `214/Props` font table, extracted from a Project save of `synthetic-base.mpp`. |
 | `wave26-gantt-saves/` | the wave-26 one-change-per-save evidence for the Gantt style decoder: 14 applied-view `0x22400008` records, one Project save per style change, plus the two `214/Props` font tables the font saves produced. Extracted by wave 27 W27-2.1; provenance below. |
@@ -168,6 +169,8 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `wave27-percent-actuals.mpp` | `4C9AECBF544377878E058CC0103BEF059B65C48F0C21B079E3AF4EE215CC7AA2` |
 | `wave27-priority-control.mpp` | `B9DEFD444DF39CCCEB11DA61FA020E74E462CAC4693CBB372402F4BCF7219E17` |
 | `wave27-priority-750.mpp` | `0AD24ADCE21D9907052A056A9637F6823069190C2921974FF3FFDC1446E1F49D` |
+| `wave27-unlink-control.mpp` | `973D376ACC6B180F58A40952FDA1C00649710720221121A8A6AD78B22AC47F5E` |
+| `wave27-unlink.mpp` | `8249D54946BA0443ED2CBFE4006104BD226217807F97CC3A30637FAB1446559E` |
 
 ## `synthetic-base.mpp` — provenance
 
