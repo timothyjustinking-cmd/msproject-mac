@@ -68,6 +68,25 @@ Estimate: 6-8 hours.
 
 Estimate: 8-12 hours, likely split into waves 30 and 31.
 
+## Queued from the wave-28 review (Medium/Low; `wave28-verification/review.md`)
+
+- R28-5 Medium: `scripts/check_fixtures.py`'s user-profile pattern is built without
+  `re.escape`, so the UTF-16 `\Users\` / `\Documents and Settings\` check can never
+  fire (drive-path detection works).  Fix with a falsification test.
+- R28-6 Medium: a percent edit plus a Start edit in one save is unmeasured; a
+  percent edit on a task with its own calendar is accepted, shown, then dropped at
+  save as a warning (refuse it up front).
+- R28-7 Medium: `076438f` keeps the operator's name in local history; the push is
+  blocked until Tim rules (verifier's job, not a wave item).
+- R28-8 Low: the Task Form offers Name, Duration and Finish as editable but never
+  saves them; a typed value can be dropped silently when the selection moves.
+- R28-9 Low: new tests print SKIP and pass when a fixture is missing.
+- R28-10 Low: two claims worded beyond what the tests show.
+- R28-11 Low: `tests/data/README.md` lacks hash rows for 12 new fixtures.
+- R28-12 Low: one commit's gate log skipped the core tests.
+- Plus the wave-28 record's own "Found, not fixed" list (F4-F7, A1-A9 and the
+  carried residuals).
+
 ## After wave 30 (not planned in detail)
 
 Team Planner, Network Diagram, Calendar and Report views; the constraint-mso engine
