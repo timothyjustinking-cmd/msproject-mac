@@ -13,8 +13,11 @@
 //   * The frozen gutter prints the FILE's ID, not a fresh 1..n ordinal.
 //
 // The committed fixtures prove the rule in CI.  The corpus case pins rows 0-12
-// of the clean capture: (ID, indent level, name hash).  Only the HASH of a name
-// enters this file -- the names are client content and are never quoted.
+// of the clean capture by ID, indent level, summary flag and Project's
+// structural OutlineNumber, all read from the corpus at test time.  No task or
+// project name (and no invertible hash of one) enters this file: wave 27
+// removed the old unsalted FNV-1a hashes, which included the project title
+// (W27-3.5).
 //
 // Usage: qt_task_order <outline.mpp> <synthetic-base.mpp> <golden.sha256>
 //                      [project_a.mpp]
@@ -55,15 +58,6 @@ void check_int(long long got, long long want, const char* what) {
         ++g_failures;
         std::fprintf(stderr, "FAIL: %s (got %lld, want %lld)\n", what, got, want);
     }
-}
-
-std::uint64_t fnv1a64(const std::string& text) {
-    std::uint64_t hash = 14695981039346656037ull;
-    for (const unsigned char byte : text) {
-        hash ^= byte;
-        hash *= 1099511628211ull;
-    }
-    return hash;
 }
 
 // The row's ID cell as an integer (the gutter's text), or -1 when absent.
@@ -319,7 +313,9 @@ void case_synthetic(const QString& path) {
 }
 
 // The clean capture's first thirteen rows (project row + IDs 1..12), measured
-// 2026-10-23.  Only name hashes are recorded: the strings are client content.
+// 2026-10-23.  The rows are pinned by ID, indent level, summary flag and the
+// structural OutlineNumber, all read from project_a.mpp at test time; no name
+// and no invertible hash of one is recorded here (W27-3.5).
 void case_corpus(const QString& path) {
     msqt::PlanDocument document;
     std::string error;
@@ -332,14 +328,19 @@ void case_corpus(const QString& path) {
     // ID 5 is a milestone CHILD of ID 2 (a summary), not of ID 3/4: the
     // reader's stored chain (level 2 -> 0-based 1) and the capture's indent
     // agree.  The earlier 2 here was a transcription slip the gate caught.
+    //
+    // The project row (ID 0) is level -1 and has NO OutlineNumber; the task
+    // rows follow Project's own sibling path.  ID order is not outline order:
+    // ID 1's top-level task is outline 2 and ID 12's is outline 1, so the
+    // numbers start at 2 in the captured ID window.  A row is a summary exactly
+    // when a deeper row follows it in its subtree; ID 12 is a summary whose
+    // children lie beyond the 13 captured rows.
     const int expected_levels[] = {-1, 0, 1, 2, 2, 1, 1, 2, 2, 2, 2, 2, 0};
-    const std::uint64_t expected_hashes[] = {
-        0x366272367ae937deull, 0x9ed96c036bddd5d0ull, 0xafd15e31e5d6fd52ull,
-        0xbed77fed78047781ull, 0xb9086d11d495b957ull, 0x86cd7ec4d42dccdaull,
-        0xad5a1517f0c725aaull, 0x43fd5367e9606d70ull, 0x6b9d2887528a1c2cull,
-        0x6c0a03fedfa3d97dull, 0x375cdd816a5f39c2ull, 0x873b6ad6e022f6b7ull,
-        0x47bae979e7c3b1ecull};
-    const core::view::FieldId name_field = app::task_field_id("Name");
+    const int expected_summary[] = {1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1};
+    const char* expected_outline[] = {"", "2", "2.2", "2.2.1", "2.2.2", "2.1",
+                                      "2.3", "2.3.1", "2.3.2", "2.3.3", "2.3.4",
+                                      "2.3.5", "1"};
+    const core::view::FieldId outline_field = app::task_field_id("OutlineNumber");
     check(document.sheet() != nullptr && document.sheet()->row_count() >= 13,
           "project_a.mpp has at least the capture's 13 visible rows");
     if (document.sheet() == nullptr || document.sheet()->row_count() < 13) {
@@ -350,9 +351,17 @@ void case_corpus(const QString& path) {
                   "project_a row order is ID order");
         check_int(document.sheet()->outline_level(row), expected_levels[row],
                   "project_a outline level matches the clean capture");
-        const std::string name = document.sheet()->field_text(row, name_field);
-        check(fnv1a64(name) == expected_hashes[row],
-              "project_a name hash matches the clean capture");
+        check_int(document.sheet()->is_summary(row) ? 1 : 0, expected_summary[row],
+                  "project_a summary flag matches the clean captured structure");
+        const std::string outline =
+            document.sheet()->field_text(row, outline_field);
+        if (outline != expected_outline[row]) {
+            std::fprintf(stderr,
+                         "FAIL: project_a OutlineNumber row %zu (got \"%s\", want \"%s\")\n",
+                         row, outline.c_str(), expected_outline[row]);
+            ++g_failures;
+        }
+        ++g_checks;
     }
 }
 
