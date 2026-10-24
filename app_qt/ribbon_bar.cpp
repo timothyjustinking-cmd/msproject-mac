@@ -251,22 +251,22 @@ const std::vector<TabSpec>& tab_specs() {
         launcher(font, "Font");
         GroupSpec& schedule = add_group(task, "Schedule", 282);
         // The five percentage buttons are icon-only like the readback's [s]
-        // marks; each glyph is a ring filled to its percentage.  W27-0.1: they
-        // are DISABLED (decision-9 tooltip) until a measured actuals writer
-        // exists: Project's own 50 % save
-        // (tests/data/wave27-percent-actuals.mpp) writes ActualDuration,
-        // RemainingDuration, ActualStart, two dates, a progress flag and the
-        // project row's roll-up as well, so a one-word +92 write is not the edit
-        // Project makes.
-        small_cmd(schedule, "0%", RibbonCommand::percent_0, 18, 0, 0, false, true,
+        // marks; each glyph is a ring filled to its percentage.  W28-1.2: they
+        // are ENABLED on the measured actuals writer
+        // (app::make_percent_edit -> mppwrite::write_percent_actuals), which
+        // reproduces Project's own save pairs byte for byte
+        // (tests/data/wave28-percent-*.mpp): ActualDuration, RemainingDuration,
+        // ActualStart, the measured dates, the progress flag, the project row's
+        // roll-up and the Var2Data steps -- not the old one-word +92 write.
+        small_cmd(schedule, "0%", RibbonCommand::percent_0, 18, 0, 0, true, true,
                   "schedule.percent_0");
-        small_cmd(schedule, "25%", RibbonCommand::percent_25, 20, 0, 1, false, true,
+        small_cmd(schedule, "25%", RibbonCommand::percent_25, 20, 0, 1, true, true,
                   "schedule.percent_25");
-        small_cmd(schedule, "50%", RibbonCommand::percent_50, 20, 0, 2, false, true,
+        small_cmd(schedule, "50%", RibbonCommand::percent_50, 20, 0, 2, true, true,
                   "schedule.percent_50");
-        small_cmd(schedule, "75%", RibbonCommand::percent_75, 20, 0, 3, false, true,
+        small_cmd(schedule, "75%", RibbonCommand::percent_75, 20, 0, 3, true, true,
                   "schedule.percent_75");
-        small_cmd(schedule, "100%", RibbonCommand::percent_100, 26, 0, 4, false, true,
+        small_cmd(schedule, "100%", RibbonCommand::percent_100, 26, 0, 4, true, true,
                   "schedule.percent_100");
         split(schedule, "Mark on Track", 64, 0, 5, 3, "schedule.mark_on_track");
         small(schedule, "Respect Links", app::MenuAction::none, 96, 0, 6, false, 1, false,

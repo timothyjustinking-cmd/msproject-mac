@@ -657,12 +657,11 @@ void test_real_save_round_trip() {
         }
     }
 
-    // ---- percent complete (wave 26, W26-1.2; NOT ENABLED since W27-0.1) ---
-    // The edit kind and its save path stay tested so the measured actuals writer
-    // (wave 28) can enable the buttons again.  The UI is disabled (W27-0.1)
-    // because Project's own save writes eight-plus copies.  The model applies
-    // the edit last-one-wins and the save cascade writes
-    // mppwrite::TaskTable::set_percent_complete in the one final container.
+    // ---- percent complete (wave 26, W26-1.2; ENABLED by wave 28, W28-1.2) --
+    // The model applies the edit last-one-wins; the save cascade writes the
+    // measured actuals block (mppwrite::write_percent_actuals) in the one final
+    // container -- Project's own save shape, not the old +92 word.  The four
+    // Project save pairs are app_edits_actuals_tests' job.
     Loaded percent_base = load(copy);
     check(percent_base.ok, "the source re-loads for the percent save");
     check(!percent_base.plan.tasks.empty(),

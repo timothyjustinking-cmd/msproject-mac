@@ -12,13 +12,20 @@ session must read first._
   Every item is DONE; nothing is deferred.  The wave made the save safe and got
   CI green on all three OSs; the publication hold is **lifted** (history scrubbed
   24 Oct 2026), and `wave27` is pushed.
-* **The % Complete buttons are DISABLED** (exact decision-9 tooltip "not
-  implemented in this port") until wave 28's actuals writer.  Project's own 50 %
-  save (`tests/data/wave27-percent-actuals.mpp`) writes Actual Duration,
-  Remaining Duration, % Complete, Actual Start, two date words, a progress flag,
-  the project row's roll-up and Var2Data field 0x0B40015E; the old port wrote +92
-  only.  No UI path may queue `StructuralKind::set_percent` before wave 28.
-  The edit kind, save path and tests are kept, marked NOT ENABLED.
+* **The % Complete buttons are ENABLED on the measured actuals writer**
+  (wave 28, W28-1.2): each click queues one
+  `app::StructuralKind::set_percent` edit through `app::make_percent_edit`, and
+  File > Save writes Project's own actuals with
+  `mppwrite::write_percent_actuals`.  The four Project save pairs
+  (`tests/data/wave28-percent-*.mpp`: auto 0->40, 40->100, 100->0 and manual
+  0->40) match byte for byte on FixedData and VarMeta, on Var2Data after masking
+  the per-session step ids, and on the edited row's FixedMeta count; every
+  stream outside those four stays the control's.  Project's own 50 % save
+  (`tests/data/wave27-percent-actuals.mpp`) writes Actual Duration, Remaining
+  Duration, % Complete, Actual Start, two date words, a progress flag, the
+  project row's roll-up and Var2Data field 0x0B40015E; the old port wrote +92
+  only -- that one-word path is gone.  Task Information's Percent complete field
+  queues the same edit.
 * **The edit model owns the percent rules** (W27-0.2): `app::make_percent_edit`
   refuses uid 0, an unknown uid, a value above 100 and any summary row;
   `StructuralEdits::push(edit, const PlanInput*)` REQUIRES the plan for a
@@ -163,12 +170,14 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
 * **Displayed rows resolve through their uid** (wave 25): `app::print_row_list`
   takes RecordSet rows; never index `plan.tasks` with a RecordSet row; uid 0 is
   the project row and refuses task edits.
-* **Saveable structural edits** (waves 26-27): Priority is measured against
-  Project and enabled; PercentComplete is NOT enabled — the five % buttons are
-  disabled and no UI path may queue `set_percent` until wave 28's actuals
-  writer.  A percent edit needs the loaded plan at `push()`; step 5a refuses one
-  stale percent edit instead of failing the save.  Every enabled new edit path
-  needs a save-and-reopen test AND the standing-rule-1 Project measurement.
+* **Saveable structural edits** (waves 26-28): Priority is measured against
+  Project and enabled; PercentComplete is enabled on the measured actuals writer
+  (the five % buttons and Task Information's Percent complete field), which
+  writes the actuals, dates, progress flag, project roll-up and Var2Data steps
+  rather than +92.  A percent edit needs the loaded plan at `push()`; step 5a
+  refuses one stale percent edit instead of failing the save.  Every enabled new
+  edit path needs a save-and-reopen test AND the standing-rule-1 Project
+  measurement.
 * **`plan_recalc`** never rewrites the golden by default; refreshing needs the
   exact value `PLAN_RECALC_UPDATE_GOLDEN=1`, and the local/CI gate runs
   `ctest -E plan_recalc` plus the corpus-free binary/step.

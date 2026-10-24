@@ -21,7 +21,9 @@
 #include <utility>
 #include <vector>
 
+#include "actuals.h"
 #include "add_delete.h"
+#include "cal.h"
 #include "cfb_writer.h"
 #include "field_values.h"
 #include "save.h"
@@ -214,6 +216,60 @@ bool task_table_row_for_uid(const mppwrite::TaskTable& table, std::uint32_t uid,
         }
     }
     return false;
+}
+
+// Project's finish for a MANUALLY scheduled row is not a plain AddWork: the
+// working time between the start's CLOCK time and the end of the first day at
+// or after it with a pattern is charged first.  MEASURED on every manual row of
+// the tree -- start Sun 2026-01-04 13:00, 5 d -> Fri 12:00, 3 d -> Wed 12:00,
+// 2 d -> Tue 12:00 -- and the manual 0 -> 40 % save pair proves the ACTUALS use
+// the same rule: ActualStart Sun 13:00 with 16 h of actual work stops Tue
+// 12:00, not the calendar-correct Tue 17:00 (docs/engine-parity.md "THE MANUAL
+// FINISH IS NOT PLAIN AddWork"; core/plan/plan.cpp implements the identical
+// manual_partial_day_charge/manual_finish_of, which the app build does not
+// link).  For a start that is a working instant the charge is 0, so this is
+// add_work.
+core::sched::ticks manual_day_charge(const core::sched::Calendar& calendar,
+                                     core::sched::date32 start) {
+    if (core::sched::is_na(start) || calendar.is_working_instant(start)) {
+        return 0;
+    }
+    const std::int32_t clock = core::sched::time_of(start);
+    const std::int32_t day = core::sched::day_of(start);
+    for (std::int32_t offset = 0; offset < core::sched::kDaysPerWeek; ++offset) {
+        const core::sched::DayPattern& pattern =
+            calendar.pattern_for_day(day + offset);
+        if (pattern.empty()) {
+            continue;
+        }
+        core::sched::ticks charge = 0;
+        for (std::size_t i = 0; i < pattern.count; ++i) {
+            const std::int32_t begin = pattern.start_ticks(i);
+            const std::int32_t end = pattern.end_ticks(i);
+            if (end <= clock) {
+                continue;
+            }
+            charge += end - std::max(begin, clock);
+        }
+        return charge;
+    }
+    return 0;
+}
+
+std::uint32_t manual_finish_date(const core::sched::Calendar& calendar,
+                                 std::uint32_t start,
+                                 std::uint32_t duration_ticks) {
+    if (!mppwrite::is_date(start) || duration_ticks == 0) {
+        return start;
+    }
+    const core::sched::ticks charge = manual_day_charge(calendar, start);
+    if (charge >= duration_ticks) {
+        // [I] A duration shorter than the start day's tail has no oracle row;
+        // core/plan keeps the row at its start rather than guessing, and so
+        // does this save path.
+        return start;
+    }
+    return calendar.add_work(start, duration_ticks - charge);
 }
 
 }  // namespace
@@ -1014,15 +1070,25 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                    " of task uid " + std::to_string(edit->uid));
         }
 
-        // 5a (wave 26).  Project Priority has one stored copy (FixedData +78 of
-        // row 0, measured in wave 27 W27-0.3), so its table write needs no
-        // cross-stream fix-up.  PercentComplete is NOT single-copy -- Project's
-        // own 50 % save (tests/data/wave27-percent-actuals.mpp) also writes the
-        // actuals, the dates, a progress flag, the project-row roll-up and a
-        // Var2Data field -- so this path stays for its test only; the UI is
-        // disabled (W27-0.1).  All winning edits ride one write.
+        // 5a (wave 28).  PercentComplete is a full actuals write: Project's own
+        // save pairs (tests/data/wave28-percent-*.mpp) change ActualDuration,
+        // RemainingDuration, % Work Complete, four date words, a progress flag,
+        // the start anchor, the project-row roll-up and two Var2Data fields, so
+        // the single-word table patch the wave-26 path used is gone.  The dates
+        // come from the file's own calendar (core_cal, app-side because
+        // core_mppwrite is standard-library only): ActualStart, then Stop =
+        // the working-time walk over ActualDuration -- plain add_work for an
+        // automatic row, Project's manual-start charge for a row whose
+        // Fixed2Meta manual bit is set (see manual_finish_date above) -- and at
+        // 100 % the finish is that stop; below 100 % Resume =
+        // next_start(Stop).  All winning percent edits and the project priority
+        // still ride one written file.
         if (!percent_edits.empty() || priority_edit != nullptr) {
             mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
+            std::vector<mppwrite::PercentActualEdit> actual_edits;
+            core::sched::Calendar calendar;
+            bool calendar_ready = false;
+            bool calendar_failed = false;
             for (const StructuralEdit* edit : percent_edits) {
                 // W27-3.1: a percent edit whose uid the source table does not
                 // carry is a REFUSED edit, not a failed save.  push() already
@@ -1039,21 +1105,111 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                         "(a pending insert has no saved row), so it was not written");
                     continue;
                 }
-                table.set_percent_complete(row, edit->percent);
-                ++result.percent_rows_written;
+                mppwrite::PercentActualEdit actual;
+                actual.uid = edit->uid;
+                actual.percent = edit->percent;
+                if (edit->percent > 0) {
+                    if (!calendar_ready && !calendar_failed) {
+                        try {
+                            calendar = core::cal::load_project_calendar(
+                                std::string(source_path));
+                            calendar_ready = true;
+                        } catch (const std::exception& error) {
+                            calendar_failed = true;
+                            result.warnings.push_back(
+                                "percent complete for task uid " +
+                                std::to_string(edit->uid) +
+                                " was refused: the project calendar could not be read (" +
+                                error.what() + ")");
+                        }
+                    }
+                    if (!calendar_ready) {
+                        if (calendar_failed) {
+                            result.warnings.push_back(
+                                "percent complete for task uid " +
+                                std::to_string(edit->uid) +
+                                " was refused: the project calendar is unavailable");
+                        }
+                        continue;
+                    }
+                    // Working-time arithmetic needs the row's calendar.  Only
+                    // the project calendar is measured (every wave-28 pair has
+                    // -1 here), so a task calendar is refused rather than
+                    // guessed.
+                    if (table.u32(row, mppwrite::task_row::kCalendarUid) !=
+                        0xFFFFFFFFu) {
+                        result.warnings.push_back(
+                            "percent complete for task uid " +
+                            std::to_string(edit->uid) +
+                            " was refused: the task uses its own calendar, which "
+                            "this writer does not measure");
+                        continue;
+                    }
+                    std::uint32_t actual_start =
+                        table.u32(row, mppwrite::task_row::kActualStart);
+                    if (!mppwrite::is_date(actual_start)) {
+                        actual_start = table.u32(row, mppwrite::task_row::kStart2);
+                    }
+                    if (!mppwrite::is_date(actual_start)) {
+                        actual_start = table.u32(row, mppwrite::task_row::kStart);
+                    }
+                    if (!mppwrite::is_date(actual_start)) {
+                        result.warnings.push_back(
+                            "percent complete for task uid " +
+                            std::to_string(edit->uid) +
+                            " was refused: the task has no start date to count "
+                            "working time from");
+                        continue;
+                    }
+                    std::uint32_t const duration =
+                        table.u32(row, mppwrite::task_row::kDuration);
+                    std::uint32_t const actual_ticks =
+                        mppwrite::actual_duration_ticks(duration, edit->percent);
+                    // A manually scheduled row charges the start day's tail
+                    // (the manual pair's Stop is Tue 12:00, not Tue 17:00);
+                    // an automatic row is a plain working-time walk.
+                    const bool manual =
+                        mppwrite::task_is_manually_scheduled(document, row);
+                    std::uint32_t const stop =
+                        manual ? manual_finish_date(calendar, actual_start,
+                                                    actual_ticks)
+                               : calendar.add_work(actual_start, actual_ticks);
+                    actual.dates.actual_start = actual_start;
+                    actual.dates.stop = stop;
+                    if (edit->percent == 100) {
+                        // Measured on auto 40->100: ActualFinish = the finish
+                        // reached by the whole duration, and Resume = Stop = it.
+                        actual.dates.actual_finish = stop;
+                        actual.dates.resume = stop;
+                    } else {
+                        actual.dates.resume = calendar.next_start(stop);
+                    }
+                }
+                actual_edits.push_back(actual);
                 result.notes.push_back("task uid " + std::to_string(edit->uid) +
                                        ": percent complete " +
                                        std::to_string(edit->percent));
             }
+            if (!actual_edits.empty()) {
+                const mppwrite::PercentActualsResult written =
+                    mppwrite::write_percent_actuals(document, actual_edits);
+                result.percent_rows_written += written.rows_written;
+                for (const std::string& warning : written.warnings) {
+                    result.warnings.push_back(warning);
+                }
+            }
             if (priority_edit != nullptr) {
+                // Re-read the table: the actuals writer replaced FixedData.
+                mppwrite::TaskTable priority_table =
+                    mppwrite::TaskTable::from_document(document);
                 // Row 0 is the project row (uid 0), matched like any other.
-                const std::size_t row = table.row_for_uid(0);
-                table.set_priority(row, priority_edit->priority);
+                const std::size_t row = priority_table.row_for_uid(0);
+                priority_table.set_priority(row, priority_edit->priority);
+                priority_table.store_into(document);
                 result.priority_rows_written = 1;
                 result.notes.push_back("project priority " +
                                        std::to_string(priority_edit->priority));
             }
-            table.store_into(document);
             document.save(next_write_path());
         }
 

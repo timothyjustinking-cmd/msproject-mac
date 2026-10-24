@@ -410,9 +410,12 @@ clones the file's last live row for everything else). A written link keeps the
 predecessor, successor, type and lag exactly as the dialog stated; the writer allocates
 the row's uid/identity and the app reloads it.
 
-Does **not** persist: every other edit the sheet accepts — Name, Finish, Duration,
-percent complete, the computed columns (whose columns are read-only anyway), and the
-undo history itself — is **view-only in memory**. The stored custom fields and links
+Does **not** persist: Name, Finish and Duration typed in the sheet, the computed
+columns (whose columns are read-only anyway), and the undo history itself — all
+**view-only in memory**. Percent complete is not a sheet edit either (that column is
+read-only): the ribbon's five % buttons and Task Information's Percent complete field
+queue a structural edit that File > Save writes as Project's own actuals (wave 28,
+`core/mppwrite/actuals.h`). The stored custom fields and links
 are written only through their dialogs, not by typing in a grid cell (the stored
 columns are read-only).
 Saving a name does not change the file; the app never claims it does. The file the user

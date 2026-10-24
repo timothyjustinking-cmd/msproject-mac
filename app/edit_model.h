@@ -79,16 +79,14 @@ enum class StructuralKind : std::uint8_t {
     // the file link row named by `link_uid`.
     add_link = 4,
     delete_link = 5,
-    // Wave 26 (W26-1.2), NOT ENABLED (wave 27 W27-0.1): the ribbon's
-    // 0/25/50/75/100 % buttons.  `uid` is the task and `percent` is 0..100.
-    // The buttons are DISABLED with the decision-9 tooltip because
-    // mppwrite::TaskTable::set_percent_complete writes ONE word (+92), while
-    // Project's own 50 % save (tests/data/wave27-percent-actuals.mpp) also writes
-    // ActualDuration (+80), RemainingDuration (+88), ActualStart (+120), two
-    // dates (+132/+136), a progress flag (+168), the project row's roll-up
-    // (+80/+88/+92) and a Var2Data field (0x0B40015E).  The edit kind and its
-    // save test stay so the measured actuals writer (wave 28) can enable them;
-    // no UI route may queue this kind until then (W27-0.1).
+    // Wave 26 (W26-1.2), ENABLED by wave 28 (W28-1.2): the ribbon's
+    // 0/25/50/75/100 % buttons and Task Information's Percent complete field.
+    // `uid` is the task and `percent` is 0..100.  Project's own 50 % save
+    // (tests/data/wave27-percent-actuals.mpp) writes ActualDuration (+80),
+    // RemainingDuration (+88), ActualStart (+120), two dates (+132/+136), a
+    // progress flag (+168), the project row's roll-up (+80/+88/+92) and a
+    // Var2Data field (0x0B40015E), so step 5a writes the measured actuals block
+    // (core/mppwrite/actuals.h), not the old one-word +92 patch.
     set_percent = 6,
     // Wave 26 (W26-5.1): Project Information's Priority.  The value lives in the
     // project row's FixedData +78 (row 0, uid 0) and is written through
@@ -363,14 +361,17 @@ struct StructuralDocumentEdits {
 //                        value (one file);
 //      clear_field    -> one mppwrite::clear_field_value call per field, because
 //                        clearing is the measured empty-value shape;
-//   5a. set_percent    -> one TaskTable::set_percent_complete + store_into and one
-//                        container write for all of them (wave 26; NOT ENABLED
-//                        since W27-0.1: the one-word +92 write is not the edit
-//                        Project makes -- see StructuralKind::set_percent).  A
-//                        percent edit whose uid the source table does not carry
-//                        is REFUSED with a warning and does not fail the save
-//                        (W27-3.1): the rest of the cascade still lands, so a
-//                        bad edit can never block every later Save;
+//   5a. set_percent    -> the measured actuals writer
+//                        (mppwrite::write_percent_actuals, wave 28 W28-1.2):
+//                        ActualDuration/RemainingDuration/% words, the four
+//                        actual dates, the progress flag, the project row's
+//                        roll-up and the row's Var2Data steps -- Project's own
+//                        save shape (tests/data/wave28-percent-*.mpp), not the
+//                        wave-26 one-word +92 patch.  A percent edit whose uid
+//                        the source table does not carry is REFUSED with a
+//                        warning and does not fail the save (W27-3.1): the rest
+//                        of the cascade still lands, so a bad edit can never
+//                        block every later Save;
 //   5b. document edits-> only when `document_edits.hook` is set: the hook runs on
 //                        the SAME CfbDocument, after step 5 and before the final
 //                        write (this is the wave-17 seam);

@@ -388,6 +388,24 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_links COMMAND app_edits_links_tests)
     set_tests_properties(app_edits_links PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 28 (W28-1.2): the %-complete actuals writer against Project's own
+    # save pairs.  Four committed pairs (auto 0->40, 40->100, 100->0 and manual
+    # 0->40); each save is compared stream by stream with the pair, and every
+    # non-owned stream must equal the control.  Writes only under
+    # APP_TEST_OUT_DIR.
+    add_executable(app_edits_actuals_tests app_edits_actuals_tests.cpp)
+    target_compile_features(app_edits_actuals_tests PRIVATE cxx_std_20)
+    set_target_properties(app_edits_actuals_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_actuals_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_actuals_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_actuals_tests)
+
+    add_test(NAME app_edits_actuals COMMAND app_edits_actuals_tests)
+    set_tests_properties(app_edits_actuals PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 26 (W26-3.1): the file's Gantt style record -- the row -> Text Styles
     # category rule and the headless read seam.  The stock fixture is committed;
     # the PROJECT_A half skips when corpus/ is absent.

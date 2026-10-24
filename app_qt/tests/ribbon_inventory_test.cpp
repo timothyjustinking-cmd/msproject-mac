@@ -25,8 +25,8 @@
 //   * the enabled controls are wired: the pin's enabled set matches the live
 //     enabled state and the action/command each one runs, and the functional
 //     controls change the window (Timeline strip, Project Summary row, Critical
-//     Tasks highlight, Unlink); the five %-complete buttons are DISABLED
-//     (W27-0.1: no measured actuals writer) and clicking one queues nothing;
+//     Tasks highlight, Unlink); the five %-complete buttons are ENABLED on the
+//     measured actuals writer (W28-1.2) and one click queues one set_percent;
 //   * the gallery's 16 swatches carry the measured palette colours.
 //
 // The fixtures the functional checks open are copies of committed files; nothing
@@ -511,8 +511,13 @@ const EnabledWiring kEnabledWiring[] = {
     {"Project", "Schedule", "Move Project", "", "move_project"},
     {"Project", "Status", "Update Project", "", "update_project"},
     {"Gantt Chart Format", "Columns", "Custom Fields", "custom_fields", ""},
-    // W27-0.1: the five %-complete buttons are disabled until the actuals
-    // writer exists, so they are no longer in the enabled wiring set.
+    // W28-1.2: the five %-complete buttons are enabled on the measured actuals
+    // writer; each one must stay wired to its own command.
+    {"Task", "Schedule", "0%", "", "percent_0"},
+    {"Task", "Schedule", "25%", "", "percent_25"},
+    {"Task", "Schedule", "50%", "", "percent_50"},
+    {"Task", "Schedule", "75%", "", "percent_75"},
+    {"Task", "Schedule", "100%", "", "percent_100"},
     {"Task", "Schedule", "link tasks", "", "link_tasks"},
     {"Task", "Schedule", "unlink tasks", "", "unlink_tasks"},
     {"View", "Split View", "Timeline", "", "toggle_timeline"},
@@ -706,7 +711,8 @@ int main(int argc, char** argv) {
     // W26-1.2..1.5 add the functional checks that open these fixtures; until
     // then the arguments are accepted (the CMake test entry is final) but not
     // used, and the compiler must not warn.  W27-0.1 removed the corpus
-    // %-complete check (the buttons are disabled), so corpus_path is unused.
+    // %-complete check; W28-1.2 covers the %-complete wiring and one queued
+    // edit on the committed fixture, so corpus_path stays optional/unused.
     (void)order_fixture;
     (void)corpus_path;
 
@@ -1093,50 +1099,60 @@ int main(int argc, char** argv) {
         }
     }
 
-    // W27-0.1: the five %-complete buttons are DISABLED with the exact
-    // decision-9 tooltip.  Project's own 50 % save also writes ActualDuration,
-    // RemainingDuration, ActualStart, two dates, a progress flag and the project
-    // row's roll-up (tests/data/wave27-percent-actuals.mpp), so this port has no measured
-    // writer for the edit yet.  The controls stay laid out for the measured
-    // strip, and clicking one must not queue app::StructuralKind::set_percent
-    // through any route.
+    // W28-1.2: the five %-complete buttons are ENABLED on the measured actuals
+    // writer.  One click on a saved leaf row queues ONE set_percent edit (the
+    // displayed plan shows the new value; File > Save writes Project's actuals
+    // through mppwrite::write_percent_actuals).  The refused cases (project row,
+    // summary, pending insert) are the edit model's own tests.
     {
         QString open_percent_error;
         gate::check(window.open_file(fixture, &open_percent_error),
                     "the fixture reopens for the %-button state check");
         QApplication::processEvents();
         std::uint32_t uid = 0;
-        for (std::size_t row = 0; row < window.sheet()->row_count(); ++row) {
-            const std::uint32_t candidate = window.sheet()->row_uid(row);
-            if (candidate != 0) {
-                uid = candidate;
+        for (const app::TaskRow& task : window.plan().tasks) {
+            if (task.uid != 0 && !task.summary && task.file_row != 0) {
+                uid = task.uid;
                 break;
             }
         }
-        gate::check(uid != 0, "the fixture has a task row");
-        gate::check(uid == 0 || select_uid(window, uid), "a task row is selected");
+        gate::check(uid != 0, "the fixture has a saved leaf task");
+        gate::check(uid == 0 || select_uid(window, uid), "the leaf task is selected");
         const app::TaskRow* before = uid != 0 ? plan_task(window, uid) : nullptr;
         const std::uint16_t percent_before =
             before != nullptr ? before->percent_complete : 0;
+        // Click a value the row does not already carry: an unchanged value is a
+        // deliberate no-op in the shell (there is no measured identical save).
+        const std::uint16_t target = percent_before == 50 ? 25 : 50;
+        const QString label = QString::number(target) + QStringLiteral("%");
+        const std::size_t pending_before = window.pending_edits().size();
         // NOTE: find_control() rebuilds the ribbon page, so a control pointer
         // from an earlier call must never be used after another one.
-        for (const char* label : {"0%", "25%", "50%", "75%", "100%"}) {
-            QWidget* control = find_control(ribbon, QStringLiteral("Task"),
-                                            QStringLiteral("Schedule"),
-                                            QString::fromUtf8(label));
-            gate::check(control != nullptr, "a %-complete button is in the page");
-            gate::check(control != nullptr && !control->isEnabled() &&
-                            control->toolTip() ==
-                                QStringLiteral("not implemented in this port"),
-                        "a %-complete button is disabled with the exact decision-9 tooltip");
-            if (control != nullptr) {
-                click_control(control);
-            }
+        QWidget* control = find_control(ribbon, QStringLiteral("Task"),
+                                        QStringLiteral("Schedule"), label);
+        gate::check(control != nullptr, "the %-complete button is in the page");
+        gate::check(control != nullptr && control->isEnabled(),
+                    "the %-complete button is enabled on the actuals writer");
+        gate::check(control != nullptr &&
+                        control->toolTip() != QStringLiteral("not implemented in this port"),
+                    "an enabled %-complete button no longer carries the decision-9 tooltip");
+        if (control != nullptr && uid != 0) {
+            click_control(control);
+            QApplication::processEvents();
         }
-        QApplication::processEvents();
         const app::TaskRow* after = uid != 0 ? plan_task(window, uid) : nullptr;
-        gate::check(after != nullptr && after->percent_complete == percent_before,
-                    "clicking a disabled %-button queues no percent edit");
+        gate::check(after != nullptr && after->percent_complete == target,
+                    "clicking a %-button shows the new percent in the plan");
+        gate::check(window.pending_edits().size() == pending_before + 1,
+                    "clicking a %-button queues exactly one percent edit");
+        if (after != nullptr && after->percent_complete == target) {
+            gate::check(window.pending_edits().next_undo() != nullptr &&
+                            window.pending_edits().next_undo()->kind ==
+                                app::StructuralKind::set_percent &&
+                            window.pending_edits().next_undo()->uid == uid &&
+                            window.pending_edits().next_undo()->percent == target,
+                        "the queued edit is the selected row's set_percent");
+        }
     }
 
     // Unlink removes every SAVED link touching the selected task, at either

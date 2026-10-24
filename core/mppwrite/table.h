@@ -115,12 +115,21 @@ inline constexpr std::size_t kActualDuration = 80;    /* u32 ticks */
 inline constexpr std::size_t kDuration = 84;          /* u32 ticks */
 inline constexpr std::size_t kRemainingDuration = 88; /* u32 ticks */
 inline constexpr std::size_t kPercentComplete = 92;   /* u16, 0..100 */
+inline constexpr std::size_t kPercentWorkComplete = 94; /* u16, 0..100 */
 inline constexpr std::size_t kStart = 96;             /* packed date */
 inline constexpr std::size_t kFinish = 100;           /* packed date */
 inline constexpr std::size_t kStart2 = 104;           /* second date copy */
 inline constexpr std::size_t kFinish2 = 108;
 inline constexpr std::size_t kStart3 = 112;           /* third date copy */
 inline constexpr std::size_t kFinish3 = 116;
+/* The four stored actuals words.  MEASURED in the wave-28 save pairs:
+ * PercentComplete 0->40 writes +120 ActualStart and +132/+136 (Resume/Stop) at
+ * the row's effective start / the working-time stop and resume; 100->0 clears
+ * all four to kInvalidDate (actuals.h). */
+inline constexpr std::size_t kActualStart = 120;      /* u32 packed date */
+inline constexpr std::size_t kActualFinish = 124;     /* u32 packed date */
+inline constexpr std::size_t kResume = 132;           /* u32 packed date */
+inline constexpr std::size_t kStop = 136;             /* u32 packed date */
 inline constexpr std::size_t kStartSlack = 186;       /* i32 ticks, = COM StartSlack */
 inline constexpr std::size_t kTotalSlack = 190;       /* i32 ticks, = COM TotalSlack */
 /* Legacy name for +190, kept so existing callers/tests that spelt it this way
@@ -131,6 +140,14 @@ inline constexpr std::size_t kTotalSlackCopy = 190;
  * on the edited row after COM was given a duration in minutes. */
 inline constexpr std::size_t kDurationFormat = 164;   /* u16 */
 /*
+ * +168 is the row's progress-flags word (base 0x0080 on every row of the wave-28
+ * fixtures).  MEASURED: Project's percent save ORs 0x9000 into it as soon as a
+ * row carries progress, and does NOT clear those bits when the percent returns
+ * to 0 (wave28-percent-auto0.mpp keeps 0x9080 after auto 100->0), so the writer
+ * only ever ORs.
+ */
+inline constexpr std::size_t kProgressFlags = 168;    /* u32 */
+/*
  * +174 is the row's packed-date "start anchor" (spec/mpp-records.md §2).  W29
  * measured what Project does with it on its own save of a manual task: after
  * setting a Manual=True task's Start it wrote the new date here as well as into
@@ -139,6 +156,8 @@ inline constexpr std::size_t kDurationFormat = 164;   /* u16 */
  * unsnapped predecessor-finish bound, or 0xFFFFFFFF (w3-o1.mpp).
  */
 inline constexpr std::size_t kStartAnchor = 174;      /* u32 packed date */
+/* +178: i32 task calendar UniqueID, -1 = the project calendar (reader.cpp). */
+inline constexpr std::size_t kCalendarUid = 178;      /* i32 */
 
 } /* namespace task_row */
 /* The PjFormatUnit value a duration/lag edit in MINUTES stores (measured on the
@@ -191,12 +210,14 @@ class TaskTable {
      * tests/data/wave27-priority-750.mpp (W27-0.3) changes only that word of
      * row 0, so it needs no coordination. */
     void set_priority(std::size_t row, std::uint16_t priority);
-    /* NOT single-copy: Project's own PercentComplete save (tests/data/
-     * wave27-percent-actuals.mpp) also writes ActualDuration (+80), RemainingDuration (+88),
-     * ActualStart (+120), two dates (+132/+136), a progress flag (+168), the
-     * project row's roll-up (+80/+88/+92) and a Var2Data field (0x0B40015E).
-     * Kept for the wave-26 edit test; the UI is disabled (wave 27 W27-0.1)
-     * until a measured actuals writer (wave 28) writes every copy. */
+    /* NOT single-copy: Project's own PercentComplete saves (tests/data/
+     * wave28-percent-*.mpp, W28-1.1) also write ActualDuration (+80),
+     * RemainingDuration (+88), ActualStart (+120), two dates (+132/+136), a
+     * progress flag (+168), the project row's roll-up (+80/+88/+92) and
+     * Var2Data fields (0x0B40015E / 0x0B4004E5).  The percent edit is written
+     * by mppwrite::write_percent_actuals (actuals.h), which owns every copy;
+     * this one-word setter remains for the engine-diff scenario builder and is
+     * not the percent edit's writer (wave 28, W28-1.2). */
     void set_percent_complete(std::size_t row, std::uint16_t percent);
 
     /*
