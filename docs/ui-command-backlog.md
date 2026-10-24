@@ -126,6 +126,8 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Edit | Paste | implemented |  |
 | Edit | Select All | implemented |  |
 | Edit | Delete Task | implemented |  |
+| Edit | Indent Task | implemented |  |
+| Edit | Outdent Task | implemented |  |
 | Edit | Task Information... | implemented |  |
 | Edit | Custom Fields... | implemented |  |
 | Edit | Predecessors... | implemented |  |
@@ -161,5 +163,5 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 ## Summary
 
 * ribbon commands: 95 (82 disabled)
-* menu commands: 49 (7 disabled)
+* menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

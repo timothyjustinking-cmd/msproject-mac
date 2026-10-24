@@ -26,6 +26,7 @@
 #include "cal.h"
 #include "cfb_writer.h"
 #include "field_values.h"
+#include "outline.h"
 #include "save.h"
 #include "table.h"
 
@@ -66,6 +67,52 @@ bool is_field_edit(StructuralKind kind) noexcept {
 
 bool is_link_edit(StructuralKind kind) noexcept {
     return kind == StructuralKind::add_link || kind == StructuralKind::delete_link;
+}
+
+// Wave 28 (W28-2.1): Indent/Outdent, the one pair that owns an outline shape.
+bool is_outline_edit(StructuralKind kind) noexcept {
+    return kind == StructuralKind::outline_indent ||
+           kind == StructuralKind::outline_outdent;
+}
+
+const TaskRow* task_row_for_uid(const std::vector<TaskRow>& tasks,
+                                std::uint32_t uid) {
+    for (const TaskRow& row : tasks) {
+        if (row.uid == uid) {
+            return &row;
+        }
+    }
+    return nullptr;
+}
+
+// The index of `uid` in the display order, or tasks.size().
+std::size_t task_index_for_uid(const std::vector<TaskRow>& tasks,
+                               std::uint32_t uid) {
+    for (std::size_t index = 0; index < tasks.size(); ++index) {
+        if (tasks[index].uid == uid) {
+            return index;
+        }
+    }
+    return tasks.size();
+}
+
+// The display row the outline shape names: the previous row at the SAME
+// outline level (indent's new summary) or at one level less (outdent's parent).
+// `tasks` is in display (ID) order, so this is the row above in the sheet.
+const TaskRow* outline_anchor_in_plan(const PlanInput& plan, std::uint32_t uid,
+                                      bool indent) {
+    const std::size_t moved = task_index_for_uid(plan.tasks, uid);
+    if (moved == plan.tasks.size()) {
+        return nullptr;
+    }
+    const int wanted = plan.tasks[moved].outline_level - (indent ? 0 : 1);
+    for (std::size_t index = moved; index > 0; --index) {
+        const TaskRow& candidate = plan.tasks[index - 1];
+        if (candidate.outline_level == wanted) {
+            return &candidate;
+        }
+    }
+    return nullptr;
 }
 
 // core::gantt::LinkType orders FS/SS/FF/SF; the FILE orders FF=0, FS=1, SF=2,
@@ -192,6 +239,80 @@ void apply_field_to_row(TaskRow& row, const StructuralEdit& edit) {
         *found = std::move(value);
     } else {
         row.custom_fields.push_back(std::move(value));
+    }
+}
+
+// Wave 28 (W28-2.1): the outline the display plan shows.  Each edit records
+// the summary row it touches in anchor_uid, so the replay is deterministic:
+// the moved row's subtree shifts by the level difference and the summary row
+// takes the queued duration (indent: the calendar span of the new children;
+// outdent: the marker's restored duration) and summary flag.  The row's
+// start/finish are NOT touched: the writer stores the roll-up in +96/+100 and
+// leaves the effective +104/+108 pair alone, and that pair is what TaskRow and
+// the sheet show (reader.h Task::start/finish), so the measured saves leave
+// the displayed dates where the control had them.  Numbers are recomputed once
+// at the end, because every row below the move keeps its ID but changes
+// sibling path.
+void apply_outline_to_tasks(std::vector<TaskRow>& tasks,
+                            const std::vector<StructuralEdit>& applied) {
+    bool changed = false;
+    for (const StructuralEdit& edit : applied) {
+        if (!is_outline_edit(edit.kind)) {
+            continue;
+        }
+        const std::size_t moved = task_index_for_uid(tasks, edit.uid);
+        const std::size_t parent = task_index_for_uid(tasks, edit.anchor_uid);
+        if (moved == tasks.size() || parent == tasks.size() || moved == parent) {
+            continue;  // a pending delete removed one end of the shape
+        }
+        changed = true;
+        const bool indent = edit.kind == StructuralKind::outline_indent;
+        const int old_level = tasks[moved].outline_level;
+        const int new_level = tasks[parent].outline_level + (indent ? 1 : 0);
+        const int delta = new_level - old_level;
+        if (delta != 0) {
+            // The moved row and every following row deeper than it.
+            for (std::size_t index = moved; index < tasks.size(); ++index) {
+                if (index != moved && tasks[index].outline_level <= old_level) {
+                    break;
+                }
+                tasks[index].outline_level += delta;
+            }
+        }
+        if (indent) {
+            tasks[parent].summary = true;
+            tasks[parent].duration_ticks =
+                static_cast<std::int64_t>(edit.summary_duration);
+        } else {
+            tasks[parent].summary = false;
+            tasks[parent].duration_ticks =
+                static_cast<std::int64_t>(edit.restored_duration);
+        }
+    }
+    if (!changed) {
+        return;
+    }
+    // Project's OutlineNumber is the sibling path ("1", "1.1").  Rows appear
+    // in outline order in the display plan, so one forward pass rebuilds it.
+    std::vector<int> counters;
+    for (TaskRow& row : tasks) {
+        if (row.outline_level < 0) {
+            continue;  // the synthesized project-summary row keeps its label
+        }
+        const std::size_t level = static_cast<std::size_t>(row.outline_level);
+        if (counters.size() < level + 1) {
+            counters.resize(level + 1, 0);
+        }
+        ++counters[level];
+        counters.resize(level + 1);
+        std::string number;
+        for (std::size_t depth = 0; depth <= level; ++depth) {
+            if (depth != 0) {
+                number += '.';
+            }
+            number += std::to_string(counters[depth]);
+        }
+        row.outline_number = std::move(number);
     }
 }
 
@@ -475,6 +596,250 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
     return true;
 }
 
+bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
+                       std::uint32_t uid, bool indent, StructuralEdit& out,
+                       std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    out.kind = indent ? StructuralKind::outline_indent
+                      : StructuralKind::outline_outdent;
+    out.uid = uid;
+    if (uid == 0) {
+        error = "uid 0 is the project summary row and has no outline to move";
+        return false;
+    }
+    const TaskRow* row = task_row_for_uid(plan.tasks, uid);
+    if (row == nullptr) {
+        error = "task uid " + std::to_string(uid) +
+                " is not a live task in the file (a pending insert has no saved row)";
+        return false;
+    }
+    if (row->file_row == 0) {
+        error = "task uid " + std::to_string(uid) +
+                " is not a saved task (a pending insert has no file row), so its "
+                "outline cannot be written";
+        return false;
+    }
+    if (indent) {
+        if (row->outline_level != 0) {
+            error = "task uid " + std::to_string(uid) +
+                    " is not a top-level task; the measured indent moves a top-level "
+                    "row under its preceding sibling";
+            return false;
+        }
+    } else {
+        if (row->summary) {
+            error = "task uid " + std::to_string(uid) +
+                    " is a summary; the measured outdent moves a leaf";
+            return false;
+        }
+        if (row->outline_level < 1) {
+            error = "task uid " + std::to_string(uid) +
+                    " is already at the top level and cannot be outdented";
+            return false;
+        }
+    }
+
+    // The FILE's stored outline is the authority for the parent link, the
+    // sibling, the marker and the working-time dates: mppwrite's writer
+    // derives the write from exactly these rows.
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    std::vector<mppwrite::OutlineRow> rows;
+    std::string rows_error;
+    if (!mppwrite::read_outline_rows(document, "114/TBkndTask", rows, rows_error)) {
+        error = "the saved task outline could not be read (" + rows_error + ")";
+        return false;
+    }
+    std::size_t moved = rows.size();
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        if (rows[index].uid == uid) {
+            moved = index;
+            break;
+        }
+    }
+    if (moved == rows.size() || rows[moved].deleted) {
+        error = "task uid " + std::to_string(uid) +
+                " has no live row in the saved task table";
+        return false;
+    }
+    // 0-based display level vs the file's 1-based +172.  A pending outline edit
+    // (or a pending insert above the row) shifts the display without changing
+    // the file; queueing another shape from that display would write a parent
+    // the user is not looking at.
+    if (rows[moved].level != static_cast<std::uint16_t>(row->outline_level + 1)) {
+        error = "task uid " + std::to_string(uid) +
+                ": the sheet's outline level does not match the saved file (a "
+                "pending outline edit or insert has not been saved yet); save or "
+                "undo it first";
+        return false;
+    }
+    core::sched::Calendar calendar;
+    try {
+        calendar = core::cal::load_project_calendar(std::string(source_path));
+    } catch (const std::exception& calendar_error) {
+        error = std::string("the project calendar could not be read (") +
+                calendar_error.what() + ")";
+        return false;
+    }
+
+    if (indent) {
+        if (rows.empty() || rows[0].uid != 0) {
+            error = "the saved task table has no project row, so the outline "
+                    "cannot be read";
+            return false;
+        }
+        const std::vector<std::size_t>& project_children = rows[0].child_rows;
+        const auto position =
+            std::find(project_children.begin(), project_children.end(), moved);
+        if (position == project_children.end() || position == project_children.begin()) {
+            error = "task uid " + std::to_string(uid) +
+                    " has no preceding sibling in the saved file to become its "
+                    "summary";
+            return false;
+        }
+        const std::size_t parent_index = *(position - 1);
+        const mppwrite::OutlineRow& summary = rows[parent_index];
+        if (summary.deleted) {
+            error = "task uid " + std::to_string(uid) +
+                    ": the preceding sibling is a deleted row";
+            return false;
+        }
+        if (!summary.child_rows.empty() || summary.stored_children ||
+            (summary.fixed2_flags & mppwrite::kOutlineSummaryFlag) != 0) {
+            error = "task uid " + std::to_string(uid) + ": the preceding sibling "
+                    "(task uid " + std::to_string(summary.uid) +
+                    ") is already a summary; indenting under a summary is not measured";
+            return false;
+        }
+        // The display's preceding row at this level must be the file's
+        // preceding sibling: the measured shape writes the row the sheet shows.
+        const TaskRow* shown = outline_anchor_in_plan(plan, uid, true);
+        if (shown == nullptr || shown->uid != summary.uid) {
+            error = "task uid " + std::to_string(uid) +
+                    ": the saved file's outline order differs from the sheet's row "
+                    "order, so the measured indent shape does not apply";
+            return false;
+        }
+        // The roll-up span: the moved subtree's earliest +104 and latest +108.
+        // Depth-first through the file's child links, exactly the rows the
+        // writer rolls up.
+        std::uint32_t earliest = mppwrite::kInvalidDate;
+        std::uint32_t latest = mppwrite::kInvalidDate;
+        std::vector<std::size_t> stack(1, moved);
+        std::vector<bool> seen(rows.size(), false);
+        while (!stack.empty()) {
+            const std::size_t current = stack.back();
+            stack.pop_back();
+            if (current >= rows.size() || seen[current]) {
+                continue;
+            }
+            seen[current] = true;
+            const mppwrite::OutlineRow& member = rows[current];
+            if (!mppwrite::is_date(member.start) ||
+                !mppwrite::is_date(member.finish)) {
+                error = "task uid " + std::to_string(uid) +
+                        ": the moved subtree has a row without a valid start or "
+                        "finish, so the summary dates cannot be written";
+                return false;
+            }
+            if (!mppwrite::is_date(earliest) || member.start < earliest) {
+                earliest = member.start;
+            }
+            if (!mppwrite::is_date(latest) || member.finish > latest) {
+                latest = member.finish;
+            }
+            for (const std::size_t child : member.child_rows) {
+                stack.push_back(child);
+            }
+        }
+        if (!mppwrite::is_date(earliest) || !mppwrite::is_date(latest) ||
+            latest < earliest) {
+            error = "task uid " + std::to_string(uid) +
+                    ": the moved subtree has no valid date span";
+            return false;
+        }
+        const core::sched::ticks span = calendar.work_time_between(
+            static_cast<core::sched::date32>(earliest),
+            static_cast<core::sched::date32>(latest));
+        if (span < 0 ||
+            static_cast<std::uint64_t>(span) > 0xFFFFFFFFull) {
+            error = "task uid " + std::to_string(uid) +
+                    ": the moved subtree's working-time span cannot be stored";
+            return false;
+        }
+        out.summary_duration = static_cast<std::uint32_t>(span);
+        out.anchor_uid = summary.uid;
+        return true;
+    }
+
+    if (rows[moved].level < 2 || !rows[moved].child_rows.empty()) {
+        error = "task uid " + std::to_string(uid) +
+                " is not a leaf below the top level in the saved file";
+        return false;
+    }
+    const std::size_t parent_index = rows[moved].parent_row;
+    if (parent_index == static_cast<std::size_t>(-1) || parent_index == 0 ||
+        parent_index >= rows.size()) {
+        error = "task uid " + std::to_string(uid) +
+                " has no parent summary in the saved outline";
+        return false;
+    }
+    const mppwrite::OutlineRow& summary = rows[parent_index];
+    if (summary.child_rows.size() != 1 || summary.child_rows.front() != moved) {
+        error = "task uid " + std::to_string(uid) +
+                ": its parent has another child; outdenting from a parent that "
+                "stays a summary is not measured";
+        return false;
+    }
+    const TaskRow* shown = outline_anchor_in_plan(plan, uid, false);
+    if (shown == nullptr || shown->uid != summary.uid) {
+        error = "task uid " + std::to_string(uid) +
+                ": the saved file's parent does not match the row above the task "
+                "on the sheet; the measured outdent shape does not apply";
+        return false;
+    }
+    const mppwrite::OutlineMarker marker =
+        mppwrite::read_outline_marker(document, summary.uid);
+    if (!marker.present) {
+        error = "task uid " + std::to_string(uid) + ": the parent summary (task uid " +
+                std::to_string(summary.uid) +
+                ") has no 0x0B40007C duration marker, so its restored duration is "
+                "unknown";
+        return false;
+    }
+    if (!mppwrite::is_date(summary.start)) {
+        error = "task uid " + std::to_string(uid) +
+                ": the parent summary has no valid effective start (+104), so the "
+                "restored start cannot be computed";
+        return false;
+    }
+    const std::uint32_t restored_start =
+        calendar.next_start(static_cast<core::sched::date32>(summary.start));
+    const std::uint32_t restored_finish =
+        calendar.add_work(static_cast<core::sched::date32>(restored_start),
+                          static_cast<core::sched::ticks>(marker.duration_ticks));
+    if (!mppwrite::is_date(restored_start) || !mppwrite::is_date(restored_finish) ||
+        core::sched::is_overflow(static_cast<core::sched::date32>(restored_finish)) ||
+        restored_finish < restored_start) {
+        error = "task uid " + std::to_string(uid) +
+                ": the restored schedule overflows the project calendar";
+        return false;
+    }
+    out.restored_duration = marker.duration_ticks;
+    out.restored_duration_format = marker.duration_format;
+    out.restored_start = date32_from_packed(restored_start);
+    out.restored_finish = date32_from_packed(restored_finish);
+    out.anchor_uid = summary.uid;
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
     switch (edit.kind) {
         case StructuralKind::insert_task: {
@@ -655,6 +1020,50 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
             edit.dependants = 0;
             break;
         }
+        case StructuralKind::outline_indent:
+        case StructuralKind::outline_outdent: {
+            // W28-2.1: the plan can prove the row and the row above it; the
+            // file-side rules (marker words, sibling's leaf shape, the stored
+            // child lists) belong to make_outline_edit and the writer, which
+            // re-check them before writing.
+            if (plan == nullptr || edit.uid == 0 || edit.anchor_uid == 0) {
+                return false;
+            }
+            const TaskRow* row = task_row_for_uid(plan->tasks, edit.uid);
+            if (row == nullptr || row->file_row == 0) {
+                return false;
+            }
+            const TaskRow* anchor =
+                outline_anchor_in_plan(*plan, edit.uid,
+                                       edit.kind == StructuralKind::outline_indent);
+            if (anchor == nullptr || anchor->uid != edit.anchor_uid ||
+                anchor->file_row == 0) {
+                return false;
+            }
+            if (edit.kind == StructuralKind::outline_indent) {
+                if (row->outline_level != 0 || anchor->summary) {
+                    return false;
+                }
+            } else {
+                if (row->summary || row->outline_level < 1 || !anchor->summary) {
+                    return false;
+                }
+                if (edit.restored_start == kDateNa ||
+                    edit.restored_finish == kDateNa ||
+                    edit.restored_finish < edit.restored_start) {
+                    return false;
+                }
+            }
+            for (const StructuralEdit& existing : applied_) {
+                if (existing.kind == StructuralKind::delete_task &&
+                    (existing.uid == edit.uid ||
+                     existing.uid == edit.anchor_uid)) {
+                    return false;  // the row will not exist when the save runs
+                }
+            }
+            edit.dependants = 0;
+            break;
+        }
     }
     applied_.push_back(std::move(edit));
     undone_.clear();
@@ -686,6 +1095,11 @@ std::vector<StructuralEdit> StructuralEdits::detach_edits_naming(std::uint32_t u
             }
         } else if (existing.kind == StructuralKind::add_link) {
             names_uid = existing.uid == uid || existing.predecessor_uid == uid;
+        } else if (is_outline_edit(existing.kind)) {
+            // W28-2.1: deleting either the moved row or the summary it names
+            // leaves the writer no shape to apply, so the outline edit is
+            // displaced like a percent/actuals edit (undo restores it).
+            names_uid = existing.uid == uid || existing.anchor_uid == uid;
         }
         if (names_uid) {
             displaced.push_back(std::move(existing));
@@ -948,6 +1362,11 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
             }
         }
     }
+    // Wave 28 (W28-2.1): the indented/outdented outline, in edit order, then
+    // the OutlineNumber pass.  This is what makes the sheet's indentation and
+    // collapse triangles and the Gantt's summary bars follow the move on the
+    // next rebuild (W28-2.2); the save writes the same shape.
+    apply_outline_to_tasks(tasks, applied_);
     // Wave 26 (W26-5.1): the project priority, last one wins.
     for (const StructuralEdit& edit : applied_) {
         if (edit.kind == StructuralKind::set_project_priority) {
@@ -997,6 +1416,47 @@ PlanInput StructuralEdits::without_structural_edits(const PlanInput& shown,
         tasks.push_back(current != nullptr ? *current : file_row);
     }
     edited.tasks = std::move(tasks);
+    // Wave 28 (W28-2.1): an outline edit owns outline_level/outline_number/
+    // summary, and a summary parent's duration, on the rows it touches.  A cell
+    // edit cannot produce those values, and apply() replays them from the
+    // file's shape, so carrying them from `shown` would shift the moved subtree
+    // twice.  The anchor's duration is restored because the outline edit owns
+    // +84; every other cell (including a pending Start edit, and start/finish,
+    // which the outline writer never changes) keeps what the sheet shows.
+    bool outline_pending = false;
+    std::set<std::uint32_t> outline_summaries;
+    const auto note_outline_edit = [&](const StructuralEdit& edit) {
+        if (!is_outline_edit(edit.kind)) {
+            return;
+        }
+        outline_pending = true;
+        outline_summaries.insert(edit.anchor_uid);
+    };
+    for (const StructuralEdit& edit : applied_) {
+        note_outline_edit(edit);
+    }
+    // W28-2.1: an UNDONE outline edit is not replayed by apply(), so the rows it
+    // owned must go back to the file's shape too.  Without this, undoing an
+    // indent would keep the sheet's summary row, shifted level and roll-up
+    // duration: the shown row and the file row differ only in the fields the
+    // edit owned, and no applied edit is left to reset them.
+    for (const StructuralEdit& edit : undone_) {
+        note_outline_edit(edit);
+    }
+    if (outline_pending) {
+        for (TaskRow& row : edited.tasks) {
+            const TaskRow* file_row = task_row_for_uid(loaded.tasks, row.uid);
+            if (file_row == nullptr) {
+                continue;  // a pending insert: apply() places it, no file row
+            }
+            row.outline_level = file_row->outline_level;
+            row.outline_number = file_row->outline_number;
+            row.summary = file_row->summary;
+            if (outline_summaries.count(row.uid) != 0) {
+                row.duration_ticks = file_row->duration_ticks;
+            }
+        }
+    }
     // Cell edits never touch links or assignments; the display plan dropped the
     // deleted tasks' dependants, so restore the file's rows and let apply() drop
     // them again.  Field/link additions are re-derived from the edit list.
@@ -1152,6 +1612,16 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // Wave 28 (W28-2.1): the outline edits, all in one writer call, in
+    // application order (each edit sees the table the previous one left).
+    bool has_outline_edits = false;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (is_outline_edit(edit.kind)) {
+            has_outline_edits = true;
+            break;
+        }
+    }
+
     // Count the writer calls first: every one writes a file, and only the LAST one
     // may write the target (so an earlier refusal leaves the target untouched).
     std::size_t write_ops = 0;
@@ -1166,6 +1636,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     write_ops += field_clears.size();
     if (!actual_writes.empty() || priority_edit != nullptr) {
         ++write_ops;  // one table write for every actuals/priority edit
+    }
+    if (has_outline_edits) {
+        ++write_ops;  // one outline writer call, one file
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -1509,7 +1982,48 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             document.save(next_write_path());
         }
 
-        // 5b (wave 17).  The document-edit seam: the `214/CTable` view state and
+        // 5b (wave 28, W28-2.1).  Indent/Outdent: mppwrite::write_outline_edits
+        // owns the outline level/parent/summary flag/roll-up and the Var2Data
+        // marker and child lists of one or more edits, in application order.
+        // It runs after the actuals write so a date update's changed child
+        // dates are the ones the summary dates see, and before the document
+        // hook.  A refused edit is a warning and not a failed save (the
+        // W27-3.1 rule); the step still emits the file, because the op count
+        // above reserved this write and only the last op may write the target.
+        if (has_outline_edits) {
+            std::vector<mppwrite::OutlineEdit> outline_edits;
+            outline_edits.reserve(applied.size());
+            for (const StructuralEdit& edit : applied) {
+                if (!is_outline_edit(edit.kind)) {
+                    continue;
+                }
+                mppwrite::OutlineEdit writer_edit;
+                writer_edit.uid = edit.uid;
+                writer_edit.indent =
+                    edit.kind == StructuralKind::outline_indent;
+                writer_edit.summary_duration = edit.summary_duration;
+                writer_edit.restored_duration = edit.restored_duration;
+                writer_edit.restored_duration_format =
+                    edit.restored_duration_format;
+                writer_edit.restored_start =
+                    packed_from_date32(edit.restored_start);
+                writer_edit.restored_finish =
+                    packed_from_date32(edit.restored_finish);
+                outline_edits.push_back(writer_edit);
+            }
+            const mppwrite::OutlineWriteResult written =
+                mppwrite::write_outline_edits(document, outline_edits,
+                                              "114/TBkndTask");
+            result.outline_rows_written = written.rows_written;
+            for (const std::string& warning : written.warnings) {
+                result.warnings.push_back(warning);
+            }
+            result.notes.push_back(std::to_string(written.rows_written) +
+                                   " outline edit(s) written");
+            document.save(next_write_path());
+        }
+
+        // 5c (wave 17).  The document-edit seam: the `214/CTable` view state and
         // the `114/Props` formula, applied to THIS document -- after the
         // field-value writers (so the shared 0x02401392 flag decision sees a value
         // written moments ago) and before the one final write.  The hook does no
@@ -1590,6 +2104,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (!field_clears.empty()) {
             result.api += " clear_field_value";
+        }
+        if (has_outline_edits) {
+            result.api += " write_outline_edits";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";

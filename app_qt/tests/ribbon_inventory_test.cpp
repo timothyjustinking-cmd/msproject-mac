@@ -27,6 +27,8 @@
 //     controls change the window (Timeline strip, Project Summary row, Critical
 //     Tasks highlight, Unlink); the five %-complete buttons are ENABLED on the
 //     measured actuals writer (W28-1.2) and one click queues one set_percent;
+//     Indent/Outdent are ENABLED on the measured outline writer (W28-2.1) and one
+//     click queues one outline edit;
 //   * the gallery's 16 swatches carry the measured palette colours.
 //
 // The fixtures the functional checks open are copies of committed files; nothing
@@ -522,6 +524,10 @@ const EnabledWiring kEnabledWiring[] = {
     {"Task", "Schedule", "unlink tasks", "", "unlink_tasks"},
     // W28-1.3: Mark on Track's main button runs the measured date update.
     {"Task", "Schedule", "Mark on Track", "", "mark_on_track"},
+    // W28-2.1: Indent/Outdent are enabled on the measured outline writer; their
+    // buttons must stay wired to their own commands.
+    {"Task", "Schedule", "outdent", "", "outdent"},
+    {"Task", "Schedule", "indent", "", "indent"},
     {"View", "Split View", "Timeline", "", "toggle_timeline"},
     {"Gantt Chart Format", "Bar Styles", "Critical Tasks", "", "toggle_critical_tasks"},
     {"Gantt Chart Format", "Show/Hide", "Project Summary Task", "",
@@ -692,12 +698,14 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     msqt::configure_application();
 
-    if (argc < 11) {
+    if (argc < 14) {
         std::fprintf(stderr,
                      "usage: ribbon_inventory_tests <fixture.mpp> <ribbon_pin.tsv> "
                      "<w26-ribbon.measures.json> <timeline-hidden.mpp> <timeline-shown.mpp> "
                      "<summary-on.mpp> <summary-off.mpp> <order.mpp> <outline.mpp> "
-                     "<unmodelled.tsv> <mark-on-track-control.mpp> [corpus.mpp]\n");
+                     "<unmodelled.tsv> <mark-on-track-control.mpp> "
+                     "<outline-indent-control.mpp> <outline-outdent-control.mpp> "
+                     "[corpus.mpp]\n");
         return 2;
     }
     const QString fixture = QString::fromLocal8Bit(argv[1]);
@@ -711,7 +719,11 @@ int main(int argc, char** argv) {
     const QString outline_fixture = QString::fromLocal8Bit(argv[9]);
     const QString unmodelled_path = QString::fromLocal8Bit(argv[10]);
     const QString mark_fixture = QString::fromLocal8Bit(argv[11]);
-    const QString corpus_path = argc > 12 ? QString::fromLocal8Bit(argv[12]) : QString();
+    // W28-2.1: the committed indent/outdent controls drive the two outline
+    // buttons' click checks.
+    const QString indent_fixture = QString::fromLocal8Bit(argv[12]);
+    const QString outdent_fixture = QString::fromLocal8Bit(argv[13]);
+    const QString corpus_path = argc > 14 ? QString::fromLocal8Bit(argv[14]) : QString();
     // W26-1.2..1.5 add the functional checks that open these fixtures; until
     // then the arguments are accepted (the CMake test entry is final) but not
     // used, and the compiler must not warn.  W27-0.1 removed the corpus
@@ -1212,6 +1224,120 @@ int main(int argc, char** argv) {
         }
     }
 
+    // W28-2.1: Indent and Outdent are ENABLED on the measured outline writer.
+    // On the committed indent control, uid 2 is a top-level leaf whose preceding
+    // sibling uid 1 is a leaf: clicking Indent queues ONE outline_indent edit
+    // anchored on uid 1, and the display shows uid 1 as the measured summary
+    // (level 0, 1200 min = 0x2EE0 ticks) before Save.  Undo through the menu
+    // action restores the outline.
+    {
+        QString open_indent_error;
+        gate::check(window.open_file(indent_fixture, &open_indent_error),
+                    "the indent control opens for the Indent check");
+        QApplication::processEvents();
+        const app::TaskRow* anchor_before = plan_task(window, 1);
+        const app::TaskRow* moved_before = plan_task(window, 2);
+        gate::check(anchor_before != nullptr && !anchor_before->summary &&
+                        anchor_before->file_row != 0,
+                    "the indent control's uid 1 is a saved leaf anchor");
+        gate::check(moved_before != nullptr && !moved_before->summary &&
+                        moved_before->outline_level == 0 && moved_before->file_row != 0,
+                    "the indent control's uid 2 is a saved top-level leaf");
+        gate::check(select_uid(window, 2), "uid 2 is selected for Indent");
+        const std::size_t pending_before = window.pending_edits().size();
+        QWidget* control = find_control(ribbon, QStringLiteral("Task"),
+                                        QStringLiteral("Schedule"),
+                                        QStringLiteral("indent"));
+        gate::check(control != nullptr, "the Indent button is in the page");
+        gate::check(control != nullptr && control->isEnabled(),
+                    "the Indent button is enabled on the measured outline writer");
+        gate::check(control != nullptr &&
+                        control->toolTip() != QStringLiteral("not implemented in this port"),
+                    "the enabled Indent button carries a live tooltip");
+        if (control != nullptr) {
+            click_control(control);
+            QApplication::processEvents();
+        }
+        gate::check(window.pending_edits().size() == pending_before + 1,
+                    "clicking Indent queues exactly one outline edit");
+        const app::StructuralEdit* queued = window.pending_edits().next_undo();
+        gate::check(queued != nullptr &&
+                        queued->kind == app::StructuralKind::outline_indent &&
+                        queued->uid == 2 && queued->anchor_uid == 1,
+                    "the queued edit is uid 2's indent anchored on uid 1");
+        const app::TaskRow* anchor_after = plan_task(window, 1);
+        const app::TaskRow* moved_after = plan_task(window, 2);
+        gate::check(anchor_after != nullptr && anchor_after->summary,
+                    "clicking Indent shows uid 1 as a summary at once");
+        gate::check(anchor_after != nullptr && anchor_after->duration_ticks == 0x2EE0,
+                    "the summary carries Project's measured 0x2EE0 duration");
+        gate::check(moved_after != nullptr && moved_after->outline_level == 1,
+                    "clicking Indent moves uid 2 one level down at once");
+        QAction* undo_action = gate::find_action(window, app::MenuAction::undo);
+        gate::check(undo_action != nullptr && undo_action->isEnabled(),
+                    "the outline edit is on the menu's Undo stack");
+        if (undo_action != nullptr) {
+            undo_action->trigger();
+            QApplication::processEvents();
+        }
+        const app::TaskRow* anchor_undone = plan_task(window, 1);
+        const app::TaskRow* moved_undone = plan_task(window, 2);
+        gate::check(window.pending_edits().size() == pending_before,
+                    "Undo removes the queued outline edit");
+        gate::check(anchor_undone != nullptr && !anchor_undone->summary &&
+                        anchor_undone->duration_ticks == 0x5DC0,
+                    "Undo restores uid 1's leaf duration");
+        gate::check(moved_undone != nullptr && moved_undone->outline_level == 0,
+                    "Undo restores uid 2's level");
+    }
+
+    // W28-2.1: the outdent control has uid 2 as the only child of summary uid 1.
+    // One Outdent click queues the measured outline_outdent edit (restoring
+    // uid 1's 2400 min = 0x5DC0) and the sheet shows the flatter outline at once.
+    {
+        QString open_outdent_error;
+        gate::check(window.open_file(outdent_fixture, &open_outdent_error),
+                    "the outdent control opens for the Outdent check");
+        QApplication::processEvents();
+        const app::TaskRow* anchor_before = plan_task(window, 1);
+        const app::TaskRow* moved_before = plan_task(window, 2);
+        gate::check(anchor_before != nullptr && anchor_before->summary,
+                    "the outdent control's uid 1 is a saved summary");
+        gate::check(moved_before != nullptr && moved_before->outline_level == 1 &&
+                        moved_before->file_row != 0,
+                    "the outdent control's uid 2 is its saved child");
+        gate::check(select_uid(window, 2), "uid 2 is selected for Outdent");
+        const std::size_t pending_before = window.pending_edits().size();
+        QWidget* control = find_control(ribbon, QStringLiteral("Task"),
+                                        QStringLiteral("Schedule"),
+                                        QStringLiteral("outdent"));
+        gate::check(control != nullptr, "the Outdent button is in the page");
+        gate::check(control != nullptr && control->isEnabled(),
+                    "the Outdent button is enabled on the measured outline writer");
+        gate::check(control != nullptr &&
+                        control->toolTip() != QStringLiteral("not implemented in this port"),
+                    "the enabled Outdent button carries a live tooltip");
+        if (control != nullptr) {
+            click_control(control);
+            QApplication::processEvents();
+        }
+        gate::check(window.pending_edits().size() == pending_before + 1,
+                    "clicking Outdent queues exactly one outline edit");
+        const app::StructuralEdit* queued = window.pending_edits().next_undo();
+        gate::check(queued != nullptr &&
+                        queued->kind == app::StructuralKind::outline_outdent &&
+                        queued->uid == 2 && queued->anchor_uid == 1,
+                    "the queued edit is uid 2's outdent anchored on uid 1");
+        const app::TaskRow* anchor_after = plan_task(window, 1);
+        const app::TaskRow* moved_after = plan_task(window, 2);
+        gate::check(anchor_after != nullptr && !anchor_after->summary,
+                    "clicking Outdent shows uid 1 as a leaf at once");
+        gate::check(anchor_after != nullptr && anchor_after->duration_ticks == 0x5DC0,
+                    "the restored row carries the measured 0x5DC0 duration");
+        gate::check(moved_after != nullptr && moved_after->outline_level == 0,
+                    "clicking Outdent pulls uid 2 back to the top level at once");
+    }
+
     // Unlink removes every SAVED link touching the selected task, at either
     // end: Project's Unlink Tasks was measured to remove both an incoming and
     // an outgoing link (W27-3.3, COM UnlinkTasks on the outline fixture).
@@ -1270,13 +1396,22 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "note: links %zu -> %zu after Unlink (selected uid %u)\n",
                          links_before, window.plan().links.size(), selected_uid);
         }
-        // The outdent/indent/split-task buttons are disabled with the exact
-        // tooltip: the shared sheet model has no outline/split edit
-        // (core/sheet/sheet.h: "No row insert/delete/move or indent/outdent").
-        for (const char* label : {"outdent", "indent", "split task"}) {
+        // W28-2.1: outdent/indent are live on the measured outline writer
+        // (app::make_outline_edit -> mppwrite::write_outline_edits), so they
+        // are enabled; split task still has no engine edit and stays disabled
+        // with the exact tooltip (core/sheet/sheet.h: "No row
+        // insert/delete/move or indent/outdent").
+        for (const char* label : {"outdent", "indent"}) {
             QWidget* control = find_control(ribbon, QStringLiteral("Task"),
                                             QStringLiteral("Schedule"),
                                             QString::fromUtf8(label));
+            gate::check(control != nullptr && control->isEnabled(),
+                        "the measured outline button is enabled");
+        }
+        {
+            QWidget* control = find_control(ribbon, QStringLiteral("Task"),
+                                            QStringLiteral("Schedule"),
+                                            QStringLiteral("split task"));
             gate::check(control != nullptr && !control->isEnabled() &&
                             control->toolTip() ==
                                 QStringLiteral("not implemented in this port"),

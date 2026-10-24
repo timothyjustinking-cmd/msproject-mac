@@ -36,6 +36,11 @@ QKeySequence menu_shortcut(const app::MenuItemSpec& item) {
         // app/menu_model.cpp writes Backspace as "\b"; QKeySequence's portable
         // name is the only form that parses everywhere.
         sequence += QStringLiteral("Backspace");
+    } else if (key == "left" || key == "right") {
+        // Wave 28 (W28-2.1): Project's Indent/Outdent keys are Option+Shift+
+        // Right/Left.  The menu model stores the key by name (it is not one
+        // character); QKeySequence's portable names are Left/Right.
+        sequence += key == "left" ? QStringLiteral("Left") : QStringLiteral("Right");
     } else if (key.size() == 1) {
         sequence += QLatin1Char(code);
     } else {

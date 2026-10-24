@@ -341,6 +341,13 @@ class MainWindow final : public QMainWindow {
     // edit model's reason) a project row, an unknown uid, a summary and a
     // pending insert; an unchanged value is a no-op with a message.
     void set_selected_percent(std::uint16_t percent);
+    // W28-2.1: the ribbon's Indent/Outdent buttons and the Option+Shift+arrow
+    // menu items share this.  It builds the edit with app::make_outline_edit
+    // (the file's own outline and calendar), queues it, and rebuilds the sheet
+    // and Gantt through after_structural_change() so the new levels, outline
+    // numbers and summary bar show at once.  A shape Project's three save
+    // pairs did not measure is refused with a status message.
+    void indent_selected(bool indent);
     void unlink_selected_task();
     // W26-6.3: pushes the selected task's values into the docked Task Form.
     void refresh_task_form();

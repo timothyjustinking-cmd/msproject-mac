@@ -53,7 +53,11 @@ def menu_commands() -> list[tuple[str, str, str]]:
         title = re.search(r'(\w+)\.title\s*=\s*"([^"]+)"', line)
         if title:
             menu = title.group(2)
-        item = re.search(r'item\(MenuAction::(\w+),\s*"([^"]*)"', line)
+        # W28-2.1: outline commands have no Command modifier, so menu_model.cpp
+        # writes them with item_no_command(); they are ordinary menu commands.
+        item = re.search(
+            r'(?:item|item_no_command)\(MenuAction::(\w+),\s*"([^"]*)"', line
+        )
         if item:
             rows.append((menu, item.group(2), item.group(1)))
     return rows
