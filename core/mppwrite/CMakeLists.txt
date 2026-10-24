@@ -34,6 +34,7 @@ add_library(core_mppwrite STATIC
     field_values.cpp
     actuals.cpp
     outline.cpp
+    project_props.cpp
 )
 add_library(msproject::mppwrite ALIAS core_mppwrite)
 
