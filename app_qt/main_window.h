@@ -316,11 +316,16 @@ class MainWindow final : public QMainWindow {
     void update_status();
     // Wave 22 (E7): the status bar's centred "New Tasks : <mode>" text follows
     // the LOADED file's stored default (Project's QNEWTASKSAREMANUAL property,
-    // mpp::ProjectRow::new_tasks_manual).  A new/empty project, a file that
+    // mpp::ProjectRow::new_tasks_manual) and, from wave 28 (W28-3.1), any
+    // pending Options > Schedule change.  A new/empty project, a file that
     // does not store the setting (an original Project 2007 MPP12 file) or an
     // undecodable value keeps the Manually Scheduled text -- operator decision
     // 11 and the documented fallback.
     void update_status_mode();
+    // W28-3.1: the shown mode = the loaded file's mode + the LAST pending
+    // set_new_task_mode edit (undo/redo move the edit, so this is recomputed
+    // after every stack change).
+    void refresh_new_task_mode();
     void update_zoom_slider();
     void update_window_title();
     void update_chrome();
@@ -445,8 +450,12 @@ class MainWindow final : public QMainWindow {
     // Wave 22 (E7): the loaded file's stored new-task default.  `known` is false
     // for a new project and for a file that does not store the property (every
     // original Project 2007 MPP12 file); the label then falls back to Manual.
+    // Wave 28 (W28-3.1): loaded_* is that baseline, and new_tasks_* is the
+    // baseline with the last pending set_new_task_mode edit applied.
     bool new_tasks_manual_ = true;
     bool new_tasks_manual_known_ = false;
+    bool loaded_new_tasks_manual_ = true;
+    bool loaded_new_tasks_manual_known_ = false;
     Theme theme_ = Theme::light;
     // W26-4.2: the Office Theme chooser's current entry.  "Use system setting"
     // resolves through the platform colour scheme at apply time.

@@ -913,7 +913,8 @@ void check_print(msqt::MainWindow& window) {
     window.show_backstage(false);
 }
 
-void check_options(msqt::MainWindow& window, const QJsonObject& measures) {
+void check_options(msqt::MainWindow& window, const QJsonObject& measures,
+                   const QString& fixture) {
     const QJsonObject options = measures.value(QStringLiteral("options")).toObject();
     const QJsonArray titles = options.value(QStringLiteral("titles")).toArray();
     const QJsonArray counts = options.value(QStringLiteral("control_counts")).toArray();
@@ -1037,6 +1038,61 @@ void check_options(msqt::MainWindow& window, const QJsonObject& measures) {
                         QStringLiteral("Auto Scheduled")),
                 "the shell's auto mode follows the Options result");
 
+    // W28-3.1: with a saved document the choice is a pending edit that File >
+    // Save writes, and the status bar follows it at once.  synthetic-base
+    // stores 0x0001 = Manually Scheduled, so the load side is known too.
+    QString open_error;
+    gate::check(window.open_file(fixture, &open_error),
+                "the fixture opens for the new-task-mode checks");
+    if (window.status_mode_label() != nullptr) {
+        gate::check(window.status_mode_label()->text().contains(
+                        QStringLiteral("Manually Scheduled")),
+                    "the loaded fixture shows its stored manual mode");
+    }
+    gate::check(!window.document_dirty(),
+                "a fresh load has no pending new-task-mode edit");
+    window.set_new_task_mode(false);
+    gate::check(!window.new_tasks_manual() &&
+                    window.status_mode_label() != nullptr &&
+                    window.status_mode_label()->text().contains(
+                        QStringLiteral("Auto Scheduled")),
+                "the loaded document's status bar follows Auto Scheduled");
+    gate::check(window.document_dirty(),
+                "the mode change is a pending edit on a loaded document");
+    gate::check(window.pending_edits().size() == 1,
+                "the loaded document queues one mode edit");
+    const app::StructuralEdit* queued_mode = window.pending_edits().next_undo();
+    gate::check(queued_mode != nullptr &&
+                    queued_mode->kind == app::StructuralKind::set_new_task_mode &&
+                    !queued_mode->new_tasks_manual,
+                "Options queues the measured set_new_task_mode edit");
+    // Undo/redo through the real Edit-menu actions, so the status bar's
+    // follow-the-stack path is the one the user gets.
+    if (QAction* undo = gate::find_action(window, app::MenuAction::undo)) {
+        undo->trigger();
+        QApplication::processEvents();
+    }
+    gate::check(window.status_mode_label() != nullptr &&
+                    window.status_mode_label()->text().contains(
+                        QStringLiteral("Manually Scheduled")),
+                "undo restores the file's stored mode in the status bar");
+    gate::check(!window.document_dirty(),
+                "undo removes the only pending edit");
+    if (QAction* redo = gate::find_action(window, app::MenuAction::redo)) {
+        redo->trigger();
+        QApplication::processEvents();
+    }
+    gate::check(window.status_mode_label() != nullptr &&
+                    window.status_mode_label()->text().contains(
+                        QStringLiteral("Auto Scheduled")),
+                "redo applies the choice again");
+    if (QAction* undo = gate::find_action(window, app::MenuAction::undo)) {
+        undo->trigger();
+        QApplication::processEvents();
+    }
+    gate::check(!window.document_dirty(),
+                "the gate leaves the loaded fixture with no pending edit");
+
     // The rail's Options entry opens the same dialog.
     window.show_backstage(true);
     QApplication::processEvents();
@@ -1128,7 +1184,7 @@ int main(int argc, char** argv) {
     check_new(window, fixture, out_dir);
     check_locations(window, fixture, out_dir);
     check_print(window);
-    check_options(window, measures);
+    check_options(window, measures, fixture);
 
     std::fprintf(stderr,
                  "note: W26-4.1..4.6 rail, File-tab, Account, New, location, Print and "
