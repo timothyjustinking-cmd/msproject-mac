@@ -283,6 +283,38 @@ DOCUMENTED = {
         "8975C16CCBB289FC451AF39BBB03E49803764B1354B99DD23B8A48D775C0EFE3",
     "tests/data/wave29-percent-mid60.mpp":
         "260875811C67B126970789CC035DC9595C4644359F7F0144433A7C17D10FBEF7",
+    # Wave 29 (W29-0.3): five Project 2021 save pairs on a shaped copy of the
+    # synthetic base whose ID 1 already records 60 % (ActualStart on the
+    # effective start; its 0x0B40015E block is marker + middle 60 + final 60)
+    # and whose IDs 2/3 are untouched leaves.  Mark on Track on ID 1 with
+    # the through date after (2026-01-09) and before (2026-01-07) the recorded
+    # progress; Update Project with All=True on both dates; and Update
+    # Project's "Selected tasks" scope on IDs 1 and 2.  Measured: Project DOES
+    # lower recorded progress (60 -> 40) when the date precedes it, appends a
+    # middle step when raising and REPLACES the stored middle in place when
+    # lowering; a date update's replaced 0F400032 does not move Props
+    # 0x04000002; the Selected scope leaves the status-date record at
+    # 0xffffffff and the project row's Resume/Stop at the project start.
+    "tests/data/wave29-mark-60-after-control.mpp":
+        "5CE3E87AB426681416F49DA17AD7F3B33218754DD6191BE17A9691BDFE797196",
+    "tests/data/wave29-mark-60-after.mpp":
+        "12394B4F6AAF5EA16764CEE529F7D3099A7C98523D0B7E328C38FDF9C6BF0FE1",
+    "tests/data/wave29-mark-60-before-control.mpp":
+        "C1CB43CAFF52BD11D1DD9F929BF94FBC7B300EA19E5A345C885309413D5D3362",
+    "tests/data/wave29-mark-60-before.mpp":
+        "154BCB6669C6DE91DBD3DF0A8844693F3ADD38BD75E7624CB8F323482913D71C",
+    "tests/data/wave29-update-60-after-control.mpp":
+        "EC283054C2B7FF50360D44971CA9C6D96668A18833B60DBA213C20D2543AD56D",
+    "tests/data/wave29-update-60-after.mpp":
+        "35ABDB9B628AA1765B970FB7058A7AC1BECE95F86007663F7B0FF0359CEECD82",
+    "tests/data/wave29-update-60-before-control.mpp":
+        "971B55C377425EABD81698DB558125B6FF21FCFE1BCB2AA9F755A771D2E0D0C6",
+    "tests/data/wave29-update-60-before.mpp":
+        "77D75938112EFDDCC4EE810BF9FFE8AA83A8664028CEFD468AAD81299D078D5A",
+    "tests/data/wave29-update-60-selected-control.mpp":
+        "F5ABBF88DA9D934FFAD69759397DB794FFA203D7458807CF93D8920EEE24B48A",
+    "tests/data/wave29-update-60-selected.mpp":
+        "8CBBFE3E2E9268F9C0A25C44044BD3DFBD65965C016F924E8E0431063A9435E6",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and

@@ -524,10 +524,15 @@ struct Pair {
     bool via_percent;        /* make_percent_edit vs make_update_actuals_edit */
     bool moves_status_date;  /* Update Project stores its date */
     std::uint32_t status_date_raw; /* control's stored date; 0 = unchecked */
+    std::uint32_t through_raw;     /* the packed update date (W29-0.3 pairs) */
+    /* W29-0.3: true only for Update Project's entire-project scope, whose
+     * project row takes the earliest per-row Resume/Stop. */
+    bool entire_project;
 };
 
 const std::uint32_t kUid1[] = {1};
 const std::uint32_t kUid2[] = {2};
+const std::uint32_t kUid12[] = {1, 2};
 const std::uint32_t kUid123[] = {1, 2, 3};
 /* W29-0.2: the wave-29 pairs' edited rows -- a leaf under two summaries, the
  * one task with a work-bearing assignment, and the top-level milestone. */
@@ -537,43 +542,83 @@ const std::uint32_t kUid7[] = {7};
 
 const std::uint16_t kPct0[] = {0};
 const std::uint16_t kPct40[] = {40};
+const std::uint16_t kPct80[] = {80};
 const std::uint16_t kPct100[] = {100};
 const std::uint16_t kMarkManualPct[] = {83};
 const std::uint16_t kUpdatePct[] = {50, 83, 100};
+/* W29-0.3: Mark on Track 60 -> 80 / 60 -> 40; Update Project all rows and the
+ * two-of-three selection. */
+const std::uint16_t kPct80_100[] = {80, 100};
+const std::uint16_t kPct80_100_100[] = {80, 100, 100};
+const std::uint16_t kPct40_83_100[] = {40, 83, 100};
 
 const std::uint32_t kTicks9600[] = {9600};
 const std::uint32_t kTicks12000[] = {12000};
+const std::uint32_t kTicks19200[] = {19200};
 const std::uint32_t kUpdateTicks[] = {12000, 12000, 9600};
+const std::uint32_t kTicks19200_14400[] = {19200, 14400};
+const std::uint32_t kTicks9600_12000_9600[] = {9600, 12000, 9600};
+const std::uint32_t kTicks19200_14400_9600[] = {19200, 14400, 9600};
 
 const Pair kPairs[] = {
     /* W28-1.1/W28-1.2: PerentComplete save pairs. */
     {"auto0-40", "wave28-percent-auto0-control.mpp",
-     "wave28-percent-auto40.mpp", kUid1, kPct40, nullptr, 1, true, false, 0},
+     "wave28-percent-auto40.mpp", kUid1, kPct40, nullptr, 1, true, false,
+     0, kThroughRaw, false},
     {"auto40-100", "wave28-percent-auto40-control.mpp",
-     "wave28-percent-auto100.mpp", kUid1, kPct100, nullptr, 1, true, false, 0},
+     "wave28-percent-auto100.mpp", kUid1, kPct100, nullptr, 1, true, false,
+     0, kThroughRaw, false},
     {"auto100-0", "wave28-percent-auto100-control.mpp",
-     "wave28-percent-auto0.mpp", kUid1, kPct0, nullptr, 1, true, false, 0},
+     "wave28-percent-auto0.mpp", kUid1, kPct0, nullptr, 1, true, false,
+     0, kThroughRaw, false},
     {"manual0-40", "wave28-percent-manual0-control.mpp",
-     "wave28-percent-manual40.mpp", kUid1, kPct40, nullptr, 1, true, false, 0},
+     "wave28-percent-manual40.mpp", kUid1, kPct40, nullptr, 1, true, false,
+     0, kThroughRaw, false},
     /* W28-1.3: Mark on Track (one row, status date left alone) and Update
      * Project (three rows, status date moved to the through date). */
     {"mark-auto", "wave28-mark-auto-control.mpp", "wave28-mark-auto.mpp",
-     kUid1, kPct40, kTicks9600, 1, false, false, kThroughRaw},
+     kUid1, kPct40, kTicks9600, 1, false, false, kThroughRaw, kThroughRaw,
+     false},
     {"mark-manual", "wave28-mark-manual-control.mpp", "wave28-mark-manual.mpp",
-     kUid2, kMarkManualPct, kTicks12000, 1, false, false, kThroughRaw},
+     kUid2, kMarkManualPct, kTicks12000, 1, false, false, kThroughRaw,
+     kThroughRaw, false},
     {"update", "wave28-update-control.mpp", "wave28-update.mpp",
-     kUid123, kUpdatePct, kUpdateTicks, 3, false, true, 0xFFFFFFFFu},
+     kUid123, kUpdatePct, kUpdateTicks, 3, false, true, 0xFFFFFFFFu,
+     kThroughRaw, true},
     /* W29-0.2: the three measured wave-29 shapes, each one 0 -> measured edit
      * on an automatic row -- a leaf under a summary (the summary and project
      * roll-up), a work-bearing assignment (% Work Complete, task and
      * assignment actual work), and a zero-duration milestone 0 -> 100. */
     {"wave29-leaf40", "wave29-percent-leaf-control.mpp",
-     "wave29-percent-leaf40.mpp", kUid3, kPct40, nullptr, 1, true, false, 0},
+     "wave29-percent-leaf40.mpp", kUid3, kPct40, nullptr, 1, true, false, 0,
+     kThroughRaw, false},
     {"wave29-work40", "wave29-percent-work-control.mpp",
-     "wave29-percent-work40.mpp", kUid6, kPct40, nullptr, 1, true, false, 0},
+     "wave29-percent-work40.mpp", kUid6, kPct40, nullptr, 1, true, false, 0,
+     kThroughRaw, false},
     {"wave29-milestone100", "wave29-percent-milestone-control.mpp",
      "wave29-percent-milestone100.mpp", kUid7, kPct100, nullptr, 1, true,
-     false, 0},
+     false, 0, kThroughRaw, false},
+    /* W29-0.3: a row already at 60 % with its ActualStart on the effective
+     * start.  Mark on Track on that one row, with the status date after
+     * (2026-01-09) and before (2026-01-07) the recorded progress; Update
+     * Project with All=True on the same two dates; and its Selected-tasks
+     * scope on a two-of-three selection (uids 1 and 2), which leaves the
+     * status-date record at 0xffffffff (measured). */
+    {"wave29-mark-60-after", "wave29-mark-60-after-control.mpp",
+     "wave29-mark-60-after.mpp", kUid1, kPct80, kTicks19200, 1, false, false,
+     0x3BF60000u, 0x3BF60000u, false},
+    {"wave29-mark-60-before", "wave29-mark-60-before-control.mpp",
+     "wave29-mark-60-before.mpp", kUid1, kPct40, kTicks9600, 1, false, false,
+     0x3BF40000u, 0x3BF40000u, false},
+    {"wave29-update-60-after", "wave29-update-60-after-control.mpp",
+     "wave29-update-60-after.mpp", kUid123, kPct80_100_100,
+     kTicks19200_14400_9600, 3, false, true, 0xFFFFFFFFu, 0x3BF60000u, true},
+    {"wave29-update-60-before", "wave29-update-60-before-control.mpp",
+     "wave29-update-60-before.mpp", kUid123, kPct40_83_100,
+     kTicks9600_12000_9600, 3, false, true, 0xFFFFFFFFu, 0x3BF40000u, true},
+    {"wave29-update-60-selected", "wave29-update-60-selected-control.mpp",
+     "wave29-update-60-selected.mpp", kUid12, kPct80_100,
+     kTicks19200_14400, 2, false, false, 0xFFFFFFFFu, 0x3BF60000u, false},
 };
 
 void check_pair(const Pair& pair) {
@@ -607,7 +652,7 @@ void check_pair(const Pair& pair) {
               "the reader decodes the control's status date");
     }
 
-    const app::date32 through_date = core::sched::from_ymd(2026, 1, 7);
+    const app::date32 through_date = app::date32_from_packed(pair.through_raw);
     app::StructuralEdit edit;
     std::string edit_error;
     if (pair.via_percent) {
@@ -626,6 +671,8 @@ void check_pair(const Pair& pair) {
               "the edit carries the through date");
         check(edit.updates_status_date == pair.moves_status_date,
               "the edit carries the status-date decision");
+        check(edit.update_entire_project == pair.entire_project,
+              "the edit carries the update scope (entire project vs selection)");
         check_size(edit.actuals.size(), pair.count,
                    "the update covers every target");
         if (edit.actuals.size() == pair.count) {
@@ -936,7 +983,7 @@ void check_pair(const Pair& pair) {
                       get_u32(result_props, result_at),
                   "the port's status date equals Project's");
             if (pair.moves_status_date) {
-                check(get_u32(result_props, result_at) == kThroughRaw,
+                check(get_u32(result_props, result_at) == pair.through_raw,
                       "Project's update pair stores the through date");
                 check(get_u32(control_props, control_at) == 0xFFFFFFFFu,
                       "the update control stores no status date");
@@ -950,8 +997,10 @@ void check_pair(const Pair& pair) {
     }
     /* Project reallocates these two per-session id words on every save (the
      * same records the new-task-mode test masks); the port leaves the
-     * control's bytes.  They are the only Props bytes not compared byte for
-     * byte with Project's save. */
+     * control's bytes.  The whole 4-byte word is opaque -- the wave-29
+     * mark-before pair's control and result differ in every one of its bytes
+     * -- so they are the only Props bytes not compared byte for byte with
+     * Project's save. */
     const std::uint32_t kPropsOpaque[] = {0x02400029u, 0x024013c2u};
     const std::vector<PropsRecord> output_records = parse_props(output_props);
     const std::vector<PropsRecord> result_records = parse_props(result_props);
@@ -967,13 +1016,17 @@ void check_pair(const Pair& pair) {
             continue;
         }
         check_expected_failure(
-            get_u16(output_props, ours->payload + 2) ==
-                get_u16(result_props, theirs->payload + 2),
+            get_u32(output_props, ours->payload) ==
+                get_u32(result_props, theirs->payload),
             ("Props record " + hex_tag(id) +
              " per-save id word equals Project's (Project reallocates it on "
              "every save; the port does not own it)").c_str());
-        zero_span(output_masked, ours->payload + 2, 2);
-        zero_span(result_masked, theirs->payload + 2, 2);
+        /* The whole 4-byte word at +0 is the per-save id: the wave-29
+         * mark-before control and result differ in every byte of it (the high
+         * half moved a961 -> b02c), so a 2-byte mask would leave the two
+         * files unequal. */
+        zero_span(output_masked, ours->payload, 4);
+        zero_span(result_masked, theirs->payload, 4);
     }
     check(output_masked == result_masked,
           "Props equals Project's save except the two per-save id words");
@@ -1032,7 +1085,7 @@ void check_pair(const Pair& pair) {
         }
         if (pair.moves_status_date || pair.status_date_raw != 0) {
             const std::uint32_t expected = pair.moves_status_date
-                                               ? kThroughRaw
+                                               ? pair.through_raw
                                                : pair.status_date_raw;
             check(reread.project.status_date_stored,
                   "the save keeps the status-date record");

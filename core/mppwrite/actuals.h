@@ -48,7 +48,9 @@
  *   sum(real planned work)), +8/+16/+24 = those two real-assignment sums (0 on
  *   a placeholder-only file), and +120/+132/+136 as measured (the project start;
  *   Resume/Stop are the earliest WRITTEN summary date, else Update Project's
- *   earliest row date).  The edited row's VarMeta/Var2Data fields:
+ *   entire-project earliest row date -- Mark on Track and Update Project's
+ *   Selected-tasks scope keep the project start there, W29-0.3).  The edited
+ *   row's VarMeta/Var2Data fields:
  *   0x0B4004E3 and 0x0B4004E5 are removed, 0x0B400505/0x0B400506 are removed
  *   when a 0 % row starts carrying progress, a 0x0B4004E4 payload shrinks 12 -> 8
  *   bytes with 4 freed bytes on a zero-duration 100 % edit (the milestone pair),
@@ -57,7 +59,12 @@
  *   none.  A block built from scratch starts with Project's marker step
  *   (flag 1, percent 32768.0, a fresh opaque id) before the new middle step and
  *   the constant final step; a 40 -> 100 save keeps the marker and the old
- *   middles and drops only the old final.  The FixedMeta entry that covers the
+ *   middles and drops only the old final.  W29-0.3: RAISING and LOWERING a
+ *   recorded percent differ.  60 -> 80 appends middle 80 and final 80 (the
+ *   old middle 60 stays); 60 -> 40 keeps the old middle 60 byte for byte and
+ *   replaces ONLY the final step with final 40, so the block stays three
+ *   steps.  The rule is Project's own save of both directions on a 60 % row.
+ *   The FixedMeta entry that covers the
  *   row has its variable-field count adjusted by the NET number of VarMeta
  *   entries added and removed (measured: 9 -> 9 for the automatic pair,
  *   11 -> 9 for the manual pair, where three entries go and one arrives).
@@ -108,10 +115,14 @@
  *                               byte (the milestone's 72-byte block).
  *   TBkndAssn 0F400032          removed at 0 %; appended (56 bytes) when none
  *                               existed; replaced (append + remove, 56 bytes, or
- *                               76 bytes at 100 % with a percent edit, where the
- *                               second record carries the OLD actual work); a
- *                               zero-duration row stores a 56-byte all-zero
- *                               block with the units words 0 (the milestone).
+ *                               76 bytes when a recorded percent is recomputed,
+ *                               where the second record carries the OLD actual
+ *                               work); a zero-duration row stores a 56-byte
+ *                               all-zero block with the units words 0 (the
+ *                               milestone).  W29-0.3: on a date update the
+ *                               second record is (old actual, 0, NEW ticks)
+ *                               when the percent RAISES (60 -> 80) and the old
+ *                               record byte for byte when it LOWERS (60 -> 40).
  *   TBkndAssn VarMeta           9 -> 10 entries on a first 0F400032 append,
  *                               10 -> 9 on its removal; the physical tail keeps
  *                               Project's stale slot, as in the Task table.
@@ -132,10 +143,14 @@
  * mid-to-mid edit (25 -> 60) is measured as wave29-percent-mid60.mpp but stays
  * refused: Project reschedules the whole chain on that save (durations, dates,
  * anchors, slack) and this writer has no scheduler, so the pair's moved fields
- * are the save-pair test's named expected failures.  A date update still
- * refuses every shape (W29-0.3 measures it), and a combination of two shapes (a
- * milestone under a summary, a resource-loaded leaf, a milestone with resource
- * work) has no pair, so the app refuses it.
+ * are the save-pair test's named expected failures.  W29-0.3 measured a date
+ * update on a row that already records progress: Mark on Track and Update
+ * Project both RECOMPUTE the percent through the update date, raising 60 -> 80
+ * or lowering 60 -> 40, and the app accepts exactly that top-level automatic
+ * 60 % shape (a 0 % or 40 % row, a manual row, an equal percent, or a date
+ * that would erase/complete the row still has no pair and stays refused).  A
+ * combination of two shapes (a milestone under a summary, a resource-loaded
+ * leaf, a milestone with resource work) has no pair, so the app refuses it.
  *
  * CORRECTION (wave 29, W29-0.0): the wave-28 save-pair test did NOT compare
  * those streams with Project's file -- it asserted them equal to the CONTROL,
@@ -230,15 +245,25 @@ bool task_is_manually_scheduled(CfbDocument const& doc, std::size_t row,
 
 /* W29-0.0: true when the saved row already records progress -- a stored
  * % Complete (+92) above 0, an ActualStart/ActualFinish (+120/+124), or a
- * 0x0B40015E step block for the uid.  The wave-28 Mark on Track and Update
- * Project pairs all start from 0 % rows with no actual dates and no step
- * block, and the app now refuses a date update on any row this returns true
- * for: the measured writers have never been shown a row whose progress they
- * overwrite, and rule 1 (wave 29) says an unmeasured shape is not written.
+ * 0x0B40015E step block for the uid.  The app refuses a date update on a row
+ * this returns true for UNLESS the row is the exact shape W29-0.3 measured
+ * (see task_has_progress_block): every other progressed row still has no
+ * Project pair showing what the recomputed percent does to its recorded
+ * actuals, and rule 1 (wave 29) says an unmeasured shape is not written.
  * A row with no saved row of that uid returns false; the caller's own
  * saved-row check reports that case. */
 bool task_has_recorded_progress(CfbDocument const& doc, std::uint32_t uid,
                                 std::string_view table = "114/TBkndTask");
+
+/* W29-0.3: true when the saved row carries Project's 0x0B40015E progress step
+ * block.  The measured progressed-row date updates (tests/data/
+ * wave29-mark-60-*.mpp / wave29-update-60-*.mpp) all start from a row whose
+ * 60 % Project stored as [marker, middle 60, final 60]; the app lifts the
+ * W29-0.0 refusal only when this block is present, so the writer's lowering
+ * rule (keep the old middle, replace the final) is applied to data it can
+ * decode rather than to an inferred shape. */
+bool task_has_progress_block(CfbDocument const& doc, std::uint32_t uid,
+                             std::string_view table = "114/TBkndTask");
 
 /* The four packed dates one edit writes.  kInvalidDate (0xFFFFFFFF) means NA.
  * At percent 0 all four are NA; at 100 % ActualFinish is required; for

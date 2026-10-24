@@ -717,6 +717,62 @@ bool percent_through(const core::sched::Calendar& calendar, std::uint32_t start,
     return true;
 }
 
+// W29-0.3 (R28-3): the ONE progressed-row shape Project's own save pairs
+// measure end to end -- an automatic, top-level leaf whose stored progress is
+// Project's 60 % edit (a 0x0B40015E step block, and an ActualStart equal to the
+// row's effective Start), updated through a date that computes a DIFFERENT
+// mid-range percent.  Both measured directions pass: 60 -> 80 raises and
+// 60 -> 40 lowers.  `why` names the first condition the row fails; every other
+// progressed row keeps the W29-0.0 refusal (rule 1: lift only measured shapes).
+bool measured_progress_update_shape(const mppwrite::TaskTable& table,
+                                    const mppwrite::CfbDocument& document,
+                                    const TaskRow& row,
+                                    const PercentThrough& progress,
+                                    std::string& why) {
+    if (row.manually_scheduled) {
+        why = "the row is manually scheduled and the measured row is automatic";
+        return false;
+    }
+    if (row.percent_complete != 60) {
+        why = "its stored percent is " + std::to_string(row.percent_complete) +
+              " %, not the measured 60 %";
+        return false;
+    }
+    if (progress.percent == 0 || progress.percent >= 100) {
+        why = "the date computes " + std::to_string(progress.percent) +
+              " %, and only a mid-range recomputation is measured";
+        return false;
+    }
+    if (progress.percent == row.percent_complete) {
+        why = "the date recomputes the percent the row already stores";
+        return false;
+    }
+    std::size_t file_row = 0;
+    try {
+        file_row = table.row_for_uid(row.uid);
+    } catch (const std::exception&) {
+        why = "the saved task table has no row for the uid";
+        return false;
+    }
+    if (table.u16(file_row, mppwrite::task_row::kPercentComplete) != 60) {
+        why = "the saved row's % Complete is not the measured 60";
+        return false;
+    }
+    const std::uint32_t actual_start =
+        table.u32(file_row, mppwrite::task_row::kActualStart);
+    if (!mppwrite::is_date(actual_start) ||
+        actual_start != table.u32(file_row, mppwrite::task_row::kStart2)) {
+        why = "its saved ActualStart is not the measured one (the row's "
+              "effective start)";
+        return false;
+    }
+    if (!mppwrite::task_has_progress_block(document, row.uid)) {
+        why = "it has no saved 0x0B40015E progress block";
+        return false;
+    }
+    return true;
+}
+
 bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_path,
                               const std::vector<std::uint32_t>& uids,
                               date32 through_date, bool updates_status_date,
@@ -761,6 +817,14 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
                 open_error.what() + ")";
         return false;
     }
+    mppwrite::TaskTable file_table;
+    try {
+        file_table = mppwrite::TaskTable::from_document(document);
+    } catch (const std::exception& table_error) {
+        error = std::string("the saved task table could not be read (") +
+                table_error.what() + ")";
+        return false;
+    }
     const std::uint32_t through = packed_from_date32(through_date);
     StructuralEdit built;
     built.kind = StructuralKind::update_actuals;
@@ -769,30 +833,6 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
     for (std::uint32_t uid : uids) {
         const TaskRow* row = nullptr;
         if (!check_actuals_target(plan, uid, row, false, error)) {
-            return false;
-        }
-        if (row->percent_complete > 0) {
-            error = "task uid " + std::to_string(uid) + " is already " +
-                    std::to_string(row->percent_complete) +
-                    " % complete; no Project save pair measures a date update on a "
-                    "row with progress, and this command would recompute the "
-                    "percent from the date";
-            return false;
-        }
-        bool recorded_progress = false;
-        try {
-            recorded_progress = mppwrite::task_has_recorded_progress(document, uid);
-        } catch (const std::exception& progress_error) {
-            error = "task uid " + std::to_string(uid) +
-                    ": the saved progress could not be read (" +
-                    progress_error.what() + ")";
-            return false;
-        }
-        if (recorded_progress) {
-            error = "task uid " + std::to_string(uid) +
-                    " already records progress (an actual date or a progress "
-                    "block); no Project save pair measures a date update on such "
-                    "a row, and this command would recompute the percent";
             return false;
         }
         if (row->duration_ticks < 0 ||
@@ -811,12 +851,69 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
                     "so its progress through the date cannot be measured";
             return false;
         }
+        bool recorded_progress = false;
+        try {
+            recorded_progress = mppwrite::task_has_recorded_progress(document, uid);
+        } catch (const std::exception& progress_error) {
+            error = "task uid " + std::to_string(uid) +
+                    ": the saved progress could not be read (" +
+                    progress_error.what() + ")";
+            return false;
+        }
+        if (row->percent_complete > 0) {
+            // W29-0.3: Project DOES recompute a progressed row's percent from
+            // the update date, lowering it when the date is before the recorded
+            // progress (60 -> 40 measured).  The lift is confined to the exact
+            // shape the five wave-29 pairs measure; anything else keeps the
+            // W29-0.0 refusal.
+            std::string why_not;
+            bool measured_shape = false;
+            try {
+                measured_shape = measured_progress_update_shape(
+                    file_table, document, *row, progress, why_not);
+            } catch (const std::exception& shape_error) {
+                error = "task uid " + std::to_string(uid) +
+                        ": the saved progress could not be read (" +
+                        shape_error.what() + ")";
+                return false;
+            }
+            if (!measured_shape) {
+                error = "task uid " + std::to_string(uid) + " is already " +
+                        std::to_string(row->percent_complete) +
+                        " % complete; the only measured date update on a row "
+                        "with progress is the automatic top-level 60 % shape "
+                        "(W29-0.3), and this row is not it (" + why_not + ")";
+                return false;
+            }
+        } else if (recorded_progress) {
+            error = "task uid " + std::to_string(uid) +
+                    " already records progress (an actual date or a progress "
+                    "block); no Project save pair measures a date update on such "
+                    "a row, and this command would recompute the percent";
+            return false;
+        }
         ActualsTarget target;
         target.uid = uid;
         target.percent = progress.percent;
         target.actual_ticks = progress.actual_ticks;
         target.step_percent = progress.step_percent;
         built.actuals.push_back(target);
+    }
+    // W29-0.3: Update Project's "Entire project" scope is the only one whose
+    // project row takes the earliest per-row Resume/Stop.  `uids` IS the scope,
+    // so the flag is true exactly when it names every live, saved, non-summary
+    // task of the plan -- the list the app's All scope builds.  A pending insert
+    // (file_row 0) has no file row and a pending delete is already out of the
+    // plan, so neither changes the comparison.
+    built.update_entire_project = true;
+    for (const TaskRow& candidate : plan.tasks) {
+        if (candidate.uid == 0 || candidate.summary || candidate.file_row == 0) {
+            continue;
+        }
+        if (seen.find(candidate.uid) == seen.end()) {
+            built.update_entire_project = false;
+            break;
+        }
     }
     out = std::move(built);
     return true;
@@ -1252,7 +1349,16 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                     return false;
                 }
                 if (row->percent_complete > 0) {
-                    return false;
+                    // W29-0.3: the plan-side half of the one measured
+                    // progressed-row shape.  The file-side half (stored 60 %,
+                    // ActualStart on the effective start, a 0x0B40015E block)
+                    // ran when the edit was built; this keeps a hand-built
+                    // queue from bypassing the percent/manual rules.
+                    if (row->manually_scheduled || row->percent_complete != 60 ||
+                        target.percent == 0 || target.percent >= 100 ||
+                        target.percent == row->percent_complete) {
+                        return false;
+                    }
                 }
                 if (!seen.insert(target.uid).second) {
                     return false;
@@ -1914,13 +2020,19 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
     std::vector<WinningActual> actual_writes;
-    // Update Project's project-row roll-up differs from Mark on Track's: only
-    // the status-date command uses the earliest per-row resume/stop (measured,
-    // see actuals.h).  Any applied status-updating edit selects it, even when a
-    // later percent edit wins one of its rows.
+    // Update Project's project-row roll-up differs from Mark on Track's and from
+    // Update Project's own "Selected tasks" scope: only the command that covers
+    // the ENTIRE project makes the project row's Resume/Stop the earliest
+    // per-row dates.  W29-0.3 measured both Update Project scopes on the same
+    // base: the all-rows save takes 3bf31c20, the two-of-three selection keeps
+    // the project start 3bf11e78 while still moving the status date.  So the
+    // decision is the edit's scope, never updates_status_date.  Any applied
+    // entire-project update selects it, even when a later percent edit wins one
+    // of its rows (measured, see actuals.h).
     bool update_project_mode = false;
     for (const StructuralEdit& edit : edits.applied()) {
-        if (edit.kind == StructuralKind::update_actuals && edit.updates_status_date) {
+        if (edit.kind == StructuralKind::update_actuals &&
+            edit.update_entire_project) {
             update_project_mode = true;
         }
     }
@@ -2311,15 +2423,16 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                     result.warnings.push_back(warning);
                 }
             }
-            // Update Project stores its date as the project status date
-            // (measured: control 0xffffffff -> 0x3bf40000 on the update pair).
-            // Mark on Track and the percent pairs leave the record alone.  The
-            // last applied update that asked for it wins, matching the display
-            // plan's order.
+            // Update Project stores its date as the project status date only
+            // for the ENTIRE-PROJECT scope (measured: control 0xffffffff ->
+            // 0x3bf40000 on the update pair; the two-of-three Selected scope
+            // leaves 0xffffffff).  Mark on Track and the percent pairs leave
+            // the record alone.  The last applied update that asked for it
+            // wins, matching the display plan's order.
             const StructuralEdit* status_edit = nullptr;
             for (const StructuralEdit& edit : edits.applied()) {
                 if (edit.kind == StructuralKind::update_actuals &&
-                    edit.updates_status_date) {
+                    edit.updates_status_date && edit.update_entire_project) {
                     status_edit = &edit;
                 }
             }

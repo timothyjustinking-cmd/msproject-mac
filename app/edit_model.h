@@ -191,6 +191,14 @@ struct StructuralEdit {
     // in the file's project status date.  Mark on Track leaves that record
     // alone (measured on both mark pairs).
     bool updates_status_date = false;
+    // update_actuals (W29-0.3): true when the targets cover EVERY live,
+    // saved, non-summary task -- Update Project's "Entire project" scope.  Only
+    // that scope's save makes the project row's Resume/Stop the earliest
+    // per-row date; Mark on Track and Update Project's "Selected tasks" scope
+    // keep the project start there, even though the selected scope still moves
+    // the status date (measured: wave29-update-60-selected.mpp's project row
+    // keeps 3bf11e78 while wave29-update-60-after.mpp's takes 3bf31c20).
+    bool update_entire_project = false;
     // set_project_priority: Project's project priority, 0..1000.
     std::uint16_t priority = 500;
     // set_new_task_mode (W28-3.1): true for Manually Scheduled, false for Auto

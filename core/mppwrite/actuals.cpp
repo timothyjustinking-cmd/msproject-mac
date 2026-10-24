@@ -875,6 +875,11 @@ bool task_has_recorded_progress(CfbDocument const& doc, std::uint32_t uid,
         is_date(rows.u32(row, task_row::kActualFinish))) {
         return true;
     }
+    return task_has_progress_block(doc, uid, table);
+}
+
+bool task_has_progress_block(CfbDocument const& doc, std::uint32_t uid,
+                             std::string_view table) {
     std::string const var_meta_path = table_stream(table, "VarMeta");
     if (!doc.has_stream(var_meta_path)) {
         return false;
@@ -927,6 +932,10 @@ PercentActualsResult write_percent_actuals(
         bool real_assignment = false;
         std::uint32_t duration = 0;
         std::uint32_t actual = 0;
+        /* W29-0.3: the row's stored percent BEFORE this edit; the assignment
+         * writer needs the direction (raise vs lower) to reproduce Project's
+         * 0F400032 replacement record. */
+        std::uint16_t old_percent = 0;
     };
     std::vector<AppliedEdit> applied;
     std::size_t freed_task_bytes = 0;
@@ -1174,6 +1183,7 @@ PercentActualsResult write_percent_actuals(
         std::size_t discarded = 0;
         std::vector<ProgressStep> steps;
         bool had_progress_block = false;
+        std::size_t old_progress_size = 0;
         std::vector<std::uint32_t> const old_offsets =
             find_var_offsets(var_meta, kProgressField, edit.uid);
         if (old_offsets.size() > 1) {
@@ -1183,7 +1193,85 @@ PercentActualsResult write_percent_actuals(
         }
         if (has_progress && !old_offsets.empty()) {
             had_progress_block = true;
-            steps = decode_steps(read_var_block(var2, old_offsets.front()));
+            std::vector<std::uint8_t> const old_block =
+                read_var_block(var2, old_offsets.front());
+            old_progress_size = old_block.size();
+            steps = decode_steps(old_block);
+        }
+        const double step_percent =
+            edit.step_percent < 0.0 ? static_cast<double>(edit.percent)
+                                    : edit.step_percent;
+        /* W29-0.3: Project LOWERS a recorded percent by replacing the stored
+         * middle step and rewriting the block where it stands.  MEASURED on
+         * the two "before" pairs: [marker, middle 60, final 60] at offset 536
+         * becomes [marker, middle 40 (fresh id), final 40] at the SAME offset;
+         * VarMeta and the Var2Data size do not move.  A block of any other
+         * shape is not a measured lowering and refuses. */
+        bool progress_in_place = false;
+        std::vector<std::uint8_t> progress_payload;
+        if (has_progress) {
+            if (had_progress_block && steps.size() > 1 && steps.back().flag == 1) {
+                steps.pop_back(); /* the previous "current" step */
+            }
+            if (steps.empty()) {
+                /* A block Project builds from scratch starts with the measured
+                 * marker step; 40 -> 100 keeps the marker it already has. */
+                ProgressStep marker;
+                marker.flag = 1;
+                marker.percent = kMarkerPercent;
+                marker.id = fresh_step_id(edit.uid, edit.percent, steps);
+                steps.push_back(marker);
+            }
+            bool const lowering = !edit.progress_flags &&
+                                  edit.percent < old_percent;
+            if (lowering &&
+                !(had_progress_block && steps.size() == 2 &&
+                  steps.front().flag == 1 && steps.back().flag == 0 &&
+                  step_percent < steps.back().percent)) {
+                throw Error("task uid " + std::to_string(edit.uid) +
+                            ": lowering a recorded percent is measured only "
+                            "from a [marker, middle, current] block, not this "
+                            "one");
+            }
+            /* W29-0.3: Project RAISES a recorded percent by appending a new
+             * middle step (60 -> 80 is [marker, middle 60, middle 80, final
+             * 80]); it LOWERS it by replacing the stored middle (60 -> 40 is
+             * [marker, middle 40, final 40]).  Both are Project's own saves
+             * of the same 60 % row. */
+            if (lowering) {
+                steps.pop_back(); /* the stored middle, replaced below */
+                ProgressStep middle;
+                middle.flag = 0;
+                middle.percent = step_percent;
+                middle.id = fresh_step_id(edit.uid, edit.percent, steps);
+                steps.push_back(middle);
+                ProgressStep final_step;
+                final_step.flag = 1;
+                final_step.percent = step_percent;
+                final_step.id = kFinalStepId;
+                steps.push_back(final_step);
+                progress_payload = encode_steps(steps);
+                progress_in_place =
+                    progress_payload.size() == old_progress_size;
+                if (!progress_in_place) {
+                    throw Error("task uid " + std::to_string(edit.uid) +
+                                ": lowering the recorded percent changes the "
+                                "0x0B40015E block size, which is not a "
+                                "measured shape");
+                }
+            } else {
+                ProgressStep middle;
+                middle.flag = 0;
+                middle.percent = step_percent;
+                middle.id = fresh_step_id(edit.uid, edit.percent, steps);
+                steps.push_back(middle);
+                ProgressStep final_step;
+                final_step.flag = 1;
+                final_step.percent = step_percent;
+                final_step.id = kFinalStepId;
+                steps.push_back(final_step);
+                progress_payload = encode_steps(steps);
+            }
         }
         removed += remove_var_entries(var_meta, var2, edit.uid, kResetField,
                                       freed_task_bytes);
@@ -1198,39 +1286,31 @@ PercentActualsResult write_percent_actuals(
             removed += remove_var_entries(var_meta, var2, edit.uid,
                                           kManualFieldB, freed_task_bytes);
         }
-        removed += remove_var_entries(var_meta, var2, edit.uid, kProgressField,
-                                      has_progress ? discarded : freed_task_bytes);
+        if (!progress_in_place) {
+            removed += remove_var_entries(var_meta, var2, edit.uid,
+                                          kProgressField,
+                                          has_progress ? discarded
+                                                       : freed_task_bytes);
+        }
         if (has_progress) {
-            if (had_progress_block && steps.size() > 1 && steps.back().flag == 1) {
-                steps.pop_back(); /* the previous "current" step */
+            if (progress_in_place) {
+                /* W29-0.3 measured lowering: same payload size, same offset;
+                 * the VarMeta entry is not touched at all. */
+                put_u32(var2, old_offsets.front(),
+                        static_cast<std::uint32_t>(progress_payload.size()));
+                std::copy(progress_payload.begin(), progress_payload.end(),
+                          var2.begin() +
+                              static_cast<std::ptrdiff_t>(old_offsets.front() +
+                                                          4));
+            } else {
+                std::uint32_t const offset =
+                    static_cast<std::uint32_t>(var2.size());
+                std::vector<std::uint8_t> const block =
+                    encode_block(progress_payload);
+                var2.insert(var2.end(), block.begin(), block.end());
+                insert_var_entry(var_meta, edit.uid, kProgressField, offset);
+                ++added;
             }
-            if (steps.empty()) {
-                /* A block Project builds from scratch starts with the measured
-                 * marker step; 40 -> 100 keeps the marker it already has. */
-                ProgressStep marker;
-                marker.flag = 1;
-                marker.percent = kMarkerPercent;
-                marker.id = fresh_step_id(edit.uid, edit.percent, steps);
-                steps.push_back(marker);
-            }
-            const double step_percent =
-                edit.step_percent < 0.0 ? static_cast<double>(edit.percent)
-                                        : edit.step_percent;
-            ProgressStep middle;
-            middle.flag = 0;
-            middle.percent = step_percent;
-            middle.id = fresh_step_id(edit.uid, edit.percent, steps);
-            steps.push_back(middle);
-            ProgressStep final_step;
-            final_step.flag = 1;
-            final_step.percent = step_percent;
-            final_step.id = kFinalStepId;
-            steps.push_back(final_step);
-            std::uint32_t const offset = static_cast<std::uint32_t>(var2.size());
-            std::vector<std::uint8_t> const block = encode_block(encode_steps(steps));
-            var2.insert(var2.end(), block.begin(), block.end());
-            insert_var_entry(var_meta, edit.uid, kProgressField, offset);
-            ++added;
         } else if (find_var_offsets(var_meta, kResetField, edit.uid).empty()) {
             std::uint32_t const offset = static_cast<std::uint32_t>(var2.size());
             std::vector<std::uint8_t> const payload(std::begin(kResetBlock),
@@ -1319,6 +1399,7 @@ PercentActualsResult write_percent_actuals(
         done.real_assignment = assignment.real;
         done.duration = duration;
         done.actual = actual;
+        done.old_percent = old_percent;
         applied.push_back(done);
         ++result.rows_written;
     }
@@ -1395,6 +1476,12 @@ PercentActualsResult write_percent_actuals(
                          assn_declared_entries * kVarMetaEntrySize);
 
     std::size_t freed_assn_bytes = 0;
+    /* W29-0.3: a date update that REPLACES 0F400032 does not move Props
+     * 0x04000002 (all five new pairs keep the word at 0), while a percent
+     * edit's replacement does (wave-28 40 -> 100 counts the 56-byte block,
+     * 100 -> 0 counts 76).  So a date update's old payload goes to a
+     * discarded sink. */
+    std::size_t discarded_assn_bytes = 0;
     for (AppliedEdit const& item : applied) {
         PercentActualEdit const& edit = item.edit;
         std::size_t assn_row = static_cast<std::size_t>(-1);
@@ -1444,7 +1531,9 @@ PercentActualsResult write_percent_actuals(
          * started 4800-tick day, and when the rebuilt payload does not fit the
          * old slot it is APPENDED and the entry repointed (the work pair grows
          * 72 -> 100 bytes; the leaf pair's 100-byte block is rewritten in
-         * place).  A milestone's block is left byte for byte (milestone pair).
+         * place).  W29-0.3: a date update that LOWERS a recorded percent keeps
+         * the old first record as the second entry with the new tick word.
+         * A milestone's block is left byte for byte (milestone pair).
          */
         if (item.duration != 0) {
             std::vector<std::uint32_t> const work_offsets =
@@ -1524,6 +1613,32 @@ PercentActualsResult write_percent_actuals(
                 }
                 work = build_work_block(records, units * 16.0, remaining_work,
                                         remaining_ticks * 8u);
+                bool const lowering =
+                    !edit.progress_flags && edit.percent < item.old_percent;
+                if (lowering) {
+                    /* W29-0.3 measured LOWERING (60 -> 40 on the placeholder
+                     * assignment): magic gains its low bit, +32 clears, the
+                     * header and record 0 carry the new remaining work and
+                     * ticks, and record 1 keeps the old remaining work and
+                     * units with the NEW tick word.  A real assignment or a
+                     * block that is not two records is not measured. */
+                    if (item.real_assignment ||
+                        old_work.size() !=
+                            kAssnWorkHeader + 2 * kAssnWorkRecord) {
+                        throw Error(
+                            "assignment uid " + std::to_string(assn_uid) +
+                            ": lowering a recorded percent is measured only on "
+                            "a placeholder 0F400031 of two records");
+                    }
+                    std::size_t const second =
+                        kAssnWorkHeader + kAssnWorkRecord;
+                    put_u32(work, 0, kAssnWorkMagic | 1u);
+                    put_u32(work, 32, 0);
+                    put_f64(work, second, get_f64(old_work, kAssnWorkHeader));
+                    put_f64(work, second + 8,
+                            get_f64(old_work, kAssnWorkHeader + 8));
+                    put_u32(work, second + 24, remaining_ticks * 8u);
+                }
             }
             if (edit.percent == 100 || work.size() == old_work.size()) {
                 /* In place.  A 100 % percent edit SHORTENS the payload to its
@@ -1548,7 +1663,9 @@ PercentActualsResult write_percent_actuals(
 
         /* 0F400032: remove at 0 %, append 56 bytes when none existed, replace
          * (append + remove) otherwise.  A 100 % percent edit's replacement
-         * carries the old actual work as a second record. */
+         * carries the old actual work as a second record.  W29-0.3: so does a
+         * date update that recomputes a recorded percent, and the second
+         * record's shape depends on the direction (raise vs lower). */
         std::vector<std::uint32_t> const actual_offsets =
             find_var_offsets(assn_var_meta, kAssnActualWorkField, assn_uid);
         if (actual_offsets.size() > 1) {
@@ -1557,18 +1674,25 @@ PercentActualsResult write_percent_actuals(
                         " 0F400032 blocks; the measured shape is one");
         }
         bool const had_actual_work = !actual_offsets.empty();
+        std::vector<std::uint8_t> old_actual_payload;
         if (had_actual_work) {
+            old_actual_payload = read_var_block(assn_var2, actual_offsets.front());
             std::size_t const removed32 = remove_var_entries(
                 assn_var_meta, assn_var2, assn_uid, kAssnActualWorkField,
-                freed_assn_bytes);
+                edit.progress_flags ? freed_assn_bytes
+                                    : discarded_assn_bytes);
             if (removed32 != 1) {
                 throw Error("assignment uid " + std::to_string(assn_uid) +
                             ": 0F400032 was not removed exactly once");
             }
         }
         if (edit.percent > 0) {
+            bool const date_update_replace =
+                !edit.progress_flags && edit.percent < 100 &&
+                edit.percent != item.old_percent;
             if (had_actual_work &&
-                !(edit.percent == 100 && edit.progress_flags)) {
+                !(edit.percent == 100 && edit.progress_flags) &&
+                !date_update_replace) {
                 throw Error("assignment uid " + std::to_string(assn_uid) +
                             ": replacing 0F400032 below 100 % (or at 100 % "
                             "from a date update) is not a measured shape");
@@ -1591,9 +1715,30 @@ PercentActualsResult write_percent_actuals(
             put_u32(payload, 52, ticks8);
             if (had_actual_work) {
                 payload.resize(kAssnActualHeader + 2 * kAssnActualRecord);
-                put_f64(payload, 56, old_actual_work);
-                put_f64(payload, 64, 0.0);
-                put_u32(payload, 72, ticks8);
+                /* W29-0.3: RAISING a recorded percent (60 -> 80) stores the
+                 * old actual work with units 0 and the NEW tick word;
+                 * LOWERING it (60 -> 40) keeps the old record byte for byte as
+                 * the second entry.  Both are Project's own saves. */
+                bool const lowering =
+                    !edit.progress_flags && edit.percent < item.old_percent;
+                if (lowering) {
+                    if (old_actual_payload.size() <
+                        kAssnActualHeader + kAssnActualRecord) {
+                        throw Error(
+                            "assignment uid " + std::to_string(assn_uid) +
+                            ": the 0F400032 being lowered carries no record to "
+                            "keep, which is not a measured shape");
+                    }
+                    std::copy(old_actual_payload.begin() + kAssnActualHeader,
+                              old_actual_payload.begin() + kAssnActualHeader +
+                                  kAssnActualRecord,
+                              payload.begin() + kAssnActualHeader +
+                                  kAssnActualRecord);
+                } else {
+                    put_f64(payload, 56, old_actual_work);
+                    put_f64(payload, 64, 0.0);
+                    put_u32(payload, 72, ticks8);
+                }
             }
             std::uint32_t const offset =
                 static_cast<std::uint32_t>(assn_var2.size());

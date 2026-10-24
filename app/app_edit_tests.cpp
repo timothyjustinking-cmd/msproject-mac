@@ -211,31 +211,37 @@ void test_percent_edit_model() {
 
     // W29-0.0 (the wave-28 review's R28-2, High): a command that writes the
     // .mpp is enabled only for the row shapes and transitions a committed
-    // Project pair measured.  One check per refusal.
+    // Project pair measured.  W29-0.2 lifted the leaf-under-summary and
+    // work-bearing shapes for their measured 0 -> 40 transition; one check per
+    // refusal and one per lift.
     {
         app::PlanInput below = make_plan();
         below.tasks[0].outline_level = 1;
-        app::StructuralEdit refused_edit;
-        check(!app::make_percent_edit(below, below.tasks[0].uid, 40, refused_edit, error),
-              "a leaf under a summary is refused");
-        check(error.find("under a summary") != std::string::npos,
-              "the leaf-under-summary refusal names the shape");
+        app::StructuralEdit accepted_edit;
+        check(app::make_percent_edit(below, below.tasks[0].uid, 40,
+                                     accepted_edit, error),
+              "a leaf under a summary is accepted on the measured 0 -> 40 "
+              "shape (W29-0.2)");
+        check(accepted_edit.kind == app::StructuralKind::set_percent &&
+                  accepted_edit.percent == 40,
+              "the accepted leaf-under-summary edit is a set_percent");
 
         app::PlanInput milestone = make_plan();
         milestone.tasks[0].milestone = true;
+        app::StructuralEdit refused_edit;
         check(!app::make_percent_edit(milestone, milestone.tasks[0].uid, 40,
                                       refused_edit, error),
               "a milestone is refused");
         check(error.find("milestone") != std::string::npos,
               "the milestone refusal names the shape");
 
-        // make_plan() gives task 2 an assignment carrying 4800 ticks of work.
+        // make_plan() gives task 2 an assignment carrying 4800 ticks of work;
+        // W29-0.2 measured that row shape at 0 -> 40.
         app::PlanInput working = make_plan();
-        check(!app::make_percent_edit(working, working.tasks[1].uid, 40, refused_edit,
-                                      error),
-              "a task with a work-bearing assignment is refused");
-        check(error.find("carries work") != std::string::npos,
-              "the work-bearing refusal names the shape");
+        check(app::make_percent_edit(working, working.tasks[1].uid, 40,
+                                     accepted_edit, error),
+              "a task with a work-bearing assignment is accepted on the "
+              "measured 0 -> 40 shape (W29-0.2)");
 
         // The four measured transitions: auto 0->40, 40->100, 100->0 and
         // manual 0->40.  0->50, 40->0 and either manual transition are not.
