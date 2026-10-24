@@ -596,6 +596,44 @@ void check_pair(const PairCase& pair) {
     }
 }
 
+/* W29-0.0: write a copy of `source` with the Fixed2Meta manual bit (entry +8,
+ * 0x80) of `uid` cleared, so make_outline_edit's file-side scheduling refusal
+ * can be tested without waiting for a Project auto-scheduled pair.  The
+ * FixedMeta/Fixed2Meta pairing is the one mppwrite uses (47-byte entry +4
+ * names the FixedData row offset; the same index in the 96-byte Fixed2Meta). */
+bool write_auto_row_copy(const std::filesystem::path& source,
+                         const std::filesystem::path& target, std::uint32_t uid,
+                         std::string& failure) {
+    constexpr std::size_t kFixed2MetaEntry = 96;
+    constexpr std::size_t kFixed2MetaFlags = 8;
+    try {
+        mppwrite::CfbDocument document =
+            mppwrite::CfbDocument::from_file(source.string());
+        const Bytes fixed_data = document.read_stream(task_stream("FixedData"));
+        const Bytes meta = document.read_stream(task_stream("FixedMeta"));
+        Bytes fixed2_meta = document.read_stream(task_stream("Fixed2Meta"));
+        const std::size_t row = uid_row(fixed_data, uid);
+        const std::size_t entry =
+            row == kNoIndex ? kNoIndex : meta_entry_for_row(meta, row);
+        if (row == kNoIndex || entry == kNoIndex ||
+            fixed2_meta.size() < 16 + entry * kFixed2MetaEntry + kFixed2MetaFlags + 1) {
+            failure = "the control has no paired metadata entry for uid " +
+                      std::to_string(uid);
+            return false;
+        }
+        fixed2_meta[16 + entry * kFixed2MetaEntry + kFixed2MetaFlags] &=
+            static_cast<std::uint8_t>(~0x80u);
+        document.replace_stream(task_stream("Fixed2Meta"), fixed2_meta);
+        std::error_code remove_error;
+        std::filesystem::remove(target, remove_error);
+        document.save(target.string());
+        return true;
+    } catch (const std::exception& error) {
+        failure = error.what();
+        return false;
+    }
+}
+
 void check_refusals() {
     const std::filesystem::path indent_control =
         std::filesystem::path(APP_TEST_DATA_DIR) /
@@ -640,6 +678,87 @@ void check_refusals() {
     check(!app::make_outline_edit(indent_plan, indent_control.string(), 99, true,
                                   edit, error),
           "an unknown uid is refused");
+
+    // W29-0.0 (the wave-28 review's R28-4, High): every measured outline row is
+    // manually scheduled, so the edit model refuses a moved row or an involved
+    // summary that is automatic.  The file's Fixed2Meta bit is the authority;
+    // these copies clear it without touching the committed pairs.
+    std::error_code out_error;
+    std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
+                                        out_error);
+    std::string patch_failure;
+    const std::filesystem::path auto_moved_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "w29-outline-auto-moved.mpp";
+    check(write_auto_row_copy(indent_control, auto_moved_path, 2, patch_failure),
+          "the automatic moved-row copy is written");
+    if (std::filesystem::exists(auto_moved_path)) {
+        app::PlanInput auto_plan;
+        try {
+            auto_plan =
+                app::plan_input_from_document(mpp::load_file(auto_moved_path.string()));
+        } catch (const std::exception& load_error) {
+            check(false, "the automatic moved-row copy loads");
+            std::printf("LOAD ERROR: %s\n", load_error.what());
+        }
+        check(!app::make_outline_edit(auto_plan, auto_moved_path.string(), 2, true,
+                                      edit, error),
+              "indent of an automatically scheduled row is refused");
+        check(error.find("automatically scheduled") != std::string::npos,
+              "the automatic-row refusal names the scheduling mode");
+    }
+
+    const std::filesystem::path auto_parent_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "w29-outline-auto-parent.mpp";
+    check(write_auto_row_copy(outdent_control, auto_parent_path, 1, patch_failure),
+          "the automatic outdent-parent copy is written");
+    if (std::filesystem::exists(auto_parent_path)) {
+        app::PlanInput auto_plan;
+        try {
+            auto_plan =
+                app::plan_input_from_document(mpp::load_file(auto_parent_path.string()));
+        } catch (const std::exception& load_error) {
+            check(false, "the automatic outdent-parent copy loads");
+            std::printf("LOAD ERROR: %s\n", load_error.what());
+        }
+        check(!app::make_outline_edit(auto_plan, auto_parent_path.string(), 2, false,
+                                      edit, error),
+              "outdent from an automatically scheduled parent is refused");
+        check(error.find("automatically scheduled") != std::string::npos,
+              "the automatic-parent refusal names the scheduling mode");
+    }
+
+    // W29-0.0: the new summary (the indent's preceding sibling) must not carry
+    // progress, a resource-loaded work assignment or a queued actuals edit.
+    app::PlanInput progressed = indent_plan;
+    for (app::TaskRow& task : progressed.tasks) {
+        if (task.uid == 1) {
+            task.percent_complete = 40;
+        }
+    }
+    check(!app::make_outline_edit(progressed, indent_control.string(), 2, true, edit,
+                                  error),
+          "indent under a row with progress is refused");
+    check(error.find("progress") != std::string::npos,
+          "the progress refusal names the progress");
+
+    app::PlanInput working = indent_plan;
+    app::AssignmentRow work;
+    work.uid = 500;
+    work.task_uid = 1;
+    work.resource_uid = 100;
+    work.work_ticks = 4800;
+    working.assignments.push_back(work);
+    check(!app::make_outline_edit(working, indent_control.string(), 2, true, edit,
+                                  error),
+          "indent under a work-bearing row is refused");
+    check(error.find("carries work") != std::string::npos,
+          "the work refusal names the assignment");
+
+    check(!app::make_outline_edit(indent_plan, indent_control.string(), 2, true, edit,
+                                  error, {1u}),
+          "indent under a row with a pending actuals edit is refused");
+    check(error.find("pending actuals") != std::string::npos,
+          "the pending-actuals refusal names the queued edit");
 
     /* push() re-checks the plan it is given: no plan, a wrong anchor, and a
      * pending delete of either row. */

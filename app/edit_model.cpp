@@ -117,6 +117,154 @@ const TaskRow* outline_anchor_in_plan(const PlanInput& plan, std::uint32_t uid,
     return nullptr;
 }
 
+// W29-0.0 (the wave-28 review's R28-2/R28-4, High): the row shapes every
+// committed Project save pair measured.  All of tests/data/wave28-percent-*.mpp,
+// wave28-mark-*.mpp and wave28-update*.mpp are the flat synthetic-base project:
+// top-level leaves (outline level 0) with no milestones.  Rule 1 (wave 29 brief
+// section 1) says a command is enabled only for the row shapes a pair measured,
+// so the edit model refuses the rest here rather than writing bytes Project has
+// never been seen to write.
+//
+// A WORK-BEARING ASSIGNMENT is one that names a real resource and carries work.
+// The fixture rows' assignments are Project's UNASSIGNED placeholders: they
+// store the task's planned work but their +8 word is the 0xFFFF0001 null-
+// resource sentinel (AssignmentRow::resource_uid is 0), and every committed
+// pair is that shape -- Project's own save updates the placeholder's actual-work
+// block, which W29-0.1 implements.  A resource-loaded assignment (R28-2(b)'s
+// "% Work Complete / task actual work / assignment actual work") has no pair at
+// all.  The wave-28 headers' "the placeholder assignments carry no work"
+// described RESOURCE work; the stored +20 word is non-zero on every fixture row
+// (2400/1440/960 minutes on the three tasks).
+bool has_work_resource_assignment(const PlanInput& plan, std::uint32_t uid) {
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.task_uid == uid && assignment.resource_uid != 0 &&
+            assignment.work_ticks > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool check_actuals_row_shape(const PlanInput& plan, const TaskRow& row,
+                             std::string& error) {
+    if (row.outline_level != 0) {
+        error = "task uid " + std::to_string(row.uid) +
+                " is a leaf under a summary; no Project save pair measures an "
+                "actuals write below a summary, and its stored roll-up would be "
+                "left stale";
+        return false;
+    }
+    if (row.milestone) {
+        error = "task uid " + std::to_string(row.uid) +
+                " is a milestone; no Project save pair measures an actuals write "
+                "on a milestone";
+        return false;
+    }
+    if (has_work_resource_assignment(plan, row.uid)) {
+        error = "task uid " + std::to_string(row.uid) +
+                " has a resource assignment that carries work; no Project save "
+                "pair measures an actuals write on a resource-loaded task (the "
+                "measured rows carry only Project's unassigned placeholders)";
+        return false;
+    }
+    return true;
+}
+
+// The row rules a percent edit and a date update share: a saved, live,
+// non-summary task of the measured shape.  `row` receives the plan row on
+// acceptance.
+bool check_actuals_target(const PlanInput& plan, std::uint32_t uid,
+                          const TaskRow*& row, std::string& error) {
+    row = nullptr;
+    if (uid == 0) {
+        error = "uid 0 is the project summary row and has no task % complete to write";
+        return false;
+    }
+    const TaskRow* found = task_row_for_uid(plan.tasks, uid);
+    if (found == nullptr) {
+        error = "task uid " + std::to_string(uid) +
+                " is not a live task in the file (a pending insert has no saved row)";
+        return false;
+    }
+    // W28-1.2: presence in a PlanInput is not evidence that the file has a
+    // saved row.  StructuralEdits::apply() puts pending inserts into the plan
+    // it returns (with file_row 0), so a shell that hands back the applied
+    // plan would otherwise queue a % edit whose value the save silently drops
+    // while reporting success (the wave-27 review's finding).
+    if (found->file_row == 0) {
+        error = "task uid " + std::to_string(uid) +
+                " is not a saved task (a pending insert has no file row), so its "
+                "% complete cannot be written";
+        return false;
+    }
+    if (found->summary) {
+        error = "task uid " + std::to_string(uid) +
+                " is a summary task; Project computes its % complete from its children, "
+                "so this port refuses to write a stored value for it";
+        return false;
+    }
+    if (!check_actuals_row_shape(plan, *found, error)) {
+        return false;
+    }
+    row = found;
+    return true;
+}
+
+// W29-0.0 (R28-4): the row that becomes the new summary on an indent must be
+// a 0 % row with no resource-loaded assignment work and no actuals edit queued
+// in the same save.  The three committed outline pairs are 0 % rows whose only
+// assignment is Project's unassigned placeholder (planned work, null resource);
+// Project's own save tombstones that placeholder, which W29-0.1 implements.
+// With progress -- or with a resource assignment whose work Project would have
+// to roll into the summary -- step 5a would write that row's leaf actuals and
+// the project roll-up before step 5b turns it into a summary, a shape no pair
+// measured.
+bool check_new_summary_shape(const PlanInput& plan, std::uint32_t uid,
+                             const std::vector<std::uint32_t>& pending_actuals,
+                             std::string& error) {
+    const TaskRow* row = task_row_for_uid(plan.tasks, uid);
+    if (row != nullptr && row->percent_complete > 0) {
+        error = "task uid " + std::to_string(uid) + " is already " +
+                std::to_string(row->percent_complete) +
+                " % complete and would become the summary; no Project save pair "
+                "measures an indent under a row with progress";
+        return false;
+    }
+    if (has_work_resource_assignment(plan, uid)) {
+        error = "task uid " + std::to_string(uid) +
+                " has a resource assignment that carries work and would become "
+                "the summary; no Project save pair measures an indent under a "
+                "resource-loaded row";
+        return false;
+    }
+    if (std::find(pending_actuals.begin(), pending_actuals.end(), uid) !=
+        pending_actuals.end()) {
+        error = "task uid " + std::to_string(uid) +
+                " has a pending actuals edit and would become the summary; no "
+                "Project save pair measures an indent under a row whose actuals "
+                "are queued in the same save";
+        return false;
+    }
+    return true;
+}
+
+// The percent transitions the four committed Project pairs measured
+// (tests/data/wave28-percent-*): automatic 0 -> 40, 40 -> 100 and 100 -> 0, and
+// manual 0 -> 40.  Project stores different words per transition (the 40 -> 100
+// save keeps its step marker and drops only the final step; 100 -> 0 keeps the
+// progress bits), so a target value alone is not a measured shape -- the pair's
+// FROM value matters too.
+bool measured_percent_transition(bool manually_scheduled, std::uint16_t from,
+                                 std::uint16_t to) noexcept {
+    if (from == 0 && to == 40) {
+        return true;
+    }
+    if (manually_scheduled) {
+        return false;
+    }
+    return (from == 40 && to == 100) || (from == 100 && to == 0);
+}
+
 // core::gantt::LinkType orders FS/SS/FF/SF; the FILE orders FF=0, FS=1, SF=2,
 // SS=3 (add_delete.h).  The reader maps one way (reader_adapter.h); this is the
 // writer direction, and it must not be a cast.
@@ -422,41 +570,24 @@ bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t p
     out.kind = StructuralKind::set_percent;
     out.uid = uid;
     out.percent = percent;
-    if (uid == 0) {
-        error = "uid 0 is the project summary row and has no task % complete to write";
-        return false;
-    }
     if (percent > 100) {
         error = "percent complete " + std::to_string(percent) + " is above 100";
         return false;
     }
     const TaskRow* row = nullptr;
-    for (const TaskRow& task : plan.tasks) {
-        if (task.uid == uid) {
-            row = &task;
-            break;
-        }
-    }
-    if (row == nullptr) {
-        error = "task uid " + std::to_string(uid) +
-                " is not a live task in the file (a pending insert has no saved row)";
+    if (!check_actuals_target(plan, uid, row, error)) {
         return false;
     }
-    // W28-1.2: presence in a PlanInput is not evidence that the file has a
-    // saved row.  StructuralEdits::apply() puts pending inserts into the plan
-    // it returns (with file_row 0), so a shell that hands back the applied
-    // plan would otherwise queue a % edit whose value the save silently drops
-    // while reporting success (the wave-27 review's finding).
-    if (row->file_row == 0) {
-        error = "task uid " + std::to_string(uid) +
-                " is not a saved task (a pending insert has no file row), so its "
-                "% complete cannot be written";
-        return false;
-    }
-    if (row->summary) {
-        error = "task uid " + std::to_string(uid) +
-                " is a summary task; Project computes its % complete from its children, "
-                "so this port refuses to write a stored value for it";
+    // W29-0.0: only the transitions a committed Project pair measured are
+    // enabled (rule 1).  The current value is the display plan's, so a queued
+    // edit is judged against the state the save will see.
+    if (!measured_percent_transition(row->manually_scheduled,
+                                     row->percent_complete, percent)) {
+        error = "task uid " + std::to_string(uid) + " is stored at " +
+                std::to_string(row->percent_complete) + " % and this edit sets " +
+                std::to_string(percent) +
+                " %; no Project save pair measures that transition (measured: "
+                "automatic 0->40, 40->100, 100->0 and manual 0->40)";
         return false;
     }
     error.clear();
@@ -548,29 +679,52 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
                 calendar_error.what() + ")";
         return false;
     }
+    // W29-0.0 (R28-3): every measured date-update pair starts from a 0 % row
+    // with no actual dates and no progress block.  The commands recompute the
+    // percent from the row's start and the date, so on a row that already has
+    // progress an earlier date would lower or erase recorded actuals -- a shape
+    // no pair measured.  The file is the authority for that state; the plan's
+    // percent catches a pending edit the file does not have yet.
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
     const std::uint32_t through = packed_from_date32(through_date);
     StructuralEdit built;
     built.kind = StructuralKind::update_actuals;
     built.through_date = through_date;
     built.updates_status_date = updates_status_date;
     for (std::uint32_t uid : uids) {
-        StructuralEdit checked;
-        std::string refusal;
-        // Same leaf/saved-row/summary rules as a percent edit; the percent
-        // argument is a placeholder this edit replaces below.
-        if (!make_percent_edit(plan, uid, 0, checked, refusal)) {
-            error = refusal;
+        const TaskRow* row = nullptr;
+        if (!check_actuals_target(plan, uid, row, error)) {
             return false;
         }
-        const TaskRow* row = nullptr;
-        for (const TaskRow& task : plan.tasks) {
-            if (task.uid == uid) {
-                row = &task;
-                break;
-            }
+        if (row->percent_complete > 0) {
+            error = "task uid " + std::to_string(uid) + " is already " +
+                    std::to_string(row->percent_complete) +
+                    " % complete; no Project save pair measures a date update on a "
+                    "row with progress, and this command would recompute the "
+                    "percent from the date";
+            return false;
         }
-        if (row == nullptr) {
-            error = "task uid " + std::to_string(uid) + " is not a live task";
+        bool recorded_progress = false;
+        try {
+            recorded_progress = mppwrite::task_has_recorded_progress(document, uid);
+        } catch (const std::exception& progress_error) {
+            error = "task uid " + std::to_string(uid) +
+                    ": the saved progress could not be read (" +
+                    progress_error.what() + ")";
+            return false;
+        }
+        if (recorded_progress) {
+            error = "task uid " + std::to_string(uid) +
+                    " already records progress (an actual date or a progress "
+                    "block); no Project save pair measures a date update on such "
+                    "a row, and this command would recompute the percent";
             return false;
         }
         if (row->duration_ticks < 0 ||
@@ -602,7 +756,8 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
 
 bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                        std::uint32_t uid, bool indent, StructuralEdit& out,
-                       std::string& error) {
+                       std::string& error,
+                       const std::vector<std::uint32_t>& pending_actuals) {
     out = StructuralEdit{};
     error.clear();
     out.kind = indent ? StructuralKind::outline_indent
@@ -684,6 +839,19 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                 "undo it first";
         return false;
     }
+    // W29-0.0 (R28-4): every committed outline pair consists of MANUALLY
+    // scheduled rows (Project's COM facts record manual:true on IDs 1-3 for all
+    // three pairs; build/w28/W28-2.1-project-outline-edit.json).  An automatic
+    // row stores different +164/+174 and duration words, and no pair measured
+    // them, so the shape is refused until W29-0.4 measures one.  The file's
+    // Fixed2Meta bit is the authority (the plan's flag is the same bit through
+    // the reader).
+    if (!mppwrite::task_is_manually_scheduled(document, rows[moved].row)) {
+        error = "task uid " + std::to_string(uid) +
+                " is automatically scheduled; no Project save pair measures an "
+                "outline edit on an automatic row (all measured rows are manual)";
+        return false;
+    }
     core::sched::Calendar calendar;
     try {
         calendar = core::cal::load_project_calendar(std::string(source_path));
@@ -713,6 +881,18 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
         if (summary.deleted) {
             error = "task uid " + std::to_string(uid) +
                     ": the preceding sibling is a deleted row";
+            return false;
+        }
+        // W29-0.0: every row the measured indent touches is manually scheduled,
+        // and the new summary carries no progress, work or queued actuals.
+        if (!mppwrite::task_is_manually_scheduled(document, summary.row)) {
+            error = "task uid " + std::to_string(summary.uid) +
+                    " would become the summary but is automatically scheduled; "
+                    "no Project save pair measures an outline edit on an automatic "
+                    "row (all measured rows are manual)";
+            return false;
+        }
+        if (!check_new_summary_shape(plan, summary.uid, pending_actuals, error)) {
             return false;
         }
         if (!summary.child_rows.empty() || summary.stored_children ||
@@ -796,6 +976,15 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
         return false;
     }
     const mppwrite::OutlineRow& summary = rows[parent_index];
+    // W29-0.0: the measured outdent's parent is manually scheduled too (the
+    // header used to claim the opposite); an automatic parent has no pair.
+    if (!mppwrite::task_is_manually_scheduled(document, summary.row)) {
+        error = "task uid " + std::to_string(summary.uid) +
+                " is the parent summary and is automatically scheduled; no "
+                "Project save pair measures an outline edit on an automatic row "
+                "(all measured rows are manual)";
+        return false;
+    }
     if (summary.child_rows.size() != 1 || summary.child_rows.front() != moved) {
         error = "task uid " + std::to_string(uid) +
                 ": its parent has another child; outdenting from a parent that "
@@ -985,23 +1174,22 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
             }
             std::set<std::uint32_t> seen;
             for (const ActualsTarget& target : edit.actuals) {
-                StructuralEdit checked;
+                // W29-0.0: the same row-shape rules as a percent edit, and the
+                // progress rule a date update owes (the file-side check ran in
+                // make_update_actuals_edit; this is the plan-side half, which
+                // also sees a pending percent edit).
+                const TaskRow* row = nullptr;
                 std::string error;
-                if (!make_percent_edit(*plan, target.uid, target.percent, checked,
-                                       error)) {
+                if (!check_actuals_target(*plan, target.uid, row, error)) {
+                    return false;
+                }
+                if (row->percent_complete > 0) {
                     return false;
                 }
                 if (!seen.insert(target.uid).second) {
                     return false;
                 }
-                const TaskRow* row = nullptr;
-                for (const TaskRow& task : plan->tasks) {
-                    if (task.uid == target.uid) {
-                        row = &task;
-                        break;
-                    }
-                }
-                if (row == nullptr || !std::isfinite(target.step_percent) ||
+                if (!std::isfinite(target.step_percent) ||
                     target.step_percent < 0.0) {
                     return false;
                 }
@@ -1071,9 +1259,30 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 if (row->outline_level != 0 || anchor->summary) {
                     return false;
                 }
+                if (!row->manually_scheduled || !anchor->manually_scheduled) {
+                    return false;  // W29-0.0: the measured rows are manual
+                }
+                std::vector<std::uint32_t> pending_actuals;
+                for (const StructuralEdit& existing : applied_) {
+                    if (existing.kind == StructuralKind::set_percent) {
+                        pending_actuals.push_back(existing.uid);
+                    } else if (existing.kind == StructuralKind::update_actuals) {
+                        for (const ActualsTarget& target : existing.actuals) {
+                            pending_actuals.push_back(target.uid);
+                        }
+                    }
+                }
+                std::string shape_error;
+                if (!check_new_summary_shape(*plan, anchor->uid, pending_actuals,
+                                             shape_error)) {
+                    return false;
+                }
             } else {
                 if (row->summary || row->outline_level < 1 || !anchor->summary) {
                     return false;
+                }
+                if (!row->manually_scheduled || !anchor->manually_scheduled) {
+                    return false;  // W29-0.0: the measured rows are manual
                 }
                 if (edit.restored_start == kDateNa ||
                     edit.restored_finish == kDateNa ||

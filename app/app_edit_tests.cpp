@@ -203,11 +203,69 @@ void test_percent_edit_model() {
     check(!app::make_percent_edit(plan, plan.tasks[1].uid, 101, edit, error),
           "a percent above 100 is refused");
 
-    check(app::make_percent_edit(plan, plan.tasks[0].uid, 50, edit, error),
-          "a leaf task is accepted");
+    check(app::make_percent_edit(plan, plan.tasks[0].uid, 40, edit, error),
+          "a leaf task is accepted on the measured 0 -> 40 transition");
     check(edit.kind == app::StructuralKind::set_percent &&
-              edit.uid == plan.tasks[0].uid && edit.percent == 50,
+              edit.uid == plan.tasks[0].uid && edit.percent == 40,
           "the accepted edit is a ready-to-push set_percent");
+
+    // W29-0.0 (the wave-28 review's R28-2, High): a command that writes the
+    // .mpp is enabled only for the row shapes and transitions a committed
+    // Project pair measured.  One check per refusal.
+    {
+        app::PlanInput below = make_plan();
+        below.tasks[0].outline_level = 1;
+        app::StructuralEdit refused_edit;
+        check(!app::make_percent_edit(below, below.tasks[0].uid, 40, refused_edit, error),
+              "a leaf under a summary is refused");
+        check(error.find("under a summary") != std::string::npos,
+              "the leaf-under-summary refusal names the shape");
+
+        app::PlanInput milestone = make_plan();
+        milestone.tasks[0].milestone = true;
+        check(!app::make_percent_edit(milestone, milestone.tasks[0].uid, 40,
+                                      refused_edit, error),
+              "a milestone is refused");
+        check(error.find("milestone") != std::string::npos,
+              "the milestone refusal names the shape");
+
+        // make_plan() gives task 2 an assignment carrying 4800 ticks of work.
+        app::PlanInput working = make_plan();
+        check(!app::make_percent_edit(working, working.tasks[1].uid, 40, refused_edit,
+                                      error),
+              "a task with a work-bearing assignment is refused");
+        check(error.find("carries work") != std::string::npos,
+              "the work-bearing refusal names the shape");
+
+        // The four measured transitions: auto 0->40, 40->100, 100->0 and
+        // manual 0->40.  0->50, 40->0 and either manual transition are not.
+        app::PlanInput transitions = make_plan();
+        check(!app::make_percent_edit(transitions, transitions.tasks[0].uid, 50,
+                                      refused_edit, error),
+              "0 -> 50 is refused (no measured transition)");
+        check(error.find("transition") != std::string::npos,
+              "the transition refusal names the rule");
+        transitions.tasks[0].percent_complete = 40;
+        check(app::make_percent_edit(transitions, transitions.tasks[0].uid, 100,
+                                     refused_edit, error),
+              "an automatic 40 -> 100 is accepted");
+        check(!app::make_percent_edit(transitions, transitions.tasks[0].uid, 0,
+                                      refused_edit, error),
+              "an automatic 40 -> 0 is refused");
+        transitions.tasks[0].percent_complete = 100;
+        check(app::make_percent_edit(transitions, transitions.tasks[0].uid, 0,
+                                     refused_edit, error),
+              "an automatic 100 -> 0 is accepted");
+        transitions.tasks[0].percent_complete = 0;
+        transitions.tasks[0].manually_scheduled = true;
+        check(app::make_percent_edit(transitions, transitions.tasks[0].uid, 40,
+                                     refused_edit, error),
+              "a manual 0 -> 40 stays accepted");
+        transitions.tasks[0].percent_complete = 40;
+        check(!app::make_percent_edit(transitions, transitions.tasks[0].uid, 100,
+                                      refused_edit, error),
+              "a manual 40 -> 100 is refused");
+    }
 
     app::StructuralEdits planless;
     check(!planless.push(edit), "a plan-less set_percent is refused");
@@ -267,8 +325,8 @@ void test_percent_edit_model() {
 
     app::StructuralEdits accepted;
     check(accepted.push(edit, &plan), "push with the plan accepts a leaf task");
-    check(accepted.apply(plan).tasks[0].percent_complete == 50,
-          "the display plan shows the accepted 50 %");
+    check(accepted.apply(plan).tasks[0].percent_complete == 40,
+          "the display plan shows the accepted 40 %");
 }
 
 void test_delete_undo_restores_edits() {
@@ -357,10 +415,11 @@ void test_without_structural_edits() {
     app::StructuralEdit percent;
     percent.kind = app::StructuralKind::set_percent;
     percent.uid = plan.tasks[0].uid;
-    percent.percent = 50;
+    // W29-0.0: 0 -> 40 is the measured automatic transition; 50 is not.
+    percent.percent = 40;
     check(percent_edits.push(percent, &plan), "a percent edit on a leaf is accepted");
     const app::PlanInput percent_shown = percent_edits.apply(plan);
-    check(percent_shown.tasks[0].percent_complete == 50,
+    check(percent_shown.tasks[0].percent_complete == 40,
           "the display plan shows the queued percent");
     check(percent_edits.undo(), "the percent edit is undone");
     const app::PlanInput percent_recovered =
@@ -738,7 +797,9 @@ void test_real_save_round_trip() {
         app::StructuralEdit stale_edit;
         stale_edit.kind = app::StructuralKind::set_percent;
         stale_edit.uid = 999;
-        stale_edit.percent = 25;
+        // W29-0.0: a measured transition, so the queue reaches the save layer
+        // and the save-layer (not the model's transition rule) is what refuses.
+        stale_edit.percent = 40;
         check(stale_edits.push(stale_edit, &stale),
               "a percent edit for a plan row the source lacks is queued");
         const std::filesystem::path stale_path =
@@ -770,7 +831,7 @@ void test_real_save_round_trip() {
         app::StructuralEdit undo_percent;
         undo_percent.kind = app::StructuralKind::set_percent;
         undo_percent.uid = percent_uid;
-        undo_percent.percent = 25;
+        undo_percent.percent = 40;
         check(undo_edits.push(undo_percent, &percent_base.plan),
               "the percent-before-delete edit is queued");
         check(undo_edits.push(delete_uid(percent_uid)), "the task is deleted");
@@ -790,7 +851,7 @@ void test_real_save_round_trip() {
             for (const app::TaskRow& row : undo_reread.plan.tasks) {
                 if (row.uid == percent_uid) {
                     undo_found = true;
-                    check_size(row.percent_complete, 25,
+                    check_size(row.percent_complete, 40,
                                "the saved file has the percent from before the delete");
                 }
             }

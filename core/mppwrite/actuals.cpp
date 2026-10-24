@@ -459,6 +459,34 @@ bool task_is_manually_scheduled(CfbDocument const& doc, std::size_t row,
     return (fixed2_meta[flags_at] & kFixed2MetaFlagManual) != 0;
 }
 
+bool task_has_recorded_progress(CfbDocument const& doc, std::uint32_t uid,
+                                std::string_view table) {
+    TaskTable const rows = TaskTable::from_document(doc, table);
+    std::size_t row = rows.rows();
+    for (std::size_t candidate = 1; candidate < rows.rows(); ++candidate) {
+        if (rows.uid(candidate) == uid) {
+            row = candidate;
+            break;
+        }
+    }
+    if (row == rows.rows()) {
+        return false; /* the caller reports a uid with no saved row itself */
+    }
+    if (rows.u16(row, task_row::kPercentComplete) != 0) {
+        return true;
+    }
+    if (is_date(rows.u32(row, task_row::kActualStart)) ||
+        is_date(rows.u32(row, task_row::kActualFinish))) {
+        return true;
+    }
+    std::string const var_meta_path = table_stream(table, "VarMeta");
+    if (!doc.has_stream(var_meta_path)) {
+        return false;
+    }
+    std::vector<std::uint8_t> const var_meta = doc.read_stream(var_meta_path);
+    return !find_var_offsets(var_meta, kProgressField, uid).empty();
+}
+
 PercentActualsResult write_percent_actuals(
     CfbDocument& doc, std::vector<PercentActualEdit> const& edits,
     std::string_view table, PercentActualsOptions const& options) {

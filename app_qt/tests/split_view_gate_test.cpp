@@ -284,14 +284,16 @@ int main(int argc, char** argv) {
     // Information queue.
     const QString original_percent = form->percent_field()->text();
     // A value that differs from the row's stored percent (the fixture stores
-    // 0 %; this also keeps the gate honest if it ever changes).
+    // 0 %; this also keeps the gate honest if it ever changes).  W29-0.0
+    // (R28-2): only the measured transitions are enabled -- automatic 0->40,
+    // 40->100, 100->0 and manual 0->40 -- so the typed value is 40, not 25/50.
     QString original_digits;
     for (const QChar ch : original_percent) {
         if (ch.isDigit()) {
             original_digits += ch;
         }
     }
-    const int typed_percent_value = original_digits.toInt() == 50 ? 25 : 50;
+    const int typed_percent_value = original_digits.toInt() == 40 ? 100 : 40;
     const QString typed_percent = QString::number(typed_percent_value) + QStringLiteral("%");
     const std::size_t pending_before_percent = window.pending_edits().size();
     form->percent_field()->setFocus();

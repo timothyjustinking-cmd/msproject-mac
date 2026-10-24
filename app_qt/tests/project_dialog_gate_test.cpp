@@ -545,9 +545,16 @@ void check_update_project(const QJsonObject& measures) {
                     dialog.entire_radio()->isEnabled() &&
                     dialog.entire_radio()->isChecked(),
                 "Entire project stays the checked scope");
+    // W29-0.0 (R28-3): the measured update pair is Entire project only; the
+    // selection scope has no Project save pair, so it is disabled with the
+    // exact decision-9 tooltip until W29-0.3 measures one.
     gate::check(dialog.selected_radio() != nullptr &&
-                    dialog.selected_radio()->isEnabled(),
-                "Selected tasks is available to the same writer");
+                    !dialog.selected_radio()->isEnabled() &&
+                    dialog.selected_radio()->toolTip() == tooltip,
+                "Selected tasks is disabled with the decision-9 tooltip");
+    gate::check(dialog.selected_radio() != nullptr &&
+                    !dialog.selected_radio()->isChecked(),
+                "Selected tasks is not the checked scope");
     gate::check(dialog.completion_radio() != nullptr &&
                     !dialog.completion_radio()->isEnabled() &&
                     dialog.completion_radio()->toolTip() == tooltip,

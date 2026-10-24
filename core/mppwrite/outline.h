@@ -106,8 +106,17 @@
  *   - indent of a non-top-level row, into a preceding sibling that is already
  *     a summary or already carries a 0x7C marker / child list, or a row whose
  *     row id does not fit the measured one-byte +142 slot;
- *   - outdent of a summary, of a row whose parent has another child, of a row
- *     whose parent has no 0x7C marker, or from a manually-scheduled parent.
+ *   - outdent of a summary, of a row whose parent has another child, or of a
+ *     row whose parent has no 0x7C marker.
+ * Scheduling mode is not a writer rule: core_mppwrite does not link the
+ * reader's scheduling model.  The APP refuses an indent/outdent unless every
+ * row involved is manually scheduled (app::make_outline_edit, reading the same
+ * Fixed2Meta bit through task_is_manually_scheduled), because the three
+ * committed pairs are all manual; it also refuses an indent whose new summary
+ * carries progress, a resource-loaded work assignment, or an actuals edit
+ * queued in the same save (W29-0.0).  The wave-28 text here said the writer
+ * refused an outdent "from a manually-scheduled parent" -- the opposite of the
+ * measured pair (its parent is manual) and a check that did not exist.
  * A damaged task/outline table (Fixed2Data or metadata not the measured
  * geometry, a malformed E4/marker block) THROWS instead: that is a file the
  * writer cannot keep consistent, not an edit the user asked for.
@@ -115,9 +124,14 @@
  * NOT WRITTEN: Project's own outline save also tombstones the assignment row
  * of the task that becomes a summary (and, on outdent, creates a new assignment
  * for the restored leaf).  TBkndAssn is outside this writer, exactly as it is
- * outside the W28-1.2 actuals writer; the save-pair tests assert every Task
- * stream against Project and treat TBkndAssn separately, and Project's reopen
- * of the port's save is the acceptance test (the W28-0.4 precedent).
+ * outside the W28-1.2 actuals writer.
+ *
+ * CORRECTION (wave 29, W29-0.0): the wave-28 save-pair test did NOT assert
+ * "every Task stream against Project" -- it compared them with the CONTROL and
+ * only printed the TBkndAssn row counts, and NO Project COM reopen of the
+ * port's outline save exists.  Rule 1 does not accept either as evidence here;
+ * W29-0.1 turns Project's changed bytes into named checks and commits the
+ * reopen JSON, or the command stays disabled for that shape.
  */
 
 #ifndef MPPWRITE_OUTLINE_H

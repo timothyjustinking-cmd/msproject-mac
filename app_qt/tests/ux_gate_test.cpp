@@ -577,8 +577,12 @@ void case_window(const QString& fixture, const QString& out_dir) {
     const QString current_percent = percent_dialog.percent_edit() != nullptr
                                         ? percent_dialog.percent_edit()->text().trimmed()
                                         : QString();
+    // W29-0.0 (R28-2): only the measured transitions are enabled -- automatic
+    // 0->40, 40->100, 100->0 and manual 0->40.  The fixture's task is 0 %, so
+    // the accepted value is 40 (typed; the ribbon's fixed 25/50/75 are not
+    // measured from 0 and are refused by the same edit model).
     const std::uint16_t target_percent =
-        current_percent == QStringLiteral("50%") ? 25 : 50;
+        current_percent == QStringLiteral("40%") ? 100 : 40;
     if (percent_dialog.percent_edit() != nullptr) {
         percent_dialog.percent_edit()->setText(QString::number(target_percent) +
                                                QStringLiteral("%"));

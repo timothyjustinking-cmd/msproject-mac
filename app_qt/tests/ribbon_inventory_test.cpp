@@ -1137,8 +1137,11 @@ int main(int argc, char** argv) {
         const app::TaskRow* before = uid != 0 ? plan_task(window, uid) : nullptr;
         const std::uint16_t percent_before =
             before != nullptr ? before->percent_complete : 0;
-        // Click a value the row does not already carry: an unchanged value is a
-        // deliberate no-op in the shell (there is no measured identical save).
+        // W29-0.0 (R28-2): the command family stays enabled, but the edit model
+        // refuses a value no Project pair measured for the row.  The fixture's
+        // saved leaf is 0 %, and none of the ribbon's fixed 25/50/75/100 is
+        // measured from 0 (measured: automatic 0->40, 40->100, 100->0 and
+        // manual 0->40), so the click must queue nothing and say why.
         const std::uint16_t target = percent_before == 50 ? 25 : 50;
         const QString label = QString::number(target) + QStringLiteral("%");
         const std::size_t pending_before = window.pending_edits().size();
@@ -1157,18 +1160,12 @@ int main(int argc, char** argv) {
             QApplication::processEvents();
         }
         const app::TaskRow* after = uid != 0 ? plan_task(window, uid) : nullptr;
-        gate::check(after != nullptr && after->percent_complete == target,
-                    "clicking a %-button shows the new percent in the plan");
-        gate::check(window.pending_edits().size() == pending_before + 1,
-                    "clicking a %-button queues exactly one percent edit");
-        if (after != nullptr && after->percent_complete == target) {
-            gate::check(window.pending_edits().next_undo() != nullptr &&
-                            window.pending_edits().next_undo()->kind ==
-                                app::StructuralKind::set_percent &&
-                            window.pending_edits().next_undo()->uid == uid &&
-                            window.pending_edits().next_undo()->percent == target,
-                        "the queued edit is the selected row's set_percent");
-        }
+        gate::check(after != nullptr && after->percent_complete == percent_before,
+                    "an unmeasured %-button click leaves the plan's percent unchanged");
+        gate::check(window.pending_edits().size() == pending_before,
+                    "an unmeasured %-button click queues no percent edit");
+        gate::check(window.status_left_text().contains(QStringLiteral("transition")),
+                    "the refusal names the measured-transition rule in the status line");
     }
 
     // W28-1.3: Mark on Track on the committed status-date fixture.  The

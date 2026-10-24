@@ -12,9 +12,12 @@
  *   FixedData +80  ActualDuration     = Duration * percent / 100
  *             +88  RemainingDuration  = Duration - ActualDuration
  *             +92  PercentComplete    = percent
- *             +94  PercentWorkComplete= 100 at 100 %, else 0 (the fixture's
- *                                       placeholder assignments carry no work,
- *                                       and Project's own save stores 0)
+ *             +94  PercentWorkComplete= 100 at 100 %, else 0 (every fixture row
+ *                                       carries Project's UNASSIGNED
+ *                                       placeholder assignment -- non-zero +20
+ *                                       planned work, the 0xFFFF0001 null-
+ *                                       resource sentinel -- and Project's own
+ *                                       save stores 0 below 100 %)
  *             +120 ActualStart        = the task's effective start
  *             +124 ActualFinish       = the measured finish at 100 %, else NA
  *             +132 Resume / +136 Stop = the caller's working-time values,
@@ -47,9 +50,20 @@
  * NOT WRITTEN, and why: Project's save also rewrites Task Fixed2Data /
  * Fixed2Meta, the Task FixedMeta opaque cache bytes, TBkndAssn work contours,
  * CEdl/props/summary-information save metadata.  Those are derived caches the
- * port has never written; the save-pair test asserts every stream outside the
- * four task-table streams still equals the CONTROL file, and Project's reopen
- * of the port's save is the acceptance test (the W28-0.4 precedent).
+ * port has never written.
+ *
+ * CORRECTION (wave 29, W29-0.0): the wave-28 save-pair test did NOT compare
+ * those streams with Project's file -- it asserted them equal to the CONTROL,
+ * so Project's own changes passed silently (the wave-28 review's R28-1), and NO
+ * Project COM reopen of the port's actuals save exists (the W28-0.4 reopen
+ * artifact reopened Project's own process, not this writer's file).  Rule 1
+ * therefore does not accept "Project's reopen" as evidence here: W29-0.1 turns
+ * each Project-changed byte into a named check against Project's file, writes
+ * the deterministic ones, and commits the reopen JSON, or the command stays
+ * disabled for that shape.  The app also refuses, from W29-0.0, every row shape
+ * no committed pair measured (a leaf under a summary, a milestone, a resource-
+ * loaded assignment that carries work, an unmeasured percent transition, and a
+ * date update on a row that already records progress).
  *
  * 0x0B40015E STEP IDS ARE OPAQUE.  Each 20-byte step ends in a u32 Project
  * allocates per session (the same block saved twice keeps its ids; a new
@@ -124,6 +138,18 @@ std::uint32_t actual_duration_ticks(std::uint32_t duration_ticks,
  * core/plan's manual_finish_of): the manual 0 -> 40 pair's Stop is Tue 12:00
  * from a Sunday 13:00 actual start, not the calendar-correct Tue 17:00. */
 bool task_is_manually_scheduled(CfbDocument const& doc, std::size_t row,
+                                std::string_view table = "114/TBkndTask");
+
+/* W29-0.0: true when the saved row already records progress -- a stored
+ * % Complete (+92) above 0, an ActualStart/ActualFinish (+120/+124), or a
+ * 0x0B40015E step block for the uid.  The wave-28 Mark on Track and Update
+ * Project pairs all start from 0 % rows with no actual dates and no step
+ * block, and the app now refuses a date update on any row this returns true
+ * for: the measured writers have never been shown a row whose progress they
+ * overwrite, and rule 1 (wave 29) says an unmeasured shape is not written.
+ * A row with no saved row of that uid returns false; the caller's own
+ * saved-row check reports that case. */
+bool task_has_recorded_progress(CfbDocument const& doc, std::uint32_t uid,
                                 std::string_view table = "114/TBkndTask");
 
 /* The four packed dates one edit writes.  kInvalidDate (0xFFFFFFFF) means NA.

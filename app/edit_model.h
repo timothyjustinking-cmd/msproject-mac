@@ -316,12 +316,16 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
 //            prove the file has not moved under the edit.
 //
 // uid 0, an unknown uid, a pending insert (file_row == 0), a summary for
-// outdent, an unreadable file/outline/calendar, and the shapes outline.h lists
-// as unmeasured are refused with `error` naming the reason.  `out` is left
+// outdent, an unreadable file/outline/calendar, a row that is not manually
+// scheduled (every measured outline row is), an indent whose new summary
+// carries progress, assignment work or an actuals edit queued in the same save
+// (name its uid in `pending_actuals`), and the shapes outline.h lists as
+// unmeasured are refused with `error` naming the reason.  `out` is left
 // default-constructed on refusal.
 bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                        std::uint32_t uid, bool indent, StructuralEdit& out,
-                       std::string& error);
+                       std::string& error,
+                       const std::vector<std::uint32_t>& pending_actuals = {});
 
 // ---------------------------------------------------------------------------
 // Wave 28 (W28-3.1): the project's new-task scheduling mode

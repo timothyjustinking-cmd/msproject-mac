@@ -951,6 +951,11 @@ UpdateProjectDialog::UpdateProjectDialog(QWidget* parent) : QDialog(parent) {
     radios_.push_back(entire_);
     scope_group->addButton(entire_);
     selected_ = new QRadioButton(QStringLiteral("Selected tasks"), this);
+    // W29-0.0 (R28-3): the measured update pair is "Entire project" on three
+    // rows; no Project save pair covers a selection scope, so the choice stays
+    // disabled with the decision-9 tooltip until W29-0.3 measures one.
+    selected_->setEnabled(false);
+    selected_->setToolTip(kDisabledTip);
     radios_.push_back(selected_);
     scope_group->addButton(selected_);
     for_row->addWidget(entire_);

@@ -2333,10 +2333,23 @@ void MainWindow::indent_selected(bool indent) {
     // the measured parent/sibling shape, the marker words and the calendar
     // arithmetic.  The shell only supplies the displayed plan and the path the
     // edit must agree with.
+    // W29-0.0: the actuals edits already queued are named too, because an
+    // indent under a row whose actuals are queued in the same save is a shape
+    // no Project pair measured.
+    std::vector<std::uint32_t> pending_actuals;
+    for (const app::StructuralEdit& pending : structural_.applied()) {
+        if (pending.kind == app::StructuralKind::set_percent) {
+            pending_actuals.push_back(pending.uid);
+        } else if (pending.kind == app::StructuralKind::update_actuals) {
+            for (const app::ActualsTarget& target : pending.actuals) {
+                pending_actuals.push_back(target.uid);
+            }
+        }
+    }
     app::StructuralEdit edit;
     std::string error;
     if (!app::make_outline_edit(doc_.plan(), doc_.path(), selected.uid, indent,
-                                edit, error)) {
+                                edit, error, pending_actuals)) {
         set_message(std::string(indent ? "indent: " : "outdent: ") + error, true);
         update_status();
         return;

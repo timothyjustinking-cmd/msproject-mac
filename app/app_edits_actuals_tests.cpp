@@ -47,6 +47,7 @@
 #include <cstdio>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <set>
 #include <string>
 #include <system_error>
@@ -708,6 +709,125 @@ void check_group_edit_model() {
     }
 }
 
+/* W29-0.0 (the wave-28 review's R28-3, High): a date update is refused on a
+ * row that already records progress -- stored % > 0, an ActualStart, or a
+ * 0x0B40015E progress block.  One check per shape; the last two patch a copy of
+ * the committed control so the refusal is proved on the file-side check alone
+ * (the plan's percent stays 0). */
+void check_update_refusals() {
+    const std::filesystem::path eight_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-percent-auto40-control.mpp";
+    const std::filesystem::path zero_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-update-control.mpp";
+    if (!std::filesystem::exists(eight_path) || !std::filesystem::exists(zero_path)) {
+        std::printf("SKIP: the W29-0.0 refusal controls are not present\n");
+        return;
+    }
+    const app::date32 through_date = core::sched::from_ymd(2026, 1, 7);
+    app::StructuralEdit edit;
+    std::string error;
+
+    /* (a) the stored percent: uid 1 is at 40 % in the committed control. */
+    app::PlanInput stored;
+    try {
+        stored = app::plan_input_from_document(mpp::load_file(eight_path.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the 40 % control loads");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        return;
+    }
+    check(!app::make_update_actuals_edit(stored, eight_path.string(), {1u},
+                                         through_date, false, edit, error),
+          "a date update on a row stored at 40 % is refused");
+    check(error.find("already") != std::string::npos && error.find("%") != std::string::npos,
+          "the stored-percent refusal names the progress");
+
+    std::error_code fs_error;
+    std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
+                                        fs_error);
+    auto patched_copy = [](const std::filesystem::path& source,
+                           const std::filesystem::path& target,
+                           const std::function<void(mppwrite::TaskTable&, std::size_t)>& patch,
+                           std::string& failure) -> bool {
+        try {
+            mppwrite::CfbDocument document =
+                mppwrite::CfbDocument::from_file(source.string());
+            mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
+            const std::size_t row = table.row_for_uid(1);
+            patch(table, row);
+            table.store_into(document);
+            std::error_code remove_error;
+            std::filesystem::remove(target, remove_error);
+            document.save(target.string());
+            return true;
+        } catch (const std::exception& patch_error) {
+            failure = patch_error.what();
+            return false;
+        }
+    };
+
+    /* (b) an ActualStart on an otherwise 0 % row. */
+    const std::filesystem::path actual_start_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "w29-actual-start.mpp";
+    std::string patch_error;
+    const bool wrote_actual_start = patched_copy(
+        zero_path, actual_start_path,
+        [](mppwrite::TaskTable& table, std::size_t row) {
+            table.set_u32(row, mppwrite::task_row::kActualStart, 0x3BF212C0u);
+        },
+        patch_error);
+    check(wrote_actual_start, "the ActualStart copy is written");
+    if (wrote_actual_start) {
+        app::PlanInput patched;
+        try {
+            patched = app::plan_input_from_document(
+                mpp::load_file(actual_start_path.string()));
+        } catch (const std::exception& load_error) {
+            check(false, "the ActualStart copy loads");
+            std::printf("LOAD ERROR: %s\n", load_error.what());
+            patched = {};
+        }
+        check(patched.tasks.size() > 1 && patched.tasks[0].percent_complete == 0,
+              "the ActualStart copy still reads as 0 %");
+        check(!app::make_update_actuals_edit(patched, actual_start_path.string(), {1u},
+                                             through_date, false, edit, error),
+              "a date update on a 0 % row with an ActualStart is refused");
+        check(error.find("actual date") != std::string::npos,
+              "the ActualStart refusal names the recorded actual date");
+    }
+
+    /* (c) a progress block on a 0 % row with no actual dates. */
+    const std::filesystem::path progress_block_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "w29-progress-block.mpp";
+    const bool wrote_progress_block = patched_copy(
+        eight_path, progress_block_path,
+        [](mppwrite::TaskTable& table, std::size_t row) {
+            table.set_u16(row, mppwrite::task_row::kPercentComplete, 0);
+            table.set_u32(row, mppwrite::task_row::kActualStart, 0xFFFFFFFFu);
+            table.set_u32(row, mppwrite::task_row::kActualFinish, 0xFFFFFFFFu);
+        },
+        patch_error);
+    check(wrote_progress_block, "the progress-block copy is written");
+    if (wrote_progress_block) {
+        app::PlanInput patched;
+        try {
+            patched = app::plan_input_from_document(
+                mpp::load_file(progress_block_path.string()));
+        } catch (const std::exception& load_error) {
+            check(false, "the progress-block copy loads");
+            std::printf("LOAD ERROR: %s\n", load_error.what());
+            patched = {};
+        }
+        check(patched.tasks.size() > 1 && patched.tasks[0].percent_complete == 0,
+              "the progress-block copy reads as 0 %");
+        check(!app::make_update_actuals_edit(patched, progress_block_path.string(),
+                                             {1u}, through_date, false, edit, error),
+              "a date update on a 0 % row with a progress block is refused");
+        check(error.find("progress") != std::string::npos,
+              "the progress-block refusal names the block");
+    }
+}
+
 } /* namespace */
 
 int main() {
@@ -716,6 +836,7 @@ int main() {
     }
     check_percent_through();
     check_group_edit_model();
+    check_update_refusals();
     std::printf("app_edits_actuals_tests: %d checks passed\n", g_checks - g_failures);
     if (g_failures != 0) {
         std::printf("app_edits_actuals_tests: %d FAILURE(S)\n", g_failures);
