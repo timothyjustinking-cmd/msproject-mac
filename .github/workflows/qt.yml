@@ -106,8 +106,15 @@ jobs:
             generator: Unix Makefiles
 
     steps:
+      # W27-1.2: the "Committed fixtures match their pinned hashes" step runs
+      # scripts/check_fixtures.py, whose oracle-provenance sub-check reconstructs
+      # each oracle's last measured-body change from `git log --follow`.  A
+      # shallow checkout has one commit, so every claimed recording_commit would
+      # fail.  Full history (fetch-depth: 0) is the fix the brief prefers.
       - name: Check out
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Linux only.  The distro Qt is not linked (the next step pins 6.5.3), but
       # these packages supply the GL/xkb/common headers and libraries the
