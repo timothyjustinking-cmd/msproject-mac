@@ -2,6 +2,11 @@
 
 #include "entry_columns.h"
 
+#include <QFont>
+#include <QFontMetrics>
+#include <QString>
+
+#include <algorithm>
 #include <cstddef>
 #include <utility>
 
@@ -15,8 +20,10 @@ core::view::FieldId model_field(const char* name) { return app::task_field_id(na
 // The stock Entry table's stored character widths: Indicators 6, Task Mode 9,
 // Task Name 24, Duration/Start/Finish 13, Predecessors/Resources 17, and the
 // 20-character "Add New Column" stub.  entry_width_px() turns them into the
-// measured 39/57/147/81/81/81/105/105/123.  At load, a width actually stored in
-// the file's `214/CTable` replaces default_chars (display_columns_for_sheet).
+// measured 39/57/147/81/81/81/105/105/123 (the fixture's Segoe UI 10 unit).  At
+// load, a width actually stored in the file's `214/CTable` replaces
+// default_chars and the FILE's measured unit converts it
+// (display_columns_for_sheet).
 const std::vector<EntryColumn>& columns() {
     static const std::vector<EntryColumn> kColumns = {
         {"", 0u, 6, entry_width_px(6), EntryCellKind::indicators, 0x0b4000cdu},
@@ -39,21 +46,64 @@ const std::vector<EntryColumn>& columns() {
 }
 
 // The stock width for a field whose file column stores none: the Entry column's
-// own width when this field has one (matched by model field or by the CTable
-// field id), else Project's measured fresh-column header (12 characters).
-int stock_display_width(core::view::FieldId field) {
+// own character width when this field has one (matched by model field or by the
+// CTable field id), else Project's measured fresh-column header (12 characters),
+// converted at the file's own unit.
+int stock_display_width(core::view::FieldId field, int char_px) {
     for (const EntryColumn& column : columns()) {
-        if (field != 0 && column.field == field) {
-            return column.width;
-        }
-        if (field != 0 && column.table_field == field) {
-            return column.width;
+        if (field != 0 && (column.field == field || column.table_field == field)) {
+            return column_width_px(column.default_chars, char_px);
         }
     }
-    return entry_width_px(12);
+    return column_width_px(12, char_px);
 }
 
+// MEASURED on this box (build/w29/font_probe2, Qt 6.5.3/GDI): the lowercase
+// alphabet advances sum to 133 px at Arial 8, 167 px at Segoe UI 10 and 179 px
+// at Calibri 11 and Carlito 11.  133/26 = 5.12 -> 5, 167/26 = 6.42 -> 6,
+// 179/26 = 6.88 -> 7.  The table keeps those answers independent of the faces a
+// CI runner happens to have installed (the corpus and fixture fonts must paint
+// the same width on Linux and macOS as on Windows).
+struct MeasuredCharPx {
+    const char* family;
+    int point_size;
+    int px;
+};
+
+constexpr MeasuredCharPx kMeasuredCharPx[] = {
+    {"Arial", 8, 5},
+    {"Segoe UI", 10, 6},
+    {"Calibri", 11, 7},
+    {"Carlito", 11, 7},
+};
+
 }  // namespace
+
+int column_char_px(const std::string& family, int point_size) {
+    if (family.empty() || point_size <= 0) {
+        return kColumnCharPx;
+    }
+    const QString wanted = QString::fromStdString(family);
+    for (const MeasuredCharPx& measured : kMeasuredCharPx) {
+        if (point_size == measured.point_size &&
+            wanted.compare(QString::fromLatin1(measured.family), Qt::CaseInsensitive) == 0) {
+            return measured.px;
+        }
+    }
+    // Unmeasured face: the same rule, measured live.  Round half up; a font
+    // engine that reports nothing usable keeps the stock unit.
+    QFont font(wanted);
+    font.setPointSize(point_size);
+    const QFontMetrics metrics(font);
+    int sum = 0;
+    for (char letter = 'a'; letter <= 'z'; ++letter) {
+        sum += metrics.horizontalAdvance(QLatin1Char(letter));
+    }
+    if (sum <= 0) {
+        return kColumnCharPx;
+    }
+    return std::clamp((sum + 13) / 26, 1, 64);
+}
 
 const std::vector<EntryColumn>& entry_columns() { return columns(); }
 
@@ -101,7 +151,8 @@ EntryCellKind display_kind_for_field(core::view::FieldId field) {
     return EntryCellKind::data;
 }
 
-std::vector<DisplayColumn> display_columns_for_sheet(const core::sheet::SheetModel& sheet) {
+std::vector<DisplayColumn> display_columns_for_sheet(const core::sheet::SheetModel& sheet,
+                                                     int char_px) {
     std::vector<DisplayColumn> display;
     const core::view::FieldId id_field = app::task_field_id("ID");
     display.reserve(sheet.visible_column_count() + 1);
@@ -120,8 +171,12 @@ std::vector<DisplayColumn> display_columns_for_sheet(const core::sheet::SheetMod
         shown.title = source.title;
         shown.field = source.field;
         shown.kind = display_kind_for_field(source.field);
-        shown.width = source.width > 0 ? entry_width_px(source.width)
-                                       : stock_display_width(source.field);
+        // W29-1.1: the stored width is characters; the file's own font sets
+        // the pixel unit.  A stored 0 never gets here -- table_sheet_columns()
+        // marks such a column hidden (Project draws none for PROJECT_A's
+        // Indicators) -- but a visible column with no width keeps the fallback.
+        shown.width = source.width > 0 ? column_width_px(source.width, char_px)
+                                       : stock_display_width(source.field, char_px);
         display.push_back(std::move(shown));
     }
     if (display.empty()) {
@@ -135,7 +190,7 @@ std::vector<DisplayColumn> display_columns_for_sheet(const core::sheet::SheetMod
     DisplayColumn stub;
     stub.title = "Add New Column";
     stub.field = 0;
-    stub.width = entry_width_px(20);
+    stub.width = column_width_px(20, char_px);
     stub.kind = EntryCellKind::stub;
     display.push_back(std::move(stub));
     return display;

@@ -17,13 +17,18 @@
 //
 // WHERE THE WIDTHS COME FROM
 //   MS Project stores a column's width in the `214/CTable` column record: the
-//   first of its nine opaque bytes is the width in characters.  One character is
-//   6 px plus 3 px of padding (entry_width_px), measured from the reference and
-//   the fixture together: 6/9/24/13/13/13/17/17 characters -> 39/57/147/81/81/81/
-//   105/105 px, and the 20-character stub -> 123 px.
+//   first of its nine opaque bytes is the width in CHARACTERS.  The pixel width
+//   is chars * unit + 3 px of padding, where the unit is the advance of one
+//   character in the file's default text font -- the rounded average advance of
+//   'a'..'z' (W29-1.1, column_char_px()).  The committed fixture's Segoe UI 10
+//   gives 6 px: 6/9/24/13/13/13/17/17 characters -> 39/57/147/81/81/81/105/105 px
+//   and the 20-character stub -> 123 px (the widths docs/parity.md pins).
+//   PROJECT_A's Arial 8 gives 5 px: its 70/9/19/21/7/13/13/17 characters ->
+//   353/48/98/108/38/68/68/88 px, matching Project's clean 1920 capture.
 //
 // No Qt types here: this is the column data the model, the header band and the
-// cell delegate read.
+// cell delegate read.  (column_char_px() takes only std::string/int; its
+// implementation measures with QFontMetrics.)
 #pragma once
 
 #include <cstdint>
@@ -82,13 +87,15 @@ inline constexpr core::view::FieldId kPercentCompleteField = 0x0b400020u;
 inline constexpr core::view::FieldId kSummaryFlagField = 0x0b400051u;
 
 
-// MS Project's column width unit: one stored character is 6 px and every
-// column carries 3 px of padding.  The rule was derived from the reference and
-// the fixture TOGETHER: the fixture's `214/CTable` stores 6/9/24/13/13/13/17/17
-// characters for Indicators/Task Mode/Name/Duration/Start/Finish/Predecessors/
-// Resources, and 6*6+3 = 39, 9*6+3 = 57, 24*6+3 = 147, 13*6+3 = 81, 17*6+3 =
-// 105 -- exactly the measured boundaries.  The "Add New Column" stub is 20
-// characters: 20*6+3 = 123.
+// Every column carries 3 px of padding.  The STOCK character unit is 6 px: the
+// committed fixture's default font is Segoe UI 10, whose lowercase alphabet
+// averages 167/26 = 6.42 px -> 6, and its `214/CTable` stores
+// 6/9/24/13/13/13/17/17 characters for Indicators/Task Mode/Name/Duration/
+// Start/Finish/Predecessors/Resources, so 6*6+3 = 39, 9*6+3 = 57, 24*6+3 = 147,
+// 13*6+3 = 81, 17*6+3 = 105 -- exactly the measured boundaries.  The "Add New
+// Column" stub is 20 characters: 20*6+3 = 123.  A loaded file's own font may
+// give a different unit (PROJECT_A's Arial 8 gives 5); column_char_px() is the
+// measured rule and the Entry list keeps the stock 6 for a new/empty project.
 inline constexpr int kColumnCharPx = 6;
 inline constexpr int kColumnPaddingPx = 3;
 
@@ -111,10 +118,27 @@ struct DisplayColumn {
     EntryCellKind kind = EntryCellKind::data;
 };
 
-// The pixel width for a stored character width.  `chars <= 0` returns 0.
-inline constexpr int entry_width_px(int chars) noexcept {
-    return chars > 0 ? chars * kColumnCharPx + kColumnPaddingPx : 0;
+// The pixel width for a stored character width at a given character unit.
+// `chars <= 0` returns 0.
+inline constexpr int column_width_px(int chars, int char_px) noexcept {
+    return chars > 0 && char_px > 0 ? chars * char_px + kColumnPaddingPx : 0;
 }
+
+// The pixel width for a stored character width at the stock 6 px unit.
+inline constexpr int entry_width_px(int chars) noexcept {
+    return column_width_px(chars, kColumnCharPx);
+}
+
+// W29-1.1: the pixel advance of ONE stored column character, measured from the
+// file's default text font (the first FONT_BASES entry -- the font Project's
+// Font box shows -- else the non-critical style; an absent font keeps the
+// stock 6).  Project's rule is round(sum(advance('a'..'z')) / 26), measured on
+// this box: Arial 8 -> 133/26 = 5.12 -> 5 (PROJECT_A's 70-character Task Name
+// paints 353 px, and every one of its eight stored columns fits 5*chars+3);
+// Segoe UI 10 -> 167/26 = 6.42 -> 6 (the fixture's stock Entry widths).
+// Those pairs are table-driven so a CI runner without the face installed still
+// paints the file's own width; any other face is measured with QFontMetrics.
+int column_char_px(const std::string& family, int point_size);
 
 // The nine display columns, in sheet order.  A stable, static table: the
 // header, the model, the delegate and the test all read this one list.
@@ -126,13 +150,18 @@ const std::vector<DisplayColumn>& entry_display_columns();
 
 // Wave 21 (operator decision 7): the display for the LOADED file's sheet.
 //
-// One column per visible sheet column, in the sheet's order (which is the
+// One column per VISIBLE sheet column, in the sheet's order (which is the
 // stored `214/CTable` order), titled and sized from that column; the stored ID
 // column is skipped (the frozen row-number gutter draws it) and the "Add New
-// Column" stub is appended.  A column whose stored width is 0 (the file stores
-// none) takes the Entry presentation's width for that field, else the measured
-// fresh-column width (12 characters = 75 px).
-std::vector<DisplayColumn> display_columns_for_sheet(const core::sheet::SheetModel& sheet);
+// Column" stub is appended.  W29-1.1: a stored width of 0 is a column Project
+// does not draw (PROJECT_A's Indicators), and app::table_sheet_columns() marks
+// it hidden, so it never reaches this list.  A visible column that somehow
+// carries no width takes the Entry presentation's width for that field, else
+// the measured fresh-column width (12 characters).  `char_px` is the file's
+// measured character unit (column_char_px()); the stock 6 keeps a caller that
+// has no decoded font on the fixture's own presentation.
+std::vector<DisplayColumn> display_columns_for_sheet(const core::sheet::SheetModel& sheet,
+                                                     int char_px = kColumnCharPx);
 
 // Sum of the columns' pixel widths: the sheet's table width (the nine Entry
 // columns are 819 px, docs/parity.md).

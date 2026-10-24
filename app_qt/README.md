@@ -160,10 +160,16 @@ the widths N/A; at 1920x1032 all nine fit and it scores them.
 The file's `214/CTable` stores a column's width in characters (the first of its
 nine opaque bytes; `core/viewstate` and `docs/handoff/w62.md`).  `PlanDocument`
 reads the CTable on load (`table_column_chars`), and `MainWindow` converts each
-Entry column with MS Project's rule **`width = characters * 6 + 3`**:
-24 chars → 147 px, 13 → 81, 17 → 105, 20 (the Add New Column stub) → 123.  The
-stock character widths are the fallback when a file has no CTable for a field.
-The status line reports the stored characters.
+stored column with Project's rule **`width = characters * unit + 3`**, where the
+unit is measured from the file's default text font (the first FONT_BASES entry):
+round(sum of the lowercase alphabet advances / 26).  The committed fixture's
+Segoe UI 10 gives 6 px -- 24 chars → 147 px, 13 → 81, 17 → 105, 20 (the Add New
+Column stub) → 123; the corpus file's Arial 8 gives 5 px -- 70 → 353, 19 → 98,
+17 → 88.  Those measured pairs are pinned in `entry_columns.cpp`, so a runner
+without the face installed paints the same widths.  The stock character widths
+are the fallback when a file has no CTable for a field.  A stored width of 0 is
+a column Project does not draw (the corpus file's Indicators), so the sheet
+model keeps it hidden.  The status line reports the stored characters.
 
 The splitter is the table's own right edge when the window can hold it: gutter
 + nine columns = 879 px, with the 6 px handle after it, which at 1920 is

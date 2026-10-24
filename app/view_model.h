@@ -272,10 +272,12 @@ bool task_column_editable(core::view::FieldId field) noexcept;
 //   field      table_column_field(record.field_id); a record with field id 0 is
 //              not a column and is skipped
 //   title      the stored UTF-16 title, else task_column_caption(field)
-//   width      opaque_header[0] -- the stored character width (the same byte the
-//              Qt shell already converts with its 6 px/char + 3 rule); 0 means
-//              the file stores no width, so the sheet's own default width for
-//              that field is used (0 = auto when it has none either)
+//   width      opaque_header[0] -- the stored character width; the Qt shell
+//              turns it into pixels at the FILE's measured character unit
+//              (entry_columns.h, column_char_px()), not a fixed 6 px.  0 is
+//              measured (PROJECT_A's Indicators) as a column Project does not
+//              draw: the record is kept with width 0 and visible = false.
+//   visible    width > 0 -- see above; the sheet model keeps hidden columns
 //   align/kind copied from default_sheet_columns() for the stock fields so a
 //              loaded sheet renders exactly like the default one; Auto otherwise
 //   read_only  !task_column_editable(field) -- see above

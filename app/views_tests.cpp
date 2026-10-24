@@ -606,6 +606,23 @@ void test_table_sheet_columns() {
     check_size(app::table_sheet_columns(zero_only).size(), defaults.size(),
                "a table of only field-id-0 records falls back too");
 
+    // W29-1.1 (measured, PROJECT_A): a stored width of 0 is not "auto" -- it is
+    // a column Project does not draw.  PROJECT_A stores 0 for Indicators and the
+    // clean 1920 capture shows Task Name at the sheet edge with no Indicators
+    // column.  The record stays in the model, hidden, and its width is kept 0
+    // rather than replaced with a stock width.
+    msproject::viewstate::TableDef zero_width;
+    zero_width.columns.push_back(stored_column(0x0b40000eu, "Job", 30));
+    zero_width.columns.push_back(stored_column(0x0b4000cdu, "", 0));  // Indicators
+    const std::vector<core::sheet::SheetColumn> kept = app::table_sheet_columns(zero_width);
+    check_size(kept.size(), 2, "a stored zero-width column is kept in the model");
+    if (kept.size() == 2) {
+        check(kept[0].visible && kept[0].width == 30,
+              "a stored positive width stays visible and unchanged");
+        check(!kept[1].visible, "a stored zero width is hidden (Project draws no column)");
+        check(kept[1].width == 0, "a stored zero width is not replaced by a stock width");
+    }
+
     // The model really uses the set: the file's order, its captions, values in
     // the mapped fields, and the read-only columns refusing an edit.
     PlanInput input = make_plan();

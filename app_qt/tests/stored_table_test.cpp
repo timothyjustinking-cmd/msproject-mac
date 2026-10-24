@@ -102,6 +102,33 @@ void check_width(int got, int want, int index) {
     }
 }
 
+void check_offset(int got, int want, int index) {
+    if (got != want) {
+        std::fprintf(stderr, "FAIL: display column %d starts at %d px, want %d px\n", index, got,
+                     want);
+        ++g_failures;
+    }
+}
+
+// W29-1.1: the measured character unit and the width arithmetic.  This is a
+// pure rule (no window), so it runs on every platform: the table entries are
+// the faces the two measured files use, which a CI runner without Segoe UI or
+// Arial must still convert to the same px.
+void case_column_units() {
+    check(msqt::column_char_px("Arial", 8) == 5,
+          "Arial 8 -> 5 px: PROJECT_A's stored column unit");
+    check(msqt::column_char_px("Segoe UI", 10) == 6,
+          "Segoe UI 10 -> 6 px: the committed fixture's stored column unit");
+    check(msqt::column_char_px("Calibri", 11) == 7, "Calibri 11 -> 7 px (measured)");
+    check(msqt::column_char_px("Carlito", 11) == 7,
+          "Carlito 11 -> 7 px (the metric-compatible open face)");
+    check(msqt::column_char_px("", 0) == msqt::kColumnCharPx,
+          "an absent font keeps the stock 6 px unit");
+    check(msqt::column_width_px(70, 5) == 353, "70 characters at 5 px + 3 = 353");
+    check(msqt::column_width_px(7, 5) == 38, "7 characters at 5 px + 3 = 38");
+    check(msqt::column_width_px(0, 5) == 0, "a zero stored width paints nothing");
+}
+
 // --- the synthetic non-Entry table -------------------------------------------
 
 // One column record of the table written into the fixture copy.  The field ids
@@ -785,22 +812,60 @@ void case_corpus(const QString& corpus) {
           "the Font size combo shows the file's decoded default");
     // Measured from corpus/project_a.mpp's first CTable row: Indicators width 0,
     // Task Name 70, Dur 9, Start 19, Finish 21, % Comp 7, Pre 13, Suc 13,
-    // SUMMARY 17 characters (docs/handoff/q6.md).
+    // SUMMARY 17 characters.  W29-1.1: the file's default font is Arial 8 (the
+    // Font box above pins it), whose measured unit is 5 px, so the eight data
+    // columns paint 353/48/98/108/38/68/68/88 px -- the widths in Project's own
+    // clean 1920 capture (boundaries 54/407/455/553/661/699/767/835/883 with
+    // Task Name at the sheet edge).  The Indicators record stores width 0 and
+    // Project draws no column for it.
     const std::vector<ExpectedColumn> expected = {
-        {"", 39},            // Indicators: no stored width, the stock 39 px
-        {"Task Name", 423},  // 70 characters
-        {"Dur", 57},         // 9
-        {"Start", 117},      // 19
-        {"Finish", 129},     // 21
-        {"% Complete", 45},  // 7
-        {"Pre", 81},         // 13
-        {"Suc", 81},         // 13
-        {"SUMMARY", 105},    // 17
-        {"Add New Column", 123},
+        {"Task Name", 353},  // 70 characters at 5 px + 3
+        {"Dur", 48},         // 9
+        {"Start", 98},       // 19
+        {"Finish", 108},     // 21
+        {"% Complete", 38},  // 7
+        {"Pre", 68},         // 13
+        {"Suc", 68},         // 13
+        {"SUMMARY", 88},     // 17
+        {"Add New Column", 103},  // 20 characters at the file's unit
     };
     check_presentation(window, expected, "the corpus file's stored table");
     check(window.sheet() != nullptr && window.sheet()->column_count() == 10,
           "the corpus sheet model keeps all ten stored columns");
+    check(window.sheet() != nullptr && !window.sheet()->column_visible(1),
+          "the stored zero-width Indicators column is hidden, not drawn as 39 px");
+
+    // W29-1.1: the live 1920 layout, not only the model's width numbers.  A
+    // fresh window at the reference client size loads with the same split
+    // fraction the parity render uses; the eight data columns must start at
+    // Project's measured boundaries (54/407/455/553/661/699/767/835) minus its
+    // 54-px row-number gutter.  The last one starts inside the sheet pane (the
+    // capture clips SUMMARY at the pane edge too, at 48 of its 88 px).
+    msqt::MainWindow parity;
+    parity.resize(msqt::kParityWidth, msqt::kParityHeight);
+    if (!parity.open_file(corpus, &error)) {
+        std::fprintf(stderr, "FAIL: could not open the corpus file at 1920: %s\n",
+                     error.toUtf8().constData());
+        ++g_failures;
+    } else {
+        parity.show();
+        QApplication::processEvents();
+        QTableView* sheet = parity.sheet_view();
+        if (sheet == nullptr || sheet->viewport() == nullptr) {
+            check(false, "the 1920 corpus window has a sheet viewport");
+        } else {
+            const int reference_starts[] = {0, 353, 401, 499, 607, 645, 713, 781};
+            for (int index = 0; index < 8; ++index) {
+                check_offset(sheet->columnViewportPosition(index), reference_starts[index],
+                             index);
+            }
+            check(sheet->columnViewportPosition(7) < sheet->viewport()->width(),
+                  "the eighth stored column starts inside the 1920 sheet pane");
+            check(parity.sheet_table_model() != nullptr &&
+                      parity.sheet_table_model()->columnCount() == 9,
+                  "the 1920 sheet shows the eight data columns and the stub");
+        }
+    }
     // A mapped column must show the file's value: the corpus stores Duration as
     // DurationText, which has no RecordSet column of its own.
     if (window.sheet() != nullptr) {
@@ -1170,6 +1235,7 @@ int main(int argc, char** argv) {
     const QString out_dir = QString::fromLocal8Bit(argv[2]);
     const QString corpus = argc >= 4 ? QString::fromLocal8Bit(argv[3]) : QString();
 
+    case_column_units();
     case_computed_text_rules();
     case_fixture_is_entry(fixture);
     case_synthetic_non_entry(fixture, out_dir);

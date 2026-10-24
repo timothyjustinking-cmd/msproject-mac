@@ -572,11 +572,13 @@ std::vector<core::sheet::SheetColumn> table_sheet_columns(
         if (const core::sheet::SheetColumn* stock = stock_column(field); stock != nullptr) {
             column.align = stock->align;
             column.kind = stock->kind;
-            if (column.width <= 0) {
-                column.width = stock->width;  // the file stores no width for it
-            }
         }
-        column.visible = true;
+        // W29-1.1 (measured, PROJECT_A): a stored width of 0 is not "auto" -- it
+        // is a column Project does not draw.  The file's Indicators record stores
+        // 0 and the clean 1920 capture shows Task Name at the sheet edge with no
+        // Indicators column.  The record stays in the model (it is the file's
+        // table) but is hidden, and the width is kept as stored.
+        column.visible = column.width > 0;
         // Read-only unless the save path can write the field back (see the header).
         column.read_only = !task_column_editable(field);
         columns.push_back(std::move(column));

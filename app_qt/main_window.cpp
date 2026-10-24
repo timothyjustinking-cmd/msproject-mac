@@ -158,6 +158,37 @@ app::ZoomLevel stepped_zoom(app::ZoomLevel zoom, int delta) {
 
 QString to_q(const std::string& text) { return QString::fromStdString(text); }
 
+// W26-REV-4 / W29-1.1: the file's default text font -- the first FONT_BASES
+// entry (what Project's Font box shows), else the non-critical style.  It is
+// both the ribbon's Font value and the font whose metrics OWN the stored sheet
+// column width: one stored character is one lowercase-alphabet advance
+// (entry_columns.h, column_char_px()).
+struct FileFont {
+    QString family;
+    int point_size = 0;
+};
+
+FileFont file_font(const msproject::viewstate::GanttStyle& style) {
+    FileFont font;
+    if (!style.decoded) {
+        return font;
+    }
+    if (!style.fonts.empty() && style.fonts.front().valid &&
+        !style.fonts.front().name.empty()) {
+        font.family = to_q(style.fonts.front().name);
+        font.point_size = style.fonts.front().point_size;
+        return font;
+    }
+    const std::size_t index =
+        static_cast<std::size_t>(msproject::viewstate::TextStyleItem::non_critical);
+    if (index < style.text.size() && style.text[index].valid &&
+        !style.text[index].font_name.empty()) {
+        font.family = to_q(style.text[index].font_name);
+        font.point_size = style.text[index].point_size;
+    }
+    return font;
+}
+
 // W28-1.2: Task Information's Percent complete parser.  The measured writer
 // stores a u16 percent, so only a whole number 0..100 is accepted; the trailing
 // '%' the sheet renders is optional, as in the sheet's own Percent cell.
@@ -1129,25 +1160,8 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     // the document's default font (PROJECT_A's Arial 8, which is what Project's
     // own Font box shows); an absent table falls back to the non-critical style.
     {
-        QString family;
-        int point_size = 0;
-        const msproject::viewstate::GanttStyle& style = doc_.gantt_style();
-        if (style.decoded) {
-            if (!style.fonts.empty() && style.fonts.front().valid &&
-                !style.fonts.front().name.empty()) {
-                family = to_q(style.fonts.front().name);
-                point_size = style.fonts.front().point_size;
-            } else {
-                const std::size_t index = static_cast<std::size_t>(
-                    msproject::viewstate::TextStyleItem::non_critical);
-                if (index < style.text.size() && style.text[index].valid &&
-                    !style.text[index].font_name.empty()) {
-                    family = to_q(style.text[index].font_name);
-                    point_size = style.text[index].point_size;
-                }
-            }
-        }
-        ribbon_->set_font_default(family, point_size);
+        const FileFont font = file_font(doc_.gantt_style());
+        ribbon_->set_font_default(font.family, font.point_size);
     }
 
     refresh_timeline();
@@ -1202,7 +1216,14 @@ void MainWindow::configure_task_columns() {
     // column N maps to a real model column and editing keeps working.
     std::vector<DisplayColumn> columns;
     if (doc_.has_document() && doc_.sheet() != nullptr) {
-        columns = display_columns_for_sheet(*doc_.sheet());
+        // W29-1.1: the stored widths are CHARACTERS.  Project paints
+        // chars * unit + 3 px, where the unit is measured from the file's
+        // default font (PROJECT_A's Arial 8 -> 5; the fixture's Segoe UI 10 ->
+        // 6).  A fixed 6 px/char made PROJECT_A's eight columns too wide to fit
+        // at 1920, which is why the sheet showed only five of them.
+        const FileFont font = file_font(doc_.gantt_style());
+        columns = display_columns_for_sheet(
+            *doc_.sheet(), column_char_px(font.family.toStdString(), font.point_size));
     } else {
         columns = entry_display_columns();
     }
@@ -1220,9 +1241,10 @@ void MainWindow::configure_sheet() {
     }
     // The widths ARE the presentation's: the Entry list's measured 39/57/147/81/
     // 81/81/105/105/123 for a new/empty project, the file's stored character
-    // widths (chars * 6 + 3) for a loaded one.  A stored width of 0 already fell
-    // back to the stock width in display_columns_for_sheet(), so every column has
-    // a positive width here.
+    // widths at the file's own measured unit (W29-1.1: PROJECT_A's Arial 8 gives
+    // 353/48/98/108/38/68/68/88, the fixture's Segoe UI 10 keeps 6 px).  A
+    // stored width of 0 is a hidden column (app::table_sheet_columns), so every
+    // column here has a positive width.
     sheet_view_->setMinimumWidth(0);
     const std::vector<DisplayColumn>& columns = sheet_model_.display_columns();
     for (std::size_t index = 0; index < columns.size(); ++index) {
