@@ -93,7 +93,8 @@ enum class StructuralKind : std::uint8_t {
     // Wave 26 (W26-5.1): Project Information's Priority.  The value lives in the
     // project row's FixedData +78 (row 0, uid 0) and is written through
     // mppwrite::TaskTable::set_priority on the project row -- a single-copy
-    // table write (measured in W27-0.3).
+    // table write measured in W27-0.3 (the Project-saved pair differs only at
+    // row 0 +78).
     set_project_priority = 7,
 };
 

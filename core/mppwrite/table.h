@@ -187,8 +187,9 @@ class TaskTable {
     void set_u16(std::size_t row, std::size_t offset, std::uint16_t value);
     void set_u32(std::size_t row, std::size_t offset, std::uint32_t value);
 
-    /* Priority (+78) has exactly one stored copy (Project's own save changes
-     * only that word), so it needs no coordination. */
+    /* Priority (+78) has exactly one stored copy: the Project-saved pair
+     * tests/data/wave27-priority-750.mpp (W27-0.3) changes only that word of
+     * row 0, so it needs no coordination. */
     void set_priority(std::size_t row, std::uint16_t priority);
     /* NOT single-copy: Project's own PercentComplete save (tests/data/
      * wave27-percent-actuals.mpp) also writes ActualDuration (+80), RemainingDuration (+88),
