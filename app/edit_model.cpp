@@ -1779,11 +1779,12 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             row.uid = 0;  // the writer allocates; the app never patches a uid
             // W28-3.1: the row is scheduled with the project's stored mode as
             // it stood when Insert Task was pressed.  The Fixed2Meta bit's two
-            // save shapes are the W45 measurement; the probe behind the mode
-            // pairs records that Project 2021's own InsertTask command put a
-            // Manual=True row under BOTH modes (build/w28/W28-3.1-oracle.log),
-            // so this row flag is the brief's "Insert Task uses it" semantics,
-            // not a blind copy of that command.
+            // save shapes are the W45 measurement; the mode itself is measured:
+            // Project 2021's own InsertTask put its new row (the new unique id)
+            // at Manual=True under the manual option and Manual=False under
+            // auto (build/w28/W28-3.1-project-new-task-mode.json, insert_probe;
+            // Project inserts before the active row and renumbers, so the row
+            // is identified by its new unique id, not by a new ID).
             row.manually_scheduled = edit.manually_scheduled;
             const mppwrite::AddedRow added =
                 mppwrite::add_task_row(document, row, next_write_path());

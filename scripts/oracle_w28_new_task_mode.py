@@ -215,12 +215,20 @@ def main():
                     "path": os.path.relpath(INSERT_FILES[key], ROOT),
                 }
                 facts["insert_probe"][key] = entry
-                new_ids = sorted(set(after) - set(before), key=int)
-                if new_ids:
-                    new_row = after[new_ids[0]]
+                # Project's InsertTask inserts BEFORE the active row and
+                # renumbers, so the new row is NOT a new ID: the row that was
+                # last gains a new ID while the inserted row takes ID 1 and a
+                # new unique id.  Identify it by the unique id (wave-28 review:
+                # an ID-keyed set difference printed the old row that moved).
+                new_uids = sorted({row["unique_id"] for row in after.values()} -
+                                  {row["unique_id"] for row in before.values()})
+                if new_uids:
+                    new_row = next(row for row in after.values()
+                                   if row["unique_id"] == new_uids[0])
                     log(f"InsertTask under "
-                        f"{'manual' if manual else 'auto'} mode: "
-                        f"ID {new_row['id']} Manual={new_row['manual']} "
+                        f"{'manual' if manual else 'auto'} mode: new unique id "
+                        f"{new_uids[0]} at ID {new_row['id']} "
+                        f"Manual={new_row['manual']} "
                         f"Summary={new_row['summary']}")
                 else:
                     log(f"InsertTask under "
