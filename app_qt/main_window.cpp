@@ -1782,6 +1782,12 @@ void MainWindow::handle_action(app::MenuAction action) {
         case app::MenuAction::delete_task:
             delete_task();
             return;
+        case app::MenuAction::indent:
+            indent_selected(true);
+            return;
+        case app::MenuAction::outdent:
+            indent_selected(false);
+            return;
         case app::MenuAction::task_fields:
             // Wave 23 (B-13): Task > Information is Task Information now.
             show_task_information();
@@ -2005,9 +2011,13 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             set_details_visible(checked);
             return;
         case RibbonCommand::outdent:
+            indent_selected(false);
+            return;
         case RibbonCommand::indent:
+            indent_selected(true);
+            return;
         case RibbonCommand::split_task:
-            // Not wired (no engine outline/split edit); disabled until then.
+            // Not wired (no engine split edit); disabled until then.
             return;
         case RibbonCommand::project_information:
             show_project_information();
@@ -2193,6 +2203,51 @@ void MainWindow::set_selected_percent(std::uint16_t percent) {
     after_structural_change(selected.uid);
     set_message("queued " + std::to_string(percent) + "% complete for task uid " +
                     std::to_string(selected.uid) + "; File > Save writes it",
+                false);
+    update_status();
+}
+
+void MainWindow::indent_selected(bool indent) {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr) {
+        set_message(std::string(indent ? "indent" : "outdent") +
+                        " is available in the Task Sheet view",
+                    false);
+        update_status();
+        return;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (!selected.has_selection || selected.uid == 0) {
+        set_message("select a task first", true);
+        update_status();
+        return;
+    }
+    // W28-2.1: the file-side rules live in make_outline_edit -- a saved row,
+    // the measured parent/sibling shape, the marker words and the calendar
+    // arithmetic.  The shell only supplies the displayed plan and the path the
+    // edit must agree with.
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_outline_edit(doc_.plan(), doc_.path(), selected.uid, indent,
+                                edit, error)) {
+        set_message(std::string(indent ? "indent: " : "outdent: ") + error, true);
+        update_status();
+        return;
+    }
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
+        set_message(std::string(indent ? "indent" : "outdent") +
+                        ": the edit was refused",
+                    true);
+        update_status();
+        return;
+    }
+    // The RecordSet is rebuilt, so after_structural_change() detaches the Qt
+    // adapter first; the new outline level and number are on the sheet and the
+    // Gantt's summary bar on the next rebuild (W28-2.2).
+    after_structural_change(selected.uid);
+    set_message("queued " + std::string(indent ? "indent" : "outdent") +
+                    " for task uid " + std::to_string(selected.uid) +
+                    "; File > Save writes it",
                 false);
     update_status();
 }

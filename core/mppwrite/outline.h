@@ -161,6 +161,9 @@ struct OutlineEdit {
     std::uint32_t restored_finish = kInvalidDate;
 };
 
+/* Fixed2Data +42 bit that marks a summary row (see the byte list above). */
+inline constexpr std::uint8_t kOutlineSummaryFlag = 0x40;
+
 struct OutlineWriteResult {
     /* Number of edits actually applied; a refused edit is not counted. */
     std::size_t rows_written = 0;

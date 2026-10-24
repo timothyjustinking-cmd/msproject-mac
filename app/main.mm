@@ -705,6 +705,44 @@ void apply_structural_change(PlanState& plan) {
     rebuild_view(plan);
 }
 
+// Indent/Outdent (W28-2.1): the file-side rules live in app::make_outline_edit,
+// measured from Project's three outline save pairs -- a saved row, the measured
+// parent/sibling shape, the marker words and the calendar arithmetic.  The plan
+// handed over is the displayed one, so a pending insert or delete of the row (or
+// its anchor) is refused with the model's message; nothing is queued.
+void outline_selected_task(PlanState& plan, bool indent) {
+    if (plan.sheet == nullptr || !app::view_mode_is_task(plan.view_mode)) {
+        return;
+    }
+    if (plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    const app::SelectedTask selected = app::selected_task(*plan.sheet, plan.row_map);
+    if (!selected.has_selection || selected.uid == 0) {
+        note(plan, "select a task first", true);
+        return;
+    }
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_outline_edit(plan.base, plan.path, selected.uid, indent, edit, error)) {
+        note(plan, std::string(indent ? "indent: " : "outdent: ") + error, true);
+        return;
+    }
+    if (!plan.edits.push(std::move(edit), &plan.base)) {
+        note(plan, std::string(indent ? "indent" : "outdent") + ": the edit was refused",
+             true);
+        return;
+    }
+    // apply_structural_change() rebuilds the sheet and the Gantt from the display
+    // plan, so the new level, outline number and summary bar are visible before
+    // Save (W28-2.2).
+    apply_structural_change(plan);
+    note(plan, "queued " + std::string(indent ? "indent" : "outdent") +
+                   " for task uid " + std::to_string(selected.uid) +
+                   " (pending; Save writes it)",
+         false);
+}
+
 bool load_plan(PlanState& plan, const std::string& path) {
     plan = PlanState{};
     plan.path = path;
@@ -2577,6 +2615,8 @@ BOOL run_print_view(PlanState& plan, const app::PrintJob& job, NSURL* save_url) 
 - (void)performMenuAction:(id)sender;
 - (void)insertTask:(id)sender;
 - (void)deleteTask:(id)sender;
+- (void)indentTask:(id)sender;
+- (void)outdentTask:(id)sender;
 - (void)taskFields:(id)sender;
 - (void)editPredecessors:(id)sender;
 - (void)tableDateFormat:(id)sender;
@@ -2630,7 +2670,19 @@ static void append_menu_items(NSMenu* menu, const std::vector<app::MenuItemSpec>
             continue;
         }
         [item setAction:@selector(performMenuAction:)];
-        [item setKeyEquivalent:to_ns(item_spec.key)];
+        // W28-2.1: the menu model names the arrow keys ("left"/"right") because
+        // Project binds Indent/Outdent to Option+Shift+Right/Left and neither is
+        // one printable character.  AppKit spells them as the Unicode function-key
+        // code points; every other key stays the literal string.
+        NSString* key_equivalent = to_ns(item_spec.key);
+        if (std::string(item_spec.key) == "left") {
+            key_equivalent = [NSString
+                stringWithFormat:@"%C", static_cast<unichar>(NSLeftArrowFunctionKey)];
+        } else if (std::string(item_spec.key) == "right") {
+            key_equivalent = [NSString
+                stringWithFormat:@"%C", static_cast<unichar>(NSRightArrowFunctionKey)];
+        }
+        [item setKeyEquivalent:key_equivalent];
         NSEventModifierFlags mask = 0;
         if (item_spec.command_key) {
             mask |= NSEventModifierFlagCommand;
@@ -2955,6 +3007,12 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         case app::MenuAction::delete_task:
             [self deleteTask:nil];
             return;
+        case app::MenuAction::indent:
+            [self indentTask:nil];
+            return;
+        case app::MenuAction::outdent:
+            [self outdentTask:nil];
+            return;
         case app::MenuAction::task_fields:
             [self taskFields:nil];
             return;
@@ -3106,6 +3164,28 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     note(plan, "deleted task uid " + std::to_string(selected.uid) + " (pending; Save writes it)",
          false);
     [g_view refreshAfterChange];
+}
+
+// Indent/Outdent (W28-2.1): Project's Option+Shift+Right / Option+Shift+Left
+// commands, sharing one path so the two cannot drift apart.
+- (void)indentTask:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    outline_selected_task(*g_plan, true);
+    [g_view refreshAfterChange];
+    refresh_menu_bar();
+}
+
+- (void)outdentTask:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    outline_selected_task(*g_plan, false);
+    [g_view refreshAfterChange];
+    refresh_menu_bar();
 }
 
 // Task Fields... (wave 13): one modal form for the six measured custom fields

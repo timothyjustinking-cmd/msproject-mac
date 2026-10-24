@@ -406,6 +406,24 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_actuals COMMAND app_edits_actuals_tests)
     set_tests_properties(app_edits_actuals PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 28 (W28-2.1): Indent / Outdent through the app model and save
+    # cascade.  Three committed Project save pairs (indent a leaf, indent a
+    # summary, outdent back); make_outline_edit's calendar words, the display
+    # replay, undo/redo, and the six task streams are all compared with
+    # Project's own save.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_outline_tests app_edits_outline_tests.cpp)
+    target_compile_features(app_edits_outline_tests PRIVATE cxx_std_20)
+    set_target_properties(app_edits_outline_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_outline_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_outline_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_outline_tests)
+
+    add_test(NAME app_edits_outline COMMAND app_edits_outline_tests)
+    set_tests_properties(app_edits_outline PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 26 (W26-3.1): the file's Gantt style record -- the row -> Text Styles
     # category rule and the headless read seam.  The stock fixture is committed;
     # the PROJECT_A half skips when corpus/ is absent.

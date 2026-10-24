@@ -108,6 +108,18 @@ enum class StructuralKind : std::uint8_t {
     // and wave28-update*.mpp; app::make_update_actuals_edit computes the
     // targets with app::percent_through.
     update_actuals = 8,
+    // Wave 28 (W28-2.1): Project's Indent/Outdent on one saved task, written
+    // by mppwrite::write_outline_edits (core/mppwrite/outline.h).  `uid` is
+    // the moved task; `anchor_uid` is the summary row the display touches --
+    // the preceding sibling that becomes the summary on indent, the parent
+    // that becomes a leaf again on outdent.  Indent moves a top-level row
+    // (leaf or summary) under its preceding sibling; outdent moves a LEAF out
+    // of a parent that has no other child (the only shapes Project's three
+    // committed pairs measured).  `summary_duration` and the restored_* words
+    // are computed by app::make_outline_edit from the file's outline and
+    // calendar; a hand-built edit without them is refused by push().
+    outline_indent = 9,
+    outline_outdent = 10,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -169,6 +181,25 @@ struct StructuralEdit {
     bool updates_status_date = false;
     // set_project_priority: Project's project priority, 0..1000.
     std::uint16_t priority = 500;
+
+    // --- outline_indent / outline_outdent (W28-2.1) -------------------------
+    // outline_indent: the new summary's FixedData +84 -- the project
+    // calendar's working time between the moved subtree's earliest +104 and
+    // latest +108.  The writer computes those two dates itself; this value is
+    // the caller's (outline.h).
+    std::uint32_t summary_duration = 0;
+    // outline_outdent: the parent's 0x0B40007C marker words.  The writer
+    // re-reads the marker and refuses when these no longer match (the file
+    // changed after the edit was made), so they are the proof the restore is
+    // the shape Project measured.
+    std::uint32_t restored_duration = 0;
+    std::uint16_t restored_duration_format = 0;
+    // outline_outdent: the leaf schedule computed from the marker and the
+    // parent's +104 (make_outline_edit); the writer only proves they are
+    // valid dates in order.
+    date32 restored_start = kDateNa;
+    date32 restored_finish = kDateNa;
+
     core::gantt::LinkType link_type = core::gantt::LinkType::finish_to_start;
     // The lag in 6-second file ticks (4800 = one 8-hour working day).
     std::int32_t lag_ticks = 0;
@@ -247,6 +278,36 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
                               date32 through_date, bool updates_status_date,
                               StructuralEdit& out, std::string& error);
 
+// ---------------------------------------------------------------------------
+// Wave 28 (W28-2.1): Indent / Outdent
+// ---------------------------------------------------------------------------
+//
+// Builds a ready-to-push outline edit for the saved task `uid`, from the
+// file's own stored outline (mppwrite::read_outline_rows / read_outline_marker)
+// and project calendar.  The file is the authority because the writer derives
+// the parent link, the child list and the marker from it; the plan is checked
+// too, and an edit whose display row/level disagrees with the file (a pending
+// insert above it, a pending outline edit not yet saved) is refused rather
+// than queued against a shape the save cannot reproduce.
+//
+//   indent : `uid` must be a top-level saved row (leaf or summary -- both
+//            measured) whose preceding sibling is a live leaf.  The new
+//            summary's duration is the calendar working time between the
+//            moved subtree's earliest start (+104) and latest finish (+108).
+//   outdent: `uid` must be a saved leaf whose parent has exactly one child
+//            and a 0x0B40007C marker.  The restored schedule is
+//            next_start(parent +104) and add_work(that start, marker
+//            duration), and the marker words are carried so the writer can
+//            prove the file has not moved under the edit.
+//
+// uid 0, an unknown uid, a pending insert (file_row == 0), a summary for
+// outdent, an unreadable file/outline/calendar, and the shapes outline.h lists
+// as unmeasured are refused with `error` naming the reason.  `out` is left
+// default-constructed on refusal.
+bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
+                       std::uint32_t uid, bool indent, StructuralEdit& out,
+                       std::string& error);
+
 // The pending edits, in application order, with an undo/redo cursor.
 class StructuralEdits {
   public:
@@ -278,6 +339,15 @@ class StructuralEdits {
     // actual ticks must agree with the percent and the row's duration, and a
     // target with a pending task delete is refused (the row would be gone when
     // the save ran).  The through date must be a real date.
+    //
+    // An outline edit REQUIRES `plan` too (W28-2.1): `uid` must be a saved row
+    // (file_row != 0) at the display level the shape needs (top level for
+    // indent, below the top for outdent), a summary is refused for outdent,
+    // `anchor_uid` must be the display row the shape names (the preceding
+    // sibling for indent, the parent for outdent), the restored words must be
+    // valid dates in order, and a pending delete of the moved row or its
+    // anchor is refused.  make_outline_edit performs the file-side checks;
+    // push() re-checks everything the plan alone can prove.
     //
     // Pushing a delete_task also removes the set/clear field edits, percent
     // edits, update_actuals edits that name the task and add_link edits: those
@@ -373,6 +443,10 @@ struct StructuralSaveResult {
     std::size_t percent_rows_written = 0;
     // Wave 26 (W26-5.1): 1 when the project row's Priority was written.
     std::size_t priority_rows_written = 0;
+    // Wave 28 (W28-2.1): outline edits the writer applied.  A refused edit is
+    // reported in `warnings` and is not counted; the rest of the cascade lands
+    // (the W27-3.1 refusal rule).
+    std::size_t outline_rows_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the
@@ -464,9 +538,15 @@ struct StructuralDocumentEdits {
 //                        warning and does not fail the save (W27-3.1): the rest
 //                        of the cascade still lands, so a bad edit can never
 //                        block every later Save;
-//   5b. document edits-> only when `document_edits.hook` is set: the hook runs on
-//                        the SAME CfbDocument, after step 5 and before the final
-//                        write (this is the wave-17 seam);
+//   5b. outline edits  -> mppwrite::write_outline_edits (W28-2.1): one call for
+//                        every queued indent/outdent, in application order,
+//                        after the actuals write (so a date update's changed
+//                        child dates are the ones the summary dates come from)
+//                        and before the hook.  A refused edit is a warning, not
+//                        a failed save, exactly like step 5a;
+//   5c. document edits-> only when `document_edits.hook` is set: the hook runs on
+//                        the SAME CfbDocument, after steps 5/5a/5b and before
+//                        the final write (this is the wave-17 seam);
 //   6. start dates    -> the normal mppwrite::save_date_edits path; when no start
 //                        edit is writable but a hook ran, the final write is an
 //                        explicit mppwrite::CfbDocument::save instead.

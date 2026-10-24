@@ -9,8 +9,10 @@
 // items in one menu sharing a key equivalent; the documented key equivalents for
 // Open/Save/Save As/Undo/Redo/Copy/Paste/Select All/Zoom/Filter; the wave-12
 // Insert > Task (Cmd-I) and Edit > Delete Task (Cmd-Backspace) items and their
-// enablement; and -- importantly -- that the two things the model cannot do
-// (Insert > Resource, Cut) are PRESENT, permanently disabled, and carry a reason.
+// enablement; the wave-28 outline items (Option+Shift+Right/Left, no Command,
+// matching Project); and -- importantly -- that the two things the model cannot
+// do (Insert > Resource, Cut) are PRESENT, permanently disabled, and carry a
+// reason.
 
 #include <cstddef>
 #include <cstdio>
@@ -263,6 +265,8 @@ void test_documented_menu_contents() {
     bool paste = false;
     bool select_all = false;
     bool delete_task = false;
+    bool indent_task = false;
+    bool outdent_task = false;
     bool task_fields = false;
     bool predecessors = false;
     bool custom_field_formula = false;
@@ -298,6 +302,16 @@ void test_documented_menu_contents() {
             delete_task = std::string(item.key) == "\b" && item.command_key &&
                           !item.shift && !item.option && item.separator_before;
         }
+        if (item.action == MenuAction::indent) {
+            // W28-2.1: Project's key is Option+Shift+Right with NO Command, so
+            // the spec's command_key must be false (item_no_command).
+            indent_task = std::string(item.key) == "right" && item.shift && item.option &&
+                          !item.command_key && std::string(item.title) == "Indent Task";
+        }
+        if (item.action == MenuAction::outdent) {
+            outdent_task = std::string(item.key) == "left" && item.shift && item.option &&
+                           !item.command_key && std::string(item.title) == "Outdent Task";
+        }
     }
     check(undo, "Undo is Cmd-Z");
     check(redo_shift, "Redo is Cmd-Shift-Z");
@@ -305,6 +319,8 @@ void test_documented_menu_contents() {
     check(paste, "Paste is Cmd-V");
     check(select_all, "Select All is Cmd-A");
     check(delete_task, "Delete Task is Cmd-Backspace, after a separator");
+    check(indent_task, "Indent Task is Option+Shift+Right, no Command");
+    check(outdent_task, "Outdent Task is Option+Shift+Left, no Command");
     check(task_fields && predecessors,
           "Task Fields and Predecessors are in Edit with no key equivalent");
     check(custom_field_formula,
@@ -529,6 +545,33 @@ void test_enablement() {
           "Insert Task works without a selection (it appends at the end)");
     check(!app::menu_item_enabled(MenuAction::delete_task, structural),
           "Delete Task needs a selected row");
+    // W28-2.1: the outline commands follow Delete Task's structural rules (a
+    // document, the Task Sheet view, a selected saved row, no open cell edit).
+    // A shape Project's three save pairs did not measure is refused by
+    // make_outline_edit with a status message, never by a greyed-out item.
+    check(app::menu_item_supported(MenuAction::indent), "Indent Task is supported");
+    check(app::menu_item_supported(MenuAction::outdent), "Outdent Task is supported");
+    check(app::menu_item_enabled(MenuAction::indent, everything_state()),
+          "Indent Task works with a selection");
+    check(app::menu_item_enabled(MenuAction::outdent, everything_state()),
+          "Outdent Task works with a selection");
+    check(!app::menu_item_enabled(MenuAction::indent, empty_state()),
+          "Indent Task needs a document");
+    check(!app::menu_item_enabled(MenuAction::outdent, empty_state()),
+          "Outdent Task needs a document");
+    MenuState outline = everything_state();
+    outline.has_selection = false;
+    check(!app::menu_item_enabled(MenuAction::indent, outline),
+          "Indent Task needs a selected row");
+    check(!app::menu_item_enabled(MenuAction::outdent, outline),
+          "Outdent Task needs a selected row");
+    outline = everything_state();
+    outline.editing = true;
+    check(!app::menu_item_enabled(MenuAction::indent, outline),
+          "Indent Task is off while a cell edit is open");
+    check(!app::menu_item_enabled(MenuAction::outdent, outline),
+          "Outdent Task is off while a cell edit is open");
+
     structural = everything_state();
     structural.task_view = false;
     check(!app::menu_item_enabled(MenuAction::insert_task, structural),
@@ -539,6 +582,10 @@ void test_enablement() {
           "Task Fields is task-view only");
     check(!app::menu_item_enabled(MenuAction::predecessors, structural),
           "Predecessors is task-view only");
+    check(!app::menu_item_enabled(MenuAction::indent, structural),
+          "Indent Task is task-view only");
+    check(!app::menu_item_enabled(MenuAction::outdent, structural),
+          "Outdent Task is task-view only");
 
     // The wave-13 dialogs act on the selected task: a selection is required, an
     // open cell edit and an empty state both disable them.

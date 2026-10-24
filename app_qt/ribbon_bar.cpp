@@ -274,9 +274,15 @@ const std::vector<TabSpec>& tab_specs() {
               "schedule.respect_links");
         small(schedule, "Inactivate", app::MenuAction::none, 96, 1, 6, false, 1, false,
               "schedule.inactivate");
-        small_cmd(schedule, "outdent", RibbonCommand::outdent, 18, 1, 0, false, true,
+        // W28-2.1: Indent/Outdent are ENABLED on the measured outline writer
+        // (app::make_outline_edit -> mppwrite::write_outline_edits), which
+        // reproduces Project's own indent/summary/outdent save pairs.  The
+        // handler refuses the shapes Project's pairs did not measure (a first
+        // top-level row, a summary outdent) with a status message; it never
+        // queues a write for them.
+        small_cmd(schedule, "outdent", RibbonCommand::outdent, 18, 1, 0, true, true,
                   "schedule.outdent");
-        small_cmd(schedule, "indent", RibbonCommand::indent, 20, 1, 1, false, true,
+        small_cmd(schedule, "indent", RibbonCommand::indent, 20, 1, 1, true, true,
                   "schedule.indent");
         small_cmd(schedule, "link tasks", RibbonCommand::link_tasks, 20, 1, 2, true, true,
                   "schedule.link");

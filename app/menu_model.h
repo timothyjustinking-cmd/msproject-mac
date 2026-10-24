@@ -75,6 +75,12 @@ enum class MenuAction : std::uint8_t {
     // into its link/assignment rows (w11-oracle section 2); the shell confirms the
     // cascade size first.
     delete_task,
+    // Wave 28 (W28-2.1): Project's Indent/Outdent (Alt+Shift+Right / Left on
+    // Project; Option+Shift+arrows here, without Command).  They queue the
+    // measured outline edit (app::make_outline_edit) that Save writes with
+    // mppwrite::write_outline_edits.
+    indent,
+    outdent,
     // Wave 13: the two pending-edit dialogs.  Both act on the selected task and
     // both queue edits the Save path writes (app/edit_model.h): Task Fields edits
     // the six measured custom fields, Predecessors adds/removes incoming links.

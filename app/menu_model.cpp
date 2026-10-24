@@ -24,6 +24,16 @@ MenuItemSpec item(MenuAction action, const char* title, const char* key = "",
 // WAVE 26 (W26-6.1): a drop-down container.  It has no action or key of its
 // own; the children are ordinary MenuItemSpecs and are what the builders
 // create actions for.
+// W28-2.1: Project binds Indent/Outdent to Alt+Shift+Right / Left -- no
+// Command.  `item` always sets the Command modifier, so outline items take
+// this variant.
+MenuItemSpec item_no_command(MenuAction action, const char* title, const char* key,
+                             bool shift, bool option) {
+    MenuItemSpec spec = item(action, title, key, shift, option);
+    spec.command_key = false;
+    return spec;
+}
+
 MenuItemSpec submenu(const char* title, std::vector<MenuItemSpec> children,
                      bool separator_before = false) {
     MenuItemSpec spec;
@@ -76,6 +86,11 @@ std::vector<MenuSpec> build_menu_specs() {
         // Wave 12.  Cmd-Backspace is the Mac's "delete"; Delete Task is a
         // structural edit and asks for confirmation before it runs.
         item(MenuAction::delete_task, "Delete Task", "\b", false, false, true),
+        // Wave 28 (W28-2.1): Project's indent/outdent keys.  A shape Project's
+        // three save pairs did not measure is refused with a status message,
+        // never queued, so the item is enabled with a selected saved task.
+        item_no_command(MenuAction::indent, "Indent Task", "right", true, true),
+        item_no_command(MenuAction::outdent, "Outdent Task", "left", true, true),
         // Wave 13: the two pending-edit dialogs.  They act on the selected task;
         // no key equivalents (they are forms, not blind commands).
         // Wave 23 (B-13): Task > Information opens the six-tab Task Information
@@ -207,6 +222,8 @@ const std::vector<MenuAction>& all_menu_actions() {
         MenuAction::usage_month,
         MenuAction::insert_task,
         MenuAction::delete_task,
+        MenuAction::indent,
+        MenuAction::outdent,
         MenuAction::task_fields,
         MenuAction::custom_fields,
         MenuAction::predecessors,
@@ -335,6 +352,8 @@ bool menu_item_enabled(MenuAction action, const MenuState& state) noexcept {
             return state.has_document;
         case MenuAction::insert_task:
         case MenuAction::delete_task:
+        case MenuAction::indent:
+        case MenuAction::outdent:
         case MenuAction::task_fields:
         case MenuAction::custom_fields:
         case MenuAction::predecessors:
@@ -401,6 +420,8 @@ const char* menu_action_name(MenuAction action) noexcept {
         case MenuAction::usage_month: return "usage_month";
         case MenuAction::insert_task: return "insert_task";
         case MenuAction::delete_task: return "delete_task";
+        case MenuAction::indent: return "indent";
+        case MenuAction::outdent: return "outdent";
         case MenuAction::task_fields: return "task_fields";
         case MenuAction::custom_fields: return "custom_fields";
         case MenuAction::predecessors: return "predecessors";
