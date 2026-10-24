@@ -175,6 +175,26 @@ DOCUMENTED = {
         "17BA9E3FEC598ABB736FB6723E50A331E29FBEA447FB21EDD1F05493743774A9",
     "tests/data/wave28-percent-manual40.mpp":
         "4EF4CB7FD7B115E7FDB2F9F2CC02EC026FBD73E3E28F78725E84B1F0230438C7",
+    # Wave 28 (W28-1.3): one same-session Project 2021 save pair per update
+    # command, built by scripts/oracle_w28_update.py under C:/w28 with neutral
+    # metadata.  The Mark on Track pairs carry status date 2026-01-07 00:00 in
+    # the control and change only the selected row (auto row 1 -> 40 %, manual
+    # row 2 -> 83 %).  The Update Project pair stores no status date in the
+    # control; UpdateProject(All, 2026-01-07, pj0to100Percent) moves all three
+    # rows (50/83/100 %) and stores the through date as the status date, so the
+    # port's Update Project save owns that 4-byte 114/Props record too.
+    "tests/data/wave28-mark-auto-control.mpp":
+        "13AD22E4E337FBBBA0C25A5A9A8883C1D6A25A05E6A1103E2B6B962B28684A83",
+    "tests/data/wave28-mark-auto.mpp":
+        "9ABC9FB58E36D2A9DBE6597496E6AD9E94463E7BDB1601C87B79953D3AB900A1",
+    "tests/data/wave28-mark-manual-control.mpp":
+        "41D774786BA76FDBDB3DB7D5670BFE892FBDAFA61805B39F6A912BDD4A5DFA1A",
+    "tests/data/wave28-mark-manual.mpp":
+        "DEF4ABF59135BFD3488B73D02E6955C03A38117778D3E7B80578E49096CADE56",
+    "tests/data/wave28-update-control.mpp":
+        "66847BFBF5C8BFEAE79A7847AF374DD0BB871C9B2E23D853C67D06DECA6D3164",
+    "tests/data/wave28-update.mpp":
+        "66E26371D5B5BC0A8A2A24213492CED9B06D1F4743F75BFAA3FE0DC49209EE62",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
