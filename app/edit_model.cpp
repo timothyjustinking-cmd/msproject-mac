@@ -261,6 +261,17 @@ bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t p
                 " is not a live task in the file (a pending insert has no saved row)";
         return false;
     }
+    // W28-1.2: presence in a PlanInput is not evidence that the file has a
+    // saved row.  StructuralEdits::apply() puts pending inserts into the plan
+    // it returns (with file_row 0), so a shell that hands back the applied
+    // plan would otherwise queue a % edit whose value the save silently drops
+    // while reporting success (the wave-27 review's finding).
+    if (row->file_row == 0) {
+        error = "task uid " + std::to_string(uid) +
+                " is not a saved task (a pending insert has no file row), so its "
+                "% complete cannot be written";
+        return false;
+    }
     if (row->summary) {
         error = "task uid " + std::to_string(uid) +
                 " is a summary task; Project computes its % complete from its children, "
