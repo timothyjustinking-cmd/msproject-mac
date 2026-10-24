@@ -104,3 +104,109 @@ and built serially under `build/w27-fresh{,-app,-qt}` (log
   W27-0.3 does for Task FixedData.
 
 WAVE-27-G0-COMPLETE
+
+## G1 - CI green on all three OSs
+
+All three items are DONE; nothing in G1 is deferred.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W27-1.1 | `widest_line` unused: an error under GCC/Clang, so the Linux and macOS Qt builds stop | **DONE** | commit `5cd1c61`; gate log `build/w27/gates-8e7895f-W27-1.1.log` |
+| W27-1.2 | oracle-provenance sub-check needs history; CI checks out one commit | **DONE** | commit `2f80dd1`; gate log `build/w27/gates-5cd1c61-W27-1.2.log` |
+| W27-1.3 | push, dispatch both workflows, fix the first macOS/Linux failures | **DONE** | commits `61772a5`, `231a422`, `9b69e9c`, `07f67b6`, `1d0a92a`; final green runs `40056060660` (qt-shell, three OSs), `40056462711` (ci, two OSs), `40056064713` (app-macos) |
+
+W27-1.1 detail:
+
+- `app_qt/ribbon_bar.cpp`'s anonymous-namespace `widest_line()` had no
+  caller.  It and the two includes only it used (`<QFontMetrics>`, `<algorithm>`)
+  are removed; `<QFont>` stays for `ribbon_font()`.  No behaviour change.
+- MSVC passed it; GCC and Clang fail `-Wunused-function` under `-Werror`.
+  The first wave-27 qt-shell run (`40053878076`) reached the Linux and macOS
+  builds past this point, and the final green run `40056060660` shows both
+  compilers accept the tree.
+
+W27-1.2 detail:
+
+- Both checkouts now use `actions/checkout@v4` with `fetch-depth: 0` (ci.yml
+  keeps its `ref:` expression for the workflow_run case beside it).
+  `scripts/check_fixtures.py`'s provenance walk sees full history, so the
+  last-measured-body check verifies on a runner rather than failing every
+  oracle on a one-commit clone.
+- The fixtures step passed on windows-msvc and ubuntu-gcc in ci run
+  `40056462711`, and in all three qt-shell jobs of `40056060660`.
+
+W27-1.3 detail:
+
+The brief names `app/main.mm` ("not compiled since wave 24"), which only the
+`app-macos` workflow compiles, so that workflow was dispatched alongside the
+two the standing rules name.  It found two real breaks.  Dispatch series
+(all on branch `wave27`; every red was fixed before the next dispatch):
+
+| tip | qt-shell | ci | app-macos |
+|---|---|---|---|
+| `2f80dd1` | `40053878076` red: linux-qt backstage ink, macos-qt build (`kRailBackground`, `kSeparator`) | `40053880511` **green** | `40053935957` red: `main.mm:1524` undeclared `refresh_menu_items` |
+| `61772a5` | - | - | `40054198682` red: declaration put in the anonymous namespace, recursive call ambiguous |
+| `9b69e9c` | `40054734014` red: macos-qt About check (`activeModalWidget` null) | `40054736287` **green** | `40054738405` **green** |
+| `07f67b6` | `40055403392` red: macos-qt About title | `40055405582` **green** | `40055407782` **green** |
+| `1d0a92a` | `40056060660` **green** (linux-qt, windows-qt, macos-qt) | `40056062664` red: windows-msvc `cal` SEGFAULT; re-dispatch `40056462711` **green** | `40056064713` **green** |
+
+- `61772a5` + `231a422` (main.mm): W26-6.1's recursive
+  `refresh_menu_items()` is defined at global scope near the bottom of the
+  file and called from `refresh_menu_bar()` inside the first anonymous
+  namespace.  `231a422` puts the forward declaration at global scope, before
+  the namespace, matching the definition; the wrong-scope first attempt is
+  kept in history as the evidence for the ambiguity error.
+- `9b69e9c` (qt): removed the two unused colour constants Clang rejected
+  (GCC had accepted them); and replaced the two "HSL-darkest pixel equals the
+  ink" rail checks with "the row contains the measured ink within the
+  12-per-channel tolerance the selected-green check already uses" (Linux
+  FreeType can make an antialiasing fringe darker than the glyph core).  The
+  selected-green and disabled-ink assertions are unchanged in strength:
+  #242424 is still separated from black and from #999999.
+- `07f67b6` + `1d0a92a` (qt): the About box is found by walking
+  `QApplication::topLevelWidgets()` (the repo's dialog idiom) instead of
+  `activeModalWidget()`, which returned null on macOS; and it is identified
+  by its text (product name + measured version), because macOS does not
+  carry the QMessageBox window title the check had pinned.  The dialog is
+  closed so `exec()` returns.
+- ci `40056062664`'s windows-msvc `cal` SEGFAULT was triaged as a runner
+  flake, not a code defect: the core sources at `1d0a92a` are identical to
+  the green ci run `40055405582` at `07f67b6` (the only change between them
+  is `app_qt/tests/backstage_gate_test.cpp`, outside the root project), and
+  `cal` passed 20/20 local repeats on MSVC.  Re-dispatch `40056462711` was
+  green on both OSs.
+
+Group gates on the final commit `1d0a92a`, fresh trees configured from
+scratch under `build/w27-fresh{,-app,-qt}` and built serially (log
+`build/w27/g1-fresh-gates.log`):
+
+- core configure/build exit 0 with `CORE_WARNINGS_AS_ERRORS=ON`; core ctest
+  `-E plan_recalc` 51/51
+- `plan_recalc` 512 checks with corpus / 266 with `MPP_NO_CORPUS=1`
+- engine `--selftest` 53 checks, 0 failures; `--suite --expect-fail
+  constraint-mso` reached the expected failing set, exit 0
+- reader 1100 checks with corpus / 420 without; M2 `recalc --compare`
+  332/332 (268 leaf + 64 summary fields)
+- app ctest 17/17; app_qt ctest 23/23
+- fixtures OK (28 documented hashes, 24 tracked `.mpp`), oracle provenance
+  OK (8)
+- client-name scan 0 hits on HEAD; whitespace-normalised `guard_names.py` 0
+  on `c632c8f..HEAD`; client-string hex grep no matches
+
+Per-commit gate logs: `build/w27/gates-8e7895f-W27-1.1.log`,
+`gates-5cd1c61-W27-1.2.log`, `gates-2f80dd1-W27-1.3.log`,
+`gates-61772a5-W27-1.3.log`, `gates-231a422-W27-1.3.log`,
+`gates-9b69e9c-W27-1.3.log`, `gates-07f67b6-W27-1.3.log` (all under
+`build/w27/`).  CI watch logs are beside them as `ci-watch-*`.
+
+## Found, not fixed (G1)
+
+- macOS does not surface the `QMessageBox::about` window title the Windows
+  run carries; the gate now asserts the box's text and prints the title as
+  a note.  This is a platform difference in Qt, not a port defect.
+- ci run `40056062664`'s `cal` SEGFAULT happened once on an unchanged core
+  tree and did not reproduce (20/20 local repeats, green re-dispatch).  If
+  it recurs, treat it as a runner-memory symptom and add the `cal` binary to
+  the triage, not a scheduling change.
+
+WAVE-27-G1-COMPLETE
