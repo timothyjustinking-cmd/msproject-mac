@@ -535,3 +535,93 @@ wave-level blocker inherited from G0 (an intermediate blob history cannot be
 rewritten), not a G4 failure.
 
 WAVE-28-G4-COMPLETE
+
+## G5 - split task
+
+W28-5.1 is DEFERRED, with the measurement evidence the brief requires.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W28-5.1 | Split Task on a leaf task: measure Project's one split and decide from the bytes whether the writer can produce it | **DEFERRED** | commits `cc803c1` (oracle), `64c3b4c` (pair, README, hashes), `1d4e830` (notes wording); measurement `build/w28/W28-5.1-project-split.json`, `build/w28/w28-5.1-split-pair-diff.txt`; decision `build/w28/W28-5.1-split-decision.log`; gates `build/w28/W28-5.1-oracle-script-gate.log`, `build/w28/W28-5.1-fixture-pair-gate.log`, `build/w28/g5-fresh-gates.log` |
+
+W28-5.1 detail:
+
+- Measurement. `Application.SplitTask` is the interactive split tool: the COM
+  call waits for a split date and the Guard had to kill WINPROJ after 300 s
+  (`build/w28/probe_split3.py`).  The split is therefore written through the
+  object model the UI itself updates, on an automatic leaf: with aware-UTC
+  dates (a naive datetime is shifted by the local timezone), setting
+  `Task.SplitParts(1).Finish = 2026-01-07 17:00` and then
+  `SplitParts.Add(2026-01-09 08:00, 2026-01-12 17:00)` turns automatic ID 1
+  from 5 days (Mon 2026-01-05 08:00 -> Fri 2026-01-09 17:00, one part) into the
+  same 5 days in two parts (Mon 08:00 -> Wed 17:00 and Fri 08:00 -> Mon
+  2026-01-12 17:00).  The committed pair
+  `tests/data/wave28-split-control.mpp` / `wave28-split.mpp` comes from ONE
+  continuous Project 2021 session on a neutral `C:/w28` copy with neutral
+  metadata (`scripts/oracle_w28_split.py`); Project's reopen of both files
+  reads the facts back exactly (`build/w28/W28-5.1-project-split.json`).
+- The bytes.  The split is stored on the ASSIGNMENT, not in the task table:
+  assignment uid 1's `0x0F400031` planned-work contour is a 100-byte flat
+  block in the control (VarMeta address 8, length word 100, first content u32
+  `0x00200000`, two 28-byte records) and a 128-byte segmented block in the
+  split (address 396, length word 128, first content u32 `0x00200003`, three
+  28-byte records); the VarMeta entry moves 8 -> 396 and
+  `TBkndAssn/Var2Data` grows 396 -> 528 (+132, the block and its length word),
+  the old block at 8 now unreferenced.  The assignment finish moves +3 days.
+  Task row 1 moves +100/+108/+116 (stored, effective and late finish) +3 days
+  and gains a previously unmeasured `+168` bit `0x2000` (0x80 -> 0x2080).  The
+  project row's Duration and RemainingDuration go 24000 -> 28800 ticks (+4800,
+  one working day) and its +100/+108/+116 finish words +3 days; rows 2-3 gain
+  4800 ticks (one working day) of free/start/total slack, with LateStart
+  +1 day and LateFinish +3 days.  `TBkndTask` FixedMeta, VarMeta and Var2Data
+  do not change:
+  `SplitParts` is not a stored task field Project rewrites (the field appears
+  only in the generated name table, `core/model/field_table.gen.cpp:254`).
+- Decision: the writer cannot produce this in this wave.  `mppwrite` decodes only
+  the FLAT planned-work contour (72 bytes when it writes one,
+  `core/mppwrite/add_delete.cpp:2160-2165`, `add_delete.h:612`); its contour
+  builder writes that flat template only and REFUSES a uid that already has a
+  contour entry (:3054-3057), and the measured actuals writer records
+  `TBkndAssn work contours` as NOT WRITTEN (`core/mppwrite/actuals.h:48`), with
+  every save-pair test requiring the non-owned streams to equal the control.
+  The segmented 128-byte block, its 28-byte cumulative work/time records and
+  the VarMeta relocation are not decoded anywhere in the port; the task-table
+  side is a whole-plan reschedule (project duration, every row's slack/late
+  dates) plus a new progress bit, not a local row write.  Implementing it
+  would need a decoded segmented-contour format, a contour replace writer, a
+  full CPM reschedule save and a measured split-date policy in the app.  The
+  committed pair is what a later writer's save is compared with field by
+  field; this wave adds no save path.
+- The button is unchanged and stays disabled with the exact tooltip:
+  `app_qt/ribbon_bar.cpp:291` passes `enabled=false` and the control builder
+  sets `"not implemented in this port"` (:628-630); the handler
+  `app_qt/main_window.cpp:2049-2051` is still the unwired no-op.  The ribbon
+  inventory gate checks every disabled control carries that exact string
+  (`app_qt/tests/ribbon_inventory_test.cpp:313`).
+- Full measurement/decision log: `build/w28/W28-5.1-split-decision.log`
+  (local, like every build/ artifact); the pair, its hashes and the README
+  row are committed so the bytes can be re-read without Project.
+
+Group gates (fresh trees configured from scratch under
+`build/w28-fresh{,-app,-qt}`, serial, tree `64c3b4c`, log
+`build/w28/g5-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks passed |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded, 7 pass, 1 expected fail |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks passed |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match |
+| app ctest / app_qt ctest | 20/20 / 24/24 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (72 documented hashes, 52 tracked `.mpp`); paths OK (94 files); provenance OK (8 oracles) |
+| client-name scan on HEAD / `guard_names` wave range / G5 range | scan on HEAD: 0 files / 0 hits; `wave27..HEAD` still refuses the intermediate `synthetic-calendars.mpp` blob from 076438f (exit 1, the known G0 blocker); `3fe29cc..HEAD` 0 hits (exit 0); hex grep no matches (exit 1, expected) |
+
+The gate script exited 0; every gate in the table exited 0 except the two
+listed with exit 1 for known reasons: the hex grep's 1 is its no-match success,
+and the wave-range guard's 1 is the wave-level blocker inherited from G0 (an
+intermediate blob history cannot be rewritten), not a G5 failure.  The G5 range
+is 0.
+
+WAVE-28-G5-COMPLETE
