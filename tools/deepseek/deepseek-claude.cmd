@@ -19,6 +19,9 @@ set "ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-flash[1m]"
 set "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-flash"
 set "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-flash"
 set "CLAUDE_CODE_EFFORT_LEVEL=max"
-set "CLAUDE_CODE_AUTO_COMPACT_WINDOW=786432"
+rem Compact at ~200k tokens, not 786k: every turn re-reads the whole context, so a
+rem smaller working context cuts per-turn cost and latency (wave 26 averaged ~285k
+rem tokens per turn; see docs/handoff/assessment-2026-10-24.md section 6).
+set "CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000"
 cd /d "%~dp0..\.."
 claude %*
