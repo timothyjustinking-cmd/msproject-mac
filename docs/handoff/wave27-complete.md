@@ -307,3 +307,174 @@ Per-commit gate logs: `build/w27/gates-97e0b81-W27-2.1.log` (fixtures),
   the rendering finding, not to W27-2.1's fixtures and tests.
 
 WAVE-27-G2-COMPLETE
+
+## G3 - the cheap queued review items
+
+All six items are DONE; nothing in G3 is deferred.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W27-3.1 | A % edit on a pending inserted task makes every save fail (wave-26 review item 9) | **DONE** | commit `1ad385d`; gates `build/w27/gates-36cafbf-W27-3.1.log` |
+| W27-3.2 | Deleting a task discards its pending edits and undo does not restore them | **DONE** | commit `032cee2`; gates `build/w27/gates-1ad385d-W27-3.2.log` |
+| W27-3.3 | Unlink: measure Project's Unlink Tasks on a task with both a predecessor and a successor (COM `UnlinkTasks`, count `TaskDependencies`) and match it | **DONE** | fixtures `8cad902`, code `8fe6c18`; gates `build/w27/gates-8cad902-W27-3.3.log` |
+| W27-3.4 | The new save tests in `app/app_edit_tests.cpp` pass when the load fails; make a failed load fail the test | **DONE** | commit `c7679bc`; gates `build/w27/gates-8fe6c18-W27-3.4-clean.log` |
+| W27-3.5 | `app_qt/tests/task_order_test.cpp` pins 13 unsalted FNV-1a hashes of PROJECT_A display names, including the project title (invertible); replace with ID-and-structure checks against the corpus at test time | **DONE** | commit `c7283d7`; gates `build/w27/gates-c7679bc-W27-3.5.log` |
+| W27-3.6 | Two files are wholly CRLF against `docs/build.md`'s LF rule (`app_qt/project_dialogs_qt.cpp`, `app_qt/tests/project_dialog_gate_test.cpp`) | **DONE** | commit `1bf7b99` (also `app/edit_model.cpp`, left by G0); gates `build/w27/gates-c7283d7-W27-3.6.log` |
+
+W27-3.1 detail:
+
+- No UI path can queue the edit.  The five % buttons were already disabled
+  (W27-0.1), and `StructuralEdits::push` refuses a `set_percent` whose uid has
+  no live, non-summary file row through `make_percent_edit` (W27-0.2).  The new
+  model check builds a hand-made percent edit for a uid the plan lacks and
+  asserts the refusal.
+- The save layer no longer trusts the queue.  `save_structural_edits` looks a
+  percent edit's uid up with a non-throwing table scan instead of
+  `TaskTable::row_for_uid`; an absent uid refuses that ONE edit with a warning
+  naming the uid, and the rest of the cascade and the target write still
+  happen.  `row_for_uid` stays throwing for its other callers, which treat an
+  absent uid as a bug.
+- The real-save test appends uid 999 to the display plan only, queues 25 %, and
+  saves the same queue twice: both saves return ok, zero percent rows are
+  written, the warning names 999 and the target is non-empty -- so a stale or
+  hand-built queue cannot poison every later Save.  app_edit 148 checks at this
+  commit.
+
+W27-3.2 detail:
+
+- `StructuralEdit::displaced` holds the field, clear-field, percent and
+  link-add edits a delete removes from the applied list.  They still must not
+  be written before the delete (the delete cascade would undo them), but they
+  are no longer destroyed: `undo()` restores them in their original order and
+  `redo()` detaches them again into the delete so a second undo restores them.
+  One helper, `detach_edits_naming`, implements the removal for push and redo.
+- The model test queues 40 %, a custom text field and a 3 -> 1 link add, deletes
+  the task and asserts three displaced edits; it then checks the display plan
+  (task hidden), undo (all three applied again, percent and link visible), redo
+  (all three displaced again) and undo after redo (restored again).
+- The real-save test does the review's falsifying sequence: 25 %, delete the
+  task, undo, Save.  The saved file re-reads with the task at 25 % and one
+  percent row written.  app_edit 177 checks at this commit.
+
+W27-3.3 detail:
+
+- Measurement.  A neutral copy of synthetic `wave23-outline.mpp` was opened in
+  Project 2021 and saved as the same-session control; uid 4 -- the one task
+  with both a predecessor (3 -> 4 FS+2 d) and a successor (4 -> 6 FF) -- was
+  selected and Task > Unlink Tasks was run.  Through COM, `TaskDependencies`
+  went 3 -> 1: both links touching uid 4 were removed, the unrelated
+  3 -> 5 SS+1 d link survived, and the count was still 1 after reopen.  The
+  selected task's own collection went 2 -> 0.  The oracle is
+  `scripts/oracle_w27_unlink.py`; the pair is
+  `tests/data/wave27-unlink-control.mpp` / `wave27-unlink.mpp` (synthetic,
+  neutral metadata; SHA-256s in `tests/data/README.md` and
+  `scripts/check_fixtures.py`).
+- On disk the link `FixedData` stream is byte-identical between the pair;
+  `FixedMeta` tombstones entries 0 and 2 (state byte +0 00 -> 02) and sets the
+  header flags word 4 -> 6.  The `Fixed2Data`/`Fixed2Meta` differences are
+  per-save GUID bookkeeping: the control already differs from the base there.
+- Port change.  `app::saved_links_touching(plan, edits, uid)` returns every
+  saved link naming the task at either end, skipping a link a pending
+  `delete_link` already removes; a pending add has no saved row (uid 0) and is
+  not returned.  `make_link_delete_edit` addresses the link by `link_uid`,
+  carries its predecessor and names its successor as the edit's uid whichever
+  end was selected.  `MainWindow::unlink_selected_task` and the ribbon gate use
+  both; the gate selects a task with links at both ends and requires both to go
+  while the untouched link survives (links 3 -> 1 for selected uid 4).
+- The app link test saves the same two deletions from `wave23-outline.mpp` and
+  compares the link table with Project's own save: `FixedData`, `FixedMeta` and
+  `Fixed2Meta` are byte-identical to `wave27-unlink.mpp`.  `Fixed2Data` is
+  excluded because Project rewrites the link GUIDs on every save.  app_edits_links
+  200 checks.
+
+W27-3.4 detail:
+
+- A failed load already counted one failed check through `load()`, but the
+  wave-26 blocks asserted only inside `if (load.ok)`, so a failure skipped the
+  body without adding a second check; a successful load with an empty plan
+  skipped it with no failure at all.  Every `Loaded` the real save test uses now
+  has its own named check before the dependent body: `after_add`,
+  `after_delete`, `combined_base` and its non-empty task list, the combined
+  re-read, `percent_base` and its non-empty task list, `percent_reread` and
+  `own_loaded`.  A failed or empty load is now a reported failure.
+- app_edit 186 checks (was 177; the nine new load checks).  The first W27-3.4
+  gate run (`gates-8fe6c18-W27-3.4.log`) also built an uncommitted W27-3.5 draft
+  and failed `qt_task_order_corpus` on that draft's wrong outline numbers; the
+  stashed rerun with only W27-3.4 in the tree (`-clean.log`) is the log of
+  record.
+
+W27-3.5 detail:
+
+- `fnv1a64` and all 13 unsalted hashes are deleted.  The corpus case now
+  asserts, all read from `project_a.mpp` at test time, the ID order 0..12, each
+  row's indent level, its summary flag and Project's `OutlineNumber`; no
+  display name is read or stored.
+- The structural values also record what the hashes concealed: ID order is not
+  outline order in this file (ID 1's top-level task is outline 2, ID 12's is
+  outline 1), ID 12 is a summary whose children lie beyond the 13 captured
+  rows, and row 0 is the project row (level -1, empty outline, summary).
+- `qt_task_order` and `qt_task_order_corpus` pass with the corpus present (217
+  checks).
+
+W27-3.6 detail:
+
+- The two files the brief names and `app/edit_model.cpp` (left wholly CRLF by
+  the wave-26 G0 note) are now LF: 1,052, 793 and 1,148 lines respectively.
+  The conversion changed no content -- `git diff --ignore-cr-at-eol` against
+  the parent is empty -- and each file now reports CRLF 0 / bareCR 0.
+
+Group gates on the final code commit `1bf7b99`, fresh trees configured from
+scratch under `build/w27-fresh{,-app,-qt}` and built serially (log
+`build/w27/g3-fresh-gates.log`):
+
+- core configure/build exit 0 with `CORE_WARNINGS_AS_ERRORS=ON`; core ctest
+  `-E plan_recalc` 51/51
+- `plan_recalc` 512 checks with corpus / 266 with `MPP_NO_CORPUS=1`
+- engine `--selftest` 53 checks, 0 failures; `--suite --expect-fail
+  constraint-mso` 8 scenarios, 8 recorded (7 pass + the one expected failure),
+  0 unrecorded
+- reader 1100 checks with corpus / 420 without; M2 `recalc --compare` 332/332
+  (268 leaf + 64 summary fields)
+- app ctest 17/17; app_qt ctest 23/23 (one transient MSB6003 file lock was
+  retried inside the script; both trees' builds exited 0)
+- `check_fixtures.py` OK (46 documented hashes, 26 tracked `.mpp`), oracle
+  provenance OK (8)
+- client-name scan 0 hits on HEAD; whitespace-normalised `guard_names.py` 0
+  on `c632c8f..HEAD`; client-string hex grep no matches
+- The script's exit code is 1 because its last command is the expected-empty
+  hex grep.
+
+Per-commit gate logs (each: core 51/51, app 17/17, app_qt 23/23, fixtures OK,
+HEAD and working-tree name scans 0, `guard_names` 0, hex grep none):
+`build/w27/gates-36cafbf-W27-3.1.log`,
+`gates-1ad385d-W27-3.2.log`,
+`gates-8cad902-W27-3.3.log` (fixtures committed, code in the tree),
+`gates-8fe6c18-W27-3.4-clean.log`,
+`gates-c7679bc-W27-3.5.log`,
+`gates-c7283d7-W27-3.6.log`.
+
+## Found, not fixed (G3)
+
+- **Medium**: Unlink acts on the one selected task.  Project's Task > Unlink
+  Tasks acts on a multi-row selection; `MainWindow::unlink_selected_task` reads
+  only `selected.uid`.  The W27-3.3 measurement and save comparison cover the
+  one task with links at both ends, so a multi-row Unlink in the port leaves the
+  other selected tasks' links in place.
+- **Low**: a pending link ADD naming the unlinked task survives Unlink.  It has
+  no saved row to tombstone, and its removal path today is undo; Project would
+  have the link in memory and remove it before the next save.
+- **Privacy**: the 13 unsalted FNV-1a display-name hashes removed by W27-3.5
+  remain in git history (added in `912b3fa`, removed in `c7283d7`).  The
+  standing rules forbid rewriting commits, so they are still recoverable from
+  `git log`; if the repository is published, CLOSE/Tim must decide between
+  accepting that history and the rewrite the rules currently rule out.
+- **Repo hygiene**: the W27-3.6 audit (`build/w27/tools/eol_scan.py`, read-only)
+  still reports 173 tracked text files containing CRLF lines -- mostly
+  grandfathered analysis output (`analysis/*.tsv`, `docs/analysis/oracle/*.json`),
+  but also `app/field_link_edits.cpp`, `app/app_edits_links_tests.cpp`,
+  `tests/io_error_paths.cpp`, `scripts/uifile_rcdata.py`, `memory/app.md` and a
+  one-line `.github/workflows/app-macos.yml`.  The three files G3 owned are
+  clean; normalising the rest is a mechanical repo-wide change that would bury
+  this wave's diff and belongs to a dedicated cleanup.
+
+WAVE-27-G3-COMPLETE
