@@ -1,6 +1,6 @@
 # Handoff index — read only the group you need
 
-64 handoffs, ~780 KB: do **not** read the directory.  Start with
+100 handoffs, ~1.3 MB: do **not** read the directory.  Start with
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
@@ -11,7 +11,14 @@ kept for investigation; each is the record of its stream at that wave.
 | `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
 | `assessment-2026-10-24.md` | where the port stands after wave 26, and the workflow review |
 | `plan-waves27-30.md` | the proposed next rounds |
-| `wave26-verification/` | the verifier's fresh-tree gates and independent review of wave 26 |
+| `wave27-complete.md` | **the wave-27 gate** (below), the current record |
+
+## Wave 27 (closed on branch `wave27` - pushed; CI green on all three OSs; not merged)
+
+| file | what |
+|---|---|
+| `wave27-complete.md` | **the wave-27 gate**: G0..G3 + CLOSE, every item DONE, the fresh-tree gates on `9323db2`, the two privacy scans and the history residuals, the independent review, the CI runs, the re-scored 16 decisions, "Found, not fixed" |
+| `wave27-brief.md` | **the work order**: publication lifted; the two wave-26 Highs (save safety), CI on all three OSs, the decoding evidence, six queued fixes |
 
 ## Wave 26 (closed on branch `wave26` - verified, not merged; pushed 24 Oct for CI)
 
@@ -19,6 +26,7 @@ kept for investigation; each is the record of its stream at that wave.
 |---|---|
 | `wave26-complete.md` | **the wave-26 gate**: G0..G6 + CLOSE, every item DONE, the fresh-tree gates on the fixed tree, the privacy scans (including the wrapped-name finding), the independent review and its High fixes, the live same-file comparison, the re-scored 16 decisions, "Found, not fixed" |
 | `wave26-brief.md` | **the work order**: groups G0..G6 + CLOSE, parity first, one finding id per commit, deferral only with evidence |
+| `wave26-verification/` | the verifier's fresh-tree gates and independent review of wave 26 |
 | `wave25-verification/gates.md` | the verifier's fresh-tree gate run on wave 25's tip |
 | `wave25-verification/review.md` | the independent review of `wave24..wave25` (G0 answers its one High) |
 
