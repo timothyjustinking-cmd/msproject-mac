@@ -447,9 +447,12 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
     // (W25-1/S1): the displayed rows are RecordSet rows and the source resolves
     // each through its uid -- no display-plan copy with the project row spliced
     // in, so the project row works whether or not the file shows it.
-    const core::gantt::GanttSource source =
+    core::gantt::GanttSource source =
         app::make_gantt_source_for_displayed_rows(view_, records_, row_map_.rows, {},
                                                   core::gantt::kDateNa);
+    // Wave 29 (W29-1.3): the applied view's stored bar styles decide which
+    // text each bar shows and on which side; see apply_stored_bar_labels().
+    apply_stored_bar_labels(source);
     // No status-date marker: app::today_date32() would make the offscreen render
     // change every day, and this wave's render must be deterministic.
     core::gantt::Timescale timescale = app::timescale_for_zoom(view_, app::gantt_zoom(zoom));
@@ -471,6 +474,67 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
     // sheet's committed cells), so this is the one place where the computed
     // column texts can be refreshed without a second derivation path.
     fill_computed_columns();
+}
+
+void PlanDocument::apply_stored_bar_labels(core::gantt::GanttSource& source) {
+    if (!gantt_style_.decoded) {
+        return;
+    }
+    // A bar-label date is a BARE short date: the file's order, separator and
+    // year width, without the sheet's weekday.  The clean capture's milestone
+    // prints "14/04/26", not the Date cell's "Tue 14/04/26".
+    core::sheet::SheetFormat label_format = format_;
+    label_format.date.show_weekday = false;
+    label_format.date.show_time_of_day = false;
+    const auto date_text = [&label_format](core::sched::date32 day) {
+        return core::sheet::format_date_text(app::date_value_from_date32(day),
+                                             label_format);
+    };
+    // The project row is not in view_.tasks: make_gantt_source_for_displayed_rows
+    // synthesizes uid 0 from app::project_summary_row(), so the label facts come
+    // from the same row.
+    const app::TaskRow project_row = app::project_summary_row(view_);
+    for (core::gantt::TaskBarInput& bar : source.tasks) {
+        const app::TaskRow* row = nullptr;
+        if (bar.uid == 0) {
+            row = &project_row;
+        } else {
+            for (const app::TaskRow& candidate : view_.tasks) {
+                if (candidate.uid == bar.uid) {
+                    row = &candidate;
+                    break;
+                }
+            }
+        }
+        if (row == nullptr) {
+            continue;
+        }
+        app::BarLabelTask task;
+        task.project_summary = bar.uid == 0;
+        task.summary = row->summary;
+        task.milestone = row->milestone;
+        task.critical = row->critical;
+        task.manually_scheduled = row->manually_scheduled;
+        task.finished = row->percent_complete >= 100;
+        task.in_progress = row->percent_complete > 0 && row->percent_complete < 100;
+
+        app::BarLabelValues values;
+        values.name = row->name;
+        values.id = std::to_string(row->id);
+        values.start = date_text(row->start);
+        values.finish = date_text(row->finish);
+        values.duration =
+            core::sheet::format_duration_text(row->duration_ticks, format_);
+        values.resource = resource_names_text(view_, row->uid);
+        values.percent = core::sheet::format_value_text(
+            core::view::Value::of_int(row->percent_complete),
+            core::sheet::CellKind::Percent, format_);
+
+        const app::BarLabelTexts texts =
+            app::bar_label_texts_for(gantt_style_, task, values);
+        bar.sides = {texts.left, texts.right, texts.top, texts.bottom, texts.inside};
+        bar.stored_labels = true;
+    }
 }
 
 void PlanDocument::fill_computed_columns() {

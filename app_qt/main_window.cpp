@@ -1125,8 +1125,12 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     loaded_new_tasks_manual_known_ = new_tasks_manual_known_;
 
     // The persisted date style belongs to the loaded SheetFormat before anything
-    // formats a cell or the status line.
+    // formats a cell or the status line.  Wave 29 (W29-1.3): the Gantt is
+    // rebuilt here as well, because the applied view's stored bar labels format
+    // their dates with this same SheetFormat -- load() built them with the
+    // default date style.
     doc_.apply_preferences(prefs_);
+    doc_.rebuild_views(prefs_.zoom);
 
     // The Entry presentation, with no filter.
     auto* header = static_cast<SheetHeaderView*>(sheet_view_->horizontalHeader());

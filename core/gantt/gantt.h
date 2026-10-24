@@ -294,6 +294,23 @@ struct LabelPlacement {
     Rect rect;
 };
 
+// Wave 29 (W29-1.3): which side of the bar a stored bar style's label sits on,
+// in the order the style record stores the five field ids (left, right, top,
+// bottom, inside).
+enum class BarLabelSide : std::uint8_t { left = 0, right, top, bottom, inside };
+
+inline constexpr std::size_t kBarLabelSideCount = 5;
+
+// One label the applied view's stored bar styles call for.  The layout places
+// it (left/right aligned to the bar's edge, top/bottom above/below it, inside
+// within it); the shell only draws the text in `rect`.
+struct BarText {
+    BarLabelSide side = BarLabelSide::right;
+    bool inside = false;  // true: drawn over the bar, in the bar-text colour
+    Rect rect;
+    std::string text;
+};
+
 struct Bar {
     std::uint32_t task_uid = 0;
     int row = 0;
@@ -313,6 +330,10 @@ struct Bar {
     std::array<Point, 3> cap_right{};
     // Wave 25 (W25-2/S2): copied from TaskBarInput::manual.
     bool manual = false;
+    // Wave 29 (W29-1.3): the labels the applied view's stored bar styles call
+    // for, in BarLabelSide order.  Empty when the caller supplied none; the
+    // single `label`/`label_text` above is then the fallback.
+    std::vector<BarText> texts;
 };
 
 // The per-task input.  `finish` is the task's finish *instant* (the real
@@ -334,6 +355,14 @@ struct TaskBarInput {
     // Task"/"Manual Summary" bar styles), distinct from the auto-scheduled
     // "Task" style.  The model carries the flag; the shell picks the colour.
     bool manual = false;
+    // Wave 29 (W29-1.3): the text the applied view's stored bar styles put on
+    // each side of the bar, in BarLabelSide order.  The caller formats them
+    // (the Gantt does not know field ids or the file's date format).
+    std::array<std::string, kBarLabelSideCount> sides{};
+    // True when `sides` is the stored answer, even if every entry is empty: the
+    // bar then shows exactly those labels and NONE of the bar_label_text
+    // fallback (a stored style list with no label means a bare bar).
+    bool stored_labels = false;
 };
 
 // ---------------------------------------------------------------------------

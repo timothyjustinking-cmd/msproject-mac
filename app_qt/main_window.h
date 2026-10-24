@@ -121,6 +121,9 @@ class MainWindow final : public QMainWindow {
     // asserts against the committed fixture).
     std::size_t sheet_row_count() const;
     std::size_t gantt_bar_count() const;
+    // Wave 29 (W29-1.3): the layout the canvas draws, for the offscreen gate
+    // that checks the stored bar labels (sides, rects, text).
+    const core::gantt::GanttLayout& gantt() const noexcept { return doc_.gantt(); }
 
     // The plan the views draw from (file + applied structural edits + the
     // sheet's committed cells).  Wave 24: the uid-routing gate needs the same

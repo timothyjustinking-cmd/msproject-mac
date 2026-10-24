@@ -121,6 +121,82 @@ struct CellFill {
     return fill;
 }
 
+// Wave 29 (W29-1.3): bar labels from the applied view's stored bar styles.
+//
+// Every `BarStyle` carries five Task field ids (left, right, top, bottom,
+// inside) and a Show For / Not Show For pair of 64-bit masks.  The masks index
+// Project's PjBarShowFor categories (MPXJ's GanttBarShowTasks; Aspose.Tasks'
+// GanttBarShowFor documents the same numbering): 0 Normal, 1 Milestone, 2
+// Summary, 3 Critical, 4 Noncritical, 6 Finished, 7 In Progress, 26 Rolled Up,
+// 27 Project Summary, 28 Split, 40 Group By Summary, 41 Deliverable, 42
+// Dependency, 43 Active, 44 Manually Scheduled, 45 Warning, 49 Placeholder.
+//
+// A style applies when every *set* Show For category is true and every set Not
+// Show For category is false.  A style that tests a category the port cannot
+// answer (Marked, the Flag1..20 set, the early/late variants) never matches:
+// putting a label on a bar Project leaves bare is worse than showing none.
+// The categories the model answers outright are listed on bar_label_texts_for.
+struct BarLabelTask {
+    bool project_summary = false;
+    bool summary = false;   // a summary task other than the project row
+    bool milestone = false;
+    bool critical = false;
+    bool manually_scheduled = false;
+    bool finished = false;    // 100 % complete
+    bool in_progress = false; // started, not finished
+};
+
+// The text each field id can show.  The caller formats them (the label's date
+// is the file's date format WITHOUT the weekday: Project prints "14/04/26").
+struct BarLabelValues {
+    std::string name;
+    std::string id;
+    std::string start;
+    std::string finish;
+    std::string duration;
+    std::string resource;
+    std::string percent;
+};
+
+// The five labels one row's stored bar styles call for (empty = none).
+struct BarLabelTexts {
+    std::string left;
+    std::string right;
+    std::string top;
+    std::string bottom;
+    std::string inside;
+
+    bool empty() const noexcept {
+        return left.empty() && right.empty() && top.empty() && bottom.empty() &&
+               inside.empty();
+    }
+};
+
+// Matches the stored bar styles against the task and fills each side from the
+// FIRST matching style (in file order) that stores a field id for it.  A side
+// with no field stores 0xffffffff (the record's sentinel); 0 is accepted as the
+// same for a synthetic style.  "First" is what keeps a Summary+Critical style
+// that stores no label from hiding the Summary style's left Name on a critical
+// summary when the file orders the specific style first.  An id this port has
+// no text for claims the side with an empty string (the product draws that
+// field; substituting another style's field would invent text).  A style list that
+// matches but stores no label yields all-empty texts, which is the product's
+// bare bar.
+//
+// Categories that are true/false by construction of this port's model:
+// Normal (!summary && !milestone && !project_summary), Summary (a summary that
+// is not the project row), Split false (no split bars are laid out), Rolled Up
+// false, Group By Summary false, Deliverable/Dependency false, Placeholder,
+// Placeholder Start/Finish/Duration false (the port lays out no placeholder
+// rows), Warning false (it models no warning state), Active TRUE (the reader
+// decodes no inactive rows, so every row the port lays out is active -- this is
+// what makes a stock file's Active-tagged Task/Milestone styles apply).
+// Finished/In Progress come from the task's percent complete; Manually
+// Scheduled from the reader's measured bit.
+[[nodiscard]] BarLabelTexts bar_label_texts_for(
+    const msproject::viewstate::GanttStyle& style, const BarLabelTask& task,
+    const BarLabelValues& values);
+
 // Reads a whole .mpp and decodes the applied view's Gantt style record:
 //
 //   * `214/Props` record 0x03400000        -> the FONT_BASES table

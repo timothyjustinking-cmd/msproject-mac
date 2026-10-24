@@ -56,6 +56,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -1090,6 +1091,162 @@ void case_corpus(const QString& corpus) {
               "project_a's middle tier prints the stored quarter format");
         check(info.first_minor_label.size() == 3,
               "project_a's bottom tier prints the stored short month name");
+    }
+
+    // --- Wave 29 (W29-1.3): the stored bar labels ----------------------------
+    // The applied view's ten bar styles call for four label sets: Non-Critical
+    // and Critical put Name on the right, Milestone puts StartText on the left
+    // and Name on the right, Summary puts Name on the left, and the
+    // project-summary style puts nothing.  Style order decides a row that is
+    // both summary and milestone (Milestone comes first), so a row is
+    // classified by milestone, then summary, then normal.  Names are compared
+    // with the row's own name and never printed; the date text is pinned by
+    // SHAPE only (dd/MM/yy, no weekday) because its value is client data.
+    {
+        const core::gantt::GanttLayout& layout = window.gantt();
+        const app::TaskRow project_row = app::project_summary_row(plan);
+        int project_bars = 0;
+        int summary_bars = 0;
+        int milestone_bars = 0;
+        int normal_bars = 0;
+        int label_errors = 0;
+        double sample_left_gap = 0.0;
+        double sample_right_gap = 0.0;
+        const auto date_shaped = [](const std::string& text) {
+            if (text.size() != 8 || text[2] != '/' || text[5] != '/') {
+                return false;
+            }
+            for (const std::size_t index : {0, 1, 3, 4, 6, 7}) {
+                if (text[index] < '0' || text[index] > '9') {
+                    return false;
+                }
+            }
+            return true;
+        };
+        // The side's text must exist with `want`, and the rect must sit one
+        // label gap (4 px) off the bar edge.
+        const auto expect_side = [&](const core::gantt::Bar& bar,
+                                     core::gantt::BarLabelSide side,
+                                     const std::string& want) {
+            const core::gantt::BarText* found = nullptr;
+            for (const core::gantt::BarText& text : bar.texts) {
+                if (text.side == side) {
+                    found = &text;
+                }
+            }
+            const char* side_name = side == core::gantt::BarLabelSide::left ? "left" : "right";
+            if (found == nullptr || found->text != want) {
+                ++label_errors;
+                std::fprintf(stderr, "  label row uid %u: %s text wrong or missing\n",
+                             bar.task_uid, side_name);
+                return;
+            }
+            const double gap = side == core::gantt::BarLabelSide::left
+                                   ? bar.rect.x - found->rect.right()
+                                   : found->rect.x - bar.rect.right();
+            if (std::fabs(gap - 4.0) > 0.01) {
+                ++label_errors;
+                std::fprintf(stderr, "  label row uid %u: %s gap %.2f, want 4\n",
+                             bar.task_uid, side_name, gap);
+                return;
+            }
+            if (side == core::gantt::BarLabelSide::left) {
+                sample_left_gap = gap;
+            } else {
+                sample_right_gap = gap;
+            }
+        };
+        const auto expect_absent = [&](const core::gantt::Bar& bar,
+                                       core::gantt::BarLabelSide side) {
+            for (const core::gantt::BarText& text : bar.texts) {
+                if (text.side == side) {
+                    ++label_errors;
+                    std::fprintf(stderr, "  label row uid %u: unexpected side text\n",
+                                 bar.task_uid);
+                }
+            }
+        };
+        for (const core::gantt::Bar& bar : layout.bars) {
+            const app::TaskRow* row = bar.task_uid == 0 ? &project_row
+                                                        : task_by_uid(plan, bar.task_uid);
+            if (row == nullptr) {
+                ++label_errors;
+                std::fprintf(stderr, "  label bar uid %u is not a live row\n", bar.task_uid);
+                continue;
+            }
+            // The stored styles replace the old single fallback label even when
+            // all five sides are empty (the project row's bare bar).
+            if (bar.label.visible) {
+                ++label_errors;
+                std::fprintf(stderr, "  label row uid %u: fallback label still visible\n",
+                             bar.task_uid);
+            }
+            if (bar.task_uid == 0) {
+                ++project_bars;
+                if (!bar.texts.empty()) {
+                    ++label_errors;
+                    std::fprintf(stderr, "  project row carries %zu stored texts\n",
+                                 bar.texts.size());
+                }
+            } else if (row->milestone) {
+                ++milestone_bars;
+                if (bar.texts.size() != 2) {
+                    ++label_errors;
+                    std::fprintf(stderr, "  milestone row uid %u has %zu texts, want 2\n",
+                                 bar.task_uid, bar.texts.size());
+                    continue;
+                }
+                const core::gantt::BarText* left = nullptr;
+                for (const core::gantt::BarText& text : bar.texts) {
+                    if (text.side == core::gantt::BarLabelSide::left) {
+                        left = &text;
+                    }
+                }
+                if (left == nullptr || !date_shaped(left->text)) {
+                    ++label_errors;
+                    std::fprintf(stderr,
+                                 "  milestone row uid %u: left text is not dd/MM/yy\n",
+                                 bar.task_uid);
+                }
+                expect_side(bar, core::gantt::BarLabelSide::right, row->name);
+                expect_absent(bar, core::gantt::BarLabelSide::top);
+                expect_absent(bar, core::gantt::BarLabelSide::bottom);
+                expect_absent(bar, core::gantt::BarLabelSide::inside);
+            } else if (row->summary) {
+                ++summary_bars;
+                if (bar.texts.size() != 1) {
+                    ++label_errors;
+                    std::fprintf(stderr, "  summary row uid %u has %zu texts, want 1\n",
+                                 bar.task_uid, bar.texts.size());
+                    continue;
+                }
+                expect_side(bar, core::gantt::BarLabelSide::left, row->name);
+                expect_absent(bar, core::gantt::BarLabelSide::right);
+            } else {
+                ++normal_bars;
+                if (bar.texts.size() != 1) {
+                    ++label_errors;
+                    std::fprintf(stderr, "  normal row uid %u has %zu texts, want 1\n",
+                                 bar.task_uid, bar.texts.size());
+                    continue;
+                }
+                expect_side(bar, core::gantt::BarLabelSide::right, row->name);
+                expect_absent(bar, core::gantt::BarLabelSide::left);
+            }
+        }
+        check(label_errors == 0,
+              "every stored bar label is on its stored side with its stored field");
+        check(project_bars == 1, "the project-summary bar carries no label");
+        check(milestone_bars > 0 && summary_bars > 0 && normal_bars > 0,
+              "the file's milestones, summaries and normal task bars are all checked");
+        check(project_bars + milestone_bars + summary_bars + normal_bars ==
+                  static_cast<int>(layout.bars.size()),
+              "every drawn corpus bar is covered by the label classification");
+        std::printf("note: W29-1.3 stored bar labels: %d normal (right), %d summary "
+                    "(left), %d milestone (left date + right), %d project (none); "
+                    "gaps left %.0f right %.0f\n",
+                    normal_bars, summary_bars, milestone_bars, project_bars,
+                    sample_left_gap, sample_right_gap);
     }
 
     // EVERY displayed row: % Complete is the task's stored percent, and Pre/Suc

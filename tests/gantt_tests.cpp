@@ -782,6 +782,72 @@ void test_labels(Context& context) {
                   "empty label is not placed");
 }
 
+// Wave 29 (W29-1.3): the stored bar styles' five placements.  The fallback
+// label must vanish when the caller supplies the stored answer, even an
+// all-empty one (a stored style list with no label means a bare bar).
+void test_stored_bar_texts(Context& context) {
+    gantt::GanttSource source = fixed_source();
+    gantt::TaskBarInput& task = source.tasks[0];  // 1-day bar at x = 420, w = 20
+    task.stored_labels = true;
+    task.sides[static_cast<std::size_t>(gantt::BarLabelSide::left)] = "Start";
+    task.sides[static_cast<std::size_t>(gantt::BarLabelSide::right)] = "Name";
+    task.sides[static_cast<std::size_t>(gantt::BarLabelSide::top)] = "T";
+    task.sides[static_cast<std::size_t>(gantt::BarLabelSide::bottom)] = "B";
+    task.sides[static_cast<std::size_t>(gantt::BarLabelSide::inside)] = "In";
+    const gantt::GanttLayout layout =
+        build_gantt(source, fixed_style(), day_scale());
+
+    const gantt::Bar bar = find_bar(layout, 1);
+    // The single task-name label is NOT also drawn: stored labels replace it.
+    context.check(!bar.label.visible, "a stored-labelled bar has no fallback label");
+    context.check(bar.texts.size() == 5, "all five stored sides are placed");
+    if (bar.texts.size() == 5) {
+        context.check(bar.texts[0].side == gantt::BarLabelSide::left,
+                      "text 0 is the left label");
+        context.check(bar.texts[1].side == gantt::BarLabelSide::right,
+                      "text 1 is the right label");
+        context.check(bar.texts[2].side == gantt::BarLabelSide::top,
+                      "text 2 is the top label");
+        context.check(bar.texts[3].side == gantt::BarLabelSide::bottom,
+                      "text 3 is the bottom label");
+        context.check(bar.texts[4].side == gantt::BarLabelSide::inside,
+                      "text 4 is the inside label");
+        // 7 px per character, label_gap 4: left is right-aligned to the bar,
+        // right starts one gap after it.
+        context.rect(bar.texts[0].rect, 381.0, 5.0, 35.0, 12.0,
+                     "left label ends at the bar's edge less the gap");
+        context.rect(bar.texts[1].rect, 444.0, 5.0, 28.0, 12.0,
+                     "right label starts one gap after the bar");
+        // Top/bottom are centred; inside spans the bar's interior.
+        context.rect(bar.texts[2].rect, 426.5, -11.0, 7.0, 12.0,
+                     "top label is centred one gap above the bar");
+        context.rect(bar.texts[3].rect, 426.5, 21.0, 7.0, 12.0,
+                     "bottom label is centred one gap below the bar");
+        context.rect(bar.texts[4].rect, 424.0, 5.0, 12.0, 12.0,
+                     "inside label spans the bar interior");
+        context.check(bar.texts[4].inside, "the inside label is marked inside");
+        context.check(!bar.texts[0].inside && !bar.texts[1].inside,
+                      "left/right labels are outside the bar");
+    }
+
+    // A stored answer with no labels at all is a bare bar, not the fallback.
+    gantt::GanttSource bare = fixed_source();
+    bare.tasks[0].stored_labels = true;
+    const gantt::GanttLayout bare_layout =
+        build_gantt(bare, fixed_style(), day_scale());
+    const gantt::Bar bare_bar = find_bar(bare_layout, 1);
+    context.check(bare_bar.texts.empty(), "an all-empty stored answer places no text");
+    context.check(!bare_bar.label.visible, "an all-empty stored answer shows no fallback");
+
+    // A task with no stored answer keeps the bar_label_text fallback.
+    const gantt::GanttLayout fallback_layout =
+        build_gantt(fixed_source(), fixed_style(), day_scale());
+    context.check(find_bar(fallback_layout, 1).label.visible,
+                  "a task without stored labels keeps the fallback label");
+    context.check(find_bar(fallback_layout, 1).texts.empty(),
+                  "a task without stored labels has no stored text");
+}
+
 void test_week_and_month_headers(Context& context) {
     // Week tier: week columns start Monday; labels are "day short-month".
     gantt::Timescale week;
@@ -1620,6 +1686,7 @@ int main() {
     test_snapping(context);
     test_status_line(context);
     test_labels(context);
+    test_stored_bar_texts(context);
     test_week_and_month_headers(context);
     test_bar_defaults(context);
     test_calendar_shading(context);

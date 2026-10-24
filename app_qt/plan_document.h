@@ -228,6 +228,12 @@ class PlanDocument {
   private:
     void reset();
     void build_gantt(app::ZoomLevel zoom);
+    // Wave 29 (W29-1.3): fills each source task's `sides` from the applied
+    // view's stored bar styles (app::bar_label_texts_for) and marks the bar as
+    // stored-labelled, so the layout draws exactly those labels.  A file whose
+    // style record did not decode leaves the source untouched (the single
+    // task-name label stays).
+    void apply_stored_bar_labels(core::gantt::GanttSource& source);
     void rebuild_from_base(app::ZoomLevel zoom, std::uint32_t keep_uid);
     void refresh_filter_rows();
     void read_table(const std::string& source_path);

@@ -152,6 +152,135 @@ BarPalette bar_palette_from(const msproject::viewstate::GanttStyle& style) {
     return palette;
 }
 
+namespace {
+
+// One PjBarShowFor category the port's model can answer (see view_style.h).
+struct ShowForFact {
+    int category;
+    bool value;
+};
+
+// True when every category the style tests is answered and agrees with the
+// task.  A category outside the fact table is NOT answerable and makes the
+// style fail: a style Project applies to a state this port cannot see must not
+// put its text on a bar.
+bool style_applies_to(const msproject::viewstate::BarStyle& bar,
+                      const BarLabelTask& task) {
+    const ShowForFact facts[] = {
+        {0, !task.summary && !task.milestone && !task.project_summary},  // Normal
+        {1, task.milestone},                                             // Milestone
+        {2, task.summary && !task.project_summary},                      // Summary
+        {3, task.critical},                                              // Critical
+        {4, !task.critical},                                             // Noncritical
+        {6, task.finished},                                              // Finished
+        {7, task.in_progress},                                           // In Progress
+        {26, false},  // Rolled Up: the port lays out no rolled-up rows
+        {27, task.project_summary},  // Project Summary
+        {28, false},                 // Split: no split bars are laid out
+        {40, false},                 // Group By Summary: not a view the port draws
+        {41, false},                 // Deliverable: not decoded
+        {42, false},                 // Dependency: not decoded
+        {43, true},                  // Active: the reader decodes no inactive rows
+        {44, task.manually_scheduled},  // Manually Scheduled
+        {45, false},  // Warning: the port models no warning state
+        {46, false},  // Placeholder Start
+        {47, false},  // Placeholder Finish
+        {48, false},  // Placeholder Duration
+        {49, false},  // Placeholder: no placeholder rows
+    };
+    const auto answered = [&facts](int category, bool& value) {
+        for (const ShowForFact& fact : facts) {
+            if (fact.category == category) {
+                value = fact.value;
+                return true;
+            }
+        }
+        return false;
+    };
+    for (int category = 0; category < 64; ++category) {
+        const bool show = ((bar.show_for >> category) & 1u) != 0;
+        const bool hide = ((bar.show_for_not >> category) & 1u) != 0;
+        if (!show && !hide) {
+            continue;
+        }
+        bool value = false;
+        if (!answered(category, value)) {
+            return false;
+        }
+        if (show && !value) {
+            return false;
+        }
+        if (hide && value) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The stored Task field id -> the text the caller supplied for it.  The plain
+// Start/Finish/Duration ids are the unnamed date32/i32 fields next to
+// StartText/FinishText/DurationText in the descriptor table (analysis/
+// unnamed_inferred.tsv: 0x0b400504 is "StartText-1", 0x0b400508
+// "DurationText+1"); a stock file's Milestone style stores 0x0b400504, which is
+// the start date the product prints beside the diamond.
+std::string label_text_for(std::uint32_t field_id, const BarLabelValues& values) {
+    switch (field_id) {
+        case 0x0b40000eu:
+            return values.name;
+        case 0x0b400017u:
+            return values.id;
+        case 0x0b400020u:
+            return values.percent;
+        case 0x0b400031u:
+            return values.resource;
+        case 0x0b400503u:
+            return values.finish;
+        case 0x0b400504u:
+            return values.start;
+        case 0x0b400505u:
+            return values.start;
+        case 0x0b400506u:
+            return values.finish;
+        case 0x0b400507u:
+            return values.duration;
+        case 0x0b400508u:
+            return values.duration;
+        default:
+            return {};
+    }
+}
+
+}  // namespace
+
+BarLabelTexts bar_label_texts_for(const msproject::viewstate::GanttStyle& style,
+                                  const BarLabelTask& task,
+                                  const BarLabelValues& values) {
+    BarLabelTexts texts;
+    if (!style.decoded) {
+        return texts;
+    }
+    bool claimed[5] = {};
+    for (const msproject::viewstate::BarStyle& bar : style.bars) {
+        if (!style_applies_to(bar, task)) {
+            continue;
+        }
+        const std::uint32_t fields[5] = {bar.left_text, bar.right_text, bar.top_text,
+                                         bar.bottom_text, bar.inside_text};
+        std::string* out[5] = {&texts.left, &texts.right, &texts.top, &texts.bottom,
+                               &texts.inside};
+        for (int side = 0; side < 5; ++side) {
+            // The record stores 0xffffffff for "no field"; a synthetic style
+            // leaves the default 0.
+            if (claimed[side] || fields[side] == 0 || fields[side] == 0xffffffffu) {
+                continue;
+            }
+            claimed[side] = true;
+            *out[side] = label_text_for(fields[side], values);
+        }
+    }
+    return texts;
+}
+
 bool read_gantt_style(const std::string& path, msproject::viewstate::GanttStyle& out,
                       std::string* reason,
                       msproject::viewstate::CellFormatTable* cell_formats) {

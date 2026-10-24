@@ -24,6 +24,7 @@
 
 namespace {
 
+using msproject::viewstate::BarStyle;
 using msproject::viewstate::CellFormat;
 using msproject::viewstate::CellFormatTable;
 using msproject::viewstate::FontBase;
@@ -129,6 +130,121 @@ void test_cell_fill_rule() {
           "view style: formatting never leaks to another row");
 }
 
+// Wave 29 (W29-1.3): the stored bar styles' Show For masks decide which label
+// each side shows.  Synthetic style tables, so every rule is isolated.
+void test_bar_label_matching() {
+    GanttStyle style;
+    style.decoded = true;
+    BarStyle critical;
+    critical.show_for = 0x9;                 // Normal + Critical
+    critical.right_text = 0x0b40000e;        // Name
+    BarStyle summary;
+    summary.show_for = 0x4;                  // Summary
+    summary.left_text = 0x0b40000e;          // Name
+    BarStyle milestone;
+    milestone.show_for = 0x2;                // Milestone
+    milestone.left_text = 0x0b400505;        // StartText
+    milestone.right_text = 0x0b40000e;       // Name
+    BarStyle auto_task;
+    auto_task.show_for = 0x1;                // Normal
+    auto_task.show_for_not = std::uint64_t{1} << 44;  // not Manually Scheduled
+    auto_task.right_text = 0x0b400031;       // ResourceNames
+    style.bars = {critical, summary, milestone, auto_task};
+
+    app::BarLabelValues values;
+    values.name = "NAME";
+    values.start = "START";
+    values.resource = "RES";
+
+    app::BarLabelTask normal;
+    normal.critical = true;
+    app::BarLabelTexts texts = app::bar_label_texts_for(style, normal, values);
+    check(texts.right == "NAME" && texts.left.empty(),
+          "bar label: a critical normal task shows the Name on the right");
+
+    app::BarLabelTask noncritical;
+    texts = app::bar_label_texts_for(style, noncritical, values);
+    check(texts.right == "RES" && texts.left.empty(),
+          "bar label: a noncritical task matches no Normal+Critical style, so no Name");
+
+    app::BarLabelTask summary_task;
+    summary_task.summary = true;
+    texts = app::bar_label_texts_for(style, summary_task, values);
+    check(texts.left == "NAME" && texts.right.empty(),
+          "bar label: a summary shows the left Name, not a normal task's label");
+
+    app::BarLabelTask milestone_task;
+    milestone_task.milestone = true;
+    texts = app::bar_label_texts_for(style, milestone_task, values);
+    check(texts.left == "START" && texts.right == "NAME",
+          "bar label: a milestone shows StartText on the left and Name on the right");
+
+    // The project row is also a summary task in the plan (project_summary_row
+    // sets both flags); it must still match neither Summary nor Normal.
+    app::BarLabelTask project;
+    project.summary = true;
+    project.project_summary = true;
+    texts = app::bar_label_texts_for(style, project, values);
+    check(texts.empty(),
+          "bar label: the project row matches neither Summary nor Normal");
+
+    // Active (43) is answered true; Manually Scheduled (44) from the model bit.
+    app::BarLabelTask automatic;  // Normal + Active + not manual
+    texts = app::bar_label_texts_for(style, automatic, values);
+    check(texts.right == "RES",
+          "bar label: a stock Active-tagged Normal style matches an auto task");
+    app::BarLabelTask manual_task;
+    manual_task.manually_scheduled = true;
+    texts = app::bar_label_texts_for(style, manual_task, values);
+    check(texts.right.empty(),
+          "bar label: a Not Manually Scheduled style excludes a manual task");
+
+    // An unanswerable category (Flag1 = bit 16) never matches.
+    GanttStyle flagged_style;
+    flagged_style.decoded = true;
+    BarStyle flagged;
+    flagged.show_for = std::uint64_t{1} << 16;  // Flag1
+    flagged.right_text = 0x0b40000e;
+    flagged_style.bars = {flagged};
+    texts = app::bar_label_texts_for(flagged_style, automatic, values);
+    check(texts.empty(),
+          "bar label: a style testing a category the port cannot answer never matches");
+
+    // First matching style claims the side; a later style fills only a side the
+    // first left empty.  This is what keeps a Summary label under a
+    // Summary+Critical style that stores no text.
+    GanttStyle layered;
+    layered.decoded = true;
+    BarStyle specific;
+    specific.show_for = 0x4 | 0x8;  // Summary + Critical
+    specific.right_text = 0x0b40000e;
+    BarStyle general;
+    general.show_for = 0x4;         // Summary
+    general.left_text = 0x0b40000e;
+    layered.bars = {specific, general};
+    app::BarLabelTask critical_summary;
+    critical_summary.summary = true;
+    critical_summary.critical = true;
+    texts = app::bar_label_texts_for(layered, critical_summary, values);
+    check(texts.right == "NAME" && texts.left == "NAME",
+          "bar label: each side takes the first matching style that stores a field");
+
+    // A field id the port cannot map claims the side with no text rather than
+    // borrowing the next style's field.
+    GanttStyle unknown;
+    unknown.decoded = true;
+    BarStyle unknown_first;
+    unknown_first.show_for = 0x1;
+    unknown_first.right_text = 0x0b499999;  // not a Task field the port knows
+    BarStyle known_second;
+    known_second.show_for = 0x1;
+    known_second.right_text = 0x0b40000e;
+    unknown.bars = {unknown_first, known_second};
+    texts = app::bar_label_texts_for(unknown, automatic, values);
+    check(texts.right.empty(),
+          "bar label: an unmapped field id does not borrow a later style's field");
+}
+
 void check_stock_fixture() {
     GanttStyle style;
     CellFormatTable formats;
@@ -185,6 +301,34 @@ void check_stock_fixture() {
           "view style: a stock project defines no summary-critical bar style");
     check(!palette.has_finished,
           "view style: a stock project defines no finished bar style");
+
+    // Wave 29 (W29-1.3): a stock project's bar styles.  "Task" shows
+    // ResourceNames for a Normal+Active task that is NOT Manually Scheduled
+    // (bit 44) or Group By Summary (bit 40); "Manual Task" is the same for a
+    // manual task; "Milestone" shows the start date (0x0b400504) on the right
+    // unless the task is manual or a placeholder; "Summary" stores no label.
+    app::BarLabelValues values;
+    values.name = "NAME";
+    values.start = "START";
+    values.resource = "RES";
+    const app::BarLabelTask auto_task;
+    app::BarLabelTexts texts = app::bar_label_texts_for(style, auto_task, values);
+    check(texts.right == "RES" && texts.left.empty(),
+          "view style: a stock auto task shows ResourceNames on the right");
+    app::BarLabelTask manual_task;
+    manual_task.manually_scheduled = true;
+    texts = app::bar_label_texts_for(style, manual_task, values);
+    check(texts.right == "RES",
+          "view style: a stock manual task shows ResourceNames via Manual Task");
+    app::BarLabelTask milestone_task;
+    milestone_task.milestone = true;
+    texts = app::bar_label_texts_for(style, milestone_task, values);
+    check(texts.right == "START" && texts.left.empty(),
+          "view style: a stock milestone shows the start date on the right");
+    app::BarLabelTask summary_task;
+    summary_task.summary = true;
+    texts = app::bar_label_texts_for(style, summary_task, values);
+    check(texts.empty(), "view style: a stock summary row shows no bar label");
 }
 
 void check_corpus_fixture() {
@@ -283,6 +427,84 @@ void check_corpus_fixture() {
     check(palette.has_finished && palette.finished == (Rgb{0, 176, 80}),
           "view style: PROJECT_A's finished fill is (0,176,80)");
 
+    // Wave 29 (W29-1.3): four of the ten stored bar styles carry labels, and
+    // these are their Show For masks and field ids as the record stores them.
+    // Critical Task/Non-Critical Task show the Name on the right for
+    // Normal+Critical / Normal+Noncritical; Milestone shows StartText
+    // (0x0b400505) on the left and the Name on the right; Summary shows the
+    // Name on the left.  Project Summary stores no label -- and the capture's
+    // project row shows none.
+    const auto bar_named = [&style](const char* name) -> const BarStyle* {
+        for (const BarStyle& bar : style.bars) {
+            if (bar.name == name) {
+                return &bar;
+            }
+        }
+        return nullptr;
+    };
+    // A side the style does not label stores the record's 0xffffffff sentinel
+    // (the probe's "none"), not 0.
+    constexpr std::uint32_t kNoLabelField = 0xffffffffu;
+    const BarStyle* critical_bar = bar_named("Critical Task");
+    check(critical_bar != nullptr && critical_bar->show_for == 0x9 &&
+              critical_bar->right_text == 0x0b40000e &&
+              critical_bar->left_text == kNoLabelField &&
+              critical_bar->top_text == kNoLabelField &&
+              critical_bar->bottom_text == kNoLabelField &&
+              critical_bar->inside_text == kNoLabelField,
+          "view style: PROJECT_A's Critical Task shows Name on the right");
+    const BarStyle* noncritical_bar = bar_named("Non-Critical Task");
+    check(noncritical_bar != nullptr && noncritical_bar->show_for == 0x11 &&
+              noncritical_bar->right_text == 0x0b40000e,
+          "view style: PROJECT_A's Non-Critical Task shows Name on the right");
+    const BarStyle* milestone_bar = bar_named("Milestone");
+    check(milestone_bar != nullptr && milestone_bar->show_for == 0x2 &&
+              milestone_bar->left_text == 0x0b400505 &&
+              milestone_bar->right_text == 0x0b40000e,
+          "view style: PROJECT_A's Milestone shows StartText left, Name right");
+    const BarStyle* summary_bar = bar_named("Summary");
+    check(summary_bar != nullptr && summary_bar->show_for == 0x4 &&
+              summary_bar->left_text == 0x0b40000e &&
+              summary_bar->right_text == kNoLabelField,
+          "view style: PROJECT_A's Summary shows Name on the left");
+    const BarStyle* project_bar = bar_named("Project Summary");
+    check(project_bar != nullptr && project_bar->show_for == 0x8000000 &&
+              project_bar->left_text == kNoLabelField &&
+              project_bar->right_text == kNoLabelField,
+          "view style: PROJECT_A's Project Summary stores no label");
+
+    app::BarLabelValues labels;
+    labels.name = "NAME";
+    labels.start = "START";
+    labels.finish = "FINISH";
+    labels.duration = "DUR";
+    labels.resource = "RES";
+    labels.percent = "PCT";
+    app::BarLabelTask normal_critical;
+    normal_critical.critical = true;
+    const app::BarLabelTask normal_plain;
+    app::BarLabelTask summary_task;
+    summary_task.summary = true;
+    app::BarLabelTask milestone_task;
+    milestone_task.milestone = true;
+    app::BarLabelTask project_task;
+    project_task.summary = true;
+    project_task.project_summary = true;
+    app::BarLabelTexts texts = app::bar_label_texts_for(style, normal_critical, labels);
+    check(texts.right == "NAME" && texts.left.empty(),
+          "view style: PROJECT_A's critical task label is the Name on the right");
+    texts = app::bar_label_texts_for(style, normal_plain, labels);
+    check(texts.right == "NAME" && texts.left.empty(),
+          "view style: PROJECT_A's noncritical task label is the Name on the right");
+    texts = app::bar_label_texts_for(style, summary_task, labels);
+    check(texts.left == "NAME" && texts.right.empty(),
+          "view style: PROJECT_A's summary label is the Name on the left");
+    texts = app::bar_label_texts_for(style, milestone_task, labels);
+    check(texts.left == "START" && texts.right == "NAME",
+          "view style: PROJECT_A's milestone label is the start date and the Name");
+    texts = app::bar_label_texts_for(style, project_task, labels);
+    check(texts.empty(), "view style: PROJECT_A's project row shows no bar label");
+
     // Wave 26 (W26-3.3): the file's three timescale tiers -- year, quarter
     // and month, exactly the capture's rows ("2026" / "Qtr 2, 2026" / "Apr").
     using msproject::viewstate::TimescaleUnit;
@@ -317,6 +539,7 @@ int main() {
     test_category_precedence();
     test_style_lookup();
     test_cell_fill_rule();
+    test_bar_label_matching();
     check_stock_fixture();
     check_corpus_fixture();
     test_refusals();

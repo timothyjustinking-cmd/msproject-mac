@@ -679,6 +679,48 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
                                  shown);
             }
         }
+
+        // Wave 29 (W29-1.3): the labels the applied view's stored bar styles
+        // call for.  The model has placed each one; the shell only aligns and
+        // clips the text inside its rect.  A label entirely left of the canvas
+        // is not drawn: the clean capture shows no left label on the first
+        // bar, whose Summary text would sit before x = 0.
+        for (const core::gantt::BarText& text : bar.texts) {
+            if (text.text.empty() || text.rect.w <= 1.0) {
+                continue;
+            }
+            const QRectF rect(text.rect.x, text.rect.y + body_top, text.rect.w,
+                              text.rect.h);
+            if (rect.right() <= 0.0 ||
+                rect.left() >= static_cast<double>(canvas_width)) {
+                continue;
+            }
+            const QFontMetricsF metrics(font());
+            QString shown = QString::fromStdString(text.text);
+            const double available =
+                rect.right() > static_cast<double>(canvas_width)
+                    ? static_cast<double>(canvas_width) - rect.left()
+                    : rect.width();
+            if (available > 0.0 && metrics.horizontalAdvance(shown) > available) {
+                shown = metrics.elidedText(shown, Qt::ElideRight, available);
+            }
+            int flags = static_cast<int>(Qt::AlignVCenter);
+            switch (text.side) {
+                case core::gantt::BarLabelSide::left:
+                    flags |= static_cast<int>(Qt::AlignRight);
+                    break;
+                case core::gantt::BarLabelSide::right:
+                    flags |= static_cast<int>(Qt::AlignLeft);
+                    break;
+                case core::gantt::BarLabelSide::top:
+                case core::gantt::BarLabelSide::bottom:
+                case core::gantt::BarLabelSide::inside:
+                    flags |= static_cast<int>(Qt::AlignHCenter);
+                    break;
+            }
+            painter.setPen(text.inside ? QColor(0xff, 0xff, 0xff) : kBodyText);
+            painter.drawText(rect, flags, shown);
+        }
     }
 
     paint_header(painter, days, weeks, canvas_width);

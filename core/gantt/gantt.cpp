@@ -158,6 +158,53 @@ void place_label(Bar& bar, const GanttStyle& style) {
     }
 }
 
+// Wave 29 (W29-1.3): the labels the applied view's stored bar styles call for.
+// The capture measures the two horizontal placements -- a summary's left text
+// is right-aligned and ends ~4 px before its bar, right text starts ~4-7 px
+// after it -- so left/right use style.label_gap and the text's own width.
+// Top/bottom/inside are decisions (unmeasured): top/bottom are centred on the
+// bar one label gap above/below it, and inside spans the bar's interior.  The
+// corpus stores no top/bottom/inside label, so no capture can decide them.
+void place_texts(Bar& bar, const std::array<std::string, kBarLabelSideCount>& sides,
+                 const GanttStyle& style) {
+    bar.texts.clear();
+    for (std::size_t index = 0; index < kBarLabelSideCount; ++index) {
+        const std::string& text = sides[index];
+        if (text.empty()) {
+            continue;
+        }
+        BarText placed;
+        placed.side = static_cast<BarLabelSide>(index);
+        placed.text = text;
+        placed.rect.h = bar.rect.h;
+        placed.rect.y = bar.rect.y;
+        const double text_width = measure_label(text, style);
+        placed.rect.w = text_width;
+        switch (placed.side) {
+            case BarLabelSide::left:
+                placed.rect.x = bar.rect.x - style.label_gap - text_width;
+                break;
+            case BarLabelSide::right:
+                placed.rect.x = bar.rect.right() + style.label_gap;
+                break;
+            case BarLabelSide::top:
+                placed.rect.x = bar.rect.center_x() - text_width / 2.0;
+                placed.rect.y = bar.rect.y - style.label_gap - bar.rect.h;
+                break;
+            case BarLabelSide::bottom:
+                placed.rect.x = bar.rect.center_x() - text_width / 2.0;
+                placed.rect.y = bar.rect.bottom() + style.label_gap;
+                break;
+            case BarLabelSide::inside:
+                placed.inside = true;
+                placed.rect.x = bar.rect.x + style.label_gap;
+                placed.rect.w = std::max(0.0, bar.rect.w - 2.0 * style.label_gap);
+                break;
+        }
+        bar.texts.push_back(std::move(placed));
+    }
+}
+
 // Removes coincident consecutive points so the polyline contract in gantt.h
 // holds (and so the arrow's final segment has a real direction).
 std::vector<Point> clean_polyline(std::vector<Point> points) {
@@ -1091,7 +1138,11 @@ GanttLayout build_gantt(const GanttSource& source, const GanttStyle& style,
         bar.critical = task.critical;
         bar.manual = task.manual;
         bar.percent_complete = clamp_unit(task.percent_complete);
-        bar.label_text = bar_label_text(task, layout.style);
+        // Wave 29 (W29-1.3): the stored bar styles' labels replace the single
+        // fallback; a stored list with no entries is a bare bar, not a reason
+        // to fall back to the task name.
+        bar.label_text =
+            task.stored_labels ? std::string() : bar_label_text(task, layout.style);
 
         const double next_x = scale.x_for_day_start(add_days(start_day, 1));
         const double day_width = std::isfinite(next_x) ? next_x - left : 0.0;
@@ -1167,6 +1218,9 @@ GanttLayout build_gantt(const GanttSource& source, const GanttStyle& style,
         bar.fill = Rect{bar.rect.x, bar.rect.y, bar.rect.w * bar.percent_complete,
                         bar.rect.h};
         place_label(bar, layout.style);
+        if (task.stored_labels) {
+            place_texts(bar, task.sides, layout.style);
+        }
         layout.bars.push_back(std::move(bar));
     }
 
