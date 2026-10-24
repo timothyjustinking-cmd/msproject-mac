@@ -118,6 +118,17 @@ DOCUMENTED = {
     # Project prompt gate opens now that the % buttons are disabled.
     "tests/data/wave27-percent-actuals.mpp":
         "4C9AECBF544377878E058CC0103BEF059B65C48F0C21B079E3AF4EE215CC7AA2",
+    # Wave 27 (W27-0.3): the SAME Project 2021 session's save of synthetic-base
+    # before and after Project Summary Task > Priority was set to 750, with
+    # neutral metadata.  The pair's TBkndTask/FixedData differs in exactly the
+    # project row's +78 word (500 = 0x01F4 -> 750 = 0x02EE); every other stream
+    # difference is per-save bookkeeping (the wave-24 same-session pair shows
+    # the same GUID/edit-list churn).  The 750 file is the fixture the port's
+    # saved FixedData stream is compared with byte for byte.
+    "tests/data/wave27-priority-control.mpp":
+        "B9DEFD444DF39CCCEB11DA61FA020E74E462CAC4693CBB372402F4BCF7219E17",
+    "tests/data/wave27-priority-750.mpp":
+        "0AD24ADCE21D9907052A056A9637F6823069190C2921974FF3FFDC1446E1F49D",
     # Wave 26 (W26-3.1): the Gantt view's style record and the 214/Props
     # FONT_BASES payload, extracted read-only from tests/data/synthetic-base.mpp
     # (its first decodable Gantt view, "Gantt &with Timeline"; the W26-3.1
