@@ -20,14 +20,15 @@
  *                versus appended block);
  *   Var2Data     byte-identical (block order and the stale bytes Project leaves).
  *
- * The other streams are the control's: this writer owns the six TBkndTask
- * streams only.  Project's own save also rewrites 214/CEdl, Props, Props14,
- * SummaryInformation and the other tables' Fixed2Data (session ids and saved
- * timestamps), and TBkndAssn (the assignment side effect documented in
- * outline.h: a task that becomes a summary loses its assignment row; an outdent
- * re-creates a placeholder).  The test asserts the port leaves all of those at
- * the control's bytes and REPORTS that Project's differ -- Project's reopen of
- * the port's save is the acceptance for TBkndAssn (W28-0.4 precedent).
+ * W29-0.1 (the wave-28 review's R28-1) widened the ownership to Project's
+ * measured outline side effects: the six TBkndAssn streams and the six
+ * 114/Props counters.  They are compared with PROJECT's file, never with the
+ * control: the tombstoned assignment (indent / summary) and the re-created
+ * assignment row (outdent) must be byte-identical, and the two per-save opaque
+ * Fixed2Data identities and the two per-save Props id words are named EXPECTED
+ * FAILURES rather than silent masks.  Every stream the writer does not own is
+ * either equal to Project's file or a named expected failure; "port == control"
+ * is no longer asserted anywhere.
  *
  * The fourth case applies indent then outdent in ONE call from the indent
  * control and compares with Project's outdent save: Project produced that file
@@ -49,6 +50,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -97,14 +99,31 @@ class TestContext {
               what + " (actual " + std::to_string(actual) + ", expected " +
                   std::to_string(expected) + ")");
     }
+    /* W29-0.1 / the W25-5 convention: a gap Project's file shows and the port
+     * does not reproduce is a NAMED expected failure.  While the gap is open it
+     * prints EXPECTED FAIL and the test stays green; the day the port reproduces
+     * Project, the same call is a hard failure so the list cannot rot. */
+    void expected_failure(bool project_truth, std::string const& what) {
+        if (project_truth) {
+            ++failures_;
+            std::cout << "FAIL: expected failure '" << what
+                      << "' now PASSES -- remove it from the expected-failure "
+                         "list and make it a normal check\n";
+            return;
+        }
+        ++expected_failures_;
+        std::cout << "EXPECTED FAIL: " << what << "\n";
+    }
     int report() const {
-        std::cout << checks_ << " checks, " << failures_ << " failures\n";
+        std::cout << checks_ << " checks, " << failures_ << " failures, "
+                  << expected_failures_ << " expected failures\n";
         return failures_ == 0 ? 0 : 1;
     }
 
   private:
     int checks_ = 0;
     int failures_ = 0;
+    int expected_failures_ = 0;
 };
 
 std::string fixture(std::string const& name) {
@@ -157,6 +176,121 @@ bool is_task_stream(std::string const& path) {
 std::vector<std::uint8_t> stream_of(CfbDocument const& doc,
                                     std::string const& path) {
     return doc.read_stream(path);
+}
+
+std::vector<std::uint8_t> stream_or_empty(CfbDocument const& doc,
+                                          std::string const& path) {
+    return doc.has_stream(path) ? doc.read_stream(path)
+                                : std::vector<std::uint8_t>{};
+}
+
+std::string assn_stream(std::string const& name) {
+    return "114/TBkndAssn/" + name;
+}
+
+std::array<std::string, 6> const kAssnStreams = {
+    assn_stream("FixedData"), assn_stream("FixedMeta"),
+    assn_stream("Fixed2Data"), assn_stream("Fixed2Meta"),
+    assn_stream("VarMeta"), assn_stream("Var2Data")};
+
+/* The streams this writer owns: the six Task streams, the six Assn streams and
+ * 114/Props (the save counters). */
+bool owned_stream(std::string const& path) {
+    return is_task_stream(path) || "114/Props" == path ||
+           std::find(kAssnStreams.begin(), kAssnStreams.end(), path) !=
+               kAssnStreams.end();
+}
+
+std::uint32_t get_u32(std::vector<std::uint8_t> const& bytes,
+                      std::size_t offset) {
+    return static_cast<std::uint32_t>(bytes[offset]) |
+           (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+           (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
+           (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+}
+
+std::uint16_t get_u16(std::vector<std::uint8_t> const& bytes,
+                      std::size_t offset) {
+    return static_cast<std::uint16_t>(bytes[offset] | (bytes[offset + 1] << 8));
+}
+
+/* One 114/Props record: u32 length / u32 id / u32 kind / payload. */
+struct PropsRecord {
+    std::uint32_t id = 0;
+    std::uint32_t length = 0;
+    std::size_t payload = 0;
+};
+
+std::vector<PropsRecord> parse_props(std::vector<std::uint8_t> const& props) {
+    std::vector<PropsRecord> records;
+    std::size_t offset = 16;
+    while (offset + 12 <= props.size()) {
+        PropsRecord record;
+        record.length = get_u32(props, offset);
+        record.id = get_u32(props, offset + 4);
+        if ((record.id & 0x00FF0000u) != 0x00400000u) {
+            break;
+        }
+        if (static_cast<std::uint64_t>(offset) + 12u + record.length >
+            static_cast<std::uint64_t>(props.size())) {
+            break;
+        }
+        record.payload = offset + 12;
+        records.push_back(record);
+        offset += 12u + record.length;
+    }
+    return records;
+}
+
+PropsRecord const* find_props_record(std::vector<PropsRecord> const& records,
+                                     std::uint32_t id) {
+    for (PropsRecord const& record : records) {
+        if (record.id == id) {
+            return &record;
+        }
+    }
+    return nullptr;
+}
+
+/* The 16-byte scalar Props record framing outline.cpp writes: u32 4 / big-endian
+ * tag / u32 4 / u32 value.  SIZE_MAX unless the tag occurs exactly once. */
+std::size_t props_scalar_value(std::vector<std::uint8_t> const& props,
+                               std::uint32_t tag) {
+    std::size_t found = static_cast<std::size_t>(-1);
+    for (std::size_t at = 0; at + 16 <= props.size(); ++at) {
+        if (get_u32(props, at) != 4 || get_u32(props, at + 8) != 4) {
+            continue;
+        }
+        std::uint32_t const stored =
+            (static_cast<std::uint32_t>(props[at + 4]) << 24) |
+            (static_cast<std::uint32_t>(props[at + 5]) << 16) |
+            (static_cast<std::uint32_t>(props[at + 6]) << 8) |
+            static_cast<std::uint32_t>(props[at + 7]);
+        if (stored != tag) {
+            continue;
+        }
+        if (found != static_cast<std::size_t>(-1)) {
+            return static_cast<std::size_t>(-1);
+        }
+        found = at + 12;
+    }
+    return found;
+}
+
+void zero_span(std::vector<std::uint8_t>& bytes, std::size_t at,
+               std::size_t n) {
+    if (at + n > bytes.size()) {
+        return;
+    }
+    std::fill(bytes.begin() + static_cast<std::ptrdiff_t>(at),
+              bytes.begin() + static_cast<std::ptrdiff_t>(at + n),
+              std::uint8_t{0});
+}
+
+std::string hex_tag(std::uint32_t tag) {
+    char buffer[16];
+    std::snprintf(buffer, sizeof buffer, "0x%08x", tag);
+    return buffer;
 }
 
 std::string describe(std::string const& label, std::string const& path,
@@ -243,6 +377,94 @@ std::vector<std::uint8_t> canonical_fixed2(
     return out;
 }
 
+/*
+ * Canonicalise the TBkndAssn Fixed2Data identities.  A record's own +0..15 is a
+ * per-save identity; its parent +16..31 names a TASK Fixed2Data identity (a
+ * different id space, the rule actuals.h measured).  Each file resolves the
+ * parent through its OWN task identities first.  MEASURED (W29-0.1): Project
+ * does NOT rewrite the parent links of assignment rows it does not touch when
+ * it reallocates the Task identities on save, so those links are STALE and are
+ * resolved through the CONTROL's task identities (the common ancestor) instead.
+ * Links that name no identity in either map are kept verbatim: both files carry
+ * the same stale bytes there, or the comparison reports a real difference.
+ */
+using Identity = std::array<std::uint8_t, 16>;
+
+std::map<Identity, Identity> identity_map(
+    std::vector<std::uint8_t> const& fixed2, std::size_t records,
+    std::size_t stride, std::size_t first_record, std::uint8_t tag) {
+    std::map<Identity, Identity> map;
+    for (std::size_t record = 0; record < records; ++record) {
+        std::size_t const base = stride * (first_record + record);
+        Identity id{};
+        std::copy(fixed2.begin() + static_cast<std::ptrdiff_t>(base),
+                  fixed2.begin() + static_cast<std::ptrdiff_t>(base + 16),
+                  id.begin());
+        bool const empty =
+            std::all_of(id.begin(), id.end(),
+                        [](std::uint8_t b) { return b == 0; });
+        if (!empty) {
+            Identity replacement{};
+            replacement[0] = tag;
+            for (std::size_t i = 0; i < 4; ++i) {
+                replacement[1 + i] =
+                    static_cast<std::uint8_t>((record >> (8 * i)) & 0xFFu);
+            }
+            map.emplace(id, replacement);
+        }
+    }
+    return map;
+}
+
+std::vector<std::uint8_t> canonical_assn_fixed2(
+    std::vector<std::uint8_t> const& assn_fixed2, std::size_t assn_rows,
+    std::vector<std::uint8_t> const& task_fixed2, std::size_t task_rows,
+    std::vector<std::uint8_t> const& control_task_fixed2,
+    std::size_t control_task_rows) {
+    constexpr std::size_t kRecord = 48;
+    constexpr std::size_t kParent = 16;
+    if (assn_fixed2.size() != kRecord * assn_rows) {
+        throw std::runtime_error("TBkndAssn/Fixed2Data is not 48*rows bytes");
+    }
+    std::map<Identity, Identity> const own =
+        identity_map(assn_fixed2, assn_rows, kRecord, 0, 0x41);
+    std::map<Identity, Identity> const parents =
+        identity_map(task_fixed2, task_rows, 64, 3, 0x42);
+    std::map<Identity, Identity> const stale =
+        identity_map(control_task_fixed2, control_task_rows, 64, 3, 0x42);
+    std::vector<std::uint8_t> out = assn_fixed2;
+    auto replace_id = [&out](std::size_t at, Identity const& id) {
+        std::copy(id.begin(), id.end(),
+                  out.begin() + static_cast<std::ptrdiff_t>(at));
+    };
+    for (std::size_t row = 0; row < assn_rows; ++row) {
+        std::size_t const base = kRecord * row;
+        Identity id{};
+        std::copy(assn_fixed2.begin() + static_cast<std::ptrdiff_t>(base),
+                  assn_fixed2.begin() +
+                      static_cast<std::ptrdiff_t>(base + 16),
+                  id.begin());
+        auto const self = own.find(id);
+        if (self != own.end()) {
+            replace_id(base, self->second);
+        }
+        Identity parent{};
+        std::copy(assn_fixed2.begin() +
+                      static_cast<std::ptrdiff_t>(base + kParent),
+                  assn_fixed2.begin() +
+                      static_cast<std::ptrdiff_t>(base + kParent + 16),
+                  parent.begin());
+        auto const found = parents.find(parent);
+        auto const fallback = stale.find(parent);
+        if (found != parents.end()) {
+            replace_id(base + kParent, found->second);
+        } else if (fallback != stale.end()) {
+            replace_id(base + kParent, fallback->second);
+        }
+    }
+    return out;
+}
+
 struct PairCase {
     char const* label;
     char const* control;
@@ -250,91 +472,170 @@ struct PairCase {
     OutlineEdit edit;
 };
 
-std::size_t fixed_meta_entry_for_row(std::vector<std::uint8_t> const& meta,
-                                     std::size_t row) {
-    std::uint32_t const offset =
-        static_cast<std::uint32_t>(task_row::kHeaderSize +
-                                   task_row::kStride * row);
-    for (std::size_t i = 0; i < (meta.size() - 16) / 47; ++i) {
-        std::size_t const base = 16 + i * 47;
-        std::uint32_t const stored = static_cast<std::uint32_t>(meta[base + 4]) |
-                                     (static_cast<std::uint32_t>(meta[base + 5])
-                                      << 8) |
-                                     (static_cast<std::uint32_t>(meta[base + 6])
-                                      << 16) |
-                                     (static_cast<std::uint32_t>(meta[base + 7])
-                                      << 24);
-        if (stored == offset) {
-            return i;
-        }
-    }
-    return static_cast<std::size_t>(-1);
-}
-
 /*
- * Project rewrites the 16-byte opaque blob at FixedMeta entry +8 on the row it
- * edits (a fresh session token, like the percent-step ids of actuals.h); the
- * port cannot reproduce it and leaves the row's blob at the control's bytes.
- * Every other byte of the edited entry -- in particular the +2 field count and
- * the +26 summary bit -- must equal Project's, and every untouched entry must
- * be the control's.
+ * W29-0.1: FixedMeta is now written in full.  The edited row's +2 field count,
+ * +26 summary bit and the 16-byte +8..23 cache blob all follow measured rules
+ * (set_fixed_meta_blob in outline.cpp), so the whole stream must equal
+ * PROJECT's file byte for byte -- the wave-28 test masked the blob and compared
+ * it with the control, which R28-1 rejected.
  */
 void check_fixed_meta(TestContext& ctx, std::string const& label,
-                      CfbDocument const& control, CfbDocument const& project,
-                      CfbDocument const& port, std::size_t edited_row) {
-    std::vector<std::uint8_t> const base =
-        stream_of(control, task_stream("FixedMeta"));
+                      CfbDocument const& project, CfbDocument const& port) {
     std::vector<std::uint8_t> const theirs =
         stream_of(project, task_stream("FixedMeta"));
     std::vector<std::uint8_t> const ours =
         stream_of(port, task_stream("FixedMeta"));
     ctx.equal(ours.size(), theirs.size(), label + ": FixedMeta size");
-    ctx.equal(ours.size(), base.size(), label + ": FixedMeta control size");
-    if (ours.size() != theirs.size() || ours.size() != base.size() ||
-        ours.size() < 16) {
-        return;
+    if (ours.size() == theirs.size()) {
+        ctx.check(ours == theirs,
+                  label + ": FixedMeta equals Project's byte for byte (+2, "
+                          "+8..23 and +26 included)");
     }
-    std::size_t const edited = fixed_meta_entry_for_row(base, edited_row);
-    ctx.check(edited != static_cast<std::size_t>(-1),
-              label + ": edited row has a FixedMeta entry");
-    if (edited == static_cast<std::size_t>(-1)) {
-        return;
+}
+
+/*
+ * W29-0.1: the outline save's measured side effects.  TBkndAssn (the tombstoned
+ * assignment of a new summary and the row an outdent re-creates) and the six
+ * 114/Props counters are OWNED and compared with PROJECT's file; every stream
+ * the writer does not own is either equal to Project's file or a named expected
+ * failure.  Nothing here compares the port with the control.
+ */
+void check_owned_side_effects(TestContext& ctx, std::string const& label,
+                              CfbDocument const& control,
+                              CfbDocument const& project,
+                              CfbDocument const& port,
+                              std::size_t task_rows) {
+    for (std::string const& stream : kAssnStreams) {
+        if (stream == assn_stream("Fixed2Data")) {
+            continue;
+        }
+        ctx.check(stream_of(port, stream) == stream_of(project, stream),
+                  label + ": " + stream + " equals Project's");
     }
-    bool header = true;
-    for (std::size_t i = 0; i < 16; ++i) {
-        header = header && ours[i] == base[i] && ours[i] == theirs[i];
-    }
-    ctx.check(header, label + ": FixedMeta header equals the pair's");
-    std::size_t const entries = (ours.size() - 16) / 47;
-    std::size_t edited_differences = 0;
-    for (std::size_t entry = 0; entry < entries; ++entry) {
-        std::size_t const at = 16 + entry * 47;
-        if (entry == edited) {
-            for (std::size_t b = 0; b < 47; ++b) {
-                if (b >= 8 && b < 24) {
-                    continue; /* opaque per-save blob */
-                }
-                if (ours[at + b] != theirs[at + b]) {
-                    ++edited_differences;
-                }
-            }
-            bool blob_kept = true;
-            for (std::size_t b = 8; b < 24; ++b) {
-                blob_kept = blob_kept && ours[at + b] == base[at + b];
-            }
-            ctx.check(blob_kept,
-                      label + ": edited row's opaque blob is the control's");
-        } else {
-            for (std::size_t b = 0; b < 47; ++b) {
-                if (ours[at + b] != base[at + b]) {
-                    ++edited_differences;
-                }
-            }
+    {
+        std::vector<std::uint8_t> const port_assn =
+            stream_of(port, assn_stream("Fixed2Data"));
+        std::vector<std::uint8_t> const project_assn =
+            stream_of(project, assn_stream("Fixed2Data"));
+        std::vector<std::uint8_t> const project_task_fixed2 =
+            stream_of(project, task_stream("Fixed2Data"));
+        std::size_t const project_task_rows =
+            (stream_of(project, task_stream("FixedData")).size() -
+             task_row::kHeaderSize) /
+            task_row::kStride;
+        std::vector<std::uint8_t> const control_task_fixed2 =
+            stream_of(control, task_stream("Fixed2Data"));
+        std::size_t const control_task_rows =
+            (stream_of(control, task_stream("FixedData")).size() -
+             task_row::kHeaderSize) /
+            task_row::kStride;
+        ctx.equal(port_assn.size(), project_assn.size(),
+                  label + ": TBkndAssn/Fixed2Data size");
+        if (port_assn.size() == project_assn.size()) {
+            ctx.check(canonical_assn_fixed2(
+                          port_assn, port_assn.size() / 48,
+                          stream_of(port, task_stream("Fixed2Data")), task_rows,
+                          control_task_fixed2, control_task_rows) ==
+                          canonical_assn_fixed2(
+                              project_assn, project_assn.size() / 48,
+                              project_task_fixed2, project_task_rows,
+                              control_task_fixed2, control_task_rows),
+                      label + ": TBkndAssn/Fixed2Data equals Project's after "
+                              "identity canonicalisation");
         }
     }
-    ctx.equal(edited_differences, 0,
-              label + ": FixedMeta equals the pair's outside the edited "
-                      "row's opaque blob");
+
+    std::vector<std::uint8_t> const port_props = stream_of(port, "114/Props");
+    std::vector<std::uint8_t> const project_props =
+        stream_of(project, "114/Props");
+    ctx.equal(port_props.size(), project_props.size(),
+              label + ": Props keeps Project's length");
+    if (port_props.size() == project_props.size()) {
+        std::uint32_t const kCounters[] = {0x01000002u, 0x01000100u,
+                                           0x04000001u, 0x04000002u,
+                                           0x04000100u, 0x04008000u};
+        for (std::uint32_t const tag : kCounters) {
+            std::size_t const ours = props_scalar_value(port_props, tag);
+            std::size_t const theirs = props_scalar_value(project_props, tag);
+            ctx.check(ours != static_cast<std::size_t>(-1) &&
+                          theirs != static_cast<std::size_t>(-1),
+                      label + ": Props carries the " + hex_tag(tag) +
+                          " record");
+            if (ours != static_cast<std::size_t>(-1) &&
+                theirs != static_cast<std::size_t>(-1)) {
+                ctx.equal(get_u32(port_props, ours),
+                          get_u32(project_props, theirs),
+                          label + ": Props " + hex_tag(tag) +
+                              " counter equals Project's");
+            }
+        }
+        /* Project reallocates these two per-session id words on every save; the
+         * port leaves the control's bytes.  They are the only Props bytes not
+         * compared byte for byte with Project's save, and they are a NAMED
+         * expected failure, not a silent mask. */
+        std::uint32_t const kOpaque[] = {0x02400029u, 0x024013c2u};
+        std::vector<PropsRecord> const port_records = parse_props(port_props);
+        std::vector<PropsRecord> const project_records =
+            parse_props(project_props);
+        std::vector<std::uint8_t> port_masked = port_props;
+        std::vector<std::uint8_t> project_masked = project_props;
+        for (std::uint32_t const id : kOpaque) {
+            PropsRecord const* ours = find_props_record(port_records, id);
+            PropsRecord const* theirs = find_props_record(project_records, id);
+            bool const present = ours != nullptr && theirs != nullptr &&
+                                 ours->length >= 4 && theirs->length >= 4;
+            ctx.check(present, label + ": Props carries record " + hex_tag(id));
+            if (!present) {
+                continue;
+            }
+            ctx.expected_failure(
+                get_u16(port_props, ours->payload + 2) ==
+                    get_u16(project_props, theirs->payload + 2),
+                label + ": Props record " + hex_tag(id) +
+                    " per-save id word equals Project's (Project reallocates it"
+                    " on every save; the port does not own it)");
+            zero_span(port_masked, ours->payload + 2, 2);
+            zero_span(project_masked, theirs->payload + 2, 2);
+        }
+        ctx.check(port_masked == project_masked,
+                  label + ": Props equals Project's save except the two per-save"
+                          " id words");
+    }
+
+    /* R28-1: "port == control" is not the measurement.  A stream Project's save
+     * leaves alone must equal Project's file; one it rewrites is a named
+     * expected failure, never an assertion that the control's bytes are right. */
+    std::vector<std::string> a_paths = control.stream_paths();
+    std::vector<std::string> b_paths = port.stream_paths();
+    std::sort(a_paths.begin(), a_paths.end());
+    std::sort(b_paths.begin(), b_paths.end());
+    ctx.check(a_paths == b_paths,
+              label + ": the save adds and removes no stream");
+    std::vector<std::string> all_paths = a_paths;
+    for (std::string const& path : project.stream_paths()) {
+        all_paths.push_back(path);
+    }
+    std::sort(all_paths.begin(), all_paths.end());
+    all_paths.erase(std::unique(all_paths.begin(), all_paths.end()),
+                    all_paths.end());
+    for (std::string const& path : all_paths) {
+        if (owned_stream(path)) {
+            continue;
+        }
+        bool const project_changed = stream_or_empty(project, path) !=
+                                     stream_or_empty(control, path);
+        bool const ours_matches = stream_or_empty(port, path) ==
+                                  stream_or_empty(project, path);
+        if (project_changed) {
+            ctx.expected_failure(
+                ours_matches, label + ": " + path +
+                                  ": Project's save rewrites it and the port "
+                                  "does not reproduce it");
+        } else {
+            ctx.check(ours_matches,
+                      label + ": " + path + " equals Project's save");
+        }
+    }
 }
 
 void apply_and_compare(TestContext& ctx, PairCase const& test) {
@@ -370,7 +671,7 @@ void apply_and_compare(TestContext& ctx, PairCase const& test) {
     ctx.check(stream_of(port, task_stream("FixedData")) != control_fixed,
               label + ": FixedData actually changed");
 
-    check_fixed_meta(ctx, label, control, project, port, 1);
+    check_fixed_meta(ctx, label, project, port);
     ctx.check(stream_of(port, task_stream("Fixed2Meta")) ==
                   stream_of(project, task_stream("Fixed2Meta")),
               label + ": Fixed2Meta equals Project's");
@@ -401,31 +702,7 @@ void apply_and_compare(TestContext& ctx, PairCase const& test) {
                   label + ": Fixed2Data outline bytes changed");
     }
 
-    /* --- everything else stays the control's ----------------------------- */
-    for (std::string const& path : control.stream_paths()) {
-        if (is_task_stream(path)) {
-            continue;
-        }
-        std::vector<std::uint8_t> const ours = stream_of(port, path);
-        std::vector<std::uint8_t> const base = stream_of(control, path);
-        ctx.check(ours == base, label + ": " + path + " is the control's");
-    }
-    /* TBkndAssn is Project's own assignment side effect (outline.h).  Report it
-     * rather than asserting equality with Project.  Assignment rows are 110
-     * bytes with no fixed header (add_delete.h), so the count is size / 110. */
-    std::size_t project_assn_rows = 0;
-    std::size_t control_assn_rows = 0;
-    if (project.has_stream("114/TBkndAssn/FixedData")) {
-        project_assn_rows =
-            stream_of(project, "114/TBkndAssn/FixedData").size() / 110;
-    }
-    if (control.has_stream("114/TBkndAssn/FixedData")) {
-        control_assn_rows =
-            stream_of(control, "114/TBkndAssn/FixedData").size() / 110;
-    }
-    std::cout << "  " << label << ": TBkndAssn rows control " << control_assn_rows
-              << ", Project " << project_assn_rows
-              << " (not written; documented in outline.h)\n";
+    check_owned_side_effects(ctx, label, control, project, port, rows);
 
 #ifdef MPPWRITE_HAVE_READER
     mpp::Document const project_reader =
@@ -524,8 +801,11 @@ void refusal_cases(TestContext& ctx) {
 
 /*
  * Indent then outdent in one call, from the indent control.  Project's outdent
- * result was produced by saving the indent result and outdenting it, so the
- * whole chain -- including where each Var2Data block lands -- must equal it.
+ * result was produced from the SUMMARY save, not from this indent control, so
+ * the Task streams (which the pair proves) must equal it while the assignment
+ * side cannot: the two inputs' TBkndAssn/Var2Data differ by 20 bytes of blocks
+ * an earlier session had already dropped.  The chain's assignment comparison is
+ * therefore a NAMED expected failure (see the block below), not a claim.
  */
 void chain_case(TestContext& ctx) {
     OutlineEdit indent;
@@ -576,17 +856,117 @@ void chain_case(TestContext& ctx) {
                       "chain: " + stream + " equals the outdent result");
         }
     }
-    check_fixed_meta(ctx, "chain", control, project, port, 1);
+    check_fixed_meta(ctx, "chain", project, port);
     ctx.check(stream_of(port, task_stream("FixedData")) ==
                   stream_of(control, task_stream("FixedData")),
               "chain: FixedData returns to the control after outdent");
-    for (std::string const& path : control.stream_paths()) {
-        if (path.rfind("114/TBkndTask/", 0) == 0 ||
-            path.rfind("114/TBkndAssn/", 0) == 0) {
+    /* --- the chain's assignment side --------------------------------------
+     * Project never applied two outline edits in ONE save, so this chain is not
+     * a Project pair for TBkndAssn.  Its input is the indent control
+     * (assignment Var2Data 396 bytes); the outdent pair starts from the SUMMARY
+     * save's result (376 bytes: an earlier session had already dropped task 2's
+     * tombstoned blocks), so the re-created row lands 20 bytes later, the freed
+     * counter keeps the indent step's 120 (Project's file 104), and the
+     * tombstoned row's Fixed2Meta carries the indent pair's +52 = 0x08 rather
+     * than the summary save's 0x00.  Those are NAMED expected failures; the
+     * three measured pairs above are the strict comparison. */
+    for (std::string const& stream : kAssnStreams) {
+        if (stream == assn_stream("Fixed2Data")) {
             continue;
         }
-        ctx.check(stream_of(port, path) == stream_of(control, path),
-                  "chain: " + path + " is the control's");
+        bool const equal =
+            stream_of(port, stream) == stream_of(project, stream);
+        if (stream == assn_stream("Fixed2Meta") ||
+            stream == assn_stream("VarMeta") ||
+            stream == assn_stream("Var2Data")) {
+            ctx.expected_failure(
+                equal, "chain: " + stream + " equals the outdent result (the "
+                       "chain's input is the indent control, not the summary "
+                       "save the outdent pair started from)");
+        } else {
+            ctx.check(equal, "chain: " + stream + " equals the outdent result");
+        }
+    }
+    {
+        std::vector<std::uint8_t> const port_assn =
+            stream_of(port, assn_stream("Fixed2Data"));
+        std::vector<std::uint8_t> const project_assn =
+            stream_of(project, assn_stream("Fixed2Data"));
+        std::vector<std::uint8_t> const control_task_fixed2 =
+            stream_of(control, task_stream("Fixed2Data"));
+        std::size_t const project_task_rows =
+            (stream_of(project, task_stream("FixedData")).size() -
+             task_row::kHeaderSize) /
+            task_row::kStride;
+        ctx.expected_failure(
+            port_assn.size() == project_assn.size() &&
+                canonical_assn_fixed2(
+                    port_assn, port_assn.size() / 48,
+                    stream_of(port, task_stream("Fixed2Data")), rows,
+                    control_task_fixed2, rows) ==
+                    canonical_assn_fixed2(
+                        project_assn, project_assn.size() / 48,
+                        stream_of(project, task_stream("Fixed2Data")),
+                        project_task_rows, control_task_fixed2, rows),
+            "chain: TBkndAssn/Fixed2Data equals the outdent result after "
+            "identity canonicalisation (the outdent pair's assignment rows "
+            "carry an older session's parent links)");
+    }
+    {
+        std::vector<std::uint8_t> const port_props =
+            stream_of(port, "114/Props");
+        std::vector<std::uint8_t> const project_props =
+            stream_of(project, "114/Props");
+        ctx.equal(port_props.size(), project_props.size(),
+                  "chain: Props keeps the outdent result's length");
+        std::uint32_t const kCounters[] = {0x01000002u, 0x01000100u,
+                                           0x04000001u, 0x04000002u,
+                                           0x04000100u, 0x04008000u};
+        for (std::uint32_t const tag : kCounters) {
+            std::size_t const ours = props_scalar_value(port_props, tag);
+            std::size_t const theirs = props_scalar_value(project_props, tag);
+            bool const present = ours != static_cast<std::size_t>(-1) &&
+                                 theirs != static_cast<std::size_t>(-1);
+            ctx.check(present, "chain: Props carries the " + hex_tag(tag) +
+                                   " record");
+            if (!present) {
+                continue;
+            }
+            bool const equal = get_u32(port_props, ours) ==
+                               get_u32(project_props, theirs);
+            if (tag == 0x04000002u || tag == 0x04000100u) {
+                ctx.expected_failure(
+                    equal, "chain: Props " + hex_tag(tag) +
+                               " counter equals the outdent result (the "
+                               "chain's input carries blocks Project's summary "
+                               "save had already dropped)");
+            } else {
+                ctx.check(equal, "chain: Props " + hex_tag(tag) +
+                                     " counter equals the outdent result");
+            }
+        }
+        std::uint32_t const kOpaque[] = {0x02400029u, 0x024013c2u};
+        std::vector<PropsRecord> const port_records = parse_props(port_props);
+        std::vector<PropsRecord> const project_records =
+            parse_props(project_props);
+        std::vector<std::uint8_t> port_masked = port_props;
+        std::vector<std::uint8_t> project_masked = project_props;
+        for (std::uint32_t const id : kOpaque) {
+            PropsRecord const* ours = find_props_record(port_records, id);
+            PropsRecord const* theirs = find_props_record(project_records, id);
+            bool const present = ours != nullptr && theirs != nullptr &&
+                                 ours->length >= 4 && theirs->length >= 4;
+            ctx.check(present, "chain: Props carries record " + hex_tag(id));
+            if (!present) {
+                continue;
+            }
+            zero_span(port_masked, ours->payload + 2, 2);
+            zero_span(project_masked, theirs->payload + 2, 2);
+        }
+        ctx.expected_failure(
+            port_masked == project_masked,
+            "chain: Props equals the outdent result except the per-save id "
+            "words (the two assignment counters differ; see above)");
     }
 
     OutlineMarker const marker = read_outline_marker(

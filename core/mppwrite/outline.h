@@ -1,6 +1,6 @@
 /*
  * outline.h -- Project's stored task outline for an Indent / Outdent edit
- * (wave 28, W28-2.1).
+ * (wave 28, W28-2.1; wave 29, W29-0.1 added TBkndAssn and 114/Props).
  *
  * MEASURED SOURCE.  tests/data/wave28-outline-{indent,summary,outdent}.mpp are
  * three Project-2021 save pairs (a control file and the file Project saved
@@ -47,9 +47,12 @@
  *        (measured 11 -> 10: three leaf fields removed, two summary fields
  *        added); +26 bit 0x80 is SET (the stored summary flag -- every summary
  *        row of the controls carries it; the project row stores 0).  The
- *        entry's 16-byte blob at +8 is opaque per-save data Project rewrites on
- *        the row it touches; the writer leaves it and the save-pair test masks
- *        it on that row.
+ *        entry's 16-byte cache blob at +8..23 moves five bytes, measured on
+ *        both indent pairs: +9 |= 0x40, +12 |= 0x0C, +16 |= 0x10,
+ *        +17 := (+17 & ~0x04) | 0x01, +18 |= 0x20 (0xbf->0xff, 0x71->0x7d,
+ *        0x07->0x17, 0x4c->0x49, 0xcf->0xef).  set_fixed_meta_blob writes
+ *        them; the save-pair test compares the whole entry (blob included)
+ *        with Project's file -- wave 28 masked it and compared the control.
  *   VarMeta / Var2Data (logical entries; physical tail preserved)
  *     P loses 0x0B4004E5 and, when present, 0x0B400505/0x0B400506, and gains
  *       0x0B40007C = { original Duration (+84), original DurationFormat (+164),
@@ -81,7 +84,10 @@
  *   FixedMeta
  *     P: +2 moves by the net change (measured 10 -> 10: E4 removed, 4E5 added);
  *        +26 bit 0x80 is LEFT SET (measured: Project does not clear the summary
- *        flag when a summary becomes a leaf again; do not "repair" it).
+ *        flag when a summary becomes a leaf again; do not "repair" it).  The
+ *        +8..23 blob reverses four of the indent's bytes (+12 &= ~0x0C,
+ *        +16 &= ~0x10, +17 := (+17 & ~0x01) | 0x04, +18 &= ~0x20); +9's 0x40
+ *        is sticky, so it is left set.
  *   VarMeta / Var2Data
  *     P loses 0x0B4004E4 and gains the constant 0x0B4004E5 block
  *       { 01 00 00 00 01 00 FF FF } when it has none.  0x0B40007C IS KEPT
@@ -90,6 +96,69 @@
  *       payload grows, so the new block is appended and the old one stays as
  *       garbage (measured: the old block at offset 90 is untouched and the
  *       entry points at 568).
+ *
+ * WHAT THE SAME SAVES DO TO TBkndAssn AND 114/Props (W29-0.1)
+ *   The assignment table is OWNED now: write_outline_edits writes its six
+ *   streams and the 114/Props counters, and the save-pair tests compare them
+ *   with PROJECT's file (wave 28 compared them with the control, which the
+ *   wave-28 review's R28-1 rejected).  Geometry: FixedData rows 110 bytes
+ *   (uid +0, task uid +4, planned work f64 +20, actual +28, remaining +44);
+ *   FixedMeta entries 34 bytes (state +0: 0x00 live / 0x02 tombstoned, field
+ *   count +2, row offset +4 = 110*row); Fixed2Data records 48 bytes; Fixed2Meta
+ *   entries 53 bytes (+4 = 48*row, +9 new-row bit, +52 last byte); VarMeta
+ *   entries the usual (uid, Var2Data offset, key) triple.  The FixedMeta
+ *   header's u32 at +4 is 4 before any tombstone and 6 once one exists (it is
+ *   sticky: an outdent whose tombstone remains keeps 6).
+ *
+ *   INDENT (both measured indents): the new summary P's assignment is
+ *   TOMBSTONED, measured as
+ *     FixedMeta: entry +0 := 0x02, +2 field count := 0.  The row stays in
+ *       FixedData unchanged -- the state, not a removal, hides it;
+ *     header +4 := 6 (4 -> 6 on the first tombstone);
+ *     VarMeta: every logical entry of P's uid is removed.  Project does NOT
+ *       shrink the stream: it writes the reduced logical count at +8 and
+ *       leaves the last slots as stale copies of the entries that used to be
+ *       there (9 entries -> logical 6; the last three still name uid 3).  The
+ *       writer reproduces that tail (merge_logical_var_meta);
+ *     Fixed2Data / Fixed2Meta: LEFT as stored (+9 = 0x01, +52 = 0x08 in both
+ *       pairs); a tombstone does not touch either record.
+ *
+ *   OUTDENT: P's tombstoned assignment is RE-CREATED as a NEW row appended to
+ *   FixedData; the tombstone row stays where it was.  Measured as
+ *     FixedData: the tombstone's row copied with +0 uid := max(uid) + 1 (the
+ *       +4 task word stays P's uid and every plan word, +20 included, is the
+ *       tombstone's);
+ *     FixedMeta: a new 34-byte entry, +0 := 0x00, +2 := 4, +4 := 110*new_row;
+ *     Fixed2Data: a new 48-byte record -- a fresh own identity, P's Task
+ *       Fixed2Data identity as the parent +16..31, and the tombstone record's
+ *       constant +32..47 tail;
+ *     Fixed2Meta: a new entry, +4 := 48*new_row, +9 := 0x00 (new row),
+ *       +52 := 0x28;
+ *     VarMeta/Var2Data: four blocks for the new uid -- 0x0F40027A (4-byte
+ *       per-session token 0C 30 16 3D), 0x0F400031 (flat planned-work contour:
+ *       {0x00200000, 44, 160000.0, work_ticks*100.0, work_ticks*8, 0, 1, 0, 0}
+ *       then a 28-byte zero record), 0x0F400299 and 0x0F40029B (16 zero bytes
+ *       each).  Blocks append in that order; the entries are inserted by
+ *       ascending key (31, 27A, 299, 29B).  work_ticks = planned work / 100 and
+ *       must be a positive integer that fits the u32 words (the writer refuses
+ *       anything else).
+ *
+ *   114/Props (length-prefixed [u32 length][u32 id][u32 kind][payload] records):
+ *     0x01000002 / 0x04000002 count the freed Var2 bytes: every removed
+ *       logical entry's block length plus any in-place shrink of a block the
+ *       edit rewrites.  Measured: indent task 0->16 / assignment 0->120,
+ *       summary task 16->32 / assignment 104->224, outdent task 16->24 /
+ *       assignment 104->104 (the re-created blocks are new; nothing is freed);
+ *     0x01000100 / 0x04000100 are the two tables' Var2 lengths (indent 520->
+ *       548 / 396->396, summary 548->576 / 376->376, outdent 548->580 /
+ *       376->500);
+ *     0x04000001 is the assignment row count (outdent 3 -> 4);
+ *     0x04008000 := 1 iff some tombstoned assignment's task has no LIVE
+ *       ASSIGNMENT row left (indent 0 -> 1, the summary pair stays 1, the
+ *       outdent's re-created row makes it 0).
+ *     Project also reallocates two per-save opaque id records (0x02400029,
+ *     0x024013c2); the writer leaves the control's bytes and the save-pair
+ *     tests name those two words as expected failures.
  *
  * ROLL-UP ARITHMETIC IS THE CALLER'S.  A summary's +84 is not the sum of its
  * children's durations: it is the project calendar's working time between the
@@ -106,8 +175,13 @@
  *   - indent of a non-top-level row, into a preceding sibling that is already
  *     a summary or already carries a 0x7C marker / child list, or a row whose
  *     row id does not fit the measured one-byte +142 slot;
+ *   - indent whose new summary P does not have exactly one LIVE assignment row
+ *     (the tombstone shape the pairs measured);
  *   - outdent of a summary, of a row whose parent has another child, or of a
- *     row whose parent has no 0x7C marker.
+ *     row whose parent has no 0x7C marker;
+ *   - outdent whose parent P does not have exactly one TOMBSTONED assignment
+ *     row, or whose planned work is not a positive integral number of ticks
+ *     that fits the contour's f64/u32 words.
  * Scheduling mode is not a writer rule: core_mppwrite does not link the
  * reader's scheduling model.  The APP refuses an indent/outdent unless every
  * row involved is manually scheduled (app::make_outline_edit, reading the same
@@ -121,17 +195,38 @@
  * geometry, a malformed E4/marker block) THROWS instead: that is a file the
  * writer cannot keep consistent, not an edit the user asked for.
  *
- * NOT WRITTEN: Project's own outline save also tombstones the assignment row
- * of the task that becomes a summary (and, on outdent, creates a new assignment
- * for the restored leaf).  TBkndAssn is outside this writer, exactly as it is
- * outside the W28-1.2 actuals writer.
+ * EVIDENCE (wave 29, W29-0.1): the wave-28 save-pair test did NOT assert
+ * "every owned stream against Project" -- it compared the Task streams with the
+ * CONTROL, checked only some bytes of FixedMeta/Fixed2Data, asserted every
+ * other stream equalled the control, and merely printed Project's TBkndAssn
+ * row counts.  Rule 1 does not accept that, and no Project COM reopen of the
+ * port's outline save existed.  W29-0.1:
+ *   - turns Project's changed bytes into named checks: the core save-pair test
+ *     (tests/roundtrip_outline.cpp) and the app test
+ *     (app/app_edits_outline_tests.cpp) compare the six Task streams, the six
+ *     TBkndAssn streams and 114/Props with PROJECT's file, field by field
+ *     (FixedMeta whole, Fixed2Data after identity canonicalisation, the six
+ *     Props counters by name), and every stream outside that set is either
+ *     "port == Project" or a named EXPECTED FAILURE -- never "port == control";
+ *   - implements the tombstone, the re-create and the FixedMeta blob rules
+ *     above, so the whole owned set matches Project's save in all three pairs
+ *     (only the two per-save Props id words stay expected failures).
  *
- * CORRECTION (wave 29, W29-0.0): the wave-28 save-pair test did NOT assert
- * "every Task stream against Project" -- it compared them with the CONTROL and
- * only printed the TBkndAssn row counts, and NO Project COM reopen of the
- * port's outline save exists.  Rule 1 does not accept either as evidence here;
- * W29-0.1 turns Project's changed bytes into named checks and commits the
- * reopen JSON, or the command stays disabled for that shape.
+ * REOPEN (wave 29, W29-0.1): scripts/oracle_w29_reopen.py had Project 16.0
+ * open the port's three outline saves and Project's own saves of the same
+ * edits (copies under build/oracle-work) and record every row by ID; the facts
+ * are in build/w29/W29-0.1-project-reopen.json, sha256
+ * cc68d5957124b86611477f954270e57945820d3b45515ee4ba9afd69b00c8d1f.  Each
+ * pair -- app-outline-indent, app-outline-summary, app-outline-outdent -- has
+ * 0 differing fields over the project summary row and IDs 1..3 (Manual,
+ * Summary, OutlineNumber, Duration,
+ * Start, Finish, percent complete and percent work complete, actual and
+ * remaining duration, ActualStart/ActualFinish, Work/ActualWork/RemainingWork).
+ * The same run reopens the actuals and new-task-mode saves the rest of W29-0.1
+ * covers (10 pairs, all 0 differing fields; see the record).  The fixtures'
+ * TBkndAssn rows are resource-less (resource word 0xFFFF0001), so Project
+ * exposes no Assignment objects for them; that layer is covered by the
+ * field-by-field TBkndAssn comparison above, not by the reopen.
  */
 
 #ifndef MPPWRITE_OUTLINE_H
@@ -186,11 +281,12 @@ struct OutlineWriteResult {
 };
 
 /*
- * Apply every edit to `doc` in order and write the six owned TBkndTask streams
- * back.  Each edit sees the table as the previous edit left it.  All streams
- * are built on copies first, so a throw leaves `doc` byte-identical.  A
- * refusal changes only that edit (the rest still apply) and is reported in
- * `warnings`.
+ * Apply every edit to `doc` in order and write the owned streams back: the six
+ * TBkndTask streams, the six TBkndAssn streams and 114/Props.  Each edit sees
+ * the tables as the previous edit left it.  All streams are built on copies
+ * first, so a throw leaves `doc` byte-identical.  A refusal changes only that
+ * edit (the rest still apply) and is reported in `warnings`; every measured-
+ * shape check for an edit runs before that edit's first mutation.
  */
 OutlineWriteResult write_outline_edits(
     CfbDocument& doc, std::vector<OutlineEdit> const& edits,

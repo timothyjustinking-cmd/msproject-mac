@@ -47,23 +47,71 @@
  * array back into the first slots of the original stream, so the stream size
  * and every byte past the new logical count are preserved.
  *
- * NOT WRITTEN, and why: Project's save also rewrites Task Fixed2Data /
- * Fixed2Meta, the Task FixedMeta opaque cache bytes, TBkndAssn work contours,
- * CEdl/props/summary-information save metadata.  Those are derived caches the
- * port has never written.
+ * ALSO WRITTEN (wave 29, W29-0.1), because the five wave-28 percent pairs and
+ * the three mark/update pairs change these fields on every save; the save-pair
+ * tests now compare every one of them with PROJECT's file:
+ *   Task FixedMeta entry +44    0x08 once the row has progress, 0x00 at 0 %.
+ *   Task FixedMeta +8..23 blob  entry+9 bit 0x40 (percent < 100 and the elapsed
+ *                               work equals Duration*percent/100), entry+17 bit
+ *                               0x04 (automatic rows only: 0 < percent < 100;
+ *                               manual rows keep their byte), entry+18 bit 0x20
+ *                               (a percent edit sets it when either percent is
+ *                               100; Mark on Track / Update Project clear it).
+ *   Task Fixed2Meta entry +88   clears 0x0C once the row has progress; a 0 %
+ *                               write leaves it alone.
+ *                        +95    0x10 at 0 %, 0x00 above.
+ *   Task Fixed2Data row+3 +42   0x30 at 0 %, 0x01 above.
+ *                         +46   the project start at 0 %, NA at 100 %,
+ *                               ActualStart for an automatic row below 100 %,
+ *                               unchanged for a manual row below 100 %.
+ *   TBkndAssn FixedData +28     planned work * elapsed ticks / Duration;
+ *                        +44   planned - that; +60 Resume; +104 Stop copy (the
+ *                               task Start at 0 %).
+ *   TBkndAssn FixedMeta +2      net 0F400032 entry change; +10 0x08 at progress
+ *                               and 0x10 at 100 %; +14 0x04 at progress.
+ *   TBkndAssn Fixed2Meta +9     clears bit 0x01 once the row has progress.
+ *   TBkndAssn 0F400031          rewritten in place: at 100 % with a percent edit
+ *                               a 44-byte zero header (word +32 = 1) replaces the
+ *                               records; at 100 % from a date update the records
+ *                               stay byte for byte and +32 = 0; below 100 % the
+ *                               record count is kept and every record gets the
+ *                               new remaining work.
+ *   TBkndAssn 0F400032          removed at 0 %; appended (56 bytes) when none
+ *                               existed; replaced (append + remove, 56 bytes, or
+ *                               76 bytes at 100 % with a percent edit, where the
+ *                               second record carries the OLD actual work).
+ *   TBkndAssn VarMeta           9 -> 10 entries on a first 0F400032 append,
+ *                               10 -> 9 on its removal; the physical tail keeps
+ *                               Project's stale slot, as in the Task table.
+ *   114/Props 0x01000002        += the payload bytes of the removed Task blocks
+ *                               (a REPLACED 0F40015E block is not counted),
+ *              0x01000100      := the new Task Var2Data size,
+ *              0x04000002      += the payload bytes of a removed 0F400032,
+ *              0x04000100      := the new Assn Var2Data size.
+ *
+ * The save-pair tests compare every stream with Project's file (W29-0.1).  The
+ * bytes this writer still does not reproduce are named gaps, not assertions of
+ * the control: the random identity GUIDs Project reallocates in Fixed2Data and
+ * the opaque 0x0B40015E step ids.  The app refuses, from W29-0.0, every row
+ * shape no committed pair measured (a leaf under a summary, a milestone, a
+ * resource-loaded assignment that carries work, an unmeasured percent
+ * transition, and a date update on a row that already records progress).
  *
  * CORRECTION (wave 29, W29-0.0): the wave-28 save-pair test did NOT compare
  * those streams with Project's file -- it asserted them equal to the CONTROL,
  * so Project's own changes passed silently (the wave-28 review's R28-1), and NO
- * Project COM reopen of the port's actuals save exists (the W28-0.4 reopen
- * artifact reopened Project's own process, not this writer's file).  Rule 1
- * therefore does not accept "Project's reopen" as evidence here: W29-0.1 turns
- * each Project-changed byte into a named check against Project's file, writes
- * the deterministic ones, and commits the reopen JSON, or the command stays
- * disabled for that shape.  The app also refuses, from W29-0.0, every row shape
- * no committed pair measured (a leaf under a summary, a milestone, a resource-
- * loaded assignment that carries work, an unmeasured percent transition, and a
- * date update on a row that already records progress).
+ * Project COM reopen of the port's actuals save existed (the W28-0.4 reopen
+ * artifact reopened Project's own process, not this writer's file).  W29-0.1
+ * rewrites those comparisons and ran Project's reopen of the port's actuals,
+ * outline and new-task-mode saves (scripts/oracle_w29_reopen.py; facts in
+ * build/w29/W29-0.1-project-reopen.json, sha256
+ * cc68d5957124b86611477f954270e57945820d3b45515ee4ba9afd69b00c8d1f).  Project
+ * 16.0 reopened 10 port saves against Project's own save of the same edit and
+ * displayed 0 differing fields on every row (project summary and IDs 1..3:
+ * Manual, Summary, OutlineNumber, Duration, Start, Finish, percent complete and
+ * percent work complete, actual/remaining duration, ActualStart/Finish,
+ * Work/ActualWork/RemainingWork; project NewTasksCreatedAsManual).  Rule 1
+ * accepts the reopen only because it was actually run.
  *
  * 0x0B40015E STEP IDS ARE OPAQUE.  Each 20-byte step ends in a u32 Project
  * allocates per session (the same block saved twice keeps its ids; a new

@@ -75,6 +75,66 @@ constexpr std::uint32_t kStatusDateKind = 4u;
 constexpr std::uint8_t kResetBlock[8] = {0x01, 0x00, 0x00, 0x00,
                                          0x01, 0x00, 0xFF, 0xFF};
 
+/* W29-0.1: the Task metadata Project rewrites on an actuals save.
+ *   FixedMeta +44 is 0x08 once the row has progress, 0x00 at 0 % (measured on
+ *   every pair; the control rows carry 0x00 or, at a saved 40 %, 0x08).
+ *   FixedMeta +8..23 is the opaque cache blob; three of its bits follow the
+ *   edit: entry+9 bit 0x40 (percent < 100 and Actual == Duration*percent/100),
+ *   entry+17 bit 0x04 (automatic rows only: 0 < percent < 100; manual rows keep
+ *   their byte) and entry+18 bit 0x20 (a percent edit sets it when the old or
+ *   the new percent is 100, a date update clears it).
+ *   Fixed2Meta entry +88 (clear 0x0C once a row has progress; a 0 % write leaves
+ *   it alone) and +95 (0x10 at 0 %, 0x00 above).
+ *   Fixed2Data record row+3: +42 0x30 at 0 % / 0x01 above; +46 the project start
+ *   at 0 %, NA at 100 %, ActualStart for an automatic row below 100 %, and
+ *   unchanged for a manual row below 100 %. */
+constexpr std::size_t kFixedMetaFlag44 = 44;
+constexpr std::size_t kFixedMetaBlob = 8;
+constexpr std::size_t kFixed2MetaLeafTail = 88;
+constexpr std::uint8_t kFixed2MetaTailClear = 0x0C;
+constexpr std::size_t kFixed2MetaKind = 95;
+constexpr std::uint8_t kFixed2MetaKindLeaf = 0x10;
+constexpr std::size_t kFixed2RecordStartCopy = 46;
+constexpr std::uint8_t kFixed2RecordNoProgress = 0x30;
+constexpr std::uint8_t kFixed2RecordHasProgress = 0x01;
+
+/* TBkndAssn: 110-byte rows, 34-byte FixedMeta entries, 53-byte Fixed2Meta
+ * entries, and the two variable fields Project's save updates (0F400031 work
+ * contour, 0F400032 actual work). */
+constexpr std::size_t kAssnStride = 110;
+constexpr std::size_t kAssnUid = 0;
+constexpr std::size_t kAssnTask = 4;
+constexpr std::size_t kAssnUnits = 12;
+constexpr std::size_t kAssnPlanned = 20;
+constexpr std::size_t kAssnActual = 28;
+constexpr std::size_t kAssnRemaining = 44;
+constexpr std::size_t kAssnResume = 60;
+constexpr std::size_t kAssnStartCopy = 104;
+constexpr std::size_t kAssnMetaHeader = 16;
+constexpr std::size_t kAssnMetaEntry = 34;
+constexpr std::size_t kAssnMetaFieldCount = 2;
+constexpr std::size_t kAssnMetaRowOffset = 4;
+constexpr std::size_t kAssnMetaWord10 = 10;
+constexpr std::size_t kAssnMetaWord14 = 14;
+constexpr std::size_t kAssnFixed2MetaEntry = 53;
+constexpr std::size_t kAssnFixed2MetaFlags = 9;
+constexpr std::uint32_t kAssnWorkField = 0x0F400031u;
+constexpr std::uint32_t kAssnActualWorkField = 0x0F400032u;
+constexpr std::size_t kAssnWorkHeader = 44;
+constexpr std::size_t kAssnWorkRecord = 28;
+constexpr std::size_t kAssnActualHeader = 36;
+constexpr std::size_t kAssnActualRecord = 20;
+constexpr std::uint32_t kAssnWorkMagic = 0x00200000u;
+
+/* 114/Props scalar entries: [u32 LE 4][tag 4 bytes BIG-endian][u32 LE 4]
+ * [value u32 LE].  The four counters an actuals save moves; each occurs exactly
+ * once in every measured file (W29-0.1). */
+constexpr std::uint32_t kPropTaskFreed = 0x01000002u;
+constexpr std::uint32_t kPropTaskVar2Size = 0x01000100u;
+constexpr std::uint32_t kPropAssnFreed = 0x04000002u;
+constexpr std::uint32_t kPropAssnVar2Size = 0x04000100u;
+constexpr std::size_t kPropScalarSize = 16;
+
 std::string table_stream(std::string_view table, std::string_view name) {
     return std::string(table) + "/" + std::string(name);
 }
@@ -209,15 +269,81 @@ std::uint32_t fresh_step_id(std::uint32_t uid, std::uint16_t percent,
     }
 }
 
-/* Remove every VarMeta entry for (mid, field); return how many went.  Matching
- * is exact on mid: the writer only ever creates and owns mid == uid entries for
- * these fields, so a 0x80000000|uid family entry is not silently swallowed. */
+/* TBkndTask's path with the table name swapped for TBkndAssn.  The writer only
+ * ever runs on a task table; any other path is a caller mistake, not a shape to
+ * guess about. */
+std::string assn_table_for(std::string_view task_table) {
+    constexpr std::string_view suffix = "TBkndTask";
+    if (task_table.size() < suffix.size() ||
+        task_table.substr(task_table.size() - suffix.size()) != suffix) {
+        throw Error("the actuals writer needs a TBkndTask path to locate "
+                    "TBkndAssn, not '" + std::string(task_table) + "'");
+    }
+    std::string out(task_table);
+    out.replace(out.size() - suffix.size(), suffix.size(), "TBkndAssn");
+    return out;
+}
+
+/* The storage's Props stream: '114/TBkndTask' -> '114/Props'. */
+std::string props_path_for(std::string_view table) {
+    std::size_t const slash = table.find('/');
+    if (slash == std::string_view::npos) {
+        throw Error("'" + std::string(table) + "' has no storage prefix");
+    }
+    return std::string(table.substr(0, slash)) + "/Props";
+}
+
+/* Byte offset of the VALUE of one 16-byte scalar Props entry, located by its
+ * big-endian tag.  Requiring exactly one occurrence is the measured shape: the
+ * save pair moves one record per counter (W29-0.1). */
+std::size_t props_value_offset(std::vector<std::uint8_t> const& props,
+                               std::uint32_t tag) {
+    std::size_t found = static_cast<std::size_t>(-1);
+    for (std::size_t at = 0; at + kPropScalarSize <= props.size(); ++at) {
+        if (get_u32(props, at) != 4 || get_u32(props, at + 8) != 4) {
+            continue;
+        }
+        std::uint32_t const stored =
+            (static_cast<std::uint32_t>(props[at + 4]) << 24) |
+            (static_cast<std::uint32_t>(props[at + 5]) << 16) |
+            (static_cast<std::uint32_t>(props[at + 6]) << 8) |
+            static_cast<std::uint32_t>(props[at + 7]);
+        if (stored != tag) {
+            continue;
+        }
+        if (found != static_cast<std::size_t>(-1)) {
+            throw Error("114/Props holds more than one scalar record for tag " +
+                        std::to_string(tag));
+        }
+        found = at + 12;
+    }
+    if (found == static_cast<std::size_t>(-1)) {
+        throw Error("114/Props has no scalar record for tag 0x" +
+                    std::to_string(tag) + ", so the save counters cannot be "
+                    "kept");
+    }
+    return found;
+}
+
+/* Remove every VarMeta entry for (mid, field); return how many went and add the
+ * payload bytes of each removed block to freed_bytes.  `var2` is needed because
+ * the entry names the block: Project's freed-byte counters in 114/Props move by
+ * exactly the block payload sizes (W29-0.1).  Matching is exact on mid: the
+ * writer only ever creates and owns mid == uid entries for these fields, so a
+ * 0x80000000|uid family entry is not silently swallowed. */
 std::size_t remove_var_entries(std::vector<std::uint8_t>& var_meta,
-                               std::uint32_t mid, std::uint32_t field_id) {
+                               std::vector<std::uint8_t> const& var2,
+                               std::uint32_t mid, std::uint32_t field_id,
+                               std::size_t& freed_bytes) {
     std::vector<VarEntry> const entries = read_var_entries(var_meta);
     std::size_t removed = 0;
     for (std::size_t i = entries.size(); i-- > 0;) {
         if (entries[i].mid == mid && entries[i].field_id == field_id) {
+            if (static_cast<std::size_t>(entries[i].offset) + 4 > var2.size()) {
+                throw Error("VarMeta entry for field 0x" +
+                            std::to_string(field_id) + " points past Var2Data");
+            }
+            freed_bytes += get_u32(var2, entries[i].offset);
             std::size_t const at = kVarMetaHeaderSize + i * kVarMetaEntrySize;
             var_meta.erase(var_meta.begin() + static_cast<std::ptrdiff_t>(at),
                            var_meta.begin() +
@@ -497,15 +623,42 @@ PercentActualsResult write_percent_actuals(
     std::string const meta_path = table_stream(table, "FixedMeta");
     std::string const var_meta_path = table_stream(table, "VarMeta");
     std::string const var2_path = table_stream(table, "Var2Data");
+    std::string const fixed2_path = table_stream(table, "Fixed2Data");
+    std::string const fixed2_meta_path = table_stream(table, "Fixed2Meta");
     std::vector<std::uint8_t> meta = doc.read_stream(meta_path);
     std::vector<std::uint8_t> var_meta = doc.read_stream(var_meta_path);
     std::vector<std::uint8_t> var2 = doc.read_stream(var2_path);
+    std::vector<std::uint8_t> fixed2 = doc.read_stream(fixed2_path);
+    std::vector<std::uint8_t> fixed2_meta = doc.read_stream(fixed2_meta_path);
     if (meta.size() < kFixedMetaHeaderSize ||
         (meta.size() - kFixedMetaHeaderSize) % kFixedMetaEntrySize != 0) {
         throw Error("FixedMeta is " + std::to_string(meta.size()) +
                     " bytes, not 16 + 47*n");
     }
     (void)read_var_entries(var_meta); /* validates the 24 + 12*n shape */
+    if (fixed2.size() != kFixed2RecordSize * (row_count + 3)) {
+        throw Error("Fixed2Data is " + std::to_string(fixed2.size()) +
+                    " bytes for " + std::to_string(row_count) + " rows (expected " +
+                    std::to_string(kFixed2RecordSize * (row_count + 3)) + ")");
+    }
+    if (fixed2_meta.size() < kFixed2MetaHeaderSize ||
+        (fixed2_meta.size() - kFixed2MetaHeaderSize) % kFixed2MetaEntrySize != 0) {
+        throw Error("Fixed2Meta is " + std::to_string(fixed2_meta.size()) +
+                    " bytes, not 16 + 96*n");
+    }
+
+    /* W29-0.1: the applied edits also drive the TBkndAssn streams and the
+     * 114/Props counters, which are read once after the task loop. */
+    struct AppliedEdit {
+        PercentActualEdit edit;
+        std::size_t row = 0;
+        bool manual = false;
+        bool has_progress = false;
+        std::uint32_t duration = 0;
+        std::uint32_t actual = 0;
+    };
+    std::vector<AppliedEdit> applied;
+    std::size_t freed_task_bytes = 0;
 
     /* Edit only the logical entries; the physical tail beyond header +8 belongs
      * to no reader and is preserved verbatim (see merge_logical_var_meta). */
@@ -602,6 +755,26 @@ PercentActualsResult write_percent_actuals(
             continue;
         }
         bool const has_progress = edit.percent > 0;
+        std::size_t const meta_index = meta_entry_for_row(meta, row);
+        if (meta_index == static_cast<std::size_t>(-1)) {
+            throw Error("FixedMeta has no entry for FixedData row " +
+                        std::to_string(row) + " (uid " +
+                        std::to_string(edit.uid) +
+                        "), so its metadata cannot be kept");
+        }
+        std::size_t const meta_base =
+            kFixedMetaHeaderSize + meta_index * kFixedMetaEntrySize;
+        std::size_t const fixed2_meta_at =
+            kFixed2MetaHeaderSize + meta_index * kFixed2MetaEntrySize;
+        if (fixed2_meta_at + kFixed2MetaEntrySize > fixed2_meta.size()) {
+            throw Error("Fixed2Meta has no entry " + std::to_string(meta_index) +
+                        " for task uid " + std::to_string(edit.uid));
+        }
+        bool const manual =
+            (fixed2_meta[fixed2_meta_at + kFixed2MetaFlags] &
+             kFixed2MetaFlagManual) != 0;
+        bool const derived_actual =
+            actual == actual_duration_ticks(duration, edit.percent);
         rows.set_u32(row, task_row::kActualDuration, actual);
         rows.set_u32(row, task_row::kRemainingDuration, duration - actual);
         rows.set_u16(row, task_row::kPercentComplete, edit.percent);
@@ -650,22 +823,33 @@ PercentActualsResult write_percent_actuals(
         /* --- the row's variable fields ---------------------------------- */
         std::size_t added = 0;
         std::size_t removed = 0;
+        /* Bytes the props counter 0x01000002 gains: the payloads of the blocks
+         * this edit stops referencing.  MEASURED (W29-0.1): a replaced progress
+         * block is NOT counted, so its bytes go to a discarded sink. */
+        std::size_t discarded = 0;
         std::vector<ProgressStep> steps;
         bool had_progress_block = false;
-        if (has_progress) {
-            std::vector<std::uint32_t> const old_offsets =
-                find_var_offsets(var_meta, kProgressField, edit.uid);
-            if (!old_offsets.empty()) {
-                had_progress_block = true;
-                steps = decode_steps(read_var_block(var2, old_offsets.front()));
-            }
+        std::vector<std::uint32_t> const old_offsets =
+            find_var_offsets(var_meta, kProgressField, edit.uid);
+        if (old_offsets.size() > 1) {
+            throw Error("task uid " + std::to_string(edit.uid) + " has " +
+                        std::to_string(old_offsets.size()) +
+                        " 0x0B40015E blocks; the measured shape is one");
         }
-        removed += remove_var_entries(var_meta, edit.uid, kResetField);
+        if (has_progress && !old_offsets.empty()) {
+            had_progress_block = true;
+            steps = decode_steps(read_var_block(var2, old_offsets.front()));
+        }
+        removed += remove_var_entries(var_meta, var2, edit.uid, kResetField,
+                                      freed_task_bytes);
         if (has_progress && old_percent == 0) {
-            removed += remove_var_entries(var_meta, edit.uid, kManualFieldA);
-            removed += remove_var_entries(var_meta, edit.uid, kManualFieldB);
+            removed += remove_var_entries(var_meta, var2, edit.uid,
+                                          kManualFieldA, freed_task_bytes);
+            removed += remove_var_entries(var_meta, var2, edit.uid,
+                                          kManualFieldB, freed_task_bytes);
         }
-        removed += remove_var_entries(var_meta, edit.uid, kProgressField);
+        removed += remove_var_entries(var_meta, var2, edit.uid, kProgressField,
+                                      has_progress ? discarded : freed_task_bytes);
         if (has_progress) {
             if (had_progress_block && steps.size() > 1 && steps.back().flag == 1) {
                 steps.pop_back(); /* the previous "current" step */
@@ -709,15 +893,6 @@ PercentActualsResult write_percent_actuals(
 
         /* FixedMeta +2 is the row's variable-field count.  The measured pairs
          * move it by the NET entry change (manual 0->40: 11 -> 9). */
-        std::size_t const meta_index = meta_entry_for_row(meta, row);
-        if (meta_index == static_cast<std::size_t>(-1)) {
-            throw Error("FixedMeta has no entry for FixedData row " +
-                        std::to_string(row) + " (uid " +
-                        std::to_string(edit.uid) +
-                        "), so its variable-field count cannot be kept");
-        }
-        std::size_t const meta_base =
-            kFixedMetaHeaderSize + meta_index * kFixedMetaEntrySize;
         std::int64_t const count =
             static_cast<std::int64_t>(get_u16(meta, meta_base + kFixedMetaFieldCount)) +
             static_cast<std::int64_t>(added) - static_cast<std::int64_t>(removed);
@@ -728,6 +903,71 @@ PercentActualsResult write_percent_actuals(
         }
         put_u16(meta, meta_base + kFixedMetaFieldCount,
                 static_cast<std::uint16_t>(count));
+
+        /* --- the Task metadata Project rewrites (W29-0.1) --------------- */
+        meta[meta_base + kFixedMetaFlag44] = has_progress ? 0x08 : 0x00;
+        std::size_t const blob = meta_base + kFixedMetaBlob;
+        auto set_blob_bit = [&meta, blob](std::size_t index, std::uint8_t bit,
+                                          bool value) {
+            if (value) {
+                meta[blob + index] |= bit;
+            } else {
+                meta[blob + index] =
+                    static_cast<std::uint8_t>(meta[blob + index] & ~bit);
+            }
+        };
+        /* entry+9 bit 0x40: percent < 100 and the elapsed work is exactly the
+         * rounded Duration*percent/100.  Mark on Track's 83 % manual row stores
+         * 1200 of 19920 ticks and clears it; its 50 % row (1200 of 1200) sets
+         * it. */
+        set_blob_bit(1, 0x40, edit.percent < 100 && derived_actual);
+        /* entry+17 bit 0x04: automatic rows only, below 100 % with progress.
+         * Manual rows keep the byte they had. */
+        if (!manual) {
+            set_blob_bit(9, 0x04, has_progress && edit.percent < 100);
+        }
+        /* entry+18 bit 0x20: a percent edit sets it when either side is 100 %;
+         * Mark on Track / Update Project clear it. */
+        set_blob_bit(10, 0x20,
+                     edit.progress_flags &&
+                         (old_percent == 100 || edit.percent == 100));
+
+        if (has_progress) {
+            fixed2_meta[fixed2_meta_at + kFixed2MetaLeafTail] = static_cast<std::uint8_t>(
+                fixed2_meta[fixed2_meta_at + kFixed2MetaLeafTail] &
+                ~kFixed2MetaTailClear);
+        }
+        fixed2_meta[fixed2_meta_at + kFixed2MetaKind] =
+            has_progress ? 0x00 : kFixed2MetaKindLeaf;
+
+        std::size_t const fixed2_at = kFixed2RecordSize * (row + 3);
+        std::uint8_t const old_row_flags = fixed2[fixed2_at + kFixed2RecordFlags];
+        if (old_row_flags != kFixed2RecordNoProgress &&
+            old_row_flags != kFixed2RecordHasProgress) {
+            throw Error("task uid " + std::to_string(edit.uid) +
+                        ": Fixed2Data +42 is 0x" +
+                        std::to_string(old_row_flags) +
+                        ", not the measured 0x30/0x01 leaf shape");
+        }
+        fixed2[fixed2_at + kFixed2RecordFlags] =
+            has_progress ? kFixed2RecordHasProgress : kFixed2RecordNoProgress;
+        std::size_t const start_copy = fixed2_at + kFixed2RecordStartCopy;
+        if (edit.percent == 100) {
+            put_u32(fixed2, start_copy, kInvalidDate);
+        } else if (edit.percent == 0) {
+            put_u32(fixed2, start_copy, rows.u32(0, task_row::kStart));
+        } else if (!manual) {
+            put_u32(fixed2, start_copy, edit.dates.actual_start);
+        }
+
+        AppliedEdit done;
+        done.edit = edit;
+        done.row = row;
+        done.manual = manual;
+        done.has_progress = has_progress;
+        done.duration = duration;
+        done.actual = actual;
+        applied.push_back(done);
         ++result.rows_written;
     }
 
@@ -753,10 +993,342 @@ PercentActualsResult write_percent_actuals(
     std::vector<std::uint8_t> const final_var_meta =
         merge_logical_var_meta(original_var_meta, var_meta);
 
+    /* --- TBkndAssn: the assignment's actual work (W29-0.1) --------------
+     * Every measured task row has exactly one assignment (the unassigned
+     * placeholder, resource uid via the 0xFFFF sentinel).  The pair moves the
+     * assignment's Actual Work (+28), Remaining Work (+44), Resume (+60) and
+     * Stop copy (+104); the FixedMeta entry's field count and two flag words;
+     * the Fixed2Meta `has actual work` bit; and the two variable blocks
+     * 0F400031 (rewritten in place) and 0F400032 (append, replace or remove). */
+    std::string const assn_table = assn_table_for(table);
+    std::string const assn_fixed_path = table_stream(assn_table, "FixedData");
+    std::string const assn_meta_path = table_stream(assn_table, "FixedMeta");
+    std::string const assn_fixed2_meta_path =
+        table_stream(assn_table, "Fixed2Meta");
+    std::string const assn_var_meta_path = table_stream(assn_table, "VarMeta");
+    std::string const assn_var2_path = table_stream(assn_table, "Var2Data");
+    std::vector<std::uint8_t> assn_fixed = doc.read_stream(assn_fixed_path);
+    std::vector<std::uint8_t> assn_meta = doc.read_stream(assn_meta_path);
+    std::vector<std::uint8_t> assn_fixed2_meta =
+        doc.read_stream(assn_fixed2_meta_path);
+    std::vector<std::uint8_t> assn_var_meta = doc.read_stream(assn_var_meta_path);
+    std::vector<std::uint8_t> assn_var2 = doc.read_stream(assn_var2_path);
+    if (assn_fixed.size() % kAssnStride != 0) {
+        throw Error("TBkndAssn/FixedData is " + std::to_string(assn_fixed.size()) +
+                    " bytes, not a multiple of " + std::to_string(kAssnStride));
+    }
+    if (assn_meta.size() < kAssnMetaHeader ||
+        (assn_meta.size() - kAssnMetaHeader) % kAssnMetaEntry != 0) {
+        throw Error("TBkndAssn/FixedMeta is " + std::to_string(assn_meta.size()) +
+                    " bytes, not 16 + 34*n");
+    }
+    if (assn_fixed2_meta.size() < kFixed2MetaHeaderSize ||
+        (assn_fixed2_meta.size() - kFixed2MetaHeaderSize) %
+                kAssnFixed2MetaEntry !=
+            0) {
+        throw Error("TBkndAssn/Fixed2Meta is " +
+                    std::to_string(assn_fixed2_meta.size()) +
+                    " bytes, not 16 + 53*n");
+    }
+    (void)read_var_entries(assn_var_meta);
+    std::vector<std::uint8_t> const original_assn_var_meta = assn_var_meta;
+    std::size_t const assn_physical_entries =
+        (assn_var_meta.size() - kVarMetaHeaderSize) / kVarMetaEntrySize;
+    std::size_t const assn_declared_entries = get_u32(assn_var_meta, 8);
+    if (assn_declared_entries > assn_physical_entries) {
+        throw Error("TBkndAssn/VarMeta declares " +
+                    std::to_string(assn_declared_entries) + " entries but holds " +
+                    std::to_string(assn_physical_entries));
+    }
+    assn_var_meta.resize(kVarMetaHeaderSize +
+                         assn_declared_entries * kVarMetaEntrySize);
+
+    std::size_t freed_assn_bytes = 0;
+    for (AppliedEdit const& item : applied) {
+        PercentActualEdit const& edit = item.edit;
+        std::size_t assn_row = static_cast<std::size_t>(-1);
+        for (std::size_t candidate = 0;
+             candidate < assn_fixed.size() / kAssnStride; ++candidate) {
+            if (get_u32(assn_fixed, candidate * kAssnStride + kAssnTask) ==
+                edit.uid) {
+                if (assn_row != static_cast<std::size_t>(-1)) {
+                    throw Error("task uid " + std::to_string(edit.uid) +
+                                " has more than one TBkndAssn row; the measured "
+                                "shape is one assignment");
+                }
+                assn_row = candidate;
+            }
+        }
+        if (assn_row == static_cast<std::size_t>(-1)) {
+            throw Error("task uid " + std::to_string(edit.uid) +
+                        " has no TBkndAssn row, so its assignment actuals "
+                        "cannot be written");
+        }
+        std::size_t const base = assn_row * kAssnStride;
+        std::uint32_t const assn_uid = get_u32(assn_fixed, base + kAssnUid);
+        if (item.duration == 0) {
+            throw Error("task uid " + std::to_string(edit.uid) +
+                        " has zero duration; the assignment work ratio is not "
+                        "measured for that shape");
+        }
+        double const planned = get_f64(assn_fixed, base + kAssnPlanned);
+        double const units = get_f64(assn_fixed, base + kAssnUnits);
+        double const old_actual_work = get_f64(assn_fixed, base + kAssnActual);
+        double const actual_work =
+            planned * static_cast<double>(item.actual) /
+            static_cast<double>(item.duration);
+        double const remaining_work = planned - actual_work;
+        std::uint32_t const remaining_ticks = item.duration - item.actual;
+        if (item.actual > 0xFFFFFFFFu / 8u) {
+            throw Error("task uid " + std::to_string(edit.uid) +
+                        ": actual ticks overflow the 32-bit work word");
+        }
+        std::uint32_t const ticks8 = item.actual * 8u;
+
+        /* 0F400031: in-place rewrite at the same Var2Data offset.  100 % with a
+         * percent edit stores a 44-byte zero header and drops the records (their
+         * bytes stay as garbage); 100 % from a date update keeps the records
+         * byte for byte and clears the word at +32; below 100 % keeps the
+         * record count and rewrites the remaining work into each one. */
+        std::vector<std::uint32_t> const work_offsets =
+            find_var_offsets(assn_var_meta, kAssnWorkField, assn_uid);
+        if (work_offsets.size() != 1) {
+            throw Error("assignment uid " + std::to_string(assn_uid) + " has " +
+                        std::to_string(work_offsets.size()) +
+                        " 0F400031 blocks; the measured shape is one");
+        }
+        std::uint32_t const work_offset = work_offsets.front();
+        std::vector<std::uint8_t> const old_work =
+            read_var_block(assn_var2, work_offset);
+        if (old_work.size() < kAssnWorkHeader) {
+            throw Error("assignment uid " + std::to_string(assn_uid) +
+                        ": 0F400031 is " + std::to_string(old_work.size()) +
+                        " bytes, shorter than its 44-byte header");
+        }
+        std::vector<std::uint8_t> work;
+        if (edit.percent < 100) {
+            if ((old_work.size() - kAssnWorkHeader) % kAssnWorkRecord != 0) {
+                throw Error("assignment uid " + std::to_string(assn_uid) +
+                            ": 0F400031 is " +
+                            std::to_string(old_work.size()) +
+                            " bytes, not 44 + 28*n");
+            }
+            work = old_work;
+            put_u32(work, 0, kAssnWorkMagic);
+            put_u32(work, 4, static_cast<std::uint32_t>(kAssnWorkHeader));
+            put_f64(work, 8, 160000.0);
+            put_f64(work, 16, remaining_work);
+            put_u32(work, 24, remaining_ticks * 8u);
+            put_u32(work, 28, 0);
+            put_u32(work, 32, 1);
+            put_u32(work, 36, 0);
+            put_u32(work, 40, 0);
+            std::size_t const records =
+                (old_work.size() - kAssnWorkHeader) / kAssnWorkRecord;
+            for (std::size_t i = 0; i < records; ++i) {
+                std::size_t const at =
+                    kAssnWorkHeader + i * kAssnWorkRecord;
+                put_f64(work, at, remaining_work);
+                put_f64(work, at + 8, 160000.0);
+                put_u32(work, at + 16, 0);
+                put_u32(work, at + 20, 0);
+                put_u32(work, at + 24, remaining_ticks * 8u);
+            }
+        } else {
+            work.assign(kAssnWorkHeader, 0);
+            put_u32(work, 0, kAssnWorkMagic);
+            put_u32(work, 4, static_cast<std::uint32_t>(kAssnWorkHeader));
+            put_u32(work, 32, edit.progress_flags ? 1u : 0u);
+            if (!edit.progress_flags) {
+                work = old_work;
+                put_u32(work, 0, kAssnWorkMagic);
+                put_u32(work, 4, static_cast<std::uint32_t>(kAssnWorkHeader));
+                put_f64(work, 8, 0.0);
+                put_f64(work, 16, 0.0);
+                put_u32(work, 24, 0);
+                put_u32(work, 28, 0);
+                put_u32(work, 32, 0);
+                put_u32(work, 36, 0);
+                put_u32(work, 40, 0);
+            }
+        }
+        /* The record bytes past a shortened payload stay as Project leaves
+         * them; every write here is in place. */
+        put_u32(assn_var2, work_offset,
+                static_cast<std::uint32_t>(work.size()));
+        std::copy(work.begin(), work.end(),
+                  assn_var2.begin() + static_cast<std::ptrdiff_t>(work_offset + 4));
+
+        /* 0F400032: remove at 0 %, append 56 bytes when none existed, replace
+         * (append + remove) otherwise.  A 100 % percent edit's replacement
+         * carries the old actual work as a second record. */
+        std::vector<std::uint32_t> const actual_offsets =
+            find_var_offsets(assn_var_meta, kAssnActualWorkField, assn_uid);
+        if (actual_offsets.size() > 1) {
+            throw Error("assignment uid " + std::to_string(assn_uid) + " has " +
+                        std::to_string(actual_offsets.size()) +
+                        " 0F400032 blocks; the measured shape is one");
+        }
+        bool const had_actual_work = !actual_offsets.empty();
+        if (had_actual_work) {
+            std::size_t const removed32 = remove_var_entries(
+                assn_var_meta, assn_var2, assn_uid, kAssnActualWorkField,
+                freed_assn_bytes);
+            if (removed32 != 1) {
+                throw Error("assignment uid " + std::to_string(assn_uid) +
+                            ": 0F400032 was not removed exactly once");
+            }
+        }
+        if (edit.percent > 0) {
+            if (had_actual_work &&
+                !(edit.percent == 100 && edit.progress_flags)) {
+                throw Error("assignment uid " + std::to_string(assn_uid) +
+                            ": replacing 0F400032 below 100 % (or at 100 % "
+                            "from a date update) is not a measured shape");
+            }
+            std::vector<std::uint8_t> payload(
+                kAssnActualHeader + kAssnActualRecord, 0);
+            put_u16(payload, 0, 1);
+            put_u16(payload, 2, 24);
+            put_u32(payload, 4, static_cast<std::uint32_t>(kAssnActualHeader));
+            put_f64(payload, 8, units);
+            put_f64(payload, 16, actual_work);
+            put_u32(payload, 24, ticks8);
+            put_f64(payload, 36, actual_work);
+            put_f64(payload, 44, units);
+            put_u32(payload, 52, ticks8);
+            if (had_actual_work) {
+                payload.resize(kAssnActualHeader + 2 * kAssnActualRecord);
+                put_f64(payload, 56, old_actual_work);
+                put_f64(payload, 64, 0.0);
+                put_u32(payload, 72, ticks8);
+            }
+            std::uint32_t const offset =
+                static_cast<std::uint32_t>(assn_var2.size());
+            std::vector<std::uint8_t> const block = encode_block(payload);
+            assn_var2.insert(assn_var2.end(), block.begin(), block.end());
+            insert_var_entry(assn_var_meta, assn_uid, kAssnActualWorkField,
+                             offset);
+        }
+
+        put_f64(assn_fixed, base + kAssnActual, actual_work);
+        put_f64(assn_fixed, base + kAssnRemaining, remaining_work);
+        std::uint32_t const no_progress_date =
+            rows.u32(item.row, task_row::kStart);
+        put_u32(assn_fixed, base + kAssnResume,
+                item.has_progress ? edit.dates.resume : no_progress_date);
+        put_u32(assn_fixed, base + kAssnStartCopy,
+                item.has_progress ? edit.dates.stop : no_progress_date);
+
+        std::size_t assn_meta_index = static_cast<std::size_t>(-1);
+        for (std::size_t i = 0;
+             i < (assn_meta.size() - kAssnMetaHeader) / kAssnMetaEntry; ++i) {
+            if (get_u32(assn_meta, kAssnMetaHeader + i * kAssnMetaEntry +
+                                      kAssnMetaRowOffset) == base) {
+                assn_meta_index = i;
+                break;
+            }
+        }
+        if (assn_meta_index == static_cast<std::size_t>(-1)) {
+            throw Error("TBkndAssn/FixedMeta has no entry for row " +
+                        std::to_string(assn_row));
+        }
+        std::size_t const assn_meta_at =
+            kAssnMetaHeader + assn_meta_index * kAssnMetaEntry;
+        std::int64_t const assn_count =
+            static_cast<std::int64_t>(
+                get_u16(assn_meta, assn_meta_at + kAssnMetaFieldCount)) +
+            (edit.percent > 0 ? 1 : 0) - (had_actual_work ? 1 : 0);
+        if (assn_count < 0 || assn_count > 0xFFFF) {
+            throw Error("TBkndAssn field count for uid " +
+                        std::to_string(edit.uid) + " would become " +
+                        std::to_string(assn_count));
+        }
+        put_u16(assn_meta, assn_meta_at + kAssnMetaFieldCount,
+                static_cast<std::uint16_t>(assn_count));
+        assn_meta[assn_meta_at + kAssnMetaWord10] = static_cast<std::uint8_t>(
+            (assn_meta[assn_meta_at + kAssnMetaWord10] & ~0x18u) |
+            (item.has_progress ? 0x08u : 0u) |
+            (edit.percent == 100 ? 0x10u : 0u));
+        assn_meta[assn_meta_at + kAssnMetaWord14] = static_cast<std::uint8_t>(
+            (assn_meta[assn_meta_at + kAssnMetaWord14] & ~0x04u) |
+            (item.has_progress ? 0x04u : 0u));
+        std::size_t const assn_f2_meta_at =
+            kFixed2MetaHeaderSize + assn_meta_index * kAssnFixed2MetaEntry;
+        if (assn_f2_meta_at + kAssnFixed2MetaEntry >
+            assn_fixed2_meta.size()) {
+            throw Error("TBkndAssn/Fixed2Meta has no entry " +
+                        std::to_string(assn_meta_index));
+        }
+        if (item.has_progress) {
+            assn_fixed2_meta[assn_f2_meta_at + kAssnFixed2MetaFlags] =
+                static_cast<std::uint8_t>(
+                    assn_fixed2_meta[assn_f2_meta_at +
+                                     kAssnFixed2MetaFlags] &
+                    ~0x01u);
+        }
+    }
+
+    std::size_t const assn_entry_count = count_var_entries(assn_var_meta);
+    if (assn_var_meta.size() !=
+        kVarMetaHeaderSize + assn_entry_count * kVarMetaEntrySize) {
+        throw Error("TBkndAssn/VarMeta lost its 24 + 12*n shape while editing");
+    }
+    put_u32(assn_var_meta, 8,
+            static_cast<std::uint32_t>(assn_entry_count));
+    if (assn_var2.size() > 0xFFFFFFFFu) {
+        throw Error("TBkndAssn/Var2Data grew past the 32-bit size word");
+    }
+    put_u32(assn_var_meta, kVarMetaVar2SizeOffset,
+            static_cast<std::uint32_t>(assn_var2.size()));
+    std::vector<std::uint8_t> const final_assn_var_meta =
+        merge_logical_var_meta(original_assn_var_meta, assn_var_meta);
+
+    /* --- 114/Props counters -------------------------------------------- */
+    std::string const props_path = props_path_for(table);
+    if (!doc.has_stream(props_path)) {
+        throw Error(props_path + " is absent, so the save counters cannot be "
+                    "kept");
+    }
+    std::vector<std::uint8_t> props = doc.read_stream(props_path);
+    std::size_t const task_freed_at = props_value_offset(props, kPropTaskFreed);
+    std::size_t const task_var2_at =
+        props_value_offset(props, kPropTaskVar2Size);
+    std::size_t const assn_freed_at = props_value_offset(props, kPropAssnFreed);
+    std::size_t const assn_var2_at =
+        props_value_offset(props, kPropAssnVar2Size);
+    auto accumulated = [](std::uint32_t old, std::size_t added,
+                          const char* what) {
+        if (added > 0xFFFFFFFFu - old) {
+            throw Error(std::string(what) + " counter overflows its 32-bit word");
+        }
+        return static_cast<std::uint32_t>(old + added);
+    };
+    if (var2.size() > 0xFFFFFFFFu) {
+        throw Error("TBkndTask/Var2Data grew past the 32-bit size word");
+    }
+    put_u32(props, task_freed_at,
+            accumulated(get_u32(props, task_freed_at), freed_task_bytes,
+                        "Task freed-byte"));
+    put_u32(props, task_var2_at, static_cast<std::uint32_t>(var2.size()));
+    put_u32(props, assn_freed_at,
+            accumulated(get_u32(props, assn_freed_at), freed_assn_bytes,
+                        "Assn freed-byte"));
+    put_u32(props, assn_var2_at,
+            static_cast<std::uint32_t>(assn_var2.size()));
+
     rows.store_into(doc, table);
     doc.replace_stream(meta_path, meta);
+    doc.replace_stream(fixed2_path, fixed2);
+    doc.replace_stream(fixed2_meta_path, fixed2_meta);
     doc.replace_stream(var2_path, var2);
     doc.replace_stream(var_meta_path, final_var_meta);
+    doc.replace_stream(assn_fixed_path, assn_fixed);
+    doc.replace_stream(assn_meta_path, assn_meta);
+    doc.replace_stream(assn_fixed2_meta_path, assn_fixed2_meta);
+    doc.replace_stream(assn_var_meta_path, final_assn_var_meta);
+    doc.replace_stream(assn_var2_path, assn_var2);
+    doc.replace_stream(props_path, props);
 
     std::string const inconsistent = check_table(doc, table);
     if (!inconsistent.empty()) {
