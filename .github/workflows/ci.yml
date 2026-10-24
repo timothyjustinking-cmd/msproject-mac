@@ -87,6 +87,11 @@ jobs:
           # EXACT commit qt-shell tested (head_sha); the old head_branch could
           # check out a newer commit than the one the Qt run proved.
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          # W27-1.2: check_fixtures.py's oracle-provenance sub-check walks
+          # `git log --follow` to find each oracle's last measured-body change;
+          # on a one-commit shallow clone every recording_commit fails.  Fetch
+          # the full history, as the brief prefers.
+          fetch-depth: 0
 
       # Puts cl.exe, link.exe and Ninja on PATH (and sets INCLUDE/LIB) the same
       # way `vcvars64.bat` does in docs/build.md.  Windows-only: the other two
