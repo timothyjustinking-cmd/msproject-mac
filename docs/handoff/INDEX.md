@@ -4,7 +4,16 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Wave 26 (closed on branch `wave26` - not merged, not pushed; hold)
+## Now (24 October 2026)
+
+| file | what |
+|---|---|
+| `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
+| `assessment-2026-10-24.md` | where the port stands after wave 26, and the workflow review |
+| `plan-waves27-30.md` | the proposed next rounds |
+| `wave26-verification/` | the verifier's fresh-tree gates and independent review of wave 26 |
+
+## Wave 26 (closed on branch `wave26` - verified, not merged; pushed 24 Oct for CI)
 
 | file | what |
 |---|---|

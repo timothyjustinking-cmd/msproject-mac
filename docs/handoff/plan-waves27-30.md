@@ -4,7 +4,9 @@ _Proposed by the Opus verifier session after the wave-26 assessment
 (`assessment-2026-10-24.md`).  Each wave is a DeepSeek work order run in groups, a
 fresh session per group, then verified by fresh-tree gates and one independent
 review.  Only Critical or High findings jump the queue; everything else goes to the
-wave it belongs to.  Not yet approved by Tim._
+wave it belongs to.  The workflow changes below were approved and implemented by
+Tim's instruction on 24 October 2026 (`standing-rules.md`); the wave order still
+awaits his go-ahead._
 
 ## How every wave runs (changes from wave 26)
 
@@ -74,7 +76,7 @@ case; macOS launch and notarisation; the hashed task names in
 
 ## Decisions needed from Tim before wave 27
 
-1. Lift the publication hold so waves are pushed and CI runs.
-2. Move builds out of Dropbox sync (Dropbox-ignore `build/`).
+1. ~~Lift the publication hold so waves are pushed and CI runs.~~ Done 24 Oct 2026.
+2. ~~Move builds out of Dropbox sync (Dropbox-ignore `build/`).~~ Done 24 Oct 2026.
 3. Approve this order, in particular: disable the % buttons in wave 27 and bring
    them back with the actuals writer in wave 28.

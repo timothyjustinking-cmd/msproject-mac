@@ -124,6 +124,13 @@ Archives (only for history): `docs/archive/coordinator-handoff-through-wave20.md
 `docs/archive/WAVES-coordination-board-wave7.md`,
 `memory/archive/coordinator-through-wave20-full.md`.
 
+## Standing rules (from wave 27)
+
+`docs/handoff/standing-rules.md` binds every wave: save paths measured against
+Project before they are enabled, small working context, per-commit incremental
+gates with full fresh-tree gates per group, CI every wave, one independent review
+per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
+
 ## House rules that are easy to get wrong
 
 * **Project screenshots stay local** (operator ruling 2026-10-23; a pre-push
