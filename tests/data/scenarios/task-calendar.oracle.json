@@ -4,7 +4,7 @@
     "recorded_via": "scripts/engine_diff.py --record through MS Project COM (scripts/oracle_lock.py, FileClose(0))",
     "project_version": "16.0.20430.20182 (Microsoft Project Professional 2021)",
     "recorded_at": "2026-10-23",
-    "recording_commit": "e91f19b",
+    "recording_commit": "a62285a",
     "provenance_source": "git log --follow: the last commit that changed the measured body (provenance-only edits excluded)",
     "source_base": "synthetic-calendars",
     "source_sha256": "F486F0C3235BD8A592542E942141FE873C4262E6AFA19E029A9C4C79386017CA"
