@@ -38,6 +38,7 @@
 #include "record_set.h"
 #include "selection_model.h"  // app::RowMap
 #include "sheet.h"
+#include "cell_format.h"  // msproject::viewstate::CellFormatTable (wave 29)
 #include "gantt_style.h"  // msproject::viewstate::GanttStyle (wave 26)
 #include "viewstate.h"  // msproject::viewstate::TableDef (wave 21)
 
@@ -191,6 +192,14 @@ class PlanDocument {
         return gantt_style_;
     }
 
+    // Wave 29 (W29-1.2): the applied view's stored per-cell formatting, read
+    // from the same `214/CV_iew` view as gantt_style().  A file without the
+    // record keeps an undecoded table and the sheet paints only the Text
+    // Styles backgrounds.
+    const msproject::viewstate::CellFormatTable& cell_formats() const noexcept {
+        return cell_formats_;
+    }
+
     // Wave 21 (operator decision 7): the file's own first `214/CTable` table.
     // The SheetModel is built from it through app::table_sheet_columns(), so the
     // sheet's column set, order, titles and widths are the file's.  An empty
@@ -252,6 +261,7 @@ class PlanDocument {
     // part of the save diff.
     msproject::viewstate::TableDef table_;
     msproject::viewstate::GanttStyle gantt_style_;
+    msproject::viewstate::CellFormatTable cell_formats_;
     std::string applied_view_;
     std::string path_;
     std::string title_;

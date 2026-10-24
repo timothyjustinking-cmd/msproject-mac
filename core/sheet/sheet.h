@@ -223,6 +223,12 @@ struct SheetFormat {
  */
 struct SheetColumn {
     FieldId field = 0;
+    // Wave 29 (W29-1.2): the `214/CTable` field id this column came from, which
+    // the applied Gantt view's per-cell formatting record also keys on.  `field`
+    // is the model field the table driver mapped it to (DurationText becomes
+    // Duration, say), so a stored-format lookup needs the original id.  0 = a
+    // hand-built column with no file record behind it.
+    std::uint32_t table_field = 0;
     std::string title;
     int width = 0;
     core::view::ColumnAlign align = core::view::ColumnAlign::Auto;

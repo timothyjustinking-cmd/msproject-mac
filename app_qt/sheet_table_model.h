@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 
+#include "cell_format.h"    // the file's per-cell fills (wave 29)
 #include "entry_columns.h"  // DisplayColumn (wave 21)
 #include "gantt_style.h"    // the file's text styles (wave 26)
 #include "prefs.h"
@@ -99,6 +100,18 @@ class SheetTableModel final : public QAbstractTableModel {
         }
     }
 
+    // Wave 29 (W29-1.2): the applied view's stored per-cell formatting.  The
+    // pointer follows the same stable-member rule as the style pointer.  A
+    // stored fill wins over the row's Text Styles background; an automatic
+    // entry keeps the Text Styles background (app::cell_fill_for).
+    void set_cell_formats(const msproject::viewstate::CellFormatTable* formats) {
+        cell_formats_ = formats;
+        if (rowCount() > 0) {
+            emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1),
+                             {Qt::BackgroundRole});
+        }
+    }
+
     core::sheet::SheetModel* sheet() const noexcept { return sheet_; }
 
     // Displayed row -> RecordSet row.  core::sheet::kNoIndex when out of range.
@@ -139,6 +152,7 @@ class SheetTableModel final : public QAbstractTableModel {
     core::sheet::SheetModel* sheet_ = nullptr;
     const app::Preferences* preferences_ = nullptr;
     const msproject::viewstate::GanttStyle* style_ = nullptr;
+    const msproject::viewstate::CellFormatTable* cell_formats_ = nullptr;
     bool generic_ = false;
     // The task-sheet presentation, in display order.  Initialised to the Entry
     // list, replaced by a loaded file's own table.

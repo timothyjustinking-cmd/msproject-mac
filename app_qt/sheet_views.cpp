@@ -22,6 +22,7 @@
 #include <QStyle>
 #include <QStyleOptionViewItem>
 #include <QToolButton>
+#include <QVariant>
 #include <QWidget>
 #include <QWidgetAction>
 
@@ -505,7 +506,18 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
         const int indent = kOutlineIndent + (level > 0 ? level * kOutlineIndent : 0);
         const bool children = children_lookup_ && children_lookup_(index.row());
         painter->save();
-        painter->fillRect(option.rect, selected ? kSelection : kSheetBackground);
+        // Wave 29 (W29-1.2): the Name cell takes the model's stored fill too
+        // (PROJECT_A's yellow Highlighted row, the shaded summary rows).  The
+        // styled-item paint below would draw the same brush; filling it here
+        // keeps the cell's edges under the outline symbol and indent
+        // consistent with the text area.
+        const QVariant background = index.data(Qt::BackgroundRole);
+        const QColor fill = selected
+                                ? kSelection
+                                : (background.canConvert<QColor>()
+                                       ? background.value<QColor>()
+                                       : kSheetBackground);
+        painter->fillRect(option.rect, fill);
         QStyleOptionViewItem text_option = option;
         text_option.rect.setLeft(text_option.rect.left() + indent);
         QStyledItemDelegate::paint(painter, text_option, index);

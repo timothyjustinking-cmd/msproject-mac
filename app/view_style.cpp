@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "cell_format.h"
 #include "cfb_writer.h"
 #include "gantt_style.h"
 #include "props.h"
@@ -152,8 +153,12 @@ BarPalette bar_palette_from(const msproject::viewstate::GanttStyle& style) {
 }
 
 bool read_gantt_style(const std::string& path, msproject::viewstate::GanttStyle& out,
-                      std::string* reason) {
+                      std::string* reason,
+                      msproject::viewstate::CellFormatTable* cell_formats) {
     out = msproject::viewstate::GanttStyle{};
+    if (cell_formats != nullptr) {
+        *cell_formats = msproject::viewstate::CellFormatTable{};
+    }
     try {
         const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(path);
 
@@ -204,6 +209,17 @@ bool read_gantt_style(const std::string& path, msproject::viewstate::GanttStyle&
         if (!msproject::viewstate::parse_gantt_style(style_data, fonts, out,
                                                      &parse_error)) {
             fail(reason, "view '" + view->name + "': " + parse_error.message);
+            return false;
+        }
+        // Wave 29 (W29-1.2): the same view's per-cell formatting.  A view that
+        // stores no such record (the committed synthetic fixture does not) is
+        // not an error; the table simply stays undecoded.
+        const std::span<const std::uint8_t> cell_data =
+            msproject::viewstate::cell_format_data_from_view(views, *view);
+        if (cell_formats != nullptr && !cell_data.empty() &&
+            !msproject::viewstate::parse_cell_formats(cell_data, *cell_formats,
+                                                      &parse_error)) {
+            fail(reason, "cell formats: " + parse_error.message);
             return false;
         }
         if (reason != nullptr) {

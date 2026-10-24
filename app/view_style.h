@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <string>
 
+#include "cell_format.h"
 #include "gantt_style.h"
 
 namespace app {
@@ -98,6 +99,28 @@ struct BarPalette {
 // has_* false) when the record did not decode.
 [[nodiscard]] BarPalette bar_palette_from(const msproject::viewstate::GanttStyle& style);
 
+// Wave 29 (W29-1.2): the fill a sheet cell takes from the view's stored
+// per-cell formatting.  `set` is false when the row has no entry, or when the
+// entry's colour is automatic -- in both cases the cell keeps the row's Text
+// Styles background, which is Project's "Automatic" meaning.  A field-specific
+// entry wins over the row's 0xffffffff default (core/viewstate/cell_format.h).
+struct CellFill {
+    bool set = false;
+    Rgb colour{};
+};
+
+[[nodiscard]] inline CellFill cell_fill_for(
+    const msproject::viewstate::CellFormatTable& formats, std::uint32_t row_uid,
+    std::uint32_t field_id) noexcept {
+    CellFill fill;
+    const msproject::viewstate::CellFormat* entry = formats.find(row_uid, field_id);
+    if (entry != nullptr && entry->has_background) {
+        fill.set = true;
+        fill.colour = entry->background;
+    }
+    return fill;
+}
+
 // Reads a whole .mpp and decodes the applied view's Gantt style record:
 //
 //   * `214/Props` record 0x03400000        -> the FONT_BASES table
@@ -109,8 +132,15 @@ struct BarPalette {
 // false with a reason, and the caller keeps its stock presentation.  This is
 // the shared seam: the Qt shell and app/main.mm both paint Gantt bars, and the
 // headless app test drives this function on the committed synthetic fixture.
+//
+// `cell_formats`, when non-null, receives the applied view's `0x2240000c`
+// per-cell formatting (W29-1.2).  A view without the record leaves it
+// undecoded, which is not a failure; a record that does not frame as 44-byte
+// entries is refused like any other malformed view record.
 [[nodiscard]] bool read_gantt_style(const std::string& path,
                                     msproject::viewstate::GanttStyle& out,
-                                    std::string* reason = nullptr);
+                                    std::string* reason = nullptr,
+                                    msproject::viewstate::CellFormatTable*
+                                        cell_formats = nullptr);
 
 }  // namespace app

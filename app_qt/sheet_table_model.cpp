@@ -280,6 +280,31 @@ QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
             return {};
         }
         case Qt::BackgroundRole: {
+            // Wave 29 (W29-1.2): the view's stored per-cell fill wins over the
+            // row's Text Styles background.  The lookup key is the row's
+            // UniqueID and the DISPLAY column's stored field id; an automatic
+            // entry leaves `set == false`, so the Text Styles background (if
+            // any) still applies, which is Project's "Automatic" meaning.
+            // Generic presentations (resource/usage sheets) show other record
+            // types with their own uids, so the task table's formats do not
+            // apply there.
+            if (!generic_ && cell_formats_ != nullptr) {
+                const std::size_t display_column = static_cast<std::size_t>(index.column());
+                if (display_column < display_columns_.size()) {
+                    // W29-1.2: key on the STORED field id.  `field` is the
+                    // mapped model field (the table's DurationText column shows
+                    // Task.Duration), while the record stores the `214/CTable`
+                    // id the column record itself carries.
+                    const DisplayColumn& shown = display_columns_[display_column];
+                    const core::view::FieldId key =
+                        shown.table_field != 0 ? shown.table_field : shown.field;
+                    const app::CellFill fill =
+                        app::cell_fill_for(*cell_formats_, sheet_->row_uid(row), key);
+                    if (fill.set) {
+                        return QColor(fill.colour.red, fill.colour.green, fill.colour.blue);
+                    }
+                }
+            }
             const msproject::viewstate::TextStyle* file_style = row_text_style(row);
             if (file_style != nullptr && file_style->has_background) {
                 return QColor(file_style->background.red, file_style->background.green,

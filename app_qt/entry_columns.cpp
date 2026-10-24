@@ -115,6 +115,9 @@ const std::vector<DisplayColumn>& entry_display_columns() {
             DisplayColumn shown;
             shown.title = column.title;
             shown.field = column.field;
+            // W29-1.2: the Entry list's stored ids are the same `214/CTable`
+            // ids the applied view's per-cell formatting record keys on.
+            shown.table_field = column.table_field;
             shown.width = column.width;
             shown.kind = column.kind;
             display.push_back(std::move(shown));
@@ -170,6 +173,11 @@ std::vector<DisplayColumn> display_columns_for_sheet(const core::sheet::SheetMod
         DisplayColumn shown;
         shown.title = source.title;
         shown.field = source.field;
+        // W29-1.2: carry the stored `214/CTable` id through for the cell-format
+        // lookup (the model field above is the mapped one, e.g. Duration rather
+        // than DurationText).  A hand-built column with no file record behind it
+        // falls back to its model field, which is what the stock Entry list uses.
+        shown.table_field = source.table_field != 0 ? source.table_field : source.field;
         shown.kind = display_kind_for_field(source.field);
         // W29-1.1: the stored width is characters; the file's own font sets
         // the pixel unit.  A stored 0 never gets here -- table_sheet_columns()

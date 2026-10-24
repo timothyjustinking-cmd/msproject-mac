@@ -304,6 +304,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // the model keeps this pointer across loads and reads the style record that
     // PlanDocument::load() replaces in place.
     sheet_model_.set_gantt_style(&doc_.gantt_style());
+    // Wave 29 (W29-1.2): the same stable-pointer rule for the applied view's
+    // stored per-cell fills (PROJECT_A's yellow Highlighted row and the shaded
+    // summary rows).
+    sheet_model_.set_cell_formats(&doc_.cell_formats());
     build_central_widget();
     // Wave 26 (W26-3.2): the same stable pointer for the Gantt's bar palette.
     // GanttCanvas::set_layout() re-reads it on every rebuild.

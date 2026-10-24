@@ -18,11 +18,14 @@
 #include <fstream>
 #include <string>
 
+#include "cell_format.h"
 #include "gantt_style.h"
 #include "view_style.h"
 
 namespace {
 
+using msproject::viewstate::CellFormat;
+using msproject::viewstate::CellFormatTable;
 using msproject::viewstate::FontBase;
 using msproject::viewstate::GanttStyle;
 using msproject::viewstate::Rgb;
@@ -94,12 +97,47 @@ void test_style_lookup() {
           "view style: a record with no font base yields no style");
 }
 
+// Wave 29 (W29-1.2): the fill rule the sheet model applies to one cell.
+void test_cell_fill_rule() {
+    CellFormat specific;
+    specific.row_uid = 7;
+    specific.field_id = 0x0b40000e;
+    specific.has_background = true;
+    specific.background = Rgb{255, 242, 0};
+    CellFormat row_default;
+    row_default.row_uid = 7;
+    row_default.field_id = 0xffffffffu;
+    row_default.has_background = true;
+    row_default.background = Rgb{82, 87, 91};
+    CellFormat automatic;
+    automatic.row_uid = 7;
+    automatic.field_id = 0x0b4000cd;
+    automatic.has_background = false;
+    CellFormatTable formats;
+    formats.decoded = true;
+    formats.entries = {specific, row_default, automatic};
+
+    const app::CellFill stored = app::cell_fill_for(formats, 7, 0x0b40000e);
+    check(stored.set && stored.colour == (Rgb{255, 242, 0}),
+          "view style: a field-specific fill wins and is the stored colour");
+    const app::CellFill fallback = app::cell_fill_for(formats, 7, 0x0b400020);
+    check(fallback.set && fallback.colour == (Rgb{82, 87, 91}),
+          "view style: an unformatted field takes the row default");
+    check(!app::cell_fill_for(formats, 7, 0x0b4000cd).set,
+          "view style: an automatic entry leaves the Text Styles background");
+    check(!app::cell_fill_for(formats, 8, 0x0b40000e).set,
+          "view style: formatting never leaks to another row");
+}
+
 void check_stock_fixture() {
     GanttStyle style;
+    CellFormatTable formats;
     std::string reason;
     const std::string path = std::string(APP_TEST_DATA_DIR) + "/synthetic-base.mpp";
-    check(app::read_gantt_style(path, style, &reason),
+    check(app::read_gantt_style(path, style, &reason, &formats),
           "view style: synthetic-base's Gantt style decodes (" + reason + ")");
+    check(!formats.decoded && formats.entries.empty(),
+          "view style: synthetic-base stores no per-cell formatting record");
     check(style.decoded, "view style: synthetic-base's record is marked decoded");
     check(style.fonts.size() == 64, "view style: synthetic-base has 64 font slots");
     if (style.fonts.size() > 3) {
@@ -156,9 +194,46 @@ void check_corpus_fixture() {
         return;
     }
     GanttStyle style;
+    CellFormatTable formats;
     std::string reason;
-    check(app::read_gantt_style(path, style, &reason),
+    check(app::read_gantt_style(path, style, &reason, &formats),
           "view style: PROJECT_A's Gantt style decodes (" + reason + ")");
+
+    // Wave 29 (W29-1.2): PROJECT_A's per-cell formatting.  213 entries are
+    // 13 project-row entries (field overrides plus the row default) and 10 for
+    // each of the 20 stored task rows; the capture's grey project/summary rows
+    // and yellow Highlighted row are these stored fills.
+    check(formats.decoded, "view style: PROJECT_A's cell-format record decodes");
+    check(formats.entries.size() == 213,
+          "view style: PROJECT_A stores 213 cell-format entries");
+    const CellFormat* highlighted = formats.find(10742, 0x0b40000e);
+    check(highlighted != nullptr && highlighted->has_background &&
+              highlighted->background == (Rgb{255, 242, 0}),
+          "view style: uid 10742 (ID 10) stores the yellow Highlighted fill");
+    check(highlighted != nullptr && highlighted->background_pattern == 1,
+          "view style: the Highlighted fill is solid");
+    const CellFormat* indicators = formats.find(10742, 0x0b4000cd);
+    check(indicators != nullptr && !indicators->has_background,
+          "view style: the Highlighted row's hidden Indicators entry is automatic");
+    const CellFormat* summary_cell = formats.find(10720, 0x0b40000e);
+    check(summary_cell != nullptr &&
+              summary_cell->background == (Rgb{82, 87, 91}),
+          "view style: uid 10720 (ID 1) stores the summary row's grey");
+    const CellFormat* project = formats.find(0, 0x0b40000e);
+    check(project != nullptr && project->background == (Rgb{82, 87, 91}),
+          "view style: the project row's Task Name entry is grey");
+    const CellFormat* project_default = formats.find(0, 0x0b400001);
+    check(project_default != nullptr &&
+              project_default->field_id == 0xffffffffu &&
+              project_default->background == (Rgb{0, 55, 103}),
+          "view style: the project row's 0xffffffff default is the dark blue");
+    const CellFormat* plain = formats.find(10733, 0x0b40000e);
+    check(plain != nullptr && !plain->has_background,
+          "view style: an automatic task row stores no fill");
+    check(app::cell_fill_for(formats, 10742, 0x0b40000e).set,
+          "view style: the fill rule returns the Highlighted row's colour");
+    check(!app::cell_fill_for(formats, 10742, 0x0b4000cd).set,
+          "view style: the fill rule treats the automatic entry as no fill");
 
     // The file's own text styles: a font table of Arial faces, a red italic
     // milestone, a bold blue summary and a navy project summary.  These are the
@@ -241,6 +316,7 @@ void test_refusals() {
 int main() {
     test_category_precedence();
     test_style_lookup();
+    test_cell_fill_rule();
     check_stock_fixture();
     check_corpus_fixture();
     test_refusals();

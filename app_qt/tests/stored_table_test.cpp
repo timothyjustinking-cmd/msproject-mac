@@ -941,6 +941,104 @@ void case_corpus(const QString& corpus) {
               "the painted sheet carries the decoded summary blue text");
     }
 
+    // Wave 29 (W29-1.2): the view's stored per-cell formatting reaches the
+    // sheet.  The capture's yellow row is ID 10 (uid 10742): every scrolling
+    // cell stores (255,242,0).  The project row and ID 1 store the grey
+    // (82,87,91) that the capture shows, and an automatic row (ID 2, uid
+    // 10733) stores no fill at all.  These colours come from the file's
+    // `0x2240000c` record, not from a constant in the shell.
+    {
+        const app::TaskRow* highlighted_task = task_by_id(plan, 10);
+        const int highlighted_row =
+            highlighted_task != nullptr ? display_row_of_uid(window, highlighted_task->uid)
+                                        : -1;
+        check(highlighted_row >= 0, "the Highlighted row (ID 10) is displayed");
+        if (highlighted_row >= 0) {
+            const std::vector<msqt::DisplayColumn>& columns = table_model->display_columns();
+            int yellow_columns = 0;
+            for (int column = 0; column < model->columnCount(); ++column) {
+                if (static_cast<std::size_t>(column) >= columns.size() ||
+                    columns[static_cast<std::size_t>(column)].kind ==
+                        msqt::EntryCellKind::stub ||
+                    columns[static_cast<std::size_t>(column)].field == 0) {
+                    continue;
+                }
+                const QColor background =
+                    model->data(model->index(highlighted_row, column), Qt::BackgroundRole)
+                        .value<QColor>();
+                if (background == QColor(255, 242, 0)) {
+                    ++yellow_columns;
+                } else {
+                    std::fprintf(stderr,
+                                 "FAIL: W29-1.2 display column %d is not yellow (got %s)\n",
+                                 column, qPrintable(background.name()));
+                    ++g_failures;
+                }
+            }
+            check(yellow_columns == 8,
+                  "all eight scrolling cells of the Highlighted row are yellow");
+
+            // The painted Name cell takes the model's brush, not the delegate's
+            // white sheet fill (the hierarchy paint path bypasses Qt's own
+            // background drawing).
+            if (window.sheet_view() != nullptr &&
+                window.sheet_view()->viewport() != nullptr) {
+                const QRect rect =
+                    window.sheet_view()->visualRect(model->index(highlighted_row, 0));
+                if (!rect.isEmpty()) {
+                    const QImage image =
+                        window.sheet_view()->viewport()->grab().toImage();
+                    // The stored Name column is 353 px (70 characters at Arial
+                    // 8's 5 px unit) and the offscreen viewport is 336 px, so
+                    // the sample is clamped into the painted area; y = top + 2
+                    // sits above the text, where the cell's fill is unobstructed.
+                    const int sample_x = std::min(rect.right() - 5, image.width() - 3);
+                    const int sample_y = rect.top() + 2;
+                    const QColor sample = image.pixelColor(sample_x, sample_y);
+                    std::printf("note: W29-1.2 Highlighted Name rect %d,%d %dx%d; "
+                                "sample (%d,%d) = %s; viewport %dx%d\n",
+                                rect.x(), rect.y(), rect.width(), rect.height(),
+                                sample_x, sample_y, qPrintable(sample.name()),
+                                image.width(), image.height());
+                    check(sample == QColor(255, 242, 0),
+                          "the painted Task Name cell of the Highlighted row is yellow");
+                } else {
+                    std::printf("note: W29-1.2 the Highlighted row is scrolled out; "
+                                "painted Name-cell check skipped\n");
+                }
+            }
+        }
+        if (name_display >= 0) {
+            const int project_row = display_row_of_uid(window, 0);
+            check(project_row >= 0, "the stored project row is displayed");
+            if (project_row >= 0) {
+                check(model->data(model->index(project_row, name_display),
+                                  Qt::BackgroundRole)
+                          .value<QColor>() == QColor(82, 87, 91),
+                      "the project row's Task Name keeps the stored grey");
+            }
+            const app::TaskRow* plain = task_by_id(plan, 2);
+            const int plain_row =
+                plain != nullptr ? display_row_of_uid(window, plain->uid) : -1;
+            if (plain_row >= 0) {
+                check(!model->data(model->index(plain_row, name_display), Qt::BackgroundRole)
+                           .value<QColor>()
+                           .isValid(),
+                      "an automatic row stores no fill (the Text Styles rule applies)");
+            }
+        }
+    }
+    // W29-1.2: the fills must be in the PAINTED pixels as well as the model.
+    if (window.sheet_view() != nullptr && window.sheet_view()->viewport() != nullptr) {
+        const QImage painted = window.sheet_view()->viewport()->grab().toImage();
+        const int yellow_pixels = pixels_near(painted, qRgb(255, 242, 0), 0);
+        const int grey_pixels = pixels_near(painted, qRgb(82, 87, 91), 2);
+        std::printf("note: W29-1.2 painted sheet: %d yellow, %d grey pixels\n",
+                    yellow_pixels, grey_pixels);
+        check(yellow_pixels > 200, "the painted sheet carries the stored yellow row");
+        check(grey_pixels > 200, "the painted sheet carries the stored grey row fills");
+    }
+
     // Wave 26 (W26-3.2): the Gantt bars use PROJECT_A's own 10-style palette.
     // The colours asserted are the decoded ones the clean capture shows:
     // noncritical (0,32,96), critical (255,0,0), summary (0,0,128); the

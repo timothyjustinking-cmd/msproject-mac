@@ -17,6 +17,7 @@
 // corpus/ is never required.
 
 #include "viewstate.h"
+#include "cell_format.h"
 #include "gantt_style.h"
 
 #include <algorithm>
@@ -1121,6 +1122,105 @@ void test_gantt_style() {
     check(!partial.text[static_cast<std::size_t>(TextStyleItem::highlighted)].valid,
           "gantt style: a bad font index marks the style invalid");
     check(!partial.warnings.empty(), "gantt style: a bad font index warns");
+}
+
+// ---------------------------------------------------------------------------
+// Wave 29 (W29-1.2): the view's per-cell formatting record
+//
+// The layout is core/viewstate/cell_format.h's: 44-byte entries of
+// UniqueID, field id, opaque flags, an R,G,B,automatic colour at +24, the
+// pattern word at +36 and the opaque font word at +40.  The values used here
+// are PROJECT_A's own decoded words (a grey field-specific entry, the project
+// row's dark-blue default and the yellow Highlighted row's fill).
+// ---------------------------------------------------------------------------
+
+void test_cell_format() {
+    using msproject::viewstate::CellFormat;
+    using msproject::viewstate::CellFormatTable;
+    using msproject::viewstate::ParseError;
+    using msproject::viewstate::Rgb;
+
+    std::vector<std::uint8_t> payload(44 * 3, 0);
+    const auto put_entry = [&payload](std::size_t index, std::uint32_t row,
+                                      std::uint32_t field, std::uint32_t flags,
+                                      std::uint32_t colour, std::uint32_t pattern,
+                                      std::uint32_t font_word) {
+        const std::size_t base = index * 44;
+        put_u32(payload, base, row);
+        put_u32(payload, base + 4, field);
+        put_u32(payload, base + 8, flags);
+        put_u32(payload, base + 24, colour);
+        put_u32(payload, base + 36, pattern);
+        put_u32(payload, base + 40, font_word);
+    };
+    // The project row's Task Name (grey), its row default (dark blue) and the
+    // Highlighted row's Task Name (yellow).
+    put_entry(0, 0, 0x0b40000eu, 0x01000000u, 0x005b5752u, 1, 0x66000058u);
+    put_entry(1, 0, 0xffffffffu, 0x01000005u, 0x00673700u, 1, 0x66000058u);
+    put_entry(2, 10742, 0x0b40000eu, 0, 0x0000f2ffu, 1, 0x00000050u);
+
+    CellFormatTable table;
+    ParseError error;
+    check(msproject::viewstate::parse_cell_formats(payload, table, &error),
+          "cell format: a 3-entry record parses");
+    check(table.decoded, "cell format: decoded flag");
+    check_eq(table.entries.size(), std::size_t{3}, "cell format: one entry per 44 bytes");
+
+    const CellFormat& grey = table.entries[0];
+    check_eq(grey.row_uid, std::uint32_t{0}, "cell format: row word is the UniqueID");
+    check_eq(grey.field_id, std::uint32_t{0x0b40000e}, "cell format: field id at +4");
+    check_eq(grey.flags, std::uint32_t{0x01000000}, "cell format: opaque flags at +8");
+    check(grey.has_background, "cell format: a zero flag byte is a stored colour");
+    check(grey.background == (Rgb{0x52, 0x57, 0x5b}),
+          "cell format: the colour bytes are R,G,B (the measured grey)");
+    check_eq(grey.background_pattern, std::uint32_t{1},
+             "cell format: the pattern word at +36");
+    check_eq(grey.font_word, std::uint32_t{0x66000058},
+             "cell format: the opaque font word at +40");
+
+    const CellFormat& yellow = table.entries[2];
+    check(yellow.background == (Rgb{255, 242, 0}),
+          "cell format: the Highlighted row's fill is (255,242,0)");
+    check_eq(yellow.font_word, std::uint32_t{0x00000050},
+             "cell format: the Highlighted row's font word");
+
+    // A field-specific entry beats the row default; a field the row does not
+    // name falls back to the default; another row finds nothing.
+    check(table.find(0, 0x0b40000e) == &table.entries[0],
+          "cell format: the field-specific entry wins");
+    const CellFormat* fallback = table.find(0, 0x0b400020);
+    check(fallback == &table.entries[1],
+          "cell format: a field with no entry takes the row default");
+    check(fallback != nullptr && fallback->background == (Rgb{0, 55, 103}),
+          "cell format: the project row's default is the stored dark blue");
+    check(table.find(1, 0x0b40000e) == nullptr,
+          "cell format: another row has no inherited formatting");
+    check(table.find(10742, 0x0b40000e) == &table.entries[2],
+          "cell format: the yellow entry resolves by UniqueID");
+
+    // Automatic: any non-zero flag byte means no stored colour.
+    std::vector<std::uint8_t> automatic = payload;
+    automatic[2 * 44 + 24 + 3] = 0xff;
+    CellFormatTable automatic_table;
+    check(msproject::viewstate::parse_cell_formats(automatic, automatic_table, &error),
+          "cell format: a record with an automatic colour parses");
+    check(automatic_table.entries.size() == 3 &&
+              !automatic_table.entries[2].has_background,
+          "cell format: a 0xFF flag byte is automatic, not a colour");
+
+    // Framing refusals: a partial entry is never guessed, an empty payload is
+    // an empty table.
+    std::vector<std::uint8_t> partial(43, 0);
+    CellFormatTable refused;
+    check(!msproject::viewstate::parse_cell_formats(partial, refused, &error),
+          "cell format: a 43-byte payload is refused");
+    check(!error.message.empty(), "cell format: the refusal names the framing");
+    CellFormatTable empty;
+    check(msproject::viewstate::parse_cell_formats(
+              std::span<const std::uint8_t>{}, empty, &error),
+          "cell format: an empty payload parses");
+    check(empty.decoded && empty.entries.empty(),
+          "cell format: an empty payload is an empty decoded table");
 }
 
 // ---------------------------------------------------------------------------
@@ -3498,6 +3598,8 @@ int main(int argc, char** argv) {
     run("errors", test_errors_and_warnings);
     run("text", test_text_helpers);
     run("gantt-style", test_gantt_style);
+    // Wave 29 (W29-1.2): the per-cell formatting record
+    run("cell-format", test_cell_format);
     // Wave 27 (W27-2.1): one controlled save per decoder field
     run("gantt-save-font-family", test_gantt_save_font_family);
     run("gantt-save-font-size", test_gantt_save_font_size);

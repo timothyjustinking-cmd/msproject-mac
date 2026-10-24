@@ -566,6 +566,9 @@ std::vector<core::sheet::SheetColumn> table_sheet_columns(
         }
         core::sheet::SheetColumn column;
         column.field = field;
+        // W29-1.2: keep the stored id too.  The applied view's cell-format
+        // record keys on `214/CTable` field ids, not the mapped model fields.
+        column.table_field = record.field_id;
         column.title = record.title.empty() ? task_column_caption(field) : record.title;
         // The stored character width: the first of the nine opaque header bytes.
         column.width = static_cast<int>(record.opaque_header[0]);

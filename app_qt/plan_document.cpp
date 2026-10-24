@@ -730,9 +730,11 @@ void PlanDocument::read_applied_view(const std::string& source_path) {
 // record is presentation metadata only, so a failure never fails the load.
 void PlanDocument::read_style(const std::string& source_path) {
     gantt_style_ = msproject::viewstate::GanttStyle{};
+    cell_formats_ = msproject::viewstate::CellFormatTable{};
     std::string reason;
-    if (!app::read_gantt_style(source_path, gantt_style_, &reason)) {
+    if (!app::read_gantt_style(source_path, gantt_style_, &reason, &cell_formats_)) {
         gantt_style_ = msproject::viewstate::GanttStyle{};
+        cell_formats_ = msproject::viewstate::CellFormatTable{};
     }
 }
 

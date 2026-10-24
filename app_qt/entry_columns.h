@@ -114,6 +114,10 @@ struct EntryColumn {
 struct DisplayColumn {
     std::string title;                 // caption as painted
     core::view::FieldId field = 0;     // model field; 0 for the Add New Column stub
+    // Wave 29 (W29-1.2): the file's stored `214/CTable` field id, which the
+    // applied view's per-cell formatting record keys on (the cell-format lookup
+    // uses this when non-zero, else `field`).  0 for synthetic columns.
+    std::uint32_t table_field = 0;
     int width = 0;                     // pixels
     EntryCellKind kind = EntryCellKind::data;
 };
