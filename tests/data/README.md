@@ -49,6 +49,7 @@ checkout. Nothing here is client data.
 | `wave29-outline-auto-summary-control.mpp` / `wave29-outline-auto-summary.mpp` | the same measurement's summary-making indent: ID 3 was first indented under ID 2 (ID 2 becomes a summary), then ID 2 with its child was indented under ID 1 (`scripts/oracle_w29_outline_auto.py`, W29-0.4).  Measured: the moved summary and its child both shift one level; the new summary and the project row take 9600 ticks and finish Tue 2026-01-06 17:00; all four automatic rows' slack is 0 with late start Mon 08:00. |
 | `wave29-outline-auto-outdent-control.mpp` / `wave29-outline-auto-outdent.mpp` | the same measurement's inverse on automatic rows: the auto-indent shape saved, then `Tasks(2).OutlineOutdent()` (`scripts/oracle_w29_outline_auto.py`, W29-0.4).  Measured: the restored parent and the project row take the marker duration (24000) and the restored finish Fri 2026-01-09 17:00; uid 2 and uid 3 recalculate (slack 9600/14400, late starts Wed/Thu 08:00); the assignment row is re-created with the restored dates and the file's per-session token. |
 | `wave29-outline-manual-parent-control.mpp` / `wave29-outline-manual-parent.mpp` | the hybrid outdent: ID 1 (the parent) and ID 3 are MANUAL, ID 2 is automatic; the auto-indent shape saved, then ID 2 outdented (`scripts/oracle_w29_outline_auto.py`, W29-0.4).  Measured: the manual parent is restored by the manual rules and its +88/+108 are left alone, but its slack is recalculated (0), as is the project row's (late start = the project start record 3bf11e78); ID 2 takes slack 9600 with late start Wed 08:00; the unrelated manual ID 3 keeps its stale 16800 slack and late dates. |
+| `wave*-control-null.mpp` | the W29-1.0b no-edit baseline for every actuals and outline save pair: Project 2021 opens a COPY of the pair's `-control.mpp` under the neutral root `C:/w29` and saves it with NO edit, then saves the same file once more; the FIRST save is committed as `<control-stem>-null.mpp` (`scripts/oracle_w29_null_saves.py`).  A byte that differs between the control and its null save is per-save noise (identity GUIDs, the stored path/session words, timestamps) and the save-pair tests mask it by a named rule; every other byte of Project's edit save is the edit's effect, which the port's save must reproduce or the test FAILS.  The second save's per-stream stability is recorded in `build/w29/W29-1.0b-null-saves.json`, not committed. |
 | `synthetic-calendars.mpp` | synthetic two-calendar fixture (wave 19, `scripts/build_calendar_fixture.py`).  In W28-0.1 its two embedded save-path strings were replaced in place with a neutral same-length string (`scripts/w28_neutralise_path.py`), and then the operator name in its SummaryInformation properties and one Var2Data value was replaced the same way (`scripts/w28_neutralise_operator.py`), because the engine suite's calendar oracle depends on every other byte. |
 | `synthetic-gantt-style.bin` / `synthetic-gantt-fonts.bin` | the wave-26 Gantt-style decoder's first fixtures: one Gantt view's `0x22400008` record and its `214/Props` font table, extracted from a Project save of `synthetic-base.mpp`. |
 | `wave26-gantt-saves/` | the wave-26 one-change-per-save evidence for the Gantt style decoder: 14 applied-view `0x22400008` records, one Project save per style change, plus the two `214/Props` font tables the font saves produced. Extracted by wave 27 W27-2.1; provenance below. |
@@ -197,46 +198,69 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `wave27-priority-750.mpp` | `C5A6F06E39665323323BE796EA484FDBD1C0ED2CF9261F4F104565DA48FB6252` |
 | `wave27-unlink-control.mpp` | `55CF09C7EAE1CD29E8A707394C1F3E49D065E368E6AF4FF113BB071A9D91C171` |
 | `wave27-unlink.mpp` | `83DFA7677E75CEE5F4810F07E86149E372BA71FEB0D57BE4C84D23B27E6DB178` |
+| `wave28-mark-auto-control-null.mpp` | `6E1BEBA6F45F4B476D84AAB07B003A6FD242EAA5B1164D57D000C7A951AAEF44` |
+| `wave28-mark-manual-control-null.mpp` | `37C7170DDF1BA001D60819CEC88969ABBD39CA60266EEDA0D7D73AEABFD52EE6` |
+| `wave28-newtask-auto-control.mpp` | `923FC593ABC10F521BBC6429D94823FC1DAF1ABFF66C762D30D26ED6E53247CB` |
+| `wave28-newtask-auto.mpp` | `269EEB5707B20E257533E05F56C89F338D9B0F567D2D927706F05403CE572A2F` |
+| `wave28-newtask-manual-control.mpp` | `DFD3812D419E390CB25C2A67436E1C9FC0CD57AC092741514EC4CF13799F0E41` |
+| `wave28-newtask-manual.mpp` | `988AE84E0E644F024D515E5E90A97807E8311145CE26C5EBAA4BE9C91B3F39FA` |
+| `wave28-outline-indent-control-null.mpp` | `E146FB0634E9C9582B6052E7D94365B7A396199E4D8AA650946C6E50FEF99347` |
+| `wave28-outline-outdent-control-null.mpp` | `F91C5BE04C66194B9BF2FB664E0A80B240EA53CE10C57FF66CF18628AC5D148A` |
+| `wave28-outline-summary-control-null.mpp` | `18444151DEB198486FF69BD52598A823FE4806CF2C1F6A6E15C313FB4BC77E4F` |
+| `wave28-percent-auto0-control-null.mpp` | `1DF4AB43FDD583DA9361CDC9837B81571FE904906CDD9F67D87EA7294ACEE970` |
 | `wave28-percent-auto0-control.mpp` | `69BC2E31A7663479109F6137E92EFAA99426C576224EEF78373B18112915E974` |
-| `wave28-percent-auto40.mpp` | `079ECF4A2B402FBF819A4DE28EFF6F2A334F850369724D2FC778C52C72DF3024` |
-| `wave28-percent-auto40-control.mpp` | `174CC3E3E56A793215BC9D5FD6928A199FEB2C20523C8C1D828AA4D0DBE09EF4` |
-| `wave28-percent-auto100.mpp` | `B72297F7DE3E320008C34FC5E3755A23987B734773565CCD08982CD2469E211A` |
-| `wave28-percent-auto100-control.mpp` | `E37F8ECD42FC56C91FD341DAA7BC20CB54CF71F971EEDC5A12E291B9F828F10F` |
 | `wave28-percent-auto0.mpp` | `0978235B44C99C82F8943DC74DFF86D39B1C5F9FE7E88427E63B156ED8F9C93E` |
+| `wave28-percent-auto100-control-null.mpp` | `48AB3D82B22003A064B7B7CBBF919387D5AB984DC6B498F32832D3E3AF1CC763` |
+| `wave28-percent-auto100-control.mpp` | `E37F8ECD42FC56C91FD341DAA7BC20CB54CF71F971EEDC5A12E291B9F828F10F` |
+| `wave28-percent-auto100.mpp` | `B72297F7DE3E320008C34FC5E3755A23987B734773565CCD08982CD2469E211A` |
+| `wave28-percent-auto40-control-null.mpp` | `7FB277CA5A98FC8D5BD1E3022CD70E58F41D45DAAB5EAAEF0EB2A757C83CC7A0` |
+| `wave28-percent-auto40-control.mpp` | `174CC3E3E56A793215BC9D5FD6928A199FEB2C20523C8C1D828AA4D0DBE09EF4` |
+| `wave28-percent-auto40.mpp` | `079ECF4A2B402FBF819A4DE28EFF6F2A334F850369724D2FC778C52C72DF3024` |
+| `wave28-percent-manual0-control-null.mpp` | `CAD8D7217A166BBCC4D8679658187C7E8C027E1D3A9873D1E46E0087EF40CA3D` |
 | `wave28-percent-manual0-control.mpp` | `17BA9E3FEC598ABB736FB6723E50A331E29FBEA447FB21EDD1F05493743774A9` |
 | `wave28-percent-manual40.mpp` | `4EF4CB7FD7B115E7FDB2F9F2CC02EC026FBD73E3E28F78725E84B1F0230438C7` |
-| `wave28-newtask-manual-control.mpp` | `DFD3812D419E390CB25C2A67436E1C9FC0CD57AC092741514EC4CF13799F0E41` |
-| `wave28-newtask-auto.mpp` | `269EEB5707B20E257533E05F56C89F338D9B0F567D2D927706F05403CE572A2F` |
-| `wave28-newtask-auto-control.mpp` | `923FC593ABC10F521BBC6429D94823FC1DAF1ABFF66C762D30D26ED6E53247CB` |
-| `wave28-newtask-manual.mpp` | `988AE84E0E644F024D515E5E90A97807E8311145CE26C5EBAA4BE9C91B3F39FA` |
 | `wave28-split-control.mpp` | `7C4243FE1548B16C4CAF2EBCB91D6753D913D228ECB2257944FF06C557D7B072` |
 | `wave28-split.mpp` | `F65E36B93117B6962679027282F85EBB20AB60CFB0448CD4755B7B53A6901EEC` |
-| `wave29-percent-leaf-control.mpp` | `AB20D37140F9D241770DA3544952DA29E51B438F5003ED1D9BEB05BAB6B38544` |
-| `wave29-percent-leaf40.mpp` | `F1FC26932EFBF2F96C386B1F9579F7EE10709B92D2D3D8B636ABF906E8A3D2D4` |
-| `wave29-percent-work-control.mpp` | `0A1D8327EF2ED62E5F4DD2935E5B3585E2F41DBF9B40695B442C552966232BD8` |
-| `wave29-percent-work40.mpp` | `31A8E5E79FA36C97FAA2085B8ECC74E5E014951DFF25C8E483A82DBDC82DBC4D` |
-| `wave29-percent-milestone-control.mpp` | `2ED0BB0A27A02B77B4AC0A176827F09DEBEE303515422FCA58FCCD1A23A5BCA5` |
-| `wave29-percent-milestone100.mpp` | `17E9938FFBA881747E98B10FAA9CCD98A9E7FAAB1BA5455C121579AB7DB5249E` |
-| `wave29-percent-mid25-control.mpp` | `8975C16CCBB289FC451AF39BBB03E49803764B1354B99DD23B8A48D775C0EFE3` |
-| `wave29-percent-mid60.mpp` | `260875811C67B126970789CC035DC9595C4644359F7F0144433A7C17D10FBEF7` |
+| `wave28-update-control-null.mpp` | `5F62741D88D67621025C9A8EC309AB262879A10FF30254B9A44423AF741AEB0A` |
+| `wave29-mark-60-after-control-null.mpp` | `1F9ED9BE12C2AC0BB68D4268DAE100F4E8CE232AD1EE66DB1F74F0AC509B5E47` |
 | `wave29-mark-60-after-control.mpp` | `5CE3E87AB426681416F49DA17AD7F3B33218754DD6191BE17A9691BDFE797196` |
 | `wave29-mark-60-after.mpp` | `12394B4F6AAF5EA16764CEE529F7D3099A7C98523D0B7E328C38FDF9C6BF0FE1` |
+| `wave29-mark-60-before-control-null.mpp` | `468F931299A31FC3046AFFA6B945305EB7BDD3FD24E2713AF2A54977D96B4DEE` |
 | `wave29-mark-60-before-control.mpp` | `C1CB43CAFF52BD11D1DD9F929BF94FBC7B300EA19E5A345C885309413D5D3362` |
 | `wave29-mark-60-before.mpp` | `154BCB6669C6DE91DBD3DF0A8844693F3ADD38BD75E7624CB8F323482913D71C` |
-| `wave29-update-60-after-control.mpp` | `EC283054C2B7FF50360D44971CA9C6D96668A18833B60DBA213C20D2543AD56D` |
-| `wave29-update-60-after.mpp` | `35ABDB9B628AA1765B970FB7058A7AC1BECE95F86007663F7B0FF0359CEECD82` |
-| `wave29-update-60-before-control.mpp` | `971B55C377425EABD81698DB558125B6FF21FCFE1BCB2AA9F755A771D2E0D0C6` |
-| `wave29-update-60-before.mpp` | `77D75938112EFDDCC4EE810BF9FFE8AA83A8664028CEFD468AAD81299D078D5A` |
-| `wave29-update-60-selected-control.mpp` | `F5ABBF88DA9D934FFAD69759397DB794FFA203D7458807CF93D8920EEE24B48A` |
-| `wave29-update-60-selected.mpp` | `8CBBFE3E2E9268F9C0A25C44044BD3DFBD65965C016F924E8E0431063A9435E6` |
+| `wave29-outline-auto-indent-control-null.mpp` | `934D4915785B73DBA7055CA14CCE2B96EF3B4DC6EB3C69237ED1B3A5C1C3BC5F` |
 | `wave29-outline-auto-indent-control.mpp` | `23CEF994955FBF733719AEAACD5EE273064A84FDE36E4D564E99712525C0C5E2` |
 | `wave29-outline-auto-indent.mpp` | `566785C4217A118B1D6CC371935324BA44F25644D25351BCA4883DDC57EC7AF2` |
-| `wave29-outline-auto-summary-control.mpp` | `4BC7A41F03729A69F1D0016D39885E9A267E84D3990943CF47C365D2DFF32FC1` |
-| `wave29-outline-auto-summary.mpp` | `26FF79D9AF3C368933015E8ED8D141609D4C24080CB54A00033E30DE03AA58A2` |
+| `wave29-outline-auto-outdent-control-null.mpp` | `78D8E5F7A80902D355CFE4BD26917E7046A8CA2B5F2485E1F4120DF44FD19FEC` |
 | `wave29-outline-auto-outdent-control.mpp` | `66B22FC1260B99228145FE3D846D4922398EAD6B3466BED370AB85706554C35F` |
 | `wave29-outline-auto-outdent.mpp` | `7D3009F51D66D67B01086D55055A495C7E0265E4F25F3A40C7E4453C31193AA4` |
+| `wave29-outline-auto-summary-control-null.mpp` | `AC69EA62F1DF177910993EC12870121F9B692E8EC9E6EAC2E556AF1E1E1522BD` |
+| `wave29-outline-auto-summary-control.mpp` | `4BC7A41F03729A69F1D0016D39885E9A267E84D3990943CF47C365D2DFF32FC1` |
+| `wave29-outline-auto-summary.mpp` | `26FF79D9AF3C368933015E8ED8D141609D4C24080CB54A00033E30DE03AA58A2` |
+| `wave29-outline-manual-parent-control-null.mpp` | `4A3138685668AEA7EADAE66FC446E94F4FD09E6E298C3BB03038D01B2C57155D` |
 | `wave29-outline-manual-parent-control.mpp` | `C9BBE9ECA30BF11145C466D2D832EC9E27F25A0EB5AC366945E4F81D3384BC01` |
 | `wave29-outline-manual-parent.mpp` | `6230E118C3E84EC7C4E284DD4B496D4CB21933B79CFA742B7FC57958B63948BD` |
+| `wave29-percent-leaf-control-null.mpp` | `36790320EFB0A6210E21EC624B21F26D310718C135B6C77D1BE9495628DE32C9` |
+| `wave29-percent-leaf-control.mpp` | `AB20D37140F9D241770DA3544952DA29E51B438F5003ED1D9BEB05BAB6B38544` |
+| `wave29-percent-leaf40.mpp` | `F1FC26932EFBF2F96C386B1F9579F7EE10709B92D2D3D8B636ABF906E8A3D2D4` |
+| `wave29-percent-mid25-control-null.mpp` | `C7C59D79C69D2101DEF61E1BED99C4C18B0C0FA707759195CE161B128C500E4C` |
+| `wave29-percent-mid25-control.mpp` | `8975C16CCBB289FC451AF39BBB03E49803764B1354B99DD23B8A48D775C0EFE3` |
+| `wave29-percent-mid60.mpp` | `260875811C67B126970789CC035DC9595C4644359F7F0144433A7C17D10FBEF7` |
+| `wave29-percent-milestone-control-null.mpp` | `56C278FA730DDB051AC1B95D9F416EB1A09A8ED4E6FAB86CB1FB871AE9DA18C8` |
+| `wave29-percent-milestone-control.mpp` | `2ED0BB0A27A02B77B4AC0A176827F09DEBEE303515422FCA58FCCD1A23A5BCA5` |
+| `wave29-percent-milestone100.mpp` | `17E9938FFBA881747E98B10FAA9CCD98A9E7FAAB1BA5455C121579AB7DB5249E` |
+| `wave29-percent-work-control-null.mpp` | `3A147BD8AB5260FE969D0C8C34AF01817CF65BE36563C93D27E8190F1A7943D4` |
+| `wave29-percent-work-control.mpp` | `0A1D8327EF2ED62E5F4DD2935E5B3585E2F41DBF9B40695B442C552966232BD8` |
+| `wave29-percent-work40.mpp` | `31A8E5E79FA36C97FAA2085B8ECC74E5E014951DFF25C8E483A82DBDC82DBC4D` |
+| `wave29-update-60-after-control-null.mpp` | `E1A945781571AE5E90ED738CB9B56811D9B472F14630FA43652E7DBA9AA5E5D3` |
+| `wave29-update-60-after-control.mpp` | `EC283054C2B7FF50360D44971CA9C6D96668A18833B60DBA213C20D2543AD56D` |
+| `wave29-update-60-after.mpp` | `35ABDB9B628AA1765B970FB7058A7AC1BECE95F86007663F7B0FF0359CEECD82` |
+| `wave29-update-60-before-control-null.mpp` | `4966D1AAD557077FEECFF42752B397A177384C32376D8967EA0EE53C47C7F629` |
+| `wave29-update-60-before-control.mpp` | `971B55C377425EABD81698DB558125B6FF21FCFE1BCB2AA9F755A771D2E0D0C6` |
+| `wave29-update-60-before.mpp` | `77D75938112EFDDCC4EE810BF9FFE8AA83A8664028CEFD468AAD81299D078D5A` |
+| `wave29-update-60-selected-control-null.mpp` | `1457F590CA692ABF86A92F31B53E9E41288CB30609AE377AD2CDB4FFCE4733A3` |
+| `wave29-update-60-selected-control.mpp` | `F5ABBF88DA9D934FFAD69759397DB794FFA203D7458807CF93D8920EEE24B48A` |
+| `wave29-update-60-selected.mpp` | `8CBBFE3E2E9268F9C0A25C44044BD3DFBD65965C016F924E8E0431063A9435E6` |
 
 ## `synthetic-base.mpp` — provenance
 
