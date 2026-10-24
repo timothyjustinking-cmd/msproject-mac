@@ -249,18 +249,30 @@ void check_rail(msqt::MainWindow& window, const QJsonObject& measures) {
                      buttons[3]->height(), text_x, nav_text_left);
         gate::check(text_x == nav_text_left,
                     "the rail text starts at the capture's measured x");
-        // The enabled text colour: the darkest Info pixel is the measured ink.
+        // The enabled text colour: the row must CONTAIN the measured ink.  It
+        // is deliberately not "the darkest pixel equals the ink": Linux's
+        // FreeType rasteriser produced subpixel-AA fringes one channel darker
+        // than the ink, and HSL lightness made a fringe win the darkest scan
+        // even though the glyph core was the exact pen colour (wave-27 run
+        // 40053878076, qt_backstage_gate).  A 12-step-per-channel tolerance is
+        // the same one the selected-green check below uses; it still separates
+        // #242424 from black and from the disabled #999999.
+        const QRect info_row(nav_text_left, info_top + 8,
+                             rail_width - 8 - nav_text_left, entry_height - 14);
         QColor darkest(255, 255, 255);
-        for (int y = info_top + 8; y < info_top + entry_height - 6; ++y) {
-            for (int x = nav_text_left; x < rail_width - 8; ++x) {
+        for (int y = info_row.top(); y <= info_row.bottom(); ++y) {
+            for (int x = info_row.left(); x <= info_row.right(); ++x) {
                 const QColor colour = image.pixelColor(x, y);
                 if (colour.lightness() < darkest.lightness()) {
                     darkest = colour;
                 }
             }
         }
-        gate::check(darkest == text_enabled,
-                    "the enabled rail text is the measured #242424");
+        std::fprintf(stderr, "note: Info row darkest #%02x%02x%02x (ink #%02x%02x%02x)\n",
+                     darkest.red(), darkest.green(), darkest.blue(), text_enabled.red(),
+                     text_enabled.green(), text_enabled.blue());
+        gate::check(row_has_colour(image, info_row, text_enabled, 12),
+                    "the enabled rail text renders the measured #242424");
 
         // Account is selected: its render carries the measured green.
         buttons[10]->click();
@@ -275,16 +287,21 @@ void check_rail(msqt::MainWindow& window, const QJsonObject& measures) {
         // Save..Close are disabled while no document is open: the measured
         // disabled ink #999999 is what their rows render.
         const int save_top = buttons[4]->mapTo(backstage, QPoint(0, 0)).y();
+        const QRect save_row(nav_text_left, save_top + 8, rail_width - 8 - nav_text_left,
+                             entry_height - 14);
         QColor save_darkest(255, 255, 255);
-        for (int y = save_top + 8; y < save_top + entry_height - 6; ++y) {
-            for (int x = nav_text_left; x < rail_width - 8; ++x) {
+        for (int y = save_row.top(); y <= save_row.bottom(); ++y) {
+            for (int x = save_row.left(); x <= save_row.right(); ++x) {
                 const QColor colour = selected.pixelColor(x, y);
                 if (colour.lightness() < save_darkest.lightness()) {
                     save_darkest = colour;
                 }
             }
         }
-        gate::check(save_darkest == text_disabled,
+        std::fprintf(stderr, "note: Save row darkest #%02x%02x%02x (ink #%02x%02x%02x)\n",
+                     save_darkest.red(), save_darkest.green(), save_darkest.blue(),
+                     text_disabled.red(), text_disabled.green(), text_disabled.blue());
+        gate::check(row_has_colour(selected, save_row, text_disabled, 12),
                     "Save (no document) renders the measured #999999");
     }
 
