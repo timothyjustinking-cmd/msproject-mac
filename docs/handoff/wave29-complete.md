@@ -12,7 +12,7 @@ Deferrals need the attempt evidence the standing rules and the brief name.
 | W29-0.1 | High: the save-pair tests mask Project's changes | **DONE** | commit `f650c10` and the record commit that adds this file; gates `build/w29/gates-21ca5b2-W29-0.1-*.log` |
 | W29-0.2 | High: the percent writer on real schedules | **DONE** | commit `b751435`; gates `build/w29/gates-4a644c7-W29-0.2-*.log` |
 | W29-0.3 | High: Mark on Track / Update Project on rows with progress | **DONE** | commit `bd9e13d`; gates `build/w29/gates-61f19c8-W29-0.3-*.log` |
-| W29-0.4 | High: indent and outdent on auto-scheduled rows | PENDING | - |
+| W29-0.4 | High: indent and outdent on auto-scheduled rows | **DONE** | commit `8f80c2a`; gates `build/w29/gates-7fc719b-W29-0.4-*.log` |
 
 W29-0.1 detail:
 
@@ -155,6 +155,91 @@ W29-0.3 detail:
 - No Project COM reopen of the PORT's saves was run for this item, so this
   record makes no reopen claim; the field-by-field comparison is against
   Project's own file and the app's reader reopens the port's save.
+
+W29-0.4 detail:
+
+- Four new Project 2021 save pairs on the synthetic base, all built by
+  `scripts/oracle_w29_outline_auto.py` through Project on the neutral root
+  (`C:/w29/fixtures-outline`); facts, including Project's COM reopen of every
+  one of the eight files, are in
+  `build/w29/W29-0.4-project-outline-auto.json` (not committed).  Rows stay
+  ID-only in the record.
+  - `wave29-outline-auto-indent(-control)`: all rows automatic; ID 2
+    indented under its preceding sibling ID 1, which becomes a summary
+    (summary span 0x3840);
+  - `wave29-outline-auto-summary(-control)`: ID 3 indented under ID 2 first,
+    then ID 2 (with ID 3) indented under ID 1 -- the summary-making indent,
+    summary span 0x2580;
+  - `wave29-outline-auto-outdent(-control)`: the automatic indent shape,
+    then ID 2 outdented back to the top level (restored duration 0x5dc0);
+  - `wave29-outline-manual-parent(-control)`: the hybrid -- ID 1 manual,
+    ID 2 automatic; ID 2 indented under ID 1, then outdented again.
+- The five schedule words Project's save rewrites on EVERY recalculated row:
+  +74 == +186 == +190 = `work_time_between(row resulting +108, resulting
+  project +108)`; +116 = resulting project +108; +112 = `sub_work(resulting
+  project +108, row resulting +84 duration)` -- the backward pass, NOT
+  `add_work(row +104, slack)`.  The project row is the exception: its +112
+  is the project-start record (the hybrid pair's 3bf11e78 lies earlier than
+  the backward pass lands).  The earlier add_work guess fails the automatic
+  pairs: auto-indent ID 3's +112 is 3bf312c0, while add_work(+104, 4800)
+  lands on 3bf227d8.
+- Resulting durations the backward pass uses: indent -> new summary and
+  project row take the summary span (0x3840 auto-indent, 0x2580
+  auto-summary); outdent -> restored parent and project row take 0x5dc0.
+  The resulting project finish is the latest subtree finish on indent and
+  the restored finish on outdent.
+- Project's save also rewrites the project row's display/effective words:
+  automatic indent sets +84/+88 = summary span and +100/+108 = latest;
+  automatic outdent sets +84/+88 = restored duration and +100/+108 =
+  restored finish (the hybrid leaves +88/+108, while +84 still ends 0x5dc0).
+- Hybrid (automatic child of a manual parent): the manual parent IS
+  recalculated and joins the slack set (+74/+186/+190 = 9600, +112
+  Wed 08:00), while the untouched manual row keeps its stale words; the
+  project row's stored +96 stays the project-start record and its +108
+  stays the restored finish.  A mixed-scheduling indent and a manual row
+  under an automatic parent stay refused.
+- The writer's automatic gates (all before the first mutation): manual
+  project row; summary not level 1 / leaf not level 2; project start not
+  the subtree's earliest date; another top-level row finishing after the
+  rolled-up finish; the moved row finishing after the restored finish; and
+  a slack vector that does not name exactly the live automatic rows (plus
+  the restored manual parent of a hybrid outdent) once each with valid
+  packed LateStart/LateFinish.  The manual shape still takes no slack
+  vector.
+- The app computes the same words with the project calendar
+  (`build_outline_slack` in `app/edit_model.cpp`) from each row's resulting
+  +108/+84 and passes them through `OutlineEdit::slack`; its display update
+  now also moves the summary's effective finish and the project row's
+  duration/finish, and `without_structural_edits` restores the automatic
+  anchor's finish from the file so an undo still matches the control.
+- Both save-pair tests compare every recalculated row's five words, the
+  project row's duration/finish and the four automatic pairs field by field
+  against PROJECT's file; the core refusal cases cover a partial slack set,
+  a non-date LateStart, an automatic outdent without slack and a manual
+  indent carrying slack.
+- No Project COM reopen of the PORT's saves was run for this item, so this
+  record makes no reopen claim; the eight-file reopen JSON above is Project
+  reopening its own measured files, and the port is judged against Project's
+  file field by field.
+
+Gates for commit `8f80c2a` (parent `7fc719b`), logs under `build/w29/`
+(`gates-7fc719b-W29-0.4-*.log`):
+
+| gate | result |
+|---|---|
+| core Release build (`mppwrite_roundtrip_outline`) | exit 0 |
+| core `mppwrite_roundtrip_outline` | 1081 checks, 0 failures, 108 expected failures, exit 0 |
+| app Release build (eight edit/dialog test targets) | exit 0 |
+| `app_edits_actuals_tests` | 2280 checks, 0 failures, 278 expected failures, exit 0 |
+| `app_edit_tests` | 208 checks, 0 failures, exit 0 |
+| `app_edits_fields_tests` | 160 checks, 0 failures, exit 0 |
+| `app_edits_links_tests` | 200 checks, 0 failures, exit 0 |
+| `app_edits_new_task_mode_tests` | 1933 checks, 0 failures, exit 0 |
+| `app_edits_outline_tests` | 2470 checks, 0 failures, 101 expected failures, exit 0 |
+| `project_dialogs_tests` | 70 checks, 0 failures, exit 0 |
+| `start_edit_warning_tests` | 41 checks, 0 failures, exit 0 |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 78 tracked `.mpp`); paths OK (120 files); provenance OK (8 oracles) |
+| client-name scan on HEAD and the staged tree / name guard `7fc719b..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected) |
 
 Gates for commit `bd9e13d` (parent `61f19c8`), logs under `build/w29/`
 (`gates-61f19c8-W29-0.3-*.log`):
