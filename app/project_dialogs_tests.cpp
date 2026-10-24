@@ -135,11 +135,22 @@ int main() {
         check(!invalid.push(wrong_row), "a priority edit for a task row is refused");
     }
 
-    // The real writer: save the priority and re-read it from the file.
+    // The real writer, measured against Project (wave 27 W27-0.3).  The
+    // committed pair is Project 2021's SAME-session save before and after it set
+    // the project summary task's Priority to 750; the pair's Task FixedData
+    // differs in exactly row 0's +78/+79 word (500 -> 750), and every other
+    // byte that differs between the two files is the per-save bookkeeping the
+    // wave-24 same-session pair also shows.  The port saves the CONTROL fixture
+    // and its Task FixedData stream must equal Project's 750 fixture byte for
+    // byte -- field by field, not a port-reader round trip.
     {
+        const std::string control =
+            std::string(APP_TEST_DATA_DIR) + "/wave27-priority-control.mpp";
+        const std::string measured =
+            std::string(APP_TEST_DATA_DIR) + "/wave27-priority-750.mpp";
         const std::string source = (out_dir / "project-priority-source.mpp").string();
         const std::string target = (out_dir / "project-priority-saved.mpp").string();
-        std::filesystem::copy_file(fixture, source,
+        std::filesystem::copy_file(control, source,
                                    std::filesystem::copy_options::overwrite_existing);
         app::StructuralEdits save_edits;
         check(save_edits.push(app::make_project_priority_edit(750)),
@@ -151,6 +162,40 @@ int main() {
             std::printf("  save error: %s\n", result.error.c_str());
         }
         check(result.priority_rows_written == 1, "one project priority row was written");
+
+        const std::vector<std::uint8_t> control_fixed =
+            mpp::CompoundFile::from_file(control).read_stream("114/TBkndTask/FixedData");
+        const std::vector<std::uint8_t> measured_fixed =
+            mpp::CompoundFile::from_file(measured).read_stream("114/TBkndTask/FixedData");
+        check(control_fixed.size() == measured_fixed.size(),
+              "the Project pair has the same Task FixedData size");
+        std::vector<std::size_t> pair_diffs;
+        for (std::size_t index = 0;
+             index < control_fixed.size() && index < measured_fixed.size(); ++index) {
+            if (control_fixed[index] != measured_fixed[index]) {
+                pair_diffs.push_back(index);
+            }
+        }
+        // 48-byte table header + 202-byte row 0; Priority is the row's +78 word.
+        const std::size_t priority_offset = 48 + 78;
+        check(pair_diffs.size() == 2 &&
+                  pair_diffs[0] == priority_offset &&
+                  pair_diffs[1] == priority_offset + 1,
+              "Project's own priority save changes only FixedData +78/+79 of row 0");
+        if (pair_diffs.size() == 2) {
+            check(control_fixed[priority_offset] == 0xf4 &&
+                      control_fixed[priority_offset + 1] == 0x01,
+                  "the control fixture stores Priority 500 at +78");
+            check(measured_fixed[priority_offset] == 0xee &&
+                      measured_fixed[priority_offset + 1] == 0x02,
+                  "the measured fixture stores Priority 750 at +78");
+        }
+
+        const std::vector<std::uint8_t> port_fixed =
+            mpp::CompoundFile::from_file(target).read_stream("114/TBkndTask/FixedData");
+        check(port_fixed == measured_fixed,
+              "the port's saved Task FixedData is byte-identical to Project's 750 save");
+
         const mpp::Document reread = mpp::load_file(target);
         check(reread.project.priority == 750,
               "the saved file re-reads the written project priority");
