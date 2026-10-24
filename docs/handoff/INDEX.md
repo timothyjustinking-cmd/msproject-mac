@@ -4,14 +4,21 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Now (24 October 2026)
+## Now (25 October 2026)
 
 | file | what |
 |---|---|
 | `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
 | `assessment-2026-10-24.md` | where the port stands after wave 26, and the workflow review |
 | `plan-waves27-30.md` | the proposed next rounds |
-| `wave27-complete.md` | **the wave-27 gate** (below), the current record |
+| `wave28-complete.md` | **the wave-28 gate** (below), the current record |
+
+## Wave 28 (closed on branch `wave28` - local only; push refused by the pre-push guard on `076438f`; not merged)
+
+| file | what |
+|---|---|
+| `wave28-complete.md` | **the wave-28 gate**: G0..G5 + CLOSE, G0..G4 DONE and G5 DEFERRED with its measurement, the fresh-tree gates on `7a69a40`, both privacy scans and the history residuals, the independent review (0 Critical, 3 High - first in wave 29) and its errata, the push refusal, the re-scored 16 decisions, "Found, not fixed" |
+| `wave28-brief.md` | **the work order**: the editing core - the actuals writer, outline editing, the new-task mode, the editable Task Form, split |
 
 ## Wave 27 (closed on branch `wave27` - pushed; CI green on all three OSs; not merged)
 
