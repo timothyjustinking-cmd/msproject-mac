@@ -202,6 +202,20 @@ bool task_is_live(const std::vector<TaskRow>& tasks, std::uint32_t uid) {
     return false;
 }
 
+// W27-3.1: the non-throwing form of TaskTable::row_for_uid, for a save path
+// that must refuse ONE edit rather than fail the whole write.  `row_for_uid`
+// itself stays throwing: its other callers treat an absent uid as a bug.
+bool task_table_row_for_uid(const mppwrite::TaskTable& table, std::uint32_t uid,
+                            std::size_t& row) {
+    for (std::size_t candidate = 0; candidate < table.rows(); ++candidate) {
+        if (table.uid(candidate) == uid) {
+            row = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 bool is_measured_task_field(std::uint32_t field_id) noexcept {
@@ -972,7 +986,21 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         if (!percent_edits.empty() || priority_edit != nullptr) {
             mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
             for (const StructuralEdit* edit : percent_edits) {
-                const std::size_t row = table.row_for_uid(edit->uid);
+                // W27-3.1: a percent edit whose uid the source table does not
+                // carry is a REFUSED edit, not a failed save.  push() already
+                // refuses to queue one (make_percent_edit needs a live,
+                // non-summary file task), so this is the save layer's
+                // defence-in-depth for a hand-built or stale queue: report the
+                // refusal and keep the rest of the cascade, so this edit can
+                // never make every later Save fail.
+                std::size_t row = 0;
+                if (!task_table_row_for_uid(table, edit->uid, row)) {
+                    result.warnings.push_back(
+                        "percent complete for task uid " + std::to_string(edit->uid) +
+                        " was refused: the source file has no task row with that UniqueID "
+                        "(a pending insert has no saved row), so it was not written");
+                    continue;
+                }
                 table.set_percent_complete(row, edit->percent);
                 ++result.percent_rows_written;
                 result.notes.push_back("task uid " + std::to_string(edit->uid) +

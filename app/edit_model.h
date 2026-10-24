@@ -348,7 +348,11 @@ struct StructuralDocumentEdits {
 //   5a. set_percent    -> one TaskTable::set_percent_complete + store_into and one
 //                        container write for all of them (wave 26; NOT ENABLED
 //                        since W27-0.1: the one-word +92 write is not the edit
-//                        Project makes -- see StructuralKind::set_percent);
+//                        Project makes -- see StructuralKind::set_percent).  A
+//                        percent edit whose uid the source table does not carry
+//                        is REFUSED with a warning and does not fail the save
+//                        (W27-3.1): the rest of the cascade still lands, so a
+//                        bad edit can never block every later Save;
 //   5b. document edits-> only when `document_edits.hook` is set: the hook runs on
 //                        the SAME CfbDocument, after step 5 and before the final
 //                        write (this is the wave-17 seam);
