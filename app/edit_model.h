@@ -158,9 +158,10 @@ bool is_measured_task_field(std::uint32_t field_id) noexcept;
 // Project computes a summary's % from its children's actual and total durations
 // and distributes a summary edit to them, while this port could only write +92
 // on the summary row -- a shape Project recalculates away.  uid 0 (the
-// project-summary row), an unknown uid and a row that is not a live file task
-// (a pending insert) are refused too.  On acceptance `out` is a ready-to-push
-// set_percent edit; on refusal `error` names the reason.
+// project-summary row), an unknown uid and a row with no saved file row (a
+// pending insert -- TaskRow::file_row == 0, including one present in the plan
+// StructuralEdits::apply() returns) are refused too.  On acceptance `out` is a
+// ready-to-push set_percent edit; on refusal `error` names the reason.
 bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t percent,
                        StructuralEdit& out, std::string& error);
 
@@ -186,8 +187,9 @@ class StructuralEdits {
     // the shell calls app::validate_link_add() first (app/field_link_edits.h).
     //
     // A set_percent edit REQUIRES `plan` (W27-0.2): the row must be a live,
-    // non-summary file task (make_percent_edit), and a plan-less set_percent is
-    // refused rather than trusted.  `plan` is ignored for the other kinds.
+    // non-summary, saved file task (make_percent_edit; file_row != 0), and a
+    // plan-less set_percent is refused rather than trusted.  `plan` is ignored
+    // for the other kinds.
     //
     // Pushing a delete_task also removes the set/clear field edits, percent
     // edits and add_link edits that name the task: those could never reach the

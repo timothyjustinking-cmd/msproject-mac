@@ -82,6 +82,10 @@ app::TaskRow make_task(std::uint32_t uid, std::int64_t duration_ticks, date32 st
     app::TaskRow row;
     row.uid = uid;
     row.id = uid;
+    // These helpers model rows the file already stores (the reader gives real
+    // tasks file_row >= 1; 0 is a pending insert).  Wave 28 makes the percent
+    // rules depend on that distinction, so a hand-built live row must carry it.
+    row.file_row = uid;
     row.name = "Task";
     row.duration_ticks = duration_ticks;
     row.start = start;
@@ -231,6 +235,35 @@ void test_percent_edit_model() {
     app::StructuralEdits no_pending;
     check(!no_pending.push(pending, &plan),
           "push refuses a percent edit for a uid with no file row (a pending insert)");
+
+    // W28-1.2 (wave-27 review finding 6): the shell's display plan is
+    // StructuralEdits::apply(), which CONTAINS the pending insert.  Presence in
+    // that plan must not be mistaken for a saved row: the save would drop the
+    // edit and still report success.
+    app::StructuralEdits with_insert;
+    check(with_insert.push(insert_after("Pending Insert", 77, 0)),
+          "the pending insert is queued");
+    const app::PlanInput with_pending = with_insert.apply(plan);
+    bool pending_seen = false;
+    for (const app::TaskRow& row : with_pending.tasks) {
+        if (row.uid == 77) {
+            pending_seen = true;
+            check(row.file_row == 0, "the applied plan's insert has no file row");
+        }
+    }
+    check(pending_seen, "apply() includes the pending insert in the display plan");
+    app::StructuralEdit on_pending;
+    std::string pending_error;
+    check(!app::make_percent_edit(with_pending, 77, 25, on_pending, pending_error),
+          "make_percent_edit refuses the applied plan's pending insert");
+    check(pending_error.find("saved") != std::string::npos,
+          "the refusal says the row is not saved");
+    app::StructuralEdit pending_percent;
+    pending_percent.kind = app::StructuralKind::set_percent;
+    pending_percent.uid = 77;
+    pending_percent.percent = 25;
+    check(!with_insert.push(pending_percent, &with_pending),
+          "push with the applied plan also refuses the pending insert");
 
     app::StructuralEdits accepted;
     check(accepted.push(edit, &plan), "push with the plan accepts a leaf task");
