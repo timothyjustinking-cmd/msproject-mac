@@ -141,6 +141,50 @@ DOCUMENTED = {
         "B9FD3240CCB0EBD7B94AF17824C1FE104F44BC860AD4DCE093AF7BFD75B23CF4",
     "tests/data/synthetic-gantt-fonts.bin":
         "BEC0B057A37AE959A123BBC28C052366C6134DCC7DF6C5DE308FA897C568F478",
+    # Wave 27 (W27-2.1): the wave-26 one-change-per-save evidence, extracted
+    # from Project 2021's own saves of tests/data/synthetic-base.mpp (the
+    # applied view's `214/CV_iew` main block, record 0x22400008).  The saves
+    # were made by the local, git-ignored scripts under build/w26/g3
+    # (oracle_styles.py, oracle_probe.py, oracle_probe3.py); each blob is the
+    # record of one save, and control.style.bin is the first session's unedited
+    # save.  The two font blobs are the `214/Props` FONT_BASES payload of the
+    # font-family and font-size saves; every other save's payload is
+    # byte-identical to synthetic-gantt-fonts.bin.  A record carries no path,
+    # author, project title or task text (only Project's stock bar-style names
+    # and font families), so no metadata needed neutralising.  The source .mpp
+    # hashes are in tests/data/README.md; the .mpp files stay local.
+    "tests/data/wave26-gantt-saves/control.style.bin":
+        "37A84A7963DD671CEADF9CFE2DAB06D1CBD798F00A0614420B9238418E849686",
+    "tests/data/wave26-gantt-saves/arial.style.bin":
+        "D5E493B8AB72EE8DAFA2FBA0006A8F4F734886167D59D343FAE32253CE26C98C",
+    "tests/data/wave26-gantt-saves/arial.fonts.bin":
+        "3CBE0D5459C1E30B5F37552D13669064768523C598003CBFFE7FA504C0C29A16",
+    "tests/data/wave26-gantt-saves/size8.style.bin":
+        "43E14459F7D37FEFC56C36B065D66CA4705C868508AC1DF3C7AB78CADB39E88B",
+    "tests/data/wave26-gantt-saves/size8.fonts.bin":
+        "DFDD77C6D17133401510414B75AE175244A4C24D5E9111CBCFED074796D8210A",
+    "tests/data/wave26-gantt-saves/critical-blue.style.bin":
+        "FAF026BB99504B7A8C20A9504FDB4740C5C5FA395A03E0BF84C6402C0FEC3A0E",
+    "tests/data/wave26-gantt-saves/milestone-italic.style.bin":
+        "B3C4F76B11244AF4DEB7D18DDB6D4C1E58C9D89ED7E5BA6F57A749BB6521620E",
+    "tests/data/wave26-gantt-saves/milestone-bold.style.bin":
+        "873EDE49F8C21681265B5DCC53B2B221CA13DFF4FED716A76014E4EFDFFED722",
+    "tests/data/wave26-gantt-saves/milestone-underline.style.bin":
+        "3E250AF7329D9BA3E843BF0A21E1F89BBE237A60ABE2789A3A2D3B1F9D1174B9",
+    "tests/data/wave26-gantt-saves/highlight-fill.style.bin":
+        "DECD741A59CAE93EFE5027B1B1FA2FCE1D950C517E521C1C2C07136C900A308A",
+    "tests/data/wave26-gantt-saves/task-red.style.bin":
+        "9CA275EA9945F362E3B369B491F05799E07E215FA70A82430AB0E9D40CAD5610",
+    "tests/data/wave26-gantt-saves/summary-green.style.bin":
+        "42C316FCFED265E4703846373C75502747E4BB142FE6A49DC426D34E906A3BAB",
+    "tests/data/wave26-gantt-saves/milestone-blue.style.bin":
+        "C13550BC657B240198B88CDFEFCCF89A940AEAE61E0187C601BA091E78513C39",
+    "tests/data/wave26-gantt-saves/ts-yqm.style.bin":
+        "24332C5A66BDEA6A101E17FB6EC32471362F98DF08DE3D734696ECA323D61E6B",
+    "tests/data/wave26-gantt-saves/ts-ymd.style.bin":
+        "E13B487DDAF942C3DB40E7FF98EA61926765C234CFB3DBAEFEA4F2F9768DEC3C",
+    "tests/data/wave26-gantt-saves/ts-yhq.style.bin":
+        "78C8D721A02628517821FC4A88F4F6F1DF4F2A5250B63B16BF5A4991690E0A43",
 }
 
 
