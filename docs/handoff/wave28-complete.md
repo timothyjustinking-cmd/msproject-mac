@@ -260,3 +260,102 @@ exited 0; the `guard_names` refusal is the wave-level blocker inherited from
 G0, not a G1 failure.
 
 WAVE-28-G1-COMPLETE
+
+## G2 - outline editing
+
+Both items are DONE.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W28-2.1 | Indent and outdent: measure Project's saves (a leaf under a sibling, a summary with children, outdent back), implement the writer, enable the ribbon buttons, shortcuts and menu items; undo/redo | **DONE** | commits `b427bde` (three pairs, README, hashes), `2bb3bca` (oracle), `669d49f` (writer), `40a5827` (shell); measurement `build/w28/W28-2.1-project-outline-edit.json`; gates `build/w28/gates-669d49f-W28-2.1-*.log` |
+| W28-2.2 | The sheet and Gantt reflect the new outline at once (collapse triangles, indentation, summary bars) | **DONE** | commit `8027462`; gates `build/w28/gates-40a5827-W28-2.2-*.log` |
+
+W28-2.1 detail:
+
+- Three Project 2021 save pairs in one continuous session each, on neutral
+  copies under `C:/w28` with neutral metadata: indent (ID 2, a leaf, under ID
+  1; ID 1 becomes a summary), summary (ID 3 under ID 2, then ID 2 with its
+  child under ID 1) and outdent (the indent shape, then ID 2 back to the top
+  level).  The pairs are `tests/data/wave28-outline-{indent,summary,outdent}`
+  and their `-control` files; the word-level diffs are
+  `build/w28/W28-2.1-full-diff-{indent,summary,outdent}.log`.
+- The pairs fixed the six owned `TBkndTask` streams: FixedData
+  +84/+96/+100/+140/+142/+164/+172/+174 (roll-up duration, earliest/latest
+  child, has-children/has-parent, duration format, outline level, start
+  anchor); Fixed2Data parent identity, +42 flags and +46 start word;
+  Fixed2Meta +88/+95; FixedMeta +2 and the variable-field count, +26 summary
+  bit; Var2Data 0x0B40007C/0x4E4/0x4E5/0x505/0x506 (marker and child list).
+  A summary's roll-up duration is `0x2EE0` (1200 min); outdent restores
+  `0x5DC0` (2400 min), format 7, start `0x3bf212c0`, finish `0x3bf627d8`.
+  The writer never changes the effective date pair +104/+108, so displayed
+  dates stay put on indent and outdent.
+- `core/mppwrite/outline.{h,cpp}` writes Indent/Outdent onto those streams.
+  The core round-trip test applies each pair and compares the port's save with
+  Project's field by field: every non-owned stream equals the control,
+  Fixed2Data equals after canonicalising Project's per-save identity GUIDs,
+  and the edited row's opaque FixedMeta +8..23 blob is the only masked range
+  (+2/+26 still match).  `TBkndAssn` is not written; its row counts are
+  reported, not skipped silently.  560 checks, 0 failures.
+- `app/edit_model.cpp`: `StructuralKind` outline_indent/outline_outdent and
+  `make_outline_edit` read the file's stored outline and project calendar —
+  the display-level match, the DFS roll-up span from working time between the
+  subtree's +104/+108, and the outdent restore words.  Save step 5b calls
+  `write_outline_edits` once; a refusal is a warning, not a failed save.  The
+  display replay sets level/OutlineNumber/the summary flag and takes the
+  summary +84 from the queued duration, leaving +104/+108 alone.  Undo also
+  recovers the rows owned by an outline edit sitting on the redo stack; without
+  that the sheet kept the summary, shifted level and roll-up duration after
+  Undo (found by the new ribbon click check).  A pending delete of either end
+  displaces the edit, and undo restores it.
+- UI: the Task tab's Indent/Outdent buttons are enabled on this writer; Edit
+  gains Indent Task / Outdent Task on Option+Shift+Right / Left with no
+  Command (Qt maps the named arrows, AppKit maps the NS arrow function keys).
+  Both shells drive the same `make_outline_edit`/`push` path; the Qt handler
+  refuses an unmeasured shape with a status message.  The generated command
+  backlog lists both as implemented.
+- `app_edits_outline_tests` walks all three pairs: the measured words, push,
+  display against Project's reopened files, undo/redo including recovery from
+  the displayed plan, the real save cascade, the six streams and the untouched
+  non-owned streams — 942 checks, 0 failures.  The ribbon inventory pins
+  Indent/Outdent enabled, checks their wiring, clicks each on the committed
+  control (one queued outline edit, the measured summary/restored durations on
+  the display) and undoes the indent through the menu; `menu_tests` checks the
+  two items' titles, keys, enablement and edit guard — 986 checks.
+
+W28-2.2 detail:
+
+- The new `qt_outline_display` opens W28-2.1's Project-saved indent and outdent
+  controls, drives the real Edit > Indent Task / Outdent Task actions and
+  checks the live views with no save and no reopen:
+  * sheet: uid 2 level 0 -> 1, indent 0 -> one `SheetMetrics::indent_per_level`,
+    OutlineNumber "1.1" (uid 3 renumbers 3 -> 2); uid 1 is a summary with a
+    working collapse triangle — `toggle_collapsed` hides uid 2's row and
+    expanding restores the row count; the outdent control reverses all of it
+    and the former summary's triangle refuses to collapse;
+  * Gantt: uid 1's bar becomes kind `summary` / shape `summary_bracket` while
+    uid 2 stays a normal rectangle; outdent returns uid 1 to a normal bar;
+  * Undo restores the flat display at once and redo reapplies it in both
+    cases.
+- This item adds no save path.
+
+Group gates (fresh trees configured from scratch under
+`build/w28-fresh{,-app,-qt}`, serial, tree `8027462`, log
+`build/w28/g2-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks passed |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded, 7 pass, 1 expected fail |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks passed |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match |
+| app ctest / app_qt ctest | 19/19 / 24/24 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (66 documented hashes, 46 tracked `.mpp`); paths OK (88 files); provenance OK (8 oracles) |
+| client-name scan on HEAD / `guard_names` wave range | 0 files / 0 hits; `wave27..HEAD` refuses only the 076438f intermediate blob (exit 1); hex grep no matches (exit 1, expected) |
+
+The gate script exited 0; the `guard_names` refusal is the wave-level blocker
+inherited from G0 (an intermediate blob history cannot rewrite), not a G2
+failure.
+
+WAVE-28-G2-COMPLETE
