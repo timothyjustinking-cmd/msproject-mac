@@ -27,7 +27,7 @@ awaits his go-ahead._
 | group | items |
 |---|---|
 | G0 | **% Complete:** refuse summary tasks; disable the five buttons until wave 28's actuals writer lands (tooltip says why).  **Priority:** measure the project-row Priority save against Project; keep it only if the bytes match. |
-| G1 | **CI:** push `wave26`/`wave27`; fix whatever the first macOS and Linux runs find (`app/main.mm` has not been compiled since wave 24). |
+| G1 | **CI:** the first runs on `wave26` (24 Oct 2026, qt-shell 40043956720, ci 40043959284) failed on two things to fix first: (a) `app_qt/ribbon_bar.cpp:535` `widest_line` is unused - an error under GCC and Clang, so the Linux and macOS builds stop there; (b) the oracle-provenance check needs history, but CI checks out one commit - give the fixtures step `fetch-depth: 0` (or skip that sub-check on a shallow clone with an explicit message).  Then dispatch both workflows again and fix whatever the first complete macOS and Linux runs find (`app/main.mm` has not been compiled since wave 24). |
 | G2 | **Evidence:** commit the one-change-per-save Project files behind the text-style, bar-style and timescale decoders, with a test per change. |
 | G3 | **Queued review fixes, the cheap ones:** the unsaved % edit on a pending inserted task, the delete-discards-pending-edit, Unlink both directions (measure first), the silent `if (load ok)` test guards. |
 | CLOSE | gates, review, live check |
