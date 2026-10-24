@@ -213,6 +213,16 @@ void test_percent_edit_model() {
     check(!refused.push(bypass, &with_summary),
           "push with the plan refuses a hand-built summary edit");
 
+    // W27-3.1: no path can queue a % edit for a row that exists only as a
+    // pending insert -- its placeholder uid is not in the loaded plan.
+    app::StructuralEdit pending;
+    pending.kind = app::StructuralKind::set_percent;
+    pending.uid = 99;
+    pending.percent = 25;
+    app::StructuralEdits no_pending;
+    check(!no_pending.push(pending, &plan),
+          "push refuses a percent edit for a uid with no file row (a pending insert)");
+
     app::StructuralEdits accepted;
     check(accepted.push(edit, &plan), "push with the plan accepts a leaf task");
     check(accepted.apply(plan).tasks[0].percent_complete == 50,
@@ -587,6 +597,42 @@ void test_real_save_round_trip() {
             }
             check(percent_found, "the percent-edited task is in the saved file");
         }
+
+        // W27-3.1: the save layer refuses ONE unwritable percent edit instead
+        // of failing the whole write, so a stale/hand-built queue (the shape of
+        // a % edit on a pending insert) cannot poison every later Save.  The
+        // plan carries uid 999; the source file does not.
+        app::PlanInput stale = percent_base.plan;
+        stale.tasks.push_back(make_task(999, 4800, from_ymd(2026, 1, 8, 8, 0)));
+        app::StructuralEdits stale_edits;
+        app::StructuralEdit stale_edit;
+        stale_edit.kind = app::StructuralKind::set_percent;
+        stale_edit.uid = 999;
+        stale_edit.percent = 25;
+        check(stale_edits.push(stale_edit, &stale),
+              "a percent edit for a plan row the source lacks is queued");
+        const std::filesystem::path stale_path =
+            std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-percent-stale.mpp";
+        std::filesystem::remove(stale_path, error);
+        const app::StructuralSaveResult stale_outcome = app::save_structural_edits(
+            stale_edits, {}, copy.string(), stale_path.string(), false);
+        check(stale_outcome.ok,
+              "a percent edit the source cannot carry does not fail the save");
+        check_size(stale_outcome.percent_rows_written, 0,
+                   "the refused percent edit writes no row");
+        bool refused_named = false;
+        for (const std::string& warning : stale_outcome.warnings) {
+            if (warning.find("999") != std::string::npos) {
+                refused_named = true;
+            }
+        }
+        check(refused_named, "the refused percent edit is reported and names its uid");
+        check(bytes_on_disk(stale_path) != 0,
+              "the refused edit's save still wrote the target");
+        const app::StructuralSaveResult stale_again = app::save_structural_edits(
+            stale_edits, {}, copy.string(), stale_path.string(), false);
+        check(stale_again.ok,
+              "the same queue saves again: the refused edit blocks no later Save");
     }
 
     // ---- refusals ---------------------------------------------------------
