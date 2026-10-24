@@ -15,6 +15,9 @@
 
 #include "outline.h"
 
+#include "edit_marker.h"
+#include "summary_info.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -2074,6 +2077,10 @@ OutlineWriteResult write_outline_edits(CfbDocument& doc,
                                        std::string_view table) {
     OutlineWriteResult result;
     State state(doc, table);
+    /* W29-1.0b: the opened project row, kept for the
+     * DocumentSummaryInformation rewrite at the end (the automatic roll-up
+     * changes the project row's duration and finish). */
+    TaskTable const opened_rows = state.rows;
 
     /* 114/Props is read before the edits because an automatic outdent needs the
      * project-start record, an outdent's re-created assignment copies the
@@ -2219,6 +2226,11 @@ OutlineWriteResult write_outline_edits(CfbDocument& doc,
     put_u32(props, assn_deleted_at,
             assn_has_unresolved_tombstone(assn) ? 1u : 0u);
 
+    /* W29-1.0b: Project records the edit in Props14 record 0x3540000a (payload
+     * 01 00) on every editor save; a missing record in a hand-built fixture is
+     * a no-op, a damaged one refuses the save before anything is stored. */
+    write_edit_marker(doc);
+
     state.rows.store_into(doc, table);
     doc.replace_stream(state.meta_path, state.meta);
     doc.replace_stream(state.fixed2_path, state.fixed2);
@@ -2232,6 +2244,13 @@ OutlineWriteResult write_outline_edits(CfbDocument& doc,
     doc.replace_stream(assn.var2_path, assn.var2);
     doc.replace_stream(assn.var_meta_path, final_assn_var_meta);
     doc.replace_stream(props_path, props);
+
+    /* W29-1.0b: an automatic indent/outdent changes the project row's
+     * duration and finish, and Project's save changes the project summary's
+     * display strings with them; both are edit effects, not per-save noise
+     * (the null saves leave DocumentSummaryInformation byte for byte equal to
+     * the control). */
+    write_project_summary(doc, opened_rows, state.rows);
 
     std::string const inconsistent = check_table(doc, table);
     if (!inconsistent.empty()) {

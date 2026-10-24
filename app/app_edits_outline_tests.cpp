@@ -47,20 +47,22 @@
 //        TBkndAssn Fixed2Data  byte-identical after canonicalising the record
 //                   identities AND resolving the parent links, which Project
 //                   leaves stale on rows it does not touch (outline.h);
-//        114/Props  byte-identical except the two per-save opaque id words,
-//                   with the six counters 0x01000002, 0x01000100, 0x04000001,
-//                   0x04000002, 0x04000100 and 0x04008000 checked by name;
+//        114/Props  compared through the committed null save (W29-1.0b): its
+//                   two per-save identity GUID records are masked as noise,
+//                   every other byte must equal Project's edit save, and the
+//                   six counters 0x01000002, 0x01000100, 0x04000001, 0x04000002,
+//                   0x04000100 and 0x04008000 are ALSO checked by name;
 //        each owned row field is ALSO checked by name against Project's file:
 //        the summary row's FixedMeta +2/+8..23/+26, Fixed2Meta +88/+95,
 //        Fixed2Data +42/+46, and the assignment row's state/count/header word,
 //        uid and planned work.
-//   4. compares EVERY OTHER STREAM WITH PROJECT'S FILE: a stream Project's save
-//      leaves alone must equal it; one Project rewrites (the summary
-//      information, the calendar caches, the other tables' session ids) is a
-//      named EXPECTED FAILURE, never an assertion that the control's bytes are
-//      right (the W25-5 pattern: while the gap is open the test stays green, and
-//      the day the port reproduces the stream the same call FAILS so the list
-//      cannot rot);
+//   4. compares EVERY OTHER STREAM THROUGH THE COMMITTED NULL SAVE (W29-1.0b,
+//      the R28-1 residual): a byte that differs between the control and
+//      Project's no-edit save is per-save noise and is masked by a named rule;
+//      every unmasked byte that differs between the null save and Project's
+//      edit save is the edit's EFFECT and must equal the port's save.  Each
+//      stream's noise and effect counts are printed, and a mismatch is a
+//      FAILING check -- no whole-stream expected failure remains;
 //   5. reopens the port's save through the independent core/mpp reader and
 //      proves the DISPLAY edit_model shows is the file Project's reader shows:
 //      outline level, OutlineNumber, summary flag, duration and the +104/+108
@@ -100,6 +102,7 @@
 #include "outline.h"
 #include "reader.h"
 #include "reader_adapter.h"
+#include "save_pair_noise.h"
 #include "table.h"
 
 #if !defined(APP_TEST_DATA_DIR) || !defined(APP_TEST_OUT_DIR)
@@ -125,7 +128,6 @@ constexpr std::size_t kAssnFixed2Record = 48;
 
 int g_checks = 0;
 int g_failures = 0;
-int g_expected_failures = 0;
 
 void check(bool ok, const char* what) {
     ++g_checks;
@@ -135,21 +137,67 @@ void check(bool ok, const char* what) {
     }
 }
 
-/* W29-0.1 (the wave-28 review's R28-1): a stream or field Project changes and
- * the port does not reproduce is a NAMED EXPECTED FAILURE, the W25-5 pattern.
- * `project_truth` is what Project's file shows; while the gap is open the call
- * prints EXPECTED FAIL and the test stays green, and the day the port
- * reproduces Project the same call FAILS so the list cannot rot. */
-void check_expected_failure(bool project_truth, const char* what) {
-    if (project_truth) {
-        ++g_failures;
-        std::printf("FAIL: expected failure '%s' now PASSES -- remove it from "
-                    "the expected-failure list and make it a normal check\n",
-                    what);
-        return;
+const char* kind_name(save_pair::Kind kind) {
+    switch (kind) {
+        case save_pair::Kind::fixed_block:
+            return "block";
+        case save_pair::Kind::exact:
+            return "exact";
+        case save_pair::Kind::props14:
+            return "props14";
+        case save_pair::Kind::cedl:
+            return "cedl";
     }
-    ++g_expected_failures;
-    std::printf("EXPECTED FAIL: %s\n", what);
+    return "?";
+}
+
+save_pair::Kind kind_for_path(const std::string& path) {
+    /* OLE control streams carry a leading 0x05 in their path; the measured
+     * zero-noise stream is DocumentSummaryInformation below it. */
+    std::string name = path;
+    if (!name.empty() && name.front() == '\x05') {
+        name.erase(name.begin());
+    }
+    if (name == "DocumentSummaryInformation") {
+        return save_pair::Kind::exact;
+    }
+    if (name == "Props14") {
+        return save_pair::Kind::props14;
+    }
+    if (name == "214/CEdl/Var2Data") {
+        return save_pair::Kind::cedl;
+    }
+    return save_pair::Kind::fixed_block;
+}
+
+std::string mismatch_message(const std::string& path,
+                             const save_pair::Verdict& verdict) {
+    std::string message =
+        path + " equals Project's edit save outside the null-save mask";
+    if (verdict.mismatches != 0) {
+        char ours[8];
+        char theirs[8];
+        std::snprintf(ours, sizeof(ours), "%02x", verdict.output_byte);
+        std::snprintf(theirs, sizeof(theirs), "%02x", verdict.result_byte);
+        message += " (first of " + std::to_string(verdict.mismatches) +
+                   " at byte " + std::to_string(verdict.first_mismatch) +
+                   ": port 0x" + ours + ", Project 0x" + theirs + ")";
+    }
+    return message;
+}
+
+/* The W29-1.0b report: per stream, the per-save noise and the edit's effect. */
+void report_stream(const std::string& path, save_pair::Kind kind,
+                   const save_pair::Verdict& verdict) {
+    std::printf("   %-34s %-7s noise=%-4llu effects=%-4llu",
+                path.c_str(), kind_name(kind),
+                static_cast<unsigned long long>(verdict.noise),
+                static_cast<unsigned long long>(verdict.effects));
+    if (verdict.masked_tail != 0) {
+        std::printf(" masked-tail=%llu",
+                    static_cast<unsigned long long>(verdict.masked_tail));
+    }
+    std::printf("\n");
 }
 
 void check_size(std::size_t got, std::size_t want, const char* what) {
@@ -214,56 +262,10 @@ bool same_span(const Bytes& a, const Bytes& b, std::size_t at, std::size_t n) {
                       b.begin() + static_cast<std::ptrdiff_t>(at));
 }
 
-void zero_span(Bytes& bytes, std::size_t at, std::size_t n) {
-    if (at + n <= bytes.size()) {
-        std::fill(bytes.begin() + static_cast<std::ptrdiff_t>(at),
-                  bytes.begin() + static_cast<std::ptrdiff_t>(at + n),
-                  std::uint8_t{0});
-    }
-}
-
 std::string hex_tag(std::uint32_t tag) {
     char buffer[16];
     std::snprintf(buffer, sizeof buffer, "0x%08x", tag);
     return buffer;
-}
-
-/* One 114/Props record: u32 length / u32 id / u32 kind / payload. */
-struct PropsRecord {
-    std::uint32_t id = 0;
-    std::uint32_t length = 0;
-    std::size_t payload = 0;
-};
-
-std::vector<PropsRecord> parse_props(const Bytes& props) {
-    std::vector<PropsRecord> records;
-    std::size_t offset = 16;
-    while (offset + 12 <= props.size()) {
-        PropsRecord record;
-        record.length = get_u32(props, offset);
-        record.id = get_u32(props, offset + 4);
-        if ((record.id & 0x00FF0000u) != 0x00400000u) {
-            break;
-        }
-        if (static_cast<std::uint64_t>(offset) + 12u + record.length >
-            static_cast<std::uint64_t>(props.size())) {
-            break;
-        }
-        record.payload = offset + 12;
-        records.push_back(record);
-        offset += 12u + record.length;
-    }
-    return records;
-}
-
-const PropsRecord* find_props_record(const std::vector<PropsRecord>& records,
-                                     std::uint32_t id) {
-    for (const PropsRecord& record : records) {
-        if (record.id == id) {
-            return &record;
-        }
-    }
-    return nullptr;
 }
 
 /* The 16-byte scalar record framing outline.cpp writes: u32 4 / big-endian tag
@@ -679,11 +681,18 @@ void check_pair(const PairCase& pair) {
         std::filesystem::path(APP_TEST_DATA_DIR) / pair.control;
     const std::filesystem::path result_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / pair.result;
+    const std::filesystem::path null_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        save_pair::null_fixture_name(pair.control);
     if (!std::filesystem::exists(control_path) ||
         !std::filesystem::exists(result_path)) {
         std::printf("SKIP: %s / %s are not present\n", pair.control, pair.result);
         return;
     }
+    /* W29-1.0b: the mask source is committed with the pair. */
+    check(std::filesystem::exists(null_path),
+          (std::string("the committed null save for ") + pair.control +
+           " is present").c_str());
 
     app::PlanInput plan;
     try {
@@ -799,14 +808,17 @@ void check_pair(const PairCase& pair) {
           "the save leaves no intermediate file");
 
     mppwrite::CfbDocument control;
+    mppwrite::CfbDocument null_save;
     mppwrite::CfbDocument project;
     mppwrite::CfbDocument output;
     try {
         control = mppwrite::CfbDocument::from_file(control_path.string());
+        null_save = mppwrite::CfbDocument::from_file(null_path.string());
         project = mppwrite::CfbDocument::from_file(result_path.string());
         output = mppwrite::CfbDocument::from_file(out_path.string());
     } catch (const std::exception& open_error) {
-        check(false, "the control, the Project pair and the port's save open");
+        check(false, "the control, the null save, the Project pair and the "
+                     "port's save open");
         std::printf("OPEN ERROR: %s\n", open_error.what());
         return;
     }
@@ -1076,7 +1088,8 @@ void check_pair(const PairCase& pair) {
         }
     }
 
-    /* --- 114/Props against PROJECT's file -------------------------------- */
+    /* --- 114/Props through the committed null save ----------------------- */
+    const Bytes control_props = control.read_stream("114/Props");
     const Bytes project_props = project.read_stream("114/Props");
     const Bytes output_props = output.read_stream("114/Props");
     check_size(output_props.size(), project_props.size(),
@@ -1096,41 +1109,23 @@ void check_pair(const PairCase& pair) {
                        " counter equals Project's").c_str());
             }
         }
-        /* Project reallocates these two per-session id words on every save; the
-         * port leaves the control's bytes.  They are the only Props bytes not
-         * compared byte for byte with Project's save, and they are a NAMED
-         * expected failure, not a silent mask. */
-        const std::uint32_t kOpaque[] = {0x02400029u, 0x024013c2u};
-        const std::vector<PropsRecord> output_records = parse_props(output_props);
-        const std::vector<PropsRecord> project_records = parse_props(project_props);
-        Bytes output_masked = output_props;
-        Bytes project_masked = project_props;
-        for (const std::uint32_t id : kOpaque) {
-            const PropsRecord* ours = find_props_record(output_records, id);
-            const PropsRecord* theirs = find_props_record(project_records, id);
-            const bool present = ours != nullptr && theirs != nullptr &&
-                                 ours->length >= 4 && theirs->length >= 4;
-            check(present, ("Props carries record " + hex_tag(id)).c_str());
-            if (!present) {
-                continue;
-            }
-            check_expected_failure(
-                get_u16(output_props, ours->payload + 2) ==
-                    get_u16(project_props, theirs->payload + 2),
-                ("Props record " + hex_tag(id) +
-                 " per-save id word equals Project's (Project reallocates it "
-                 "on every save; the port does not own it)").c_str());
-            zero_span(output_masked, ours->payload + 2, 2);
-            zero_span(project_masked, theirs->payload + 2, 2);
-        }
-        check(output_masked == project_masked,
-              "Props equals Project's save except the two per-save id words");
     }
+    /* W29-1.0b: the two per-save identity GUID records differ between the
+     * control and Project's no-edit save; the 16-byte block mask hides exactly
+     * those.  Every other Props byte must equal Project's edit save. */
+    const Bytes null_props = null_save.read_stream("114/Props");
+    const save_pair::Verdict props_verdict = save_pair::compare(
+        save_pair::Kind::fixed_block, control_props, null_props, project_props,
+        output_props);
+    check(props_verdict.lengths_ok,
+          "Props has equal control and null-save lengths");
+    check(props_verdict.mismatches == 0,
+          mismatch_message("114/Props", props_verdict).c_str());
+    report_stream("114/Props", save_pair::Kind::fixed_block, props_verdict);
+    std::size_t total_noise = props_verdict.noise;
+    std::size_t total_effects = props_verdict.effects;
 
-    /* --- every other stream, against PROJECT's file ---------------------- */
-    /* R28-1: "port == control" is not the measurement.  A stream Project's save
-     * leaves alone must equal Project's file; one it rewrites is a named
-     * expected failure, never an assertion that the control's bytes are right. */
+    /* --- every other stream, through the committed null save ------------- */
     const std::vector<std::string> control_path_list = control.stream_paths();
     const std::vector<std::string> output_path_list = output.stream_paths();
     std::set<std::string> const control_paths(control_path_list.begin(),
@@ -1142,24 +1137,35 @@ void check_pair(const PairCase& pair) {
     std::set<std::string> all_paths = control_paths;
     const std::vector<std::string> result_path_list = project.stream_paths();
     all_paths.insert(result_path_list.begin(), result_path_list.end());
+    const std::vector<std::string> null_path_list = null_save.stream_paths();
+    all_paths.insert(null_path_list.begin(), null_path_list.end());
     for (const std::string& path : all_paths) {
         if (owned_stream(path)) {
             continue;
         }
-        const bool project_changed =
-            stream_or_empty(project, path) != stream_or_empty(control, path);
-        const bool ours_matches =
-            stream_or_empty(output, path) == stream_or_empty(project, path);
-        if (project_changed) {
-            check_expected_failure(
-                ours_matches,
-                (path + ": Project's save rewrites it and the port does not "
-                 "reproduce it").c_str());
+        const save_pair::Kind kind = kind_for_path(path);
+        const save_pair::Verdict verdict = save_pair::compare(
+            kind, stream_or_empty(control, path),
+            stream_or_empty(null_save, path), stream_or_empty(project, path),
+            stream_or_empty(output, path));
+        report_stream(path, kind, verdict);
+        total_noise += verdict.noise;
+        total_effects += verdict.effects;
+        if (kind == save_pair::Kind::exact) {
+            check(verdict.noise_free,
+                  (path + ": the null save leaves it byte for byte equal to "
+                          "the control").c_str());
         } else {
-            check(ours_matches,
-                  (path + " equals Project's save").c_str());
+            check(verdict.lengths_ok,
+                  (path + ": control and null save have the measured lengths")
+                      .c_str());
         }
+        check(verdict.mismatches == 0,
+              mismatch_message(path, verdict).c_str());
     }
+    std::printf("   pair totals: noise=%llu effects=%llu\n",
+                static_cast<unsigned long long>(total_noise),
+                static_cast<unsigned long long>(total_effects));
 
     check(mppwrite::check_table(output).empty(),
           "the saved task table passes check_table");
@@ -1420,9 +1426,8 @@ int main() {
         check_pair(pair);
     }
     check_refusals();
-    std::printf("app_edits_outline_tests: %d checks passed, %d expected "
-                "failure(s)\n",
-                g_checks - g_failures, g_expected_failures);
+    std::printf("app_edits_outline_tests: %d checks passed\n",
+                g_checks - g_failures);
     if (g_failures != 0) {
         std::printf("app_edits_outline_tests: %d FAILURE(S)\n", g_failures);
         return 1;

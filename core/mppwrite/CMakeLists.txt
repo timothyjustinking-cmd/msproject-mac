@@ -35,6 +35,8 @@ add_library(core_mppwrite STATIC
     actuals.cpp
     outline.cpp
     project_props.cpp
+    summary_info.cpp
+    edit_marker.cpp
 )
 add_library(msproject::mppwrite ALIAS core_mppwrite)
 

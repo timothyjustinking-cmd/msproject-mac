@@ -25,20 +25,30 @@
 //                   must match);
 //        TBkndAssn FixedData, FixedMeta, Fixed2Meta, VarMeta and Var2Data
 //                   byte-identical (Fixed2Data after identity canonicalisation);
-//        114/Props  byte-identical except the two per-save opaque id words
-//                   (records 0x02400029 / 0x024013c2, their u16 at payload +2);
+//        114/Props  compared through the committed null save (W29-1.0b): its
+//                   two per-save identity GUID records are masked as noise,
+//                   every other byte must equal Project's edit save, and the
+//                   four counters are ALSO checked by name;
 //        each owned row field is ALSO checked by name against Project's file:
 //        FixedMeta +2/+44 and the +8..23 blob, Fixed2Meta +88/+95, Fixed2Data
 //        +42/+46, the assignment's actual/remaining/resume/stop words and its
 //        metadata words, and the four 114/Props counters.
-//   3. compares EVERY OTHER STREAM WITH PROJECT'S FILE: a stream Project's save
-//      leaves alone must equal it; one Project rewrites (the summary
-//      information, the calendar and resource Fixed2Data session ids, the
-//      214/CEdl, CFilter, CGrouping, CTable and CV_iew caches, 214/Props and
-//      Props14) is a named EXPECTED FAILURE, never an assertion that the
-//      control's bytes are right (the W25-5 pattern: while the gap is open the
-//      test stays green, and the day the port reproduces the stream the same
-//      call FAILS so the list cannot rot).
+//   3. compares EVERY OTHER STREAM THROUGH THE COMMITTED NULL SAVE (W29-1.0b,
+//      the R28-1 residual): Project opened each control and saved it with NO
+//      edit; a byte that differs between the control and that null save is
+//      per-save noise and is masked by a named rule (16-byte block for
+//      fixed-length streams, per-byte after normalising Props14 and
+//      214/CEdl/Var2Data; DocumentSummaryInformation has no measured noise and
+//      is exact).  Every unmasked byte that differs between the null save and
+//      Project's edit save is the edit's EFFECT and must equal the port's save.
+//      The test prints each stream's noise and effect counts and the pair
+//      totals; a mismatch is a FAILING check, so a shape the port cannot
+//      reproduce cannot hide behind an expected failure.
+//   4. reopens the port's save and proves the reader agrees with Project's
+//      percent and status date.
+//
+// The null saves are committed as tests/data/<control stem>-null.mpp; a missing
+// one FAILS rather than degrading the discipline.
 //
 // The dates are not hand-fed: the save cascade computes them from the file's
 // own calendar (core/cal), which is what makes this a test of the whole path
@@ -73,6 +83,7 @@
 #include "edit_model.h"
 #include "layout_model.h"
 #include "reader_adapter.h"
+#include "save_pair_noise.h"
 #include "table.h"
 
 #if !defined(APP_TEST_DATA_DIR) || !defined(APP_TEST_OUT_DIR)
@@ -129,6 +140,73 @@ void check_size(std::size_t got, std::size_t want, const char* what) {
                     static_cast<unsigned long long>(got),
                     static_cast<unsigned long long>(want));
     }
+}
+
+const char* kind_name(save_pair::Kind kind) {
+    switch (kind) {
+        case save_pair::Kind::fixed_block:
+            return "block";
+        case save_pair::Kind::exact:
+            return "exact";
+        case save_pair::Kind::props14:
+            return "props14";
+        case save_pair::Kind::cedl:
+            return "cedl";
+    }
+    return "?";
+}
+
+save_pair::Kind kind_for_path(const std::string& path) {
+    /* OLE control streams carry a leading 0x05 in their path; the measured
+     * zero-noise stream is DocumentSummaryInformation below it. */
+    std::string name = path;
+    if (!name.empty() && name.front() == '\x05') {
+        name.erase(name.begin());
+    }
+    if (name == "DocumentSummaryInformation") {
+        return save_pair::Kind::exact;
+    }
+    if (name == "Props14") {
+        return save_pair::Kind::props14;
+    }
+    if (name == "214/CEdl/Var2Data") {
+        return save_pair::Kind::cedl;
+    }
+    return save_pair::Kind::fixed_block;
+}
+
+std::string mismatch_message(const std::string& path,
+                             const save_pair::Verdict& verdict) {
+    std::string message =
+        path + " equals Project's edit save outside the null-save mask";
+    if (verdict.mismatches != 0) {
+        message += " (first of " + std::to_string(verdict.mismatches) +
+                   " at byte " + std::to_string(verdict.first_mismatch) +
+                   ": port 0x";
+        char hex[8];
+        std::snprintf(hex, sizeof(hex), "%02x", verdict.output_byte);
+        message += hex;
+        message += ", Project 0x";
+        std::snprintf(hex, sizeof(hex), "%02x", verdict.result_byte);
+        message += hex;
+        message += ")";
+    }
+    return message;
+}
+
+/* The W29-1.0b report: per stream, how many bytes are per-save noise and how
+ * many are the edit's effect. */
+void report_stream(const std::string& path, save_pair::Kind kind,
+                   const save_pair::Verdict& verdict) {
+    std::printf("   %-34s %-7s noise=%-4llu effects=%-4llu",
+                path.c_str(), kind_name(kind),
+                static_cast<unsigned long long>(verdict.noise),
+                static_cast<unsigned long long>(verdict.effects));
+    if (verdict.masked_tail != 0) {
+        std::printf(" masked-tail=%llu",
+                    static_cast<unsigned long long>(verdict.masked_tail));
+    }
+    std::printf("\n");
 }
 
 std::uint16_t get_u16(const Bytes& bytes, std::size_t offset) {
@@ -229,44 +307,6 @@ std::size_t status_date_payload(const Bytes& props) {
     return kNoIndex;
 }
 
-/* One 114/Props record: u32 length / u32 id / u32 kind / payload. */
-struct PropsRecord {
-    std::uint32_t id = 0;
-    std::uint32_t length = 0;
-    std::size_t payload = 0;
-};
-
-std::vector<PropsRecord> parse_props(const Bytes& props) {
-    std::vector<PropsRecord> records;
-    std::size_t offset = 16;
-    while (offset + 12 <= props.size()) {
-        PropsRecord record;
-        record.length = get_u32(props, offset);
-        record.id = get_u32(props, offset + 4);
-        if ((record.id & 0x00FF0000u) != 0x00400000u) {
-            break;
-        }
-        if (static_cast<std::uint64_t>(offset) + 12u + record.length >
-            static_cast<std::uint64_t>(props.size())) {
-            break;
-        }
-        record.payload = offset + 12;
-        records.push_back(record);
-        offset += 12u + record.length;
-    }
-    return records;
-}
-
-const PropsRecord* find_props_record(const std::vector<PropsRecord>& records,
-                                     std::uint32_t id) {
-    for (const PropsRecord& record : records) {
-        if (record.id == id) {
-            return &record;
-        }
-    }
-    return nullptr;
-}
-
 /* The 16-byte scalar record framing actuals.cpp writes: u32 4 / big-endian tag
  * / u32 4 / u32 value.  Returns the value's offset, or kNoIndex unless the tag
  * occurs exactly once. */
@@ -305,14 +345,6 @@ bool same_span(const Bytes& a, const Bytes& b, std::size_t at, std::size_t n) {
     return std::equal(a.begin() + static_cast<std::ptrdiff_t>(at),
                       a.begin() + static_cast<std::ptrdiff_t>(at + n),
                       b.begin() + static_cast<std::ptrdiff_t>(at));
-}
-
-void zero_span(Bytes& bytes, std::size_t at, std::size_t n) {
-    if (at + n <= bytes.size()) {
-        std::fill(bytes.begin() + static_cast<std::ptrdiff_t>(at),
-                  bytes.begin() + static_cast<std::ptrdiff_t>(at + n),
-                  std::uint8_t{0});
-    }
 }
 
 /* The 16-byte identity GUID Project allocates in Fixed2Data. */
@@ -627,11 +659,19 @@ void check_pair(const Pair& pair) {
         std::filesystem::path(APP_TEST_DATA_DIR) / pair.control;
     const std::filesystem::path result_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / pair.result;
+    const std::filesystem::path null_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        save_pair::null_fixture_name(pair.control);
     if (!std::filesystem::exists(control_path) ||
         !std::filesystem::exists(result_path)) {
         std::printf("SKIP: %s / %s are not present\n", pair.control, pair.result);
         return;
     }
+    /* W29-1.0b: the mask source is committed with the pair.  A missing null
+     * save would silently degrade the discipline, so it is a failure. */
+    check(std::filesystem::exists(null_path),
+          (std::string("the committed null save for ") + pair.control +
+           " is present").c_str());
 
     app::PlanInput plan;
     try {
@@ -711,14 +751,17 @@ void check_pair(const Pair& pair) {
           "the save leaves no intermediate file");
 
     mppwrite::CfbDocument control;
+    mppwrite::CfbDocument null_save;
     mppwrite::CfbDocument result;
     mppwrite::CfbDocument output;
     try {
         control = mppwrite::CfbDocument::from_file(control_path.string());
+        null_save = mppwrite::CfbDocument::from_file(null_path.string());
         result = mppwrite::CfbDocument::from_file(result_path.string());
         output = mppwrite::CfbDocument::from_file(out_path.string());
     } catch (const std::exception& open_error) {
-        check(false, "the control, the Project pair and the port's save open");
+        check(false, "the control, the null save, the Project pair and the "
+                     "port's save open");
         std::printf("OPEN ERROR: %s\n", open_error.what());
         return;
     }
@@ -995,46 +1038,28 @@ void check_pair(const Pair& pair) {
             }
         }
     }
-    /* Project reallocates these two per-session id words on every save (the
-     * same records the new-task-mode test masks); the port leaves the
-     * control's bytes.  The whole 4-byte word is opaque -- the wave-29
-     * mark-before pair's control and result differ in every one of its bytes
-     * -- so they are the only Props bytes not compared byte for byte with
-     * Project's save. */
-    const std::uint32_t kPropsOpaque[] = {0x02400029u, 0x024013c2u};
-    const std::vector<PropsRecord> output_records = parse_props(output_props);
-    const std::vector<PropsRecord> result_records = parse_props(result_props);
-    Bytes output_masked = output_props;
-    Bytes result_masked = result_props;
-    for (const std::uint32_t id : kPropsOpaque) {
-        const PropsRecord* ours = find_props_record(output_records, id);
-        const PropsRecord* theirs = find_props_record(result_records, id);
-        const bool present = ours != nullptr && theirs != nullptr &&
-                             ours->length >= 4 && theirs->length >= 4;
-        check(present, ("Props carries record " + hex_tag(id)).c_str());
-        if (!present) {
-            continue;
-        }
-        check_expected_failure(
-            get_u32(output_props, ours->payload) ==
-                get_u32(result_props, theirs->payload),
-            ("Props record " + hex_tag(id) +
-             " per-save id word equals Project's (Project reallocates it on "
-             "every save; the port does not own it)").c_str());
-        /* The whole 4-byte word at +0 is the per-save id: the wave-29
-         * mark-before control and result differ in every byte of it (the high
-         * half moved a961 -> b02c), so a 2-byte mask would leave the two
-         * files unequal. */
-        zero_span(output_masked, ours->payload, 4);
-        zero_span(result_masked, theirs->payload, 4);
-    }
-    check(output_masked == result_masked,
-          "Props equals Project's save except the two per-save id words");
+    /* W29-1.0b: Props's per-save id GUIDs are NOISE, not an expected failure:
+     * they differ between the control and Project's no-edit save, so the
+     * 16-byte block mask hides exactly those records.  Every other byte -- the
+     * counters above and the status date -- is an edit effect or untouched and
+     * must equal Project's edit save. */
+    const Bytes null_props = null_save.read_stream("114/Props");
+    const save_pair::Verdict props_verdict = save_pair::compare(
+        save_pair::Kind::fixed_block, control_props, null_props, result_props,
+        output_props);
+    check(props_verdict.lengths_ok,
+          "Props has equal control and null-save lengths");
+    check(props_verdict.mismatches == 0,
+          mismatch_message("114/Props", props_verdict).c_str());
+    report_stream("114/Props", save_pair::Kind::fixed_block, props_verdict);
+    std::size_t total_noise = props_verdict.noise;
+    std::size_t total_effects = props_verdict.effects;
 
-    /* --- every other stream, against PROJECT's file ---------------------- */
-    /* R28-1: "port == control" is not the measurement.  A stream Project's save
-     * leaves alone must equal Project's file; one it rewrites is a named
-     * expected failure, never an assertion that the control's bytes are right. */
+    /* --- every other stream, through the null save ------------------------ */
+    /* W29-1.0b (the R28-1 residual): a whole-stream expected failure cannot
+     * tell a per-save byte from a change the edit caused.  The committed null
+     * save masks the former; every unmasked byte Project's edit save changes
+     * is the edit's effect and must equal the port's save. */
     const std::vector<std::string> control_path_list = control.stream_paths();
     const std::vector<std::string> output_path_list = output.stream_paths();
     std::set<std::string> const control_paths(control_path_list.begin(),
@@ -1046,24 +1071,35 @@ void check_pair(const Pair& pair) {
     std::set<std::string> all_paths = control_paths;
     const std::vector<std::string> result_path_list = result.stream_paths();
     all_paths.insert(result_path_list.begin(), result_path_list.end());
+    const std::vector<std::string> null_path_list = null_save.stream_paths();
+    all_paths.insert(null_path_list.begin(), null_path_list.end());
     for (const std::string& path : all_paths) {
         if (owned_stream(path)) {
             continue;
         }
-        const bool project_changed =
-            stream_or_empty(result, path) != stream_or_empty(control, path);
-        const bool ours_matches =
-            stream_or_empty(output, path) == stream_or_empty(result, path);
-        if (project_changed) {
-            check_expected_failure(
-                ours_matches,
-                (path + ": Project's save rewrites it and the port does not "
-                 "reproduce it").c_str());
+        const save_pair::Kind kind = kind_for_path(path);
+        const save_pair::Verdict verdict = save_pair::compare(
+            kind, stream_or_empty(control, path),
+            stream_or_empty(null_save, path), stream_or_empty(result, path),
+            stream_or_empty(output, path));
+        report_stream(path, kind, verdict);
+        total_noise += verdict.noise;
+        total_effects += verdict.effects;
+        if (kind == save_pair::Kind::exact) {
+            check(verdict.noise_free,
+                  (path + ": the null save leaves it byte for byte equal to "
+                          "the control").c_str());
         } else {
-            check(ours_matches,
-                  (path + " equals Project's save").c_str());
+            check(verdict.lengths_ok,
+                  (path + ": control and null save have the measured lengths")
+                      .c_str());
         }
+        check(verdict.mismatches == 0,
+              mismatch_message(path, verdict).c_str());
     }
+    std::printf("   pair totals: noise=%llu effects=%llu\n",
+                static_cast<unsigned long long>(total_noise),
+                static_cast<unsigned long long>(total_effects));
 
     check(mppwrite::check_table(output).empty(),
           "the saved task table passes check_table");

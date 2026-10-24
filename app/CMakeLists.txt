@@ -395,6 +395,8 @@ if(APP_BUILD_TESTS)
     # APP_TEST_OUT_DIR.
     add_executable(app_edits_actuals_tests app_edits_actuals_tests.cpp)
     target_compile_features(app_edits_actuals_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_actuals_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(app_edits_actuals_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(app_edits_actuals_tests PRIVATE app_layout)
     target_compile_definitions(app_edits_actuals_tests PRIVATE
@@ -413,6 +415,8 @@ if(APP_BUILD_TESTS)
     # Project's own save.  Writes only under APP_TEST_OUT_DIR.
     add_executable(app_edits_outline_tests app_edits_outline_tests.cpp)
     target_compile_features(app_edits_outline_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_outline_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(app_edits_outline_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(app_edits_outline_tests PRIVATE app_layout)
     target_compile_definitions(app_edits_outline_tests PRIVATE

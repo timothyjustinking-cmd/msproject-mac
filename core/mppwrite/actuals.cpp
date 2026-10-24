@@ -19,6 +19,9 @@
 
 #include "actuals.h"
 
+#include "add_delete.h"
+#include "edit_marker.h"
+#include "summary_info.h"
 #include "table.h"
 
 #include <algorithm>
@@ -893,6 +896,11 @@ PercentActualsResult write_percent_actuals(
     std::string_view table, PercentActualsOptions const& options) {
     PercentActualsResult result;
     TaskTable rows = TaskTable::from_document(doc, table);
+    /* W29-1.0b: the opened project row, kept for the DocumentSummaryInformation
+     * rewrite at the end.  The summary's start/finish FILETIMEs are derived
+     * from the DAY DELTA of this row, so the opened bytes (not a timezone
+     * guess) are the reference. */
+    TaskTable const opened_rows = rows;
     std::size_t const row_count = rows.rows();
 
     std::string const meta_path = table_stream(table, "FixedMeta");
@@ -1884,6 +1892,28 @@ PercentActualsResult write_percent_actuals(
     put_u32(props, assn_var2_at,
             static_cast<std::uint32_t>(assn_var2.size()));
 
+    /* W29-1.0b: the link table's driving-state byte.  Project's work pair takes
+     * the ONE live incoming link to the edited row from 0x0f to 0x07 when that
+     * row enters progress; every other measured pair has no live incoming link
+     * and stages nothing.  A shape this rule does not cover is refused here,
+     * before any stream is stored. */
+    std::vector<ProgressLinkEdit> progress_edits;
+    progress_edits.reserve(applied.size());
+    for (AppliedEdit const& item : applied) {
+        ProgressLinkEdit progress;
+        progress.uid = item.edit.uid;
+        progress.entered_progress =
+            item.old_percent == 0 && item.edit.percent != 0;
+        progress_edits.push_back(progress);
+    }
+    ProgressLinks const link_flags =
+        stage_progress_link_flags(doc, progress_edits);
+
+    /* W29-1.0b: Project records on every editor save that the file was edited
+     * (Props14 record 0x3540000a -> 01 00).  The whole-stream expected failure
+     * this replaces could not tell that effect from the save's own noise. */
+    write_edit_marker(doc);
+
     rows.store_into(doc, table);
     doc.replace_stream(meta_path, meta);
     doc.replace_stream(fixed2_path, fixed2);
@@ -1896,6 +1926,15 @@ PercentActualsResult write_percent_actuals(
     doc.replace_stream(assn_var_meta_path, final_assn_var_meta);
     doc.replace_stream(assn_var2_path, assn_var2);
     doc.replace_stream(props_path, props);
+    if (!link_flags.fixed2_meta.empty()) {
+        doc.replace_stream("114/TBkndCons/Fixed2Meta", link_flags.fixed2_meta);
+    }
+
+    /* W29-1.0b: the project summary's display strings are an edit effect, not
+     * per-save noise (the null saves leave DocumentSummaryInformation byte for
+     * byte equal to the control).  Rewrite it from the project row the writer
+     * just stored; the writer refuses a shape it has not measured. */
+    write_project_summary(doc, opened_rows, rows);
 
     std::string const inconsistent = check_table(doc, table);
     if (!inconsistent.empty()) {

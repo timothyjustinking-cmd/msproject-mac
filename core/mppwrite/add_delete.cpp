@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -1828,16 +1829,18 @@ AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
         task_identity(doc, successor_row, function);
     LinkIdentity const link_identity = make_link_identity(doc, function);
 
-    /* Fixed2Meta +8: 0x0f for the first live link naming this successor, 0x07
-     * for a later one (measured rule, see add_delete.h). */
-    std::uint8_t flag = kLinkFixed2FirstLinkFlag;
+    /* Fixed2Meta +8: keep `add_task_link`'s wave-47 choice -- 0x0f, or 0x07
+     * when a live link already names this successor.  W29-1.0b measured the
+     * byte as a driving-state flag rather than a position marker (see
+     * add_delete.h); the two measured adds do not exercise the distinction. */
+    std::uint8_t flag = kLinkFixed2BaseFlag;
     for (std::size_t row = 0; row < rows; ++row) {
         if (!links.rows.rows[row].live) {
             continue;
         }
         if (get_u32(links.rows.fixed, row * kLinkRowSize + kConsSuccessor) ==
             successor_uid) {
-            flag = kLinkFixed2LaterLinkFlag;
+            flag = kLinkFixed2EnteredProgressFlag;
             break;
         }
     }
@@ -2078,6 +2081,133 @@ DeletedLink delete_task_link(CfbDocument& doc, std::uint32_t link_uid,
         "+4 has bit 0x02; every stream size is unchanged");
     doc = reread;
     return result;
+}
+
+/* ---- link Fixed2Meta driving-state byte (W29-1.0b) ---------------------- */
+
+ProgressLinks stage_progress_link_flags(
+    CfbDocument const& doc, std::vector<ProgressLinkEdit> const& edits,
+    std::string_view table) {
+    std::string const function = "stage_progress_link_flags";
+    ProgressLinks out;
+    out.flags.reserve(edits.size());
+    if (edits.empty()) {
+        return out;
+    }
+    DependentTable const links = load_dependent_table(
+        doc, table, kLinkRowSize, kLinkMetaEntrySize, function);
+    std::size_t const rows = links.rows.size();
+    std::string const fixed2_meta_path = table_stream(table, "Fixed2Meta");
+    std::vector<std::uint8_t> staged;
+    bool have_meta = false;
+    bool any_changed = false;
+    for (ProgressLinkEdit const& edit : edits) {
+        ProgressLinkFlag flag;
+        flag.successor_uid = edit.uid;
+        for (DependentRow const& row : links.rows) {
+            if (row.live && row.successor == edit.uid) {
+                ++flag.live_incoming;
+            }
+        }
+        out.flags.push_back(flag);
+        if (flag.live_incoming == 0) {
+            continue;
+        }
+        ProgressLinkFlag& record = out.flags.back();
+        if (!edit.entered_progress) {
+            throw Error(function + ": task uid " + std::to_string(edit.uid) +
+                        " has " + std::to_string(record.live_incoming) +
+                        " live incoming link(s) but this edit does not take it "
+                        "from 0 % to non-zero; no Project save measures the "
+                        "link flag for that shape, so the command is refused");
+        }
+        if (record.live_incoming > 1) {
+            throw Error(function + ": task uid " + std::to_string(edit.uid) +
+                        " has " + std::to_string(record.live_incoming) +
+                        " live incoming links; the one-link progress effect is "
+                        "the only measured shape, so the command is refused");
+        }
+        if (!have_meta) {
+            std::string const fixed2_path = table_stream(table, "Fixed2Data");
+            if (!doc.has_stream(fixed2_path)) {
+                throw Error(function + ": the link table has a live incoming "
+                            "link but no " + fixed2_path +
+                            "; refusing to guess the flag it carries");
+            }
+            std::vector<std::uint8_t> const fixed2 = doc.read_stream(fixed2_path);
+            if (fixed2.size() != rows * kLinkFixed2RecordSize) {
+                throw Error(function + ": " + fixed2_path + " is " +
+                            std::to_string(fixed2.size()) + " bytes, not " +
+                            std::to_string(rows) + "*48; refusing to change a "
+                            "damaged link table");
+            }
+            if (!doc.has_stream(fixed2_meta_path)) {
+                throw Error(function + ": the link table has a live incoming "
+                            "link but no " + fixed2_meta_path +
+                            "; refusing to guess the flag it carries");
+            }
+            staged = doc.read_stream(fixed2_meta_path);
+            if (staged.size() !=
+                kLinkF2MetaHeaderSize + rows * kLinkFixed2MetaEntrySize) {
+                throw Error(function + ": " + fixed2_meta_path + " is " +
+                            std::to_string(staged.size()) + " bytes, not 16 + " +
+                            std::to_string(rows) + "*9; refusing to change a "
+                            "damaged link table");
+            }
+            if (get_u32(staged, kLinkF2MetaMagicOffset) != kDependentMagic ||
+                get_u32(staged, kLinkF2MetaCount) != rows ||
+                get_u32(staged, kLinkF2MetaFixedSize) != fixed2.size()) {
+                throw Error(function + ": " + fixed2_meta_path +
+                            " header counts do not match the link table; "
+                            "refusing to change a damaged link table");
+            }
+            for (std::size_t row = 0; row < rows; ++row) {
+                std::size_t const base =
+                    kLinkF2MetaHeaderSize + row * kLinkFixed2MetaEntrySize;
+                if (get_u32(staged, base + kLinkF2MetaRecordOffset) !=
+                    row * kLinkFixed2RecordSize) {
+                    throw Error(function + ": " + fixed2_meta_path + " entry " +
+                                std::to_string(row) +
+                                " does not name Fixed2Data record " +
+                                std::to_string(row) +
+                                "; refusing to change a damaged link table");
+                }
+            }
+            have_meta = true;
+        }
+        std::size_t link_row = rows;
+        for (DependentRow const& row : links.rows) {
+            if (row.live && row.successor == edit.uid) {
+                link_row = row.row;
+                break;
+            }
+        }
+        std::size_t const base =
+            kLinkF2MetaHeaderSize + link_row * kLinkFixed2MetaEntrySize;
+        record.before = staged[base + kLinkF2MetaFlag];
+        if (record.before != kLinkFixed2BaseFlag &&
+            record.before != kLinkFixed2EnteredProgressFlag) {
+            char before_hex[8] = {};
+            std::snprintf(before_hex, sizeof(before_hex), "%02x",
+                          static_cast<unsigned>(record.before));
+            throw Error(function + ": task uid " + std::to_string(edit.uid) +
+                        "'s one live incoming link has Fixed2Meta +8 = 0x" +
+                        before_hex +
+                        "; only 0x0f and 0x07 are measured, so the command is "
+                        "refused");
+        }
+        record.written = true;
+        record.after = kLinkFixed2EnteredProgressFlag;
+        if (record.before != record.after) {
+            staged[base + kLinkF2MetaFlag] = record.after;
+            record.changed = true;
+            any_changed = true;
+        }
+    }
+    if (any_changed) {
+        out.fixed2_meta = staged;
+    }
+    return out;
 }
 
 /* ---- resource rows: 114/TBkndRsc (W54) ---------------------------------- */

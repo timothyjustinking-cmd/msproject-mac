@@ -323,11 +323,15 @@ DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
  * identity is for) without inventing Project's counter.  The Project gate is the
  * proof that Project accepts this.
  *
- * Fixed2Meta entry byte +8 is 0x0f for the FIRST link row naming a successor and
- * 0x07 for later ones (in link1 rows 0..2 are 0x0f, rows 3..4 -- the second
- * links into successors 3 and 4 -- are 0x07; w12-linkadd's two rows both name
- * distinct successors and are both 0x0f).  That rule is an inference from those
- * two measured files; the writer applies it over LIVE rows and documents it.
+ * Fixed2Meta entry byte +8 is a DRIVING-STATE byte, not a position marker.  The
+ * wave-47 reading ("0x0f for the first link row naming a successor, 0x07 for
+ * later ones") is falsified by the wave-29 corpus: wave29-percent-mid25-control
+ * has three live links into three distinct successors, yet the first is 0x07
+ * and the other two are 0x0f, and wave29-percent-work40 shows the one live
+ * incoming link to the edited row move 0x0f -> 0x07 when that row enters
+ * progress (W29-1.0b).  `add_task_link` still writes 0x0f for a new link (the
+ * two measured adds had no driving-state reason for 0x07), and
+ * `stage_progress_link_flags` performs the measured edit-time change.
  *
  * A delete changes only FixedMeta: the entry's +0 becomes 0x02, +2 stays 0, the
  * table header +4 gets bit 0x02, and FixedData/Fixed2Data/Fixed2Meta keep every
@@ -367,10 +371,14 @@ inline constexpr std::size_t kLinkFixed2RecordSize = 48;
 inline constexpr std::size_t kLinkIdentitySize = 16;
 /* Link Fixed2Meta: a 16-byte header plus one 9-byte entry per row. */
 inline constexpr std::size_t kLinkFixed2MetaEntrySize = 9;
-/* Entry byte +8 values measured in Project's own files: the first link into a
- * successor stores 0x0f, later links into it store 0x07. */
-inline constexpr std::uint8_t kLinkFixed2FirstLinkFlag = 0x0F;
-inline constexpr std::uint8_t kLinkFixed2LaterLinkFlag = 0x07;
+/* Entry byte +8 is a driving-state byte, not a position marker (see the note
+ * above): 0x0f is the ordinary state, 0x07 the state the measured progress
+ * transition writes.  `add_task_link` keeps its wave-47 choice (0x0f, or 0x07
+ * when a live link already names the successor), which the two measured adds
+ * accepted; the names below describe the states it writes, not the falsified
+ * first/later reading. */
+inline constexpr std::uint8_t kLinkFixed2BaseFlag = 0x0F;
+inline constexpr std::uint8_t kLinkFixed2EnteredProgressFlag = 0x07;
 
 /* What `add_task_link` proved from the file on disk. */
 struct AddedLink {
@@ -454,6 +462,54 @@ AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
  */
 DeletedLink delete_task_link(CfbDocument& doc, std::uint32_t link_uid,
                              std::string const& path);
+
+/* --- link Fixed2Meta driving-state byte, measured through a percent edit --- */
+
+/* One applied edit, as the link-flag rule needs it. */
+struct ProgressLinkEdit {
+    std::uint32_t uid = 0;
+    /* True when the edit takes the row from stored percent 0 to non-zero (the
+     * wave-29 measured transition). */
+    bool entered_progress = false;
+};
+
+struct ProgressLinkFlag {
+    std::uint32_t successor_uid = 0;
+    std::size_t live_incoming = 0; /* live link rows whose successor is the uid */
+    std::uint8_t before = 0;       /* Fixed2Meta entry +8 of the one live link */
+    std::uint8_t after = 0;
+    bool written = false; /* the measured edit value 0x07 is now in effect */
+    bool changed = false; /* a byte actually changed (0x0f -> 0x07) */
+};
+
+struct ProgressLinks {
+    std::vector<ProgressLinkFlag> flags; /* one per edit, in input order */
+    /* The new 114/TBkndCons/Fixed2Meta bytes when any flag changed; empty when
+     * no stream needs replacing.  The caller stores it. */
+    std::vector<std::uint8_t> fixed2_meta;
+};
+
+/*
+ * Stage the link table's measured edit effect on Fixed2Meta +8 (W29-1.0b).
+ *
+ * Project's wave29-percent-work40 save takes the one LIVE incoming link to the
+ * edited row from 0x0f to 0x07 when that row enters progress.  This function
+ * reads `114/TBkndCons` from `doc`, applies that rule to a copy of
+ * `114/TBkndCons/Fixed2Meta`, and returns the bytes to store; `doc` is not
+ * modified.  It is called before the actuals writer stores anything, so a
+ * refusal leaves the file untouched.
+ *
+ * Rules:
+ *   - no live incoming link: no-op (every other measured pair);
+ *   - exactly one live incoming link and the edit enters progress: require the
+ *     entry's +8 byte to be 0x0f or 0x07 and stage 0x07;
+ *   - more than one live incoming link, an edit on a linked row that does NOT
+ *     enter progress, or any other +8 value: no Project save measures the
+ *     shape, so throw Error and let the caller refuse the command.
+ */
+ProgressLinks stage_progress_link_flags(
+    CfbDocument const& doc, std::vector<ProgressLinkEdit> const& edits,
+    std::string_view table = "114/TBkndCons");
 
 /* --- resource rows: 114/TBkndRsc (W54) ---------------------------------- */
 

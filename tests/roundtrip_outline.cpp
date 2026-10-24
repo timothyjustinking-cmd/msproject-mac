@@ -24,11 +24,17 @@
  * measured outline side effects: the six TBkndAssn streams and the six
  * 114/Props counters.  They are compared with PROJECT's file, never with the
  * control: the tombstoned assignment (indent / summary) and the re-created
- * assignment row (outdent) must be byte-identical, and the two per-save opaque
- * Fixed2Data identities and the two per-save Props id words are named EXPECTED
- * FAILURES rather than silent masks.  Every stream the writer does not own is
- * either equal to Project's file or a named expected failure; "port == control"
- * is no longer asserted anywhere.
+ * assignment row (outdent) must be byte-identical, and the per-save Fixed2Data
+ * identities are canonicalised by name.
+ *
+ * W29-1.0b (R28-1 residual) replaced the old whole-stream expected failures
+ * with a measured null-save discipline (tests/save_pair_noise.h).  Each pair
+ * control has a committed no-edit save, `<control stem>-null.mpp`.  A byte that
+ * differs between the control and its null save is per-save noise and is
+ * masked by a NAMED rule; every unmasked byte that differs between the null
+ * save and Project's edit save is the edit's effect, and the port's save must
+ * equal Project's there or the check FAILS.  Each stream prints its noise and
+ * effect counts.  A missing null save FAILS rather than degrading to a mask.
  *
  * W29-0.4 (R28-4) added the four AUTOMATIC-scheduling pairs:
  * wave29-outline-auto-{indent,summary,outdent} and
@@ -76,6 +82,7 @@
 
 #include "cfb_writer.h"
 #include "outline.h"
+#include "save_pair_noise.h"
 #include "table.h"
 
 #ifdef MPPWRITE_HAVE_READER
@@ -219,11 +226,6 @@ std::uint32_t get_u32(std::vector<std::uint8_t> const& bytes,
            (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
            (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
            (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
-}
-
-std::uint16_t get_u16(std::vector<std::uint8_t> const& bytes,
-                      std::size_t offset) {
-    return static_cast<std::uint16_t>(bytes[offset] | (bytes[offset + 1] << 8));
 }
 
 /* One 114/Props record: u32 length / u32 id / u32 kind / payload. */
@@ -499,15 +501,85 @@ void check_fixed_meta(TestContext& ctx, std::string const& label,
     }
 }
 
+const char* kind_name(save_pair::Kind kind) {
+    switch (kind) {
+        case save_pair::Kind::fixed_block:
+            return "block";
+        case save_pair::Kind::exact:
+            return "exact";
+        case save_pair::Kind::props14:
+            return "props14";
+        case save_pair::Kind::cedl:
+            return "cedl";
+    }
+    return "?";
+}
+
+save_pair::Kind kind_for_path(std::string const& path) {
+    /* OLE control streams carry a leading 0x05 in their path; the measured
+     * zero-noise stream is DocumentSummaryInformation below it. */
+    std::string name = path;
+    if (!name.empty() && name.front() == '\x05') {
+        name.erase(name.begin());
+    }
+    if (name == "DocumentSummaryInformation") {
+        return save_pair::Kind::exact;
+    }
+    if (name == "Props14") {
+        return save_pair::Kind::props14;
+    }
+    if (name == "214/CEdl/Var2Data") {
+        return save_pair::Kind::cedl;
+    }
+    return save_pair::Kind::fixed_block;
+}
+
+std::string mismatch_message(std::string const& path,
+                             save_pair::Verdict const& verdict) {
+    std::string message =
+        path + " equals Project's edit save outside the null-save mask";
+    if (verdict.mismatches != 0) {
+        char ours[8];
+        char theirs[8];
+        std::snprintf(ours, sizeof(ours), "%02x", verdict.output_byte);
+        std::snprintf(theirs, sizeof(theirs), "%02x", verdict.result_byte);
+        message += " (first of " + std::to_string(verdict.mismatches) +
+                   " at byte " + std::to_string(verdict.first_mismatch) +
+                   ": port 0x" + ours + ", Project 0x" + theirs + ")";
+    }
+    return message;
+}
+
+/* The W29-1.0b report: per stream, the per-save noise and the edit's effect. */
+void report_stream(std::string const& label, std::string const& path,
+                   save_pair::Kind kind, save_pair::Verdict const& verdict) {
+    std::printf("   %-22s %-34s %-7s noise=%-4llu effects=%-4llu",
+                label.c_str(), path.c_str(), kind_name(kind),
+                static_cast<unsigned long long>(verdict.noise),
+                static_cast<unsigned long long>(verdict.effects));
+    if (verdict.masked_tail != 0) {
+        std::printf(" masked-tail=%llu",
+                    static_cast<unsigned long long>(verdict.masked_tail));
+    }
+    std::printf("\n");
+}
+
 /*
  * W29-0.1: the outline save's measured side effects.  TBkndAssn (the tombstoned
  * assignment of a new summary and the row an outdent re-creates) and the six
- * 114/Props counters are OWNED and compared with PROJECT's file; every stream
- * the writer does not own is either equal to Project's file or a named expected
- * failure.  Nothing here compares the port with the control.
+ * 114/Props counters are OWNED and compared with PROJECT's file.
+ *
+ * W29-1.0b: every stream the writer does not own is compared through the
+ * committed no-edit save of the control.  A byte that differs between the
+ * control and the null save is per-save noise and is masked by its measured
+ * rule; every unmasked byte that differs between the null save and Project's
+ * edit save is the edit's effect, and the port must reproduce it or the check
+ * FAILS.  Nothing here compares the port with the control as if the control
+ * were the result.
  */
 void check_owned_side_effects(TestContext& ctx, std::string const& label,
                               CfbDocument const& control,
+                              CfbDocument const& null_save,
                               CfbDocument const& project,
                               CfbDocument const& port,
                               std::size_t task_rows) {
@@ -556,6 +628,25 @@ void check_owned_side_effects(TestContext& ctx, std::string const& label,
         stream_of(project, "114/Props");
     ctx.equal(port_props.size(), project_props.size(),
               label + ": Props keeps Project's length");
+    /* W29-1.0b: Project reallocates the two per-session identity GUID records
+     * on every save; the control and the no-edit save differ there and the
+     * 16-byte block mask hides exactly those records.  Every other Props byte
+     * must equal Project's edit save. */
+    std::vector<std::uint8_t> const control_props =
+        stream_of(control, "114/Props");
+    std::vector<std::uint8_t> const null_props =
+        stream_of(null_save, "114/Props");
+    save_pair::Verdict const props_verdict = save_pair::compare(
+        save_pair::Kind::fixed_block, control_props, null_props, project_props,
+        port_props);
+    ctx.check(props_verdict.lengths_ok,
+              label + ": Props has equal control and null-save lengths");
+    ctx.check(props_verdict.mismatches == 0,
+              label + ": " + mismatch_message("114/Props", props_verdict));
+    report_stream(label, "114/Props", save_pair::Kind::fixed_block,
+                  props_verdict);
+    std::size_t total_noise = props_verdict.noise;
+    std::size_t total_effects = props_verdict.effects;
     if (port_props.size() == project_props.size()) {
         std::uint32_t const kCounters[] = {0x01000002u, 0x01000100u,
                                            0x04000001u, 0x04000002u,
@@ -575,42 +666,13 @@ void check_owned_side_effects(TestContext& ctx, std::string const& label,
                               " counter equals Project's");
             }
         }
-        /* Project reallocates these two per-session id words on every save; the
-         * port leaves the control's bytes.  They are the only Props bytes not
-         * compared byte for byte with Project's save, and they are a NAMED
-         * expected failure, not a silent mask. */
-        std::uint32_t const kOpaque[] = {0x02400029u, 0x024013c2u};
-        std::vector<PropsRecord> const port_records = parse_props(port_props);
-        std::vector<PropsRecord> const project_records =
-            parse_props(project_props);
-        std::vector<std::uint8_t> port_masked = port_props;
-        std::vector<std::uint8_t> project_masked = project_props;
-        for (std::uint32_t const id : kOpaque) {
-            PropsRecord const* ours = find_props_record(port_records, id);
-            PropsRecord const* theirs = find_props_record(project_records, id);
-            bool const present = ours != nullptr && theirs != nullptr &&
-                                 ours->length >= 4 && theirs->length >= 4;
-            ctx.check(present, label + ": Props carries record " + hex_tag(id));
-            if (!present) {
-                continue;
-            }
-            ctx.expected_failure(
-                get_u16(port_props, ours->payload + 2) ==
-                    get_u16(project_props, theirs->payload + 2),
-                label + ": Props record " + hex_tag(id) +
-                    " per-save id word equals Project's (Project reallocates it"
-                    " on every save; the port does not own it)");
-            zero_span(port_masked, ours->payload + 2, 2);
-            zero_span(project_masked, theirs->payload + 2, 2);
-        }
-        ctx.check(port_masked == project_masked,
-                  label + ": Props equals Project's save except the two per-save"
-                          " id words");
     }
 
-    /* R28-1: "port == control" is not the measurement.  A stream Project's save
-     * leaves alone must equal Project's file; one it rewrites is a named
-     * expected failure, never an assertion that the control's bytes are right. */
+    /* R28-1 / W29-1.0b: every stream the writer does not own is compared
+     * through the committed no-edit save.  Control-vs-null differences are
+     * per-save noise and are masked by their measured rule; null-vs-Project
+     * differences are the edit's effects, and the port must reproduce every
+     * one.  A stream whose effects the port cannot reproduce FAILS here. */
     std::vector<std::string> a_paths = control.stream_paths();
     std::vector<std::string> b_paths = port.stream_paths();
     std::sort(a_paths.begin(), a_paths.end());
@@ -621,6 +683,9 @@ void check_owned_side_effects(TestContext& ctx, std::string const& label,
     for (std::string const& path : project.stream_paths()) {
         all_paths.push_back(path);
     }
+    for (std::string const& path : null_save.stream_paths()) {
+        all_paths.push_back(path);
+    }
     std::sort(all_paths.begin(), all_paths.end());
     all_paths.erase(std::unique(all_paths.begin(), all_paths.end()),
                     all_paths.end());
@@ -628,20 +693,29 @@ void check_owned_side_effects(TestContext& ctx, std::string const& label,
         if (owned_stream(path)) {
             continue;
         }
-        bool const project_changed = stream_or_empty(project, path) !=
-                                     stream_or_empty(control, path);
-        bool const ours_matches = stream_or_empty(port, path) ==
-                                  stream_or_empty(project, path);
-        if (project_changed) {
-            ctx.expected_failure(
-                ours_matches, label + ": " + path +
-                                  ": Project's save rewrites it and the port "
-                                  "does not reproduce it");
+        save_pair::Kind const kind = kind_for_path(path);
+        save_pair::Verdict const verdict = save_pair::compare(
+            kind, stream_or_empty(control, path),
+            stream_or_empty(null_save, path), stream_or_empty(project, path),
+            stream_or_empty(port, path));
+        report_stream(label, path, kind, verdict);
+        total_noise += verdict.noise;
+        total_effects += verdict.effects;
+        if (kind == save_pair::Kind::exact) {
+            ctx.check(verdict.noise_free,
+                      label + ": " + path +
+                          ": the null save leaves it byte for byte equal to "
+                          "the control");
         } else {
-            ctx.check(ours_matches,
-                      label + ": " + path + " equals Project's save");
+            ctx.check(verdict.lengths_ok,
+                      label + ": " + path +
+                          ": control and null save have the measured lengths");
         }
+        ctx.check(verdict.mismatches == 0,
+                  label + ": " + mismatch_message(path, verdict));
     }
+    std::cout << "   " << label << " pair totals: noise=" << total_noise
+              << " effects=" << total_effects << "\n";
 }
 
 void apply_and_compare(TestContext& ctx, PairCase const& test) {
@@ -661,6 +735,18 @@ void apply_and_compare(TestContext& ctx, PairCase const& test) {
 
     CfbDocument const control = CfbDocument::from_file(fixture(test.control));
     CfbDocument const project = CfbDocument::from_file(fixture(test.project));
+    /* W29-1.0b: the committed no-edit save of the control is the mask source
+     * for Project's per-save noise.  A missing null save is a FAILING check:
+     * without it the stream comparisons below could not tell noise from an
+     * edit effect. */
+    std::string const null_name = save_pair::null_fixture_name(test.control);
+    bool const null_present = std::filesystem::exists(fixture(null_name));
+    ctx.check(null_present,
+              label + ": committed null save " + null_name + " is present");
+    CfbDocument null_save;
+    if (null_present) {
+        null_save = CfbDocument::from_file(fixture(null_name));
+    }
     CfbDocument const port = CfbDocument::from_file(out_path(name));
     require_same_streams(ctx, label, control, port);
     require_same_streams(ctx, label, control, project);
@@ -708,7 +794,8 @@ void apply_and_compare(TestContext& ctx, PairCase const& test) {
                   label + ": Fixed2Data outline bytes changed");
     }
 
-    check_owned_side_effects(ctx, label, control, project, port, rows);
+    check_owned_side_effects(ctx, label, control, null_save, project, port,
+                             rows);
 
 #ifdef MPPWRITE_HAVE_READER
     mpp::Document const project_reader =
