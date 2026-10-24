@@ -21,6 +21,7 @@ checkout. Nothing here is client data.
 | `wave25-auto.mpp` | **synthetic** `wave23-outline.mpp` with every task switched to automatic scheduling (`Manual = False`) and saved by Project 2021 with neutral metadata; the parity reference that distinguishes an auto task bar from a manual one (W25-2). |
 | `wave25-flag11.mpp` … `wave25-flag17.mpp` | seven single-bit controls, one per flag in the +33 group: wave23-outline.mpp with every flag False on ID 3, then ONLY that flag True, saved through Project 2021 by the committed `scripts/measure_flags.py` (W25-9).  They pin the bit order the all-20 fixture cannot. |
 | `wave27-percent-actuals.mpp` | **synthetic** synthetic-base with Task ID 1 set to 50 % PercentComplete by Project 2021, saved with neutral metadata by `scripts/oracle_w27.py`.  Project's own % edit writes the actuals, dates, progress flag, project-row roll-up and Var2Data field 0x0B40015E as well as FixedData +92 (W27-0.1 evidence); also the project-with-actuals fixture the Move Project gate opens. |
+| `wave27-priority-control.mpp` / `wave27-priority-750.mpp` | the SAME Project 2021 session's save of synthetic-base before and after the project summary task's Priority was set to 750, with neutral metadata (`scripts/oracle_w27.py`).  Task FixedData differs in exactly the project row's +78 word (500 -> 750); the other stream differences are per-save bookkeeping.  The 750 file is the field-by-field oracle the port's priority save is compared with (W27-0.3). |
 | `synthetic-calendars.mpp` | synthetic two-calendar fixture (wave 19, `scripts/build_calendar_fixture.py`) |
 
 ## `wave23-outline.mpp` — provenance (wave 23)
@@ -94,6 +95,8 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `wave25-flag16.mpp` | `0D1F5FF13FB55F98D3AAE8647FB7FAA725C5B85E561B92B99A3D78E5065A92AE` |
 | `wave25-flag17.mpp` | `B7F9EDF6A35D61E6B17FEBFFC8FB6378325CD29E9F01FAB9D8002A23330AC0EB` |
 | `wave27-percent-actuals.mpp` | `4C9AECBF544377878E058CC0103BEF059B65C48F0C21B079E3AF4EE215CC7AA2` |
+| `wave27-priority-control.mpp` | `B9DEFD444DF39CCCEB11DA61FA020E74E462CAC4693CBB372402F4BCF7219E17` |
+| `wave27-priority-750.mpp` | `0AD24ADCE21D9907052A056A9637F6823069190C2921974FF3FFDC1446E1F49D` |
 
 ## `synthetic-base.mpp` — provenance
 
