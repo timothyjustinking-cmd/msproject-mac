@@ -2080,16 +2080,17 @@ void MainWindow::unlink_selected_task() {
         update_status();
         return;
     }
-    const std::vector<app::PredecessorListItem> links =
-        app::predecessors_of(doc_.plan(), structural_, selected.uid);
+    // Project's Unlink Tasks removes every link touching the selection, not just
+    // its incoming ones: the W27-3.3 COM measurement on uid 4 of the outline
+    // fixture took TaskDependencies from 3 to 1 by deleting 3 -> 4 FS+2 d AND
+    // 4 -> 6 FF.  saved_links_touching is therefore both-directional.
+    const std::vector<app::TaskLinkItem> links =
+        app::saved_links_touching(doc_.plan(), structural_, selected.uid);
     std::size_t removed = 0;
     std::string error;
-    for (const app::PredecessorListItem& item : links) {
-        if (item.link_uid == 0) {
-            continue;  // a pending add: undo removes it, a delete cannot
-        }
+    for (const app::TaskLinkItem& item : links) {
         app::StructuralEdit edit;
-        if (!app::make_link_delete(item, selected.uid, edit, error)) {
+        if (!app::make_link_delete_edit(item, edit, error)) {
             continue;
         }
         if (structural_.push(edit)) {
@@ -2097,13 +2098,13 @@ void MainWindow::unlink_selected_task() {
         }
     }
     if (removed == 0) {
-        set_message("the selected task has no saved predecessor link to unlink", false);
+        set_message("the selected task has no saved link to unlink", false);
         update_status();
         return;
     }
     after_structural_change(selected.uid);
     set_message("removed " + std::to_string(removed) +
-                    " predecessor link(s); File > Save writes the change",
+                    " link(s); File > Save writes the change",
                 false);
     update_status();
 }
