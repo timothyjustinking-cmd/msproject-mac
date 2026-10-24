@@ -210,3 +210,100 @@ Per-commit gate logs: `build/w27/gates-8e7895f-W27-1.1.log`,
   the triage, not a scheduling change.
 
 WAVE-27-G1-COMPLETE
+
+## G2 - commit the decoding evidence
+
+W27-2.1 is DONE; nothing in G2 is deferred.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W27-2.1 | The one-change-per-save Project files behind the wave-26 text-style, bar-style and timescale decoders live only under `build/w26/` | **DONE** | fixtures `7a6ec96`, tests `72bf912`, docs `3049471`; gates `build/w27/gates-97e0b81-W27-2.1.log`, `gates-7a6ec96-W27-2.1.log`, `gates-72bf912-W27-2.1-readme.log`, `build/w27/g2-fresh-gates.log` |
+
+W27-2.1 detail:
+
+- Took the brief's lighter option: commit the extracted records, not the
+  239,104-byte `.mpp` saves.  `tests/data/wave26-gantt-saves/` holds 16 files:
+  14 `*.style.bin` (41,363 bytes each) and 2 `*.fonts.bin` (8,710 bytes each).
+  Each style blob is the applied view's `0x22400008` record from one Project
+  2021 save (the applied view is main-block index 1 of `214/CV_iew`, which is
+  the block the COM calls edited; index 0 decodes but shows no diff).  Each
+  font blob is that save's `214/Props` `0x03400000` FONT_BASES payload.
+- `control.style.bin` is the same session's unedited save.  Its FONT_BASES
+  payload is byte-identical to the tracked `synthetic-gantt-fonts.bin`, so it is
+  not duplicated; every non-font save's payload is byte-identical too, so only
+  the two real font-table changes are committed.  Duplicate evidence was
+  committed once: `control-a` = `control-b`, `t3-milestone-italic` = `-int`,
+  `b2-task-red-int` = `-name`, `ts-ymd` = `ts-2tier`; the Arial and size-8 saves
+  share a style record and differ only in the font table.  Failed and no-op COM
+  calls (`b2-task-red-explicit`, `ts3-toplabels`, the wave-23 timescale
+  variants) are not committed; `ts3-count2` has distinct bytes but decodes to
+  the same tiers as `ts-yqm`, so it adds no field evidence.
+- No metadata needed neutralising: a record is the style payload only.  A
+  printable ASCII/UTF-16 scan of all 16 blobs finds only Project's stock bar
+  style names and font families -- no path, author, project title or task text.
+  The source `.mpp` SHA-256s are in `tests/data/README.md`; the `.mpp` files
+  stay local under the git-ignored `build/w26/g3/`.
+- 13 tests, one per save (198 checks): `gantt-save-font-family`, `-font-size`,
+  `-critical-colour`, `-milestone-italic`, `-milestone-bold`,
+  `-milestone-underline`, `-highlight-fill`, `-task-bar`, `-summary-bar`,
+  `-milestone-bar`, `-timescale-yqm`, `-timescale-ymd`, `-timescale-yhq`.  Each
+  loads the control record and the save through the public decoder, builds the
+  full decoded field-difference list (`gantt_differences` compares every field
+  the decoder exposes, including the has-colour flags, bar ids, tier counts and
+  view flags), asserts the list is exactly the recorded field(s), then asserts
+  the changed field's decoded value.
+- The decoded changes: Arial (point size 0xFFFF) on all 17 text styles; Calibri
+  8 on all 17 plus the bold/foreground resets the explicit-argument call made;
+  critical foreground (0,0,255); external italic/bold/underline on with the grey
+  foreground becoming automatic; noncritical background (255,255,0); Task
+  middle red with start/end becoming automatic and id 40; Summary's three
+  colours green and id 40; Milestone start blue with middle/end becoming
+  automatic and id 40; middle/bottom tiers weeks/13 -> quarters/2 and days/20 ->
+  months/10 (`ymd`: months/9 only; `yhq`: half_years/123 and quarters/5).  The
+  raw records also differ in per-save tail bytes and in undecoded regions; the
+  tests assert the decoded projection, and every decoded field except the
+  recorded change is equal.
+- Wave-26 errata confirmed by the files and written into the README: Project's
+  `TextStyles` `Item` index is not the slot index (Item 3 edited the external
+  slot, Item 7 the noncritical slot), and a family-only save stores 0xFFFF as
+  the point size.
+
+Group gates on the final code commit `72bf912`, fresh trees configured from
+scratch under `build/w27-fresh{,-app,-qt}` and built serially (log
+`build/w27/g2-fresh-gates.log`):
+
+- core configure/build exit 0 with `CORE_WARNINGS_AS_ERRORS=ON`; core ctest
+  `-E plan_recalc` 51/51
+- `plan_recalc` 512 checks with corpus / 266 with `MPP_NO_CORPUS=1`
+- engine `--selftest` 53 checks, 0 failures; `--suite --expect-fail
+  constraint-mso` 7 pass + the one expected failure, 0 unrecorded
+- reader 1100 checks with corpus / 420 without; M2 `recalc --compare` 332/332
+  (268 leaf + 64 summary fields)
+- app ctest 17/17; app_qt ctest 23/23
+- `check_fixtures.py` OK (44 documented hashes, 24 tracked `.mpp`), oracle
+  provenance OK (8)
+- client-name scan 0 hits on HEAD; whitespace-normalised `guard_names.py` 0
+  on `c632c8f..HEAD`; client-string hex grep no matches
+- The script's exit code is 1 because its last command is the expected-empty
+  hex grep.  Clearing `build/w27-fresh-app` also hit a transient
+  directory-handle lock; CMake then re-ran compiler detection and every source
+  compiled, so that tree was still configured and built from scratch (the core
+  and app_qt trees were cleared normally).
+
+Per-commit gate logs: `build/w27/gates-97e0b81-W27-2.1.log` (fixtures),
+`gates-7a6ec96-W27-2.1-tests-build.log` and `gates-7a6ec96-W27-2.1.log`
+(tests), `gates-72bf912-W27-2.1-readme.log` (docs).
+
+## Found, not fixed (G2)
+
+- **Medium**: a Project save that changes only the Gantt text font family stores
+  point size 0xFFFF (65,535) in the target FONT_BASES slot (the `arial` save
+  proves it; the `size8` save stores 8 when a size is given).  The decoder
+  reports the stored value faithfully, but `app_qt/gantt_canvas.cpp:719` and
+  `app_qt/sheet_table_model.cpp:261` pass any `point_size > 0` straight to
+  `QFont::setPointSize`, so reopening such a file in the port would request a
+  65,535-point font for the timescale header and the sheet rows.  A sanity
+  bound in the consumers (or an "unset size" flag from the decoder) belongs to
+  the rendering finding, not to W27-2.1's fixtures and tests.
+
+WAVE-27-G2-COMPLETE
