@@ -48,12 +48,14 @@ namespace msqt {
 namespace {
 
 // The measured Account capture (project-backstage-account.png, 1903x1033).
-const QColor kRailBackground(0xf0, 0xf0, 0xf0);
+// Only the values painted here live here: the rail fill and the separators are
+// the stylesheet's job and the gate reads them from the measures JSON, so
+// constants for them would be unused (Clang's -Wunused-const-variable is an
+// error in the macOS qt-shell job, wave-27 run 40053878076).
 const QColor kContentBackground(0xf5, 0xf5, 0xf5);
 const QColor kNavText(0x24, 0x24, 0x24);
 const QColor kNavDisabledText(0x99, 0x99, 0x99);
 const QColor kNavSelectedText(0x0f, 0x70, 0x3b);
-const QColor kSeparator(0xd1, 0xd1, 0xd1);
 
 QFont backstage_font(int point_size, bool bold = false) {
     QFont font;
