@@ -10,6 +10,7 @@
 #include <QColor>
 #include <QCursor>
 #include <QDate>
+#include <QDateEdit>
 #include <QLocale>
 #include <QFileDialog>
 #include <QDir>
@@ -54,6 +55,7 @@
 #include <QWidget>
 #include <QWidgetAction>
 #include <QPushButton>
+#include <QRadioButton>
 
 #include <algorithm>
 #include <cmath>
@@ -2019,6 +2021,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::update_project:
             show_update_project();
             return;
+        case RibbonCommand::mark_on_track:
+            mark_on_track();
+            return;
         case RibbonCommand::move_project:
             show_move_project();
             return;
@@ -3006,9 +3011,141 @@ void MainWindow::show_update_project() {
         update_status();
         return;
     }
+    const app::PlanInput& plan = doc_.plan();
+    // The writer patches the file's stored status date; a file without the
+    // record has no measured shape, so refuse before the dialog rather than
+    // letting the save throw later.
+    if (!plan.status_date_stored) {
+        set_message("update project: this file has no project status-date record, which "
+                    "this writer does not measure; nothing was changed",
+                    true);
+        update_status();
+        return;
+    }
     UpdateProjectDialog dialog(this);
-    dialog.exec();
-    set_message("update project: this port has no actuals writer, nothing was changed",
+    if (dialog.exec() != QDialog::Accepted) {
+        set_message("update project cancelled", false);
+        update_status();
+        return;
+    }
+    if (!dialog.progress_radio()->isChecked()) {
+        // The other choices are disabled in the dialog; this is defensive.
+        set_message("update project: only 0% - 100% complete is implemented; nothing was "
+                    "changed",
+                    true);
+        update_status();
+        return;
+    }
+    std::vector<std::uint32_t> uids;
+    std::uint32_t focus_uid = 0;
+    if (dialog.selected_radio()->isChecked()) {
+        const app::SelectedTask selected =
+            doc_.sheet() != nullptr
+                ? app::selected_task(*doc_.sheet(), doc_.rows())
+                : app::SelectedTask{};
+        if (!selected.has_selection || selected.uid == 0) {
+            set_message("update project: select a task first", true);
+            update_status();
+            return;
+        }
+        uids.push_back(selected.uid);
+        focus_uid = selected.uid;
+    } else {
+        // Entire project: every saved live leaf row.  A pending delete's row is
+        // still in doc_.plan(), but push() refuses an update naming it; a
+        // pending insert has no saved row.
+        for (const app::TaskRow& task : plan.tasks) {
+            if (task.uid == 0 || task.summary || task.file_row == 0) {
+                continue;
+            }
+            bool deleted = false;
+            for (const app::StructuralEdit& pending : structural_.applied()) {
+                if (pending.kind == app::StructuralKind::delete_task &&
+                    pending.uid == task.uid) {
+                    deleted = true;
+                    break;
+                }
+            }
+            if (!deleted) {
+                uids.push_back(task.uid);
+            }
+        }
+        if (uids.empty()) {
+            set_message("update project: the project has no saved leaf tasks to update",
+                        true);
+            update_status();
+            return;
+        }
+    }
+    const QDate through = dialog.through_date()->date();
+    const app::date32 through_date =
+        core::sched::from_ymd(through.year(), through.month(), through.day());
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_update_actuals_edit(plan, doc_.path(), uids, through_date, true,
+                                       edit, error)) {
+        set_message("update project: " + error, true);
+        update_status();
+        return;
+    }
+    if (!structural_.push(std::move(edit), &plan)) {
+        set_message("update project: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(focus_uid);
+    set_message("queued the update of " + std::to_string(uids.size()) +
+                    " task(s) through " +
+                    through.toString(QStringLiteral("yyyy-MM-dd")).toStdString() +
+                    "; File > Save writes it",
+                false);
+    update_status();
+}
+
+void MainWindow::mark_on_track() {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr) {
+        set_message("mark on track is available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    const app::PlanInput& plan = doc_.plan();
+    if (!plan.status_date_stored || plan.status_date == app::kDateNa) {
+        set_message("mark on track: this file stores no project status date, so there is "
+                    "no date to mark work complete through; nothing was changed",
+                    true);
+        update_status();
+        return;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (!selected.has_selection || selected.uid == 0) {
+        set_message("select a task first", true);
+        update_status();
+        return;
+    }
+    // W28-1.3: the measured Mark on Track pair edits one selected row through
+    // the file's stored status date and leaves the status date itself alone.
+    app::StructuralEdit edit;
+    std::string error;
+    const std::vector<std::uint32_t> uids = {selected.uid};
+    if (!app::make_update_actuals_edit(plan, doc_.path(), uids, plan.status_date,
+                                       false, edit, error)) {
+        set_message("mark on track: " + error, true);
+        update_status();
+        return;
+    }
+    const std::uint16_t percent =
+        edit.actuals.empty() ? 0 : edit.actuals.front().percent;
+    if (!structural_.push(std::move(edit), &plan)) {
+        set_message("mark on track: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(selected.uid);
+    set_message("queued task uid " + std::to_string(selected.uid) + " at " +
+                    std::to_string(percent) + "% complete through " +
+                    core::sched::to_string(plan.status_date) +
+                    "; File > Save writes it",
                 false);
     update_status();
 }

@@ -330,12 +330,26 @@ class UpdateProjectDialog final : public QDialog {
     QPushButton* ok_button() const noexcept { return ok_; }
     QPushButton* cancel_button() const noexcept { return cancel_; }
     QList<QRadioButton*> radios() const noexcept { return radios_; }
+    // W28-1.3: the named choices, so the gate and the shell read the same
+    // widgets.  progress = "0% - 100% complete" (the measured writer),
+    // completion = "100% complete", reschedule = "Reschedule uncompleted work
+    // to start after", entire/selected = the "For:" scope.
+    QRadioButton* progress_radio() const noexcept { return progress_; }
+    QRadioButton* completion_radio() const noexcept { return completion_; }
+    QRadioButton* reschedule_radio() const noexcept { return reschedule_; }
+    QRadioButton* entire_radio() const noexcept { return entire_; }
+    QRadioButton* selected_radio() const noexcept { return selected_; }
 
   private:
     QDateEdit* through_ = nullptr;
     QDateEdit* after_ = nullptr;
     QPushButton* ok_ = nullptr;
     QPushButton* cancel_ = nullptr;
+    QRadioButton* progress_ = nullptr;
+    QRadioButton* completion_ = nullptr;
+    QRadioButton* reschedule_ = nullptr;
+    QRadioButton* entire_ = nullptr;
+    QRadioButton* selected_ = nullptr;
     QList<QRadioButton*> radios_;
 };
 

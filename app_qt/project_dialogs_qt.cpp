@@ -3,6 +3,7 @@
 #include "project_dialogs_qt.h"
 
 #include <QAbstractItemView>
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDate>
@@ -889,6 +890,12 @@ UpdateProjectDialog::UpdateProjectDialog(QWidget* parent) : QDialog(parent) {
         return radio;
     };
 
+    // W28-1.3: the update shape and the scope are two independent radio
+    // groups; without explicit groups every radio in the dialog shares one
+    // auto-exclusive group, so checking a scope would clear the shape.
+    auto* update_group = new QButtonGroup(this);
+    auto* scope_group = new QButtonGroup(this);
+
     auto* through_row = new QHBoxLayout();
     through_row->setContentsMargins(0, 0, 0, 0);
     through_row->setSpacing(6);
@@ -903,21 +910,34 @@ UpdateProjectDialog::UpdateProjectDialog(QWidget* parent) : QDialog(parent) {
     through_row->addStretch(1);
     outer->addLayout(through_row);
 
-    add_radio(QStringLiteral("0% - 100% complete"), false, this);
-    add_radio(QStringLiteral("100% complete"), false, this);
+    // W28-1.3: "0% - 100% complete" is Project's default and the one option
+    // the measured actuals writer covers, so it is enabled and checked.  The
+    // other two update shapes have no measured save and stay disabled with the
+    // exact decision-9 tooltip; the OK button is live for the covered one.
+    progress_ = add_radio(QStringLiteral("0% - 100% complete"), true, this);
+    update_group->addButton(progress_);
+    completion_ = add_radio(QStringLiteral("100% complete"), false, this);
+    update_group->addButton(completion_);
+    completion_->setEnabled(false);
+    completion_->setToolTip(kDisabledTip);
 
     auto* after_row = new QHBoxLayout();
     after_row->setContentsMargins(0, 0, 0, 0);
     after_row->setSpacing(6);
-    auto* after_radio = new QRadioButton(
+    reschedule_ = new QRadioButton(
         QStringLiteral("Reschedule uncompleted work to start after:"), this);
-    radios_.push_back(after_radio);
-    after_row->addWidget(after_radio);
+    reschedule_->setEnabled(false);
+    reschedule_->setToolTip(kDisabledTip);
+    radios_.push_back(reschedule_);
+    update_group->addButton(reschedule_);
+    after_row->addWidget(reschedule_);
     after_ = new QDateEdit(this);
     after_->setObjectName(QStringLiteral("afterDate"));
     after_->setDisplayFormat(QStringLiteral("dd/MM/yy"));
     after_->setFixedWidth(90);
     after_->setDate(QDate::currentDate());
+    after_->setEnabled(false);
+    after_->setToolTip(kDisabledTip);
     after_row->addWidget(after_);
     after_row->addStretch(1);
     outer->addLayout(after_row);
@@ -926,19 +946,22 @@ UpdateProjectDialog::UpdateProjectDialog(QWidget* parent) : QDialog(parent) {
     for_row->setContentsMargins(0, 0, 0, 0);
     for_row->setSpacing(8);
     for_row->addWidget(new QLabel(QStringLiteral("For:"), this));
-    auto* entire = new QRadioButton(QStringLiteral("Entire project"), this);
-    entire->setChecked(true);
-    radios_.push_back(entire);
-    auto* selected = new QRadioButton(QStringLiteral("Selected tasks"), this);
-    radios_.push_back(selected);
-    for_row->addWidget(entire);
-    for_row->addWidget(selected);
+    entire_ = new QRadioButton(QStringLiteral("Entire project"), this);
+    entire_->setChecked(true);
+    radios_.push_back(entire_);
+    scope_group->addButton(entire_);
+    selected_ = new QRadioButton(QStringLiteral("Selected tasks"), this);
+    radios_.push_back(selected_);
+    scope_group->addButton(selected_);
+    for_row->addWidget(entire_);
+    for_row->addWidget(selected_);
     for_row->addStretch(1);
     outer->addLayout(for_row);
 
     auto* note = new QLabel(
-        QStringLiteral("This port has no actuals writer, so Update Project changes "
-                       "nothing (decision 15)."),
+        QStringLiteral("Update Project writes Project's stored actuals through the "
+                       "date above for the tasks in scope.  100% complete and "
+                       "rescheduling the uncompleted work are not implemented."),
         this);
     note->setWordWrap(true);
     outer->addWidget(note);
@@ -950,8 +973,8 @@ UpdateProjectDialog::UpdateProjectDialog(QWidget* parent) : QDialog(parent) {
     bottom->addStretch(1);
     ok_ = make_button(this, QStringLiteral("OK"));
     ok_->setObjectName(QStringLiteral("okButton"));
-    ok_->setEnabled(false);
-    ok_->setToolTip(kDisabledTip);
+    ok_->setEnabled(true);
+    ok_->setToolTip(QStringLiteral("update the tasks through the date above"));
     cancel_ = make_button(this, QStringLiteral("Cancel"));
     cancel_->setObjectName(QStringLiteral("cancelButton"));
     bottom->addWidget(ok_);

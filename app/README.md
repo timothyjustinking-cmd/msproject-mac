@@ -415,7 +415,12 @@ columns (whose columns are read-only anyway), and the undo history itself — al
 **view-only in memory**. Percent complete is not a sheet edit either (that column is
 read-only): the ribbon's five % buttons and Task Information's Percent complete field
 queue a structural edit that File > Save writes as Project's own actuals (wave 28,
-`core/mppwrite/actuals.h`). The stored custom fields and links
+`core/mppwrite/actuals.h`). Wave 28 also enabled Mark on Track and Update Project
+(Task > Schedule and Project > Status) on the same writer: both queue an
+`update_actuals` edit measured against Project's own save, and Update Project writes
+the project status date in `114/Props` when the file stores one. 100% complete and
+reschedule-the-rest stay disabled, with the decision-9 tooltip, because they have no
+measured save. The stored custom fields and links
 are written only through their dialogs, not by typing in a grid cell (the stored
 columns are read-only).
 Saving a name does not change the file; the app never claims it does. The file the user

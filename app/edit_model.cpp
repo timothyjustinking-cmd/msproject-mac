@@ -338,6 +338,143 @@ bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t p
     return true;
 }
 
+bool percent_through(const core::sched::Calendar& calendar, std::uint32_t start,
+                     std::uint32_t duration_ticks, bool manually_scheduled,
+                     std::uint32_t through, PercentThrough& out) {
+    out = PercentThrough{};
+    if (!mppwrite::is_date(start) || !mppwrite::is_date(through)) {
+        return false;
+    }
+    if (duration_ticks == 0) {
+        // A milestone has no working time to divide; measured pairs have none,
+        // and reaching the start is the only definition that needs no guess.
+        out.percent = through >= start ? 100 : 0;
+        out.step_percent = static_cast<double>(out.percent);
+        return true;
+    }
+    const std::uint32_t finish =
+        manually_scheduled ? manual_finish_date(calendar, start, duration_ticks)
+                           : calendar.add_work(start, duration_ticks);
+    if (core::sched::is_overflow(static_cast<core::sched::date32>(finish)) ||
+        !mppwrite::is_date(finish)) {
+        return false;
+    }
+    if (through >= finish) {
+        out.percent = 100;
+        out.actual_ticks = duration_ticks;
+        out.step_percent = 100.0;
+        return true;
+    }
+    if (through <= start) {
+        return true;  // 0 %, no actual time
+    }
+    std::uint64_t elapsed =
+        static_cast<std::uint64_t>(calendar.work_time_between(
+            calendar.next_start(start), through));
+    if (manually_scheduled) {
+        elapsed += static_cast<std::uint64_t>(manual_day_charge(calendar, start));
+    }
+    if (elapsed >= duration_ticks) {
+        out.percent = 100;
+        out.actual_ticks = duration_ticks;
+        out.step_percent = 100.0;
+        return true;
+    }
+    out.percent = static_cast<std::uint16_t>(elapsed * 100u / duration_ticks);
+    out.actual_ticks = static_cast<std::uint32_t>(elapsed);
+    out.step_percent =
+        static_cast<double>(elapsed) * 100.0 / static_cast<double>(duration_ticks);
+    if (out.percent == 0) {
+        // The writer's 0 % shape has no actual time; a sub-1 % fraction is
+        // not a shape any measured Project save stores.
+        out.actual_ticks = 0;
+        out.step_percent = 0.0;
+    }
+    return true;
+}
+
+bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_path,
+                              const std::vector<std::uint32_t>& uids,
+                              date32 through_date, bool updates_status_date,
+                              StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    if (uids.empty()) {
+        error = "no task was selected for the update";
+        return false;
+    }
+    if (packed_from_date32(through_date) == mppwrite::kInvalidDate) {
+        error = "the update date is not a real date";
+        return false;
+    }
+    std::set<std::uint32_t> seen;
+    for (std::uint32_t uid : uids) {
+        if (!seen.insert(uid).second) {
+            error = "task uid " + std::to_string(uid) +
+                    " appears twice in one update";
+            return false;
+        }
+    }
+    core::sched::Calendar calendar;
+    try {
+        calendar = core::cal::load_project_calendar(std::string(source_path));
+    } catch (const std::exception& calendar_error) {
+        error = std::string("the project calendar could not be read (") +
+                calendar_error.what() + ")";
+        return false;
+    }
+    const std::uint32_t through = packed_from_date32(through_date);
+    StructuralEdit built;
+    built.kind = StructuralKind::update_actuals;
+    built.through_date = through_date;
+    built.updates_status_date = updates_status_date;
+    for (std::uint32_t uid : uids) {
+        StructuralEdit checked;
+        std::string refusal;
+        // Same leaf/saved-row/summary rules as a percent edit; the percent
+        // argument is a placeholder this edit replaces below.
+        if (!make_percent_edit(plan, uid, 0, checked, refusal)) {
+            error = refusal;
+            return false;
+        }
+        const TaskRow* row = nullptr;
+        for (const TaskRow& task : plan.tasks) {
+            if (task.uid == uid) {
+                row = &task;
+                break;
+            }
+        }
+        if (row == nullptr) {
+            error = "task uid " + std::to_string(uid) + " is not a live task";
+            return false;
+        }
+        if (row->duration_ticks < 0 ||
+            row->duration_ticks > static_cast<std::int64_t>(0xFFFFFFFFu)) {
+            error = "task uid " + std::to_string(uid) +
+                    " has a duration the file format cannot express";
+            return false;
+        }
+        PercentThrough progress;
+        if (!percent_through(
+                calendar, static_cast<std::uint32_t>(row->start),
+                static_cast<std::uint32_t>(row->duration_ticks),
+                row->manually_scheduled, through, progress)) {
+            error = "task uid " + std::to_string(uid) +
+                    " has no start date, or its finish overflows the calendar, "
+                    "so its progress through the date cannot be measured";
+            return false;
+        }
+        ActualsTarget target;
+        target.uid = uid;
+        target.percent = progress.percent;
+        target.actual_ticks = progress.actual_ticks;
+        target.step_percent = progress.step_percent;
+        built.actuals.push_back(target);
+    }
+    out = std::move(built);
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
     switch (edit.kind) {
         case StructuralKind::insert_task: {
@@ -452,6 +589,63 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
             edit.dependants = 0;
             break;
         }
+        case StructuralKind::update_actuals: {
+            // W28-1.3: the same plan-aware leaf/saved-row/summary rules as a
+            // percent edit, applied to every target, plus the tick/percent
+            // consistency the writer relies on and a guard against a pending
+            // delete of a target (the row will not be there when the save
+            // runs).
+            if (plan == nullptr || edit.actuals.empty() ||
+                packed_from_date32(edit.through_date) == mppwrite::kInvalidDate) {
+                return false;
+            }
+            std::set<std::uint32_t> seen;
+            for (const ActualsTarget& target : edit.actuals) {
+                StructuralEdit checked;
+                std::string error;
+                if (!make_percent_edit(*plan, target.uid, target.percent, checked,
+                                       error)) {
+                    return false;
+                }
+                if (!seen.insert(target.uid).second) {
+                    return false;
+                }
+                const TaskRow* row = nullptr;
+                for (const TaskRow& task : plan->tasks) {
+                    if (task.uid == target.uid) {
+                        row = &task;
+                        break;
+                    }
+                }
+                if (row == nullptr || !std::isfinite(target.step_percent) ||
+                    target.step_percent < 0.0) {
+                    return false;
+                }
+                const std::uint64_t duration =
+                    static_cast<std::uint64_t>(std::max<std::int64_t>(
+                        0, row->duration_ticks));
+                if (target.actual_ticks > duration) {
+                    return false;
+                }
+                if (target.percent == 0 && target.actual_ticks != 0) {
+                    return false;
+                }
+                if (target.percent > 0 && target.actual_ticks == 0 && duration != 0) {
+                    return false;
+                }
+                if (target.percent == 100 && target.actual_ticks != duration) {
+                    return false;
+                }
+                for (const StructuralEdit& existing : applied_) {
+                    if (existing.kind == StructuralKind::delete_task &&
+                        existing.uid == target.uid) {
+                        return false;
+                    }
+                }
+            }
+            edit.dependants = 0;
+            break;
+        }
         case StructuralKind::set_project_priority: {
             if (edit.uid != 0 || edit.priority > 1000) {
                 return false;
@@ -480,6 +674,16 @@ std::vector<StructuralEdit> StructuralEdits::detach_edits_naming(std::uint32_t u
             existing.kind == StructuralKind::clear_field ||
             existing.kind == StructuralKind::set_percent) {
             names_uid = existing.uid == uid;
+        } else if (existing.kind == StructuralKind::update_actuals) {
+            // W28-1.3: a delete of any target invalidates the whole date
+            // update; keep the user's edit for undo rather than half-applying
+            // it to a row the delete removes.
+            for (const ActualsTarget& target : existing.actuals) {
+                if (target.uid == uid) {
+                    names_uid = true;
+                    break;
+                }
+            }
         } else if (existing.kind == StructuralKind::add_link) {
             names_uid = existing.uid == uid || existing.predecessor_uid == uid;
         }
@@ -718,15 +922,29 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
             }
         }
     }
-    // Wave 26: the ribbon's %-complete edits, same last-one-wins rule.
+    // Wave 26/28: the ribbon's %-complete edits and the Mark on Track /
+    // Update Project date updates, applied in ONE chronological pass so a
+    // later edit of either kind is the one the row shows (the save collapses
+    // the same way).
     for (const StructuralEdit& edit : applied_) {
-        if (edit.kind != StructuralKind::set_percent) {
+        if (edit.kind == StructuralKind::set_percent) {
+            for (TaskRow& row : tasks) {
+                if (row.uid == edit.uid) {
+                    row.percent_complete = edit.percent;
+                    break;
+                }
+            }
             continue;
         }
-        for (TaskRow& row : tasks) {
-            if (row.uid == edit.uid) {
-                row.percent_complete = edit.percent;
-                break;
+        if (edit.kind != StructuralKind::update_actuals) {
+            continue;
+        }
+        for (const ActualsTarget& target : edit.actuals) {
+            for (TaskRow& row : tasks) {
+                if (row.uid == target.uid) {
+                    row.percent_complete = target.percent;
+                    break;
+                }
             }
         }
     }
@@ -883,22 +1101,46 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     std::sort(field_sets.begin(), field_sets.end(), by_index);
     std::sort(field_clears.begin(), field_clears.end(), by_index);
 
-    // Wave 26: the %-complete edits.  Last edit per task wins, exactly as the
-    // display plan applies them; all rows go through one table write.
-    std::map<std::uint32_t, std::size_t> last_percent;
+    // Wave 26/28: the %-complete and date-update edits.  Last write per task
+    // wins ACROSS both kinds, exactly as the display plan applies them (one
+    // chronological pass); every winning target goes through one actuals
+    // write.  `target` is SIZE_MAX for a set_percent edit, else the index in
+    // the update edit's target list.
+    struct WinningActual {
+        std::size_t edit = 0;
+        std::size_t target = static_cast<std::size_t>(-1);
+    };
+    std::map<std::uint32_t, WinningActual> last_actual;
     for (std::size_t index = 0; index < edits.applied().size(); ++index) {
         const StructuralEdit& edit = edits.applied()[index];
         if (edit.kind == StructuralKind::set_percent) {
-            last_percent[edit.uid] = index;
+            last_actual[edit.uid] = WinningActual{index, static_cast<std::size_t>(-1)};
+        } else if (edit.kind == StructuralKind::update_actuals) {
+            for (std::size_t target = 0; target < edit.actuals.size(); ++target) {
+                last_actual[edit.actuals[target].uid] = WinningActual{index, target};
+            }
         }
     }
-    std::vector<const StructuralEdit*> percent_edits;
-    for (const auto& entry : last_percent) {
-        percent_edits.push_back(&edits.applied()[entry.second]);
+    std::vector<WinningActual> actual_writes;
+    // Update Project's project-row roll-up differs from Mark on Track's: only
+    // the status-date command uses the earliest per-row resume/stop (measured,
+    // see actuals.h).  Any applied status-updating edit selects it, even when a
+    // later percent edit wins one of its rows.
+    bool update_project_mode = false;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::update_actuals && edit.updates_status_date) {
+            update_project_mode = true;
+        }
     }
-    std::sort(percent_edits.begin(), percent_edits.end(),
-              [&last_percent](const StructuralEdit* left, const StructuralEdit* right) {
-                  return last_percent.at(left->uid) < last_percent.at(right->uid);
+    for (const auto& entry : last_actual) {
+        actual_writes.push_back(entry.second);
+    }
+    std::sort(actual_writes.begin(), actual_writes.end(),
+              [](const WinningActual& left, const WinningActual& right) {
+                  if (left.edit != right.edit) {
+                      return left.edit < right.edit;
+                  }
+                  return left.target < right.target;
               });
 
     // Wave 26 (W26-5.1): the project priority, last edit wins.  It lives in the
@@ -922,8 +1164,8 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         ++write_ops;
     }
     write_ops += field_clears.size();
-    if (!percent_edits.empty() || priority_edit != nullptr) {
-        ++write_ops;  // one table write for every percent/priority edit
+    if (!actual_writes.empty() || priority_edit != nullptr) {
+        ++write_ops;  // one table write for every actuals/priority edit
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -1070,45 +1312,70 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                    " of task uid " + std::to_string(edit->uid));
         }
 
-        // 5a (wave 28).  PercentComplete is a full actuals write: Project's own
-        // save pairs (tests/data/wave28-percent-*.mpp) change ActualDuration,
-        // RemainingDuration, % Work Complete, four date words, a progress flag,
-        // the start anchor, the project-row roll-up and two Var2Data fields, so
-        // the single-word table patch the wave-26 path used is gone.  The dates
-        // come from the file's own calendar (core_cal, app-side because
-        // core_mppwrite is standard-library only): ActualStart, then Stop =
-        // the working-time walk over ActualDuration -- plain add_work for an
-        // automatic row, Project's manual-start charge for a row whose
-        // Fixed2Meta manual bit is set (see manual_finish_date above) -- and at
-        // 100 % the finish is that stop; below 100 % Resume =
-        // next_start(Stop).  All winning percent edits and the project priority
-        // still ride one written file.
-        if (!percent_edits.empty() || priority_edit != nullptr) {
+        // 5a (wave 28).  PercentComplete, Mark on Track and Update Project are
+        // one actuals write: Project's own save pairs
+        // (tests/data/wave28-percent-*.mpp, wave28-mark-*.mpp,
+        // wave28-update*.mpp) change ActualDuration, RemainingDuration, % Work
+        // Complete, four date words, a progress flag, the start anchor, the
+        // project-row roll-up and two Var2Data fields, so the single-word table
+        // patch the wave-26 path used is gone.  The dates come from the file's
+        // own calendar (core_cal, app-side because core_mppwrite is
+        // standard-library only): ActualStart, then Stop = the working-time
+        // walk over the elapsed ticks -- plain add_work for an automatic row,
+        // Project's manual-start charge for a row whose Fixed2Meta manual bit
+        // is set (see manual_finish_date above) -- and at 100 % the finish is
+        // that stop; below 100 % Resume = next_start(Stop).  A percent edit
+        // derives its elapsed ticks from Duration * percent / 100 and ORs the
+        // progress bits; a date update carries the exact ticks and unrounded
+        // step percent make_update_actuals_edit computed, leaves the progress
+        // word alone (measured: +168 stays 0x0080 on both mark and update
+        // pairs), and Update Project also stores its date as the project status
+        // date.  All winning actuals and the project priority still ride one
+        // written file.
+        if (!actual_writes.empty() || priority_edit != nullptr) {
             mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
             std::vector<mppwrite::PercentActualEdit> actual_edits;
             core::sched::Calendar calendar;
             bool calendar_ready = false;
             bool calendar_failed = false;
-            for (const StructuralEdit* edit : percent_edits) {
-                // W27-3.1: a percent edit whose uid the source table does not
-                // carry is a REFUSED edit, not a failed save.  push() already
-                // refuses to queue one (make_percent_edit needs a live,
-                // non-summary file task), so this is the save layer's
-                // defence-in-depth for a hand-built or stale queue: report the
-                // refusal and keep the rest of the cascade, so this edit can
-                // never make every later Save fail.
+            for (const WinningActual& winner : actual_writes) {
+                const StructuralEdit& source = edits.applied()[winner.edit];
+                const bool from_update = winner.target != static_cast<std::size_t>(-1);
+                const std::uint32_t uid =
+                    from_update ? source.actuals[winner.target].uid : source.uid;
+                const std::uint16_t percent =
+                    from_update ? source.actuals[winner.target].percent : source.percent;
+                // Name the command that asked for the write, so a refused row
+                // is attributable in the message.
+                const std::string what =
+                    std::string(from_update ? "the date update for task uid "
+                                            : "percent complete for task uid ") +
+                    std::to_string(uid);
+                // W27-3.1: an edit whose uid the source table does not carry
+                // is a REFUSED edit, not a failed save.  push() already
+                // refuses to queue one (make_percent_edit and
+                // make_update_actuals_edit need a live, non-summary file
+                // task), so this is the save layer's defence-in-depth for a
+                // hand-built or stale queue: report the refusal and keep the
+                // rest of the cascade, so this edit can never make every later
+                // Save fail.
                 std::size_t row = 0;
-                if (!task_table_row_for_uid(table, edit->uid, row)) {
+                if (!task_table_row_for_uid(table, uid, row)) {
                     result.warnings.push_back(
-                        "percent complete for task uid " + std::to_string(edit->uid) +
+                        what +
                         " was refused: the source file has no task row with that UniqueID "
                         "(a pending insert has no saved row), so it was not written");
                     continue;
                 }
                 mppwrite::PercentActualEdit actual;
-                actual.uid = edit->uid;
-                actual.percent = edit->percent;
-                if (edit->percent > 0) {
+                actual.uid = uid;
+                actual.percent = percent;
+                if (from_update) {
+                    actual.actual_ticks = source.actuals[winner.target].actual_ticks;
+                    actual.step_percent = source.actuals[winner.target].step_percent;
+                    actual.progress_flags = false;
+                }
+                if (percent > 0) {
                     if (!calendar_ready && !calendar_failed) {
                         try {
                             calendar = core::cal::load_project_calendar(
@@ -1117,18 +1384,14 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                         } catch (const std::exception& error) {
                             calendar_failed = true;
                             result.warnings.push_back(
-                                "percent complete for task uid " +
-                                std::to_string(edit->uid) +
-                                " was refused: the project calendar could not be read (" +
-                                error.what() + ")");
+                                what + " was refused: the project calendar could "
+                                       "not be read (" + error.what() + ")");
                         }
                     }
                     if (!calendar_ready) {
                         if (calendar_failed) {
                             result.warnings.push_back(
-                                "percent complete for task uid " +
-                                std::to_string(edit->uid) +
-                                " was refused: the project calendar is unavailable");
+                                what + " was refused: the project calendar is unavailable");
                         }
                         continue;
                     }
@@ -1139,10 +1402,8 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                     if (table.u32(row, mppwrite::task_row::kCalendarUid) !=
                         0xFFFFFFFFu) {
                         result.warnings.push_back(
-                            "percent complete for task uid " +
-                            std::to_string(edit->uid) +
-                            " was refused: the task uses its own calendar, which "
-                            "this writer does not measure");
+                            what + " was refused: the task uses its own calendar, "
+                                   "which this writer does not measure");
                         continue;
                     }
                     std::uint32_t actual_start =
@@ -1155,16 +1416,17 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                     }
                     if (!mppwrite::is_date(actual_start)) {
                         result.warnings.push_back(
-                            "percent complete for task uid " +
-                            std::to_string(edit->uid) +
-                            " was refused: the task has no start date to count "
-                            "working time from");
+                            what + " was refused: the task has no start date to "
+                                   "count working time from");
                         continue;
                     }
                     std::uint32_t const duration =
                         table.u32(row, mppwrite::task_row::kDuration);
+                    // A date update already knows its elapsed working time; a
+                    // percent edit derives it, exactly as W28-1.2 measured.
                     std::uint32_t const actual_ticks =
-                        mppwrite::actual_duration_ticks(duration, edit->percent);
+                        from_update ? actual.actual_ticks
+                                    : mppwrite::actual_duration_ticks(duration, percent);
                     // A manually scheduled row charges the start day's tail
                     // (the manual pair's Stop is Tue 12:00, not Tue 17:00);
                     // an automatic row is a plain working-time walk.
@@ -1176,7 +1438,7 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                : calendar.add_work(actual_start, actual_ticks);
                     actual.dates.actual_start = actual_start;
                     actual.dates.stop = stop;
-                    if (edit->percent == 100) {
+                    if (percent == 100) {
                         // Measured on auto 40->100: ActualFinish = the finish
                         // reached by the whole duration, and Resume = Stop = it.
                         actual.dates.actual_finish = stop;
@@ -1186,17 +1448,51 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                     }
                 }
                 actual_edits.push_back(actual);
-                result.notes.push_back("task uid " + std::to_string(edit->uid) +
-                                       ": percent complete " +
-                                       std::to_string(edit->percent));
+                if (from_update) {
+                    result.notes.push_back(
+                        "task uid " + std::to_string(uid) + ": " +
+                        std::to_string(percent) + "% complete through " +
+                        mppwrite::format_date(packed_from_date32(source.through_date)));
+                } else {
+                    result.notes.push_back("task uid " + std::to_string(uid) +
+                                           ": percent complete " +
+                                           std::to_string(percent));
+                }
             }
             if (!actual_edits.empty()) {
+                mppwrite::PercentActualsOptions options;
+                // Update Project's project-row Resume/Stop are the earliest
+                // valid per-row values; Mark on Track and the percent pairs keep
+                // the project start (measured, see actuals.h).
+                options.project_resume_stop_from_rows = update_project_mode;
                 const mppwrite::PercentActualsResult written =
-                    mppwrite::write_percent_actuals(document, actual_edits);
+                    mppwrite::write_percent_actuals(document, actual_edits,
+                                                    "114/TBkndTask", options);
                 result.percent_rows_written += written.rows_written;
                 for (const std::string& warning : written.warnings) {
                     result.warnings.push_back(warning);
                 }
+            }
+            // Update Project stores its date as the project status date
+            // (measured: control 0xffffffff -> 0x3bf40000 on the update pair).
+            // Mark on Track and the percent pairs leave the record alone.  The
+            // last applied update that asked for it wins, matching the display
+            // plan's order.
+            const StructuralEdit* status_edit = nullptr;
+            for (const StructuralEdit& edit : edits.applied()) {
+                if (edit.kind == StructuralKind::update_actuals &&
+                    edit.updates_status_date) {
+                    status_edit = &edit;
+                }
+            }
+            if (status_edit != nullptr) {
+                const std::uint32_t packed =
+                    packed_from_date32(status_edit->through_date);
+                const std::uint32_t previous =
+                    mppwrite::write_project_status_date(document, packed);
+                result.notes.push_back("project status date " +
+                                       mppwrite::format_date(previous) + " -> " +
+                                       mppwrite::format_date(packed));
             }
             if (priority_edit != nullptr) {
                 // Re-read the table: the actuals writer replaced FixedData.

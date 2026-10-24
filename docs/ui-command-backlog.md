@@ -18,7 +18,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Task | Font | U | disabled | future: not implemented in this port |
 | Task | Font | highlight colour | disabled | future: not implemented in this port |
 | Task | Font | font colour | disabled | future: not implemented in this port |
-| Task | Schedule | Mark on Track | disabled | future: not implemented in this port |
+| Task | Schedule | Mark on Track | implemented |  |
 | Task | Schedule | Respect Links | disabled | future: not implemented in this port |
 | Task | Schedule | Inactivate | disabled | future: not implemented in this port |
 | Task | Tasks | Manually Schedule | disabled | future: not implemented in this port |
@@ -160,6 +160,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 95 (83 disabled)
+* ribbon commands: 95 (82 disabled)
 * menu commands: 49 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

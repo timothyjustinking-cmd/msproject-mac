@@ -520,6 +520,8 @@ const EnabledWiring kEnabledWiring[] = {
     {"Task", "Schedule", "100%", "", "percent_100"},
     {"Task", "Schedule", "link tasks", "", "link_tasks"},
     {"Task", "Schedule", "unlink tasks", "", "unlink_tasks"},
+    // W28-1.3: Mark on Track's main button runs the measured date update.
+    {"Task", "Schedule", "Mark on Track", "", "mark_on_track"},
     {"View", "Split View", "Timeline", "", "toggle_timeline"},
     {"Gantt Chart Format", "Bar Styles", "Critical Tasks", "", "toggle_critical_tasks"},
     {"Gantt Chart Format", "Show/Hide", "Project Summary Task", "",
@@ -548,6 +550,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::links_between_projects: return "links_between_projects";
         case RibbonCommand::update_project: return "update_project";
         case RibbonCommand::move_project: return "move_project";
+        case RibbonCommand::mark_on_track: return "mark_on_track";
         case RibbonCommand::wbs_menu: return "wbs_menu";
         case RibbonCommand::set_baseline_menu: return "set_baseline_menu";
     }
@@ -694,7 +697,7 @@ int main(int argc, char** argv) {
                      "usage: ribbon_inventory_tests <fixture.mpp> <ribbon_pin.tsv> "
                      "<w26-ribbon.measures.json> <timeline-hidden.mpp> <timeline-shown.mpp> "
                      "<summary-on.mpp> <summary-off.mpp> <order.mpp> <outline.mpp> "
-                     "<unmodelled.tsv> [corpus.mpp]\n");
+                     "<unmodelled.tsv> <mark-on-track-control.mpp> [corpus.mpp]\n");
         return 2;
     }
     const QString fixture = QString::fromLocal8Bit(argv[1]);
@@ -707,12 +710,13 @@ int main(int argc, char** argv) {
     const QString order_fixture = QString::fromLocal8Bit(argv[8]);
     const QString outline_fixture = QString::fromLocal8Bit(argv[9]);
     const QString unmodelled_path = QString::fromLocal8Bit(argv[10]);
-    const QString corpus_path = argc > 11 ? QString::fromLocal8Bit(argv[11]) : QString();
+    const QString mark_fixture = QString::fromLocal8Bit(argv[11]);
+    const QString corpus_path = argc > 12 ? QString::fromLocal8Bit(argv[12]) : QString();
     // W26-1.2..1.5 add the functional checks that open these fixtures; until
     // then the arguments are accepted (the CMake test entry is final) but not
     // used, and the compiler must not warn.  W27-0.1 removed the corpus
-    // %-complete check; W28-1.2 covers the %-complete wiring and one queued
-    // edit on the committed fixture, so corpus_path stays optional/unused.
+    // %-complete check; W28-1.3 drives Mark on Track on the committed
+    // status-date fixture, so corpus_path stays optional/unused.
     (void)order_fixture;
     (void)corpus_path;
 
@@ -1152,6 +1156,59 @@ int main(int argc, char** argv) {
                             window.pending_edits().next_undo()->uid == uid &&
                             window.pending_edits().next_undo()->percent == target,
                         "the queued edit is the selected row's set_percent");
+        }
+    }
+
+    // W28-1.3: Mark on Track on the committed status-date fixture.  The
+    // fixture stores the project status date (Wed 2026-01-07) and a saved auto
+    // leaf at 0 %; clicking the split button's main part queues ONE
+    // update_actuals edit for the selected row through that date (Project's
+    // measured 40 %), and leaves the status date itself alone.
+    {
+        QString mark_open_error;
+        gate::check(window.open_file(mark_fixture, &mark_open_error),
+                    "the status-date fixture opens for the Mark on Track check");
+        QApplication::processEvents();
+        std::uint32_t uid = 0;
+        for (const app::TaskRow& task : window.plan().tasks) {
+            if (task.uid != 0 && !task.summary && task.file_row != 0) {
+                uid = task.uid;
+                break;
+            }
+        }
+        gate::check(uid != 0, "the status-date fixture has a saved leaf task");
+        gate::check(uid == 0 || select_uid(window, uid),
+                    "the leaf task is selected for Mark on Track");
+        const std::size_t pending_before = window.pending_edits().size();
+        QWidget* control = find_control(ribbon, QStringLiteral("Task"),
+                                        QStringLiteral("Schedule"),
+                                        QStringLiteral("Mark on Track"));
+        gate::check(control != nullptr, "the Mark on Track button is in the page");
+        gate::check(control != nullptr && control->isEnabled(),
+                    "Mark on Track is enabled on the measured actuals writer");
+        gate::check(control != nullptr &&
+                        control->toolTip() !=
+                            QStringLiteral("not implemented in this port"),
+                    "the enabled Mark on Track button carries a live tooltip");
+        if (control != nullptr && uid != 0) {
+            click_control(control);
+            QApplication::processEvents();
+        }
+        const app::TaskRow* after = uid != 0 ? plan_task(window, uid) : nullptr;
+        gate::check(after != nullptr && after->percent_complete == 40,
+                    "clicking Mark on Track shows Project's measured percent");
+        gate::check(window.pending_edits().size() == pending_before + 1,
+                    "Mark on Track queues exactly one edit");
+        if (after != nullptr && after->percent_complete == 40) {
+            const app::StructuralEdit* queued = window.pending_edits().next_undo();
+            gate::check(queued != nullptr &&
+                            queued->kind == app::StructuralKind::update_actuals &&
+                            !queued->updates_status_date &&
+                            queued->actuals.size() == 1 &&
+                            queued->actuals[0].uid == uid &&
+                            queued->actuals[0].percent == 40 &&
+                            queued->through_date == core::sched::from_ymd(2026, 1, 7),
+                        "the queued edit is the measured Mark on Track date update");
         }
     }
 

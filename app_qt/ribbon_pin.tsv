@@ -56,7 +56,7 @@ Task	0	Schedule	small	25%	1	schedule.percent_25	0	-
 Task	0	Schedule	small	50%	1	schedule.percent_50	0	-
 Task	0	Schedule	small	75%	1	schedule.percent_75	0	-
 Task	0	Schedule	small	100%	1	schedule.percent_100	0	-
-Task	0	Schedule	split	Mark on Track	0	schedule.mark_on_track	0	-
+Task	0	Schedule	split	Mark on Track	1	schedule.mark_on_track	0	-
 Task	0	Schedule	small	Respect Links	0	schedule.respect_links	0	-
 Task	0	Schedule	small	Inactivate	0	schedule.inactivate	1	-
 Task	0	Schedule	small	outdent	0	schedule.outdent	1	-

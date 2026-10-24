@@ -852,6 +852,29 @@ struct ProjectRow {
     bool timeline_shown = true;
     bool timeline_stored = false;
 
+    /* ---- The project STATUS DATE (Project > Project Information > Status
+     * date; the date Mark on Track and Update Project measure progress
+     * through).  STORED in the project TABLE props stream (114/Props, or
+     * 112/Props in a 2010+ project down-saved to MPP12) as the 4-byte record
+     * 0x02400045, kind 4: one packed date.  0xffffffff means the file has no
+     * status date (Project's initial value).
+     *
+     * MEASURED 2026-10-24 on the W28-1.3 save pairs
+     * (tests/data/wave28-mark-*.mpp and wave28-update*.mpp): both controls
+     * carry 0x3bf40000 (Wed 2026-01-07 00:00) because the oracle set
+     * Project.StatusDate before saving; Mark on Track saves it unchanged, and
+     * Update Project's edited pair moves NA -> 0x3bf40000 (a separate probe
+     * with the stored date at 2026-01-06 and the command's update date at
+     * 2026-01-07 reopened with 2026-01-07, so the command always writes its
+     * update date here).  The record is the only 4-byte/kind-4 project props
+     * record in the measured files.
+     *
+     * `status_date_stored` is false when the file does not carry the record;
+     * a caller must then treat the date as unknown rather than reading the
+     * zero-initialised PackedDate. */
+    PackedDate status_date;
+    bool status_date_stored = false;
+
     /* ---- The project ROW's own Flag10 (the SUMMARY column the port shows on
      * synthetic row 0).  Same FixedMeta entry byte +25 bit 0x04 that a task
      * row uses (wave 23 W23-6); the project row is FixedMeta row 0.  Wave 24

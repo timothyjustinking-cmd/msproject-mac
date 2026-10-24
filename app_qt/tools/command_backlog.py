@@ -30,6 +30,12 @@ MISSING_REASON = {
     "none": "future: not implemented in this port",
 }
 
+# W28-1.3: a split button whose main click runs a real command.  Split controls
+# carry no MenuAction, so the ribbon table names the implemented ones here.  The
+# WBS and Set Baseline splits open menus whose every item is disabled, and the
+# Format/Drawing splits have no engine, so all three stay "none".
+IMPLEMENTED_SPLIT_COMMANDS = {"mark_on_track"}
+
 
 def implemented_actions() -> set[str]:
     text = (ROOT / "app_qt" / "command_status.h").read_text(encoding="utf-8")
@@ -59,7 +65,8 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
     The ribbon spec is code, not a literal table: tabs are built with
     ``add_group(tab_var, "Group", width)`` and commands with
     ``large/small(group_var, "Label", app::MenuAction::x, ...)`` (``split``
-    carries no action).  Only command controls are listed: the combos, check
+    carries no MenuAction; a split that continues onto the next line can carry a
+    ``RibbonCommand``).  Only command controls are listed: the combos, check
     boxes, the gallery, dialog launchers and the date field are controls, not
     menu commands, and the inventory pin (app_qt/ribbon_pin.tsv) already
     records them.
@@ -72,7 +79,8 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
     group_titles: dict[str, tuple[str, str]] = {}
     rows: list[tuple[str, str, str, str]] = []
     current_tab = ""
-    for line in block.splitlines():
+    lines = block.splitlines()
+    for index, line in enumerate(lines):
         tab = re.search(r"TabSpec\s+(\w+);", line)
         if tab:
             current_tab = tab.group(1)
@@ -109,19 +117,30 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
         if split:
             context = group_titles.get(split.group(1))
             if context is not None:
+                command = "none"
+                if line.rstrip().endswith(","):
+                    # The call continues on the next line(s); a split that
+                    # states enabled/command puts the command there.
+                    for follow in lines[index + 1:index + 4]:
+                        found = re.search(r"RibbonCommand::(\w+)", follow)
+                        if found:
+                            command = found.group(1)
+                            break
+                        if ");" in follow:
+                            break
                 rows.append(
                     (
                         tab_titles.get(context[0], context[0]),
                         context[1],
                         split.group(2),
-                        "none",
+                        command,
                     )
                 )
     return rows
 
 
 def status(action: str, implemented: set[str]) -> tuple[str, str]:
-    if action in implemented:
+    if action in implemented or action in IMPLEMENTED_SPLIT_COMMANDS:
         return "implemented", ""
     return "disabled", MISSING_REASON.get(action, "future: not implemented in this port")
 

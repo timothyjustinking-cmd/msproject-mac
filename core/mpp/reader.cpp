@@ -734,6 +734,10 @@ constexpr std::uint32_t kPropsVersion = 0x3540000Cu;
 /* Project props (112/114/Props): the inserted-project table and its counts. */
 constexpr std::uint32_t kProjectPropsSubprojectData = 0x024000A2u;
 constexpr std::uint32_t kProjectPropsSubprojectCount = 0x02400084u;
+/* Project props: the project STATUS DATE (Project > Project Information >
+ * Status date).  Kind 4, one packed date; 0xffffffff means no status date.
+ * Measured on the W28-1.3 save pairs; see ProjectRow in reader.h. */
+constexpr std::uint32_t kProjectPropsStatusDate = 0x02400045u;
 /* Project props: Project's internal property QNEWTASKSAREMANUAL -- File >
  * Options > Schedule > "New tasks: Manually Scheduled / Auto Scheduled".
  * Kind 2 (u16), 0 = Auto Scheduled, nonzero = Manually Scheduled.  The id is
@@ -3730,6 +3734,8 @@ struct ProjectPropsRecords {
     bool summary_row_stored = false;
     bool timeline_shown = true;
     bool timeline_stored = false;
+    PackedDate status_date;
+    bool status_date_stored = false;
 };
 
 std::vector<std::uint8_t> read_props_stream(const CompoundFile& cfb,
@@ -3784,6 +3790,16 @@ ProjectPropsRecords decode_project_props(const CompoundFile& cfb,
     const std::vector<std::uint8_t> table_props = read_props_stream(cfb, format.table_root);
     for_each_props_record(table_props, [&](std::uint32_t id, std::uint32_t kind,
                                            std::size_t payload, std::uint32_t length) {
+        if (id == kProjectPropsStatusDate) {
+            if (kind != 4u || length < 4u) {
+                warn_props_shape(warnings, table_path, id, kind, length,
+                                 "kind 4 / 4 bytes (packed date)");
+                return;
+            }
+            out.status_date.raw = u32_at(table_props, payload);
+            out.status_date_stored = true;
+            return;
+        }
         if (id != kProjectPropsNewTasksManual) {
             return;
         }
@@ -3874,6 +3890,8 @@ Document parse_document(const CompoundFile& cfb) {
     document.project.summary_row_stored = project_props.summary_row_stored;
     document.project.timeline_shown = project_props.timeline_shown;
     document.project.timeline_stored = project_props.timeline_stored;
+    document.project.status_date = project_props.status_date;
+    document.project.status_date_stored = project_props.status_date_stored;
     resolve_resource_calendars(document);
     return document;
 }
