@@ -11,6 +11,7 @@ SHA256 for the one fixture whose content is quoted in docs.
 """
 
 import os
+import re
 import subprocess
 import sys
 
@@ -23,8 +24,15 @@ DOCUMENTED = {
     # Wave 19: synthetic-base's tasks converted to automatic scheduling plus a
     # second named base calendar ("Shift A", Mon-Fri 09:00-13:00 + 14:00-18:00).
     # Built by scripts/build_calendar_fixture.py; pinned in engine_diff.py too.
+    # Wave 28 (W28-0.1): the two UTF-16LE save-path strings (Props14 and the
+    # 214/CEdl/Var2Data entry) named the operator and the company Dropbox
+    # folder.  Because this file is the engine suite's calendar base and its
+    # recorded oracle depends on its bytes, the brief allowed them to be
+    # replaced IN PLACE with a neutral same-length string (C:\w19\... padded;
+    # scripts/w28_neutralise_path.py).  Every other byte is unchanged; only the
+    # path text differs, hence the new hash.
     "tests/data/synthetic-calendars.mpp":
-        "F486F0C3235BD8A592542E942141FE873C4262E6AFA19E029A9C4C79386017CA",
+        "C42D6FEA0E4EB64317D0BDED09B422A59314AE45220230CE1C98DBC5F438030B",
     "tests/data/project_a_recalc_golden.tsv":
         "36F156F618C94C92D70FBA6D754340D374DDE72E7D2FF136D1E22DBEE5400DB8",
     # Wave 23 (W23-1/W23-7/W23-8): the 3-level outline fixture built through
@@ -41,8 +49,13 @@ DOCUMENTED = {
     # Wave 23 (W23-6): wave23-outline.mpp opened by Project 2021 on a copy,
     # Task.Flag10 set True on ID 3 and saved (the control save first).  The
     # reader's Flag10 decode is checked against this file.
+    # Wave 28 (W28-0.1): re-derived by scripts/oracle_w28_privacy.py under
+    # C:/w28 because the wave-23 save embedded the operator's local save path.
+    # Same Project save of the same base: Task FixedData is byte-identical to
+    # wave23-outline.mpp and Task FixedMeta differs only at entry byte +25 bit
+    # 0x04 (offset 323, 00 -> 04).
     "tests/data/wave23-flags.mpp":
-        "6B74A9DAEA67F0759A6A465BAD63D20556C8A06EFFFEDCE3EBF71CF4F1B80958",
+        "72ACC2086FA9A97781F96EBBD243D4C2CF91E7902BEE9FE19D8139303E3E802A",
     # Wave 24 (W24-2): Project 2021's own save of synthetic-base with Format >
     # Project Summary Task OFF and ON, built by scripts/oracle_w24.py under a
     # neutral path with neutral Author/Manager/Company/UserName.  The reader
@@ -116,8 +129,10 @@ DOCUMENTED = {
     # (+80/+88/+92) and Var2Data field 0x0B40015E -- not the single +92 word the
     # port used to write.  It is also the project-with-actuals fixture the Move
     # Project prompt gate opens now that the % buttons are disabled.
+    # Wave 28 (W28-0.1): re-derived by scripts/oracle_w28_privacy.py under
+    # C:/w28; the wave-27 save embedded the operator's local save path.
     "tests/data/wave27-percent-actuals.mpp":
-        "4C9AECBF544377878E058CC0103BEF059B65C48F0C21B079E3AF4EE215CC7AA2",
+        "56198DEA93A518B32E8813858855368C33C472B191D49AAD5E23E27CE8196C2C",
     # Wave 27 (W27-0.3): the SAME Project 2021 session's save of synthetic-base
     # before and after Project Summary Task > Priority was set to 750, with
     # neutral metadata.  The pair's TBkndTask/FixedData differs in exactly the
@@ -125,10 +140,13 @@ DOCUMENTED = {
     # difference is per-save bookkeeping (the wave-24 same-session pair shows
     # the same GUID/edit-list churn).  The 750 file is the fixture the port's
     # saved FixedData stream is compared with byte for byte.
+    # Wave 28 (W28-0.1): re-derived in one session by
+    # scripts/oracle_w28_privacy.py under C:/w28; the wave-27 saves embedded
+    # the operator's local save path.  The pair still differs only at +78/+79.
     "tests/data/wave27-priority-control.mpp":
-        "B9DEFD444DF39CCCEB11DA61FA020E74E462CAC4693CBB372402F4BCF7219E17",
+        "5ACA3BBA6E4B49CF6E91F8E582F1E1DCF45E23CFC0C424C3632E10A2F2C72152",
     "tests/data/wave27-priority-750.mpp":
-        "0AD24ADCE21D9907052A056A9637F6823069190C2921974FF3FFDC1446E1F49D",
+        "C5A6F06E39665323323BE796EA484FDBD1C0ED2CF9261F4F104565DA48FB6252",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
@@ -138,10 +156,15 @@ DOCUMENTED = {
     # reopen).  The link FixedData stays byte-identical, FixedMeta tombstones
     # entries 0 and 2 and sets header flags 4 -> 6.  The unlinked file is the
     # oracle the port's Unlink save is compared with.
+    # Wave 28 (W28-0.1): re-derived in one session by
+    # scripts/oracle_w28_privacy.py under C:/w28; the wave-27 saves embedded
+    # the operator's local save path.  The control's three TBkndCons streams
+    # still equal wave23-outline's, and the unlink save still changes only
+    # FixedMeta's tombstones and header flags.
     "tests/data/wave27-unlink-control.mpp":
-        "973D376ACC6B180F58A40952FDA1C00649710720221121A8A6AD78B22AC47F5E",
+        "55CF09C7EAE1CD29E8A707394C1F3E49D065E368E6AF4FF113BB071A9D91C171",
     "tests/data/wave27-unlink.mpp":
-        "8249D54946BA0443ED2CBFE4006104BD226217807F97CC3A30637FAB1446559E",
+        "83DFA7677E75CEE5F4810F07E86149E372BA71FEB0D57BE4C84D23B27E6DB178",
     # Wave 26 (W26-3.1): the Gantt view's style record and the 214/Props
     # FONT_BASES payload, extracted read-only from tests/data/synthetic-base.mpp
     # (its first decodable Gantt view, "Gantt &with Timeline"; the W26-3.1
@@ -199,6 +222,89 @@ DOCUMENTED = {
     "tests/data/wave26-gantt-saves/ts-yhq.style.bin":
         "78C8D721A02628517821FC4A88F4F6F1DF4F2A5250B63B16BF5A4991690E0A43",
 }
+
+
+# W28-0.1: a committed fixture must not carry a local absolute path.  Project
+# records the save path in every save (`Props14` and the `214/CEdl/Var2Data`
+# entry, UTF-16LE), and a save made in the working tree therefore named the
+# operator and the company Dropbox folder.  The six wave-23/27 fixtures were
+# re-derived under C:/w28 and the wave-19 calendar fixture's two records were
+# edited in place, so every Project record now names only a neutral oracle
+# root.  Those roots are the ONE allowed form: `C:\wNN\...` (any NN, either
+# separator, with or without a trailing separator).  Any other drive path --
+# and any user-profile path, whichever drive -- fails.
+#
+# Both encodings are searched: UTF-16LE as a byte sequence (this finds a
+# string wherever it starts in the file, i.e. at either byte alignment) and
+# raw ASCII.  The stock `gbui://mainpage.htm` record contains "i:/" but is not
+# a drive path, hence the look-behind for a preceding alphanumeric; in UTF-16LE
+# that look-behind is the two-byte pair `[A-Za-z]\0`.
+def _u16(text):
+    return text.encode("utf-16le")
+
+
+NEUTRAL_ROOT = re.compile(r"^[Cc]:[\\/]w\d+(?:[\\/]|$)")
+LOCAL_PATH_UTF16 = re.compile(
+    rb"(?<![A-Za-z0-9]\x00)[A-Za-z]\x00:\x00[\\/]\x00")
+LOCAL_PATH_BYTES = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
+PROFILE_UTF16 = re.compile(b"|".join(_u16(text) for text in (
+    "\\Users\\", "/Users/", "/home/", "\\Documents and Settings\\")))
+PROFILE_BYTES = re.compile(
+    rb"\\Users\\|/Users/|/home/|\\Documents and Settings\\")
+
+
+def _path_token(data, at, wide):
+    """The path-like token containing byte offset `at` (quotes/NUL delimit)."""
+    path_chars = ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                  "0123456789:\\/._-~$ ")
+
+    def path_char(value):
+        return 0x20 <= value < 0x7F and chr(value) in path_chars
+
+    if wide:
+        start = at
+        while start >= 2 and data[start - 1] == 0 and path_char(data[start - 2]):
+            start -= 2
+        end = at
+        while end + 1 < len(data) and data[end + 1] == 0 and path_char(data[end]):
+            end += 2
+        return data[start:end].decode("utf-16le", "replace")
+    start = at
+    while start >= 1 and path_char(data[start - 1]):
+        start -= 1
+    end = at
+    while end < len(data) and path_char(data[end]):
+        end += 1
+    return data[start:end].decode("latin-1")
+
+
+def _path_hits(data, rel):
+    hits = []
+    for regex, kind, wide in ((LOCAL_PATH_UTF16, "drive path", True),
+                              (PROFILE_UTF16, "user-profile path", True),
+                              (LOCAL_PATH_BYTES, "drive path", False),
+                              (PROFILE_BYTES, "user-profile path", False)):
+        for match in regex.finditer(data):
+            at = match.start()
+            value = _path_token(data, at, wide)
+            if kind == "user-profile path" or not NEUTRAL_ROOT.match(value):
+                hits.append((rel, kind, at, value))
+    return hits
+
+
+def check_fixture_paths():
+    """W28-0.1: no committed fixture may embed a local absolute path."""
+    failures = []
+    tracked = git("ls-files", "tests/data").stdout.split()
+    for rel in tracked:
+        path = os.path.join(ROOT, rel)
+        if not os.path.exists(path):
+            continue
+        with open(path, "rb") as handle:
+            data = handle.read()
+        for rel_name, kind, offset, value in _path_hits(data, rel):
+            failures.append(f"{rel_name}: {kind} at byte {offset}: {value!r}")
+    return failures, len(tracked)
 
 
 def git(*args):
@@ -333,6 +439,9 @@ def main():
     provenance_failures, oracles = check_oracle_provenance()
     failures.extend(provenance_failures)
 
+    path_failures, scanned = check_fixture_paths()
+    failures.extend(path_failures)
+
     if failures:
         print("FIXTURE CHECK FAILED")
         for f in failures:
@@ -340,6 +449,7 @@ def main():
         print("\nRestore with: Remove-Item <file>; git checkout HEAD -- <file>")
         return 1
     print(f"fixtures OK ({len(DOCUMENTED)} documented hashes, {len(tracked)} tracked .mpp)")
+    print(f"fixture paths OK ({scanned} tracked test-data files, no local path)")
     print(f"scenario oracle provenance OK ({oracles} oracle(s), recording_commit = "
           f"last measured-body change)")
     return 0

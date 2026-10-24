@@ -134,7 +134,15 @@ BASE_FILES = {
     },
     "synthetic-calendars": {
         "path": ROOT / "tests" / "data" / "synthetic-calendars.mpp",
-        "sha256": "f486f0c3235bd8a592542e942141fe873c4262e6afa19e029a9c4c79386017ca",
+        # Wave 28 (W28-0.1): the file carried the operator's local save path in
+        # two UTF-16LE records (Props14 and 214/CEdl/Var2Data).  Because this
+        # is the engine suite's calendar base, the paths were replaced IN PLACE
+        # by a neutral same-length string (C:\w19\..., scripts/
+        # w28_neutralise_path.py) rather than re-saved; every other byte,
+        # INCLUDING the scheduling data the oracle measured, is unchanged.  The
+        # recorded oracle below therefore still describes this base; only the
+        # pinned hash moves.
+        "sha256": "c42d6fea0e4eb64317d0bded09b422a59314ae45220230ce1c98dbc5f438030b",
         # calendar uid -> name.  Built by scripts/build_calendar_fixture.py:
         # synthetic-base's three tasks converted to automatic scheduling and a
         # second NAMED base calendar added (Mon-Fri 09:00-13:00 + 14:00-18:00).
