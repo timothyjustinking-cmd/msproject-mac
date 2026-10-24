@@ -359,3 +359,99 @@ inherited from G0 (an intermediate blob history cannot rewrite), not a G2
 failure.
 
 WAVE-28-G2-COMPLETE
+
+## G3 - new-task mode
+
+W28-3.1 is DONE.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W28-3.1 | Measure Project's save of the project's new-task mode (`114/Props` record `0x024013c8`) when changed in Options > Schedule; write it; Insert Task uses it; the status bar follows it | **DONE** | commits `fc7272e` (four pairs, README, hashes), `5d22f54` (oracle), `d2e89c7` (writer, edit model, app test), `feb0ba1` (shell, status bar, Insert Task, backstage gate), `da7f030` (insert-probe correction); measurement `build/w28/W28-3.1-project-new-task-mode.json`; gates `build/w28/gates-d2e89c7-W28-3.1-qt-{build-1,gate}.log`, `build/w28/gates-feb0ba1-W28-3.1-app-{test-recheck,ctest-recheck}.log` |
+
+W28-3.1 detail:
+
+- Two Project 2021 save pairs in one continuous session each, on neutral copies
+  of `tests/data/synthetic-base.mpp` under `C:/w28` with neutral
+  Author/Manager/Company/UserName/Title: manual -> auto and auto -> manual.  The
+  files are `tests/data/wave28-newtask-manual-control.mpp` /
+  `wave28-newtask-auto.mpp` and `wave28-newtask-auto-control.mpp` /
+  `wave28-newtask-manual.mpp`, 239104 bytes each, SHA-256 pinned.  Project's own
+  reopen reads the property back flipped in both directions
+  (`manual_to_auto`: True -> False; `auto_to_manual`: False -> True; oracle log
+  `build/w28/W28-3.1-oracle.log`).
+- The measured record is `114/Props`, id `0x024013c8`, kind 2, length 2, payload
+  at stream offset 2998 in these four fixtures.  Project stores `0x00FF` for
+  manual and `0x0000` for auto; the base fixture's `0x0001` also reads as
+  manual.  The two pair diffs (`build/w28/W28-3.1-pair{1,2}-diff.log`) show that
+  one semantic byte plus Project's own per-save churn in 15 of 96 streams:
+  SummaryInformation byte +232, the two opaque Props id payloads at 921/2859
+  (`0x02400029`, `0x024013c2`), Fixed2Data identity bytes in
+  TBkndTask/Assn/Cal/Rsc, 214/CEdl FixedData +147 and its Var2Data/VarMeta
+  rewrite, CFilter/CGrouping/CTable/CV_iew, 214/Props and Props14's length.  The
+  port changes only 114/Props and leaves the opaque ids as the base has them.
+- `core/mppwrite/project_props.{h,cpp}` walks the 16-byte stream header and the
+  12-byte record headers, checks the record's shape, replaces the two payload
+  bytes with Project's measured values, rewrites the stream and returns the
+  previous value; a missing, truncated or wrong-shape record throws instead of
+  writing.  `app::make_new_task_mode_edit` refuses a file without the record
+  before anything is queued (an original Project 2007 MPP12 file), naming
+  `0x024013c8` in the message.
+- Edit model: `StructuralKind::set_new_task_mode` (11), last edit wins, one
+  writer op; save step 5d runs after the document hook and before the final
+  write, so the mode lands in the container the hook produced.  The edit touches
+  no task row: `StructuralEdits::apply` ignores it, and `save_structural_edits`
+  only adds the one Props write.
+- Shell (`feb0ba1`): with a saved document, Options > Schedule queues the edit
+  and File > Save writes it; after a structural save the shell reloads the
+  target, so the saved mode becomes the new baseline.  The status bar shows the
+  loaded file's stored mode with the last pending mode edit applied, recomputed
+  in `after_structural_change`, so undo/redo walk back to the file's value (the
+  Qt gate triggers the real Edit-menu actions).  Insert Task stamps the shown
+  mode into the new row (`Fixed2Meta` entry byte +8 bit `0x80`; false `0x7f`,
+  true `0xff`).  A file without the record shows the reason and queues nothing;
+  with no document the mode stays the shell's live new-project mode.
+- Insert Task's mode is measured, not assumed: Project 2021's own `InsertTask`
+  probe (json `insert_probe`; not a committed fixture) creates its new row (new
+  unique id 4) with Manual=True under the manual option and Manual=False under
+  auto.  Project inserts before the active row and renumbers, so the new row is
+  the new unique id at ID 1, not the newly occupied ID 4; `da7f030` corrects the
+  oracle's log line, which had picked the old row that moved to ID 4.  The
+  port's Insert Task therefore matches Project's own command
+  (`build/w28/W28-3.1-insert-probe-recheck.log`).
+- Tests: `app_edits_new_task_mode_tests` (1933 checks, 0 failures) walks both
+  pairs: read the stored mode, make/push/undo/redo, the real save cascade, the
+  port's Props against Project's edited Props record by record (masking only
+  Project's two opaque id payloads), every other stream byte-identical to the
+  control, exactly one changed stream, and the reader's read-back.  The insert
+  check runs both controls x both modes and asserts the display placeholder and
+  the saved row carry the flag.  The missing-record check splices the record
+  out, proves the reader reports unknown, the helper refuses naming
+  `0x024013c8`, a hand-pushed edit's save fails, and neither the target nor a
+  temp file is left.  `qt_backstage_gate` loads a fixture storing manual, shows
+  its stored mode, queues Auto, checks one pending `set_new_task_mode` edit and
+  the label, then undoes/redoes through the Edit menu
+  (`build/w28/gates-d2e89c7-W28-3.1-qt-gate.log`).
+
+Group gates (fresh trees configured from scratch under
+`build/w28-fresh{,-app,-qt}`, serial, tree `da7f030`, log
+`build/w28/g3-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks passed |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded, 7 pass, 1 expected fail |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks passed |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match |
+| app ctest / app_qt ctest | 20/20 / 24/24 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (70 documented hashes, 50 tracked `.mpp`); paths OK (92 files); provenance OK (8 oracles) |
+| client-name scan on HEAD / `guard_names` wave range / G3 range | 0 files / 0 hits; `wave27..HEAD` refuses only the 076438f intermediate blob (exit 1); `7fe86e8..HEAD` 0 hits (exit 0); hex grep no matches (exit 1, expected) |
+
+The gate script's own exit code is 1 because its last command is the hex grep
+(no matches is its success); every numbered stage above exited 0, including
+the 52 core, 20 app and 24 app_qt tests.  The `guard_names` wave-range refusal
+is the wave-level blocker inherited from G0 (an intermediate blob history
+cannot rewrite), not a G3 failure.
+
+WAVE-28-G3-COMPLETE
