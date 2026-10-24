@@ -532,9 +532,36 @@ void check_update_project(const QJsonObject& measures) {
                 "both captured date fields are live widgets");
     const QString tooltip = QString::fromUtf8(
         msqt::project_dialog_geometry::kNotImplemented);
-    gate::check(!dialog.ok_button()->isEnabled() &&
-                    dialog.ok_button()->toolTip() == tooltip,
-                "OK is disabled with the exact decision-9 tooltip (no actuals writer)");
+    // W28-1.3: OK is live for the one measured update shape ("0% - 100%
+    // complete", entire project), and the choices with no measured save stay
+    // disabled with the exact decision-9 tooltip.
+    gate::check(dialog.ok_button()->isEnabled(),
+                "OK is enabled on the measured actuals writer");
+    gate::check(dialog.progress_radio() != nullptr &&
+                    dialog.progress_radio()->isEnabled() &&
+                    dialog.progress_radio()->isChecked(),
+                "0% - 100% complete is the enabled, checked default");
+    gate::check(dialog.entire_radio() != nullptr &&
+                    dialog.entire_radio()->isEnabled() &&
+                    dialog.entire_radio()->isChecked(),
+                "Entire project stays the checked scope");
+    gate::check(dialog.selected_radio() != nullptr &&
+                    dialog.selected_radio()->isEnabled(),
+                "Selected tasks is available to the same writer");
+    gate::check(dialog.completion_radio() != nullptr &&
+                    !dialog.completion_radio()->isEnabled() &&
+                    dialog.completion_radio()->toolTip() == tooltip,
+                "100% complete is disabled with the decision-9 tooltip");
+    gate::check(dialog.reschedule_radio() != nullptr &&
+                    !dialog.reschedule_radio()->isEnabled() &&
+                    dialog.reschedule_radio()->toolTip() == tooltip,
+                "rescheduling is disabled with the decision-9 tooltip");
+    gate::check(dialog.after_date() != nullptr &&
+                    !dialog.after_date()->isEnabled() &&
+                    dialog.after_date()->toolTip() == tooltip,
+                "the reschedule date field is disabled with the decision-9 tooltip");
+    gate::check(dialog.through_date()->isEnabled(),
+                "the through date is live");
     gate::check(dialog.cancel_button()->isEnabled(), "Cancel works");
     std::fprintf(stderr, "note: Update Project %dx%d, %d choices\n", dialog.width(),
                  dialog.height(), static_cast<int>(dialog.radios().size()));

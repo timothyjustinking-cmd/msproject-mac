@@ -73,6 +73,9 @@ enum class RibbonCommand : std::uint8_t {
     links_between_projects,
     update_project,
     move_project,
+    // Wave 28 (W28-1.3): Mark on Track's main button on the measured actuals
+    // writer.  Its drop-down has no measured menu, so only the button runs.
+    mark_on_track,
     // The two drop-down buttons: their click opens the menu the capture shows.
     wbs_menu,
     set_baseline_menu,

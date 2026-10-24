@@ -64,6 +64,13 @@ constexpr std::uint32_t kManualFieldB = 0x0B400506u;
 constexpr std::uint32_t kFinalStepId = 0x340A75F7u;
 constexpr std::uint32_t kProgressFlagBits = 0x9000u;
 
+/* W28-1.3: the project status-date record in 114/Props (kind 4, 4-byte packed
+ * date; 0xffffffff = NA).  MEASURED on the update pair: the record sits at
+ * stream offset 1292 (payload 1304) and its payload goes ffffffff ->
+ * 0x3bf40000; the stream size is unchanged. */
+constexpr std::uint32_t kStatusDateField = 0x02400045u;
+constexpr std::uint32_t kStatusDateKind = 4u;
+
 /* The constant payload of a 0x0B4004E5 block: one u32 pair and a u16 pair. */
 constexpr std::uint8_t kResetBlock[8] = {0x01, 0x00, 0x00, 0x00,
                                          0x01, 0x00, 0xFF, 0xFF};
@@ -334,14 +341,20 @@ std::vector<bool> deleted_rows(std::vector<std::uint8_t> const& meta,
     return deleted;
 }
 
-/* Recompute the project row from the leaf rows.  Measured on all four pairs:
+/* Recompute the project row from the leaf rows.  Measured on all four W28-1.2
+ * pairs and both W28-1.3 mark pairs:
  * PercentComplete = 100 * sum(ActualDuration) / sum(Duration) over the
  * non-summary, non-deleted task rows; ActualDuration = project Duration *
  * that percent / 100; Remaining = project Duration - ActualDuration; and
- * ActualStart/Resume/Stop = the project start (+104) while any task has
- * progress, NA otherwise.  PercentWorkComplete and the flag/anchor words are
- * never touched on the project row. */
-void write_project_rollup(TaskTable& table, std::vector<bool> const& excluded) {
+ * ActualStart = the project start (+104) while any task has progress, NA
+ * otherwise.  Resume/Stop are the project start too, except in Update
+ * Project's mode (`from_rows`), where they are the earliest valid per-row
+ * resume and stop -- MEASURED on wave28-update.mpp: project Resume = Stop =
+ * Tue 12:00, the row-3 finish, while rows 1 and 2 stop Tue 17:00 and resume
+ * Wed 08:00.  PercentWorkComplete and the flag/anchor words are never touched
+ * on the project row. */
+void write_project_rollup(TaskTable& table, std::vector<bool> const& excluded,
+                          bool resume_stop_from_rows) {
     std::uint64_t total_duration = 0;
     std::uint64_t total_actual = 0;
     for (std::size_t row = 1; row < table.rows(); ++row) {
@@ -370,8 +383,38 @@ void write_project_rollup(TaskTable& table, std::vector<bool> const& excluded) {
     if (total_actual > 0) {
         std::uint32_t const start = table.u32(0, task_row::kStart2);
         table.set_u32(0, task_row::kActualStart, start);
-        table.set_u32(0, task_row::kResume, start);
-        table.set_u32(0, task_row::kStop, start);
+        std::uint32_t resume = start;
+        std::uint32_t stop = start;
+        if (resume_stop_from_rows) {
+            bool have_resume = false;
+            bool have_stop = false;
+            for (std::size_t row = 1; row < table.rows(); ++row) {
+                if (row < excluded.size() && excluded[row]) {
+                    continue;
+                }
+                const std::uint32_t row_resume = table.u32(row, task_row::kResume);
+                if (is_date(row_resume) && (!have_resume || row_resume < resume)) {
+                    resume = row_resume;
+                    have_resume = true;
+                }
+                const std::uint32_t row_stop = table.u32(row, task_row::kStop);
+                if (is_date(row_stop) && (!have_stop || row_stop < stop)) {
+                    stop = row_stop;
+                    have_stop = true;
+                }
+            }
+            /* No measurable row date (a table whose progress rows carry no
+             * resume/stop has no measured pair): keep the project start rather
+             * than writing NA under a positive total. */
+            if (!have_resume) {
+                resume = start;
+            }
+            if (!have_stop) {
+                stop = start;
+            }
+        }
+        table.set_u32(0, task_row::kResume, resume);
+        table.set_u32(0, task_row::kStop, stop);
     } else {
         table.set_u32(0, task_row::kActualStart, kInvalidDate);
         table.set_u32(0, task_row::kResume, kInvalidDate);
@@ -418,7 +461,7 @@ bool task_is_manually_scheduled(CfbDocument const& doc, std::size_t row,
 
 PercentActualsResult write_percent_actuals(
     CfbDocument& doc, std::vector<PercentActualEdit> const& edits,
-    std::string_view table) {
+    std::string_view table, PercentActualsOptions const& options) {
     PercentActualsResult result;
     TaskTable rows = TaskTable::from_document(doc, table);
     std::size_t const row_count = rows.rows();
@@ -515,7 +558,21 @@ PercentActualsResult write_percent_actuals(
         std::uint16_t const old_percent =
             rows.u16(row, task_row::kPercentComplete);
         std::uint32_t const duration = rows.u32(row, task_row::kDuration);
-        std::uint32_t const actual = actual_duration_ticks(duration, edit.percent);
+        /* W28-1.3: an explicit elapsed value wins over the duration*percent
+         * derivation (Mark on Track / Update Project store the working time
+         * between the actual start and the date, not a percentage of the
+         * duration).  Zero keeps the W28-1.2 shape. */
+        std::uint32_t const actual =
+            edit.actual_ticks != 0
+                ? edit.actual_ticks
+                : actual_duration_ticks(duration, edit.percent);
+        if (actual > duration) {
+            result.warnings.push_back(
+                "task uid " + std::to_string(edit.uid) + ": actual duration " +
+                std::to_string(actual) + " ticks exceeds the row's duration " +
+                std::to_string(duration));
+            continue;
+        }
         bool const has_progress = edit.percent > 0;
         rows.set_u32(row, task_row::kActualDuration, actual);
         rows.set_u32(row, task_row::kRemainingDuration, duration - actual);
@@ -532,13 +589,34 @@ PercentActualsResult write_percent_actuals(
         rows.set_u32(row, task_row::kStop,
                      has_progress ? edit.dates.stop : kInvalidDate);
         if (has_progress) {
-            rows.set_u32(row, task_row::kProgressFlags,
-                         rows.u32(row, task_row::kProgressFlags) |
-                             kProgressFlagBits);
+            if (edit.progress_flags) {
+                rows.set_u32(row, task_row::kProgressFlags,
+                             rows.u32(row, task_row::kProgressFlags) |
+                                 kProgressFlagBits);
+            }
             rows.set_u32(row, task_row::kStartAnchor,
                          edit.dates.actual_start);
         } else {
             rows.set_u32(row, task_row::kStartAnchor, kInvalidDate);
+        }
+        /* W28-1.3 slack and late-date rules, measured on the mark/update pairs:
+         * a row that has started loses its start slack (+186 := 0), and a row
+         * at 100 % loses every slack word and stores its actual dates as the
+         * late pair (+112/+116 := ActualStart/ActualFinish).  The 83 % manual
+         * mark row keeps Free/TotalSlack (9600 each) while StartSlack goes to
+         * 0; the 100 % update row goes 14400 -> 0 on all three and its late
+         * pair moves from Wed/Fri to the actual Sun/Tue.  A row written at 0 %
+         * keeps all of them (auto 100->0 leaves the late pair alone).  These
+         * words were already at the measured values on every W28-1.2 percent
+         * pair, so setting them there is byte-identical. */
+        if (has_progress) {
+            rows.set_u32(row, task_row::kStartSlack, 0);
+        }
+        if (edit.percent == 100) {
+            rows.set_u32(row, task_row::kFreeSlack, 0);
+            rows.set_u32(row, task_row::kTotalSlack, 0);
+            rows.set_u32(row, task_row::kStart3, edit.dates.actual_start);
+            rows.set_u32(row, task_row::kFinish3, edit.dates.actual_finish);
         }
 
         /* --- the row's variable fields ---------------------------------- */
@@ -573,14 +651,17 @@ PercentActualsResult write_percent_actuals(
                 marker.id = fresh_step_id(edit.uid, edit.percent, steps);
                 steps.push_back(marker);
             }
+            const double step_percent =
+                edit.step_percent < 0.0 ? static_cast<double>(edit.percent)
+                                        : edit.step_percent;
             ProgressStep middle;
             middle.flag = 0;
-            middle.percent = edit.percent;
+            middle.percent = step_percent;
             middle.id = fresh_step_id(edit.uid, edit.percent, steps);
             steps.push_back(middle);
             ProgressStep final_step;
             final_step.flag = 1;
-            final_step.percent = edit.percent;
+            final_step.percent = step_percent;
             final_step.id = kFinalStepId;
             steps.push_back(final_step);
             std::uint32_t const offset = static_cast<std::uint32_t>(var2.size());
@@ -630,7 +711,8 @@ PercentActualsResult write_percent_actuals(
     for (std::size_t row = 1; row < row_count; ++row) {
         excluded[row] = summaries[row] || tombstones[row];
     }
-    write_project_rollup(rows, excluded);
+    write_project_rollup(rows, excluded,
+                         options.project_resume_stop_from_rows);
 
     /* Header words: the entry count and the Var2Data size. */
     std::size_t const entry_count = count_var_entries(var_meta);
@@ -654,6 +736,54 @@ PercentActualsResult write_percent_actuals(
                     inconsistent);
     }
     return result;
+}
+
+std::uint32_t write_project_status_date(CfbDocument& doc,
+                                        std::uint32_t packed_date,
+                                        std::string_view root) {
+    if (!is_date(packed_date)) {
+        throw Error("the project status date " + format_date(packed_date) +
+                    " is not a writable packed date");
+    }
+    std::string const path = std::string(root) + "/Props";
+    if (!doc.has_stream(path)) {
+        throw Error(path + " is absent, so the project status date cannot be "
+                    "written");
+    }
+    std::vector<std::uint8_t> props = doc.read_stream(path);
+    if (props.size() < 16) {
+        throw Error(path + " is " + std::to_string(props.size()) +
+                    " bytes, shorter than the 16-byte props header");
+    }
+    std::size_t offset = 16;
+    while (offset + 12 <= props.size()) {
+        const std::uint32_t length = get_u32(props, offset);
+        const std::uint32_t id = get_u32(props, offset + 4);
+        const std::uint32_t kind = get_u32(props, offset + 8);
+        if ((id & 0x00FF0000u) != 0x00400000u) {
+            break; /* the record framing has ended */
+        }
+        if (static_cast<std::uint64_t>(offset) + 12u + length > props.size()) {
+            throw Error(path + " has a truncated record 0x" +
+                        std::to_string(id) + " (declared " +
+                        std::to_string(length) + " bytes)");
+        }
+        if (id == kStatusDateField) {
+            if (kind != kStatusDateKind || length < 4u) {
+                throw Error(path + " stores the status date as kind " +
+                            std::to_string(kind) + " / " +
+                            std::to_string(length) +
+                            " bytes, not the measured kind 4 / 4 bytes");
+            }
+            const std::uint32_t previous = get_u32(props, offset + 12);
+            put_u32(props, offset + 12, packed_date);
+            doc.replace_stream(path, props);
+            return previous;
+        }
+        offset += 12u + length;
+    }
+    throw Error(path + " has no status-date record (0x02400045), so the "
+                "project status date cannot be written");
 }
 
 } /* namespace mppwrite */

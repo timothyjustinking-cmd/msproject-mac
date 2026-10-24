@@ -268,7 +268,8 @@ const std::vector<TabSpec>& tab_specs() {
                   "schedule.percent_75");
         small_cmd(schedule, "100%", RibbonCommand::percent_100, 26, 0, 4, true, true,
                   "schedule.percent_100");
-        split(schedule, "Mark on Track", 64, 0, 5, 3, "schedule.mark_on_track");
+        split(schedule, "Mark on Track", 64, 0, 5, 3, "schedule.mark_on_track",
+              true, RibbonCommand::mark_on_track);
         small(schedule, "Respect Links", app::MenuAction::none, 96, 0, 6, false, 1, false,
               "schedule.respect_links");
         small(schedule, "Inactivate", app::MenuAction::none, 96, 1, 6, false, 1, false,
@@ -1059,8 +1060,31 @@ void RibbonBar::build_page(int tab_index) {
                     button->setFocusPolicy(Qt::NoFocus);
                     auto* menu = new QMenu(button);
                     menu->setToolTipsVisible(true);
-                    if (spec.enabled && (spec.command == RibbonCommand::wbs_menu ||
-                                         spec.command == RibbonCommand::set_baseline_menu)) {
+                    if (spec.enabled && spec.command != RibbonCommand::none &&
+                        spec.command != RibbonCommand::wbs_menu &&
+                        spec.command != RibbonCommand::set_baseline_menu) {
+                        // W28-1.3: Mark on Track's main button runs its
+                        // command; its drop-down has no measured menu in this
+                        // port, so the arrow opens one disabled "not
+                        // implemented" entry.  Decision 9 is about dead clicks,
+                        // and this click is live.
+                        QAction* entry =
+                            menu->addAction(QStringLiteral("not implemented in this port"));
+                        entry->setEnabled(false);
+                        entry->setToolTip(QString::fromUtf8(kNotImplemented));
+                        button->setMenu(menu);
+                        button->setPopupMode(QToolButton::MenuButtonPopup);
+                        button->setEnabled(true);
+                        button->setToolTip(label);
+                        const RibbonCommand command = spec.command;
+                        connect(button, &QToolButton::clicked, this, [this, command](bool) {
+                            if (command_handler_) {
+                                command_handler_(command, false);
+                            }
+                        });
+                    } else if (spec.enabled &&
+                               (spec.command == RibbonCommand::wbs_menu ||
+                                spec.command == RibbonCommand::set_baseline_menu)) {
                         // W26-5.4: the captured drop-down menus.  Every item has
                         // no engine in this port, so each is disabled with the
                         // exact decision-9 tooltip; opening the menu is live.

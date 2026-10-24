@@ -220,6 +220,16 @@ struct PlanInput {
      * (a file without a usable entry leaves the cell blank). */
     bool project_flag10 = false;
     bool project_flag10_stored = false;
+
+    /* Wave 28 (W28-1.3): the file's project STATUS DATE (Project Information's
+     * Status date), the date Mark on Track measures progress through.  The
+     * reader decodes the stored 114/Props record 0x02400045 (reader.h
+     * ProjectRow::status_date has the measured evidence).  `stored` is false
+     * when the file carries no such record; `status_date` is then kDateNa and
+     * must not be treated as "today" or as a default.  Update Project writes
+     * its own through date into this record; Mark on Track never moves it. */
+    date32 status_date = kDateNa;
+    bool status_date_stored = false;
 };
 
 // The synthetic TaskRow make_record_set() puts at row 0 when

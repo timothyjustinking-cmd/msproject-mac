@@ -151,6 +151,11 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     }
     input.project_flag10 = document.project.flag10;
     input.project_flag10_stored = document.project.flag10_stored;
+    // Wave 28 (W28-1.3): the stored project status date.  A file without the
+    // record reports not-stored; the value is then kDateNa (date32_from_packed
+    // maps 0xffffffff to kDateNa), never a defaulted date.
+    input.status_date = date32_from_packed(document.project.status_date.raw);
+    input.status_date_stored = document.project.status_date_stored;
 
     input.tasks.reserve(document.tasks.size());
     for (const mpp::Task& task : document.tasks) {

@@ -64,6 +64,10 @@
 #include "document.h"
 #include "layout_model.h"
 
+namespace core::sched {
+class Calendar;
+}
+
 namespace app {
 
 enum class StructuralKind : std::uint8_t {
@@ -94,6 +98,27 @@ enum class StructuralKind : std::uint8_t {
     // table write measured in W27-0.3 (the Project-saved pair differs only at
     // row 0 +78).
     set_project_priority = 7,
+    // Wave 28 (W28-1.3): Mark on Track / Update Project -- a date measured
+    // progress write over one or more leaf tasks, on the SAME writer as
+    // set_percent (mppwrite::write_percent_actuals).  `actuals` carries the
+    // computed per-task percent and elapsed working ticks, `through_date` the
+    // date they were measured through, and `updates_status_date` says whether
+    // the save also moves the project status date (Update Project does; Mark
+    // on Track does not).  Project's pairs are tests/data/wave28-mark-*.mpp
+    // and wave28-update*.mpp; app::make_update_actuals_edit computes the
+    // targets with app::percent_through.
+    update_actuals = 8,
+};
+
+// One task's computed progress in an update_actuals edit.  `actual_ticks` is
+// the exact elapsed working time (not Duration * percent / 100) and
+// `step_percent` the exact unrounded percent Project stores in the
+// 0x0B40015E step block.
+struct ActualsTarget {
+    std::uint32_t uid = 0;
+    std::uint16_t percent = 0;
+    std::uint32_t actual_ticks = 0;
+    double step_percent = 0.0;
 };
 
 // One pending edit, as the user asked for it.
@@ -133,6 +158,15 @@ struct StructuralEdit {
     std::uint32_t link_uid = 0;
     // set_percent: the task's new PercentComplete, 0..100.
     std::uint16_t percent = 0;
+    // update_actuals: the computed targets, at most one per uid.
+    std::vector<ActualsTarget> actuals;
+    // update_actuals: the date progress is measured through (midnight, as the
+    // status date and the Update Project dialog are stored).
+    date32 through_date = kDateNa;
+    // update_actuals: true only for Update Project, which stores through_date
+    // in the file's project status date.  Mark on Track leaves that record
+    // alone (measured on both mark pairs).
+    bool updates_status_date = false;
     // set_project_priority: Project's project priority, 0..1000.
     std::uint16_t priority = 500;
     core::gantt::LinkType link_type = core::gantt::LinkType::finish_to_start;
@@ -163,6 +197,56 @@ bool is_measured_task_field(std::uint32_t field_id) noexcept;
 bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t percent,
                        StructuralEdit& out, std::string& error);
 
+// ---------------------------------------------------------------------------
+// Wave 28 (W28-1.3): progress through a date -- Mark on Track / Update Project
+// ---------------------------------------------------------------------------
+//
+// The MEASURED rule behind both commands (tests/data/wave28-mark-*.mpp and
+// wave28-update*.mpp; the working-time pieces are the same ones the percent
+// save uses):
+//
+//   finish = manual ? manual_finish_of(calendar, start, duration)
+//                   : calendar.add_work(start, duration)
+//   100 % if through >= finish (ActualDuration = Duration)
+//     0 % if through <= start
+//   else elapsed = (manual ? the start day's partial-day charge : 0)
+//                  + calendar.work_time_between(calendar.next_start(start),
+//                                               through)
+//        percent = elapsed * 100 / duration, truncated
+//        ActualDuration = elapsed
+//
+// Project also stores the UNROUNDED fraction in the 0x0B40015E step block
+// (the measured manual 1200/1440 row stores 83.33333333333333 beside the
+// stored 83), which is `step_percent`.  A computed 0 % stores zero elapsed
+// ticks and no dates: the writer's row shape has no "0 % with progress".
+// A zero-duration row (a milestone) is 100 % once `through` reaches its start
+// and 0 % before it; there is no measured update pair for one, and this is
+// the only definition that needs no division.
+//
+// `start` and `through` are packed/date32 words (they are the same counter,
+// see layout_model.h) and `duration_ticks` the file's 6-second ticks.  False
+// when a date is invalid or the calendar overflows the finish.
+struct PercentThrough {
+    std::uint16_t percent = 0;
+    std::uint32_t actual_ticks = 0;
+    double step_percent = 0.0;
+};
+bool percent_through(const core::sched::Calendar& calendar, std::uint32_t start,
+                     std::uint32_t duration_ticks, bool manually_scheduled,
+                     std::uint32_t through, PercentThrough& out);
+
+// Builds a ready-to-push update_actuals edit by computing percent_through for
+// every uid in `uids` against the project calendar loaded from
+// `source_path` (the same core/cal calendar the save path uses).  `uids` must
+// be non-empty, distinct, saved leaf tasks (make_percent_edit's rules);
+// `through_date` must be a real date.  The result's through_date and
+// updates_status_date are always set.  On refusal `error` names the task and
+// the reason and `out` is left default-constructed.
+bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_path,
+                              const std::vector<std::uint32_t>& uids,
+                              date32 through_date, bool updates_status_date,
+                              StructuralEdit& out, std::string& error);
+
 // The pending edits, in application order, with an undo/redo cursor.
 class StructuralEdits {
   public:
@@ -189,12 +273,20 @@ class StructuralEdits {
     // plan-less set_percent is refused rather than trusted.  `plan` is ignored
     // for the other kinds.
     //
+    // An update_actuals edit also REQUIRES `plan` (W28-1.3): every target must
+    // pass the same leaf/saved-row/summary rules, uids must be distinct, the
+    // actual ticks must agree with the percent and the row's duration, and a
+    // target with a pending task delete is refused (the row would be gone when
+    // the save ran).  The through date must be a real date.
+    //
     // Pushing a delete_task also removes the set/clear field edits, percent
-    // edits and add_link edits that name the task: those could never reach the
-    // file (the writer writes the fields/links before the delete, and the
-    // delete cascade would tombstone the link again).  They are not lost: the
-    // delete keeps them in StructuralEdit::displaced, undo() restores them and
-    // redo() removes them again (W27-3.2).  Documented in app/README.md.
+    // edits, update_actuals edits that name the task and add_link edits: those
+    // could never reach the file (the writer writes the fields/links before the
+    // delete, and the delete cascade would tombstone the link again).  A date
+    // update names a task when any of its targets does; the whole update is
+    // displaced, not half-applied.  They are not lost: the delete keeps them in
+    // StructuralEdit::displaced, undo() restores them and redo() removes them
+    // again (W27-3.2).  Documented in app/README.md.
     bool push(StructuralEdit edit, const PlanInput* plan = nullptr);
 
     // Moves the newest applied edit to the redo list; a delete_task's

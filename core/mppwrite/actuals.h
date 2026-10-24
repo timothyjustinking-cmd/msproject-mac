@@ -56,6 +56,40 @@
  * session's ids differ).  The port allocates its own deterministic non-zero
  * tokens; the pair test decodes the steps and compares flags/percents, with
  * the ids excluded, and the COM reopen proves Project accepts them.
+ *
+ * MARK ON TRACK AND UPDATE PROJECT (W28-1.3) ride the same writer with three
+ * measured differences (tests/data/wave28-mark-*.mpp, wave28-update*.mpp):
+ *   - The elapsed working time is NOT Duration * percent / 100.  Update
+ *     Project's 50 % row is a 2400-minute manual row with 1200 minutes
+ *     elapsed; its 83 % row has 1200 of 1440 minutes, and Project stores
+ *     83.33333333333333 in the step block.  The caller therefore passes
+ *     PercentActualEdit::actual_ticks (exact elapsed ticks) and
+ *     step_percent (the unrounded double), and this writer stores both
+ *     verbatim.  A zero actual_ticks keeps the W28-1.2 derivation.
+ *   - FixedData +168 is left at its existing value 0x0080 on every edited row:
+ *     these commands do NOT OR the 0x9000 progress bits a percent edit sets
+ *     (Measured: all three update rows and both mark rows keep 0x80.)
+ *     `progress_flags = false` selects that shape; the +174 start anchor is
+ *     still set to ActualStart.
+ *   - Update Project's project-row Resume/Stop are the EARLIEST valid per-row
+ *     resume and stop (Tuesday 12:00 on the update pair), not the project
+ *     start Mark on Track and the percent pairs keep.
+ *     PercentActualsOptions::project_resume_stop_from_rows selects it.
+ *   - Every written row also loses its StartSlack (+186 := 0) once it has
+ *     progress, and a row written at 100 % loses FreeSlack/TotalSlack too
+ *     (+74/+190 := 0) and stores its actual dates in the late pair
+ *     (+112/+116 := ActualStart/ActualFinish).  Measured: the 83 % manual mark
+ *     row keeps 9600/9600 free/total slack while StartSlack goes 9600 -> 0;
+ *     the 100 % update row goes 14400 -> 0 on all three and its late pair moves
+ *     from Wed/Fri to the actual Sun/Tue; a 0 % write leaves all of them alone.
+ *     The W28-1.2 pairs already carried these values, so the same writes are
+ *     byte-identical there.
+ *
+ * UPDATE PROJECT ALSO STORES ITS UPDATE DATE AS THE PROJECT STATUS DATE:
+ * 114/Props record 0x02400045, kind 4, one packed date (the update control
+ * stores 0xffffffff; the edited pair stores 0x3bf40000, Wed 2026-01-07).
+ * write_project_status_date patches exactly those four payload bytes and
+ * leaves the stream length unchanged.
  */
 
 #ifndef MPPWRITE_ACTUALS_H
@@ -106,6 +140,34 @@ struct PercentActualEdit {
     std::uint32_t uid = 0;
     std::uint16_t percent = 0;
     ActualsDates dates;
+    /* W28-1.3: the exact elapsed working ticks this edit completed.  0 keeps
+     * the W28-1.2 derivation Duration * percent / 100.  Mark on Track and
+     * Update Project pass the value their date arithmetic measured, because
+     * 50 % of a 2400-minute manual row is 1200 minutes and 83 % is 1200 of
+     * 1440 -- neither is Duration * percent / 100.  Must not exceed the row's
+     * Duration; the edit is refused (with a warning) when it does. */
+    std::uint32_t actual_ticks = 0;
+    /* W28-1.3: the percent written to the 0x0B40015E middle and final steps.
+     * Negative keeps the integer `percent` as a double.  Project stores the
+     * unrounded value (83.33333333333333 for 1200/1440). */
+    double step_percent = -1.0;
+    /* W28-1.3: true (a percent edit) ORs 0x9000 into FixedData +168 when the
+     * row has progress.  Mark on Track and Update Project leave the word
+     * unchanged, so they pass false. */
+    bool progress_flags = true;
+};
+
+/* W28-1.3: how the project row's Resume/Stop are chosen.  False keeps the
+ * W28-1.2/Mark on Track rule (both = the project start, FixedData row 0
+ * +104).  True is Update Project's measured roll-up: both are the EARLIEST
+ * valid resume/stop among the included task rows (Tuesday 12:00 on the
+ * update pair, where the three rows resume Wed 08:00, Wed 08:00 and Tue
+ * 12:00 and stop Tue 17:00, Tue 17:00 and Tue 12:00).  The caller selects it
+ * for Update Project (the command that also stores the status date), not for
+ * Mark on Track: both are date updates, but only Update Project uses the row
+ * dates. */
+struct PercentActualsOptions {
+    bool project_resume_stop_from_rows = false;
 };
 
 struct PercentActualsResult {
@@ -123,7 +185,22 @@ struct PercentActualsResult {
  */
 PercentActualsResult write_percent_actuals(
     CfbDocument& doc, std::vector<PercentActualEdit> const& edits,
-    std::string_view table = "114/TBkndTask");
+    std::string_view table = "114/TBkndTask",
+    PercentActualsOptions const& options = {});
+
+/*
+ * Store one packed date in the project's status-date record (114/Props,
+ * record 0x02400045, kind 4, 4-byte payload).  Returns the previous raw value
+ * so the caller can report it.  Throws Error when the stream or the record is
+ * absent or has a different shape, or when `packed_date` is not a real date --
+ * a file with no status-date record is a file this writer has not measured,
+ * and inventing one (or silently not writing it) would break the save pair.
+ * The stream length is unchanged: only the record's four payload bytes move.
+ * `root` is the table storage ("114"; "112" in an MPP12 file).
+ */
+std::uint32_t write_project_status_date(CfbDocument& doc,
+                                        std::uint32_t packed_date,
+                                        std::string_view root = "114");
 
 }  // namespace mppwrite
 

@@ -364,7 +364,8 @@ set(QT_RIBBON_ARGS
     "${QT_TEST_DATA_DIR_CMAKE}/wave24-summary-off.mpp"
     "${QT_TEST_DATA_DIR_CMAKE}/wave24-order.mpp"
     "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ribbon_pin_unmodelled.tsv")
+    "${CMAKE_CURRENT_SOURCE_DIR}/ribbon_pin_unmodelled.tsv"
+    "${QT_TEST_DATA_DIR_CMAKE}/wave28-mark-auto-control.mpp")
 if(EXISTS "${QT_REPO_ROOT}/corpus/project_a.mpp")
     list(APPEND QT_RIBBON_ARGS "${QT_REPO_ROOT}/corpus/project_a.mpp")
     message(STATUS "app_qt: corpus/project_a.mpp found -- ribbon %-complete corpus case enabled")

@@ -26,6 +26,22 @@ session must read first._
   project row's roll-up and Var2Data field 0x0B40015E; the old port wrote +92
   only -- that one-word path is gone.  Task Information's Percent complete field
   queues the same edit.
+* **Mark on Track and Update Project are ENABLED on the same actuals writer**
+  (wave 28, W28-1.3): both queue one `app::StructuralKind::update_actuals` edit
+  built by `app::make_update_actuals_edit`, which measures each row's percent and
+  actual ticks through the date with the percent-through rule (`app::percent_through`)
+  and File > Save writes them with `mppwrite::write_percent_actuals`.  Mark on
+  Track (Task > Schedule) edits the selected saved leaf through the file's stored
+  project status date and leaves that date alone; Update Project (Project >
+  Status) edits Entire project or Selected tasks through the dialog's date and
+  writes it to the status-date word in `114/Props`.  The three Project save pairs
+  (`tests/data/wave28-mark-auto*`, `wave28-mark-manual*` and `wave28-update*`)
+  match byte for byte on FixedData, the edited rows' FixedMeta counts, VarMeta and
+  Var2Data after masking step ids, plus the Update pair's status-date word; every
+  stream outside those stays the control's.  Project's slack and late-date
+  rewrite on a progress save is measured and reproduced.  Update Project's
+  "100% complete" and rescheduling choices stay disabled with the decision-9
+  tooltip: neither has a measured save.
 * **The edit model owns the percent rules** (W27-0.2): `app::make_percent_edit`
   refuses uid 0, an unknown uid, a value above 100 and any summary row;
   `StructuralEdits::push(edit, const PlanInput*)` REQUIRES the plan for a
@@ -172,12 +188,12 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
   the project row and refuses task edits.
 * **Saveable structural edits** (waves 26-28): Priority is measured against
   Project and enabled; PercentComplete is enabled on the measured actuals writer
-  (the five % buttons and Task Information's Percent complete field), which
-  writes the actuals, dates, progress flag, project roll-up and Var2Data steps
-  rather than +92.  A percent edit needs the loaded plan at `push()`; step 5a
-  refuses one stale percent edit instead of failing the save.  Every enabled new
-  edit path needs a save-and-reopen test AND the standing-rule-1 Project
-  measurement.
+  (the five % buttons, Task Information's Percent complete field, Mark on Track
+  and Update Project), which writes the actuals, dates, slack/late words, progress
+  flag, project roll-up/status date and Var2Data steps rather than +92.  A percent
+  edit and a date update need the loaded plan at `push()`; step 5a refuses one
+  stale percent edit instead of failing the save.  Every enabled new edit path
+  needs a save-and-reopen test AND the standing-rule-1 Project measurement.
 * **`plan_recalc`** never rewrites the golden by default; refreshing needs the
   exact value `PLAN_RECALC_UPDATE_GOLDEN=1`, and the local/CI gate runs
   `ctest -E plan_recalc` plus the corpus-free binary/step.
