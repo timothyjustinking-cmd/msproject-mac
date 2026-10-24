@@ -240,7 +240,8 @@ DOCUMENTED = {
     # part.  Edited: ONE split (part 1 -> Wed 2026-01-07 17:00, part 2 Fri
     # 2026-01-09 08:00 -> Mon 2026-01-12 17:00), duration 2400 ticks kept,
     # finish +3 days.  The split lives on the ASSIGNMENT's 0x0F400031
-    # planned-work contour (block 100 -> 128 bytes, count word 0 -> 3, VarMeta
+    # planned-work contour (block 100 -> 128 bytes, first u32 0x00200000 ->
+    # 0x00200003 and its 28-byte cumulative-work record list 2 -> 3, VarMeta
     # offset 8 -> 396; TBkndAssn Var2Data 396 -> 528) plus task row 1's
     # +100/+108/+116 dates and +168 bit 0x2000, the project row's
     # Duration/RemainingDuration and every other row's slack/late dates.  No
