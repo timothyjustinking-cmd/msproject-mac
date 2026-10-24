@@ -216,6 +216,23 @@ DOCUMENTED = {
         "D2FBF8C358A91905C538DEE4185FFEE2EC6F3BD0B6CA56E984FCD1A48BF2A511",
     "tests/data/wave28-outline-outdent.mpp":
         "A03B8FC55B642FA520083BD2ECE8361DC305A43DDB0DB9AC7E447193F92277AD",
+    # Wave 28 (W28-3.1): two same-session Project 2021 save pairs for Options >
+    # Schedule > "New tasks created", built by the committed
+    # scripts/oracle_w28_new_task_mode.py on synthetic-base copies under C:/w28
+    # with neutral metadata.  manual_to_auto: control saved with
+    # NewTasksCreatedAsManual=True, edited with False; auto_to_manual: the
+    # reverse.  The option is 114/Props record 0x024013c8 (kind 2, 2 bytes);
+    # Project normalises the base fixture's 0x0001 to 0x00FF for manual and
+    # writes 0x0000 for auto.  The edited files are the field-by-field oracles
+    # for the port's new-task-mode writer (W28-3.1).
+    "tests/data/wave28-newtask-manual-control.mpp":
+        "DFD3812D419E390CB25C2A67436E1C9FC0CD57AC092741514EC4CF13799F0E41",
+    "tests/data/wave28-newtask-auto.mpp":
+        "269EEB5707B20E257533E05F56C89F338D9B0F567D2D927706F05403CE572A2F",
+    "tests/data/wave28-newtask-auto-control.mpp":
+        "923FC593ABC10F521BBC6429D94823FC1DAF1ABFF66C762D30D26ED6E53247CB",
+    "tests/data/wave28-newtask-manual.mpp":
+        "988AE84E0E644F024D515E5E90A97807E8311145CE26C5EBAA4BE9C91B3F39FA",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
