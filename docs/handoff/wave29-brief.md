@@ -8,6 +8,12 @@ findings are G0; it found no Critical)._
 
 ## 0. Publication
 
+_Update 2026-10-25: Tim approved rewriting `076438f`; `wave28` was replayed with
+the clean blob, pushed, and `wave29` was moved onto it (same trees; old-to-new ids
+in `docs/handoff/wave28-verification/sha-map.txt` and
+`docs/handoff/wave29-sha-map.txt`).  The guard should now pass: push and
+dispatch normally in CLOSE.  The paragraph below is the original text._
+
 `wave28` is not on the remote: the pre-push guard refuses the intermediate
 `tests/data/synthetic-calendars.mpp` blob added in `076438f` (the operator's name;
 `d1b5a8a` cleaned the tip).  Whether that commit is rewritten is Tim's decision and
@@ -90,6 +96,37 @@ measured shape at a time.
   refusal per measured shape.
 
 ### G1 - PROJECT_A gaps (decision 7)
+
+_Verifier addendum 2026-10-25 ~05:30 (Tim asked for the High findings to be
+actioned): G1 starts with these two items, before W29-1.1._
+
+- **W29-1.0a  (High, CI)  Wave 28's CI is red on two platforms; both errors are
+  still in the tree.**  (1) macOS (`macos-qt`, run 40119832706):
+  `app/main.mm:722,728,732,740` call `note(...)` before its definition at
+  `app/main.mm:1347` ("use of undeclared identifier 'note'") - add a forward
+  declaration above the first use.  (2) Linux GCC (`ci`, run 40119835455):
+  `tests/roundtrip_outline.cpp:296` defines `describe(...)`, which nothing calls
+  (`-Werror=unused-function`) - remove it or use it.  MSVC does not report either,
+  so also check every file this wave and wave 28 touched for the same two
+  patterns (a free function used above its definition in `.mm` files; an unused
+  function in an anonymous namespace).  One commit, with a note that the Windows
+  gates cannot see these errors.
+- **W29-1.0b  (High, R28-1 residual)  Separate Project's per-save noise from
+  the edit's effects.**  W29-0.1 marks whole streams as named expected failures
+  (`SummaryInformation`, `DocumentSummaryInformation`, `Props`, `CEdl` FixedData/
+  VarMeta/Var2Data, `CV_iew`, `CTable`, `CGrouping`, `CFilter`, `TBkndCal` and
+  `TBkndRsc` Fixed2Data) because Project rewrites them.  A whole-stream expected
+  failure cannot tell a timestamp or per-save id from a change the edit caused,
+  so it would also hide a real one (for example a resource roll-up in
+  `TBkndRsc`).  Measure a **null save**: Project opens each save pair's control
+  file under `C:\w29\` and saves it with no edit (and once more, to see which
+  words change on every save); commit the null-save files as fixtures.  Then, in
+  the actuals and outline save-pair tests, a byte that differs between the
+  control and the null save is per-save noise (masked, by named offset or
+  record); every byte that differs between the null save and Project's edit save
+  is the edit's effect and must equal the port's save or be a FAILING check, with
+  the command refused for that shape.  Report per stream how many bytes are noise
+  and how many are edit effects.
 
 - **W29-1.1** Stored sheet column widths: 8 columns as the file stores them (the
   port shows 5 at 1920), decoded and applied.
