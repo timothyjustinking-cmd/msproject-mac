@@ -287,3 +287,24 @@ Gates for commit `f650c10` (parent `21ca5b2`), logs under `build/w29/`
 | `app_edits_new_task_mode_tests` | 1933 checks, 0 failures, exit 0 |
 | `check_fixtures.py` | fixtures OK (72 documented hashes, 52 tracked `.mpp`); paths OK (94 files); provenance OK (8 oracles) |
 | client-name scan on HEAD and the staged tree / name guard `21ca5b2..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected) |
+
+G0 group gates (fresh trees configured from scratch on `50df4b2` under
+`build/w29-fresh{,-app,-qt}`, built serially, log
+`build/w29/g0-fresh-gates.log`; `50df4b2` is the W29-0.4 record, docs-only
+over the code tree `8f80c2a`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 20/20 / 24/24 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (98 documented hashes, 78 tracked `.mpp`); paths OK (120 files); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `wave28..HEAD` / `guard_names` `21646f4..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The numbers belong to `50df4b2`; the marker commit that follows is docs-only.
+
+WAVE-29-G0-COMPLETE
