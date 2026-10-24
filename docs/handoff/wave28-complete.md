@@ -1,0 +1,151 @@
+# Wave 28 - the completion record
+
+One table row per brief item.  A group ends only when its exact
+`WAVE-28-<group>-COMPLETE` line is appended below (wave-28-brief section 1).
+Deferrals need the attempt evidence the standing rules and the brief name.
+
+## G0 - the wave-27 verifier findings (Critical/High only)
+
+All four items are DONE.  W28-0.1 has a follow-up commit: its first commit left
+the operator's name inside the re-saved calendar blob, and the pre-push guard
+refused that blob; the name was then replaced in place without touching the
+scheduling payload.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W28-0.1 | High: seven fixtures embed the operator's local save path | **DONE** | commits `076438f`, `d1b5a8a`; gates `build/w28/gates-bc90915-W28-0.1.log`, `build/w28/gates-076438f-W28-0.1-name.log` |
+| W28-0.2 | High: outline numbers pin impossible values | **DONE** | commit `3dbdce0`; gates `build/w28/gates-d1b5a8a-W28-0.2.log` |
+| W28-0.3 | Medium (promoted): the fixture builder reads past its FAT vector | **DONE** | commit `2b365e5`; gates `build/w28/gates-3dbdce0-W28-0.3.log` |
+| W28-0.4 | Medium (promoted): Unlink under standing rule 1 | **DONE (KEPT)** | commit `01c9a0b`; gates `build/w28/gates-2b365e5-W28-0.4.log` |
+
+W28-0.1 detail:
+
+- Six fixtures were re-derived through Project 2021 COM on the neutral root
+  `C:/w28` in one session with neutral Author, Manager, Company, UserName and
+  Title, reproducing the edit each records (`scripts/oracle_w28_privacy.py`).
+  `synthetic-calendars.mpp` is the engine suite's calendar base whose oracle is
+  pinned to its bytes, so its two path strings were replaced IN PLACE with
+  neutral same-length strings (`scripts/w28_neutralise_path.py`); every other
+  byte, including the scheduling payload, is unchanged.
+- `scripts/check_fixtures.py` now fails on any tracked test-data file that
+  embeds a drive path (at either byte alignment) or a user-profile path; the
+  only allowed drive root is the neutral `C:\wNN`.  Falsified against the
+  pre-fix copies: 14 leaked strings; the fixed tree reports 0 failures over 68
+  tracked test-data files.
+- Follow-up `d1b5a8a`: the path pass had left the operator's name in
+  `synthetic-calendars.mpp` SummaryInformation (two ANSI values) and one
+  Var2Data value (UTF-16LE).  `scripts/w28_neutralise_operator.py` replaces the
+  name in place with an equal-length neutral string (the name itself is passed
+  on the command line, never written into the script): three strings, 21
+  changed bytes, file size unchanged.  The new SHA-256 is pinned in
+  `check_fixtures.py`, `engine_diff.py` and `tests/data/README.md` with the
+  reason.  The task-calendar scenario's recorded expectations still hold (the
+  engine suite passes) because only those text bytes moved.
+- History is not rewritten; the old blobs still hold the path and the name,
+  and that decision is Tim's (see the blocker below).
+
+W28-0.2 detail:
+
+- Project measured through COM on copies under `build/oracle-work`
+  (`scripts/oracle_w28_outline.py`; numbers in
+  `build/w28/W28-0.2-project-outline.json`): Tasks(1).OutlineNumber = "1",
+  Tasks(12).OutlineNumber = "2"; the twelve task rows measure 1, 1.1, 1.1.1,
+  1.1.2, 1.2, 1.3, 1.3.1..1.3.5, 2.  The old expectations ("2" ... "1") were
+  impossible.  `wave24-order.mpp`, whose stored row order differs from its ID
+  order, measures 1..5 by ID.
+- `core/mpp/reader.cpp`: both outline derivations now sort every sibling group
+  by the stored ID column (Task::row_id for MPP12; the FixedData ID word for
+  the MPP14 Fixed2Data pass), with the row index as a deterministic
+  tie-breaker.  The stored outline level stays authoritative.
+- `app_qt/tests/task_order_test.cpp`: corpus expectations now hold Project's
+  measured values, and `case_order` asserts OutlineNumber on the committed
+  `wave24-order.mpp`, so CI without `corpus/` fails if the stored-order
+  derivation returns (before the fix, ID 2 would read "5").
+
+W28-0.3 detail:
+
+- `tests/mpp_fixture_builder.h` sized the FAT vector as `total * 4` entries
+  while the writer reads `fat_sectors * (kSector / 4)` = 128 per FAT sector.
+  The resize is now exactly what the loop reads and still above the highest
+  index `set_fat` wrote (`total - 1`), so it never shrinks a live entry.
+- Debug confirmation: before the fix `mpp_error_paths` and `cal` did not finish
+  (two live test processes, no output; killed after 613.7 s and 33.7 s), while
+  `mpp_perf_large`, whose file is large enough for the old allocation, passed.
+  After the fix the same Debug binaries pass 3/3 in 3.08 s.
+
+W28-0.4 detail:
+
+- The port's Unlink save removes the same links as Project's own Unlink save:
+  the three link-table streams are byte-identical to
+  `tests/data/wave27-unlink.mpp`.  Project's own save also rewrites ID 4's
+  stored date cache (start 2026-12-16 17:00 -> 2026-12-11 08:00, finish
+  2026-12-18 17:00 -> 2026-12-14 17:00, slack 0 -> 19200), which the port's
+  no-CPM save leaves as the base has it; ID 3's stored dates are unchanged.
+- Standing rule 1's test for this item is Project's reopen of the PORT's save.
+  Measured through COM on copies under `build/oracle-work`
+  (`scripts/oracle_w28_unlink.py`; facts in
+  `build/w28/W28-0.4-project-reopen.json`): Project 2021 (automatic
+  calculation) reopened the port's save and Project's own save with 0
+  differing fields over the project row and IDs 1..6 -- start, finish,
+  duration, OutlineNumber, Predecessors, Successors and each task's
+  TaskDependencies count.  Both reopens remove the same links (dependency
+  counts on IDs 3, 4 and 6 fall 2->1, 2->0 and 1->0); every other row is
+  unchanged.  No displayed date differs between the base and either Unlink
+  save after reopen, and an explicit CalculateAll changes nothing, so the
+  on-open read was already Project's recalculated schedule.  The stored date
+  cache the port does not write is therefore invisible to Project.
+- Unlink stays enabled with the no-reschedule save.  The app test comment now
+  records the measurement instead of claiming the comparison is "Unlink's
+  bytes only".
+
+Group gates (fresh trees configured from scratch under
+`build/w28-fresh{,-app,-qt}`, serial, tree `01c9a0b`, log
+`build/w28/g0-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 51/51 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks passed |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded, 7 pass, 1 expected fail |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks passed |
+| M2 `recalc --compare` | 332/332 fields, 0 mismatches |
+| app ctest / app_qt ctest | 17/17 / 23/23 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (46 documented hashes, 26 tracked `.mpp`); paths OK (68 files); provenance OK (8 oracles) |
+| client-name scan on HEAD / `guard_names` wave range | 0 files / 0 hits; `wave27..HEAD` refuses only the 076438f intermediate blob (exit 1); hex grep no matches (exit 1, expected) |
+
+The gate script's own exit code is 1 because its last command is the hex grep
+(no matches is its success); every numbered stage above exited 0.  The
+`guard_names` refusal is the wave-level blocker below, not a G0 failure: the
+final tree's `synthetic-calendars.mpp` is clean (the HEAD scan and the path
+check pass); only the blob committed in `076438f` still carries the name.
+
+## Found, not fixed
+
+- **The pre-push guard still refuses the wave branch because of commit
+  `076438f`'s intermediate blob.**  The final tree is clean (W28-0.1's
+  follow-up replaced the name), but the blob added in `076438f` still carries
+  the operator's name, and `guard_names.py wave27..wave28` scans every added
+  blob in the range.  Section 0 forbids rewriting history or working round the
+  guard.  Only Tim can authorize a rewrite of that commit or rule on the
+  guard; until then CLOSE cannot push the branch.  This is recorded here and
+  in `d1b5a8a` rather than resolved locally.
+- **Two pre-wave fixtures still embed the operator's name at HEAD.**
+  `tests/data/synthetic-base.mpp` and `tests/data/wave23-outline.mpp` each
+  store it twice in SummaryInformation (ANSI) and once in a Var2Data value
+  (UTF-16LE); scan `build/w28/W28-0.4-operator-scan.log` (3 hits each, no
+  string printed).  They were added in earlier waves, are outside the
+  `wave27..wave28` push range, and `synthetic-base.mpp` is the engine suite's
+  base with seven scenario oracles and two scripts pinned to its hash.  The
+  same in-place method could clean the tip, but it would move those pins and
+  would not remove the historical blobs; the tree also carries the name in 69
+  tracked text files (historical docs).  A repo-wide name purge is a history
+  decision for Tim, not a fixture edit under this wave.
+- **Project's stored date cache and its displayed schedule differ.**  Project's
+  own Unlink save stores ID 4 at 2026-12-11..12-14 but displays
+  2026-12-17..12-18 after the automatic recalculation on open; the same
+  happens to the base.  This is why the reopen comparison, not the stored
+  bytes, is the right test for W28-0.4.  No action for the port: it neither
+  reads nor writes that cache as a schedule.
+
+WAVE-28-G0-COMPLETE
