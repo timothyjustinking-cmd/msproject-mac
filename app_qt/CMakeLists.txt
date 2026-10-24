@@ -464,6 +464,22 @@ add_test(NAME qt_split_view_gate
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================
+# WAVE 28 (G2, W28-2.2): the sheet and Gantt show a queued Indent/Outdent at
+# once -- level and OutlineNumber, the one-level indent, the summary's working
+# collapse triangle, and the Gantt summary bracket, then undo/redo.  The two
+# controls are the files Project saved for the W28-2.1 measurement.
+# ===========================================================================
+add_executable(qt_outline_display_tests tests/outline_display_test.cpp)
+target_link_libraries(qt_outline_display_tests PRIVATE qt_shell)
+qt_set_warnings(qt_outline_display_tests)
+
+add_test(NAME qt_outline_display
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_outline_display_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave28-outline-indent-control.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave28-outline-outdent-control.mpp")
+
+# ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
 # four OFL faces live in app_qt/fonts/ and are compiled into each executable as
 # Qt resources, so the shell never depends on the host having the font and the
