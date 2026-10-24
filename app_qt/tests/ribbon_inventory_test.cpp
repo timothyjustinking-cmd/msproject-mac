@@ -1139,35 +1139,63 @@ int main(int argc, char** argv) {
                     "clicking a disabled %-button queues no percent edit");
     }
 
-    // Unlink removes the selected task's saved predecessor links through the
-    // shared link-edit path; the display plan's link list shrinks.
+    // Unlink removes every SAVED link touching the selected task, at either
+    // end: Project's Unlink Tasks was measured to remove both an incoming and
+    // an outgoing link (W27-3.3, COM UnlinkTasks on the outline fixture).
     {
         QString open_unlink_error;
         gate::check(window.open_file(outline_fixture, &open_unlink_error),
                     "the linked fixture opens for the Unlink check");
         QApplication::processEvents();
-        std::uint32_t successor = 0;
-        for (const app::LinkRow& link : window.plan().links) {
-            if (link.successor_uid != 0) {
-                successor = link.successor_uid;
+        const auto touching = [&window](std::uint32_t uid) {
+            std::size_t count = 0;
+            for (const app::LinkRow& link : window.plan().links) {
+                if (link.predecessor_uid == uid || link.successor_uid == uid) {
+                    ++count;
+                }
+            }
+            return count;
+        };
+        std::uint32_t selected_uid = 0;
+        std::size_t touching_before = 0;
+        for (const app::LinkRow& candidate : window.plan().links) {
+            if (candidate.successor_uid == 0) {
+                continue;
+            }
+            bool has_incoming = false;
+            bool has_outgoing = false;
+            for (const app::LinkRow& other : window.plan().links) {
+                if (other.successor_uid == candidate.successor_uid) {
+                    has_incoming = true;
+                }
+                if (other.predecessor_uid == candidate.successor_uid) {
+                    has_outgoing = true;
+                }
+            }
+            if (has_incoming && has_outgoing) {
+                selected_uid = candidate.successor_uid;
+                touching_before = touching(selected_uid);
                 break;
             }
         }
-        gate::check(successor != 0, "the fixture carries a saved link");
+        gate::check(selected_uid != 0 && touching_before >= 2,
+                    "the fixture has a task with BOTH a predecessor and a successor");
         const std::size_t links_before = window.plan().links.size();
-        gate::check(successor == 0 || select_uid(window, successor),
-                    "the linked successor is selected");
+        gate::check(selected_uid == 0 || select_uid(window, selected_uid),
+                    "the task with links at both ends is selected");
         QWidget* unlink = find_control(ribbon, QStringLiteral("Task"),
                                        QStringLiteral("Schedule"),
                                        QStringLiteral("unlink tasks"));
         gate::check(unlink != nullptr, "the Unlink button is in the page");
-        if (unlink != nullptr && successor != 0) {
+        if (unlink != nullptr && selected_uid != 0) {
             click_control(unlink);
             QApplication::processEvents();
-            gate::check(window.plan().links.size() < links_before,
-                        "Unlink removes the selected task's predecessor links");
-            std::fprintf(stderr, "note: links %zu -> %zu after Unlink\n", links_before,
-                         window.plan().links.size());
+            gate::check(touching(selected_uid) == 0,
+                        "Unlink removes BOTH links touching the selected task");
+            gate::check(window.plan().links.size() + touching_before == links_before,
+                        "Unlink leaves every link that does not touch the selection");
+            std::fprintf(stderr, "note: links %zu -> %zu after Unlink (selected uid %u)\n",
+                         links_before, window.plan().links.size(), selected_uid);
         }
         // The outdent/indent/split-task buttons are disabled with the exact
         // tooltip: the shared sheet model has no outline/split edit

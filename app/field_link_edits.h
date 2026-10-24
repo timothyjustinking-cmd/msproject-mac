@@ -1,6 +1,8 @@
 // app/field_link_edits.h -- the portable half of the two wave-13 dialogs: the
 // "Task Fields..." form (custom-field values) and the "Predecessors..." form
-// (incoming link rows).
+// (incoming link rows).  Wave 27 adds the both-direction link list the Unlink
+// command uses (saved_links_touching): Project removes a task's outgoing links
+// as well as its incoming ones.
 //
 // WHY THIS IS PURE C++
 //   main.mm is AppKit and cannot be compiled on the development box, so every
@@ -143,5 +145,37 @@ bool make_link_add(const PlanInput& plan, const StructuralEdits& edits,
 // pending row or a zero uid.
 bool make_link_delete(const PredecessorListItem& item, std::uint32_t successor_uid,
                       StructuralEdit& out, std::string& error);
+
+// ---------------------------------------------------------------------------
+// Task > Unlink Tasks (the selected task's saved links at EITHER end)
+// ---------------------------------------------------------------------------
+
+// One SAVED link touching a task, whichever end that task is.  This is a
+// different question from the Predecessors dialog: that dialog edits incoming
+// links only, while Project's Unlink Tasks was measured to remove both links
+// touching the task (W27-3.3: uid 4's incoming 3 -> 4 FS+2 d and outgoing
+// 4 -> 6 FF both went; TaskDependencies 3 -> 1).
+struct TaskLinkItem {
+    std::uint32_t link_uid = 0;
+    std::uint32_t predecessor_uid = 0;
+    std::uint32_t successor_uid = 0;
+    core::gantt::LinkType type = core::gantt::LinkType::finish_to_start;
+    std::int32_t lag_ticks = 0;
+};
+
+// Every saved link in `plan` that names `task_uid` as its predecessor OR its
+// successor, in plan order, with links already pending a delete omitted.  A
+// pending add (link_uid 0) is not a saved link and is not returned: a file
+// delete cannot name it, so undo removes it instead.
+std::vector<TaskLinkItem> saved_links_touching(const PlanInput& plan,
+                                               const StructuralEdits& edits,
+                                               std::uint32_t task_uid);
+
+// The delete edit for one saved link.  The edit's uid is the link's SUCCESSOR
+// and its predecessor_uid the link's predecessor, whichever end the user
+// selected; the writer addresses the row by link_uid.  False with `error` for a
+// link with no uid.
+bool make_link_delete_edit(const TaskLinkItem& item, StructuralEdit& out,
+                           std::string& error);
 
 }  // namespace app

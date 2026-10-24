@@ -480,4 +480,58 @@ bool make_link_delete(const PredecessorListItem& item, std::uint32_t successor_u
     return true;
 }
 
+std::vector<TaskLinkItem> saved_links_touching(const PlanInput& plan,
+                                               const StructuralEdits& edits,
+                                               std::uint32_t task_uid) {
+    std::vector<TaskLinkItem> items;
+    if (task_uid == 0) {
+        return items;
+    }
+    for (const LinkRow& link : plan.links) {
+        if (link.uid == 0 ||
+            (link.predecessor_uid != task_uid && link.successor_uid != task_uid)) {
+            continue;
+        }
+        bool deleted = false;
+        for (const StructuralEdit& edit : edits.applied()) {
+            if (edit.kind == StructuralKind::delete_link && edit.link_uid == link.uid) {
+                deleted = true;
+                break;
+            }
+        }
+        if (deleted) {
+            continue;
+        }
+        TaskLinkItem item;
+        item.link_uid = link.uid;
+        item.predecessor_uid = link.predecessor_uid;
+        item.successor_uid = link.successor_uid;
+        item.type = link.type;
+        item.lag_ticks = link.lag_ticks;
+        items.push_back(item);
+    }
+    return items;
+}
+
+bool make_link_delete_edit(const TaskLinkItem& item, StructuralEdit& out,
+                           std::string& error) {
+    error.clear();
+    if (item.link_uid == 0) {
+        error = "that link is a pending add; undo it instead";
+        return false;
+    }
+    if (item.successor_uid == 0 || item.predecessor_uid == 0) {
+        error = "the link needs both of its task rows";
+        return false;
+    }
+    out = StructuralEdit{};
+    out.kind = StructuralKind::delete_link;
+    out.uid = item.successor_uid;
+    out.predecessor_uid = item.predecessor_uid;
+    out.link_uid = item.link_uid;
+    out.link_type = item.type;
+    out.lag_ticks = item.lag_ticks;
+    return true;
+}
+
 }  // namespace app

@@ -12,6 +12,10 @@
 //      re-add the same relation in one Save (deletes run before adds); a
 //      pre-existing target is byte-identical when the writer refuses; and the
 //      original/source file is never written.
+//   3. Unlink (W27-3.3): the both-direction link list on the synthetic
+//      wave23-outline fixture, then the real save compared stream-for-stream
+//      with Project 2021's own UnlinkTasks save (tests/data/wave27-unlink.mpp);
+//      Project removes BOTH links touching the task, TaskDependencies 3 -> 1.
 //
 // Build/run (Windows, MSVC; see app/README.md):
 //   cmake -S app -B build\vs-w55 -G "Visual Studio 17 2022" -A x64 -DAPP_BUILD_TESTS=ON
@@ -28,6 +32,7 @@
 #include <vector>
 
 #include "add_delete.h"
+#include "cfb.h"
 #include "date.h"
 #include "edit_model.h"
 #include "field_link_edits.h"
@@ -354,6 +359,63 @@ void test_delete_prunes_adds() {
     check_size(edits.link_edit_count(), 0, "the delete dropped the link add naming it");
 }
 
+// Project's Unlink Tasks removes BOTH directions (W27-3.3): the helper must
+// list a link whether the selected task is its predecessor or its successor.
+void test_saved_links_touching() {
+    const app::PlanInput plan = make_plan();
+    app::StructuralEdits edits;
+    check_size(app::saved_links_touching(plan, edits, 1).size(), 1,
+               "task 1 has one outgoing link");
+    check_size(app::saved_links_touching(plan, edits, 2).size(), 2,
+               "task 2 has one link at each end");
+    check_size(app::saved_links_touching(plan, edits, 3).size(), 1,
+               "task 3 has one incoming link");
+    check_size(app::saved_links_touching(plan, edits, 99).size(), 0,
+               "an unknown task has no saved link");
+
+    const std::vector<app::TaskLinkItem> both =
+        app::saved_links_touching(plan, edits, 2);
+    if (both.size() == 2) {
+        check(both[0].link_uid == 11 && both[0].predecessor_uid == 1 &&
+                  both[0].successor_uid == 2,
+              "the incoming link comes first in plan order");
+        check(both[1].link_uid == 12 && both[1].predecessor_uid == 2 &&
+                  both[1].successor_uid == 3,
+              "the outgoing link follows it");
+        app::StructuralEdit edit;
+        std::string error;
+        check(app::make_link_delete_edit(both[1], edit, error),
+              "an outgoing link builds a delete edit");
+        check(edit.kind == app::StructuralKind::delete_link && edit.uid == 3 &&
+                  edit.predecessor_uid == 2 && edit.link_uid == 12,
+              "the edit names the link's successor as uid, whichever end was selected");
+    }
+
+    app::StructuralEdit remove;
+    remove.kind = app::StructuralKind::delete_link;
+    remove.uid = 2;
+    remove.predecessor_uid = 1;
+    remove.link_uid = 11;
+    check(edits.push(remove), "the incoming delete is queued");
+    const std::vector<app::TaskLinkItem> after =
+        app::saved_links_touching(plan, edits, 2);
+    check_size(after.size(), 1, "a pending delete drops that link from the list");
+    if (!after.empty()) {
+        check(after[0].link_uid == 12, "the outgoing link is the one that survives");
+    }
+
+    app::StructuralEdits adds;
+    app::StructuralEdit add;
+    std::string error;
+    check(app::make_link_add(plan, adds, 3, 1, LinkType::finish_to_start, "0", add,
+                             error),
+          "an unrelated link add is built");
+    check(adds.push(add), "the link add is queued");
+    const app::PlanInput shown = adds.apply(plan);
+    check_size(app::saved_links_touching(shown, adds, 1).size(), 1,
+               "a pending add is not a SAVED link, so Unlink leaves it to undo");
+}
+
 // ---------------------------------------------------------------------------
 // The real writer sequence
 // ---------------------------------------------------------------------------
@@ -395,6 +457,20 @@ bool has_signature(const mpp::Document& document, const std::string& signature) 
         }
     }
     return false;
+}
+
+// One stream's bytes from each file, compared.  Throws become a named failure:
+// the caller's check reports it without killing the rest of the test.
+bool stream_equal(const std::filesystem::path& lhs, const std::filesystem::path& rhs,
+                  const char* stream) {
+    try {
+        const mpp::CompoundFile left = mpp::CompoundFile::from_file(lhs.string());
+        const mpp::CompoundFile right = mpp::CompoundFile::from_file(rhs.string());
+        return left.read_stream(stream) == right.read_stream(stream);
+    } catch (const std::exception& error) {
+        std::printf("FAIL: cannot compare %s: %s\n", stream, error.what());
+        return false;
+    }
 }
 
 void test_real_round_trip() {
@@ -639,8 +715,129 @@ void test_real_round_trip() {
     check_size(bytes_on_disk(copy), copy_bytes, "the source copy is untouched by every save");
 }
 
+// ---------------------------------------------------------------------------
+// Unlink: the port's save against Project's own UnlinkTasks save (W27-3.3)
+// ---------------------------------------------------------------------------
+
+// tests/data/wave23-outline.mpp has three links: 3 -> 4 FS+2 d, 3 -> 5 SS+1 d
+// and 4 -> 6 FF.  Project 2021's Unlink Tasks on uid 4 -- the one task with a
+// predecessor AND a successor -- removed BOTH links touching it and left the
+// unrelated 3 -> 5 (measured: TaskDependencies 3 -> 1, still 1 after reopen;
+// build/w27/unlink-facts.json).  The fixture pair is the same session's save
+// before and after, so the link-table streams are the field-by-field oracle.
+void test_real_unlink_matches_project() {
+    const std::filesystem::path data(APP_TEST_DATA_DIR);
+    const std::filesystem::path fixture = data / "wave23-outline.mpp";
+    const std::filesystem::path project_control = data / "wave27-unlink-control.mpp";
+    const std::filesystem::path project_unlinked = data / "wave27-unlink.mpp";
+    if (!std::filesystem::exists(fixture) ||
+        !std::filesystem::exists(project_control) ||
+        !std::filesystem::exists(project_unlinked)) {
+        std::printf("SKIP: the outline/unlink fixtures are not present\n");
+        return;
+    }
+    std::error_code copy_error;
+    std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
+                                        copy_error);
+    const std::filesystem::path copy =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "app-unlink-source.mpp";
+    std::filesystem::remove(copy, copy_error);
+    std::filesystem::copy_file(fixture, copy,
+                               std::filesystem::copy_options::overwrite_existing,
+                               copy_error);
+    check(!copy_error, "the outline fixture was copied into the build tree");
+
+    Loaded base = load(copy);
+    if (!base.ok) {
+        return;
+    }
+    check_size(base.plan.tasks.size(), 6, "the outline fixture has six tasks");
+    check_size(base.plan.links.size(), 3, "the outline fixture has three links");
+    check(has_signature(base.document, "3->4 FS 9600"),
+          "3 -> 4 is FS with a two-day lag");
+    check(has_signature(base.document, "3->5 SS 4800"),
+          "3 -> 5 is SS with a one-day lag");
+    check(has_signature(base.document, "4->6 FF 0"), "4 -> 6 is FF with no lag");
+
+    // The Project control save carries the same link table as the committed
+    // base, so comparing the port's save with the UNLINKED save is comparing
+    // Unlink's bytes only.  Fixed2Data is deliberately excluded: Project
+    // rewrites its three link GUIDs on every save (the control already differs
+    // from the base), which is per-save bookkeeping, not Unlink.
+    const char* const link_streams[] = {"114/TBkndCons/FixedData",
+                                        "114/TBkndCons/FixedMeta",
+                                        "114/TBkndCons/Fixed2Meta"};
+    for (const char* stream : link_streams) {
+        check(stream_equal(fixture, project_control, stream),
+              "the Project control's link table matches the base fixture");
+    }
+
+    const std::uint32_t selected_uid = 4;
+    const std::vector<app::TaskLinkItem> touching =
+        app::saved_links_touching(base.plan, app::StructuralEdits{}, selected_uid);
+    check_size(touching.size(), 2,
+               "uid 4 has one incoming and one outgoing saved link");
+    std::size_t incoming = 0;
+    std::size_t outgoing = 0;
+    for (const app::TaskLinkItem& item : touching) {
+        if (item.successor_uid == selected_uid) {
+            ++incoming;
+        }
+        if (item.predecessor_uid == selected_uid) {
+            ++outgoing;
+        }
+    }
+    check_size(incoming, 1, "one saved link ends at uid 4");
+    check_size(outgoing, 1, "one saved link starts at uid 4");
+
+    app::StructuralEdits unlink;
+    std::string error_text;
+    for (const app::TaskLinkItem& item : touching) {
+        app::StructuralEdit edit;
+        check(app::make_link_delete_edit(item, edit, error_text),
+              "each link touching uid 4 builds a delete edit");
+        check(unlink.push(edit), "each delete edit is queued");
+    }
+    const std::filesystem::path port_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "app-unlink-port.mpp";
+    std::filesystem::remove(port_path, copy_error);
+    const app::StructuralSaveResult outcome =
+        app::save_structural_edits(unlink, {}, copy.string(), port_path.string(),
+                                   false);
+    check(outcome.ok, "the Unlink save succeeds");
+    if (!outcome.ok) {
+        std::printf("SAVE ERROR: %s\n", outcome.error.c_str());
+        return;
+    }
+    check_size(outcome.links_deleted, 2,
+               "Project removes both links touching the task: two tombstones");
+    check(outcome.api.find("delete_task_link") != std::string::npos,
+          "the outcome names delete_task_link");
+
+    Loaded after = load(port_path);
+    if (after.ok) {
+        check_size(after.document.links.size(), 1, "one live link remains");
+        check(has_signature(after.document, "3->5 SS 4800"),
+              "the unrelated link survives");
+        check(!has_signature(after.document, "3->4 FS 9600"),
+              "the incoming link is gone");
+        check(!has_signature(after.document, "4->6 FF 0"),
+              "the outgoing link is gone");
+        check_size(after.plan.links.size(), 1, "the app plan agrees");
+    }
+
+    for (const char* stream : link_streams) {
+        check(stream_equal(port_path, project_unlinked, stream),
+              "the port's saved link table is byte-identical to Project's Unlink save");
+    }
+}
+
 #else
 void test_real_round_trip() {
+    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+}
+
+void test_real_unlink_matches_project() {
     std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
 }
 #endif
@@ -654,7 +851,9 @@ int main() {
     test_validation();
     test_push_and_display();
     test_delete_prunes_adds();
+    test_saved_links_touching();
     test_real_round_trip();
+    test_real_unlink_matches_project();
 
     if (g_failures != 0) {
         std::printf("FAIL: %d of %d checks failed\n", g_failures, g_checks);
