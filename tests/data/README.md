@@ -9,7 +9,7 @@ checkout. Nothing here is client data.
 | `project_a_golden.tsv` | MS Project's own COM export of the PROJECT_A corpus file (83 live tasks), used as the oracle. See `project_a_golden.md`. |
 | `project_a_golden.md` | how the golden TSV was produced and what its columns mean |
 | `wave23-outline.mpp` | **synthetic** MPP14 fixture built by Project 2021 for wave 23: 3-level outline, FS+2 d / SS+1 d / FF links, one resource. See its provenance below. |
-| `wave23-flags.mpp` | the same fixture after Project set Task.Flag10 (0x0b400051) True on ID 3; the measured byte for the SUMMARY column (W23-6). SHA256 `6B74A9DA…F1B80958`. |
+| `wave23-flags.mpp` | the same fixture after Project set Task.Flag10 (0x0b400051) True on ID 3; the measured byte for the SUMMARY column (W23-6). Re-derived under `C:/w28` by `scripts/oracle_w28_privacy.py` in W28-0.1 (the wave-23 save embedded the operator's local path); Task FixedData is byte-identical to `wave23-outline.mpp` and Task FixedMeta differs only at entry byte +25 bit 0x04. SHA256 `72ACC208…3E802A`. |
 | `wave24-summary-off.mpp` | synthetic-base saved by Project 2021 with the project-summary row OFF (214/Props 0x03400009 = 0); wave 24 W24-2. |
 | `wave24-summary-on.mpp` | the same file with the row ON (0x03400009 = 1); the only difference from the off save is that record and per-save handles. |
 | `wave24-timeline-hidden.mpp` | synthetic-base saved with the Timeline strip hidden (214/Props 0x03400008 empty). |
@@ -20,10 +20,10 @@ checkout. Nothing here is client data.
 | `wave24-flag20.mpp` | only Flag20 True on ID 3 (byte +34 bit 0x04), pinning the non-contiguous id/bit position. |
 | `wave25-auto.mpp` | **synthetic** `wave23-outline.mpp` with every task switched to automatic scheduling (`Manual = False`) and saved by Project 2021 with neutral metadata; the parity reference that distinguishes an auto task bar from a manual one (W25-2). |
 | `wave25-flag11.mpp` … `wave25-flag17.mpp` | seven single-bit controls, one per flag in the +33 group: wave23-outline.mpp with every flag False on ID 3, then ONLY that flag True, saved through Project 2021 by the committed `scripts/measure_flags.py` (W25-9).  They pin the bit order the all-20 fixture cannot. |
-| `wave27-percent-actuals.mpp` | **synthetic** synthetic-base with Task ID 1 set to 50 % PercentComplete by Project 2021, saved with neutral metadata by `scripts/oracle_w27.py`.  Project's own % edit writes the actuals, dates, progress flag, project-row roll-up and Var2Data field 0x0B40015E as well as FixedData +92 (W27-0.1 evidence); also the project-with-actuals fixture the Move Project gate opens. |
-| `wave27-priority-control.mpp` / `wave27-priority-750.mpp` | the SAME Project 2021 session's save of synthetic-base before and after the project summary task's Priority was set to 750, with neutral metadata (`scripts/oracle_w27.py`).  Task FixedData differs in exactly the project row's +78 word (500 -> 750); the other stream differences are per-save bookkeeping.  The 750 file is the field-by-field oracle the port's priority save is compared with (W27-0.3). |
-| `wave27-unlink-control.mpp` / `wave27-unlink.mpp` | the SAME Project 2021 session's save of synthetic `wave23-outline.mpp` before and after Task > Unlink Tasks on the one task with BOTH a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and 4 -> 6 FF), with neutral metadata (`scripts/oracle_w27_unlink.py`).  Project removes BOTH links touching the task: TaskDependencies 3 -> 1 (the unrelated 3 -> 5 SS+1 d survives, and the count is still 1 after reopen).  The link table's FixedData is untouched; FixedMeta tombstones entries 0 and 2 and sets header flags 4 -> 6.  The pair is the oracle the port's Unlink save is compared with (W27-3.3). |
-| `synthetic-calendars.mpp` | synthetic two-calendar fixture (wave 19, `scripts/build_calendar_fixture.py`) |
+| `wave27-percent-actuals.mpp` | **synthetic** synthetic-base with Task ID 1 set to 50 % PercentComplete by Project 2021, saved with neutral metadata by `scripts/oracle_w27.py`, re-derived under `C:/w28` by `scripts/oracle_w28_privacy.py` in W28-0.1.  Project's own % edit writes the actuals, dates, progress flag, project-row roll-up and Var2Data field 0x0B40015E as well as FixedData +92 (W27-0.1 evidence); also the project-with-actuals fixture the Move Project gate opens. |
+| `wave27-priority-control.mpp` / `wave27-priority-750.mpp` | the SAME Project 2021 session's save of synthetic-base before and after the project summary task's Priority was set to 750, with neutral metadata (`scripts/oracle_w27.py`; re-derived under `C:/w28` by `scripts/oracle_w28_privacy.py` in W28-0.1).  Task FixedData differs in exactly the project row's +78 word (500 -> 750); the other stream differences are per-save bookkeeping.  The 750 file is the field-by-field oracle the port's priority save is compared with (W27-0.3). |
+| `wave27-unlink-control.mpp` / `wave27-unlink.mpp` | the SAME Project 2021 session's save of synthetic `wave23-outline.mpp` before and after Task > Unlink Tasks on the one task with BOTH a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and 4 -> 6 FF), with neutral metadata (`scripts/oracle_w27_unlink.py`; re-derived under `C:/w28` by `scripts/oracle_w28_privacy.py` in W28-0.1).  Project removes BOTH links touching the task: TaskDependencies 3 -> 1 (the unrelated 3 -> 5 SS+1 d survives, and the count is still 1 after reopen).  The link table's FixedData is untouched; FixedMeta tombstones entries 0 and 2 and sets header flags 4 -> 6.  The pair is the oracle the port's Unlink save is compared with (W27-3.3). |
+| `synthetic-calendars.mpp` | synthetic two-calendar fixture (wave 19, `scripts/build_calendar_fixture.py`).  In W28-0.1 its two embedded save-path strings were replaced in place with a neutral same-length string (`scripts/w28_neutralise_path.py`) because the engine suite's calendar oracle depends on every other byte. |
 | `synthetic-gantt-style.bin` / `synthetic-gantt-fonts.bin` | the wave-26 Gantt-style decoder's first fixtures: one Gantt view's `0x22400008` record and its `214/Props` font table, extracted from a Project save of `synthetic-base.mpp`. |
 | `wave26-gantt-saves/` | the wave-26 one-change-per-save evidence for the Gantt style decoder: 14 applied-view `0x22400008` records, one Project save per style change, plus the two `214/Props` font tables the font saves produced. Extracted by wave 27 W27-2.1; provenance below. |
 
@@ -124,7 +124,7 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `scenarios/recalculate.oracle.json` | `457CE73B3895BA1A1FDF9A2F4F163EE9D6C504BAD6485D6E158DE69FA2384F9B` |
 | `scenarios/task-calendar.oracle.json` | `855A7EED5E0A2F5C1DDFA9B8195216462B75017F8EDB45CB3987F901A90D58BE` |
 | `synthetic-base.mpp` | `55C109F2F62FD6B9F05789AB002C35991A424AAB18C78F92E4200DF7B3FC6069` |
-| `synthetic-calendars.mpp` | `F486F0C3235BD8A592542E942141FE873C4262E6AFA19E029A9C4C79386017CA` |
+| `synthetic-calendars.mpp` | `C42D6FEA0E4EB64317D0BDED09B422A59314AE45220230CE1C98DBC5F438030B` |
 | `synthetic-gantt-fonts.bin` | `BEC0B057A37AE959A123BBC28C052366C6134DCC7DF6C5DE308FA897C568F478` |
 | `synthetic-gantt-style.bin` | `B9FD3240CCB0EBD7B94AF17824C1FE104F44BC860AD4DCE093AF7BFD75B23CF4` |
 | `synthetic-props.bin` | `8739CDB83D96210ED3874AD14055F02C88B97F9C5FF74C343AD04D548B8E0334` |
@@ -132,7 +132,7 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `synthetic-viewstate-ctable-col.bin` | `7B753DFE1C930CF95C6C2E3D75A821505A2B6F43C35FB42C30979D824E5FF52E` |
 | `synthetic-viewstate-ctable-date.bin` | `E106E86452C37F4EA73263F043AE5EF1280BEEF46999C62271933960705EB3CB` |
 | `wave23-outline.mpp` | `055721FF07E93F8C8C06B8428E9EF3495D10A38BE8C432506FCB5FF3A786DA20` |
-| `wave23-flags.mpp` | `6B74A9DAEA67F0759A6A465BAD63D20556C8A06EFFFEDCE3EBF71CF4F1B80958` |
+| `wave23-flags.mpp` | `72ACC2086FA9A97781F96EBBD243D4C2CF91E7902BEE9FE19D8139303E3E802A` |
 | `wave24-order.mpp` | `515537D2B86415F85A3D15FB320C3F5A0EBB7A0951FF43CBCD00DC6B2BF6DDAF` |
 | `wave24-summary-off.mpp` | `0EF4DE69CC9C2CF6D3C6568C86B9A8B708DE6E8CCC8D404BC4FBE82AE4A6C391` |
 | `wave24-summary-on.mpp` | `90BF1055E1FF415E453208C04123C2A2F869E38D950237DF116D59D2E53C7C05` |
@@ -166,11 +166,11 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `wave26-gantt-saves/ts-yqm.style.bin` | `24332C5A66BDEA6A101E17FB6EC32471362F98DF08DE3D734696ECA323D61E6B` |
 | `wave26-gantt-saves/ts-ymd.style.bin` | `E13B487DDAF942C3DB40E7FF98EA61926765C234CFB3DBAEFEA4F2F9768DEC3C` |
 | `wave26-gantt-saves/ts-yhq.style.bin` | `78C8D721A02628517821FC4A88F4F6F1DF4F2A5250B63B16BF5A4991690E0A43` |
-| `wave27-percent-actuals.mpp` | `4C9AECBF544377878E058CC0103BEF059B65C48F0C21B079E3AF4EE215CC7AA2` |
-| `wave27-priority-control.mpp` | `B9DEFD444DF39CCCEB11DA61FA020E74E462CAC4693CBB372402F4BCF7219E17` |
-| `wave27-priority-750.mpp` | `0AD24ADCE21D9907052A056A9637F6823069190C2921974FF3FFDC1446E1F49D` |
-| `wave27-unlink-control.mpp` | `973D376ACC6B180F58A40952FDA1C00649710720221121A8A6AD78B22AC47F5E` |
-| `wave27-unlink.mpp` | `8249D54946BA0443ED2CBFE4006104BD226217807F97CC3A30637FAB1446559E` |
+| `wave27-percent-actuals.mpp` | `56198DEA93A518B32E8813858855368C33C472B191D49AAD5E23E27CE8196C2C` |
+| `wave27-priority-control.mpp` | `5ACA3BBA6E4B49CF6E91F8E582F1E1DCF45E23CFC0C424C3632E10A2F2C72152` |
+| `wave27-priority-750.mpp` | `C5A6F06E39665323323BE796EA484FDBD1C0ED2CF9261F4F104565DA48FB6252` |
+| `wave27-unlink-control.mpp` | `55CF09C7EAE1CD29E8A707394C1F3E49D065E368E6AF4FF113BB071A9D91C171` |
+| `wave27-unlink.mpp` | `83DFA7677E75CEE5F4810F07E86149E372BA71FEB0D57BE4C84D23B27E6DB178` |
 
 ## `synthetic-base.mpp` — provenance
 
