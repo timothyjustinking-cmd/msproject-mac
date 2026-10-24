@@ -251,6 +251,38 @@ DOCUMENTED = {
         "7C4243FE1548B16C4CAF2EBCB91D6753D913D228ECB2257944FF06C557D7B072",
     "tests/data/wave28-split.mpp":
         "F65E36B93117B6962679027282F85EBB20AB60CFB0448CD4755B7B53A6901EEC",
+    # Wave 29 (W29-0.2): four Project 2021 save pairs on a shaped copy of the
+    # synthetic wave25-auto.mpp schedule (one zero-duration milestone added),
+    # built by the committed scripts/oracle_w29_percent.py under C:/w29 with
+    # neutral metadata.  Each pair opens a fresh copy of the shaped base,
+    # saves the control, applies ONE PercentComplete edit, saves, and then
+    # reopens every saved file (facts JSON: build/w29/W29-0.2-project-percent.json).
+    #   leaf      ID 3 (outline level 3)          0 -> 40 %
+    #   work      ID 6 (work-bearing assignment)  0 -> 40 %
+    #   milestone ID 7 (zero duration)            0 -> 100 %
+    #   mid       ID 4 (outline level 3)         25 -> 60 %
+    # leaf/work/milestone are row-local writes plus Project's summary/project
+    # roll-up (percent, actual/remaining duration, ActualStart/Resume/Stop).
+    # The mid pair also RESCHEDULES every row -- date caches, summary
+    # durations, summary/project Resume/Stop -- which the port's save path
+    # cannot reproduce because it links no scheduler; that pair is the named
+    # failing check and the 25 -> 60 transition stays refused (W29-0.2).
+    "tests/data/wave29-percent-leaf-control.mpp":
+        "AB20D37140F9D241770DA3544952DA29E51B438F5003ED1D9BEB05BAB6B38544",
+    "tests/data/wave29-percent-leaf40.mpp":
+        "F1FC26932EFBF2F96C386B1F9579F7EE10709B92D2D3D8B636ABF906E8A3D2D4",
+    "tests/data/wave29-percent-work-control.mpp":
+        "0A1D8327EF2ED62E5F4DD2935E5B3585E2F41DBF9B40695B442C552966232BD8",
+    "tests/data/wave29-percent-work40.mpp":
+        "31A8E5E79FA36C97FAA2085B8ECC74E5E014951DFF25C8E483A82DBDC82DBC4D",
+    "tests/data/wave29-percent-milestone-control.mpp":
+        "2ED0BB0A27A02B77B4AC0A176827F09DEBEE303515422FCA58FCCD1A23A5BCA5",
+    "tests/data/wave29-percent-milestone100.mpp":
+        "17E9938FFBA881747E98B10FAA9CCD98A9E7FAAB1BA5455C121579AB7DB5249E",
+    "tests/data/wave29-percent-mid25-control.mpp":
+        "8975C16CCBB289FC451AF39BBB03E49803764B1354B99DD23B8A48D775C0EFE3",
+    "tests/data/wave29-percent-mid60.mpp":
+        "260875811C67B126970789CC035DC9595C4644359F7F0144433A7C17D10FBEF7",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
