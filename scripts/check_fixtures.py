@@ -315,6 +315,40 @@ DOCUMENTED = {
         "F5ABBF88DA9D934FFAD69759397DB794FFA203D7458807CF93D8920EEE24B48A",
     "tests/data/wave29-update-60-selected.mpp":
         "8CBBFE3E2E9268F9C0A25C44044BD3DFBD65965C016F924E8E0431063A9435E6",
+    # Wave 29 (W29-0.4): four Project 2021 save pairs on shaped copies of the
+    # synthetic base, built by the committed scripts/oracle_w29_outline_auto.py
+    # under C:/w29 with neutral metadata.  Each pair opens a fresh copy, sets
+    # the scheduling modes through COM, saves the control, applies ONE outline
+    # edit, saves, and reopens every saved file (facts JSON, not committed:
+    # build/w29/W29-0.4-project-outline-auto.json).
+    #   auto-indent   all rows automatic; ID 2 indented under ID 1
+    #   auto-summary  all rows automatic; ID 3 indented under ID 2, then ID 2
+    #                 (with its child) indented under ID 1
+    #   auto-outdent  all rows automatic; ID 2 indented under ID 1 (the
+    #                 auto-indent shape), then outdented back
+    #   manual-parent ID 1 (the parent) and ID 3 manual, ID 2 automatic; ID 2
+    #                 indented under ID 1, then outdented (the hybrid pair)
+    # Project recalculates every automatic row on save: the five schedule words
+    # (+74/+112/+116/+186/+190) and the duration/finish roll-up (+88, +108 and
+    # the project row's +84/+88/+100/+108).  The hybrid pair recalculates its
+    # MANUAL restored parent too and leaves the unrelated manual row (ID 3)
+    # stale.  These pairs are the W29-0.4 measurement.
+    "tests/data/wave29-outline-auto-indent-control.mpp":
+        "23CEF994955FBF733719AEAACD5EE273064A84FDE36E4D564E99712525C0C5E2",
+    "tests/data/wave29-outline-auto-indent.mpp":
+        "566785C4217A118B1D6CC371935324BA44F25644D25351BCA4883DDC57EC7AF2",
+    "tests/data/wave29-outline-auto-summary-control.mpp":
+        "4BC7A41F03729A69F1D0016D39885E9A267E84D3990943CF47C365D2DFF32FC1",
+    "tests/data/wave29-outline-auto-summary.mpp":
+        "26FF79D9AF3C368933015E8ED8D141609D4C24080CB54A00033E30DE03AA58A2",
+    "tests/data/wave29-outline-auto-outdent-control.mpp":
+        "66B22FC1260B99228145FE3D846D4922398EAD6B3466BED370AB85706554C35F",
+    "tests/data/wave29-outline-auto-outdent.mpp":
+        "7D3009F51D66D67B01086D55055A495C7E0265E4F25F3A40C7E4453C31193AA4",
+    "tests/data/wave29-outline-manual-parent-control.mpp":
+        "C9BBE9ECA30BF11145C466D2D832EC9E27F25A0EB5AC366945E4F81D3384BC01",
+    "tests/data/wave29-outline-manual-parent.mpp":
+        "6230E118C3E84EC7C4E284DD4B496D4CB21933B79CFA742B7FC57958B63948BD",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and

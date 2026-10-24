@@ -90,6 +90,15 @@ constexpr std::size_t kAssnStride = 110;
 constexpr std::size_t kAssnUid = 0;
 constexpr std::size_t kAssnTask = 4;
 constexpr std::size_t kAssnPlannedWork = 20;
+/* +52 Start / +56 Finish / +60 Resume copy the assigned task's effective +104 /
+ * +108 (reader.h), and +104 repeats the start.  Measured on the re-created
+ * outdent assignment in all three pairs: the automatic wave-29 pairs mirror the
+ * recomputed effective pair, the manual wave-28 pair keeps the effective pair
+ * the control already stored. */
+constexpr std::size_t kAssnStart = 52;
+constexpr std::size_t kAssnFinish = 56;
+constexpr std::size_t kAssnResume = 60;
+constexpr std::size_t kAssnStartCopy = 104;
 constexpr std::size_t kAssnMetaHeader = 16;
 constexpr std::size_t kAssnMetaEntry = 34;
 constexpr std::size_t kAssnMetaState = 0;
@@ -101,6 +110,11 @@ constexpr std::uint8_t kAssnMetaStateDeleted = 0x02;
 constexpr std::size_t kAssnFixed2Record = 48;
 constexpr std::size_t kAssnFixed2MetaEntry = 53;
 constexpr std::size_t kAssnFixed2MetaRowWord = 4;
+/* +8 mirrors the assigned task's scheduling mode: 0x80 set on a manual task
+ * (the wave-28 pair and the wave-29 hybrid pair), clear on an automatic one
+ * (the wave-29 automatic-parent pair); the other bits come from the tombstone. */
+constexpr std::size_t kAssnFixed2MetaManual = 8;
+constexpr std::uint8_t kAssnFixed2MetaManualBit = 0x80;
 constexpr std::size_t kAssnFixed2MetaFlags = 9;
 constexpr std::size_t kAssnFixed2MetaLastByte = 52;
 constexpr std::uint8_t kAssnFixed2MetaNewLastByte = 0x28;
@@ -117,12 +131,11 @@ constexpr std::size_t kAssnContourTicks8 = 24;
 constexpr std::size_t kAssnContourFlatWord = 32;
 constexpr std::size_t kAssnNewRowFieldCount = 4;
 
-/* 0x0F40027A is a 4-byte per-session word: assignments created in earlier
- * sessions hold 0x3D141482 in every measured file, and the outdent pair's
- * new row holds 0x3D16300C (0.03615 vs 0.03667 as an f32, 44 s apart -- an
- * undecoded session value, not a plan value).  The writer writes the word
- * measured on the outdent pair, as it copies Project's opaque identities. */
-constexpr std::uint8_t kAssnCreatedToken[4] = {0x0C, 0x30, 0x16, 0x3D};
+/* 0x0F40027A carries the file's current per-session word: 114/Props records
+ * 0x02400007 and 0x024013B1 each store the same 4 bytes in every measured file
+ * (wave-28 outdent 0x3D16300C, the two wave-29 outdent pairs 0x3D170E1A), and
+ * Project's re-created assignment block copies that word.  The writer reads it
+ * from record 0x02400007 instead of hard-coding one session's value. */
 
 /* 114/Props scalar counters an outline save moves (16-byte records, the same
  * shape actuals.cpp measured). */
@@ -133,6 +146,27 @@ constexpr std::uint32_t kPropAssnFreed = 0x04000002u;
 constexpr std::uint32_t kPropAssnVar2Size = 0x04000100u;
 constexpr std::uint32_t kPropAssnDeleted = 0x04008000u;
 constexpr std::size_t kPropScalarSize = 16;
+
+/* W29-0.4: the two per-save 4-byte DATE records in 114/Props, framed like the
+ * counters but with their id stored LITTLE-endian (the scalar tags above are
+ * read big-endian; the measured record ids are the other way round):
+ *   0x02400002  the project start -- the value a top-level automatic row's
+ *               Fixed2Data +46 carries (3bf11e78 in every outline fixture);
+ *   0x02400003  the project finish -- equal to the project row's +100 in every
+ *               outline pair, control and Project result, and moved by the
+ *               automatic roll-ups of W29-0.4;
+ *   0x02400007  the current per-session word the re-created assignment's
+ *               0x0F40027A block copies (0x024013B1 stores the same 4 bytes).
+ */
+constexpr std::uint32_t kPropProjectStart = 0x02400002u;
+constexpr std::uint32_t kPropProjectFinish = 0x02400003u;
+constexpr std::uint32_t kPropSessionWord = 0x02400007u;
+constexpr std::uint32_t kPropSessionWordCopy = 0x024013B1u;
+
+/* Fixed2Meta byte +8 bit 0x80: Project's Manually Scheduled flag, the same bit
+ * actuals.cpp's task_is_manually_scheduled reads. */
+constexpr std::size_t kFixed2MetaFlags = 8;
+constexpr std::uint8_t kFixed2MetaFlagManual = 0x80;
 
 std::string table_stream(std::string_view table, std::string_view name) {
     return std::string(table) + "/" + std::string(name);
@@ -262,6 +296,43 @@ std::size_t props_value_offset(std::vector<std::uint8_t> const& props,
         throw Error("114/Props has no scalar record for tag 0x" +
                     std::to_string(tag) +
                     ", so the outline save counters cannot be kept");
+    }
+    return found;
+}
+
+/* Byte offset of the 4-byte PAYLOAD of one per-save 114/Props record, or
+ * SIZE_MAX when the record is absent.  The records are the [u32 length][u32 id]
+ * [u32 kind][payload] chain the test parses from offset 16; this family's id is
+ * stored LITTLE-endian (see kPropProjectStart).  A record of the requested id
+ * with another payload length, or two copies of it, is a shape no measured file
+ * has and throws. */
+std::size_t props_record_payload(std::vector<std::uint8_t> const& props,
+                                 std::uint32_t id) {
+    std::size_t found = static_cast<std::size_t>(-1);
+    std::size_t at = 16;
+    while (at + 12 <= props.size()) {
+        std::uint32_t const length = get_u32(props, at);
+        std::uint32_t const stored = get_u32(props, at + 4);
+        if ((stored & 0x00FF0000u) != 0x00400000u) {
+            break;
+        }
+        if (static_cast<std::uint64_t>(at) + 12u + length > props.size()) {
+            throw Error("a 114/Props record runs past the stream");
+        }
+        if (stored == id) {
+            if (length != 4) {
+                throw Error("114/Props record for id 0x" +
+                            std::to_string(id) + " is " +
+                            std::to_string(length) +
+                            " bytes, not the measured 4");
+            }
+            if (found != static_cast<std::size_t>(-1)) {
+                throw Error("114/Props holds more than one record for id 0x" +
+                            std::to_string(id));
+            }
+            found = at + 12;
+        }
+        at += 12u + length;
     }
     return found;
 }
@@ -623,6 +694,17 @@ void set_fixed2_meta_byte(State& state, std::size_t row, std::size_t offset,
                       index * kFixed2MetaEntrySize + offset] = value;
 }
 
+/* Project's Manually Scheduled bit for one FixedData row (W29-0.4).  The
+ * FixedMeta entry index names the same Fixed2Meta entry; byte +8 bit 0x80 is
+ * the bit core/mpp reads and actuals.cpp's task_is_manually_scheduled tests. */
+bool row_is_manual(State const& state, std::size_t row) {
+    std::size_t const index = fixed2_meta_entry_for_row(state, row);
+    return (state.fixed2_meta[kFixed2MetaHeaderSize +
+                              index * kFixed2MetaEntrySize +
+                              kFixed2MetaFlags] &
+            kFixed2MetaFlagManual) != 0;
+}
+
 void adjust_field_count(State& state, std::size_t row, std::int64_t delta) {
     std::size_t const index = meta_entry_for_row(state.meta, row);
     if (index == static_cast<std::size_t>(-1)) {
@@ -661,7 +743,8 @@ void set_fixed_meta_summary(State& state, std::size_t row) {
 }
 
 /* The FixedMeta entry's 16-byte cache blob at +8..23.  MEASURED (W29-0.1) on
- * both indent pairs and reversed by the outdent pair, five bytes move:
+ * both indent pairs and reversed by the outdent pair, five entry bytes move
+ * (+9/+12/+16/+17/+18 are entry-relative, i.e. blob +1/+4/+8/+9/+10):
  *   indent   +9 |= 0x40   +12 |= 0x0C   +16 |= 0x10
  *            +17 := (+17 & ~0x04) | 0x01   +18 |= 0x20
  *   outdent  +9 unchanged (0x40 is sticky, like the +26 summary flag)
@@ -671,8 +754,21 @@ void set_fixed_meta_summary(State& state, std::size_t row) {
  * (0xbf->0xff, 0x71->0x7d, 0x07->0x17, 0x4c->0x49, 0xcf->0xef); the outdent
  * pair's control carries the indent result's bytes and its result is the four
  * arithmetic reverses.  Before W29-0.1 the writer left the control's blob and
- * the save-pair test masked it -- rule 1 does not accept that. */
-void set_fixed_meta_blob(State& state, std::size_t row, bool indent) {
+ * the save-pair test masked it -- rule 1 does not accept that.
+ *
+ * W29-0.4 measured the AUTOMATIC variants on the four new pairs.  The cache
+ * byte-1 0x40 bit and the +17/+18 field-state bits behave differently when the
+ * row is automatically scheduled:
+ *   automatic indent  +9 |= 0x40, +12 |= 0x0C, +16 |= 0x10; +17/+18 are
+ *                     left exactly as stored (0x48/0xef in both pairs, where
+ *                     the manual rule would have turned 0x48 into 0x49).
+ *   automatic outdent +12 &= ~0x0C, +16 &= ~0x10; +9, +17 and +18 are left
+ *                     as stored (0x48/0xef survive).
+ * A restored MANUAL parent keeps the manual outdent rule (the hybrid pair's
+ * 0x49->0x4c and 0xef->0xcf prove it).  The moved automatic row's +9 0x40 bit
+ * is written by set_moved_fixed_meta_blob below. */
+void set_fixed_meta_blob(State& state, std::size_t row, bool indent,
+                         bool automatic) {
     std::size_t const index = meta_entry_for_row(state.meta, row);
     if (index == static_cast<std::size_t>(-1)) {
         throw Error("FixedMeta has no entry for FixedData row " +
@@ -684,15 +780,41 @@ void set_fixed_meta_blob(State& state, std::size_t row, bool indent) {
         state.meta[blob + 1] |= 0x40;
         state.meta[blob + 4] |= 0x0C;
         state.meta[blob + 8] |= 0x10;
-        state.meta[blob + 9] = static_cast<std::uint8_t>(
-            (state.meta[blob + 9] & ~0x04u) | 0x01u);
-        state.meta[blob + 10] |= 0x20;
+        if (!automatic) {
+            state.meta[blob + 9] = static_cast<std::uint8_t>(
+                (state.meta[blob + 9] & ~0x04u) | 0x01u);
+            state.meta[blob + 10] |= 0x20;
+        }
     } else {
         state.meta[blob + 4] &= static_cast<std::uint8_t>(~0x0Cu);
         state.meta[blob + 8] &= static_cast<std::uint8_t>(~0x10u);
-        state.meta[blob + 9] = static_cast<std::uint8_t>(
-            (state.meta[blob + 9] & ~0x01u) | 0x04u);
-        state.meta[blob + 10] &= static_cast<std::uint8_t>(~0x20u);
+        if (!automatic) {
+            state.meta[blob + 9] = static_cast<std::uint8_t>(
+                (state.meta[blob + 9] & ~0x01u) | 0x04u);
+            state.meta[blob + 10] &= static_cast<std::uint8_t>(~0x20u);
+        }
+    }
+}
+
+/* The moved rows' FixedMeta +9 0x40 bit, measured on the automatic pairs:
+ *   indent:   set on the moved root AND every row of the moved subtree
+ *             (auto-indent 0xbf->0xff; auto-summary sets the moved summary and
+ *             its child, both 0xbf->0xff)
+ *   outdent:  clear on the moved leaf (auto-outdent 0xff->0xbf; the hybrid
+ *             pair's moved row is already clear and stays clear)
+ * The W29-0.1 manual shape leaves the moved rows' blobs alone. */
+void set_moved_fixed_meta_blob(State& state, std::size_t row, bool indent) {
+    std::size_t const index = meta_entry_for_row(state.meta, row);
+    if (index == static_cast<std::size_t>(-1)) {
+        throw Error("FixedMeta has no entry for FixedData row " +
+                    std::to_string(row));
+    }
+    std::size_t const bit =
+        kFixedMetaHeaderSize + index * kFixedMetaEntrySize + 8 + 1;
+    if (indent) {
+        state.meta[bit] |= 0x40;
+    } else {
+        state.meta[bit] &= static_cast<std::uint8_t>(~0x40u);
     }
 }
 
@@ -872,6 +994,7 @@ std::vector<OutlineRow> build_rows(State& state) {
         info.duration_format = state.rows.u16(row, task_row::kDurationFormat);
         info.start = state.rows.u32(row, task_row::kStart2);
         info.finish = state.rows.u32(row, task_row::kFinish2);
+        info.manual = row_is_manual(state, row);
         info.deleted = row_is_deleted(state, row);
         info.stored_children = state.rows.u16(row, kHasChildrenByte) != 0;
         info.fixed2_flags =
@@ -919,6 +1042,87 @@ void collect_subtree(std::vector<OutlineRow> const& rows, std::size_t row,
         collect_subtree(rows, child, out, visiting);
     }
     visiting[row] = false;
+}
+
+/* W29-0.4: the rows Project recalculates +186/+190 for on an automatic outline
+ * save -- every LIVE automatic row, the project row included.  The hybrid
+ * outdent also recalculates its restored MANUAL parent, which the caller adds
+ * with add_slack_uid. */
+std::vector<std::uint32_t> automatic_slack_uids(State const& state,
+                                                std::vector<OutlineRow> const& rows) {
+    std::vector<std::uint32_t> uids;
+    for (std::size_t row = 0; row < rows.size(); ++row) {
+        if (rows[row].deleted) {
+            continue;
+        }
+        if (!row_is_manual(state, row)) {
+            uids.push_back(rows[row].uid);
+        }
+    }
+    std::sort(uids.begin(), uids.end());
+    return uids;
+}
+
+void add_slack_uid(std::vector<std::uint32_t>& uids, std::uint32_t uid) {
+    if (std::find(uids.begin(), uids.end(), uid) == uids.end()) {
+        uids.push_back(uid);
+        std::sort(uids.begin(), uids.end());
+    }
+}
+
+/* The caller's slack vector must name exactly `expected`, once each: the
+ * writer cannot tell which row a stray uid refers to, and Project's save
+ * rewrote the pair-measured set and nothing else.  The late dates are packed
+ * dates the caller computed with its calendar; the writer refuses a vector
+ * that cannot be stored as two dates before the edit's first mutation. */
+bool check_slack_set(std::vector<OutlineSlack> const& slack,
+                     std::vector<std::uint32_t> const& expected,
+                     std::string& warning) {
+    std::vector<std::uint32_t> got;
+    got.reserve(slack.size());
+    for (OutlineSlack const& entry : slack) {
+        got.push_back(entry.uid);
+        if (!is_date(entry.late_start) || !is_date(entry.late_finish) ||
+            entry.late_finish < entry.late_start) {
+            warning = "the queued slack for task uid " +
+                      std::to_string(entry.uid) +
+                      " does not carry a valid LateStart/LateFinish pair, so"
+                      " the automatic outline save cannot write +112/+116";
+            return false;
+        }
+    }
+    std::sort(got.begin(), got.end());
+    if (got != expected) {
+        warning = "the automatic outline roll-up needs the +74/+112/+116/"
+                  "+186/+190 words of exactly the live automatic rows (plus"
+                  " the restored manual parent of a hybrid outdent), and the"
+                  " queued slack list does not match them";
+        return false;
+    }
+    return true;
+}
+
+void apply_slack(State& state, std::vector<OutlineRow> const& rows,
+                 std::vector<OutlineSlack> const& slack) {
+    for (OutlineSlack const& entry : slack) {
+        std::size_t at = static_cast<std::size_t>(-1);
+        for (std::size_t row = 0; row < rows.size(); ++row) {
+            if (rows[row].uid == entry.uid && !rows[row].deleted) {
+                at = row;
+                break;
+            }
+        }
+        if (at == static_cast<std::size_t>(-1)) {
+            throw Error("the queued slack names task uid " +
+                        std::to_string(entry.uid) +
+                        ", which has no live FixedData row");
+        }
+        state.rows.set_u32(at, task_row::kFreeSlack, entry.free_slack);
+        state.rows.set_u32(at, task_row::kStart3, entry.late_start);
+        state.rows.set_u32(at, task_row::kFinish3, entry.late_finish);
+        state.rows.set_u32(at, task_row::kStartSlack, entry.start_slack);
+        state.rows.set_u32(at, task_row::kTotalSlack, entry.total_slack);
+    }
 }
 
 std::string task_label(std::uint32_t uid) {
@@ -1020,13 +1224,20 @@ void tombstone_assignment(State& state, std::size_t row) {
 }
 
 /* Re-create the tombstoned assignment of the summary that becomes a leaf again
- * (outdent).  Every byte below is measured on tests/data/wave28-outline-
- * outdent.mpp; the new row is a copy of the tombstone's FixedData with a fresh
- * uid, and its four Var2 blocks are appended in Project's own order
- * (0F40027A, 0F400031, 0F400299, 0F40029B) while the VarMeta entries are
- * inserted in ascending key order. */
+ * (outdent).  Every byte below is measured on the three outline-outdent pairs
+ * (wave-28 manual, wave-29 automatic parent and wave-29 hybrid manual parent);
+ * the new row is a copy of the tombstone's FixedData with a fresh uid, its
+ * +52/+56/+60/+104 date words mirror the restored task's effective +104/+108,
+ * its Fixed2Meta +8 manual bit follows that task's scheduling mode, and its
+ * four Var2 blocks are appended in Project's own order (0F40027A, 0F400031,
+ * 0F400299, 0F40029B) while the VarMeta entries are inserted in ascending key
+ * order.  The 0F40027A payload is the file's current per-session word from
+ * 114/Props record 0x02400007. */
 void recreate_assignment(State& state, std::size_t tombstone_row,
-                         std::size_t task_row, std::uint32_t work_ticks) {
+                         std::size_t task_row, std::uint32_t work_ticks,
+                         std::uint32_t effective_start,
+                         std::uint32_t effective_finish, bool manual,
+                         std::array<std::uint8_t, 4> const& session_word) {
     AssnState& assn = state.assn;
     std::uint32_t new_uid = 0;
     for (std::size_t row = 0; row < assn.row_count; ++row) {
@@ -1059,6 +1270,10 @@ void recreate_assignment(State& state, std::size_t tombstone_row,
         assn.fixed.begin() + static_cast<std::ptrdiff_t>(row_at),
         assn.fixed.begin() + static_cast<std::ptrdiff_t>(row_at + kAssnStride));
     put_u32(row, kAssnUid, new_uid);
+    put_u32(row, kAssnStart, effective_start);
+    put_u32(row, kAssnFinish, effective_finish);
+    put_u32(row, kAssnResume, effective_start);
+    put_u32(row, kAssnStartCopy, effective_start);
     assn.fixed.insert(assn.fixed.end(), row.begin(), row.end());
 
     std::size_t const meta_at =
@@ -1107,6 +1322,13 @@ void recreate_assignment(State& state, std::size_t tombstone_row,
             static_cast<std::ptrdiff_t>(f2m_at + kAssnFixed2MetaEntry));
     put_u32(f2m_entry, kAssnFixed2MetaRowWord,
             static_cast<std::uint32_t>(new_row * kAssnFixed2Record));
+    f2m_entry[kAssnFixed2MetaManual] =
+        manual ? static_cast<std::uint8_t>(
+                     f2m_entry[kAssnFixed2MetaManual] |
+                     kAssnFixed2MetaManualBit)
+               : static_cast<std::uint8_t>(
+                     f2m_entry[kAssnFixed2MetaManual] &
+                     static_cast<std::uint8_t>(~kAssnFixed2MetaManualBit));
     f2m_entry[kAssnFixed2MetaFlags] = 0x00;
     f2m_entry[kAssnFixed2MetaLastByte] = kAssnFixed2MetaNewLastByte;
     assn.fixed2_meta.insert(assn.fixed2_meta.end(), f2m_entry.begin(),
@@ -1114,8 +1336,7 @@ void recreate_assignment(State& state, std::size_t tombstone_row,
 
     /* Project appends the blocks in this order (offsets 376, 384, 460, 480 in
      * the measured pair) but inserts the entries by ascending key. */
-    std::vector<std::uint8_t> created(std::begin(kAssnCreatedToken),
-                                      std::end(kAssnCreatedToken));
+    std::vector<std::uint8_t> created(session_word.begin(), session_word.end());
     std::array<std::uint32_t, 4> const keys = {
         kAssnCreatedField, kAssnContourField, kAssnZeroFieldA, kAssnZeroFieldB};
     std::array<std::vector<std::uint8_t>, 4> const payloads = {
@@ -1271,6 +1492,70 @@ bool apply_indent(State& state, OutlineEdit const& edit,
         return false;
     }
 
+    /* W29-0.4: the scheduling mode of the moved row and the new summary picks
+     * the rule set.  Both manual = the wave-28/29-0.1 shape; both automatic =
+     * the W29-0.4 shape; a MIX is not a pair Project ever saved and is
+     * refused.  The slack vector is validated here, before the first write. */
+    bool const moved_manual = row_is_manual(state, row);
+    bool const summary_manual = row_is_manual(state, parent);
+    if (moved_manual != summary_manual) {
+        warning = task_label(edit.uid) +
+                  " and its new summary (task uid " +
+                  std::to_string(summary.uid) +
+                  ") are scheduled differently (one automatic, one manual);"
+                  " no Project save pair measures a mixed-scheduling indent";
+        return false;
+    }
+    bool const automatic = !moved_manual;
+    if (automatic) {
+        if (row_is_manual(state, 0)) {
+            warning = task_label(edit.uid) +
+                      ": the project row is manually scheduled; the measured"
+                      " automatic roll-up needs the automatic project row";
+            return false;
+        }
+        if (summary.level != 1) {
+            warning = task_label(edit.uid) +
+                      ": the new summary is not a top-level row; the measured"
+                      " automatic roll-up needs a level-1 summary";
+            return false;
+        }
+        /* The project's own duration is the span from +96, and Project's save
+         * leaves +96 alone; the measured pairs have +96 == +104 == earliest. */
+        std::uint32_t const project_start =
+            state.rows.u32(0, task_row::kStart);
+        if (!is_date(project_start) || project_start != earliest ||
+            rows[0].start != earliest) {
+            warning = task_label(edit.uid) +
+                      ": the project row's start is not the moved subtree's"
+                      " earliest date; that automatic roll-up shape is not"
+                      " measured";
+            return false;
+        }
+        for (std::size_t child : rows[0].child_rows) {
+            if (child == row || child == parent || rows[child].deleted) {
+                continue;
+            }
+            if (!is_date(rows[child].finish) || rows[child].finish > latest) {
+                warning = task_label(edit.uid) +
+                          ": another top-level row finishes after the new"
+                          " summary's last date; that automatic roll-up shape"
+                          " is not measured";
+                return false;
+            }
+        }
+        std::vector<std::uint32_t> const expected =
+            automatic_slack_uids(state, rows);
+        if (!check_slack_set(edit.slack, expected, warning)) {
+            return false;
+        }
+    } else if (!edit.slack.empty()) {
+        warning = task_label(edit.uid) +
+                  ": the manual indent takes no +186/+190 slack, but the queued"
+                  " edit carries some";
+        return false;
+    }
+
     /* Capture the leaf's marker values before the roll-up overwrites them. */
     std::uint32_t const original_duration = summary.duration;
     std::uint16_t const original_format = summary.duration_format;
@@ -1298,17 +1583,43 @@ bool apply_indent(State& state, OutlineEdit const& edit,
                        kSummaryDurationFormat);
     state.rows.set_u32(parent, task_row::kStartAnchor, kInvalidDate);
 
+    if (automatic) {
+        /* W29-0.4 measured: the new summary's +88 and +108 roll up, and the
+         * project row takes the same duration/finish.  The guards above make
+         * the project's span identical to the summary's, so Project's +84 is
+         * this same summary_duration. */
+        state.rows.set_u32(parent, task_row::kRemainingDuration,
+                           edit.summary_duration);
+        state.rows.set_u32(parent, task_row::kFinish2, latest);
+        state.rows.set_u32(0, task_row::kDuration, edit.summary_duration);
+        state.rows.set_u32(0, task_row::kRemainingDuration,
+                           edit.summary_duration);
+        state.rows.set_u32(0, task_row::kFinish, latest);
+        state.rows.set_u32(0, task_row::kFinish2, latest);
+    }
+
     set_row_flags(state, parent, kFixed2FlagSummary);
     set_row_start_copy(state, parent, kInvalidDate);
     set_fixed2_meta_byte(state, parent, kFixed2MetaLeafTail, 0x00);
     set_fixed2_meta_byte(state, parent, kFixed2MetaKind, 0x08);
     set_fixed_meta_summary(state, parent);
-    set_fixed_meta_blob(state, parent, true);
+    set_fixed_meta_blob(state, parent, true, automatic);
 
     set_row_parent(state, row, row_identity(state, parent));
-    set_row_flags(state, row, rows[row].child_rows.empty()
-                                  ? kFixed2FlagChildLeaf
-                                  : kFixed2FlagSummary);
+    if (!automatic || !rows[row].child_rows.empty()) {
+        /* A moved automatic LEAF keeps its stored Fixed2Data +42 (0x30 in both
+         * automatic pairs); every other moved row takes the manual flags
+         * (0xA0 child leaf / 0x40 moved summary). */
+        set_row_flags(state, row, rows[row].child_rows.empty()
+                                      ? kFixed2FlagChildLeaf
+                                      : kFixed2FlagSummary);
+    }
+    if (automatic) {
+        for (std::size_t member : subtree) {
+            set_moved_fixed_meta_blob(state, member, true);
+        }
+        apply_slack(state, rows, edit.slack);
+    }
 
     std::size_t added = 0;
     std::size_t removed = 0;
@@ -1334,6 +1645,9 @@ bool apply_indent(State& state, OutlineEdit const& edit,
 
 bool apply_outdent(State& state, OutlineEdit const& edit,
                    std::vector<OutlineRow> const& rows, std::size_t row,
+                   bool have_project_start, std::uint32_t project_start,
+                   bool have_session_word,
+                   std::array<std::uint8_t, 4> const& session_word,
                    std::string& warning) {
     OutlineRow const& moved = rows[row];
     if (moved.level < 2) {
@@ -1398,21 +1712,135 @@ bool apply_outdent(State& state, OutlineEdit const& edit,
                   ": the parent summary has no valid effective start";
         return false;
     }
-    std::vector<std::uint8_t> parent_children_payload;
-    if (!stored_child_list(state, summary.uid, parent_children_payload)) {
-        warning = task_label(edit.uid) + ": the parent summary (task uid " +
+
+    /* W29-0.4: which rule set applies.  A MANUAL moved row needs a MANUAL
+     * parent (the wave-28 shape); an AUTOMATIC moved row was measured with
+     * both an automatic parent and a manual parent (the hybrid pair).  A
+     * manual row under an automatic parent is not measured. */
+    bool const moved_manual = row_is_manual(state, row);
+    bool const parent_manual = row_is_manual(state, parent);
+    if (moved_manual && !parent_manual) {
+        warning = task_label(edit.uid) +
+                  " is manually scheduled and its parent (task uid " +
                   std::to_string(summary.uid) +
-                  ") has no 0x0B4004E4 child list";
+                  ") is automatic; no Project save pair measures that mixed"
+                  " outdent";
         return false;
     }
-    std::vector<std::uint32_t> const parent_children =
-        decode_child_list(parent_children_payload);
-    if (parent_children.size() != 1 ||
-        parent_children.front() != moved.row_id) {
+    bool const automatic = !moved_manual;
+    std::vector<std::uint32_t> expected_slack;
+    if (automatic) {
+        if (moved.level != 2 || summary.level != 1) {
+            warning = task_label(edit.uid) +
+                      ": the automatic outdent is measured only for a level-2"
+                      " leaf whose parent is a level-1 summary";
+            return false;
+        }
+        if (row_is_manual(state, 0)) {
+            warning = task_label(edit.uid) +
+                      ": the project row is manually scheduled; the measured"
+                      " automatic roll-up needs the automatic project row";
+            return false;
+        }
+        if (!have_project_start || !is_date(project_start)) {
+            warning = task_label(edit.uid) +
+                      ": 114/Props has no project-start record (0x02400002),"
+                      " so the automatic row's Fixed2Data start copy cannot be"
+                      " written";
+            return false;
+        }
+        /* Project's save leaves the project row's own +96 alone.  In the
+         * automatic-parent pair the project row and the restored summary start
+         * with the moved row (restored start); in the hybrid pair the manual
+         * parent already starts at the restored start while the project row
+         * keeps the project-start record's date. */
+        std::uint32_t const wanted_project_start =
+            parent_manual ? project_start : edit.restored_start;
+        if (state.rows.u32(0, task_row::kStart) != wanted_project_start ||
+            rows[0].start != wanted_project_start ||
+            rows[parent].start != edit.restored_start ||
+            state.rows.u32(parent, task_row::kStart2) != edit.restored_start) {
+            warning = task_label(edit.uid) +
+                      ": the project row's or the parent's start (stored or"
+                      " effective) is not the measured automatic-outdent start;"
+                      " that roll-up shape is not measured";
+            return false;
+        }
+        for (std::size_t child : rows[0].child_rows) {
+            if (child == parent || rows[child].deleted) {
+                continue;
+            }
+            if (!is_date(rows[child].finish) ||
+                rows[child].finish > edit.restored_finish) {
+                warning = task_label(edit.uid) +
+                          ": another top-level row finishes after the restored"
+                          " finish; that automatic roll-up shape is not"
+                          " measured";
+                return false;
+            }
+        }
+        if (!is_date(moved.finish) ||
+            moved.finish > edit.restored_finish) {
+            warning = task_label(edit.uid) +
+                      ": the moved row's finish is after the restored finish;"
+                      " that automatic roll-up shape is not measured";
+            return false;
+        }
+        if (parent_manual &&
+            (rows[0].finish != edit.restored_finish ||
+             rows[parent].finish != edit.restored_finish ||
+             state.rows.u32(parent, task_row::kRemainingDuration) !=
+                 edit.restored_duration)) {
+            warning = task_label(edit.uid) +
+                      ": the project row's finish or the manual parent's"
+                      " finish/remaining duration is not the restored one; the"
+                      " measured hybrid outdent leaves those words alone";
+            return false;
+        }
+        expected_slack = automatic_slack_uids(state, rows);
+        if (parent_manual) {
+            add_slack_uid(expected_slack, summary.uid);
+        }
+        if (!check_slack_set(edit.slack, expected_slack, warning)) {
+            return false;
+        }
+    } else if (!edit.slack.empty()) {
         warning = task_label(edit.uid) +
-                  ": the parent's child list does not name exactly the moved"
-                  " row, so the parent's restored leaf shape is not measured";
+                  ": the manual outdent takes no +186/+190 slack, but the"
+                  " queued edit carries some";
         return false;
+    }
+
+    std::vector<std::uint8_t> parent_children_payload;
+    bool const parent_has_list =
+        stored_child_list(state, summary.uid, parent_children_payload);
+    if (automatic && parent_manual) {
+        /* MEASURED hybrid shape: an automatic child under a manual parent has
+         * no 0x0B4004E4 block, and Project does not remove one. */
+        if (parent_has_list) {
+            warning = task_label(edit.uid) + ": the manual parent summary"
+                      " (task uid " + std::to_string(summary.uid) +
+                      ") carries a 0x0B4004E4 child list; the measured hybrid"
+                      " outdent has none";
+            return false;
+        }
+    } else {
+        if (!parent_has_list) {
+            warning = task_label(edit.uid) + ": the parent summary (task uid " +
+                      std::to_string(summary.uid) +
+                      ") has no 0x0B4004E4 child list";
+            return false;
+        }
+        std::vector<std::uint32_t> const parent_children =
+            decode_child_list(parent_children_payload);
+        if (parent_children.size() != 1 ||
+            parent_children.front() != moved.row_id) {
+            warning = task_label(edit.uid) +
+                      ": the parent's child list does not name exactly the"
+                      " moved row, so the parent's restored leaf shape is not"
+                      " measured";
+            return false;
+        }
     }
     if (summary.parent_row == static_cast<std::size_t>(-1)) {
         warning = task_label(edit.uid) +
@@ -1441,13 +1869,19 @@ bool apply_outdent(State& state, OutlineEdit const& edit,
                   ": the project row already names the moved row as a child";
         return false;
     }
-    project_ids.push_back(moved.row_id);
-    std::sort(project_ids.begin(), project_ids.end());
+    bool const hybrid = automatic && parent_manual;
+    if (!hybrid) {
+        project_ids.push_back(moved.row_id);
+        std::sort(project_ids.begin(), project_ids.end());
+    }
 
     /* TBkndAssn (W29-0.1): Project RE-CREATES the assignment of the summary
      * that becomes a leaf again.  Measured only for exactly one tombstoned row
      * for that task (and no live row); the new row's contour is built from the
-     * tombstoned row's planned work, so that value must be a whole work tick. */
+     * tombstoned row's planned work, so that value must be a whole work tick.
+     * W29-0.4: its date words mirror the restored task's effective pair, and
+     * its 0x0F40027A block copies the current per-session word from 114/Props
+     * record 0x02400007. */
     std::vector<std::size_t> const assn_rows =
         assn_rows_for_task(state.assn, summary.uid);
     if (assn_rows.size() != 1 ||
@@ -1475,6 +1909,28 @@ bool apply_outdent(State& state, OutlineEdit const& edit,
     std::uint32_t const work_tick_count =
         static_cast<std::uint32_t>(work_ticks);
 
+    /* The re-created assignment's +52/+56/+60/+104 mirror the restored task's
+     * effective +104/+108.  The automatic pairs recompute +108 to the restored
+     * finish; the manual pair keeps the effective pair the file stored. */
+    std::uint32_t const assn_start =
+        state.rows.u32(parent, task_row::kStart2);
+    std::uint32_t const assn_finish =
+        parent_manual ? state.rows.u32(parent, task_row::kFinish2)
+                      : edit.restored_finish;
+    if (!is_date(assn_start) || !is_date(assn_finish)) {
+        warning = task_label(edit.uid) + ": the restored summary (task uid " +
+                  std::to_string(summary.uid) +
+                  ") has no valid effective start/finish, so the re-created"
+                  " assignment's date words cannot be written";
+        return false;
+    }
+    if (!have_session_word) {
+        warning = task_label(edit.uid) + ": 114/Props has no 0x02400007"
+                  " current-session word, so the re-created assignment's"
+                  " 0x0F40027A block cannot be written";
+        return false;
+    }
+
     std::uint32_t const new_level = moved.level - 1;
     state.rows.set_u32(parent, task_row::kDuration, edit.restored_duration);
     state.rows.set_u32(parent, task_row::kStart, edit.restored_start);
@@ -1482,7 +1938,22 @@ bool apply_outdent(State& state, OutlineEdit const& edit,
     state.rows.set_u16(parent, kHasChildrenByte, 0);
     state.rows.set_u16(parent, task_row::kDurationFormat,
                        edit.restored_duration_format);
-    state.rows.set_u32(parent, task_row::kStartAnchor, parent_start);
+    state.rows.set_u32(parent, task_row::kStartAnchor,
+                       parent_manual ? parent_start : kInvalidDate);
+
+    if (!parent_manual) {
+        /* W29-0.4 automatic-parent pair: the restored summary's +88 and +108
+         * roll up, and so do the project row's duration and finish.  The
+         * guards above make the project's span the restored duration. */
+        state.rows.set_u32(parent, task_row::kRemainingDuration,
+                           edit.restored_duration);
+        state.rows.set_u32(parent, task_row::kFinish2, edit.restored_finish);
+        state.rows.set_u32(0, task_row::kDuration, edit.restored_duration);
+        state.rows.set_u32(0, task_row::kRemainingDuration,
+                           edit.restored_duration);
+        state.rows.set_u32(0, task_row::kFinish, edit.restored_finish);
+        state.rows.set_u32(0, task_row::kFinish2, edit.restored_finish);
+    }
 
     state.rows.set_u16(row, kOutlineLevelWord,
                        static_cast<std::uint16_t>(new_level));
@@ -1492,34 +1963,68 @@ bool apply_outdent(State& state, OutlineEdit const& edit,
     set_row_flags(state, parent, summary.level == 1
                                      ? kFixed2FlagTopLevelLeaf
                                      : kFixed2FlagChildLeaf);
-    set_row_start_copy(state, parent, parent_start);
+    /* MEASURED: an automatic outdent (both the automatic and the hybrid
+     * manual-parent pair) stores the Props project-start record (0x02400002)
+     * in the restored leaf's +46, not the parent's +104; the wave-28 manual
+     * pair stores +104. */
+    set_row_start_copy(state, parent,
+                       automatic ? project_start : parent_start);
     set_fixed2_meta_byte(state, parent, kFixed2MetaKind, 0x10);
-    set_fixed_meta_blob(state, parent, false);
+    set_fixed_meta_blob(state, parent, false, !parent_manual);
 
     set_row_parent(state, row, row_identity(state, summary.parent_row));
     set_row_flags(state, row, new_level == 1 ? kFixed2FlagTopLevelLeaf
                                              : kFixed2FlagChildLeaf);
+    if (automatic) {
+        /* MEASURED: a top-level automatic leaf stores NA in +174, kind 0x10
+         * in Fixed2Meta, and the project start (Props 0x02400002) as its
+         * Fixed2Data +46 start copy. */
+        state.rows.set_u32(row, task_row::kStartAnchor, kInvalidDate);
+        set_fixed2_meta_byte(state, row, kFixed2MetaKind, 0x10);
+        set_row_start_copy(state, row, project_start);
+        set_moved_fixed_meta_blob(state, row, false);
+        apply_slack(state, rows, edit.slack);
+    }
 
     std::size_t added = 0;
     std::size_t removed = 0;
-    removed += remove_var_entries(state, summary.uid, kChildListField);
-    /* Project appends the project's grown child list first, then the restored
-     * leaf's 0x0B4004E5 block (measured: offsets 548 then 568). */
-    std::size_t project_added = 0;
-    set_var_block(state, kProjectUid, kChildListField,
-                  encode_child_list(project_ids), project_added);
-    added += project_added;
+    if (!hybrid) {
+        removed += remove_var_entries(state, summary.uid, kChildListField);
+        /* Project appends the project's grown child list first, then the
+         * restored leaf's 0x0B4004E5 block (measured: offsets 548 then 568).
+         * A block append to an EXISTING entry is not a field-count change;
+         * set_var_block only increments `added` for a new entry. */
+        std::size_t project_added = 0;
+        set_var_block(state, kProjectUid, kChildListField,
+                      encode_child_list(project_ids), project_added);
+        added += project_added;
+    }
     if (find_var_offsets(state.var_meta, kLeafField, summary.uid).empty()) {
         set_var_block(state, summary.uid, kLeafField,
                       std::vector<std::uint8_t>(std::begin(kLeafBlock),
                                                 std::end(kLeafBlock)),
                       added);
     }
-    recreate_assignment(state, tombstone_assn_row, parent, work_tick_count);
+    std::size_t moved_added = 0;
+    if (automatic &&
+        find_var_offsets(state.var_meta, kLeafField, moved.uid).empty()) {
+        /* MEASURED hybrid pair: the moved automatic row gains its leaf block
+         * after the restored parent's (offsets 536 then 548). */
+        set_var_block(state, moved.uid, kLeafField,
+                      std::vector<std::uint8_t>(std::begin(kLeafBlock),
+                                                std::end(kLeafBlock)),
+                      moved_added);
+    }
+    recreate_assignment(state, tombstone_assn_row, parent, work_tick_count,
+                        assn_start, assn_finish, parent_manual, session_word);
 
     adjust_field_count(state, parent,
                        static_cast<std::int64_t>(added) -
                            static_cast<std::int64_t>(removed));
+    if (moved_added != 0) {
+        adjust_field_count(state, row,
+                           static_cast<std::int64_t>(moved_added));
+    }
     return true;
 }
 
@@ -1569,6 +2074,39 @@ OutlineWriteResult write_outline_edits(CfbDocument& doc,
                                        std::string_view table) {
     OutlineWriteResult result;
     State state(doc, table);
+
+    /* 114/Props is read before the edits because an automatic outdent needs the
+     * project-start record, an outdent's re-created assignment copies the
+     * current-session word, and the project-finish record is rewritten after
+     * them.  A missing stream is only fatal once something is written (the
+     * existing behaviour); a malformed record is fatal here. */
+    std::string const props_path = props_path_for(table);
+    bool const has_props = doc.has_stream(props_path);
+    std::vector<std::uint8_t> props =
+        has_props ? doc.read_stream(props_path) : std::vector<std::uint8_t>{};
+    std::size_t const project_start_at =
+        has_props ? props_record_payload(props, kPropProjectStart)
+                  : static_cast<std::size_t>(-1);
+    std::size_t const project_finish_at =
+        has_props ? props_record_payload(props, kPropProjectFinish)
+                  : static_cast<std::size_t>(-1);
+    std::size_t const session_word_at =
+        has_props ? props_record_payload(props, kPropSessionWord)
+                  : static_cast<std::size_t>(-1);
+    bool const have_project_start =
+        project_start_at != static_cast<std::size_t>(-1);
+    std::uint32_t const project_start =
+        have_project_start ? get_u32(props, project_start_at) : kInvalidDate;
+    bool const have_session_word =
+        session_word_at != static_cast<std::size_t>(-1);
+    std::array<std::uint8_t, 4> session_word{};
+    if (have_session_word) {
+        std::copy(props.begin() + static_cast<std::ptrdiff_t>(session_word_at),
+                  props.begin() +
+                      static_cast<std::ptrdiff_t>(session_word_at + 4),
+                  session_word.begin());
+    }
+
     for (OutlineEdit const& edit : edits) {
         if (edit.uid == 0) {
             result.warnings.push_back(
@@ -1591,9 +2129,12 @@ OutlineWriteResult write_outline_edits(CfbDocument& doc,
         }
         std::vector<OutlineRow> const rows = build_rows(state);
         std::string warning;
-        bool const applied = edit.indent
-                                 ? apply_indent(state, edit, rows, row, warning)
-                                 : apply_outdent(state, edit, rows, row, warning);
+        bool const applied =
+            edit.indent
+                ? apply_indent(state, edit, rows, row, warning)
+                : apply_outdent(state, edit, rows, row, have_project_start,
+                                project_start, have_session_word, session_word,
+                                warning);
         if (!applied) {
             result.warnings.push_back(std::move(warning));
             continue;
@@ -1638,13 +2179,20 @@ OutlineWriteResult write_outline_edits(CfbDocument& doc,
     std::vector<std::uint8_t> const final_assn_var_meta =
         merge_logical_var_meta(assn.original_var_meta, assn.var_meta);
 
-    /* --- 114/Props: the six counters an outline save moves ---------------- */
-    std::string const props_path = props_path_for(table);
-    if (!doc.has_stream(props_path)) {
+    /* --- 114/Props: the six counters an outline save moves, and the
+     * project-finish date record every pair keeps equal to the project row's
+     * +100 ------------------------------------------------------------- */
+    if (!has_props) {
         throw Error(props_path +
                     " is absent, so the outline save counters cannot be kept");
     }
-    std::vector<std::uint8_t> props = doc.read_stream(props_path);
+    if (project_finish_at == static_cast<std::size_t>(-1)) {
+        throw Error("114/Props has no 4-byte project-finish record "
+                    "0x02400003, so the saved project finish cannot be kept"
+                    " equal to the project row");
+    }
+    put_u32(props, project_finish_at,
+            state.rows.u32(0, task_row::kFinish));
     std::size_t const task_freed_at = props_value_offset(props, kPropTaskFreed);
     std::size_t const task_size_at =
         props_value_offset(props, kPropTaskVar2Size);

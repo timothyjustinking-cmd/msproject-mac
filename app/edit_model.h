@@ -139,6 +139,20 @@ struct ActualsTarget {
     double step_percent = 0.0;
 };
 
+// One row's recalculated slack/late-date words in an outline edit (W29-0.4).
+// The app copies of mppwrite::OutlineSlack: the same five values Project's
+// automatic save writes into +74/+112/+116/+186/+190.  `late_start` and
+// `late_finish` are date32 words (the file's packed dates are the same
+// counter).
+struct OutlineSlackEntry {
+    std::uint32_t uid = 0;
+    std::uint32_t free_slack = 0;
+    std::uint32_t start_slack = 0;
+    std::uint32_t total_slack = 0;
+    date32 late_start = kDateNa;
+    date32 late_finish = kDateNa;
+};
+
 // One pending edit, as the user asked for it.
 struct StructuralEdit {
     StructuralKind kind = StructuralKind::insert_task;
@@ -222,6 +236,13 @@ struct StructuralEdit {
     // valid dates in order.
     date32 restored_start = kDateNa;
     date32 restored_finish = kDateNa;
+    // outline_indent/outdent (W29-0.4): the +74/+112/+116/+186/+190 words of
+    // every row an AUTOMATIC save recalculates -- every live automatic row, plus
+    // the restored manual parent of a hybrid outdent.  make_outline_edit
+    // computes them from the file's outline and the project calendar; the
+    // manual shape carries none, and the writer refuses a vector that does not
+    // name exactly the rows Project recalculates.
+    std::vector<OutlineSlackEntry> slack;
 
     core::gantt::LinkType link_type = core::gantt::LinkType::finish_to_start;
     // The lag in 6-second file ticks (4800 = one 8-hour working day).
@@ -323,13 +344,30 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
 //            duration), and the marker words are carried so the writer can
 //            prove the file has not moved under the edit.
 //
+// W29-0.4: an AUTOMATIC indent (moved row and new summary both automatic) and
+// an automatic outdent (the moved row automatic, the parent automatic or
+// manual -- the hybrid pair) are enabled for the shapes the four wave-29 save
+// pairs measured (wave29-outline-auto-indent/-summary/-auto-outdent/
+// -manual-parent).  make_outline_edit computes the resulting schedule and
+// fills StructuralEdit::slack: for every live automatic row, and the restored
+// manual parent of a hybrid outdent,
+//   slack = calendar.work_time_between(row's resulting +108, project +108),
+//   +74 = +186 = +190 = slack,
+//   +112 = add_work(row +104, slack), +116 = add_work(row +108, slack).
+// The indent's new summary and the project row roll up to the moved subtree's
+// latest finish; an outdent's project finish is the restored finish.  A mixed
+// indent (one row automatic, one manual) and a manual row under an automatic
+// parent are still refused: no pair measures those directions.
+//
 // uid 0, an unknown uid, a pending insert (file_row == 0), a summary for
-// outdent, an unreadable file/outline/calendar, a row that is not manually
-// scheduled (every measured outline row is), an indent whose new summary
-// carries progress, assignment work or an actuals edit queued in the same save
-// (name its uid in `pending_actuals`), and the shapes outline.h lists as
-// unmeasured are refused with `error` naming the reason.  `out` is left
-// default-constructed on refusal.
+// outdent, an unreadable file/outline/calendar, a mixed-scheduling shape, an
+// automatic shape the writer's guards reject (project row manual, a start that
+// is not the measured roll-up start, another top-level row finishing after the
+// new project finish), an indent whose new summary carries progress,
+// assignment work or an actuals edit queued in the same save (name its uid in
+// `pending_actuals`), and the shapes outline.h lists as unmeasured are refused
+// with `error` naming the reason.  `out` is left default-constructed on
+// refusal.
 bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                        std::uint32_t uid, bool indent, StructuralEdit& out,
                        std::string& error,

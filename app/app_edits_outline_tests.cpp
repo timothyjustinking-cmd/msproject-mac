@@ -1,23 +1,32 @@
 // app/app_edits_outline_tests.cpp -- Indent / Outdent through the app's edit
 // model and save cascade against Project's own save pairs (wave 28 measured the
-// pairs; wave 29, W29-0.1, gave the writer the assignment table and 114/Props).
+// manual pairs; wave 29, W29-0.1, gave the writer the assignment table and
+// 114/Props; W29-0.4 measured the automatic pairs).
 //
 // For each committed pair (tests/data/wave28-outline-{indent,summary,outdent}
-// and the matching -control.mpp; neutral metadata and the neutral C:/w28 drive
-// path, see tests/data/README.md and core/mppwrite/outline.h) this test:
+// and tests/data/wave29-outline-auto-{indent,summary,outdent} plus
+// wave29-outline-manual-parent, and the matching -control.mpp; neutral metadata
+// and the neutral C:/w28 drive path, see tests/data/README.md and
+// core/mppwrite/outline.h) this test:
 //
 //   1. loads the pair's CONTROL through the app's reader adapter and builds the
 //      edit with make_outline_edit() -- the app's own file-side validation and
 //      calendar arithmetic -- then proves the measured words it computed:
-//        indent : the new summary's +84 is 0x2ee0 for both measured indents
-//                 (the calendar's working time across the moved subtree);
+//        indent : the new summary's +84 is 0x2ee0 for both measured manual
+//                 indents and 0x3840 / 0x2580 for the automatic ones (the
+//                 calendar's working time across the moved subtree);
 //        outdent: the restored marker words are 0x5dc0 / format 7 and the
 //                 restored schedule is next_start(parent +104) = 0x3bf212c0,
 //                 add_work(that, 0x5dc0) = 0x3bf627d8 (Project's words);
+//        automatic shapes also carry the slack set Project's save writes on
+//                 every recalculated row (+74/+112/+116/+186/+190), measured
+//                 from the result file (W29-0.4); the manual pairs carry none;
 //   2. queues it with push(), checks the DISPLAY the edit model would show
-//      (levels, OutlineNumber paths, summary flags, +84 durations; the +104/
-//      +108 dates the sheet and Gantt draw are unchanged, as Project's save
-//      leaves them), and checks undo restores the control and redo the move;
+//      (levels, OutlineNumber paths, summary flags, +84 durations; the manual
+//      pairs leave the +104/+108 dates the sheet and Gantt draw alone, while an
+//      automatic save recomputes the summary's +108 and the project row's
+//      duration/finish, which the display follows -- W29-0.4), and checks undo
+//      restores the control and redo the move;
 //   3. saves it with the real cascade into APP_TEST_OUT_DIR and proves every
 //      stream the writer owns matches PROJECT's own save, field by field
 //      (W29-0.1, the wave-28 review's R28-1: wave 28 compared these with the
@@ -495,6 +504,47 @@ Bytes canonical_assn_fixed2(const Bytes& assn_fixed2, std::size_t assn_rows,
     return out;
 }
 
+/* W29-0.4: one row of the slack words an AUTOMATIC edit makes the save write.
+ * The measured rule (build_outline_slack): free = start = total =
+ * work_time_between(row finish, resulting project finish), late start =
+ * add_work(row start, start_slack), late finish = add_work(row finish,
+ * total_slack) = the resulting project finish. */
+struct SlackExpect {
+    std::uint32_t uid;
+    std::uint32_t free_slack;
+    std::uint32_t start_slack;
+    std::uint32_t total_slack;
+    std::uint32_t late_start_raw;
+    std::uint32_t late_finish_raw;
+};
+
+const SlackExpect kAutoIndentSlack[] = {
+    {0, 0, 0, 0, 0x3BF212C0u, 0x3BF427D8u},
+    {1, 0, 0, 0, 0x3BF212C0u, 0x3BF427D8u},
+    {2, 0, 0, 0, 0x3BF212C0u, 0x3BF427D8u},
+    {3, 4800, 4800, 4800, 0x3BF312C0u, 0x3BF427D8u},
+};
+const SlackExpect kAutoSummarySlack[] = {
+    {0, 0, 0, 0, 0x3BF212C0u, 0x3BF327D8u},
+    {1, 0, 0, 0, 0x3BF212C0u, 0x3BF327D8u},
+    {2, 0, 0, 0, 0x3BF212C0u, 0x3BF327D8u},
+    {3, 0, 0, 0, 0x3BF212C0u, 0x3BF327D8u},
+};
+const SlackExpect kAutoOutdentSlack[] = {
+    {0, 0, 0, 0, 0x3BF212C0u, 0x3BF627D8u},
+    {1, 0, 0, 0, 0x3BF212C0u, 0x3BF627D8u},
+    {2, 9600, 9600, 9600, 0x3BF412C0u, 0x3BF627D8u},
+    {3, 14400, 14400, 14400, 0x3BF512C0u, 0x3BF627D8u},
+};
+/* The hybrid pair: the parent uid 1 is MANUAL, so the save recalculates it as
+ * the restored leaf plus the automatic project row and moved row; the other
+ * manual row (uid 3) keeps its stale late dates and is absent. */
+const SlackExpect kManualParentSlack[] = {
+    {0, 0, 0, 0, 0x3BF11E78u, 0x3BF627D8u},
+    {1, 0, 0, 0, 0x3BF212C0u, 0x3BF627D8u},
+    {2, 9600, 9600, 9600, 0x3BF412C0u, 0x3BF627D8u},
+};
+
 struct PairCase {
     const char* slug;
     const char* control;
@@ -509,6 +559,10 @@ struct PairCase {
     std::uint16_t restored_duration_format;
     std::uint32_t restored_start_raw;
     std::uint32_t restored_finish_raw;
+    /* W29-0.4: the slack set an automatic edit carries (empty for the manual
+     * wave-28 pairs). */
+    const SlackExpect* slack = nullptr;
+    std::size_t slack_count = 0;
 };
 
 const PairCase kPairs[] = {
@@ -523,6 +577,27 @@ const PairCase kPairs[] = {
      * leaf again with the marker's stored duration and a restored schedule. */
     {"outdent", "wave28-outline-outdent-control.mpp", "wave28-outline-outdent.mpp",
      2, false, 1, 0, 0x5DC0u, 0x0007u, 0x3BF212C0u, 0x3BF627D8u},
+    /* W29-0.4: the four automatic-scheduling pairs.  Project recalculates every
+     * automatic row, so the save ALSO writes the summary's +108 and the project
+     * row's duration/finish, and the edit carries the slack words measured from
+     * Project's result file (core/mppwrite/outline.h). */
+    {"auto-indent", "wave29-outline-auto-indent-control.mpp",
+     "wave29-outline-auto-indent.mpp", 2, true, 1, 0x3840u, 0, 0, 0, 0,
+     kAutoIndentSlack, sizeof(kAutoIndentSlack) / sizeof(kAutoIndentSlack[0])},
+    {"auto-summary", "wave29-outline-auto-summary-control.mpp",
+     "wave29-outline-auto-summary.mpp", 2, true, 1, 0x2580u, 0, 0, 0, 0,
+     kAutoSummarySlack, sizeof(kAutoSummarySlack) / sizeof(kAutoSummarySlack[0])},
+    {"auto-outdent", "wave29-outline-auto-outdent-control.mpp",
+     "wave29-outline-auto-outdent.mpp", 2, false, 1, 0, 0x5DC0u, 0x0007u,
+     0x3BF212C0u, 0x3BF627D8u, kAutoOutdentSlack,
+     sizeof(kAutoOutdentSlack) / sizeof(kAutoOutdentSlack[0])},
+    /* The hybrid pair: an automatic row leaving a MANUAL parent.  The restored
+     * parent keeps its effective +104/+108; its duration and the slack words
+     * are the automatic rule's. */
+    {"manual-parent", "wave29-outline-manual-parent-control.mpp",
+     "wave29-outline-manual-parent.mpp", 2, false, 1, 0, 0x5DC0u, 0x0007u,
+     0x3BF212C0u, 0x3BF627D8u, kManualParentSlack,
+     sizeof(kManualParentSlack) / sizeof(kManualParentSlack[0])},
 };
 
 const app::TaskRow* find_row(const app::PlanInput& plan, std::uint32_t uid) {
@@ -565,6 +640,12 @@ void check_row_row(const app::TaskRow& shown, const app::TaskRow& expected,
 void check_display_matches(const app::PlanInput& shown,
                            const app::PlanInput& expected, const char* slug,
                            const char* side) {
+    // W29-0.4: an automatic save recalculates the project row's duration and
+    // finish, and the display plan follows; the manual shapes leave both.
+    check_size(shown.project_duration_ticks, expected.project_duration_ticks,
+               (std::string(slug) + " " + side + " project duration").c_str());
+    check(shown.project_finish == expected.project_finish,
+          (std::string(slug) + " " + side + " project finish").c_str());
     for (std::uint32_t uid = 1; uid <= 3; ++uid) {
         const app::TaskRow* a = find_row(shown, uid);
         const app::TaskRow* b = find_row(expected, uid);
@@ -648,6 +729,32 @@ void check_pair(const PairCase& pair) {
         check_size(app::packed_from_date32(edit.restored_finish),
                    pair.restored_finish_raw,
                    "the restored finish is add_work(start, marker duration)");
+    }
+    // W29-0.4: the automatic shapes carry the recalculated rows' slack words,
+    // the manual ones carry none.
+    check_size(edit.slack.size(), pair.slack_count,
+               "the edit carries Project's slack rows");
+    if (edit.slack.size() == pair.slack_count) {
+        for (std::size_t index = 0; index < pair.slack_count; ++index) {
+            const SlackExpect& want = pair.slack[index];
+            const app::OutlineSlackEntry& got = edit.slack[index];
+            const std::string at =
+                "slack row " + std::to_string(index) + " (uid " +
+                std::to_string(want.uid) + ")";
+            check_size(got.uid, want.uid, (at + " uid").c_str());
+            check_size(got.free_slack, want.free_slack,
+                       (at + " free slack").c_str());
+            check_size(got.start_slack, want.start_slack,
+                       (at + " start slack").c_str());
+            check_size(got.total_slack, want.total_slack,
+                       (at + " total slack").c_str());
+            check_size(app::packed_from_date32(got.late_start),
+                       want.late_start_raw,
+                       (at + " late start").c_str());
+            check_size(app::packed_from_date32(got.late_finish),
+                       want.late_finish_raw,
+                       (at + " late finish").c_str());
+        }
     }
 
     /* --- push + display + undo/redo -------------------------------------- */
@@ -1181,10 +1288,11 @@ void check_refusals() {
                                   edit, error),
           "an unknown uid is refused");
 
-    // W29-0.0 (the wave-28 review's R28-4, High): every measured outline row is
-    // manually scheduled, so the edit model refuses a moved row or an involved
-    // summary that is automatic.  The file's Fixed2Meta bit is the authority;
-    // these copies clear it without touching the committed pairs.
+    // W29-0.4 (R28-4, High): the measured automatic shapes are the four wave-29
+    // pairs above.  A MIXED indent -- the moved row and the row that would
+    // become its summary scheduled differently -- is still refused: no Project
+    // save pair measures it.  The file's Fixed2Meta bit is the authority; these
+    // copies clear it without touching the committed pairs.
     std::error_code out_error;
     std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
                                         out_error);
@@ -1204,9 +1312,9 @@ void check_refusals() {
         }
         check(!app::make_outline_edit(auto_plan, auto_moved_path.string(), 2, true,
                                       edit, error),
-              "indent of an automatically scheduled row is refused");
-        check(error.find("automatically scheduled") != std::string::npos,
-              "the automatic-row refusal names the scheduling mode");
+              "a mixed-scheduling indent is refused");
+        check(error.find("scheduled differently") != std::string::npos,
+              "the mixed-indent refusal names the scheduling difference");
     }
 
     const std::filesystem::path auto_parent_path =

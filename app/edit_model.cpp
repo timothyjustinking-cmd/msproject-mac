@@ -293,6 +293,117 @@ bool check_new_summary_shape(const PlanInput& plan, std::uint32_t uid,
     return true;
 }
 
+// W29-0.4: the five schedule words Project's automatic save rewrites on every
+// row it recalculates (the four wave-29 outline pairs):
+//   slack = work_time_between(row's resulting +108, project's resulting +108)
+//   +74 = +186 = +190 = slack
+//   +112 = the project start on the project row; every other row's is the
+//          BACKWARD pass sub_work(project's resulting +108, row's resulting
+//          +84), NOT add_work(row's +104, slack): on auto-indent uid 3 the
+//          measured late start is 3bf312c0 (sub_work(3bf427d8, 9600)) while
+//          add_work(3bf212c0, 4800) is 3bf227d8.  The project row keeps the
+//          project start record, which in the hybrid pair (3bf11e78) is earlier
+//          than any task's backward pass.
+//   +116 = the project's resulting +108 on every row.
+// The uids are every live automatic row plus `extra_uids` (the restored manual
+// parent of a hybrid outdent), which is exactly the set the writer accepts.
+// `resulting_finish` and `resulting_duration` hold each row's +108 and +84 after
+// the edit; the rows the edit does not roll up keep the file's.
+bool build_outline_slack(const std::vector<mppwrite::OutlineRow>& rows,
+                         const core::sched::Calendar& calendar,
+                         std::uint32_t project_finish,
+                         const std::vector<std::uint32_t>& resulting_finish,
+                         const std::vector<std::uint32_t>& resulting_duration,
+                         const std::vector<std::uint32_t>& extra_uids,
+                         std::vector<OutlineSlackEntry>& out,
+                         std::string& error) {
+    if (resulting_finish.size() != rows.size() ||
+        resulting_duration.size() != rows.size()) {
+        error = "the outline changed while the edit was being made";
+        return false;
+    }
+    std::vector<std::uint32_t> uids;
+    for (const mppwrite::OutlineRow& row : rows) {
+        if (!row.deleted && !row.manual) {
+            uids.push_back(row.uid);
+        }
+    }
+    for (const std::uint32_t uid : extra_uids) {
+        if (std::find(uids.begin(), uids.end(), uid) == uids.end()) {
+            uids.push_back(uid);
+        }
+    }
+    std::sort(uids.begin(), uids.end());
+    std::vector<OutlineSlackEntry> built;
+    built.reserve(uids.size());
+    for (const std::uint32_t uid : uids) {
+        std::size_t index = rows.size();
+        for (std::size_t candidate = 0; candidate < rows.size(); ++candidate) {
+            if (rows[candidate].uid == uid) {
+                index = candidate;
+                break;
+            }
+        }
+        if (index == rows.size()) {
+            error = "task uid " + std::to_string(uid) +
+                    " is not in the saved outline, so its slack cannot be "
+                    "computed";
+            return false;
+        }
+        const std::uint32_t start = rows[index].start;
+        const std::uint32_t finish = resulting_finish[index];
+        const std::uint32_t duration = resulting_duration[index];
+        if (!mppwrite::is_date(start) || !mppwrite::is_date(finish) ||
+            !mppwrite::is_date(project_finish)) {
+            error = "task uid " + std::to_string(uid) +
+                    " has no valid start or resulting finish, so its slack "
+                    "cannot be computed";
+            return false;
+        }
+        const core::sched::ticks slack = calendar.work_time_between(
+            static_cast<core::sched::date32>(finish),
+            static_cast<core::sched::date32>(project_finish));
+        if (slack < 0) {
+            error = "task uid " + std::to_string(uid) +
+                    " finishes after the resulting project finish; the measured "
+                    "automatic roll-up has no negative slack";
+            return false;
+        }
+        if (static_cast<std::uint64_t>(slack) > 0xFFFFFFFFull) {
+            error = "task uid " + std::to_string(uid) +
+                    "'s slack does not fit the file's u32 word";
+            return false;
+        }
+        core::sched::date32 late_start = 0;
+        if (uid == 0) {
+            late_start = static_cast<core::sched::date32>(start);
+        } else {
+            late_start = calendar.sub_work(
+                static_cast<core::sched::date32>(project_finish), duration);
+        }
+        const core::sched::date32 late_finish =
+            static_cast<core::sched::date32>(project_finish);
+        if (core::sched::is_overflow(late_start) ||
+            core::sched::is_overflow(late_finish) ||
+            core::sched::is_na(late_start) ||
+            core::sched::is_na(late_finish)) {
+            error = "task uid " + std::to_string(uid) +
+                    "'s late dates overflow the project calendar";
+            return false;
+        }
+        OutlineSlackEntry entry;
+        entry.uid = uid;
+        entry.free_slack = static_cast<std::uint32_t>(slack);
+        entry.start_slack = entry.free_slack;
+        entry.total_slack = entry.free_slack;
+        entry.late_start = late_start;
+        entry.late_finish = late_finish;
+        built.push_back(entry);
+    }
+    out = std::move(built);
+    return true;
+}
+
 // The percent transitions the committed Project pairs measured
 // (tests/data/wave28-percent-*, wave29-percent-*): on a FLAT top-level leaf,
 // automatic 0 -> 40, 40 -> 100 and 100 -> 0 and manual 0 -> 40; the wave-29
@@ -467,9 +578,14 @@ void apply_field_to_row(TaskRow& row, const StructuralEdit& edit) {
 // start/finish are NOT touched: the writer stores the roll-up in +96/+100 and
 // leaves the effective +104/+108 pair alone, and that pair is what TaskRow and
 // the sheet show (reader.h Task::start/finish), so the measured saves leave
-// the displayed dates where the control had them.  Numbers are recomputed once
-// at the end, because every row below the move keeps its ID but changes
-// sibling path.
+// the displayed dates where the control had them.
+// W29-0.4: an AUTOMATIC edit carries slack, and its save DOES recompute the
+// summary row's effective +108 (Project recalculates the automatic rows): an
+// indent's new summary finishes at the moved subtree's latest date, which is
+// every slack entry's late finish (the resulting project finish); an outdent's
+// restored leaf finishes at restored_finish.  The manual shapes carry no slack
+// and keep the dates the file stored.  Numbers are recomputed once at the end,
+// because every row below the move keeps its ID but changes sibling path.
 void apply_outline_to_tasks(std::vector<TaskRow>& tasks,
                             const std::vector<StructuralEdit>& applied) {
     bool changed = false;
@@ -500,10 +616,16 @@ void apply_outline_to_tasks(std::vector<TaskRow>& tasks,
             tasks[parent].summary = true;
             tasks[parent].duration_ticks =
                 static_cast<std::int64_t>(edit.summary_duration);
+            if (!edit.slack.empty()) {
+                tasks[parent].finish = edit.slack.front().late_finish;
+            }
         } else {
             tasks[parent].summary = false;
             tasks[parent].duration_ticks =
                 static_cast<std::int64_t>(edit.restored_duration);
+            if (!edit.slack.empty()) {
+                tasks[parent].finish = edit.restored_finish;
+            }
         }
     }
     if (!changed) {
@@ -1004,19 +1126,12 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                 "undo it first";
         return false;
     }
-    // W29-0.0 (R28-4): every committed outline pair consists of MANUALLY
-    // scheduled rows (Project's COM facts record manual:true on IDs 1-3 for all
-    // three pairs; build/w28/W28-2.1-project-outline-edit.json).  An automatic
-    // row stores different +164/+174 and duration words, and no pair measured
-    // them, so the shape is refused until W29-0.4 measures one.  The file's
-    // Fixed2Meta bit is the authority (the plan's flag is the same bit through
-    // the reader).
-    if (!mppwrite::task_is_manually_scheduled(document, rows[moved].row)) {
-        error = "task uid " + std::to_string(uid) +
-                " is automatically scheduled; no Project save pair measures an "
-                "outline edit on an automatic row (all measured rows are manual)";
-        return false;
-    }
+    // W29-0.4 (R28-4): the scheduling mode of the moved row and the rows the
+    // edit touches picks the rule set.  Both manual is the wave-28 shape; both
+    // automatic (and, for outdent, an automatic row under a manual parent --
+    // the hybrid pair) is the wave-29 shape; a mixed edit is refused below,
+    // once the sibling/parent is known.
+
     core::sched::Calendar calendar;
     try {
         calendar = core::cal::load_project_calendar(std::string(source_path));
@@ -1048,15 +1163,8 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                     ": the preceding sibling is a deleted row";
             return false;
         }
-        // W29-0.0: every row the measured indent touches is manually scheduled,
-        // and the new summary carries no progress, work or queued actuals.
-        if (!mppwrite::task_is_manually_scheduled(document, summary.row)) {
-            error = "task uid " + std::to_string(summary.uid) +
-                    " would become the summary but is automatically scheduled; "
-                    "no Project save pair measures an outline edit on an automatic "
-                    "row (all measured rows are manual)";
-            return false;
-        }
+        // W29-0.4: the new summary carries no progress, work or queued actuals
+        // in every measured pair, manual or automatic.
         if (!check_new_summary_shape(plan, summary.uid, pending_actuals, error)) {
             return false;
         }
@@ -1123,6 +1231,73 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                     ": the moved subtree's working-time span cannot be stored";
             return false;
         }
+        // W29-0.4: manual/manual is the wave-28 shape and carries no slack;
+        // automatic/automatic is the wave-29 shape, whose save recalculates
+        // every live automatic row.  A mixed indent is not a pair Project
+        // saved.
+        if (rows[moved].manual != summary.manual) {
+            error = "task uid " + std::to_string(uid) +
+                    " and its new summary (task uid " +
+                    std::to_string(summary.uid) +
+                    ") are scheduled differently; no Project save pair measures "
+                    "a mixed-scheduling indent";
+            return false;
+        }
+        if (!summary.manual) {
+            if (rows[0].manual) {
+                error = "the project row is manually scheduled; the measured "
+                        "automatic indent needs the automatic project row";
+                return false;
+            }
+            if (summary.level != 1) {
+                error = "task uid " + std::to_string(summary.uid) +
+                        " would become a non-top-level summary; the measured "
+                        "automatic indent needs a level-1 summary";
+                return false;
+            }
+            if (rows[0].start != earliest) {
+                error = "the project row's effective start (+104) is not the "
+                        "moved subtree's earliest date; that automatic roll-up "
+                        "shape is not measured";
+                return false;
+            }
+            if (summary.start != earliest) {
+                error = "task uid " + std::to_string(summary.uid) +
+                        "'s effective start (+104) is not the moved subtree's "
+                        "earliest date; that automatic roll-up shape is not "
+                        "measured";
+                return false;
+            }
+            for (const std::size_t child : rows[0].child_rows) {
+                if (child == moved || child == parent_index ||
+                    rows[child].deleted) {
+                    continue;
+                }
+                if (!mppwrite::is_date(rows[child].finish) ||
+                    rows[child].finish > latest) {
+                    error = "another top-level row finishes after the new "
+                            "summary's last date; that automatic roll-up shape "
+                            "is not measured";
+                    return false;
+                }
+            }
+            std::vector<std::uint32_t> resulting_finish(rows.size());
+            std::vector<std::uint32_t> resulting_duration(rows.size());
+            for (std::size_t index = 0; index < rows.size(); ++index) {
+                resulting_finish[index] = rows[index].finish;
+                resulting_duration[index] = rows[index].duration;
+            }
+            resulting_finish[parent_index] = latest;
+            resulting_finish[0] = latest;
+            resulting_duration[parent_index] =
+                static_cast<std::uint32_t>(span);
+            resulting_duration[0] = static_cast<std::uint32_t>(span);
+            if (!build_outline_slack(rows, calendar, latest, resulting_finish,
+                                     resulting_duration, {}, out.slack,
+                                     error)) {
+                return false;
+            }
+        }
         out.summary_duration = static_cast<std::uint32_t>(span);
         out.anchor_uid = summary.uid;
         return true;
@@ -1141,15 +1316,9 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
         return false;
     }
     const mppwrite::OutlineRow& summary = rows[parent_index];
-    // W29-0.0: the measured outdent's parent is manually scheduled too (the
-    // header used to claim the opposite); an automatic parent has no pair.
-    if (!mppwrite::task_is_manually_scheduled(document, summary.row)) {
-        error = "task uid " + std::to_string(summary.uid) +
-                " is the parent summary and is automatically scheduled; no "
-                "Project save pair measures an outline edit on an automatic row "
-                "(all measured rows are manual)";
-        return false;
-    }
+    // W29-0.4: an automatic row may leave an automatic parent (the wave-29
+    // automatic pair) or a manual one (the hybrid pair); a MANUAL row under an
+    // automatic parent has no pair and is refused below.
     if (summary.child_rows.size() != 1 || summary.child_rows.front() != moved) {
         error = "task uid " + std::to_string(uid) +
                 ": its parent has another child; outdenting from a parent that "
@@ -1189,6 +1358,92 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
         error = "task uid " + std::to_string(uid) +
                 ": the restored schedule overflows the project calendar";
         return false;
+    }
+    // W29-0.4: a MANUAL row out of a MANUAL parent is the wave-28 shape and
+    // carries no slack; an AUTOMATIC row out of either an automatic parent
+    // (the wave-29 automatic pair) or a manual one (the hybrid pair) makes
+    // Project recalculate every live automatic row, plus the restored manual
+    // parent of the hybrid.  A manual row out of an automatic parent has no
+    // pair and is refused.
+    const bool moved_manual = rows[moved].manual;
+    if (moved_manual && !summary.manual) {
+        error = "task uid " + std::to_string(uid) +
+                " is manually scheduled and its parent (task uid " +
+                std::to_string(summary.uid) +
+                ") is automatically scheduled; no Project save pair measures "
+                "that mixed outdent";
+        return false;
+    }
+    if (!moved_manual) {
+        if (rows[0].manual) {
+            error = "the project row is manually scheduled; the measured "
+                    "automatic outdent needs the automatic project row";
+            return false;
+        }
+        if (rows[moved].level != 2 || summary.level != 1) {
+            error = "task uid " + std::to_string(uid) +
+                    ": the automatic outdent is measured only for a level-2 "
+                    "leaf whose parent is a level-1 summary";
+            return false;
+        }
+        if (summary.start != restored_start) {
+            error = "task uid " + std::to_string(summary.uid) +
+                    ": the parent summary's effective start (+104) is not the "
+                    "measured automatic-outdent start; that roll-up shape is "
+                    "not measured";
+            return false;
+        }
+        if (!summary.manual && rows[0].start != restored_start) {
+            error = "the project row's effective start (+104) is not the "
+                    "measured automatic-outdent start; that roll-up shape is "
+                    "not measured";
+            return false;
+        }
+        if (!mppwrite::is_date(rows[moved].finish) ||
+            rows[moved].finish > restored_finish) {
+            error = "task uid " + std::to_string(uid) +
+                    " finishes after the restored finish; that automatic "
+                    "roll-up shape is not measured";
+            return false;
+        }
+        for (const std::size_t child : rows[0].child_rows) {
+            if (child == parent_index || rows[child].deleted) {
+                continue;
+            }
+            if (!mppwrite::is_date(rows[child].finish) ||
+                rows[child].finish > restored_finish) {
+                error = "another top-level row finishes after the restored "
+                        "finish; that automatic roll-up shape is not measured";
+                return false;
+            }
+        }
+        if (summary.manual &&
+            (rows[0].finish != restored_finish ||
+             summary.finish != restored_finish)) {
+            error = "the project row's or the manual parent's finish is not "
+                    "the restored finish; the measured hybrid outdent leaves "
+                    "those words alone";
+            return false;
+        }
+        std::vector<std::uint32_t> resulting_finish(rows.size());
+        std::vector<std::uint32_t> resulting_duration(rows.size());
+        for (std::size_t index = 0; index < rows.size(); ++index) {
+            resulting_finish[index] = rows[index].finish;
+            resulting_duration[index] = rows[index].duration;
+        }
+        resulting_finish[parent_index] = restored_finish;
+        resulting_finish[0] = restored_finish;
+        resulting_duration[parent_index] = marker.duration_ticks;
+        resulting_duration[0] = marker.duration_ticks;
+        std::vector<std::uint32_t> extra_uids;
+        if (summary.manual) {
+            extra_uids.push_back(summary.uid);
+        }
+        if (!build_outline_slack(rows, calendar, restored_finish,
+                                 resulting_finish, resulting_duration,
+                                 extra_uids, out.slack, error)) {
+            return false;
+        }
     }
     out.restored_duration = marker.duration_ticks;
     out.restored_duration_format = marker.duration_format;
@@ -1433,8 +1688,15 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 if (row->outline_level != 0 || anchor->summary) {
                     return false;
                 }
-                if (!row->manually_scheduled || !anchor->manually_scheduled) {
-                    return false;  // W29-0.0: the measured rows are manual
+                // W29-0.4: both modes are measured, but only when the moved
+                // row and the new summary agree; a mixed indent has no pair.
+                // The automatic shape carries the recalculated slack words,
+                // the manual shape carries none.
+                if (row->manually_scheduled != anchor->manually_scheduled) {
+                    return false;
+                }
+                if ((!row->manually_scheduled) == edit.slack.empty()) {
+                    return false;
                 }
                 std::vector<std::uint32_t> pending_actuals;
                 for (const StructuralEdit& existing : applied_) {
@@ -1455,8 +1717,15 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 if (row->summary || row->outline_level < 1 || !anchor->summary) {
                     return false;
                 }
-                if (!row->manually_scheduled || !anchor->manually_scheduled) {
-                    return false;  // W29-0.0: the measured rows are manual
+                // W29-0.4: an automatic row may leave an automatic or a manual
+                // parent (the two wave-29 shapes); a manual row only leaves a
+                // manual parent.  Only the automatic shapes carry slack.
+                if (row->manually_scheduled) {
+                    if (!anchor->manually_scheduled || !edit.slack.empty()) {
+                        return false;
+                    }
+                } else if (edit.slack.empty()) {
+                    return false;
                 }
                 if (edit.restored_start == kDateNa ||
                     edit.restored_finish == kDateNa ||
@@ -1777,6 +2046,25 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
     // collapse triangles and the Gantt's summary bars follow the move on the
     // next rebuild (W28-2.2); the save writes the same shape.
     apply_outline_to_tasks(tasks, applied_);
+    // W29-0.4: an automatic outline save recalculates the project row too.  The
+    // writer stores the same words measured from Project's save: on an indent
+    // the moved subtree's span (summary_duration) and latest finish (every
+    // slack entry's late finish); on an outdent the restored duration and
+    // finish.  The manual shapes leave the project row alone.
+    for (const StructuralEdit& edit : applied_) {
+        if (!is_outline_edit(edit.kind) || edit.slack.empty()) {
+            continue;
+        }
+        if (edit.kind == StructuralKind::outline_indent) {
+            effective.project_duration_ticks =
+                static_cast<std::int64_t>(edit.summary_duration);
+            effective.project_finish = edit.slack.front().late_finish;
+        } else {
+            effective.project_duration_ticks =
+                static_cast<std::int64_t>(edit.restored_duration);
+            effective.project_finish = edit.restored_finish;
+        }
+    }
     // Wave 26 (W26-5.1): the project priority, last one wins.
     for (const StructuralEdit& edit : applied_) {
         if (edit.kind == StructuralKind::set_project_priority) {
@@ -1859,16 +2147,27 @@ PlanInput StructuralEdits::without_structural_edits(const PlanInput& shown,
     // edit cannot produce those values, and apply() replays them from the
     // file's shape, so carrying them from `shown` would shift the moved subtree
     // twice.  The anchor's duration is restored because the outline edit owns
-    // +84; every other cell (including a pending Start edit, and start/finish,
-    // which the outline writer never changes) keeps what the sheet shows.
+    // +84; every other cell (including a pending Start edit) keeps what the
+    // sheet shows.  W29-0.4: an automatic edit also owns the anchor's effective
+    // finish, which is restored for that shape only; a manual edit leaves
+    // start/finish exactly as the sheet shows them.
     bool outline_pending = false;
     std::set<std::uint32_t> outline_summaries;
+    // W29-0.4: an automatic edit also owns its summary row's effective finish
+    // (apply_outline_to_tasks sets it from the resulting project finish), so
+    // undoing from the displayed plan must restore that too.  The manual shapes
+    // never change start/finish, and a pending Start edit on the row keeps its
+    // start either way.
+    std::set<std::uint32_t> outline_finishes;
     const auto note_outline_edit = [&](const StructuralEdit& edit) {
         if (!is_outline_edit(edit.kind)) {
             return;
         }
         outline_pending = true;
         outline_summaries.insert(edit.anchor_uid);
+        if (!edit.slack.empty()) {
+            outline_finishes.insert(edit.anchor_uid);
+        }
     };
     for (const StructuralEdit& edit : applied_) {
         note_outline_edit(edit);
@@ -1892,6 +2191,9 @@ PlanInput StructuralEdits::without_structural_edits(const PlanInput& shown,
             row.summary = file_row->summary;
             if (outline_summaries.count(row.uid) != 0) {
                 row.duration_ticks = file_row->duration_ticks;
+            }
+            if (outline_finishes.count(row.uid) != 0) {
+                row.finish = file_row->finish;
             }
         }
     }
@@ -2487,6 +2789,17 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                     packed_from_date32(edit.restored_start);
                 writer_edit.restored_finish =
                     packed_from_date32(edit.restored_finish);
+                writer_edit.slack.reserve(edit.slack.size());
+                for (const OutlineSlackEntry& entry : edit.slack) {
+                    mppwrite::OutlineSlack writer_slack;
+                    writer_slack.uid = entry.uid;
+                    writer_slack.free_slack = entry.free_slack;
+                    writer_slack.start_slack = entry.start_slack;
+                    writer_slack.total_slack = entry.total_slack;
+                    writer_slack.late_start = packed_from_date32(entry.late_start);
+                    writer_slack.late_finish = packed_from_date32(entry.late_finish);
+                    writer_edit.slack.push_back(writer_slack);
+                }
                 outline_edits.push_back(writer_edit);
             }
             const mppwrite::OutlineWriteResult written =

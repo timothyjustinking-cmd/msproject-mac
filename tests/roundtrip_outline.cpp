@@ -30,7 +30,19 @@
  * either equal to Project's file or a named expected failure; "port == control"
  * is no longer asserted anywhere.
  *
- * The fourth case applies indent then outdent in ONE call from the indent
+ * W29-0.4 (R28-4) added the four AUTOMATIC-scheduling pairs:
+ * wave29-outline-auto-{indent,summary,outdent} and
+ * wave29-outline-manual-parent (an automatic row leaving a MANUAL parent).
+ * Their saves also rewrite the five schedule words on every recalculated row
+ * (+74 FreeSlack, +112 LateStart, +116 LateFinish, +186 StartSlack, +190
+ * TotalSlack) and the automatic rows' duration/finish roll-up (+88, +108, and
+ * the project row's +84/+88/+100/+108).  The edit carries those measured words
+ * (OutlineEdit::slack, hard-coded from Project's files here; the app computes
+ * them with the project calendar); the test compares them byte for byte with
+ * Project's file, including the hybrid pair's manual parent (recalculated back
+ * into the set) and the manual row it leaves stale.
+ *
+ * The fourth manual case applies indent then outdent in ONE call from the indent
  * control and compares with Project's outdent save: Project produced that file
  * by saving the indent result and then outdenting it, so the whole two-save
  * chain (including the Var2Data append offsets 520/536/548/568) must match.
@@ -797,6 +809,43 @@ void refusal_cases(TestContext& ctx) {
     check_refusal(ctx, "outdent a summary",
                   "wave28-outline-outdent-control.mpp", edit,
                   "summary move unmeasured");
+
+    /* W29-0.4: the automatic rules run only with the slack vector of exactly
+     * the rows Project recalculated.  These refusals prove the set is checked
+     * (and the document left untouched) before the first mutation. */
+    OutlineEdit auto_indent;
+    auto_indent.uid = 2;
+    auto_indent.indent = true;
+    auto_indent.summary_duration = 0x3840;
+    auto_indent.slack = {{0, 0, 0, 0, 0x3bf212c0, 0x3bf427d8}};
+    check_refusal(ctx, "automatic indent with a partial slack set",
+                  "wave29-outline-auto-indent-control.mpp", auto_indent,
+                  "queued slack list does not match");
+
+    auto_indent.slack = {{0, 0, 0, 0, 0, 0x3bf427d8}};
+    check_refusal(ctx, "automatic indent with a non-date LateStart",
+                  "wave29-outline-auto-indent-control.mpp", auto_indent,
+                  "valid LateStart/LateFinish");
+
+    OutlineEdit auto_outdent;
+    auto_outdent.uid = 2;
+    auto_outdent.indent = false;
+    auto_outdent.restored_duration = 0x5dc0;
+    auto_outdent.restored_duration_format = 0x0007;
+    auto_outdent.restored_start = 0x3bf212c0;
+    auto_outdent.restored_finish = 0x3bf627d8;
+    check_refusal(ctx, "automatic outdent with no slack",
+                  "wave29-outline-auto-outdent-control.mpp", auto_outdent,
+                  "queued slack list does not match");
+
+    OutlineEdit manual_indent;
+    manual_indent.uid = 2;
+    manual_indent.indent = true;
+    manual_indent.summary_duration = 0x2ee0;
+    manual_indent.slack = {{0, 0, 0, 0, 0x3bf212c0, 0x3bf427d8}};
+    check_refusal(ctx, "manual indent carrying automatic slack",
+                  "wave28-outline-indent-control.mpp", manual_indent,
+                  "takes no slack");
 }
 
 /*
@@ -1021,6 +1070,38 @@ int main() {
             {"outdent", "wave28-outline-outdent-control.mpp",
              "wave28-outline-outdent.mpp",
              OutlineEdit{2, false, 0, 0x5dc0, 0x0007, 0x3bf212c0, 0x3bf627d8}},
+            /* W29-0.4: the four automatic-scheduling pairs.  The edit carries
+             * every recalculated row's +74/+112/+116/+186/+190 words (project
+             * row included), plus the restored manual parent in the hybrid
+             * pair.  Values measured from Project's result file. */
+            {"auto-indent", "wave29-outline-auto-indent-control.mpp",
+             "wave29-outline-auto-indent.mpp",
+             OutlineEdit{2, true, 0x3840, 0, 0, kInvalidDate, kInvalidDate,
+                         {{0, 0, 0, 0, 0x3bf212c0, 0x3bf427d8},
+                          {1, 0, 0, 0, 0x3bf212c0, 0x3bf427d8},
+                          {2, 0, 0, 0, 0x3bf212c0, 0x3bf427d8},
+                          {3, 4800, 4800, 4800, 0x3bf312c0, 0x3bf427d8}}}},
+            {"auto-summary", "wave29-outline-auto-summary-control.mpp",
+             "wave29-outline-auto-summary.mpp",
+             OutlineEdit{2, true, 0x2580, 0, 0, kInvalidDate, kInvalidDate,
+                         {{0, 0, 0, 0, 0x3bf212c0, 0x3bf327d8},
+                          {1, 0, 0, 0, 0x3bf212c0, 0x3bf327d8},
+                          {2, 0, 0, 0, 0x3bf212c0, 0x3bf327d8},
+                          {3, 0, 0, 0, 0x3bf212c0, 0x3bf327d8}}}},
+            {"auto-outdent", "wave29-outline-auto-outdent-control.mpp",
+             "wave29-outline-auto-outdent.mpp",
+             OutlineEdit{2, false, 0, 0x5dc0, 0x0007, 0x3bf212c0, 0x3bf627d8,
+                         {{0, 0, 0, 0, 0x3bf212c0, 0x3bf627d8},
+                          {1, 0, 0, 0, 0x3bf212c0, 0x3bf627d8},
+                          {2, 9600, 9600, 9600, 0x3bf412c0, 0x3bf627d8},
+                          {3, 14400, 14400, 14400, 0x3bf512c0,
+                           0x3bf627d8}}}},
+            {"manual-parent", "wave29-outline-manual-parent-control.mpp",
+             "wave29-outline-manual-parent.mpp",
+             OutlineEdit{2, false, 0, 0x5dc0, 0x0007, 0x3bf212c0, 0x3bf627d8,
+                         {{0, 0, 0, 0, 0x3bf11e78, 0x3bf627d8},
+                          {1, 0, 0, 0, 0x3bf212c0, 0x3bf627d8},
+                          {2, 9600, 9600, 9600, 0x3bf412c0, 0x3bf627d8}}}},
         };
         for (PairCase const& test : cases) {
             apply_and_compare(ctx, test);

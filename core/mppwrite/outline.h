@@ -97,6 +97,84 @@
  *       garbage (measured: the old block at offset 90 is untouched and the
  *       entry points at 568).
  *
+ * WHAT CHANGES WHEN THE ROWS ARE AUTOMATICALLY SCHEDULED (W29-0.4)
+ * Four more committed pairs, made from the same neutral synthetic project with
+ * the rows' Fixed2Meta manual bits clear (Project's COM facts say Manual=False):
+ *
+ *   wave29-outline-auto-indent        all rows automatic; Task 2 (leaf) is
+ *                                     indented under Task 1.
+ *   wave29-outline-auto-summary       all rows automatic; Task 2 (summary of
+ *                                     Task 3) is indented under Task 1.
+ *   wave29-outline-auto-outdent       all rows automatic; Task 2 is outdented
+ *                                     from its parent Task 1.
+ *   wave29-outline-manual-parent      Task 1 (the parent) and Task 3 are
+ *                                     manual, Task 2 is automatic; Task 2 is
+ *                                     outdented from Task 1.
+ *
+ * The command set is the same as the manual cases, but Project additionally
+ * rolls the duration/remaining-duration and both effective finishes up the
+ * chain, recalculates slack, and (for an outdent) rewrites the moved row's
+ * Fixed2Data start copy.  MEASURED bytes:
+ *
+ *   AUTOMATIC INDENT (both the moved row and the new summary P automatic)
+ *     P: +88 RemainingDuration := summary_duration (the manual shape leaves
+ *        +88 alone); +108 Finish2 := the children's latest +108 (the manual
+ *        shape leaves +108 alone).
+ *     the PROJECT row: +84/+88 := summary_duration; +100/+108 := that latest
+ *        date.  Measured only when the project's +96 Start equals the
+ *        summary's earliest date and every other top-level row finishes no
+ *        later than the latest child; the writer checks both, because the
+ *        project's duration is the calendar span from its own start.
+ *     U: Fixed2Data +42 is LEFT at its stored value for a moved automatic
+ *        LEAF (0x30; the manual leaf becomes 0xA0).  A moved automatic
+ *        SUMMARY still takes 0x40, as in the manual shape.  U's +174 stays NA.
+ *     every LIVE automatic row (the project row included): +74/+186/+190 :=
+ *        the calendar working time between that row's resulting +108 and the
+ *        project's resulting +100, and +112/+116 := the backward pass from
+ *        that project finish (see OutlineSlack).  The caller computes all five
+ *        (OutlineSlack); the writer checks the uid set.  Measured: uid2
+ *        Wed 17:00 -> project Wed 17:00 = 0; uid3 Tue 17:00 -> Wed 17:00 =
+ *        4800 (0x12c0) with +112 Tue 08:00 and +116 Wed 17:00.
+ *     The FixedMeta/Fixed2Meta/VarMeta/assn/Props changes are the manual
+ *     indent's.
+ *
+ *   AUTOMATIC OUTDENT, PARENT AUTOMATIC (wave29-outline-auto-outdent)
+ *     the restored parent P: +88 := restored_duration; +108 := the restored
+ *        finish; +174 StartAnchor := NA (an automatic leaf; the manual shape
+ *        stores P +104).  The rest of P's words are the manual shape's.
+ *     the PROJECT row: +84/+88 := restored_duration; +100/+108 := the
+ *        restored finish (same guards as the automatic indent).
+ *     the moved row U: +174 := NA and Fixed2Meta +95 := 0x10 (both were
+ *        already so in this pair); Fixed2Data +42 := 0x30 (level 1, manual
+ *        rule); Fixed2Data +46 start copy := the project start from Props
+ *        record 0x02400002 (already equal here, so the diff does not show it).
+ *     every LIVE automatic row: +186/+190 as above.
+ *
+ *   AUTOMATIC MOVED ROW, MANUAL PARENT (wave29-outline-manual-parent)
+ *     P stays MANUAL and is restored by the manual rules (+84, +96, +100,
+ *        +140, +164, +174 := P +104, flags 0x30, meta kind 0x10, blob), and
+ *        +88/+108 are LEFT alone.
+ *     P has NO 0x0B4004E4 child list in the pair's control (an automatic child
+ *        under a manual parent does not get one), so Project does NOT remove a
+ *        child list and does NOT touch the PROJECT row's child list: it stays
+ *        `{3}`.  A parent that carries a child list in this hybrid shape is
+ *        unmeasured and refused.
+ *     P gains 0x0B4004E5 (append; FixedMeta count 9 -> 10).  The MOVED row U
+ *        also gains 0x0B4004E5 when it has none (append after P's).
+ *     U: +174 := NA; Fixed2Meta +95 := 0x10; Fixed2Data +46 := the project
+ *        start record (measured 0x3bf212c0 -> 0x3bf11e78); +42 := 0x30.
+ *     Slack: every LIVE automatic row as above, PLUS the manual restored
+ *        parent.  Measured: U 9600/9600 (0x2580), P 0/0 (P's StartSlack was
+ *        9600 and becomes 0), the project row 0/0.  The unrelated MANUAL row
+ *        (uid3) keeps 16800/16800: manual rows other than the restored parent
+ *        are not recalculated.
+ *
+ *   The props project-finish record 0x02400003 (payload u32, little-endian,
+ *   the project row's +100) moves with the project roll-up and is compared
+ *   byte for byte by the save-pair tests.  The project START record 0x02400002
+ *   is the value a top-level automatic row's Fixed2Data +46 carries; it does
+ *   not change in any pair.
+ *
  * WHAT THE SAME SAVES DO TO TBkndAssn AND 114/Props (W29-0.1)
  *   The assignment table is OWNED now: write_outline_edits writes its six
  *   streams and the 114/Props counters, and the save-pair tests compare them
@@ -134,8 +212,10 @@
  *       constant +32..47 tail;
  *     Fixed2Meta: a new entry, +4 := 48*new_row, +9 := 0x00 (new row),
  *       +52 := 0x28;
- *     VarMeta/Var2Data: four blocks for the new uid -- 0x0F40027A (4-byte
- *       per-session token 0C 30 16 3D), 0x0F400031 (flat planned-work contour:
+ *     VarMeta/Var2Data: four blocks for the new uid -- 0x0F40027A (the 4-byte
+ *       per-session token Project stores in 114/Props records 0x02400007 and
+ *       0x024013B1; 0C 30 16 3D in wave 28, 3D 17 0E 1A in the wave-29 pairs),
+ *       0x0F400031 (flat planned-work contour:
  *       {0x00200000, 44, 160000.0, work_ticks*100.0, work_ticks*8, 0, 1, 0, 0}
  *       then a 28-byte zero record), 0x0F400299 and 0x0F40029B (16 zero bytes
  *       each).  Blocks append in that order; the entries are inserted by
@@ -181,16 +261,28 @@
  *     row whose parent has no 0x7C marker;
  *   - outdent whose parent P does not have exactly one TOMBSTONED assignment
  *     row, or whose planned work is not a positive integral number of ticks
- *     that fits the contour's f64/u32 words.
- * Scheduling mode is not a writer rule: core_mppwrite does not link the
- * reader's scheduling model.  The APP refuses an indent/outdent unless every
- * row involved is manually scheduled (app::make_outline_edit, reading the same
- * Fixed2Meta bit through task_is_manually_scheduled), because the three
- * committed pairs are all manual; it also refuses an indent whose new summary
- * carries progress, a resource-loaded work assignment, or an actuals edit
- * queued in the same save (W29-0.0).  The wave-28 text here said the writer
- * refused an outdent "from a manually-scheduled parent" -- the opposite of the
- * measured pair (its parent is manual) and a check that did not exist.
+ *     that fits the contour's f64/u32 words;
+ *   - an indent whose moved row and new summary are scheduled DIFFERENTLY
+ *     (one automatic, one manual), or an outdent of a MANUAL row from an
+ *     AUTOMATIC parent: no pair measures a mixed edit in those directions;
+ *   - an automatic indent/outdent that is not the measured automatic shape:
+ *     the project row manual, the summary not top-level, the project's +96
+ *     start different from the summary's earliest/restored start, another
+ *     top-level row finishing after the new project finish, a missing
+ *     project-start / project-finish Props record, or a slack vector whose
+ *     uids are not exactly the rows Project recalculates;
+ *   - a hybrid outdent whose manual parent carries a 0x0B4004E4 child list
+ *     (the measured one has none) or whose moved row is not the level-2 leaf
+ *     the pairs measured.
+ * The writer reads the manual bit itself (Fixed2Meta +8 & 0x80, the same bit
+ * task_is_manually_scheduled reads) and picks the manual or automatic rules
+ * from that; the APP uses the same bit to gate which command it offers
+ * (app::make_outline_edit, W29-0.4).  The app also refuses an indent whose new
+ * summary carries progress, a resource-loaded work assignment, or an actuals
+ * edit queued in the same save (W29-0.0).  The wave-28 text here said the
+ * writer refused an outdent "from a manually-scheduled parent" -- the opposite
+ * of the measured manual pair (its parent is manual) and a check that did not
+ * exist; W29-0.4 measured that direction explicitly.
  * A damaged task/outline table (Fixed2Data or metadata not the measured
  * geometry, a malformed E4/marker block) THROWS instead: that is a file the
  * writer cannot keep consistent, not an edit the user asked for.
@@ -254,8 +346,38 @@ struct OutlineMarker {
 OutlineMarker read_outline_marker(CfbDocument const& doc, std::uint32_t uid,
                                   std::string_view table = "114/TBkndTask");
 
+/* W29-0.4: one row's recalculated schedule words, as the caller's calendar
+ * computed them.  Project's automatic save rewrites, for every row it
+ * recalculates:
+ *   +74  FreeSlack,
+ *   +112 LateStart,
+ *   +116 LateFinish,
+ *   +186 StartSlack,
+ *   +190 TotalSlack.
+ * The writer checks that the vector names exactly the rows Project
+ * recalculates for the edit's measured shape -- every live automatic row, plus
+ * the restored manual parent of a hybrid outdent -- and writes all five words.
+ * MEASURED (the four W29-0.4 pairs): FreeSlack == StartSlack == TotalSlack on
+ * every recalculated row, LateFinish is the resulting project finish (+108),
+ * and LateStart is the BACKWARD pass -- sub_work(resulting project finish,
+ * the row's resulting +84 duration) -- except on the project row, whose
+ * LateStart is the project start record (in the hybrid pair that is earlier
+ * than the backward pass lands).  Nothing here does calendar arithmetic: the
+ * caller supplies the packed dates.  The manual shape (both rows manual) takes
+ * no slack block. */
+struct OutlineSlack {
+    std::uint32_t uid = 0;
+    std::uint32_t free_slack = 0;  /* +74, ticks */
+    std::uint32_t start_slack = 0; /* +186, ticks */
+    std::uint32_t total_slack = 0; /* +190, ticks */
+    std::uint32_t late_start = 0;  /* +112, packed date */
+    std::uint32_t late_finish = 0; /* +116, packed date */
+};
+
 /* One requested outline edit.  Indent uses summary_duration; outdent uses the
- * four restored_* values.  `uid` is the moved task's UniqueID. */
+ * four restored_* values.  `uid` is the moved task's UniqueID.  For an edit
+ * whose rows are automatically scheduled the caller also supplies `slack`
+ * (see OutlineSlack). */
 struct OutlineEdit {
     std::uint32_t uid = 0;
     bool indent = true;
@@ -268,6 +390,8 @@ struct OutlineEdit {
     std::uint16_t restored_duration_format = 0;
     std::uint32_t restored_start = kInvalidDate;
     std::uint32_t restored_finish = kInvalidDate;
+    /* Automatic shapes only (W29-0.4); empty for the manual shape. */
+    std::vector<OutlineSlack> slack;
 };
 
 /* Fixed2Data +42 bit that marks a summary row (see the byte list above). */
@@ -304,6 +428,10 @@ struct OutlineRow {
     std::uint16_t duration_format = 0; /* +164 */
     std::uint32_t start = kInvalidDate;  /* +104 */
     std::uint32_t finish = kInvalidDate; /* +108 */
+    /* Fixed2Meta +8 & 0x80, the same Manually Scheduled bit
+     * task_is_manually_scheduled reads (W29-0.4).  The automatic rule set
+     * recalculates every row with this false. */
+    bool manual = false;
     bool deleted = false;
     bool stored_children = false;   /* +140 */
     std::uint8_t fixed2_flags = 0;  /* Fixed2Data +42 */
