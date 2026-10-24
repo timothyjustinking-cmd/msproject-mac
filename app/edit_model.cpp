@@ -919,9 +919,13 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                    " of task uid " + std::to_string(edit->uid));
         }
 
-        // 5a (wave 26).  PercentComplete and the project Priority each have one
-        // stored copy (FixedData words of their rows), so the table write needs
-        // no cross-stream fix-up.  All winning edits ride one write.
+        // 5a (wave 26).  Project Priority has one stored copy (FixedData +78 of
+        // row 0, measured in wave 27 W27-0.3), so its table write needs no
+        // cross-stream fix-up.  PercentComplete is NOT single-copy -- Project's
+        // own 50 % save (tests/data/wave27-percent-actuals.mpp) also writes the
+        // actuals, the dates, a progress flag, the project-row roll-up and a
+        // Var2Data field -- so this path stays for its test only; the UI is
+        // disabled (W27-0.1).  All winning edits ride one write.
         if (!percent_edits.empty() || priority_edit != nullptr) {
             mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
             for (const StructuralEdit* edit : percent_edits) {

@@ -187,8 +187,15 @@ class TaskTable {
     void set_u16(std::size_t row, std::size_t offset, std::uint16_t value);
     void set_u32(std::size_t row, std::size_t offset, std::uint32_t value);
 
-    /* Fields with exactly one stored copy, so they need no coordination. */
+    /* Priority (+78) has exactly one stored copy (Project's own save changes
+     * only that word), so it needs no coordination. */
     void set_priority(std::size_t row, std::uint16_t priority);
+    /* NOT single-copy: Project's own PercentComplete save (tests/data/
+     * wave27-percent-actuals.mpp) also writes ActualDuration (+80), RemainingDuration (+88),
+     * ActualStart (+120), two dates (+132/+136), a progress flag (+168), the
+     * project row's roll-up (+80/+88/+92) and a Var2Data field (0x0B40015E).
+     * Kept for the wave-26 edit test; the UI is disabled (wave 27 W27-0.1)
+     * until a measured actuals writer (wave 28) writes every copy. */
     void set_percent_complete(std::size_t row, std::uint16_t percent);
 
     /*

@@ -719,21 +719,16 @@ void check_move_project(const QJsonObject& measures, const QString& data_dir) {
     gate::check(!prompt_without_actuals,
                 "a project without actual values gets no Move Project prompt");
 
-    // Give the selected task an actual value through the ribbon's own 50 %
-    // command (a pending edit), then the prompt must appear.
-    QWidget* percent = ribbon_control_by_label(window, QStringLiteral("Task"),
-                                               QStringLiteral("Schedule"),
-                                               QStringLiteral("50%"));
-    gate::check(percent != nullptr, "the 50% ribbon control is live");
-    if (percent != nullptr) {
-        auto* button = qobject_cast<QAbstractButton*>(percent);
-        if (button != nullptr) {
-            button->click();
-        }
-        QApplication::processEvents();
-    }
+    // A project that carries actuals: open the Project-saved fixture in which
+    // Task 1 was set to 50 % through MS Project itself (wave 27 W27-0.1; the
+    // 50 % ribbon command is disabled until the actuals writer exists, so it
+    // can no longer be the way this gate obtains an actual value).
+    gate::check(window.open_file(
+                    data_dir + QStringLiteral("/wave27-percent-actuals.mpp"), &error),
+                "the Project-saved actuals fixture opens for the Move Project gate");
+    QApplication::processEvents();
     gate::check(app::project_has_actual_values(window.plan()),
-                "the live edit gives the plan an actual value");
+                "the Project-saved fixture carries an actual value");
 
     PromptSeen seen;
     QTimer timer;
@@ -765,8 +760,8 @@ void check_move_project(const QJsonObject& measures, const QString& data_dir) {
                 "the prompt carries Project's captured text verbatim");
     gate::check(seen.yes && seen.no && seen.buttons == 2,
                 "the prompt offers exactly the captured Yes/No buttons");
-    gate::check(window.pending_edits().size() == 1,
-                "answering Yes queues no move edit (only the percent edit remains)");
+    gate::check(window.pending_edits().empty(),
+                "answering Yes queues no move edit and no other edit is pending");
 }
 
 }  // namespace

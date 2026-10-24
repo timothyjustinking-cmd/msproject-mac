@@ -486,9 +486,11 @@ void test_real_save_round_trip() {
         }
     }
 
-    // ---- percent complete (wave 26, W26-1.2) ------------------------------
-    // The ribbon's %-complete buttons queue StructuralKind::set_percent.  The
-    // model applies it last-one-wins and the save cascade writes
+    // ---- percent complete (wave 26, W26-1.2; NOT ENABLED since W27-0.1) ---
+    // The edit kind and its save path stay tested so the measured actuals writer
+    // (wave 28) can enable the buttons again.  The UI is disabled (W27-0.1)
+    // because Project's own save writes eight-plus copies.  The model applies
+    // the edit last-one-wins and the save cascade writes
     // mppwrite::TaskTable::set_percent_complete in the one final container.
     Loaded percent_base = load(copy);
     if (percent_base.ok && !percent_base.plan.tasks.empty()) {

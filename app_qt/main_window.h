@@ -324,11 +324,11 @@ class MainWindow final : public QMainWindow {
     void refresh_backstage_info();
     void set_message(std::string text, bool is_error);
     void handle_action(app::MenuAction action);
-    // Wave 26: the ribbon controls that are not menu actions (the %-complete
-    // buttons and Link/Unlink in W26-1.2; the view/format toggles arrive with
-    // W26-1.3/1.4).
+    // Wave 26: the ribbon controls that are not menu actions (Link/Unlink in
+    // W26-1.2; the view/format toggles arrive with W26-1.3/1.4).  Wave 27
+    // (W27-0.1) removed the %-complete handler: those five buttons are disabled
+    // until the actuals writer exists, and no UI route may queue set_percent.
     void handle_ribbon_command(RibbonCommand command, bool checked);
-    void set_percent_complete(int percent);
     void unlink_selected_task();
     // W26-6.3: pushes the selected task's values into the docked Task Form.
     void refresh_task_form();
