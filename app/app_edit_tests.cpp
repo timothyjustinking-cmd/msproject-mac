@@ -165,6 +165,60 @@ void test_push_and_undo() {
     check(!edits.drop_insert(4), "dropping it twice is refused");
 }
 
+void test_percent_edit_model() {
+    // Wave 27 (W27-0.2): the leaf/summary rule lives in the edit MODEL, so no
+    // shell path (and no future one) can queue a %-complete edit Project would
+    // recalculate away.
+    app::PlanInput plan = make_plan();
+    app::StructuralEdit edit;
+    std::string error;
+
+    check(!app::make_percent_edit(plan, 0, 50, edit, error),
+          "uid 0 is refused by the model");
+    check(error.find("project summary") != std::string::npos,
+          "the refusal names the project-summary row");
+
+    plan.tasks[0].summary = true;
+    check(!app::make_percent_edit(plan, plan.tasks[0].uid, 50, edit, error),
+          "a summary row is refused by the model");
+    check(error.find("summary") != std::string::npos,
+          "the refusal names the summary task");
+    plan.tasks[0].summary = false;
+
+    check(!app::make_percent_edit(plan, 99, 50, edit, error),
+          "an unknown uid is refused (a pending insert has no saved row)");
+    check(!app::make_percent_edit(plan, plan.tasks[1].uid, 101, edit, error),
+          "a percent above 100 is refused");
+
+    check(app::make_percent_edit(plan, plan.tasks[0].uid, 50, edit, error),
+          "a leaf task is accepted");
+    check(edit.kind == app::StructuralKind::set_percent &&
+              edit.uid == plan.tasks[0].uid && edit.percent == 50,
+          "the accepted edit is a ready-to-push set_percent");
+
+    app::StructuralEdits planless;
+    check(!planless.push(edit), "a plan-less set_percent is refused");
+
+    app::PlanInput with_summary = make_plan();
+    with_summary.tasks[0].summary = true;
+    app::StructuralEdit summary_edit;
+    check(!app::make_percent_edit(with_summary, with_summary.tasks[0].uid, 50, summary_edit,
+                                  error),
+          "the helper refuses the summary row too");
+    app::StructuralEdit bypass;
+    bypass.kind = app::StructuralKind::set_percent;
+    bypass.uid = with_summary.tasks[0].uid;
+    bypass.percent = 50;
+    app::StructuralEdits refused;
+    check(!refused.push(bypass, &with_summary),
+          "push with the plan refuses a hand-built summary edit");
+
+    app::StructuralEdits accepted;
+    check(accepted.push(edit, &plan), "push with the plan accepts a leaf task");
+    check(accepted.apply(plan).tasks[0].percent_complete == 50,
+          "the display plan shows the accepted 50 %");
+}
+
 void test_without_structural_edits() {
     app::PlanInput plan = make_plan();
     // A cell edit the user already made: task 1 has a new Start.
@@ -500,14 +554,16 @@ void test_real_save_round_trip() {
         percent_edit.kind = app::StructuralKind::set_percent;
         percent_edit.uid = percent_uid;
         percent_edit.percent = 40;
-        check(percent_edits.push(percent_edit), "the percent edit is recorded");
+        check(percent_edits.push(percent_edit, &percent_base.plan),
+              "the percent edit is recorded");
         const app::PlanInput percent_shown = percent_edits.apply(percent_base.plan);
         check(!percent_shown.tasks.empty() &&
                   percent_shown.tasks.front().percent_complete == 40,
               "apply() shows the task at 40 % complete");
 
         percent_edit.percent = 101;
-        check(!percent_edits.push(percent_edit), "a percent above 100 is refused");
+        check(!percent_edits.push(percent_edit, &percent_base.plan),
+              "a percent above 100 is refused");
 
         const std::filesystem::path percent_path =
             std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-percent.mpp";
@@ -610,6 +666,7 @@ void test_real_save_round_trip() {
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     test_push_and_undo();
+    test_percent_edit_model();
     test_without_structural_edits();
     test_apply_placement();
     test_real_save_round_trip();

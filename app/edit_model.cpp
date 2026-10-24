@@ -221,7 +221,43 @@ const StructuralEdit* StructuralEdits::next_redo() const noexcept {
     return undone_.empty() ? nullptr : &undone_.back();
 }
 
-bool StructuralEdits::push(StructuralEdit edit) {
+bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t percent,
+                       StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    out.kind = StructuralKind::set_percent;
+    out.uid = uid;
+    out.percent = percent;
+    if (uid == 0) {
+        error = "uid 0 is the project summary row and has no task % complete to write";
+        return false;
+    }
+    if (percent > 100) {
+        error = "percent complete " + std::to_string(percent) + " is above 100";
+        return false;
+    }
+    const TaskRow* row = nullptr;
+    for (const TaskRow& task : plan.tasks) {
+        if (task.uid == uid) {
+            row = &task;
+            break;
+        }
+    }
+    if (row == nullptr) {
+        error = "task uid " + std::to_string(uid) +
+                " is not a live task in the file (a pending insert has no saved row)";
+        return false;
+    }
+    if (row->summary) {
+        error = "task uid " + std::to_string(uid) +
+                " is a summary task; Project computes its % complete from its children, "
+                "so this port refuses to write a stored value for it";
+        return false;
+    }
+    error.clear();
+    return true;
+}
+
+bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
     switch (edit.kind) {
         case StructuralKind::insert_task: {
             edit.name = trim_ascii(std::move(edit.name));
@@ -329,9 +365,16 @@ bool StructuralEdits::push(StructuralEdit edit) {
             break;
         }
         case StructuralKind::set_percent: {
-            if (edit.uid == 0 || edit.percent > 100) {
+            // W27-0.2: the model, not the shell, owns the leaf/summary rule.
+            if (plan == nullptr) {
                 return false;
             }
+            StructuralEdit checked;
+            std::string error;
+            if (!make_percent_edit(*plan, edit.uid, edit.percent, checked, error)) {
+                return false;
+            }
+            edit = std::move(checked);
             for (const StructuralEdit& existing : applied_) {
                 if (existing.kind == StructuralKind::delete_task &&
                     existing.uid == edit.uid) {
