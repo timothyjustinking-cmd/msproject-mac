@@ -274,13 +274,15 @@ bool edit_predecessors(QWidget* parent, const app::PlanInput& loaded,
 // Task Information (wave 21; the operator's Project capture shows six tabs)
 //
 // GENERAL is functional over app/: Name, Duration, Start and Finish are the four
-// task fields the sheet's edit model writes (Start is also what a save collects).
-// Estimated, Percent complete, Priority, Schedule mode and the Display on Timeline
-// options have no writer in this port, so they are shown READ-ONLY with an inline
-// note -- decision 15, no fake success.  PREDECESSORS and RESOURCES state that the
-// task's links/assignments are edited by their own commands; ADVANCED, NOTES and
-// CUSTOM FIELDS are laid out with their primary action disabled and the note.
-// Cancel always discards.
+// task fields the sheet's edit model writes (Start is also what a save collects),
+// and Percent complete (wave 28, W28-1.2) is queued by OK as the same
+// app::StructuralKind::set_percent edit the ribbon's five % buttons make -- the
+// measured actuals writer, not a sheet cell.  Estimated, Priority, Schedule mode
+// and the Display on Timeline options have no writer in this port, so they are
+// shown READ-ONLY with an inline note -- decision 15, no fake success.
+// PREDECESSORS and RESOURCES state that the task's links/assignments are edited
+// by their own commands; ADVANCED, NOTES and CUSTOM FIELDS are laid out with
+// their primary action disabled and the note.  Cancel always discards.
 // ---------------------------------------------------------------------------
 
 struct TaskInformationValues {
@@ -288,6 +290,8 @@ struct TaskInformationValues {
     std::string duration_text;
     std::string start_text;
     std::string finish_text;
+    // W28-1.2: the rendered Percent complete text.  A changed value is applied
+    // by MainWindow::apply_task_information as a set_percent structural edit.
     std::string percent_text;
     bool manually_scheduled = false;
     // Wave 26 (W26-5.3): the per-task custom-field values, moved here from the
@@ -304,7 +308,7 @@ class TaskInformationDialog final : public QDialog {
     explicit TaskInformationDialog(const TaskInformationValues& current,
                                    QWidget* parent = nullptr);
 
-    // Read on OK: the four editable texts, as typed.
+    // Read on OK: the five editable texts, as typed.
     const TaskInformationValues& values() const noexcept { return values_; }
 
     QTabWidget* tabs() const noexcept { return tabs_; }
@@ -312,6 +316,8 @@ class TaskInformationDialog final : public QDialog {
     QLineEdit* duration_edit() const noexcept { return duration_; }
     QLineEdit* start_edit() const noexcept { return start_; }
     QLineEdit* finish_edit() const noexcept { return finish_; }
+    // W28-1.2: enabled on the measured actuals writer (see the class comment).
+    QLineEdit* percent_edit() const noexcept { return percent_; }
     QCheckBox* hide_bar_check() const noexcept { return hide_bar_; }
     QCheckBox* rollup_check() const noexcept { return rollup_; }
     // W26-5.3: the Custom Fields tab's six value edits, in
@@ -330,6 +336,7 @@ class TaskInformationDialog final : public QDialog {
     QLineEdit* duration_ = nullptr;
     QLineEdit* start_ = nullptr;
     QLineEdit* finish_ = nullptr;
+    QLineEdit* percent_ = nullptr;
     QCheckBox* hide_bar_ = nullptr;
     QCheckBox* rollup_ = nullptr;
 };

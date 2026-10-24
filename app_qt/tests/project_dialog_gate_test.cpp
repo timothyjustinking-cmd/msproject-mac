@@ -720,9 +720,10 @@ void check_move_project(const QJsonObject& measures, const QString& data_dir) {
                 "a project without actual values gets no Move Project prompt");
 
     // A project that carries actuals: open the Project-saved fixture in which
-    // Task 1 was set to 50 % through MS Project itself (wave 27 W27-0.1; the
-    // 50 % ribbon command is disabled until the actuals writer exists, so it
-    // can no longer be the way this gate obtains an actual value).
+    // Task 1 was set to 50 % through MS Project itself (wave 27 W27-0.1).  The
+    // 50 % ribbon command can queue the same edit now (wave 28 W28-1.2), but
+    // this gate needs a FILE that already stores actuals on open, which only
+    // the Project-saved fixture does.
     gate::check(window.open_file(
                     data_dir + QStringLiteral("/wave27-percent-actuals.mpp"), &error),
                 "the Project-saved actuals fixture opens for the Move Project gate");

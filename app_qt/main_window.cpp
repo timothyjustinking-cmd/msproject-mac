@@ -156,6 +156,42 @@ app::ZoomLevel stepped_zoom(app::ZoomLevel zoom, int delta) {
 
 QString to_q(const std::string& text) { return QString::fromStdString(text); }
 
+// W28-1.2: Task Information's Percent complete parser.  The measured writer
+// stores a u16 percent, so only a whole number 0..100 is accepted; the trailing
+// '%' the sheet renders is optional, as in the sheet's own Percent cell.
+bool parse_percent_text(const std::string& text, std::uint16_t* percent) {
+    std::size_t begin = 0;
+    std::size_t end = text.size();
+    const auto space = [](char ch) { return ch == ' ' || ch == '\t'; };
+    while (begin < end && space(text[begin])) {
+        ++begin;
+    }
+    while (end > begin && space(text[end - 1])) {
+        --end;
+    }
+    if (end > begin && text[end - 1] == '%') {
+        --end;
+        while (end > begin && space(text[end - 1])) {
+            --end;
+        }
+    }
+    if (begin == end) {
+        return false;
+    }
+    unsigned value = 0;
+    for (std::size_t index = begin; index < end; ++index) {
+        if (text[index] < '0' || text[index] > '9') {
+            return false;
+        }
+        value = value * 10 + static_cast<unsigned>(text[index] - '0');
+        if (value > 100) {
+            return false;
+        }
+    }
+    *percent = static_cast<std::uint16_t>(value);
+    return true;
+}
+
 // The status-bar view buttons, in Project 2021's measured order.  Wave 23
 // (B-9): five, as in the clean capture -- Gantt Chart, Task Usage, Team Planner,
 // Resource Sheet, Report.  Resource Usage is a View-tab command; it was never
@@ -1909,13 +1945,14 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::percent_50:
         case RibbonCommand::percent_75:
         case RibbonCommand::percent_100:
-            // W27-0.1: the five %-complete buttons are DISABLED with the
-            // decision-9 tooltip.  Project's own 50 % save writes the actuals
-            // and the project row's roll-up as well as +92, so this port has no
-            // measured writer for the edit yet; the controls stay laid out and
-            // this case is unreachable.  They return with the actuals writer in
-            // wave 28, and no UI path may queue app::StructuralKind::set_percent
-            // before then.
+            // W28-1.2: enabled on the measured actuals writer.  One click queues
+            // one set_percent edit through the same make_percent_edit/push path
+            // Save uses; the writer stores the whole actuals block, not +92.
+            set_selected_percent(command == RibbonCommand::percent_0    ? 0
+                                 : command == RibbonCommand::percent_25 ? 25
+                                 : command == RibbonCommand::percent_50 ? 50
+                                 : command == RibbonCommand::percent_75 ? 75
+                                                                        : 100);
             return;
         case RibbonCommand::link_tasks:
             // The shell's direct link command is the Predecessors dialog: the
@@ -2105,6 +2142,52 @@ void MainWindow::unlink_selected_task() {
     after_structural_change(selected.uid);
     set_message("removed " + std::to_string(removed) +
                     " link(s); File > Save writes the change",
+                false);
+    update_status();
+}
+
+void MainWindow::set_selected_percent(std::uint16_t percent) {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr) {
+        set_message("percent complete is available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (!selected.has_selection || selected.uid == 0) {
+        set_message("select a task first", true);
+        update_status();
+        return;
+    }
+    // W28-1.2: the leaf/saved-row/summary rules live in the edit model
+    // (make_percent_edit); the shell only hands it the displayed plan, which
+    // includes a pending insert the model must refuse (file_row == 0).
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_percent_edit(doc_.plan(), selected.uid, percent, edit, error)) {
+        set_message("percent complete: " + error, true);
+        update_status();
+        return;
+    }
+    // Clicking the value the task already carries asks for no file change; the
+    // measured writer has no pair for an identical save, so do not queue one.
+    for (const app::TaskRow& task : doc_.plan().tasks) {
+        if (task.uid == selected.uid && task.percent_complete == percent) {
+            set_message("task uid " + std::to_string(selected.uid) + " is already " +
+                            std::to_string(percent) + "% complete",
+                        false);
+            update_status();
+            return;
+        }
+    }
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
+        set_message("percent complete: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(selected.uid);
+    set_message("queued " + std::to_string(percent) + "% complete for task uid " +
+                    std::to_string(selected.uid) + "; File > Save writes it",
                 false);
     update_status();
 }
@@ -3625,10 +3708,57 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
         update_status();
         return false;
     }
+    // Wave 28 (W28-1.2): Percent complete is not a sheet cell here -- it is the
+    // same set_percent structural edit the ribbon's five % buttons make, so the
+    // save writes Project's measured actuals (write_percent_actuals).  Parse and
+    // validate it BEFORE any sheet cell is committed: an invalid or refused
+    // percent must leave the dialog's whole edit unapplied (decision 15).
+    app::StructuralEdit percent_edit;
+    bool has_percent_edit = false;
+    {
+        std::string current_text;
+        const core::view::FieldId percent_field =
+            app::task_field_id("PercentComplete");
+        for (std::size_t column = 0; column < sheet->column_count(); ++column) {
+            if (sheet->column(column).field == percent_field) {
+                current_text = app::cell_text(*sheet, selected.row, column, prefs_);
+                break;
+            }
+        }
+        const app::TaskRow* task = doc_.task_by_uid(selected.uid);
+        if (current_text.empty() && task != nullptr) {
+            current_text = std::to_string(task->percent_complete) + "%";
+        }
+        if (values.percent_text != current_text) {
+            std::uint16_t percent = 0;
+            std::string error;
+            if (!parse_percent_text(values.percent_text, &percent)) {
+                set_message("task information: percent complete must be a whole number "
+                            "from 0 to 100",
+                            true);
+                update_status();
+                return false;
+            }
+            if (task == nullptr ||
+                !app::make_percent_edit(doc_.plan(), selected.uid, percent, percent_edit,
+                                        error)) {
+                set_message("task information: " +
+                                (task == nullptr ? std::string("no task row") : error),
+                            true);
+                update_status();
+                return false;
+            }
+            // A different spelling of the same value ("50" for "50%") is not a
+            // file change; the measured writer has no pair for an identical save.
+            has_percent_edit = task->percent_complete != percent;
+        }
+    }
     struct FieldEdit {
         const char* name;
         const std::string* text;
     };
+    // (The percent edit computed above is pushed with the other structural
+    // edits, after every part of the dialog has validated.)
     const FieldEdit edits[] = {{"Name", &values.name},
                                {"Duration", &values.duration_text},
                                {"Start", &values.start_text},
@@ -3702,6 +3832,16 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
                 structural_.push(edit);
             }
             structural_applied = !field_edits.empty();
+        }
+    }
+    // Wave 28 (W28-1.2): push the validated Percent complete edit once every
+    // other part of the dialog has parsed, so a refused dialog queues nothing.
+    if (ok && has_percent_edit) {
+        if (!structural_.push(percent_edit, &doc_.plan())) {
+            ok = false;
+            set_message("task information: the percent edit was refused", true);
+        } else {
+            structural_applied = true;
         }
     }
 

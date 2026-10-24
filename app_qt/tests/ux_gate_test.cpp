@@ -563,6 +563,47 @@ void case_window(const QString& fixture, const QString& out_dir) {
           "the dialog's OK reached the sheet model");
     check(window.sheet() != nullptr && window.sheet()->undo(),
           "the apply is one undo step like a typed edit");
+
+    // W28-1.2: Task Information's Percent complete field is ENABLED on the
+    // measured actuals writer, and OK queues one set_percent edit instead of a
+    // sheet-cell write (wave 27 W27-0.1 had it read-only).
+    msqt::TaskInformationValues percent_values;
+    check(window.task_information_values(&percent_values),
+          "the selected task's values are readable for the percent field");
+    msqt::TaskInformationDialog percent_dialog(percent_values);
+    check(percent_dialog.percent_edit() != nullptr &&
+              percent_dialog.percent_edit()->isEnabled(),
+          "Task Information's Percent complete field is editable");
+    const QString current_percent = percent_dialog.percent_edit() != nullptr
+                                        ? percent_dialog.percent_edit()->text().trimmed()
+                                        : QString();
+    const std::uint16_t target_percent =
+        current_percent == QStringLiteral("50%") ? 25 : 50;
+    if (percent_dialog.percent_edit() != nullptr) {
+        percent_dialog.percent_edit()->setText(QString::number(target_percent) +
+                                               QStringLiteral("%"));
+    }
+    percent_dialog.accept();
+    const std::size_t pending_before_percent = window.pending_edits().size();
+    check(window.apply_task_information(percent_dialog.values()),
+          "Task Information apply commits the percent edit");
+    check(window.pending_edits().size() == pending_before_percent + 1,
+          "OK queues exactly one percent edit");
+    const app::StructuralEdit* queued = window.pending_edits().next_undo();
+    check(queued != nullptr && queued->kind == app::StructuralKind::set_percent &&
+              queued->percent == target_percent,
+          "the queued edit is the measured set_percent");
+    if (queued != nullptr) {
+        const app::TaskRow* edited = nullptr;
+        for (const app::TaskRow& task : window.plan().tasks) {
+            if (task.uid == queued->uid) {
+                edited = &task;
+                break;
+            }
+        }
+        check(edited != nullptr && edited->percent_complete == target_percent,
+              "the displayed plan shows the percent Task Information queued");
+    }
 }
 
 }  // namespace

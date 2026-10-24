@@ -843,11 +843,15 @@ TaskInformationDialog::TaskInformationDialog(const TaskInformationValues& curren
     estimated->setToolTip(QStringLiteral("not implemented in this port"));
     form->addRow(make_form_label(general, QStringLiteral("Estimated:")), estimated);
 
-    auto* percent = make_line_edit(general);
-    percent->setText(to_q(current.percent_text));
-    percent->setEnabled(false);
-    percent->setToolTip(QStringLiteral("not implemented in this port"));
-    form->addRow(make_form_label(general, QStringLiteral("Percent c&omplete:")), percent);
+    // W28-1.2: editable on the measured actuals writer.  A changed value is
+    // read by accept() and queued by MainWindow::apply_task_information as the
+    // same set_percent edit the ribbon's five % buttons make.
+    percent_ = make_line_edit(general);
+    percent_->setText(to_q(current.percent_text));
+    percent_->setToolTip(
+        QStringLiteral("A whole number from 0 to 100; OK queues the edit and File > Save "
+                       "writes Project's measured actuals"));
+    form->addRow(make_form_label(general, QStringLiteral("Percent c&omplete:")), percent_);
 
     auto* priority = make_spin_box(general);
     priority->setRange(0, 1000);
@@ -895,9 +899,10 @@ TaskInformationDialog::TaskInformationDialog(const TaskInformationValues& curren
     general_layout->addWidget(make_hint(
         general, size,
         QStringLiteral("Name, Duration, Start and Finish are written through the sheet's "
-                       "edit model.  Estimated, Percent complete, Priority, Schedule mode "
-                       "and the Display on Timeline options are read-only in this port: "
-                       "there is no writer for them yet (decision 15).")));
+                       "edit model; Percent complete is queued as Project's measured "
+                       "actuals edit.  Estimated, Priority, Schedule mode and the Display "
+                       "on Timeline options are read-only in this port: there is no writer "
+                       "for them yet (decision 15).")));
     general_layout->addStretch(1);
     tabs_->addTab(general, QStringLiteral("General"));
 
@@ -990,6 +995,9 @@ void TaskInformationDialog::accept() {
     values_.duration_text = duration_->text().toStdString();
     values_.start_text = start_->text().toStdString();
     values_.finish_text = finish_->text().toStdString();
+    if (percent_ != nullptr) {
+        values_.percent_text = percent_->text().toStdString();
+    }
     values_.custom_field_texts.clear();
     for (QLineEdit* edit : custom_field_inputs_) {
         values_.custom_field_texts.push_back(edit->text().toStdString());

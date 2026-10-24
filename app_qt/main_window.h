@@ -266,7 +266,9 @@ class MainWindow final : public QMainWindow {
     bool task_information_values(TaskInformationValues* out) const;
     // Applies Name/Duration/Start/Finish through the sheet's edit model -- the
     // same begin_edit/commit_edit path a typed cell edit uses, so undo and the
-    // save diff see them.  True when every applied field committed.
+    // save diff see them -- and queues a changed Percent complete as the
+    // measured set_percent structural edit (wave 28, W28-1.2).  True when every
+    // applied field committed and the percent parsed.
     bool apply_task_information(const TaskInformationValues& values);
     // Shows the six-tab dialog for the selected task, then applies OK.
     void show_task_information();
@@ -325,10 +327,15 @@ class MainWindow final : public QMainWindow {
     void set_message(std::string text, bool is_error);
     void handle_action(app::MenuAction action);
     // Wave 26: the ribbon controls that are not menu actions (Link/Unlink in
-    // W26-1.2; the view/format toggles arrive with W26-1.3/1.4).  Wave 27
-    // (W27-0.1) removed the %-complete handler: those five buttons are disabled
-    // until the actuals writer exists, and no UI route may queue set_percent.
+    // W26-1.2; the view/format toggles arrive with W26-1.3/1.4).  Wave 28
+    // (W28-1.2) restored the five %-complete buttons on the measured actuals
+    // writer: each click queues one app::StructuralKind::set_percent edit
+    // through make_percent_edit(), which Save writes as Project's own actuals.
     void handle_ribbon_command(RibbonCommand command, bool checked);
+    // W28-1.2: the five %-complete buttons' shared command.  Refuses (with the
+    // edit model's reason) a project row, an unknown uid, a summary and a
+    // pending insert; an unchanged value is a no-op with a message.
+    void set_selected_percent(std::uint16_t percent);
     void unlink_selected_task();
     // W26-6.3: pushes the selected task's values into the docked Task Form.
     void refresh_task_form();

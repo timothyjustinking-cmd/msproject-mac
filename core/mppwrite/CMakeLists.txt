@@ -32,6 +32,7 @@ add_library(core_mppwrite STATIC
     save.cpp
     add_delete.cpp
     field_values.cpp
+    actuals.cpp
 )
 add_library(msproject::mppwrite ALIAS core_mppwrite)
 
