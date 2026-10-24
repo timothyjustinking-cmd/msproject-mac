@@ -1016,6 +1016,8 @@ bool MainWindow::open_file(const QString& path, QString* error) {
         // Back to the new-project default: no loaded file says otherwise.
         new_tasks_manual_ = true;
         new_tasks_manual_known_ = false;
+        loaded_new_tasks_manual_ = true;
+        loaded_new_tasks_manual_known_ = false;
         last_save_target_.clear();
         view_sheet_.reset();
         view_records_.clear();
@@ -1079,6 +1081,9 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     const mpp::NewTaskMode new_task_mode = mpp::read_new_task_mode(path.toStdString());
     new_tasks_manual_known_ = new_task_mode.known;
     new_tasks_manual_ = new_task_mode.known ? new_task_mode.manual : true;
+    // W28-3.1: the baseline a pending Options > Schedule edit/undo restores to.
+    loaded_new_tasks_manual_ = new_tasks_manual_;
+    loaded_new_tasks_manual_known_ = new_tasks_manual_known_;
 
     // The persisted date style belongs to the loaded SheetFormat before anything
     // formats a cell or the status line.
@@ -1302,6 +1307,8 @@ void MainWindow::update_status_mode() {
     // unknown value (new project, original Project 2007 file, undecodable
     // record) keeps the product's current Manual text -- the documented
     // fallback -- and the tooltip says so, so the display never invents a mode.
+    // W28-3.1: `new_tasks_manual_` already includes the last pending Options >
+    // Schedule choice (refresh_new_task_mode).
     const bool manual = !new_tasks_manual_known_ || new_tasks_manual_;
     status_mode_->setText(manual ? QStringLiteral("New Tasks : Manually Scheduled")
                                  : QStringLiteral("New Tasks : Auto Scheduled"));
@@ -1314,6 +1321,23 @@ void MainWindow::update_status_mode() {
                   : QStringLiteral("New projects start with Manually Scheduled tasks");
     }
     status_mode_->setToolTip(tip);
+}
+
+void MainWindow::refresh_new_task_mode() {
+    // W28-3.1: the baseline is what the loaded file stored; the LAST pending
+    // mode edit is the user's newest choice.  Undo/redo therefore restore the
+    // previous choice (or the file's value) without a separate save of the
+    // shown state.
+    bool manual = loaded_new_tasks_manual_;
+    bool known = loaded_new_tasks_manual_known_;
+    for (const app::StructuralEdit& edit : structural_.applied()) {
+        if (edit.kind == app::StructuralKind::set_new_task_mode) {
+            manual = edit.new_tasks_manual;
+            known = true;
+        }
+    }
+    new_tasks_manual_ = known ? manual : true;
+    new_tasks_manual_known_ = known;
 }
 
 void MainWindow::clear_render_selection() {
@@ -1448,6 +1472,8 @@ void MainWindow::new_project() {
     // whatever the file that was open before said.
     new_tasks_manual_ = true;
     new_tasks_manual_known_ = false;
+    loaded_new_tasks_manual_ = true;
+    loaded_new_tasks_manual_known_ = false;
     last_save_target_.clear();
     view_sheet_.reset();
     view_records_.clear();
@@ -2365,6 +2391,9 @@ void MainWindow::after_structural_change(std::uint32_t keep_uid) {
     if (!doc_.has_document()) {
         return;
     }
+    // W28-3.1: undo/redo/insert all land here; the shown new-task mode is the
+    // stack's last mode edit (or the loaded file's value when there is none).
+    refresh_new_task_mode();
     // Detach the Qt adapter BEFORE the rebuild: apply_structural_edits replaces
     // PlanDocument::sheet_, and the QAbstractItemModel must not keep pointing at
     // the destroyed SheetModel while the view handles a model reset.
@@ -3274,11 +3303,41 @@ void MainWindow::show_options() {
 }
 
 void MainWindow::set_new_task_mode(bool manual) {
-    // The port has no writer for the stored new-task property, so this is the
-    // shell's live mode: the status bar and the new-project callout follow it,
-    // exactly as Project's Options page changes the current project's mode.
+    // W28-3.1: with a saved document, Options > Schedule's choice is a pending
+    // structural edit written to 114/Props record 0x024013c8 at File > Save
+    // (Project's measured bytes: core/mppwrite/project_props.h).  A file that
+    // does not store the record (an original Project 2007 MPP12 file) cannot be
+    // written by this port, so the change is refused with the reason rather
+    // than showing a mode the file will not carry.
+    if (doc_.has_document()) {
+        app::StructuralEdit edit;
+        std::string error;
+        if (!app::make_new_task_mode_edit(doc_.path(), manual, edit, error) ||
+            !structural_.push(std::move(edit))) {
+            set_message("new tasks: " + (error.empty()
+                                             ? std::string("could not queue the change")
+                                             : error),
+                        true);
+            update_status();
+            return;
+        }
+        // The stack now holds the newest mode; after_structural_change refreshes
+        // the shown mode, the edited dot and Save's enabled state.
+        after_structural_change();
+        set_message(std::string("new tasks: ") +
+                        (manual ? "manually scheduled" : "auto scheduled") +
+                        "; File > Save writes it",
+                    false);
+        update_status();
+        return;
+    }
+    // No document: the shell's live mode.  A new project has no file to record
+    // it in yet; the status bar and the new-project callout follow it, exactly
+    // as Project's Options page changes the mode of the project it shows.
     new_tasks_manual_ = manual;
     new_tasks_manual_known_ = true;
+    loaded_new_tasks_manual_ = manual;
+    loaded_new_tasks_manual_known_ = true;
     if (info_callout_ != nullptr) {
         info_callout_->setText(
             manual ? QStringLiteral("New tasks are created in Manually Scheduled mode.")
@@ -3561,6 +3620,11 @@ void MainWindow::insert_task() {
     edit.uid = structural_.next_placeholder_uid(doc_.plan());
     edit.anchor_uid = doc_.selected_uid();
     edit.name = name.toStdString();
+    // W28-3.1: "Insert Task uses it" -- the row takes the project's shown
+    // new-task mode (the loaded file's stored mode plus any pending Options >
+    // Schedule choice).  An unknown mode shows/displays Manual (operator
+    // decision 11), so the inserted row is manual there too.
+    edit.manually_scheduled = !new_tasks_manual_known_ || new_tasks_manual_;
     if (edit.uid == 0 || !structural_.push(edit)) {
         set_message("could not queue the insert", true);
         update_status();
