@@ -149,3 +149,114 @@ check pass); only the blob committed in `076438f` still carries the name.
   reads nor writes that cache as a schedule.
 
 WAVE-28-G0-COMPLETE
+
+## G1 - the actuals writer
+
+All three items are DONE.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W28-1.1 | measure Project's % Complete edits (auto 0->40, 40->100, 100->0; manual 0->40) | **DONE** | commits `ae1a065` (four pairs, README, hashes), `18a11ce` (oracle); measurement `build/w28/W28-1.1-pair-diff.log`; gates `build/w28/gates-W28-1.1-fixtures.log`, `build/w28/gates-W28-1.1-oracle.log` |
+| W28-1.2 | actuals writer; refuse a percent edit on a row with no saved task; re-enable the five % buttons and Task Information's percent field; every pair asserts the non-owned streams | **DONE** | commits `a181229` (refusal + tests), `137bca7` (writer + % controls); gates `build/w28/gates-a181229-W28-1.2.log` |
+| W28-1.3 | Mark on Track and Update Project on the same writer, each with its own Project pair; Update Project's OK live for the covered options | **DONE** | commits `cd83e31` (three pairs), `2362916` (oracle + status-date rule), `92f45e8` (reader + writer + UI); gates `build/w28/gates-2362916-W28-1.3.log` |
+
+W28-1.1 detail:
+
+- Four same-session Project 2021 save pairs on copies under `C:/w28` with
+  neutral metadata: auto row 1 0->40, 40->100 and 100->0, and the manual row
+  0->40.  The word-level diff is `build/w28/W28-1.1-pair-diff.log`; the pairs
+  fix the field list the writer had to produce: % Complete, Actual and
+  Remaining Duration, % Work Complete, Actual Start/Finish, Resume/Stop, the
+  +168 progress word and +174 anchor, the 0x0B40015E Var2Data step block, the
+  FixedMeta variable-field count and the project row's roll-up.
+- Project's own 50 % save (`wave27-percent-actuals.mpp`) is the standing-rule-1
+  reference for the percent path and the source of the measured Var2Data field
+  0x0B40015E the wave-26 review asked for.
+
+W28-1.2 detail:
+
+- `core/mppwrite/actuals.{h,cpp}` writes the measured actuals and edits VarMeta's
+  logical entries, the 0x0B40015E step block and Var2Data step ids, merging into
+  the original streams; the manual-finish charge follows core/plan's rule.
+  `app/edit_model.cpp` step 5a writes the set_percent edits through it.
+- The four W28-1.1 pairs match FixedData and VarMeta byte-for-byte, Var2Data
+  after masking the per-session step ids, FixedMeta except the edited row's
+  count, and every stream outside the four owned task streams equals the
+  control.  The app test carried 432 checks at that commit.
+- `a181229` first made `make_percent_edit` refuse a uid with `file_row == 0`
+  (a pending insert's value would otherwise be dropped while the save reported
+  success), with the refusal case in `app_edits_actuals_tests`.
+- The five ribbon % buttons and Task Information's Percent complete field are
+  enabled on that writer and queue the same set_percent edit; the sheet's
+  Percent complete column stays read-only.
+
+W28-1.3 detail:
+
+- Three more Project 2021 pairs (`cd83e31`): Mark on Track on the auto row 1,
+  Mark on Track on the manual row 2, and Update Project 0%-100% over the whole
+  project, all through Wed 2026-01-07 00:00.  Mark on Track has no type-library
+  member, so the oracle (`2362916`) invokes Project's ribbon button through UI
+  Automation under the oracle lock.
+- Measured and implemented on the same writer:
+  * the percent-through rule: `finish = add_work(start, duration)` for an auto
+    row, `manual_finish_of` for a manual row; 100 % at/after the finish, 0 % at
+    or before the start, else the working time between (`app::percent_through`,
+    with the manual start day's partial charge).  The exact elapsed ticks are
+    stored, not Duration*percent/100 (the manual 83 % row is 1200 of 1440
+    minutes); the step block stores the unrounded percent (83.33333333333333);
+    a computed 0 % has no actual time.
+  * date updates leave FixedData +168 at its existing 0x0080 (a percent edit ORs
+    0x9000); +174 is still the actual start.
+  * every written row with progress loses StartSlack (+186 := 0); at 100 % it
+    also loses FreeSlack/TotalSlack (+74/+190 := 0) and stores ActualStart/
+    ActualFinish in the late pair (+112/+116).  A 0 % row keeps all of them.
+  * the project row's Resume/Stop are the project start for Mark on Track and
+    the percent pairs, but Update Project's are the earliest valid per-row
+    resume/stop (Tue 12:00 on the update pair).  The discriminator is the
+    command's status-date flag, not "date update vs percent edit".
+  * Update Project stores its through date as the project status date
+    (`114/Props` record 0x02400045, kind 4, four bytes, NA -> 0x3bf40000); the
+    reader now decodes it into ProjectRow/PlanInput, and the writer patches only
+    those four bytes.  Mark on Track leaves the record alone.
+- UI (`92f45e8`): Mark on Track is enabled on the ribbon split's main click
+  (its unmeasured drop-down item stays disabled) and reads the file's stored
+  status date; Update Project's OK computes the date update for Entire project
+  or Selected tasks.  "100% complete" and rescheduling remain disabled with the
+  exact decision-9 tooltip.  Files without the status-date record are refused
+  before the dialog with an honest message.
+- Tests: `app_edits_actuals_tests` now checks all seven save pairs (874 checks),
+  including the update pair's status-date word and the Props stream (exactly
+  four bytes differ from the control; the mark pairs' Props equals the control),
+  the percent-through values against the update pair, and group/mixed edit-model
+  cases (undo/redo, a pending delete displacing the whole update, a later
+  percent edit winning one target).  `qt_ribbon_inventory` clicks Mark on Track
+  on the committed status-date fixture and checks the queued update; the
+  `qt_project_dialog_gate` checks the dialog's live and disabled choices.
+- Docs: `docs/START-HERE.md` and `app/README.md` describe the enabled commands
+  and the measured status-date write; `docs/ui-command-backlog.md` was
+  regenerated (Mark on Track is `implemented`), with the generator taught that
+  a split whose main click runs a real command is implemented.
+
+Group gates (fresh trees configured from scratch under
+`build/w28-fresh{,-app,-qt}`, serial, tree `92f45e8`, log
+`build/w28/g1-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 51/51 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks passed |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded, 7 pass, 1 expected fail |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks passed |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match |
+| app ctest / app_qt ctest | 18/18 / 23/23 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (60 documented hashes, 40 tracked `.mpp`); paths OK (82 files); provenance OK (8 oracles) |
+| client-name scan on HEAD / `guard_names` wave range | 0 files / 0 hits; `wave27..HEAD` refuses only the 076438f intermediate blob (exit 1); hex grep no matches (exit 1, expected) |
+
+The app ctest output in the gate log is a rerun of the same command on the same
+tree: the first append hit a Windows file lock while this session was reading
+the log, and the script's own exit for that stage was 0.  The gate script
+exited 0; the `guard_names` refusal is the wave-level blocker inherited from
+G0, not a G1 failure.
+
+WAVE-28-G1-COMPLETE
