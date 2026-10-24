@@ -1,0 +1,9 @@
+# wave29 moved onto the rewritten wave28 (21646f4), 2026-10-25 (Tim approved the 076438f rewrite).
+# Every commit keeps its tree (plus wave28's sha-map.txt), message, author and dates.
+# Columns: old-id new-id.  Records written before the move cite the old ids.
+b6c28d06a97d2ffbd711741bc3d921017e9aefdb f2641c53090850b74459b2d1ba0a717a54d252aa
+21ca5b2100377e22a05f545083a0d29bdfb63135 ff8ab390732e191c3350a46bf27f2fd1fa48099b
+f650c101d4076be7fdf7c0de9b47e198380051e0 f6c958ce682630cf886f0e282a44200b473aa014
+cf9161225e21be96d3506fe7b1a5710ef2e7014d 8531b40b7cd66e8d71254b0575f5a7e8fea7abe5
+4a644c7b09f85f81b85771d58e4c5b405cb72890 eddd9e9e10cf443e1f132d4686f40947cb3b5c69
+bc171a8461167d727afacaa898f149faf87030d9 9fd872a3cfb21dd3bdcfb14219c2d21419243ac9
