@@ -108,6 +108,16 @@ DOCUMENTED = {
         "0D1F5FF13FB55F98D3AAE8647FB7FAA725C5B85E561B92B99A3D78E5065A92AE",
     "tests/data/wave25-flag17.mpp":
         "B7F9EDF6A35D61E6B17FEBFFC8FB6378325CD29E9F01FAB9D8002A23330AC0EB",
+    # Wave 27 (W27-0.1): synthetic-base opened on a copy and Task ID 1 set to
+    # 50 % PercentComplete THROUGH PROJECT 2021, saved with neutral metadata.
+    # The committed evidence that Project's own % edit writes actual duration
+    # (+80), remaining duration (+88), actual start (+120), two dates
+    # (+132/+136), a progress flag (+168), the project row's roll-up
+    # (+80/+88/+92) and Var2Data field 0x0B40015E -- not the single +92 word the
+    # port used to write.  It is also the project-with-actuals fixture the Move
+    # Project prompt gate opens now that the % buttons are disabled.
+    "tests/data/wave27-percent-actuals.mpp":
+        "4C9AECBF544377878E058CC0103BEF059B65C48F0C21B079E3AF4EE215CC7AA2",
     # Wave 26 (W26-3.1): the Gantt view's style record and the 214/Props
     # FONT_BASES payload, extracted read-only from tests/data/synthetic-base.mpp
     # (its first decodable Gantt view, "Gantt &with Timeline"; the W26-3.1
