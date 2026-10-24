@@ -195,6 +195,27 @@ DOCUMENTED = {
         "66847BFBF5C8BFEAE79A7847AF374DD0BB871C9B2E23D853C67D06DECA6D3164",
     "tests/data/wave28-update.mpp":
         "66E26371D5B5BC0A8A2A24213492CED9B06D1F4743F75BFAA3FE0DC49209EE62",
+    # Wave 28 (W28-2.1): three same-session Project 2021 save pairs for
+    # OutlineIndent/OutlineOutdent, built by the committed
+    # scripts/oracle_w28_outline_edit.py on synthetic-base copies under C:/w28
+    # with neutral metadata.  indent: ID 2 under ID 1, so ID 1 becomes a
+    # summary; summary: ID 3 under ID 2 first, then ID 2 (and its child) under
+    # ID 1, so a whole subtree moves down a level; outdent: the indent shape
+    # with ID 2 outdented back to the top, so ID 1 stops being a summary.
+    # The edited files are the field-by-field oracles for the port's outline
+    # writer (W28-2.1).
+    "tests/data/wave28-outline-indent-control.mpp":
+        "4A7FDEE530C11EB68AEAF50E24E84EFFE206215267825588746526B7AB717514",
+    "tests/data/wave28-outline-indent.mpp":
+        "7A8AA14D33D633C39392BAEF5102BB2A36E0049951EA711C115D63D7E280E56F",
+    "tests/data/wave28-outline-summary-control.mpp":
+        "C2F809C243B0E43B4197EF9E655FAAD2D7A6061A1509B663A9AD76EE43355F09",
+    "tests/data/wave28-outline-summary.mpp":
+        "0A51E66CA4E550E8BCB50E3129452675C777B2F65AC14A5C230ADB7C20A10A2D",
+    "tests/data/wave28-outline-outdent-control.mpp":
+        "D2FBF8C358A91905C538DEE4185FFEE2EC6F3BD0B6CA56E984FCD1A48BF2A511",
+    "tests/data/wave28-outline-outdent.mpp":
+        "A03B8FC55B642FA520083BD2ECE8361DC305A43DDB0DB9AC7E447193F92277AD",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
