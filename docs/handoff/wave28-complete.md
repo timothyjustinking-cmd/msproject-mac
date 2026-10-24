@@ -625,3 +625,298 @@ intermediate blob history cannot be rewritten), not a G5 failure.  The G5 range
 is 0.
 
 WAVE-28-G5-COMPLETE
+
+## CLOSE - the wave record
+
+The wave ran as six groups plus this close, one fresh session each.  Every item
+in G0..G4 is DONE; G5's W28-5.1 is DEFERRED with the measurement and decision
+evidence its section records.  The group marker lines end each section above.
+The CLOSE work is the fresh-tree gate run, the privacy scans, the independent
+review pass over `git diff wave27..wave28` (two read-only reviewers), the push
+attempt, the START-HERE / INDEX / memory update and the re-scored 16 decisions.
+
+The CLOSE review found **no Critical, three High and three Medium** findings in
+the code review and **no Critical/High, one Medium and eight Low** in the
+record audit.  The Highs are acceptance gaps on the enabled actuals and outline
+save paths and one privacy-scope correction; the wave's rule 1 forbids writing
+bytes that have not been measured against Project, so they are **first in wave
+29** (standing rule 5: review Critical/High findings go to the front of the next
+wave, exactly as wave 27's two Highs became wave 28's G0).  The record errata
+below correct the statements the reviewers falsified.  No earlier section is
+edited; history is not rewritten.
+
+### Fresh-tree gates (final code tree `7a69a40`)
+
+Three trees were configured FROM SCRATCH on 2026-10-25 and built serially:
+`build/w28-fresh` (core, `-DCORE_WARNINGS_AS_ERRORS=ON`),
+`build/w28-fresh-app` (headless app tests) and `build/w28-fresh-qt` (Qt shell
+and its tests).  The numbers are in **`build/w28/close-fresh-gates.log`**,
+filed for standing rule 3 as the identical copy
+**`build/w28/gates-7a69a40-W28-CLOSE.log`**.
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | **52/52** |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | **512 checks / 266 checks** |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | **53 checks, 0 failures** / 8 recorded, **7 pass, 1 expected fail**, 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | **1100 checks / 420 checks** |
+| M2 `recalc --compare` | **332/332**, **268/268** and **64/64** fields match |
+| app ctest / app_qt ctest | **20/20** / **24/24** |
+| `check_fixtures.py` / oracle provenance | fixtures **OK** (72 documented hashes, 52 tracked `.mpp`); paths OK (94 files); provenance OK (8 oracles) |
+| parity wave23-outline / wave25-auto colour | **10/10** / **1/0** comparable, 0 failing (`build/w28/close-parity.log`) |
+| client-name line scan / messages / normalised guard / hex grep | HEAD **0 files / 0 hits**; messages **0 commits**; `3fe29cc..HEAD` **0 hits, exit 0**; push range refuses only the `076438f` blob; hex grep **no matches** |
+
+The numbers belong to `7a69a40`; the CLOSE docs commit that follows is
+docs-only.  The quoted app check counts were independently re-run on that tree
+(`build/w28/direct-counters.log`): actuals **874**, outline **942**, new-task
+mode **1933**, app edit model **196**, outline round-trip **560/0 failures**.
+
+### Privacy
+
+Both scans ran on the final code tree `7a69a40` (the CLOSE commit after it is
+docs-only):
+
+- line-based `scan_client_names.py HEAD --messages wave27..HEAD`: **0 files /
+  0 hits** on HEAD and **0 commit messages** quote a client name
+  (`build/w28/close-fresh-gates.log`).  This scanner looks for **client**
+  names only; it does not look for the operator's name.
+- whitespace-normalised `guard_names.py`: **0 hits, exit 0** on `3fe29cc..HEAD`
+  (the G5 + CLOSE range); the push range `origin/wave27..wave28` **refuses
+  exactly one item**, the `tests/data/synthetic-calendars.mpp` blob added in
+  `076438f`, whose name `d1b5a8a` replaced at the tip (output in the gate log,
+  the preflight `build/w28/close-guard-preflight.log` and the push attempt
+  `build/w28/close-push.log`).  `guard_names.py` is range-based; it does not
+  audit the whole tree.
+- `git grep -nE "client-string-[0-9a-f]{8}"`: no matches.
+
+The push-range refusal is the wave-level blocker, not a CLOSE failure: the
+final tree's calendar file is clean and the fixture path check reports 0.  The
+final-tree privacy scope is: the **seven** fixtures that embedded the local
+save path are clean (W28-0.1), the path check is clean (94 files), and **two
+pre-wave fixtures and 69 tracked text files still carry the operator's name**
+(F3 and Found, not fixed).  Residuals (all outside this wave's push range) also
+include the 13 unsalted FNV-1a name hashes in the wave-26 history and the
+golden TSV's unsalted hashes.  The local gate log again holds the corpus-backed
+reader warning about skipped row uid 10856 (a name the 156-name list does not
+include); nothing tracked quotes it and `build/` is local-only, so the scanner
+coverage gap stays listed.
+
+### Independent review of `wave27..wave28`
+
+Two read-only reviewers ran in parallel against the final code tree `7a69a40`:
+a **code review** of the diff (save-path acceptance against the committed
+Project pairs, writer bounds, UI claims) and a **record audit** of
+`wave28-complete.md` against the logs, commits, fixture hashes and git objects.
+Neither edited a tracked file, configured a build or made a commit; their
+scratch scripts are under `build/verify-w28/scratch/` (local).  Counts: code
+review **0 Critical / 3 High / 2 Medium / 2 Low** (F1-F7); record audit
+**0 Critical / 0 High / 1 Medium / 8 Low** (A1-A9).
+
+What both reviewers confirmed as sound: W28-3.1's `114/Props` writer is
+bounds-checked and refuses short, truncated, wrong-kind and missing records,
+and its save pair differs from Project only at Project's two per-save payload
+bytes; W28-5.1 is genuinely deferred with the exact tooltip, the disabled
+button, the no-op handler and no save path, and the split bytes match the
+record (24000->28800 ticks, task `+168` `0x80->0x2080`, Var2Data 396->528,
+VarMeta 8->396); W28-0.3's FAT resize is correct; W28-0.2's ID order matches
+Project for the twelve task rows; added lines carry no new local path or
+operator string and are LF; all 30 cited commits exist and are ancestors of
+`7a69a40`; every cited `build/w28/` log exists; the six group markers appear
+once each in order; all six fresh-tree gate tables match their logs and trees;
+the fixture pins are exact (72 documented hashes, 52 tracked `.mpp`, 94 paths,
+8 oracles); and the privacy scans are as recorded.
+
+| id | sev | finding | disposition |
+|---|---|---|---|
+| F1 | **High** | The actuals save-pair test's FixedMeta expectation is the control with only the edited rows' `+2/+3` count taken from Project.  Project also changes `+44` (`00<->08`) on the edited entry in 6/7 pairs and bytes in the `+8..23` blob in 6/7; the writer does not produce either, and the test still passes.  Under brief section 1 those unproduced fields are a failing check, not a masked one.  Record line 183 overstated the match. | **first in wave 29**: measure `+44`/blob semantics through Project, write them, or carry them as a named expected-failing check; errata below states the current truth. |
+| F2 | **High** | The outline test does not check the assignment side effect.  Indent and summary tombstones task 1's assignment (FixedMeta state 0/count 3 -> state 2/count 0); outdent creates a new live assignment (uid 4, FixedData 330->440, Var2Data 376->500, VarMeta 96->144).  The port leaves `TBkndAssn` at the control and the test only prints row counts. | **first in wave 29**: a measured assignment tombstone/create writer, then a real check; `outline.h` already documents that the rows are not written. |
+| F3 | **High** | The privacy claim is scoped to the seven path fixtures, not the tree: two pre-wave fixtures still carry the operator's name at HEAD, `check_fixtures.py` scans paths only, `scan_client_names.py` scans client names only and `guard_names.py` is range-based, so no gate scans the whole tree for the operator's name.  The residual is disclosed in Found, not fixed. | **record corrected here**; a whole-tree operator-name scan (or a tree-wide check in `check_fixtures.py`) and the Tim-owned purge are wave 29 items. |
+| F4 | Medium | The outline `+8..23` blob mask is broader than the measurement: Project changes only `+9,+12,+16,+17,+18` on the edited entry, 11 of 16 blob bytes stay identical and untouched entries are unchanged, so the "fresh per-save identity token" justification is unsupported. | wave 29 with F2/A1; errata corrects the wording. |
+| F5 | Medium | Code and test comments claim "Project's reopen of the port's save is the acceptance" for actuals, outline and new-task mode, but no reopen artifact exists for those three port saves (the only reopen JSON is W28-0.4 Unlink; the other oracles reopen Project's own files). | wave 29: run Project's reopen on the three port saves and record it; comments corrected then. |
+| F6 | Low | W28-0.2 row 0: Project measures OutlineNumber `"0"` / level 0; the test expects `""` / `-1`.  Task rows 1..12 are pinned correctly. | queued (wave 29). |
+| F7 | Low | `write_project_status_date` accepts a status-date record of length > 4 (bounds-safe) although its error text says the measured shape is 4 bytes. | queued (wave 29). |
+| A1 | Medium | Against brief section 1, the outline save test masks Project's changed FixedMeta blob and canonicalises Fixed2Data identities instead of failing; disclosed but still a masked check. | wave 29 with F2/F4. |
+| A2 | Low | `build/w28/w28-2.1-fixture-check.log` mixes trees: 66 documented is b427bde's, the 40/82 tracked counts are its parent's; b427bde's tree is 66/46/88.  The six new fixtures were hashed but not yet tracked at gate time. | queued (tooling); no client data. |
+| A3 | Low | G5's fresh gates ran on `64c3b4c` (the code tip) while the record commit's parent is `1d4e830` (comments/README only); the record states the tree, so no number is misattributed. | no action; noted. |
+| A4 | Low | Rule-3 log-naming gaps: `3fe29cc` (G4) quotes fresh-tree numbers with no log named; `64c3b4c`, `cc803c1` and `1d4e830` quote measurement numbers without naming their W28-5.1 logs. | recorded in Found; history cannot be rewritten. |
+| A5 | Low | The 942/986 check counts are quoted but are not in the named `gates-669d49f` logs; they appear only in `build/w28-app/Testing/Temporary/LastTest.log`.  The numbers are true and were re-run in CLOSE (`build/w28/direct-counters.log`). | record note; queued (gate-log naming). |
+| A6 | Low | `tests/data/README.md` calls its table "the complete inventory" but 16 tracked files have no SHA-256 row (12 wave-28 outline/mark/update pairs, 4 wave-26 reference JSONs); all 72 pins match bytes and every present row matches. | queued (README pass). |
+| A7 | Low | Fixture commits also carry `scripts/check_fixtures.py` and/or `tests/data/README.md` (`b427bde`, `ae1a065`, `fc7272e`, `64c3b4c`), against rule 6's "fixtures only". | recorded in Found with the rule/practice item. |
+| A8 | Low | "3 hits each" in the two pre-wave fixtures is cited to `W28-0.4-operator-scan.log`, which reports files and marker kinds; the per-file count is in `W28-0.4-operator-locate.log` (2 ANSI + 1 UTF-16LE).  The statement is true. | errata corrects the citation. |
+| A9 | Low | W28-3.1 says "four pairs"; it is **two** Project save pairs (four `.mpp` files: manual control/manual and auto control/auto), as the record's own detail line says. | errata corrects it. |
+
+### Errata to the sections above (from the review; no earlier text is edited)
+
+- **Line 182-183 (W28-1.1):** the comparison is FixedData and VarMeta
+  byte-for-byte, Var2Data after masking the per-session step ids, and
+  **FixedMeta as the control with only the edited rows' count taken from
+  Project**.  Project's other FixedMeta changes — the `+44` flag in 6/7 pairs
+  and the `+8..23` blob bytes in 6/7 — are neither written nor compared, so
+  "FixedMeta except the edited row's count" must be read as "the control's
+  FixedMeta plus the measured count", not as a full FixedMeta match (F1).  No
+  Project reopen of the port's actuals save exists (F5).
+- **Line 294-296 (W28-2.1):** "every non-owned stream equals the control"
+  holds for the streams the test compares; `TBkndAssn` is **not compared at
+  all**.  Project tombstones an assignment on indent/summary and creates one on
+  outdent; the port leaves `TBkndAssn` at the control and the test prints row
+  counts without a check (F2).  The `+8..23` mask is broader than Project's
+  actual change — only `+9,+12,+16,+17,+18` differ on the edited entry — so
+  the "per-save identity" reading is unsupported (F4/A1).
+- **Line 136:** the per-file "3 hits each" count comes from
+  `build/w28/W28-0.4-operator-locate.log`; the named scan log does not carry
+  per-file counts (A8).
+- **Line 369:** "four pairs" is **two Project save pairs / four `.mpp` files**
+  (A9).
+- **Privacy:** the clean-fixture claim applies to the seven path-bearing
+  fixtures; two other pre-wave fixtures still carry the operator's name and the
+  gates do not scan the whole tree for it (F3).  See the Privacy section above.
+
+### Push and CI
+
+`wave28` could not be pushed.  The local pre-push guard refused it (exit 1) on
+exactly one item: the `tests/data/synthetic-calendars.mpp` blob added in
+`076438f` embeds the operator's name (the tip's file, replaced by `d1b5a8a`,
+is clean).  Because the branch is not on the remote, both `gh workflow run`
+dispatches failed with `HTTP 422: No ref found for: wave28` (qt.yml and
+ci.yml).  The full output is `build/w28/close-push.log`.  Section 0 forbids
+rewriting history or working round the guard, so only Tim can authorize a
+rewrite of `076438f` or rule on the guard; **no CI run exists for wave 28**.
+The rest of the guard's checks pass: no screenshots or corpus files are added,
+and every other added blob is clean.  The attempt was made at the final code
+tree `7a69a40`; the CLOSE commit is docs-only and is not pushed either.
+
+### The 16 decisions re-scored (wave-27 close as the starting point)
+
+| # | decision | wave 27 | after wave 28 | why |
+|---|---|---|---|---|
+| 1 | all seven tabs | DONE | **DONE** | unchanged: every tab's groups are pinned and the live-kind gate reads the real widget classes; the five % buttons keep their measured layout and are now enabled (W28-1.2) |
+| 2 | full backstage | DONE | **DONE** | unchanged: the Project rail and all eleven pages exist; the online entries stay laid out and disabled |
+| 3 | original icon set | DONE | **DONE** | unchanged: 114 command controls carry the one-ink glyphs; menu/QAT/status-bar artwork still uses the older drawings (listed) |
+| 4 | measured chrome metrics | DONE (stronger) | **DONE (stronger)** | unchanged: the measured rectangles/rows/gallery colours are committed and no chrome metric changed this wave |
+| 5 | timeline strip | DONE | **DONE** | unchanged |
+| 6 | real Entry table | DONE | **DONE** | unchanged |
+| 7 | render what the file says | PARTIAL (stronger) | **PARTIAL (stronger)** | W28-2.2 makes the sheet and Gantt reflect a new outline at once (level/indentation, a working collapse triangle, OutlineNumber, summary brackets) and W28-0.2 measures OutlineNumber against Project; still open: stored sheet column widths (5 vs 8 at 1920), PROJECT_A's yellow row fill, bar-label coverage, timescale origin/zoom |
+| 8 | status bar | PARTIAL | **PARTIAL (stronger)** | W28-3.1 makes the centre's "New Tasks : <mode>" follow the loaded file's stored mode with the last pending mode edit applied, recomputed after undo/redo and saves; the other measured contents are unchanged |
+| 9 | disabled commands + backlog | DONE (stronger) | **DONE (stronger)** | the five % buttons, Mark on Track, Update Project (covered options), Indent/Outdent and the Options new-task mode are enabled on measured writers; Split Task stays disabled with the exact decision-9 tooltip; the generated backlog lists Mark on Track and the two outline commands (the five dynamic % controls are carried by the pin and live gate, listed) |
+| 10 | light and dark themes | PARTIAL (stronger) | **PARTIAL (stronger)** | unchanged: Dark Gray and Black darken the chrome and the gate matches the measured fills; the sheet/chart header bands and ribbon ink stay light (listed) |
+| 11 | new-project defaults | DONE | **DONE (stronger)** | W28-3.1 closes the wave-26 Medium: the stored new-task mode is measured, Options > Schedule writes it, the status bar follows it, and Insert Task stamps it into the new row exactly as Project's own InsertTask probe does |
+| 12 | structural measurement | PARTIAL (stronger) | **PARTIAL (stronger)** | new live Qt gates (`qt_outline_display`, the split-view Task Form matrix) and byte-level save pairs for the seven actuals files, three outline pairs and two new-task-mode pairs; the pixel score is not re-run (no reference PNG locally) |
+| 13 | Carlito bundled | DONE | **DONE** | unchanged |
+| 14 | every dialog on every tab | PARTIAL (stronger) | **PARTIAL (stronger)** | unchanged: Text Styles, Gridlines, Bar Styles, Page Setup, Visual Reports and Compare Projects are still disabled backlog entries |
+| 15 | dialog semantics | PARTIAL | **PARTIAL (stronger)** | Update Project's OK runs the measured actuals/status-date write for Entire project or Selected tasks and disables its unmeasured choices with the exact tooltip; Task Information's Percent complete field is live on the same writer; the Task Form's commits run through the same edit model (no new write path) |
+| 16 | split view | DONE | **DONE (stronger)** | W28-4.1 makes the docked Task Form's fields editable through the sheet's own model and save paths, with selection-uid guards, no-op unchanged values and undo through the real menu action; Predecessors/Resources stay read-only where the sheet is |
+
+## Found, not fixed
+
+* **F1 - the actuals save does not write every field Project changes.**
+  Project changes the edited entry's FixedMeta `+44` (`00<->08`) in 6/7 pairs
+  and blob bytes in 6/7; the port writes only the count and the test masks the
+  rest.  Brief section 1 makes that a failing check.  Fixing it needs the flag
+  semantics measured through Project (rule 1) or a named expected-failing
+  check.  **First in wave 29.**  [High - acceptance]
+* **F2 - outline editing leaves Project's assignment side effect unwritten.**
+  Project tombstones task 1's assignment on indent/summary and creates a new
+  assignment on outdent; the port leaves `TBkndAssn` at the control and the
+  test only prints row counts.  Needs a measured assignment tombstone/create
+  writer and a real check.  **First in wave 29**, with F4/A1.  [High -
+  acceptance]
+* **F3 - no gate scans the whole tree for the operator's name.**  Two pre-wave
+  fixtures (`synthetic-base.mpp`, `wave23-outline.mpp`) carry it three times
+  each, 69 tracked text files carry it, `check_fixtures.py` checks paths only,
+  the line-based scan looks for client names, and `guard_names.py` is
+  range-based.  The residual is disclosed; a whole-tree check and the purge are
+  Tim's decision and wave 29's tooling item.  [High - privacy scope]
+* **F5 - the reopen acceptance was never run for the actuals, outline and
+  new-task saves.**  The only reopen artifact is W28-0.4 Unlink; the code
+  comments that cite reopen acceptance must be corrected with it.  Wave 29.
+  [Medium - evidence]
+* **F7 - `write_project_status_date` accepts a status-date record longer than
+  the measured 4 bytes** (bounds-safe, but looser than its error text says).
+  Wave 29.  [Low]
+* **F6 - the W28-0.2 project row expects `""`/`-1` where Project measures
+  `"0"`/0**; task rows 1..12 are correct.  Wave 29.  [Low]
+* **A2/A5 - two gate logs do not belong to the tree/numbers they name**
+  (`w28-2.1-fixture-check.log` mixes trees; 942/986 are only in
+  `build/w28-app/.../LastTest.log`, though re-run true in CLOSE).  Tooling
+  pass.  [Low]
+* **A6 - `tests/data/README.md`'s "complete inventory" lacks 16 rows**
+  (12 wave-28 pairs, 4 wave-26 reference JSONs); every pin that exists matches.
+  [Low]
+* **A4 - rule-3 log-naming gaps** in `3fe29cc` (G4: numbers, no log named) and
+  in `64c3b4c`, `cc803c1`, `1d4e830` (measurement numbers, W28-5.1 log not
+  named).  History cannot be rewritten.  [Medium/Low - process]
+* **A7 - fixture commits carry the hash registry, README row and provenance
+  script** (`ae1a065`, `b427bde`, `fc7272e`, `64c3b4c`), though rule 6 says a
+  fixture commit carries fixtures only; the rule text and practice need
+  reconciling by Tim.  [Medium - process]
+* **The push is blocked by the local pre-push guard.**  Commit `076438f`
+  added `tests/data/synthetic-calendars.mpp` with the operator's name inside the
+  re-saved calendar blob; `d1b5a8a` replaced the name at the tip, but the blob
+  is still in the push range `origin/wave27..wave28`.  The final tree is clean
+  and every other guard check passes.  Section 0 forbids rewriting history or
+  working round the guard; only Tim can authorize a rewrite of that commit or
+  rule on the guard.  Until then the branch cannot be pushed and CI cannot run.
+  [High - privacy/process]
+* **Two pre-wave fixtures at HEAD still store the operator's name** three times
+  each (`tests/data/synthetic-base.mpp`, `tests/data/wave23-outline.mpp`: two
+  ANSI SummaryInformation values and one UTF-16LE Var2Data value); 69 tracked
+  text files (historical docs) also carry it.  They are outside the push range
+  and `synthetic-base.mpp` is the engine suite's base with seven scenario
+  oracles and two scripts pinned to its hash; the same in-place method could
+  clean the tip but would move those pins and would not remove the historical
+  blobs.  A repo-wide purge is Tim's decision.  [Privacy]
+* **Split Task is deferred** (W28-5.1): the segmented 128-byte assignment work
+  contour, its VarMeta relocation and the whole-plan slack/date rewrite are not
+  decoded; the button keeps the exact decision-9 tooltip and the committed pair
+  is the later writer's comparison.  [Medium - the item is deferred with its
+  measurement, as the brief allows]
+* **The wave-26 residuals remain**: stored sheet column widths (5 vs 8 at
+  1920), PROJECT_A's yellow per-row fill, bar-label coverage, the dark themes'
+  light sheet/chart header bands and fixed ribbon ink, the menu-bar/QAT/
+  status-bar artwork, the undecoded stored combination view, the White theme.
+  [Low; stored widths are Medium - decision 7]
+* **Six dialogs remain disabled backlog entries** (decision 14): Text Styles,
+  Gridlines, Bar Styles, Page Setup, Visual Reports, Compare Projects.
+  [Medium - decision 14 stays PARTIAL]
+* **The engines with no writer remain** (project move, baselines, WBS codes,
+  calendars) and are laid out and honestly inert.  [Low]
+* **Custom Fields** covers the six measured families; Start/Finish custom
+  fields and the Resource/Project scopes are not in the port's field table.
+  [Low]
+* **Timescale origin/zoom** still differs from Project's scroll position.
+  [Low]
+* **The pixel score is not re-run**: no PROJECT_A reference PNG is local.
+  [Low]
+* **A stored point size of 0xFFFF** still reaches Qt unguarded in
+  `app_qt/gantt_canvas.cpp` and `app_qt/sheet_table_model.cpp`; a sanity bound
+  belongs to the rendering work.  [Medium - wave-26 review]
+* **Unlink acts on the one selected task**; Project's Unlink Tasks acts on a
+  multi-row selection.  [Medium - W27-3.3]
+* **A pending link ADD naming an unlinked task survives Unlink** (it has no
+  saved row to tombstone); undo is its removal path today.  [Low - W27-3.3]
+* **The ribbon check-box accessible-name sync** and the **Task Information
+  validate-then-commit ordering** remain from the wave-26 review.  [Medium]
+* **Three real-save fixture blocks print SKIP and pass** when a fixture is
+  missing (the Unlink block is the newest); a missing fixture needs a failing
+  check.  [Low - wave-27 review]
+* **`scripts/mpp_diff.py` still truncates its per-row diff at ten offsets**
+  with no marker; it hid date words from a reviewer in wave 27.  [Low - tooling]
+* **The 156-name list is built from live rows**, so the corpus-backed reader
+  warning about skipped row uid 10856 prints a name the scanner does not know
+  into the local CLOSE gate log; nothing tracked quotes it and `build/` is
+  local-only.  The warning should print the uid/row only, and the scanner should
+  include skipped-row names.  [Low - tooling/privacy]
+* **174 tracked text files still contain CRLF lines** (`git grep -Il $'\r'`;
+  grandfathered analysis output and a few sources; the wave-27 record's 173 was
+  one short); a repo-wide normalisation belongs to a dedicated change.  [Low]
+* **The 13 unsalted FNV-1a display-name hashes** removed in wave 27 remain in
+  the older wave-26 commits, and `tests/data/project_a_golden.tsv` still carries
+  unsalted 16-hex name hashes.  Rewriting history is forbidden by the brief;
+  both remain Tim's decision.  [Privacy - recorded in the Privacy section]
+* **The generated backlog does not list the five dynamic %-complete ribbon
+  controls, Update Project or Split Task**: `docs/ui-command-backlog.md` is
+  generated from the menu/ribbon command model; `ribbon_pin.tsv` and the live
+  gates carry them instead.  [Low - decision 9's backlog stays incomplete]
+
+WAVE-28-COMPLETE
