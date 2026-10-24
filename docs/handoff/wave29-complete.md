@@ -11,7 +11,7 @@ Deferrals need the attempt evidence the standing rules and the brief name.
 | W29-0.0 | High: the enabled commands cover unmeasured shapes | **DONE** | commit `21ca5b2`; gates `build/w29/gates-b6c28d0-W29-0.0-*.log` |
 | W29-0.1 | High: the save-pair tests mask Project's changes | **DONE** | commit `f650c10` and the record commit that adds this file; gates `build/w29/gates-21ca5b2-W29-0.1-*.log` |
 | W29-0.2 | High: the percent writer on real schedules | **DONE** | commit `b751435`; gates `build/w29/gates-4a644c7-W29-0.2-*.log` |
-| W29-0.3 | High: Mark on Track / Update Project on rows with progress | PENDING | - |
+| W29-0.3 | High: Mark on Track / Update Project on rows with progress | **DONE** | commit `bd9e13d`; gates `build/w29/gates-61f19c8-W29-0.3-*.log` |
 | W29-0.4 | High: indent and outdent on auto-scheduled rows | PENDING | - |
 
 W29-0.1 detail:
@@ -104,6 +104,76 @@ W29-0.2 detail:
 - `tests/data/README.md` corrected: the work control's 0F400031 is 72 bytes
   (44 + one record), the dropped task fields are 0x0B4004E3/0x0B4004E5, and
   the mid pair's moved fields are listed as measured.
+
+W29-0.3 detail:
+
+- Five new Project 2021 save pairs on a shaped synthetic base whose ID 1 is
+  automatic and already records 60 % (ActualStart 2026-01-05 08:00; the
+  0x0B40015E block is marker, middle 60, final 60): Mark on Track on ID 1
+  with the status date after (2026-01-09) and before (2026-01-07) the
+  recorded progress, UpdateProject(All=True) on both dates, and
+  UpdateProject(All=False) on a two-of-three selection (IDs 1 and 2).  The
+  oracle is `scripts/oracle_w29_update_progress.py`; facts
+  `build/w29/W29-0.3-project-progress-update.json` (not committed).
+- Project DOES lower recorded progress: 60 -> 40 when the through date
+  precedes it, 60 -> 80 when it follows.  The App gate
+  (`measured_progress_update_shape`) lifts the W29-0.0 date-update refusal
+  only for the measured automatic top-level 60 % shape with an ActualStart
+  equal to the effective Start and a progress block; every other progressed
+  row keeps the refusal, and the 25 -> 60 mid transition stays refused.
+- 0x0B40015E: a raise appends middle 80 + final 80 (76 -> 96 bytes at a new
+  Var2Data offset, 616 -> 716); a lower REPLACES the stored middle with a
+  fresh id and rewrites the same 76-byte payload in place (offset 536,
+  VarMeta untouched, Var2Data stays 616).  Our writer refuses a lowering
+  from any other block shape.
+- 0F400031: a raise/0..99 rebuild keeps the W29-0.2 rule; a lower writes
+  magic 0x00200001, clears +32, record 0 = (new remaining work, units*16,
+  new ticks*8) and record 1 = (the old first record's remaining work and
+  units, the NEW tick word).  A real assignment or a non-two-record block
+  refuses to lower.
+- 0F400032: a date update's replaced block does NOT move Props 0x04000002
+  (all five pairs keep it at 0; a percent edit still counts the removed
+  payload: wave-28 40 -> 100 counts 56, 100 -> 0 counts 76).  The raise's
+  second record is (old actual work, units 0, new tick word); the lower's
+  second record is the old record byte for byte.
+- Scope: only the entire-project Update Project makes the project row's
+  Resume/Stop the earliest per-row dates (3bf31c20) and stores the status
+  date (0x3bf60000 / 0x3bf40000).  The two-of-three Selected scope keeps
+  the project start (3bf11e78) and leaves the status-date record at
+  0xffffffff.  The edit carries `update_entire_project` (the scope's uid
+  list vs every live saved non-summary task); the save layer uses it for
+  both decisions instead of the caller's status-date flag.
+- The Props comparison now masks the whole 4-byte per-save id word at
+  payload +0 for records 0x02400029 / 0x024013c2: the mark-before control
+  and result differ in every byte of that word (a961.... vs b02c....), so
+  the old 2-byte mask left the two files unequal.  The expected-failure
+  check is likewise over the full word.
+- `app_edit_tests` had four stale W29-0.2 checks still asserting the
+  pre-lift refusals for the leaf-under-a-summary and work-bearing shapes;
+  they now assert the measured 0 -> 40 lifts (the milestone 0 -> 40 refusal
+  stays).  208 checks pass.
+- No Project COM reopen of the PORT's saves was run for this item, so this
+  record makes no reopen claim; the field-by-field comparison is against
+  Project's own file and the app's reader reopens the port's save.
+
+Gates for commit `bd9e13d` (parent `61f19c8`), logs under `build/w29/`
+(`gates-61f19c8-W29-0.3-*.log`):
+
+| gate | result |
+|---|---|
+| core Release build (`core_mppwrite`, `mppwrite_roundtrip_outline`) | exit 0 |
+| core `mppwrite_roundtrip_outline` | 492 checks, 0 failures, 49 expected failures, exit 0 |
+| app Release build (ALL_BUILD) | exit 0 |
+| `app_edits_actuals_tests` | 2280 checks, 0 failures, 278 expected failures, exit 0 |
+| `app_edit_tests` | 208 checks, 0 failures, exit 0 |
+| `app_edits_fields_tests` | 160 checks, 0 failures, exit 0 |
+| `app_edits_links_tests` | 200 checks, 0 failures, exit 0 |
+| `app_edits_new_task_mode_tests` | 1933 checks, 0 failures, exit 0 |
+| `app_edits_outline_tests` | 988 checks, 0 failures, 42 expected failures, exit 0 |
+| `project_dialogs_tests` | 70 checks, 0 failures, exit 0 |
+| `start_edit_warning_tests` | 41 checks, 0 failures, exit 0 |
+| `check_fixtures.py` | fixtures OK (90 documented hashes, 70 tracked `.mpp`); paths OK (112 files); provenance OK (8 oracles) |
+| client-name scan on HEAD and the staged tree / name guard `61f19c8..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected) |
 
 Gates for commit `b751435` (parent `4a644c7`), logs under `build/w29/`
 (`gates-4a644c7-W29-0.2-*.log`):
