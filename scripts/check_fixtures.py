@@ -233,6 +233,23 @@ DOCUMENTED = {
         "923FC593ABC10F521BBC6429D94823FC1DAF1ABFF66C762D30D26ED6E53247CB",
     "tests/data/wave28-newtask-manual.mpp":
         "988AE84E0E644F024D515E5E90A97807E8311145CE26C5EBAA4BE9C91B3F39FA",
+    # Wave 28 (W28-5.1): one same-session Project 2021 save pair for Split Task
+    # on an automatic leaf, built by the committed scripts/oracle_w28_split.py
+    # on a synthetic-base copy under C:/w28 with neutral metadata.  Control:
+    # ID 1 automatic, 5 days, 2026-01-05 08:00 -> 2026-01-09 17:00, one split
+    # part.  Edited: ONE split (part 1 -> Wed 2026-01-07 17:00, part 2 Fri
+    # 2026-01-09 08:00 -> Mon 2026-01-12 17:00), duration 2400 ticks kept,
+    # finish +3 days.  The split lives on the ASSIGNMENT's 0x0F400031
+    # planned-work contour (block 100 -> 128 bytes, count word 0 -> 3, VarMeta
+    # offset 8 -> 396; TBkndAssn Var2Data 396 -> 528) plus task row 1's
+    # +100/+108/+116 dates and +168 bit 0x2000, the project row's
+    # Duration/RemainingDuration and every other row's slack/late dates.  No
+    # TBkndTask variable structure changes.  The pair is the measurement that
+    # DEFERS the split writer (W28-5.1).
+    "tests/data/wave28-split-control.mpp":
+        "7C4243FE1548B16C4CAF2EBCB91D6753D913D228ECB2257944FF06C557D7B072",
+    "tests/data/wave28-split.mpp":
+        "F65E36B93117B6962679027282F85EBB20AB60CFB0448CD4755B7B53A6901EEC",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
