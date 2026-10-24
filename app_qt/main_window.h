@@ -36,6 +36,7 @@
 #include "prefs.h"
 #include "ribbon_bar.h"  // RibbonCommand (wave 26)
 #include "sheet_table_model.h"
+#include "task_form.h"  // TaskFormField (W28-4.1)
 #include "theme.h"
 
 class QAction;
@@ -67,7 +68,6 @@ class GanttCanvas;
 class Backstage;
 class PreferencesStore;
 class RibbonBar;
-class TaskForm;
 class TimelineStrip;
 class ViewLabel;
 
@@ -273,8 +273,11 @@ class MainWindow final : public QMainWindow {
     // same begin_edit/commit_edit path a typed cell edit uses, so undo and the
     // save diff see them -- and queues a changed Percent complete as the
     // measured set_percent structural edit (wave 28, W28-1.2).  True when every
-    // applied field committed and the percent parsed.
-    bool apply_task_information(const TaskInformationValues& values);
+    // applied field committed and the percent parsed.  W28-4.1: `source` names
+    // the surface in the status messages; the docked Task Form passes "task
+    // form" and uses this very path, so it adds no write path.
+    bool apply_task_information(const TaskInformationValues& values,
+                                const char* source = "task information");
     // Shows the six-tab dialog for the selected task, then applies OK.
     void show_task_information();
 
@@ -355,7 +358,16 @@ class MainWindow final : public QMainWindow {
     void indent_selected(bool indent);
     void unlink_selected_task();
     // W26-6.3: pushes the selected task's values into the docked Task Form.
+    // W28-4.1: also records the uid the form was populated for and enables a
+    // field exactly when its sheet column is editable.
     void refresh_task_form();
+    // W28-4.1: a value committed in the docked Task Form.  The value goes
+    // through apply_task_information() -- the sheet cell session for the four
+    // cell fields and the measured set_percent edit for % Complete -- so the
+    // form adds no write path.  A commit whose form row is no longer the
+    // selected task is dropped (the line edit's focus-out can arrive after a
+    // selection click moved the sheet).
+    void commit_task_form_field(TaskFormField field, const QString& text);
     void open_dialog(const QString& start_dir = QString());
     void show_about();
     void show_shortcuts();
@@ -421,6 +433,10 @@ class MainWindow final : public QMainWindow {
     // fraction and every parity rectangle unchanged while Details is hidden.
     QSplitter* details_splitter_ = nullptr;
     TaskForm* task_form_ = nullptr;
+    // W28-4.1: the task uid the docked form's values were populated for.  A
+    // commit for any other row is refused rather than written to the wrong
+    // task; refresh_task_form() sets both this and the field texts together.
+    std::uint32_t task_form_uid_ = 0;
     QSlider* zoom_slider_ = nullptr;
     QLabel* status_summary_ = nullptr;
     QLabel* status_message_ = nullptr;

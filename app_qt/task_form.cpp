@@ -17,9 +17,10 @@ namespace {
 QLineEdit* make_field(QWidget* parent, const QString& object_name) {
     auto* field = new QLineEdit(parent);
     field->setObjectName(object_name);
-    // Display only this wave: the values come from the sheet model, and the
-    // editable path is Task Information (see the header).
-    field->setReadOnly(true);
+    // W28-4.1: editable by default; MainWindow disables a field whose sheet
+    // column is missing/read-only, and the two display-only fields are
+    // disabled below.  The values still come from the sheet model.
+    field->setReadOnly(false);
     field->setFrame(true);
     field->setMinimumWidth(140);
     field->setFixedHeight(22);
@@ -61,6 +62,20 @@ TaskForm::TaskForm(QWidget* parent) : QWidget(parent) {
     predecessors_ = make_field(this, QStringLiteral("taskFormPredecessors"));
     resources_ = make_field(this, QStringLiteral("taskFormResources"));
 
+    // W28-4.1: these two have no sheet edit path (the stored table declares
+    // their columns read-only, link edits are the Link dialog and there is no
+    // assignment writer), so the form shows them disabled rather than offering
+    // an edit a save would drop.
+    predecessors_->setReadOnly(true);
+    predecessors_->setEnabled(false);
+    predecessors_->setToolTip(
+        QStringLiteral("Predecessors: edited with the Link command; the sheet's column is "
+                       "read-only"));
+    resources_->setReadOnly(true);
+    resources_->setEnabled(false);
+    resources_->setToolTip(
+        QStringLiteral("Resources: the port has no assignment writer"));
+
     form_->addRow(make_caption(this, QStringLiteral("Name")), name_);
     form_->addRow(make_caption(this, QStringLiteral("Duration")), duration_);
     form_->addRow(make_caption(this, QStringLiteral("Start")), start_);
@@ -76,7 +91,47 @@ TaskForm::TaskForm(QWidget* parent) : QWidget(parent) {
     outer->addWidget(selection_);
     outer->addStretch(1);
 
+    // W28-4.1: Return, or focus leaving the field, reports the value to
+    // MainWindow.  A programmatic setText (the selection sync) never emits
+    // editingFinished, so refreshing the form cannot queue an edit.
+    auto wire = [this](QLineEdit* edit, TaskFormField which) {
+        connect(edit, &QLineEdit::editingFinished, this, [this, edit, which] {
+            if (commit_ != nullptr && !edit->isReadOnly()) {
+                commit_(which, edit->text());
+            }
+        });
+    };
+    wire(name_, TaskFormField::name);
+    wire(duration_, TaskFormField::duration);
+    wire(start_, TaskFormField::start);
+    wire(finish_, TaskFormField::finish);
+    wire(percent_, TaskFormField::percent);
+
     clear();
+}
+
+void TaskForm::set_commit_handler(CommitHandler handler) {
+    commit_ = std::move(handler);
+}
+
+QLineEdit* TaskForm::field(TaskFormField which) const noexcept {
+    switch (which) {
+        case TaskFormField::name: return name_;
+        case TaskFormField::duration: return duration_;
+        case TaskFormField::start: return start_;
+        case TaskFormField::finish: return finish_;
+        case TaskFormField::percent: return percent_;
+    }
+    return nullptr;
+}
+
+void TaskForm::set_field_enabled(TaskFormField which, bool enabled) {
+    QLineEdit* edit = field(which);
+    if (edit == nullptr) {
+        return;
+    }
+    edit->setReadOnly(!enabled);
+    edit->setEnabled(enabled);
 }
 
 void TaskForm::set_values(const TaskFormValues& values) {
