@@ -1,9 +1,10 @@
 // app/app_edits_actuals_tests.cpp -- the actuals writer against Project's own
-// save pairs (wave 28, W28-1.2 and W28-1.3).
+// save pairs (wave 28, W28-1.2 and W28-1.3; the wave-29 shapes, W29-0.2).
 //
 // For each committed pair (tests/data/wave28-percent-*.mpp,
-// wave28-mark-*.mpp, wave28-update*.mpp -- neutral metadata and the neutral
-// C:/w28 drive path, see tests/data/README.md) this test:
+// wave28-mark-*.mpp, wave28-update*.mpp and wave29-percent-*.mpp -- neutral
+// metadata and the neutral C:/w28 and C:/w29 drive paths, see
+// tests/data/README.md) this test:
 //
 //   1. loads the pair's CONTROL through the app's reader adapter, builds the
 //      edit through make_percent_edit() (a % edit) or
@@ -394,14 +395,43 @@ std::map<Identity, Identity> task_identity_map(const Bytes& fixed2,
     return canonical;
 }
 
+/* The RESOURCE identities (114/TBkndRsc/Fixed2Data: 40-byte records, three
+ * leading records, row r's identity at +0..15).  A real-resource assignment's
+ * +32..47 word carries the resource's per-save identity; Project reallocates it
+ * on every save (the wave-29 work pair's control/result do), while Project's
+ * unassigned placeholders carry a constant there.  Canonicalising the link
+ * through the resource map lets every other assignment-Fixed2Data byte be
+ * compared exactly. */
+std::map<Identity, Identity> resource_identity_map(const Bytes& fixed2) {
+    std::map<Identity, Identity> canonical;
+    constexpr std::size_t kRecord = 40;
+    constexpr std::size_t kFirst = 3;
+    if (fixed2.size() < kRecord * kFirst || fixed2.size() % kRecord != 0) {
+        return canonical;
+    }
+    const std::size_t rows = fixed2.size() / kRecord - kFirst;
+    for (std::size_t row = 0; row < rows; ++row) {
+        const Identity id = read_identity(fixed2, kRecord * (row + kFirst));
+        if (!identity_empty(id)) {
+            canonical.emplace(id, row_identity(row));
+        }
+    }
+    return canonical;
+}
+
 /* The same canonicalisation for TBkndAssn Fixed2Data: 48-byte records, the
- * record's own id at +0..15 and its parent link at +16..31.  The parent is the
+ * record's own id at +0..15, its parent link at +16..31 and, on a real-resource
+ * assignment, the resource's per-save identity at +32..47.  The parent is the
  * TASK's Fixed2Data identity (different id space from the assignment ids), so
- * the links are canonicalised through the Task table's map. */
+ * the links are canonicalised through the Task table's map; the resource word
+ * is left alone unless it names a resource (Project's placeholder constant is
+ * compared exactly). */
 Bytes canonical_assn_fixed2(const Bytes& fixed2,
-                            const std::map<Identity, Identity>& task_ids) {
+                            const std::map<Identity, Identity>& task_ids,
+                            const std::map<Identity, Identity>& resource_ids) {
     constexpr std::size_t kRecord = 48;
     constexpr std::size_t kParent = 16;
+    constexpr std::size_t kResource = 32;
     if (fixed2.size() % kRecord != 0) {
         return {};
     }
@@ -420,6 +450,13 @@ Bytes canonical_assn_fixed2(const Bytes& fixed2,
         if (found != task_ids.end()) {
             std::copy(found->second.begin(), found->second.end(),
                       out.begin() + static_cast<std::ptrdiff_t>(base + kParent));
+        }
+        const Identity resource = read_identity(fixed2, base + kResource);
+        const auto resource_found = resource_ids.find(resource);
+        if (resource_found != resource_ids.end()) {
+            std::copy(resource_found->second.begin(), resource_found->second.end(),
+                      out.begin() +
+                          static_cast<std::ptrdiff_t>(base + kResource));
         }
     }
     return out;
@@ -492,6 +529,11 @@ struct Pair {
 const std::uint32_t kUid1[] = {1};
 const std::uint32_t kUid2[] = {2};
 const std::uint32_t kUid123[] = {1, 2, 3};
+/* W29-0.2: the wave-29 pairs' edited rows -- a leaf under two summaries, the
+ * one task with a work-bearing assignment, and the top-level milestone. */
+const std::uint32_t kUid3[] = {3};
+const std::uint32_t kUid6[] = {6};
+const std::uint32_t kUid7[] = {7};
 
 const std::uint16_t kPct0[] = {0};
 const std::uint16_t kPct40[] = {40};
@@ -521,6 +563,17 @@ const Pair kPairs[] = {
      kUid2, kMarkManualPct, kTicks12000, 1, false, false, kThroughRaw},
     {"update", "wave28-update-control.mpp", "wave28-update.mpp",
      kUid123, kUpdatePct, kUpdateTicks, 3, false, true, 0xFFFFFFFFu},
+    /* W29-0.2: the three measured wave-29 shapes, each one 0 -> measured edit
+     * on an automatic row -- a leaf under a summary (the summary and project
+     * roll-up), a work-bearing assignment (% Work Complete, task and
+     * assignment actual work), and a zero-duration milestone 0 -> 100. */
+    {"wave29-leaf40", "wave29-percent-leaf-control.mpp",
+     "wave29-percent-leaf40.mpp", kUid3, kPct40, nullptr, 1, true, false, 0},
+    {"wave29-work40", "wave29-percent-work-control.mpp",
+     "wave29-percent-work40.mpp", kUid6, kPct40, nullptr, 1, true, false, 0},
+    {"wave29-milestone100", "wave29-percent-milestone-control.mpp",
+     "wave29-percent-milestone100.mpp", kUid7, kPct100, nullptr, 1, true,
+     false, 0},
 };
 
 void check_pair(const Pair& pair) {
@@ -763,13 +816,18 @@ void check_pair(const Pair& pair) {
     check_size(output_assn_f2.size(), result_assn_f2.size(),
                "TBkndAssn Fixed2Data size equals Project's");
     if (output_assn_f2.size() == result_assn_f2.size()) {
-        /* Each file's assignment parents name ITS OWN Task identities (Project
-         * allocates a fresh set per save; the port keeps the control's), so the
-         * link map is built from the same file's Task Fixed2Data. */
+        /* Each file's assignment parents name ITS OWN Task identities, and a
+         * real-resource assignment's +32 word names its OWN resource identity
+         * (Project allocates a fresh set per save; the port keeps the
+         * control's), so both maps are built from the same file's streams. */
         check(canonical_assn_fixed2(
-                  output_assn_f2, task_identity_map(output_f2, task_rows)) ==
+                  output_assn_f2, task_identity_map(output_f2, task_rows),
+                  resource_identity_map(
+                      stream_or_empty(output, "114/TBkndRsc/Fixed2Data"))) ==
                   canonical_assn_fixed2(
-                      result_assn_f2, task_identity_map(result_f2, task_rows)),
+                      result_assn_f2, task_identity_map(result_f2, task_rows),
+                      resource_identity_map(
+                          stream_or_empty(result, "114/TBkndRsc/Fixed2Data"))),
               "TBkndAssn Fixed2Data equals Project's after identity "
               "canonicalisation");
     }
@@ -830,14 +888,20 @@ void check_pair(const Pair& pair) {
                   (uid + " assignment FixedMeta +14 progress word equals "
                    "Project's").c_str());
         }
-        const std::size_t af2m = 16 + arow * 53;
-        if (af2m + 53 <= output_assn_f2m.size() &&
-            af2m + 53 <= result_assn_f2m.size()) {
-            check(output_assn_f2m[af2m + 9] == result_assn_f2m[af2m + 9],
-                  (uid + " assignment Fixed2Meta +9 live bit equals "
-                   "Project's").c_str());
-        } else {
-            check(false, (uid + ": Fixed2Meta has the assignment entry").c_str());
+        /* Fixed2Meta is indexed by the FixedMeta ENTRY, not by the data row:
+         * the assignment table's entry order can differ from its FixedData
+         * order once a row is tombstoned (the wave-29 milestone pair). */
+        if (aentry != kNoIndex) {
+            const std::size_t af2m = 16 + aentry * 53;
+            if (af2m + 53 <= output_assn_f2m.size() &&
+                af2m + 53 <= result_assn_f2m.size()) {
+                check(output_assn_f2m[af2m + 9] == result_assn_f2m[af2m + 9],
+                      (uid + " assignment Fixed2Meta +9 live bit equals "
+                       "Project's").c_str());
+            } else {
+                check(false,
+                      (uid + ": Fixed2Meta has the assignment entry").c_str());
+            }
         }
     }
 
@@ -978,6 +1042,110 @@ void check_pair(const Pair& pair) {
     } catch (const std::exception& read_error) {
         check(false, "the reader reopens the port's save");
         std::printf("READ ERROR: %s\n", read_error.what());
+    }
+}
+
+/* W29-0.2: the mid-to-mid pair (25 -> 60) stays refused.  Project's own save of
+ * that edit does not merely write the row's actuals: it RESCHEDULES the chain
+ * (the summary durations shrink 26400 -> 23040 ticks, the summary/project row
+ * takes a new start and roll-up, the other leaves' date copies move, and the
+ * edited leaf's Resume/Stop follow the new schedule).  This save path has no
+ * scheduler, so the transition stays refused and every field Project moves is a
+ * NAMED EXPECTED FAILURE, not an assertion that the control's bytes are right
+ * (rule 1: a field Project changes in the pair that the port does not produce is
+ * a failing check).  Because the edit is refused the port writes nothing, so
+ * the port's "save" keeps the control's value; each check below compares that
+ * value with Project's file.  The refusal check is the anti-rot guard: the day
+ * the transition is enabled this block must be rewritten against a port save. */
+void check_mid_pair_refused() {
+    std::printf("-- pair wave29-mid25-60 (refused shape):\n");
+    const std::filesystem::path control_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave29-percent-mid25-control.mpp";
+    const std::filesystem::path result_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave29-percent-mid60.mpp";
+    if (!std::filesystem::exists(control_path) ||
+        !std::filesystem::exists(result_path)) {
+        std::printf("SKIP: the mid pair is not present\n");
+        return;
+    }
+
+    app::PlanInput plan;
+    try {
+        plan =
+            app::plan_input_from_document(mpp::load_file(control_path.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the mid pair control loads through the reader");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        return;
+    }
+    app::StructuralEdit edit;
+    std::string edit_error;
+    check(!app::make_percent_edit(plan, 4, 60, edit, edit_error),
+          "make_percent_edit refuses the unmeasured 25 -> 60 mid edit");
+    check(edit_error.find("no Project save pair measures") != std::string::npos,
+          "the mid refusal names the missing transition measurement");
+
+    mppwrite::CfbDocument control;
+    mppwrite::CfbDocument result;
+    try {
+        control = mppwrite::CfbDocument::from_file(control_path.string());
+        result = mppwrite::CfbDocument::from_file(result_path.string());
+    } catch (const std::exception& open_error) {
+        check(false, "the mid pair files open");
+        std::printf("OPEN ERROR: %s\n", open_error.what());
+        return;
+    }
+    const Bytes control_fixed = control.read_stream(task_stream("FixedData"));
+    const Bytes result_fixed = result.read_stream(task_stream("FixedData"));
+
+    struct RescheduledField {
+        std::uint32_t uid;
+        std::size_t offset;
+        const char* name;
+    };
+    /* Every word the pair measurement showed Project's save moving. */
+    const RescheduledField kRescheduled[] = {
+        {0, 80, "ActualDuration"},  {0, 84, "Duration"},
+        {0, 88, "RemainingDuration"}, {0, 92, "% complete"},
+        {0, 96, "Start"},           {0, 104, "Start2"},
+        {0, 112, "Start3"},         {0, 120, "ActualStart"},
+        {0, 132, "Resume"},         {0, 136, "Stop"},
+        {1, 80, "ActualDuration"},  {1, 84, "Duration"},
+        {1, 88, "RemainingDuration"}, {1, 92, "% complete"},
+        {1, 96, "Start"},           {1, 104, "Start2"},
+        {1, 112, "Start3"},         {1, 120, "ActualStart"},
+        {1, 132, "Resume"},         {1, 136, "Stop"},
+        {2, 80, "ActualDuration"},  {2, 84, "Duration"},
+        {2, 88, "RemainingDuration"}, {2, 92, "% complete"},
+        {2, 96, "Start"},           {2, 104, "Start2"},
+        {2, 112, "Start3"},         {2, 120, "ActualStart"},
+        {2, 132, "Resume"},         {2, 136, "Stop"},
+        {3, 96, "Start"},           {3, 100, "Finish"},
+        {3, 104, "Start2"},         {3, 108, "Finish2"},
+        {3, 112, "Start3"},         {3, 116, "Finish3"},
+        {3, 174, "start anchor"},   {4, 80, "ActualDuration"},
+        {4, 88, "RemainingDuration"}, {4, 92, "% complete"},
+        {4, 132, "Resume"},         {4, 136, "Stop"},
+        {5, 104, "Start2"},         {5, 108, "Finish2"},
+        {5, 186, "StartSlack"},     {5, 190, "TotalSlack"},
+        {7, 104, "Start2"},         {7, 108, "Finish2"},
+        {7, 186, "StartSlack"},     {7, 190, "TotalSlack"},
+    };
+    for (const RescheduledField& field : kRescheduled) {
+        const std::string uid = std::to_string(field.uid);
+        const std::size_t row = uid_row(control_fixed, field.uid);
+        check(row != kNoIndex,
+              (uid + ": the rescheduled uid is a saved row").c_str());
+        if (row == kNoIndex) {
+            continue;
+        }
+        const std::size_t at = 48 + 202 * row + field.offset;
+        check_expected_failure(
+            get_u32(control_fixed, at) == get_u32(result_fixed, at),
+            (uid + " " + field.name +
+             " equals Project's (Project reschedules the chain on this edit; "
+             "the port has no scheduler on this save path)").c_str());
     }
 }
 
@@ -1314,6 +1482,7 @@ int main() {
     for (const Pair& pair : kPairs) {
         check_pair(pair);
     }
+    check_mid_pair_refused();
     check_percent_through();
     check_group_edit_model();
     check_update_refusals();

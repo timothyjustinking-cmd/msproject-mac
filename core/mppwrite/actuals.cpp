@@ -53,12 +53,18 @@ constexpr std::uint8_t kFixed2MetaFlagManual = 0x80;
  * this marker, the new middle, the constant final. */
 constexpr double kMarkerPercent = 32768.0;
 
-/* The four variable fields Project's percent save touches (measured, W28-1.1).
+/* The variable fields Project's percent save touches (measured, W28-1.1).
  * 0x0B40015E is the progress-step block; 0x0B4004E5 is the constant 8-byte
  * block a 0 % row keeps; 0x0B400505/0x0B400506 are the two 2-byte manual
- * fields a 0 % manual row carries and loses when it first gets progress. */
+ * fields a 0 % manual row carries and loses when it first gets progress.
+ * W29-0.2: 0x0B4004E3 is a second constant 8-byte 0 % block -- the wave-29
+ * work pair removes it at first progress alongside 0x0B4004E5 -- and
+ * 0x0B4004E4 is uid 0's project-mode block, whose 12-byte payload a milestone
+ * 0 -> 100 shrinks in place to 8 bytes ({2,1,7} -> {1,1}, freeing 4). */
 constexpr std::uint32_t kProgressField = 0x0B40015Eu;
 constexpr std::uint32_t kResetField = 0x0B4004E5u;
+constexpr std::uint32_t kResetFieldAlt = 0x0B4004E3u;
+constexpr std::uint32_t kProjectModeField = 0x0B4004E4u;
 constexpr std::uint32_t kManualFieldA = 0x0B400505u;
 constexpr std::uint32_t kManualFieldB = 0x0B400506u;
 constexpr std::uint32_t kFinalStepId = 0x340A75F7u;
@@ -98,12 +104,28 @@ constexpr std::size_t kFixed2RecordStartCopy = 46;
 constexpr std::uint8_t kFixed2RecordNoProgress = 0x30;
 constexpr std::uint8_t kFixed2RecordHasProgress = 0x01;
 
+/* W29-0.2: the task row's work header doubles, MEASURED on the wave-29
+ * work-bearing-assignment pair: +8 planned Work, +16 Actual Work and +24
+ * Remaining Work, f64, in thousandths of a minute (960000 = 960 minutes).  A
+ * row whose assignment names a real resource stores them from that assignment;
+ * an unassigned placeholder row keeps its zeros (the leaf and milestone pairs
+ * do not move them). */
+constexpr std::size_t kTaskWork = 8;
+constexpr std::size_t kTaskActualWork = 16;
+constexpr std::size_t kTaskRemainingWork = 24;
+
 /* TBkndAssn: 110-byte rows, 34-byte FixedMeta entries, 53-byte Fixed2Meta
  * entries, and the two variable fields Project's save updates (0F400031 work
  * contour, 0F400032 actual work). */
 constexpr std::size_t kAssnStride = 110;
 constexpr std::size_t kAssnUid = 0;
 constexpr std::size_t kAssnTask = 4;
+/* +8 is the resource uid: 0 on a project/summary row, 0xFFFF0001 on Project's
+ * UNASSIGNED placeholder assignment, a real resource otherwise (W29-0.2: the
+ * work pair's row names the file's one resource; the project row's work
+ * doubles and % Work Complete follow the real rows only). */
+constexpr std::size_t kAssnResource = 8;
+constexpr std::uint32_t kNullResource = 0xFFFF0001u;
 constexpr std::size_t kAssnUnits = 12;
 constexpr std::size_t kAssnPlanned = 20;
 constexpr std::size_t kAssnActual = 28;
@@ -180,6 +202,17 @@ double get_f64(std::vector<std::uint8_t> const& b, std::size_t o) {
     static_assert(sizeof bits == sizeof value, "IEEE-754 double expected");
     std::memcpy(&value, &bits, sizeof value);
     return value;
+}
+
+/* TaskTable exposes u16/u32 setters only; a row-header double is its two
+ * little-endian words (W29-0.2). */
+void set_row_f64(TaskTable& rows, std::size_t row, std::size_t offset,
+                 double value) {
+    std::uint64_t bits = 0;
+    static_assert(sizeof bits == sizeof value, "IEEE-754 double expected");
+    std::memcpy(&bits, &value, sizeof bits);
+    rows.set_u32(row, offset, static_cast<std::uint32_t>(bits & 0xFFFFFFFFu));
+    rows.set_u32(row, offset + 4, static_cast<std::uint32_t>(bits >> 32));
 }
 
 /* One 20-byte step of a 0x0B40015E block.  The trailing id is an opaque token
@@ -358,6 +391,29 @@ std::size_t count_var_entries(std::vector<std::uint8_t> const& var_meta) {
     return read_var_entries(var_meta).size();
 }
 
+/* Point the single existing (mid, field) entry at `offset`.  W29-0.2: when a
+ * rebuilt block does not fit its old slot the new block is APPENDED and the
+ * entry repointed; the old bytes stay in Var2Data and the freed-byte counter
+ * does not move (measured on the work pair, whose 0F400031 grows 72 -> 100). */
+void repoint_var_entry(std::vector<std::uint8_t>& var_meta, std::uint32_t mid,
+                       std::uint32_t field_id, std::uint32_t offset) {
+    std::size_t found = 0;
+    for (VarEntry const& entry : read_var_entries(var_meta)) {
+        if (entry.mid != mid || entry.field_id != field_id) {
+            continue;
+        }
+        std::size_t const at =
+            kVarMetaHeaderSize + entry.index * kVarMetaEntrySize + 4;
+        put_u32(var_meta, at, offset);
+        ++found;
+    }
+    if (found != 1) {
+        throw Error("expected one VarMeta entry for field 0x" +
+                    std::to_string(field_id) + " of uid " +
+                    std::to_string(mid) + ", found " + std::to_string(found));
+    }
+}
+
 /* Project's VarMeta has a LOGICAL entry count in header +8 and a possibly longer
  * PHYSICAL array.  MEASURED (W28-1.1): the automatic pairs are 528 bytes with
  * header 40, physical 42 -- slots [40],[41] are stale duplicates no reader is
@@ -401,21 +457,90 @@ std::size_t meta_entry_for_row(std::vector<std::uint8_t> const& meta,
     return static_cast<std::size_t>(-1);
 }
 
-/* Which task rows are summaries or tombstones.  Summaries follow Fixed2Data's
- * parent links, as core/mpp does (reader.cpp read_outline): a row that some
- * other row names as its parent has children, and its own Duration/Actual
- * Duration are roll-ups, not work.  PROJECT_A's stored has-children flag
- * disagrees with the links on some rows, so the links win. */
-std::vector<bool> summary_rows(CfbDocument const& doc, std::string_view table,
-                               std::size_t rows) {
-    std::vector<bool> summary(rows, false);
+/* One 0F400031 payload of `records` contour records.  MEASURED on the wave-29
+ * leaf pair: header magic 0x00200000, length 44, units*16 at +8, remaining
+ * work at +16, remaining ticks*8 at +24 and +32 = 1; every 28-byte record
+ * carries (remaining work, units*16, 0, 0, remaining ticks*8).  Project writes
+ * one record per started 4800-tick day block, never fewer than one. */
+std::vector<std::uint8_t> build_work_block(std::size_t records, double units16,
+                                           double remaining_work,
+                                           std::uint32_t remaining_ticks8) {
+    std::vector<std::uint8_t> work(
+        kAssnWorkHeader + records * kAssnWorkRecord, 0);
+    put_u32(work, 0, kAssnWorkMagic);
+    put_u32(work, 4, static_cast<std::uint32_t>(kAssnWorkHeader));
+    put_f64(work, 8, units16);
+    put_f64(work, 16, remaining_work);
+    put_u32(work, 24, remaining_ticks8);
+    put_u32(work, 28, 0);
+    put_u32(work, 32, 1);
+    put_u32(work, 36, 0);
+    put_u32(work, 40, 0);
+    for (std::size_t i = 0; i < records; ++i) {
+        std::size_t const at = kAssnWorkHeader + i * kAssnWorkRecord;
+        put_f64(work, at, remaining_work);
+        put_f64(work, at + 8, units16);
+        put_u32(work, at + 16, 0);
+        put_u32(work, at + 20, 0);
+        put_u32(work, at + 24, remaining_ticks8);
+    }
+    return work;
+}
+
+/* W29-0.2: a milestone 0 -> 100 shrinks uid 0's 0x0B4004E4 project-mode block
+ * in place.  MEASURED on the milestone pair: the staged base's 12-byte payload
+ * {2,1,7} becomes {1,1}, the length word 12 -> 8, the stale third word stays as
+ * garbage, and the freed-byte counter gains 4.  An already-shrunk block is left
+ * alone so a cascade of milestones counts the four bytes once. */
+void shrink_project_mode_block(std::vector<std::uint8_t>& var_meta,
+                               std::vector<std::uint8_t>& var2,
+                               std::size_t& freed_bytes) {
+    std::vector<std::uint32_t> const offsets =
+        find_var_offsets(var_meta, kProjectModeField, 0);
+    if (offsets.size() != 1) {
+        throw Error("the project row has " + std::to_string(offsets.size()) +
+                    " 0x0B4004E4 blocks; the measured shape is one");
+    }
+    std::uint32_t const offset = offsets.front();
+    std::vector<std::uint8_t> const old = read_var_block(var2, offset);
+    if (old.size() == 8) {
+        return; /* already shrunk by an earlier milestone in this save */
+    }
+    if (old.size() != 12) {
+        throw Error("the project row's 0x0B4004E4 block is " +
+                    std::to_string(old.size()) +
+                    " bytes, not the measured 12-byte shape");
+    }
+    put_u32(var2, offset, 8);
+    put_u32(var2, offset + 4, 1);
+    put_u32(var2, offset + 8, 1);
+    freed_bytes += 4;
+}
+
+/* The task outline: which rows are summaries, and each row's parent.  Summaries
+ * follow Fixed2Data's parent links, as core/mpp does (reader.cpp
+ * read_outline): a row that some other row names as its parent has children,
+ * and its own Duration/Actual Duration are roll-ups, not work.  PROJECT_A's
+ * stored has-children flag disagrees with the links on some rows, so the links
+ * win.  `parent` is SIZE_MAX for a row whose link is absent or names no row;
+ * the wave-29 pairs' links reach the project row (uid 0). */
+struct Outline {
+    std::vector<bool> summary;
+    std::vector<std::size_t> parent;
+};
+
+Outline read_outline(CfbDocument const& doc, std::string_view table,
+                     std::size_t rows) {
+    Outline out;
+    out.summary.assign(rows, false);
+    out.parent.assign(rows, static_cast<std::size_t>(-1));
     std::string const fixed2_path = table_stream(table, "Fixed2Data");
     if (!doc.has_stream(fixed2_path)) {
-        return summary;
+        return out;
     }
     std::vector<std::uint8_t> const fixed2 = doc.read_stream(fixed2_path);
     if (fixed2.size() != kFixed2RecordSize * (rows + 3)) {
-        return summary; /* damaged outline: treat the table as flat */
+        return out; /* damaged outline: treat the table as flat */
     }
     using RowId = std::array<std::uint8_t, 16>;
     auto record = [&](std::size_t row) {
@@ -438,7 +563,7 @@ std::vector<bool> summary_rows(CfbDocument const& doc, std::string_view table,
     }
     for (std::size_t row = 1; row < rows; ++row) {
         if (fixed2[record(row) + kFixed2RecordFlags] & kFixed2FlagHasChildren) {
-            summary[row] = true;
+            out.summary[row] = true;
         }
         RowId const parent = read_id(record(row), kFixed2RecordRowOffset);
         if (parent == no_id) {
@@ -446,10 +571,41 @@ std::vector<bool> summary_rows(CfbDocument const& doc, std::string_view table,
         }
         auto const found = row_by_id.find(parent);
         if (found != row_by_id.end() && found->second != row) {
-            summary[found->second] = true;
+            out.summary[found->second] = true;
+            out.parent[row] = found->second;
         }
     }
-    return summary;
+    return out;
+}
+
+/* True when `row` lies under `ancestor` in the outline.  A missing link or a
+ * cycle ends the walk without an answer. */
+bool descends_from(std::vector<std::size_t> const& parent, std::size_t row,
+                   std::size_t ancestor) {
+    std::size_t at = row;
+    for (std::size_t guard = 0; guard <= parent.size(); ++guard) {
+        if (at >= parent.size()) {
+            return false;
+        }
+        at = parent[at];
+        if (at == ancestor) {
+            return true;
+        }
+        if (at == static_cast<std::size_t>(-1)) {
+            return false;
+        }
+    }
+    return false;
+}
+
+/* True when the row's own words already record progress.  The summary roll-up
+ * uses it to decide which summaries this save rewrites: only a summary with a
+ * progressed leaf descendant takes Project's values (W29-0.2). */
+bool row_has_progress(TaskTable const& rows, std::size_t row) {
+    return rows.u16(row, task_row::kPercentComplete) != 0 ||
+           rows.u32(row, task_row::kActualDuration) != 0 ||
+           is_date(rows.u32(row, task_row::kActualStart)) ||
+           is_date(rows.u32(row, task_row::kActualFinish));
 }
 
 std::vector<bool> deleted_rows(std::vector<std::uint8_t> const& meta,
@@ -467,20 +623,110 @@ std::vector<bool> deleted_rows(std::vector<std::uint8_t> const& meta,
     return deleted;
 }
 
-/* Recompute the project row from the leaf rows.  Measured on all four W28-1.2
- * pairs and both W28-1.3 mark pairs:
+/* Recompute a summary row from its leaf descendants.  MEASURED on the wave-29
+ * leaf pair (uid 3 at 40 % makes uid 1 and uid 2 roll up):
+ *   +80  ActualDuration    = the summary's own Duration * sum(leaf actual) /
+ *                            sum(leaf Duration), truncated (uid 1: 3840 ticks,
+ *                            uid 2: 5760, both over a 28800-tick own duration);
+ *   +88  RemainingDuration = own Duration - that;
+ *   +92  PercentComplete   = (100 * sum(leaf actual) + sum(leaf Duration)/2) /
+ *                            sum(leaf Duration) (uid 1: 13, uid 2: 20);
+ *   +120 ActualStart       = the summary's own Start2 (both 3d4612c0);
+ *   +132/+136 Resume/Stop  = the EARLIEST valid leaf resume and stop (both
+ *                            3d462418, uid 3's working-time values).
+ * A summary with no progressed leaf descendant is left byte for byte, and so
+ * are every summary's flag/anchor words.  Returns the rows written so the
+ * project roll-up can take its Resume/Stop from them. */
+std::vector<bool> write_summary_rollup(TaskTable& table, Outline const& outline,
+                                       std::vector<bool> const& deleted) {
+    std::size_t const rows = table.rows();
+    std::vector<bool> written(rows, false);
+    for (std::size_t summary = 1; summary < rows; ++summary) {
+        if (summary >= outline.summary.size() || !outline.summary[summary] ||
+            (summary < deleted.size() && deleted[summary])) {
+            continue;
+        }
+        std::uint64_t sum_duration = 0;
+        std::uint64_t sum_actual = 0;
+        bool progressed = false;
+        bool have_resume = false;
+        bool have_stop = false;
+        std::uint32_t resume = kInvalidDate;
+        std::uint32_t stop = kInvalidDate;
+        for (std::size_t row = 1; row < rows; ++row) {
+            if (row >= outline.summary.size() || outline.summary[row] ||
+                (row < deleted.size() && deleted[row])) {
+                continue;
+            }
+            if (!descends_from(outline.parent, row, summary)) {
+                continue;
+            }
+            sum_duration += table.u32(row, task_row::kDuration);
+            sum_actual += table.u32(row, task_row::kActualDuration);
+            if (row_has_progress(table, row)) {
+                progressed = true;
+            }
+            std::uint32_t const row_resume = table.u32(row, task_row::kResume);
+            if (is_date(row_resume) && (!have_resume || row_resume < resume)) {
+                resume = row_resume;
+                have_resume = true;
+            }
+            std::uint32_t const row_stop = table.u32(row, task_row::kStop);
+            if (is_date(row_stop) && (!have_stop || row_stop < stop)) {
+                stop = row_stop;
+                have_stop = true;
+            }
+        }
+        if (!progressed || sum_duration == 0) {
+            continue;
+        }
+        std::uint64_t const own = table.u32(summary, task_row::kDuration);
+        std::uint64_t const actual =
+            std::min<std::uint64_t>(own, own * sum_actual / sum_duration);
+        std::uint64_t const rounded =
+            (sum_actual * 100 + sum_duration / 2) / sum_duration;
+        table.set_u32(summary, task_row::kActualDuration,
+                      static_cast<std::uint32_t>(actual));
+        table.set_u32(summary, task_row::kRemainingDuration,
+                      static_cast<std::uint32_t>(own - actual));
+        table.set_u16(
+            summary, task_row::kPercentComplete,
+            static_cast<std::uint16_t>(std::min<std::uint64_t>(100, rounded)));
+        table.set_u32(summary, task_row::kActualStart,
+                      table.u32(summary, task_row::kStart2));
+        if (have_resume) {
+            table.set_u32(summary, task_row::kResume, resume);
+        }
+        if (have_stop) {
+            table.set_u32(summary, task_row::kStop, stop);
+        }
+        written[summary] = true;
+    }
+    return written;
+}
+
+/* Recompute the project row.  Measured on all four W28-1.2 percent pairs, both
+ * W28-1.3 mark pairs and the three wave-29 shapes:
  * PercentComplete = 100 * sum(ActualDuration) / sum(Duration) over the
  * non-summary, non-deleted task rows; ActualDuration = project Duration *
- * that percent / 100; Remaining = project Duration - ActualDuration; and
- * ActualStart = the project start (+104) while any task has progress, NA
- * otherwise.  Resume/Stop are the project start too, except in Update
- * Project's mode (`from_rows`), where they are the earliest valid per-row
- * resume and stop -- MEASURED on wave28-update.mpp: project Resume = Stop =
- * Tue 12:00, the row-3 finish, while rows 1 and 2 stop Tue 17:00 and resume
- * Wed 08:00.  PercentWorkComplete and the flag/anchor words are never touched
- * on the project row. */
+ * that percent / 100; Remaining = project Duration - ActualDuration.
+ * ActualStart = the project start (+104) when any applied edit has progress --
+ * the milestone pair writes it with total actual time still 0 -- or when a task
+ * row carries actual time, NA otherwise.  Resume/Stop are the earliest written
+ * SUMMARY date (the leaf pair: 3d462418, which is later than the project start
+ * and still wins), else, in Update Project's mode (`from_rows`), the earliest
+ * valid per-row date, else the project start.  PercentWorkComplete is the
+ * real-assignment ratio, MEASURED on the work pair:
+ * round(100 * sum(Actual Work) / sum(Work)) over assignments whose resource
+ * word is neither 0 nor Project's 0xFFFF0001 placeholder (40 there; 0 on the
+ * placeholder-only leaf and milestone pairs).  Those assignments also give the
+ * project row's +8/+16/+24 header doubles.  The flag/anchor words are never
+ * touched on the project row. */
 void write_project_rollup(TaskTable& table, std::vector<bool> const& excluded,
-                          bool resume_stop_from_rows) {
+                          bool resume_stop_from_rows, bool any_progress,
+                          std::vector<bool> const& summary_written,
+                          double real_work, double real_actual_work,
+                          std::uint16_t percent_work) {
     std::uint64_t total_duration = 0;
     std::uint64_t total_actual = 0;
     for (std::size_t row = 1; row < table.rows(); ++row) {
@@ -506,20 +752,26 @@ void write_project_rollup(TaskTable& table, std::vector<bool> const& excluded,
     table.set_u32(0, task_row::kRemainingDuration,
                   project_duration - project_actual);
     table.set_u16(0, task_row::kPercentComplete, percent);
-    if (total_actual > 0) {
+    table.set_u16(0, task_row::kPercentWorkComplete, percent_work);
+    set_row_f64(table, 0, kTaskWork, real_work);
+    set_row_f64(table, 0, kTaskActualWork, real_actual_work);
+    set_row_f64(table, 0, kTaskRemainingWork, real_work - real_actual_work);
+    if (any_progress || total_actual > 0) {
         std::uint32_t const start = table.u32(0, task_row::kStart2);
         table.set_u32(0, task_row::kActualStart, start);
-        std::uint32_t resume = start;
-        std::uint32_t stop = start;
-        if (resume_stop_from_rows) {
-            bool have_resume = false;
-            bool have_stop = false;
+        bool have_resume = false;
+        bool have_stop = false;
+        std::uint32_t resume = kInvalidDate;
+        std::uint32_t stop = kInvalidDate;
+        if (summary_written.size() == table.rows()) {
             for (std::size_t row = 1; row < table.rows(); ++row) {
-                if (row < excluded.size() && excluded[row]) {
+                if (!summary_written[row]) {
                     continue;
                 }
-                const std::uint32_t row_resume = table.u32(row, task_row::kResume);
-                if (is_date(row_resume) && (!have_resume || row_resume < resume)) {
+                const std::uint32_t row_resume =
+                    table.u32(row, task_row::kResume);
+                if (is_date(row_resume) &&
+                    (!have_resume || row_resume < resume)) {
                     resume = row_resume;
                     have_resume = true;
                 }
@@ -529,15 +781,33 @@ void write_project_rollup(TaskTable& table, std::vector<bool> const& excluded,
                     have_stop = true;
                 }
             }
-            /* No measurable row date (a table whose progress rows carry no
-             * resume/stop has no measured pair): keep the project start rather
-             * than writing NA under a positive total. */
-            if (!have_resume) {
-                resume = start;
+        }
+        if (!have_resume && !have_stop && resume_stop_from_rows) {
+            for (std::size_t row = 1; row < table.rows(); ++row) {
+                if (row < excluded.size() && excluded[row]) {
+                    continue;
+                }
+                const std::uint32_t row_resume = table.u32(row, task_row::kResume);
+                if (is_date(row_resume) &&
+                    (!have_resume || row_resume < resume)) {
+                    resume = row_resume;
+                    have_resume = true;
+                }
+                const std::uint32_t row_stop = table.u32(row, task_row::kStop);
+                if (is_date(row_stop) && (!have_stop || row_stop < stop)) {
+                    stop = row_stop;
+                    have_stop = true;
+                }
             }
-            if (!have_stop) {
-                stop = start;
-            }
+        }
+        /* No measurable date (a table whose progress rows carry no
+         * resume/stop has no measured pair): keep the project start rather
+         * than writing NA under a positive total. */
+        if (!have_resume) {
+            resume = start;
+        }
+        if (!have_stop) {
+            stop = start;
         }
         table.set_u32(0, task_row::kResume, resume);
         table.set_u32(0, task_row::kStop, stop);
@@ -654,6 +924,7 @@ PercentActualsResult write_percent_actuals(
         std::size_t row = 0;
         bool manual = false;
         bool has_progress = false;
+        bool real_assignment = false;
         std::uint32_t duration = 0;
         std::uint32_t actual = 0;
     };
@@ -672,8 +943,44 @@ PercentActualsResult write_percent_actuals(
     }
     var_meta.resize(kVarMetaHeaderSize + declared_entries * kVarMetaEntrySize);
 
-    std::vector<bool> const summaries = summary_rows(doc, table, row_count);
     std::vector<bool> const tombstones = deleted_rows(meta, row_count);
+    Outline const outline = read_outline(doc, table, row_count);
+
+    /* W29-0.2: the task row's +8/+16/+24 doubles and +94 follow the assignment
+     * that carries them, so TBkndAssn/FixedData is read BEFORE the task loop.
+     * A REAL assignment names a resource that is neither 0 (a project/summary
+     * row) nor 0xFFFF0001 (Project's unassigned placeholder); the wave-29 work
+     * pair's one real assignment is the only measured case. */
+    std::string const assn_table = assn_table_for(table);
+    std::string const assn_fixed_path = table_stream(assn_table, "FixedData");
+    std::vector<std::uint8_t> assn_fixed = doc.read_stream(assn_fixed_path);
+    if (assn_fixed.size() % kAssnStride != 0) {
+        throw Error("TBkndAssn/FixedData is " +
+                    std::to_string(assn_fixed.size()) + " bytes, not a multiple of " +
+                    std::to_string(kAssnStride));
+    }
+    struct AssignmentWork {
+        bool real = false;
+        double planned = 0;
+    };
+    std::vector<AssignmentWork> assignment_work(row_count);
+    for (std::size_t at = 0; at < assn_fixed.size() / kAssnStride; ++at) {
+        std::size_t const base = at * kAssnStride;
+        std::uint32_t const resource = get_u32(assn_fixed, base + kAssnResource);
+        if (resource == 0 || resource == kNullResource) {
+            continue;
+        }
+        std::uint32_t const task = get_u32(assn_fixed, base + kAssnTask);
+        for (std::size_t row = 1; row < row_count; ++row) {
+            if (rows.uid(row) != task) {
+                continue;
+            }
+            assignment_work[row].real = true;
+            assignment_work[row].planned +=
+                get_f64(assn_fixed, base + kAssnPlanned);
+            break;
+        }
+    }
 
     /* Streams are built on the copies above and only handed to the document
      * after every edit has been accepted, so a throw leaves `doc` untouched. */
@@ -702,7 +1009,7 @@ PercentActualsResult write_percent_actuals(
                 "written");
             continue;
         }
-        if (summaries[row]) {
+        if (outline.summary[row]) {
             result.warnings.push_back(
                 "task uid " + std::to_string(edit.uid) +
                 " is a summary row; its percent is a roll-up");
@@ -773,13 +1080,36 @@ PercentActualsResult write_percent_actuals(
         bool const manual =
             (fixed2_meta[fixed2_meta_at + kFixed2MetaFlags] &
              kFixed2MetaFlagManual) != 0;
+        /* W29-0.2: the anchor rule below needs the row's saved kind, and the
+         * write at the end of this block overwrites it. */
+        std::uint8_t const old_kind =
+            fixed2_meta[fixed2_meta_at + kFixed2MetaKind];
         bool const derived_actual =
             actual == actual_duration_ticks(duration, edit.percent);
+        AssignmentWork const& assignment = assignment_work[row];
+        double const task_actual_work =
+            assignment.real
+                ? (duration == 0
+                       ? 0.0
+                       : assignment.planned * static_cast<double>(actual) /
+                             static_cast<double>(duration))
+                : 0.0;
         rows.set_u32(row, task_row::kActualDuration, actual);
         rows.set_u32(row, task_row::kRemainingDuration, duration - actual);
         rows.set_u16(row, task_row::kPercentComplete, edit.percent);
+        /* W29-0.2: a row whose assignment names a real resource stores the
+         * edit's percent as % Work Complete (the work pair: 0 -> 40); the
+         * placeholder assignment keeps the wave-28 rule (100 at 100 %, else 0;
+         * the leaf and milestone pairs). */
         rows.set_u16(row, task_row::kPercentWorkComplete,
-                     edit.percent == 100 ? 100 : 0);
+                     assignment.real ? edit.percent
+                                     : (edit.percent == 100 ? 100 : 0));
+        if (assignment.real) {
+            set_row_f64(rows, row, kTaskWork, assignment.planned);
+            set_row_f64(rows, row, kTaskActualWork, task_actual_work);
+            set_row_f64(rows, row, kTaskRemainingWork,
+                        assignment.planned - task_actual_work);
+        }
         rows.set_u32(row, task_row::kActualStart,
                      has_progress ? edit.dates.actual_start : kInvalidDate);
         rows.set_u32(row, task_row::kActualFinish,
@@ -795,8 +1125,17 @@ PercentActualsResult write_percent_actuals(
                              rows.u32(row, task_row::kProgressFlags) |
                                  kProgressFlagBits);
             }
-            rows.set_u32(row, task_row::kStartAnchor,
-                         edit.dates.actual_start);
+            /* W29-0.2: the +174 start anchor is re-pointed only on the shapes
+             * that measured it: a manual row (the wave-28 manual pair) or a row
+             * whose saved Fixed2Meta kind is the wave-28 FLAT leaf 0x10 (the
+             * mark/update controls).  Every wave-29 shape has a different saved
+             * kind (0x00/0x14/0x04) and keeps the anchor Project left -- the
+             * leaf's 3d4a12c0 and the work row's NA stay byte for byte, so
+             * writing ActualStart there would fail the pair. */
+            if (manual || old_kind == kFixed2MetaKindLeaf) {
+                rows.set_u32(row, task_row::kStartAnchor,
+                             edit.dates.actual_start);
+            }
         } else {
             rows.set_u32(row, task_row::kStartAnchor, kInvalidDate);
         }
@@ -818,6 +1157,12 @@ PercentActualsResult write_percent_actuals(
             rows.set_u32(row, task_row::kTotalSlack, 0);
             rows.set_u32(row, task_row::kStart3, edit.dates.actual_start);
             rows.set_u32(row, task_row::kFinish3, edit.dates.actual_finish);
+            /* W29-0.2: the milestone pair moves Start2/Finish2 (the project
+             * start, 3d4612c0) onto the actual dates (3d4d27d8).  The wave-28
+             * 100 % rows already store those dates there, so the write is
+             * byte-identical for them. */
+            rows.set_u32(row, task_row::kStart2, edit.dates.actual_start);
+            rows.set_u32(row, task_row::kFinish2, edit.dates.actual_finish);
         }
 
         /* --- the row's variable fields ---------------------------------- */
@@ -841,6 +1186,11 @@ PercentActualsResult write_percent_actuals(
             steps = decode_steps(read_var_block(var2, old_offsets.front()));
         }
         removed += remove_var_entries(var_meta, var2, edit.uid, kResetField,
+                                      freed_task_bytes);
+        /* W29-0.2: a 0 % row may also carry the second constant 8-byte block
+         * 0x0B4004E3 (the work pair does); it goes at first progress and its
+         * payload counts toward the freed-byte word like 4E5's. */
+        removed += remove_var_entries(var_meta, var2, edit.uid, kResetFieldAlt,
                                       freed_task_bytes);
         if (has_progress && old_percent == 0) {
             removed += remove_var_entries(var_meta, var2, edit.uid,
@@ -889,6 +1239,12 @@ PercentActualsResult write_percent_actuals(
             var2.insert(var2.end(), block.begin(), block.end());
             insert_var_entry(var_meta, edit.uid, kResetField, offset);
             ++added;
+        }
+        /* W29-0.2: a milestone at 100 % shrinks the project row's 0x0B4004E4
+         * project-mode block in place (measured: payload 12 -> 8, freed += 4;
+         * the second milestone in a cascade sees 8 bytes and adds nothing). */
+        if (duration == 0 && edit.percent == 100) {
+            shrink_project_mode_block(var_meta, var2, freed_task_bytes);
         }
 
         /* FixedMeta +2 is the row's variable-field count.  The measured pairs
@@ -941,14 +1297,9 @@ PercentActualsResult write_percent_actuals(
             has_progress ? 0x00 : kFixed2MetaKindLeaf;
 
         std::size_t const fixed2_at = kFixed2RecordSize * (row + 3);
-        std::uint8_t const old_row_flags = fixed2[fixed2_at + kFixed2RecordFlags];
-        if (old_row_flags != kFixed2RecordNoProgress &&
-            old_row_flags != kFixed2RecordHasProgress) {
-            throw Error("task uid " + std::to_string(edit.uid) +
-                        ": Fixed2Data +42 is 0x" +
-                        std::to_string(old_row_flags) +
-                        ", not the measured 0x30/0x01 leaf shape");
-        }
+        /* W29-0.2: the wave-29 rows carry +42 values 0x84 / 0x2c / 0x04, so the
+         * write is unconditional (the wave-28 0x30/0x01 guard was a false
+         * limit, not a measured assertion of the control). */
         fixed2[fixed2_at + kFixed2RecordFlags] =
             has_progress ? kFixed2RecordHasProgress : kFixed2RecordNoProgress;
         std::size_t const start_copy = fixed2_at + kFixed2RecordStartCopy;
@@ -965,6 +1316,7 @@ PercentActualsResult write_percent_actuals(
         done.row = row;
         done.manual = manual;
         done.has_progress = has_progress;
+        done.real_assignment = assignment.real;
         done.duration = duration;
         done.actual = actual;
         applied.push_back(done);
@@ -977,10 +1329,16 @@ PercentActualsResult write_percent_actuals(
 
     std::vector<bool> excluded(row_count, false);
     for (std::size_t row = 1; row < row_count; ++row) {
-        excluded[row] = summaries[row] || tombstones[row];
+        excluded[row] = outline.summary[row] || tombstones[row];
     }
-    write_project_rollup(rows, excluded,
-                         options.project_resume_stop_from_rows);
+    /* W29-0.2: the summary rows above a progressed leaf roll up first; the
+     * project row (which takes its Resume/Stop from them) is written after the
+     * assignment loop, once the real-assignment work sums are final.
+     * write_summary_rollup skips leaf rows that are summaries itself, so it
+     * needs only the tombstoned rows -- `excluded` above also marks every
+     * summary (the project sum must not charge a summary's roll-up twice). */
+    std::vector<bool> const summary_written =
+        write_summary_rollup(rows, outline, tombstones);
 
     /* Header words: the entry count and the Var2Data size. */
     std::size_t const entry_count = count_var_entries(var_meta);
@@ -1000,23 +1358,16 @@ PercentActualsResult write_percent_actuals(
      * Stop copy (+104); the FixedMeta entry's field count and two flag words;
      * the Fixed2Meta `has actual work` bit; and the two variable blocks
      * 0F400031 (rewritten in place) and 0F400032 (append, replace or remove). */
-    std::string const assn_table = assn_table_for(table);
-    std::string const assn_fixed_path = table_stream(assn_table, "FixedData");
     std::string const assn_meta_path = table_stream(assn_table, "FixedMeta");
     std::string const assn_fixed2_meta_path =
         table_stream(assn_table, "Fixed2Meta");
     std::string const assn_var_meta_path = table_stream(assn_table, "VarMeta");
     std::string const assn_var2_path = table_stream(assn_table, "Var2Data");
-    std::vector<std::uint8_t> assn_fixed = doc.read_stream(assn_fixed_path);
     std::vector<std::uint8_t> assn_meta = doc.read_stream(assn_meta_path);
     std::vector<std::uint8_t> assn_fixed2_meta =
         doc.read_stream(assn_fixed2_meta_path);
     std::vector<std::uint8_t> assn_var_meta = doc.read_stream(assn_var_meta_path);
     std::vector<std::uint8_t> assn_var2 = doc.read_stream(assn_var2_path);
-    if (assn_fixed.size() % kAssnStride != 0) {
-        throw Error("TBkndAssn/FixedData is " + std::to_string(assn_fixed.size()) +
-                    " bytes, not a multiple of " + std::to_string(kAssnStride));
-    }
     if (assn_meta.size() < kAssnMetaHeader ||
         (assn_meta.size() - kAssnMetaHeader) % kAssnMetaEntry != 0) {
         throw Error("TBkndAssn/FixedMeta is " + std::to_string(assn_meta.size()) +
@@ -1066,17 +1417,17 @@ PercentActualsResult write_percent_actuals(
         }
         std::size_t const base = assn_row * kAssnStride;
         std::uint32_t const assn_uid = get_u32(assn_fixed, base + kAssnUid);
-        if (item.duration == 0) {
-            throw Error("task uid " + std::to_string(edit.uid) +
-                        " has zero duration; the assignment work ratio is not "
-                        "measured for that shape");
-        }
         double const planned = get_f64(assn_fixed, base + kAssnPlanned);
         double const units = get_f64(assn_fixed, base + kAssnUnits);
         double const old_actual_work = get_f64(assn_fixed, base + kAssnActual);
+        /* W29-0.2: a milestone (Duration 0) has no work to pro-rate -- the
+         * milestone pair stores 0 actual and the planned work (0) as remaining
+         * -- so the ratio is only computed for a durated row. */
         double const actual_work =
-            planned * static_cast<double>(item.actual) /
-            static_cast<double>(item.duration);
+            item.duration == 0
+                ? 0.0
+                : planned * static_cast<double>(item.actual) /
+                      static_cast<double>(item.duration);
         double const remaining_work = planned - actual_work;
         std::uint32_t const remaining_ticks = item.duration - item.actual;
         if (item.actual > 0xFFFFFFFFu / 8u) {
@@ -1085,79 +1436,115 @@ PercentActualsResult write_percent_actuals(
         }
         std::uint32_t const ticks8 = item.actual * 8u;
 
-        /* 0F400031: in-place rewrite at the same Var2Data offset.  100 % with a
-         * percent edit stores a 44-byte zero header and drops the records (their
-         * bytes stay as garbage); 100 % from a date update keeps the records
-         * byte for byte and clears the word at +32; below 100 % keeps the
-         * record count and rewrites the remaining work into each one. */
-        std::vector<std::uint32_t> const work_offsets =
-            find_var_offsets(assn_var_meta, kAssnWorkField, assn_uid);
-        if (work_offsets.size() != 1) {
-            throw Error("assignment uid " + std::to_string(assn_uid) + " has " +
-                        std::to_string(work_offsets.size()) +
-                        " 0F400031 blocks; the measured shape is one");
-        }
-        std::uint32_t const work_offset = work_offsets.front();
-        std::vector<std::uint8_t> const old_work =
-            read_var_block(assn_var2, work_offset);
-        if (old_work.size() < kAssnWorkHeader) {
-            throw Error("assignment uid " + std::to_string(assn_uid) +
-                        ": 0F400031 is " + std::to_string(old_work.size()) +
-                        " bytes, shorter than its 44-byte header");
-        }
-        std::vector<std::uint8_t> work;
-        if (edit.percent < 100) {
+        /* 0F400031: 100 % with a percent edit stores a 44-byte zero header and
+         * drops the records (their bytes stay as garbage); 100 % from a date
+         * update keeps the records byte for byte and clears the word at +32;
+         * 0 % keeps the old record count and rewrites the remaining work into
+         * each one.  0 < percent < 100 (W29-0.2) rebuilds one record per
+         * started 4800-tick day, and when the rebuilt payload does not fit the
+         * old slot it is APPENDED and the entry repointed (the work pair grows
+         * 72 -> 100 bytes; the leaf pair's 100-byte block is rewritten in
+         * place).  A milestone's block is left byte for byte (milestone pair).
+         */
+        if (item.duration != 0) {
+            std::vector<std::uint32_t> const work_offsets =
+                find_var_offsets(assn_var_meta, kAssnWorkField, assn_uid);
+            if (work_offsets.size() != 1) {
+                throw Error("assignment uid " + std::to_string(assn_uid) +
+                            " has " + std::to_string(work_offsets.size()) +
+                            " 0F400031 blocks; the measured shape is one");
+            }
+            std::uint32_t const work_offset = work_offsets.front();
+            std::vector<std::uint8_t> const old_work =
+                read_var_block(assn_var2, work_offset);
+            if (old_work.size() < kAssnWorkHeader) {
+                throw Error("assignment uid " + std::to_string(assn_uid) +
+                            ": 0F400031 is " + std::to_string(old_work.size()) +
+                            " bytes, shorter than its 44-byte header");
+            }
             if ((old_work.size() - kAssnWorkHeader) % kAssnWorkRecord != 0) {
                 throw Error("assignment uid " + std::to_string(assn_uid) +
-                            ": 0F400031 is " +
-                            std::to_string(old_work.size()) +
+                            ": 0F400031 is " + std::to_string(old_work.size()) +
                             " bytes, not 44 + 28*n");
             }
-            work = old_work;
-            put_u32(work, 0, kAssnWorkMagic);
-            put_u32(work, 4, static_cast<std::uint32_t>(kAssnWorkHeader));
-            put_f64(work, 8, 160000.0);
-            put_f64(work, 16, remaining_work);
-            put_u32(work, 24, remaining_ticks * 8u);
-            put_u32(work, 28, 0);
-            put_u32(work, 32, 1);
-            put_u32(work, 36, 0);
-            put_u32(work, 40, 0);
-            std::size_t const records =
-                (old_work.size() - kAssnWorkHeader) / kAssnWorkRecord;
-            for (std::size_t i = 0; i < records; ++i) {
-                std::size_t const at =
-                    kAssnWorkHeader + i * kAssnWorkRecord;
-                put_f64(work, at, remaining_work);
-                put_f64(work, at + 8, 160000.0);
-                put_u32(work, at + 16, 0);
-                put_u32(work, at + 20, 0);
-                put_u32(work, at + 24, remaining_ticks * 8u);
-            }
-        } else {
-            work.assign(kAssnWorkHeader, 0);
-            put_u32(work, 0, kAssnWorkMagic);
-            put_u32(work, 4, static_cast<std::uint32_t>(kAssnWorkHeader));
-            put_u32(work, 32, edit.progress_flags ? 1u : 0u);
-            if (!edit.progress_flags) {
+            std::vector<std::uint8_t> work;
+            if (edit.percent == 100) {
+                work.assign(kAssnWorkHeader, 0);
+                put_u32(work, 0, kAssnWorkMagic);
+                put_u32(work, 4, static_cast<std::uint32_t>(kAssnWorkHeader));
+                put_u32(work, 32, edit.progress_flags ? 1u : 0u);
+                if (!edit.progress_flags) {
+                    work = old_work;
+                    put_u32(work, 0, kAssnWorkMagic);
+                    put_u32(work, 4, static_cast<std::uint32_t>(kAssnWorkHeader));
+                    put_f64(work, 8, 0.0);
+                    put_f64(work, 16, 0.0);
+                    put_u32(work, 24, 0);
+                    put_u32(work, 28, 0);
+                    put_u32(work, 32, 0);
+                    put_u32(work, 36, 0);
+                    put_u32(work, 40, 0);
+                }
+            } else if (edit.percent == 0) {
                 work = old_work;
                 put_u32(work, 0, kAssnWorkMagic);
                 put_u32(work, 4, static_cast<std::uint32_t>(kAssnWorkHeader));
-                put_f64(work, 8, 0.0);
-                put_f64(work, 16, 0.0);
-                put_u32(work, 24, 0);
+                put_f64(work, 8, units * 16.0);
+                put_f64(work, 16, remaining_work);
+                put_u32(work, 24, remaining_ticks * 8u);
                 put_u32(work, 28, 0);
-                put_u32(work, 32, 0);
+                put_u32(work, 32, 1);
                 put_u32(work, 36, 0);
                 put_u32(work, 40, 0);
+                std::size_t const records =
+                    (old_work.size() - kAssnWorkHeader) / kAssnWorkRecord;
+                for (std::size_t i = 0; i < records; ++i) {
+                    std::size_t const at =
+                        kAssnWorkHeader + i * kAssnWorkRecord;
+                    put_f64(work, at, remaining_work);
+                    put_f64(work, at + 8, units * 16.0);
+                    put_u32(work, at + 16, 0);
+                    put_u32(work, at + 20, 0);
+                    put_u32(work, at + 24, remaining_ticks * 8u);
+                }
+            } else {
+                /* W29-0.2: a REAL-resource assignment's contour carries one
+                 * record per started 4800-tick day (measured: 9600 ticks ->
+                 * 2 records, from a 1-record control); a placeholder keeps
+                 * the record count it had (wave-28: 2 at 40 %; the leaf pair:
+                 * 2).  The placeholder count is not recomputed, because
+                 * Project did not recompute it on any measured pair. */
+                std::size_t records =
+                    (old_work.size() - kAssnWorkHeader) / kAssnWorkRecord;
+                if (item.real_assignment) {
+                    records = std::max<std::size_t>(
+                        1, static_cast<std::size_t>(
+                               (static_cast<std::uint64_t>(item.duration) + 4799u) /
+                               4800u));
+                }
+                work = build_work_block(records, units * 16.0, remaining_work,
+                                        remaining_ticks * 8u);
+            }
+            if (edit.percent == 100 || work.size() == old_work.size()) {
+                /* In place.  A 100 % percent edit SHORTENS the payload to its
+                 * 44-byte header at the same offset; the record bytes past it
+                 * stay as Project leaves them (garbage).  The rebuilt 0..99 %
+                 * payloads are written in place only when the size is
+                 * unchanged. */
+                put_u32(assn_var2, work_offset,
+                        static_cast<std::uint32_t>(work.size()));
+                std::copy(work.begin(), work.end(),
+                          assn_var2.begin() +
+                              static_cast<std::ptrdiff_t>(work_offset + 4));
+            } else {
+                std::uint32_t const offset =
+                    static_cast<std::uint32_t>(assn_var2.size());
+                std::vector<std::uint8_t> const block = encode_block(work);
+                assn_var2.insert(assn_var2.end(), block.begin(), block.end());
+                repoint_var_entry(assn_var_meta, assn_uid, kAssnWorkField,
+                                  offset);
             }
         }
-        /* The record bytes past a shortened payload stay as Project leaves
-         * them; every write here is in place. */
-        put_u32(assn_var2, work_offset,
-                static_cast<std::uint32_t>(work.size()));
-        std::copy(work.begin(), work.end(),
-                  assn_var2.begin() + static_cast<std::ptrdiff_t>(work_offset + 4));
 
         /* 0F400032: remove at 0 %, append 56 bytes when none existed, replace
          * (append + remove) otherwise.  A 100 % percent edit's replacement
@@ -1188,14 +1575,19 @@ PercentActualsResult write_percent_actuals(
             }
             std::vector<std::uint8_t> payload(
                 kAssnActualHeader + kAssnActualRecord, 0);
-            put_u16(payload, 0, 1);
+            /* W29-0.2: the milestone pair's appended block has u16 +0 = 0 and
+             * a zero units word, because the row has no actual work; a row
+             * with actual work stores 1 and the assignment's units (the leaf
+             * and work pairs). */
+            bool const has_actual_work = actual_work > 0.0;
+            put_u16(payload, 0, has_actual_work ? 1 : 0);
             put_u16(payload, 2, 24);
             put_u32(payload, 4, static_cast<std::uint32_t>(kAssnActualHeader));
-            put_f64(payload, 8, units);
+            put_f64(payload, 8, has_actual_work ? units : 0.0);
             put_f64(payload, 16, actual_work);
             put_u32(payload, 24, ticks8);
             put_f64(payload, 36, actual_work);
-            put_f64(payload, 44, units);
+            put_f64(payload, 44, has_actual_work ? units : 0.0);
             put_u32(payload, 52, ticks8);
             if (had_actual_work) {
                 payload.resize(kAssnActualHeader + 2 * kAssnActualRecord);
@@ -1268,6 +1660,36 @@ PercentActualsResult write_percent_actuals(
                     ~0x01u);
         }
     }
+
+    /* W29-0.2: the project row's +8/+16/+24 doubles and its +94 percent are the
+     * REAL assignments' work sums (measured on the work pair:
+     * 960000/384000/576000 and 40 %); the project row itself is written now,
+     * after every assignment row has its final values, so its Resume/Stop can
+     * also take the summary dates write_summary_rollup set above. */
+    double real_work = 0.0;
+    double real_actual_work = 0.0;
+    for (std::size_t at = 0; at < assn_fixed.size() / kAssnStride; ++at) {
+        std::size_t const base = at * kAssnStride;
+        std::uint32_t const resource = get_u32(assn_fixed, base + kAssnResource);
+        if (resource == 0 || resource == kNullResource) {
+            continue;
+        }
+        real_work += get_f64(assn_fixed, base + kAssnPlanned);
+        real_actual_work += get_f64(assn_fixed, base + kAssnActual);
+    }
+    std::uint16_t percent_work = 0;
+    if (real_work > 0.0) {
+        double const ratio = 100.0 * real_actual_work / real_work;
+        percent_work = static_cast<std::uint16_t>(
+            std::min(100.0, std::max(0.0, std::floor(ratio + 0.5))));
+    }
+    bool any_progress = false;
+    for (AppliedEdit const& item : applied) {
+        any_progress = any_progress || item.has_progress;
+    }
+    write_project_rollup(rows, excluded, options.project_resume_stop_from_rows,
+                         any_progress, summary_written, real_work,
+                         real_actual_work, percent_work);
 
     std::size_t const assn_entry_count = count_var_entries(assn_var_meta);
     if (assn_var_meta.size() !=

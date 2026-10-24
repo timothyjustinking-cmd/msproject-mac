@@ -145,36 +145,81 @@ bool has_work_resource_assignment(const PlanInput& plan, std::uint32_t uid) {
     return false;
 }
 
+// W29-0.2: the row shapes the wave-29 percent pairs measured, each ALONE on an
+// automatic row -- a leaf under a summary (0 -> 40), a task with a work-bearing
+// assignment (0 -> 40) and a zero-duration milestone (0 -> 100).  A combination
+// of two (a milestone under a summary, a resource-loaded leaf, a milestone with
+// resource work) has no pair, so check_actuals_row_shape refuses it.
+struct ActualsRowShape {
+    bool under_summary = false;
+    bool milestone = false;
+    bool work_resource = false;
+};
+
+ActualsRowShape actuals_row_shape(const PlanInput& plan, const TaskRow& row) {
+    ActualsRowShape shape;
+    shape.under_summary = row.outline_level != 0;
+    shape.milestone = row.milestone;
+    shape.work_resource = has_work_resource_assignment(plan, row.uid);
+    return shape;
+}
+
 bool check_actuals_row_shape(const PlanInput& plan, const TaskRow& row,
-                             std::string& error) {
-    if (row.outline_level != 0) {
+                             bool percent_edit, std::string& error) {
+    const ActualsRowShape shape = actuals_row_shape(plan, row);
+    if (!percent_edit) {
+        // W29-0.3 measures date updates; until its pairs land a date update
+        // keeps every W29-0.0 refusal.
+        if (shape.under_summary) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " is a leaf under a summary; no Project save pair measures "
+                    "an actuals write below a summary, and its stored roll-up "
+                    "would be left stale";
+            return false;
+        }
+        if (shape.milestone) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " is a milestone; no Project save pair measures an actuals "
+                    "write on a milestone";
+            return false;
+        }
+        if (shape.work_resource) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " has a resource assignment that carries work; no Project "
+                    "save pair measures an actuals write on a resource-loaded "
+                    "task (the measured rows carry only Project's unassigned "
+                    "placeholders)";
+            return false;
+        }
+        return true;
+    }
+    if (shape.under_summary && shape.milestone) {
         error = "task uid " + std::to_string(row.uid) +
-                " is a leaf under a summary; no Project save pair measures an "
-                "actuals write below a summary, and its stored roll-up would be "
-                "left stale";
+                " is a milestone under a summary; no Project save pair measures "
+                "that combination (the wave-29 milestone pair is top-level)";
         return false;
     }
-    if (row.milestone) {
+    if (shape.under_summary && shape.work_resource) {
         error = "task uid " + std::to_string(row.uid) +
-                " is a milestone; no Project save pair measures an actuals write "
-                "on a milestone";
+                " is a leaf under a summary AND has a resource assignment that "
+                "carries work; no Project save pair measures that combination";
         return false;
     }
-    if (has_work_resource_assignment(plan, row.uid)) {
+    if (shape.milestone && shape.work_resource) {
         error = "task uid " + std::to_string(row.uid) +
-                " has a resource assignment that carries work; no Project save "
-                "pair measures an actuals write on a resource-loaded task (the "
-                "measured rows carry only Project's unassigned placeholders)";
+                " is a milestone with a resource assignment that carries work; "
+                "no Project save pair measures that combination";
         return false;
     }
     return true;
 }
 
 // The row rules a percent edit and a date update share: a saved, live,
-// non-summary task of the measured shape.  `row` receives the plan row on
-// acceptance.
+// non-summary task of a measured shape.  `row` receives the plan row on
+// acceptance; `percent_edit` selects the wave-29 shape rules (W29-0.2).
 bool check_actuals_target(const PlanInput& plan, std::uint32_t uid,
-                          const TaskRow*& row, std::string& error) {
+                          const TaskRow*& row, bool percent_edit,
+                          std::string& error) {
     row = nullptr;
     if (uid == 0) {
         error = "uid 0 is the project summary row and has no task % complete to write";
@@ -203,7 +248,7 @@ bool check_actuals_target(const PlanInput& plan, std::uint32_t uid,
                 "so this port refuses to write a stored value for it";
         return false;
     }
-    if (!check_actuals_row_shape(plan, *found, error)) {
+    if (!check_actuals_row_shape(plan, *found, percent_edit, error)) {
         return false;
     }
     row = found;
@@ -248,21 +293,41 @@ bool check_new_summary_shape(const PlanInput& plan, std::uint32_t uid,
     return true;
 }
 
-// The percent transitions the four committed Project pairs measured
-// (tests/data/wave28-percent-*): automatic 0 -> 40, 40 -> 100 and 100 -> 0, and
-// manual 0 -> 40.  Project stores different words per transition (the 40 -> 100
-// save keeps its step marker and drops only the final step; 100 -> 0 keeps the
-// progress bits), so a target value alone is not a measured shape -- the pair's
-// FROM value matters too.
-bool measured_percent_transition(bool manually_scheduled, std::uint16_t from,
+// The percent transitions the committed Project pairs measured
+// (tests/data/wave28-percent-*, wave29-percent-*): on a FLAT top-level leaf,
+// automatic 0 -> 40, 40 -> 100 and 100 -> 0 and manual 0 -> 40; the wave-29
+// shapes measure exactly one transition each -- a leaf under a summary 0 -> 40,
+// a resource-loaded task 0 -> 40 and a milestone 0 -> 100, all automatic.
+// Project stores different words per transition (the 40 -> 100 save keeps its
+// step marker and drops only the final step; 100 -> 0 keeps the progress bits;
+// the mid-to-mid pair makes Project reschedule the chain), so a target value
+// alone is not a measured shape -- the pair's FROM value and the row shape
+// matter too.
+bool measured_percent_transition(const ActualsRowShape& shape,
+                                 bool manually_scheduled, std::uint16_t from,
                                  std::uint16_t to) noexcept {
-    if (from == 0 && to == 40) {
-        return true;
+    if (!shape.under_summary && !shape.milestone && !shape.work_resource) {
+        if (from == 0 && to == 40) {
+            return true;
+        }
+        if (manually_scheduled) {
+            return false;
+        }
+        return (from == 40 && to == 100) || (from == 100 && to == 0);
     }
     if (manually_scheduled) {
-        return false;
+        return false; /* the wave-29 pairs are automatic rows */
     }
-    return (from == 40 && to == 100) || (from == 100 && to == 0);
+    if (shape.under_summary && !shape.milestone && !shape.work_resource) {
+        return from == 0 && to == 40;
+    }
+    if (shape.work_resource && !shape.under_summary && !shape.milestone) {
+        return from == 0 && to == 40;
+    }
+    if (shape.milestone && !shape.under_summary && !shape.work_resource) {
+        return from == 0 && to == 100;
+    }
+    return false; /* a combination the shape check refuses */
 }
 
 // core::gantt::LinkType orders FS/SS/FF/SF; the FILE orders FF=0, FS=1, SF=2,
@@ -575,19 +640,22 @@ bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t p
         return false;
     }
     const TaskRow* row = nullptr;
-    if (!check_actuals_target(plan, uid, row, error)) {
+    if (!check_actuals_target(plan, uid, row, true, error)) {
         return false;
     }
-    // W29-0.0: only the transitions a committed Project pair measured are
-    // enabled (rule 1).  The current value is the display plan's, so a queued
-    // edit is judged against the state the save will see.
-    if (!measured_percent_transition(row->manually_scheduled,
+    // W29-0.0/W29-0.2: only the transitions a committed Project pair measured
+    // are enabled (rule 1), per row shape.  The current value is the display
+    // plan's, so a queued edit is judged against the state the save will see.
+    const ActualsRowShape shape = actuals_row_shape(plan, *row);
+    if (!measured_percent_transition(shape, row->manually_scheduled,
                                      row->percent_complete, percent)) {
         error = "task uid " + std::to_string(uid) + " is stored at " +
                 std::to_string(row->percent_complete) + " % and this edit sets " +
                 std::to_string(percent) +
-                " %; no Project save pair measures that transition (measured: "
-                "automatic 0->40, 40->100, 100->0 and manual 0->40)";
+                " %; no Project save pair measures that transition on this row "
+                "shape (measured: a flat automatic leaf 0->40, 40->100 and "
+                "100->0; a flat manual leaf 0->40; a leaf under a summary 0->40; "
+                "a resource-loaded task 0->40; a milestone 0->100)";
         return false;
     }
     error.clear();
@@ -700,7 +768,7 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
     built.updates_status_date = updates_status_date;
     for (std::uint32_t uid : uids) {
         const TaskRow* row = nullptr;
-        if (!check_actuals_target(plan, uid, row, error)) {
+        if (!check_actuals_target(plan, uid, row, false, error)) {
             return false;
         }
         if (row->percent_complete > 0) {
@@ -1180,7 +1248,7 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 // also sees a pending percent edit).
                 const TaskRow* row = nullptr;
                 std::string error;
-                if (!check_actuals_target(*plan, target.uid, row, error)) {
+                if (!check_actuals_target(*plan, target.uid, row, false, error)) {
                     return false;
                 }
                 if (row->percent_complete > 0) {
@@ -2165,13 +2233,29 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                    "which this writer does not measure");
                         continue;
                     }
+                    // A manually scheduled row charges the start day's tail
+                    // (the manual pair's Stop is Tue 12:00, not Tue 17:00);
+                    // an automatic row is a plain working-time walk.  The
+                    // manual bit also selects the ActualStart source below.
+                    const bool manual =
+                        mppwrite::task_is_manually_scheduled(document, row);
                     std::uint32_t actual_start =
                         table.u32(row, mppwrite::task_row::kActualStart);
                     if (!mppwrite::is_date(actual_start)) {
-                        actual_start = table.u32(row, mppwrite::task_row::kStart2);
+                        // W29-0.2: a manual row's measured start is Start2 (the
+                        // manual pairs' Sunday 13:00, NOT their Monday Start);
+                        // an automatic row's is Start.  The wave-29 milestone
+                        // pair proves the second half: its Start2 still held
+                        // the project start (3d4612c0) and Project wrote
+                        // ActualStart = Start (3d4d27d8).
+                        actual_start = table.u32(
+                            row, manual ? mppwrite::task_row::kStart2
+                                        : mppwrite::task_row::kStart);
                     }
                     if (!mppwrite::is_date(actual_start)) {
-                        actual_start = table.u32(row, mppwrite::task_row::kStart);
+                        actual_start = table.u32(
+                            row, manual ? mppwrite::task_row::kStart
+                                        : mppwrite::task_row::kStart2);
                     }
                     if (!mppwrite::is_date(actual_start)) {
                         result.warnings.push_back(
@@ -2186,11 +2270,6 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                     std::uint32_t const actual_ticks =
                         from_update ? actual.actual_ticks
                                     : mppwrite::actual_duration_ticks(duration, percent);
-                    // A manually scheduled row charges the start day's tail
-                    // (the manual pair's Stop is Tue 12:00, not Tue 17:00);
-                    // an automatic row is a plain working-time walk.
-                    const bool manual =
-                        mppwrite::task_is_manually_scheduled(document, row);
                     std::uint32_t const stop =
                         manual ? manual_finish_date(calendar, actual_start,
                                                     actual_ticks)

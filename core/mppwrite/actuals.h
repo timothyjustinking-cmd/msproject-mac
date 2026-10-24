@@ -8,27 +8,51 @@
  * build/w28/actuals-words.log (not committed) hold the full byte diff and the
  * per-word dump.
  *
- * WHAT A PERCENT EDIT WRITES, per edited leaf row:
+ * WHAT A PERCENT EDIT WRITES, per edited leaf row (wave-28 rules, extended by
+ * the three wave-29 shape pairs):
  *   FixedData +80  ActualDuration     = Duration * percent / 100
  *             +88  RemainingDuration  = Duration - ActualDuration
  *             +92  PercentComplete    = percent
- *             +94  PercentWorkComplete= 100 at 100 %, else 0 (every fixture row
+ *             +94  PercentWorkComplete= percent when the row has a real
+ *                                       (work-bearing) assignment; otherwise
+ *                                       100 at 100 %, else 0 (every wave-28 row
  *                                       carries Project's UNASSIGNED
  *                                       placeholder assignment -- non-zero +20
  *                                       planned work, the 0xFFFF0001 null-
  *                                       resource sentinel -- and Project's own
  *                                       save stores 0 below 100 %)
- *             +120 ActualStart        = the task's effective start
+ *             +8/+16/+24              Work / Actual Work / Remaining Work of
+ *                                       the real assignment (thousandths of a
+ *                                       minute, f64); untouched on a placeholder
+ *             +120 ActualStart        = the stored +120 when the row has one,
+ *                                       else the manual row's Start2 (+104), else
+ *                                       the automatic row's Start (+96)
  *             +124 ActualFinish       = the measured finish at 100 %, else NA
+ *             +104/+108 Start2/Finish2= the actual dates at 100 % (the milestone
+ *                                       pair; below 100 % they are untouched)
  *             +132 Resume / +136 Stop = the caller's working-time values,
  *                                       NA at 0 %
  *             +168 progress flags      = existing word | 0x9000 when percent > 0
  *                                       (100->0 keeps the bits: measured)
- *             +174 start anchor       = ActualStart when percent > 0, else NA
- *   plus the project row's roll-up (+80/+88/+92 and +120/+132/+136, recomputed
- *   from every non-summary task row) and the row's VarMeta/Var2Data fields:
- *   0x0B4004E5 is removed, 0x0B400505/0x0B400506 are removed when a 0 % row
- *   starts carrying progress, and at percent > 0 a 0x0B40015E step block is
+ *             +174 start anchor       = ActualStart when the row has progress and
+ *                                       is manual or WAS a leaf; untouched
+ *                                       otherwise (the milestone keeps NA)
+ *   The summary rows above the progressed leaf then take Project's roll-up
+ *   (W29-0.2, the leaf pair): +80 = the summary's own Duration * sum(leaf
+ *   ActualDuration) / sum(leaf Duration), +88 = own Duration - that, +92 =
+ *   rounded 100 * sum(leaf ActualDuration) / sum(leaf Duration), +120 = the
+ *   summary's own Start2, +132/+136 = the earliest valid leaf resume/stop.  A
+ *   summary with no progressed leaf descendant is left byte for byte, as are
+ *   every summary's flag and anchor words.  The project row takes +80/+88/+92
+ *   over the non-summary rows, +94 = round(100 * sum(real actual work) /
+ *   sum(real planned work)), +8/+16/+24 = those two real-assignment sums (0 on
+ *   a placeholder-only file), and +120/+132/+136 as measured (the project start;
+ *   Resume/Stop are the earliest WRITTEN summary date, else Update Project's
+ *   earliest row date).  The edited row's VarMeta/Var2Data fields:
+ *   0x0B4004E3 and 0x0B4004E5 are removed, 0x0B400505/0x0B400506 are removed
+ *   when a 0 % row starts carrying progress, a 0x0B4004E4 payload shrinks 12 -> 8
+ *   bytes with 4 freed bytes on a zero-duration 100 % edit (the milestone pair),
+ *   and at percent > 0 a 0x0B40015E step block is
  *   appended; at 0 % a constant 0x0B4004E5 block is appended when the row has
  *   none.  A block built from scratch starts with Project's marker step
  *   (flag 1, percent 32768.0, a fresh opaque id) before the new middle step and
@@ -47,7 +71,7 @@
  * array back into the first slots of the original stream, so the stream size
  * and every byte past the new logical count are preserved.
  *
- * ALSO WRITTEN (wave 29, W29-0.1), because the five wave-28 percent pairs and
+ * ALSO WRITTEN (wave 29, W29-0.1), because the four wave-28 percent pairs and
  * the three mark/update pairs change these fields on every save; the save-pair
  * tests now compare every one of them with PROJECT's file:
  *   Task FixedMeta entry +44    0x08 once the row has progress, 0x00 at 0 %.
@@ -64,22 +88,30 @@
  *                         +46   the project start at 0 %, NA at 100 %,
  *                               ActualStart for an automatic row below 100 %,
  *                               unchanged for a manual row below 100 %.
- *   TBkndAssn FixedData +28     planned work * elapsed ticks / Duration;
+ *   TBkndAssn FixedData +28     planned work * the row's actual ticks / Duration
+ *                               (0 for a zero-duration row, the milestone);
  *                        +44   planned - that; +60 Resume; +104 Stop copy (the
  *                               task Start at 0 %).
  *   TBkndAssn FixedMeta +2      net 0F400032 entry change; +10 0x08 at progress
  *                               and 0x10 at 100 %; +14 0x04 at progress.
  *   TBkndAssn Fixed2Meta +9     clears bit 0x01 once the row has progress.
- *   TBkndAssn 0F400031          rewritten in place: at 100 % with a percent edit
- *                               a 44-byte zero header (word +32 = 1) replaces the
- *                               records; at 100 % from a date update the records
- *                               stay byte for byte and +32 = 0; below 100 % the
- *                               record count is kept and every record gets the
- *                               new remaining work.
+ *   TBkndAssn 0F400031          rewritten in place or APPENDED: at 100 % with a
+ *                               percent edit a 44-byte zero header (word +32 = 1)
+ *                               replaces the records; at 100 % from a date update
+ *                               the records stay byte for byte and +32 = 0;
+ *                               below 100 % a real (work-bearing) assignment
+ *                               rebuilds ceil(Duration / 4800) records (the work
+ *                               pair grows 72 -> 100 bytes and is appended and
+ *                               repointed), a placeholder keeps the control's
+ *                               record count (2 in the wave-28 and mid controls);
+ *                               a zero-duration row leaves the block byte for
+ *                               byte (the milestone's 72-byte block).
  *   TBkndAssn 0F400032          removed at 0 %; appended (56 bytes) when none
  *                               existed; replaced (append + remove, 56 bytes, or
  *                               76 bytes at 100 % with a percent edit, where the
- *                               second record carries the OLD actual work).
+ *                               second record carries the OLD actual work); a
+ *                               zero-duration row stores a 56-byte all-zero
+ *                               block with the units words 0 (the milestone).
  *   TBkndAssn VarMeta           9 -> 10 entries on a first 0F400032 append,
  *                               10 -> 9 on its removal; the physical tail keeps
  *                               Project's stale slot, as in the Task table.
@@ -91,11 +123,19 @@
  *
  * The save-pair tests compare every stream with Project's file (W29-0.1).  The
  * bytes this writer still does not reproduce are named gaps, not assertions of
- * the control: the random identity GUIDs Project reallocates in Fixed2Data and
- * the opaque 0x0B40015E step ids.  The app refuses, from W29-0.0, every row
- * shape no committed pair measured (a leaf under a summary, a milestone, a
- * resource-loaded assignment that carries work, an unmeasured percent
- * transition, and a date update on a row that already records progress).
+ * the control: the random identity GUIDs Project reallocates in Fixed2Data (the
+ * assignment's real-resource +32 word included) and the opaque 0x0B40015E step
+ * ids.  W29-0.2 measured three more shapes -- a leaf under a summary 0 -> 40
+ * (with the summary and project roll-ups), a work-bearing assignment 0 -> 40
+ * (task and assignment actual work) and a zero-duration milestone 0 -> 100 --
+ * and the app accepts exactly those transitions on automatic rows.  A
+ * mid-to-mid edit (25 -> 60) is measured as wave29-percent-mid60.mpp but stays
+ * refused: Project reschedules the whole chain on that save (durations, dates,
+ * anchors, slack) and this writer has no scheduler, so the pair's moved fields
+ * are the save-pair test's named expected failures.  A date update still
+ * refuses every shape (W29-0.3 measures it), and a combination of two shapes (a
+ * milestone under a summary, a resource-loaded leaf, a milestone with resource
+ * work) has no pair, so the app refuses it.
  *
  * CORRECTION (wave 29, W29-0.0): the wave-28 save-pair test did NOT compare
  * those streams with Project's file -- it asserted them equal to the CONTROL,
