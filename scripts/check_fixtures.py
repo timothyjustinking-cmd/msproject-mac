@@ -29,10 +29,14 @@ DOCUMENTED = {
     # folder.  Because this file is the engine suite's calendar base and its
     # recorded oracle depends on its bytes, the brief allowed them to be
     # replaced IN PLACE with a neutral same-length string (C:\w19\... padded;
-    # scripts/w28_neutralise_path.py).  Every other byte is unchanged; only the
-    # path text differs, hence the new hash.
+    # scripts/w28_neutralise_path.py).  The operator's name, still stored in
+    # the SummaryInformation properties and one Var2Data value of the same
+    # blob, was then replaced the same way (scripts/w28_neutralise_operator.py)
+    # because the pre-push guard refuses any new blob that carries it.  Every
+    # other byte is unchanged; only the path and name text differs, hence the
+    # new hash.
     "tests/data/synthetic-calendars.mpp":
-        "C42D6FEA0E4EB64317D0BDED09B422A59314AE45220230CE1C98DBC5F438030B",
+        "BAF83A50C19A82F834CD7CCBF833E53C2DB9130C9627F2EAB6EBE44F3C5D68AE",
     "tests/data/project_a_recalc_golden.tsv":
         "36F156F618C94C92D70FBA6D754340D374DDE72E7D2FF136D1E22DBEE5400DB8",
     # Wave 23 (W23-1/W23-7/W23-8): the 3-level outline fixture built through
