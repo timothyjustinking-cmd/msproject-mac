@@ -109,6 +109,15 @@
 #include "usage.h"
 #include "view_model.h"
 
+// W26-6.1 added refresh_menu_items() near the bottom of this file, but
+// refresh_menu_bar() (defined inside the anonymous namespace below) calls it.
+// The declaration must be at GLOBAL scope to match the global definition:
+// a second `static` declaration inside the anonymous namespace names a
+// different function and made the recursive call ambiguous (app-macos run
+// 40054198682).  This file is compiled only by app-macos, which first saw it
+// on wave 27 since wave 24.
+static void refresh_menu_items(NSMenu* menu, const app::MenuState& state);
+
 namespace {
 
 // Geometry.  kRowHeight must equal default_sheet_metrics().row_height (the
@@ -1505,13 +1514,6 @@ app::MenuState current_menu_state() {
     }
     return state;
 }
-
-// W26-6.1 added refresh_menu_items() at the bottom of this file, but
-// refresh_menu_bar() (defined here first) calls it.  The definition is static
-// and has no header, so it needs this declaration: without one the call is an
-// undeclared identifier under Clang, which is the only compiler that ever sees
-// this file (app-macos run 40053935957, first main.mm compile since wave 24).
-static void refresh_menu_items(NSMenu* menu, const app::MenuState& state);
 
 // Walks the installed menu bar and applies app::menu_item_enabled() to every
 // item the menu model created (tag == MenuAction), plus the dynamic Columns
