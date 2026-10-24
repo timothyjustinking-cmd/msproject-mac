@@ -27,6 +27,7 @@
 #include <initializer_list>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -1120,6 +1121,533 @@ void test_gantt_style() {
     check(!partial.text[static_cast<std::size_t>(TextStyleItem::highlighted)].valid,
           "gantt style: a bad font index marks the style invalid");
     check(!partial.warnings.empty(), "gantt style: a bad font index warns");
+}
+
+// ---------------------------------------------------------------------------
+// Wave 27 (W27-2.1): the wave-26 controlled saves, one change per save
+//
+// tests/data/wave26-gantt-saves/ holds the applied view's `0x22400008` record
+// from each save of the wave-26 controlled session, plus the two FONT_BASES
+// tables the font saves produced (extraction and source `.mpp` hashes:
+// tests/data/README.md).  Each save changed one thing.  These tests decode the
+// control record and the save's record through the public decoder and assert
+// that the decoded difference is exactly the field that changed; the bar
+// names, text-style labels and timescale values below are Project 2021's own.
+//
+// `gantt_differences` compares every field the decoder exposes (including the
+// "has colour" flags, the bar ids and the tier counts), so a record whose
+// changed offset moved more than the recorded field would show up as an extra
+// name and fail the equality rather than pass unnoticed.
+// ---------------------------------------------------------------------------
+
+// The analysis scripts' short names for the 17 Text Styles items, in the
+// record's order.  The decoder's own names are longer ("row and column
+// titles"); these keep the expected-difference strings readable.
+const char* gantt_item_label(std::size_t index) {
+    static const char* const kLabels[] = {
+        "highlighted", "rowcol",   "noncritical", "critical",    "summary",
+        "milestone",   "middle",   "bottom",       "left",        "right",
+        "top",         "bottomtext", "inside",     "marked",      "projectsummary",
+        "external",    "toptimescale"};
+    static_assert(std::size(kLabels) == msproject::viewstate::kTextStyleItemCount,
+                  "one short name per Text Styles item");
+    return index < std::size(kLabels) ? kLabels[index] : "unknown";
+}
+
+std::string gantt_differences(const msproject::viewstate::GanttStyle& before,
+                              const msproject::viewstate::GanttStyle& after) {
+    using msproject::viewstate::BarStyle;
+    using msproject::viewstate::TextStyle;
+    using msproject::viewstate::TimescaleTier;
+
+    std::string out;
+    const auto add = [&out](const std::string& name) {
+        if (!out.empty()) {
+            out += ", ";
+        }
+        out += name;
+    };
+
+    for (std::size_t i = 0; i < msproject::viewstate::kTextStyleItemCount; ++i) {
+        const TextStyle& a = before.text[i];
+        const TextStyle& b = after.text[i];
+        const std::string prefix =
+            std::string("text[") + std::to_string(i) + "]." + gantt_item_label(i) + ".";
+        if (a.valid != b.valid) {
+            add(prefix + "valid");
+        }
+        if (a.font_index != b.font_index || a.font_name != b.font_name ||
+            a.point_size != b.point_size) {
+            add(prefix + "font");
+        }
+        if (a.bold != b.bold) {
+            add(prefix + "bold");
+        }
+        if (a.italic != b.italic) {
+            add(prefix + "italic");
+        }
+        if (a.underline != b.underline) {
+            add(prefix + "underline");
+        }
+        if (a.strikethrough != b.strikethrough) {
+            add(prefix + "strike");
+        }
+        if (a.has_colour != b.has_colour || a.colour != b.colour) {
+            add(prefix + "foreground");
+        }
+        if (a.has_background != b.has_background || a.background != b.background) {
+            add(prefix + "background");
+        }
+        if (a.background_pattern != b.background_pattern) {
+            add(prefix + "pattern");
+        }
+    }
+
+    if (before.bars.size() != after.bars.size()) {
+        add("bars.count");
+    }
+    const std::size_t bar_count = std::min(before.bars.size(), after.bars.size());
+    for (std::size_t i = 0; i < bar_count; ++i) {
+        const BarStyle& a = before.bars[i];
+        const BarStyle& b = after.bars[i];
+        const std::string prefix =
+            std::string("bar[") + std::to_string(i) + "]." + a.name + ".";
+        if (a.name != b.name) {
+            add(prefix + "name");
+        }
+        if (a.id != b.id) {
+            add(prefix + "id");
+        }
+        if (a.row != b.row) {
+            add(prefix + "row");
+        }
+        if (a.middle_shape != b.middle_shape) {
+            add(prefix + "middle_shape");
+        }
+        if (a.middle_pattern != b.middle_pattern) {
+            add(prefix + "middle_pattern");
+        }
+        if (a.has_middle_colour != b.has_middle_colour ||
+            a.middle_colour != b.middle_colour) {
+            add(prefix + "middle_colour");
+        }
+        if (a.start_shape != b.start_shape) {
+            add(prefix + "start_shape");
+        }
+        if (a.start_type != b.start_type) {
+            add(prefix + "start_type");
+        }
+        if (a.has_start_colour != b.has_start_colour || a.start_colour != b.start_colour) {
+            add(prefix + "start_colour");
+        }
+        if (a.end_shape != b.end_shape) {
+            add(prefix + "end_shape");
+        }
+        if (a.end_type != b.end_type) {
+            add(prefix + "end_type");
+        }
+        if (a.has_end_colour != b.has_end_colour || a.end_colour != b.end_colour) {
+            add(prefix + "end_colour");
+        }
+        if (a.show_for != b.show_for) {
+            add(prefix + "show_for");
+        }
+        if (a.show_for_not != b.show_for_not) {
+            add(prefix + "show_for_not");
+        }
+        if (a.left_text != b.left_text) {
+            add(prefix + "left_text");
+        }
+        if (a.right_text != b.right_text) {
+            add(prefix + "right_text");
+        }
+        if (a.top_text != b.top_text) {
+            add(prefix + "top_text");
+        }
+        if (a.bottom_text != b.bottom_text) {
+            add(prefix + "bottom_text");
+        }
+        if (a.inside_text != b.inside_text) {
+            add(prefix + "inside_text");
+        }
+    }
+
+    const auto tier_differences = [&add](const char* tier, const TimescaleTier& a,
+                                         const TimescaleTier& b) {
+        if (a.unit != b.unit) {
+            add(std::string(tier) + ".unit");
+        }
+        if (a.count != b.count) {
+            add(std::string(tier) + ".count");
+        }
+        if (a.format != b.format) {
+            add(std::string(tier) + ".format");
+        }
+        if (a.align != b.align) {
+            add(std::string(tier) + ".align");
+        }
+        if (a.tick_lines != b.tick_lines) {
+            add(std::string(tier) + ".tick_lines");
+        }
+        if (a.fiscal_year != b.fiscal_year) {
+            add(std::string(tier) + ".fiscal_year");
+        }
+    };
+    tier_differences("top", before.top, after.top);
+    tier_differences("middle", before.middle, after.middle);
+    tier_differences("bottom", before.bottom, after.bottom);
+
+    if (before.view_flags != after.view_flags) {
+        add("view_flags");
+    }
+    if (before.timescale_show != after.timescale_show) {
+        add("timescale_show");
+    }
+    if (before.timescale_size != after.timescale_size) {
+        add("timescale_size");
+    }
+    return out;
+}
+
+struct GanttSavePair {
+    msproject::viewstate::GanttStyle control;
+    msproject::viewstate::GanttStyle save;
+    bool ok = false;
+};
+
+// Loads control.style.bin and <stem>.style.bin.  The control's font table is
+// the tracked synthetic-gantt-fonts.bin (byte-identical to the control save's
+// own 214/Props payload); a font save supplies its own table.
+GanttSavePair load_gantt_save(const std::string& stem, bool own_font_table) {
+    using msproject::viewstate::FontBase;
+
+    GanttSavePair pair;
+    const std::string data_dir = VIEWSTATE_TEST_DATA;
+    const std::string save_dir = data_dir + "/wave26-gantt-saves/";
+    const std::string control_font_path = data_dir + "/synthetic-gantt-fonts.bin";
+    const std::vector<std::uint8_t> control_bytes =
+        read_file(save_dir + "control.style.bin");
+    const std::vector<std::uint8_t> save_bytes = read_file(save_dir + stem + ".style.bin");
+    const std::vector<std::uint8_t> control_font_bytes = read_file(control_font_path);
+    const std::vector<std::uint8_t> save_font_bytes =
+        read_file(own_font_table ? save_dir + stem + ".fonts.bin" : control_font_path);
+    check(!control_bytes.empty() && !save_bytes.empty(),
+          stem + ": the committed control and save records read");
+    check(!control_font_bytes.empty() && !save_font_bytes.empty(),
+          stem + ": the committed font tables read");
+    if (control_bytes.empty() || save_bytes.empty() || control_font_bytes.empty() ||
+        save_font_bytes.empty()) {
+        return pair;
+    }
+
+    std::vector<FontBase> control_fonts;
+    std::vector<FontBase> save_fonts;
+    msproject::viewstate::ParseError error;
+    check(msproject::viewstate::parse_font_bases(control_font_bytes, control_fonts, &error),
+          stem + ": the control font table parses");
+    check(msproject::viewstate::parse_font_bases(save_font_bytes, save_fonts, &error),
+          stem + ": the save's font table parses");
+    check(msproject::viewstate::parse_gantt_style(control_bytes, control_fonts, pair.control,
+                                                  &error),
+          stem + ": the control record parses");
+    check(msproject::viewstate::parse_gantt_style(save_bytes, save_fonts, pair.save, &error),
+          stem + ": the save record parses");
+    pair.ok = pair.control.decoded && pair.save.decoded;
+    check(pair.ok, stem + ": both records decode");
+    return pair;
+}
+
+// The whole comparison: the decoded difference between the control record and
+// the save must be exactly `expected`, name for name and in order.
+void expect_gantt_changes(const GanttSavePair& pair,
+                          std::initializer_list<std::string_view> expected,
+                          const std::string& what) {
+    if (!pair.ok) {
+        return;  // load_gantt_save() already reported which read or parse failed
+    }
+    std::string joined;
+    for (const std::string_view name : expected) {
+        if (!joined.empty()) {
+            joined += ", ";
+        }
+        joined += name;
+    }
+    check_eq(gantt_differences(pair.control, pair.save), joined, what);
+}
+
+void test_gantt_save_font_family() {
+    const GanttSavePair pair = load_gantt_save("arial", true);
+    expect_gantt_changes(
+        pair,
+        {"text[0].highlighted.font", "text[1].rowcol.font", "text[2].noncritical.font",
+         "text[3].critical.font", "text[4].summary.font", "text[5].milestone.font",
+         "text[6].middle.font", "text[7].bottom.font", "text[8].left.font",
+         "text[9].right.font", "text[10].top.font", "text[11].bottomtext.font",
+         "text[12].inside.font", "text[13].marked.font", "text[14].projectsummary.font",
+         "text[15].external.font", "text[16].toptimescale.font"},
+        "gantt save arial: only the font field of all 17 text styles changes");
+    if (!pair.ok) {
+        return;
+    }
+    for (std::size_t i = 0; i < msproject::viewstate::kTextStyleItemCount; ++i) {
+        check_eq(pair.save.text[i].font_index, std::uint8_t{6},
+                 "gantt save arial: text style " + std::to_string(i) + " names font base 6");
+        check_eq(pair.save.text[i].font_name, std::string("Arial"),
+                 "gantt save arial: text style " + std::to_string(i) + " is Arial");
+    }
+    check_eq(pair.save.fonts[6].point_size, 65535,
+             "gantt save arial: the family-only call stores 0xffff as the point size");
+    check(!pair.control.fonts[6].valid,
+          "gantt save arial: font base 6 is a hole in the control table");
+}
+
+void test_gantt_save_font_size() {
+    const GanttSavePair pair = load_gantt_save("size8", true);
+    expect_gantt_changes(
+        pair,
+        {"text[0].highlighted.font",
+         "text[1].rowcol.font", "text[1].rowcol.foreground",
+         "text[2].noncritical.font", "text[2].noncritical.foreground",
+         "text[3].critical.font", "text[3].critical.foreground",
+         "text[4].summary.font", "text[4].summary.bold", "text[4].summary.foreground",
+         "text[5].milestone.font", "text[5].milestone.foreground",
+         "text[6].middle.font", "text[6].middle.foreground",
+         "text[7].bottom.font", "text[7].bottom.foreground",
+         "text[8].left.font", "text[8].left.bold", "text[8].left.foreground",
+         "text[9].right.font", "text[9].right.bold", "text[9].right.foreground",
+         "text[10].top.font", "text[10].top.bold", "text[10].top.foreground",
+         "text[11].bottomtext.font", "text[11].bottomtext.bold",
+         "text[11].bottomtext.foreground",
+         "text[12].inside.font", "text[12].inside.bold",
+         "text[13].marked.font", "text[13].marked.foreground",
+         "text[14].projectsummary.font", "text[14].projectsummary.bold",
+         "text[14].projectsummary.foreground",
+         "text[15].external.font", "text[15].external.foreground",
+         "text[16].toptimescale.font", "text[16].toptimescale.foreground"},
+        "gantt save size8: the size change and the explicit-argument resets");
+    if (!pair.ok) {
+        return;
+    }
+    check_eq(pair.save.fonts[6].name, std::string("Calibri"),
+             "gantt save size8: font base 6 is Calibri");
+    check_eq(pair.save.fonts[6].point_size, 8, "gantt save size8: font base 6 size 8");
+    check_eq(pair.save.text[0].point_size, 8,
+             "gantt save size8: the highlighted style resolves to size 8");
+    check(!pair.save.text[4].bold,
+          "gantt save size8: the summary style loses its bold bit");
+    check(pair.save.text[1].has_colour && pair.save.text[1].colour == (msproject::viewstate::Rgb{0, 0, 0}),
+          "gantt save size8: the row/column style gains an explicit black foreground");
+    check(pair.save.text[15].has_colour && pair.save.text[15].colour == (msproject::viewstate::Rgb{0, 0, 0}),
+          "gantt save size8: the external style foreground becomes explicit black");
+}
+
+void test_gantt_save_critical_colour() {
+    using msproject::viewstate::Rgb;
+    const GanttSavePair pair = load_gantt_save("critical-blue", false);
+    expect_gantt_changes(pair, {"text[3].critical.foreground"},
+                         "gantt save critical-blue: only the critical foreground changes");
+    if (!pair.ok) {
+        return;
+    }
+    check(!pair.control.text[3].has_colour,
+          "gantt save critical-blue: the control foreground is automatic");
+    check(pair.save.text[3].has_colour, "gantt save critical-blue: the save foreground is explicit");
+    check(pair.save.text[3].colour == (Rgb{0, 0, 255}),
+          "gantt save critical-blue: the stored foreground is blue");
+}
+
+void test_gantt_save_milestone_italic() {
+    using msproject::viewstate::Rgb;
+    const GanttSavePair pair = load_gantt_save("milestone-italic", false);
+    expect_gantt_changes(pair, {"text[15].external.italic", "text[15].external.foreground"},
+                         "gantt save milestone-italic: italic on, foreground back to automatic");
+    if (!pair.ok) {
+        return;
+    }
+    check(!pair.control.text[15].italic, "gantt save milestone-italic: the control is upright");
+    check(pair.save.text[15].italic, "gantt save milestone-italic: the save is italic");
+    check(pair.control.text[15].has_colour &&
+              pair.control.text[15].colour == (Rgb{128, 128, 128}),
+          "gantt save milestone-italic: the control foreground is explicit grey");
+    check(!pair.save.text[15].has_colour,
+          "gantt save milestone-italic: the save foreground is automatic");
+}
+
+void test_gantt_save_milestone_bold() {
+    using msproject::viewstate::Rgb;
+    const GanttSavePair pair = load_gantt_save("milestone-bold", false);
+    expect_gantt_changes(pair, {"text[15].external.bold", "text[15].external.foreground"},
+                         "gantt save milestone-bold: bold on, foreground back to automatic");
+    if (!pair.ok) {
+        return;
+    }
+    check(!pair.control.text[15].bold, "gantt save milestone-bold: the control is not bold");
+    check(pair.save.text[15].bold, "gantt save milestone-bold: the save is bold");
+    check(pair.control.text[15].has_colour &&
+              pair.control.text[15].colour == (Rgb{128, 128, 128}),
+          "gantt save milestone-bold: the control foreground is explicit grey");
+    check(!pair.save.text[15].has_colour,
+          "gantt save milestone-bold: the save foreground is automatic");
+}
+
+void test_gantt_save_milestone_underline() {
+    using msproject::viewstate::Rgb;
+    const GanttSavePair pair = load_gantt_save("milestone-underline", false);
+    expect_gantt_changes(pair, {"text[15].external.underline",
+                                "text[15].external.foreground"},
+                         "gantt save milestone-underline: underline on, foreground automatic");
+    if (!pair.ok) {
+        return;
+    }
+    check(!pair.control.text[15].underline,
+          "gantt save milestone-underline: the control is not underlined");
+    check(pair.save.text[15].underline, "gantt save milestone-underline: the save is underlined");
+    check(pair.control.text[15].has_colour &&
+              pair.control.text[15].colour == (Rgb{128, 128, 128}),
+          "gantt save milestone-underline: the control foreground is explicit grey");
+    check(!pair.save.text[15].has_colour,
+          "gantt save milestone-underline: the save foreground is automatic");
+}
+
+void test_gantt_save_highlight_fill() {
+    using msproject::viewstate::Rgb;
+    const GanttSavePair pair = load_gantt_save("highlight-fill", false);
+    expect_gantt_changes(pair, {"text[2].noncritical.background"},
+                         "gantt save highlight-fill: only the noncritical background changes");
+    if (!pair.ok) {
+        return;
+    }
+    check(!pair.control.text[2].has_background,
+          "gantt save highlight-fill: the control background is automatic");
+    check(pair.save.text[2].has_background, "gantt save highlight-fill: the save background is set");
+    check(pair.save.text[2].background == (Rgb{255, 255, 0}),
+          "gantt save highlight-fill: the stored background is yellow");
+    check_eq(pair.save.text[2].background_pattern, std::uint16_t{1},
+             "gantt save highlight-fill: the pattern stays solid");
+}
+
+void test_gantt_save_task_bar() {
+    using msproject::viewstate::Rgb;
+    const GanttSavePair pair = load_gantt_save("task-red", false);
+    expect_gantt_changes(pair,
+                         {"bar[0].Task.id", "bar[0].Task.middle_colour",
+                          "bar[0].Task.start_colour", "bar[0].Task.end_colour"},
+                         "gantt save task-red: the Task bar's colours and id");
+    if (!pair.ok) {
+        return;
+    }
+    const auto& bar = pair.save.bars[0];
+    check_eq(bar.name, std::string("Task"), "gantt save task-red: bar 0 is Task");
+    check_eq(bar.id, std::uint16_t{40}, "gantt save task-red: the stored id becomes 40");
+    check(bar.has_middle_colour && bar.middle_colour == (Rgb{255, 0, 0}),
+          "gantt save task-red: the middle colour is red");
+    check(!bar.has_start_colour, "gantt save task-red: the start colour is automatic");
+    check(!bar.has_end_colour, "gantt save task-red: the end colour is automatic");
+    check(pair.control.bars[0].has_start_colour &&
+              pair.control.bars[0].start_colour == (Rgb{0, 0, 0}),
+          "gantt save task-red: the control start colour is explicit black");
+}
+
+void test_gantt_save_summary_bar() {
+    using msproject::viewstate::Rgb;
+    const GanttSavePair pair = load_gantt_save("summary-green", false);
+    expect_gantt_changes(pair,
+                         {"bar[3].Summary.id", "bar[3].Summary.middle_colour",
+                          "bar[3].Summary.start_colour", "bar[3].Summary.end_colour"},
+                         "gantt save summary-green: the Summary bar's colours and id");
+    if (!pair.ok) {
+        return;
+    }
+    const auto& bar = pair.save.bars[3];
+    check_eq(bar.name, std::string("Summary"), "gantt save summary-green: bar 3 is Summary");
+    check_eq(bar.id, std::uint16_t{40}, "gantt save summary-green: the stored id becomes 40");
+    check(bar.has_middle_colour && bar.middle_colour == (Rgb{0, 128, 0}),
+          "gantt save summary-green: the middle colour is green");
+    check(bar.has_start_colour && bar.start_colour == (Rgb{0, 128, 0}),
+          "gantt save summary-green: the start colour is green");
+    check(bar.has_end_colour && bar.end_colour == (Rgb{0, 128, 0}),
+          "gantt save summary-green: the end colour is green");
+}
+
+void test_gantt_save_milestone_bar() {
+    using msproject::viewstate::Rgb;
+    const GanttSavePair pair = load_gantt_save("milestone-blue", false);
+    expect_gantt_changes(pair,
+                         {"bar[2].Milestone.id", "bar[2].Milestone.middle_colour",
+                          "bar[2].Milestone.start_colour", "bar[2].Milestone.end_colour"},
+                         "gantt save milestone-blue: the Milestone bar's colours and id");
+    if (!pair.ok) {
+        return;
+    }
+    const auto& bar = pair.save.bars[2];
+    check_eq(bar.name, std::string("Milestone"), "gantt save milestone-blue: bar 2 is Milestone");
+    check_eq(bar.id, std::uint16_t{40},
+             "gantt save milestone-blue: the stored id becomes 40");
+    check(bar.has_start_colour && bar.start_colour == (Rgb{0, 0, 255}),
+          "gantt save milestone-blue: the start colour is blue");
+    check(!bar.has_middle_colour, "gantt save milestone-blue: the middle colour is automatic");
+    check(!bar.has_end_colour, "gantt save milestone-blue: the end colour is automatic");
+    check(pair.control.bars[2].has_start_colour &&
+              pair.control.bars[2].start_colour == (Rgb{99, 99, 99}),
+          "gantt save milestone-blue: the control start colour is grey");
+}
+
+void test_gantt_save_timescale_yqm() {
+    using msproject::viewstate::TimescaleUnit;
+    const GanttSavePair pair = load_gantt_save("ts-yqm", false);
+    expect_gantt_changes(pair,
+                         {"middle.unit", "middle.format", "bottom.unit",
+                          "bottom.format"},
+                         "gantt save ts-yqm: the middle and bottom tiers change");
+    if (!pair.ok) {
+        return;
+    }
+    check(pair.save.middle.unit == TimescaleUnit::quarters,
+          "gantt save ts-yqm: the middle tier is quarters");
+    check_eq(pair.save.middle.format, 2, "gantt save ts-yqm: the quarter format is 2");
+    check_eq(pair.save.middle.count, 1, "gantt save ts-yqm: the middle count stays 1");
+    check(pair.save.bottom.unit == TimescaleUnit::months,
+          "gantt save ts-yqm: the bottom tier is months");
+    check_eq(pair.save.bottom.format, 10, "gantt save ts-yqm: the month format is 10");
+    check(pair.save.top.unit == TimescaleUnit::none,
+          "gantt save ts-yqm: the top tier stays absent");
+    check_eq(pair.save.top.format, 35, "gantt save ts-yqm: the top format stays 35");
+}
+
+void test_gantt_save_timescale_ymd() {
+    using msproject::viewstate::TimescaleUnit;
+    const GanttSavePair pair = load_gantt_save("ts-ymd", false);
+    expect_gantt_changes(pair, {"middle.unit", "middle.format"},
+                         "gantt save ts-ymd: only the middle tier changes");
+    if (!pair.ok) {
+        return;
+    }
+    check(pair.save.middle.unit == TimescaleUnit::months,
+          "gantt save ts-ymd: the middle tier is months");
+    check_eq(pair.save.middle.format, 9, "gantt save ts-ymd: the month format is 9");
+    check(pair.save.bottom.unit == TimescaleUnit::days,
+          "gantt save ts-ymd: the bottom tier stays days");
+    check_eq(pair.save.bottom.format, 20, "gantt save ts-ymd: the bottom format stays 20");
+}
+
+void test_gantt_save_timescale_yhq() {
+    using msproject::viewstate::TimescaleUnit;
+    const GanttSavePair pair = load_gantt_save("ts-yhq", false);
+    expect_gantt_changes(pair,
+                         {"middle.unit", "middle.format", "bottom.unit",
+                          "bottom.format"},
+                         "gantt save ts-yhq: the middle and bottom tiers change");
+    if (!pair.ok) {
+        return;
+    }
+    check(pair.save.middle.unit == TimescaleUnit::half_years,
+          "gantt save ts-yhq: the middle tier is half years");
+    check_eq(pair.save.middle.format, 123, "gantt save ts-yhq: the half-year format is 123");
+    check(pair.save.bottom.unit == TimescaleUnit::quarters,
+          "gantt save ts-yhq: the bottom tier is quarters");
+    check_eq(pair.save.bottom.format, 5, "gantt save ts-yhq: the quarter format is 5");
+    check(pair.save.middle.tick_lines && pair.save.bottom.tick_lines,
+          "gantt save ts-yhq: both tiers still draw tick lines");
 }
 
 // ---------------------------------------------------------------------------
@@ -2970,6 +3498,20 @@ int main(int argc, char** argv) {
     run("errors", test_errors_and_warnings);
     run("text", test_text_helpers);
     run("gantt-style", test_gantt_style);
+    // Wave 27 (W27-2.1): one controlled save per decoder field
+    run("gantt-save-font-family", test_gantt_save_font_family);
+    run("gantt-save-font-size", test_gantt_save_font_size);
+    run("gantt-save-critical-colour", test_gantt_save_critical_colour);
+    run("gantt-save-milestone-italic", test_gantt_save_milestone_italic);
+    run("gantt-save-milestone-bold", test_gantt_save_milestone_bold);
+    run("gantt-save-milestone-underline", test_gantt_save_milestone_underline);
+    run("gantt-save-highlight-fill", test_gantt_save_highlight_fill);
+    run("gantt-save-task-bar", test_gantt_save_task_bar);
+    run("gantt-save-summary-bar", test_gantt_save_summary_bar);
+    run("gantt-save-milestone-bar", test_gantt_save_milestone_bar);
+    run("gantt-save-timescale-yqm", test_gantt_save_timescale_yqm);
+    run("gantt-save-timescale-ymd", test_gantt_save_timescale_ymd);
+    run("gantt-save-timescale-yhq", test_gantt_save_timescale_yhq);
     run("writer-roundtrip", test_writer_roundtrip);
     run("writer-date-format", test_writer_date_format);
     run("writer-column", test_writer_column);
