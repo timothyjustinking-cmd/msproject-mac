@@ -1443,6 +1443,34 @@ PlanInput StructuralEdits::without_structural_edits(const PlanInput& shown,
         tasks.push_back(current != nullptr ? *current : file_row);
     }
     edited.tasks = std::move(tasks);
+    // Wave 28 (W28-4.1): a set_percent or update_actuals edit owns the row's
+    // percent_complete in the display plan (apply() writes it from the edit).
+    // An UNDONE edit is not replayed by apply(), so without this the shown row
+    // would keep the percent the undone edit gave it and the sheet -- and the
+    // docked Task Form, which reads the same plan -- would keep showing a value
+    // the file no longer has.  Restore the file's value for the uids an undone
+    // edit touched, the same shape as the outline restore below.
+    std::set<std::uint32_t> undone_percent_uids;
+    for (const StructuralEdit& edit : undone_) {
+        if (edit.kind == StructuralKind::set_percent) {
+            undone_percent_uids.insert(edit.uid);
+        } else if (edit.kind == StructuralKind::update_actuals) {
+            for (const ActualsTarget& target : edit.actuals) {
+                undone_percent_uids.insert(target.uid);
+            }
+        }
+    }
+    if (!undone_percent_uids.empty()) {
+        for (TaskRow& row : edited.tasks) {
+            if (undone_percent_uids.count(row.uid) == 0) {
+                continue;
+            }
+            const TaskRow* file_row = task_row_for_uid(loaded.tasks, row.uid);
+            if (file_row != nullptr) {
+                row.percent_complete = file_row->percent_complete;
+            }
+        }
+    }
     // Wave 28 (W28-2.1): an outline edit owns outline_level/outline_number/
     // summary, and a summary parent's duration, on the rows it touches.  A cell
     // edit cannot produce those values, and apply() replays them from the

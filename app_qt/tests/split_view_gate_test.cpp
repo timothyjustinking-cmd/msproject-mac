@@ -13,6 +13,11 @@
 //   3. selects a different task in the LIVE sheet with a real mouse click and
 //      proves the form's fields follow the selection (same task names as the
 //      sheet's own model, row by row);
+//   3b. (wave 28, W28-4.1) commits the form's Name, Start and % Complete fields
+//      and proves each reaches the same edit model the sheet uses (a sheet cell
+//      session for Name/Start, the measured set_percent edit for percent), that
+//      the two fields the sheet declares read-only stay disabled, and that
+//      Edit > Undo reverses every one of them with the form following;
 //   4. resizes the splitter and proves the pane's height follows, then clicks
 //      Details again and proves the pane is gone and the document is not dirty.
 //
@@ -202,6 +207,125 @@ int main(int argc, char** argv) {
     click_sheet_row(window, 0);
     gate::check(form->name_field()->text() == first_name,
                 "selecting row 1 again updates it back");
+
+    // --- 3b. W28-4.1: the form's fields edit through the sheet's own paths --
+    // Each field reports its value to MainWindow, which hands it to the SAME
+    // apply_task_information path the sheet cells and Task Information use:
+    // a begin_edit/commit_edit sheet session for the four cell fields and the
+    // measured set_percent structural edit for % Complete.  The form adds no
+    // writer of its own; the two fields the sheet declares read-only stay
+    // disabled rather than offering an edit a save would drop.
+    gate::check(!form->name_field()->isReadOnly(),
+                "the form's Name field is editable");
+    gate::check(!form->duration_field()->isReadOnly(),
+                "the form's Duration field is editable");
+    gate::check(!form->start_field()->isReadOnly(),
+                "the form's Start field is editable");
+    gate::check(!form->finish_field()->isReadOnly(),
+                "the form's Finish field is editable");
+    gate::check(!form->percent_field()->isReadOnly(),
+                "the form's % Complete field is editable");
+    gate::check(form->predecessors_field()->isReadOnly() &&
+                    !form->predecessors_field()->isEnabled(),
+                "Predecessors stays disabled (the sheet declares it read-only)");
+    gate::check(form->resources_field()->isReadOnly() &&
+                    !form->resources_field()->isEnabled(),
+                "Resources stays disabled (no assignment writer)");
+
+    QAction* undo = gate::find_action(window, app::MenuAction::undo);
+    gate::check(undo != nullptr, "the Edit menu carries Undo");
+
+    // Name: a sheet cell edit (in memory, exactly like the sheet's own Name
+    // column), undone by the sheet's undo stack.
+    const QString original_name = form->name_field()->text();
+    const QString renamed = original_name + QStringLiteral(" (form)");
+    form->name_field()->setFocus();
+    form->name_field()->setText(renamed);
+    QTest::keyClick(form->name_field(), Qt::Key_Return);
+    QApplication::processEvents();
+    gate::check(sheet_name(window, 0) == renamed,
+                "Return commits the form's Name through the sheet model");
+    gate::check(form->name_field()->text() == renamed,
+                "the form shows the committed name");
+    if (undo != nullptr) {
+        undo->trigger();
+        QApplication::processEvents();
+    }
+    gate::check(sheet_name(window, 0) == original_name,
+                "Edit > Undo reverses the form's Name edit");
+    gate::check(form->name_field()->text() == original_name,
+                "the form follows the Name undo");
+
+    // Start: the one cell field the save path persists.  The form's edit is
+    // the same pending start the sheet's in-cell editor makes.
+    gate::check(window.pending_start_edits() == 0,
+                "the fixture opens with no pending start edit");
+    const QString original_start = form->start_field()->text();
+    form->start_field()->setFocus();
+    form->start_field()->setText(QStringLiteral("2026-02-02"));
+    QTest::keyClick(form->start_field(), Qt::Key_Return);
+    QApplication::processEvents();
+    gate::check(window.pending_start_edits() == 1,
+                "the form's Start edit is one pending save edit");
+    gate::check(window.document_dirty(), "the document is dirty after the Start edit");
+    gate::check(form->start_field()->text() != original_start,
+                "the form shows the new start");
+    if (undo != nullptr) {
+        undo->trigger();
+        QApplication::processEvents();
+    }
+    gate::check(window.pending_start_edits() == 0,
+                "Edit > Undo reverses the form's Start edit");
+    gate::check(form->start_field()->text() == original_start,
+                "the form follows the Start undo");
+
+    // % Complete: no sheet cell path (that column is read-only); the form
+    // queues the same measured set_percent edit the ribbon's % buttons and Task
+    // Information queue.
+    const QString original_percent = form->percent_field()->text();
+    // A value that differs from the row's stored percent (the fixture stores
+    // 0 %; this also keeps the gate honest if it ever changes).
+    QString original_digits;
+    for (const QChar ch : original_percent) {
+        if (ch.isDigit()) {
+            original_digits += ch;
+        }
+    }
+    const int typed_percent_value = original_digits.toInt() == 50 ? 25 : 50;
+    const QString typed_percent = QString::number(typed_percent_value) + QStringLiteral("%");
+    const std::size_t pending_before_percent = window.pending_edits().size();
+    form->percent_field()->setFocus();
+    form->percent_field()->setText(typed_percent);
+    QTest::keyClick(form->percent_field(), Qt::Key_Return);
+    QApplication::processEvents();
+    gate::check(window.pending_edits().size() == pending_before_percent + 1,
+                "the form's % Complete edit queues exactly one structural edit");
+    const app::StructuralEdit* queued = window.pending_edits().next_undo();
+    gate::check(queued != nullptr &&
+                    queued->kind == app::StructuralKind::set_percent &&
+                    queued->percent == typed_percent_value,
+                "the queued edit is the measured set_percent");
+    gate::check(form->percent_field()->text() == typed_percent,
+                "the form shows the percent it queued");
+    if (undo != nullptr) {
+        undo->trigger();
+        QApplication::processEvents();
+    }
+    gate::check(window.pending_edits().size() == pending_before_percent,
+                "Edit > Undo drops the form's percent edit");
+    gate::check(form->percent_field()->text() != typed_percent,
+                "the form follows the percent undo");
+    gate::check(!window.document_dirty(),
+                "the form's undone edits leave the document clean");
+
+    // An unchanged field is not a file change and not an undo step.
+    const QString unchanged = form->name_field()->text();
+    form->name_field()->setFocus();
+    form->name_field()->setText(unchanged);
+    QTest::keyClick(form->name_field(), Qt::Key_Return);
+    QApplication::processEvents();
+    gate::check(window.sheet() != nullptr && !window.sheet()->can_undo(),
+                "Return on the unchanged value queues no edit");
 
     // --- 4. the splitter is resizable; the toggle undocks ------------------
     const int total = outer->height();

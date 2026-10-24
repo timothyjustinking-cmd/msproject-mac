@@ -249,6 +249,12 @@ structural redo list. The trade-off is documented rather than hidden: cell edits
 before a structural edit are no longer undoable afterwards (their *values* survive — the
 rebuild folds the current cell values back through
 `StructuralEdits::without_structural_edits`, so a pending Start edit is not lost).
+That inverse also gives an **undone** percent edit back to the file: `apply()` does
+not replay an edit that has been undone, so the display plan must not keep the
+percent it wrote. `without_structural_edits` restores the file's stored
+`percent_complete` for every task a `set_percent` or `update_actuals` edit in the
+redo list touched (W28-4.1), so the sheet — and the Qt shell's Task Form, which
+reads the same plan — never shows a percent the file does not have.
 
 On Save the writer applies the whole set: each delete through
 `mppwrite::delete_task_row` (the task plus its link/assignment cascade), each insert
@@ -428,7 +434,14 @@ that does not store the record (an original Project 2007 MPP12 file) refuses the
 change rather than inventing one. The stored custom fields and links
 are written only through their dialogs, not by typing in a grid cell (the stored
 columns are read-only).
-Saving a name does not change the file; the app never claims it does. The file the user
+Saving a name does not change the file; the app never claims it does. The Qt shell's
+docked Task Form (View > Details) commits through exactly these paths — its
+Name/Duration/Start/Finish are sheet cell edits and its % Complete is the measured
+structural edit — so it adds no writer of its own and its persistence matches the
+sheet's: Start and percent reach the file, Name/Finish/Duration stay in memory. Its
+Predecessors and Resources fields are disabled because those sheet columns are
+read-only and there is no field-level link/assignment writer (wave 28, W28-4.1).
+The file the user
 opened is never modified: the helpers refuse `target == source`, and a failure leaves no
 output file behind.
 

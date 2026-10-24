@@ -349,6 +349,26 @@ void test_without_structural_edits() {
     check_size(recovered.links.size(), 2, "the links the delete would drop are restored");
     check_size(recovered.assignments.size(), 1, "the assignment is restored");
 
+    // W28-4.1: a set_percent edit owns the row's percent_complete in the display
+    // plan, and undoing it must give the file's value back -- the sheet and the
+    // docked Task Form both read this plan, so a stale percent would keep showing
+    // a value the file does not have.
+    app::StructuralEdits percent_edits;
+    app::StructuralEdit percent;
+    percent.kind = app::StructuralKind::set_percent;
+    percent.uid = plan.tasks[0].uid;
+    percent.percent = 50;
+    check(percent_edits.push(percent, &plan), "a percent edit on a leaf is accepted");
+    const app::PlanInput percent_shown = percent_edits.apply(plan);
+    check(percent_shown.tasks[0].percent_complete == 50,
+          "the display plan shows the queued percent");
+    check(percent_edits.undo(), "the percent edit is undone");
+    const app::PlanInput percent_recovered =
+        percent_edits.without_structural_edits(percent_shown, plan);
+    check(percent_recovered.tasks[0].percent_complete ==
+              plan.tasks[0].percent_complete,
+          "an undone percent edit restores the file's value");
+
     // Re-applying the edits on the recovered plan is the display plan again, and
     // the cell edit is still there.
     const app::PlanInput rebuilt = edits.apply(recovered);

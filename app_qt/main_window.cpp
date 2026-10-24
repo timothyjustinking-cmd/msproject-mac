@@ -559,6 +559,10 @@ void MainWindow::build_central_widget() {
     details_splitter_->setChildrenCollapsible(false);
     details_splitter_->addWidget(splitter_);
     task_form_ = new TaskForm(details_splitter_);
+    // W28-4.1: a committed field goes through the one editable path the sheet
+    // cells and Task Information use; the form has no writer of its own.
+    task_form_->set_commit_handler(
+        [this](TaskFormField field, const QString& text) { commit_task_form_field(field, text); });
     details_splitter_->addWidget(task_form_);
     task_form_->setVisible(false);
     outer->addWidget(details_splitter_, 1);
@@ -2113,6 +2117,10 @@ void MainWindow::refresh_task_form() {
     if (task_form_ == nullptr) {
         return;
     }
+    // W28-4.1: the uid and the texts are set together, so a commit that arrives
+    // after a selection change is either for the row now shown or is dropped by
+    // commit_task_form_field.  Never leave a stale uid behind a cleared form.
+    task_form_uid_ = 0;
     if (prefs_.view != app::ViewMode::task_sheet || doc_.sheet() == nullptr) {
         task_form_->clear();
         return;
@@ -2143,6 +2151,79 @@ void MainWindow::refresh_task_form() {
         values.resources = computed(kResourceNamesField);
     }
     task_form_->set_values(values);
+    task_form_uid_ = selected.uid;
+
+    // W28-4.1: a field edits through the sheet's own cell session, so it is
+    // enabled exactly when the file's table shows an editable column for it
+    // (the same lookup apply_task_information performs).  Percent complete has
+    // no sheet cell path -- its column is read-only -- and queues the measured
+    // set_percent edit the ribbon's % buttons and Task Information queue, so it
+    // needs no column and stays enabled.
+    const auto column_for = [this](std::string_view field_name) -> std::size_t {
+        const core::view::FieldId field = app::task_field_id(field_name);
+        for (std::size_t column = 0; column < doc_.sheet()->column_count(); ++column) {
+            if (doc_.sheet()->column(column).field == field) {
+                return column;
+            }
+        }
+        return core::sheet::kNoIndex;
+    };
+    const auto editable = [this, &column_for](const char* field_name) {
+        const std::size_t column = column_for(field_name);
+        return column != core::sheet::kNoIndex && !doc_.sheet()->column_read_only(column);
+    };
+    task_form_->set_field_enabled(TaskFormField::name, editable("Name"));
+    task_form_->set_field_enabled(TaskFormField::duration, editable("Duration"));
+    task_form_->set_field_enabled(TaskFormField::start, editable("Start"));
+    task_form_->set_field_enabled(TaskFormField::finish, editable("Finish"));
+    task_form_->set_field_enabled(TaskFormField::percent, true);
+}
+
+void MainWindow::commit_task_form_field(TaskFormField field, const QString& text) {
+    // The typed value belongs to the task the form was populated for.  A
+    // selection change re-points the form's texts and task_form_uid_ together
+    // (refresh_task_form), so a commit that arrives afterwards is either
+    // unchanged for the new row or names a row the form no longer shows: drop
+    // it rather than write it to the wrong task.  (The line edit's focus-out
+    // can be delivered around a click that moved the sheet's selection.)
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr || task_form_uid_ == 0) {
+        refresh_task_form();
+        return;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (!selected.has_selection || selected.uid != task_form_uid_) {
+        refresh_task_form();
+        return;
+    }
+    TaskInformationValues values;
+    if (!task_information_values(&values)) {
+        refresh_task_form();
+        return;
+    }
+    std::string* target = nullptr;
+    switch (field) {
+        case TaskFormField::name: target = &values.name; break;
+        case TaskFormField::duration: target = &values.duration_text; break;
+        case TaskFormField::start: target = &values.start_text; break;
+        case TaskFormField::finish: target = &values.finish_text; break;
+        case TaskFormField::percent: target = &values.percent_text; break;
+    }
+    const std::string typed = text.toStdString();
+    if (target == nullptr || *target == typed) {
+        // Return on the value the task already carries is not a file change and
+        // must not become an undo step (nor a queued identical percent save).
+        refresh_task_form();
+        return;
+    }
+    *target = typed;
+    // The same call Task Information's OK makes: the four cell fields commit
+    // through the sheet's begin_edit/commit_edit session; a changed percent
+    // queues the measured set_percent edit.  A refusal is its status message.
+    apply_task_information(values, "task form");
+    // A refused value is still in the line edit; show the value the sheet kept.
+    // (On success apply_task_information has already refreshed the form.)
+    refresh_task_form();
 }
 
 void MainWindow::unlink_selected_task() {
@@ -3946,7 +4027,11 @@ bool MainWindow::task_information_values(TaskInformationValues* out) const {
     return true;
 }
 
-bool MainWindow::apply_task_information(const TaskInformationValues& values) {
+bool MainWindow::apply_task_information(const TaskInformationValues& values,
+                                        const char* source) {
+    // The status prefix names the surface: Task Information's dialog or (W28-4.1)
+    // the docked Task Form.  The applied edits are the same either way.
+    const std::string prefix(source);
     if (doc_.sheet() == nullptr) {
         return false;
     }
@@ -3989,8 +4074,8 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
             std::uint16_t percent = 0;
             std::string error;
             if (!parse_percent_text(values.percent_text, &percent)) {
-                set_message("task information: percent complete must be a whole number "
-                            "from 0 to 100",
+                set_message(prefix +
+                                ": percent complete must be a whole number from 0 to 100",
                             true);
                 update_status();
                 return false;
@@ -3998,7 +4083,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
             if (task == nullptr ||
                 !app::make_percent_edit(doc_.plan(), selected.uid, percent, percent_edit,
                                         error)) {
-                set_message("task information: " +
+                set_message(prefix + ": " +
                                 (task == nullptr ? std::string("no task row") : error),
                             true);
                 update_status();
@@ -4041,9 +4126,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
         }
         if (!sheet->begin_edit(selected.row, column)) {
             ok = false;
-            set_message(std::string("task information: the ") + edit.name +
-                            " column is read-only",
-                        true);
+            set_message(prefix + ": the " + edit.name + " column is read-only", true);
             continue;
         }
         sheet->set_edit_text(*edit.text);
@@ -4051,7 +4134,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
         if (!outcome.ok) {
             sheet->cancel_edit();
             ok = false;
-            set_message("task information: " + outcome.error, true);
+            set_message(prefix + ": " + outcome.error, true);
             continue;
         }
         applied = applied || outcome.changed;
@@ -4079,7 +4162,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
             !app::make_task_field_edits(*row, inputs, doc_.format(), field_edits,
                                         field_error)) {
             ok = false;
-            set_message("task information: " +
+            set_message(prefix + ": " +
                             (field_error.empty() ? std::string("no task row")
                                                  : field_error),
                         true);
@@ -4095,7 +4178,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
     if (ok && has_percent_edit) {
         if (!structural_.push(percent_edit, &doc_.plan())) {
             ok = false;
-            set_message("task information: the percent edit was refused", true);
+            set_message(prefix + ": the percent edit was refused", true);
         } else {
             structural_applied = true;
         }
@@ -4111,7 +4194,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values) {
             structural_.clear_redo();
             after_cell_change();
         }
-        set_message("task information applied", false);
+        set_message(prefix + " applied", false);
     }
     update_status();
     return ok;
