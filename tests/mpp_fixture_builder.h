@@ -292,7 +292,15 @@ inline std::vector<std::uint8_t> make_cfb(const std::vector<Stream>& streams) {
     for (std::uint32_t i = 0; i < fat_sectors; ++i) {
         set_fat(next_sector + i, kFatSector);
     }
-    fat_entries.resize(static_cast<std::size_t>(total) * 4, kFreeSector);
+    /* One FAT entry per sector, written out as whole sectors: the loop below
+     * reads fat_sectors * (kSector / 4) entries.  Sizing this as total * 4
+     * under-allocated every file smaller than 32 sectors, so the write loop
+     * read past the vector (W28-0.3: a Debug build asserts/hangs in
+     * cal_tests and mpp_error_paths).  fat_sectors * (kSector / 4) is exactly
+     * what the loop reads, and it is above the highest index set_fat wrote
+     * (total - 1), so this resize never shrinks live entries. */
+    fat_entries.resize(static_cast<std::size_t>(fat_sectors) * (kSector / 4),
+                       kFreeSector);
 
     /* Directory bytes. */
     std::vector<std::uint8_t> directory(dir_sectors * kSector, 0);
