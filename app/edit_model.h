@@ -140,6 +140,11 @@ struct StructuralEdit {
     core::gantt::LinkType link_type = core::gantt::LinkType::finish_to_start;
     // The lag in 6-second file ticks (4800 = one 8-hour working day).
     std::int32_t lag_ticks = 0;
+    // delete_task only (W27-3.2): the earlier field/percent/link-add edits for
+    // this task that pushing the delete removed from the applied list.  They
+    // are kept here so undo() can put them back (and redo() remove them again)
+    // instead of discarding the user's work silently.  Empty otherwise.
+    std::vector<StructuralEdit> displaced;
 };
 
 // True for the six custom-field ids whose storage and 114/Props registration are
@@ -184,13 +189,19 @@ class StructuralEdits {
     // non-summary file task (make_percent_edit), and a plan-less set_percent is
     // refused rather than trusted.  `plan` is ignored for the other kinds.
     //
-    // Pushing a delete_task also drops the set/clear field edits and add_link
-    // edits that name the task: those could never reach the file (the writer
-    // writes the fields/links before the delete, and the delete cascade would
-    // tombstone the link again).  Documented in app/README.md.
+    // Pushing a delete_task also removes the set/clear field edits, percent
+    // edits and add_link edits that name the task: those could never reach the
+    // file (the writer writes the fields/links before the delete, and the
+    // delete cascade would tombstone the link again).  They are not lost: the
+    // delete keeps them in StructuralEdit::displaced, undo() restores them and
+    // redo() removes them again (W27-3.2).  Documented in app/README.md.
     bool push(StructuralEdit edit, const PlanInput* plan = nullptr);
 
+    // Moves the newest applied edit to the redo list; a delete_task's
+    // displaced edits return to the applied list in their original order.
     bool undo();
+    // Re-applies the newest undone edit; a delete_task removes its displaced
+    // edits again.
     bool redo();
     void clear_redo() noexcept { undone_.clear(); }
 
@@ -233,6 +244,11 @@ class StructuralEdits {
     PlanInput without_structural_edits(const PlanInput& shown, const PlanInput& loaded) const;
 
   private:
+    // Removes from applied_ every edit a delete of `uid` displaces (the same
+    // set push has always dropped), preserving their relative order.  push()
+    // and redo() store the result in the delete's `displaced` (W27-3.2).
+    std::vector<StructuralEdit> detach_edits_naming(std::uint32_t uid);
+
     std::vector<StructuralEdit> applied_;  // in application order
     std::vector<StructuralEdit> undone_;   // a redo pops its back
 };

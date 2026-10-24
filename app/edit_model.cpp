@@ -298,22 +298,9 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
             }
             // A field value or a link add for this task could never reach the
             // file: the delete runs after them in the save sequence and the
-            // cascade tombstones the link again.  Drop those edits with it.
-            applied_.erase(
-                std::remove_if(applied_.begin(), applied_.end(),
-                               [&edit](const StructuralEdit& existing) {
-                                   if (existing.kind == StructuralKind::set_field ||
-                                       existing.kind == StructuralKind::clear_field ||
-                                       existing.kind == StructuralKind::set_percent) {
-                                       return existing.uid == edit.uid;
-                                   }
-                                   if (existing.kind == StructuralKind::add_link) {
-                                       return existing.uid == edit.uid ||
-                                              existing.predecessor_uid == edit.uid;
-                                   }
-                                   return false;
-                               }),
-                applied_.end());
+            // cascade tombstones the link again.  They are moved into the
+            // delete, not destroyed, so undo can restore them (W27-3.2).
+            edit.displaced = detach_edits_naming(edit.uid);
             break;
         }
         case StructuralKind::set_field:
@@ -413,12 +400,46 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
     return true;
 }
 
+std::vector<StructuralEdit> StructuralEdits::detach_edits_naming(std::uint32_t uid) {
+    // W27-3.2: the set push(delete_task) has always dropped, collected in
+    // their original order instead of erased.  The delete keeps the result in
+    // StructuralEdit::displaced; undo() puts it back.
+    std::vector<StructuralEdit> displaced;
+    std::vector<StructuralEdit> kept;
+    kept.reserve(applied_.size());
+    for (StructuralEdit& existing : applied_) {
+        bool names_uid = false;
+        if (existing.kind == StructuralKind::set_field ||
+            existing.kind == StructuralKind::clear_field ||
+            existing.kind == StructuralKind::set_percent) {
+            names_uid = existing.uid == uid;
+        } else if (existing.kind == StructuralKind::add_link) {
+            names_uid = existing.uid == uid || existing.predecessor_uid == uid;
+        }
+        if (names_uid) {
+            displaced.push_back(std::move(existing));
+        } else {
+            kept.push_back(std::move(existing));
+        }
+    }
+    applied_ = std::move(kept);
+    return displaced;
+}
+
 bool StructuralEdits::undo() {
     if (applied_.empty()) {
         return false;
     }
-    undone_.push_back(applied_.back());
+    StructuralEdit edit = std::move(applied_.back());
     applied_.pop_back();
+    if (edit.kind == StructuralKind::delete_task) {
+        // W27-3.2: the edits the delete displaced could never have reached the
+        // file, but they were the user's work; undo brings them back.
+        for (StructuralEdit& displaced : edit.displaced) {
+            applied_.push_back(std::move(displaced));
+        }
+    }
+    undone_.push_back(std::move(edit));
     return true;
 }
 
@@ -426,8 +447,14 @@ bool StructuralEdits::redo() {
     if (undone_.empty()) {
         return false;
     }
-    applied_.push_back(undone_.back());
+    StructuralEdit edit = std::move(undone_.back());
     undone_.pop_back();
+    if (edit.kind == StructuralKind::delete_task) {
+        // Undo restored the displaced edits; redoing the delete removes them
+        // again and keeps them for a later undo.
+        edit.displaced = detach_edits_naming(edit.uid);
+    }
+    applied_.push_back(std::move(edit));
     return true;
 }
 
