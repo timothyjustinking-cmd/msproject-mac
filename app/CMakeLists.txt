@@ -424,6 +424,24 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_outline COMMAND app_edits_outline_tests)
     set_tests_properties(app_edits_outline PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 28 (W28-3.1): Options > Schedule's new-task mode through the app
+    # model and save cascade.  Two committed Project save pairs (manual->auto
+    # and auto->manual); the owned 114/Props record is compared with Project's
+    # save, every other stream with the control, and Insert Task's row flag is
+    # proved in both directions.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_new_task_mode_tests app_edits_new_task_mode_tests.cpp)
+    target_compile_features(app_edits_new_task_mode_tests PRIVATE cxx_std_20)
+    set_target_properties(app_edits_new_task_mode_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_new_task_mode_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_new_task_mode_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_new_task_mode_tests)
+
+    add_test(NAME app_edits_new_task_mode COMMAND app_edits_new_task_mode_tests)
+    set_tests_properties(app_edits_new_task_mode PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 26 (W26-3.1): the file's Gantt style record -- the row -> Text Styles
     # category rule and the headless read seam.  The stock fixture is committed;
     # the PROJECT_A half skips when corpus/ is absent.

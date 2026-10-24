@@ -27,6 +27,8 @@
 #include "cfb_writer.h"
 #include "field_values.h"
 #include "outline.h"
+#include "project_props.h"
+#include "reader.h"
 #include "save.h"
 #include "table.h"
 
@@ -208,6 +210,8 @@ TaskRow placeholder_row(const StructuralEdit& edit, const TaskRow* template_row)
     row.uid = edit.uid;
     row.name = edit.name;
     row.outline_level = 0;
+    // W28-3.1: the project's stored mode is what the row is scheduled with.
+    row.manually_scheduled = edit.manually_scheduled;
     if (template_row != nullptr) {
         row.duration_ticks = template_row->duration_ticks;
         row.percent_complete = template_row->percent_complete;
@@ -840,6 +844,21 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
     return true;
 }
 
+bool make_new_task_mode_edit(std::string_view source_path, bool manual,
+                             StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    const mpp::NewTaskMode mode =
+        mpp::read_new_task_mode(std::string(source_path));
+    if (!mode.known) {
+        error = "this file does not store the new-task scheduling mode "
+                "(114/Props record 0x024013c8), so the option cannot be saved";
+        return false;
+    }
+    out.kind = StructuralKind::set_new_task_mode;
+    out.new_tasks_manual = manual;
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
     switch (edit.kind) {
         case StructuralKind::insert_task: {
@@ -1017,6 +1036,14 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
             }
             // Last one wins, like set_percent: the display plan and the save
             // both take the newest edit per target.
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::set_new_task_mode: {
+            // W28-3.1: plan-free; it names no task.  The file-side refusal (a
+            // file with no 0x024013c8 record) is make_new_task_mode_edit's.
+            // Last one wins at save, like the priority above.
+            edit.uid = 0;
             edit.dependants = 0;
             break;
         }
@@ -1612,6 +1639,16 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // Wave 28 (W28-3.1): the project's new-task mode, last edit wins.  It is
+    // one Props record, written after the document hook and before the final
+    // write (step 5d).
+    const StructuralEdit* mode_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::set_new_task_mode) {
+            mode_edit = &edit;
+        }
+    }
+
     // Wave 28 (W28-2.1): the outline edits, all in one writer call, in
     // application order (each edit sees the table the previous one left).
     bool has_outline_edits = false;
@@ -1639,6 +1676,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (has_outline_edits) {
         ++write_ops;  // one outline writer call, one file
+    }
+    if (mode_edit != nullptr) {
+        ++write_ops;  // the Props record patch, one file
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -1737,6 +1777,14 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             mppwrite::NewTaskRow row;
             row.name = edit.name;
             row.uid = 0;  // the writer allocates; the app never patches a uid
+            // W28-3.1: the row is scheduled with the project's stored mode as
+            // it stood when Insert Task was pressed.  The Fixed2Meta bit's two
+            // save shapes are the W45 measurement; the probe behind the mode
+            // pairs records that Project 2021's own InsertTask command put a
+            // Manual=True row under BOTH modes (build/w28/W28-3.1-oracle.log),
+            // so this row flag is the brief's "Insert Task uses it" semantics,
+            // not a blind copy of that command.
+            row.manually_scheduled = edit.manually_scheduled;
             const mppwrite::AddedRow added =
                 mppwrite::add_task_row(document, row, next_write_path());
             ++result.added;
@@ -2049,6 +2097,24 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             result.document_edits_written = true;
         }
 
+        // 5d (wave 28, W28-3.1).  The project's stored new-task scheduling
+        // mode: 114/Props record 0x024013c8, written with Project's measured
+        // bytes (core/mppwrite/project_props.h).  The last queued choice wins,
+        // as in the display.  Unlike the per-row refusals above, a missing or
+        // wrongly shaped record FAILS the save: there is no measured record
+        // shape to add, so silently skipping it would leave the option showing
+        // a value the file does not carry.
+        if (mode_edit != nullptr) {
+            const std::uint16_t previous = mppwrite::write_new_task_mode(
+                document, mode_edit->new_tasks_manual);
+            result.new_task_mode_written = 1;
+            result.notes.push_back(
+                std::string("new-task mode ") +
+                (previous != 0 ? "manual" : "auto") + " -> " +
+                (mode_edit->new_tasks_manual ? "manual" : "auto"));
+            document.save(next_write_path());
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -2107,6 +2173,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (has_outline_edits) {
             result.api += " write_outline_edits";
+        }
+        if (mode_edit != nullptr) {
+            result.api += " write_new_task_mode";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";

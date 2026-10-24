@@ -420,7 +420,12 @@ queue a structural edit that File > Save writes as Project's own actuals (wave 2
 `update_actuals` edit measured against Project's own save, and Update Project writes
 the project status date in `114/Props` when the file stores one. 100% complete and
 reschedule-the-rest stay disabled, with the decision-9 tooltip, because they have no
-measured save. The stored custom fields and links
+measured save. Wave 28 (W28-3.1) also persists Options > Schedule's **new tasks
+created** mode: OK queues a `set_new_task_mode` edit, File > Save writes Project's
+measured `114/Props` record `0x024013c8` (`core/mppwrite/project_props.h`; 0x00FF
+manual, 0x0000 auto), and Insert Task schedules its new row with that mode. A file
+that does not store the record (an original Project 2007 MPP12 file) refuses the
+change rather than inventing one. The stored custom fields and links
 are written only through their dialogs, not by typing in a grid cell (the stored
 columns are read-only).
 Saving a name does not change the file; the app never claims it does. The file the user
