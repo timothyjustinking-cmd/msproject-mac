@@ -15,10 +15,15 @@
 //       +16  4 B  background colour, same layout
 //       +28  u16  background pattern (1 = solid)
 //
-//   The 17 records, in file order, are the Text Styles dialog's items:
+//   The 19 records, in file order, are the Text Styles dialog's items:
 //       highlighted, row/column titles, noncritical, critical, summary,
 //       milestone, middle timescale, bottom timescale, bar text left/right/
-//       top/bottom/inside, marked, project summary, external, top timescale.
+//       top/bottom/inside, marked, project summary, external, top timescale,
+//       changed cells, inactive tasks.
+//   MPXJ reads only the first 17; wave 29's controlled arial/size-8 saves
+//   changed all 19 records, and Project 2021's defaults in slots 17/18
+//   (a pale blue fill; grey strikethrough text) are Changed Cells and
+//   Inactive Tasks, the dialog's last two items.
 //
 //   font bases (`214/Props` record id 0x03400000):
 //       +0 u16 count, then count records of
@@ -90,9 +95,11 @@ enum class TextStyleItem : std::uint8_t {
     project_summary,
     external,
     top_timescale,
+    changed_cells,
+    inactive,
 };
 
-inline constexpr std::size_t kTextStyleItemCount = 17;
+inline constexpr std::size_t kTextStyleItemCount = 19;
 
 [[nodiscard]] const char* text_style_item_name(TextStyleItem item) noexcept;
 
@@ -138,6 +145,16 @@ struct BarStyle {
     Rgb end_colour{};
     std::uint64_t show_for = 0;       // GanttBarShowForTasks bits
     std::uint64_t show_for_not = 0;
+    // MPXJ's setFromField/setToField: the task fields the bar starts and ends
+    // at.  Wave 29's byte dump of the stock file measured the real values, so
+    // no stock row stores 0: Task/Split/Summary/Project Summary are
+    // 0x0B400503 -> 0x0B400504 (Start/Finish), a Milestone is 504 -> 504,
+    // Progress and Rolled Up Progress are 0x0B400029 -> 0x0B400077
+    // (Complete Through), Deliverable Start/Finish are 0x0B400480/481,
+    // Manual Summary Rollup is 0x0B400023/0x0B400024 and Deadline is
+    // 0x0B4001B5.  A zero here therefore means "not stored", not a field.
+    std::uint32_t from_field = 0;
+    std::uint32_t to_field = 0;
     std::uint32_t left_text = 0;
     std::uint32_t right_text = 0;
     std::uint32_t top_text = 0;
@@ -223,6 +240,8 @@ inline constexpr std::size_t kGanttBarFirstOffset = 2255;
 inline constexpr std::size_t kGanttBarStride = 195;
 inline constexpr std::size_t kGanttBarNameOffset = 91;   // NUL-terminated UTF-16
 inline constexpr std::size_t kGanttBarNameBytes = kGanttBarStride - kGanttBarNameOffset;
+inline constexpr std::size_t kGanttBarFromFieldOffset = 41;  // u32, MPXJ setFromField
+inline constexpr std::size_t kGanttBarToFieldOffset = 45;    // u32, MPXJ setToField
 
 // The timescale tiers, measured from the same record (MPXJ's
 // GanttChartView14.processViewProperties layout):

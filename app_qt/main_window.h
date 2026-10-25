@@ -197,6 +197,17 @@ class MainWindow final : public QMainWindow {
     // real path without a modal.
     void mark_on_track();
 
+    // --- wave 29 (W29-2.1): the Gantt Chart Format tab's dialogs -----------
+    // Text Styles and Bar Styles edit the open view's in-memory style on OK and
+    // rebuild the sheet/Gantt; Gridlines is laid out and inert.  None of the
+    // three writes the file.  Public so the offscreen gate can drive them
+    // without a modal.
+    void show_text_styles();
+    void show_gridlines();
+    void show_bar_styles();
+    // Applies an edited style to the open view (the dialogs' OK path).
+    void apply_session_gantt_style(const msproject::viewstate::GanttStyle& style);
+
     // Opens/closes the File backstage.  Public so the structural gate can prove
     // the left rail and pages without clicking through a modal.
     void show_backstage(bool open);

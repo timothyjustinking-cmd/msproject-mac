@@ -30,11 +30,22 @@ MISSING_REASON = {
     "none": "future: not implemented in this port",
 }
 
-# W28-1.3: a split button whose main click runs a real command.  Split controls
-# carry no MenuAction, so the ribbon table names the implemented ones here.  The
-# WBS and Set Baseline splits open menus whose every item is disabled, and the
-# Format/Drawing splits have no engine, so all three stay "none".
-IMPLEMENTED_SPLIT_COMMANDS = {"mark_on_track"}
+# W28-1.3 / W29-2.1: controls whose click runs a RibbonCommand rather than a
+# MenuAction.  A split carries no MenuAction; a large button with a RibbonCommand
+# still passes MenuAction::none.  The ribbon table names the implemented ones
+# here.  The WBS and Set Baseline splits open menus whose every item is disabled,
+# and the Format/Drawing splits have no engine, so those stay "none".
+IMPLEMENTED_RIBBON_COMMANDS = {"mark_on_track", "text_styles", "gridlines", "bar_styles"}
+
+# W29-2.1 (operator decision 15): a dialog can be live while part of its engine
+# is not built.  The command is implemented (it opens, applies what it can and
+# never fakes success), and the remaining gap is named here so the backlog still
+# carries it.
+RIBBON_GAPS = {
+    "text_styles": "gap: background patterns not implemented in this port",
+    "gridlines": "gap: laid out; gridlines engine not implemented, OK disabled",
+    "bar_styles": "gap: appearance/row editing not implemented; colours and text fields only",
+}
 
 
 def implemented_actions() -> set[str]:
@@ -108,6 +119,17 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
             group_var, label, action = command.groups()
             context = group_titles.get(group_var)
             if context is not None:
+                # W29-2.1: a large/small call built for a RibbonCommand passes
+                # MenuAction::none on the opening line and names the command on
+                # a continuation line (the split rule below).
+                if action == "none" and line.rstrip().endswith(","):
+                    for follow in lines[index + 1:index + 4]:
+                        found = re.search(r"RibbonCommand::(\w+)", follow)
+                        if found:
+                            action = found.group(1)
+                            break
+                        if ");" in follow:
+                            break
                 rows.append(
                     (
                         tab_titles.get(context[0], context[0]),
@@ -144,8 +166,8 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
 
 
 def status(action: str, implemented: set[str]) -> tuple[str, str]:
-    if action in implemented or action in IMPLEMENTED_SPLIT_COMMANDS:
-        return "implemented", ""
+    if action in implemented or action in IMPLEMENTED_RIBBON_COMMANDS:
+        return "implemented", RIBBON_GAPS.get(action, "")
     return "disabled", MISSING_REASON.get(action, "future: not implemented in this port")
 
 

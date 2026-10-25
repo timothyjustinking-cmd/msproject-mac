@@ -79,6 +79,10 @@ enum class RibbonCommand : std::uint8_t {
     // The two drop-down buttons: their click opens the menu the capture shows.
     wbs_menu,
     set_baseline_menu,
+    // Wave 29 (W29-2.1): the Gantt Chart Format tab's three dialogs.
+    text_styles,
+    gridlines,
+    bar_styles,
 };
 
 class RibbonBar final : public QWidget {

@@ -588,6 +588,16 @@ void PlanDocument::fill_computed_columns() {
     }
 }
 
+void PlanDocument::set_session_gantt_style(
+    const msproject::viewstate::GanttStyle& style, app::ZoomLevel zoom) {
+    // Assignment, not replacement: gantt_style_'s address is what SheetTableModel
+    // and GanttCanvas hold.  The Gantt is rebuilt so W29-1.3's stored bar labels
+    // are derived again from the edited styles; the sheet is repainted by the
+    // shell's after_model_change().
+    gantt_style_ = style;
+    rebuild_views(zoom);
+}
+
 void PlanDocument::rebuild_views(app::ZoomLevel zoom, bool from_user_zoom) {
     if (from_user_zoom) {
         // The three shell zoom levels take over from the file's stored zoom.

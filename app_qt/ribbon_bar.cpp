@@ -149,8 +149,9 @@ ControlSpec& add(GroupSpec& group, const char* label, Kind kind, int width, int 
 }
 
 GroupSpec& large(GroupSpec& group, const char* label, app::MenuAction action, int width, int col,
-                 bool enabled = false, const char* icon = nullptr) {
-    add(group, label, Kind::button, width, 0, col, 3, 1, action, RibbonCommand::none, nullptr, 0,
+                 bool enabled = false, const char* icon = nullptr,
+                 RibbonCommand command = RibbonCommand::none) {
+    add(group, label, Kind::button, width, 0, col, 3, 1, action, command, nullptr, 0,
         enabled, false, icon);
     return group;
 }
@@ -486,10 +487,12 @@ const std::vector<TabSpec>& tab_specs() {
         format.title = "Gantt Chart Format";
         format.contextual = true;
         GroupSpec& format_group = add_group(format, "Format", 153);
-        large(format_group, "Text\nStyles", app::MenuAction::none, 48, 0, false,
-              "format.text_styles");
-        large(format_group, "Gridlines", app::MenuAction::none, 48, 1, false,
-              "format.gridlines");
+        // W29-2.1: both open live dialogs.  Text Styles and Bar Styles apply to
+        // the view for the session; Gridlines is laid out and says so.
+        large(format_group, "Text\nStyles", app::MenuAction::none, 48, 0, true,
+              "format.text_styles", RibbonCommand::text_styles);
+        large(format_group, "Gridlines", app::MenuAction::none, 48, 1, true,
+              "format.gridlines", RibbonCommand::gridlines);
         large(format_group, "Layout", app::MenuAction::none, 44, 2, false, "format.layout");
         GroupSpec& columns = add_group(format, "Columns", 198);
         large(columns, "Insert\nColumn", app::MenuAction::none, 56, 0, false, "columns.insert");
@@ -506,7 +509,10 @@ const std::vector<TabSpec>& tab_specs() {
         small(columns, "Custom Fields", app::MenuAction::custom_fields, 102, 2, 1, true, 4, false,
               "properties.custom_fields");
         GroupSpec& bar_styles = add_group(format, "Bar Styles", 307);
-        split(bar_styles, "Format", 50, 0, 0, 3, "bar_styles.format");
+        // The split's main button opens the Bar Styles dialog (Project's own
+        // click); its drop-down menu has no measured items in this port.
+        split(bar_styles, "Format", 50, 0, 0, 3, "bar_styles.format", true,
+              RibbonCommand::bar_styles);
         check(bar_styles, "Critical Tasks", RibbonCommand::toggle_critical_tasks, 96, 0, 1,
               true);
         check(bar_styles, "Slack", RibbonCommand::none, 96, 1, 1);

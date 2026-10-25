@@ -69,6 +69,7 @@ add_library(qt_shell STATIC
     timeline_strip.cpp
     dialogs.cpp
     project_dialogs_qt.cpp
+    format_dialogs_qt.cpp
     options_dialog.cpp
     print_page.cpp
     preferences_store.cpp
@@ -430,6 +431,23 @@ add_test(NAME qt_project_dialog_gate
                  "${QT_TEST_DATA_DIR_CMAKE}")
 
 # ===========================================================================
+# WAVE 29 (G2, W29-2.1): the Gantt Chart Format tab's Text Styles, Gridlines
+# and Bar Styles dialogs.  The gate parses the committed measured rectangles
+# (tests/data/reference/w29-format-dialogs.measures.json), measures the LIVE
+# widget tree and drives every functional path (Text Styles' 19 items and the
+# All target, Bar Styles' colours and five text fields, the session apply path).
+# ===========================================================================
+add_executable(qt_format_dialog_gate_tests tests/format_dialog_gate_test.cpp)
+target_link_libraries(qt_format_dialog_gate_tests PRIVATE qt_shell Qt6::Test)
+qt_set_warnings(qt_format_dialog_gate_tests)
+
+add_test(NAME qt_format_dialog_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_format_dialog_gate_tests>
+                 "${QT_REPO_ROOT}/tests/data/reference/w29-format-dialogs.measures.json"
+                 "${QT_TEST_DATA_DIR_CMAKE}")
+
+# ===========================================================================
 # WAVE 26 (G6, W26-6.2): the dark themes darken ONLY the chrome.  The gate
 # renders Colorful, Dark Gray and Black, compares the live ribbon/status pixels
 # with the committed Project measurements (tests/data/reference/
@@ -505,7 +523,8 @@ foreach(carlito_target
         qt_empty_state_tests qt_chrome_gate_tests qt_view_gate_tests
         qt_dialog_gate_tests qt_clipboard_tests qt_stored_table_tests
         qt_ux_gate_tests qt_ribbon_inventory_tests qt_uid_routing_tests
-        qt_icon_gate_tests qt_backstage_gate_tests qt_project_dialog_gate_tests)
+        qt_icon_gate_tests qt_backstage_gate_tests qt_project_dialog_gate_tests
+        qt_format_dialog_gate_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 

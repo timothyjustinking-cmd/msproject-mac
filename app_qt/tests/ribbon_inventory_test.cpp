@@ -513,6 +513,11 @@ const EnabledWiring kEnabledWiring[] = {
     {"Project", "Schedule", "Move Project", "", "move_project"},
     {"Project", "Status", "Update Project", "", "update_project"},
     {"Gantt Chart Format", "Columns", "Custom Fields", "custom_fields", ""},
+    // W29-2.1: the Format group's two dialog launchers and the Bar Styles
+    // group's Format split open live dialogs.
+    {"Gantt Chart Format", "Format", "Text Styles", "", "text_styles"},
+    {"Gantt Chart Format", "Format", "Gridlines", "", "gridlines"},
+    {"Gantt Chart Format", "Bar Styles", "Format", "", "bar_styles"},
     // W28-1.2: the five %-complete buttons are enabled on the measured actuals
     // writer; each one must stay wired to its own command.
     {"Task", "Schedule", "0%", "", "percent_0"},
@@ -559,6 +564,9 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::mark_on_track: return "mark_on_track";
         case RibbonCommand::wbs_menu: return "wbs_menu";
         case RibbonCommand::set_baseline_menu: return "set_baseline_menu";
+        case RibbonCommand::text_styles: return "text_styles";
+        case RibbonCommand::gridlines: return "gridlines";
+        case RibbonCommand::bar_styles: return "bar_styles";
     }
     return "none";
 }

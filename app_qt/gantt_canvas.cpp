@@ -695,7 +695,60 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
                 rect.left() >= static_cast<double>(canvas_width)) {
                 continue;
             }
-            const QFontMetricsF metrics(font());
+            // Wave 29 (W29-2.1): the Text Styles dialog's Bar Text - Left/
+            // Right/Top/Bottom/Inside item, in the file's order.  The font's
+            // family, size and four effect bits, the foreground and (when the
+            // stored pattern is not Hollow) a solid background fill all come
+            // from the selected style; a style the record left automatic keeps
+            // the measured stock presentation.
+            using msproject::viewstate::TextStyle;
+            using msproject::viewstate::TextStyleItem;
+            TextStyleItem item = TextStyleItem::bar_text_left;
+            switch (text.side) {
+                case core::gantt::BarLabelSide::left:
+                    item = TextStyleItem::bar_text_left;
+                    break;
+                case core::gantt::BarLabelSide::right:
+                    item = TextStyleItem::bar_text_right;
+                    break;
+                case core::gantt::BarLabelSide::top:
+                    item = TextStyleItem::bar_text_top;
+                    break;
+                case core::gantt::BarLabelSide::bottom:
+                    item = TextStyleItem::bar_text_bottom;
+                    break;
+                case core::gantt::BarLabelSide::inside:
+                    item = TextStyleItem::bar_text_inside;
+                    break;
+            }
+            const TextStyle* text_style = nullptr;
+            if (style_ != nullptr && style_->decoded) {
+                const auto index = static_cast<std::size_t>(item);
+                if (index < style_->text.size() && style_->text[index].valid) {
+                    text_style = &style_->text[index];
+                }
+            }
+            QFont label_font = font();
+            if (text_style != nullptr) {
+                if (!text_style->font_name.empty()) {
+                    label_font.setFamily(QString::fromStdString(text_style->font_name));
+                }
+                if (text_style->point_size > 0) {
+                    label_font.setPointSize(text_style->point_size);
+                }
+                label_font.setBold(text_style->bold);
+                label_font.setItalic(text_style->italic);
+                label_font.setUnderline(text_style->underline);
+                label_font.setStrikeOut(text_style->strikethrough);
+            }
+            if (text_style != nullptr && text_style->has_background &&
+                text_style->background_pattern != 0) {
+                painter.fillRect(rect, QColor(text_style->background.red,
+                                              text_style->background.green,
+                                              text_style->background.blue));
+            }
+            painter.setFont(label_font);
+            const QFontMetricsF metrics(label_font);
             QString shown = QString::fromStdString(text.text);
             const double available =
                 rect.right() > static_cast<double>(canvas_width)
@@ -718,7 +771,12 @@ void GanttCanvas::paintEvent(QPaintEvent*) {
                     flags |= static_cast<int>(Qt::AlignHCenter);
                     break;
             }
-            painter.setPen(text.inside ? QColor(0xff, 0xff, 0xff) : kBodyText);
+            QColor pen = text.inside ? QColor(0xff, 0xff, 0xff) : kBodyText;
+            if (text_style != nullptr && text_style->has_colour) {
+                pen = QColor(text_style->colour.red, text_style->colour.green,
+                             text_style->colour.blue);
+            }
+            painter.setPen(pen);
             painter.drawText(rect, flags, shown);
         }
     }

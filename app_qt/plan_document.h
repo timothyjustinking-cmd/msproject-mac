@@ -194,6 +194,13 @@ class PlanDocument {
         return gantt_style_;
     }
 
+    // Wave 29 (W29-2.1): replace the view's in-memory Gantt style after a
+    // Format dialog's OK and rebuild the Gantt from it.  The member is assigned
+    // in place, so the sheet model's and the canvas's pointers to it stay
+    // valid.  Nothing is written to the file.
+    void set_session_gantt_style(const msproject::viewstate::GanttStyle& style,
+                                 app::ZoomLevel zoom);
+
     // Wave 29 (W29-1.2): the applied view's stored per-cell formatting, read
     // from the same `214/CV_iew` view as gantt_style().  A file without the
     // record keeps an undecoded table and the sheet paints only the Text

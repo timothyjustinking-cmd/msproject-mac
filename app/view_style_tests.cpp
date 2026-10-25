@@ -305,11 +305,13 @@ void check_stock_fixture() {
     // Wave 29 (W29-1.3): a stock project's bar styles.  "Task" shows
     // ResourceNames for a Normal+Active task that is NOT Manually Scheduled
     // (bit 44) or Group By Summary (bit 40); "Manual Task" is the same for a
-    // manual task; "Milestone" shows the start date (0x0b400504) on the right
-    // unless the task is manual or a placeholder; "Summary" stores no label.
+    // manual task; "Milestone" shows the finish date (0x0b400504, which wave
+    // 29's Bar Styles capture proves is Task Finish) on the right unless the
+    // task is manual or a placeholder; "Summary" stores no label.
     app::BarLabelValues values;
     values.name = "NAME";
     values.start = "START";
+    values.finish = "FINISH";
     values.resource = "RES";
     const app::BarLabelTask auto_task;
     app::BarLabelTexts texts = app::bar_label_texts_for(style, auto_task, values);
@@ -323,8 +325,8 @@ void check_stock_fixture() {
     app::BarLabelTask milestone_task;
     milestone_task.milestone = true;
     texts = app::bar_label_texts_for(style, milestone_task, values);
-    check(texts.right == "START" && texts.left.empty(),
-          "view style: a stock milestone shows the start date on the right");
+    check(texts.right == "FINISH" && texts.left.empty(),
+          "view style: a stock milestone shows the finish date on the right");
     app::BarLabelTask summary_task;
     summary_task.summary = true;
     texts = app::bar_label_texts_for(style, summary_task, values);

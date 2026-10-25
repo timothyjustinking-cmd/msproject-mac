@@ -217,12 +217,13 @@ bool style_applies_to(const msproject::viewstate::BarStyle& bar,
     return true;
 }
 
-// The stored Task field id -> the text the caller supplied for it.  The plain
-// Start/Finish/Duration ids are the unnamed date32/i32 fields next to
-// StartText/FinishText/DurationText in the descriptor table (analysis/
-// unnamed_inferred.tsv: 0x0b400504 is "StartText-1", 0x0b400508
-// "DurationText+1"); a stock file's Milestone style stores 0x0b400504, which is
-// the start date the product prints beside the diamond.
+// The stored Task field id -> the text the caller supplied for it.  Wave 29's
+// Bar Styles capture names the From/To fields of its rows directly: the Task
+// row stores 0x0b400503/0x0b400504 and shows "Task Start"/"Task Finish", and
+// Milestone stores 504 twice, so 503 is Start and 504 is Finish.  The
+// StartText/FinishText ids follow at 0x0b400505/0x0b400506, and 507/508 are
+// the two DurationText forms (analysis/unnamed_inferred.tsv's earlier +-1
+// reading of 504 was off by one field; the capture settles it).
 std::string label_text_for(std::uint32_t field_id, const BarLabelValues& values) {
     switch (field_id) {
         case 0x0b40000eu:
@@ -234,9 +235,9 @@ std::string label_text_for(std::uint32_t field_id, const BarLabelValues& values)
         case 0x0b400031u:
             return values.resource;
         case 0x0b400503u:
-            return values.finish;
-        case 0x0b400504u:
             return values.start;
+        case 0x0b400504u:
+            return values.finish;
         case 0x0b400505u:
             return values.start;
         case 0x0b400506u:

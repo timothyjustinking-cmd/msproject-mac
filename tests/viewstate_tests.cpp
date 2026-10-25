@@ -1040,6 +1040,32 @@ void test_gantt_style() {
     check(!milestone.italic, "gantt style: the stock milestone style is upright");
     check(!milestone.has_colour, "gantt style: the stock milestone colour is automatic");
 
+    // Wave 29 (W29-2.1): the record carries 19 text styles, not MPXJ's 17.
+    // Project 2021's stock defaults in the last two are the Changed Cells
+    // fill (a pale blue solid background) and Inactive Tasks (grey
+    // strikethrough), the Text Styles dialog's final two items.
+    const TextStyle& changed_cells =
+        style.text[static_cast<std::size_t>(TextStyleItem::changed_cells)];
+    check(changed_cells.valid, "gantt style: changed cells resolves font base 3");
+    check_eq(changed_cells.font_index, std::uint8_t{3},
+             "gantt style: changed cells font index");
+    check(changed_cells.has_colour && changed_cells.colour == (Rgb{0, 0, 0}),
+          "gantt style: changed cells foreground is explicit black");
+    check(changed_cells.has_background &&
+              changed_cells.background == (Rgb{239, 243, 255}),
+          "gantt style: changed cells background is the stored pale blue");
+    check_eq(changed_cells.background_pattern, std::uint16_t{1},
+             "gantt style: changed cells background is solid");
+
+    const TextStyle& inactive =
+        style.text[static_cast<std::size_t>(TextStyleItem::inactive)];
+    check(inactive.valid, "gantt style: inactive tasks resolves font base 3");
+    check(inactive.strikethrough, "gantt style: inactive tasks is strikethrough");
+    check(inactive.has_colour && inactive.colour == (Rgb{192, 192, 192}),
+          "gantt style: inactive tasks foreground is the stored grey");
+    check(!inactive.has_background,
+          "gantt style: inactive tasks background is automatic");
+
     // Wave 26 (W26-3.2): the active view's bar styles.  The stock synthetic
     // view has all 41 Project bar styles; the values below are Project 2021's
     // own (and the summary/milestone middle/start/end colours are the fields
@@ -1053,6 +1079,14 @@ void test_gantt_style() {
         check(task.has_middle_colour && task.middle_colour == (Rgb{138, 187, 237}),
               "gantt style: Task auto middle colour is (138,187,237)");
         check((task.show_for & 0x1u) != 0, "gantt style: Task shows for Normal tasks");
+        // Wave 29 (W29-2.1): the row's stored display row and From/To fields.
+        // Project's Bar Styles capture shows Row 1, Task Start and Task Finish
+        // for this record; the byte dump gives 0x0b400503/0x0b400504.
+        check_eq(task.row, std::uint16_t{0}, "gantt style: Task stores display row 1");
+        check_eq(task.from_field, std::uint32_t{0x0b400503u},
+                 "gantt style: Task starts at Task Start");
+        check_eq(task.to_field, std::uint32_t{0x0b400504u},
+                 "gantt style: Task ends at Task Finish");
     }
     for (const msproject::viewstate::BarStyle& bar : style.bars) {
         if (bar.name == "Summary") {
@@ -1068,6 +1102,10 @@ void test_gantt_style() {
                      "gantt style: the Milestone start shape is a diamond");
             check(bar.has_start_colour && bar.start_colour == (Rgb{99, 99, 99}),
                   "gantt style: the stock Milestone start colour is grey");
+            check_eq(bar.from_field, std::uint32_t{0x0b400504u},
+                     "gantt style: Milestone starts at Task Finish");
+            check_eq(bar.to_field, std::uint32_t{0x0b400504u},
+                     "gantt style: Milestone ends at Task Finish");
         }
         if (bar.name == "Progress") {
             check(bar.has_middle_colour && bar.middle_colour == (Rgb{59, 135, 212}),
@@ -1262,7 +1300,7 @@ void test_cell_format() {
 // name and fail the equality rather than pass unnoticed.
 // ---------------------------------------------------------------------------
 
-// The analysis scripts' short names for the 17 Text Styles items, in the
+// The analysis scripts' short names for the 19 Text Styles items, in the
 // record's order.  The decoder's own names are longer ("row and column
 // titles"); these keep the expected-difference strings readable.
 const char* gantt_item_label(std::size_t index) {
@@ -1270,7 +1308,7 @@ const char* gantt_item_label(std::size_t index) {
         "highlighted", "rowcol",   "noncritical", "critical",    "summary",
         "milestone",   "middle",   "bottom",       "left",        "right",
         "top",         "bottomtext", "inside",     "marked",      "projectsummary",
-        "external",    "toptimescale"};
+        "external",    "toptimescale", "changedcells", "inactive"};
     static_assert(std::size(kLabels) == msproject::viewstate::kTextStyleItemCount,
                   "one short name per Text Styles item");
     return index < std::size(kLabels) ? kLabels[index] : "unknown";
@@ -1376,6 +1414,12 @@ std::string gantt_differences(const msproject::viewstate::GanttStyle& before,
         }
         if (a.show_for_not != b.show_for_not) {
             add(prefix + "show_for_not");
+        }
+        if (a.from_field != b.from_field) {
+            add(prefix + "from_field");
+        }
+        if (a.to_field != b.to_field) {
+            add(prefix + "to_field");
         }
         if (a.left_text != b.left_text) {
             add(prefix + "left_text");
@@ -1506,8 +1550,9 @@ void test_gantt_save_font_family() {
          "text[6].middle.font", "text[7].bottom.font", "text[8].left.font",
          "text[9].right.font", "text[10].top.font", "text[11].bottomtext.font",
          "text[12].inside.font", "text[13].marked.font", "text[14].projectsummary.font",
-         "text[15].external.font", "text[16].toptimescale.font"},
-        "gantt save arial: only the font field of all 17 text styles changes");
+         "text[15].external.font", "text[16].toptimescale.font",
+         "text[17].changedcells.font", "text[18].inactive.font"},
+        "gantt save arial: only the font field of all 19 text styles changes");
     if (!pair.ok) {
         return;
     }
@@ -1545,7 +1590,9 @@ void test_gantt_save_font_size() {
          "text[14].projectsummary.font", "text[14].projectsummary.bold",
          "text[14].projectsummary.foreground",
          "text[15].external.font", "text[15].external.foreground",
-         "text[16].toptimescale.font", "text[16].toptimescale.foreground"},
+         "text[16].toptimescale.font", "text[16].toptimescale.foreground",
+         "text[17].changedcells.font",
+         "text[18].inactive.font", "text[18].inactive.foreground"},
         "gantt save size8: the size change and the explicit-argument resets");
     if (!pair.ok) {
         return;

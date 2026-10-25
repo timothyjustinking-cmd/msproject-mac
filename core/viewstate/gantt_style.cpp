@@ -122,7 +122,8 @@ const char* timescale_unit_name(TimescaleUnit unit) noexcept {
     return "none";
 }
 
-const char* text_style_item_name(TextStyleItem item) noexcept {    switch (item) {
+const char* text_style_item_name(TextStyleItem item) noexcept {
+    switch (item) {
         case TextStyleItem::highlighted: return "highlighted";
         case TextStyleItem::row_column_titles: return "row and column titles";
         case TextStyleItem::non_critical: return "noncritical";
@@ -140,6 +141,8 @@ const char* text_style_item_name(TextStyleItem item) noexcept {    switch (item)
         case TextStyleItem::project_summary: return "project summary";
         case TextStyleItem::external: return "external tasks";
         case TextStyleItem::top_timescale: return "top timescale";
+        case TextStyleItem::changed_cells: return "changed cells";
+        case TextStyleItem::inactive: return "inactive tasks";
     }
     return "unknown";
 }
@@ -251,6 +254,8 @@ bool parse_gantt_style(std::span<const std::uint8_t> style_data,
         bar.has_end_colour = read_colour(style_data, base + 29, bar.end_colour);
         bar.show_for = read_u64(style_data, base + 49);
         bar.show_for_not = read_u64(style_data, base + 57);
+        bar.from_field = read_u32(style_data, base + kGanttBarFromFieldOffset);
+        bar.to_field = read_u32(style_data, base + kGanttBarToFieldOffset);
         bar.left_text = read_u32(style_data, base + 67);
         bar.right_text = read_u32(style_data, base + 71);
         bar.top_text = read_u32(style_data, base + 75);

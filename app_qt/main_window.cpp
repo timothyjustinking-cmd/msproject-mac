@@ -76,6 +76,7 @@
 #include "export_pdf.h"
 #include "field_link_edits.h"
 #include "fields_model.h"  // app::read_file_formulas (the definition dialog)
+#include "format_dialogs_qt.h"  // the Gantt Chart Format tab's dialogs (W29-2.1)
 #include "filter_model.h"
 #include "gantt_canvas.h"
 #include "layout_model.h"
@@ -500,6 +501,10 @@ void MainWindow::build_central_widget() {
             sheet_view_->setColumnHidden(column, true);
             set_message("column hidden", false);
             update_status();
+            return;
+        }
+        if (command == QStringLiteral("text_styles")) {
+            show_text_styles();
             return;
         }
         if (command == QStringLiteral("insert_column")) {
@@ -2105,6 +2110,15 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             set_message("Set Baseline: no command is implemented in this port", false);
             update_status();
             return;
+        case RibbonCommand::text_styles:
+            show_text_styles();
+            return;
+        case RibbonCommand::gridlines:
+            show_gridlines();
+            return;
+        case RibbonCommand::bar_styles:
+            show_bar_styles();
+            return;
     }
 }
 
@@ -3355,6 +3369,74 @@ void MainWindow::mark_on_track() {
                     std::to_string(percent) + "% complete through " +
                     core::sched::to_string(plan.status_date) +
                     "; File > Save writes it",
+                false);
+    update_status();
+}
+
+// ---------------------------------------------------------------------------
+// Wave 29 (W29-2.1): the Gantt Chart Format tab's three dialogs
+// ---------------------------------------------------------------------------
+
+void MainWindow::apply_session_gantt_style(
+    const msproject::viewstate::GanttStyle& style) {
+    if (!doc_.has_document()) {
+        return;
+    }
+    // The style member is assigned in place, so the sheet model's and the
+    // canvas's pointers stay valid; after_model_change() rebuilds the Gantt
+    // (and its stored bar labels) and repaints the sheet from the new styles.
+    doc_.set_session_gantt_style(style, prefs_.zoom);
+    after_model_change();
+}
+
+void MainWindow::show_text_styles() {
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    TextStylesDialog dialog(doc_.gantt_style(), this);
+    if (dialog.exec() != QDialog::Accepted || !dialog.changed()) {
+        set_message(dialog.style_available()
+                        ? "text styles cancelled; nothing changed"
+                        : "this project has no decoded text styles to edit",
+                    false);
+        update_status();
+        return;
+    }
+    apply_session_gantt_style(dialog.style());
+    set_message("text styles applied to this view for the session; there is no "
+                "Project style save pair, so File > Save keeps the file's bytes",
+                false);
+    update_status();
+}
+
+void MainWindow::show_gridlines() {
+    GridlinesDialog dialog(this);
+    dialog.exec();
+    set_message("gridlines are not implemented in this port; nothing was changed",
+                false);
+    update_status();
+}
+
+void MainWindow::show_bar_styles() {
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    BarStylesDialog dialog(doc_.gantt_style(), this);
+    if (dialog.exec() != QDialog::Accepted || !dialog.changed()) {
+        set_message(dialog.style_available()
+                        ? "bar styles cancelled; nothing changed"
+                        : "this project has no decoded bar styles to edit",
+                    false);
+        update_status();
+        return;
+    }
+    apply_session_gantt_style(dialog.style());
+    set_message("bar styles applied to this view for the session; there is no "
+                "Project style save pair, so File > Save keeps the file's bytes",
                 false);
     update_status();
 }

@@ -176,8 +176,8 @@ Help	0	Help	button	Help	0	help.help	0	-
 Help	0	Help	button	Feedback	0	help.feedback	0	-
 Help	0	Help	button	Show Training	0	help.training	0	-
 Gantt Chart Format	1	Format	group	-	-	-	-	-
-Gantt Chart Format	1	Format	button	Text Styles	0	format.text_styles	0	-
-Gantt Chart Format	1	Format	button	Gridlines	0	format.gridlines	0	-
+Gantt Chart Format	1	Format	button	Text Styles	1	format.text_styles	1	-
+Gantt Chart Format	1	Format	button	Gridlines	1	format.gridlines	1	-
 Gantt Chart Format	1	Format	button	Layout	0	format.layout	0	-
 Gantt Chart Format	1	Columns	group	-	-	-	-	-
 Gantt Chart Format	1	Columns	button	Insert Column	0	columns.insert	0	-
@@ -188,7 +188,7 @@ Gantt Chart Format	1	Columns	small	wrap text	0	columns.wrap	0	-
 Gantt Chart Format	1	Columns	small	Column Settings	0	columns.settings	1	-
 Gantt Chart Format	1	Columns	small	Custom Fields	1	properties.custom_fields	2	-
 Gantt Chart Format	1	Bar Styles	group	-	-	-	-	-
-Gantt Chart Format	1	Bar Styles	split	Format	0	bar_styles.format	0	-
+Gantt Chart Format	1	Bar Styles	split	Format	1	bar_styles.format	1	-
 Gantt Chart Format	1	Bar Styles	checkbox	Critical Tasks	1	-	0	unchecked
 Gantt Chart Format	1	Bar Styles	checkbox	Slack	0	-	1	unchecked
 Gantt Chart Format	1	Bar Styles	checkbox	Late Tasks	0	-	2	unchecked

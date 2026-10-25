@@ -92,13 +92,13 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Help | Help | Help | disabled | future: not implemented in this port |
 | Help | Help | Feedback | disabled | future: not implemented in this port |
 | Help | Help | Show Training | disabled | future: not implemented in this port |
-| Gantt Chart Format | Format | Text Styles | disabled | future: not implemented in this port |
-| Gantt Chart Format | Format | Gridlines | disabled | future: not implemented in this port |
+| Gantt Chart Format | Format | Text Styles | implemented | gap: background patterns not implemented in this port |
+| Gantt Chart Format | Format | Gridlines | implemented | gap: laid out; gridlines engine not implemented, OK disabled |
 | Gantt Chart Format | Format | Layout | disabled | future: not implemented in this port |
 | Gantt Chart Format | Columns | Insert Column | disabled | future: not implemented in this port |
 | Gantt Chart Format | Columns | Column Settings | disabled | future: not implemented in this port |
 | Gantt Chart Format | Columns | Custom Fields | implemented |  |
-| Gantt Chart Format | Bar Styles | Format | disabled | future: not implemented in this port |
+| Gantt Chart Format | Bar Styles | Format | implemented | gap: appearance/row editing not implemented; colours and text fields only |
 | Gantt Chart Format | Bar Styles | Task Path | disabled | future: not implemented in this port |
 | Gantt Chart Format | Bar Styles | Baseline | disabled | future: not implemented in this port |
 | Gantt Chart Format | Bar Styles | Slippage | disabled | future: not implemented in this port |
@@ -162,6 +162,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 95 (82 disabled)
+* ribbon commands: 95 (79 disabled)
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

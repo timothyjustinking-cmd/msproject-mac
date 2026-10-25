@@ -239,7 +239,7 @@ QMenu* SheetHeaderView::build_column_menu(int logical_index) {
     add_command(QStringLiteral("Hide Column"), QStringLiteral("hide_column"));
     menu->addSeparator();
     add_command(QStringLiteral("Font..."), QString());
-    add_command(QStringLiteral("Text Styles..."), QString());
+    add_command(QStringLiteral("Text Styles..."), QStringLiteral("text_styles"));
     menu->addSeparator();
     add_command(QStringLiteral("Field Settings"), QString());
     auto* custom = menu->addMenu(QStringLiteral("Custom Fields"));
