@@ -823,10 +823,11 @@ follow it are docs-only over it):
 
 Resume notes for the group run:
 
-- The first fresh app build hit the environment's transient MSB6003 tlog
-  file locks; four targets did not link, and the resulting app ctest had
-  `app_project_dialogs` Not Run.  The same fresh tree was rebuilt to
-  completion (`app build (resume) exit: 0`).  The first link of
+- The first fresh app build exited 1 on the environment's transient
+  MSB6003 tlog file locks; the app ctest that followed still passed 19 of
+  20 tests, with `app_project_dialogs` Not Run because its exe was the one
+  not produced.  The same fresh tree was rebuilt to completion
+  (`app build (resume) exit: 0`).  The first link of
   `project_dialogs_tests.exe` (SHA256 A4341A24...) was then refused by this
   machine's Application Control policy (CodeIntegrity events 3077/3033,
   policy `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`); relinking produced
