@@ -252,6 +252,8 @@ const ChromePalette& chrome_palette(Theme theme) {
         /*chart_header_rule=*/kGridLine,
         /*chart_header_rule_strong=*/kGridLineStrong,
         /*ribbon_ink=*/QColor(0x1f, 0x3a, 0x5f),
+        // W29-5.2: the light QAT (#F7F7F7) and status (#F0F0F0) take the same ink.
+        /*window_ink=*/QColor(0x1f, 0x3a, 0x5f),
     };
     // Dark Gray: the captured window/tab row (82,87,90) and group row
     // (189,189,189) put dark text on the light group row and light text on the
@@ -302,6 +304,10 @@ const ChromePalette& chrome_palette(Theme theme) {
         /*chart_header_rule_strong=*/QColor(0x54, 0x54, 0x54),
         // The group row is the light (189,189,189), so the wave-26 ink stays.
         /*ribbon_ink=*/QColor(0x1f, 0x3a, 0x5f),
+        // W29-5.2: the QAT (82,87,90) and status (84,84,84) surfaces are dark
+        // here, so their artwork takes the light ink (5.9:1 / 6.1:1) rather
+        // than the ribbon ink, which would be only 1.5:1 on them.
+        /*window_ink=*/QColor(0xe6, 0xe6, 0xe6),
     };
     // Black: the captured window/tab row (25,32,40), group row (41,41,41) and
     // status bar (21,21,21).
@@ -348,6 +354,9 @@ const ChromePalette& chrome_palette(Theme theme) {
         // The group row is (41,41,41): the dark wave-26 ink would vanish, so
         // Black's one ink is the light text colour (contrast 11.6:1).
         /*ribbon_ink=*/QColor(0xe6, 0xe6, 0xe6),
+        // W29-5.2: Black's window/status surfaces are near-black, so the same
+        // light ink serves the QAT, menu pop-ups and status bar.
+        /*window_ink=*/QColor(0xe6, 0xe6, 0xe6),
     };
     switch (theme) {
         case Theme::dark:

@@ -9,9 +9,10 @@
 // chrome without reproducing anyone's artwork.
 //
 // WAVE 29 (W29-5.2): the drawings follow the wave-26 one-ink style -- a 32 px
-// grid scaled to `pixels`, round strokes and a single ink.  The caller
-// passes ChromePalette::ribbon_ink; an invalid colour falls back to the light
-// theme's ink (#1F3A5F).
+// grid scaled to `pixels`, round strokes and a single ink.  The caller passes
+// the live chrome ink (ChromePalette::window_ink at the shell's call sites, the
+// surface these glyphs are painted on); an invalid colour falls back to the
+// light theme's ink (#1F3A5F).
 //
 // The per-screen gates assert that every visible ribbon button, quick-access
 // action and status view button carries a non-null icon of the pinned size;

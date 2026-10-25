@@ -772,9 +772,10 @@ void MainWindow::build_menus() {
                     // The quick-access toolbar reuses these actions, so give
                     // every one an icon drawn by shell_icons.cpp (never
                     // Microsoft artwork).  W29-5.2: the artwork is one-ink in
-                    // the wave-26 style, drawn in the live chrome ink.
+                    // the wave-26 style, drawn in the live window ink (the QAT
+                    // and menu pop-ups sit on the window surface).
                     action->setIcon(shell_action_icon(
-                        item.action, kShellIconPx, chrome_palette(theme_).ribbon_ink));
+                        item.action, kShellIconPx, chrome_palette(theme_).window_ink));
                 }
                 const QKeySequence shortcut = menu_shortcut(item);
                 if (!shortcut.isEmpty()) {
@@ -847,9 +848,9 @@ void MainWindow::build_status_bar() {
         button->setText(QString::fromLatin1(spec.label));
         // The product's status bar shows an icon beside each view label; the
         // icon is ours (shell_icons.cpp), never Microsoft artwork, and follows
-        // the theme's chrome ink (W29-5.2).
+        // the theme's window ink (W29-5.2).
         button->setIcon(shell_view_icon(view_index, kShellIconPx,
-                                        chrome_palette(theme_).ribbon_ink));
+                                        chrome_palette(theme_).window_ink));
         button->setIconSize(QSize(kShellIconPx, kShellIconPx));
         button->setCheckable(true);
         button->setAutoExclusive(true);
@@ -3203,9 +3204,10 @@ void MainWindow::set_theme(Theme theme, bool persist) {
 void MainWindow::apply_icon_ink() {
     // W29-5.2: the menu actions, the quick-access toolbar (which reuses those
     // same QActions) and the status-bar view buttons are chrome; their one-ink
-    // artwork is redrawn in the live theme ink so Black's near-black chrome
-    // gets the light ink.  Container QActions carry no data and no glyph.
-    const QColor ink = chrome_palette(theme_).ribbon_ink;
+    // artwork is redrawn in the live WINDOW ink, because those surfaces are the
+    // window/status background rather than the ribbon's light group row.
+    // Container QActions carry no data and no glyph.
+    const QColor ink = chrome_palette(theme_).window_ink;
     for (QAction* action : actions_) {
         if (action == nullptr || !action->data().isValid()) {
             continue;

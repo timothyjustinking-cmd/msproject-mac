@@ -383,6 +383,21 @@ void check_chrome_glyph(const QIcon& icon, const QIcon& expected,
     }
 }
 
+double relative_luminance(const QColor& colour) {
+    const auto channel = [](double value) {
+        value /= 255.0;
+        return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(colour.red()) + 0.7152 * channel(colour.green()) +
+           0.0722 * channel(colour.blue());
+}
+
+double contrast_ratio(const QColor& first, const QColor& second) {
+    const double a = relative_luminance(first);
+    const double b = relative_luminance(second);
+    return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05);
+}
+
 QString slug(const QString& title) {
     QString out = title.toLower();
     for (QChar& character : out) {
@@ -675,8 +690,9 @@ int main(int argc, char** argv) {
 
     // --- W29-5.2: the menu bar, QAT and status-bar artwork ------------------
     // The chrome art is one-ink in every theme: the live icons must equal the
-    // factory render in that theme's ChromePalette::ribbon_ink, be monochrome,
-    // and be re-inked when the theme changes (light -> Dark Gray -> Black).
+    // factory render in that theme's ChromePalette::window_ink, be monochrome,
+    // be legible on the measured QAT/status surfaces, and be re-inked when the
+    // theme changes (light -> Dark Gray -> Black).
     QMenuBar* bar = window.menuBar();
     gate::check(bar != nullptr, "the window owns a menu bar");
     gate::check(gate::find_action(window, app::MenuAction::save) != nullptr,
@@ -685,8 +701,8 @@ int main(int argc, char** argv) {
     gate::check(quick != nullptr, "the window owns the quick-access strip");
     const std::vector<QToolButton*>& view_buttons = window.view_buttons();
     gate::check(view_buttons.size() == 5, "the status bar carries five view buttons");
-    const QColor light_ink = msqt::chrome_palette(msqt::Theme::light).ribbon_ink;
-    const QColor black_ink = msqt::chrome_palette(msqt::Theme::black).ribbon_ink;
+    const QColor light_ink = msqt::chrome_palette(msqt::Theme::light).window_ink;
+    const QColor black_ink = msqt::chrome_palette(msqt::Theme::black).window_ink;
     gate::check(light_ink != black_ink,
                 "the light and Black themes use different chrome inks");
 
@@ -697,7 +713,18 @@ int main(int argc, char** argv) {
         }
         QApplication::processEvents();
         const std::string theme_label = msqt::theme_name(theme);
-        const QColor ink = msqt::chrome_palette(theme).ribbon_ink;
+        const msqt::ChromePalette& chrome = msqt::chrome_palette(theme);
+        const QColor ink = chrome.window_ink;
+        // The artwork sits on the QAT and status surfaces; the dark ribbon ink
+        // on Dark Gray's dark window would be 1.5:1, so pin legibility.
+        gate::check(contrast_ratio(ink, chrome.quick_access_background) >= 4.5,
+                    ("theme " + theme_label +
+                     ": the QAT ink reaches 4.5:1 on its measured surface")
+                        .c_str());
+        gate::check(contrast_ratio(ink, chrome.status_background) >= 4.5,
+                    ("theme " + theme_label +
+                     ": the status ink reaches 4.5:1 on its measured surface")
+                        .c_str());
 
         std::vector<QAction*> menu_actions;
         if (bar != nullptr) {

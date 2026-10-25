@@ -134,6 +134,13 @@ struct ChromePalette {
     // measured group row is light, so the wave-26 ink stays; Black's measured
     // group row is near-black, so its glyphs switch to the light ink.
     QColor ribbon_ink;
+    // W29-5.2: the ink for artwork on the WINDOW-coloured chrome -- the
+    // quick-access strip, menu pop-ups and the status bar.  In Dark Gray the
+    // ribbon's group row is light but these surfaces are the dark window
+    // (82,87,90) and status (84,84,84) shades, where the dark ribbon ink is
+    // only 1.5:1; they take the light ink instead (>= 5.8:1).  Light keeps
+    // #1F3A5F and Black already uses the light ink.
+    QColor window_ink;
 };
 
 const ChromePalette& chrome_palette(Theme theme);
