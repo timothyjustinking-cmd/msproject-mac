@@ -571,3 +571,24 @@ Gates for commit `c79a45d` (parent `aaf05fe`), logs under `build/w29/`
 | PROJECT_A render geometry (local, no capture committed) | 23 px per 7 days = 3.2857 px/day; quarter rules 3.2889/3.2857/3.2935; first rule 101 px = 31 days after the left edge, origin 2025-12-01 |
 | client-name scan / client-string grep | 156 corpus names; HEAD 0 files/0 hits; `--cached` 0 files/0 hits; no matches, HEAD and index |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`, 144 tracked test-data files, no local path, 8 scenario oracles) |
+
+G1 group gates (fresh trees configured from scratch on `830b5b6` under
+`build/w29-g1-fresh{,-app,-qt}`, built serially, log
+`build/w29/g1-fresh-gates.log`; `830b5b6` is the G1 record, docs-only over
+the code tree `c79a45d`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 20/20 / 24/24 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (144 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `4fee013..HEAD` / `guard_names` `4fee013..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The numbers belong to `830b5b6`; the marker commit that follows is docs-only.
+
+WAVE-29-G1-COMPLETE
