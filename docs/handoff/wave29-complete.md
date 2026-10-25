@@ -843,3 +843,107 @@ The numbers belong to `7fd6851`; the record and marker commits that follow
 it are docs-only.
 
 WAVE-29-G3-COMPLETE
+
+## G4 - Visual Reports, Compare Projects
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W29-4.1 | Both dialogs laid out from captures; primary actions disabled with the exact decision-9 tooltip | **DONE** | commit `56f0ffa`; gates `build/w29/gates-4ee0cf3-W29-4.1-*.log` |
+
+W29-4.1 detail:
+
+- The layout evidence is the local Project 2021 capture of the two dialogs,
+  opened through UI Automation on the Report tab's own ribbon buttons from a
+  read-only working copy of `tests/data/synthetic-base.mpp` (tag
+  `g4-dialogs`).  The captures stay git-ignored (rule 4); the numbers and UI
+  strings are committed in
+  `tests/data/reference/w29-report-dialogs.measures.json`.  Visual Reports -
+  Create Report measures 625x541 and Compare Project Versions 469x251; every
+  captured control is stored as [x, y, width, height] client-relative with
+  its caption.  The control tables were verified against the local capture
+  before the file was committed: every id and rectangle matches, and the
+  only substitution is Compare Projects' `%1` in place of the opened copy's
+  file name.
+- Visual Reports carries the capture's 22 visible controls: the tab control
+  (one captured control whose seven owner-drawn items are drawn on the two
+  rows the capture shows, three summary tabs over All and the three usage
+  tabs, with All selected), the ten template names in the captured order
+  with the first selected, Microsoft Excel and Microsoft Visio checked, the
+  "Show report templates created in:" label, the New/Edit/Manage Template
+  buttons, the Sample group with its sunken frame and the capture's
+  "No sample available." alternate text, the usage-level label and combo
+  (5 items, current index 3, "Weeks"), "Include report templates from:"
+  unchecked with its edit and Modify, the separator at y = 484, and the
+  Help / Save Data / View / Close row.  The captured blank status static
+  (id 11) carries the inline note.  Compare Projects carries its 11 visible
+  controls: the two groups (the first with the captured caption pattern and
+  the opened file's name), the empty previous-version combo, Browse, the
+  wrapped description, the Task Table and Resource Table labels and combos
+  (22/10 and 12/3, both showing "Entry"), OK and Cancel.  The captured
+  hidden "Previous version" static is not painted.
+- Both dialogs are fixed at the captured client sizes and set Project's 9 pt
+  dialog face before building their children.  The shell's 11 pt face does
+  not fit the capture: measured with GDI against Carlito, the 439x26
+  description would need three lines, the 457-wide compare caption would
+  overflow with any name, and several 13-px label rows would clip; at 9 pt
+  every captured box fits (the description takes two lines, the caption
+  fits 441 px, and "Task Table:" measures 54 px against the captured 53).
+- There is no report engine and no comparison engine, so operator decision
+  15 applies: every current-affecting control is present, disabled and
+  carries decision 9's exact tooltip `not implemented in this port`; the
+  dismiss buttons (Close, Cancel) are live and the shell reports "nothing
+  was changed" after dismissal; and both gaps are named in
+  `docs/ui-command-backlog.md`.  Neither dialog can fake success:
+  OK/View/Save Data/the template commands/the combos and Browse are all
+  inert, and each dialog carries an inline note where the capture leaves
+  room.
+- Two captured limitations are recorded in the measures file rather than
+  guessed: the tab control and the three combos are owner-drawn, so
+  `CB_GETLBTEXT` returns `CB_ERR` and their unseen item strings are not
+  recorded (the port keeps the measured count, current index and visible
+  text, with empty strings elsewhere); and four Visual Reports controls plus
+  one Compare Projects control are captured but not painted (invisible
+  accessibility containers or hidden statics).
+- Two knowing deviations, recorded with the item.  Project grows the Compare
+  Project Versions window with a long project name; the port keeps the
+  measured 469 px and elides the middle of the name in the captured caption
+  (a short fixture name such as `synthetic-base.mpp` fits unchanged).  And
+  the captured sample pane shows a chart the port cannot draw, so the port
+  shows the capture's own "No sample available." state instead.
+- Evidence: `app_qt/tests/report_dialog_gate_test.cpp` parses the measures
+  JSON, finds every captured control by its `measuredControlId` property,
+  compares the LIVE rectangle and caption, requires the marked set to equal
+  the captured set and every not-painted id to have no widget, checks both
+  fixed sizes and titles, the two-row tab labels and selected item, the ten
+  template names and selection, each combo's count/current/visible text, the
+  three check-box states, the exact tooltips on every current-affecting
+  control, and that Close/Cancel reject and hide the dialog.  The shell path
+  opens the fixture in a `MainWindow`, activates the Report tab and clicks
+  the ribbon's own Compare Projects and Visual Reports buttons; a modal
+  inspector proves the Compare dialog carries `synthetic-base.mpp` in its
+  captured caption, both dialogs open with OK/View disabled and the exact
+  tooltip, and each dismisses.
+- The Report tab's two buttons are now enabled (`RibbonCommand::
+  compare_projects`, `visual_reports`); `ribbon_pin.tsv` marks both enabled,
+  the ribbon inventory pins each button to its own command, and the
+  generated backlog now lists 95 ribbon rows with 77 disabled (was 79), both
+  new rows `implemented` with their named gap.
+- The first gate build failed twice on the test source (a `QString::c_str`
+  call and `qobject_cast` on the Q_OBJECT-free dialog classes); the test now
+  builds the message with `std::string` and uses `dynamic_cast`, and the log
+  keeps both attempts.  All four new text files are LF in the index and the
+  worktree (the measures JSON is pinned `text eol=lf` by `.gitattributes`).
+
+Gates for commit `56f0ffa` (parent `4ee0cf3`), logs under `build/w29/`
+(`gates-4ee0cf3-W29-4.1-*.log`):
+
+| gate | result |
+|---|---|
+| app_qt Release build (`qt_shell`, `qt_report_dialog_gate_tests`, `qt_ribbon_inventory_tests`, `msproject_qt`) | exit 0 |
+| `qt_report_dialog_gate` | passed, 0 failures (1.43 s standalone; 0.27 s in the full ctest) |
+| `qt_ribbon_inventory` | passed |
+| app_qt ctest | 27/27 passed (13.28 s) |
+| client-name scan on HEAD / on the staged tree | 156 corpus names; 0 files, 0 hits / 0 files, 0 hits |
+| client-string grep / `git diff --check` | no matches (exit 1, expected) / clean |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (147 tracked test-data files, no local path); provenance OK (8 oracles) |
+| `guard_names` `4ee0cf3..56f0ffa` | exit 0 |
