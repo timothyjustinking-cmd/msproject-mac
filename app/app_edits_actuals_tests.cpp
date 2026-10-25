@@ -1479,6 +1479,38 @@ void check_update_refusals() {
     check(error.find("already") != std::string::npos && error.find("%") != std::string::npos,
           "the stored-percent refusal names the progress");
 
+    /* (a2) W29-C2 (the CLOSE review's first High): the 60 % row's measured
+     * lift is only 40 % and 80 %.  A date one workday after its start
+     * computes 20 % -- the same writer would lower the row, but no pair
+     * measured that payload, so the edit must be refused up front. */
+    const std::filesystem::path sixty_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave29-mark-60-after-control.mpp";
+    if (!std::filesystem::exists(sixty_path)) {
+        std::printf("SKIP: wave29-mark-60-after-control.mpp is not present\n");
+    } else {
+        app::PlanInput sixty;
+        try {
+            sixty = app::plan_input_from_document(
+                mpp::load_file(sixty_path.string()));
+        } catch (const std::exception& load_error) {
+            check(false, "the 60 % control loads");
+            std::printf("LOAD ERROR: %s\n", load_error.what());
+            sixty = {};
+        }
+        if (!sixty.tasks.empty()) {
+            app::StructuralEdit unmeasured;
+            std::string unmeasured_error;
+            check(!app::make_update_actuals_edit(
+                      sixty, sixty_path.string(), {1u},
+                      core::sched::from_ymd(2026, 1, 6), false, unmeasured,
+                      unmeasured_error),
+                  "a date computing 20 % on the 60 % row is refused");
+            check(unmeasured_error.find("40 %") != std::string::npos &&
+                      unmeasured_error.find("80 %") != std::string::npos,
+                  "the recomputed-percent refusal names the measured values");
+        }
+    }
+
     std::error_code fs_error;
     std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
                                         fs_error);

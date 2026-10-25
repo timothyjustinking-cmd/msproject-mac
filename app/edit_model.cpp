@@ -844,7 +844,10 @@ bool percent_through(const core::sched::Calendar& calendar, std::uint32_t start,
 // Project's 60 % edit (a 0x0B40015E step block, and an ActualStart equal to the
 // row's effective Start), updated through a date that computes a DIFFERENT
 // mid-range percent.  Both measured directions pass: 60 -> 80 raises and
-// 60 -> 40 lowers.  `why` names the first condition the row fails; every other
+// 60 -> 40 lowers.  The recomputed percent must be one of those two measured
+// values, exactly (no fractional step), because the writer's append/replace
+// rules were measured only on those two payloads -- W29-C2, the CLOSE review's
+// first High.  `why` names the first condition the row fails; every other
 // progressed row keeps the W29-0.0 refusal (rule 1: lift only measured shapes).
 bool measured_progress_update_shape(const mppwrite::TaskTable& table,
                                     const mppwrite::CfbDocument& document,
@@ -865,8 +868,16 @@ bool measured_progress_update_shape(const mppwrite::TaskTable& table,
               " %, and only a mid-range recomputation is measured";
         return false;
     }
-    if (progress.percent == row.percent_complete) {
-        why = "the date recomputes the percent the row already stores";
+    if (progress.percent != 40 && progress.percent != 80) {
+        why = "the date computes " + std::to_string(progress.percent) +
+              " %, and only the measured 40 % and 80 % recomputations are "
+              "accepted";
+        return false;
+    }
+    if (progress.step_percent != static_cast<double>(progress.percent)) {
+        why = "the date computes a fractional step percent (" +
+              std::to_string(progress.step_percent) +
+              "), and only a whole-percent recomputation is measured";
         return false;
     }
     std::size_t file_row = 0;
