@@ -308,14 +308,6 @@ const BarFieldChoice kBarTextFields[] = {
     {0x0b400508u, "Duration Text"},
 };
 
-QStringList bar_text_field_items() {
-    QStringList items;
-    for (const BarFieldChoice& choice : kBarTextFields) {
-        items << QString::fromLatin1(choice.name);
-    }
-    return items;
-}
-
 void fill_bar_field_combo(QComboBox* combo) {
     for (const BarFieldChoice& choice : kBarTextFields) {
         combo->addItem(QString::fromLatin1(choice.name),

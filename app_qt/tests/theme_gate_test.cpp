@@ -122,21 +122,6 @@ QColor sample_value(const QJsonObject& samples, const QString& theme, const QStr
     return QColor(samples.value(theme).toObject().value(key).toString());
 }
 
-// How many pixels are EXACTLY one colour.  The chrome surfaces are flat fills,
-// so this is the surface's area (no antialiasing at a solid fill's interior).
-int exact_count(const QImage& image, const QColor& colour) {
-    const QRgb want = colour.rgba();
-    int count = 0;
-    for (int y = 0; y < image.height(); ++y) {
-        for (int x = 0; x < image.width(); ++x) {
-            if (image.pixel(x, y) == want) {
-                ++count;
-            }
-        }
-    }
-    return count;
-}
-
 // Pixels within `tolerance` of a colour on every channel: glyph cores survive
 // a colour change against a contrasting fill even when the outermost
 // antialiased edge is a blend toward the fill.
