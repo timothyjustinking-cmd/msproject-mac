@@ -1158,7 +1158,7 @@ Resume notes for the group run:
 - The part B script's final native command is the expected-failure hex grep
   (exit 1); every gate printed exit 0 and the log is the record.
 
-The numbers belong to `7ea220c`; the two record commits that follow it
-(`10ad181`, `d70e97e`) are docs-only.
+The numbers belong to `7ea220c`; the two record commits (`10ad181`,
+`d70e97e`) and this marker are docs-only.
 
 WAVE-29-G5-COMPLETE
