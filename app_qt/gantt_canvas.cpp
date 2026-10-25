@@ -884,7 +884,14 @@ void GanttCanvas::paint_header(QPainter& painter, const std::vector<DayCell>& da
             painter.drawText(QRect(text_x, top, available, tier_height),
                              static_cast<int>(alignment | Qt::AlignVCenter), text);
         }
-        painter.setPen(QPen(chrome.chart_header_rule_strong, 1));
+        // W29-C4: the measured dark frames' horizontal tier boundary matches
+        // the WEAK rule (chart_tier_rule #5D5D5D Dark Gray / #2D2D2D Black),
+        // not the strong Monday/week rule the vertical boundaries use.  Light
+        // keeps the wave-26 strong line (no light tier measurement exists).
+        const QColor tier_boundary = theme_ == Theme::light
+                                         ? chrome.chart_header_rule_strong
+                                         : chrome.chart_header_rule;
+        painter.setPen(QPen(tier_boundary, 1));
         painter.drawLine(0, top + tier_height - 1, canvas_width,
                          top + tier_height - 1);
         top += tier_height;

@@ -128,8 +128,8 @@ struct ChromePalette {
     QColor chart_header_background_alt;  // the lower tiers' fill (light differs)
     QColor chart_header_weekend;         // weekend day cells in the day tier
     QColor chart_header_text;            // the label ink when the file has none
-    QColor chart_header_rule;            // the day tier's ordinary cell rules
-    QColor chart_header_rule_strong;     // Monday/week boundaries and tier rules
+    QColor chart_header_rule;            // the day tier's ordinary cell rules; dark themes also paint the horizontal tier boundary with it (measured, W29-C4)
+    QColor chart_header_rule_strong;     // Monday/week boundaries (light also paints the tier boundary with it)
     // W29-5.1: the ribbon's one-ink glyph colour (decision 3).  Dark Gray's
     // measured group row is light, so the wave-26 ink stays; Black's measured
     // group row is near-black, so its glyphs switch to the light ink.
