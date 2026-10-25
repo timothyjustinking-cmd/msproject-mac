@@ -986,3 +986,119 @@ The numbers belong to `56f0ffa`; the record and marker commits that follow
 it are docs-only.
 
 WAVE-29-G4-COMPLETE
+
+## G5 - Dark chrome header bands and the shell artwork
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W29-5.1 | Dark-theme sheet/chart header bands and ribbon ink measured against Project's Dark Gray and Black themes | **DONE** | commit `13e0235`; gates `build/w29/gates-12b4cf1-W29-5.1-*.log`; measurement `build/w29/g5-w29-5-1-measure.log` |
+| W29-5.2 | Menu bar, QAT and status-bar artwork in the wave-26 icon style | **DONE** | commit `f09f114`; gates `build/w29/gates-13e0235-W29-5.2-*.log` |
+
+W29-5.1 detail:
+
+- Operator decision 10 and operator Q14: in Dark Gray and Black only the
+  CHROME darkens; the sheet's cells and the chart's body keep the file's
+  colours.  Wave 26 left two header gaps; this item closes both from the local
+  Project 2021 audit captures (874x491, git-ignored:
+  `corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744264666-4mp1fn.jpg`
+  = Dark Gray, `...-ekrn72.jpg` = Black).  The frames, crops and sampling runs
+  stay in the working tree (`build/w29/g5-w29-5-1-measure.log`,
+  `build/w29/g5-crops/`); only numbers are committed, in
+  `tests/data/reference/w29-dark-header.measures.json` (rule 4).
+- Measured fills: the sheet's caption band is Dark Gray `#262626` / Black
+  `#646464`; the frozen row-number gutter, the corner above it and the chart
+  timescale band are the SWAPPED pair, Dark Gray `#666666` / Black `#262626`.
+  The chart's ordinary cell rules are `#5F5F5F` (DG) / `#2D2D2D` (Black) and
+  its Monday/week and tier rules `#545454` / `#323232`: Dark Gray's rules are
+  DARKER than its band and Black's are LIGHTER, so the pair is not one "dark
+  rule" value.  The chart's label ink does NOT follow the theme: the cores are
+  the file's `#333333` in both dark themes, so Black's labels stay
+  low-contrast exactly as Project's do.  No weekend tint is distinguishable in
+  either dark capture, so the dark weekend fill equals the band fill.
+- Caption and row-number inks: the JPEG peaks are dimmer than the ink; the
+  direction is measured (light on dark) and the values are the chrome's dark
+  text colour `#F2F2F2`, as `capture_samples.derived` records.  The light
+  values are the exact constants the wave-17/21 painters already used
+  (`shell_style.h`), so the light render cannot drift; the gate pins all 15
+  fields against the JSON.
+- Ribbon ink (decision 3, our one-ink art): Dark Gray's measured group row is
+  light (`#BDBDBD`), so the wave-26 ink `#1F3A5F` stays (6.1:1); Black's
+  `#292929` gets `#E6E6E6` (11.6:1).  `shell_ribbon_icon` now takes the ink,
+  `RibbonBar::set_theme` re-renders the active page's icon-bearing controls,
+  and later-built pages use the live theme's ink.
+- Code: `ChromePalette` grew 15 fields (`theme.h`/`theme.cpp`); the sheet's
+  caption band, row gutter and corner paint from it (`sheet_views.cpp/h`,
+  with `set_theme`); the Gantt timescale band does too
+  (`gantt_canvas.cpp/h`); `main_window.cpp` passes the theme to both.  The
+  sheet's viewport and the chart's body are deliberately untouched.
+- One measured geometry fix: the timescale's day and tier rules now end at
+  `top + tier_height - 1`.  They previously painted one pixel into the chart
+  body's top grid line, which was invisible in light but drew a dark tick into
+  the body under the dark themes.  The change moves light pixels only along
+  that 43-position boundary and matches Project's band edge.
+- Evidence: `qt_theme_gate` now pins, per theme, the compiled palette against
+  the committed JSON; the live caption band, gutter, corner, chart tiers and
+  label inks against the measured values; caption/row-number ink presence and
+  at least 4.5:1 contrast on the measured fill; the live ribbon QIcon against
+  the theme-ink factory render pixel for pixel and its monochrome ink; a band
+  repaint on a theme change; and the sheet viewport plus the chart body below
+  42 px pixel-identical across the three themes (tolerance 0).  It writes
+  band/chart PNGs to its out-dir for review.  The wave-26 light/dark chart
+  equality assertion is narrowed to the body, because the band is now chrome.
+
+Gates for commit `13e0235` (parent `12b4cf1`), logs under `build/w29/`
+(`gates-12b4cf1-W29-5.1-*.log`, builds `g5-w29-5-1-build*.log`, theme-gate
+`g5-w29-5-1-theme-gate.log`):
+
+| gate | result |
+|---|---|
+| app_qt Release build | exit 0 on the retry (the first pass hit one transient MSB6003 tlog lock) |
+| `qt_theme_gate` | passed, 0 failures |
+| `qt_icon_gate` / `qt_chrome_gate` | passed, 0 failures / passed, 0 failures |
+| app_qt ctest | 27/27 passed |
+| client-name scan on HEAD and the staged tree `43ca0ff` / client-string grep | 0 files, 0 hits / 0 files, 0 hits / no matches (exit 1, expected) |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK; provenance OK (8 oracles) |
+
+W29-5.2 detail:
+
+- This item is a RESTYLE, not a new measurement: decision 3 makes the chrome
+  artwork the port's own, so there is no bitmap to sample.  The ink is the
+  W29-5.1 value (`ChromePalette::ribbon_ink`).  `app_qt/shell_icons.cpp` is
+  re-authored on the wave-26 grid -- a 32-px drawing scaled to 16/32,
+  round-cap/round-join strokes and ONE ink per render -- with the same helper
+  idiom as `ribbon_glyphs.cpp`.  `shell_action_icon()` and
+  `shell_view_icon()` take the ink; an invalid colour falls back to `#1F3A5F`.
+  The five status view glyphs (Gantt Chart, Task Usage, Team Planner, Resource
+  Sheet, Report) each carry a distinct mark inside the shared page frame.
+- Glyph coverage is unchanged from the committed set: no menu command gained
+  or lost its drawing in this item, and commands without bespoke art keep the
+  neutral tile (which is itself one-ink).  The Undo/Redo pair is a straight
+  return arrow, chosen after a curved hook collapsed into a tick at 16 px.
+- Wiring: `build_menus()` draws each menu action in
+  `chrome_palette(theme_).ribbon_ink`; the QAT reuses those same QActions, so
+  it follows automatically.  `build_status_bar()` draws the five view glyphs
+  in the same ink.  The new `MainWindow::apply_icon_ink()` runs from
+  `set_theme()` and re-draws `actions_` and `view_buttons_`, so a live theme
+  change re-inks the menu bar, QAT and status bar with the ribbon.
+- Evidence: `qt_icon_gate` gained the chrome half.  Per theme (light, Dark
+  Gray, Black) it proves the menu bar exposes at least 20 command actions and
+  still carries Save; every menu command's live 16-px icon is pixel-identical
+  to `shell_action_icon(id, 16, ink)`, visibly inked and monochrome (0 off-ink
+  pixels); the QAT's three actions hold the same themed glyphs; all five
+  status buttons hold `shell_view_icon(index, 16, ink)`, visibly inked and
+  monochrome; and light and Black use different inks, so the per-theme
+  equality also proves the live re-ink on a theme change.  The gate writes
+  `chrome-icons.png` in its out-dir (`build/w26/`) -- every menu command and
+  status glyph at 32 and 16 px for human review.
+
+Gates for commit `f09f114` (parent `13e0235`), logs under `build/w29/`
+(`gates-13e0235-W29-5.2-*.log`, build/gate record `g5-w29-5-2.log`):
+
+| gate | result |
+|---|---|
+| app_qt Release build | exit 0 (two passes hit transient MSB6003/LNK1104 file locks; straight retries linked every target, no code change) |
+| `qt_icon_gate` (with the W29-5.2 chrome section) | passed, 0 failures |
+| `qt_chrome_gate` / `qt_theme_gate` | passed, 0 failures / passed, 0 failures |
+| app_qt ctest | 27/27 passed |
+| client-name scan on HEAD and the staged tree `bdc5430d` / client-string grep | 0 files, 0 hits / 0 files, 0 hits / no matches (exit 1, expected) |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (148 tracked test-data files, no local path); provenance OK (8 oracles) |
