@@ -308,3 +308,266 @@ over the code tree `8f80c2a`):
 The numbers belong to `50df4b2`; the marker commit that follows is docs-only.
 
 WAVE-29-G0-COMPLETE
+
+## G1 - PROJECT_A gaps (decision 7)
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W29-1.0a | High (CI): wave 28's two platform compile errors are still in the tree | **DONE** | commit `a790a24`; gates `build/w29/gates-4fee013-W29-1.0a-*.log` |
+| W29-1.0b | High (R28-1 residual): separate Project's per-save noise from the edit's effects | **DONE** | commits `fed21fb`, `2b9862e`; gates `build/w29/gates-a790a24-W29-1.0b-*.log` and `build/w29/gates-fed21fb-W29-1.0b-*.log` |
+| W29-1.1 | Stored sheet column widths: 8 columns as the file stores them | **DONE** | commit `7b01d37`; gates `build/w29/gates-2b9862e-W29-1.1-*.log` |
+| W29-1.2 | The yellow Highlighted row fill, as stored per row | **DONE** | commit `1a743b6`; gates `build/w29/gates-7b01d37-W29-1.2-*.log` |
+| W29-1.3 | Bar-label coverage: every label the stored bar styles call for | **DONE** | commit `aaf05fe`; gates `build/w29/gates-1a743b6-W29-1.3-*.log` |
+| W29-1.4 | Timescale scroll origin and zoom as stored | **DONE** | commit `c79a45d`; gates `build/w29/gates-aaf05fe-W29-1.4-*.log` |
+
+W29-1.0a detail:
+
+- macOS (`app/main.mm`): `note(...)` is called at 722/728/732/740 and was
+  defined at 1347; a forward declaration now sits with the other forward
+  declarations above the first use.
+- Linux GCC (`tests/roundtrip_outline.cpp`): the anonymous-namespace
+  `describe(...)` at 296 is unused and is removed.
+- A scan of all 43 C++/header files wave 28 and wave 29 touched found no
+  other instance of the two patterns
+  (`build/w29/W29-1.0a-pattern-scan.log`); the scan is falsified on the two
+  pre-fix blobs, which it does flag
+  (`build/w29/w29-1.0a-falsify.py`, "FALSIFICATION OK").  No clang or GCC is
+  installed on this machine, so this record makes no claim that the Windows
+  gates see either error; the CLOSE dispatch is the real compiler check.
+
+W29-1.0b detail:
+
+- `fed21fb` (fixtures only): Project 2021 opened a copy of each of the 23
+  actuals/outline save-pair control fixtures under `C:/w29` and saved it with
+  no edit, then saved the same file a second time.  The first save of each is
+  committed as `tests/data/<control-stem>-null.mpp`; the second stays under
+  `build/w29` and its per-stream stability is recorded in
+  `build/w29/W29-1.0b-null-saves.json`
+  (`scripts/oracle_w29_null_saves.py`).  Every committed null save was checked
+  against its `-save1` snapshot byte for byte, and the staged path scan reports
+  no fixture embeds a local path.
+- `2b9862e`: `tests/save_pair_noise.h` classifies every compared stream:
+  `fixed_block` 16-byte records (a differing byte is per-save noise and is
+  masked); `props14/cedl` variable-length streams (size-cache head zeroed, the
+  save-path record sentinel-replaced, compared per byte, framing tail reported
+  separately); `exact` DocumentSummaryInformation (zero measured noise).  A
+  byte that differs between the null save and Project's edit save outside the
+  mask is the edit's effect: it must equal the port's save or the check fails,
+  and an unmeasured shape is refused.
+- Measured on the 22 compared pairs (15 actuals, 7 outline): pair totals
+  noise=2549, effects=2614, masked-tail=836; DocumentSummaryInformation exact
+  noise=0, effects=2501 (17/22 pairs changed by the edit; the port matches all
+  2501 bytes); 114/Props block noise=338, effects=92; Props14 var noise=112,
+  effects=20, tail=836; 114/TBkndCons/Fixed2Meta block noise=0, effects=1;
+  SummaryInformation block noise=120, effects=0; the other Fixed2Data/Var2Data/
+  FixedData streams noise only (for example TBkndCal 330, TBkndRsc 220,
+  CFilter 220, CGrouping 220, TBkndCons 135, CV_iew FixedData 330).
+- The missing effects are now written: the Props14 marker payload
+  0x00 -> 0x01 (`edit_marker.cpp`), the project row's display summary in
+  DocumentSummaryInformation (`summary_info.cpp`, rebuilt from the row and
+  refusing unmeasured shapes), and the link driving-state byte
+  (`add_delete.cpp` stage_progress_link_flags).  The falsified "first/later
+  link row" reading of Fixed2Meta +8 is corrected in `add_delete.h`.
+
+W29-1.1 detail:
+
+- A `CTable` column stores its width in characters; Project multiplies by a
+  pixel unit measured from the file's default text font (the first
+  `FONT_BASES` entry, the pair the ribbon Font box shows), the mean lowercase
+  advance rounded.  Measured with Qt 6.5.3/GDI on this box: Arial 8
+  133/26 = 5.12 -> 5 px, Segoe UI 10 167/26 = 6.42 -> 6 px, Calibri 11
+  179/26 = 6.88 -> 7 px (Carlito 11 the same); the pixel width is
+  characters * unit + 3 padding.
+- PROJECT_A stores Indicators 0, Task Name 70, Dur 9, Start 19, Finish 21,
+  % Complete 7, Pre 13, Suc 13, SUMMARY 17; at Arial 8/5 px those are
+  353/48/98/108/38/68/68/88 px, which at 1920 put the display columns at
+  viewport offsets 0/353/401/499/607/645/713/781 -- the clean capture's
+  boundaries minus the 54 px gutter.
+- A stored 0 is not "auto": Project draws no column for it, so the record
+  stays in the sheet model with width 0 and `visible=false` (PROJECT_A's
+  Indicators).
+- The measured face/unit pairs are table-driven in `entry_columns.cpp` so a
+  Linux or macOS CI runner without those faces paints identical widths; an
+  unmeasured face is measured live with `QFontMetrics` and clamped.  The
+  committed fixture's default font is Segoe UI 10 (unit 6), so its Entry
+  presentation is unchanged: 39/57/147/81/81/81/105/105/123.
+- `qt_stored_table_corpus` checks the 8 stored data columns plus the stub at
+  353/48/98/108/38/68/68/88/103 px, Indicators hidden, offsets 0..781 at
+  1920.
+
+W29-1.2 detail:
+
+- The fills are not in the text styles (every PROJECT_A text style stores an
+  automatic background); they are the applied Gantt view's `214/CV_iew` item
+  `0x2240000c`, Format > Font formatting saved per cell.
+- The payload is a plain sequence of 44-byte entries with no count header; a
+  row's entry is keyed by its task UniqueID and the `214/CTable` field id,
+  with 0xffffffff as the row default; the field-specific entry wins.  The
+  colour is R,G,B plus an automatic flag (the same fourth-byte rule
+  `gantt_style.cpp` applies); automatic means no stored fill, so the Text
+  Styles background still applies.
+- PROJECT_A's applied view stores 213 entries (13 project-row, 10 each for
+  20 task rows).  The Highlighted row uid 10742 stores (255,242,0) with
+  pattern 1 on nine fields; its tenth, the hidden zero-width Indicators
+  field, is automatic.  The project row stores grey 82,87,91 on its visible
+  fields and dark blue 0,55,103 as the default.
+- The shell looks the entry up with the STORED `214/CTable` field id: the
+  table maps DurationText/StartText/FinishText 0x0b400507/505/506 to the
+  model's Duration/Start/Finish, and the record keys on the stored ids, so
+  `SheetColumn`/`DisplayColumn` now carry `table_field` alongside the mapped
+  model field.
+- The other `0x2240000c` record in PROJECT_A (view 4, 484 bytes) does not
+  follow this layout; it is not the applied view, and the decoder is only
+  ever handed the applied Gantt view's record.
+- `qt_stored_table_corpus` checks all eight scrolling cells of ID 10 yellow
+  (painted Name cell yellow; 6407 yellow / 18892 grey pixels).
+
+W29-1.3 detail:
+
+- The corpus file's applied view stores ten bar styles; four name text:
+  Critical Task and Non-Critical Task put Name on the right, Milestone puts
+  StartText on the left and Name on the right, Summary puts Name on the left,
+  and Project Summary stores none.  The clean capture shows exactly that, so
+  each label is the style's, not a constant fallback.
+- Each 195-byte BarStyle record stores five label field ids
+  (left/right/top/bottom/inside at +67..+83) and two 64-bit Show For masks at
+  +49/+57.  A style applies when every SET Show For category's fact is true
+  and every SET Not Show For category's fact is false; a category the port
+  cannot answer makes the style never match.
+- Answered from the model: Normal, Summary, Critical, Noncritical, Finished,
+  In Progress, Manually Scheduled, Active and the project row.  False by
+  construction: Split, Rolled Up, Group By Summary, Deliverable, Dependency,
+  Warning and the Placeholder variants.  Marked and the flag / early-late
+  variants stay unanswered.
+- The first matching style that stores a field on a side claims it, so an
+  earlier specific style that stores no label cannot hide a later general
+  style's text.  A side with no field stores the record's 0xffffffff
+  sentinel (the stock Manual Task style needs this and its Not-Warning bit to
+  match).  A field id the port cannot map claims the side with empty text
+  rather than borrowing another style's.
+- The date label is the file's own date format with the weekday and time
+  cleared (the capture prints a bare dd/MM/yy), which is why `open_file`
+  now rebuilds the views after `apply_preferences`.  Top/bottom/inside are
+  unmeasured by the capture: top/bottom are centred one label gap
+  above/below the bar and inside spans the interior.
+- `qt_stored_table_corpus` classifies every drawn bar by its row: 57 normal
+  (right name), 16 summary (left name), 10 milestone (left date + right
+  name), 1 project (none), with both horizontal gaps exactly 4 px.
+
+W29-1.4 detail:
+
+- The applied view's style record `0x22400008` carries both saved fields at
+  +1176 (u32) and +1180 (u16).  PROJECT_A stores 220478400 (= 2025-12-01
+  00:00, tenths of a minute since 1983-12-31) and bytes 06 01 = 262, not
+  MPXJ's low-byte 6.  Every other 41363-byte view stores +1181 = 0; several
+  store exactly 14400 (1984-01-01, Project's stock default), which must not
+  pin the axis.
+- The size is a u16 in Project too: on the same synthetic view and window, a
+  copy patched only at +1180 from 0x0064 (100) to 0x0106 (262) renders 2.625x
+  wider (15.583 -> 5.936 visible days, 23.6 -> 61.8 px/day).  A copy patched
+  to 0x0006 renders 12x wider, not the linear 16.7x, so Project floors a very
+  small column; the 262 pair is the evidence for the high byte.
+- The percentage scales the BOTTOM TIER's unit column, not a fixed day.  Day
+  tier: 100% = 24.0 px/day (the wave25 reference and the size-100 control).
+  Month tier: 100% = 38.2 px/month, from the capture's calendar-proportional
+  month columns (102 px for 31 days, 98-99 px for 30) and 3.2875 px/day at
+  262%.  PROJECT_A stores months, so 38.2 * 2.62 / 30.4375 = 3.2882 px/day,
+  within 0.0007 of the measured 3.2875 (test tolerance 0.02).  The model
+  emits a calendar-day axis and GanttCanvas paints the stored
+  year/quarter/month tiers from their own units, so months stay proportional.
+- The origin is pinned, not a lower bound: a task before it sits at x < 0
+  (clipped) instead of pulling the axis back.  `use_stored_timescale_` is
+  true from load until the user picks a shell zoom level;
+  `MainWindow::set_zoom` passes that switch, so the zoom buttons keep
+  working.
+- Evidence: `tests/data/reference/w29-projecta-timescale.measures.json`
+  (numbers only; the client file and capture stay git-ignored, rule 4).  A
+  local render of a neutral PROJECT_A copy measures 23 px per 7-day gridline
+  period = 3.2857 px/day, quarter rules 296/299/303 px over 90/91/92 days
+  (3.2889/3.2857/3.2935), and the first quarter rule 101 px = 31 days after
+  the chart's left edge, i.e. the axis starts on the stored 2025-12-01.  No
+  image is committed (rule 4).
+
+Gates for commit `a790a24` (parent `4fee013`), logs under `build/w29/`
+(`gates-4fee013-W29-1.0a-*.log`):
+
+| gate | result |
+|---|---|
+| core Release build (`mppwrite_roundtrip_outline`, tree configured from `50df4b2`, `CORE_WARNINGS_AS_ERRORS=ON`) | exit 0 |
+| `mppwrite_roundtrip_outline` | 1081 checks, 0 failures, 108 expected failures, exit 0 |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 78 tracked `.mpp`); paths OK (120 files); provenance OK (8 oracles) |
+| client-name scan on HEAD / staged tree / name guard `4fee013..HEAD` / hex grep | 0 files, 0 hits / 0 files, 0 hits / exit 0 / no matches (exit 1, expected) |
+
+Gates for commit `fed21fb` (parent `a790a24`, fixtures only), logs under
+`build/w29/` (`gates-a790a24-W29-1.0b-*.log`):
+
+| gate | result |
+|---|---|
+| `check_fixtures.py` (staged) | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (143 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on the staged tree / HEAD | 0 files, 0 hits / 0 files, 0 hits |
+
+Gates for commit `2b9862e` (parent `fed21fb`), logs under `build/w29/`
+(`gates-fed21fb-W29-1.0b-*.log`):
+
+| gate | result |
+|---|---|
+| core Release build | exit 0 |
+| `mppwrite_roundtrip_outline` | 1749 checks, 0 failures, 7 expected failures, exit 0 |
+| app Release build | exit 0 |
+| `app_edits_actuals_tests` / `app_edits_outline_tests` | 3723 checks passed, 50 expected failures / 3138 checks passed, exit 0 |
+| client-name scan | 156 corpus names; `--cached` 0 files, 0 hits |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`, 143 tracked test-data files, no local path, 8 scenario oracles) |
+
+Gates for commit `7b01d37` (parent `2b9862e`), logs under `build/w29/`
+(`gates-2b9862e-W29-1.1-*.log`):
+
+| gate | result |
+|---|---|
+| app Release build | exit 0 |
+| `views_tests` | 219 checks passed, exit 0 |
+| app_qt Release build / ctest | exit 0 / 24/24 passed, 0 failed, 24.30 s |
+| `qt_stored_table_corpus` | 8 stored data columns + stub at 353/48/98/108/38/68/68/88/103, Indicators hidden, offsets 0..781 at 1920 |
+| client-name scan | 156 corpus names; HEAD 0 files/0 hits; `--cached` 0 files/0 hits |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`, 143 tracked test-data files, no local path, 8 scenario oracles) |
+
+Gates for commit `1a743b6` (parent `7b01d37`), logs under `build/w29/`
+(`gates-7b01d37-W29-1.2-*.log`):
+
+| gate | result |
+|---|---|
+| core Release build | exit 0 |
+| `viewstate_tests` / `sheet_tests` | 1065 checks, 0 failures / 1052 checks passed, exit 0 |
+| app Release build | exit 0 |
+| `app_view_style_tests` | 70 checks, 0 failures (corpus: 213 entries, 10742/0x0b40000e = 255,242,0; project row grey; default 0,55,103; automatic rows no fill) |
+| `views_tests` | 219 checks passed, exit 0 |
+| app_qt Release build / ctest | exit 0 / 24/24 passed; `qt_stored_table_corpus`: all eight scrolling cells of ID 10 yellow, 6407 yellow / 18892 grey pixels |
+| client-name scan / client-string grep | 156 corpus names; HEAD 0 files/0 hits; `--cached` 0 files/0 hits; no matches |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`, 143 tracked test-data files, no local path, 8 scenario oracles) |
+
+Gates for commit `aaf05fe` (parent `1a743b6`), logs under `build/w29/`
+(`gates-1a743b6-W29-1.3-*.log`):
+
+| gate | result |
+|---|---|
+| core Release build | exit 0 |
+| `gantt_tests` | 766 checks passed, exit 0 (all five label sides, the bare stored bar, the fallback when nothing is stored) |
+| app Release build / app tests | exit 0 / `app_layout`, `app_views`, `app_view_style` exit 0 |
+| `app_view_style_tests` | 94 checks, 0 failures (stock auto/manual/milestone/summary; PROJECT_A's masks and field ids; first-match, unmapped id, unknown category) |
+| app_qt Release build / ctest | exit 0 / 24/24 passed; `qt_stored_table_corpus` notes the four label classes and both 4 px gaps |
+| client-name scan / client-string grep | 156 corpus names; HEAD 0 files/0 hits; `--cached` 0 files/0 hits; no matches |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`, 143 tracked test-data files, no local path, 8 scenario oracles) |
+
+Gates for commit `c79a45d` (parent `aaf05fe`), logs under `build/w29/`
+(`gates-aaf05fe-W29-1.4-*.log`):
+
+| gate | result |
+|---|---|
+| core Release build | exit 0 |
+| `viewstate_tests` / `gantt_tests` | 1068 checks, 0 failures (the patched 06 01 record parses as 262) / 769 checks passed (a pinned origin keeps its day; bars before it at x = -100 and -60) |
+| app Release build | exit 0 |
+| `layout_model_tests` | 297 checks passed (origin decode, the 3.287 px/day mapping, the stock 24 px/day, unmeasured tiers) |
+| `views_tests` / `view_style_tests` | 219 checks passed / 94 checks, 0 failures |
+| app_qt Release build / ctest | exit 0 / 24/24 tests passed |
+| PROJECT_A render geometry (local, no capture committed) | 23 px per 7 days = 3.2857 px/day; quarter rules 3.2889/3.2857/3.2935; first rule 101 px = 31 days after the left edge, origin 2025-12-01 |
+| client-name scan / client-string grep | 156 corpus names; HEAD 0 files/0 hits; `--cached` 0 files/0 hits; no matches, HEAD and index |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`, 144 tracked test-data files, no local path, 8 scenario oracles) |
