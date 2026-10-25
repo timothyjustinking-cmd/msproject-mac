@@ -592,3 +592,89 @@ the code tree `c79a45d`):
 The numbers belong to `830b5b6`; the marker commit that follows is docs-only.
 
 WAVE-29-G1-COMPLETE
+
+## G2 - Format dialogs (decision 14)
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W29-2.1 | Text Styles, Gridlines and Bar Styles dialogs | **DONE** | commit `190e1ce`; gates `build/w29/gates-6a36a43-W29-2.1-*.log` |
+
+W29-2.1 detail:
+
+- The layout evidence is the local Project 2021 captures of Text Styles
+  (408x352), Gridlines (472x188) and Bar Styles (747x536), recorded as
+  numbers only in `tests/data/reference/w29-format-dialogs.measures.json`:
+  every control's client-relative rectangle and the captured list counts
+  (font styles 4, sizes 16, background patterns 14 Hollow..Dark Dither,
+  14 gridline kinds and 5 line types, 41 stock bar-style rows, bar-style
+  columns Task 160 / Row 90 / Type 255 / Start 45 / Finish 85 / Text 100,
+  five side rows, 11 bar-text fields, start/end shapes 25 each, middle
+  shape 8, middle pattern 12, three types).  The captures stay git-ignored
+  (rule 4).
+- Text Styles: the style record `0x22400008` carries 19 text-style records,
+  not MPXJ's 17; the captures' list is 19 items, Project 2021's stock
+  defaults fill slots 17/18 as Changed Cells (pale blue, RGB 239,243,255,
+  solid) and Inactive Tasks (grey, RGB 192,192,192, strikethrough), and a
+  controlled all-19 save changed all 19 records.  The decoder exposes both,
+  the item combo is the captured order, and "All" edits every record.  Font
+  family, style, size, colour and the four effect bits are live; an
+  undecoded record disables the dialog and OK with the decision-9 tooltip
+  and an inline note.
+- Gridlines: the captured 14 line kinds, five line types and colour control
+  are laid out and disabled together with OK and the decision-9 tooltip
+  because wave 26 decoded no gridline engine; the inline note says so.
+  The dialog never reports success.
+- Bar Styles: the captured 41-row stock table with Row showing the stored
+  row + 1 (every stock style stores row 0, i.e. display row 1), the Text
+  and Bars tabs, the five captured side rows and 11 bar-text fields.  The
+  fill, start, middle and end colours and the From/To fields are live; the
+  start/end shape lists, middle shape and pattern lists and the three type
+  boxes are present with the captured contents and disabled with the
+  decision-9 tooltip because appearance editing has no engine, as is Text
+  Styles' background-pattern combo.  Cut/Paste/Insert/Help are present and
+  disabled.
+- The From/To decode settles W26's label mapping: the capture shows Task
+  Start / Task Finish for `0x0b400503` / `0x0b400504`, so
+  `label_text_for` swaps its 503/504 arms; a stock Milestone still prints
+  `0x0b400504`, now Task Finish, and the tests follow the capture.
+- OK applies to the open view only: `PlanDocument::set_session_gantt_style`
+  assigns the style in place (the sheet model's and canvas's pointers stay
+  valid), rebuilds the Gantt and re-derives the stored bar labels;
+  `MainWindow::apply_session_gantt_style` repaints through
+  `after_model_change()`.  The Gantt canvas paints each bar-text side from
+  its own Text Styles record (family, size, bold/italic/underline/
+  strikethrough, foreground, and a solid background when the stored pattern
+  is not Hollow).
+- A changed style is a write path with no Project pair in this port, so
+  every dialog says Save keeps the file's bytes and nothing is written;
+  `document_dirty` stays false.  The ribbon's Text Styles, Gridlines and
+  Bar Styles Format split are enabled and wired, and the generated
+  `docs/ui-command-backlog.md` records the three commands as implemented
+  with their remaining gaps (decision 15).
+- Evidence: `app_qt/tests/format_dialog_gate_test.cpp` parses the measures
+  JSON, measures the live widget tree (sizes, titles, every control
+  rectangle, list counts and order), drives the functional paths (All
+  writes 19 records, a single-item edit leaves Inactive alone, Task row
+  edits, red start colour, OK applies and repaints both the sheet's
+  FontRole and the bar labels) and proves the disabled paths stay disabled
+  with the exact tooltip.  The gate passed offscreen in 102.14 s.
+- The privacy scans and `check_fixtures.py` for this item ran with GIT_DIR
+  pointing at a byte-identical local copy of `.git` because the Dropbox
+  placeholders cost ~44 s per git process (156 names per scan would be
+  ~1.9 h); the mirror was refreshed and its HEAD and index hash verified
+  before every scan
+  (`build/w29/gates-6a36a43-W29-2.1-scan-method.txt`).
+
+Gates for commit `190e1ce` (parent `6a36a43`), logs under `build/w29/`
+(`gates-6a36a43-W29-2.1-*.log`):
+
+| gate | result |
+|---|---|
+| core Release build | exit 0 |
+| `viewstate_tests` | 1086 checks, 0 failures (19 records; Changed Cells and Inactive defaults; Task/Milestone From/To) |
+| app Release build | exit 0 |
+| `layout_model_tests` / `views_tests` / `view_style_tests` | 297 checks passed / 219 checks passed / 94 checks, 0 failures |
+| app_qt Release build / ctest | exit 0 / 25/25 tests passed (2866.25 s); `qt_format_dialog_gate` passed in 102.14 s |
+| client-name scan / staged scan | 156 corpus names; HEAD 0 files, 0 hits; `--cached` 0 files, 0 hits |
+| client-string grep / `git diff --check` | no matches, HEAD and index (exit 1, expected) / exit 0 |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (145 tracked test-data files, no local path); provenance OK (8 oracles) |
