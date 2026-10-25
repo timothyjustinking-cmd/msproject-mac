@@ -947,3 +947,42 @@ Gates for commit `56f0ffa` (parent `4ee0cf3`), logs under `build/w29/`
 | client-string grep / `git diff --check` | no matches (exit 1, expected) / clean |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (147 tracked test-data files, no local path); provenance OK (8 oracles) |
 | `guard_names` `4ee0cf3..56f0ffa` | exit 0 |
+
+G4 group gates (fresh trees configured from scratch on the worktree at
+`4448df3` under `build/w29-g4-fresh{,-app,-qt}`, log
+`build/w29/g4-fresh-gates.log`; the G4 code is `56f0ffa`, and `4448df3` adds
+only this record over it):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 20/20 / 27/27 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (147 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `4ee0cf3..HEAD` / `guard_names` `4ee0cf3..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+Resume notes for the group run:
+
+- The core and app_qt builds each hit this environment's transient MSB6003
+  file locks (core once, app_qt twice); the script's retry rebuilt the same
+  fresh tree and every build ended exit 0, so no tree was reconfigured.
+- The first privacy invocation expanded `$base..HEAD` through PowerShell's
+  range operator, so the message scan ranged from `4ee0cf3` backwards and
+  reported one old wave-23 commit (not a G4 commit) while `guard_names` got
+  the wrong arguments.  The corrected re-run with a quoted range is appended
+  to the same log: messages `4ee0cf3..HEAD` 0 commits quote names,
+  `guard_names` exit 0, hex grep no matches; the scan on HEAD was 0 files,
+  0 hits both times.  The G3 script, which this run copied, carries the same
+  unquoted range; the numbers recorded here are the corrected ones.
+- The part B script's final native command is the expected-failure hex grep
+  (exit 1), so the script process exits 1 after its last stage even though
+  every gate printed exit 0; the log is the record.
+
+The numbers belong to `56f0ffa`; the record and marker commits that follow
+it are docs-only.
+
+WAVE-29-G4-COMPLETE
