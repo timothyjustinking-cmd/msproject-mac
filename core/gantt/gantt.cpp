@@ -550,6 +550,13 @@ void Timescale::snap_origin(date32 earliest) {
     if (is_na(origin) || is_overflow(origin)) {
         origin = core::sched::from_ymd(1984, 1, 2);
     }
+    if (pin_origin) {
+        // A stored scroll origin is the file's own left edge: keep it even when
+        // a task starts earlier (that bar is off-screen at x < 0, as Project
+        // draws it).  Only normalise the time of day.
+        origin = core::sched::date_only(origin);
+        return;
+    }
     date32 candidate = origin;
     if (!is_na(earliest) && !is_overflow(earliest) && earliest < candidate) {
         candidate = earliest;

@@ -47,6 +47,7 @@
 #include "date.h"
 #include "field_value.h"  // mpp::CustomFieldValue: plain data, no reader
 #include "gantt.h"
+#include "gantt_style.h"
 #include "record_set.h"
 #include "resource_tables.h"  // core::view::ResourceType for ResourceRow
 #include "sheet.h"
@@ -391,6 +392,35 @@ core::gantt::Timescale timescale_for_plan(const PlanInput& input, double pixels_
 // shell does not invent a fourth scale).  This is what the timescale preference
 // in app/prefs.h applies through.
 core::gantt::Timescale timescale_for_zoom(const PlanInput& input, core::gantt::GanttZoom zoom);
+
+// Wave 29 (W29-1.4): the applied view's saved timescale scroll origin and
+// zoom, as PROJECT_A stores them.  The two stored fields are
+//   +1176 u32  the saved left edge, tenths of a minute since 1983-12-31 00:00;
+//   +1180 u16  the saved size percentage (MPXJ reads only its low byte).
+// The reference values and how the window maps the percentage to pixels are in
+// tests/data/reference/w29-projecta-timescale.measures.json: the applied view
+// stores 2025-12-01 and 262 with a months bottom tier, and Project 2021's clean
+// capture renders the same day width the mapping below produces (3.287 px/day).
+struct StoredTimescale {
+    bool origin = false;  // `scale.origin` and `pin_origin` were set
+    bool zoom = false;    // `scale.unit` and `pixels_per_unit` were set
+};
+
+// +1176 u32 -> date32 (00:00 of the stored instant); kDateNa for 0, which is
+// what a view with no saved timescale stores.  14400 units is one day and one
+// date32 day, so the conversion is a division of the same counter.
+core::sched::date32 stored_timescale_origin(std::uint32_t stored) noexcept;
+
+// Applies whichever of the two stored fields is usable, in place:
+//   * origin: always when +1176 is non-zero, with pin_origin set so
+//     build_gantt() does not move it back over an earlier task;
+//   * zoom: when +1180 is positive and the bottom tier is a measured unit
+//     (days: 24 px column at 100%; months: 38.2 px column at 100%).  The
+//     result is a calendar-day axis at base * size/100, which is what the
+//     capture's proportional month columns and 3.287 px/day show.
+// An unmeasured bottom unit leaves the zoom half alone (origin may still apply).
+StoredTimescale apply_stored_timescale(const msproject::viewstate::GanttStyle& style,
+                                       core::gantt::Timescale& scale);
 
 // GanttStyle defaults with row_height taken from default_sheet_metrics() so the
 // two halves of the window stay aligned.  The app sets measure_text to a real

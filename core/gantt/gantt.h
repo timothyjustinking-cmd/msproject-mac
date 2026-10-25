@@ -216,6 +216,11 @@ struct Timescale {
     // decision: the no-calendar default stays Monday (above); the calendar path
     // is data-driven because the calendar is the only source of week data here.
     bool adopt_calendar_week_start = true;
+    // The origin is a saved scroll position, not a lower bound for the bars:
+    // snap_origin() keeps it instead of moving it back over an earlier task, so
+    // a bar that starts before it sits at x < 0 and is clipped by the shell.
+    // Used by app::apply_stored_timescale() for a file's stored timescale start.
+    bool pin_origin = false;
 
     bool valid() const noexcept { return pixels_per_unit > 0.0 && !is_na(origin); }
 

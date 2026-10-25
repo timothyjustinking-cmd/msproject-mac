@@ -2445,7 +2445,8 @@ void MainWindow::set_zoom(app::ZoomLevel zoom) {
     }
     prefs_.zoom = zoom;
     if (doc_.has_document()) {
-        doc_.rebuild_views(prefs_.zoom);
+        // A user zoom choice replaces the file's stored timescale zoom (W29-1.4).
+        doc_.rebuild_views(prefs_.zoom, true);
         if (prefs_.view == app::ViewMode::task_sheet) {
             gantt_canvas_->set_layout(doc_.gantt());
             gantt_canvas_->set_selected_uid(doc_.selected_uid());

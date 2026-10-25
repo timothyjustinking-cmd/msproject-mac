@@ -111,8 +111,10 @@ class PlanDocument {
 
     // Re-derives the plan from the RecordSet (a cell edit, undo or a collapse),
     // the displayed row map (which a collapse or the filter changes) and the
-    // Gantt.
-    void rebuild_views(app::ZoomLevel zoom);
+    // Gantt.  A load (and every non-zoom rebuild) keeps the file's stored
+    // timescale origin/zoom (W29-1.4); `from_user_zoom` is the View > Zoom
+    // path, which switches to the shell's own three zoom levels instead.
+    void rebuild_views(app::ZoomLevel zoom, bool from_user_zoom = false);
 
     // Wave 20: applies the presentation preferences to the loaded format (the
     // date style, through app::apply_preferences) and the sheet's formatter.  The
@@ -268,6 +270,10 @@ class PlanDocument {
     msproject::viewstate::TableDef table_;
     msproject::viewstate::GanttStyle gantt_style_;
     msproject::viewstate::CellFormatTable cell_formats_;
+    // Wave 29 (W29-1.4): true from a load until the user picks one of the
+    // shell's zoom levels; while true, build_gantt() applies the applied
+    // view's stored scroll origin and size over the preference zoom.
+    bool use_stored_timescale_ = false;
     std::string applied_view_;
     std::string path_;
     std::string title_;

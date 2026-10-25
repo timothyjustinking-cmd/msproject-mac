@@ -185,9 +185,21 @@ struct GanttStyle {
     TimescaleTier top;
     TimescaleTier middle;
     TimescaleTier bottom;
-    // The stored tier-visibility byte and the "timescale size" byte, kept for
-    // the record; the shells decide what to draw from the units themselves.
+    // The stored tier-visibility byte, the saved timescale scroll origin and
+    // its size.  The shells decide what to draw from the units themselves.
     int timescale_show = 0;
+    //
+    // timescale_start is the +1176 u32 exactly as stored: tenths of a minute
+    // since 1983-12-31 00:00, so 14400 units = 1984-01-01 00:00 and the day
+    // field is the same counter date32 uses (app/stored_timescale.h converts).
+    // 0 is what a view with no saved timescale stores; Project 2021's
+    // PanZoomPanTo writes the panned left edge here (a save to 2026-03-01
+    // stores 221774400 for that day).
+    std::uint32_t timescale_start = 0;
+    // The +1180 u16 percentage.  MPXJ's GanttChartView14 reads only the low
+    // byte; a Project 2021 save with the high byte set renders wider by the
+    // high byte's value, so this is genuinely 16-bit.  PROJECT_A's applied
+    // view stores bytes 06 01 = 262 (not 6); a stock view stores 100.
     int timescale_size = 0;
     int view_flags = 0;
     std::vector<std::string> warnings;
@@ -236,6 +248,10 @@ inline constexpr std::size_t kGanttTopAlignOffset = 41317;
 inline constexpr std::size_t kGanttTopTicksOffset = 41349;
 inline constexpr std::size_t kGanttTopFiscalOffset = 41361;
 inline constexpr std::size_t kGanttViewFlagsOffset = 1086;
+// +1176 u32: the saved timescale scroll origin (tenths of a minute since
+// 1983-12-31 00:00; see GanttStyle::timescale_start).
+inline constexpr std::size_t kGanttTimescaleStartOffset = 1176;
+// +1180 u16: the saved timescale size percentage (see GanttStyle::timescale_size).
 inline constexpr std::size_t kGanttTimescaleSizeOffset = 1180;
 
 // Decodes the `214/Props` FONT_BASES payload (record id 0x03400000).  The

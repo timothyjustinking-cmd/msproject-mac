@@ -714,6 +714,21 @@ void test_snapping(Context& context) {
                   "empty week timescale stays inside the date32 domain");
     context.equal(empty.timescale.origin, core::sched::from_ymd(1984, 1, 2),
                   "default week origin is Monday 2 January 1984");
+
+    // Wave 29 (W29-1.4): a saved scroll origin is the file's own left edge, not
+    // a lower bound for the bars.  Pinning keeps it and lets an earlier bar sit
+    // at x < 0 (Project clips it), instead of pulling the axis back.
+    gantt::Timescale pinned = day_scale();
+    pinned.origin = day(10, 25);
+    pinned.pin_origin = true;
+    const gantt::GanttLayout pinned_layout =
+        build_gantt(fixed_source(), fixed_style(), pinned);
+    context.equal(pinned_layout.timescale.origin, day(10, 25),
+                  "a pinned stored origin is kept");
+    context.near(find_bar(pinned_layout, 4).rect.x, -100.0,
+                 "the earliest bar is five days left of a pinned 25 Oct origin");
+    context.near(find_bar(pinned_layout, 1).rect.x, -60.0,
+                 "22 October is three days left of the pinned origin");
 }
 
 void test_status_line(Context& context) {

@@ -607,6 +607,95 @@ core::gantt::Timescale timescale_for_zoom(const PlanInput& input, core::gantt::G
     return timescale;
 }
 
+// ---------------------------------------------------------------------------
+// Wave 29 (W29-1.4): the applied view's stored timescale start and size
+// ---------------------------------------------------------------------------
+//
+// The reference is tests/data/reference/w29-projecta-timescale.measures.json:
+// PROJECT_A's applied Gantt view stores start 220478400 (= 2025-12-01) and size
+// bytes 06 01 (= 262, not MPXJ's low-byte 6), with a months bottom tier.  The
+// clean capture renders that view on a calendar-day axis of 3.2875 px/day (its
+// ten complete month columns are 102/31, 98/30, 102/31, 99/30, 102/31, 102/31,
+// 98/30, 102/31, 99/30 and 102/31 px per calendar day, and the month rules are
+// proportional to their 30/31 days), so the percentage scales the BOTTOM TIER's
+// unit column, not a fixed day:
+//   days   100% = 24.0 px/day   (the measured stock width; wave 25 and the
+//                                size-100 control both pin 23.5..24.0)
+//   months 100% = 38.2 px/month (3.2875 * 30.4375 / 2.62)
+// The size-262 COM cross-check: the same synthetic view patched from 0x0064 to
+// 0x0106 renders 2.625x wider (about 61.8 px/day vs 23.6), i.e. Project reads
+// the u16.  Sizes below 100% are only approximate: a patched 0x0006 rendered
+// 1.96 px/day, not the linear 1.44, so Project appears to floor a very small
+// column.
+namespace {
+
+// 14400 units = 1984-01-01 00:00.  Every unscrolled stock view stores exactly
+// this (and a PanZoomPanTo save overwrites it), so it is Project's default, not
+// a saved scroll position; pinning the axis there would put a 2026 plan
+// thousands of days off-screen.
+constexpr std::uint32_t kStockTimescaleStart = 14400;
+constexpr double kStoredDayColumnPixels = 24.0;
+constexpr double kStoredMonthColumnPixels = 38.2;
+constexpr double kMeanDaysPerMonth = 30.4375;
+
+}  // namespace
+
+core::sched::date32 stored_timescale_origin(std::uint32_t stored) noexcept {
+    if (stored == 0) {
+        return kDateNa;
+    }
+    // Both counters start at 1983-12-31 00:00: date32 day 0 is that day, and
+    // one date32 time unit is one tenth of a minute, so no epoch arithmetic is
+    // needed beyond splitting the 14400-unit day.
+    return core::sched::pack(static_cast<std::int32_t>(stored / core::sched::kTenthsPerDay),
+                             static_cast<std::int32_t>(stored % core::sched::kTenthsPerDay));
+}
+
+StoredTimescale apply_stored_timescale(const msproject::viewstate::GanttStyle& style,
+                                       core::gantt::Timescale& scale) {
+    using msproject::viewstate::TimescaleUnit;
+    StoredTimescale applied;
+    if (!style.decoded) {
+        return applied;
+    }
+    if (style.timescale_start > kStockTimescaleStart) {
+        const core::sched::date32 origin = stored_timescale_origin(style.timescale_start);
+        if (!core::sched::is_na(origin) && !core::sched::is_overflow(origin)) {
+            scale.origin = core::sched::date_only(origin);
+            scale.pin_origin = true;
+            applied.origin = true;
+        }
+    }
+    // A count > 1 groups columns in the header; the percentage's measured
+    // anchors are all count 1, so an unmeasured grouping keeps the shell zoom.
+    if (style.timescale_size <= 0 || style.bottom.count != 1) {
+        return applied;
+    }
+    double day_width = 0.0;
+    switch (style.bottom.unit) {
+        case TimescaleUnit::days:
+            day_width = kStoredDayColumnPixels * static_cast<double>(style.timescale_size) / 100.0;
+            break;
+        case TimescaleUnit::months:
+            day_width = kStoredMonthColumnPixels *
+                        static_cast<double>(style.timescale_size) / 100.0 /
+                        kMeanDaysPerMonth;
+            break;
+        default:
+            // weeks/quarters/years/hours/...: no measured 100% column width.
+            return applied;
+    }
+    if (!(day_width > 0.0)) {
+        return applied;
+    }
+    // The axis is calendar-day continuous; the stored tier header is painted
+    // from its own units (GanttCanvas), so a month tier stays proportional.
+    scale.unit = core::gantt::TimescaleUnit::day;
+    scale.pixels_per_unit = day_width;
+    applied.zoom = true;
+    return applied;
+}
+
 core::gantt::GanttStyle default_gantt_style() {
     core::gantt::GanttStyle style;
     style.row_height = static_cast<double>(default_sheet_metrics().row_height);

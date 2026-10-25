@@ -347,6 +347,7 @@ void PlanDocument::reset() {
     filter_active_ = false;
     table_ = msproject::viewstate::TableDef{};
     gantt_style_ = msproject::viewstate::GanttStyle{};
+    use_stored_timescale_ = false;
     applied_view_.clear();
     path_.clear();
     title_.clear();
@@ -390,6 +391,10 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         // applied-view name read above selects the view; a decode failure only
         // means the sheet keeps the stock presentation.
         read_style(source_path);
+        // Wave 29 (W29-1.4): a load shows the view's saved scroll origin and
+        // size; moving the shell's zoom slider (`rebuild_views(..., true)`)
+        // hands the axis back to the three zoom levels.
+        use_stored_timescale_ = true;
 
         // The RecordSet is a stable member: SheetModel holds a reference to it,
         // so assignment (not replacement) is what keeps that reference valid.
@@ -456,13 +461,23 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
     // No status-date marker: app::today_date32() would make the offscreen render
     // change every day, and this wave's render must be deterministic.
     core::gantt::Timescale timescale = app::timescale_for_zoom(view_, app::gantt_zoom(zoom));
+    // Wave 29 (W29-1.4): the applied view's saved scroll origin and size win on
+    // load.  They are the applied view's, not the preference's, until the user
+    // picks one of the shell's zoom levels (rebuild_views(..., true)).
+    app::StoredTimescale stored;
+    if (use_stored_timescale_) {
+        stored = app::apply_stored_timescale(gantt_style_, timescale);
+    }
     if (zoom == app::ZoomLevel::week) {
         // The reference's weekly view: the *unit* stays week (so the header is a
         // week tier), but its pixels-per-unit is the measured 24 px/day, and the
-        // day row starts on Sunday (MS Project's stock calendar week).
-        timescale.unit = core::gantt::TimescaleUnit::week;
+        // day row starts on Sunday (MS Project's stock calendar week).  A stored
+        // zoom replaces the unit and the width; the week anchor still applies.
         timescale.week_start = 0;
-        timescale.pixels_per_unit = kPixelsPerWeek;
+        if (!stored.zoom) {
+            timescale.unit = core::gantt::TimescaleUnit::week;
+            timescale.pixels_per_unit = kPixelsPerWeek;
+        }
     }
     // The Gantt's row pitch must equal the sheet's 22 px rows, or the two halves
     // drift apart one row-height style at a time.
@@ -573,7 +588,13 @@ void PlanDocument::fill_computed_columns() {
     }
 }
 
-void PlanDocument::rebuild_views(app::ZoomLevel zoom) { build_gantt(zoom); }
+void PlanDocument::rebuild_views(app::ZoomLevel zoom, bool from_user_zoom) {
+    if (from_user_zoom) {
+        // The three shell zoom levels take over from the file's stored zoom.
+        use_stored_timescale_ = false;
+    }
+    build_gantt(zoom);
+}
 
 void PlanDocument::apply_preferences(const app::Preferences& preferences) {
     // The date format is a property of the sheet's formatter, not of the data:
@@ -588,6 +609,7 @@ void PlanDocument::build_empty_view(app::ZoomLevel zoom, core::sched::date32 tod
     // No document: a new project.  The chart still needs an axis, and the axis
     // must start on the CURRENT week -- the engine's Timescale default origin is
     // 1984-01-02, which is the defect this replaces.
+    use_stored_timescale_ = false;  // there is no file view to take a scale from
     core::gantt::GanttSource source;  // no tasks, no bars, no links
     core::gantt::GanttStyle style = app::default_gantt_style();
     style.row_height = static_cast<double>(kRowHeight);

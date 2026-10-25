@@ -490,6 +490,91 @@ void test_gantt() {
     check_date(plan_summary.last_finish, from_ymd(2026, 10, 26, 17, 0), "summary last finish");
 }
 
+void test_stored_timescale() {
+    // Wave 29 (W29-1.4).  The reference numbers are in
+    // tests/data/reference/w29-projecta-timescale.measures.json: PROJECT_A's
+    // applied view stores origin 220478400 and size bytes 06 01 (262), with a
+    // months bottom tier; Project 2021's clean capture renders that view at
+    // 3.287 px/day on a calendar-day axis (its month rules are proportional to
+    // the 30/31 days, not equal-width columns).
+    check_date(app::stored_timescale_origin(220478400u), from_ymd(2025, 12, 1),
+               "the PROJECT_A stored origin decodes to 2025-12-01");
+    check_date(app::stored_timescale_origin(14400u), from_ymd(1984, 1, 1),
+               "stored 14400 is 1984-01-01");
+    check_date(app::stored_timescale_origin(0u), kDateNa,
+               "stored 0 means no saved timescale, not 1983-12-31");
+
+    msproject::viewstate::GanttStyle stored;
+    stored.decoded = true;
+    stored.timescale_start = 220478400u;
+    stored.timescale_size = 262;
+    stored.bottom.unit = msproject::viewstate::TimescaleUnit::months;
+    stored.bottom.count = 1;
+    core::gantt::Timescale scale = app::default_timescale(20.0);
+    scale.origin = from_ymd(2020, 1, 28);
+    const app::StoredTimescale applied = app::apply_stored_timescale(stored, scale);
+    check(applied.origin && applied.zoom, "the PROJECT_A view supplies both halves");
+    check_date(scale.origin, from_ymd(2025, 12, 1),
+               "the applied axis starts on the stored scroll origin");
+    check(scale.pin_origin, "the stored origin is pinned against the task snap");
+    check(scale.unit == core::gantt::TimescaleUnit::day,
+          "the stored view draws a calendar-day axis, so months stay proportional");
+    check_near(scale.pixels_per_unit, 3.287, 0.02,
+               "262% with a months tier renders at the capture's 3.287 px/day");
+
+    // A task before the stored origin must not pull the axis back.
+    core::gantt::GanttSource source;
+    core::gantt::TaskBarInput earlier;
+    earlier.uid = 1;
+    earlier.start = from_ymd(2025, 11, 1, 8, 0);
+    earlier.finish = from_ymd(2025, 11, 5, 17, 0);
+    source.tasks.push_back(earlier);
+    const core::gantt::GanttLayout layout =
+        core::gantt::build_gantt(source, app::default_gantt_style(), scale);
+    check_date(layout.timescale.origin, from_ymd(2025, 12, 1),
+               "build_gantt keeps the pinned stored origin");
+    check(!layout.bars.empty() && layout.bars[0].rect.x < 0.0,
+          "a task before the stored origin is drawn left of x = 0 (clipped)");
+
+    // The stock fixture: a days bottom tier at 100% is the measured 24 px/day.
+    // Its stored start is Project's 1984-01-01 default, not a saved scroll.
+    msproject::viewstate::GanttStyle stock;
+    stock.decoded = true;
+    stock.timescale_start = 14400u;
+    stock.timescale_size = 100;
+    stock.bottom.unit = msproject::viewstate::TimescaleUnit::days;
+    stock.bottom.count = 1;
+    core::gantt::Timescale stock_scale = app::default_timescale(20.0);
+    const app::StoredTimescale stock_applied =
+        app::apply_stored_timescale(stock, stock_scale);
+    check(!stock_applied.origin, "the stock 1984-01-01 default does not pin the axis");
+    check(stock_applied.zoom, "the stock 100% size applies");
+    check(stock_scale.unit == core::gantt::TimescaleUnit::day, "stock day unit");
+    check_near(stock_scale.pixels_per_unit, 24.0, 1e-9, "stock size 100 is 24 px/day");
+
+    // An unmeasured bottom unit keeps the shell zoom but still takes the origin.
+    msproject::viewstate::GanttStyle weeks = stored;
+    weeks.bottom.unit = msproject::viewstate::TimescaleUnit::weeks;
+    core::gantt::Timescale week_scale = app::default_timescale(20.0);
+    week_scale.pixels_per_unit = 168.0;
+    const app::StoredTimescale week_applied =
+        app::apply_stored_timescale(weeks, week_scale);
+    check(week_applied.origin && !week_applied.zoom,
+          "a weeks bottom tier applies the origin but not the unmeasured zoom");
+    check_near(week_scale.pixels_per_unit, 168.0, 1e-9,
+               "the unmeasured zoom leaves the shell's width alone");
+
+    // A view with no stored state changes nothing.
+    msproject::viewstate::GanttStyle empty;
+    empty.decoded = true;
+    core::gantt::Timescale untouched = app::default_timescale(20.0);
+    untouched.origin = from_ymd(2020, 1, 28);
+    const app::StoredTimescale none = app::apply_stored_timescale(empty, untouched);
+    check(!none.origin && !none.zoom, "an unstored view applies nothing");
+    check_date(untouched.origin, from_ymd(2020, 1, 28),
+               "an unstored view keeps the plan origin");
+}
+
 void test_undated_row() {
     // A row with no start keeps its row (the sheet still shows it) and gets no
     // bar; the links that touch it are not routed.
@@ -793,6 +878,7 @@ int main() {
     test_record_set();
     test_sheet();
     test_gantt();
+    test_stored_timescale();
     test_undated_row();
     test_empty();
     test_displayed_rows_by_uid();

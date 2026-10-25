@@ -1,0 +1,119 @@
+{
+  "source": {
+    "project_a": "corpus/project_a.mpp (git-ignored, read-only). The applied Gantt view's stored timescale fields, read from a neutral copy under (C:/w29/g1-14/trees/projecta): record 0x22400008 in 214/CV_iew/Var2Data, +1176 u32 and +1180 u16. Numbers only; no task, resource or project name is recorded.",
+    "capture": "Project 2021's local clean capture of PROJECT_A, corpus/reference/2026-10-23-msproject/project-gantt-loaded-clean.png (git-ignored, never committed). Geometry measured from the body gridlines; neither the image nor any text is committed (operator ruling 2026-10-23; rule 4).",
+    "com": "Project 2021 through scripts/oracle_lock.py on neutral copies under (C:/w29/g1-14/zoom-size/). Three copies of tests/data/synthetic-base.mpp differ only in the applied view's +1180 u16 (control 0x0064 = 100; 0x0006 = 6; 0x0106 = 262). Each was opened, its TimescaleStart/Finish read at window width 966 pt, read again after a resize, and closed. Probe: build/w29/zoom_size_probe.py; output: (C:/w29/g1-14/zoom-size/zoom_size.json).",
+    "measured": "2026-10-25"
+  },
+  "stored_project_a": {
+    "applied_view": {
+      "uid": 1,
+      "record": "0x22400008",
+      "length": 41363,
+      "timescale_start_u32": 220478400,
+      "timescale_start": "2025-12-01 00:00",
+      "timescale_size_u16": 262,
+      "timescale_size_bytes": [6, 1],
+      "tiers": {
+        "top": {"unit": "years", "count": 1},
+        "middle": {"unit": "quarters", "count": 1},
+        "bottom": {"unit": "months", "count": 1}
+      },
+      "project_start": "2020-01-28 08:00",
+      "project_finish": "2026-09-24 17:00"
+    },
+    "other_views": "every other 41363-byte Gantt view record stores +1181 = 0; several store exactly 14400 (1984-01-01), which is Project's stock default and not a saved scroll position",
+    "stock_default": {
+      "start_units": 14400,
+      "date": "1984-01-01",
+      "meaning": "no saved scroll; the port must not pin the axis to it, or a 2026 plan would render thousands of empty days before its first bar"
+    },
+    "encoding": {
+      "start": "tenths of a minute since 1983-12-31 00:00; 14400 units per day; date32 day 0 is also 1983-12-31, so the conversion is a split at 14400",
+      "size": "u16 percentage. MPXJ reads only the low byte and would report 6 for PROJECT_A; Project 2021 renders the stored 0x0106 as 262 % (see com_controls)"
+    }
+  },
+  "capture": {
+    "image_size_px": [1910, 1027],
+    "chart_pane_px": [881, 1909],
+    "chart_pane_note": "the white drawing area ends at x = 1897; the last ~12 px sit under the vertical scrollbar and are still part of the timescale width",
+    "visible_range": {
+      "start": "2026-03-01 00:00",
+      "finish": "2027-01-07 14:46",
+      "note": "the capture's own later scroll, 90 days right of the stored 2025-12-01 origin; the stored origin, not this range, is what the port applies"
+    },
+    "month_gridline_x_px": [881, 983, 1081, 1183, 1282, 1384, 1486, 1584, 1686, 1785, 1887],
+    "month_columns": [
+      {"month": "2026-03", "days": 31, "width_px": 102},
+      {"month": "2026-04", "days": 30, "width_px": 98},
+      {"month": "2026-05", "days": 31, "width_px": 102},
+      {"month": "2026-06", "days": 30, "width_px": 99},
+      {"month": "2026-07", "days": 31, "width_px": 102},
+      {"month": "2026-08", "days": 31, "width_px": 102},
+      {"month": "2026-09", "days": 30, "width_px": 98},
+      {"month": "2026-10", "days": 31, "width_px": 102},
+      {"month": "2026-11", "days": 30, "width_px": 99},
+      {"month": "2026-12", "days": 31, "width_px": 102}
+    ],
+    "day_width_px": 3.2875,
+    "day_width_note": "each column width divided by its calendar day count, averaged over the ten complete months: 102/31, 98/30, 102/31, 99/30, 102/31, 102/31, 98/30, 102/31, 99/30, 102/31 = 3.2875. The axis is calendar-day continuous, so 31-day months are 102 px and 30-day months 98-99 px.",
+    "mean_month_px": 100.6,
+    "mean_calendar_month_days": 30.4375,
+    "pane_cross_check": "1028 px / 312.6 days = 3.289 px/day, the same value within a pixel"
+  },
+  "com_controls": {
+    "window": {
+      "width_pt": 966,
+      "height_pt": 389,
+      "capture_px": [1288, 688],
+      "chart_pane_px": 367,
+      "note": "same window, same sheet columns and same chart pane in every variant (its boundaries are +/-1 px; the width ratios, not the absolute px/day, are the claim); the only difference is the applied view's +1180 u16"
+    },
+    "variants": {
+      "control_size_100": {
+        "stored_u16": 100,
+        "bottom_tier": "days",
+        "visible_days": 15.583,
+        "px_per_day": 23.6
+      },
+      "size_262_high_byte_set": {
+        "stored_u16": 262,
+        "bottom_tier": "days",
+        "visible_days": 5.936,
+        "px_per_day": 61.8,
+        "ratio_to_control": 2.625
+      },
+      "size_6_low_byte_only": {
+        "stored_u16": 6,
+        "bottom_tier": "days",
+        "visible_days": 187.0,
+        "px_per_day": 1.96,
+        "ratio_to_control": 0.0833
+      }
+    },
+    "conclusion": "262 renders 2.625x the control's width at the same window, so Project reads +1180 as a u16 and not as its low byte. Reading the low byte alone (6) would be 16.7x narrower than 100; Project instead clamps the narrowest rendered day column to about 2 px, which is the 12x-wider 006 observation, so that variant is evidence for the high byte and not for a linear 6 % rule.",
+    "pan_zoom_field_writes": {
+      "PanZoomPanTo": "writes +1176 only",
+      "PanZoomZoomTo": "writes +1176 and +1180, never +1181; a one-day zoom saved size 181 with a minutes bottom tier",
+      "saved_files": "(C:/w29/g1-14/zoom-size/saved-zoom1.mpp) and (C:/w29/g1-14/saved-synth-{week,month,half}.mpp)"
+    }
+  },
+  "mapping": {
+    "day_base_px_at_100": 24.0,
+    "day_base_source": "tests/data/reference/wave25-auto.measures.json: day_width_px 24.0 for the stock view, size 100, days bottom tier",
+    "month_base_px_at_100": 38.2,
+    "month_base_derivation": "3.2875 px/day * 30.4375 days / 2.62 = 38.19 px",
+    "project_a_predicted_px_per_day": 3.2882,
+    "project_a_formula": "38.2 * 262 / 100 / 30.4375 = 3.2882",
+    "reference_px_per_day": 3.2875,
+    "difference_px_per_day": 0.0007,
+    "tolerance_px_per_day": 0.02,
+    "axis": "the percentage scales the BOTTOM TIER's unit column, not a fixed day: a days tier at 100 % is 24 px/day, a months tier at 100 % is 38.2 px/month. PROJECT_A stores months, so its 262 % gives ~100 px/month = 3.288 px/day. The port draws a calendar-day axis and paints the stored year/quarter/month tiers from their own units, keeping month columns proportional."
+  },
+  "notes": [
+    "No screenshot of a client file is committed; only these numbers are.",
+    "PROJECT_A is never opened in place; its fields were read from a neutral copy.",
+    "The port's reader decodes +1180 as a u16 and +1176 as a u32; tests/viewstate_tests.cpp patches 06 01 into a stock blob and expects 262.",
+    "The stored 262 % with a months tier is the only PROJECT_A zoom case. Weeks, quarters, years, hours and multi-count tiers have no measured 100 % column width and are left at the shell zoom (the origin still applies)."
+  ]
+}

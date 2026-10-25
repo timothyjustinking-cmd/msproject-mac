@@ -1097,6 +1097,28 @@ void test_gantt_style() {
           "gantt style: both stock tiers draw tick lines");
     check_eq(style.timescale_size, 100, "gantt style: the stock timescale size");
 
+    // Wave 29 (W29-1.4): +1176 is the saved scroll origin (tenths of a minute
+    // since 1983-12-31 00:00) and +1180 is a 16-BIT size.  The values below are
+    // PROJECT_A's applied-view words, measured through COM and recorded in
+    // tests/data/reference/w29-projecta-timescale.measures.json: the origin
+    // 220478400 is 2025-12-01, and bytes 06 01 are 262%, not MPXJ's low-byte 6.
+    // A Project 2021 save with the high byte set renders 2.62x wider than the
+    // same low byte alone (0x0106 vs 0x0064 on the same view), which is what
+    // makes the field 16-bit rather than a byte plus an unrelated flag.
+    {
+        std::vector<std::uint8_t> stored = style_bytes;
+        put_u32(stored, 1176, 220478400u);
+        stored[1180] = 0x06;
+        stored[1181] = 0x01;
+        GanttStyle wide;
+        check(msproject::viewstate::parse_gantt_style(stored, fonts, wide, &error),
+              "gantt style: a record with the stored origin and 262% parses");
+        check_eq(wide.timescale_start, std::uint32_t{220478400},
+                 "gantt style: +1176 is the raw saved scroll origin");
+        check_eq(wide.timescale_size, 262,
+                 "gantt style: +1180 is the stored u16 size (PROJECT_A 262, not 6)");
+    }
+
     // A record shorter than the measured minimum is refused, not read past.
     const std::vector<std::uint8_t> short_record(style_bytes.begin(),
                                                  style_bytes.begin() + 41361);

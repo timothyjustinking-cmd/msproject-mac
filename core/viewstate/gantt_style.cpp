@@ -261,7 +261,8 @@ bool parse_gantt_style(std::span<const std::uint8_t> style_data,
 
     out.view_flags = style_data[kGanttViewFlagsOffset];
     out.timescale_show = style_data[kGanttShowTiersOffset];
-    out.timescale_size = style_data[kGanttTimescaleSizeOffset];
+    out.timescale_start = read_u32(style_data, kGanttTimescaleStartOffset);
+    out.timescale_size = static_cast<int>(read_u16(style_data, kGanttTimescaleSizeOffset));
     out.top.unit = decode_timescale_unit(style_data[kGanttTopUnitsOffset]);
     out.top.count = style_data[kGanttTopCountOffset];
     out.top.format = read_u16(style_data, kGanttTopFormatOffset);
