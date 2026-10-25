@@ -678,3 +678,30 @@ Gates for commit `190e1ce` (parent `6a36a43`), logs under `build/w29/`
 | client-name scan / staged scan | 156 corpus names; HEAD 0 files, 0 hits; `--cached` 0 files, 0 hits |
 | client-string grep / `git diff --check` | no matches, HEAD and index (exit 1, expected) / exit 0 |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (145 tracked test-data files, no local path); provenance OK (8 oracles) |
+
+G2 group gates (fresh trees configured from scratch on `190e1ce` under
+`build/w29-g2-fresh{,-app,-qt}`, log `build/w29/g2-fresh-gates.log`;
+`190e1ce` is the W29-2.1 commit, and the record commit `afc7606` plus this
+marker commit are docs-only over it):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 20/20 / 25/25 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (145 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `6a36a43..HEAD` / `guard_names` `6a36a43..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The 2 h background limit stopped the first group-gate run during the app_qt
+build; the build, the app_qt ctest, the fixtures and the privacy stages
+were resumed against the same fresh trees and the same log (resume notes in
+`build/w29/g2-fresh-gates.log`).
+
+The numbers belong to `190e1ce`; the record and marker commits that follow
+it are docs-only.
+
+WAVE-29-G2-COMPLETE
