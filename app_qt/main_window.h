@@ -368,6 +368,9 @@ class MainWindow final : public QMainWindow {
     // W26-6.2: repaints the shell-owned chrome (quick-access strip, status bar)
     // from chrome_palette(theme_) after a live theme change.
     void apply_chrome_theme();
+    // W29-5.2: re-draws the menu/QAT action glyphs and the status view glyphs in
+    // the current theme's chrome ink.  The QAT shares the menu QActions.
+    void apply_icon_ink();
     void new_project();
     void refresh_backstage_info();
     void set_message(std::string text, bool is_error);

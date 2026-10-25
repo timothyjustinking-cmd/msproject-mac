@@ -17,6 +17,14 @@
 // Tabs join kPlan in their item's commit; a tab is never checked before its
 // glyphs exist, and the final item proves the pin's icon column has no '-' left
 // on any command row.
+//
+// WAVE 29 (W29-5.2) adds the shell-chrome half: every menu-bar action (the QAT
+// reuses three of them) and every status-bar view button is rendered at 16 px
+// in the LIVE theme's chrome ink, must be pixel-identical to the one-ink
+// factory render in that ink, must be monochrome, and must follow a live theme
+// change through light -> Dark Gray -> Black.  Unimplemented commands
+// legitimately carry the neutral tile, so unlike the ribbon commands above the
+// chrome half does not demand a distinct drawing per action.
 #include <QAbstractButton>
 #include <QApplication>
 #include <QByteArray>
@@ -28,12 +36,14 @@
 #include <QFont>
 #include <QIcon>
 #include <QImage>
+#include <QMenuBar>
 #include <QPainter>
 #include <QPixmap>
 #include <QPoint>
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <QToolBar>
 #include <QToolButton>
 #include <QWidget>
 
@@ -200,7 +210,10 @@ QByteArray glyph_hash(const QImage& image) {
 }
 
 QByteArray placeholder_hash(int pixels) {
-    return glyph_hash(msqt::shell_action_icon(app::MenuAction::none, pixels)
+    // W29-5.2: the placeholder is one-ink too; pin the light theme's ink.
+    return glyph_hash(msqt::shell_action_icon(
+                          app::MenuAction::none, pixels,
+                          msqt::chrome_palette(msqt::Theme::light).ribbon_ink)
                           .pixmap(QSize(pixels, pixels))
                           .toImage()
                           .convertToFormat(QImage::Format_ARGB32));
@@ -263,6 +276,111 @@ int off_ink_pixels(const QImage& image) {
         }
     }
     return off;
+}
+
+// --- W29-5.2: the shell-chrome artwork -------------------------------------
+
+struct ChromeEntry {
+    QString label;
+    QImage large;
+    QImage small;
+};
+
+// The chrome half's human-review sheet: every menu command's glyph and the five
+// status view glyphs at both sizes, in the light theme's ink on white paper.
+bool write_chrome_contact_sheet(const QString& path,
+                                const std::vector<ChromeEntry>& entries) {
+    const int columns = 4;
+    const int cell_w = 320;
+    const int cell_h = 62;
+    const int margin = 16;
+    const int title_h = 40;
+    const int rows = (static_cast<int>(entries.size()) + columns - 1) / columns;
+    QImage sheet(margin * 2 + columns * cell_w,
+                 title_h + margin + rows * cell_h + margin, QImage::Format_ARGB32);
+    sheet.fill(QColor(0xff, 0xff, 0xff));
+    QPainter painter(&sheet);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    QFont title_font;
+    title_font.setPointSize(14);
+    title_font.setBold(true);
+    painter.setFont(title_font);
+    painter.setPen(QColor(0x1f, 0x1f, 0x1f));
+    painter.drawText(QRect(margin, 6, sheet.width() - 2 * margin, 30),
+                     Qt::AlignLeft | Qt::AlignVCenter,
+                     QStringLiteral("W29-5.2 chrome icons - menu bar, QAT and status bar "
+                                    "(32 px and 16 px, one ink)"));
+    QFont label_font;
+    label_font.setPointSize(9);
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+        const ChromeEntry& entry = entries[index];
+        const int column = static_cast<int>(index) % columns;
+        const int row = static_cast<int>(index) / columns;
+        const int x = margin + column * cell_w;
+        const int y = title_h + margin + row * cell_h;
+        painter.setPen(QColor(0xdd, 0xdd, 0xdd));
+        painter.drawRect(QRect(x, y, cell_w - 8, cell_h - 8));
+        painter.drawImage(QPoint(x + 10, y + 12), entry.large);
+        painter.drawImage(QPoint(x + 50, y + 20), entry.small);
+        painter.setFont(label_font);
+        painter.setPen(QColor(0x1f, 0x1f, 0x1f));
+        painter.drawText(QRect(x + 76, y + 8, cell_w - 90, 22),
+                         Qt::AlignLeft | Qt::AlignVCenter, entry.label);
+        painter.setPen(QColor(0x66, 0x66, 0x66));
+        painter.drawText(QRect(x + 76, y + 30, cell_w - 90, 18),
+                         Qt::AlignLeft | Qt::AlignVCenter,
+                         QStringLiteral("32 px / 16 px"));
+    }
+    painter.end();
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    const bool saved = sheet.save(path, "PNG");
+    gate::check(saved, "the chrome contact sheet is written");
+    return saved;
+}
+
+// Every leaf command action under the (hidden) menu bar.  A submenu action is a
+// container with a menu and no data; MenuAction::none entries deliberately carry
+// no icon, exactly as Project shows no glyph for them.
+void collect_menu_actions(QMenu* menu, std::vector<QAction*>& out) {
+    if (menu == nullptr) {
+        return;
+    }
+    for (QAction* action : menu->actions()) {
+        if (action->menu() != nullptr) {
+            collect_menu_actions(action->menu(), out);
+            continue;
+        }
+        if (!action->data().isValid()) {
+            continue;
+        }
+        if (action->data().toInt() == static_cast<int>(app::MenuAction::none)) {
+            continue;
+        }
+        out.push_back(action);
+    }
+}
+
+// One chrome glyph: present, drawn at 16 px, pixel-identical to the one-ink
+// factory render in the theme's ink, and with no pixel off that ink.
+void check_chrome_glyph(const QIcon& icon, const QIcon& expected,
+                        const std::string& where) {
+    gate::check(!icon.isNull(), (where + ": carries an icon").c_str());
+    if (icon.isNull()) {
+        return;
+    }
+    const QImage image = rendered_icon(icon, kSmallPx, QImage::Format_ARGB32);
+    const QImage expected_image = rendered_icon(expected, kSmallPx, QImage::Format_ARGB32);
+    gate::check(image.width() == kSmallPx && image.height() == kSmallPx,
+                (where + ": is drawn at 16 px").c_str());
+    gate::check(glyph_hash(image) == glyph_hash(expected_image),
+                (where + ": is the theme ink's one-ink glyph").c_str());
+    gate::check(opaque_pixels(image) >= 5, (where + ": draws visible ink").c_str());
+    const int off = off_ink_pixels(
+        rendered_icon(icon, kSmallPx, QImage::Format_ARGB32_Premultiplied));
+    gate::check(off == 0, (where + ": is monochrome").c_str());
+    if (off != 0) {
+        std::fprintf(stderr, "  %s: %d off-ink pixels\n", where.c_str(), off);
+    }
 }
 
 QString slug(const QString& title) {
@@ -553,6 +671,125 @@ int main(int argc, char** argv) {
                                 .c_str());
             }
         }
+    }
+
+    // --- W29-5.2: the menu bar, QAT and status-bar artwork ------------------
+    // The chrome art is one-ink in every theme: the live icons must equal the
+    // factory render in that theme's ChromePalette::ribbon_ink, be monochrome,
+    // and be re-inked when the theme changes (light -> Dark Gray -> Black).
+    QMenuBar* bar = window.menuBar();
+    gate::check(bar != nullptr, "the window owns a menu bar");
+    gate::check(gate::find_action(window, app::MenuAction::save) != nullptr,
+                "the hidden menu bar still carries Save (the QAT reuses it)");
+    QToolBar* quick = window.quick_access();
+    gate::check(quick != nullptr, "the window owns the quick-access strip");
+    const std::vector<QToolButton*>& view_buttons = window.view_buttons();
+    gate::check(view_buttons.size() == 5, "the status bar carries five view buttons");
+    const QColor light_ink = msqt::chrome_palette(msqt::Theme::light).ribbon_ink;
+    const QColor black_ink = msqt::chrome_palette(msqt::Theme::black).ribbon_ink;
+    gate::check(light_ink != black_ink,
+                "the light and Black themes use different chrome inks");
+
+    for (const msqt::Theme theme :
+         {msqt::Theme::light, msqt::Theme::dark, msqt::Theme::black}) {
+        if (window.theme() != theme) {
+            window.set_theme(theme, false);
+        }
+        QApplication::processEvents();
+        const std::string theme_label = msqt::theme_name(theme);
+        const QColor ink = msqt::chrome_palette(theme).ribbon_ink;
+
+        std::vector<QAction*> menu_actions;
+        if (bar != nullptr) {
+            for (QAction* top : bar->actions()) {
+                collect_menu_actions(top->menu(), menu_actions);
+            }
+        }
+        gate::check(menu_actions.size() >= 20,
+                    ("theme " + theme_label + ": the menu bar has command actions")
+                        .c_str());
+        for (QAction* action : menu_actions) {
+            const auto id = static_cast<app::MenuAction>(action->data().toInt());
+            check_chrome_glyph(action->icon(),
+                               msqt::shell_action_icon(id, kSmallPx, ink),
+                               "theme " + theme_label + " / menu " +
+                                   normalized(action->text()).toStdString());
+        }
+
+        if (quick != nullptr) {
+            gate::check(quick->actions().size() == 3,
+                        ("theme " + theme_label +
+                         ": the quick-access strip carries Save/Undo/Redo")
+                            .c_str());
+            for (QAction* action : quick->actions()) {
+                if (action == nullptr || !action->data().isValid()) {
+                    continue;
+                }
+                const auto id = static_cast<app::MenuAction>(action->data().toInt());
+                check_chrome_glyph(action->icon(),
+                                   msqt::shell_action_icon(id, kSmallPx, ink),
+                                   "theme " + theme_label + " / QAT " +
+                                       normalized(action->text()).toStdString());
+            }
+        }
+
+        for (std::size_t index = 0; index < view_buttons.size(); ++index) {
+            QToolButton* button = view_buttons[index];
+            if (button == nullptr) {
+                gate::check(false, ("theme " + theme_label +
+                                    ": a status view button exists")
+                                       .c_str());
+                continue;
+            }
+            check_chrome_glyph(
+                button->icon(),
+                msqt::shell_view_icon(static_cast<int>(index), kSmallPx, ink),
+                "theme " + theme_label + " / status " + button->text().toStdString());
+        }
+    }
+
+    // Human review: every chrome glyph at both sizes, in the light theme's ink.
+    {
+        std::vector<ChromeEntry> entries;
+        std::vector<QAction*> review_actions;
+        if (bar != nullptr) {
+            for (QAction* top : bar->actions()) {
+                collect_menu_actions(top->menu(), review_actions);
+            }
+        }
+        for (QAction* action : review_actions) {
+            const auto id = static_cast<app::MenuAction>(action->data().toInt());
+            ChromeEntry entry;
+            entry.label = normalized(action->text());
+            entry.label.remove(QLatin1Char('&'));
+            entry.large = rendered_icon(msqt::shell_action_icon(id, kLargePx, light_ink),
+                                        kLargePx, QImage::Format_ARGB32);
+            entry.small = rendered_icon(msqt::shell_action_icon(id, kSmallPx, light_ink),
+                                        kSmallPx, QImage::Format_ARGB32);
+            entries.push_back(entry);
+        }
+        for (std::size_t index = 0; index < view_buttons.size(); ++index) {
+            ChromeEntry entry;
+            entry.label = QStringLiteral("status: ") +
+                          (view_buttons[index] != nullptr
+                               ? view_buttons[index]->text()
+                               : QStringLiteral("view %1").arg(index));
+            entry.large = rendered_icon(
+                msqt::shell_view_icon(static_cast<int>(index), kLargePx, light_ink),
+                kLargePx, QImage::Format_ARGB32);
+            entry.small = rendered_icon(
+                msqt::shell_view_icon(static_cast<int>(index), kSmallPx, light_ink),
+                kSmallPx, QImage::Format_ARGB32);
+            entries.push_back(entry);
+        }
+        const QString chrome_sheet =
+            QDir(out_dir).filePath(QStringLiteral("chrome-icons.png"));
+        if (write_chrome_contact_sheet(chrome_sheet, entries)) {
+            std::fprintf(stderr, "note: chrome contact sheet %s (%zu glyphs)\n",
+                         chrome_sheet.toLocal8Bit().constData(), entries.size());
+        }
+        gate::check(QFile::exists(chrome_sheet),
+                    "the chrome contact sheet exists on disk");
     }
 
     std::printf("qt_icon_gate: ");

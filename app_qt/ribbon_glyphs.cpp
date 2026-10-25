@@ -798,8 +798,9 @@ QIcon shell_ribbon_icon(const QString& key, int pixels, const QColor& ink) {
         !draw_format_glyph(painter, key)) {
         painter.end();
         // A key with no drawing is the neutral placeholder, never a blank
-        // icon: the gate's placeholder hash then fails on it.
-        return shell_action_icon(app::MenuAction::none, pixels);
+        // icon: the gate's placeholder hash then fails on it.  The placeholder
+        // follows the same theme ink (W29-5.2).
+        return shell_action_icon(app::MenuAction::none, pixels, g_ink);
     }
     painter.end();
     return QIcon(pixmap);

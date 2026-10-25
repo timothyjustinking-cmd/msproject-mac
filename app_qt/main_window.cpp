@@ -771,9 +771,10 @@ void MainWindow::build_menus() {
                 if (item.action != app::MenuAction::none) {
                     // The quick-access toolbar reuses these actions, so give
                     // every one an icon drawn by shell_icons.cpp (never
-                    // Microsoft artwork).  A present-but-unimplemented entry
-                    // draws no glyph rather than the placeholder.
-                    action->setIcon(shell_action_icon(item.action));
+                    // Microsoft artwork).  W29-5.2: the artwork is one-ink in
+                    // the wave-26 style, drawn in the live chrome ink.
+                    action->setIcon(shell_action_icon(
+                        item.action, kShellIconPx, chrome_palette(theme_).ribbon_ink));
                 }
                 const QKeySequence shortcut = menu_shortcut(item);
                 if (!shortcut.isEmpty()) {
@@ -845,8 +846,10 @@ void MainWindow::build_status_bar() {
         auto* button = new QToolButton(views);
         button->setText(QString::fromLatin1(spec.label));
         // The product's status bar shows an icon beside each view label; the
-        // icon is ours (shell_icons.cpp), never Microsoft artwork.
-        button->setIcon(shell_view_icon(view_index));
+        // icon is ours (shell_icons.cpp), never Microsoft artwork, and follows
+        // the theme's chrome ink (W29-5.2).
+        button->setIcon(shell_view_icon(view_index, kShellIconPx,
+                                        chrome_palette(theme_).ribbon_ink));
         button->setIconSize(QSize(kShellIconPx, kShellIconPx));
         button->setCheckable(true);
         button->setAutoExclusive(true);
@@ -3186,6 +3189,8 @@ void MainWindow::set_theme(Theme theme, bool persist) {
     if (gantt_canvas_ != nullptr) {
         gantt_canvas_->set_theme(theme_);
     }
+    // W29-5.2: menu/QAT/status artwork follows the same theme ink.
+    apply_icon_ink();
     apply_chrome_theme();
     update();
     if (persist && preferences_store_ != nullptr) {
@@ -3193,6 +3198,30 @@ void MainWindow::set_theme(Theme theme, bool persist) {
     }
     set_message(std::string("Office theme: ") + theme_name(theme_), false);
     update_status();
+}
+
+void MainWindow::apply_icon_ink() {
+    // W29-5.2: the menu actions, the quick-access toolbar (which reuses those
+    // same QActions) and the status-bar view buttons are chrome; their one-ink
+    // artwork is redrawn in the live theme ink so Black's near-black chrome
+    // gets the light ink.  Container QActions carry no data and no glyph.
+    const QColor ink = chrome_palette(theme_).ribbon_ink;
+    for (QAction* action : actions_) {
+        if (action == nullptr || !action->data().isValid()) {
+            continue;
+        }
+        const auto id = static_cast<app::MenuAction>(action->data().toInt());
+        if (id == app::MenuAction::none) {
+            continue;
+        }
+        action->setIcon(shell_action_icon(id, kShellIconPx, ink));
+    }
+    for (std::size_t index = 0; index < view_buttons_.size(); ++index) {
+        QToolButton* button = view_buttons_[index];
+        if (button != nullptr) {
+            button->setIcon(shell_view_icon(static_cast<int>(index), kShellIconPx, ink));
+        }
+    }
 }
 
 void MainWindow::apply_chrome_theme() {
