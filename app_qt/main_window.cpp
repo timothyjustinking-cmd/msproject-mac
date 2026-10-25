@@ -82,6 +82,7 @@
 #include "layout_model.h"
 #include "menus.h"
 #include "options_dialog.h"
+#include "page_setup_dialog.h"
 #include "preferences_store.h"
 #include "print_page.h"
 #include "project_dialogs.h"     // app::ProjectInformation (wave 26 G5)
@@ -661,6 +662,8 @@ void MainWindow::build_central_widget() {
     });
     backstage_->set_close_handler([this]() { show_backstage(false); });
     backstage_->set_options_handler([this]() { show_options(); });
+    // W29-3.1: Page Setup opens on the values every print route already uses.
+    backstage_->set_page_setup_handler([this]() { show_page_setup(); });
     backstage_->set_theme_choice_handler(
         [this](ThemeChoice choice) { set_theme_choice(choice, true); });
     backstage_->set_about_handler([this]() { show_about(); });
@@ -687,12 +690,8 @@ void MainWindow::build_central_widget() {
             if (!doc_.has_document() || doc_.sheet() == nullptr) {
                 return QImage();
             }
-            app::PageSpec spec = letter ? app::PageSpec::letter_landscape()
-                                        : app::PageSpec::a4_landscape();
-            if (!landscape) {
-                std::swap(spec.width, spec.height);
-            }
-            const app::PrintJob job = current_print_job(spec);
+            // W29-3.1: the Page Setup values ride on the live paper choice.
+            const app::PrintJob job = current_print_job(print_spec(landscape, letter));
             return render_print_page(job, 0, *doc_.sheet(), doc_.plan(), prefs_, size);
         });
     central_stack_ = new QStackedWidget(this);
@@ -2800,6 +2799,50 @@ app::PrintJob MainWindow::current_print_job(const app::PageSpec& spec) const {
                           today_text(), prefs_.zoom, spec);
 }
 
+// W29-3.1: the Page Setup record on the Print page's live paper/orientation.
+app::PageSpec MainWindow::print_spec(bool landscape, bool letter) const {
+    app::PageSpec spec = print_spec_;
+    const app::PageSpec paper =
+        letter ? app::PageSpec::letter_landscape() : app::PageSpec::a4_landscape();
+    spec.width = landscape ? paper.width : paper.height;
+    spec.height = landscape ? paper.height : paper.width;
+    return spec;
+}
+
+// The Page Setup dialog's OK path, without the modal (the gate calls this).
+// The dialog also owns orientation and paper, so the two live Print-page
+// controls follow it; the preview re-renders once through set_print_settings().
+void MainWindow::apply_page_setup(const app::PageSpec& spec) {
+    print_spec_ = spec;
+    if (backstage_ == nullptr) {
+        return;
+    }
+    const bool landscape = spec.width > spec.height;
+    const double long_side = std::max(spec.width, spec.height);
+    const bool letter = std::fabs(long_side - 792.0) < 1.0;
+    backstage_->set_print_settings(landscape, letter);
+}
+
+void MainWindow::show_page_setup() {
+    PageSetupDialog dialog(print_spec_, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    apply_page_setup(dialog.spec());
+    set_message("page setup applied to the print layout", false);
+    update_status();
+    if (dialog.preview_requested()) {
+        // The backstage Print page's preview already re-rendered with the new
+        // spec; open it.
+        if (backstage_ != nullptr) {
+            show_backstage(true);
+            backstage_->show_page(Backstage::Page::print);
+        }
+    } else if (dialog.print_requested()) {
+        print_plan();
+    }
+}
+
 void MainWindow::print_plan() {
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("printing is available in the Task Sheet view", true);
@@ -2819,11 +2862,7 @@ void MainWindow::print_plan() {
         copies = backstage_->print_copies();
         printer_name = backstage_->print_printer_name();
     }
-    app::PageSpec spec = letter ? app::PageSpec::letter_landscape()
-                                : app::PageSpec::a4_landscape();
-    if (!landscape) {
-        std::swap(spec.width, spec.height);
-    }
+    app::PageSpec spec = print_spec(landscape, letter);
     const app::PrintJob job = current_print_job(spec);
     QString error;
     if (!print_job(this, job, *doc_.sheet(), doc_.plan(), prefs_, &error, copies,

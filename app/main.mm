@@ -377,6 +377,15 @@ NSTextAlignment alignment_for(core::sheet::CellAlign align) {
     }
 }
 
+// W29-3.1: PageSpec's header/footer alignment (0 left, 1 centre, 2 right).
+NSTextAlignment print_alignment(int align) {
+    switch (align) {
+        case 1: return NSTextAlignmentCenter;
+        case 2: return NSTextAlignmentRight;
+        default: return NSTextAlignmentLeft;
+    }
+}
+
 void show_alert(NSString* title, NSString* information) {
     // --smoke must never block on a modal dialog: a CI runner has nobody to click
     // it, and the run has to fail (non-zero) rather than hang.  The text still
@@ -2337,11 +2346,23 @@ std::vector<PrintTableColumn> print_table_columns(const PlanState& plan, double 
     PrintViewState& s = *state;
     const app::PrintJob& job = s.job;
     const app::PageLayout& layout = job.layout;
-    const app::PageSpec& spec = job.spec;
+    // W29-3.1: the bands are measured on the scaled virtual page; the transform
+    // below maps them onto the physical paper (identity at 100 %).
+    const app::PageSpec& spec = job.layout.spec;
     const app::PrintPage& page = job.pages[page_index];
-    const double left = origin.x + spec.margin;
-    const double right = origin.x + spec.width - spec.margin;
-    const double page_top = origin.y;
+    const double left = spec.margin_left;
+    const double right = spec.width - spec.margin_right;
+    const double page_top = 0.0;
+
+    [NSGraphicsContext saveGraphicsState];
+    {
+        NSAffineTransform* transform = [NSAffineTransform transform];
+        [transform translateXBy:origin.x + job.spec.margin_left
+                            yBy:origin.y + job.spec.margin_top];
+        [transform scaleBy:job.spec.scale()];
+        [transform translateXBy:-job.spec.margin_left yBy:-job.spec.margin_top];
+        [transform concat];
+    }
 
     NSFont* title_font = [NSFont boldSystemFontOfSize:11.0];
     NSFont* body_font = [NSFont systemFontOfSize:8.0];
@@ -2358,28 +2379,69 @@ std::vector<PrintTableColumn> print_table_columns(const PlanState& plan, double 
     NSColor* done_color =
         [NSColor colorWithCalibratedRed:0.16 green:0.26 blue:0.52 alpha:1.0];
 
-    draw_label(to_ns(page.header),
-               NSMakeRect(left, page_top + spec.margin - 10.0,
-                          std::max(40.0, right - left - 100.0), 14.0),
-               make_attributes(title_font, ink, NSTextAlignmentLeft));
-    draw_label(@"MS Project Shell",
-               NSMakeRect(right - 100.0, page_top + spec.margin - 8.0, 100.0, 11.0),
-               make_attributes(small_font, dim, NSTextAlignmentRight));
-    stroke_line(NSMakePoint(left, page_top + layout.rule_y),
-                NSMakePoint(right, page_top + layout.rule_y), rule, 0.6);
-    if (!job.subtitle.empty()) {
-        draw_label(to_ns(job.subtitle),
-                   NSMakeRect(left, page_top + layout.subtitle_baseline - 8.0,
-                              std::max(40.0, right - left), 11.0),
-                   make_attributes(small_font, dim, NSTextAlignmentLeft));
+    if (spec.show_header) {
+        if (spec.header_text.empty()) {
+            draw_label(to_ns(page.header),
+                       NSMakeRect(left, page_top + layout.title_baseline - spec.title_size,
+                                  std::max(40.0, right - left - 100.0),
+                                  spec.title_size + 2.0),
+                       make_attributes(title_font, ink, NSTextAlignmentLeft));
+            draw_label(@"MS Project Shell",
+                       NSMakeRect(right - 100.0, page_top + layout.title_baseline - 9.0,
+                                  100.0, 11.0),
+                       make_attributes(small_font, dim, NSTextAlignmentRight));
+        } else {
+            draw_label(to_ns(page.header),
+                       NSMakeRect(left, page_top + layout.title_baseline - spec.title_size,
+                                  std::max(40.0, right - left), spec.title_size + 2.0),
+                       make_attributes(title_font, ink,
+                                       print_alignment(spec.header_align)));
+        }
+        stroke_line(NSMakePoint(left, page_top + layout.rule_y),
+                    NSMakePoint(right, page_top + layout.rule_y), rule, 0.6);
+        if (!job.subtitle.empty()) {
+            draw_label(to_ns(job.subtitle),
+                       NSMakeRect(left, page_top + layout.subtitle_baseline - 8.0,
+                                  std::max(40.0, right - left), 11.0),
+                       make_attributes(small_font, dim, NSTextAlignmentLeft));
+        }
     }
 
-    stroke_line(NSMakePoint(left, page_top + layout.footer_rule_y),
-                NSMakePoint(right, page_top + layout.footer_rule_y), rule, 0.5);
-    draw_label(to_ns(page.footer),
-               NSMakeRect(left, page_top + layout.footer_top,
-                          std::max(40.0, right - left), 11.0),
-               make_attributes(small_font, dim, NSTextAlignmentRight));
+    if (spec.show_footer) {
+        stroke_line(NSMakePoint(left, page_top + layout.footer_rule_y),
+                    NSMakePoint(right, page_top + layout.footer_rule_y), rule, 0.5);
+        draw_label(to_ns(page.footer),
+                   NSMakeRect(left, page_top + layout.footer_top,
+                              std::max(40.0, right - left), 11.0),
+                   make_attributes(small_font, dim,
+                                   print_alignment(spec.footer_align)));
+    }
+
+    // W29-3.1: the reserved legend band above the footer.
+    if (spec.show_legend) {
+        stroke_line(NSMakePoint(left, page_top + layout.legend_top),
+                    NSMakePoint(right, page_top + layout.legend_top), rule, 0.5);
+        draw_label(spec.legend_text.empty() ? @"Legend" : to_ns(spec.legend_text),
+                   NSMakeRect(left, page_top + layout.legend_top + 4.0, 60.0, 11.0),
+                   make_attributes(bold_font, ink, NSTextAlignmentLeft));
+        struct LegendEntry {
+            NSString* label;
+            NSColor* colour;
+        };
+        const LegendEntry entries[] = {
+            {@"Task", bar_color}, {@"Summary", ink},
+            {@"Milestone", ink}, {@"Critical", critical_color},
+        };
+        double x = left + 70.0;
+        for (const LegendEntry& entry : entries) {
+            fill_rect(NSMakeRect(x, page_top + layout.legend_top + 7.0, 16.0, 6.0),
+                      entry.colour);
+            draw_label(entry.label,
+                       NSMakeRect(x + 20.0, page_top + layout.legend_top + 4.0, 70.0, 11.0),
+                       make_attributes(small_font, ink, NSTextAlignmentLeft));
+            x += 90.0;
+        }
+    }
 
     const double body_top = page_top + layout.body_top;
     const std::vector<PrintTableColumn> columns =
@@ -2430,6 +2492,7 @@ std::vector<PrintTableColumn> print_table_columns(const PlanState& plan, double 
     }
 
     if (job.kind != app::PrintKind::gantt) {
+        [NSGraphicsContext restoreGraphicsState];  // the page transform
         return;
     }
 
@@ -2533,6 +2596,7 @@ std::vector<PrintTableColumn> print_table_columns(const PlanState& plan, double 
         }
     }
     [NSGraphicsContext restoreGraphicsState];
+    [NSGraphicsContext restoreGraphicsState];  // the page transform (W29-3.1)
 }
 
 - (BOOL)knowsPageRange:(NSRangePointer)range {

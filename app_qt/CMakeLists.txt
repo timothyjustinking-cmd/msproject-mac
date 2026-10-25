@@ -70,6 +70,7 @@ add_library(qt_shell STATIC
     dialogs.cpp
     project_dialogs_qt.cpp
     format_dialogs_qt.cpp
+    page_setup_dialog.cpp
     options_dialog.cpp
     print_page.cpp
     preferences_store.cpp
@@ -448,6 +449,26 @@ add_test(NAME qt_format_dialog_gate
                  "${QT_TEST_DATA_DIR_CMAKE}")
 
 # ===========================================================================
+# WAVE 29 (G3, W29-3.1): Page Setup on the shared print layout.  The gate parses
+# the committed captured rectangles (tests/data/reference/
+# w29-page-setup.measures.json), finds each captured control by the dialog's
+# measuredControlId property, measures the LIVE widget tree, then drives the
+# real shell path: the Print page's Page Setup button opens the modal, OK applies
+# the PageSpec, the Print preview is compared pixel-for-pixel with the shared
+# layout rendered from that spec, and every page's custom header/footer is
+# checked against app::expand_print_text().
+# ===========================================================================
+add_executable(qt_page_setup_gate_tests tests/page_setup_gate_test.cpp)
+target_link_libraries(qt_page_setup_gate_tests PRIVATE qt_shell Qt6::Test)
+qt_set_warnings(qt_page_setup_gate_tests)
+
+add_test(NAME qt_page_setup_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_page_setup_gate_tests>
+                 "${QT_REPO_ROOT}/tests/data/reference/w29-page-setup.measures.json"
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
+
+# ===========================================================================
 # WAVE 26 (G6, W26-6.2): the dark themes darken ONLY the chrome.  The gate
 # renders Colorful, Dark Gray and Black, compares the live ribbon/status pixels
 # with the committed Project measurements (tests/data/reference/
@@ -524,7 +545,7 @@ foreach(carlito_target
         qt_dialog_gate_tests qt_clipboard_tests qt_stored_table_tests
         qt_ux_gate_tests qt_ribbon_inventory_tests qt_uid_routing_tests
         qt_icon_gate_tests qt_backstage_gate_tests qt_project_dialog_gate_tests
-        qt_format_dialog_gate_tests)
+        qt_format_dialog_gate_tests qt_page_setup_gate_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 

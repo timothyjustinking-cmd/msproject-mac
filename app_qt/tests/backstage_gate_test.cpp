@@ -791,9 +791,9 @@ void check_print(msqt::MainWindow& window) {
     QApplication::processEvents();
     QWidget* page = backstage->pages()->currentWidget();
 
-    // The capture's Print page: copies and the printer list are live; dates,
-    // page ranges and Page Setup are laid out and disabled (the shared print
-    // job has no date/page selection).
+    // The capture's Print page: copies and the printer list are live; dates
+    // and page ranges are laid out and disabled (the shared print job has no
+    // date/page selection).  Page Setup is live since W29-3.1 (checked below).
     QSpinBox* copies =
         page != nullptr ? page->findChild<QSpinBox*>(QStringLiteral("printCopies"))
                         : nullptr;
@@ -808,7 +808,7 @@ void check_print(msqt::MainWindow& window) {
     gate::check(print_button != nullptr && print_button->isEnabled(),
                 "the Print page has the live Print button");
     for (const char* name : {"printSpecificDates", "printDateFrom", "printDateTo",
-                             "printPageFrom", "printPageTo", "printPageSetup"}) {
+                             "printPageFrom", "printPageTo"}) {
         QWidget* control = page != nullptr
                                ? page->findChild<QWidget*>(QString::fromUtf8(name))
                                : nullptr;
@@ -818,6 +818,23 @@ void check_print(msqt::MainWindow& window) {
             gate::check(control->toolTip() ==
                             QStringLiteral("not implemented in this port"),
                         "the disabled Print control carries the exact tooltip");
+        }
+    }
+    // W29-3.1: Page Setup is live and asks the shell for the dialog.
+    {
+        QAbstractButton* setup = backstage->print_page_setup_button();
+        gate::check(setup != nullptr && setup->isEnabled(),
+                    "the Print page's Page Setup control is live");
+        if (setup != nullptr) {
+            gate::check(setup->toolTip() != QStringLiteral("not implemented in this port"),
+                        "Page Setup no longer carries the disabled tooltip");
+            int calls = 0;
+            auto original_setup = backstage->page_setup_handler();
+            backstage->set_page_setup_handler([&calls]() { ++calls; });
+            setup->click();
+            QApplication::processEvents();
+            gate::check(calls == 1, "Page Setup asks the shell for the dialog");
+            backstage->set_page_setup_handler(std::move(original_setup));
         }
     }
     QCheckBox* landscape = backstage->print_landscape_check();
@@ -836,12 +853,8 @@ void check_print(msqt::MainWindow& window) {
     }
 
     auto expected = [&window, preview](bool is_landscape, bool is_letter) {
-        app::PageSpec spec = is_letter ? app::PageSpec::letter_landscape()
-                                       : app::PageSpec::a4_landscape();
-        if (!is_landscape) {
-            std::swap(spec.width, spec.height);
-        }
-        const app::PrintJob job = window.current_print_job(spec);
+        const app::PrintJob job =
+            window.current_print_job(window.print_spec(is_landscape, is_letter));
         return msqt::render_print_page(job, 0, *window.sheet(), window.plan(),
                                        window.preferences(), preview->size());
     };

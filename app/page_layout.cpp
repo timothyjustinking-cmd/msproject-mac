@@ -24,17 +24,39 @@ PageLayout page_layout(const PageSpec& spec, PrintKind kind, bool has_subtitle) 
     layout.kind = kind;
     layout.rows_per_page = 1;
 
-    layout.title_baseline = spec.margin + spec.title_size;
+    // W29-3.1: the header switch removes the title/subtitle/rule band, so the
+    // body starts at the top margin.  The subtitle lives in the header band.
+    layout.title_baseline = spec.margin_top + spec.title_size;
     double below = layout.title_baseline + spec.title_gap;
-    if (has_subtitle) {
+    if (spec.show_header && has_subtitle) {
         layout.subtitle_baseline = below + spec.subtitle_size;
         below = layout.subtitle_baseline + kRuleGap;
     }
-    layout.rule_y = below + kRuleGap;
-    layout.body_top = layout.rule_y + kBandGap;
-    layout.footer_rule_y = spec.height - spec.margin - spec.footer_height;
-    layout.footer_top = layout.footer_rule_y + kBandGap;
-    layout.body_bottom = layout.footer_rule_y - kBandGap;
+    if (spec.show_header) {
+        layout.rule_y = below + kRuleGap;
+        layout.body_top = layout.rule_y + kBandGap;
+    } else {
+        layout.title_baseline = 0.0;
+        layout.subtitle_baseline = 0.0;
+        layout.rule_y = 0.0;
+        layout.body_top = spec.margin_top;
+    }
+
+    // The footer switch removes its whole 24 pt band; the bottom margin stays.
+    layout.footer_rule_y = spec.height - spec.margin_bottom -
+                           (spec.show_footer ? spec.footer_height : 0.0);
+    layout.footer_top = spec.show_footer ? layout.footer_rule_y + kBandGap : 0.0;
+    double bottom = layout.footer_rule_y;
+    if (spec.show_footer) {
+        bottom -= kBandGap;
+    }
+    // The legend is reserved above the footer band, with a gap before the body.
+    if (spec.show_legend) {
+        layout.legend_top = bottom - spec.legend_height;
+        bottom = layout.legend_top - kBandGap;
+    }
+    layout.body_bottom = bottom;
+
     layout.body_header_height =
         kind == PrintKind::gantt ? spec.gantt_header_height : spec.header_height;
 
@@ -82,6 +104,39 @@ std::string print_footer_text(const std::string& date_text, std::size_t page,
     return text;
 }
 
+std::string expand_print_text(const std::string& pattern, const std::string& date_text,
+                              std::size_t page, std::size_t last_page) {
+    std::string text;
+    text.reserve(pattern.size() + date_text.size());
+    for (std::size_t index = 0; index < pattern.size(); ++index) {
+        const char letter = pattern[index];
+        if (letter != '&' || index + 1 == pattern.size()) {
+            text += letter;
+            continue;
+        }
+        const char code = pattern[++index];
+        switch (code) {
+            case 'p':
+                text += std::to_string(page);
+                break;
+            case 'P':
+                text += std::to_string(last_page);
+                break;
+            case 'd':
+                text += date_text;
+                break;
+            case '&':
+                text += '&';
+                break;
+            default:
+                text += '&';
+                text += code;
+                break;
+        }
+    }
+    return text;
+}
+
 std::vector<std::size_t> print_row_list(std::size_t record_row_count,
                                         const std::vector<std::size_t>& filter_rows,
                                         bool filter_active) {
@@ -100,14 +155,20 @@ PrintJob build_print_job(const PrintRequest& request, PrintRoute route) {
     PrintJob job;
     job.kind = request.kind;
     job.route = route;
+    // W29-3.1: the job keeps the physical paper (the printer and the preview's
+    // white rectangle) while the bands are measured on the scaled virtual page.
     job.spec = request.spec;
     job.subtitle = request.subtitle;
     job.rows = request.rows;
-    job.layout = page_layout(request.spec, request.kind, !request.subtitle.empty());
+    job.layout = page_layout(request.spec.layout_spec(), request.kind,
+                             request.spec.show_header && !request.subtitle.empty());
 
     const std::size_t per_page = std::max<std::size_t>(1, job.layout.rows_per_page);
     const std::size_t pages = page_count(job.rows.size(), per_page);
-    const std::string header =
+    const std::size_t first_page =
+        static_cast<std::size_t>(std::max(1, request.spec.first_page_number));
+    const std::size_t last_page = first_page + pages - 1;
+    const std::string automatic_header =
         print_header_text(request.project_name, request.report_title);
 
     job.pages.reserve(pages);
@@ -117,8 +178,15 @@ PrintJob build_print_job(const PrintRequest& request, PrintRoute route) {
         entry.first_row = page * per_page;
         entry.row_count = std::min(per_page, job.rows.size() -
                                                  std::min(entry.first_row, job.rows.size()));
-        entry.header = header;
-        entry.footer = print_footer_text(request.date_text, page + 1, pages);
+        const std::size_t number = first_page + page;
+        entry.header = request.spec.header_text.empty()
+                           ? automatic_header
+                           : expand_print_text(request.spec.header_text,
+                                               request.date_text, number, last_page);
+        entry.footer = request.spec.footer_text.empty()
+                           ? print_footer_text(request.date_text, number, last_page)
+                           : expand_print_text(request.spec.footer_text,
+                                               request.date_text, number, last_page);
         job.pages.push_back(std::move(entry));
     }
     return job;

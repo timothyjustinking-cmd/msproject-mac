@@ -121,6 +121,18 @@ class Backstage final : public QWidget {
     QComboBox* print_printer_combo() const noexcept { return print_printer_; }
     QCheckBox* print_landscape_check() const noexcept { return print_landscape_; }
     QComboBox* print_paper_combo() const noexcept { return print_paper_; }
+    // W29-3.1: Page Setup opens the dialog that edits the shared PageSpec; the
+    // live orientation/paper controls are the two fields it shares with the
+    // Print page, so the dialog's OK syncs them back through
+    // set_print_settings().
+    void set_page_setup_handler(std::function<void()> handler);
+    const std::function<void()>& page_setup_handler() const noexcept {
+        return page_setup_handler_;
+    }
+    QAbstractButton* print_page_setup_button() const noexcept {
+        return print_page_setup_;
+    }
+    void set_print_settings(bool landscape, bool letter);
 
     // W26-4.1: the rail's command entries follow the document state.  With no
     // document open the clean Account capture shows Save..Close disabled.
@@ -218,7 +230,12 @@ class Backstage final : public QWidget {
     QComboBox* print_printer_ = nullptr;
     QCheckBox* print_landscape_ = nullptr;
     QComboBox* print_paper_ = nullptr;
+    // W29-3.1: stored as QAbstractButton* so the header's accessor can return
+    // it with only QAbstractButton forward-declared (the concrete type is
+    // QPushButton, constructed in backstage.cpp).
+    QAbstractButton* print_page_setup_ = nullptr;
     PrintPreviewProvider print_provider_;
+    std::function<void()> page_setup_handler_;
     bool has_document_ = false;
 };
 

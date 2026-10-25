@@ -523,6 +523,25 @@ void Backstage::set_recent_open_handler(std::function<void(const QString&)> hand
     recent_open_handler_ = std::move(handler);
 }
 
+void Backstage::set_page_setup_handler(std::function<void()> handler) {
+    page_setup_handler_ = std::move(handler);
+}
+
+// W29-3.1: the dialog's OK path syncs its orientation/paper back to the live
+// Print page.  The two control signals are blocked so the preview renders once,
+// with the final pair, instead of once per control.
+void Backstage::set_print_settings(bool landscape, bool letter) {
+    if (print_landscape_ != nullptr) {
+        const QSignalBlocker blocker(print_landscape_);
+        print_landscape_->setChecked(landscape);
+    }
+    if (print_paper_ != nullptr) {
+        const QSignalBlocker blocker(print_paper_);
+        print_paper_->setCurrentIndex(letter ? 1 : 0);
+    }
+    refresh_print_preview();
+}
+
 void Backstage::set_print_preview_provider(PrintPreviewProvider provider) {
     print_provider_ = std::move(provider);
     refresh_print_preview();
@@ -1118,14 +1137,19 @@ QWidget* Backstage::build_print_page() {
         left_layout->addLayout(paper_row);
     }
     auto* setup = new QPushButton(QStringLiteral("Page Setup..."), left);
+    print_page_setup_ = setup;
     setup->setObjectName(QStringLiteral("printPageSetup"));
     setup->setFlat(true);
     setup->setFixedHeight(24);
     setup->setStyleSheet(QStringLiteral(
         "QPushButton { border: none; text-align: left; color: #1a5c8f;"
         " background: transparent; } QPushButton:disabled { color: #999999; }"));
-    setup->setEnabled(false);
-    setup->setToolTip(QStringLiteral("not implemented in this port"));
+    // W29-3.1: the dialog edits the shared PageSpec every print route uses.
+    connect(setup, &QAbstractButton::clicked, this, [this](bool) {
+        if (page_setup_handler_) {
+            page_setup_handler_();
+        }
+    });
     left_layout->addWidget(setup);
     left_layout->addStretch(1);
     columns->addWidget(left);

@@ -1,0 +1,33 @@
+{
+  "_note": "Wave 29 W29-3.1 measured client-relative rectangles (logical pixels at Qt scale 1) of Project 2021's Page Setup - Gantt Chart dialog, read from the local capture in build/w29. Numbers only: the capture stays local. Rect form: [x, y, width, height]. The captured tab control is the dialog's whole client rect with six owner-drawn tabs whose labels read empty, so only its count is recorded, not its text or band.",
+  "dialog": {
+    "title": "Page Setup - Gantt Chart",
+    "width": 476,
+    "height": 362,
+    "tab_count": 6
+  },
+  "page_tab_controls": [
+    { "name": "orientation_group", "id": 8, "rect": [11, 34, 459, 63] },
+    { "name": "portrait", "id": 9, "rect": [57, 64, 58, 16] },
+    { "name": "landscape", "id": 11, "rect": [204, 64, 74, 16] },
+    { "name": "scaling_group", "id": 13, "rect": [11, 103, 459, 77] },
+    { "name": "adjust", "id": 14, "rect": [20, 125, 70, 16] },
+    { "name": "scale", "id": 15, "rect": [98, 122, 38, 22] },
+    { "name": "normal_label", "id": 16, "rect": [161, 126, 70, 13] },
+    { "name": "fit", "id": 17, "rect": [20, 155, 50, 16] },
+    { "name": "fit_wide", "id": 18, "rect": [78, 152, 38, 22] },
+    { "name": "pages_wide_label", "id": 19, "rect": [141, 156, 74, 13] },
+    { "name": "fit_tall", "id": 20, "rect": [223, 152, 38, 22] },
+    { "name": "tall_label", "id": 21, "rect": [286, 156, 16, 13] },
+    { "name": "other_group", "id": 29, "rect": [11, 186, 459, 78] },
+    { "name": "paper_label", "id": 25, "rect": [20, 210, 55, 13] },
+    { "name": "paper_combo", "id": 26, "rect": [84, 206, 257, 21] },
+    { "name": "first_page_label", "id": 27, "rect": [20, 240, 97, 13] },
+    { "name": "first_page", "id": 28, "rect": [125, 236, 110, 22] },
+    { "name": "preview", "id": 4, "rect": [11, 332, 93, 23] },
+    { "name": "options", "id": 5, "rect": [113, 332, 75, 23] },
+    { "name": "print", "id": 3, "rect": [197, 332, 75, 23] },
+    { "name": "ok", "id": 1, "rect": [311, 332, 75, 23] },
+    { "name": "cancel", "id": 2, "rect": [395, 332, 75, 23] }
+  ]
+}

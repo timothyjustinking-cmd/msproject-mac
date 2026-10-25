@@ -112,8 +112,8 @@ void test_geometry() {
                "the printable width subtracts both margins");
 
     const app::PageLayout sheet = app::page_layout(spec, PrintKind::sheet, true);
-    check(sheet.body_top > spec.margin, "the body starts below the title block");
-    check(sheet.body_bottom < spec.height - spec.margin,
+    check(sheet.body_top > spec.margin_top, "the body starts below the title block");
+    check(sheet.body_bottom < spec.height - spec.margin_bottom,
           "the body ends above the footer");
     check(sheet.body_header_height == 16.0, "the sheet body header is one 16 pt tier");
     check_size(sheet.rows_per_page, 36, "A4 landscape holds 36 sheet rows");
@@ -166,6 +166,139 @@ void test_texts() {
                "the footer numbers the last page");
     check_text(app::print_footer_text("", 2, 3), "Page 2 of 3",
                "an empty date leaves only the page text");
+
+    // W29-3.1: Page Setup's text codes.
+    check_text(app::expand_print_text("&p/&P", "22/10/26", 2, 5), "2/5",
+               "&p and &P expand to the printed page numbers");
+    check_text(app::expand_print_text("&d", "22/10/26", 1, 1), "22/10/26",
+               "&d expands to the caller's date text");
+    check_text(app::expand_print_text("a && b &x", "", 1, 1), "a & b &x",
+               "&& is a literal ampersand and an unknown code is kept");
+    check_text(app::expand_print_text("", "22/10/26", 1, 1), "",
+               "an empty pattern stays empty");
+    check_text(app::expand_print_text("tail&", "", 1, 1), "tail&",
+               "a trailing ampersand is kept");
+}
+
+// W29-3.1: the four margins and the header/footer switches move the bands and
+// the row count without touching the paper.
+void test_page_setup_bands() {
+    PageSpec spec = PageSpec::a4_landscape();
+    spec.margin_left = 40.0;
+    spec.margin_right = 40.0;
+    check_size(static_cast<std::size_t>(spec.printable_width()), 762,
+               "the printable width subtracts the left and right margins");
+    app::PageLayout layout = app::page_layout(spec, PrintKind::sheet, true);
+    check(layout.title_baseline == 38.0, "the side margins do not move the title");
+    check(layout.body_top == 59.0, "the side margins do not move the body top");
+
+    spec.margin_top = 48.0;
+    spec.margin_bottom = 36.0;
+    layout = app::page_layout(spec, PrintKind::sheet, true);
+    check(layout.title_baseline == 62.0, "a 48 pt top margin lowers the title");
+    check(layout.body_top == 83.0, "the body follows the title block down");
+    check(layout.footer_rule_y == 535.0, "a 36 pt bottom margin raises the footer rule");
+    check(layout.body_bottom == 531.0, "the body ends 4 pt above the footer rule");
+    check_size(layout.rows_per_page, 33,
+               "a taller top and bottom margin fit 33 sheet rows");
+
+    PageSpec bare = PageSpec::a4_landscape();
+    bare.show_header = false;
+    layout = app::page_layout(bare, PrintKind::sheet, true);
+    check(layout.title_baseline == 0.0 && layout.rule_y == 0.0,
+          "a hidden header draws no title or rule");
+    check(layout.body_top == bare.margin_top,
+          "a hidden header starts the body at the top margin");
+    check_size(layout.rows_per_page, 38, "a hidden header fits 38 sheet rows");
+
+    bare.show_header = true;
+    bare.show_footer = false;
+    layout = app::page_layout(bare, PrintKind::sheet, true);
+    check(layout.footer_rule_y == bare.height - bare.margin_bottom,
+          "a hidden footer leaves only the bottom margin");
+    check(layout.body_bottom == bare.height - bare.margin_bottom,
+          "a hidden footer lets the body use the footer band");
+    check_size(layout.rows_per_page, 38, "a hidden footer fits 38 sheet rows");
+}
+
+// W29-3.1: scaling divides the content box on the virtual page, so more rows
+// fit while the physical paper (job.spec) is untouched.
+void test_scaling() {
+    PageSpec spec = PageSpec::a4_landscape();
+    spec.scale_percent = 50.0;
+    check(spec.valid(), "a 50 % page is valid");
+    const PageSpec virtual_page = spec.layout_spec();
+    check(virtual_page.width == 1636.0, "50 % doubles the virtual content width");
+    check(virtual_page.height == 1142.0, "50 % doubles the virtual content height");
+    check(virtual_page.scale_percent == 100.0, "the virtual page is itself unscaled");
+    check(spec.scale() == 0.5, "the physical page keeps the 0.5 scale");
+
+    app::PageLayout layout = app::page_layout(virtual_page, PrintKind::sheet, true);
+    check_size(layout.rows_per_page, 78, "a 50 % printout fits 78 sheet rows");
+
+    PrintRequest request = make_request(PrintKind::sheet, every_row(83));
+    request.spec = spec;
+    const app::PrintJob job = app::build_print_job(request, PrintRoute::printer);
+    check(job.spec.width == 842.0 && job.spec.height == 595.0,
+          "the job keeps the physical A4 paper");
+    check(job.layout.spec.width == 1636.0, "the job lays out on the virtual page");
+    check_size(job.pages.size(), 2, "83 rows at 50 % are two pages");
+
+    request.spec.scale_percent = 200.0;
+    const app::PrintJob large = app::build_print_job(request, PrintRoute::printer);
+    check_size(large.layout.rows_per_page, 14, "a 200 % printout fits 14 sheet rows");
+    check_size(large.pages.size(), 6, "83 rows at 200 % are six pages");
+
+    PageSpec tiny = PageSpec::a4_landscape();
+    tiny.scale_percent = 5.0;
+    check(!tiny.valid(), "a 5 % scale is outside Page Setup's range");
+}
+
+// W29-3.1: the legend band is reserved above the footer and shrinks the body.
+void test_legend() {
+    PageSpec spec = PageSpec::a4_landscape();
+    check(!spec.show_legend, "the legend is off by default");
+    spec.show_legend = true;
+    const app::PageLayout layout = app::page_layout(spec, PrintKind::sheet, true);
+    check(layout.legend_top == 517.0, "the legend band sits 26 pt above the body");
+    check(layout.body_bottom == 513.0, "the body ends 4 pt above the legend");
+    check_size(layout.rows_per_page, 33, "the legend band costs three sheet rows");
+
+    PrintRequest request = make_request(PrintKind::sheet, every_row(83));
+    request.spec = spec;
+    const app::PrintJob job = app::build_print_job(request, PrintRoute::printer);
+    check_size(job.pages.size(), 3, "83 rows with a legend are still three pages");
+}
+
+// W29-3.1: first page number and the custom header/footer text Page Setup can
+// set.  The page numbers shift; the automatic footer's "of N" is the last
+// printed number.
+void test_page_setup_text() {
+    PrintRequest request = make_request(PrintKind::sheet, every_row(83));
+    request.spec.first_page_number = 5;
+    const app::PrintJob job = app::build_print_job(request, PrintRoute::printer);
+    check_size(job.pages.size(), 3, "the numbered job has three pages");
+    if (job.pages.size() == 3) {
+        check_text(job.pages[0].footer, "22/10/26  |  Page 5 of 7",
+                   "the first page prints its Page Setup number");
+        check_text(job.pages[1].footer, "22/10/26  |  Page 6 of 7",
+                   "the next page increments the printed number");
+        check_text(job.pages[2].footer, "22/10/26  |  Page 7 of 7",
+                   "the last page ends at first + pages - 1");
+    }
+
+    PrintRequest custom = make_request(PrintKind::sheet, every_row(3));
+    custom.spec.first_page_number = 3;
+    custom.spec.header_text = "&d plan &p/&P &&";
+    custom.spec.footer_text = "&d page &p";
+    const app::PrintJob text = app::build_print_job(custom, PrintRoute::printer);
+    check_size(text.pages.size(), 1, "the custom-text job has one page");
+    if (!text.pages.empty()) {
+        check_text(text.pages[0].header, "22/10/26 plan 3/3 &",
+                   "a custom header expands &d, &p, &P and &&");
+        check_text(text.pages[0].footer, "22/10/26 page 3",
+                   "a custom footer expands the date and page number");
+    }
 }
 
 void test_three_row_job() {
@@ -313,6 +446,10 @@ int main() {
     test_geometry();
     test_page_counts();
     test_texts();
+    test_page_setup_bands();
+    test_scaling();
+    test_legend();
+    test_page_setup_text();
     test_three_row_job();
     test_eighty_three_row_job();
     test_seam();

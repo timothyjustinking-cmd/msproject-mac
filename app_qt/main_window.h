@@ -138,6 +138,16 @@ class MainWindow final : public QMainWindow {
     app::PrintJob current_print_job() const;
     app::PrintJob current_print_job(const app::PageSpec& spec) const;
 
+    // W29-3.1: the Page Setup values (margins, scaling, header/footer, legend,
+    // first page number) that every print route uses.  `print_spec()` puts them
+    // on the paper the Print page's live controls chose; the preview provider
+    // and print_plan share it, so the two cannot disagree.  apply_page_setup is
+    // the dialog's OK path, callable without a modal by the gate.
+    const app::PageSpec& page_setup() const noexcept { return print_spec_; }
+    app::PageSpec print_spec(bool landscape, bool letter) const;
+    void apply_page_setup(const app::PageSpec& spec);
+    void show_page_setup();
+
     // Wave 19: the active filter/view, for the offscreen tests.
     bool filter_active() const noexcept { return doc_.filter_active(); }
     app::ViewMode view_mode() const noexcept { return prefs_.view; }
@@ -435,6 +445,10 @@ class MainWindow final : public QMainWindow {
 
     PlanDocument doc_;
     app::Preferences prefs_;
+    // W29-3.1: the Page Setup values; the paper's width/height in this record
+    // follow the last applied dialog choice, but print_spec() re-applies the
+    // Print page's live orientation/paper so those two controls stay in charge.
+    app::PageSpec print_spec_;
     SheetTableModel sheet_model_;
     QTableView* sheet_view_ = nullptr;
     GanttCanvas* gantt_canvas_ = nullptr;

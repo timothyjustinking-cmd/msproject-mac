@@ -36,7 +36,11 @@ core::render::ReportStyle report_style(const PageSpec& page) {
         return style;  // the renderer's own defaults
     }
     style.page = core::render::PdfPageFormat{page.width, page.height};
-    style.margin = page.margin;
+    // Export PDF has core/render's one uniform margin and no Page Setup route;
+    // the app always exports on the default A4 page, where the four margins are
+    // equal.  (W29-3.1's margins/scaling are Print settings, applied by
+    // app::build_print_job; this route keeps its pre-wave-29 bytes.)
+    style.margin = page.margin_left;
     style.row_height = page.row_height;
     style.header_height = page.header_height;
     style.footer_height = page.footer_height;

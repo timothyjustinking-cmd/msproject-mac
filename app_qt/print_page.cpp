@@ -59,6 +59,31 @@ int align_for(core::sheet::CellAlign align) {
     return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
 }
 
+// W29-3.1: PageSpec's header/footer alignment (0 left, 1 centre, 2 right).
+int print_align(int align) {
+    switch (align) {
+        case 1:
+            return static_cast<int>(Qt::AlignHCenter);
+        case 2:
+            return static_cast<int>(Qt::AlignRight);
+        default:
+            return static_cast<int>(Qt::AlignLeft);
+    }
+}
+
+// W29-3.1: the transform that draws the scaled virtual page (layout.spec) onto
+// the physical paper (job.spec): the content box is anchored at the top-left
+// margin and shrinks about it, so the paper margins do not move.
+void apply_content_scale(QPainter& painter, const app::PageSpec& paper) {
+    const double scale = paper.scale();
+    if (scale == 1.0) {
+        return;
+    }
+    painter.translate(paper.margin_left, paper.margin_top);
+    painter.scale(scale, scale);
+    painter.translate(-paper.margin_left, -paper.margin_top);
+}
+
 void draw_cell(QPainter& painter, const QRectF& rect, const QString& text, const QFont& font,
                const QColor& colour, int flags) {
     if (text.isEmpty()) {
@@ -177,33 +202,75 @@ core::gantt::GanttLayout build_print_gantt(const app::PlanInput& plan,
 void draw_page(QPainter& painter, const app::PrintJob& job, std::size_t page_index,
                const core::sheet::SheetModel& sheet, const core::gantt::GanttLayout& gantt,
                const app::Preferences& preferences) {
-    const app::PageSpec& spec = job.spec;
+    // W29-3.1: the bands are in the virtual (scaled) page; the caller has
+    // already applied apply_content_scale() to map them onto the paper.
+    const app::PageSpec& spec = job.layout.spec;
     const app::PageLayout& layout = job.layout;
     const app::PrintPage& page = job.pages[page_index];
-    const double left = spec.margin;
-    const double right = spec.width - spec.margin;
+    const double left = spec.margin_left;
+    const double right = spec.width - spec.margin_right;
 
     const QFont title_font = print_font(spec.title_size, true);
     const QFont body_font = print_font(8.0);
     const QFont bold_font = print_font(8.0, true);
     const QFont small_font = print_font(7.0);
 
-    // Header / subtitle / rules: the bands page_layout() computed.
-    draw_cell(painter, QRectF(left, layout.title_baseline - spec.title_size,
-                              std::max(40.0, right - left - 100.0), spec.title_size + 2.0),
-              to_q(page.header), title_font, kInk, static_cast<int>(Qt::AlignLeft));
-    draw_cell(painter, QRectF(right - 100.0, layout.title_baseline - 9.0, 100.0, 11.0),
-              QStringLiteral("MS Project Shell"), small_font, kDim,
-              static_cast<int>(Qt::AlignRight));
-    draw_line(painter, left, layout.rule_y, right, layout.rule_y, kRule, 0.6);
-    if (!job.subtitle.empty()) {
-        draw_cell(painter, QRectF(left, layout.subtitle_baseline - 8.0,
-                                  std::max(40.0, right - left), 11.0),
-                  to_q(job.subtitle), small_font, kDim, static_cast<int>(Qt::AlignLeft));
+    // Header / subtitle / rules: the bands page_layout() computed.  A hidden
+    // header removes the title, subtitle and both rules (no empty band).
+    if (spec.show_header) {
+        if (spec.header_text.empty()) {
+            draw_cell(painter,
+                      QRectF(left, layout.title_baseline - spec.title_size,
+                             std::max(40.0, right - left - 100.0), spec.title_size + 2.0),
+                      to_q(page.header), title_font, kInk,
+                      static_cast<int>(Qt::AlignLeft));
+            draw_cell(painter, QRectF(right - 100.0, layout.title_baseline - 9.0, 100.0, 11.0),
+                      QStringLiteral("MS Project Shell"), small_font, kDim,
+                      static_cast<int>(Qt::AlignRight));
+        } else {
+            draw_cell(painter,
+                      QRectF(left, layout.title_baseline - spec.title_size,
+                             std::max(40.0, right - left), spec.title_size + 2.0),
+                      to_q(page.header), title_font, kInk, print_align(spec.header_align));
+        }
+        draw_line(painter, left, layout.rule_y, right, layout.rule_y, kRule, 0.6);
+        if (!job.subtitle.empty()) {
+            draw_cell(painter, QRectF(left, layout.subtitle_baseline - 8.0,
+                                      std::max(40.0, right - left), 11.0),
+                      to_q(job.subtitle), small_font, kDim,
+                      static_cast<int>(Qt::AlignLeft));
+        }
     }
-    draw_line(painter, left, layout.footer_rule_y, right, layout.footer_rule_y, kRule, 0.5);
-    draw_cell(painter, QRectF(left, layout.footer_top, std::max(40.0, right - left), 11.0),
-              to_q(page.footer), small_font, kDim, static_cast<int>(Qt::AlignRight));
+    if (spec.show_footer) {
+        draw_line(painter, left, layout.footer_rule_y, right, layout.footer_rule_y, kRule, 0.5);
+        draw_cell(painter,
+                  QRectF(left, layout.footer_top, std::max(40.0, right - left), 11.0),
+                  to_q(page.footer), small_font, kDim, print_align(spec.footer_align));
+    }
+    // W29-3.1: the reserved legend band above the footer: a heading and the
+    // four bar kinds the page can draw, in the same colours draw_page uses.
+    if (spec.show_legend) {
+        draw_line(painter, left, layout.legend_top, right, layout.legend_top, kRule, 0.5);
+        draw_cell(painter, QRectF(left, layout.legend_top + 4.0, 60.0, 11.0),
+                  spec.legend_text.empty() ? QStringLiteral("Legend")
+                                           : to_q(spec.legend_text),
+                  bold_font, kInk, static_cast<int>(Qt::AlignLeft));
+        struct LegendEntry {
+            const char* label;
+            QColor colour;
+        };
+        const LegendEntry entries[] = {
+            {"Task", kBar}, {"Summary", kInk}, {"Milestone", kInk}, {"Critical", kCritical},
+        };
+        double x = left + 70.0;
+        for (const LegendEntry& entry : entries) {
+            fill_rect(painter, QRectF(x, layout.legend_top + 7.0, 16.0, 6.0), entry.colour);
+            draw_cell(painter, QRectF(x + 20.0, layout.legend_top + 4.0, 70.0, 11.0),
+                      QString::fromUtf8(entry.label), small_font, kInk,
+                      static_cast<int>(Qt::AlignLeft));
+            x += 90.0;
+        }
+    }
 
     const double body_top = layout.body_top;
     const double printable = spec.printable_width();
@@ -455,7 +522,10 @@ bool print_job(QWidget* parent, const app::PrintJob& job,
         }
         painter.setWindow(page_rect);
         painter.setViewport(0, 0, printer.width(), printer.height());
+        painter.save();
+        apply_content_scale(painter, job.spec);
         draw_page(painter, job, page, sheet, gantt, preferences);
+        painter.restore();
     }
     painter.end();
     if (error != nullptr) {
@@ -509,6 +579,7 @@ QImage render_print_page(const app::PrintJob& job, std::size_t page_index,
     painter.scale(scale, scale);
     painter.setClipRect(QRectF(0.0, 0.0, spec.width, spec.height),
                         Qt::IntersectClip);
+    apply_content_scale(painter, spec);
     draw_page(painter, job, page_index, sheet, gantt, preferences);
     painter.restore();
     painter.end();
