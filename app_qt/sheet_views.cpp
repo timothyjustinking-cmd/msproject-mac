@@ -55,9 +55,10 @@ QFont body_font() {
 }
 
 // Two small vertical ticks at the right edge of a header section: the column
-// resize grip the reference capture shows.
-void paint_resize_grip(QPainter& painter, const QRect& rect) {
-    painter.setPen(QPen(QColor(0xb0, 0xb0, 0xb0), 1));
+// resize grip the reference capture shows.  W29-5.1 takes the tick colour from
+// the theme's chrome palette.
+void paint_resize_grip(QPainter& painter, const QRect& rect, const QColor& colour) {
+    painter.setPen(QPen(colour, 1));
     const int x = rect.right() - 5;
     const int y = rect.center().y();
     painter.drawLine(x, y - 4, x, y + 4);
@@ -268,19 +269,28 @@ void SheetHeaderView::show_column_menu(int logical_index) {
 
 QSize SheetHeaderView::sizeHint() const { return QSize(120, kSheetHeaderHeight); }
 
+void SheetHeaderView::set_theme(Theme theme) {
+    theme_ = theme;
+    update();
+}
+
 void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const {
     if (painter == nullptr || !rect.isValid()) {
         return;
     }
+    // W29-5.1: the band, its ink and its rules are chrome, so they come from the
+    // theme.  For light every value equals the wave-21 measured constants, so
+    // the parity render is byte-identical to before this wave.
+    const ChromePalette& chrome = chrome_palette(theme_);
     painter->save();
-    painter->fillRect(rect, kHeaderBackground);
+    painter->fillRect(rect, chrome.sheet_header_background);
 
     // The caption band's column separators.  The band's TOP rule is the timeline
     // strip's bottom border (directly above), and its BOTTOM rule is drawn by the
     // row-0 cells (EntryItemDelegate) so it lands exactly on the first row's
     // boundary.  Drawing either rule here instead would move the parity
     // harness's band top by a pixel and lengthen the measured header.
-    painter->setPen(QPen(kHeaderSeparator, 1));
+    painter->setPen(QPen(chrome.sheet_header_separator, 1));
     painter->drawLine(rect.right(), rect.top(), rect.right(), rect.bottom());
     // The sheet's left border (the frozen gutter's right edge) also runs through
     // the caption band, so the first column's left edge is ruled too.
@@ -309,7 +319,7 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
     QFont font = header_font();
     font.setItalic(stub);
     painter->setFont(font);
-    painter->setPen(stub ? kHeaderTextMuted : kHeaderText);
+    painter->setPen(stub ? chrome.sheet_header_text_muted : chrome.sheet_header_text);
 
     // Wave 21: the chevron's rect is reserved before wrapping, the text is
     // wrapped by layout_header_caption() (spaces/hyphens only) and every line is
@@ -333,14 +343,15 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
         // Every titled Entry header carries the sort chevron, the reference's
         // "Add New Column" stub included (muted, like its caption).  Its rect is
         // the one the layout reserved.
-        painter->setPen(QPen(stub ? kHeaderTextMuted : QColor(0x6a, 0x6a, 0x6a), 1));
+        painter->setPen(QPen(stub ? chrome.sheet_header_text_muted : chrome.sheet_header_arrow,
+                             1));
         const int arrow_y = layout.arrow_rect.center().y();
         const int arrow_x = layout.arrow_rect.center().x();
         painter->drawLine(arrow_x - 3, arrow_y - 1, arrow_x, arrow_y + 2);
         painter->drawLine(arrow_x, arrow_y + 2, arrow_x + 3, arrow_y - 1);
     }
     if (!stub) {
-        paint_resize_grip(*painter, rect);
+        paint_resize_grip(*painter, rect, chrome.sheet_header_grip);
     }
     painter->restore();
 }
@@ -359,17 +370,28 @@ SheetRowHeader::SheetRowHeader(QWidget* parent) : QHeaderView(Qt::Vertical, pare
     setMinimumSectionSize(kRowHeight);
     setFixedWidth(kGutterWidth);
     setFont(body_font());
-    // The gutter is white like the sheet, with no frame: its right edge is the
-    // sheet's first grid line, painted by SheetView.
-    setStyleSheet(QStringLiteral("QHeaderView { background: #ffffff; border: none; }"));
+    // The gutter is white like the sheet in the light theme, with no frame: its
+    // right edge is the sheet's first grid line, painted by SheetView.
+    set_theme(Theme::light);
+}
+
+void SheetRowHeader::set_theme(Theme theme) {
+    // W29-5.1: the gutter is chrome -- in the dark themes its fill and number
+    // ink are the measured ones, and the stylesheet/palette follow so the empty
+    // area below the last row matches the painted sections.
+    theme_ = theme;
+    const ChromePalette& chrome = chrome_palette(theme);
+    setStyleSheet(QStringLiteral("QHeaderView { background: %1; border: none; }")
+                      .arg(chrome.row_header_background.name()));
     QPalette palette = QHeaderView::palette();
-    palette.setColor(QPalette::Base, kRowGutter);
-    palette.setColor(QPalette::Window, kRowGutter);
-    palette.setColor(QPalette::Button, kRowGutter);
-    palette.setColor(QPalette::WindowText, kRowGutterText);
-    palette.setColor(QPalette::ButtonText, kRowGutterText);
+    palette.setColor(QPalette::Base, chrome.row_header_background);
+    palette.setColor(QPalette::Window, chrome.row_header_background);
+    palette.setColor(QPalette::Button, chrome.row_header_background);
+    palette.setColor(QPalette::WindowText, chrome.row_header_text);
+    palette.setColor(QPalette::ButtonText, chrome.row_header_text);
     setPalette(palette);
     setAutoFillBackground(true);
+    update();
 }
 
 QSize SheetRowHeader::sizeHint() const {
@@ -382,10 +404,11 @@ void SheetRowHeader::paintSection(QPainter* painter, const QRect& rect, int logi
     if (painter == nullptr || !rect.isValid()) {
         return;
     }
+    const ChromePalette& chrome = chrome_palette(theme_);
     painter->save();
-    painter->fillRect(rect, kRowGutter);
+    painter->fillRect(rect, chrome.row_header_background);
     painter->setFont(font());
-    painter->setPen(kRowGutterText);
+    painter->setPen(chrome.row_header_text);
     // Right-aligned like the reference's numbers, which stop ~16 px short of
     // the sheet's left edge.  Wave 23 (B-1): the number is the FILE's ID column
     // (computed by the model), not the display ordinal -- project_a's rows are
@@ -414,10 +437,10 @@ void SheetRowHeader::paintEvent(QPaintEvent* event) {
     // (qheaderview.cpp: `QPainter painter(d->viewport)`), so the background fill
     // has to target the same device.  The base class then paints the sections
     // (paintSection, above) and the area below the last row through
-    // CE_HeaderEmptyArea, which our white Button palette already covers.
+    // CE_HeaderEmptyArea, which the theme's Button palette already covers.
     if (viewport() != nullptr) {
         QPainter painter(viewport());
-        painter.fillRect(viewport()->rect(), kRowGutter);
+        painter.fillRect(viewport()->rect(), chrome_palette(theme_).row_header_background);
     }
     QHeaderView::paintEvent(event);
 }
@@ -434,8 +457,11 @@ SheetView::SheetView(QWidget* parent) : QTableView(parent) {
     corner_ = new QWidget(this);
     corner_->setObjectName(QStringLiteral("sheetCorner"));
     corner_->setAutoFillBackground(true);
+    // W29-5.1: the corner belongs to the frozen gutter, not the caption band --
+    // in the dark captures it shares the gutter's fill (light: both white).
     QPalette corner_palette = corner_->palette();
-    corner_palette.setColor(QPalette::Window, kHeaderBackground);
+    corner_palette.setColor(QPalette::Window,
+                            chrome_palette(Theme::light).row_header_background);
     corner_->setPalette(corner_palette);
     corner_->setFixedSize(kGutterWidth, kSheetHeaderHeight);
     corner_->move(0, 0);
@@ -445,6 +471,28 @@ SheetView::SheetView(QWidget* parent) : QTableView(parent) {
     // setCornerButtonEnabled(false), but still painted); this widget is created
     // after it, and raising it makes the white corner unconditionally topmost.
     corner_->raise();
+}
+
+void SheetView::set_theme(Theme theme) {
+    // W29-5.1: the caption band, the frozen gutter and the corner are chrome;
+    // the viewport (cells, grid lines) is not touched -- decision 10 keeps the
+    // sheet's own colours under every theme.
+    theme_ = theme;
+    const ChromePalette& chrome = chrome_palette(theme);
+    if (corner_ != nullptr) {
+        QPalette corner_palette = corner_->palette();
+        corner_palette.setColor(QPalette::Window, chrome.row_header_background);
+        corner_->setPalette(corner_palette);
+        corner_->update();
+    }
+    if (auto* header = dynamic_cast<SheetHeaderView*>(horizontalHeader());
+        header != nullptr) {
+        header->set_theme(theme);
+    }
+    if (auto* gutter = dynamic_cast<SheetRowHeader*>(verticalHeader()); gutter != nullptr) {
+        gutter->set_theme(theme);
+    }
+    update();
 }
 
 void SheetView::paintEvent(QPaintEvent* event) {

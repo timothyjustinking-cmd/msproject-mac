@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "entry_columns.h"  // DisplayColumn / EntryCellKind (wave 21)
+#include "theme.h"          // Theme (W29-5.1: the header bands follow it)
 
 class QEvent;
 class QMenu;
@@ -90,6 +91,12 @@ class SheetHeaderView final : public QHeaderView {
     void show_column_menu(int logical_index);
     void set_column_command_handler(std::function<void(const QString&, int)> handler);
 
+    // W29-5.1: the caption band is chrome.  Light (the constructor's default)
+    // paints the wave-21 measured white band; Dark Gray and Black paint the
+    // measured dark/mid bands and light captions (theme.h).
+    void set_theme(Theme theme);
+    Theme theme() const noexcept { return theme_; }
+
   protected:
     void paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const override;
 
@@ -97,6 +104,7 @@ class SheetHeaderView final : public QHeaderView {
     bool model_titles_ = false;
     std::vector<DisplayColumn> display_columns_;
     std::function<void(const QString&, int)> column_handler_;
+    Theme theme_ = Theme::light;
 };
 
 // The row-number gutter: the view's vertical header, 60 px, frozen.  QTableView
@@ -109,9 +117,18 @@ class SheetRowHeader final : public QHeaderView {
 
     QSize sizeHint() const override;
 
+    // W29-5.1: the frozen gutter (and the corner widget, which uses the same
+    // fill) follows the theme.  Light is the measured white gutter; the dark
+    // themes were sampled from the same captures as the caption band.
+    void set_theme(Theme theme);
+    Theme theme() const noexcept { return theme_; }
+
   protected:
     void paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const override;
     void paintEvent(QPaintEvent* event) override;
+
+  private:
+    Theme theme_ = Theme::light;
 };
 
 // The sheet view: a QTableView whose top-left corner (left of the column
@@ -123,6 +140,12 @@ class SheetView final : public QTableView {
   public:
     explicit SheetView(QWidget* parent = nullptr);
 
+    // W29-5.1: repaints the caption band, the frozen gutter and the corner in
+    // the theme's measured header colours.  The sheet's CELLS and grid lines do
+    // not change (they keep the file's colours, decision 10).
+    void set_theme(Theme theme);
+    Theme theme() const noexcept { return theme_; }
+
   protected:
     void paintEvent(QPaintEvent* event) override;
 
@@ -133,6 +156,7 @@ class SheetView final : public QTableView {
     // QTableView paints its cells on the viewport and a second painter on the
     // view from inside that paint event is not a supported device.
     QWidget* corner_ = nullptr;
+    Theme theme_ = Theme::light;
 };
 
 // Cell painter: Task Mode draws its pin; every other column -- Indicators

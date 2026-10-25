@@ -234,6 +234,24 @@ const ChromePalette& chrome_palette(Theme theme) {
         /*status_background=*/kStatusBackground,
         /*status_text=*/QColor(0x20, 0x20, 0x20),
         /*quick_access_background=*/kRibbonBackground,
+        // W29-5.1: the sheet/chart header bands and the one-ink glyph colour,
+        // from the wave-21 parity constants (shell_style.h) -- the same values
+        // the sheet_views.cpp/gantt_canvas.cpp painters used before this wave.
+        /*sheet_header_background=*/kHeaderBackground,
+        /*sheet_header_text=*/kHeaderText,
+        /*sheet_header_text_muted=*/kHeaderTextMuted,
+        /*sheet_header_separator=*/kHeaderSeparator,
+        /*sheet_header_arrow=*/QColor(0x6a, 0x6a, 0x6a),
+        /*sheet_header_grip=*/QColor(0xb0, 0xb0, 0xb0),
+        /*row_header_background=*/kRowGutter,
+        /*row_header_text=*/kRowGutterText,
+        /*chart_header_background=*/QColor(0xfb, 0xfb, 0xfb),
+        /*chart_header_background_alt=*/QColor(0xff, 0xff, 0xff),
+        /*chart_header_weekend=*/kWeekend,
+        /*chart_header_text=*/QColor(0x33, 0x33, 0x33),
+        /*chart_header_rule=*/kGridLine,
+        /*chart_header_rule_strong=*/kGridLineStrong,
+        /*ribbon_ink=*/QColor(0x1f, 0x3a, 0x5f),
     };
     // Dark Gray: the captured window/tab row (82,87,90) and group row
     // (189,189,189) put dark text on the light group row and light text on the
@@ -261,6 +279,29 @@ const ChromePalette& chrome_palette(Theme theme) {
         /*status_background=*/QColor(84, 84, 84),
         /*status_text=*/QColor(0xf2, 0xf2, 0xf2),
         /*quick_access_background=*/kDarkGrayWindow,
+        // W29-5.1: Dark Gray's measured header bands.  The column caption band
+        // is the dark of the pair (38,38,38) with light captions; the frozen
+        // row gutter and the corner are the mid shade (102,102,102), and the
+        // chart timescale band is the same mid shade.  The chart's label ink
+        // stays the file's #333333 (the capture's label cores sample at ~#38);
+        // its day/tier rule is #5F5F5F and its week rule #545454 (see
+        // tests/data/reference/w29-dark-header.measures.json).
+        /*sheet_header_background=*/QColor(0x26, 0x26, 0x26),
+        /*sheet_header_text=*/QColor(0xf2, 0xf2, 0xf2),
+        /*sheet_header_text_muted=*/QColor(0xb0, 0xb0, 0xb0),
+        /*sheet_header_separator=*/QColor(0x22, 0x22, 0x22),
+        /*sheet_header_arrow=*/QColor(0xb0, 0xb0, 0xb0),
+        /*sheet_header_grip=*/QColor(0xb0, 0xb0, 0xb0),
+        /*row_header_background=*/QColor(0x66, 0x66, 0x66),
+        /*row_header_text=*/QColor(0xf2, 0xf2, 0xf2),
+        /*chart_header_background=*/QColor(0x66, 0x66, 0x66),
+        /*chart_header_background_alt=*/QColor(0x66, 0x66, 0x66),
+        /*chart_header_weekend=*/QColor(0x66, 0x66, 0x66),
+        /*chart_header_text=*/QColor(0x33, 0x33, 0x33),
+        /*chart_header_rule=*/QColor(0x5f, 0x5f, 0x5f),
+        /*chart_header_rule_strong=*/QColor(0x54, 0x54, 0x54),
+        // The group row is the light (189,189,189), so the wave-26 ink stays.
+        /*ribbon_ink=*/QColor(0x1f, 0x3a, 0x5f),
     };
     // Black: the captured window/tab row (25,32,40), group row (41,41,41) and
     // status bar (21,21,21).
@@ -285,6 +326,28 @@ const ChromePalette& chrome_palette(Theme theme) {
         /*status_background=*/QColor(21, 21, 21),
         /*status_text=*/QColor(0xf0, 0xf0, 0xf0),
         /*quick_access_background=*/kBlackWindow,
+        // W29-5.1: Black swaps the pair -- the column caption band is the mid
+        // shade (100,100,100) with light captions, and the row gutter, corner
+        // and chart timescale band are the dark one (38,38,38).  The chart's
+        // #333333 label ink is near the band (as in the capture); the day/tier
+        // rule is #2D2D2D and the week rule #323232.
+        /*sheet_header_background=*/QColor(0x64, 0x64, 0x64),
+        /*sheet_header_text=*/QColor(0xf2, 0xf2, 0xf2),
+        /*sheet_header_text_muted=*/QColor(0xb0, 0xb0, 0xb0),
+        /*sheet_header_separator=*/QColor(0x58, 0x58, 0x58),
+        /*sheet_header_arrow=*/QColor(0xb0, 0xb0, 0xb0),
+        /*sheet_header_grip=*/QColor(0xb0, 0xb0, 0xb0),
+        /*row_header_background=*/QColor(0x26, 0x26, 0x26),
+        /*row_header_text=*/QColor(0xf2, 0xf2, 0xf2),
+        /*chart_header_background=*/QColor(0x26, 0x26, 0x26),
+        /*chart_header_background_alt=*/QColor(0x26, 0x26, 0x26),
+        /*chart_header_weekend=*/QColor(0x26, 0x26, 0x26),
+        /*chart_header_text=*/QColor(0x33, 0x33, 0x33),
+        /*chart_header_rule=*/QColor(0x2d, 0x2d, 0x2d),
+        /*chart_header_rule_strong=*/QColor(0x32, 0x32, 0x32),
+        // The group row is (41,41,41): the dark wave-26 ink would vanish, so
+        // Black's one ink is the light text colour (contrast 11.6:1).
+        /*ribbon_ink=*/QColor(0xe6, 0xe6, 0xe6),
     };
     switch (theme) {
         case Theme::dark:

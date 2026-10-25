@@ -72,10 +72,15 @@ QColor theme_window_colour(Theme theme);
 // ---------------------------------------------------------------------------
 //
 // Decision 10 and operator Q14: in Dark Gray and Black only the chrome darkens;
-// the sheet and chart keep the file's colours.  The shell's custom-painted
-// surfaces (the ribbon, the quick-access strip, the timeline strip and the
-// status bar) therefore take their colours from here rather than from static
-// shell_style constants, and this struct is what set_theme() repaints them with.
+// the sheet and chart keep the file's colours.  WAVE 29 (W29-5.1) closes the two
+// gaps wave 26 recorded: the sheet/chart HEADER BANDS are chrome and darken with
+// the theme (their measured fills are below; the sheet's cells and the chart's
+// body still keep the file's colours), and the ribbon's one-ink glyphs take a
+// per-theme ink so they stay legible on each measured ribbon surface.  The
+// shell's custom-painted surfaces (the ribbon, the quick-access strip, the
+// timeline strip, the status bar, the sheet captions and the chart header)
+// therefore take their colours from here rather than from static shell_style
+// constants, and this struct is what set_theme() repaints them with.
 //
 // The light values ARE the parity measurements (shell_style.h: ribbon #F7F7F7,
 // status #F0F0F0).  The two dark palettes were sampled from the local audit
@@ -104,6 +109,31 @@ struct ChromePalette {
     QColor status_background;
     QColor status_text;
     QColor quick_access_background;
+    // W29-5.1: the sheet's caption band and frozen row-number gutter.  Light
+    // values are the wave-21 parity measurements (shell_style.h); the two dark
+    // palettes were sampled from the same local audit frames as the chrome
+    // above (tests/data/reference/w29-dark-header.measures.json).
+    QColor sheet_header_background;   // the column caption band's fill
+    QColor sheet_header_text;         // caption ink
+    QColor sheet_header_text_muted;   // the Add New Column stub's ink
+    QColor sheet_header_separator;    // the caption band's column rules
+    QColor sheet_header_arrow;        // the sort chevron
+    QColor sheet_header_grip;         // the column-resize ticks
+    QColor row_header_background;     // the frozen gutter and the corner widget
+    QColor row_header_text;           // the row numbers
+    // W29-5.1: the chart timescale band.  The band is chrome and follows the
+    // theme; the chart BODY below it keeps the file's colours, and the label ink
+    // stays the file's #333333 in all three themes (measured).
+    QColor chart_header_background;      // the top tier's fill
+    QColor chart_header_background_alt;  // the lower tiers' fill (light differs)
+    QColor chart_header_weekend;         // weekend day cells in the day tier
+    QColor chart_header_text;            // the label ink when the file has none
+    QColor chart_header_rule;            // the day tier's ordinary cell rules
+    QColor chart_header_rule_strong;     // Monday/week boundaries and tier rules
+    // W29-5.1: the ribbon's one-ink glyph colour (decision 3).  Dark Gray's
+    // measured group row is light, so the wave-26 ink stays; Black's measured
+    // group row is near-black, so its glyphs switch to the light ink.
+    QColor ribbon_ink;
 };
 
 const ChromePalette& chrome_palette(Theme theme);

@@ -489,11 +489,15 @@ add_test(NAME qt_report_dialog_gate
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
 
 # ===========================================================================
-# WAVE 26 (G6, W26-6.2): the dark themes darken ONLY the chrome.  The gate
-# renders Colorful, Dark Gray and Black, compares the live ribbon/status pixels
-# with the committed Project measurements (tests/data/reference/
-# w26-theme.measures.json) and requires the sheet viewport and Gantt canvas to
-# be pixel-identical across all three (tolerance 0).
+# WAVE 26 (G6, W26-6.2), extended by WAVE 29 (G5, W29-5.1): the dark themes
+# darken ONLY the chrome.  The gate renders Colorful, Dark Gray and Black,
+# compares the live ribbon/status pixels with the committed Project
+# measurements (tests/data/reference/w26-theme.measures.json) and requires the
+# sheet viewport and the chart BODY below its timescale band to be
+# pixel-identical across all three (tolerance 0).  W29-5.1 adds the measured
+# caption band, frozen gutter, chart timescale band and per-theme ribbon ink
+# (tests/data/reference/w29-dark-header.measures.json): those are chrome and
+# must follow the theme.
 # ===========================================================================
 add_executable(qt_theme_gate_tests tests/theme_gate_test.cpp)
 target_link_libraries(qt_theme_gate_tests PRIVATE qt_shell)
@@ -504,6 +508,7 @@ add_test(NAME qt_theme_gate
                  $<TARGET_FILE:qt_theme_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                  "${QT_REPO_ROOT}/tests/data/reference/w26-theme.measures.json"
+                 "${QT_REPO_ROOT}/tests/data/reference/w29-dark-header.measures.json"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================

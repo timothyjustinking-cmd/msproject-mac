@@ -30,6 +30,7 @@
 
 #include "gantt.h"
 #include "gantt_style.h"
+#include "theme.h"  // Theme (W29-5.1: the timescale band follows it)
 #include "view_style.h"
 
 class QPainter;
@@ -74,6 +75,12 @@ class GanttCanvas final : public QWidget {
     // stock palette stands.  The pointer must outlive the canvas.
     void set_gantt_style(const msproject::viewstate::GanttStyle* style);
     bool uses_file_style() const noexcept { return palette_.decoded; }
+
+    // W29-5.1: the timescale band is chrome -- Dark Gray and Black paint the
+    // measured header fills and rules (theme.h).  The chart BODY below the band
+    // keeps the file's colours, so only the band repaints (decision 10).
+    void set_theme(Theme theme);
+    Theme theme() const noexcept { return theme_; }
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -140,6 +147,7 @@ class GanttCanvas final : public QWidget {
     bool critical_highlight_ = false;  // Project's default: Critical Tasks OFF
     const msproject::viewstate::GanttStyle* style_ = nullptr;
     app::BarPalette palette_;  // cached from style_ by set_gantt_style()
+    Theme theme_ = Theme::light;  // W29-5.1: the timescale band's palette
 };
 
 }  // namespace msqt

@@ -609,7 +609,8 @@ class RibbonField final : public QWidget {
 // The small stack button: Project's one-row command shape.  Icon-only commands
 // carry their pin label as the accessible name (the gate compares that); a text
 // command shows the label beside a 16-px glyph.
-void build_small_button(RibbonSmallButton* button, const ControlSpec& spec, QWidget* parent) {
+void build_small_button(RibbonSmallButton* button, const ControlSpec& spec, QWidget* parent,
+                        const QColor& ink) {
     button->setObjectName(QStringLiteral("ribbonSmallButton"));
     button->setFont(ribbon_font(kRibbonPointSize));
     button->setFixedHeight(kStackRowHeight);
@@ -623,12 +624,12 @@ void build_small_button(RibbonSmallButton* button, const ControlSpec& spec, QWid
     const QString icon_key = QString::fromUtf8(spec.icon != nullptr ? spec.icon : "");
     if (spec.icon_only) {
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-        button->setIcon(shell_ribbon_icon(icon_key, 16));
+        button->setIcon(shell_ribbon_icon(icon_key, 16, ink));
         button->setIconSize(QSize(16, 16));
         button->setText(QString());
     } else {
         button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        button->setIcon(shell_ribbon_icon(icon_key, 16));
+        button->setIcon(shell_ribbon_icon(icon_key, 16, ink));
         button->setIconSize(QSize(16, 16));
         button->setText(QString::fromUtf8(spec.label));
     }
@@ -738,6 +739,30 @@ void RibbonBar::set_theme(Theme theme) {
     }
     theme_ = theme;
     apply_theme_style();
+    // W29-5.1: the one-ink glyphs follow the theme too.  The icons were built
+    // with the previous theme's ink, so the active page's icon-bearing controls
+    // are re-rendered in the new one (live, no page rebuild).
+    apply_icon_ink();
+}
+
+void RibbonBar::apply_icon_ink() {
+    const QColor ink = chrome_palette(theme_).ribbon_ink;
+    for (std::size_t group = 0; group < page_controls_.size() && group < page_icons_.size();
+         ++group) {
+        const std::vector<QWidget*>& controls = page_controls_[group];
+        const std::vector<QString>& keys = page_icons_[group];
+        for (std::size_t index = 0; index < controls.size() && index < keys.size(); ++index) {
+            if (keys[index].isEmpty()) {
+                continue;  // combos, fields, check boxes, gallery, launchers
+            }
+            auto* button = qobject_cast<QToolButton*>(controls[index]);
+            if (button == nullptr) {
+                continue;
+            }
+            const int pixels = button->iconSize().width() >= 24 ? 32 : 16;
+            button->setIcon(shell_ribbon_icon(keys[index], pixels, ink));
+        }
+    }
 }
 
 void RibbonBar::apply_theme_style() {
@@ -1026,7 +1051,8 @@ void RibbonBar::build_page(int tab_index) {
                     auto* button = new QToolButton(host);
                     button->setObjectName(QStringLiteral("ribbonButton"));
                     button->setText(label);
-                    button->setIcon(shell_ribbon_icon(icon_key, kRibbonIconPx));
+                    button->setIcon(shell_ribbon_icon(icon_key, kRibbonIconPx,
+                                                     chrome_palette(theme_).ribbon_ink));
                     button->setIconSize(QSize(kRibbonIconPx, kRibbonIconPx));
                     button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
                     button->setFont(ribbon_font(kRibbonPointSize));
@@ -1060,13 +1086,15 @@ void RibbonBar::build_page(int tab_index) {
                     button->setText(label);
                     button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
                     if (spec.row_span == 1) {
-                        button->setIcon(shell_ribbon_icon(icon_key, 16));
+                        button->setIcon(shell_ribbon_icon(icon_key, 16,
+                                                         chrome_palette(theme_).ribbon_ink));
                         button->setIconSize(QSize(16, 16));
                         button->setFixedSize(spec.width, kStackRowHeight);
                         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
                         button->setAccessibleName(label);
                     } else {
-                        button->setIcon(shell_ribbon_icon(icon_key, kRibbonIconPx));
+                        button->setIcon(shell_ribbon_icon(icon_key, kRibbonIconPx,
+                                                         chrome_palette(theme_).ribbon_ink));
                         button->setIconSize(QSize(kRibbonIconPx, kRibbonIconPx));
                         button->setFixedSize(spec.width, kLargeHeight);
                     }
@@ -1134,7 +1162,8 @@ void RibbonBar::build_page(int tab_index) {
                 }
                 case Kind::small: {
                     auto* button = new RibbonSmallButton(host);
-                    build_small_button(button, spec, host);
+                    build_small_button(button, spec, host,
+                                       chrome_palette(theme_).ribbon_ink);
                     const RibbonCommand command = spec.command;
                     const app::MenuAction action = spec.action;
                     if (spec.enabled) {

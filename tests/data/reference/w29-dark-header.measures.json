@@ -1,0 +1,103 @@
+{
+  "source": {
+    "light": "Parity measurement: app_qt/shell_style.h (the wave-17/21 constants the caption band, gutter and timescale band were already painted with).  The light values are what the port rendered before W29-5.1, so the gate pins them to prove the light render did not move.",
+    "dark_gray": "Sampled from the local audit frame corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744264666-4mp1fn.jpg (MS Project Professional 2021, Office Dark Gray theme; git-ignored, never committed).",
+    "black": "Sampled from the local audit frame corpus/reference/2026-10-23-audit/mcp-computer-use-blob-1792744264666-ekrn72.jpg (MS Project Professional 2021, Office Black theme; git-ignored, never committed).",
+    "note": "The audit frames are 874x491 JPEG-downscaled captures of the same project view in the same window.  The committed palette values are the dominant flat colour of each clean run (>= 100 px away from text/rules), so the gate compares rendered pixels with these numbers exactly.  The fill values in header.* are the capture samples (see capture_samples); text inks are the brightest sampled glyph cores rounded to the chrome's measured dark text colour, and the ribbon ink is a one-ink contrast choice against the measured ribbon surface (decision 3), not a sampled Project bitmap colour.  Derived fields are marked in capture_samples.",
+    "sampling": "build/w29/g5-w29-5-1-measure.log (local): vertical/horizontal pixel runs at fixed x/y plus per-rectangle colour modes."
+  },
+  "header": {
+    "light": {
+      "sheet_header_background": "#FFFFFF",
+      "sheet_header_text": "#1F1F1F",
+      "sheet_header_text_muted": "#8A8A8A",
+      "sheet_header_separator": "#D4D4D4",
+      "sheet_header_arrow": "#6A6A6A",
+      "sheet_header_grip": "#B0B0B0",
+      "row_header_background": "#FFFFFF",
+      "row_header_text": "#333333",
+      "chart_header_background": "#FBFBFB",
+      "chart_header_background_alt": "#FFFFFF",
+      "chart_header_weekend": "#F7F7F7",
+      "chart_header_text": "#333333",
+      "chart_header_rule": "#D4D4D4",
+      "chart_header_rule_strong": "#B0B0B0",
+      "ribbon_ink": "#1F3A5F"
+    },
+    "dark_gray": {
+      "sheet_header_background": "#262626",
+      "sheet_header_text": "#F2F2F2",
+      "sheet_header_text_muted": "#B0B0B0",
+      "sheet_header_separator": "#222222",
+      "sheet_header_arrow": "#B0B0B0",
+      "sheet_header_grip": "#B0B0B0",
+      "row_header_background": "#666666",
+      "row_header_text": "#F2F2F2",
+      "chart_header_background": "#666666",
+      "chart_header_background_alt": "#666666",
+      "chart_header_weekend": "#666666",
+      "chart_header_text": "#333333",
+      "chart_header_rule": "#5F5F5F",
+      "chart_header_rule_strong": "#545454",
+      "ribbon_ink": "#1F3A5F"
+    },
+    "black": {
+      "sheet_header_background": "#646464",
+      "sheet_header_text": "#F2F2F2",
+      "sheet_header_text_muted": "#B0B0B0",
+      "sheet_header_separator": "#585858",
+      "sheet_header_arrow": "#B0B0B0",
+      "sheet_header_grip": "#B0B0B0",
+      "row_header_background": "#262626",
+      "row_header_text": "#F2F2F2",
+      "chart_header_background": "#262626",
+      "chart_header_background_alt": "#262626",
+      "chart_header_weekend": "#262626",
+      "chart_header_text": "#333333",
+      "chart_header_rule": "#2D2D2D",
+      "chart_header_rule_strong": "#323232",
+      "ribbon_ink": "#E6E6E6"
+    }
+  },
+  "capture_samples": {
+    "dark_gray": {
+      "sheet_header_fill": "#262626",
+      "sheet_caption_peak": "#E3E4DF",
+      "sheet_separator_darkest": "#222222",
+      "row_gutter_fill": "#666666",
+      "row_gutter_corner_fill": "#666666",
+      "row_number_peak": "#B9B9B9",
+      "chart_header_fill": "#666666",
+      "chart_rule": "#5F5F5F",
+      "chart_rule_strong": "#545454",
+      "chart_tier_rule": "#5D5D5D",
+      "chart_label_core": "#383838",
+      "ribbon_group_row": "#BDBDBD"
+    },
+    "black": {
+      "sheet_header_fill": "#646464",
+      "sheet_caption_peak": "#F3F3F3",
+      "sheet_separator_darkest": "#585858",
+      "row_gutter_fill": "#262626",
+      "row_gutter_corner_fill": "#262626",
+      "row_number_peak": "#AFAEAC",
+      "chart_header_fill": "#262626",
+      "chart_rule": "#2D2D2D",
+      "chart_rule_strong": "#323232",
+      "chart_tier_rule": "#2D2D2D",
+      "chart_label_core": "#3A3A3A",
+      "ribbon_group_row": "#292929"
+    },
+    "derived": {
+      "sheet_header_text": "Both dark captures show light captions; their brightest glyph cores (#E3E4DF Dark Gray, #F3F3F3 Black) support the chrome's #F2F2F2 dark text ink.  A one-pixel caption stroke cannot reach the pure ink through JPEG downscaling, so the ink is the chrome text colour, not the sample itself.",
+      "row_header_text": "The row numbers are one small glyph each; their peaks (#B9B9B9 / #AFAEAC) are dimmer than the captions' only because of their size in the downscaled frame, so the gutter uses the same #F2F2F2 ink (direction measured: light on both dark fills).",
+      "sheet_header_text_muted": "No stub caption ('Add New Column') is visible in either dark capture; the muted ink is the theme's light ink dimmed to the chrome's black muted value #B0B0B0.",
+      "sheet_header_arrow": "The sort chevron is below the capture's resolution; it follows the muted caption ink (light: the measured #6A6A6A).",
+      "sheet_header_grip": "The resize ticks are below the capture's resolution; the light theme keeps its measured #B0B0B0 and the dark themes keep the same ticks.",
+      "chart_header_weekend": "No weekend tint is distinguishable in either dark chart header (sampled day-cell fills within +/-2 of the band fill), so the dark weekend shade equals the band fill; light keeps the measured #F7F7F7.",
+      "chart_header_text": "The dark captures' label cores (#383838 Dark Gray, #3A3A3A Black) are the file's #333333 ink; Project does not lighten the timescale labels with the theme, so neither does the port.",
+      "chart_header_rule / _strong": "The vertical cell rules were sampled as solid one-pixel columns: Dark Gray #5F5F5F / #545454 and Black #2D2D2D / #323232; the shade further from the band fill is the strong (week/month) rule.  The horizontal tier boundary samples match the weak rule in both themes.",
+      "ribbon_ink": "Decision 3: the ribbon's own one-ink artwork.  Dark Gray's measured group row #BDBDBD is light, so the wave-26 ink #1F3A5F stays (contrast 6.1:1); Black's #292929 is near-black, so its glyphs use the light #E6E6E6 (contrast 11.6:1).  Project's own ribbon bitmaps in Black are still coloured, so no Project glyph colour is copied or matched."
+    }
+  }
+}

@@ -27,9 +27,9 @@
 namespace msqt {
 namespace {
 
-const QColor kHeaderMajor(0xfb, 0xfb, 0xfb);
-const QColor kHeaderMinor(0xff, 0xff, 0xff);
-const QColor kGanttHeaderText(0x33, 0x33, 0x33);  // distinct from shell_style's kHeaderText
+// W29-5.1: the header bands, their label ink and their rules now come from the
+// theme's ChromePalette (theme.h).  For light every value equals the wave-17/26
+// measurements this file used before, so the light render is unchanged.
 const QColor kMonthRule(0x9a, 0x9a, 0x9a);
 
 constexpr int kLabelInset = 3;
@@ -179,6 +179,13 @@ void GanttCanvas::set_shading(bool enabled) {
 
 void GanttCanvas::set_critical_highlight(bool enabled) {
     critical_highlight_ = enabled;
+    update();
+}
+
+void GanttCanvas::set_theme(Theme theme) {
+    // W29-5.1: only paint_header() reads the theme; the body's bars, shading,
+    // grid lines and labels keep the file's colours (decision 10).
+    theme_ = theme;
     update();
 }
 
@@ -803,13 +810,15 @@ void GanttCanvas::paint_header(QPainter& painter, const std::vector<DayCell>& da
     if (tiers.empty()) {
         return;
     }
+    const ChromePalette& chrome = chrome_palette(theme_);
     const int tier_height =
         std::max(1, kGanttHeaderHeight / static_cast<int>(tiers.size()));
     int top = 0;
     for (std::size_t tier_index = 0; tier_index < tiers.size(); ++tier_index) {
         const HeaderTier& tier = tiers[tier_index];
         painter.fillRect(QRect(0, top, canvas_width, tier_height),
-                         tier_index == 0 ? kHeaderMajor : kHeaderMinor);
+                         tier_index == 0 ? chrome.chart_header_background
+                                         : chrome.chart_header_background_alt);
 
         QFont tier_font = font();
         if (tier.has_text_style) {
@@ -825,7 +834,7 @@ void GanttCanvas::paint_header(QPainter& painter, const std::vector<DayCell>& da
             tier_font.setPointSize(kTimescalePointSize);
         }
         painter.setFont(tier_font);
-        QColor text_colour = kGanttHeaderText;
+        QColor text_colour = chrome.chart_header_text;
         if (tier.has_text_style && tier.text.has_colour) {
             text_colour = QColor(tier.text.colour.red, tier.text.colour.green,
                                  tier.text.colour.blue);
@@ -837,10 +846,17 @@ void GanttCanvas::paint_header(QPainter& painter, const std::vector<DayCell>& da
             const int w = std::max(1, pixel(cell.x + cell.width) - x);
             if (tier.spec.unit == TimescaleUnit::days) {
                 if (cell.weekday == 0 || cell.weekday == 6) {
-                    painter.fillRect(QRect(x, top, w, tier_height), kWeekend);
+                    painter.fillRect(QRect(x, top, w, tier_height),
+                                     chrome.chart_header_weekend);
                 }
-                painter.setPen(QPen(cell.weekday == 1 ? kGridLineStrong : kGridLine, 1));
-                painter.drawLine(x, top, x, top + tier_height);
+                painter.setPen(QPen(cell.weekday == 1 ? chrome.chart_header_rule_strong
+                                                      : chrome.chart_header_rule,
+                                    1));
+                // W29-5.1: end on the tier's last row, not the first row of the
+                // next region.  The old end pixel sat on the chart body's top
+                // grid line and was invisible in light (same greys) but drew a
+                // dark header tick into the body under Dark Gray/Black.
+                painter.drawLine(x, top, x, top + tier_height - 1);
                 if (cell.weekday >= 0 && w >= 4) {
                     painter.setPen(text_colour);
                     painter.drawText(QRect(x, top, w, tier_height), Qt::AlignCenter,
@@ -848,8 +864,9 @@ void GanttCanvas::paint_header(QPainter& painter, const std::vector<DayCell>& da
                 }
                 continue;
             }
-            painter.setPen(QPen(kGridLineStrong, 1));
-            painter.drawLine(x, top, x, top + tier_height);
+            painter.setPen(QPen(chrome.chart_header_rule_strong, 1));
+            // W29-5.1: stop on the tier's last row (see the day tier above).
+            painter.drawLine(x, top, x, top + tier_height - 1);
             const int text_x = x + kLabelInset;
             const int available = w - 2 * kLabelInset;
             if (available <= 4 || cell.label.empty()) {
@@ -867,7 +884,7 @@ void GanttCanvas::paint_header(QPainter& painter, const std::vector<DayCell>& da
             painter.drawText(QRect(text_x, top, available, tier_height),
                              static_cast<int>(alignment | Qt::AlignVCenter), text);
         }
-        painter.setPen(QPen(kGridLineStrong, 1));
+        painter.setPen(QPen(chrome.chart_header_rule_strong, 1));
         painter.drawLine(0, top + tier_height - 1, canvas_width,
                          top + tier_height - 1);
         top += tier_height;

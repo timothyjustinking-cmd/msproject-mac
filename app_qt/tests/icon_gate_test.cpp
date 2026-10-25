@@ -53,6 +53,7 @@
 #include "ribbon_glyphs.h"
 #include "shell_icons.h"
 #include "shell_style.h"
+#include "theme.h"
 
 namespace {
 
@@ -171,15 +172,22 @@ QImage rendered_icon(const QIcon& icon, int pixels, QImage::Format format) {
 }
 
 QImage glyph_image(const QString& key, int pixels) {
-    return rendered_icon(msqt::shell_ribbon_icon(key, pixels), pixels, QImage::Format_ARGB32);
+    // W29-5.1: the factory's ink is now a parameter; the icon gate pins the
+    // light theme's ink (the wave-26 one-ink artwork) so every hash is stable.
+    return rendered_icon(msqt::shell_ribbon_icon(
+                             key, pixels,
+                             msqt::chrome_palette(msqt::Theme::light).ribbon_ink),
+                         pixels, QImage::Format_ARGB32);
 }
 
 // The glyph as QPainter actually blended it: premultiplied, so an antialiased
 // edge is the ink scaled by its alpha and the monochrome test can read that
 // relation directly.
 QImage glyph_blend(const QString& key, int pixels) {
-    return rendered_icon(msqt::shell_ribbon_icon(key, pixels), pixels,
-                         QImage::Format_ARGB32_Premultiplied);
+    return rendered_icon(msqt::shell_ribbon_icon(
+                             key, pixels,
+                             msqt::chrome_palette(msqt::Theme::light).ribbon_ink),
+                         pixels, QImage::Format_ARGB32_Premultiplied);
 }
 
 QByteArray glyph_hash(const QImage& image) {

@@ -12,6 +12,7 @@
 // instead of passing silently.
 #pragma once
 
+#include <QColor>
 #include <QIcon>
 #include <QString>
 
@@ -19,7 +20,11 @@ namespace msqt {
 
 // One command's glyph at `pixels` (16 or 32).  Any other value falls back to
 // 16.  The glyphs are grouped by ribbon tab in ribbon_glyphs.cpp.
-QIcon shell_ribbon_icon(const QString& key, int pixels);
+// W29-5.1: `ink` is the theme's one-ink colour (ChromePalette::ribbon_ink):
+// Dark Gray's group row is light so it keeps the wave-26 ink, Black's is
+// near-black so its glyphs are drawn in the light ink.  The drawing code is
+// shared; only the ink changes, so every glyph stays monochrome per theme.
+QIcon shell_ribbon_icon(const QString& key, int pixels, const QColor& ink);
 
 // True when `key` names a glyph this file draws.  The gate's real proof is the
 // rendered pixel hash; this predicate is what the pin/contact-sheet report uses

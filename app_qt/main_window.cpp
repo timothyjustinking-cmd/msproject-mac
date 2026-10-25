@@ -3177,6 +3177,15 @@ void MainWindow::set_theme(Theme theme, bool persist) {
     if (timeline_ != nullptr) {
         timeline_->set_theme(theme_);
     }
+    // W29-5.1: the sheet's caption band/frozen gutter and the chart's timescale
+    // band are chrome too.  Their paint code reads the same chrome palette; the
+    // sheet cells and the chart body are deliberately not touched.
+    if (auto* sheet = dynamic_cast<SheetView*>(sheet_view_); sheet != nullptr) {
+        sheet->set_theme(theme_);
+    }
+    if (gantt_canvas_ != nullptr) {
+        gantt_canvas_->set_theme(theme_);
+    }
     apply_chrome_theme();
     update();
     if (persist && preferences_store_ != nullptr) {

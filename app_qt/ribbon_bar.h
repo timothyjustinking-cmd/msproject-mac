@@ -218,6 +218,10 @@ class RibbonBar final : public QWidget {
     // W26-6.2: applies the current theme's stylesheet to the produced children
     // (tabs, buttons, combos, check boxes, separators) and repaints.
     void apply_theme_style();
+    // W29-5.1: re-renders the active page's command glyphs in the theme's
+    // one-ink colour (ChromePalette::ribbon_ink), so Black's light ink lands
+    // without a page rebuild.
+    void apply_icon_ink();
     // Shows whole groups from the left until the next one would pass the right
     // edge; the rest are hidden (never half-drawn, so no label is cut).
     void layout_page_groups();

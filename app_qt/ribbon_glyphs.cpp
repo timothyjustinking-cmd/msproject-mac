@@ -29,13 +29,17 @@
 namespace msqt {
 namespace {
 
-// The one ink colour: every non-transparent pixel of a glyph must be this RGB
+// The one ink colour: every non-transparent pixel of a glyph must be one RGB
 // (the icon gate proves that from the rendered image, so it is a rendering
-// property, not a reference number).
-const QColor kInk(0x1f, 0x3a, 0x5f);
+// property, not a reference number).  W29-5.1 makes it per-call: each theme
+// supplies its chrome palette's ribbon ink, so the glyphs stay one-ink on that
+// theme's measured ribbon surface.  The drawing below never changes colour
+// mid-glyph, which is what keeps the monochrome proof true for every ink.
+const QColor kStyleInk(0x1f, 0x3a, 0x5f);
+QColor g_ink = kStyleInk;  // the ink shell_ribbon_icon() is drawing with now
 
 QPen ink_pen(qreal width = 2.0) {
-    return QPen(kInk, width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    return QPen(g_ink, width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
 }
 
 QPolygonF polygon(std::initializer_list<QPointF> points) {
@@ -71,7 +75,7 @@ void outline_rect(QPainter& painter, qreal x, qreal y, qreal w, qreal h,
 
 void filled_rect(QPainter& painter, qreal x, qreal y, qreal w, qreal h, qreal radius = 0.0) {
     painter.setPen(Qt::NoPen);
-    painter.setBrush(kInk);
+    painter.setBrush(g_ink);
     if (radius > 0.0) {
         painter.drawRoundedRect(QRectF(x, y, w, h), radius, radius);
     } else {
@@ -88,13 +92,13 @@ void outline_circle(QPainter& painter, qreal cx, qreal cy, qreal radius,
 
 void filled_circle(QPainter& painter, qreal cx, qreal cy, qreal radius) {
     painter.setPen(Qt::NoPen);
-    painter.setBrush(kInk);
+    painter.setBrush(g_ink);
     painter.drawEllipse(QPointF(cx, cy), radius, radius);
 }
 
 void filled_polygon(QPainter& painter, std::initializer_list<QPointF> points) {
     painter.setPen(Qt::NoPen);
-    painter.setBrush(kInk);
+    painter.setBrush(g_ink);
     painter.drawPolygon(polygon(points));
 }
 
@@ -629,7 +633,7 @@ bool draw_task_glyph(QPainter& painter, const QString& key) {
         const int percent = key.mid(17).toInt();
         if (percent > 0) {
             painter.setPen(Qt::NoPen);
-            painter.setBrush(kInk);
+            painter.setBrush(g_ink);
             painter.drawPie(QRectF(6, 5, 20, 20), 90 * 16, -percent * 360 * 16 / 100);
         }
         outline_circle(painter, 16, 15, 10);
@@ -773,10 +777,14 @@ bool draw_task_glyph(QPainter& painter, const QString& key) {
 
 }  // namespace
 
-QIcon shell_ribbon_icon(const QString& key, int pixels) {
+QIcon shell_ribbon_icon(const QString& key, int pixels, const QColor& ink) {
     if (pixels != 16 && pixels != 32) {
         pixels = 16;
     }
+    // W29-5.1: the theme's ink.  An invalid colour falls back to the wave-26
+    // style ink rather than drawing black, so a caller that forgets the theme
+    // fails the icon gate's exact-ink comparison instead of passing silently.
+    g_ink = ink.isValid() ? ink : kStyleInk;
     QPixmap pixmap(pixels, pixels);
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
