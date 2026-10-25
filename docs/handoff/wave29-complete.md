@@ -840,3 +840,5 @@ Resume notes for the group run:
 
 The numbers belong to `7fd6851`; the record and marker commits that follow
 it are docs-only.
+
+WAVE-29-G3-COMPLETE
