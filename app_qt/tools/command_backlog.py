@@ -35,7 +35,15 @@ MISSING_REASON = {
 # still passes MenuAction::none.  The ribbon table names the implemented ones
 # here.  The WBS and Set Baseline splits open menus whose every item is disabled,
 # and the Format/Drawing splits have no engine, so those stay "none".
-IMPLEMENTED_RIBBON_COMMANDS = {"mark_on_track", "text_styles", "gridlines", "bar_styles"}
+IMPLEMENTED_RIBBON_COMMANDS = {
+    "mark_on_track",
+    "text_styles",
+    "gridlines",
+    "bar_styles",
+    # W29-4.1: both open the captured dialog; the dialog itself only dismisses.
+    "compare_projects",
+    "visual_reports",
+}
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine
 # is not built.  The command is implemented (it opens, applies what it can and
@@ -45,6 +53,11 @@ RIBBON_GAPS = {
     "text_styles": "gap: background patterns not implemented in this port",
     "gridlines": "gap: laid out; gridlines engine not implemented, OK disabled",
     "bar_styles": "gap: appearance/row editing not implemented; colours and text fields only",
+    "visual_reports":
+        "gap: laid out; report engine not implemented, all current-affecting controls "
+        "disabled",
+    "compare_projects":
+        "gap: laid out; comparison engine not implemented, OK disabled",
 }
 
 

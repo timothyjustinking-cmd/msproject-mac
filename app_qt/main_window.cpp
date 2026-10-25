@@ -89,6 +89,7 @@
 #include "project_dialogs_qt.h"  // the Project tab's dialogs
 #include "reader.h"
 #include "reader_adapter.h"  // app::props_stream_from_file
+#include "report_dialogs_qt.h"  // the Report tab's dialogs (W29-4.1)
 #include "ribbon_bar.h"
 #include "selection_model.h"
 #include "sheet_views.h"
@@ -2118,6 +2119,12 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::bar_styles:
             show_bar_styles();
             return;
+        case RibbonCommand::visual_reports:
+            show_visual_reports();
+            return;
+        case RibbonCommand::compare_projects:
+            show_compare_projects();
+            return;
     }
 }
 
@@ -3476,6 +3483,32 @@ void MainWindow::show_bar_styles() {
     apply_session_gantt_style(dialog.style());
     set_message("bar styles applied to this view for the session; there is no "
                 "Project style save pair, so File > Save keeps the file's bytes",
+                false);
+    update_status();
+}
+
+void MainWindow::show_visual_reports() {
+    VisualReportsDialog dialog(this);
+    dialog.exec();
+    set_message("visual reports are not generated in this port; nothing was changed",
+                false);
+    update_status();
+}
+
+void MainWindow::show_compare_projects() {
+    // Project's captured group caption names the open project by its file name;
+    // the same three-step fallback as the window title keeps the two in step.
+    std::string name = doc_.loaded().source_name;
+    if (name.empty() && doc_.has_document()) {
+        name = QFileInfo(to_q(doc_.path())).fileName().toStdString();
+    }
+    if (name.empty()) {
+        name = "untitled.mpp";
+    }
+    CompareProjectsDialog dialog(to_q(name), this);
+    dialog.exec();
+    set_message("project comparison is not implemented in this port; nothing was "
+                "changed",
                 false);
     update_status();
 }

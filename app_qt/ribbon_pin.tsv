@@ -104,7 +104,7 @@ Resource	0	Level	small	Leveling Options	0	level.options	0	-
 Resource	0	Level	small	Clear Leveling	0	level.clear	1	-
 Resource	0	Level	small	Next Overallocation	0	level.next_overallocation	2	-
 Report	0	Project	group	-	-	-	-	-
-Report	0	Project	button	Compare Projects	0	project.compare	0	-
+Report	0	Project	button	Compare Projects	1	project.compare	0	-
 Report	0	View Reports	group	-	-	-	-	-
 Report	0	View Reports	button	New Report	0	reports.new	0	-
 Report	0	View Reports	button	Dashboards	0	reports.dashboards	0	-
@@ -115,7 +115,7 @@ Report	0	View Reports	button	Getting Started	0	reports.getting_started	0	-
 Report	0	View Reports	button	Custom	0	reports.custom	0	-
 Report	0	View Reports	button	Recent	0	reports.recent	0	-
 Report	0	Export	group	-	-	-	-	-
-Report	0	Export	button	Visual Reports	0	export.visual_reports	0	-
+Report	0	Export	button	Visual Reports	1	export.visual_reports	0	-
 Project	0	Insert	group	-	-	-	-	-
 Project	0	Insert	button	Subproject	0	insert.subproject	0	-
 Project	0	Add-ins	group	-	-	-	-	-

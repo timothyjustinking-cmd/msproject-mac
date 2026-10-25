@@ -83,6 +83,12 @@ enum class RibbonCommand : std::uint8_t {
     text_styles,
     gridlines,
     bar_styles,
+    // Wave 29 (W29-4.1): the Report tab's two dialogs.  Both are laid out from
+    // the captures and inert (no report or comparison engine), so the buttons
+    // are live because they open a real dialog that says so, not because the
+    // dialog can change the project.
+    compare_projects,
+    visual_reports,
 };
 
 class RibbonBar final : public QWidget {

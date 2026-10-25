@@ -360,9 +360,11 @@ const std::vector<TabSpec>& tab_specs() {
         // --- Report ---------------------------------------------------------
         TabSpec report;
         report.title = "Report";
+        // W29-4.1: both open the captured dialogs; neither engine exists, so the
+        // dialogs are laid out and inert (Close/Cancel only).
         GroupSpec& report_project = add_group(report, "Project", 70);
-        large(report_project, "Compare\nProjects", app::MenuAction::none, 60, 0, false,
-              "project.compare");
+        large(report_project, "Compare\nProjects", app::MenuAction::none, 60, 0, true,
+              "project.compare", RibbonCommand::compare_projects);
         GroupSpec& view_reports = add_group(report, "View Reports", 453);
         large(view_reports, "New\nReport", app::MenuAction::none, 48, 0, false, "reports.new");
         large(view_reports, "Dashboards", app::MenuAction::none, 56, 1, false,
@@ -377,8 +379,8 @@ const std::vector<TabSpec>& tab_specs() {
         large(view_reports, "Custom", app::MenuAction::none, 44, 6, false, "reports.custom");
         large(view_reports, "Recent", app::MenuAction::none, 44, 7, false, "reports.recent");
         GroupSpec& report_export = add_group(report, "Export", 61);
-        large(report_export, "Visual\nReports", app::MenuAction::none, 52, 0, false,
-              "export.visual_reports");
+        large(report_export, "Visual\nReports", app::MenuAction::none, 52, 0, true,
+              "export.visual_reports", RibbonCommand::visual_reports);
         tabs.push_back(std::move(report));
 
         // --- Project --------------------------------------------------------

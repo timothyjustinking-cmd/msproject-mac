@@ -518,6 +518,10 @@ const EnabledWiring kEnabledWiring[] = {
     {"Gantt Chart Format", "Format", "Text Styles", "", "text_styles"},
     {"Gantt Chart Format", "Format", "Gridlines", "", "gridlines"},
     {"Gantt Chart Format", "Bar Styles", "Format", "", "bar_styles"},
+    // W29-4.1: the Report tab's two dialog launchers are live; both dialogs
+    // only dismiss (no report or comparison engine).
+    {"Report", "Project", "Compare Projects", "", "compare_projects"},
+    {"Report", "Export", "Visual Reports", "", "visual_reports"},
     // W28-1.2: the five %-complete buttons are enabled on the measured actuals
     // writer; each one must stay wired to its own command.
     {"Task", "Schedule", "0%", "", "percent_0"},
@@ -567,6 +571,8 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::text_styles: return "text_styles";
         case RibbonCommand::gridlines: return "gridlines";
         case RibbonCommand::bar_styles: return "bar_styles";
+        case RibbonCommand::compare_projects: return "compare_projects";
+        case RibbonCommand::visual_reports: return "visual_reports";
     }
     return "none";
 }

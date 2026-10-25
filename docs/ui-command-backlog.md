@@ -51,7 +51,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Resource | Level | Leveling Options | disabled | future: not implemented in this port |
 | Resource | Level | Clear Leveling | disabled | future: not implemented in this port |
 | Resource | Level | Next Overallocation | disabled | future: not implemented in this port |
-| Report | Project | Compare Projects | disabled | future: not implemented in this port |
+| Report | Project | Compare Projects | implemented | gap: laid out; comparison engine not implemented, OK disabled |
 | Report | View Reports | New Report | disabled | future: not implemented in this port |
 | Report | View Reports | Dashboards | disabled | future: not implemented in this port |
 | Report | View Reports | Resources | disabled | future: not implemented in this port |
@@ -60,7 +60,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Report | View Reports | Getting Started | disabled | future: not implemented in this port |
 | Report | View Reports | Custom | disabled | future: not implemented in this port |
 | Report | View Reports | Recent | disabled | future: not implemented in this port |
-| Report | Export | Visual Reports | disabled | future: not implemented in this port |
+| Report | Export | Visual Reports | implemented | gap: laid out; report engine not implemented, all current-affecting controls disabled |
 | Project | Insert | Subproject | disabled | future: not implemented in this port |
 | Project | Add-ins | Get Add-ins | disabled | future: not implemented in this port |
 | Project | Add-ins | My Add-ins | disabled | future: not implemented in this port |
@@ -162,6 +162,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 95 (79 disabled)
+* ribbon commands: 95 (77 disabled)
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

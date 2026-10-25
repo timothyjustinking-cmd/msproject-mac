@@ -1,0 +1,123 @@
+{
+  "source": {
+    "note": "Wave 29 W29-4.1: the Visual Reports - Create Report and Compare Project Versions dialogs, opened in Project Professional 2021 (16.0.20430.20182) through UI Automation on the Report tab's own ribbon buttons, from a read-only working copy of tests/data/synthetic-base.mpp. The captures (screenshots, window geometry and the control/content probe) stay local under build/w29/; only the numbers and UI strings below are committed. Rect form: [x, y, width, height], client-relative. The Compare Projects group title embeds the opened copy's file name, so group_text is the pattern with %1 in place of the name. The Visual Reports tab control is one captured control whose seven owner-drawn items are drawn on two visible rows; tabs.rows records the visible layout and tabs.labels the control's item order. The three combo boxes are owner-drawn: CB_GETLBTEXT returns CB_ERR, so only the captured item count, current index and visible text are recorded, not the unseen item strings."
+  },
+  "visual_reports": {
+    "title": "Visual Reports - Create Report",
+    "width": 625,
+    "height": 541,
+    "disabled_tooltip": "not implemented in this port",
+    "tabs": {
+      "count": 7,
+      "current": 0,
+      "labels": [
+        "All",
+        "Task Usage",
+        "Resource Usage",
+        "Assignment Usage",
+        "Task Summary",
+        "Resource Summary",
+        "Assignment Summary"
+      ],
+      "rows": [
+        ["Task Summary", "Resource Summary", "Assignment Summary"],
+        ["All", "Task Usage", "Resource Usage", "Assignment Usage"]
+      ]
+    },
+    "template_list": {
+      "count": 10,
+      "current": 0,
+      "items": [
+        "Baseline Cost Report",
+        "Baseline Work Report",
+        "Budget Cost Report",
+        "Budget Work Report",
+        "Cash Flow Report",
+        "Earned Value Over Time Report",
+        "Resource Cost Summary Report",
+        "Resource Remaining Work Report",
+        "Resource Work Availability Report",
+        "Resource Work Summary Report"
+      ]
+    },
+    "level_combo": {
+      "count": 5,
+      "current": 3,
+      "text": "Weeks"
+    },
+    "checked": {
+      "excel": true,
+      "visio": true,
+      "include": false
+    },
+    "note_control_id": 11,
+    "controls": [
+      { "name": "tab_control", "id": 8, "rect": [15, 44, 375, 317] },
+      { "name": "template_list", "id": 9, "rect": [26, 94, 352, 255] },
+      { "name": "excel_box", "id": 15, "rect": [198, 27, 97, 16], "text": "Microsoft &Excel" },
+      { "name": "visio_box", "id": 16, "rect": [304, 27, 97, 16], "text": "Microsoft &Visio" },
+      { "name": "show_created_in", "id": 17, "rect": [15, 28, 174, 13], "text": "Show report templates created in:" },
+      { "name": "new_template", "id": 1, "rect": [399, 84, 155, 23], "text": "&New Template..." },
+      { "name": "edit_template", "id": 2, "rect": [399, 114, 155, 23], "text": "E&dit Template..." },
+      { "name": "manage_template", "id": 20, "rect": [399, 144, 155, 23], "text": "&Manage Template..." },
+      { "name": "sample_group", "id": 6, "rect": [399, 170, 202, 191], "text": "Sample" },
+      { "name": "sample_frame", "id": 12, "rect": [408, 190, 184, 164] },
+      { "name": "sample_note", "id": 14, "rect": [447, 265, 105, 13], "text": "No sample available." },
+      { "name": "level_label", "id": 24, "rect": [15, 367, 256, 13], "text": "Select level of &usage data to include in the report:" },
+      { "name": "level_combo", "id": 25, "rect": [280, 367, 76, 21] },
+      { "name": "include_box", "id": 21, "rect": [15, 391, 176, 16], "text": "&Include report templates from:" },
+      { "name": "include_edit", "id": 22, "rect": [32, 410, 495, 22] },
+      { "name": "modify", "id": 23, "rect": [535, 410, 75, 23], "text": "M&odify..." },
+      { "name": "separator", "id": 18, "rect": [6, 484, 613, 21] },
+      { "name": "help", "id": 19, "rect": [6, 511, 75, 23], "text": "&Help" },
+      { "name": "save_data", "id": 3, "rect": [90, 511, 77, 23], "text": "&Save Data..." },
+      { "name": "view", "id": 4, "rect": [460, 511, 75, 23], "text": "Vie&w" },
+      { "name": "close", "id": 5, "rect": [544, 511, 75, 23], "text": "&Close" },
+      { "name": "status_note", "id": 11, "rect": [15, 444, 595, 13], "text": "Text" }
+    ],
+    "not_painted": [
+      { "id": 7, "text": "Select Template", "why": "invisible owner-draw accessibility container; no visible frame or label in the capture" },
+      { "id": 10, "text": "", "why": "hidden progress control; no window is painted in the capture" },
+      { "id": 13, "text": "Click a template to see a sample.", "why": "alternative sample-pane state; the capture shows the sample chart, and the port shows the captured no-sample text (id 14)" },
+      { "id": 26, "text": "&Include report templates from:", "why": "6x15 disabled mnemonic access-key proxy behind the visible label (id 21)" }
+    ]
+  },
+  "compare_projects": {
+    "title": "Compare Project Versions",
+    "width": 469,
+    "height": 251,
+    "disabled_tooltip": "not implemented in this port",
+    "group_text": "Compare the current &project (%1) to this previous version:",
+    "previous_combo": {
+      "count": 0,
+      "current": -1,
+      "text": ""
+    },
+    "task_table_combo": {
+      "count": 22,
+      "current": 10,
+      "text": "Entry"
+    },
+    "resource_table_combo": {
+      "count": 12,
+      "current": 3,
+      "text": "Entry"
+    },
+    "controls": [
+      { "name": "compare_group", "id": 1, "rect": [6, 7, 457, 50], "text": "Compare the current &project (%1) to this previous version:" },
+      { "name": "fields_group", "id": 4, "rect": [6, 60, 457, 150], "text": "Select the fields to be used in the comparison:" },
+      { "name": "previous_combo", "id": 2, "rect": [15, 28, 355, 21] },
+      { "name": "browse", "id": 3, "rect": [379, 27, 75, 23], "text": "&Browse..." },
+      { "name": "description", "id": 5, "rect": [15, 88, 439, 26], "text": "For each column in the specified tables, the report will display a column with the data from both versions and a column showing the difference between the values." },
+      { "name": "task_table_label", "id": 6, "rect": [15, 154, 53, 13], "text": "&Task Table:" },
+      { "name": "task_table_combo", "id": 8, "rect": [103, 150, 351, 21] },
+      { "name": "resource_table_label", "id": 7, "rect": [15, 186, 79, 13], "text": "&Resource Table:" },
+      { "name": "resource_table_combo", "id": 9, "rect": [103, 182, 351, 21] },
+      { "name": "ok", "id": 10, "rect": [304, 221, 75, 23], "text": "&OK" },
+      { "name": "cancel", "id": 11, "rect": [388, 221, 75, 23], "text": "&Cancel" }
+    ],
+    "not_painted": [
+      { "id": 12, "text": "Previous version", "why": "disabled static hidden behind the previous-version combo; not visible in the capture" }
+    ]
+  }
+}

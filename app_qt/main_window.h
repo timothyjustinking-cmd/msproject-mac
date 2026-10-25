@@ -215,6 +215,15 @@ class MainWindow final : public QMainWindow {
     void show_text_styles();
     void show_gridlines();
     void show_bar_styles();
+
+    // --- wave 29 (W29-4.1): the Report tab's two dialogs --------------------
+    // Both are laid out from the captures and inert: the port has no report
+    // engine and no project-comparison engine, so every current-affecting
+    // control is disabled with decision 9's exact tooltip and Close/Cancel
+    // dismisses with "nothing was changed".  Public so the offscreen gate can
+    // drive the ribbon's real path.
+    void show_visual_reports();
+    void show_compare_projects();
     // Applies an edited style to the open view (the dialogs' OK path).
     void apply_session_gantt_style(const msproject::viewstate::GanttStyle& style);
 
