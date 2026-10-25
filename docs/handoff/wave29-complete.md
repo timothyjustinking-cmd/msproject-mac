@@ -1127,3 +1127,38 @@ logs under `build/w29/` (`gates-7ea220c-W29-5.2-window-ink-*.log`):
 | client-name scan on HEAD tree `8ac04bb` / client-string grep | 0 files, 0 hits / no matches (exit 1, expected) |
 | `guard_names` `10ad181..7ea220c` / `git diff --check` | exit 0 / clean |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (148 tracked test-data files, no local path); provenance OK (8 oracles) |
+
+G5 group gates (fresh trees configured from scratch on the worktree at
+`d70e97e` under `build/w29-g5-fresh{,-app,-qt}`, log
+`build/w29/g5-fresh-gates.log`; the G5 code is `7ea220c`, and `10ad181` /
+`d70e97e` add only the two record commits over it):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 20/20 / 27/27 passed (including `qt_icon_gate`, `qt_chrome_gate`, `qt_theme_gate`) |
+| `check_fixtures.py` / oracle provenance | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (148 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `12b4cf1..HEAD` / `guard_names` `12b4cf1..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+Resume notes for the group run:
+
+- The app_qt fresh build hit this environment's transient MSB6003 tlog lock
+  once; the script's retry rebuilt the same tree and the build ended exit 0.
+- Part A's `Add-Content` log writes lost one block to the same file-lock
+  problem ("Stream was not readable" / file in use, reported on the console):
+  the `plan_recalc MPP_NO_CORPUS=1` output.  The gate itself exited 0 in
+  sequence; its block was re-run on the same fresh binary immediately after
+  part A and appended to the log, so the 266-check line is the re-run's and
+  is labelled as such.
+- The part B script's final native command is the expected-failure hex grep
+  (exit 1); every gate printed exit 0 and the log is the record.
+
+The numbers belong to `7ea220c`; the two record commits that follow it
+(`10ad181`, `d70e97e`) are docs-only.
+
+WAVE-29-G5-COMPLETE
