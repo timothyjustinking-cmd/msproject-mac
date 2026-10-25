@@ -992,7 +992,7 @@ WAVE-29-G4-COMPLETE
 | item | finding | status | evidence |
 |---|---|---|---|
 | W29-5.1 | Dark-theme sheet/chart header bands and ribbon ink measured against Project's Dark Gray and Black themes | **DONE** | commit `13e0235`; gates `build/w29/gates-12b4cf1-W29-5.1-*.log`; measurement `build/w29/g5-w29-5-1-measure.log` |
-| W29-5.2 | Menu bar, QAT and status-bar artwork in the wave-26 icon style | **DONE** | commit `f09f114`; gates `build/w29/gates-13e0235-W29-5.2-*.log` |
+| W29-5.2 | Menu bar, QAT and status-bar artwork in the wave-26 icon style | **DONE** | commits `f09f114`, `7ea220c`; gates `build/w29/gates-13e0235-W29-5.2-*.log`, `build/w29/gates-7ea220c-W29-5.2-window-ink-*.log` |
 
 W29-5.1 detail:
 
@@ -1062,8 +1062,10 @@ Gates for commit `13e0235` (parent `12b4cf1`), logs under `build/w29/`
 W29-5.2 detail:
 
 - This item is a RESTYLE, not a new measurement: decision 3 makes the chrome
-  artwork the port's own, so there is no bitmap to sample.  The ink is the
-  W29-5.1 value (`ChromePalette::ribbon_ink`).  `app_qt/shell_icons.cpp` is
+  artwork the port's own, so there is no bitmap to sample.  The ink comes from
+  the palette: `ChromePalette::ribbon_ink` on the ribbon's group row and (from
+  `7ea220c`, see the defect below) `ChromePalette::window_ink` on the window-
+  coloured menu/QAT/status surfaces.  `app_qt/shell_icons.cpp` is
   re-authored on the wave-26 grid -- a 32-px drawing scaled to 16/32,
   round-cap/round-join strokes and ONE ink per render -- with the same helper
   idiom as `ribbon_glyphs.cpp`.  `shell_action_icon()` and
@@ -1075,18 +1077,29 @@ W29-5.2 detail:
   neutral tile (which is itself one-ink).  The Undo/Redo pair is a straight
   return arrow, chosen after a curved hook collapsed into a tick at 16 px.
 - Wiring: `build_menus()` draws each menu action in
-  `chrome_palette(theme_).ribbon_ink`; the QAT reuses those same QActions, so
+  `chrome_palette(theme_).window_ink`; the QAT reuses those same QActions, so
   it follows automatically.  `build_status_bar()` draws the five view glyphs
   in the same ink.  The new `MainWindow::apply_icon_ink()` runs from
   `set_theme()` and re-draws `actions_` and `view_buttons_`, so a live theme
-  change re-inks the menu bar, QAT and status bar with the ribbon.
+  change re-inks the menu bar, QAT and status bar.
+- One defect found after the first gate run and fixed in `7ea220c`: the first
+  cut inked these surfaces with `ribbon_ink`, which is correct for the ribbon
+  but wrong for them.  In Dark Gray the ribbon's group row is the light
+  (189,189,189), while the QAT is the dark window `#52575A` (82,87,90) and the
+  status bar `#545454` (84,84,84); `#1F3A5F` there measures only 1.5:1, so the
+  glyphs were effectively invisible.  `ChromePalette` grew a sixteenth field,
+  `window_ink`: light keeps `#1F3A5F`, Dark Gray and Black use `#E6E6E6`
+  (5.9:1 on the QAT, 6.1:1 on the status bar).  The gate now also asserts
+  contrast of the window ink against both measured backgrounds at >= 4.5:1 in
+  every theme, so this is pinned rather than eyeballed.
 - Evidence: `qt_icon_gate` gained the chrome half.  Per theme (light, Dark
   Gray, Black) it proves the menu bar exposes at least 20 command actions and
   still carries Save; every menu command's live 16-px icon is pixel-identical
   to `shell_action_icon(id, 16, ink)`, visibly inked and monochrome (0 off-ink
   pixels); the QAT's three actions hold the same themed glyphs; all five
   status buttons hold `shell_view_icon(index, 16, ink)`, visibly inked and
-  monochrome; and light and Black use different inks, so the per-theme
+  monochrome; the window ink reaches at least 4.5:1 on the quick-access and
+  status backgrounds; and light and Black use different inks, so the per-theme
   equality also proves the live re-ink on a theme change.  The gate writes
   `chrome-icons.png` in its out-dir (`build/w26/`) -- every menu command and
   status glyph at 32 and 16 px for human review.
@@ -1101,4 +1114,16 @@ Gates for commit `f09f114` (parent `13e0235`), logs under `build/w29/`
 | `qt_chrome_gate` / `qt_theme_gate` | passed, 0 failures / passed, 0 failures |
 | app_qt ctest | 27/27 passed |
 | client-name scan on HEAD and the staged tree `bdc5430d` / client-string grep | 0 files, 0 hits / 0 files, 0 hits / no matches (exit 1, expected) |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (148 tracked test-data files, no local path); provenance OK (8 oracles) |
+
+Gates for commit `7ea220c` (parent `10ad181`, the W29-5.2 window-ink follow-up),
+logs under `build/w29/` (`gates-7ea220c-W29-5.2-window-ink-*.log`):
+
+| gate | result |
+|---|---|
+| app_qt Release build | exit 0 |
+| `qt_icon_gate` (with the new contrast assertions) / `qt_chrome_gate` / `qt_theme_gate` | passed, 0 failures / passed, 0 failures / passed, 0 failures |
+| app_qt ctest | 27/27 passed |
+| client-name scan on HEAD tree `8ac04bb` / client-string grep | 0 files, 0 hits / no matches (exit 1, expected) |
+| `guard_names` `10ad181..7ea220c` / `git diff --check` | exit 0 / clean |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (148 tracked test-data files, no local path); provenance OK (8 oracles) |
