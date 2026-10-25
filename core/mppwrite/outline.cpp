@@ -164,7 +164,6 @@ constexpr std::size_t kPropScalarSize = 16;
 constexpr std::uint32_t kPropProjectStart = 0x02400002u;
 constexpr std::uint32_t kPropProjectFinish = 0x02400003u;
 constexpr std::uint32_t kPropSessionWord = 0x02400007u;
-constexpr std::uint32_t kPropSessionWordCopy = 0x024013B1u;
 
 /* Fixed2Meta byte +8 bit 0x80: Project's Manually Scheduled flag, the same bit
  * actuals.cpp's task_is_manually_scheduled reads. */
