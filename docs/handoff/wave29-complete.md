@@ -705,3 +705,138 @@ The numbers belong to `190e1ce`; the record and marker commits that follow
 it are docs-only.
 
 WAVE-29-G2-COMPLETE
+
+## G3 - Page Setup
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W29-3.1 | Page Setup, wired to the shared print layout | **DONE** | commit `7fd6851`; gates `build/w29/gates-624903d-W29-3.1-*.log` |
+
+W29-3.1 detail:
+
+- The layout evidence is the local Project 2021 capture of Page Setup -
+  Gantt Chart (476x362), recorded as numbers only in
+  `tests/data/reference/w29-page-setup.measures.json`: the title, the six
+  tabs, the five action buttons at y = 332 (Preview 11,332 93x23, Options
+  113,332 75x23, Print 197,332 75x23, OK 311,332 75x23, Cancel 395,332
+  75x23) and the 22 Page-tab control rectangles.  The captured tab control
+  is owner-drawn and reads empty, so the file records the tab count, not
+  the labels or band; the stack sits at the captured content origin
+  (0,24).  The capture stays git-ignored (rule 4).
+- The dialog is modal and fixed at 476x362 with six tabs (Page, Margins,
+  Header, Footer, Legend, View).  Page edits orientation, paper (A4 or
+  Letter), scaling (10..400%) and the first page number; Margins edits the
+  four margins in points; Header and Footer each switch the band, edit its
+  text codes and alignment; Legend switches the band and edits its title.
+  The Page-tab controls are placed at the captured rectangles and marked
+  with a `measuredControlId` property, so the gate measures the live tree
+  against the file.  Options, the Fit-to radio and its spinners, and the
+  View tab's print-notes and blank-pages boxes stay present and disabled
+  with the exact decision-9 tooltip `not implemented in this port`; the
+  View tab carries an inline note.  OK applies, Cancel leaves the caller's
+  spec untouched, Preview and Print apply and report which button was used.
+- `PageSpec` now carries four margins, `scale_percent`,
+  `show_header`/`show_footer`/`show_legend`, the header/footer/legend texts
+  and aligns and `first_page_number`.  The physical paper and the layout
+  page are separate: `layout_spec()` returns a virtual page whose content
+  box is the paper's content box divided by the scale, `build_print_job`
+  lays the report out on that virtual page, and the painters translate to
+  the paper margin, scale about the content origin and translate back, so
+  the paper margins stay put at any scale.  The header, footer and legend
+  bands reserve their captured heights only when switched on, and the
+  automatic footer honours the first page number, so a first page 5 prints
+  `Page 5 of N`.
+- `expand_print_text` expands `&d` (today), `&p` (page), `&P` (last page)
+  and `&&` (a literal ampersand); an unknown `&x` is kept verbatim.  A
+  custom header/footer is expanded per page against the job's first/last
+  page; an automatic footer keeps `print_footer_text`.  The macOS AppKit
+  painter (`app/main.mm`) uses the same layout arithmetic and conditional
+  bands as the Qt painter; this Windows machine builds the headless app
+  tree and app_qt only.
+- `MainWindow` owns the live spec (`print_spec_`).  The Print page's
+  orientation and paper controls are the two fields it shares with Page
+  Setup: `print_spec(landscape, letter)` overlays them on the stored spec,
+  the preview provider renders `current_print_job(print_spec(...))` and
+  Print uses the same call.  The dialog's OK stores the returned spec and
+  calls `Backstage::set_print_settings`, which blocks the two controls'
+  signals and refreshes the preview once; the preview refreshes after the
+  Print page is shown, so its label size is final.  The backstage gate
+  proves the button is live, has no decision-9 tooltip and calls its
+  handler once.
+- Evidence: `app_qt/tests/page_setup_gate_test.cpp` parses the measures
+  JSON, checks the live dialog's title, fixed size, six tabs, the 22 marked
+  controls and their rectangles exactly, and edits every field (landscape,
+  Letter, 50%, first page 5, margins 48/36/40/44, header `&d plan &p/&P &&`
+  aligned centre, footer `&d page &p` aligned left, legend `Key`), then
+  checks OK/Cancel/Print/Preview.  The shell path opens the fixture in a
+  `MainWindow`, shows the backstage Print page, drives the modal dialog to
+  OK and proves the applied spec yields the virtual 1140x1500 page with
+  body_top 83, footer_rule 1440, legend_top 1410, body_bottom 1406 and 99
+  Gantt rows, expands the header/footer per page for first page 5, and
+  renders a preview that matches `render_print_page` of the applied job
+  pixel-for-pixel and differs from the default job's image.  The gate
+  passed in 91.20 s under ctest in the incremental tree and 1.61 s in the
+  fresh tree; the timings follow file hydration on this machine, and the
+  same checks ran in both.
+- The Qt build's first attempt failed at `app_qt/backstage.h(133)` with
+  C2440 (`QPushButton*` to `QAbstractButton*` in the inline accessor); the
+  header now stores `print_page_setup_` as `QAbstractButton*` and the
+  rebuild reached `qt_build=0`.  The log keeps both attempts.
+- The privacy scans and `check_fixtures.py` for this item ran with GIT_DIR
+  pointing at a byte-identical local copy of `.git` because the Dropbox
+  placeholders cost ~44 s per git process (156 names per scan would be
+  ~1.9 h); the mirror was refreshed and its HEAD and index hash verified
+  before every scan
+  (`build/w29/gates-624903d-W29-3.1-scan-method.txt`).
+
+Gates for commit `7fd6851` (parent `624903d`), logs under `build/w29/`
+(`gates-624903d-W29-3.1-*.log`):
+
+| gate | result |
+|---|---|
+| app Release build | exit 0 |
+| `page_layout_tests` (`app_print`) | 109 checks passed |
+| `export_tests` (`app_export`) | 65 checks passed |
+| `layout_model_tests` / `views_tests` / `view_style_tests` | 297 checks passed / 219 checks passed / 94 checks, 0 failures |
+| app ctest (`app_print`, `app_export`, `app_layout`, `app_views`, `app_view_style`) | 5/5 tests passed (46.47 s) |
+| app_qt Release build / ctest | exit 0 / 26/26 tests passed (2903.24 s); `qt_page_setup_gate` passed in 91.20 s |
+| client-name scan / staged scan | 156 corpus names; HEAD 0 files, 0 hits; `--cached` 0 files, 0 hits |
+| client-string grep / `git diff --check` | no matches, HEAD and index (exit 1, expected) / exit 0 |
+| `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (146 tracked test-data files, no local path); provenance OK (8 oracles) |
+
+G3 group gates (fresh trees configured from scratch on `7fd6851` under
+`build/w29-g3-fresh{,-app,-qt}`, log `build/w29/g3-fresh-gates.log`;
+`7fd6851` is the W29-3.1 commit, and the record and marker commits that
+follow it are docs-only over it):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 20/20 / 26/26 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (146 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `624903d..HEAD` / `guard_names` `624903d..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+Resume notes for the group run:
+
+- The first fresh app build hit the environment's transient MSB6003 tlog
+  file locks; four targets did not link, and the resulting app ctest had
+  `app_project_dialogs` Not Run.  The same fresh tree was rebuilt to
+  completion (`app build (resume) exit: 0`).  The first link of
+  `project_dialogs_tests.exe` (SHA256 A4341A24...) was then refused by this
+  machine's Application Control policy (CodeIntegrity events 3077/3033,
+  policy `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`); relinking produced
+  SHA256 9ACC5100..., which runs (`app_project_dialogs: 70 checks,
+  0 failure(s)`), and the app ctest then passed 20/20.  The log records
+  each resume.
+- A transient lock on `build/w29/g3-fresh-gates.log` lost the first lines
+  of the part A log (the mirror note and the core configure output); the
+  exit codes and every later stage are logged, and part B re-verified the
+  same tree's mirror (HEAD `7fd6851`, index SHA256, both match).
+
+The numbers belong to `7fd6851`; the record and marker commits that follow
+it are docs-only.
