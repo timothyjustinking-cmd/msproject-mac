@@ -1295,18 +1295,32 @@ void check_refusals() {
     const std::filesystem::path outdent_control =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave28-outline-outdent-control.mpp";
+    const std::filesystem::path auto_indent_control =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave29-outline-auto-indent-control.mpp";
+    const std::filesystem::path auto_outdent_control =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave29-outline-auto-outdent-control.mpp";
     if (!std::filesystem::exists(indent_control) ||
-        !std::filesystem::exists(outdent_control)) {
+        !std::filesystem::exists(outdent_control) ||
+        !std::filesystem::exists(auto_indent_control) ||
+        !std::filesystem::exists(auto_outdent_control)) {
         std::printf("SKIP: the refusal controls are not present\n");
         return;
     }
     app::PlanInput indent_plan;
     app::PlanInput outdent_plan;
+    app::PlanInput auto_indent_plan;
+    app::PlanInput auto_outdent_plan;
     try {
         indent_plan =
             app::plan_input_from_document(mpp::load_file(indent_control.string()));
         outdent_plan = app::plan_input_from_document(
             mpp::load_file(outdent_control.string()));
+        auto_indent_plan = app::plan_input_from_document(
+            mpp::load_file(auto_indent_control.string()));
+        auto_outdent_plan = app::plan_input_from_document(
+            mpp::load_file(auto_outdent_control.string()));
     } catch (const std::exception& error) {
         check(false, "the refusal controls load");
         std::printf("LOAD ERROR: %s\n", error.what());
@@ -1439,6 +1453,50 @@ void check_refusals() {
           "indent under a row with no assignment row is refused");
     check(error.find("assignment rows") != std::string::npos,
           "the no-assignment refusal names the assignment table");
+
+    // W30-0.2 (R29-2, High): the AUTOMATIC save rewrites every live automatic
+    // row's slack and late dates, a backward pass that only holds with no
+    // links; every outline pair was measured on an unlinked file.  The MANUAL
+    // shape carries no slack list and stays accepted.
+    app::LinkRow synthetic_link;
+    synthetic_link.uid = 900;
+    synthetic_link.predecessor_uid = 1;
+    synthetic_link.successor_uid = 2;
+    app::PlanInput linked_auto = auto_indent_plan;
+    linked_auto.links.push_back(synthetic_link);
+    check(!app::make_outline_edit(linked_auto, auto_indent_control.string(), 2,
+                                  true, edit, error),
+          "an automatic indent on a linked file is refused");
+    check(error.find("link") != std::string::npos,
+          "the linked-indent refusal names the links");
+    app::PlanInput unreadable_link = auto_indent_plan;
+    unreadable_link.skipped_links = 1;
+    check(!app::make_outline_edit(unreadable_link, auto_indent_control.string(),
+                                  2, true, edit, error),
+          "an automatic indent with an unreadable link row is refused");
+    check(error.find("link") != std::string::npos,
+          "the unreadable-link refusal names the links");
+    app::PlanInput linked_auto_outdent = auto_outdent_plan;
+    linked_auto_outdent.links.push_back(synthetic_link);
+    check(!app::make_outline_edit(linked_auto_outdent,
+                                  auto_outdent_control.string(), 2, false, edit,
+                                  error),
+          "an automatic outdent on a linked file is refused");
+    check(error.find("link") != std::string::npos,
+          "the linked-outdent refusal names the links");
+    app::PlanInput linked_manual = indent_plan;
+    linked_manual.links.push_back(synthetic_link);
+    check(app::make_outline_edit(linked_manual, indent_control.string(), 2, true,
+                                 edit, error),
+          "a manual indent on a linked plan stays accepted");
+
+    app::StructuralEdit auto_edit;
+    check(app::make_outline_edit(auto_indent_plan, auto_indent_control.string(), 2,
+                                 true, auto_edit, error),
+          "the automatic indent builds for the push check");
+    app::StructuralEdits linked_push;
+    check(!linked_push.push(auto_edit, &linked_auto),
+          "push refuses an automatic outline edit once the plan has a link");
 
     check(!app::make_outline_edit(indent_plan, indent_control.string(), 2, true, edit,
                                   error, {1u}),

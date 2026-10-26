@@ -1387,6 +1387,20 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
             return false;
         }
         if (!summary.manual) {
+            // W30-0.2 (R29-2, High): the automatic save rewrites EVERY live
+            // automatic row's slack and late dates (build_outline_slack), a
+            // backward pass that only holds when no link constrains the
+            // schedule; every outline pair was measured on an unlinked file.
+            // A linked file needs Project's CPM backward pass, which this save
+            // path does not have.
+            if (!plan.links.empty() || plan.skipped_links != 0) {
+                error = "the project has " + std::to_string(plan.links.size()) +
+                        " link(s) (" + std::to_string(plan.skipped_links) +
+                        " unreadable); the automatic indent's slack and late "
+                        "dates are measured only on an unlinked file, and no "
+                        "Project save pair measures a linked automatic indent";
+                return false;
+            }
             if (rows[0].manual) {
                 error = "the project row is manually scheduled; the measured "
                         "automatic indent needs the automatic project row";
@@ -1518,6 +1532,16 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
         return false;
     }
     if (!moved_manual) {
+        // W30-0.2 (R29-2, High): the same linked-file refusal as the automatic
+        // indent -- the outdent's slack rewrite is the same backward pass.
+        if (!plan.links.empty() || plan.skipped_links != 0) {
+            error = "the project has " + std::to_string(plan.links.size()) +
+                    " link(s) (" + std::to_string(plan.skipped_links) +
+                    " unreadable); the automatic outdent's slack and late "
+                    "dates are measured only on an unlinked file, and no "
+                    "Project save pair measures a linked automatic outdent";
+            return false;
+        }
         if (rows[0].manual) {
             error = "the project row is manually scheduled; the measured "
                     "automatic outdent needs the automatic project row";
@@ -1833,6 +1857,14 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                                        edit.kind == StructuralKind::outline_indent);
             if (anchor == nullptr || anchor->uid != edit.anchor_uid ||
                 anchor->file_row == 0) {
+                return false;
+            }
+            // W30-0.2 (R29-2, High): an automatic outline edit carries slack,
+            // and its save rewrites every live automatic row's slack and late
+            // dates; only unlinked files were measured (the backward pass needs
+            // Project's CPM when a link constrains the schedule).
+            if (!edit.slack.empty() &&
+                (!plan->links.empty() || plan->skipped_links != 0)) {
                 return false;
             }
             if (edit.kind == StructuralKind::outline_indent) {
