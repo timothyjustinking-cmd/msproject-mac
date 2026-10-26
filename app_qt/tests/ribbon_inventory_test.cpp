@@ -1466,6 +1466,27 @@ int main(int argc, char** argv) {
                                 QStringLiteral("not implemented in this port"),
                         "Deliverable (Project Online) stays disabled with the exact tooltip");
         }
+        // W30-2.4: Level All was measured on a fresh overallocated project and
+        // its save is a scheduler rewrite -- task dates and LevelingDelay, eight
+        // new Task VarMeta entries, the resource's PeakUnits/overallocated words
+        // -- which the port cannot reproduce: it has no scheduler and no
+        // leveling field in app::TaskRow/ResourceRow/AssignmentRow.  The other
+        // five Leveling commands have no measured save shape either, and Next
+        // Overallocation has no overallocated fact to navigate.  All six stay
+        // disabled with decision 9's exact tooltip.
+        for (const char* label : {"Level Selection", "Level Resource", "Level All",
+                                  "Leveling Options", "Clear Leveling",
+                                  "Next Overallocation"}) {
+            QWidget* control = find_control(ribbon, QStringLiteral("Resource"),
+                                            QStringLiteral("Level"),
+                                            QString::fromUtf8(label));
+            const std::string message =
+                std::string(label) + " stays disabled with the exact tooltip";
+            gate::check(control != nullptr && !control->isEnabled() &&
+                            control->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                        message.c_str());
+        }
     }
 
     std::printf("qt_ribbon_inventory: ");

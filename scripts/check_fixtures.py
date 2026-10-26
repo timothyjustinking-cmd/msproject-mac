@@ -424,6 +424,18 @@ DOCUMENTED = {
         "ABFF616786BA1F1F5F0D0D845FC8B9A7C1575A9F20E48E1A899185F4FA812E2D",
     "tests/data/wave30-assign-delete-control-null.mpp":
         "1D3AEA3AE7CF364BC68FEDBF10B5D68BEC00B567180D23E02D9F543B9FBB8490",
+    # Wave 30 (W30-2.4): Level All on a fresh automatic, overallocated
+    # project -- three 5/3/2-day tasks sharing one 100 % Work resource --
+    # built by scripts/oracle_w30_level.py from a reopen-stable seed control,
+    # with that control's no-edit save.  Project reschedules the rows and
+    # writes leveling delays; the port has no scheduler and no leveling fields,
+    # so all six Leveling commands stay disabled (tests/data/README.md).
+    "tests/data/wave30-level-control.mpp":
+        "CE992A994FEE8CF1B5BD599439F0C4BAAEBA3DD1FE662F74A2A9AFB1605778A6",
+    "tests/data/wave30-level-all.mpp":
+        "66A2B82F783D3CBF50CFF5FDCE2F23B1CAB1585D20F3ADA966293B0C5047AE44",
+    "tests/data/wave30-level-control-null.mpp":
+        "F944680A41AF05D5B948B4CB496788289A5CEF9673FAB5E01123CB63D01E2E37",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and

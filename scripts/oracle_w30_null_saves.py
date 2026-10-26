@@ -66,6 +66,8 @@ CONTROLS = [
     # W30-2.3: Assign Resources (one assignment added, then removed).
     "wave30-assign-add-control.mpp",
     "wave30-assign-delete-control.mpp",
+    # W30-2.4: Leveling (Level All on a fresh overallocated project).
+    "wave30-level-control.mpp",
 ]
 
 

@@ -168,18 +168,25 @@ int main(int argc, char** argv) {
     QApplication::processEvents();
 
     msqt::TaskForm* form = window.task_form();
+    // W30-2.2 added the Resource Sheet's read-only form as a third pane; the
+    // two forms share the Details preference and only one is ever visible.
+    msqt::ResourceForm* resource_form = window.resource_form();
     QSplitter* outer = window.details_splitter();
     gate::check(form != nullptr, "the window owns a Task Form pane");
+    gate::check(resource_form != nullptr, "the window owns a Resource Form pane");
     gate::check(outer != nullptr, "the window owns the Details splitter");
-    if (form == nullptr || outer == nullptr) {
+    if (form == nullptr || resource_form == nullptr || outer == nullptr) {
         return gate::finish();
     }
     gate::check(outer->orientation() == Qt::Vertical,
                 "Details docks in a VERTICAL splitter");
-    gate::check(outer->count() == 2, "the splitter has the view pair and the form");
+    gate::check(outer->count() == 3,
+                "the splitter has the view pair and one form per sheet");
     gate::check(outer->widget(0) == window.splitter(),
                 "the sheet/Gantt pair stays the splitter's first pane");
     gate::check(outer->widget(1) == form, "the Task Form is the second pane");
+    gate::check(outer->widget(2) == resource_form,
+                "the Resource Form is the third pane");
     gate::check(outer->handleWidth() == msqt::kSplitHandleWidth,
                 "the splitter handle is the measured 6-px width");
     gate::check(outer->handle(1) != nullptr, "the splitter has a draggable handle");
