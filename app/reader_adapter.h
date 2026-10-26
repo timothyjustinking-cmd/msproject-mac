@@ -117,6 +117,9 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     row.name = task.name;
     row.duration_ticks = static_cast<std::int64_t>(task.duration_ticks);
     row.percent_complete = task.percent_complete;
+    // Wave 31 (W31-1.1): the stored Priority word; the View tab's Sort dialog
+    // sorts on it without any new decode.
+    row.priority = task.priority;
     row.start = date32_from_packed(task.start.raw);
     row.finish = date32_from_packed(task.finish.raw);
     row.outline_level = task.outline_level > 0 ? static_cast<int>(task.outline_level) - 1 : 0;

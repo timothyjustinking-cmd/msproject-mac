@@ -95,6 +95,13 @@ struct TaskRow {
     std::string name;
     std::int64_t duration_ticks = 0;
     std::uint16_t percent_complete = 0;  // 0..100
+    // Wave 31 (W31-1.1): Task.Priority (FixedData +78, reader.h Task::priority),
+    // the commonest sort key the View tab offers.  Project's range is 0..1000
+    // and its new-task value is 500; the reader stores whatever word the file
+    // carries, so a producer that does not store one leaves 0.  Read-only in
+    // the sheet (app::task_column_editable does not list it); this wave only
+    // sorts on it.
+    std::uint16_t priority = 0;
     date32 start = kDateNa;
     date32 finish = kDateNa;
     int outline_level = 0;

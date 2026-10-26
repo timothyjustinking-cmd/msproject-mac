@@ -1264,7 +1264,8 @@ void MainWindow::apply_filter_to_sheet_model() {
         sheet_model_.set_display_rows({}, false);
         return;
     }
-    sheet_model_.set_display_rows(doc_.display_rows(), doc_.filter_active());
+    sheet_model_.set_display_rows(doc_.display_rows(),
+                                  doc_.filter_active() || doc_.sort_active());
 }
 
 void MainWindow::configure_task_columns() {
@@ -2189,6 +2190,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             return;
         case RibbonCommand::task_mode:
             show_task_mode_menu();
+            return;
+        case RibbonCommand::data_sort:
+            show_sort_dialog();
             return;
         case RibbonCommand::split_task:
             // Not wired (no engine split edit); disabled until then.
@@ -5034,6 +5038,38 @@ void MainWindow::clear_filter() {
     update_menu_state();
     set_message("filter cleared", false);
     update_status();
+}
+
+// Wave 31 (W31-1.1): the View tab's Sort.  Project persists a sort (it reorders
+// the tasks in the file); this port applies it for the session only, as the
+// wave-31 brief allows, so the RecordSet and the file keep their order.  The
+// draft display order is app::sort_display_rows (outline-aware, project row
+// pinned); after_model_change() rebuilds the table and the Gantt from it.
+void MainWindow::show_sort_dialog() {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
+        set_message("sorting is available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    core::view::SortDefinition definition;
+    std::string description;
+    bool cleared = false;
+    QString error;
+    if (!edit_sort(this, app::sort_fields(), &definition, &description, &cleared, &error)) {
+        if (!error.isEmpty()) {
+            set_message(error.toStdString(), true);
+            update_status();
+        }
+        return;
+    }
+    if (cleared) {
+        doc_.clear_sort();
+        set_message("sort cleared", false);
+    } else {
+        doc_.set_sort(std::move(definition), description);
+        set_message("sort: " + description + " (session only)", false);
+    }
+    after_model_change();
 }
 
 void MainWindow::rebuild_generic_view() {

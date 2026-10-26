@@ -479,6 +479,9 @@ class MainWindow final : public QMainWindow {
     void show_predecessors();
     void show_filter_dialog();
     void clear_filter();
+    // Wave 31 (W31-1.1): the View tab's Sort dialog.  Session-only: the display
+    // order changes, the RecordSet and the file keep theirs.
+    void show_sort_dialog();
     void insert_task();
     void delete_task();
     void set_view(app::ViewMode mode);

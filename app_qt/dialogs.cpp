@@ -785,6 +785,101 @@ bool edit_filter(QWidget* parent, const std::vector<app::FilterField>& fields,
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Sort (wave 31, W31-1.1)
+// ---------------------------------------------------------------------------
+
+SortDialog::SortDialog(const std::vector<app::SortField>& fields, QWidget* parent)
+    : QDialog(parent), fields_(fields) {
+    setWindowTitle(QStringLiteral("Sort"));
+    auto* outer = make_outer(*this, dialog_geometry::kSortSize);
+
+    auto* form = make_form();
+    form->setObjectName(QStringLiteral("sortForm"));
+    field_ = make_combo(this);
+    for (const app::SortField& candidate : fields_) {
+        field_->addItem(to_q(candidate.title));
+    }
+    order_ = make_combo(this);
+    order_->addItem(QStringLiteral("Ascending"));
+    order_->addItem(QStringLiteral("Descending"));
+    form->addRow(make_form_label(this, QStringLiteral("Sort by")), field_);
+    form->addRow(make_form_label(this, QStringLiteral("Order")), order_);
+    outer->addLayout(form);
+
+    outer->addWidget(make_hint(
+        this, dialog_geometry::kSortSize,
+        QStringLiteral("This sort applies to this session only; the file keeps its own "
+                       "row order.  Children stay under their summary.")));
+    outer->addStretch(1);
+
+    auto* buttons = new QHBoxLayout();
+    buttons->setContentsMargins(0, 0, 0, 0);
+    buttons->setSpacing(kSpacing);
+    buttons->addStretch(1);
+    sort_ = make_button(this, QStringLiteral("Sort"));
+    clear_ = make_button(this, QStringLiteral("Clear Sort"));
+    cancel_ = make_button(this, QStringLiteral("Cancel"));
+    buttons->addWidget(sort_);
+    buttons->addWidget(clear_);
+    buttons->addWidget(cancel_);
+    outer->addLayout(buttons);
+
+    QObject::connect(sort_, &QPushButton::clicked, this, [this](bool) { apply(); });
+    QObject::connect(clear_, &QPushButton::clicked, this, [this](bool) { clear(); });
+    QObject::connect(cancel_, &QPushButton::clicked, this, &QDialog::reject);
+}
+
+void SortDialog::apply() {
+    if (field_->currentIndex() < 0 || order_->currentIndex() < 0) {
+        QMessageBox::information(this, QStringLiteral("Sort"),
+                                 QStringLiteral("Choose a field and an order."));
+        return;
+    }
+    app::SortChoice choice;
+    choice.field_index = static_cast<std::size_t>(field_->currentIndex());
+    choice.ascending = order_->currentIndex() == 0;
+    const app::SortBuild built = app::build_sort(fields_, choice);
+    if (!built.ok) {
+        QMessageBox::warning(this, QStringLiteral("Sort"), to_q(built.error));
+        return;
+    }
+    definition_ = built.definition;
+    description_ = built.description;
+    cleared_ = false;
+    QDialog::accept();
+}
+
+void SortDialog::clear() {
+    cleared_ = true;
+    definition_ = core::view::SortDefinition{};
+    description_.clear();
+    QDialog::accept();
+}
+
+bool edit_sort(QWidget* parent, const std::vector<app::SortField>& fields,
+               core::view::SortDefinition* definition, std::string* description,
+               bool* cleared, QString* error) {
+    if (definition == nullptr || description == nullptr || cleared == nullptr) {
+        if (error != nullptr) {
+            *error = QStringLiteral("internal error: no sort output");
+        }
+        return false;
+    }
+    SortDialog dialog(fields, parent);
+    const int result = dialog.exec();
+    if (error != nullptr) {
+        error->clear();
+    }
+    if (result != QDialog::Accepted) {
+        return false;
+    }
+    *definition = dialog.definition();
+    *description = dialog.description();
+    *cleared = dialog.cleared();
+    return true;
+}
+
 bool ask_task_name(QWidget* parent, QString* name) {
     if (name == nullptr) {
         return false;

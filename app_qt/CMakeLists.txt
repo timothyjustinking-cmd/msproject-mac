@@ -640,6 +640,21 @@ add_test(NAME qt_outline_display
                  "${QT_TEST_DATA_DIR_CMAKE}/wave28-outline-outdent-control.mpp")
 
 # ===========================================================================
+# WAVE 31 (G1): the View tab's Data commands through the real PlanDocument.
+# W31-1.1 proves the session-only Sort reaches the sheet's display rows AND the
+# Gantt's RowMap/bars, never the RecordSet or the file's bytes.  The outline
+# and table cases arrive with W31-1.2/W31-1.3.
+# ===========================================================================
+add_executable(qt_data_commands_tests tests/data_commands_test.cpp)
+target_link_libraries(qt_data_commands_tests PRIVATE qt_shell)
+qt_set_warnings(qt_data_commands_tests)
+
+add_test(NAME qt_data_commands
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_data_commands_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp")
+
+# ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
 # four OFL faces live in app_qt/fonts/ and are compiled into each executable as
 # Qt resources, so the shell never depends on the host having the font and the

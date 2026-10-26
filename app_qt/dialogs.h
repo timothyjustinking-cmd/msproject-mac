@@ -45,6 +45,7 @@
 #include "layout_model.h"  // app::PlanInput / TaskRow
 #include "prefs.h"         // app::Preferences (the Preferences dialog's payload)
 #include "sheet.h"
+#include "sort_model.h"    // app::SortField / app::build_sort (W31-1.1)
 #include "theme.h"
 
 class QCheckBox;
@@ -93,6 +94,8 @@ inline constexpr DialogSize kCustomFormulaSize{520, 280};
 inline constexpr DialogSize kTaskFieldsSize{480, 400};
 inline constexpr DialogSize kPredecessorsSize{640, 420};
 inline constexpr DialogSize kFilterSize{520, 300};
+// Wave 31 (W31-1.1): Field, Order and the three buttons.
+inline constexpr DialogSize kSortSize{480, 260};
 // Wave 21: the six-tab Task Information dialog.
 inline constexpr DialogSize kTaskInformationSize{560, 520};
 
@@ -387,6 +390,52 @@ bool edit_filter(QWidget* parent, const std::vector<app::FilterField>& fields,
                  const core::sheet::SheetFormat& format,
                  core::view::FilterDefinition* definition, std::string* description,
                  bool* cleared, QString* error);
+
+// ---------------------------------------------------------------------------
+// Sort (wave 31, W31-1.1)
+//
+// Project's Sort is a persisted view change; this port applies it for the
+// session only (wave-31 brief section 1), so OK reorders the displayed rows and
+// the file keeps its bytes.  The Field combo is the brief's five keys
+// (ID/Start/Finish/Priority/Name) and the Order combo Ascending/Descending;
+// Clear Sort returns the display to the file's order.  The outline order is
+// kept (app/sort_model.h), so the dialog has no "keep outline" switch to get
+// wrong.
+// ---------------------------------------------------------------------------
+
+class SortDialog final : public QDialog {
+  public:
+    explicit SortDialog(const std::vector<app::SortField>& fields,
+                        QWidget* parent = nullptr);
+
+    bool cleared() const noexcept { return cleared_; }
+    const core::view::SortDefinition& definition() const noexcept { return definition_; }
+    const std::string& description() const noexcept { return description_; }
+
+    QComboBox* field_combo() const noexcept { return field_; }
+    QComboBox* order_combo() const noexcept { return order_; }
+    QPushButton* sort_button() const noexcept { return sort_; }
+    QPushButton* clear_button() const noexcept { return clear_; }
+    QPushButton* cancel_button() const noexcept { return cancel_; }
+
+  private:
+    void apply();
+    void clear();
+
+    std::vector<app::SortField> fields_;
+    core::view::SortDefinition definition_{};
+    std::string description_;
+    bool cleared_ = false;
+    QComboBox* field_ = nullptr;
+    QComboBox* order_ = nullptr;
+    QPushButton* sort_ = nullptr;
+    QPushButton* clear_ = nullptr;
+    QPushButton* cancel_ = nullptr;
+};
+
+bool edit_sort(QWidget* parent, const std::vector<app::SortField>& fields,
+               core::view::SortDefinition* definition, std::string* description,
+               bool* cleared, QString* error);
 
 // Insert > Task...: the name to add.  QInputDialog is a Qt dialog (never the
 // platform's), so it matches the rest of the shell.

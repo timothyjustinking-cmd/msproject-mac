@@ -38,6 +38,7 @@
 #include "record_set.h"
 #include "selection_model.h"  // app::RowMap
 #include "sheet.h"
+#include "sort.h"  // core::view::SortDefinition (wave 31, W31-1.1)
 #include "cell_format.h"  // msproject::viewstate::CellFormatTable (wave 29)
 #include "gantt_style.h"  // msproject::viewstate::GanttStyle (wave 26)
 #include "viewstate.h"  // msproject::viewstate::TableDef (wave 21)
@@ -145,8 +146,17 @@ class PlanDocument {
     bool filter_active() const noexcept { return filter_active_; }
     const std::string& filter_description() const noexcept { return filter_description_; }
     const std::vector<std::size_t>& filter_rows() const noexcept { return filter_rows_; }
-    // The displayed RecordSet rows: the sheet's visible rows, restricted to the
-    // filter when one is active.  This is what the table and the Gantt draw.
+    // Wave 31 (W31-1.1): a SESSION-ONLY sort of the displayed rows.  The
+    // definition is kept across structural rebuilds (it names fields, not row
+    // indexes) and never reaches the RecordSet or the save diff; clear_sort()
+    // restores the file's order.  app/sort_model.h owns the outline-aware order.
+    void set_sort(core::view::SortDefinition definition, std::string description);
+    void clear_sort();
+    bool sort_active() const noexcept { return sort_active_; }
+    const std::string& sort_description() const noexcept { return sort_description_; }
+    // The displayed RecordSet rows: the sheet's visible rows in sorted order
+    // (when a sort is active), restricted to the filter when one is active.
+    // This is what the table and the Gantt draw.
     std::vector<std::size_t> display_rows() const;
 
     const app::PlanInput& loaded() const noexcept { return loaded_; }
@@ -253,6 +263,10 @@ class PlanDocument {
     void apply_stored_bar_labels(core::gantt::GanttSource& source);
     void rebuild_from_base(app::ZoomLevel zoom, std::uint32_t keep_uid);
     void refresh_filter_rows();
+    // Wave 31 (W31-1.1): the one display-order path.  Sheet visible rows ->
+    // outline-aware sort (when active) -> filter restriction.  Used by
+    // display_rows() and by build_gantt()'s RowMap, so everything agrees.
+    std::vector<std::size_t> ordered_display_rows() const;
     void read_table(const std::string& source_path);
     void read_applied_view(const std::string& source_path);
     void read_style(const std::string& source_path);
@@ -280,6 +294,9 @@ class PlanDocument {
     std::vector<std::size_t> filter_rows_;
     std::string filter_description_;
     bool filter_active_ = false;
+    core::view::SortDefinition sort_definition_{};
+    std::string sort_description_;
+    bool sort_active_ = false;
     // The file's stored `214/CTable` table (wave 21): presentation metadata, never
     // part of the save diff.
     msproject::viewstate::TableDef table_;

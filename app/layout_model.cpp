@@ -30,6 +30,7 @@ struct TaskFields {
     FieldId finish = 0;
     FieldId duration = 0;
     FieldId percent_complete = 0;
+    FieldId priority = 0;
     FieldId summary = 0;
     FieldId milestone = 0;
     FieldId critical = 0;
@@ -49,6 +50,7 @@ struct TaskFields {
         resolve("Finish", finish);
         resolve("Duration", duration);
         resolve("PercentComplete", percent_complete);
+        resolve("Priority", priority);
         resolve("Summary", summary);
         resolve("Milestone", milestone);
         resolve("Critical", critical);
@@ -274,6 +276,7 @@ TaskRow project_summary_row(const PlanInput& input) {
     row.name = input.title;
     row.duration_ticks = input.project_duration_ticks;
     row.percent_complete = input.project_percent_complete;
+    row.priority = input.project_priority;
     row.start = input.project_start;
     row.finish = input.project_finish;
     // -1: same text indent as Project's top-level tasks (the clean capture), and
@@ -299,6 +302,7 @@ core::view::RecordSet make_record_set(const PlanInput& input) {
                                field.outline_number, field.name,
                                field.start,    field.finish,
                                field.duration, field.percent_complete,
+                               field.priority,
                                field.summary,  field.milestone,
                                field.critical, field.outline_level,
                                field.start_text, field.finish_text,
@@ -350,6 +354,7 @@ core::view::RecordSet make_record_set(const PlanInput& input) {
         }
         put(field.duration, Value::of_duration(row.duration_ticks));
         put(field.percent_complete, Value::of_int(static_cast<std::int64_t>(row.percent_complete)));
+        put(field.priority, Value::of_int(static_cast<std::int64_t>(row.priority)));
         put(field.summary, Value::of_bool(row.summary));
         put(field.milestone, Value::of_bool(row.milestone));
         put(field.critical, Value::of_bool(row.critical));

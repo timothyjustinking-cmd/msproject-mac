@@ -166,6 +166,7 @@ add_library(app_layout STATIC
     prefs.cpp
     menu_model.cpp
     filter_model.cpp
+    sort_model.cpp
     export_pdf.cpp
     view_model.cpp
     fields_model.cpp
@@ -296,6 +297,19 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_filter COMMAND filter_tests)
     set_tests_properties(app_filter PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # W31-1.1: the Sort dialog's portable half -- the five offered fields, the
+    # outline-aware order (children stay under their parent), nulls last, the
+    # pinned project row, and the restriction to the sheet's visible rows.  A
+    # session-only view operation: nothing here writes a file.
+    add_executable(sort_tests sort_tests.cpp)
+    target_compile_features(sort_tests PRIVATE cxx_std_20)
+    set_target_properties(sort_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(sort_tests PRIVATE app_layout)
+    app_set_warnings(sort_tests)
+
+    add_test(NAME app_sort COMMAND sort_tests)
+    set_tests_properties(app_sort PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
     # The PDF export: a real PDF written under APP_TEST_OUT_DIR from synthetic
     # rows, sheet and Gantt, filtered and unfiltered, plus the shading-off

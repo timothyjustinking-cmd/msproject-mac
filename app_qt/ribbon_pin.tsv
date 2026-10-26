@@ -148,7 +148,7 @@ View	0	Resource Views	small	Resource Usage	1	view.resource_usage	0	-
 View	0	Resource Views	small	Resource Sheet	1	view.resource_sheet	1	-
 View	0	Resource Views	small	Other Views	0	view.other	2	-
 View	0	Data	group	-	-	-	-	-
-View	0	Data	button	Sort	0	data.sort	0	-
+View	0	Data	button	Sort	1	data.sort	0	-
 View	0	Data	button	Outline	0	data.outline	0	-
 View	0	Data	button	Tables	0	data.tables	0	-
 View	0	Data	combo	Highlight	0	-	0	No Highlight

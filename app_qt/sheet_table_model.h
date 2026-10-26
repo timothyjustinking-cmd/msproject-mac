@@ -74,9 +74,12 @@ class SheetTableModel final : public QAbstractTableModel {
     // blank Indicators cell, the Add New Column stub, ordinary data).
     EntryCellKind display_kind(int display_column) const;
 
-    // Wave 19: the filtered display list (RecordSet rows in display order).
-    // `active == false` means "no filter" and falls back to the sheet's own
-    // visible rows; an active filter with an empty list shows zero rows.
+    // Wave 19: the displayed display list (RecordSet rows in display order).
+    // `active == false` means "no display list" and falls back to the sheet's
+    // own visible rows; an active list with no rows shows zero rows.  Since wave
+    // 31 a SORT also supplies a display list (app/sort_model.h), so the shell
+    // passes `filter_active() || sort_active()`: the list is the sorted and/or
+    // filtered order, never a second copy of the data.
     void set_display_rows(std::vector<std::size_t> rows, bool active);
 
     void set_commit_handler(CommitHandler handler);

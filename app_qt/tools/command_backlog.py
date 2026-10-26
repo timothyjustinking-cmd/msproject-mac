@@ -65,6 +65,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     "inspect",
     # W30-3.3: Spelling opens the read-only word-list report over task names.
     "spelling",
+    # W31-1.1: the View tab's Sort opens the Sort dialog; the order it applies
+    # is session-only (the RecordSet and the file keep their row order).
+    "data_sort",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine

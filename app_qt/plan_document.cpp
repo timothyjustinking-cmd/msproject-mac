@@ -21,6 +21,7 @@
 #include "reader_adapter.h"
 #include "selection_model.h"
 #include "shell_style.h"
+#include "sort_model.h"
 #include "view_style.h"
 #include "viewstate.h"
 
@@ -345,6 +346,9 @@ void PlanDocument::reset() {
     filter_rows_.clear();
     filter_description_.clear();
     filter_active_ = false;
+    sort_definition_ = core::view::SortDefinition{};
+    sort_description_.clear();
+    sort_active_ = false;
     table_ = msproject::viewstate::TableDef{};
     gantt_style_ = msproject::viewstate::GanttStyle{};
     use_stored_timescale_ = false;
@@ -438,16 +442,15 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
     // fields once a cell is edited, so re-derive the plan the views draw from.
     view_ = app::sync_plan_from_records(base_, records_);
     row_map_ = app::build_row_map(*sheet_);
-    if (filter_active_) {
-        // Restrict the DISPLAYED row list (never the RecordSet): the same rows
-        // stay editable and the Save diff is unchanged (app/filter_model.h).
-        app::RowMap filtered;
-        filtered.rows = app::restrict_to_filter(row_map_.rows, filter_rows_);
-        filtered.uids.reserve(filtered.rows.size());
-        for (const std::size_t row : filtered.rows) {
-            filtered.uids.push_back(records_.uid(row));
-        }
-        row_map_ = std::move(filtered);
+    // Wave 31 (W31-1.1): one display-order path for the table and the chart.
+    // The sort is session-only (the RecordSet and the file are untouched) and
+    // the filter restricts the DISPLAYED row list; the same rows stay editable
+    // and the Save diff is unchanged (app/filter_model.h, app/sort_model.h).
+    row_map_.rows = ordered_display_rows();
+    row_map_.uids.clear();
+    row_map_.uids.reserve(row_map_.rows.size());
+    for (const std::size_t row : row_map_.rows) {
+        row_map_.uids.push_back(records_.uid(row));
     }
     // The Gantt is rebuilt from exactly the displayed rows, never panned, so
     // Gantt row N is displayed ordinal N (app/selection_model.h).  Wave 25
@@ -766,15 +769,34 @@ void PlanDocument::clear_filter() {
     filter_rows_.clear();
 }
 
-std::vector<std::size_t> PlanDocument::display_rows() const {
+void PlanDocument::set_sort(core::view::SortDefinition definition, std::string description) {
+    sort_definition_ = std::move(definition);
+    sort_description_ = std::move(description);
+    sort_active_ = true;
+}
+
+void PlanDocument::clear_sort() {
+    sort_active_ = false;
+    sort_definition_ = core::view::SortDefinition{};
+    sort_description_.clear();
+}
+
+std::vector<std::size_t> PlanDocument::ordered_display_rows() const {
     if (sheet_ == nullptr) {
         return {};
     }
     std::vector<std::size_t> rows = sheet_->visible_rows();
+    if (sort_active_) {
+        rows = app::sort_display_rows(sort_definition_, records_, rows);
+    }
     if (filter_active_) {
         rows = app::restrict_to_filter(rows, filter_rows_);
     }
     return rows;
+}
+
+std::vector<std::size_t> PlanDocument::display_rows() const {
+    return ordered_display_rows();
 }
 
 void PlanDocument::read_table(const std::string& source_path) {

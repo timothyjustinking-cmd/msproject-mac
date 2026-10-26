@@ -127,6 +127,11 @@ enum class RibbonCommand : std::uint8_t {
     // dialog can change the project.
     compare_projects,
     visual_reports,
+    // Wave 31 (W31-1.1): the View tab's Data group.  Sort opens the Sort
+    // dialog; the order it applies is SESSION-ONLY (the RecordSet and the file
+    // keep their order), because Project's own sort is a persisted reorder this
+    // wave did not measure.  app/sort_model.h owns the outline-aware order.
+    data_sort,
 };
 
 class RibbonBar final : public QWidget {

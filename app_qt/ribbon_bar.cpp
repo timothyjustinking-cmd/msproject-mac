@@ -482,7 +482,10 @@ const std::vector<TabSpec>& tab_specs() {
         small(resource_views, "Other Views", app::MenuAction::none, 138, 2, 1, false, 1, false,
               "view.other");
         GroupSpec& data = add_group(view, "Data", 323);
-        large(data, "Sort", app::MenuAction::none, 50, 0, false, "data.sort");
+        // W31-1.1: Sort is ENABLED; its order is session-only (the file keeps
+        // its row order), and the dialog says so.
+        large(data, "Sort", app::MenuAction::none, 50, 0, true, "data.sort",
+              RibbonCommand::data_sort);
         large(data, "Outline", app::MenuAction::none, 50, 1, false, "data.outline");
         large(data, "Tables", app::MenuAction::none, 50, 2, false, "data.tables");
         combo(data, "Highlight", "No Highlight", 156, 0, 3);

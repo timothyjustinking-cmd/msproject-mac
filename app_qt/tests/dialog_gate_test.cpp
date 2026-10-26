@@ -56,6 +56,7 @@
 #include "dialogs.h"
 #include "entry_columns.h"
 #include "filter_model.h"  // app::FilterField / app::filter_operators()
+#include "sort_model.h"    // app::sort_fields() (W31-1.1)
 #include "gantt_canvas.h"
 #include "main_window.h"
 #include "preferences_store.h"
@@ -468,6 +469,44 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
         dialog.clear_button()->click();
         gate::check(dialog.cleared(), "Clear Filter reports the clear request");
+    }
+
+    // -----------------------------------------------------------------------
+    // Sort (wave 31, W31-1.1)
+    // -----------------------------------------------------------------------
+    {
+        const std::vector<app::SortField>& fields = app::sort_fields();
+        msqt::SortDialog dialog(fields);
+        dialog.show();
+        QApplication::processEvents();
+        check_shell(dialog, "Sort", kSortSize);
+        check_form(dialog, "sortForm", 2);
+        gate::check(dialog.field_combo() != nullptr &&
+                        dialog.field_combo()->count() == static_cast<int>(fields.size()),
+                    "the sort field combo lists the five app fields");
+        gate::check(dialog.order_combo() != nullptr && dialog.order_combo()->count() == 2,
+                    "the order combo lists Ascending and Descending");
+        check_bottom_button_row(dialog, {dialog.sort_button(), dialog.clear_button(),
+                                         dialog.cancel_button()});
+        check_vertical_hint(dialog, "sortHint");
+        dialog.field_combo()->setCurrentIndex(3);  // Priority
+        dialog.order_combo()->setCurrentIndex(1);  // Descending
+        dialog.sort_button()->click();
+        gate::check(!dialog.cleared() &&
+                        dialog.description() == "Priority descending" &&
+                        dialog.definition().keys.size() == 1 &&
+                        !dialog.definition().keys.front().ascending,
+                    "Sort builds the chosen one-key definition");
+        gate::check(dialog.definition().keys.front().field == 0x0b400019u,
+                    "the chosen key is Task.Priority");
+    }
+    {
+        msqt::SortDialog dialog(app::sort_fields());
+        dialog.show();
+        QApplication::processEvents();
+        dialog.clear_button()->click();
+        gate::check(dialog.cleared() && dialog.definition().keys.empty(),
+                    "Clear Sort reports the clear request");
     }
 
     // -----------------------------------------------------------------------
