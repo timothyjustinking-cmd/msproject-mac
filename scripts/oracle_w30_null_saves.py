@@ -54,6 +54,7 @@ CONTROLS = [
     "wave30-respect-links-manual-control.mpp",
     "wave30-move-back-control.mpp",
     "wave30-move-forward-control.mpp",
+    "wave30-notes-control.mpp",
 ]
 
 
