@@ -12,9 +12,13 @@
 //     including slot 2 (ordinary resource) and slot 3 (overallocated, bold
 //     RGB 165,0,0).
 //
-// W31-3.5..3.7 extend this file with the model values and the live Qt gate
-// measured against Project's COM facts on the same committed fixture
-// (tests/data/wave31-resource-sheet.mpp), so every number here is Project's.
+// W31-3.5 checks the model's stored values; W31-3.6 checks the Qt adapter's
+// gutter, text styles and painted Indicators glyphs; W31-3.7 opens the real
+// MainWindow on the same committed fixture (tests/data/wave31-resource-sheet.mpp)
+// and pins the LIVE Resource Sheet against Project's COM facts: the visible
+// Entry fields in COM order, Project's chars * unit + 3 pixel widths from the
+// view's own font unit, the frozen gutter's stored IDs and every resource row's
+// projected values.  Every number here is Project's.
 //
 // Usage: qt_resource_sheet_gate_tests <wave31-resource-sheet.mpp>
 
@@ -25,6 +29,7 @@
 #include <string>
 #include <vector>
 
+#include <QAction>
 #include <QApplication>
 #include <QColor>
 #include <QFont>
@@ -36,7 +41,9 @@
 #include <QVariant>
 
 #include "entry_columns.h"
+#include "main_window.h"
 #include "plan_document.h"
+#include "shell_style.h"
 #include "sheet.h"
 #include "sheet_table_model.h"
 #include "sheet_views.h"
@@ -245,11 +252,11 @@ void check_resource_model(const msqt::PlanDocument& document) {
           "resource gate: Crew B is not overallocated");
 }
 
-// W31-3.6: the live adapter paints Project's Resource Sheet -- the stored ID in
-// the frozen gutter, slot 3's bold red on the overallocated row against slot
-// 2's upright automatic text on the others, and the Indicators column's (i)
-// header badge plus the red overallocation glyph (the column widths of that
-// paint are the W31-3.7 live-window gate).
+// W31-3.6: the adapter paints Project's Resource Sheet -- the stored ID in the
+// frozen gutter, slot 3's bold red on the overallocated row against slot 2's
+// upright automatic text on the others, and the Indicators column's (i) header
+// badge plus the red overallocation glyph.  W31-3.7 then pins the same facts in
+// the real window, including the widths this standalone view does not set.
 void check_qt_model(const msqt::PlanDocument& document) {
     core::view::RecordSet records =
         app::make_resource_view_records(document.plan(), nullptr);
@@ -338,6 +345,188 @@ void check_qt_model(const msqt::PlanDocument& document) {
           "resource gate: an ordinary row's Indicators cell has no red glyph");
 }
 
+// W31-3.7: the live gate.  Open the committed fixture in the real MainWindow,
+// switch to the Resource Sheet through its own menu action, and read the live
+// widget tree back against build/w31/W31-G3-probe.json:
+//   * COM TableFields lists the 14 stored fields (ID, Indicators, Resource
+//     Name, Type, Material Label, Initials, Group, Max. Units, Std. Rate, Ovt.
+//     Rate, Cost/Use, Accrue At, Base Calendar, Code) plus a -1 stub; the live
+//     sheet shows the other 13 in that order with ID in the frozen gutter.
+//   * COM reports each field's width in characters.  Project paints chars *
+//     unit + 3 px, and this view's FONT_BASES[0] is Segoe UI 10, measured at
+//     6 px/char (W31-G3-fonts.log), giving 39/123/69/81/69/63/63/69/69/69/
+//     63/87/81.
+//   * COM's Resource values are the three crews' stored rows with Crew A
+//     overallocated (PeakUnits 3.0); the live cells must render exactly those
+//     values, IDs and slot-2/slot-3 styles.
+QAction* find_action(msqt::MainWindow& window, app::MenuAction id) {
+    for (QAction* action : window.findChildren<QAction*>()) {
+        if (action->data().isValid() && action->data().toInt() == static_cast<int>(id)) {
+            return action;
+        }
+    }
+    return nullptr;
+}
+
+void check_live_window(const std::string& fixture) {
+    msqt::configure_application();
+    msqt::MainWindow window;
+    window.resize(msqt::kWindowWidth, msqt::kWindowHeight);
+    QString error;
+    check(window.open_file(QString::fromStdString(fixture), &error),
+          "resource gate: the live window opens the fixture");
+    window.show();
+    QApplication::processEvents();
+
+    QAction* resource_sheet =
+        find_action(window, app::MenuAction::view_resource_sheet);
+    check(resource_sheet != nullptr, "resource gate: the View menu carries Resource Sheet");
+    if (resource_sheet == nullptr) {
+        return;
+    }
+    resource_sheet->trigger();
+    QApplication::processEvents();
+    check(window.view_mode() == app::ViewMode::resource_sheet,
+          "resource gate: the live window switches to the Resource Sheet");
+    QTableView* sheet = window.sheet_view();
+    check(sheet != nullptr && sheet->model() != nullptr,
+          "resource gate: the live window has a sheet model");
+    if (sheet == nullptr || sheet->model() == nullptr) {
+        return;
+    }
+    auto* model = dynamic_cast<msqt::SheetTableModel*>(sheet->model());
+    check(model != nullptr && model->sheet() != nullptr,
+          "resource gate: the live window uses the resource sheet adapter");
+    if (model == nullptr || model->sheet() == nullptr) {
+        return;
+    }
+
+    // COM's visible fields, minus ID (Project draws it as the frozen gutter)
+    // and the Add New Column stub (-1), which this port does not draw.
+    const core::sheet::SheetModel& stored = *model->sheet();
+    check(model->columnCount() == 13 &&
+              stored.visible_column_count() == 13,
+          "resource gate: the live Resource Sheet shows the 13 scrolling COM fields");
+    if (model->columnCount() != 13) {
+        return;
+    }
+    const char* const titles[] = {"",         "Resource Name", "Type",
+                                  "Material Label", "Initials", "Group",
+                                  "Max. Units", "Std. Rate", "Ovt. Rate",
+                                  "Cost/Use", "Accrue At", "Base Calendar",
+                                  "Code"};
+    for (int ordinal = 0; ordinal < 13; ++ordinal) {
+        const std::size_t column =
+            stored.visible_column(static_cast<std::size_t>(ordinal));
+        const std::uint32_t want = kResourceEntryColumns[ordinal + 1].field;
+        check(column != core::sheet::kNoIndex &&
+                  stored.column(column).field == want,
+              "resource gate: the live column follows COM's TableFields order");
+        check(model->headerData(ordinal, Qt::Horizontal, Qt::DisplayRole)
+                      .toString() == QString::fromUtf8(titles[ordinal]),
+              "resource gate: the live caption matches the stored table/field caption");
+        // Project's width: the COM character count at this view's measured
+        // 6 px/char (Segoe UI 10) plus the 3 px border.
+        const int want_width = msqt::column_width_px(
+            kResourceEntryColumns[ordinal + 1].chars, msqt::kColumnCharPx);
+        if (sheet->columnWidth(ordinal) != want_width) {
+            std::fprintf(stderr, "FAIL: live column %d width %d, want %d\n", ordinal,
+                         sheet->columnWidth(ordinal), want_width);
+            ++g_failures;
+        }
+    }
+    check(model->indicators_column() == 0,
+          "resource gate: the live Indicators column is the first scrolling column");
+    check(sheet->verticalHeader() != nullptr &&
+              sheet->verticalHeader()->defaultSectionSize() == msqt::kRowHeight,
+          "resource gate: the live Resource Sheet keeps the 22 px row pitch");
+    check(sheet->verticalHeader() != nullptr &&
+              sheet->verticalHeader()->width() + msqt::kViewLabelWidth ==
+                  msqt::kGutterWidth,
+          "resource gate: the live Resource Sheet keeps the 60 px frozen gutter");
+    check(sheet->horizontalHeader() != nullptr &&
+              sheet->horizontalHeader()->height() == msqt::kSheetHeaderHeight,
+          "resource gate: the live Resource Sheet keeps the 42 px caption band");
+
+    // COM's stored Resource.ID values, drawn in the frozen gutter.
+    check(model->rowCount() == 3, "resource gate: the live sheet shows three resources");
+    if (model->rowCount() != 3) {
+        return;
+    }
+    check(model->row_number_text(0) == QStringLiteral("1") &&
+              model->row_number_text(1) == QStringLiteral("2") &&
+              model->row_number_text(2) == QStringLiteral("3"),
+          "resource gate: the live gutter reads COM's Resource.ID 1/2/3");
+
+    // COM's resource values through the live cells (W31-G3-probe.json).  The
+    // columns are the visible ordinals: 1 Name, 2 Type, 4 Initials, 5 Group,
+    // 6 Max. Units, 7 Std. Rate, 8 Ovt. Rate, 9 Cost/Use, 10 Accrue At,
+    // 11 Base Calendar, 12 Code.
+    const auto cell = [&model](int row, int column) {
+        return model->index(row, column).data(Qt::DisplayRole).toString();
+    };
+    check(cell(0, 1) == QStringLiteral("Crew A") &&
+              cell(1, 1) == QStringLiteral("Crew B") &&
+              cell(2, 1) == QStringLiteral("Crew C"),
+          "resource gate: the live Name cells are COM's resource names");
+    check(cell(0, 2) == QStringLiteral("Work") &&
+              cell(1, 2) == QStringLiteral("Work") &&
+              cell(2, 2) == QStringLiteral("Work"),
+          "resource gate: the live Type cells are COM's work resources");
+    check(cell(0, 3).isEmpty() && cell(1, 3).isEmpty() && cell(2, 3).isEmpty(),
+          "resource gate: the live Material Label cells are COM's empty labels");
+    check(cell(0, 4) == QStringLiteral("C") && cell(1, 4) == QStringLiteral("C") &&
+              cell(2, 4) == QStringLiteral("C"),
+          "resource gate: the live Initials cells are COM's C");
+    check(cell(0, 5) == QStringLiteral("North") &&
+              cell(1, 5) == QStringLiteral("South") &&
+              cell(2, 5) == QStringLiteral("North"),
+          "resource gate: the live Group cells are COM's North/South/North");
+    check(cell(0, 6) == QStringLiteral("100%") &&
+              cell(1, 6) == QStringLiteral("100%") &&
+              cell(2, 6) == QStringLiteral("100%"),
+          "resource gate: the live Max. Units cells are COM's 100 %");
+    check(cell(0, 7) == QStringLiteral("$0.00/hr") &&
+              cell(1, 7) == QStringLiteral("$50.00/hr") &&
+              cell(2, 7) == QStringLiteral("$0.00/hr"),
+          "resource gate: the live Std. Rate cells are COM's 0/50/0 per hour");
+    check(cell(0, 8) == QStringLiteral("$0.00/hr") &&
+              cell(1, 8) == QStringLiteral("$75.00/hr") &&
+              cell(2, 8) == QStringLiteral("$0.00/hr"),
+          "resource gate: the live Ovt. Rate cells are COM's 0/75/0 per hour");
+    check(cell(0, 9) == QStringLiteral("$0.00") &&
+              cell(1, 9) == QStringLiteral("$10.00") &&
+              cell(2, 9) == QStringLiteral("$0.00"),
+          "resource gate: the live Cost/Use cells are COM's 0/10/0");
+    check(cell(0, 10) == QStringLiteral("Prorated") &&
+              cell(1, 10) == QStringLiteral("Start") &&
+              cell(2, 10) == QStringLiteral("End"),
+          "resource gate: the live Accrue At cells are COM's Prorated/Start/End");
+    check(cell(0, 11) == QStringLiteral("Standard") &&
+              cell(1, 11) == QStringLiteral("Standard") &&
+              cell(2, 11) == QStringLiteral("Standard"),
+          "resource gate: the live Base Calendar cells are COM's Standard");
+    check(cell(0, 12) == QStringLiteral("CR-A") &&
+              cell(1, 12) == QStringLiteral("CR-B") &&
+              cell(2, 12) == QStringLiteral("CR-C"),
+          "resource gate: the live Code cells are COM's CR-A/CR-B/CR-C");
+    check(cell(0, 0).isEmpty() && cell(1, 0).isEmpty() && cell(2, 0).isEmpty(),
+          "resource gate: the live Indicators cells stay captionless blanks");
+
+    // COM's Overallocated: only Crew A, painted with the view's slot 3.
+    const QFont overallocated_font = model->index(0, 1).data(Qt::FontRole).value<QFont>();
+    const QColor overallocated_colour =
+        model->index(0, 1).data(Qt::ForegroundRole).value<QColor>();
+    check(overallocated_font.bold() && overallocated_colour.isValid() &&
+              overallocated_colour.red() == 165 && overallocated_colour.green() == 0 &&
+              overallocated_colour.blue() == 0,
+          "resource gate: the live overallocated row is slot 3's bold RGB 165,0,0");
+    const QFont normal_font = model->index(1, 1).data(Qt::FontRole).value<QFont>();
+    check(!normal_font.bold() &&
+              !model->index(1, 1).data(Qt::ForegroundRole).isValid(),
+          "resource gate: the live ordinary row is slot 2's upright automatic text");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -369,6 +558,7 @@ int main(int argc, char** argv) {
     check_resources(document);
     check_resource_model(document);
     check_qt_model(document);
+    check_live_window(fixture);
 
     std::printf("qt_resource_sheet_gate: %d failure(s)\n", g_failures);
     return g_failures == 0 ? 0 : 1;

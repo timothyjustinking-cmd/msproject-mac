@@ -73,6 +73,13 @@ CTest (all offscreen, `QT_SCALE_FACTOR=1`):
   Calibri-11/fallback typography, the seven-tab ribbon with every visible
   button wide enough for its label, the timeline strip, the status-bar zoom
   slider, and that at 1920x1032 all nine Entry columns fit.
+* `qt_resource_sheet_gate` — wave 31's Resource Sheet gate: reads the committed
+  `tests/data/wave31-resource-sheet.mpp` through `PlanDocument` (the stored 14
+  fields/character widths and the view's text-style slots), then opens the real
+  `MainWindow` and pins the live view against Project's COM facts: the 13
+  scrolling fields in table order, the `chars * 6 + 3` widths, Resource.ID
+  1/2/3 in the frozen gutter, each crew's Entry cell values, and Crew A's
+  slot-3 bold red.
 * `qt_save_reopen` — wave 19's acceptance gate: copies the committed fixture
   into `test-out/` (the fixture itself is never opened in place), loads it into
   the real `MainWindow`, edits a Duration and a Start through

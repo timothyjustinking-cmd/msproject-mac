@@ -244,12 +244,14 @@ add_test(NAME qt_view_gate
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
 
 # ===========================================================================
-# WAVE 31 (G3, W31-3.4): the Resource Sheet's own stored presentation, read
-# through the real PlanDocument.  The fixture is the neutral Project 2021 save
-# with the Resource Sheet applied; the test pins the Resource Entry table's 14
-# stored fields and character widths, the view's "&Entry"/"&All Resources"
-# selectors, and the two text-style slots that paint ordinary and overallocated
-# rows.  W31-3.5..3.7 grow this target into the live Qt/COM-fact gate.
+# WAVE 31 (G3, W31-3.4..3.7): the Resource Sheet's own stored presentation, read
+# through the real PlanDocument and then rendered in the real MainWindow.  The
+# fixture is the neutral Project 2021 save with the Resource Sheet applied; the
+# test pins the Resource Entry table's 14 stored fields and character widths, the
+# view's "&Entry"/"&All Resources" selectors, the two text-style slots that paint
+# ordinary and overallocated rows, and the live window's visible fields, pixel
+# column widths, gutter IDs and resource cell values against Project's COM facts
+# (build/w31/W31-G3-probe.json).
 # ===========================================================================
 add_executable(qt_resource_sheet_gate_tests tests/resource_sheet_gate_test.cpp)
 target_link_libraries(qt_resource_sheet_gate_tests PRIVATE qt_shell)
