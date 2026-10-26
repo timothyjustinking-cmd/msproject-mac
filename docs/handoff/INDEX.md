@@ -11,7 +11,14 @@ kept for investigation; each is the record of its stream at that wave.
 | `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
 | `assessment-2026-10-24.md` | where the port stands after wave 26, and the workflow review |
 | `plan-waves27-30.md` | the proposed next rounds |
-| `wave29-complete.md` | **the wave-29 gate** (below), the current record |
+| `wave30-complete.md` | **the wave-30 gate** (below), the current record |
+
+## Wave 30 (closed on branch `wave30` - pushed; CI on the final code tree; not merged)
+
+| file | what |
+|---|---|
+| `wave30-complete.md` | **the wave-30 gate**: G0..G3 + CLOSE, every item DONE or DEFERRED with a committed Project pair, the fresh-tree gates on the final code tree, both privacy scans, the independent review (0 Critical / 4 High / 7 Medium / 10 Low - all Highs fixed) and its errata, the push and the two CI dispatches, the re-scored 16 decisions, "Found, not fixed" |
+| `wave30-brief.md` | **the work order**: G0 the wave-29 review's save-path findings, G1 the Task tab, G2 the Resource tab, G3 the Project tab, the measured-shape rule for every enabled edit |
 
 ## Wave 29 (closed on branch `wave29` - pushed; CI on the final code tree; not merged)
 

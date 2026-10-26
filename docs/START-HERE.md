@@ -1,115 +1,101 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-10-26, wave 29 closed on branch `wave29` (pushed; CI green on all
-five jobs at the final code tree `7e14aaa`).  Keep this file current at every
-wave close; it is the only file a new session must read first._
+_Updated 2026-10-26, wave 30 closed on branch `wave30` (pushed; CI on the final
+code tree `0aca9d2`).  Keep this file current at every wave close; it is the
+only file a new session must read first._
 
 ## The 30-second state
 
-* **Wave 29 is closed on branch `wave29`** (cut from `wave28` = `21646f4`, the
-  rewritten clean tree) from `docs/handoff/wave29-brief.md`.  It ran as G0..G5 +
-  CLOSE, one fresh session each; the record is
-  **`docs/handoff/wave29-complete.md`** (the gate).  **Every item is DONE;
-  nothing is deferred.**
-* **G0 closed the wave-28 review's four Highs and the enabled-command gate**
-  (W29-0.0..0.4): every enabled command now refuses an unmeasured shape; the
-  save-pair tests compare every owned stream field by field against Project's
-  file instead of masking it; Project reopened 10 port saves and found **0
-  differing fields** (project row + IDs 1..3); the percent writer is measured
-  on three real schedules (leaf 0→40 under a summary, work-bearing assignment
-  0→40, zero-duration milestone 0→100) and the mid-to-mid transition stays
-  refused with 50 named `EXPECTED FAILURE` checks; Mark on Track / Update
-  Project lower recorded progress exactly as Project does (60→40 before the
-  date, 60→80 after); indent/outdent write Project's assignment tombstone and
-  re-create on automatic rows.
-* **G1 closed the PROJECT_A gaps** (W29-1.0..1.4): stored `CTable` sheet column
-  widths, the stored per-row yellow fill, every bar label the stored bar styles
-  call for, and a saved timescale origin/zoom.  A stock start plus the stock
-  100 % day tier is Project's default and deliberately changes nothing (it is
-  the shell's own week zoom; W29-C6).
-* **G2/G3/G4 added the six wave-28 backlog dialogs**: Text Styles, Gridlines
-  and Bar Styles (Text/Bar styles apply to the open view; Gridlines is laid out
-  and inert), Page Setup (six tabs, fully wired to the shared print layout),
-  and Visual Reports / Compare Projects (every current-affecting control
-  disabled with the exact decision-9 tooltip and an inline note).
-* **G5 finished the dark chrome**: the sheet caption band, gutter/corner and
-  the Gantt timescale band paint from the measured Dark Gray/Black palettes,
-  the ribbon ink follows the theme, and the menu-bar/QAT/status-bar glyphs are
-  re-authored on the one-ink grid and re-inked live per theme.
-* **The CLOSE review found 0 Critical / 2 High / 2 Medium / 2 Low** over
-  `git diff wave28..wave29`.  Both Highs are fixed (`02b720a` C1 the two
-  unused functions GCC/Clang reject; `4b03ecb` C2 the measured-only percent
-  transitions).  The first CI dispatch then found C7 (High, macOS unused
-  constant, `f7434d2`) and C9 (High, GCC `OutlineEdit` initializer,
-  `133cb3f`), the record audit found C8 (Medium, dark tier boundary painted
-  strong while the measurement is weak, fixed `31bb11b`), and the parity gate
-  found C10 (High, the stock-timescale axis shift, fixed `7e14aaa`).  C3-C7
-  (the remaining Mediums/Lows) are queued under Found, not fixed.
-* **Fresh-tree gates at the final code tree `7e14aaa`** (log
-  `build/w29/close-final-fresh-gates.log`, filed as
-  `build/w29/gates-7e14aaa-W29-CLOSE.log`; the CLOSE docs commit after it is
+* **Wave 30 is closed on branch `wave30`** (cut from `wave29` = `2a7fa4b`)
+  from `docs/handoff/wave30-brief.md`.  It ran as G0..G3 + CLOSE, one fresh
+  session each; the record is **`docs/handoff/wave30-complete.md`** (the gate).
+  G0..G3 items are DONE or DEFERRED with a committed Project save pair and its
+  measurement log; no item was deferred without evidence.
+* **G0 closed the wave-29 review's save-path queue** (W30-0.0..0.7): every
+  enabled edit path refuses up front the shapes no committed Project pair
+  measured — an assignment on an indent's new summary, an automatic
+  indent/outdent on a linked file, an outline move over progress, the 0 → 0
+  date-update target, a second progressed leaf in a summary's chain, every
+  contour but the measured 9600-tick / 100 % / project-calendar one, and Add
+  Link's second-incoming-link and progressed-successor shapes.  The
+  "0x0f first link / 0x07 later" rule is falsified: the byte is the successor's
+  driving state.
+* **G1/G2/G3 enabled eight controls** across the wave: Manually Schedule and
+  Mode's manual entry (the measured task-mode writer), Task Details (Task
+  Form), Scroll to Task, Fill (Start only), Inspect, Resource Details
+  (read-only Resource Form) and Spelling (read-only, port-owned word list).
+  Insert Summary/Milestone, Inactivate, Respect Links, Move, Notes, Add to
+  Timeline, the text-style group, Add Resources, Information/Notes, Assign
+  Resources, Level All, Calculate Project, Set Baseline and WBS are DEFERRED
+  with committed pairs; Deliverable, Resource Pool, Team Planner, Subproject
+  and the Add-ins commands stay disabled with the exact tooltip.
+* **The CLOSE review found 0 Critical / 4 High / 7 Medium / 10 Low** over
+  `git diff wave29..wave30`.  All Highs are fixed: C1/C2 by `ec29e31` (unused
+  symbols GCC/Clang reject), C3 by `0aca9d2` (physical assignment rows,
+  skipped links and the raw resource word now refused up front), A1 by
+  correcting the record.  U2 is fixed by `0770e94`, the Set Baseline backlog
+  row by `f24ad25`, `memory/writer.md` by `2db8df2`.  The remaining Mediums
+  and Lows are queued under Found, not fixed.
+* **Fresh-tree gates at the final code tree `0aca9d2`** (log
+  `build/w30/W30-CLOSE-fresh-gates.log`; the CLOSE docs commits after it are
   docs-only): core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` exit 0;
   core ctest `-E plan_recalc` **52/52**; `plan_recalc` **512** with corpus /
   **266** without; M2 **332/332**, **268/268** and **64/64**; engine selftest
   **53 checks, 0 failures** and the suite **7 pass + `constraint-mso`
   expected**, 8 recorded, 0 unrecorded; reader **1100** with corpus / **420**
-  without; app **20/20**; app_qt **27/27**; fixtures **OK** (98 documented
-  hashes, 101 tracked `.mpp`), paths OK (148), oracle provenance **OK (8)**.
+  without; app **22/22**; app_qt **32/32**; fixtures **OK** (131 documented
+  hashes, 167 tracked `.mpp`), paths OK (214), oracle provenance **OK (8)**.
 * **Parity**: wave23-outline **10/10** and wave25-auto colour-only **1/0**,
-  every measure PASS, re-run locally on the fresh Qt shell at `7e14aaa`
-  (`build/w29/c6-parity-fixed.log`, `build/w29/c6-parity-wave25.log`).  The
-  pixel score is still not re-run (no PROJECT_A reference PNG local).
+  every measure PASS, re-run locally on the fresh Qt shell at `0aca9d2`
+  (`build/w30/W30-CLOSE-parity.log`).  The pixel score is still not re-run (no
+  PROJECT_A reference PNG local).
 * **Privacy**: the line-based `scan_client_names.py HEAD --messages
-  wave28..HEAD` reports **0 files / 0 hits** and **0 commit messages**; the
+  wave29..HEAD` reports **0 files / 0 hits** and **0 commit messages**; the
   whitespace-normalised `guard_names.py` is **0 hits, exit 0** on
-  `wave28..HEAD` and on the push range `origin/wave28..HEAD`; the hex grep has
-  no matches (exit 1, expected).  The wave-28 push blocker is gone: Tim
-  approved the `076438f` rewrite, `wave28` was replayed clean and pushed
-  (`21646f4`), and the guard now passes the whole range.  Two pre-wave
-  fixtures (`synthetic-base.mpp`, `wave23-outline.mpp`) still carry the
-  operator's name three times each and 69 tracked text files carry it; a
-  repo-wide purge is Tim's decision.  **Run BOTH scans.**
-* **Push and CI**: `origin/wave29` was advanced without force three times
-  during CLOSE, after a clean preflight each time.  Both workflows were
-  dispatched explicitly on `wave29` (the `workflow_run` trigger only fires from
-  `main`); the first dispatch was red on C7/C9/C10, and the second runs on the
-  final code tree `7e14aaa` are **green**: qt.yml **40248190323** (`windows-qt`,
-  `macos-qt`, `linux-qt`, including both parity gates) and ci.yml
-  **40248193087** (`windows-msvc`, `ubuntu-gcc`).  Status snapshots are
-  `build/w29/close-ci4-{qt,ci}-status.json`.
-* **Still open** (wave-29 CLOSE "Found, not fixed"): C3 the `add_task_link`
-  Fixed2Meta +8 rule for a second incoming link (needs a Project pair); C4 the
-  null-save classifier's masked tail (tooling); C5 the late refusal of a
-  percent edit on a linked row; C6 the Props-mask sentence (documentation);
-  the wave-28 residuals (whole-tree operator-name purge, the UTF-16
-  user-profile check, save-time ordering/late refusals, the Task Form's
-  view-only fields, SKIP-on-missing fixture blocks, the `tests/data/README.md`
-  inventory gap, the process items); the theme gate's missing
-  tier-boundary sample; the stored combination view and the White theme; Split
-  Task (deferred with its measurement); the no-writer engines (project move,
-  baselines, WBS, calendars); the wave-26/27 review Mediums/Lows; the 13
-  unsalted FNV-1a hashes in older history and the golden TSV (Tim's decision);
-  174 grandfathered CRLF files.
+  `wave29..HEAD` and on the push range `origin/wave29..HEAD`; the hex grep has
+  no matches (exit 1, expected).  The 66 new fixtures use the neutral `C:/w30`
+  root and neutral metadata; no client/person name or hash is in any.  Two
+  pre-wave fixtures and 69 tracked text files still carry the operator's name,
+  and the 13 unsalted hashes remain in older history — Tim's decision.  **Run
+  BOTH scans.**
+* **Push and CI**: `origin/wave30` was advanced without force after a clean
+  preflight; both workflows were dispatched explicitly on `wave30` (the
+  `workflow_run` trigger only fires from `main`).  qt.yml **40307814439**
+  (`windows-qt`, `macos-qt`, `linux-qt`, including both parity gates) and
+  ci.yml **40307818793** (`windows-msvc`, `ubuntu-gcc`) are **green** on
+  `0aca9d2`, the first dispatch; status snapshots are
+  `build/w30/close-ci-{qt,ci}-status.json`.
+* **Still open** (wave-30 CLOSE "Found, not fixed"): C4 (task-mode exclusivity
+  vs a queued view-state/formula edit), C5 (off-chain progress and the project
+  row's Resume/Stop), U1 (Fill on a summary row), U3 (Mode-menu tooltip), U4
+  (cross-view Details/Inspect), U5 (Resource Form dock height), U6 (dead
+  `TaskInspectorValues::project`), U7/C6 (machine paths), A1 (measurement
+  commits carry scripts), the G1/G2/G3 writer gaps (reader fractional ordinal
+  and `Task.Active`, save-pair mask bound, VarMeta/214 writers, TBkndCal
+  resource calendar, baseline/WBS/scheduler/DSI writers), Spelling's modest
+  word list, the wave-29 queue (F3, F6, F7, R28-5/6/8/9/11, the named
+  refusals and conventions, the theme-gate sample gap, the stored combination
+  view and White theme, Split Task), the 13 unsalted hashes (Tim's decision)
+  and the 174 grandfathered CRLF files.
 * **Branch state**: `main` = **fcb1c10** = `origin/main`.  `wave23`
   (`e1d40b8` = `origin/wave23`), `wave24` (`6dbf126`), `wave25` (`c012813`),
   `wave26` (`1299cc7` = `origin/wave26`), `wave27` (`bc52cb8` =
-  `origin/wave27`) and `wave28` (`21646f4` = `origin/wave28`, rewritten clean
-  with Tim's approval) are closed and **not merged**.  **`wave29` is closed,
-  pushed and not merged** (`origin/wave29` = the CLOSE docs commit, code tree
-  `7e14aaa`).
+  `origin/wave27`), `wave28` (`21646f4` = `origin/wave28`) and `wave29`
+  (`2a7fa4b` = `origin/wave29`) are closed and **not merged**.  **`wave30` is
+  closed, pushed and not merged** (`origin/wave30` = the CLOSE commit, final
+  code tree `0aca9d2`).
 * Engine stays **7/8** (`constraint-mso` deliberately left failing;
   `mppwrite::save_plan` is test-only).
 
 ## Reading order
 
-**Coordinator starting wave 30** (≈5 files):
+**Coordinator starting wave 31** (≈5 files):
 
 1. this file;
-2. `docs/handoff/wave29-complete.md` — the gate: G0..G5 + CLOSE, the fresh-tree
+2. `docs/handoff/wave30-complete.md` — the gate: G0..G3 + CLOSE, the fresh-tree
    gates, both privacy scans, the independent review and its errata, the push
    and the CI runs, the re-scored 16 decisions, "Found, not fixed";
-3. `docs/handoff/wave29-brief.md` (the work order); the verifier's
-   `docs/handoff/wave29-verification/` may follow this close;
+3. `docs/handoff/wave30-brief.md` (the work order);
 4. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
 5. `docs/ui-reference-set.md` — the local captures and palettes (git-ignored);
 6. `memory/coordinator.md` — the compact current memory.
@@ -167,22 +153,25 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
   `python scripts/check_fixtures.py` before every commit (it checks the
   scenario oracle provenance and fails on an embedded drive/user-profile path).
   Nothing under `tests/data` is written by a lane.  New fixtures are built
-  through Project on a NEUTRAL path (`C:/w28`, `C:/w29`) with neutral
+  through Project on a NEUTRAL path (`C:/w28`, `C:/w29`, `C:/w30`) with neutral
   Author/Manager/Company/UserName/Title.
 * **Displayed rows resolve through their uid** (wave 25): `app::print_row_list`
   takes RecordSet rows; never index `plan.tasks` with a RecordSet row; uid 0 is
   the project row and refuses task edits.
-* **Saveable structural edits** (waves 26-29): Priority is measured against
+* **Saveable structural edits** (waves 26-30): Priority is measured against
   Project and enabled; PercentComplete, Mark on Track, Update Project and the
   Task Form percent field run on the measured actuals writer; outline
   Indent/Outdent run on the measured outline writer; the new-task mode runs on
-  the measured `114/Props` writer.  A percent edit and a date update need the
-  loaded plan at `push()`; step 5a refuses one stale percent edit instead of
-  failing the save.  Every enabled new edit path needs a save-and-reopen test
-  AND the standing-rule-1 Project measurement.  Split Task is measured but NOT
-  enabled.  The wave-29 dialogs are session-only over the open view; Studio
-  style writes do not exist, so Page Setup is layout-only and no Style dialog
-  writes the stored style records.
+  the measured `114/Props` writer; Manually Schedule/Mode run on the measured
+  task-mode writer.  A percent edit and a date update need the loaded plan at
+  `push()`; step 5a refuses one stale percent edit instead of failing the save.
+  The file-side shape harness (`PlanInput::assignment_rows`,
+  `unreadable_links`, `resource_uid_raw`) refuses up front the shapes no
+  Project pair measured (W30-C5).  Every enabled new edit path needs a
+  save-and-reopen test AND the standing-rule-1 Project measurement.  Split Task
+  is measured but NOT enabled.  The wave-29 dialogs are session-only over the
+  open view; Studio style writes do not exist, so Page Setup is layout-only
+  and no Style dialog writes the stored style records.
 * **`plan_recalc`** never rewrites the golden by default; refreshing needs the
   exact value `PLAN_RECALC_UPDATE_GOLDEN=1`, and the local/CI gate runs
   `ctest -E plan_recalc` plus the corpus-free binary/step.
@@ -196,28 +185,26 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
   with LF line endings (174 grandfathered CRLF files remain, `git grep -Il
   $'\r'`; do not add more).
 * **CI:** one dispatch per milestone; red runs are triaged, fixed and dispatched
-  again with the reason recorded.  Wave 29 dispatched twice (the first runs
-  40245417658 / 40245429060 were red on C7/C9/C10; the second runs
-  40248190323 / 40248193087 are on `7e14aaa`).
+  again with the reason recorded.  Wave 30 dispatched once; both runs were
+  green on `0aca9d2` (qt.yml 40307814439, ci.yml 40307818793).
 * **Commits:** one finding id per commit; honest numbers; a gate number must
-  belong to the tree it is written in and name its log under `build/w29/`; no
+  belong to the tree it is written in and name its log under `build/w30/`; no
   test claimed unless run.  A known gap is an expected failure **by name**, never
   an assertion of the wrong output.
 
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md and docs/handoff/wave29-complete.md.  Wave 29 is closed
-on branch wave29 (pushed; G0..G5 + CLOSE, every item DONE; CI runs on 7e14aaa
-are recorded in the record's Push and CI section).  Wave 30 follows
-docs/handoff/plan-waves27-30.md: the 83 disabled ribbon commands, highest use
-first (Task: Move, Inspect, Deliverable; Resource: Assign Resources, Resource
-Pool, levelling; Project: baselines, WBS, Calculate; View: Sort, Outline,
-Filter, Group by, Highlight), then the second view family (Resource Sheet,
-Task Usage, Resource Usage) at Gantt fidelity.  Each command that writes needs
-its own Project measurement before it is enabled (standing rule 1), and the
-wave-29 CLOSE "Found, not fixed" list (C3-C6 and the carried residuals) stays
-the queue behind it.  Keep every gate in wave29-complete CLOSE green before
-each commit and run BOTH the line-based and the whitespace-normalised
-client-name scans.
+Read docs/START-HERE.md and docs/handoff/wave30-complete.md.  Wave 30 is closed
+on branch wave30 (pushed; G0..G3 + CLOSE; eight controls enabled, the rest
+deferred with committed Project pairs; CI runs on 0aca9d2 are recorded in the
+record's Push and CI section).  Wave 31 continues the plan's wave-30 work
+(`docs/handoff/plan-waves27-30.md`): the View tab's commands (Sort, Outline,
+Filter, Group by, Highlight) and the second view family (Resource Sheet, Task
+Usage, Resource Usage) at Gantt fidelity.  Each command that writes needs its
+own Project measurement before it is enabled (standing rule 1), and the
+wave-30 CLOSE "Found, not fixed" list (C4, C5, U1, U3-U7, A1 and the carried
+residuals) stays the queue behind it.  Keep every gate in wave30-complete CLOSE
+green before each commit and run BOTH the line-based and the
+whitespace-normalised client-name scans.
 ```

@@ -159,13 +159,16 @@ W30-0.7 detail:
 
 Per-commit gates (logs under `build/w30/`, named `W30-0.x-*.log`; every
 fixture log reports fixtures OK -- 98 documented hashes, 101 tracked `.mpp`,
-148 tracked test-data files with no local path, 8 scenario oracles -- and every
-client-name scan reports 0 files / 0 hits with `guard_names wave29..HEAD`
-exit 0):
+148 tracked test-data files with no local path, 8 scenario oracles -- and the
+per-commit name scans that were retained report 0 files / 0 hits.  The
+`guard_names wave29..HEAD` exit-0 evidence is the G0 group gate below; several
+per-commit guard files are zero-byte or absent, so this table does not claim a
+per-commit guard exit (A3).  The commits' hex sentinel grep exits are recorded
+where the log carries them.
 
 | commit | builds | item tests | app ctest |
 |---|---|---|---|
-| W30-0.0 `8314f6c` | app build exit 0 | `app_edit` 217 checks; `app_edits_actuals` 3746 checks, 50 expected, 0 failures | 20/20 |
+| W30-0.0 `8314f6c` | app build exit 0 | `app_edit` 217 checks; `app_edits_actuals` 3736 checks, 50 expected, 0 failures | 20/20 |
 | W30-0.1 `bd83a6b` | app build exit 0 | `app_edits_outline` 3149 checks; `app_edit` 217 checks | 20/20 |
 | W30-0.2 `022f68c` | app build exit 0 | `app_edits_outline` 3158 checks; `app_edit` 217 checks; `app_edits_actuals` 3736 checks, 50 expected | 20/20 |
 | W30-0.3 `6599e33` | app build exit 0 | `app_edits_outline` 3178 checks; `app_edit` 217 checks; `app_edits_actuals` 3736 checks, 50 expected | 20/20 |
@@ -195,21 +198,20 @@ The numbers belong to `b2517bc`; the marker commit that follows is docs-only.
 
 ## Found, not fixed
 
-- **The display plan cannot see a link whose endpoint the reader dropped.**
-  `PlanInput` records only a `skipped_links` count for a reader link whose
-  predecessor or successor is not a live task; it carries no per-row endpoint
-  data.  Add Link's up-front refusal checks `plan.links`, so on a file holding
-  a saved link into the successor whose predecessor is not a live task the
-  dialog cannot refuse; the writer's W30-0.7 guard still refuses at save time,
-  so no unmeasured byte is written, but the refusal is fail-at-save (the R29-8
-  shape) rather than up front.  Fix direction: carry the skipped links'
-  endpoints through `PlanInput`/`reader_adapter` so `validate_link_add` can
-  refuse them up front.
-- **`memory/writer.md` still states the falsified link rule.**  Lines 1126,
-  1144 and 1256 repeat "0x0f first link into that successor / 0x07 later
-  ones".  The code (`add_delete.cpp`, `add_delete.h`) and the tests are
-  corrected by W30-0.7, but the memory note is not; a documentation fix for
-  CLOSE or the next wave, so the falsified rule cannot be re-derived.
+- **FIXED at CLOSE by W30-C5** (was: the display plan cannot see a link whose
+  endpoint the reader dropped).  `PlanInput` recorded only a `skipped_links`
+  count for a reader link whose predecessor or successor is not a live task, so
+  Add Link's up-front check could not see a file link into the successor whose
+  predecessor is not live, and the refusal was fail-at-save (the R29-8 shape).
+  `PlanInput::unreadable_links` now carries those links, and
+  `validate_link_add`, the actuals shape check and the indent shape check
+  refuse them up front; a link a pending edit dropped is not counted, so the
+  measured delete-and-re-add stays accepted.
+- **FIXED at CLOSE by W30-C3** (was: `memory/writer.md` states the falsified
+  link rule).  Lines 1126, 1144 and 1256 said "0x0f first link into that
+  successor / 0x07 later ones"; the memory note now states the measured rule
+  (the byte is the successor's driving state: 0x0f at 0 %, 0x07 once in
+  progress).
 
 WAVE-30-G0-COMPLETE
 
@@ -235,9 +237,11 @@ Five items are closed DONE (1.0's manual direction, 1.7, 1.8, 1.10 and 1.11),
 deferred with a committed Project pair (1.1, 1.2, 1.3, 1.4, 1.5 Notes, 1.6 and
 1.9).  No disabled button changed state without a measured pair; 1.11 is the
 one item the brief names as staying disabled, and it does.  G1 added 39
-tracked `.mpp` fixtures (101 at G0's close, 140 at G1's) and one new app test
-target per implemented command (plus the ribbon inventory's named Deliverable
-check).
+tracked `.mpp` fixtures (101 at G0's close, 140 at G1's) plus four new test
+targets for the five implemented items -- `app_edits_task_mode` (1.0),
+`qt_scroll_to_task_gate` (1.7), `qt_fill_gate` (1.8) and `qt_inspect_gate`
+(1.10) -- and extended `qt_split_view_gate` for 1.5's Details; 1.11 is the
+ribbon inventory's named Deliverable check, not a new target.
 
 W30-1.0 detail:
 
@@ -263,11 +267,13 @@ W30-1.0 detail:
   save.
 - `app::make_task_mode_edit` applies the plan check and then the file check
   when the command runs, so the refusal is never deferred to save; a sheet/file
-  date or duration mismatch is refused too.  The edit is exclusive in both
-  directions in `push()`, and the save cascade re-checks it.  Undo/redo
-  restores the file's bit from the displayed plan.  Qt enables the Task tab's
-  Manually Schedule button and Mode's Manually Scheduled entry; Auto Schedule
-  and Mode's automatic entry stay disabled with the exact tooltip.
+  date or duration mismatch is refused too.  The edit is exclusive against
+  structural and start edits in `push()` (a queued view-state/formula document
+  edit is NOT covered -- C4, Found, not fixed), and the save cascade re-checks
+  it.  Undo/redo restores the file's bit from the displayed plan.  Qt enables
+  the Task tab's Manually Schedule button and Mode's Manually Scheduled entry;
+  Auto Schedule and Mode's automatic entry stay disabled with the exact
+  tooltip.
 - `app_edits_task_mode_tests` (331 checks) saves the control through the real
   cascade and compares every owned stream and Props14 with Project's file
   under `tests/save_pair_noise.h` (19 effect bytes, 0 mismatches), reopens the
@@ -502,27 +508,29 @@ W30-1.11 detail:
   measured pair fails there with the item's wording.  No product code changed.
 
 Per-commit gates (logs under `build/w30/`, named `W30-1.x-*.log`).  Every
-commit's fixture log reports fixtures OK and every client-name scan reports
-0 files / 0 hits with `guard_names` exit 0; the per-commit logs carry the
-then-current counts (104 documented hashes throughout; 107 tracked `.mpp` at
-W30-1.0 rising to 140 by W30-1.9; 154 -> 187 tracked test-data files; 8
-oracles at the end).  Fixtures-only commits changed no code and ran no build
-or ctest.
+commit's fixture log reports fixtures OK, and the per-commit name scans that
+were retained report 0 files / 0 hits; the `guard_names wave29..HEAD` exit-0
+evidence is the G1 group gate, because several per-commit guard files lack an
+exit line (A3).  The per-commit logs carry the then-current counts (104
+documented hashes throughout; 107 tracked `.mpp` at W30-1.0 rising to 140 by
+W30-1.9; 154 -> 187 tracked test-data files; 8 oracles at the end).
+Measurement commits changed no product code and ran no build or ctest; they
+carry the oracle/hash scripts with the fixtures they generate (A1).
 
 | commit | builds | item tests | ctest |
 |---|---|---|---|
 | W30-1.0 pairs `0d0770e` | core exit 0; app exit 0 | core 52/52 | app 20/20 |
 | W30-1.0 `d51bcc0` | core, app, app_qt exit 0 | `app_edits_task_mode` 331 checks, 0 mismatches; `qt_ribbon_inventory` | app 21/21; app_qt 27/27 |
-| W30-1.1 `70b757a` | -- (fixtures only) | -- | -- |
-| W30-1.2 `2a99c98` | -- (fixtures only) | -- | -- |
-| W30-1.3 `ac008fa` | -- (fixtures only) | -- | -- |
-| W30-1.4 `8c1861b` | -- (fixtures only) | -- | -- |
-| W30-1.5 Notes `9ee38f6` | -- (fixtures only) | -- | -- |
+| W30-1.1 `70b757a` | -- (scripts and fixtures only) | -- | -- |
+| W30-1.2 `2a99c98` | -- (scripts and fixtures only) | -- | -- |
+| W30-1.3 `ac008fa` | -- (scripts and fixtures only) | -- | -- |
+| W30-1.4 `8c1861b` | -- (scripts and fixtures only) | -- | -- |
+| W30-1.5 Notes `9ee38f6` | -- (scripts and fixtures only) | -- | -- |
 | W30-1.5 Details `2e79aec` | core, app, app_qt exit 0 | `qt_split_view_gate`; `qt_ribbon_inventory` | app 21/21; app_qt 27/27 |
-| W30-1.6 `b2c3366` | -- (fixtures only) | -- | -- |
+| W30-1.6 `b2c3366` | -- (scripts and fixtures only) | -- | -- |
 | W30-1.7 `2b131ec` | core, app, app_qt exit 0 | `qt_scroll_to_task_gate` (new); `qt_ribbon_inventory` | app 21/21; app_qt 28/28 |
 | W30-1.8 `daaf3a1` | core, app, app_qt exit 0 | `qt_fill_gate` (new); `qt_ribbon_inventory` | app 21/21; app_qt 29/29 |
-| W30-1.9 `36298e9` | -- (fixtures only) | -- | -- |
+| W30-1.9 `36298e9` | -- (scripts and fixtures only) | -- | -- |
 | W30-1.10 `5bbcf17` | app_qt exit 0 | `qt_inspect_gate` (new), 0 failures; `qt_ribbon_inventory` | app_qt 30/30 |
 | W30-1.11 `3aa4549` | app_qt exit 0 | `qt_ribbon_inventory` 1.48 s | app_qt 30/30 |
 
@@ -543,6 +551,10 @@ G1 group gates (fresh trees configured from scratch on `3aa4549` under
 | client-name scan on HEAD / messages `wave29..HEAD` / `guard_names wave29..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
 
 The numbers belong to `3aa4549`; the marker commit that follows is docs-only.
+History note (A4): the G1 record commit was first made as `0e31238`
+("W30-G1 record temp") and then reset to `3aa4549` and recommitted as
+`3dcc5a7`; `git diff 0e31238 3dcc5a7` is empty (identical tree, message-only
+rewrite of an unpushed branch commit).
 The gate script's process status was 1 on this run because its final expected
 hex grep returns 1; every gate line exited 0 (the log carries the note, and
 the script now ends with an explicit exit 0).
@@ -611,8 +623,8 @@ W30-2.0 detail:
   Fixed2Data 336 -> 384, Fixed2Meta 86 -> 96).  `114/Props` takes three bytes
   (resource count 0x05 -> 0x06, the Rsc Var2Data size 0x0056 -> 0x008C, a
   calendar count 0x07 -> 0x08) and `214/CEdl/Var2Data` byte 543 changes
-  0x00 -> 0x26.  Task, assignment, project and DocumentSummaryInformation
-  streams have ZERO effects.
+  0x00 -> 0x26.  The task stream (including the project summary task row), the
+  assignment stream and DocumentSummaryInformation have ZERO effects.
 - DEFERRED: the port's `add_resource_row` writes only the six `TBkndRsc`
   streams and leaves every other stream byte-identical (`core/mppwrite/
   add_delete.h`), so its save would miss the resource-calendar row and the
@@ -736,10 +748,11 @@ W30-2.4 detail:
   DocumentSummaryInformation 1100 -> 1104 (project finish Fri 30/10/26 -> Fri
   6/11/26, duration `5 days?` -> `10 days?`).
 - The control had to be saved from a REOPENED seed: the first save after
-  FileNew is not reopen-stable (its 230-byte `214/CFilter` block gains a
-  second copy on the next save after a reopen), so the committed control, its
-  null save and the edit share one 460-byte block and the pair's only
-  unequal-length streams are Props14 and `214/CEdl/Var2Data`.
+  FileNew is not reopen-stable (its `214/CFilter` block gains a second copy on
+  the next save after a reopen; the exact first-save size was not retained as
+  a fixture or log -- A5), so the committed control, its null save and the
+  edit share one 460-byte block and the pair's only unequal-length streams are
+  Props14 and `214/CEdl/Var2Data`.
 - DEFERRED: the save is a scheduler rewrite.  The port has no scheduler and no
   LevelingDelay/Preleveled/Overallocated field in `app::TaskRow`,
   `ResourceRow` or `AssignmentRow`, and no writer for those words.  Level
@@ -781,23 +794,26 @@ W30-2.6 detail:
   464-465 pass `MenuAction::none`, no RibbonCommand and enabled = false; no
   `RibbonCommand::team_planner` and no `main_window` handler exist; the View
   menu entry and the status-bar view button are disabled the same way
-  (`app/menu_model.cpp:134`, `main_window.cpp:245`); the backlog rows stay
+  (`app/menu_model.cpp:134`, `main_window.cpp:247`); the backlog rows stay
   disabled with decision 9's reason.
 - W30-2.6 adds a named live check in `qt_ribbon_inventory` for BOTH ribbon
   buttons: each is present, disabled and carries exactly "not implemented in
   this port".  No product code changed.
 
 Per-commit gates (logs under `build/w30/`, named `W30-2.x-*.log`).  Every
-commit's fixture log reports fixtures OK and every client-name scan reports
-0 files / 0 hits with `guard_names` exit 0 and the hex sentinel grep exit 1 as
-expected.  Fixtures-only commits changed no code and ran no build or ctest.
+commit's fixture log reports fixtures OK and the per-commit name scans that
+were retained report 0 files / 0 hits; the `guard_names wave29..HEAD` exit-0
+and hex-sentinel-grep exit-1 evidence is the G2 group gate, because several
+per-commit guard files lack an exit line (A3).  Measurement commits changed no
+product code and ran no build or ctest; they carry the oracle/hash scripts
+with the fixtures they generate (A1).
 
 | commit | builds | item tests | ctest |
 |---|---|---|---|
-| W30-2.0 `363645c` | -- (fixtures only) | -- | -- |
-| W30-2.1 `eff96fd` | -- (fixtures only) | -- | -- |
+| W30-2.0 `363645c` | -- (scripts and fixtures only) | -- | -- |
+| W30-2.1 `eff96fd` | -- (scripts and fixtures only) | -- | -- |
 | W30-2.2 `b2e957e` | app_qt exit 0 | `qt_resource_details_gate` 0 failures; `qt_ribbon_inventory` | app_qt 31/31 (stale binary -- see Found, not fixed) |
-| W30-2.3 `f8086c0` | -- (fixtures only) | -- | -- |
+| W30-2.3 `f8086c0` | -- (scripts and fixtures only) | -- | -- |
 | W30-2.4 `8cdc56a` | app_qt exit 0 | `qt_ribbon_inventory`; `qt_split_view_gate` corrected | app_qt 31/31 |
 | W30-2.5 `913f81b` | app_qt exit 0 | `qt_ribbon_inventory` 0.68 s, 0 failures | app_qt 31/31 |
 | W30-2.6 `cd85fd3` | app_qt exit 0 | `qt_ribbon_inventory` 1.80 s, 0 failures | app_qt 31/31 |
@@ -832,9 +848,11 @@ The numbers belong to `cd85fd3`; the marker commit that follows is docs-only.
   since.  The lesson is procedural: after a change to a shared widget, ctest
   must run on the rebuilt tree, not the previous binary.
 - **A fresh Project file's first save is not reopen-stable, and the save-pair
-  mask cannot detect it.**  The first save after FileNew writes a 230-byte
+  mask cannot detect it.**  The first save after FileNew writes a
   `214/CFilter` block; the next save after a reopen materialises a second
-  copy.  W30-2.4's first control tripped the discipline's unequal-length rule
+  copy (the committed seeds end at 460 bytes; the exact first-save size was
+  not retained -- A5).  W30-2.4's first control tripped the discipline's
+  unequal-length rule
   (only Props14/CEdl may differ in length), which is the only gate that
   catches it.  `oracle_w30_level.py` now saves a SEED, reopens it and saves the
   control; future oracles that touch a fresh project should do the same before
@@ -1041,16 +1059,17 @@ W30-3.5 detail:
   string.  No product code changed.
 
 Per-commit gates (logs under `build/w30/`, named `W30-3.x-*.log`).  Every
-commit's fixture log reports fixtures OK and every client-name scan reports
-0 files / 0 hits with `guard_names` exit 0 and the hex sentinel grep exit 1 as
-expected.  The measurement commits changed only measurement scripts, fixtures
-and their README/hash table, so they ran no build or ctest.
+commit's fixture log reports fixtures OK and the per-commit name scans that
+were retained report 0 files / 0 hits; the `guard_names wave29..HEAD` exit-0
+evidence is the G3 group gate (A3).  The measurement commits changed only
+measurement scripts, fixtures and their README/hash table, so they ran no
+build or ctest.
 
 | commit | builds | item tests | ctest |
 |---|---|---|---|
 | W30-3.0 `e6b50e5` | -- (scripts and fixtures only) | -- | -- |
 | W30-3.0a `ec0138d` | -- (line endings only) | -- | -- |
-| W30-3.1 `fb89190` | -- (fixtures only) | -- | -- |
+| W30-3.1 `fb89190` | -- (scripts and fixtures only) | -- | -- |
 | W30-3.2 `df0c484` | -- (fixtures and analysis only) | -- | -- |
 | W30-3.3 `5a87d6d` | app exit 0; app_qt exit 0 | `app_spelling` 99 checks / 1867 words; `qt_spelling_gate` 0 failures; `qt_ribbon_inventory` | app 22/22; app_qt 32/32 |
 | W30-3.4 `ada5e66` | app_qt exit 0 | `qt_ribbon_inventory` 0 failures | app_qt 32/32 |
@@ -1093,11 +1112,278 @@ The numbers belong to `7c189b7`; the marker commit that follows is docs-only.
   ("the port's own word list only; no Microsoft Project dictionary and no
   correction") say so, so a finding is a prompt for the reader, not a claim
   that the name is misspelt.
-- **The generated backlog shows Set Baseline's label with a literal line-break
-  escape.**  `docs/ui-command-backlog.md` line 70 reads
-  `Set\nBaseline` because the split-label path in
-  `app_qt/tools/command_backlog.py` does not apply the `\n` -> space
-  replacement that the `large`/`small` path does.  It is a Low documentation
-  defect, outside G3's six items; the row's status and reason are correct, and
-  a one-line generator change plus regeneration would fix it.
+- **FIXED at CLOSE by W30-C2** (was: the generated backlog shows Set
+  Baseline's label with a literal line-break escape).  `docs/ui-command-backlog.md`
+  line 70 read `Set\nBaseline`; the generator's split-label path now applies
+  the same `\n` -> space replacement as the `large`/`small` path, and the
+  regenerated row reads `Set Baseline`.
 WAVE-30-G3-COMPLETE
+
+## CLOSE — the wave record
+
+The wave ran as four groups plus this close, one fresh session each: G0 (the
+wave-29 review's save-path findings), G1 (the Task tab), G2 (the Resource tab)
+and G3 (the Project tab).  Every item in G0..G3 is DONE or DEFERRED with a
+committed Project save pair and its measurement log under `build/w30/`; no item
+was deferred without evidence of an attempt.  The group marker lines end each
+section above.  The CLOSE work was the fresh-tree gate run, both privacy scans,
+the review pass over `git diff wave29..wave30`, the push and the two workflow
+dispatches, the START-HERE / INDEX / memory update, the regenerated backlog and
+the re-scored 16 decisions.  The record below belongs to the final code tree
+`0aca9d2`; the CLOSE commits after it change docs only.
+
+### The CLOSE fixes
+
+| id | finding | commit | gates |
+|---|---|---|---|
+| W30-C1 | U2: the generated backlog called Resource > Details disabled while the live, pinned control is enabled | `0770e94` | generator and regenerated doc only, no build; `build/w30/W30-C1-checks.log`: scan 0 files / 0 hits, messages 0 commits, guard exit 0, hex grep exit 1, `git diff --check` exit 0 |
+| W30-C2 | G3's Found-not-fixed: the backlog's Set Baseline split label carried a literal `\n` | `f24ad25` | generator and regenerated doc only, no build; `build/w30/W30-C2-checks.log`: scan 0/0, messages 0, guard exit 0, hex exit 1 |
+| W30-C3 | G0's Found-not-fixed: `memory/writer.md` repeated the falsified Fixed2Meta +8 "first/later link" rule | `2db8df2` | docs only, no build; `build/w30/W30-C3-checks.log`: scan 0/0, messages 0, guard exit 0, hex exit 1 |
+| W30-C4 | C1/C2 High: two GCC/Clang `-Werror` traps (unused `get_u16`; four unused test helpers) | `ec29e31` | `build/w30/W30-C4-build.log`: core build exit 0, core ctest 52/52, app build exit 0, app ctest 22/22, `app_edits_task_mode` exit 0; `W30-C4-checks.log` clean |
+| W30-C5 | C3 High: the edit model counted only live assignment rows and links while the writers count physical rows and skipped links | `0aca9d2` | `build/w30/W30-C5-*.log`: core build exit 0, core ctest 52/52; `W30-C5-gates.log`: plan_recalc 512 with corpus / 266 without, engine selftest 53 checks, suite 8 recorded (7 pass, `constraint-mso` expected), M2 332/332 + 268/268 + 64/64, fixtures OK (131 documented hashes, 167 tracked `.mpp`, 214 test-data files, 8 oracles); app build exit 0, app ctest 22/22; app_qt build exit 0, app_qt ctest 32/32 |
+
+W30-C5 closed the review's High by carrying the file-side shape into
+`PlanInput`: `TaskRow::assignment_rows` holds the physical `TBkndAssn` row count
+(live rows plus every skipped row naming the task), `AssignmentRow::
+resource_uid_raw` keeps the +8 word, and `PlanInput::unreadable_links` carries
+the reader-skipped links a pending edit has not dropped.  The actuals and indent
+shape checks now refuse a physical/live mismatch, a raw-0 placeholder word (only
+Project's `0xFFFF0001` was measured) and, for actuals, any reader-skipped link;
+Add Link refuses the same skipped links.  The reviewed failing case is a
+committed test: `tests/data/wave30-assign-delete.mpp` task 1 (a tombstoned
+deleted assignment plus a live placeholder) reads `assignment_rows == 3` and a
+percent edit on it is refused with a "physical" reason.  A link a pending delete
+dropped is not counted, so the measured delete-and-re-add stays accepted.
+
+### Fresh-tree gates (final code tree `0aca9d2`)
+
+One run on `0aca9d2`, from three trees configured from scratch under
+`build/w30-close-fresh{,-app,-qt}` and built serially with
+`CORE_WARNINGS_AS_ERRORS=ON`; log
+`build/w30/W30-CLOSE-fresh-gates.log` (started 21:13, finished 21:28).
+The marker and docs commits after it change no compiled file.
+
+| gate | result |
+|---|---|
+| core configure / build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 / 266 checks passed, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 / 420 checks passed, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app configure / build / ctest | exit 0 / exit 0 / 22/22 passed |
+| app_qt configure / build / ctest | exit 0 / exit 0 / 32/32 passed |
+| `check_fixtures.py` / paths / oracle provenance | fixtures OK (131 documented hashes, 167 tracked `.mpp`); paths OK (214 tracked test-data files, no local path); provenance OK (8 oracles) |
+| `git diff --check wave29..HEAD` (grandfathered CRLF files and `tests/data` excluded) | exit 0; no new CRLF file versus `wave29` (173 grandfathered outside `tests/data` at both tips; 174 whole-tree including `tests/data/project_a_recalc_golden.tsv`) |
+| client-name scan on HEAD / messages `wave29..HEAD` / `guard_names wave29..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The CLOSE fixes were also gated per commit: W30-C1..C3 are scripts and docs only
+and ran no build (their check logs are named above); W30-C4 rebuilt core and app
+and passed both ctests; W30-C5 rebuilt core, app and app_qt and passed all three
+plus the full measurement gate set.  The wave's groups ran their own fresh-tree
+gates on `b2517bc` (G0), `3aa4549` (G1), `cd85fd3` (G2) and `7c189b7` (G3), each
+logged beside the group section above.
+
+Parity gates on the fresh Qt shell at `0aca9d2`, offscreen at scale 1
+(`build/w30/W30-CLOSE-parity.log`): `wave23-outline` reports **10 comparable
+measures, 0 failing, 0 missing, PASS**, and `wave25-auto` colour-only reports
+**1 comparable measure, 0 failing, PASS**.  The pixel score is not re-run (no
+PROJECT_A reference PNG is local).
+
+### Privacy
+
+The final tree is clean under both scans: the line-based
+`scan_client_names.py HEAD --messages wave29..HEAD` reports **0 files / 0 hits**
+and **0 commit messages**, the whitespace-normalised `guard_names.py
+wave29..HEAD` is **0 hits, exit 0**, and `git grep -nE
+"client-string-[0-9a-f]{8}"` has no match (exit 1, expected).  All 66 new
+fixtures were built through Project on the neutral `C:/w30` root, and
+`check_fixtures.py`'s neutral-root rule accepts the measurement paths embedded
+in them; their metadata carries the neutral "Fixture Company", and no client
+task/resource/project/person name, username, e-mail, profile path or unsalted
+name hash appears in a new fixture's strings or metadata.  No Project
+screenshot or capture is committed.  The wave-30 brief records the repository's
+own path (`D:\dev\msproject-mac`, C6/U7) — machine layout, not client data, and
+not a name-scan hit; it is carried under Found, not fixed.  The pre-wave
+residuals (two fixtures and 69 tracked text files carrying the operator's name,
+and the 13 unsalted hashes in older history) are unchanged and belong to the
+wave-29 queue.
+
+### Independent review of `wave29..wave30`
+
+Three read-only reviews were run over `git diff wave29..wave30` at `3f935e0`,
+the G3 record commit before the CLOSE fixes: a save-path/core review, a
+UI/ribbon/gate review and a record audit.  They reported **21 findings: 0
+Critical, 4 High, 7 Medium, 10 Low**.  Every High is fixed: C1 and C2 by
+`ec29e31` (W30-C4), C3 by `0aca9d2` (W30-C5), A1 by correcting this record.  U2
+is fixed by `0770e94` (W30-C1); the two earlier Found-not-fixed items wave 30
+could close are fixed by W30-C2 and W30-C3.  The remaining Mediums and Lows are
+under Found, not fixed with a fix direction.  Ids are the reviewers' own, as in
+wave 29: C = save paths, U = UI, A = record audit.
+
+| id | severity | finding | disposition |
+|---|---|---|---|
+| C1 | High | `core/mppwrite/task_mode.cpp` kept an unused anonymous-namespace `get_u16`, which GCC/Clang reject under `-Werror` | **FIXED** W30-C4 |
+| C2 | High | `app/app_edits_task_mode_tests.cpp` kept four unused helpers (`kAssnMetaHeader`, `kAssnMetaEntry`, `put_u16`, `same_span`) | **FIXED** W30-C4 |
+| C3 | High | R29-8 still open on the assignment axis: tombstoned assignment rows and reader-skipped links were invisible to the edit model while the writers count them, and a raw-0 resource word collapsed to "no resource" | **FIXED** W30-C5 |
+| C4 | Medium | Task-mode exclusivity covers structural and Start edits only; a queued view-state/formula document edit still saves in the same container, and the G1 record's "exclusive in both directions" was false | Found, not fixed; the record sentence is corrected (errata) |
+| C5 | Medium | After a progress edit on a chain, the project row's Resume/Stop derives only from the edited chain even when an off-chain summary carries progress; no pair measured that shape | Found, not fixed |
+| C6 | Low | Machine-local absolute paths: the brief's repo path and the neutral `C:/w30` roots in the README, oracle scripts and fixture strings | Policy-allowed neutral roots; the brief path is U7; no client/person data — Found, not fixed (process) |
+| U1 | Medium | Fill Down can stage and save a Start on a non-project summary row; the target refusal list is otherwise presented as complete | Found, not fixed |
+| U2 | Medium | The generated backlog said Resource > Details disabled while the live wave-30 control is enabled, pinned and wired | **FIXED** W30-C1 |
+| U3 | Low | The disabled Mode-menu entry sets the decision-9 tooltip but never calls `QMenu::setToolTipsVisible(true)`, so Qt cannot display it; no gate opens the menu | Found, not fixed; the record's claim is narrowed (errata) |
+| U4 | Low | Task Details/Inspect from a non-task view dock or toggle a pane other than the command's label and status line say | Found, not fixed |
+| U5 | Low | The Resource Form is docked with two `setSizes` entries on a three-pane splitter, so it lands at its minimum height; the gate checks visibility only | Found, not fixed |
+| U6 | Low | `TaskInspectorValues::project` is written but never read | Found, not fixed |
+| U7 | Low | `docs/handoff/wave30-brief.md:11` embeds the repository's own `D:\dev\msproject-mac` path | Found, not fixed (process) |
+| A1 | High | Eleven rows called "fixtures only" and "changed no code" carry oracle/hash scripts, contradicting `standing-rules.md:55` | **FIXED in this record**: relabelled "scripts and fixtures only" / "changed no product code"; process note under Found, not fixed |
+| A2 | Medium | W30-0.0's actuals count read 3746; the log's count is 3736 | **FIXED in this record** |
+| A3 | Medium | The per-commit "guard_names exit 0" claim was unsupported for G0 0.0–0.5 and G1 1.1–1.11 (zero-byte or absent guard logs) | **FIXED in this record**: each group now claims the group gate's guard exit and only the retained per-commit scans |
+| A4 | Medium | The G1 record commit `0e31238` was reset to `3dcc5a7` (identical tree, message-only) and not disclosed | **FIXED in this record**: history note added |
+| A5 | Low | The 230-byte first-save `214/CFilter` figure has no retained log or fixture; only the 460-byte stable seed is committed | **FIXED in this record**: both claims softened; the stable 460-byte seeds stay |
+| A6 | Low | The Team Planner status-bar citation `main_window.cpp:245` is the Gantt entry; Team Planner is line 247 | **FIXED in this record** |
+| A7 | Low | W30-2.0's "Task, assignment, project and DocumentSummaryInformation streams have ZERO effects" contradicted the same bullet's three `114/Props` bytes | **FIXED in this record**: the sentence now names the task stream (including the project summary task row), the assignment stream and DSI |
+| A8 | Low | Four item commits and three group-marker commits name a second W30 id in the body | **FIXED by the rule-6 note below**: cross-references and group markers are exempt; each item subject names one item |
+
+Rule 6 (A8): the rule counts findings, not id tokens.  `b2e957e`, `8cdc56a`,
+`913f81b` and `ec0138d` name an earlier item as a cross-reference in the body,
+and the group-record commits (`b077409`, `3dcc5a7`, `2d22bbb`, `3f935e0`)
+summarise their group; every item subject names exactly one item.  No commit
+carries two findings.
+
+The reviews' verified-sound list, which the CLOSE re-checked: all 36 item-table
+commit hashes exist and their subjects match; exactly one
+`WAVE-30-G0..G3-COMPLETE` marker each and no early `WAVE-30-COMPLETE`; the
+fixture counts (101 → 140 → 158 → 167 tracked `.mpp`, 98/104/122/131 documented
+hashes) match their logs; every group gate carries the core/app/app_qt numbers,
+fixtures/paths/provenance and the scan/guard/hex lines; the item test counts
+match their logs (the sole exception was A2); the byte-effect spot checks
+reproduce from the committed pairs (W30-1.1, 1.5, 2.0–2.4, 3.0–3.2); every
+deferred control is pinned `enabled 0` with the exact decision-9 tooltip, and
+`git diff wave29..wave30 -- app_qt/ribbon_pin.tsv` shows exactly the eight DONE
+enables; Spelling is a read-only report over a sorted 1867-word list; the final
+tree has no CRLF file added by the wave.
+
+Errata in this record beyond the audit's list: G1's "one new app test target per
+implemented command" is corrected to the two targets the tree actually added
+(`app_edits_task_mode`, `app_spelling`); the G1 C4 sentence now says
+"exclusive against structural and start edits" and names the uncovered
+view-state/formula case; decision 1 and decision 9 say eight controls became
+live, not seven; decision 12 says two new app test targets and five new app_qt
+gate targets, not one; the G2/G3 gate paragraphs use the same narrowed
+guard-scan wording as G0/G1; the Set Baseline row is `Set Baseline`; and the U3
+tooltip guarantee is stated as set-but-not-displayed.
+
+### Push and CI
+
+`wave30` was cut from `origin/wave29` (`2a7fa4b`) and pushed without force at
+21:28 after a clean preflight (`build/w30/close-push1-*.log`):
+`scan_client_names.py HEAD` **0 files / 0 hits**, the message scan on
+`origin/wave29..HEAD` **0 commits**, `guard_names` **exit 0** and the hex grep
+**no matches** (exit 1, expected).  The push created `origin/wave30` at
+`0aca9d2`; no history was rewritten and no force was used.
+
+Both workflows were dispatched explicitly on `wave30` (the `workflow_run`
+trigger only fires from `main`), and the first dispatch was green on every job:
+
+* qt-shell run **40307814439** (2026-10-26 21:29 to 21:35): `windows-qt`,
+  `macos-qt` and `linux-qt` all **success**, including both parity gates.
+* ci run **40307818793** (2026-10-26 21:29 to 21:34): `windows-msvc` and
+  `ubuntu-gcc` both **success**.
+
+Status snapshots are `build/w30/close-ci-qt-status.json` and
+`build/w30/close-ci-ci-status.json`; no re-dispatch was needed.  The record and
+marker commits after `0aca9d2` change docs only, so the five green jobs cover
+the final code tree.
+
+### The 16 decisions re-scored (wave-29 close as the starting point)
+
+| # | decision | wave 29 | after wave 30 | why |
+|---|---|---|---|---|
+| 1 | all seven tabs | DONE | **DONE** | the tab/group structure is unchanged; eight previously disabled controls became live in their own tabs (Manually Schedule, Mode, Inspect and Details on Task; Scroll to Task and Fill on Task/Editing; Resource Details on Resource; Spelling on Project) |
+| 2 | full backstage | DONE | **DONE** | unchanged; no backstage work this wave |
+| 3 | original icon set | DONE (stronger) | **DONE (stronger)** | unchanged; no icon was redrawn or regressed |
+| 4 | measured chrome metrics | DONE | **DONE** | unchanged; no ribbon geometry change beyond enabled/disabled state |
+| 5 | timeline strip | DONE | **DONE** | the strip is unchanged; W30-1.6 measured that Project 16.0.20430's own Add to Timeline command is inert, so there is no positive save shape to reach for and the port's button stays disabled |
+| 6 | real Entry table | DONE | **DONE** | unchanged; Fill writes only the measured Start column and Spelling only reads names, so neither adds a column or changes the table |
+| 7 | render what the file says | DONE (stronger) | **DONE (stronger)** | unchanged rendering; the reader gained `TaskRow::calendar_uid` (W30-0.6) and the raw resource word/physical assignment counts (W30-C5) so the edit model can refuse unmeasured shapes, and every enabled writer is pinned to its measured bytes |
+| 8 | status bar | PARTIAL (stronger) | **PARTIAL (stronger)** | unchanged; Team Planner and Report still have no working view to switch to |
+| 9 | disabled commands + backlog | DONE (stronger) | **DONE (stronger)** | the regenerated backlog lists 95 ribbon commands with 69 disabled (77 at the wave-29 close), 26 implemented (18), and 51 menu commands with 7 disabled; eight controls became live, and G0 moved every enabled edit path's unmeasured-shape refusal up front |
+| 10 | light and dark themes | PARTIAL (stronger) | **PARTIAL (stronger)** | unchanged; the White theme is still laid out and disabled, and this wave made no theme change |
+| 11 | new-project defaults | DONE (stronger) | **DONE (stronger)** | unchanged; W30-1.0's Manually Schedule save stores the measured Manual bit and COM reopens both port saves with the same dates |
+| 12 | structural measurement | PARTIAL (stronger) | **PARTIAL (stronger)** | wave 30 adds field-by-field pairs for 22 new Project save pairs (13 Task, 6 Resource, 3 Project tab; 66 fixtures), five new app_qt gate targets (`qt_scroll_to_task_gate`, `qt_fill_gate`, `qt_inspect_gate`, `qt_resource_details_gate`, `qt_spelling_gate`; `qt_split_view_gate` extended) and two new app test targets (`app_edits_task_mode`, `app_spelling`); the pixel score is still not re-run (no PROJECT_A reference PNG is local) |
+| 13 | Carlito bundled | DONE | **DONE** | unchanged |
+| 14 | every dialog on every tab | DONE (stronger) | **DONE (stronger)** | unchanged; this wave adds panes and a read-only Spelling report, not a missing dialog |
+| 15 | dialog semantics | PARTIAL (stronger) | **PARTIAL (stronger)** | Spelling is a read-only port-owned report with no correction, Inspect and both Details forms are read-only, and the wave-29 inert dialogs are unchanged; no dialog gained a fake success |
+| 16 | split view | DONE (stronger) | **DONE (stronger)** | the Details splitter hosts exactly one form per view (Task Sheet → Task Form, Resource Sheet → Resource Form, usage views none), follows the current row by UID and keeps the document clean; U4/U5 are the queued caveats on cross-view command effects and the Resource Form's dock height |
+
+### Found, not fixed
+
+- **The CLOSE review's Mediums and Lows.**  C4: `make_task_mode_edit` should
+  also refuse when `document_edits.any()` (a queued view-state/formula edit
+  currently saves in the same container); C5: refuse off-chain progress or
+  measure a multi-chain project-row Resume/Stop pair before accepting it; U1:
+  refuse a summary source/target in `fill_down` (and consider the shared
+  begin-cell guard); U3: call `QMenu::setToolTipsVisible(true)` on the Mode menu
+  and add a gate that opens it; U4: switch to the Task Sheet in `task_details`
+  and `inspect` or label them per view; U5: pass the visible form's pane index
+  in `set_details_visible`'s sizes and assert the dock height in
+  `qt_resource_details_gate`; U6: remove or use
+  `TaskInspectorValues::project`; C6/U7: keep machine paths out of prose and
+  record them in the neutral-root policy (the fixture/script roots are already
+  allowed).
+- **A1 process item.**  Eleven measurement commits (`70b757a`, `2a99c98`,
+  `ac008fa`, `8c1861b`, `9ee38f6`, `b2c3366`, `36298e9`, `363645c`, `eff96fd`,
+  `f8086c0`, `fb89190`) carry oracle/hash scripts while their messages say
+  "fixtures only"; this record now labels them "scripts and fixtures only" and
+  "changed no product code".  `standing-rules.md:55` says a fixture commit
+  carries fixtures only — the wave-27/28 tension repeats.  History is not
+  rewritten; a future wave should split script changes into their own commit or
+  amend the rule.
+- **G1's reader and mask limits.**  The reader cannot represent Project's
+  inserted summary/milestone result (the fractional Fixed2Data ordinal and the
+  reparenting are ignored, so a Project save reads with the new row last) and
+  carries no `Task.Active`; `tests/save_pair_noise.h`'s fixed-block mask is
+  bounded by the control's size; the writer inserts/removes no VarMeta entry and
+  has no 214 view-stream writer.  Project 16.0.20430's Add to Timeline is inert,
+  so its committed pair is a negative baseline.
+- **G2's process and writer gaps.**  W30-2.2's ctest came from a stale binary
+  and W30-2.4 found and corrected the split-view gate on a rebuild; after a
+  shared-widget change, ctest must run on the rebuilt tree.  A fresh Project
+  file's first save is not reopen-stable (the first save's `214/CFilter` is not
+  retained; committed seeds are saved from a reopen and are stable at 460
+  bytes), and the mask cannot detect it.  Add Resources needs a `TBkndCal`
+  resource-calendar row plus three `114/Props` counts; Information/Notes need
+  VarMeta insertion (and Notes Project's RichEdit serialisation); Assign
+  Resources' remove direction needs append-and-re-key.
+- **G3's writer gaps and Spelling's word list.**  Calculate Project needs a
+  scheduler save path, VarMeta insertion and a DSI writer; Set Baseline needs a
+  baseline writer and VarMeta insertion; WBS needs a code-definition/renumber
+  writer and a `114/Props` record insertion.  Spelling's 1867-word list is
+  deliberately modest (common English and project vocabulary, no proper nouns,
+  other languages, suggestions or custom dictionary), so a reported name is a
+  prompt, not a claim that it is misspelt.  The Set Baseline backlog row is
+  FIXED by W30-C2.
+- **The wave-29 queue carried unchanged** (see `wave29-complete.md`'s Found, not
+  fixed): F3 the operator-name purge (Tim's decision), F6 the project-row
+  task-order gate, F7 the status-date length check, R28-5 the UTF-16
+  user-profile check, R28-6 save-time ordering and late refusals, R28-8 the
+  Task Form's view-only fields, R28-9 SKIP-on-missing fixtures, R28-11 the
+  README inventory, the process items (A2/A5, A4, A7, R28-12), the two named
+  expected-failure refusals, the bar-label side convention, the stored-style and
+  Visual Reports limits, the theme gate's missing tier-boundary sample, the
+  reopen scope, the stored combination view and the White theme, and Split
+  Task.  Wave 30 closed wave-29 review C3 (W30-0.7: a second incoming link is
+  refused up front and the +8 byte is the measured driving state) and C5's
+  skipped-link shape (W30-C5); wave-29 C4 (the null-save mask, now restated as
+  its size bound), C5's live-link percent shape and C6 (the Props-mask wording)
+  remain.
+- **The privacy residuals and line endings.**  Two pre-wave fixtures
+  (`synthetic-base.mpp`, `wave23-outline.mpp`) carry the operator's name three
+  times each, 69 tracked text files carry it, and the 13 unsalted FNV-1a name
+  hashes removed in wave 27 remain in older wave-26 commits and
+  `tests/data/project_a_golden.tsv`; the purge and the history handling are
+  Tim's decision.  174 grandfathered CRLF files remain
+  (`git grep -Il $'\r'`); no new one was added.
+
+WAVE-30-COMPLETE
