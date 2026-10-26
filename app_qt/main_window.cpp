@@ -2194,6 +2194,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::data_sort:
             show_sort_dialog();
             return;
+        case RibbonCommand::data_outline:
+            show_outline_menu();
+            return;
         case RibbonCommand::split_task:
             // Not wired (no engine split edit); disabled until then.
             return;
@@ -5068,6 +5071,45 @@ void MainWindow::show_sort_dialog() {
     } else {
         doc_.set_sort(std::move(definition), description);
         set_message("sort: " + description + " (session only)", false);
+    }
+    after_model_change();
+}
+
+// Wave 31 (W31-1.2): Project's View > Outline.  "Level N" leaves levels 1..N
+// visible and "All Subtasks" expands everything; both are session-only view
+// state (PlanDocument reuses the sheet's collapse state, so the file's rows and
+// bytes never change).  The Gantt follows the same visible row list.
+void MainWindow::show_outline_menu() {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
+        set_message("outline levels are available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    QMenu menu(this);
+    for (int level = 1; level <= 9; ++level) {
+        QAction* action = menu.addAction(QStringLiteral("Level %1").arg(level));
+        connect(action, &QAction::triggered, this,
+                [this, level]() { apply_outline_level(level); });
+    }
+    menu.addSeparator();
+    QAction* all = menu.addAction(QStringLiteral("All Subtasks"));
+    connect(all, &QAction::triggered, this, [this]() { apply_outline_level(0); });
+    menu.exec(QCursor::pos());
+}
+
+void MainWindow::apply_outline_level(int level) {
+    if (!doc_.has_document()) {
+        return;
+    }
+    if (level == 0) {
+        doc_.show_all_subtasks();
+        set_message("outline: all subtasks", false);
+    } else if (doc_.show_outline_level(level)) {
+        set_message("outline: level " + std::to_string(level), false);
+    } else {
+        set_message("outline: choose a level from 1 to 9", true);
+        update_status();
+        return;
     }
     after_model_change();
 }

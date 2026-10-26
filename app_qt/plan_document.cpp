@@ -781,6 +781,29 @@ void PlanDocument::clear_sort() {
     sort_description_.clear();
 }
 
+bool PlanDocument::show_outline_level(int level) {
+    if (sheet_ == nullptr || level < 1 || level > 9) {
+        return false;
+    }
+    // Project's "Level N" is 1-based and this port's outline levels are 0-based:
+    // showing through level N means every row at port level N-1 stays, and every
+    // summary at that level collapses so its children (port level N) hide.
+    sheet_->expand_all();
+    const int target = level - 1;
+    for (std::size_t row = 0; row < sheet_->row_count(); ++row) {
+        if (sheet_->is_summary(row) && sheet_->outline_level(row) == target) {
+            sheet_->collapse(row);
+        }
+    }
+    return true;
+}
+
+void PlanDocument::show_all_subtasks() {
+    if (sheet_ != nullptr) {
+        sheet_->expand_all();
+    }
+}
+
 std::vector<std::size_t> PlanDocument::ordered_display_rows() const {
     if (sheet_ == nullptr) {
         return {};

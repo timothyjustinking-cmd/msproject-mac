@@ -154,6 +154,14 @@ class PlanDocument {
     void clear_sort();
     bool sort_active() const noexcept { return sort_active_; }
     const std::string& sort_description() const noexcept { return sort_description_; }
+    // Wave 31 (W31-1.2): Project's View > Outline > Level 1..9 / All Subtasks,
+    // applied SESSION-ONLY through the sheet's collapse state (the file's rows
+    // and bytes are untouched).  Level N leaves the rows whose port outline
+    // level is <= N-1 visible: expand everything, then collapse every summary
+    // at port level N-1.  A level outside 1..9 is refused (false); All Subtasks
+    // is expand_all().  The caller rebuilds the views afterwards.
+    bool show_outline_level(int level);
+    void show_all_subtasks();
     // The displayed RecordSet rows: the sheet's visible rows in sorted order
     // (when a sort is active), restricted to the filter when one is active.
     // This is what the table and the Gantt draw.

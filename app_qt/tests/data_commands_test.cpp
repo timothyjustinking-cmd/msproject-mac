@@ -10,7 +10,13 @@
 // display-row order, and leave the file's bytes untouched.  Clear Sort
 // restores the file's order.
 //
-// The outline and table cases are added by their own commits (W31-1.2/W31-1.3).
+// W31-1.2 (Outline): View > Outline > Level N shows only rows whose outline
+// level is <= N (the sheet's 0-based port levels, so Level 1 collapses every
+// port-level-0 summary) and All Subtasks expands everything.  Both change the
+// sheet's collapse state only: the RecordSet and the file's bytes stay as they
+// were, and an active sort still orders the rows that remain visible.
+//
+// The table cases are added by their own commit (W31-1.3).
 //
 // Usage: qt_data_commands <wave23-outline.mpp>
 
@@ -177,6 +183,75 @@ void case_sort(const QString& path) {
     check_uids(bar_uids(document), file_order, "Clear Sort restores the bars' order");
 }
 
+void case_outline(const QString& path) {
+    const QString before = file_hash(path);
+    check(!before.isEmpty(), "the outline fixture is readable");
+
+    msqt::PlanDocument document;
+    std::string error;
+    check(document.load(path.toStdString(), app::ZoomLevel::week, error),
+          "the outline fixture loads");
+    if (!error.empty()) {
+        std::fprintf(stderr, "note: load error: %s\n", error.c_str());
+        return;
+    }
+    const std::vector<std::uint32_t> file_order = {1, 2, 3, 4, 5, 6};
+    check_uids(display_uids(document), file_order, "the baseline shows all six rows");
+
+    // Level 1 leaves the top-level tasks: uid 1 (1) and uid 6 (2).
+    check(document.show_outline_level(1), "Level 1 is accepted");
+    document.rebuild_views(app::ZoomLevel::week);
+    check_uids(display_uids(document), {1, 6}, "Level 1 shows only the top-level rows");
+    check_uids(document.rows().uids, {1, 6}, "the Gantt RowMap follows Level 1");
+    check_uids(record_uids(document), file_order, "Level 1 never reorders the RecordSet");
+    check(file_hash(path) == before, "Level 1 never changes the file's bytes");
+
+    // Level 2 adds the children at port level 1: uid 2 (1.1) and uid 5 (1.2).
+    check(document.show_outline_level(2), "Level 2 is accepted");
+    document.rebuild_views(app::ZoomLevel::week);
+    check_uids(display_uids(document), {1, 2, 5, 6}, "Level 2 adds the second level");
+    check(file_hash(path) == before, "Level 2 never changes the file's bytes");
+
+    // Level 3 keeps every row (the deepest task is at port level 2), and a level
+    // beyond the outline's depth shows everything too.
+    check(document.show_outline_level(3), "Level 3 is accepted");
+    document.rebuild_views(app::ZoomLevel::week);
+    check_uids(display_uids(document), file_order, "Level 3 shows every row");
+    check(document.show_outline_level(9), "Level 9 is accepted");
+    document.rebuild_views(app::ZoomLevel::week);
+    check_uids(display_uids(document), file_order, "Level 9 shows every row");
+    check(!document.show_outline_level(0), "Level 0 is refused");
+    check(!document.show_outline_level(10), "Level 10 is refused");
+
+    // Collapse something first, then All Subtasks must expand it again.
+    check(document.show_outline_level(1), "Level 1 is accepted again");
+    document.rebuild_views(app::ZoomLevel::week);
+    check_uids(display_uids(document), {1, 6}, "Level 1 hides the children again");
+    document.show_all_subtasks();
+    document.rebuild_views(app::ZoomLevel::week);
+    check_uids(display_uids(document), file_order, "All Subtasks expands every row");
+    check_uids(bar_uids(document), file_order, "All Subtasks restores the bars");
+    check(file_hash(path) == before, "the outline commands never change the file's bytes");
+
+    // A sort composes with the outline: Level 1 keeps the sorted top-level order.
+    const app::SortBuild descending = sort_by("ID", false);
+    check(descending.ok, "the ID descending sort builds");
+    document.set_sort(descending.definition, descending.description);
+    document.rebuild_views(app::ZoomLevel::week);
+    check_uids(display_uids(document), {6, 1, 5, 2, 4, 3},
+               "the sort orders the full outline");
+    check(document.show_outline_level(1), "Level 1 is accepted under a sort");
+    document.rebuild_views(app::ZoomLevel::week);
+    check_uids(display_uids(document), {6, 1}, "Level 1 keeps the sorted order");
+    document.show_all_subtasks();
+    document.rebuild_views(app::ZoomLevel::week);
+    check_uids(display_uids(document), {6, 1, 5, 2, 4, 3},
+               "All Subtasks restores the sorted order");
+    check_uids(record_uids(document), file_order,
+               "the outline commands never reorder the RecordSet");
+    check(file_hash(path) == before, "sort plus outline never changes the file's bytes");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -186,6 +261,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     case_sort(QString::fromLocal8Bit(argv[1]));
+    case_outline(QString::fromLocal8Bit(argv[1]));
     if (g_failures == 0) {
         std::printf("qt_data_commands: %d checks, 0 failures\n", g_checks);
         return 0;

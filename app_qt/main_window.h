@@ -482,6 +482,10 @@ class MainWindow final : public QMainWindow {
     // Wave 31 (W31-1.1): the View tab's Sort dialog.  Session-only: the display
     // order changes, the RecordSet and the file keep theirs.
     void show_sort_dialog();
+    // Wave 31 (W31-1.2): the View tab's Outline menu.  Session-only collapse
+    // state: Level 1..9 or All Subtasks; the file is never written.
+    void show_outline_menu();
+    void apply_outline_level(int level);
     void insert_task();
     void delete_task();
     void set_view(app::ViewMode mode);

@@ -68,6 +68,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W31-1.1: the View tab's Sort opens the Sort dialog; the order it applies
     # is session-only (the RecordSet and the file keep their row order).
     "data_sort",
+    # W31-1.2: the View tab's Outline opens the level menu (Level 1..9 / All
+    # Subtasks); the shown levels are session-only.
+    "data_outline",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine

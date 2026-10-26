@@ -132,6 +132,10 @@ enum class RibbonCommand : std::uint8_t {
     // keep their order), because Project's own sort is a persisted reorder this
     // wave did not measure.  app/sort_model.h owns the outline-aware order.
     data_sort,
+    // Wave 31 (W31-1.2): Outline opens Project's level menu (Level 1..9 / All
+    // Subtasks).  The shown levels are SESSION-ONLY: the sheet's collapse state,
+    // never the file's rows or bytes.
+    data_outline,
 };
 
 class RibbonBar final : public QWidget {

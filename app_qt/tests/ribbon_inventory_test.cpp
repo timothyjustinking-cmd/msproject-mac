@@ -512,6 +512,8 @@ const EnabledWiring kEnabledWiring[] = {
     {"View", "Task Views", "Task Usage", "view_task_usage", ""},
     // W31-1.1: the View tab's Sort opens the session-only Sort dialog.
     {"View", "Data", "Sort", "", "data_sort"},
+    // W31-1.2: Outline opens the session-only level menu.
+    {"View", "Data", "Outline", "", "data_outline"},
     {"View", "Resource Views", "Resource Usage", "view_resource_usage", ""},
     {"View", "Resource Views", "Resource Sheet", "view_resource_sheet", ""},
     {"Project", "Properties", "Custom Fields", "custom_fields", ""},
@@ -603,6 +605,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::compare_projects: return "compare_projects";
         case RibbonCommand::visual_reports: return "visual_reports";
         case RibbonCommand::data_sort: return "data_sort";
+        case RibbonCommand::data_outline: return "data_outline";
     }
     return "none";
 }

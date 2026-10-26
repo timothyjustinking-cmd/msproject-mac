@@ -486,7 +486,9 @@ const std::vector<TabSpec>& tab_specs() {
         // its row order), and the dialog says so.
         large(data, "Sort", app::MenuAction::none, 50, 0, true, "data.sort",
               RibbonCommand::data_sort);
-        large(data, "Outline", app::MenuAction::none, 50, 1, false, "data.outline");
+        // W31-1.2: Outline is ENABLED; its level menu is session-only.
+        large(data, "Outline", app::MenuAction::none, 50, 1, true, "data.outline",
+              RibbonCommand::data_outline);
         large(data, "Tables", app::MenuAction::none, 50, 2, false, "data.tables");
         combo(data, "Highlight", "No Highlight", 156, 0, 3);
         combo(data, "Filter", "No Filter", 156, 1, 3);
