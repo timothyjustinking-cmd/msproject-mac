@@ -349,6 +349,34 @@ DOCUMENTED = {
         "C9BBE9ECA30BF11145C466D2D832EC9E27F25A0EB5AC366945E4F81D3384BC01",
     "tests/data/wave29-outline-manual-parent.mpp":
         "6230E118C3E84EC7C4E284DD4B496D4CB21933B79CFA742B7FC57958B63948BD",
+    # Wave 30 (W30-1.0): two Project 2021 save pairs for the Manually Schedule
+    # mode write on the synthetic base (all three rows manual), built by the
+    # committed scripts/oracle_w30_task_mode.py under C:/w30/fixtures-mode
+    # with neutral metadata.  Each pair opens a fresh copy, sets Task ID 1's
+    # mode through COM, saves the control, changes the mode again, saves, and
+    # reopens every saved file (facts JSON, not committed:
+    # build/w30/W30-1.0-project-task-mode.json).
+    #   auto_to_manual  ID 1 automatic in the control -> Manual=True; the row's
+    #                   bytes move (FixedMeta +17/+18, Fixed2Meta +8, FixedData
+    #                   +174, Fixed2Data +50/+54/+58 and the placeholder
+    #                   assignment's Fixed2Meta +8) and no date moves.
+    #   manual_to_auto  the all-manual base -> ID 1 Manual=False; Project
+    #                   RESCHEDULES the row (Start/Finish move), so this
+    #                   direction stays disabled in the port.
+    # Both controls get a Project no-edit save (the -null fixtures) from
+    # scripts/oracle_w30_null_saves.py under C:/w30/null.
+    "tests/data/wave30-task-mode-auto-control.mpp":
+        "B47984D75E56E378AE1E12670CC4B0E13FD3D9A05D4A280420A48682FAE6CE0F",
+    "tests/data/wave30-task-mode-auto-control-null.mpp":
+        "45E06E5BE0E4148CD78E5EA2B3ACCF90E3A029780AA2E651680F77F76D52C540",
+    "tests/data/wave30-task-mode-manual.mpp":
+        "E959D5386431369CFB97EC2DF12C1DCF0D96E1D17F549D9D0F60A9377787BE9D",
+    "tests/data/wave30-task-mode-manual-control.mpp":
+        "4E3D06F9236D57E7DB8A78C40AB704CB33C3765DC8837B0B6D20B328A2844D7A",
+    "tests/data/wave30-task-mode-manual-control-null.mpp":
+        "AEE6A9F12112224809543F95D7A017BCF5FB0503D18075FCEFA432A87620A723",
+    "tests/data/wave30-task-mode-auto.mpp":
+        "9E8ECD8F4E554C72D0FFF79F1C43254CF06141248188849C196F8E73927AE3F1",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
