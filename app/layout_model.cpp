@@ -671,6 +671,19 @@ StoredTimescale apply_stored_timescale(const msproject::viewstate::GanttStyle& s
     if (style.timescale_size <= 0 || style.bottom.count != 1) {
         return applied;
     }
+    // Wave 29 CLOSE (W29-C6): a stock start is not a saved scroll position, and
+    // the stock day tier's size is 100 % -- exactly the width the shell's week
+    // zoom already draws (168 px / 7 = 24 px/day).  The record therefore adds
+    // nothing the caller does not already show; applying it would re-base the
+    // axis from the caller's week unit to days and move the measured left edge
+    // from the week start to the project-start day (the wave-23 neutral-outline
+    // reference capture starts on the Monday of the project-start week).  Keep
+    // the caller's unit, width and anchor for that default record; a stored
+    // start or any non-default size still applies below.
+    if (style.timescale_start <= kStockTimescaleStart &&
+        style.bottom.unit == TimescaleUnit::days && style.timescale_size == 100) {
+        return applied;
+    }
     double day_width = 0.0;
     switch (style.bottom.unit) {
         case TimescaleUnit::days:

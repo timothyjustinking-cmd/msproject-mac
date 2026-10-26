@@ -536,8 +536,11 @@ void test_stored_timescale() {
     check(!layout.bars.empty() && layout.bars[0].rect.x < 0.0,
           "a task before the stored origin is drawn left of x = 0 (clipped)");
 
-    // The stock fixture: a days bottom tier at 100% is the measured 24 px/day.
-    // Its stored start is Project's 1984-01-01 default, not a saved scroll.
+    // The stock fixture: a days bottom tier at 100% is Project's default record
+    // (start 1984-01-01, the stock 100 % day tier).  Its width is exactly what
+    // the shell's week zoom already draws (168 px / 7 = 24 px/day), so the
+    // record must change nothing: re-basing the axis to days would move the
+    // measured left edge from the week start to the project-start day (W29-C6).
     msproject::viewstate::GanttStyle stock;
     stock.decoded = true;
     stock.timescale_start = 14400u;
@@ -548,9 +551,22 @@ void test_stored_timescale() {
     const app::StoredTimescale stock_applied =
         app::apply_stored_timescale(stock, stock_scale);
     check(!stock_applied.origin, "the stock 1984-01-01 default does not pin the axis");
-    check(stock_applied.zoom, "the stock 100% size applies");
-    check(stock_scale.unit == core::gantt::TimescaleUnit::day, "stock day unit");
-    check_near(stock_scale.pixels_per_unit, 24.0, 1e-9, "stock size 100 is 24 px/day");
+    check(!stock_applied.zoom,
+          "the stock 100 % day record adds no zoom to the caller's view (W29-C6)");
+    check_near(stock_scale.pixels_per_unit, 20.0, 1e-9,
+               "the stock default leaves the caller's width alone");
+
+    // The same stock start with a saved non-default size still applies: a zoom
+    // can be stored without a saved scroll origin.
+    msproject::viewstate::GanttStyle stock_wide = stock;
+    stock_wide.timescale_size = 200;
+    core::gantt::Timescale wide_scale = app::default_timescale(20.0);
+    const app::StoredTimescale wide_applied =
+        app::apply_stored_timescale(stock_wide, wide_scale);
+    check(!wide_applied.origin && wide_applied.zoom,
+          "a stored 200 % day tier applies even on the stock start");
+    check(wide_scale.unit == core::gantt::TimescaleUnit::day && wide_scale.pixels_per_unit == 48.0,
+          "stored size 200 is 48 px/day");
 
     // An unmeasured bottom unit keeps the shell zoom but still takes the origin.
     msproject::viewstate::GanttStyle weeks = stored;
