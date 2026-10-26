@@ -324,8 +324,9 @@ const std::vector<TabSpec>& tab_specs() {
         small(properties, "Add to Timeline", app::MenuAction::none, 130, 2, 1, false, 1, false,
               "properties.add_to_timeline");
         GroupSpec& editing = add_group(task, "Editing", 140);
-        large(editing, "Scroll\nto Task", app::MenuAction::none, 66, 0, false,
-              "editing.scroll_to_task");
+        // W30-1.7: the sheet scroll + chart pan; a view command (no file write).
+        large(editing, "Scroll\nto Task", app::MenuAction::none, 66, 0, true,
+              "editing.scroll_to_task", RibbonCommand::scroll_to_task);
         small(editing, "Find", app::MenuAction::show_filter, 60, 0, 1, true, 1, false,
               "editing.find");
         small(editing, "Clear", app::MenuAction::clear_filter, 60, 1, 1, true, 1, false,

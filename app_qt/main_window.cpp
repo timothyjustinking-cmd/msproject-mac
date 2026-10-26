@@ -2084,6 +2084,11 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             }
             set_details_visible(true);
             return;
+        case RibbonCommand::scroll_to_task:
+            // W30-1.7: scrolls the sheet and pans the chart; a view command,
+            // never a file write.
+            scroll_to_task();
+            return;
         case RibbonCommand::toggle_details:
             // W26-6.3: dock/undock the Task Form; a view toggle, never a file
             // write.
@@ -2181,6 +2186,24 @@ void MainWindow::set_details_visible(bool visible) {
     }
     set_message(visible ? "details pane shown" : "details pane hidden", false);
     update_status();
+}
+
+void MainWindow::scroll_to_task() {
+    // W30-1.7: Task > Editing > Scroll to Task.  The sheet scrolls the selected
+    // row into view (the row menu has run the same call since wave 21) and the
+    // chart pans its left edge to the task's start.  Both are view operations:
+    // the RecordSet, the plan and the save diff are untouched, so the command
+    // can never make the document dirty.
+    if (sheet_view_ == nullptr || !doc_.has_document()) {
+        return;
+    }
+    sheet_view_->scrollTo(sheet_view_->currentIndex());
+    const std::uint32_t uid = doc_.selected_uid();
+    if (uid != 0 && doc_.scroll_gantt_to(uid, prefs_.zoom) &&
+        gantt_canvas_ != nullptr) {
+        gantt_canvas_->set_layout(doc_.gantt());
+        gantt_canvas_->set_selected_uid(doc_.selected_uid());
+    }
 }
 
 void MainWindow::refresh_task_form() {
@@ -4235,11 +4258,8 @@ QMenu* MainWindow::build_row_menu() {
     disabled(menu->addAction(QStringLiteral("Paste Special...")));
     menu->addSeparator();
     QAction* scroll = menu->addAction(QStringLiteral("Scroll to Task"));
-    connect(scroll, &QAction::triggered, this, [this](bool) {
-        if (sheet_view_ != nullptr) {
-            sheet_view_->scrollTo(sheet_view_->currentIndex());
-        }
-    });
+    // W30-1.7: the row menu and the Task tab's button share one view path.
+    connect(scroll, &QAction::triggered, this, [this](bool) { scroll_to_task(); });
     menu->addSeparator();
     command(QStringLiteral("Insert Task"), app::MenuAction::insert_task);
     command(QStringLiteral("Delete Task"), app::MenuAction::delete_task);

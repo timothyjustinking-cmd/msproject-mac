@@ -528,6 +528,24 @@ add_test(NAME qt_split_view_gate
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================
+# WAVE 30 (G1, W30-1.7): Task > Editing > Scroll to Task is a VIEW command.
+# The gate clicks the LIVE button twice on wave23-outline (uid 6 starts
+# 2026-12-11, uid 4 starts 2026-12-16) and proves the chart's timescale origin
+# follows the selected task, that each bar sits at the left edge, that the
+# earlier bar clips left, that a short window's sheet scrolls the selected row
+# back into view, and that the document is never dirty.
+# ===========================================================================
+add_executable(qt_scroll_to_task_gate_tests tests/scroll_to_task_gate_test.cpp)
+target_link_libraries(qt_scroll_to_task_gate_tests PRIVATE qt_shell Qt6::Test)
+qt_set_warnings(qt_scroll_to_task_gate_tests)
+
+add_test(NAME qt_scroll_to_task_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_scroll_to_task_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# ===========================================================================
 # WAVE 28 (G2, W28-2.2): the sheet and Gantt show a queued Indent/Outdent at
 # once -- level and OutlineNumber, the one-level indent, the summary's working
 # collapse triangle, and the Gantt summary bracket, then undo/redo.  The two

@@ -501,6 +501,8 @@ const EnabledWiring kEnabledWiring[] = {
     {"Task", "Properties", "Information", "task_fields", ""},
     // W30-1.5: the Task tab's Details shows the existing Task Form pane.
     {"Task", "Properties", "Details", "", "task_details"},
+    // W30-1.7: Scroll to Task scrolls the sheet and pans the chart (view only).
+    {"Task", "Editing", "Scroll to Task", "", "scroll_to_task"},
     {"Task", "Editing", "Find", "show_filter", ""},
     {"Task", "Editing", "Clear", "clear_filter", ""},
     {"View", "Task Views", "Task Usage", "view_task_usage", ""},
@@ -569,6 +571,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::toggle_timeline: return "toggle_timeline";
         case RibbonCommand::toggle_details: return "toggle_details";
         case RibbonCommand::task_details: return "task_details";
+        case RibbonCommand::scroll_to_task: return "scroll_to_task";
         case RibbonCommand::project_information: return "project_information";
         case RibbonCommand::change_working_time: return "change_working_time";
         case RibbonCommand::links_between_projects: return "links_between_projects";

@@ -348,6 +348,8 @@ void PlanDocument::reset() {
     table_ = msproject::viewstate::TableDef{};
     gantt_style_ = msproject::viewstate::GanttStyle{};
     use_stored_timescale_ = false;
+    scroll_origin_ = core::sched::kDateNa;
+    scroll_origin_set_ = false;
     applied_view_.clear();
     path_.clear();
     title_.clear();
@@ -478,6 +480,15 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
             timescale.unit = core::gantt::TimescaleUnit::week;
             timescale.pixels_per_unit = kPixelsPerWeek;
         }
+    }
+    // Wave 30 (W30-1.7): Task > Editing > Scroll to Task pins the chart's left
+    // edge to the selected task's start for the rest of the session, through
+    // the same Timescale::pin_origin path the file's stored origin uses (the
+    // bar sits at x = 0, earlier bars are clipped left).  It runs after the
+    // stored/zoom origin, so the command wins over both.
+    if (scroll_origin_set_) {
+        timescale.origin = scroll_origin_;
+        timescale.pin_origin = true;
     }
     // The Gantt's row pitch must equal the sheet's 22 px rows, or the two halves
     // drift apart one row-height style at a time.
@@ -717,6 +728,24 @@ void PlanDocument::set_project_summary_visible(bool visible, app::ZoomLevel zoom
     base_ = app::sync_plan_from_records(base_, records_);
     base_.show_project_summary = visible;
     rebuild_from_base(zoom, 0);
+}
+
+bool PlanDocument::scroll_gantt_to(std::uint32_t uid, app::ZoomLevel zoom) {
+    if (sheet_ == nullptr) {
+        return false;
+    }
+    // uid 0 is the synthetic project row, which is never a task (W24-1).
+    const app::TaskRow* task = task_by_uid(uid);
+    if (task == nullptr || core::sched::is_na(task->start) ||
+        core::sched::is_overflow(task->start)) {
+        return false;
+    }
+    // A bare day: the chart's left edge, not the bar's time of day.  The bar
+    // itself starts at its own time within that day, so it stays visible.
+    scroll_origin_ = core::sched::date_only(task->start);
+    scroll_origin_set_ = true;
+    build_gantt(zoom);
+    return true;
 }
 
 void PlanDocument::accept_start_edits(const std::vector<app::StartEdit>& edits) {

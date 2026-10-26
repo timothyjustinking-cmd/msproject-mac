@@ -287,6 +287,12 @@ class MainWindow final : public QMainWindow {
     // file is never written by a toggle.
     void set_details_visible(bool visible);
     bool details_visible() const noexcept { return details_visible_; }
+
+    // --- wave 30 (W30-1.7): Task > Editing > Scroll to Task ------------------
+    // Scrolls the sheet to the selected row and pans the chart to the task's
+    // start.  View only: the document is never written or marked dirty.  Public
+    // so the offscreen gate drives the same path the ribbon button does.
+    void scroll_to_task();
     TaskForm* task_form() const noexcept { return task_form_; }
     QSplitter* details_splitter() const noexcept { return details_splitter_; }
 

@@ -81,7 +81,7 @@ Task	0	Properties	small	Notes	0	properties.notes	0	-
 Task	0	Properties	small	Details	1	properties.details	1	-
 Task	0	Properties	small	Add to Timeline	0	properties.add_to_timeline	2	-
 Task	0	Editing	group	-	-	-	-	-
-Task	0	Editing	button	Scroll to Task	0	editing.scroll_to_task	0	-
+Task	0	Editing	button	Scroll to Task	1	editing.scroll_to_task	0	-
 Task	0	Editing	small	Find	1	editing.find	0	-
 Task	0	Editing	small	Clear	1	editing.clear	1	-
 Task	0	Editing	small	Fill	0	editing.fill	2	-

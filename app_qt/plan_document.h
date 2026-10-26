@@ -181,6 +181,14 @@ class PlanDocument {
     void set_project_summary_visible(bool visible, app::ZoomLevel zoom);
     bool project_summary_visible() const noexcept { return show_project_summary_; }
 
+    // Wave 30 (W30-1.7): Task > Editing > Scroll to Task.  Pins the Gantt's
+    // left edge to the selected task's start (Timescale::pin_origin) and
+    // rebuilds the chart; the sheet scroll itself is the shell's.  False, with
+    // the chart untouched, when `uid` is not a task or has no start.  View
+    // state only: the RecordSet, the plan and the save diff never see it.  The
+    // pan survives later rebuilds and zoom changes until the next load.
+    bool scroll_gantt_to(std::uint32_t uid, app::ZoomLevel zoom);
+
     // The stored character width of the `214/CTable` column whose field id is
     // `table_field` (0 when the table/file does not carry it).
     int table_column_chars(std::uint32_t table_field) const;
@@ -281,6 +289,12 @@ class PlanDocument {
     // shell's zoom levels; while true, build_gantt() applies the applied
     // view's stored scroll origin and size over the preference zoom.
     bool use_stored_timescale_ = false;
+    // Wave 30 (W30-1.7): the Scroll to Task pan -- the selected task's start
+    // date, session-only.  reset() (a load or File > New) clears it; a
+    // structural rebuild or a zoom change keeps the chart where the command
+    // put it.
+    core::sched::date32 scroll_origin_ = core::sched::kDateNa;
+    bool scroll_origin_set_ = false;
     std::string applied_view_;
     std::string path_;
     std::string title_;

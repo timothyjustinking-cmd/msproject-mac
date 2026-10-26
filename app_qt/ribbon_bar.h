@@ -78,6 +78,10 @@ enum class RibbonCommand : std::uint8_t {
     // pane (the View check box remains the toggle), so a click can never hide
     // a pane the user is reading; a view command, never a file write.
     task_details,
+    // Wave 30 (W30-1.7): the Task tab's Scroll to Task.  It scrolls the sheet
+    // to the selected row and pans the chart to the task's start; a view
+    // command, never a file write.
+    scroll_to_task,
     // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
     // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
     // commands with no menu-bar item.

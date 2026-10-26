@@ -50,6 +50,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W30-1.5: the Task tab's Details opens the Task Form details pane the
     # View tab already docks (decision 16); a view, never a file write.
     "task_details",
+    # W30-1.7: Scroll to Task scrolls the sheet to the selected row and pans
+    # the chart to the task's start; a view, never a file write.
+    "scroll_to_task",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine
