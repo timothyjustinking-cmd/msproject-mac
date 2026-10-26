@@ -436,6 +436,20 @@ DOCUMENTED = {
         "66A2B82F783D3CBF50CFF5FDCE2F23B1CAB1585D20F3ADA966293B0C5047AE44",
     "tests/data/wave30-level-control-null.mpp":
         "F944680A41AF05D5B948B4CB496788289A5CEF9673FAB5E01123CB63D01E2E37",
+    # Wave 30 (W30-3.0): Calculate Project -- F9 on a MANUAL-calculation
+    # project whose linked automatic successor is still stale -- built by
+    # scripts/oracle_w30_project_pairs.py from a reopened seed (a first save
+    # after FileNew is not reopen-stable), with the control's no-edit save.
+    # Project's F9 writes the recalculated successor dates, the project row's
+    # rolled-up Duration/Finish and new Var2Data/VarMeta entries, which the
+    # port's writer cannot reproduce; the button stays disabled
+    # (tests/data/README.md).
+    "tests/data/wave30-calculate-control.mpp":
+        "8E4E81D849DF6452EEF24177BF5D90F58A19CA70D170636FA953DFBC6EAB0FD3",
+    "tests/data/wave30-calculate.mpp":
+        "B50359BFA22C628E6204747B1E2ABD08ED262AA21608819D49245F3636918A50",
+    "tests/data/wave30-calculate-control-null.mpp":
+        "8FF4083A6F1416D9046A45472DB83132A29003A3E1BA5D75F03D2C9088DD473F",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and

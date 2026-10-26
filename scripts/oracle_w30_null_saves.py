@@ -68,6 +68,9 @@ CONTROLS = [
     "wave30-assign-delete-control.mpp",
     # W30-2.4: Leveling (Level All on a fresh overallocated project).
     "wave30-level-control.mpp",
+    # W30-3.0: Calculate Project (F9 on a manual-calculation project with a
+    # pending duration change).
+    "wave30-calculate-control.mpp",
 ]
 
 
