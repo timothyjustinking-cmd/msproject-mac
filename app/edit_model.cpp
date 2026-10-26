@@ -411,6 +411,144 @@ bool check_new_summary_shape(const PlanInput& plan, std::uint32_t uid,
     return true;
 }
 
+// W30-0.3 (R29-3, High): PlanInput::tasks is in display (outline) order, so the
+// subtree of a row is that row and every following row with a deeper level.
+// The outline writer never writes % Complete, actual duration or ActualStart,
+// and the measured pairs' rows are all 0 % with placeholder assignments; an
+// outline move over a progressed or resource-loaded row would save stale
+// roll-up values.
+std::vector<std::uint32_t> outline_subtree_uids(const PlanInput& plan,
+                                                std::uint32_t uid) {
+    std::vector<std::uint32_t> uids;
+    std::size_t start = plan.tasks.size();
+    for (std::size_t index = 0; index < plan.tasks.size(); ++index) {
+        if (plan.tasks[index].uid == uid) {
+            start = index;
+            break;
+        }
+    }
+    if (start == plan.tasks.size()) {
+        return uids;
+    }
+    const int level = plan.tasks[start].outline_level;
+    uids.push_back(plan.tasks[start].uid);
+    for (std::size_t index = start + 1; index < plan.tasks.size(); ++index) {
+        if (plan.tasks[index].outline_level <= level) {
+            break;
+        }
+        uids.push_back(plan.tasks[index].uid);
+    }
+    return uids;
+}
+
+// True when `ancestor_uid` is one of the nearest shallower rows above `uid` in
+// the display order.
+bool outline_is_ancestor(const PlanInput& plan, std::uint32_t ancestor_uid,
+                         std::uint32_t uid) {
+    if (ancestor_uid == uid) {
+        return false;
+    }
+    std::size_t target = plan.tasks.size();
+    for (std::size_t index = 0; index < plan.tasks.size(); ++index) {
+        if (plan.tasks[index].uid == uid) {
+            target = index;
+            break;
+        }
+    }
+    if (target == plan.tasks.size()) {
+        return false;
+    }
+    int level = plan.tasks[target].outline_level;
+    for (std::size_t index = target; index-- > 0;) {
+        if (plan.tasks[index].outline_level >= level) {
+            continue;
+        }
+        if (plan.tasks[index].uid == ancestor_uid) {
+            return true;
+        }
+        level = plan.tasks[index].outline_level;
+        if (level == 0) {
+            break;
+        }
+    }
+    return false;
+}
+
+// W30-0.3 (R29-3, High): one row an outline move touches must be a 0 % row
+// with no resource work and no actuals edit queued in the same save.
+bool check_outline_progress_row(
+    const PlanInput& plan, std::uint32_t uid,
+    const std::vector<std::uint32_t>& pending_actuals, std::string_view role,
+    std::string& error) {
+    const TaskRow* row = task_row_for_uid(plan.tasks, uid);
+    if (row != nullptr && row->percent_complete > 0) {
+        error = "task uid " + std::to_string(uid) + " is " +
+                std::to_string(row->percent_complete) + " % complete and is " +
+                std::string(role) +
+                "; the outline writer never writes % complete, actual duration "
+                "or ActualStart, so the save would leave its roll-up stale, and "
+                "no Project save pair measures that move";
+        return false;
+    }
+    if (has_work_resource_assignment(plan, uid)) {
+        error = "task uid " + std::to_string(uid) +
+                " has a resource assignment that carries work and is " +
+                std::string(role) +
+                "; no Project save pair measures an outline move over "
+                "resource-loaded work";
+        return false;
+    }
+    if (std::find(pending_actuals.begin(), pending_actuals.end(), uid) !=
+        pending_actuals.end()) {
+        error = "task uid " + std::to_string(uid) +
+                " has a pending actuals edit and is " + std::string(role) +
+                "; no Project save pair measures an outline move with actuals "
+                "queued in the same save";
+        return false;
+    }
+    return true;
+}
+
+bool check_outline_moved_rows(
+    const PlanInput& plan, std::uint32_t uid,
+    const std::vector<std::uint32_t>& pending_actuals, std::string& error) {
+    for (const std::uint32_t member : outline_subtree_uids(plan, uid)) {
+        if (!check_outline_progress_row(plan, member, pending_actuals,
+                                        "in the moved subtree", error)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// W30-0.3 (R29-3, High): the save writes actuals (step 5a) BEFORE the outline
+// move (step 5b), so a percent or date edit queued over a pending outline edit
+// would be written against the file's OLD outline while the sheet shows the
+// new one.  No Project pair measures that combination, so the move's rows and
+// their ancestors are refused until the outline edit is saved or undone.
+bool outline_edit_pending_for(const PlanInput& plan,
+                              const std::vector<StructuralEdit>& applied,
+                              std::uint32_t uid) {
+    for (const StructuralEdit& existing : applied) {
+        if (existing.kind != StructuralKind::outline_indent &&
+            existing.kind != StructuralKind::outline_outdent) {
+            continue;
+        }
+        const std::vector<std::uint32_t> subtree =
+            outline_subtree_uids(plan, existing.uid);
+        if (std::find(subtree.begin(), subtree.end(), uid) != subtree.end()) {
+            return true;
+        }
+        if (uid != 0 &&
+            (uid == existing.anchor_uid ||
+             outline_is_ancestor(plan, uid, existing.uid) ||
+             outline_is_ancestor(plan, uid, existing.anchor_uid))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // W29-0.4: the five schedule words Project's automatic save rewrites on every
 // row it recalculates (the four wave-29 outline pairs):
 //   slack = work_time_between(row's resulting +108, project's resulting +108)
@@ -1311,6 +1449,11 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
         if (!check_new_summary_shape(plan, summary.uid, pending_actuals, error)) {
             return false;
         }
+        // W30-0.3 (R29-3, High): only the anchor was checked; the rows the edit
+        // moves must be 0 % placeholder rows too (every pair's rows are).
+        if (!check_outline_moved_rows(plan, uid, pending_actuals, error)) {
+            return false;
+        }
         if (!summary.child_rows.empty() || summary.stored_children ||
             (summary.fixed2_flags & mppwrite::kOutlineSummaryFlag) != 0) {
             error = "task uid " + std::to_string(uid) + ": the preceding sibling "
@@ -1480,6 +1623,18 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
         error = "task uid " + std::to_string(uid) +
                 ": its parent has another child; outdenting from a parent that "
                 "stays a summary is not measured";
+        return false;
+    }
+    // W30-0.3 (R29-3, High): the moved row and the parent that becomes a leaf
+    // again must both be 0 % placeholder rows.  The writer restores the
+    // parent's marker duration but never rewrites its roll-up percent, and the
+    // measured pairs' rows are all 0 %.
+    if (!check_outline_moved_rows(plan, uid, pending_actuals, error)) {
+        return false;
+    }
+    if (!check_outline_progress_row(plan, summary.uid, pending_actuals,
+                                    "the parent that becomes a leaf again",
+                                    error)) {
         return false;
     }
     const TaskRow* shown = outline_anchor_in_plan(plan, uid, false);
@@ -1740,6 +1895,12 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 return false;
             }
             edit = std::move(checked);
+            // W30-0.3 (R29-3, High): step 5a writes this percent against the
+            // file's old outline; a pending outline edit for this row, its
+            // subtree or an ancestor has no measured combination with it.
+            if (outline_edit_pending_for(*plan, applied_, edit.uid)) {
+                return false;
+            }
             for (const StructuralEdit& existing : applied_) {
                 if (existing.kind == StructuralKind::delete_task &&
                     existing.uid == edit.uid) {
@@ -1768,6 +1929,12 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 const TaskRow* row = nullptr;
                 std::string error;
                 if (!check_actuals_target(*plan, target.uid, row, false, error)) {
+                    return false;
+                }
+                // W30-0.3 (R29-3, High): the same pending-outline refusal as a
+                // percent edit, per target: step 5a writes the date update
+                // against the file's old outline.
+                if (outline_edit_pending_for(*plan, applied_, target.uid)) {
                     return false;
                 }
                 // W30-0.0 (R29-8): the plan-side half of the up-front refusal
@@ -1867,6 +2034,19 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 (!plan->links.empty() || plan->skipped_links != 0)) {
                 return false;
             }
+            // W30-0.3 (R29-3, High): the actuals edits already queued in this
+            // save.  They write at step 5a, before the outline move at 5b.
+            std::vector<std::uint32_t> pending_actuals;
+            for (const StructuralEdit& existing : applied_) {
+                if (existing.kind == StructuralKind::set_percent) {
+                    pending_actuals.push_back(existing.uid);
+                } else if (existing.kind == StructuralKind::update_actuals) {
+                    for (const ActualsTarget& target : existing.actuals) {
+                        pending_actuals.push_back(target.uid);
+                    }
+                }
+            }
+            std::string shape_error;
             if (edit.kind == StructuralKind::outline_indent) {
                 if (row->outline_level != 0 || anchor->summary) {
                     return false;
@@ -1881,19 +2061,14 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 if ((!row->manually_scheduled) == edit.slack.empty()) {
                     return false;
                 }
-                std::vector<std::uint32_t> pending_actuals;
-                for (const StructuralEdit& existing : applied_) {
-                    if (existing.kind == StructuralKind::set_percent) {
-                        pending_actuals.push_back(existing.uid);
-                    } else if (existing.kind == StructuralKind::update_actuals) {
-                        for (const ActualsTarget& target : existing.actuals) {
-                            pending_actuals.push_back(target.uid);
-                        }
-                    }
-                }
-                std::string shape_error;
                 if (!check_new_summary_shape(*plan, anchor->uid, pending_actuals,
                                              shape_error)) {
+                    return false;
+                }
+                // W30-0.3 (R29-3, High): the queued actuals must not name a
+                // row of the moved subtree either.
+                if (!check_outline_moved_rows(*plan, edit.uid, pending_actuals,
+                                              shape_error)) {
                     return false;
                 }
             } else {
@@ -1913,6 +2088,18 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 if (edit.restored_start == kDateNa ||
                     edit.restored_finish == kDateNa ||
                     edit.restored_finish < edit.restored_start) {
+                    return false;
+                }
+                // W30-0.3 (R29-3, High): the moved leaf and the parent that
+                // becomes a leaf again must not carry progress, resource work
+                // or a queued actuals edit.
+                if (!check_outline_moved_rows(*plan, edit.uid, pending_actuals,
+                                              shape_error)) {
+                    return false;
+                }
+                if (!check_outline_progress_row(
+                        *plan, anchor->uid, pending_actuals,
+                        "the parent that becomes a leaf again", shape_error)) {
                     return false;
                 }
             }

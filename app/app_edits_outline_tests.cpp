@@ -1301,10 +1301,14 @@ void check_refusals() {
     const std::filesystem::path auto_outdent_control =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave29-outline-auto-outdent-control.mpp";
+    const std::filesystem::path summary_control =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave28-outline-summary-control.mpp";
     if (!std::filesystem::exists(indent_control) ||
         !std::filesystem::exists(outdent_control) ||
         !std::filesystem::exists(auto_indent_control) ||
-        !std::filesystem::exists(auto_outdent_control)) {
+        !std::filesystem::exists(auto_outdent_control) ||
+        !std::filesystem::exists(summary_control)) {
         std::printf("SKIP: the refusal controls are not present\n");
         return;
     }
@@ -1312,6 +1316,7 @@ void check_refusals() {
     app::PlanInput outdent_plan;
     app::PlanInput auto_indent_plan;
     app::PlanInput auto_outdent_plan;
+    app::PlanInput summary_plan;
     try {
         indent_plan =
             app::plan_input_from_document(mpp::load_file(indent_control.string()));
@@ -1321,6 +1326,8 @@ void check_refusals() {
             mpp::load_file(auto_indent_control.string()));
         auto_outdent_plan = app::plan_input_from_document(
             mpp::load_file(auto_outdent_control.string()));
+        summary_plan = app::plan_input_from_document(
+            mpp::load_file(summary_control.string()));
     } catch (const std::exception& error) {
         check(false, "the refusal controls load");
         std::printf("LOAD ERROR: %s\n", error.what());
@@ -1497,6 +1504,133 @@ void check_refusals() {
     app::StructuralEdits linked_push;
     check(!linked_push.push(auto_edit, &linked_auto),
           "push refuses an automatic outline edit once the plan has a link");
+
+    // W30-0.3 (R29-3, High): every row the move touches must be a 0 %
+    // placeholder row; the outline writer never writes progress or actuals, so
+    // a moved or restored row with progress would keep stale roll-up values.
+    app::PlanInput moved_progress = indent_plan;
+    for (app::TaskRow& task : moved_progress.tasks) {
+        if (task.uid == 2) {
+            task.percent_complete = 40;
+        }
+    }
+    check(!app::make_outline_edit(moved_progress, indent_control.string(), 2, true,
+                                  edit, error),
+          "an indent whose moved row has progress is refused");
+    check(error.find("40 % complete") != std::string::npos &&
+              error.find("moved subtree") != std::string::npos,
+          "the moved-row refusal names its percent and the subtree");
+    app::PlanInput child_progress = summary_plan;
+    for (app::TaskRow& task : child_progress.tasks) {
+        if (task.uid == 3) {
+            task.percent_complete = 40;
+        }
+    }
+    check(!app::make_outline_edit(child_progress, summary_control.string(), 2, true,
+                                  edit, error),
+          "an indent whose moved subtree holds a progressed child is refused");
+    check(error.find("moved subtree") != std::string::npos,
+          "the child refusal names the moved subtree");
+    app::PlanInput moved_work = indent_plan;
+    app::AssignmentRow moved_assignment;
+    moved_assignment.uid = 501;
+    moved_assignment.task_uid = 2;
+    moved_assignment.resource_uid = 100;
+    moved_assignment.work_ticks = 4800;
+    moved_work.assignments.push_back(moved_assignment);
+    check(!app::make_outline_edit(moved_work, indent_control.string(), 2, true, edit,
+                                  error),
+          "an indent whose moved row carries resource work is refused");
+    check(error.find("carries work") != std::string::npos &&
+              error.find("moved subtree") != std::string::npos,
+          "the moved-work refusal names the work and the subtree");
+    check(!app::make_outline_edit(indent_plan, indent_control.string(), 2, true, edit,
+                                  error, {2u}),
+          "an indent with a pending actuals edit on the moved row is refused");
+    check(error.find("pending actuals") != std::string::npos &&
+              error.find("moved subtree") != std::string::npos,
+          "the moved-pending refusal names the queued actuals");
+    app::PlanInput parent_progress = outdent_plan;
+    for (app::TaskRow& task : parent_progress.tasks) {
+        if (task.uid == 1) {
+            task.percent_complete = 40;
+        }
+    }
+    check(!app::make_outline_edit(parent_progress, outdent_control.string(), 2,
+                                  false, edit, error),
+          "an outdent whose parent that becomes a leaf has progress is refused");
+    check(error.find("parent that becomes a leaf again") != std::string::npos,
+          "the outdent refusal names the restored parent");
+
+    app::StructuralEdit indent_edit;
+    check(app::make_outline_edit(indent_plan, indent_control.string(), 2, true,
+                                 indent_edit, error),
+          "the indent builds for the queued-direction checks");
+
+    // The queued direction: an actuals edit pushed first keeps the outline edit
+    // from being queued over it (step 5a would write against the old outline).
+    if (app::make_percent_edit(indent_plan, 2, 40, edit, error)) {
+        app::StructuralEdits actuals_first;
+        check(actuals_first.push(edit, &indent_plan),
+              "the percent edit on the moved row is queued first");
+        check(!actuals_first.push(indent_edit, &indent_plan),
+              "an indent over a pending actuals edit on the moved row is refused");
+    } else {
+        check(false, "the percent edit on the moved row builds");
+        std::printf("EDIT ERROR: %s\n", error.c_str());
+    }
+
+    // The reverse direction: a percent edit queued after the outline edit.  The
+    // save writes it at step 5a against the file's old outline; no pair measures
+    // that combination.  The automatic indent is used because the percent rule
+    // itself accepts 0->40 on its automatic leaf-under-summary display row.
+    app::StructuralEdits outline_first;
+    check(outline_first.push(auto_edit, &auto_indent_plan),
+          "the automatic indent is queued first");
+    const app::PlanInput moved_display = outline_first.apply(auto_indent_plan);
+    app::StructuralEdit after_percent;
+    check(app::make_percent_edit(moved_display, 2, 40, after_percent, error),
+          "the percent edit on the displayed moved row builds");
+    check(!outline_first.push(after_percent, &moved_display),
+          "a percent edit over a pending outline edit is refused");
+    app::StructuralEdits lone_percent;
+    check(lone_percent.push(after_percent, &moved_display),
+          "the same percent edit is accepted without the outline edit");
+
+    // A date update uses the same guard; queue an outdent first so the moved
+    // row is top-level in the display and the percent-shaped row rules would
+    // otherwise accept it.
+    app::StructuralEdit outdent_edit;
+    if (app::make_outline_edit(outdent_plan, outdent_control.string(), 2, false,
+                               outdent_edit, error)) {
+        app::StructuralEdits outdent_first;
+        check(outdent_first.push(outdent_edit, &outdent_plan),
+              "the outdent is queued first");
+        const app::PlanInput outdent_display = outdent_first.apply(outdent_plan);
+        const app::TaskRow* moved_row = find_row(outdent_display, 2);
+        if (moved_row != nullptr && moved_row->duration_ticks > 0) {
+            app::StructuralEdit update_edit;
+            update_edit.kind = app::StructuralKind::update_actuals;
+            update_edit.through_date = core::sched::from_ymd(2026, 1, 7);
+            app::ActualsTarget target;
+            target.uid = 2;
+            target.percent = 40;
+            target.actual_ticks = static_cast<std::uint32_t>(
+                moved_row->duration_ticks * 40 / 100);
+            target.step_percent = 40.0;
+            update_edit.actuals.push_back(target);
+            check(!outdent_first.push(update_edit, &outdent_display),
+                  "a date update over a pending outdent is refused");
+            app::StructuralEdits lone_update;
+            check(lone_update.push(update_edit, &outdent_display),
+                  "the same date update is accepted without the outdent");
+        } else {
+            check(false, "the displayed outdent has a duration to update");
+        }
+    } else {
+        check(false, "the outdent build for the queued direction");
+        std::printf("EDIT ERROR: %s\n", error.c_str());
+    }
 
     check(!app::make_outline_edit(indent_plan, indent_control.string(), 2, true, edit,
                                   error, {1u}),
