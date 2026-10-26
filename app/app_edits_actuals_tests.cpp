@@ -1597,6 +1597,120 @@ void check_update_refusals() {
     }
 }
 
+/* W30-0.0 (R29-8, Medium): the assignment/link shapes the actuals writer
+ * THROWS on at save time -- failing the whole save and blocking every later
+ * Save -- are refused by the date-update model up front, one check per branch.
+ * The committed controls are loaded and their plans patched in memory: the
+ * model's rules read the display plan, exactly the rows the writer would count
+ * in the file. */
+void check_update_save_shape_refusals() {
+    const std::filesystem::path sixty_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave29-mark-60-after-control.mpp";
+    const std::filesystem::path zero_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-update-control.mpp";
+    if (!std::filesystem::exists(sixty_path) ||
+        !std::filesystem::exists(zero_path)) {
+        std::printf("SKIP: the W30-0.0 save-shape controls are not present\n");
+        return;
+    }
+    auto load = [](const std::filesystem::path& path, app::PlanInput& plan) {
+        try {
+            plan = app::plan_input_from_document(mpp::load_file(path.string()));
+            return true;
+        } catch (const std::exception& load_error) {
+            check(false, "the W30-0.0 control loads");
+            std::printf("LOAD ERROR: %s\n", load_error.what());
+            return false;
+        }
+    };
+    const app::date32 sixty_through = core::sched::from_ymd(2026, 1, 7);
+    const app::date32 zero_through = core::sched::from_ymd(2026, 1, 7);
+    app::StructuralEdit edit;
+    std::string error;
+    app::PlanInput sixty;
+    if (!load(sixty_path, sixty)) {
+        return;
+    }
+
+    /* (a) two live incoming links: the writer's link-flag stage throws. */
+    app::PlanInput two_links = sixty;
+    app::LinkRow first;
+    first.predecessor_uid = 2;
+    first.successor_uid = 1;
+    app::LinkRow second;
+    second.predecessor_uid = 3;
+    second.successor_uid = 1;
+    two_links.links.push_back(first);
+    two_links.links.push_back(second);
+    check(!app::make_update_actuals_edit(two_links, sixty_path.string(), {1u},
+                                         sixty_through, false, edit, error),
+          "a date update on a row with two incoming links is refused");
+    check(error.find("incoming link") != std::string::npos,
+          "the two-link date refusal names the incoming links");
+
+    /* (b) one live incoming link, 60 % -> 40 %: measured transition, but the
+     * writer's link flag covers only the 0 -> non-zero entrance. */
+    app::PlanInput one_link = sixty;
+    one_link.links.push_back(first);
+    check(!app::make_update_actuals_edit(one_link, sixty_path.string(), {1u},
+                                         sixty_through, false, edit, error),
+          "a date update on one-linked, already-progressed row is refused");
+    check(error.find("incoming link") != std::string::npos,
+          "the one-link date refusal names the incoming link");
+
+    /* (c) one live incoming link on a 0 % row entering progress IS the measured
+     * link-flag shape and stays accepted. */
+    app::PlanInput zero;
+    if (load(zero_path, zero)) {
+        app::PlanInput entering = zero;
+        entering.links.push_back(first);
+        check(app::make_update_actuals_edit(entering, zero_path.string(), {1u},
+                                            zero_through, false, edit, error),
+              "one incoming link with a 0 % row entering progress is accepted");
+    }
+
+    /* (d) the assignment count: the writer needs exactly one TBkndAssn row. */
+    app::PlanInput no_assignment = sixty;
+    no_assignment.assignments.erase(
+        std::remove_if(no_assignment.assignments.begin(),
+                       no_assignment.assignments.end(),
+                       [](const app::AssignmentRow& assignment) {
+                           return assignment.task_uid == 1;
+                       }),
+        no_assignment.assignments.end());
+    check(!app::make_update_actuals_edit(no_assignment, sixty_path.string(), {1u},
+                                         sixty_through, false, edit, error),
+          "a date update on a row with no assignment row is refused");
+    check(error.find("assignment") != std::string::npos,
+          "the no-assignment date refusal names the assignment table");
+
+    app::PlanInput two_assignments = sixty;
+    app::AssignmentRow extra;
+    extra.uid = 40;
+    extra.task_uid = 1;
+    two_assignments.assignments.push_back(extra);
+    check(!app::make_update_actuals_edit(two_assignments, sixty_path.string(),
+                                         {1u}, sixty_through, false, edit, error),
+          "a date update on a row with two assignment rows is refused");
+    check(error.find("assignment") != std::string::npos,
+          "the two-assignment date refusal names the assignment table");
+
+    /* (e) a lowering on a REAL assignment: the writer's lowering payload was
+     * measured only on Project's placeholder. */
+    app::PlanInput real_assignment = sixty;
+    for (app::AssignmentRow& assignment : real_assignment.assignments) {
+        if (assignment.task_uid == 1) {
+            assignment.resource_uid = 1;
+            assignment.work_ticks = 0;  // zero work: the row shape stays flat
+        }
+    }
+    check(!app::make_update_actuals_edit(real_assignment, sixty_path.string(),
+                                         {1u}, sixty_through, false, edit, error),
+          "a date update lowering a real-assignment row is refused");
+    check(error.find("real resource assignment") != std::string::npos,
+          "the real-assignment lowering refusal names the assignment kind");
+}
+
 } /* namespace */
 
 int main() {
@@ -1607,6 +1721,7 @@ int main() {
     check_percent_through();
     check_group_edit_model();
     check_update_refusals();
+    check_update_save_shape_refusals();
     std::printf("app_edits_actuals_tests: %d checks passed, %d expected failure(s)\n",
                 g_checks - g_failures, g_expected_failures);
     if (g_failures != 0) {

@@ -23,6 +23,7 @@
 //   cmake --build build\vs-w51 --config Release
 //   ctest --test-dir build\vs-w51 -C Release -R "^app_edit$" --output-on-failure
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -106,12 +107,26 @@ app::PlanInput make_plan() {
     second.successor_uid = 3;
     plan.links.push_back(first);
     plan.links.push_back(second);
+    // W30-0.0 (R29-8): the actuals writer requires exactly one TBkndAssn row
+    // per edited task, so every live task of a real file carries one -- the
+    // fixtures' rows are Project's placeholder (resource uid 0) except the one
+    // real assignment below, which models the W29-0.2 work shape on task 2.
+    app::AssignmentRow first_placeholder;
+    first_placeholder.uid = 8;
+    first_placeholder.task_uid = 1;
+    first_placeholder.work_ticks = 4800;
+    plan.assignments.push_back(first_placeholder);
     app::AssignmentRow assignment;
     assignment.uid = 10;
     assignment.task_uid = 2;
     assignment.resource_uid = 100;
     assignment.work_ticks = 4800;
     plan.assignments.push_back(assignment);
+    app::AssignmentRow third_placeholder;
+    third_placeholder.uid = 9;
+    third_placeholder.task_uid = 3;
+    third_placeholder.work_ticks = 4800;
+    plan.assignments.push_back(third_placeholder);
     return plan;
 }
 
@@ -273,6 +288,64 @@ void test_percent_edit_model() {
               "a manual 40 -> 100 is refused");
     }
 
+    // W30-0.0 (R29-8): the shapes the actuals writer throws on at save time are
+    // refused up front, one check per branch.  A throw there fails the WHOLE
+    // save, so the queue would block every later Save.
+    {
+        app::StructuralEdit refused_edit;
+        app::PlanInput no_assignment = make_plan();
+        no_assignment.assignments.erase(
+            std::remove_if(no_assignment.assignments.begin(),
+                           no_assignment.assignments.end(),
+                           [](const app::AssignmentRow& assignment) {
+                               return assignment.task_uid == 1;
+                           }),
+            no_assignment.assignments.end());
+        check(!app::make_percent_edit(no_assignment, 1, 40, refused_edit, error),
+              "a row with no assignment row is refused");
+        check(error.find("assignment") != std::string::npos,
+              "the no-assignment refusal names the assignment table");
+
+        app::PlanInput two_assignments = make_plan();
+        app::AssignmentRow extra;
+        extra.uid = 11;
+        extra.task_uid = 1;
+        extra.work_ticks = 4800;
+        two_assignments.assignments.push_back(extra);
+        check(!app::make_percent_edit(two_assignments, 1, 40, refused_edit,
+                                      error),
+              "a row with two assignment rows is refused");
+        check(error.find("assignment") != std::string::npos,
+              "the two-assignment refusal names the assignment table");
+
+        app::LinkRow first_incoming;
+        first_incoming.predecessor_uid = 3;
+        first_incoming.successor_uid = 1;
+        app::PlanInput two_links = make_plan();
+        two_links.links.push_back(first_incoming);
+        app::LinkRow second_incoming;
+        second_incoming.predecessor_uid = 2;
+        second_incoming.successor_uid = 1;
+        two_links.links.push_back(second_incoming);
+        check(!app::make_percent_edit(two_links, 1, 40, refused_edit, error),
+              "a row with two live incoming links is refused");
+        check(error.find("incoming link") != std::string::npos,
+              "the two-link refusal names the incoming links");
+
+        // The writer's ONE measured link shape: one incoming link on a row
+        // that enters progress (0 % -> non-zero).  The same link with any other
+        // transition throws at save time.
+        app::PlanInput one_link = make_plan();
+        one_link.links.push_back(first_incoming);
+        check(app::make_percent_edit(one_link, 1, 40, refused_edit, error),
+              "one incoming link with 0 -> 40 is the measured link-flag shape");
+        one_link.tasks[0].percent_complete = 40;
+        check(!app::make_percent_edit(one_link, 1, 100, refused_edit, error),
+              "one incoming link with 40 -> 100 is refused");
+        check(error.find("incoming link") != std::string::npos,
+              "the non-entering refusal names the incoming link");
+    }
+
     app::StructuralEdits planless;
     check(!planless.push(edit), "a plan-less set_percent is refused");
 
@@ -411,7 +484,7 @@ void test_without_structural_edits() {
     check(recovered.tasks[0].start == edited_start, "the cell edit survives the recovery");
     check_text(recovered.tasks[0].name, "Renamed", "the renamed value survives");
     check_size(recovered.links.size(), 2, "the links the delete would drop are restored");
-    check_size(recovered.assignments.size(), 1, "the assignment is restored");
+    check_size(recovered.assignments.size(), 3, "the assignments are restored");
 
     // W28-4.1: a set_percent edit owns the row's percent_complete in the display
     // plan, and undoing it must give the file's value back -- the sheet and the
@@ -474,12 +547,13 @@ void test_apply_placement() {
     shown = deletion.apply(plan);
     check_size(shown.tasks.size(), 2, "the deleted task is gone");
     check_size(shown.links.size(), 0, "both links naming the task are gone");
-    check_size(shown.assignments.size(), 0, "its assignment is gone");
+    check_size(shown.assignments.size(), 2, "its assignment is gone");
     check_size(shown.skipped_links, plan.skipped_links + 2,
                "the two dropped links are counted as skipped");
     check_size(app::count_delete_dependants(plan, 2), 3,
                "a delete of uid 2 would tombstone 2 links and 1 assignment");
-    check_size(app::count_delete_dependants(plan, 1), 1, "uid 1 has one link");
+    check_size(app::count_delete_dependants(plan, 1), 2,
+               "uid 1 has one link and one assignment row");
     check_size(app::count_delete_dependants(plan, 99), 0, "an unknown uid has none");
 
     // An insert anchored to a task that the same edit set deletes lands at the
@@ -799,6 +873,14 @@ void test_real_save_round_trip() {
         // plan carries uid 999; the source file does not.
         app::PlanInput stale = percent_base.plan;
         stale.tasks.push_back(make_task(999, 4800, from_ymd(2026, 1, 8, 8, 0)));
+        // W30-0.0: the model now requires one assignment row per edited task,
+        // so the stale row carries the placeholder every real row has; the
+        // refusal under test is still the source's missing task row.
+        app::AssignmentRow orphan_assignment;
+        orphan_assignment.uid = 998;
+        orphan_assignment.task_uid = 999;
+        orphan_assignment.work_ticks = 4800;
+        stale.assignments.push_back(orphan_assignment);
         app::StructuralEdits stale_edits;
         app::StructuralEdit stale_edit;
         stale_edit.kind = app::StructuralKind::set_percent;

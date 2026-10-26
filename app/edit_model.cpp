@@ -145,6 +145,101 @@ bool has_work_resource_assignment(const PlanInput& plan, std::uint32_t uid) {
     return false;
 }
 
+// W30-0.0 (R29-8, Medium): the assignment and link shapes the actuals writer
+// THROWS on at save time.  A throw fails the whole save, so the queue then
+// blocks every later Save until the user undoes; rule 1 wants the refusal in
+// the model, with the reason in the status line.  The writer's own checks stay
+// as the last line of defence for a hand-built queue.
+//
+// The writer's rules (core/mppwrite/actuals.cpp):
+//   * TBkndAssn must hold exactly one row for the edited task (:1497-1512);
+//   * stage_progress_link_flags (:2088-2210) throws for two or more live
+//     incoming links, and for one live incoming link when the edit is not the
+//     measured 0 % -> non-zero transition (the file's stored percent, not the
+//     plan's);
+//   * a date update that lowers a recorded percent on a REAL assignment
+//     (:1625-1640) throws; only Project's placeholder assignment with a
+//     two-record contour was measured.
+struct ActualsAssignmentShape {
+    std::size_t rows = 0;
+    bool real = false;         // names a resource other than the placeholder
+    bool work_bearing = false; // real AND carries work (the W29-0.2 shape)
+};
+
+ActualsAssignmentShape actuals_assignment_shape(const PlanInput& plan,
+                                                std::uint32_t uid) {
+    ActualsAssignmentShape shape;
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.task_uid != uid) {
+            continue;
+        }
+        ++shape.rows;
+        if (assignment.resource_uid != 0) {
+            shape.real = true;
+            if (assignment.work_ticks > 0) {
+                shape.work_bearing = true;
+            }
+        }
+    }
+    return shape;
+}
+
+std::size_t live_incoming_link_count(const PlanInput& plan, std::uint32_t uid) {
+    std::size_t count = 0;
+    for (const LinkRow& link : plan.links) {
+        if (link.successor_uid == uid) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+// `from_percent` is the stored percent the save starts from and `to_percent`
+// the one the edit writes; `date_update` marks the writes that carry
+// progress_flags = false (Mark on Track / Update Project), the only ones the
+// writer's lowering rule covers.
+bool check_actuals_save_shape(const PlanInput& plan, std::uint32_t uid,
+                              std::uint16_t from_percent,
+                              std::uint16_t to_percent, bool date_update,
+                              std::string& error) {
+    const ActualsAssignmentShape assignment =
+        actuals_assignment_shape(plan, uid);
+    if (assignment.rows != 1) {
+        error = "task uid " + std::to_string(uid) + " has " +
+                std::to_string(assignment.rows) +
+                " assignment rows; the actuals writer is measured only on a "
+                "task with Project's one placeholder assignment, and the save "
+                "would fail on this shape";
+        return false;
+    }
+    const std::size_t incoming = live_incoming_link_count(plan, uid);
+    if (incoming > 1) {
+        error = "task uid " + std::to_string(uid) + " has " +
+                std::to_string(incoming) +
+                " live incoming links; the only measured link-flag shape is "
+                "one link into a row that enters progress, and the save would "
+                "fail on this one";
+        return false;
+    }
+    if (incoming == 1 && !(from_percent == 0 && to_percent != 0)) {
+        error = "task uid " + std::to_string(uid) +
+                " has one live incoming link and this edit does not take it "
+                "from 0 % to non-zero; the measured link-flag shape is exactly "
+                "that transition, and the save would fail on this one";
+        return false;
+    }
+    if (date_update && assignment.real && to_percent > 0 && to_percent < 100 &&
+        to_percent < from_percent) {
+        error = "task uid " + std::to_string(uid) +
+                " would lower a recorded percent on a task with a real "
+                "resource assignment; the writer's lowering shape is measured "
+                "only on Project's placeholder assignment, and the save would "
+                "fail";
+        return false;
+    }
+    return true;
+}
+
 // W29-0.2: the row shapes the wave-29 percent pairs measured, each ALONE on an
 // automatic row -- a leaf under a summary (0 -> 40), a task with a work-bearing
 // assignment (0 -> 40) and a zero-duration milestone (0 -> 100).  A combination
@@ -780,6 +875,14 @@ bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t p
                 "a resource-loaded task 0->40; a milestone 0->100)";
         return false;
     }
+    // W30-0.0 (R29-8): after the measured-shape rules, refuse the assignment
+    // and link shapes the writer throws on at save time.  Ordered second so an
+    // unmeasured transition keeps naming the transition (the more specific
+    // rule); an accepted transition still cannot reach the writer's throw.
+    if (!check_actuals_save_shape(plan, uid, row->percent_complete, percent,
+                                  false, error)) {
+        return false;
+    }
     error.clear();
     return true;
 }
@@ -982,6 +1085,12 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
             error = "task uid " + std::to_string(uid) +
                     " has no start date, or its finish overflows the calendar, "
                     "so its progress through the date cannot be measured";
+            return false;
+        }
+        // W30-0.0 (R29-8): the same up-front assignment/link refusal as a
+        // percent edit, with this edit's computed percent as the target.
+        if (!check_actuals_save_shape(plan, uid, row->percent_complete,
+                                      progress.percent, true, error)) {
             return false;
         }
         bool recorded_progress = false;
@@ -1612,6 +1721,14 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 const TaskRow* row = nullptr;
                 std::string error;
                 if (!check_actuals_target(*plan, target.uid, row, false, error)) {
+                    return false;
+                }
+                // W30-0.0 (R29-8): the plan-side half of the up-front refusal
+                // (the file-side half ran in make_update_actuals_edit), so a
+                // hand-built queue cannot reach the writer's throw.
+                if (!check_actuals_save_shape(*plan, target.uid,
+                                              row->percent_complete,
+                                              target.percent, true, error)) {
                     return false;
                 }
                 if (row->percent_complete > 0) {
