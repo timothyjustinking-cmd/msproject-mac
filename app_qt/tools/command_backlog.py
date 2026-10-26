@@ -45,6 +45,9 @@ MISSING_REASON = {
     "view_calendar": "scope: the Calendar view is out of this run's scope",
     "view_other_views":
         "scope: Project's other task/resource views are out of this run's scope",
+    # W31-C4: the Task tab's Split Task button is a command control the old
+    # parser missed; its handler is deliberately unwired (no split-edit engine).
+    "split_task": "engine: no split-edit writer, so the control stays disabled",
     # W26-6.1: the View drop-downs' unimplemented entries are MenuAction::none,
     # and so are the ribbon commands with no MenuAction at all.  One neutral
     # wording covers both tables.
@@ -108,6 +111,28 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # to Project's measured 85 % window on both fixtures, session only.
     "zoom_entire",
     "zoom_selected",
+    # W31-C4: the command buttons built through small_cmd()/add(Kind::button)
+    # had no backlog row at all (the parser only knew large/small/split).
+    # These are live on their measured writers: the percent actuals buttons,
+    # Indent/Outdent, Link/Unlink and Update Project.
+    "percent_0",
+    "percent_25",
+    "percent_50",
+    "percent_75",
+    "percent_100",
+    "outdent",
+    "indent",
+    "link_tasks",
+    "unlink_tasks",
+    "update_project",
+    # Wave 29's project buttons: Project Information writes only the measured
+    # project priority; Update Project writes the measured status date.  The
+    # other three open their real dialog and say what they cannot change (the
+    # gaps below), never a fake success.
+    "project_information",
+    "links_between_projects",
+    "change_working_time",
+    "move_project",
 }
 
 # W31-C1: controls whose handler exists but which stay DISABLED by standing
@@ -143,6 +168,18 @@ RIBBON_GAPS = {
     "spelling":
         "gap: the port's own word list only; no Microsoft Project dictionary and "
         "no correction",
+    # W31-C4: the command buttons the old parser did not reach.
+    "project_information":
+        "gap: only the project priority has a measured writer; every other "
+        "field is read-only",
+    "links_between_projects":
+        "gap: the port decodes no external project links; the dialog changes "
+        "nothing",
+    "change_working_time":
+        "gap: no calendar writer; the dialog changes nothing",
+    "move_project":
+        "gap: moving a project is not implemented; the prompt reports it and the "
+        "file is unchanged",
 }
 
 
@@ -234,6 +271,55 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
                         context[1],
                         label.replace("\\n", " "),
                         action,
+                    )
+                )
+            continue
+        # W31-C4: command buttons built through small_cmd() or add(Kind::button)
+        # were invisible to the old parser: the Task tab's five percent buttons,
+        # Indent/Outdent, Link/Unlink and Split Task, and the Project tab's five
+        # property/schedule/status buttons.  The pin already records all of
+        # them; the backlog must too (operator decision 9).
+        small_cmd = re.search(
+            r"small_cmd\((\w+),\s*\"((?:[^\"\\]|\\.)*)\",\s*RibbonCommand::(\w+)",
+            line,
+        )
+        if small_cmd:
+            context = group_titles.get(small_cmd.group(1))
+            if context is not None:
+                rows.append(
+                    (
+                        tab_titles.get(context[0], context[0]),
+                        context[1],
+                        small_cmd.group(2).replace("\\n", " "),
+                        small_cmd.group(3),
+                    )
+                )
+            continue
+        button = re.search(
+            r"add\((\w+),\s*\"((?:[^\"\\]|\\.)*)\",\s*Kind::button", line
+        )
+        if button:
+            context = group_titles.get(button.group(1))
+            if context is not None:
+                # The action/command sit on the call's continuation line(s).
+                call = line
+                for follow in lines[index + 1:index + 4]:
+                    call += " " + follow
+                    if ");" in follow:
+                        break
+                command = "none"
+                found = re.search(r"RibbonCommand::(\w+)", call)
+                if found is not None and found.group(1) != "none":
+                    command = found.group(1)
+                action = re.search(r"app::MenuAction::(\w+)", call)
+                if action is not None and action.group(1) != "none":
+                    command = action.group(1)
+                rows.append(
+                    (
+                        tab_titles.get(context[0], context[0]),
+                        context[1],
+                        button.group(2).replace("\\n", " "),
+                        command,
                     )
                 )
             continue

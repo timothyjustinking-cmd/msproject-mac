@@ -422,6 +422,17 @@ add_test(NAME qt_ribbon_inventory
                  $<TARGET_FILE:qt_ribbon_inventory_tests>
                  ${QT_RIBBON_ARGS})
 
+# W31-C4 (review U3): the generated backlog must list every command control the
+# independent pin carries, in both directions, with the enabled column agreeing
+# with the row's status.  The check reads only repository files, so it runs
+# wherever Python is available (the CI runners all have it).
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME qt_command_backlog
+             COMMAND ${Python3_EXECUTABLE} -I
+                     "${QT_REPO_ROOT}/scripts/check_command_backlog.py")
+endif()
+
 # ===========================================================================
 # WAVE 26 (G2): the ribbon icon gate.  One item per tab; the test's kPlan lists
 # the tabs whose glyphs are done, so a tab joins the gate in its own commit.

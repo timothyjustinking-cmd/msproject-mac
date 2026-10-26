@@ -18,9 +18,19 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Task | Font | U | disabled | future: not implemented in this port |
 | Task | Font | highlight colour | disabled | future: not implemented in this port |
 | Task | Font | font colour | disabled | future: not implemented in this port |
+| Task | Schedule | 0% | implemented |  |
+| Task | Schedule | 25% | implemented |  |
+| Task | Schedule | 50% | implemented |  |
+| Task | Schedule | 75% | implemented |  |
+| Task | Schedule | 100% | implemented |  |
 | Task | Schedule | Mark on Track | implemented |  |
 | Task | Schedule | Respect Links | disabled | future: not implemented in this port |
 | Task | Schedule | Inactivate | disabled | future: not implemented in this port |
+| Task | Schedule | outdent | implemented |  |
+| Task | Schedule | indent | implemented |  |
+| Task | Schedule | link tasks | implemented |  |
+| Task | Schedule | unlink tasks | implemented |  |
+| Task | Schedule | split task | disabled | engine: no split-edit writer, so the control stays disabled |
 | Task | Tasks | Manually Schedule | implemented |  |
 | Task | Tasks | Auto Schedule | disabled | future: not implemented in this port |
 | Task | Tasks | Inspect | implemented |  |
@@ -64,10 +74,15 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Project | Insert | Subproject | disabled | future: not implemented in this port |
 | Project | Add-ins | Get Add-ins | disabled | future: not implemented in this port |
 | Project | Add-ins | My Add-ins | disabled | future: not implemented in this port |
+| Project | Properties | Project Information | implemented | gap: only the project priority has a measured writer; every other field is read-only |
 | Project | Properties | Custom Fields | implemented |  |
+| Project | Properties | Links Between Projects | implemented | gap: the port decodes no external project links; the dialog changes nothing |
 | Project | Properties | WBS | disabled | future: not implemented in this port |
+| Project | Properties | Change Working Time | implemented | gap: no calendar writer; the dialog changes nothing |
 | Project | Schedule | Calculate Project | disabled | future: not implemented in this port |
 | Project | Schedule | Set Baseline | disabled | future: not implemented in this port |
+| Project | Schedule | Move Project | implemented | gap: moving a project is not implemented; the prompt reports it and the file is unchanged |
+| Project | Status | Update Project | implemented |  |
 | Project | Proofing | Spelling | implemented | gap: the port's own word list only; no Microsoft Project dictionary and no correction |
 | View | Task Views | Gantt Chart | disabled | future: not implemented in this port |
 | View | Task Views | Task Usage | implemented |  |
@@ -96,6 +111,10 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Gantt Chart Format | Format | Gridlines | implemented | gap: laid out; gridlines engine not implemented, OK disabled |
 | Gantt Chart Format | Format | Layout | disabled | future: not implemented in this port |
 | Gantt Chart Format | Columns | Insert Column | disabled | future: not implemented in this port |
+| Gantt Chart Format | Columns | align left | disabled | future: not implemented in this port |
+| Gantt Chart Format | Columns | align centre | disabled | future: not implemented in this port |
+| Gantt Chart Format | Columns | align right | disabled | future: not implemented in this port |
+| Gantt Chart Format | Columns | wrap text | disabled | future: not implemented in this port |
 | Gantt Chart Format | Columns | Column Settings | disabled | future: not implemented in this port |
 | Gantt Chart Format | Columns | Custom Fields | implemented |  |
 | Gantt Chart Format | Bar Styles | Format | implemented | gap: appearance/row editing not implemented; colours and text fields only |
@@ -162,6 +181,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 95 (64 disabled)
+* ribbon commands: 114 (69 disabled)
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.
