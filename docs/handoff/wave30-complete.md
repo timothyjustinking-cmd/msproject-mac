@@ -571,3 +571,279 @@ the script now ends with an explicit exit 0).
   save shape can be measured.
 
 WAVE-30-G1-COMPLETE
+
+## G2 - the Resource tab's commands
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W30-2.0 | Add Resources (work resource row - measure) | **DEFERRED (measured)** | commit `363645c`; pairs `wave30-resource-add-*`; gates `build/w30/W30-2.0-*.log` |
+| W30-2.1 | Information and Notes (resource writes - measure) | **DEFERRED (measured)** | commit `eff96fd`; pairs `wave30-resource-rename-*`, `wave30-resource-notes-*`; gates `build/w30/W30-2.1-*.log` |
+| W30-2.2 | Details (Resource Form - view) | **DONE (read-only view)** | commit `b2e957e`; gate `qt_resource_details_gate`; gates `build/w30/W30-2.2-*.log` |
+| W30-2.3 | Assign Resources (one assign and one remove - measure) | **DEFERRED (measured)** | commit `f8086c0`; pairs `wave30-assign-add-*`, `wave30-assign-delete-*`; gates `build/w30/W30-2.3-gates.log` |
+| W30-2.4 | Level All / Level Selection / Level Resource / Leveling Options / Clear Leveling / Next Overallocation | **DEFERRED (Level All measured)** | commit `8cdc56a`; pair `wave30-level-control` / `wave30-level-all`; gates `build/w30/W30-2.4-gates.log` |
+| W30-2.5 | Resource Pool (shared pools - stays disabled) | **DONE (stays disabled, exact tooltip)** | commit `913f81b`; `qt_ribbon_inventory`; gates `build/w30/W30-2.5-gates.log` |
+| W30-2.6 | Team Planner (a view - wave 31 or later) | **DONE (stays disabled, exact tooltip)** | commit `cd85fd3`; `qt_ribbon_inventory`; gates `build/w30/W30-2.6-gates.log` |
+
+One item is DONE as a view (2.2's read-only Resource Form), two are the items
+the brief names as staying disabled (2.5 Resource Pool and 2.6 Team Planner,
+each with a named live check), and four are measured and deferred with a
+committed Project pair: Add Resources, Resource Information and Notes, Assign
+Resources (both directions) and Leveling.  No disabled button was enabled
+without a measured pair; the Leveling and Assign Resources buttons that could
+write stay disabled with decision 9's exact tooltip.  G2 added 18 tracked
+`.mpp` fixtures (140 at G1's close, 158 at G2's) -- six measured edits, each
+with a control, a no-edit null save and the edit -- and one new app_qt gate
+target (`qt_resource_details_gate`).
+
+W30-2.0 detail:
+
+- Measured by `scripts/oracle_w30_resource_pairs.py` on the synthetic base:
+  `Project.Resources.Add("R2")`, the Resource tab's Add Resources, saved before
+  and after in one session.  COM reopens the edit with Resources.Count 1 -> 2
+  (ID/UniqueID 2, Work, MaxUnits 1.0, no notes) and every task date, duration,
+  percent, MANUAL flag and ID identical.
+- The save carries 509 effect bytes under the save-pair mask.  `114/TBkndRsc`
+  grows by one 172-byte FixedData row (392 -> 564: ID 2), a 37-byte FixedMeta
+  entry (201 -> 238), a 40-byte Fixed2Data row (200 -> 240), a 51-byte
+  Fixed2Meta entry (271 -> 322), five 12-byte VarMeta entries (108 -> 168) and
+  54 Var2Data bytes (86 -> 140, including the name record).  `114/TBkndCal`
+  grows a NEW RESOURCE CALENDAR row (FixedData 100 -> 112, FixedMeta 86 -> 96,
+  Fixed2Data 336 -> 384, Fixed2Meta 86 -> 96).  `114/Props` takes three bytes
+  (resource count 0x05 -> 0x06, the Rsc Var2Data size 0x0056 -> 0x008C, a
+  calendar count 0x07 -> 0x08) and `214/CEdl/Var2Data` byte 543 changes
+  0x00 -> 0x26.  Task, assignment, project and DocumentSummaryInformation
+  streams have ZERO effects.
+- DEFERRED: the port's `add_resource_row` writes only the six `TBkndRsc`
+  streams and leaves every other stream byte-identical (`core/mppwrite/
+  add_delete.h`), so its save would miss the resource-calendar row and the
+  Props/CEdl count bytes.  The button stays disabled with the exact tooltip;
+  the pair and its null save are committed as the oracle.
+
+W30-2.1 detail:
+
+- Measured by `scripts/oracle_w30_resource_pairs.py` on the W30-2.0 edit copy,
+  in one session each.  Rename: `Resources(2).Name` `R2` -> `R2b`, the one-field
+  shape behind the Resource tab's Information dialog.  Notes: a first
+  `Resources(2).Notes = "Resource note line."`, the Notes tab of the same
+  dialog.  COM reopens both with the same resource IDs and identical task
+  dates, durations and percent; the edit reopens with the 19-character note.
+- Rename effects: 16 bytes -- `114/TBkndRsc` Var2Data 140 -> 152 (one 12-byte
+  name record appended), VarMeta unchanged in length with two effect bytes (the
+  Var2Data size word at +20 and one entry offset at +112), and `114/Props`
+  40278 0x008C -> 0x0098.  Every other stream and DocumentSummaryInformation
+  has ZERO effects.
+- Notes effects: 219 bytes -- `114/TBkndRsc` Var2Data 140 -> 332 by APPENDING
+  one u32-length-prefixed 192-byte block, Project's RichEdit document
+  (`{\rtf1\ansi\ansicpg1252\deff0\nouicompat\deflang1033{\fonttbl...}}` with
+  the `Riched20 16.0.20430` generator, the text as `\pard\f0\fs20 Resource note
+  line.\par` and a trailing NUL), not the plain text; VarMeta 168 -> 180 with
+  the new 12-byte entry INSERTED among the existing ones (logical count 12 ->
+  13, every later entry rewritten); the target's Rsc FixedMeta byte 203
+  0x05 -> 0x06 and byte 236 0x00 -> 0x40; and `114/Props` 40278 0x008C ->
+  0x014C.  No date, assignment, summary, link or calendar effect.
+- DEFERRED: the port has no resource-field writer at all (`add_resource_row`
+  only appends a whole row) and its writer never inserts or updates a VarMeta
+  entry; the note's RichEdit escaping surface is also unmeasured.  Both the
+  Information and Notes buttons stay disabled with the exact tooltip; the
+  pairs and their null saves are committed as the oracle.
+
+W30-2.2 detail:
+
+- Details is a view, so it has no save path and no pair.  Project opens its
+  Resource Form; this port docks a READ-ONLY Resource Form in the existing
+  Details splitter and switches to the Resource Sheet, whose current row it
+  follows by UID.  Every value comes from `app::PlanInput` (ID, Unique ID,
+  name, type, initials, max units, the sum of the resource's assignment work
+  and the assignment count); no field is editable and nothing is queued or
+  written.
+- The pane reuses the shared Details preference: exactly one form is visible
+  per view (Task Sheet -> Task Form, Resource Sheet -> Resource Form), usage
+  views show neither, and a freshly shown generic view starts with no current
+  row so the pane cannot carry a stale selection.  Details is a SHOW command
+  like the Task tab's (W30-1.5), not a toggle; the View check box stays the
+  toggle.  The live button is enabled in `ribbon_bar.cpp` and `ribbon_pin.tsv`
+  and wired to `RibbonCommand::resource_details`, with the enabled-wiring row
+  and command name pinned in `ribbon_inventory_test.cpp`.
+- `app_qt/tests/resource_details_gate_test.cpp` (new) runs on
+  `wave23-outline.mpp`: the live button docks the pane, the form follows the
+  Resource Sheet's selection, every field is read-only, switching to the Task
+  Sheet shows the Task Form instead, a usage view shows neither, and the
+  document stays clean.  0 failures.
+
+W30-2.3 detail:
+
+- Two measured pairs by `scripts/oracle_w30_resource_pairs.py` on the W30-2.0
+  edit copy, the brief's one assign and one remove.
+  `Task ID 1.Assignments.Add(TaskID=1, ResourceID=2)` creates assignment
+  UniqueID 4 (task UniqueID 1, resource UID 2, Units 1.0, Work 2400 min,
+  2026-01-04 13:00 -> 2026-01-09 12:00); COM reopens assignment count 0 -> 1
+  and Resource ID 2 Work 0 -> 2400 min with every task fact identical.
+  Deleting that assignment reopens assignment count 1 -> 0 and Work 2400 -> 0
+  min with every task fact identical.
+- Add effects: 1012 bytes.  `114/TBkndAssn` grows by one 110-byte FixedData
+  row (330 -> 440), a 34-byte FixedMeta slot (118 -> 152; deleted-rows flag
+  0x04 -> 0x06, live count 3 -> 4), a 48-byte Fixed2Data row (144 -> 192), a
+  53-byte Fixed2Meta slot (175 -> 228), one 12-byte VarMeta entry (132 -> 144;
+  the three uid 1 entries dropped, four uid 4 entries appended) and 124
+  Var2Data bytes (396 -> 520).  Project TOMBSTONES task 1's placeholder row in
+  the same save (slot 0 state 0x00 -> 0x02, type word 3 -> 0); the scheduler
+  sets four 4-byte task assignment-pointer words (0 -> 0x41424F80) and three
+  resource pointer words, rewrites Task FixedMeta 173 (0x07 -> 0x17) and 220
+  (0x07 -> 0x97), Task Var2Data 3 bytes, Resource FixedMeta 140
+  (0x01 -> 0x00), `114/Props` 5 bytes and DocumentSummaryInformation
+  1100 -> 1104 (the project Work summary `0 hrs` -> `40 hrs`).
+- Remove effects: 905 bytes.  Project does NOT shrink the table: FixedData
+  grows 440 -> 550 by APPENDING a 110-byte placeholder row (UniqueID 5,
+  resource word 0xFFFF0001) while the deleted row's bytes stay in place;
+  FixedMeta keeps its 152 bytes with eight effects (flag, live count 3 -> 4,
+  FixedData size, slot 2 state 0x00 -> 0x02 and type 4 -> 0, the spare slot's
+  row offset 330 -> 440 and a state byte); Fixed2Data 192 -> 240; Fixed2Meta
+  four effects (live count 3 -> 4, size, the spare record offset, a state
+  byte); VarMeta thirteen effects (the Var2Data size 520 -> 644 and the
+  deleted assignment's four uid 4 entries re-keyed to uid 5 with offsets
+  +124); Var2Data 520 -> 644.  It CLEARS the same pointer words, changes Task
+  FixedMeta 220 0x97 -> 0x87, Task Var2Data 3 bytes, `114/Props` 4 bytes and
+  DocumentSummaryInformation 1104 -> 1100 (`40 hrs` -> `0 hrs`).
+- DEFERRED: `add_assignment_row` appends the row and leaves every existing row
+  byte-identical, and `delete_assignment_row` only tombstones the row's
+  existing FixedMeta entry, so neither can write Project's placeholder
+  tombstone/appended row, the dropped/re-keyed VarMeta entries, the pointer
+  words or the Work summary.  Assign Resources stays disabled with the exact
+  tooltip; both pairs and their null saves are committed as the oracle.
+
+W30-2.4 detail:
+
+- Measured by `scripts/oracle_w30_level.py`: a fresh AUTOMATIC project with
+  three unlinked 2400/1440/960-tick tasks starting 2026-10-26 08:00 and one
+  100 % Work resource assigned to all three (PeakUnits 3.0, Overallocated
+  True), saved before and after `Application.LevelNow(All=True)`.  COM reopens
+  task 1 unchanged (2026-10-26 08:00 -> 2026-10-30 17:00), task 2 moved to
+  2026-11-02 08:00 -> 2026-11-04 17:00 with LevelingDelay 10080 min, task 3
+  moved to 2026-11-05 08:00 -> 2026-11-06 17:00 with LevelingDelay 14400 min,
+  assignment LevelingDelay 0, and Resource 1 PeakUnits 3.0 -> 1.0,
+  Overallocated True -> False; every duration, MANUAL flag, ID and work value
+  is identical.  Manual tasks are not levelled (a first attempt with manually
+  scheduled rows produced no date movement), so the fixture uses automatic
+  rows.
+- The save carries 502 effect bytes: `114/TBkndTask` 50 FixedData bytes, 12
+  FixedMeta bytes, 2 changed and 64 appended Var2Data bytes (436 -> 500), and
+  189 VarMeta bytes with EIGHT new 12-byte entries (420 -> 516; count 33 -> 41
+  -- one for the project row and two per task row); `114/TBkndAssn` 8
+  FixedData bytes (the moved assignments' date words); `114/TBkndRsc` 2
+  FixedData bytes (the PeakUnits double 3.0 -> 1.0) and one FixedMeta byte;
+  `114/Props` 3 bytes at 390/3354/3386; `214/CFilter` ZERO effects (its
+  identity bytes masked, the filter-state bytes inside the masked blocks);
+  DocumentSummaryInformation 1100 -> 1104 (project finish Fri 30/10/26 -> Fri
+  6/11/26, duration `5 days?` -> `10 days?`).
+- The control had to be saved from a REOPENED seed: the first save after
+  FileNew is not reopen-stable (its 230-byte `214/CFilter` block gains a
+  second copy on the next save after a reopen), so the committed control, its
+  null save and the edit share one 460-byte block and the pair's only
+  unequal-length streams are Props14 and `214/CEdl/Var2Data`.
+- DEFERRED: the save is a scheduler rewrite.  The port has no scheduler and no
+  LevelingDelay/Preleveled/Overallocated field in `app::TaskRow`,
+  `ResourceRow` or `AssignmentRow`, and no writer for those words.  Level
+  Selection, Level Resource, Clear Leveling, Leveling Options and Next
+  Overallocation have no measured save shape either, and Next Overallocation
+  has no overallocated fact to navigate.  All six stay disabled with decision
+  9's exact tooltip, pinned by a named `qt_ribbon_inventory` check; the pair
+  and its null save are committed as the oracle.
+
+W30-2.5 detail:
+
+- The brief keeps Resource Pool disabled; no measurement was wanted and none
+  was made.  A shared pool is a cross-file feature: a separate pool file plus
+  a sharer table in each sharer.  This port's plan model is one file
+  (`app::PlanInput` holds one resources and one assignments table, with no
+  pool file name, GUID or sharer list), and its only assignment writer appends
+  a row inside the same file (`mppwrite::add_assignment_row`); W30-2.3
+  measured the in-file assign/remove pair, and nothing there reaches a pool.
+- The control is unchanged: `ribbon_pin.tsv` line 92 carries enabled 0 for
+  `assignments.pool`; `ribbon_bar.cpp:354-355` passes `MenuAction::none`, no
+  RibbonCommand and enabled = false, so the disabled builder sets exactly
+  "not implemented in this port"; no `RibbonCommand::resource_pool` and no
+  `main_window` handler exist; the generated backlog row stays disabled with
+  that reason.
+- W30-2.5 adds a named live check in `qt_ribbon_inventory`: the Resource Pool
+  button on the live Resource tab's Assignments group is present, disabled and
+  carries exactly the decision-9 string.  No product code changed.
+
+W30-2.6 detail:
+
+- The brief puts Team Planner in wave 31 or later and keeps it disabled;
+  nothing was measured and no save path was opened.  It is a whole view --
+  resource lanes with assigned work laid out per day -- and the port has no
+  view mode, widget or model behind it (`app::ViewMode` has only task_sheet,
+  resource_sheet, task_usage and resource_usage; `app/view_model.h:73-80`).
+- The command is disabled and unwired in every place it appears:
+  `ribbon_pin.tsv` lines 89 and 146 carry enabled 0 for both the Resource tab /
+  View and View tab / Resource Views buttons; `ribbon_bar.cpp:349-350` and
+  464-465 pass `MenuAction::none`, no RibbonCommand and enabled = false; no
+  `RibbonCommand::team_planner` and no `main_window` handler exist; the View
+  menu entry and the status-bar view button are disabled the same way
+  (`app/menu_model.cpp:134`, `main_window.cpp:245`); the backlog rows stay
+  disabled with decision 9's reason.
+- W30-2.6 adds a named live check in `qt_ribbon_inventory` for BOTH ribbon
+  buttons: each is present, disabled and carries exactly "not implemented in
+  this port".  No product code changed.
+
+Per-commit gates (logs under `build/w30/`, named `W30-2.x-*.log`).  Every
+commit's fixture log reports fixtures OK and every client-name scan reports
+0 files / 0 hits with `guard_names` exit 0 and the hex sentinel grep exit 1 as
+expected.  Fixtures-only commits changed no code and ran no build or ctest.
+
+| commit | builds | item tests | ctest |
+|---|---|---|---|
+| W30-2.0 `363645c` | -- (fixtures only) | -- | -- |
+| W30-2.1 `eff96fd` | -- (fixtures only) | -- | -- |
+| W30-2.2 `b2e957e` | app_qt exit 0 | `qt_resource_details_gate` 0 failures; `qt_ribbon_inventory` | app_qt 31/31 (stale binary -- see Found, not fixed) |
+| W30-2.3 `f8086c0` | -- (fixtures only) | -- | -- |
+| W30-2.4 `8cdc56a` | app_qt exit 0 | `qt_ribbon_inventory`; `qt_split_view_gate` corrected | app_qt 31/31 |
+| W30-2.5 `913f81b` | app_qt exit 0 | `qt_ribbon_inventory` 0.68 s, 0 failures | app_qt 31/31 |
+| W30-2.6 `cd85fd3` | app_qt exit 0 | `qt_ribbon_inventory` 1.80 s, 0 failures | app_qt 31/31 |
+
+G2 group gates (fresh trees configured from scratch on `cd85fd3` under
+`build/w30-fresh{,-app,-qt}`, built serially, log
+`build/w30/W30-G2-fresh-gates.log`; the run started 18:53 and finished 19:08
+with no lock retries):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 / 266 checks passed, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 / 420 checks passed, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 21/21 / 31/31 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (122 documented hashes, 158 tracked `.mpp`); paths OK (205 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `wave29..HEAD` / `guard_names wave29..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The numbers belong to `cd85fd3`; the marker commit that follows is docs-only.
+
+## Found, not fixed
+
+- **W30-2.2's app_qt ctest result came from a stale binary.**  Its commit
+  reports 31/31, but the tree it tested had been built before the Resource
+  Form changed the Details splitter's pane count, so `qt_split_view_gate`
+  still expected two panes and would have failed on a rebuild.  W30-2.4
+  rebuilt the tree, found the failure, corrected the gate to expect the view
+  pair plus one form per sheet, and the suite has been 31/31 on every rebuild
+  since.  The lesson is procedural: after a change to a shared widget, ctest
+  must run on the rebuilt tree, not the previous binary.
+- **A fresh Project file's first save is not reopen-stable, and the save-pair
+  mask cannot detect it.**  The first save after FileNew writes a 230-byte
+  `214/CFilter` block; the next save after a reopen materialises a second
+  copy.  W30-2.4's first control tripped the discipline's unequal-length rule
+  (only Props14/CEdl may differ in length), which is the only gate that
+  catches it.  `oracle_w30_level.py` now saves a SEED, reopens it and saves the
+  control; future oracles that touch a fresh project should do the same before
+  assuming a pair is stable.
+- **The resource-write deferrals share writer gaps.**  Add Resources is
+  blocked on a `TBkndCal` resource-calendar row plus three `114/Props` count
+  words; Information and Notes are blocked on VarMeta entry insertion/updates
+  (and Notes on Project's RichEdit serialisation); Assign Resources' remove
+  direction is blocked on Project's append-and-re-key table growth.  No
+  dialog layout is the blocker for any of them; a later wave needs those
+  writers before any of these commands can be enabled.
+WAVE-30-G2-COMPLETE
