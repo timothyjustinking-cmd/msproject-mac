@@ -235,12 +235,27 @@ class PlanDocument {
         return cell_formats_;
     }
 
-    // Wave 21 (operator decision 7): the file's own first `214/CTable` table.
-    // The SheetModel is built from it through app::table_sheet_columns(), so the
+    // Wave 21 (operator decision 7): the applied `214/CTable` table.  The
+    // SheetModel is built from it through app::table_sheet_columns(), so the
     // sheet's column set, order, titles and widths are the file's.  An empty
     // TableDef means the file has no readable CTable (a new project, or a stream
     // this reader cannot decode), and the sheet keeps app::default_sheet_columns().
     const msproject::viewstate::TableDef& table() const noexcept { return table_; }
+
+    // Wave 31 (W31-1.3): the TASK tables the file stores, in file order.  A
+    // table is a task table when it has at least one task-field column
+    // (0x0b40xxxx) and no resource-field column (0x0c40xxxx); resource tables
+    // are not offered in the Task Sheet.  `table_caption` is the display name
+    // without Project's accelerator ampersand (the stored display caption when
+    // the file carries one).  select_table() applies one for the SESSION only:
+    // the sheet is rebuilt from that table's stored columns, while the applied
+    // table the file records is never written (the TableApply view state is a
+    // Project save this wave did not measure).  Returns false for an index the
+    // file does not have; the applied table is unchanged then.
+    std::size_t table_count() const noexcept { return tables_.size(); }
+    std::string table_caption(std::size_t index) const;
+    std::size_t selected_table() const noexcept { return selected_table_; }
+    bool select_table(std::size_t index);
 
     // Wave 23 (B-2, corrected): the Timeline strip is an APPLICATION setting,
     // not file state.  Measured 2026-10-23:
@@ -305,9 +320,12 @@ class PlanDocument {
     core::view::SortDefinition sort_definition_{};
     std::string sort_description_;
     bool sort_active_ = false;
-    // The file's stored `214/CTable` table (wave 21): presentation metadata, never
-    // part of the save diff.
+    // The file's stored `214/CTable` tables (wave 21, W31-1.3): presentation
+    // metadata, never part of the save diff.  `tables_` is every task table the
+    // file stores; `table_` is the applied one and `selected_table_` its index.
+    std::vector<msproject::viewstate::TableDef> tables_;
     msproject::viewstate::TableDef table_;
+    std::size_t selected_table_ = 0;
     msproject::viewstate::GanttStyle gantt_style_;
     msproject::viewstate::CellFormatTable cell_formats_;
     // Wave 29 (W29-1.4): true from a load until the user picks one of the

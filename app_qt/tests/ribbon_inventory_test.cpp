@@ -514,6 +514,8 @@ const EnabledWiring kEnabledWiring[] = {
     {"View", "Data", "Sort", "", "data_sort"},
     // W31-1.2: Outline opens the session-only level menu.
     {"View", "Data", "Outline", "", "data_outline"},
+    // W31-1.3: Tables lists the file's task tables, session-only.
+    {"View", "Data", "Tables", "", "data_tables"},
     {"View", "Resource Views", "Resource Usage", "view_resource_usage", ""},
     {"View", "Resource Views", "Resource Sheet", "view_resource_sheet", ""},
     {"Project", "Properties", "Custom Fields", "custom_fields", ""},
@@ -606,6 +608,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::visual_reports: return "visual_reports";
         case RibbonCommand::data_sort: return "data_sort";
         case RibbonCommand::data_outline: return "data_outline";
+        case RibbonCommand::data_tables: return "data_tables";
     }
     return "none";
 }

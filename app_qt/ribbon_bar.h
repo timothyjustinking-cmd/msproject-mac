@@ -136,6 +136,9 @@ enum class RibbonCommand : std::uint8_t {
     // Subtasks).  The shown levels are SESSION-ONLY: the sheet's collapse state,
     // never the file's rows or bytes.
     data_outline,
+    // Wave 31 (W31-1.3): Tables lists the task tables the file stores and
+    // switches the sheet's columns for the session only.
+    data_tables,
 };
 
 class RibbonBar final : public QWidget {

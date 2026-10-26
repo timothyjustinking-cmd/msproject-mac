@@ -652,7 +652,8 @@ qt_set_warnings(qt_data_commands_tests)
 add_test(NAME qt_data_commands
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_data_commands_tests>
-                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp")
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave31-tables.mpp")
 
 # ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The

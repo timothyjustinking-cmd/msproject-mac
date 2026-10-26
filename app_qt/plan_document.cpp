@@ -42,6 +42,25 @@ std::size_t name_column_of(const core::sheet::SheetModel& sheet) {
 // The four parts of `214/CTable`, the collection core/viewstate decodes.
 const char* const kTableParts[4] = {"214/CTable/FixedData", "214/CTable/FixedMeta",
                                     "214/CTable/VarMeta", "214/CTable/Var2Data"};
+
+// Wave 31 (W31-1.3): a Project table belongs to the Task Sheet when its columns
+// are task fields (0x0b40xxxx).  A table that carries a resource field
+// (0x0c40xxxx) is a Resource Sheet/Usage table and is not offered here; a table
+// with no task column at all is presentation junk or a shape this reader does
+// not understand.
+bool is_task_table(const msproject::viewstate::TableDef& table) {
+    bool has_task = false;
+    for (const msproject::viewstate::ColumnDef& column : table.columns) {
+        const std::uint32_t group = column.field_id & 0xffff0000u;
+        if (group == 0x0c400000u) {
+            return false;
+        }
+        if (group == 0x0b400000u) {
+            has_task = true;
+        }
+    }
+    return has_task;
+}
 // `214/CEdl` -- the applied view/table records (wave 23, B-2).
 const char* const kEdlParts[4] = {"214/CEdl/FixedData", "214/CEdl/FixedMeta",
                                   "214/CEdl/VarMeta", "214/CEdl/Var2Data"};
@@ -349,7 +368,9 @@ void PlanDocument::reset() {
     sort_definition_ = core::view::SortDefinition{};
     sort_description_.clear();
     sort_active_ = false;
+    tables_.clear();
     table_ = msproject::viewstate::TableDef{};
+    selected_table_ = 0;
     gantt_style_ = msproject::viewstate::GanttStyle{};
     use_stored_timescale_ = false;
     scroll_origin_ = core::sched::kDateNa;
@@ -823,7 +844,9 @@ std::vector<std::size_t> PlanDocument::display_rows() const {
 }
 
 void PlanDocument::read_table(const std::string& source_path) {
+    tables_.clear();
     table_ = msproject::viewstate::TableDef{};
+    selected_table_ = 0;
     try {
         const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(source_path);
         std::array<std::vector<std::uint8_t>, 4> raw;
@@ -846,16 +869,54 @@ void PlanDocument::read_table(const std::string& source_path) {
         if (state.tables.empty()) {
             return;
         }
-        // The file's FIRST table is the one the Gantt view applies (the measured
-        // fixture and both corpus files put the task Entry table first).  Keeping
-        // the whole TableDef -- caption, date format and every ColumnDef in file
-        // order -- is what the sheet, the status line and a later CTable write
-        // need; only the column set is used today.
-        table_ = state.tables.front();
+        // Wave 31 (W31-1.3): keep every TASK table in file order.  The initial
+        // applied table stays the file's first task table -- on the measured
+        // fixtures and both corpus files that is the task Entry table, which is
+        // also the table the Gantt view names.  Keeping the whole TableDef --
+        // caption, date format and every ColumnDef in file order -- is what the
+        // sheet, the menu and a later CTable write need.
+        for (const msproject::viewstate::TableDef& definition : state.tables) {
+            if (is_task_table(definition)) {
+                tables_.push_back(definition);
+            }
+        }
+        if (tables_.empty()) {
+            return;
+        }
+        table_ = tables_.front();
     } catch (...) {
         // A view-state decode is presentation metadata: never fail the load.
+        tables_.clear();
         table_ = msproject::viewstate::TableDef{};
+        selected_table_ = 0;
     }
+}
+
+std::string PlanDocument::table_caption(std::size_t index) const {
+    if (index >= tables_.size()) {
+        return {};
+    }
+    const msproject::viewstate::TableDef& definition = tables_[index];
+    std::string caption =
+        definition.display_caption.empty() ? definition.caption : definition.display_caption;
+    // Project stores the menu accelerator in the caption ("&Entry"); the menu
+    // label itself does not draw it.
+    caption.erase(std::remove(caption.begin(), caption.end(), '&'), caption.end());
+    return caption;
+}
+
+bool PlanDocument::select_table(std::size_t index) {
+    if (sheet_ == nullptr || index >= tables_.size()) {
+        return false;
+    }
+    selected_table_ = index;
+    table_ = tables_[index];
+    // Only the sheet's column set changes: same RecordSet, same collapse state
+    // and selection (SheetModel clamps a selection past the new column count).
+    // apply_edit_policy keeps the editable-column rule the load applied.
+    sheet_->set_columns(stored_columns());
+    app::apply_edit_policy(*sheet_);
+    return true;
 }
 
 void PlanDocument::read_applied_view(const std::string& source_path) {

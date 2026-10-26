@@ -2197,6 +2197,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::data_outline:
             show_outline_menu();
             return;
+        case RibbonCommand::data_tables:
+            show_tables_menu();
+            return;
         case RibbonCommand::split_task:
             // Not wired (no engine split edit); disabled until then.
             return;
@@ -5111,6 +5114,46 @@ void MainWindow::apply_outline_level(int level) {
         update_status();
         return;
     }
+    after_model_change();
+}
+
+// Wave 31 (W31-1.3): Project's View > Tables.  The list is the TASK tables the
+// open file stores (never a built-in catalogue), and applying one changes the
+// sheet's columns for this session only: the file keeps its own applied-table
+// view state and its bytes.  Project persists that choice on save; this wave
+// did not measure that save path, so the command is session-only.
+void MainWindow::show_tables_menu() {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
+        set_message("tables are available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    if (doc_.table_count() == 0) {
+        set_message("this file stores no task table", false);
+        update_status();
+        return;
+    }
+    QMenu menu(this);
+    for (std::size_t index = 0; index < doc_.table_count(); ++index) {
+        QAction* action = menu.addAction(QString::fromStdString(doc_.table_caption(index)));
+        action->setCheckable(true);
+        action->setChecked(index == doc_.selected_table());
+        connect(action, &QAction::triggered, this, [this, index]() { apply_table(index); });
+    }
+    menu.exec(QCursor::pos());
+}
+
+void MainWindow::apply_table(std::size_t index) {
+    if (!doc_.select_table(index)) {
+        set_message("that table is not available", true);
+        update_status();
+        return;
+    }
+    // The sheet model's columns changed: rebuild the adapter's display columns,
+    // the header band and the widths from the newly applied table before the
+    // row refresh and selection sync.
+    configure_task_columns();
+    set_message("table: " + doc_.table_caption(index) + " (session only)", false);
     after_model_change();
 }
 

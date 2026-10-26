@@ -490,6 +490,16 @@ DOCUMENTED = {
         "9DCFE5D48BCCA159231564CB80F952CF8BDEA35E01BDA452FFE1F3A3E3B7CA9C",
     "tests/data/wave31-fill-control-null.mpp":
         "875C2AD5BBE198766174ADAA5E2FA5549458B81588B56313090D2745D06270A8",
+    # Wave 31 (W31-1.3): synthetic-base.mpp saved by Project 2021 with a SECOND
+    # stored task table.  `TableEdit(Create=True, NewName="Review")` copied
+    # Entry, then a replacement TableEdit put Text1 (0x0b400033, title
+    # "Text1") in the copy's second column (the Indicators record).  The file
+    # still APPLIES Entry; both task tables are stored, so the Tables command's
+    # file-driven list and switching are exercised in CI.  Built by
+    # scripts/oracle_w31_tables.py under the neutral root C:/w31/tables with
+    # neutral Author/Manager/Company/UserName/Title.
+    "tests/data/wave31-tables.mpp":
+        "5AEB9C4F6A97893E1C8F3A16BE3FFF4AB100EF3D23D66AB1C595810596C987E8",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and

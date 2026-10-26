@@ -486,6 +486,11 @@ class MainWindow final : public QMainWindow {
     // state: Level 1..9 or All Subtasks; the file is never written.
     void show_outline_menu();
     void apply_outline_level(int level);
+    // Wave 31 (W31-1.3): the View tab's Tables menu.  Lists the task tables the
+    // file stores and applies one for the session only (the file's bytes and
+    // its recorded applied table are untouched).
+    void show_tables_menu();
+    void apply_table(std::size_t index);
     void insert_task();
     void delete_task();
     void set_view(app::ViewMode mode);

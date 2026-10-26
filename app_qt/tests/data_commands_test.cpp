@@ -16,9 +16,16 @@
 // sheet's collapse state only: the RecordSet and the file's bytes stay as they
 // were, and an active sort still orders the rows that remain visible.
 //
-// The table cases are added by their own commit (W31-1.3).
+// W31-1.3 (Tables): View > Tables lists the TASK tables the file stores and
+// applies one for the session only.  wave31-tables.mpp was saved by Project
+// 2021 with two task tables: Entry (its second column Indicators, field
+// 0x0b4000cd) and Review (a copy whose second column is Text1, field
+// 0x0b400033, title "Text1").  Switching changes the sheet's columns and
+// nothing else: the RecordSet, the display order, the selection and the file's
+// bytes stay as they were; a resource table would never be listed, and the
+// one-table fixture lists exactly Entry.
 //
-// Usage: qt_data_commands <wave23-outline.mpp>
+// Usage: qt_data_commands <wave23-outline.mpp> <wave31-tables.mpp>
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -252,16 +259,85 @@ void case_outline(const QString& path) {
     check(file_hash(path) == before, "sort plus outline never changes the file's bytes");
 }
 
+void case_tables(const QString& outline_path, const QString& tables_path) {
+    const QString before = file_hash(tables_path);
+    check(!before.isEmpty(), "the tables fixture is readable");
+
+    msqt::PlanDocument document;
+    std::string error;
+    check(document.load(tables_path.toStdString(), app::ZoomLevel::week, error),
+          "the tables fixture loads");
+    if (!error.empty()) {
+        std::fprintf(stderr, "note: load error: %s\n", error.c_str());
+        return;
+    }
+
+    check(document.table_count() == 2, "the file stores two task tables");
+    check(document.table_caption(0) == "Entry", "the first table is Entry");
+    check(document.table_caption(1) == "Review", "the second table is Review");
+    check(document.table_caption(2).empty(), "an out-of-range caption is empty");
+    check(document.selected_table() == 0, "the load applies the first table");
+    if (document.table_count() != 2 || document.sheet() == nullptr) {
+        return;
+    }
+    check(document.sheet()->column_count() == 9, "Entry stores nine columns");
+    check(document.sheet()->column(1).field == 0x0b4000cd,
+          "Entry's second column is Indicators (0x0b4000cd)");
+    check(document.sheet()->column(1).title.empty(), "Indicators keeps its blank caption");
+
+    const std::vector<std::uint32_t> uids = {1, 2, 3};
+    check_uids(record_uids(document), uids, "the RecordSet starts in ID order");
+    check_uids(display_uids(document), uids, "the display starts in ID order");
+    check(document.sheet()->select_cell(1, 0), "a row can be selected");
+    const std::uint32_t selected = document.selected_uid();
+    check(selected != 0, "the selected row names a task");
+
+    check(document.select_table(1), "the Review table can be applied");
+    check(document.selected_table() == 1, "the document records Review as applied");
+    check(document.table_caption(document.selected_table()) == "Review",
+          "the applied table's caption is Review");
+    check(document.sheet()->column_count() == 9, "Review stores nine columns");
+    check(document.sheet()->column(1).field == 0x0b400033,
+          "Review's second column is Text1 (0x0b400033)");
+    check(document.sheet()->column(1).title == "Text1", "Review's column is titled Text1");
+    check(document.sheet()->column(1).visible, "Review's Text1 column is visible");
+    check(document.sheet()->column(3).field == app::name_field_id(),
+          "the Task Name column stays where the table puts it");
+    check(document.selected_uid() == selected, "switching tables keeps the selected task");
+    check_uids(display_uids(document), uids, "switching tables never changes the display order");
+    check_uids(record_uids(document), uids, "switching tables never reorders the RecordSet");
+    check(file_hash(tables_path) == before, "switching tables never changes the file's bytes");
+
+    check(!document.select_table(2), "an index past the stored tables is refused");
+    check(document.selected_table() == 1, "the refused switch keeps Review applied");
+    check(document.select_table(0), "Entry can be applied again");
+    check(document.sheet()->column(1).field == 0x0b4000cd,
+          "Entry's second column is back");
+    check(document.selected_uid() == selected, "switching back keeps the selected task");
+    check(file_hash(tables_path) == before, "switching back never changes the file's bytes");
+
+    // The committed outline fixture stores ONE task table: the menu lists just
+    // it, and any other index is refused.
+    msqt::PlanDocument outline;
+    check(outline.load(outline_path.toStdString(), app::ZoomLevel::week, error),
+          "the outline fixture loads");
+    check(outline.table_count() == 1, "the outline fixture stores one task table");
+    check(outline.table_caption(0) == "Entry", "the one table is Entry");
+    check(!outline.select_table(1), "a missing second table is refused");
+    check(outline.selected_table() == 0, "the one-table file keeps Entry applied");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
-    if (argc < 2) {
-        std::fprintf(stderr, "usage: qt_data_commands <wave23-outline.mpp>\n");
+    if (argc < 3) {
+        std::fprintf(stderr, "usage: qt_data_commands <wave23-outline.mpp> <wave31-tables.mpp>\n");
         return 2;
     }
     case_sort(QString::fromLocal8Bit(argv[1]));
     case_outline(QString::fromLocal8Bit(argv[1]));
+    case_tables(QString::fromLocal8Bit(argv[1]), QString::fromLocal8Bit(argv[2]));
     if (g_failures == 0) {
         std::printf("qt_data_commands: %d checks, 0 failures\n", g_checks);
         return 0;

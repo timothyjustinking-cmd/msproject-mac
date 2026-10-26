@@ -489,7 +489,10 @@ const std::vector<TabSpec>& tab_specs() {
         // W31-1.2: Outline is ENABLED; its level menu is session-only.
         large(data, "Outline", app::MenuAction::none, 50, 1, true, "data.outline",
               RibbonCommand::data_outline);
-        large(data, "Tables", app::MenuAction::none, 50, 2, false, "data.tables");
+        // W31-1.3: Tables is ENABLED; the list is the open file's task tables
+        // and the switch is session-only.
+        large(data, "Tables", app::MenuAction::none, 50, 2, true, "data.tables",
+              RibbonCommand::data_tables);
         combo(data, "Highlight", "No Highlight", 156, 0, 3);
         combo(data, "Filter", "No Filter", 156, 1, 3);
         combo(data, "Group by", "No Group", 156, 2, 3);
