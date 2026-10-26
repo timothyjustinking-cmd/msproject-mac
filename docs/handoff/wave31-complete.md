@@ -1196,12 +1196,13 @@ tree.
 
 ### Push and CI
 
-The branch was pushed to `origin/wave31` **three times, never with force**, each
-after a clean preflight on the hook's actual range (`HEAD --not
+The code tree was pushed to `origin/wave31` **three times, never with force**,
+each after a clean preflight on the hook's actual range (`HEAD --not
 --remotes=origin`: `scan_client_names.py HEAD`, `guard_names.py <new range>`,
 `guard_names.py HEAD --not --remotes=origin`, the `client-string-` hex grep and
-`check_fixtures.py`; logs `build/w31/W31-CLOSE-push-preflight*.log`).  Both
-pushes and the third passed the repository's pre-push hook.
+`check_fixtures.py`; logs `build/w31/W31-CLOSE-push-preflight*.log`).  All
+three code-tree pushes passed the repository's pre-push hook, as does the
+docs-only push.
 
 | push | tree | new commits | preflight | log |
 |---|---|---|---|---|
@@ -1229,9 +1230,9 @@ snapshotted as `close-ci-{qt,ci}-firstdispatch-status.json` and
 `build/w31/W31-CLOSE-ci-watch*.log`.  The two platform findings and their
 fixes are W31-C5/W31-C6 (first dispatch) and W31-C7 (second dispatch), each
 fixed in its own commit with an app_qt build and 37/37 test run on the tree it
-claims.  The record and marker commit after `072773b` changes docs only; it is
-pushed without force after the third dispatch and needs no re-dispatch, so the
-five green jobs cover the final code tree.
+claims.  The CLOSE docs commit after `072773b` (and any docs-only correction
+after it) is pushed the same way and changes no compiled file; the five green
+jobs cover the final code tree.
 
 ### The 16 decisions re-scored (wave-30 close as the starting point)
 

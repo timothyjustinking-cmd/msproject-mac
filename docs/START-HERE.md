@@ -90,16 +90,17 @@ session must read first._
   Two pre-wave fixtures and 69 tracked text files still carry the operator's
   name, and the 13 unsalted hashes remain in older history — the operator's
   decision.  **Run BOTH scans.**
-* **Push and CI**: `origin/wave31` was pushed three times without force, each
+* **Push and CI**: the code tree was pushed three times without force, each
   after a clean preflight; both workflows were dispatched explicitly on
-  `wave31` after each push (the `workflow_run` trigger only fires from `main`).
-  The first dispatch (qt.yml 40400256617, ci.yml 40400261717) was red on all
-  three Qt jobs for W31-C5/W31-C6 and green on ci.yml; the second (qt.yml
-  40401372235, ci.yml 40401377893) was red on the two Unix Qt jobs for W31-C7
-  and green on ci.yml; the third is **green on `072773b`** -- qt.yml
-  **40404390641** (`windows-qt`, `macos-qt`, `linux-qt`, including both parity
-  gates) and ci.yml **40404395191** (`windows-msvc`, `ubuntu-gcc`).  Status
-  snapshots are `build/w31/close-ci-{qt,ci}-status.json`.
+  `wave31` after each of those pushes (the `workflow_run` trigger only fires
+  from `main`).  The first dispatch (qt.yml 40400256617, ci.yml 40400261717)
+  was red on all three Qt jobs for W31-C5/W31-C6 and green on ci.yml; the
+  second (qt.yml 40401372235, ci.yml 40401377893) was red on the two Unix Qt
+  jobs for W31-C7 and green on ci.yml; the third is **green on `072773b`** --
+  qt.yml **40404390641** (`windows-qt`, `macos-qt`, `linux-qt`, including both
+  parity gates) and ci.yml **40404395191** (`windows-msvc`, `ubuntu-gcc`).  The
+  CLOSE docs commit after the third dispatch is pushed the same way and changes
+  docs only.  Status snapshots are `build/w31/close-ci-{qt,ci}-status.json`.
 * **Still open** (wave-31 CLOSE "Found, not fixed"): the four core review Lows
   (C1 Accrue At 0 prints "0"; C2 the entire-project flag is caller-set; S1 an
   unchecked rate reaches `llround`/the cost multiply; S2 the Resource Sheet
