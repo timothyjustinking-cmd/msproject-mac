@@ -375,6 +375,8 @@ void PlanDocument::reset() {
     use_stored_timescale_ = false;
     scroll_origin_ = core::sched::kDateNa;
     scroll_origin_set_ = false;
+    session_timescale_ = app::ZoomFit{};
+    session_timescale_set_ = false;
     applied_view_.clear();
     path_.clear();
     title_.clear();
@@ -491,25 +493,33 @@ void PlanDocument::build_gantt(app::ZoomLevel zoom) {
     // load.  They are the applied view's, not the preference's, until the user
     // picks one of the shell's zoom levels (rebuild_views(..., true)).
     app::StoredTimescale stored;
-    if (use_stored_timescale_) {
-        stored = app::apply_stored_timescale(gantt_style_, timescale);
-    }
-    if (zoom == app::ZoomLevel::week) {
-        // The reference's weekly view: the *unit* stays week (so the header is a
-        // week tier), but its pixels-per-unit is the measured 24 px/day, and the
-        // day row starts on Sunday (MS Project's stock calendar week).  A stored
-        // zoom replaces the unit and the width; the week anchor still applies.
-        timescale.week_start = 0;
-        if (!stored.zoom) {
-            timescale.unit = core::gantt::TimescaleUnit::week;
-            timescale.pixels_per_unit = kPixelsPerWeek;
+    if (session_timescale_set_) {
+        // Wave 31 (W31-2.1): a Zoom command's fit is the session's axis and
+        // replaces both the applied view's stored timescale and the preference
+        // zoom.  The file is untouched (see the header's session-only rule).
+        timescale = session_timescale_.timescale;
+    } else {
+        if (use_stored_timescale_) {
+            stored = app::apply_stored_timescale(gantt_style_, timescale);
+        }
+        if (zoom == app::ZoomLevel::week) {
+            // The reference's weekly view: the *unit* stays week (so the header is a
+            // week tier), but its pixels-per-unit is the measured 24 px/day, and the
+            // day row starts on Sunday (MS Project's stock calendar week).  A stored
+            // zoom replaces the unit and the width; the week anchor still applies.
+            timescale.week_start = 0;
+            if (!stored.zoom) {
+                timescale.unit = core::gantt::TimescaleUnit::week;
+                timescale.pixels_per_unit = kPixelsPerWeek;
+            }
         }
     }
     // Wave 30 (W30-1.7): Task > Editing > Scroll to Task pins the chart's left
     // edge to the selected task's start for the rest of the session, through
     // the same Timescale::pin_origin path the file's stored origin uses (the
     // bar sits at x = 0, earlier bars are clipped left).  It runs after the
-    // stored/zoom origin, so the command wins over both.
+    // stored/zoom/fit origin, so the command wins over all three; a Zoom
+    // command clears the pin instead, so it cannot keep an old left edge.
     if (scroll_origin_set_) {
         timescale.origin = scroll_origin_;
         timescale.pin_origin = true;
@@ -635,8 +645,10 @@ void PlanDocument::set_session_gantt_style(
 
 void PlanDocument::rebuild_views(app::ZoomLevel zoom, bool from_user_zoom) {
     if (from_user_zoom) {
-        // The three shell zoom levels take over from the file's stored zoom.
+        // The three shell zoom levels take over from the file's stored zoom and
+        // from a Zoom command's session fit (wave 31, W31-2.1).
         use_stored_timescale_ = false;
+        clear_session_timescale();
     }
     build_gantt(zoom);
 }
@@ -771,6 +783,145 @@ bool PlanDocument::scroll_gantt_to(std::uint32_t uid, app::ZoomLevel zoom) {
     build_gantt(zoom);
     return true;
 }
+
+// ---------------------------------------------------------------------------
+// Wave 31 (W31-2.1): the View tab's Zoom commands
+// ---------------------------------------------------------------------------
+
+namespace {
+
+bool usable_date(core::sched::date32 d) noexcept {
+    return !core::sched::is_na(d) && !core::sched::is_overflow(d);
+}
+
+}  // namespace
+
+bool PlanDocument::project_span(core::sched::date32* start, core::sched::date32* finish) const {
+    core::sched::date32 first = view_.project_start;
+    core::sched::date32 last = view_.project_finish;
+    if (!usable_date(first) || !usable_date(last) || last <= first) {
+        // The project dates are absent or degenerate: the tasks' own extent is
+        // the next-best honest span (Project's Entire Project shows the same
+        // range on every measured fixture).
+        first = core::sched::kDateNa;
+        last = core::sched::kDateNa;
+        for (const app::TaskRow& task : view_.tasks) {
+            if (!usable_date(task.start) || !usable_date(task.finish)) {
+                continue;
+            }
+            if (core::sched::is_na(first) || task.start < first) {
+                first = task.start;
+            }
+            if (core::sched::is_na(last) || task.finish > last) {
+                last = task.finish;
+            }
+        }
+    }
+    if (!usable_date(first) || !usable_date(last) || last <= first) {
+        return false;
+    }
+    if (start != nullptr) {
+        *start = first;
+    }
+    if (finish != nullptr) {
+        *finish = last;
+    }
+    return true;
+}
+
+bool PlanDocument::selected_span(core::sched::date32* start, core::sched::date32* finish) const {
+    if (sheet_ == nullptr) {
+        return false;
+    }
+    core::sched::date32 first = core::sched::kDateNa;
+    core::sched::date32 last = core::sched::kDateNa;
+    bool any = false;
+    // selected_rows() is RecordSet rows, already restricted to visible rows.
+    for (const std::size_t row : sheet_->selected_rows()) {
+        core::sched::date32 task_start = core::sched::kDateNa;
+        core::sched::date32 task_finish = core::sched::kDateNa;
+        const std::uint32_t uid = records_.uid(row);
+        if (uid == 0) {
+            // The synthetic project row stands for the whole project, exactly as
+            // its Gantt bar does (app::project_summary_row).
+            if (!project_span(&task_start, &task_finish)) {
+                continue;
+            }
+        } else {
+            const app::TaskRow* task = task_by_uid(uid);
+            if (task == nullptr || !usable_date(task->start) || !usable_date(task->finish)) {
+                continue;
+            }
+            task_start = task->start;
+            task_finish = task->finish;
+        }
+        any = true;
+        if (core::sched::is_na(first) || task_start < first) {
+            first = task_start;
+        }
+        if (core::sched::is_na(last) || task_finish > last) {
+            last = task_finish;
+        }
+    }
+    // Project's Selected Tasks with no task row selected falls back to the whole
+    // project (the same command the ribbon's Selected Tasks runs).
+    if (!any) {
+        return project_span(start, finish);
+    }
+    if (!usable_date(first) || !usable_date(last) || last <= first) {
+        return false;
+    }
+    if (start != nullptr) {
+        *start = first;
+    }
+    if (finish != nullptr) {
+        *finish = last;
+    }
+    return true;
+}
+
+bool PlanDocument::apply_zoom_fit(const app::ZoomFit& fit, app::ZoomLevel zoom) {
+    if (sheet_ == nullptr || !fit.valid) {
+        return false;
+    }
+    session_timescale_ = fit;
+    session_timescale_set_ = true;
+    // The fit is the axis now: neither the file's stored timescale nor the
+    // Scroll to Task pin may override its origin.
+    use_stored_timescale_ = false;
+    scroll_origin_set_ = false;
+    build_gantt(zoom);
+    return true;
+}
+
+bool PlanDocument::zoom_entire_project(double width_px, app::ZoomLevel zoom) {
+    core::sched::date32 start = core::sched::kDateNa;
+    core::sched::date32 finish = core::sched::kDateNa;
+    if (!project_span(&start, &finish)) {
+        return false;
+    }
+    return apply_zoom_fit(app::fit_span_to_width(start, finish, width_px), zoom);
+}
+
+bool PlanDocument::zoom_selected_tasks(double width_px, app::ZoomLevel zoom) {
+    core::sched::date32 start = core::sched::kDateNa;
+    core::sched::date32 finish = core::sched::kDateNa;
+    if (!selected_span(&start, &finish)) {
+        return false;
+    }
+    return apply_zoom_fit(app::fit_span_to_width(start, finish, width_px), zoom);
+}
+
+bool PlanDocument::zoom_fixed_span(core::sched::date32 anchor, double span_days, double width_px,
+                                   app::ZoomLevel zoom) {
+    return apply_zoom_fit(app::fixed_span_to_width(anchor, span_days, width_px), zoom);
+}
+
+void PlanDocument::clear_session_timescale() {
+    session_timescale_ = app::ZoomFit{};
+    session_timescale_set_ = false;
+}
+
 
 void PlanDocument::accept_start_edits(const std::vector<app::StartEdit>& edits) {
     app::accept_start_edits(loaded_, edits);

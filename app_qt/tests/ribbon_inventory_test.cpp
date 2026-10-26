@@ -516,6 +516,8 @@ const EnabledWiring kEnabledWiring[] = {
     {"View", "Data", "Outline", "", "data_outline"},
     // W31-1.3: Tables lists the file's task tables, session-only.
     {"View", "Data", "Tables", "", "data_tables"},
+    // W31-2.1: Zoom opens the session-only Zoom dialog.
+    {"View", "Zoom", "Zoom", "", "zoom_dialog"},
     {"View", "Resource Views", "Resource Usage", "view_resource_usage", ""},
     {"View", "Resource Views", "Resource Sheet", "view_resource_sheet", ""},
     {"Project", "Properties", "Custom Fields", "custom_fields", ""},
@@ -609,6 +611,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::data_sort: return "data_sort";
         case RibbonCommand::data_outline: return "data_outline";
         case RibbonCommand::data_tables: return "data_tables";
+        case RibbonCommand::zoom_dialog: return "zoom_dialog";
     }
     return "none";
 }

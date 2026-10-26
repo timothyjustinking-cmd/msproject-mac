@@ -207,6 +207,28 @@ class PlanDocument {
     // pan survives later rebuilds and zoom changes until the next load.
     bool scroll_gantt_to(std::uint32_t uid, app::ZoomLevel zoom);
 
+    // Wave 31 (W31-2.1): the View tab's Zoom commands fit the timescale to a
+    // span.  A fit is SESSION-ONLY: it replaces the stored view timescale and
+    // the shell zoom in the chart until the next load, File > New or shell-zoom
+    // change (clear_session_timescale()), and the file's bytes and the save
+    // diff never see it.  Each call rebuilds the chart and returns false when
+    // the span or the width is unusable.
+    //
+    // `width_px` is the chart pane's width.  Entire Project fits the project
+    // start/finish (the tasks' earliest/latest when those dates are absent);
+    // Selected Tasks fits the selected rows' tasks, falling back to the project
+    // span when no task row is selected.  `zoom_fixed_span` is the Zoom dialog's
+    // 1 week / 2 weeks / 1 month / 3 months / Custom anchor, timed from
+    // `anchor`'s unit start.
+    bool zoom_entire_project(double width_px, app::ZoomLevel zoom);
+    bool zoom_selected_tasks(double width_px, app::ZoomLevel zoom);
+    bool zoom_fixed_span(core::sched::date32 anchor, double span_days, double width_px,
+                         app::ZoomLevel zoom);
+    void clear_session_timescale();
+    bool session_timescale_active() const noexcept { return session_timescale_set_; }
+    bool project_span(core::sched::date32* start, core::sched::date32* finish) const;
+    bool selected_span(core::sched::date32* start, core::sched::date32* finish) const;
+
     // The stored character width of the `214/CTable` column whose field id is
     // `table_field` (0 when the table/file does not carry it).
     int table_column_chars(std::uint32_t table_field) const;
@@ -278,6 +300,8 @@ class PlanDocument {
   private:
     void reset();
     void build_gantt(app::ZoomLevel zoom);
+    // Wave 31 (W31-2.1): store a validated fit as the session axis and rebuild.
+    bool apply_zoom_fit(const app::ZoomFit& fit, app::ZoomLevel zoom);
     // Wave 29 (W29-1.3): fills each source task's `sides` from the applied
     // view's stored bar styles (app::bar_label_texts_for) and marks the bar as
     // stored-labelled, so the layout draws exactly those labels.  A file whose
@@ -338,6 +362,12 @@ class PlanDocument {
     // put it.
     core::sched::date32 scroll_origin_ = core::sched::kDateNa;
     bool scroll_origin_set_ = false;
+    // Wave 31 (W31-2.1): the Zoom commands' session-only timescale.  While
+    // `session_timescale_set_` is true, build_gantt() uses this fit verbatim
+    // instead of the stored or preference timescale; the next load, File > New
+    // or shell-zoom change clears it.
+    app::ZoomFit session_timescale_;
+    bool session_timescale_set_ = false;
     std::string applied_view_;
     std::string path_;
     std::string title_;

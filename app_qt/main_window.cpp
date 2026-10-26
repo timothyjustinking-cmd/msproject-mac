@@ -2200,6 +2200,11 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::data_tables:
             show_tables_menu();
             return;
+        case RibbonCommand::zoom_dialog:
+            // Wave 31 (W31-2.1): the View tab's Zoom dialog.  Its result is a
+            // session-only timescale fit (apply_zoom_choice).
+            show_zoom_dialog();
+            return;
         case RibbonCommand::split_task:
             // Not wired (no engine split edit); disabled until then.
             return;
@@ -2828,13 +2833,18 @@ void MainWindow::show_shortcuts() {
 }
 
 void MainWindow::set_zoom(app::ZoomLevel zoom) {
-    if (prefs_.zoom == zoom) {
+    if (prefs_.zoom == zoom &&
+        !(doc_.has_document() && doc_.session_timescale_active())) {
+        // Nothing to change -- unless a Zoom-command fit (wave 31, W31-2.1) is
+        // active: the shell's own zoom levels are a real choice even when the
+        // preference already names them, so the fit yields to them below.
         update_zoom_slider();
         return;
     }
     prefs_.zoom = zoom;
     if (doc_.has_document()) {
-        // A user zoom choice replaces the file's stored timescale zoom (W29-1.4).
+        // A user zoom choice replaces the file's stored timescale zoom (W29-1.4)
+        // and any Zoom-command session fit (W31-2.1).
         doc_.rebuild_views(prefs_.zoom, true);
         if (prefs_.view == app::ViewMode::task_sheet) {
             gantt_canvas_->set_layout(doc_.gantt());
@@ -3487,11 +3497,18 @@ void MainWindow::show_predecessors() {
 // ---------------------------------------------------------------------------
 
 bool MainWindow::apply_preferences(const app::Preferences& preferences, bool persist) {
+    const app::ZoomLevel previous_zoom = prefs_.zoom;
     prefs_ = preferences;
     if (doc_.has_document()) {
         // The date format is the sheet's, so every date cell, the status line and
         // the PDF report follow this one change (app::apply_preferences).
         doc_.apply_preferences(prefs_);
+        // A zoom preference that actually changed is the shell's zoom level
+        // taking over, exactly like the slider (wave 31, W31-2.1): it clears a
+        // Zoom-command session fit.  Any other preference keeps the fit.
+        if (prefs_.zoom != previous_zoom) {
+            doc_.clear_session_timescale();
+        }
         doc_.rebuild_views(prefs_.zoom);
         if (prefs_.view == app::ViewMode::task_sheet) {
             gantt_canvas_->set_layout(doc_.gantt());
@@ -5155,6 +5172,66 @@ void MainWindow::apply_table(std::size_t index) {
     configure_task_columns();
     set_message("table: " + doc_.table_caption(index) + " (session only)", false);
     after_model_change();
+}
+
+// ---------------------------------------------------------------------------
+// Wave 31 (W31-2.1): View > Zoom
+// ---------------------------------------------------------------------------
+
+void MainWindow::show_zoom_dialog() {
+    if (!doc_.has_document()) {
+        set_message("zoom needs an open project", false);
+        update_status();
+        return;
+    }
+    ZoomDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    apply_zoom_choice(dialog.choice());
+}
+
+void MainWindow::apply_zoom_choice(const ZoomChoice& choice) {
+    if (!doc_.has_document()) {
+        return;
+    }
+    // Project measures its 85 % fit against the chart pane (W31-2.2 measured
+    // 1020 px at its window width); the shell asks the widget it draws into.
+    const double width =
+        gantt_canvas_ != nullptr ? static_cast<double>(gantt_canvas_->width()) : 0.0;
+    bool applied = false;
+    switch (choice.target) {
+        case ZoomTarget::entire_project:
+            applied = doc_.zoom_entire_project(width, prefs_.zoom);
+            break;
+        case ZoomTarget::selected_tasks:
+            applied = doc_.zoom_selected_tasks(width, prefs_.zoom);
+            break;
+        default:
+            // The fixed presets and Custom span from the chart's current left
+            // edge, which is where Project's dialog anchors them (W31-2.2).
+            applied = doc_.zoom_fixed_span(doc_.gantt().timescale.origin, choice.span_days(),
+                                           width, prefs_.zoom);
+            break;
+    }
+    if (!applied) {
+        set_message("the chart has no span to fit", true);
+        update_status();
+        return;
+    }
+    if (prefs_.view == app::ViewMode::task_sheet) {
+        gantt_canvas_->set_layout(doc_.gantt());
+        gantt_canvas_->set_selected_uid(doc_.selected_uid());
+    }
+    refresh_timeline();
+    const char* what = "requested span";
+    if (choice.target == ZoomTarget::entire_project) {
+        what = "entire project";
+    } else if (choice.target == ZoomTarget::selected_tasks) {
+        what = "selected tasks";
+    }
+    set_message(std::string("timescale fitted to the ") + what + " (session only)", false);
+    update_status();
 }
 
 void MainWindow::rebuild_generic_view() {

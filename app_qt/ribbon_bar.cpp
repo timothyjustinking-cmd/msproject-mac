@@ -498,7 +498,8 @@ const std::vector<TabSpec>& tab_specs() {
         combo(data, "Group by", "No Group", 156, 2, 3);
         GroupSpec& zoom = add_group(view, "Zoom", 248);
         combo(zoom, "Timescale", "Days", 96, 0, 0);
-        large(zoom, "Zoom", app::MenuAction::none, 46, 1, false, "zoom.zoom");
+        large(zoom, "Zoom", app::MenuAction::none, 46, 1, true, "zoom.zoom",
+              RibbonCommand::zoom_dialog);
         large(zoom, "Entire\nProject", app::MenuAction::none, 42, 2, false, "zoom.entire");
         large(zoom, "Selected\nTasks", app::MenuAction::none, 50, 3, false, "zoom.selected");
         GroupSpec& split_view = add_group(view, "Split View", 185);

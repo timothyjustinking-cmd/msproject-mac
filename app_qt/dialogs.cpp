@@ -14,6 +14,7 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QFont>
 #include <QSpinBox>
 #include <QString>
@@ -878,6 +879,135 @@ bool edit_sort(QWidget* parent, const std::vector<app::SortField>& fields,
     *description = dialog.description();
     *cleared = dialog.cleared();
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Zoom (wave 31, W31-2.1)
+// ---------------------------------------------------------------------------
+
+double ZoomChoice::span_days() const noexcept {
+    switch (target) {
+        case ZoomTarget::week:
+            return 7.0;
+        case ZoomTarget::two_weeks:
+            return 14.0;
+        case ZoomTarget::month:
+            return app::kZoomMonthDays;
+        case ZoomTarget::three_months:
+            return 3.0 * app::kZoomMonthDays;
+        case ZoomTarget::custom: {
+            double unit_days = 1.0;
+            if (custom_unit == 1) {
+                unit_days = 7.0;
+            } else if (custom_unit == 2) {
+                unit_days = app::kZoomMonthDays;
+            }
+            return static_cast<double>(custom_count) * unit_days;
+        }
+        case ZoomTarget::selected_tasks:
+        case ZoomTarget::entire_project:
+            return 0.0;
+    }
+    return 0.0;
+}
+
+ZoomDialog::ZoomDialog(QWidget* parent) : QDialog(parent) {
+    setWindowTitle(QStringLiteral("Zoom"));
+    auto* outer = make_outer(*this, dialog_geometry::kZoomSize);
+
+    // The seven "Zoom to" radios.  They share one parent so Qt's auto-exclusive
+    // group applies; Project's dialog has the same seven choices (dialog 756).
+    auto* choices = new QWidget(this);
+    choices->setObjectName(QStringLiteral("zoomChoices"));
+    auto* rows = new QVBoxLayout(choices);
+    rows->setContentsMargins(0, 0, 0, 0);
+    rows->setSpacing(4);
+    week_ = new QRadioButton(QStringLiteral("&1 week"), choices);
+    two_weeks_ = new QRadioButton(QStringLiteral("&2 weeks"), choices);
+    month_ = new QRadioButton(QStringLiteral("1 &month"), choices);
+    three_months_ = new QRadioButton(QStringLiteral("&3 months"), choices);
+    selected_ = new QRadioButton(QStringLiteral("&Selected tasks"), choices);
+    entire_ = new QRadioButton(QStringLiteral("&Entire project"), choices);
+    custom_ = new QRadioButton(QStringLiteral("&Custom:"), choices);
+    for (QRadioButton* radio :
+         {week_, two_weeks_, month_, three_months_, selected_, entire_, custom_}) {
+        rows->addWidget(radio);
+    }
+    entire_->setChecked(true);
+    outer->addWidget(choices);
+
+    auto* custom_row = new QHBoxLayout();
+    custom_row->setContentsMargins(0, 0, 0, 0);
+    custom_row->setSpacing(kSpacing);
+    custom_row->addSpacing(kLabelWidth + kSpacing);
+    custom_count_ = new QSpinBox(this);
+    custom_count_->setRange(1, 9999);
+    custom_count_->setValue(1);
+    custom_count_->setFixedSize(80, kControlHeight);
+    custom_row->addWidget(custom_count_);
+    custom_units_ = new QComboBox(this);
+    custom_units_->addItem(QStringLiteral("Days"));
+    custom_units_->addItem(QStringLiteral("Weeks"));
+    custom_units_->addItem(QStringLiteral("Months"));
+    custom_units_->setFixedSize(130, kControlHeight);
+    custom_row->addWidget(custom_units_);
+    custom_row->addStretch(1);
+    outer->addLayout(custom_row);
+
+    // The session-only rule is said where the user makes the choice (wave-31
+    // brief section 1).
+    outer->addWidget(make_hint(
+        this, dialog_geometry::kZoomSize,
+        QStringLiteral("This zoom applies to this session only; the file keeps its own "
+                       "timescale.  Entire project and Selected tasks fit the plan's span.")));
+    outer->addStretch(1);
+
+    auto* buttons = new QHBoxLayout();
+    buttons->setContentsMargins(0, 0, 0, 0);
+    buttons->setSpacing(kSpacing);
+    buttons->addStretch(1);
+    reset_ = make_button(this, QStringLiteral("Reset"));
+    ok_ = make_button(this, QStringLiteral("OK"));
+    cancel_ = make_button(this, QStringLiteral("Cancel"));
+    buttons->addWidget(reset_);
+    buttons->addWidget(ok_);
+    buttons->addWidget(cancel_);
+    outer->addLayout(buttons);
+
+    QObject::connect(reset_, &QPushButton::clicked, this, [this](bool) { reset_controls(); });
+    QObject::connect(ok_, &QPushButton::clicked, this, &QDialog::accept);
+    QObject::connect(cancel_, &QPushButton::clicked, this, &QDialog::reject);
+}
+
+ZoomChoice ZoomDialog::choice() const {
+    ZoomChoice result;
+    if (week_->isChecked()) {
+        result.target = ZoomTarget::week;
+    } else if (two_weeks_->isChecked()) {
+        result.target = ZoomTarget::two_weeks;
+    } else if (month_->isChecked()) {
+        result.target = ZoomTarget::month;
+    } else if (three_months_->isChecked()) {
+        result.target = ZoomTarget::three_months;
+    } else if (selected_->isChecked()) {
+        result.target = ZoomTarget::selected_tasks;
+    } else if (custom_->isChecked()) {
+        result.target = ZoomTarget::custom;
+        result.custom_count = custom_count_->value();
+        result.custom_unit = custom_units_->currentIndex();
+    } else {
+        result.target = ZoomTarget::entire_project;
+    }
+    return result;
+}
+
+void ZoomDialog::reset_controls() {
+    // Project's Reset returns the dialog's fields to the state it opened in;
+    // the view itself changes only on OK.  The port's initial state is Entire
+    // project with Custom at 1 Day (see the header's comment).
+    entire_->setChecked(true);
+    custom_count_->setValue(1);
+    custom_units_->setCurrentIndex(0);
 }
 
 bool ask_task_name(QWidget* parent, QString* name) {

@@ -139,6 +139,10 @@ enum class RibbonCommand : std::uint8_t {
     // Wave 31 (W31-1.3): Tables lists the task tables the file stores and
     // switches the sheet's columns for the session only.
     data_tables,
+    // Wave 31 (W31-2.1): the View tab's Zoom group.  The dialog's result replaces
+    // the chart's timescale for the session only (PlanDocument::zoom_fixed_span);
+    // Entire Project and Selected Tasks are wired in W31-2.2.
+    zoom_dialog,
 };
 
 class RibbonBar final : public QWidget {

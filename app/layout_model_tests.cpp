@@ -591,6 +591,90 @@ void test_stored_timescale() {
                "an unstored view keeps the plan origin");
 }
 
+void test_zoom_fit() {
+    // Wave 31 (W31-2.1/2.2).  The four reference windows are Project 2021's
+    // measured Entire Project / Selected Tasks results on the two fixtures
+    // (tests/data/reference/w31-zoom.measures.json).  The port's fit is 85 % of
+    // the pane with a floored origin; the assertions below pin the exact port
+    // window and its distance from Project's.
+    check_near(app::span_days_between(from_ymd(2026, 1, 4, 13, 0),
+                                      from_ymd(2026, 1, 9, 12, 0)),
+               4.958333, 1e-5, "the base project spans 4.958 calendar days");
+
+    const app::ZoomFit base = app::fit_span_to_width(from_ymd(2026, 1, 4, 13, 0),
+                                                     from_ymd(2026, 1, 9, 12, 0), 1020.0);
+    check(base.valid, "the base project fit is valid");
+    check(base.timescale.unit == core::gantt::TimescaleUnit::day,
+          "a five-day span fits on the day tier");
+    check_date(base.timescale.origin, from_ymd(2026, 1, 4),
+               "the base fit floors to 2026-01-04, as Project's window starts");
+    check_near(base.visible_days, 5.833333, 1e-5,
+               "the base window is the 85 % ideal (Project measured 5.874)");
+    check_near(base.timescale.pixels_per_unit, 1020.0 / 5.833333, 1e-3,
+               "the base width is the pane divided by the visible span");
+    check(base.timescale.pin_origin, "a fit pins its origin against the task snap");
+
+    const app::ZoomFit outline = app::fit_span_to_width(from_ymd(2026, 12, 11, 8, 0),
+                                                        from_ymd(2026, 12, 18, 17, 0), 1020.0);
+    check(outline.valid, "the outline project fit is valid");
+    check_date(outline.timescale.origin, from_ymd(2026, 12, 10),
+               "the outline fit floors to 2026-12-10 (Project's window start)");
+    check_near(outline.visible_days, 8.708333, 1e-5,
+               "the outline window grows to contain its finish (Project measured 8.660)");
+
+    const app::ZoomFit selection = app::fit_span_to_width(
+        from_ymd(2026, 12, 17, 8, 0), from_ymd(2026, 12, 18, 17, 0), 1020.0);
+    check(selection.valid, "the selected-tasks fit is valid");
+    check_date(selection.timescale.origin, from_ymd(2026, 12, 17),
+               "the selection fit floors to its first day");
+    check_near(selection.visible_days, 1.708333, 1e-5,
+               "a sub-day margin cannot be shown on the day tier: the window is the "
+               "finish minus the floored origin (Project's 2-hour tier measured 1.606)");
+
+    // The unit thresholds are the zoom_spec tiers.
+    check(app::zoom_fit_unit(90.0) == core::gantt::TimescaleUnit::day,
+          "90 visible days still fit on days");
+    check(app::zoom_fit_unit(90.5) == core::gantt::TimescaleUnit::week,
+          "beyond 90 days the fit uses weeks");
+    check(app::zoom_fit_unit(1096.0) == core::gantt::TimescaleUnit::month,
+          "beyond three years the fit uses months");
+
+    // The Zoom dialog's fixed spans measured on Project: 7, 14 and (mean-month
+    // rounded to its axis) about 31 and 90 days.  The port times the window
+    // from the current origin's unit start.
+    const app::ZoomFit week = app::fixed_span_to_width(from_ymd(2026, 10, 11), 7.0, 1020.0);
+    check(week.valid, "the 1-week preset is valid");
+    check_date(week.timescale.origin, from_ymd(2026, 10, 11),
+               "the 1-week preset starts on the current origin");
+    check_date(week.span_finish, from_ymd(2026, 10, 18), "the 1-week preset ends 7 days on");
+    check_near(week.timescale.pixels_per_unit, 1020.0 / 7.0, 1e-6,
+               "the 1-week preset is the whole pane over 7 days");
+    const app::ZoomFit two_weeks = app::fixed_span_to_width(from_ymd(2026, 10, 11), 14.0, 1020.0);
+    check_date(two_weeks.span_finish, from_ymd(2026, 10, 25), "2 weeks ends 14 days on");
+    check_near(two_weeks.visible_days, 14.0, 1e-9, "2 weeks shows 14 days");
+    const app::ZoomFit month = app::fixed_span_to_width(from_ymd(2026, 10, 11),
+                                                        app::kZoomMonthDays, 1020.0);
+    check(month.timescale.unit == core::gantt::TimescaleUnit::day,
+          "1 month still fits on the day tier");
+    check_near(month.visible_days, app::kZoomMonthDays, 1e-9, "1 month shows a mean month");
+    const app::ZoomFit quarter = app::fixed_span_to_width(from_ymd(2026, 10, 11),
+                                                          3.0 * app::kZoomMonthDays, 1020.0);
+    check(quarter.timescale.unit == core::gantt::TimescaleUnit::week,
+          "3 months fits on the week tier");
+    check_near(quarter.visible_days, 3.0 * app::kZoomMonthDays, 1e-9,
+               "3 months shows three mean months");
+    check_near(quarter.timescale.pixels_per_unit, (1020.0 / (3.0 * app::kZoomMonthDays)) * 7.0,
+               1e-6, "a week column is seven of the fit's days");
+
+    // Degenerate input changes nothing.
+    check(!app::fit_span_to_width(from_ymd(2026, 1, 5), from_ymd(2026, 1, 5), 1020.0).valid,
+          "an empty span cannot be fitted");
+    check(!app::fit_span_to_width(from_ymd(2026, 1, 4), from_ymd(2026, 1, 5), 0.0).valid,
+          "a zero-width pane cannot be fitted");
+    check(!app::fixed_span_to_width(kDateNa, 7.0, 1020.0).valid,
+          "a fixed span needs a real anchor");
+}
+
 void test_undated_row() {
     // A row with no start keeps its row (the sheet still shows it) and gets no
     // bar; the links that touch it are not routed.
@@ -895,6 +979,7 @@ int main() {
     test_sheet();
     test_gantt();
     test_stored_timescale();
+    test_zoom_fit();
     test_undated_row();
     test_empty();
     test_displayed_rows_by_uid();

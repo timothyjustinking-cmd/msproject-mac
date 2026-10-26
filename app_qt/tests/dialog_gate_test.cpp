@@ -30,6 +30,7 @@
 #include <QMargins>
 #include <QMetaObject>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QSize>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -49,6 +50,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -507,6 +509,58 @@ int main(int argc, char** argv) {
         dialog.clear_button()->click();
         gate::check(dialog.cleared() && dialog.definition().keys.empty(),
                     "Clear Sort reports the clear request");
+    }
+
+    // -----------------------------------------------------------------------
+    // Zoom (wave 31, W31-2.1)
+    // -----------------------------------------------------------------------
+    {
+        msqt::ZoomDialog dialog;
+        dialog.show();
+        QApplication::processEvents();
+        check_shell(dialog, "Zoom", kZoomSize);
+        gate::check(dialog.entire_radio() != nullptr && dialog.entire_radio()->isChecked(),
+                    "the Zoom dialog opens on Entire project");
+        gate::check(dialog.week_radio() != nullptr && dialog.two_weeks_radio() != nullptr &&
+                        dialog.month_radio() != nullptr &&
+                        dialog.three_months_radio() != nullptr &&
+                        dialog.selected_radio() != nullptr && dialog.custom_radio() != nullptr,
+                    "the Zoom dialog offers Project's seven Zoom to choices");
+        gate::check(dialog.custom_count_spin() != nullptr &&
+                        dialog.custom_count_spin()->value() == 1,
+                    "Custom starts at 1");
+        gate::check(dialog.custom_units_combo() != nullptr &&
+                        dialog.custom_units_combo()->count() == 3,
+                    "Custom offers Days, Weeks and Months");
+        check_bottom_button_row(dialog, {dialog.reset_button(), dialog.ok_button(),
+                                         dialog.cancel_button()});
+        check_vertical_hint(dialog, "zoomHint");
+        // The presets carry the spans W31-2.2 measured on Project.
+        dialog.week_radio()->setChecked(true);
+        gate::check(dialog.choice().target == msqt::ZoomTarget::week &&
+                        dialog.choice().span_days() == 7.0,
+                    "1 week asks for 7 days");
+        dialog.two_weeks_radio()->setChecked(true);
+        gate::check(dialog.choice().span_days() == 14.0, "2 weeks asks for 14 days");
+        dialog.month_radio()->setChecked(true);
+        gate::check(std::abs(dialog.choice().span_days() - app::kZoomMonthDays) < 1e-9,
+                    "1 month uses the mean month");
+        dialog.three_months_radio()->setChecked(true);
+        gate::check(std::abs(dialog.choice().span_days() - 3.0 * app::kZoomMonthDays) < 1e-9,
+                    "3 months uses three mean months");
+        dialog.custom_radio()->setChecked(true);
+        dialog.custom_count_spin()->setValue(6);
+        dialog.custom_units_combo()->setCurrentIndex(1);
+        gate::check(dialog.choice().target == msqt::ZoomTarget::custom &&
+                        dialog.choice().span_days() == 42.0,
+                    "Custom 6 Weeks asks for 42 days");
+        dialog.reset_button()->click();
+        gate::check(dialog.entire_radio()->isChecked() &&
+                        dialog.custom_count_spin()->value() == 1 &&
+                        dialog.custom_units_combo()->currentIndex() == 0,
+                    "Reset restores the opening controls");
+        dialog.ok_button()->click();
+        gate::check(dialog.result() == QDialog::Accepted, "OK accepts the dialog");
     }
 
     // -----------------------------------------------------------------------

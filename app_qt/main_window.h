@@ -65,6 +65,8 @@ namespace msqt {
 
 // Wave 21: the six-tab Task Information dialog's General payload (dialogs.h).
 struct TaskInformationValues;
+// Wave 31 (W31-2.1): the Zoom dialog's result (dialogs.h).
+struct ZoomChoice;
 
 class GanttCanvas;
 class Backstage;
@@ -491,6 +493,12 @@ class MainWindow final : public QMainWindow {
     // its recorded applied table are untouched).
     void show_tables_menu();
     void apply_table(std::size_t index);
+    // Wave 31 (W31-2.1): the View tab's Zoom dialog and the two span commands.
+    // All three apply a SESSION-ONLY timescale fit: the chart's axis changes,
+    // the file's bytes do not.  apply_zoom_choice() is also the ribbon
+    // Entire Project / Selected Tasks path (W31-2.2).
+    void show_zoom_dialog();
+    void apply_zoom_choice(const ZoomChoice& choice);
     void insert_task();
     void delete_task();
     void set_view(app::ViewMode mode);

@@ -56,6 +56,7 @@ class QLabel;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
+class QRadioButton;
 class QSpinBox;
 class QTabWidget;
 class QWidget;
@@ -96,6 +97,9 @@ inline constexpr DialogSize kPredecessorsSize{640, 420};
 inline constexpr DialogSize kFilterSize{520, 300};
 // Wave 31 (W31-1.1): Field, Order and the three buttons.
 inline constexpr DialogSize kSortSize{480, 260};
+// Wave 31 (W31-2.1): the "Zoom to" radios, the Custom row, the hint and the
+// three buttons (Project's dialog 756 inventory, port geometry).
+inline constexpr DialogSize kZoomSize{480, 420};
 // Wave 21: the six-tab Task Information dialog.
 inline constexpr DialogSize kTaskInformationSize{560, 520};
 
@@ -436,6 +440,88 @@ class SortDialog final : public QDialog {
 bool edit_sort(QWidget* parent, const std::vector<app::SortField>& fields,
                core::view::SortDefinition* definition, std::string* description,
                bool* cleared, QString* error);
+
+// ---------------------------------------------------------------------------
+// Zoom (wave 31, W31-2.1)
+//
+// Project's View > Zoom > Zoom... opens dialog 756: a "Zoom to" group of seven
+// radios (1 week, 2 weeks, 1 month, 3 months, Selected tasks, Entire project,
+// Custom) with a numeric field and a units combo, then OK / Cancel / Reset.
+//
+// MEASURED (W31-2.2, tests/data/reference/w31-zoom.measures.json): the fixed
+// presets cover 7, 14, ~30.97 and ~90.18 days in Project and anchor at the
+// current view's left edge; the port uses 7, 14, kZoomMonthDays and
+// 3 * kZoomMonthDays (the same mean month its month column uses) and anchors
+// at the chart's present origin.  Entire project and Selected tasks apply the
+// same fits as the ribbon commands.  The custom units offered are the three
+// the port's timescale model has (Days, Weeks, Months); Project's own unit list
+// was not extracted, so no other unit is offered.  The initial radio is Entire
+// project -- the live dialog's initial choice was not readable (its Win32
+// radios expose no SelectionItem pattern) -- and Reset restores the initial
+// controls without touching the view.
+//
+// Like the other wave-31 view commands, the result is SESSION-ONLY: the chart's
+// timescale changes, the file's bytes do not.
+// ---------------------------------------------------------------------------
+
+enum class ZoomTarget {
+    week,
+    two_weeks,
+    month,
+    three_months,
+    selected_tasks,
+    entire_project,
+    custom,
+};
+
+struct ZoomChoice {
+    ZoomTarget target = ZoomTarget::entire_project;
+    int custom_count = 1;
+    // 0 = day, 1 = week, 2 = month (the combo's index).
+    int custom_unit = 0;
+
+    // The fixed window this choice asks for in calendar days, or 0 for the two
+    // span commands (Selected tasks / Entire project), which measure the plan.
+    double span_days() const noexcept;
+};
+
+class ZoomDialog final : public QDialog {
+  public:
+    explicit ZoomDialog(QWidget* parent = nullptr);
+
+    // The live controls' choice.  A caller reads it after exec() accepted; the
+    // gate reads it too, which is why it is computed rather than cached.
+    ZoomChoice choice() const;
+
+    QRadioButton* week_radio() const noexcept { return week_; }
+    QRadioButton* two_weeks_radio() const noexcept { return two_weeks_; }
+    QRadioButton* month_radio() const noexcept { return month_; }
+    QRadioButton* three_months_radio() const noexcept { return three_months_; }
+    QRadioButton* selected_radio() const noexcept { return selected_; }
+    QRadioButton* entire_radio() const noexcept { return entire_; }
+    QRadioButton* custom_radio() const noexcept { return custom_; }
+    QSpinBox* custom_count_spin() const noexcept { return custom_count_; }
+    QComboBox* custom_units_combo() const noexcept { return custom_units_; }
+    QPushButton* reset_button() const noexcept { return reset_; }
+    QPushButton* ok_button() const noexcept { return ok_; }
+    QPushButton* cancel_button() const noexcept { return cancel_; }
+
+  private:
+    void reset_controls();
+
+    QRadioButton* week_ = nullptr;
+    QRadioButton* two_weeks_ = nullptr;
+    QRadioButton* month_ = nullptr;
+    QRadioButton* three_months_ = nullptr;
+    QRadioButton* selected_ = nullptr;
+    QRadioButton* entire_ = nullptr;
+    QRadioButton* custom_ = nullptr;
+    QSpinBox* custom_count_ = nullptr;
+    QComboBox* custom_units_ = nullptr;
+    QPushButton* reset_ = nullptr;
+    QPushButton* ok_ = nullptr;
+    QPushButton* cancel_ = nullptr;
+};
 
 // Insert > Task...: the name to add.  QInputDialog is a Qt dialog (never the
 // platform's), so it matches the rest of the shell.

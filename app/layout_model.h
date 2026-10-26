@@ -430,6 +430,68 @@ core::gantt::Timescale timescale_for_plan(const PlanInput& input, double pixels_
 // in app/prefs.h applies through.
 core::gantt::Timescale timescale_for_zoom(const PlanInput& input, core::gantt::GanttZoom zoom);
 
+// ---------------------------------------------------------------------------
+// Wave 31 (W31-2.1/2.2): the View tab's Zoom commands fit the timescale
+// ---------------------------------------------------------------------------
+//
+// MEASURED (W31-2.2, scripts/oracle_w31_zoom.py ->
+// tests/data/reference/w31-zoom.measures.json).  Project 2021 draws the fitted
+// span at 85 % of the 1020-px chart pane -- a 15 % margin, half on each side,
+// centred -- and writes the result into the view's stored timescale.  On
+// synthetic-base.mpp the 4.958-day projected span becomes the window
+// 2026-01-04 00:00 .. 2026-01-09 20:57:54 (5.874 d); wave23-outline.mpp's
+// 7.375-day span becomes 8.660 d and its 1.375-day selected span 1.606 d.
+//
+// The port's Timescale has only day/week/month columns, so the fit picks the
+// unit from the visible span and floors the left edge to a unit start (Project
+// snaps to its own bottom tier, which can be 2 or 12 hours wide).  When the
+// floored window would end before the span's finish the window grows to the
+// finish, so the whole span stays visible: predicted 5.833 d and 8.708 d on
+// the two fixtures (0.6 % from Project) and 1.708 d for the outline selection,
+// where the day tier cannot express Project's 2-hour margin (6.4 % off; the
+// underlying 85 % value, 1.618 d, is 0.7 % off).  The comparison test asserts
+// the 85 % ideal within 1.5 % for all four measurements and containment for
+// the port window; the measures file records the two-tier difference.
+inline constexpr double kZoomFitMarginFraction = 0.15;
+// Project's month column is one 30.4375-day mean month (wave 29's stored-month
+// measurement).  The Zoom dialog's 1- and 3-month presets use the same
+// arithmetic, as do month-unit fits.
+inline constexpr double kZoomMonthDays = 30.4375;
+
+struct ZoomFit {
+    core::gantt::Timescale timescale;
+    core::sched::date32 span_start = core::sched::kDateNa;
+    core::sched::date32 span_finish = core::sched::kDateNa;
+    // finish - start, in calendar days (a time of day counts as a fraction).
+    double span_days = 0.0;
+    // width / pixels_per_day: the window this timescale actually shows.
+    double visible_days = 0.0;
+    // The 85 % window before the origin floor grew it to contain the finish.
+    double ideal_visible_days = 0.0;
+    bool valid = false;
+};
+
+// Calendar days from `start` to `finish`; 0 when either is unusable or the
+// order is reversed.
+double span_days_between(date32 start, date32 finish) noexcept;
+
+// The port's fit unit for a visible span: day up to 90 days, week up to three
+// years, month beyond (the same tiers core::gantt::zoom_spec offers).
+core::gantt::TimescaleUnit zoom_fit_unit(double visible_days) noexcept;
+
+// Fits [start, finish] into width_px at kZoomFitMarginFraction, centred on the
+// span, with the origin floored to the unit start.  The window is at least the
+// ideal 85 % one and always contains `finish`; when the floor would put `start`
+// left of the window the origin moves back to start's unit start.  False (and
+// an invalid result) for a non-positive span, a non-finite width or a date
+// outside the date32 range.
+ZoomFit fit_span_to_width(date32 start, date32 finish, double width_px);
+
+// The Zoom dialog's fixed-span presets (1 week, 2 weeks, 1 month, 3 months,
+// Custom N units): exactly `span_days` from `anchor`'s unit start, at
+// width_px / span_days pixels per day.
+ZoomFit fixed_span_to_width(date32 anchor, double span_days, double width_px);
+
 // Wave 29 (W29-1.4): the applied view's saved timescale scroll origin and
 // zoom, as PROJECT_A stores them.  The two stored fields are
 //   +1176 u32  the saved left edge, tenths of a minute since 1983-12-31 00:00;

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <utility>
 
 #include "date.h"
@@ -612,6 +613,137 @@ core::gantt::Timescale timescale_for_zoom(const PlanInput& input, core::gantt::G
     timescale.pixels_per_unit = spec.pixels_per_unit;
     return timescale;
 }
+
+// ---------------------------------------------------------------------------
+// Wave 31 (W31-2.1/2.2): the Zoom commands' timescale fit
+// ---------------------------------------------------------------------------
+
+double span_days_between(date32 start, date32 finish) noexcept {
+    if (core::sched::is_na(start) || core::sched::is_na(finish) ||
+        core::sched::is_overflow(start) || core::sched::is_overflow(finish)) {
+        return 0.0;
+    }
+    const std::int64_t start_units = static_cast<std::int64_t>(core::sched::day_of(start)) *
+                                         core::sched::kTenthsPerDay +
+                                     core::sched::time_of(start);
+    const std::int64_t finish_units = static_cast<std::int64_t>(core::sched::day_of(finish)) *
+                                          core::sched::kTenthsPerDay +
+                                      core::sched::time_of(finish);
+    const std::int64_t delta = finish_units - start_units;
+    if (delta <= 0) {
+        return 0.0;
+    }
+    return static_cast<double>(delta) / static_cast<double>(core::sched::kTenthsPerDay);
+}
+
+core::gantt::TimescaleUnit zoom_fit_unit(double visible_days) noexcept {
+    if (visible_days <= 90.0) {
+        return core::gantt::TimescaleUnit::day;
+    }
+    if (visible_days <= 1095.0) {
+        return core::gantt::TimescaleUnit::week;
+    }
+    return core::gantt::TimescaleUnit::month;
+}
+
+namespace {
+
+// Calendar days one column of `unit` covers in the port's proportional axis.
+double days_per_unit(core::gantt::TimescaleUnit unit) noexcept {
+    switch (unit) {
+        case core::gantt::TimescaleUnit::day:
+            return 1.0;
+        case core::gantt::TimescaleUnit::week:
+            return 7.0;
+        case core::gantt::TimescaleUnit::month:
+            return kZoomMonthDays;
+    }
+    return 1.0;
+}
+
+void set_pixels(core::gantt::Timescale& timescale, double pixels_per_day) {
+    timescale.pixels_per_unit = pixels_per_day * days_per_unit(timescale.unit);
+}
+
+}  // namespace
+
+ZoomFit fit_span_to_width(date32 start, date32 finish, double width_px) {
+    ZoomFit fit;
+    const double span = span_days_between(start, finish);
+    if (!(span > 0.0) || !(width_px > 0.0) || !std::isfinite(width_px) ||
+        !(1.0 - kZoomFitMarginFraction > 0.0)) {
+        return fit;
+    }
+    fit.span_start = start;
+    fit.span_finish = finish;
+    fit.span_days = span;
+    fit.ideal_visible_days = span / (1.0 - kZoomFitMarginFraction);
+    fit.visible_days = fit.ideal_visible_days;
+
+    core::gantt::Timescale timescale;
+    timescale.unit = zoom_fit_unit(fit.ideal_visible_days);
+    // Project's stock week columns start on Sunday (the measured captures), so
+    // a week-tier fit floors to the Sunday of the centred window.
+    timescale.week_start = 0;
+    // Centre the span in the ideal window, then floor the left edge to the
+    // unit's own start.  The span's time of day is part of the centre: a
+    // 13:00 start with a ten-hour half-margin still fits on its own day.
+    const double margin = fit.ideal_visible_days - span;
+    const double left = static_cast<double>(core::sched::day_of(start)) +
+                        static_cast<double>(core::sched::time_of(start)) /
+                            static_cast<double>(core::sched::kTenthsPerDay) -
+                        margin / 2.0;
+    const auto left_day = static_cast<std::int32_t>(std::floor(
+        std::clamp(left, static_cast<double>(core::sched::kMinDay),
+                   static_cast<double>(core::sched::kMaxDay))));
+    timescale.origin = timescale.unit_start(core::sched::pack(left_day, 0));
+    // The floor can push the right edge left of the finish (a sub-day selection
+    // on the day tier); grow the window so the whole span stays visible.
+    const double to_finish = span_days_between(timescale.origin, finish);
+    if (to_finish > fit.visible_days) {
+        fit.visible_days = to_finish;
+    }
+    timescale.pin_origin = true;
+    set_pixels(timescale, width_px / fit.visible_days);
+    fit.timescale = timescale;
+    fit.valid = timescale.valid();
+    return fit;
+}
+
+ZoomFit fixed_span_to_width(date32 anchor, double span_days, double width_px) {
+    ZoomFit fit;
+    if (core::sched::is_na(anchor) || core::sched::is_overflow(anchor) ||
+        !(span_days > 0.0) || !std::isfinite(span_days) || !(width_px > 0.0) ||
+        !std::isfinite(width_px)) {
+        return fit;
+    }
+    fit.span_days = span_days;
+    fit.ideal_visible_days = span_days;
+    fit.visible_days = span_days;
+
+    core::gantt::Timescale timescale;
+    timescale.unit = zoom_fit_unit(span_days);
+    timescale.week_start = 0;
+    timescale.origin = timescale.unit_start(anchor);
+    timescale.pin_origin = true;
+    set_pixels(timescale, width_px / span_days);
+    fit.timescale = timescale;
+    // The window the timescale shows, from the floored origin: anchor's unit
+    // start plus exactly the requested span.
+    const std::int64_t origin_units =
+        static_cast<std::int64_t>(core::sched::day_of(timescale.origin)) *
+            core::sched::kTenthsPerDay +
+        core::sched::time_of(timescale.origin);
+    const std::int64_t finish_units =
+        origin_units + static_cast<std::int64_t>(std::llround(span_days * core::sched::kTenthsPerDay));
+    fit.span_start = timescale.origin;
+    fit.span_finish = core::sched::pack(
+        static_cast<std::int32_t>(finish_units / core::sched::kTenthsPerDay),
+        static_cast<std::int32_t>(finish_units % core::sched::kTenthsPerDay));
+    fit.valid = !core::sched::is_na(timescale.origin) && timescale.valid();
+    return fit;
+}
+
 
 // ---------------------------------------------------------------------------
 // Wave 29 (W29-1.4): the applied view's stored timescale start and size
