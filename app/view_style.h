@@ -13,9 +13,11 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "cell_format.h"
 #include "gantt_style.h"
+#include "usage_style.h"
 
 namespace app {
 
@@ -282,5 +284,39 @@ struct ResourceSheetStyle {
 [[nodiscard]] bool read_resource_sheet_style(const std::string& path,
                                              ResourceSheetStyle& out,
                                              std::string* reason = nullptr);
+
+// Wave 31 (W31-4.2): a usage view as the FILE stores it.  Both Task Usage and
+// Resource Usage are ordinary CV_iew views whose main block carries the
+// timescale style record (0x22400008) and the Details list (0x2240003c); the
+// core decoder (core/viewstate/usage_style.h) reads the two.
+//
+// `stored` is the decoded record: the details in stored order (Work, Actual
+// Work and Cost are valued; any other stored id is kept as `other` with a
+// warning) and the two rendered timescale tiers.  The named views are found by
+// stored or display name, accelerator-insensitive; a file that stores neither
+// usage view stays undecoded and the shell keeps its stock generic columns.
+struct UsageViewStyle {
+    bool decoded = false;
+    std::string view_name;     // stored name, accelerator included
+    std::string display_name;  // stored display name ("Task Usage")
+    // 0x2240000a; the wave-31 fixture stores "Usa&ge" for Task Usage and
+    // "&Usage" for Resource Usage -- the accelerator placement is the file's,
+    // not a normalised label.
+    std::string table_name;
+    std::string filter_name;   // 0x2240000b ("&All Tasks")
+    msproject::viewstate::UsageViewStyle stored;
+};
+
+// Reads `view_name` ("Task Usage" or "Resource Usage") from `path`:
+//
+//   * `214/CV_iew` -> the view definitions and that view's items
+//
+// False with a reason when 214/CV_iew does not parse, the file stores no view
+// by that name, or its style record is shorter than the timescale fields need.
+// Presentation only: nothing here is ever written back.
+[[nodiscard]] bool read_usage_view_style(const std::string& path,
+                                         std::string_view view_name,
+                                         UsageViewStyle& out,
+                                         std::string* reason = nullptr);
 
 }  // namespace app

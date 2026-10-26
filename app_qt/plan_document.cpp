@@ -418,6 +418,8 @@ void PlanDocument::reset() {
     resource_tables_.clear();
     resource_table_ = msproject::viewstate::TableDef{};
     resource_sheet_style_ = app::ResourceSheetStyle{};
+    task_usage_style_ = app::UsageViewStyle{};
+    resource_usage_style_ = app::UsageViewStyle{};
     gantt_style_ = msproject::viewstate::GanttStyle{};
     use_stored_timescale_ = false;
     scroll_origin_ = core::sched::kDateNa;
@@ -462,6 +464,9 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         // Read before the tables so read_table() can follow the view's table
         // selector; a file that stores no such view stays stock.
         read_resource_sheet_style(source_path);
+        // Wave 31 (W31-4.2): the two usage views' stored details and timescale.
+        // A file without them leaves the wave-20 generic columns in place.
+        read_usage_view_styles(source_path);
         // Wave 21 (operator decision 7): the file's own table decides the sheet's
         // columns/order/titles/widths.  Reading it BEFORE the sheet is built is
         // what makes the presentation the file's rather than the Entry default.
@@ -1189,6 +1194,23 @@ void PlanDocument::read_resource_sheet_style(const std::string& source_path) {
     std::string reason;
     if (!app::read_resource_sheet_style(source_path, resource_sheet_style_, &reason)) {
         resource_sheet_style_ = app::ResourceSheetStyle{};
+    }
+}
+
+// Wave 31 (W31-4.2): the usage views' stored details and timescale.  Each view
+// is looked up independently; a file that stores one and not the other keeps
+// the generic grid for the missing one only.
+void PlanDocument::read_usage_view_styles(const std::string& source_path) {
+    task_usage_style_ = app::UsageViewStyle{};
+    resource_usage_style_ = app::UsageViewStyle{};
+    std::string reason;
+    if (!app::read_usage_view_style(source_path, "Task Usage", task_usage_style_,
+                                    &reason)) {
+        task_usage_style_ = app::UsageViewStyle{};
+    }
+    if (!app::read_usage_view_style(source_path, "Resource Usage",
+                                    resource_usage_style_, &reason)) {
+        resource_usage_style_ = app::UsageViewStyle{};
     }
 }
 

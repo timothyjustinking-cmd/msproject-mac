@@ -19,6 +19,7 @@
 #include "viewstate.h"
 #include "cell_format.h"
 #include "gantt_style.h"
+#include "usage_style.h"
 
 #include <algorithm>
 #include <array>
@@ -1318,6 +1319,198 @@ void test_view_text_styles() {
           "view lookup: an unknown name yields nullptr");
     check(msproject::viewstate::find_view_by_name(state, "") == nullptr,
           "view lookup: an empty name yields nullptr");
+}
+
+// ---------------------------------------------------------------------------
+// Wave 31 (W31-4.2): the usage views' stored details and timescale
+//
+// The layout is core/viewstate/usage_style.h's: the timescale fields at the
+// Gantt offsets (+1152 middle unit, +1154 bottom unit, +1156/+1158 counts,
+// +1160/+1162 formats, +1164/+1166 alignments, +1176 start, +1180 size), and
+// 0x2240003c as raw u8 detail selectors with no count prefix, 0xff-padded,
+// where the first 0xff ends the list.  The values below are the committed
+// fixture's own (tests/data/reference/wave31-usage.measures.json): weeks/days,
+// formats 13/20, start 14400, size 100, details 00 02 (Task Usage) and 00 09
+// (Resource Usage).
+// ---------------------------------------------------------------------------
+
+void test_usage_style() {
+    using msproject::viewstate::kGanttBottomAlignOffset;
+    using msproject::viewstate::kGanttBottomCountOffset;
+    using msproject::viewstate::kGanttBottomFormatOffset;
+    using msproject::viewstate::kGanttBottomUnitsOffset;
+    using msproject::viewstate::kGanttMiddleAlignOffset;
+    using msproject::viewstate::kGanttMiddleCountOffset;
+    using msproject::viewstate::kGanttMiddleFormatOffset;
+    using msproject::viewstate::kGanttMiddleUnitsOffset;
+    using msproject::viewstate::kGanttTimescaleSizeOffset;
+    using msproject::viewstate::kGanttTimescaleStartOffset;
+    using msproject::viewstate::ParseError;
+    using msproject::viewstate::TimescaleUnit;
+    using msproject::viewstate::UsageDetail;
+    using msproject::viewstate::UsageDetailKind;
+    using msproject::viewstate::UsageViewStyle;
+
+    const auto put_u16 = [](std::vector<std::uint8_t>& data, std::size_t offset,
+                            std::uint16_t value) {
+        data[offset] = static_cast<std::uint8_t>(value & 0xFFu);
+        data[offset + 1] = static_cast<std::uint8_t>(value >> 8u);
+    };
+
+    // The measured fixture's 5,199-byte record: weeks over days, formats 13/20,
+    // bottom tier centred, middle tier left, no saved scroll (14400 = the
+    // 1984-01-01 epoch value) and 100 %.
+    std::vector<std::uint8_t> record(5199, 0);
+    record[kGanttMiddleUnitsOffset] = 3;  // weeks
+    record[kGanttBottomUnitsOffset] = 2;  // days
+    put_u16(record, kGanttMiddleCountOffset, 1);
+    put_u16(record, kGanttBottomCountOffset, 1);
+    put_u16(record, kGanttMiddleFormatOffset, 13);
+    put_u16(record, kGanttBottomFormatOffset, 20);
+    record[kGanttMiddleAlignOffset] = 0;  // left
+    record[kGanttBottomAlignOffset] = 1;  // centre
+    record[kGanttTimescaleStartOffset] = 0x40;  // 14400 = 0x3840
+    record[kGanttTimescaleStartOffset + 1] = 0x38;
+    put_u16(record, kGanttTimescaleSizeOffset, 100);
+
+    std::vector<std::uint8_t> task_details(111, 0xFF);
+    task_details[0] = 0x00;
+    task_details[1] = 0x02;
+
+    ParseError error;
+    UsageViewStyle task;
+    check(msproject::viewstate::parse_usage_view_style(record, task_details, task,
+                                                       &error),
+          "usage style: the Task Usage record parses");
+    check(task.decoded, "usage style: decoded flag");
+    check(task.details.size() == 2, "usage style: Task Usage stores two details");
+    check(task.details[0].stored_id == 0x00 &&
+              task.details[0].kind == UsageDetailKind::work &&
+              task.details[0].valued(),
+          "usage style: 0x00 is Work");
+    check(task.details[1].stored_id == 0x02 &&
+              task.details[1].kind == UsageDetailKind::actual_work &&
+              task.details[1].valued(),
+          "usage style: 0x02 is Actual Work");
+    check(task.warnings.empty(), "usage style: both Task Usage details are decoded");
+
+    check(task.major.unit == TimescaleUnit::weeks && task.major.count == 1 &&
+              task.major.format == 13 && task.major.align == 0,
+          "usage style: the stored middle tier is the rendered top (weeks, "
+          "format 13, left)");
+    check(task.minor.unit == TimescaleUnit::days && task.minor.count == 1 &&
+              task.minor.format == 20 && task.minor.align == 1,
+          "usage style: the stored bottom tier is the rendered bottom (days, "
+          "format 20, centred)");
+    check(!task.major.tick_lines && !task.minor.tick_lines,
+          "usage style: no tick-line bits are set in the measured record");
+    check(task.timescale_start == 14400, "usage style: the stored start is 14400");
+    check(task.timescale_size == 100, "usage style: the stored size is 100 %");
+
+    // Resource Usage stores Work + Cost (DetailStylesAdd(0) + Add(1) writes
+    // 00 09 on the measured fixture).
+    std::vector<std::uint8_t> resource_details(111, 0xFF);
+    resource_details[0] = 0x00;
+    resource_details[1] = 0x09;
+    UsageViewStyle resource;
+    check(msproject::viewstate::parse_usage_view_style(record, resource_details,
+                                                       resource, &error),
+          "usage style: the Resource Usage record parses");
+    check(resource.details.size() == 2 &&
+              resource.details[1].stored_id == 0x09 &&
+              resource.details[1].kind == UsageDetailKind::cost,
+          "usage style: 0x09 is Cost");
+
+    // A stock, untouched view stores `00 48` (Task Usage) and `00 43`
+    // (Resource Usage); the byte is a stored selector this wave has no value
+    // rule for, so it is kept as `other` and reported.
+    std::vector<std::uint8_t> stock_details(111, 0xFF);
+    stock_details[0] = 0x00;
+    stock_details[1] = 0x48;
+    UsageViewStyle stock;
+    check(msproject::viewstate::parse_usage_view_style(record, stock_details, stock,
+                                                       &error),
+          "usage style: a stock detail list parses");
+    check(stock.details.size() == 2 && stock.details[1].stored_id == 0x48 &&
+              stock.details[1].kind == UsageDetailKind::other &&
+              !stock.details[1].valued(),
+          "usage style: the stock 0x48 selector is kept as `other`");
+    check(stock.warnings.size() == 1,
+          "usage style: the undecoded selector is reported once");
+
+    // DetailStylesRemoveAll's measured state: every byte 0xff, i.e. no details.
+    std::vector<std::uint8_t> cleared(111, 0xFF);
+    UsageViewStyle none;
+    check(msproject::viewstate::parse_usage_view_style(record, cleared, none, &error),
+          "usage style: the cleared list parses");
+    check(none.details.empty(), "usage style: DetailStylesRemoveAll decodes as no details");
+
+    // A view with no 0x2240003c item at all: Project's decoder falls back to
+    // the default, which is Work.
+    UsageViewStyle absent;
+    check(msproject::viewstate::parse_usage_view_style(record, {}, absent, &error),
+          "usage style: an absent Details item parses");
+    check(absent.details.size() == 1 &&
+              absent.details[0].kind == UsageDetailKind::work,
+          "usage style: an absent Details item defaults to Work");
+
+    // Bytes after the first 0xff are padding, not details.
+    std::vector<std::uint8_t> padded(111, 0xFF);
+    padded[0] = 0x00;
+    padded[1] = 0x02;
+    padded[2] = 0xFF;
+    padded[3] = 0x09;  // stale byte after the terminator: ignored
+    UsageViewStyle stopped;
+    check(msproject::viewstate::parse_usage_view_style(record, padded, stopped, &error),
+          "usage style: a padded list parses");
+    check(stopped.details.size() == 2,
+          "usage style: the first 0xff ends the list");
+
+    // A record one byte short of the timescale fields is refused, not read past.
+    std::vector<std::uint8_t> short_record(
+        record.begin(),
+        record.begin() + static_cast<std::ptrdiff_t>(
+                             msproject::viewstate::kUsageTimescaleMinSize - 1));
+    UsageViewStyle refused;
+    check(!msproject::viewstate::parse_usage_view_style(short_record, task_details,
+                                                        refused, &error),
+          "usage style: a record shorter than the timescale fields is refused");
+
+    check(std::string(msproject::viewstate::usage_detail_kind_name(
+              UsageDetailKind::actual_work)) == "actual work",
+          "usage style: detail kind names are stable");
+
+    // record_data_from_view(): the generic accessor the Details item is read
+    // through.  A hand-built ViewState with one framed item: 12 bytes of item
+    // header, then the payload.
+    msproject::viewstate::ViewState state;
+    state.var2_data.assign(4, 0);  // the Var2Data length word block_bytes skips
+    const std::size_t payload_start = state.var2_data.size();
+    state.var2_data.resize(payload_start + 12 + 111, 0);
+    for (std::size_t index = 0; index < 111; ++index) {
+        state.var2_data[payload_start + 12 + index] = task_details[index];
+    }
+    state.blocks.push_back(msproject::viewstate::VarBlock{
+        0, static_cast<std::uint32_t>(12 + 111)});
+    msproject::viewstate::ViewDef view;
+    view.main_decoded = true;
+    view.main_block_offset = 0;
+    msproject::viewstate::ViewRecord item;
+    item.record_offset = 0;
+    item.payload_length = 111;
+    item.id = msproject::viewstate::kViewUsageDetailsKey;
+    view.records.push_back(item);
+    const auto data = msproject::viewstate::record_data_from_view(
+        state, view, msproject::viewstate::kViewUsageDetailsKey);
+    check(data.size() == 111 && data[0] == 0x00 && data[1] == 0x02,
+          "record accessor: the Details item is returned by id");
+    check(msproject::viewstate::record_data_from_view(
+              state, view, msproject::viewstate::kViewFormatKey).empty(),
+          "record accessor: an absent id yields an empty span");
+    view.main_decoded = false;
+    check(msproject::viewstate::record_data_from_view(
+              state, view, msproject::viewstate::kViewUsageDetailsKey).empty(),
+          "record accessor: an undecoded view yields an empty span");
 }
 
 // ---------------------------------------------------------------------------
@@ -3804,6 +3997,8 @@ int main(int argc, char** argv) {
     run("text", test_text_helpers);
     run("gantt-style", test_gantt_style);
     run("view-text-styles", test_view_text_styles);
+    // Wave 31 (W31-4.2): the usage views' stored details and timescale
+    run("usage-style", test_usage_style);
     // Wave 29 (W29-1.2): the per-cell formatting record
     run("cell-format", test_cell_format);
     // Wave 27 (W27-2.1): one controlled save per decoder field

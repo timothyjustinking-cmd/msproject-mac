@@ -444,4 +444,61 @@ bool read_resource_sheet_style(const std::string& path, ResourceSheetStyle& out,
     }
 }
 
+bool read_usage_view_style(const std::string& path, std::string_view view_name,
+                           UsageViewStyle& out, std::string* reason) {
+    out = UsageViewStyle{};
+    try {
+        const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(path);
+
+        std::array<std::vector<std::uint8_t>, 4> raw;
+        if (!read_parts(document, kViewParts, raw)) {
+            fail(reason, "the file has no complete 214/CV_iew stream");
+            return false;
+        }
+        msproject::viewstate::ViewState views;
+        msproject::viewstate::ParseError parse_error;
+        if (!msproject::viewstate::parse_view_state("CV_iew", part_set(raw), views,
+                                                    &parse_error)) {
+            fail(reason, "214/CV_iew: " + parse_error.message);
+            return false;
+        }
+
+        // The usage views exist independently of the view the file was left
+        // in, so the stored or display name is the key.  Unlike the Resource
+        // Sheet there is no applied-view fallback: the two usage views carry
+        // different detail lists and different left tables, so guessing which
+        // one an unnamed view is would mix them.
+        const msproject::viewstate::ViewDef* view =
+            msproject::viewstate::find_view_by_name(views, view_name);
+        if (view == nullptr) {
+            fail(reason, "the file stores no '" + std::string(view_name) + "' view");
+            return false;
+        }
+
+        const std::span<const std::uint8_t> style_data =
+            msproject::viewstate::style_data_from_view(views, *view);
+        const std::span<const std::uint8_t> detail_data =
+            msproject::viewstate::record_data_from_view(
+                views, *view, msproject::viewstate::kViewUsageDetailsKey);
+        if (!msproject::viewstate::parse_usage_view_style(style_data, detail_data,
+                                                          out.stored,
+                                                          &parse_error)) {
+            fail(reason, "view '" + view->name + "': " + parse_error.message);
+            return false;
+        }
+        out.view_name = view->name;
+        out.display_name = view->display_name;
+        out.table_name = view->table_or_top;
+        out.filter_name = view->filter_or_bottom;
+        out.decoded = true;
+        if (reason != nullptr) {
+            reason->clear();
+        }
+        return true;
+    } catch (const std::exception& failure) {
+        fail(reason, std::string("cannot open the container: ") + failure.what());
+        return false;
+    }
+}
+
 }  // namespace app

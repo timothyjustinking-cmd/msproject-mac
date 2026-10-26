@@ -338,8 +338,9 @@ const ViewDef* find_view_by_name(const ViewState& state, std::string_view name) 
     return nullptr;
 }
 
-std::span<const std::uint8_t> style_data_from_view(const ViewState& state,
-                                                   const ViewDef& view) {
+std::span<const std::uint8_t> record_data_from_view(const ViewState& state,
+                                                    const ViewDef& view,
+                                                    std::uint32_t item_id) {
     if (!view.main_decoded) {
         return {};
     }
@@ -353,7 +354,7 @@ std::span<const std::uint8_t> style_data_from_view(const ViewState& state,
     }
     const std::span<const std::uint8_t> payload = state.block_bytes(*block);
     for (const ViewRecord& record : view.records) {
-        if (record.id != kViewFormatKey) {
+        if (record.id != item_id) {
             continue;
         }
         const std::size_t start = record.record_offset + kViewItemHeaderSize;
@@ -364,6 +365,11 @@ std::span<const std::uint8_t> style_data_from_view(const ViewState& state,
         return payload.subspan(start, record.payload_length);
     }
     return {};
+}
+
+std::span<const std::uint8_t> style_data_from_view(const ViewState& state,
+                                                   const ViewDef& view) {
+    return record_data_from_view(state, view, kViewFormatKey);
 }
 
 const ViewDef* find_applied_view(const ViewState& state, std::string_view name) {

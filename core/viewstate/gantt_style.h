@@ -327,6 +327,14 @@ struct ViewTextStyles {
 [[nodiscard]] const ViewDef* find_view_by_name(const ViewState& state,
                                                std::string_view name);
 
+// The payload of the main-block item with id `item_id` of a decoded CV_iew
+// view, or an empty span when the view's main block did not decode or carries
+// no such record.  Wave 31 (W31-4.2): the usage views' Details list
+// (0x2240003c) is read through this same accessor; style_data_from_view() is
+// the 0x22400008 case.
+[[nodiscard]] std::span<const std::uint8_t> record_data_from_view(
+    const ViewState& state, const ViewDef& view, std::uint32_t item_id);
+
 // The `0x22400008` record payload of a decoded CV_iew view, or an empty span
 // when the view's main block did not decode or carries no such record.
 [[nodiscard]] std::span<const std::uint8_t> style_data_from_view(

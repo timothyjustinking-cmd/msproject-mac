@@ -338,6 +338,22 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_views COMMAND views_tests)
     set_tests_properties(app_views PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 31 (W31-4.2): the usage views' stored Details list and timescale,
+    # read from the committed wave-31 fixture through app::read_usage_view_style.
+    add_executable(usage_style_tests usage_style_tests.cpp)
+    target_compile_features(usage_style_tests PRIVATE cxx_std_20)
+    set_target_properties(usage_style_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(usage_style_tests PRIVATE app_layout)
+    target_compile_definitions(usage_style_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+    )
+    app_set_warnings(usage_style_tests)
+
+    add_test(NAME app_usage_style COMMAND usage_style_tests)
+    set_tests_properties(app_usage_style PROPERTIES
+        WORKING_DIRECTORY "${APP_REPO_ROOT}"
+    )
+
     # Wave 12: Insert/Delete Task.  The pending-edit model, its undo/redo, the
     # display plan, and the real writer sequence on a copy of the committed
     # synthetic fixture under APP_TEST_OUT_DIR (counts, uids, tombstoned

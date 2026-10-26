@@ -281,6 +281,19 @@ class PlanDocument {
         return resource_sheet_style_;
     }
 
+    // Wave 31 (W31-4.2): the two usage views' stored presentation -- their
+    // Details lists (Work by default; Actual Work and Cost when the file says
+    // so) and timescale tiers, read from 214/CV_iew by app::read_usage_view_style.
+    // A file without a usage view leaves `decoded == false` and the shell keeps
+    // its wave-20 generic columns.  Presentation metadata, never part of the
+    // save diff.
+    const app::UsageViewStyle& task_usage_style() const noexcept {
+        return task_usage_style_;
+    }
+    const app::UsageViewStyle& resource_usage_style() const noexcept {
+        return resource_usage_style_;
+    }
+
     // Wave 31 (W31-1.3): the TASK tables the file stores, in file order.  A
     // table is a task table when it has at least one task-field column
     // (0x0b40xxxx) and no resource-field column (0x0c40xxxx); resource tables
@@ -337,6 +350,10 @@ class PlanDocument {
     // (app::read_resource_sheet_style).  Read before read_table() so the table
     // selection can follow the view's 0x2240000a name.
     void read_resource_sheet_style(const std::string& source_path);
+    // Wave 31 (W31-4.2): the Task Usage and Resource Usage views' stored
+    // details and timescale (app::read_usage_view_style).  A missing view is
+    // presentation metadata only; the load never fails for it.
+    void read_usage_view_styles(const std::string& source_path);
     void read_style(const std::string& source_path);
     // Wave 22: writes the three computed texts (predecessors_text() and friends)
     // into the RecordSet for every row, from the CURRENT view plan.  Runs at the
@@ -377,6 +394,9 @@ class PlanDocument {
     std::vector<msproject::viewstate::TableDef> resource_tables_;
     msproject::viewstate::TableDef resource_table_;
     app::ResourceSheetStyle resource_sheet_style_;
+    // Wave 31 (W31-4.2): the two usage views' stored details/timescale.
+    app::UsageViewStyle task_usage_style_;
+    app::UsageViewStyle resource_usage_style_;
     msproject::viewstate::GanttStyle gantt_style_;
     msproject::viewstate::CellFormatTable cell_formats_;
     // Wave 29 (W29-1.4): true from a load until the user picks one of the
