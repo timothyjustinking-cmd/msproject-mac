@@ -1711,6 +1711,86 @@ void check_update_save_shape_refusals() {
           "the real-assignment lowering refusal names the assignment kind");
 }
 
+/* W30-0.4 (R29-4, High): a date update that computes 0 % for a row already at
+ * 0 % is a no-op Project leaves untouched.  The model drops the target instead
+ * of queueing the writer's measured 100 -> 0 removal payload (no pair covers
+ * 0 -> 0, and the payload resets anchor/no-progress words the unstarted rows do
+ * not hold constant). */
+void check_zero_update_noop() {
+    const std::filesystem::path control_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-update-control.mpp";
+    if (!std::filesystem::exists(control_path)) {
+        std::printf("SKIP: wave28-update-control.mpp is not present\n");
+        return;
+    }
+    app::PlanInput plan;
+    try {
+        plan = app::plan_input_from_document(mpp::load_file(control_path.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the 0 -> 0 control loads");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        return;
+    }
+    app::StructuralEdit edit;
+    std::string error;
+    const app::TaskRow* row1 = nullptr;
+    for (const app::TaskRow& task : plan.tasks) {
+        if (task.uid == 1) {
+            row1 = &task;
+            break;
+        }
+    }
+    check(row1 != nullptr, "the update control has uid 1");
+    if (row1 == nullptr) {
+        return;
+    }
+    // Through the row's own start: percent_through stores the 0 % shape.
+    check(!app::make_update_actuals_edit(plan, control_path.string(), {1u},
+                                         row1->start, false, edit, error),
+          "a date update that computes 0 % on a 0 % row is refused");
+    check(error.find("0 %") != std::string::npos &&
+              error.find("nothing to write") != std::string::npos,
+          "the 0 -> 0 refusal says nothing would be written");
+
+    // A mixed scope drops only the 0 -> 0 row: uid 2's plan start is moved
+    // after the update date, so it computes 0 % and leaves the target list.
+    const app::date32 through = core::sched::from_ymd(2026, 1, 7);
+    app::PlanInput mixed = plan;
+    for (app::TaskRow& task : mixed.tasks) {
+        if (task.uid == 2) {
+            task.start = core::sched::from_ymd(2026, 2, 1);
+        }
+    }
+    check(app::make_update_actuals_edit(mixed, control_path.string(), {1u, 2u, 3u},
+                                        through, false, edit, error),
+          "the mixed update builds with the 0 -> 0 row dropped");
+    check_size(edit.actuals.size(), 2,
+               "only the two rows whose percent changes are targets");
+    bool saw_two = false;
+    for (const app::ActualsTarget& target : edit.actuals) {
+        if (target.uid == 2) {
+            saw_two = true;
+        }
+    }
+    check(!saw_two, "the 0 -> 0 row is not a target");
+
+    // A hand-built 0 -> 0 target is refused by push, while the same edit as the
+    // model builds it is accepted.
+    app::StructuralEdit built;
+    check(app::make_update_actuals_edit(plan, control_path.string(), {1u}, through,
+                                        false, built, error),
+          "the reference date update builds");
+    app::StructuralEdits accepted;
+    check(accepted.push(built, &plan), "the reference date update queues");
+    app::StructuralEdit zero_target = built;
+    zero_target.actuals[0].percent = 0;
+    zero_target.actuals[0].actual_ticks = 0;
+    zero_target.actuals[0].step_percent = 0.0;
+    app::StructuralEdits refused;
+    check(!refused.push(zero_target, &plan),
+          "a hand-built 0 -> 0 date target is refused");
+}
+
 } /* namespace */
 
 int main() {
@@ -1722,6 +1802,7 @@ int main() {
     check_group_edit_model();
     check_update_refusals();
     check_update_save_shape_refusals();
+    check_zero_update_noop();
     std::printf("app_edits_actuals_tests: %d checks passed, %d expected failure(s)\n",
                 g_checks - g_failures, g_expected_failures);
     if (g_failures != 0) {

@@ -1248,6 +1248,15 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
                     "so its progress through the date cannot be measured";
             return false;
         }
+        // W30-0.4 (R29-4, High): a date update that computes 0 % for a row
+        // already at 0 % is a no-op -- Project leaves the row untouched.  The
+        // writer's 0 % payload is the measured 100 -> 0 REMOVAL, and no pair
+        // covers 0 -> 0; writing it would also reset the anchor and
+        // no-progress words that unstarted rows do not hold constant (the
+        // review's R29-4).  Drop the target instead of queueing it.
+        if (row->percent_complete == 0 && progress.percent == 0) {
+            continue;
+        }
         // W30-0.0 (R29-8): the same up-front assignment/link refusal as a
         // percent edit, with this edit's computed percent as the target.
         if (!check_actuals_save_shape(plan, uid, row->percent_complete,
@@ -1301,6 +1310,14 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
         target.actual_ticks = progress.actual_ticks;
         target.step_percent = progress.step_percent;
         built.actuals.push_back(target);
+    }
+    if (built.actuals.empty()) {
+        // W30-0.4 (R29-4, High): every selected row was a 0 -> 0 no-op, so the
+        // command changes nothing Project's save would write.
+        error = "the date update computes 0 % for every selected row, which is "
+                "already their stored percent; Project leaves those rows "
+                "untouched, so there is nothing to write";
+        return false;
     }
     // W29-0.3: Update Project's "Entire project" scope is the only one whose
     // project row takes the earliest per-row Resume/Stop.  `uids` IS the scope,
@@ -1929,6 +1946,12 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 const TaskRow* row = nullptr;
                 std::string error;
                 if (!check_actuals_target(*plan, target.uid, row, false, error)) {
+                    return false;
+                }
+                // W30-0.4 (R29-4, High): the model drops a 0 -> 0 target as a
+                // no-op; a hand-built queue must not reach the writer's measured
+                // 100 -> 0 removal payload on a row stored at 0 %.
+                if (row->percent_complete == 0 && target.percent == 0) {
                     return false;
                 }
                 // W30-0.3 (R29-3, High): the same pending-outline refusal as a
