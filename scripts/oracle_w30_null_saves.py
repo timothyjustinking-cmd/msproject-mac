@@ -52,6 +52,8 @@ CONTROLS = [
     "wave30-inactivate-second-control.mpp",
     "wave30-respect-links-auto-control.mpp",
     "wave30-respect-links-manual-control.mpp",
+    "wave30-move-back-control.mpp",
+    "wave30-move-forward-control.mpp",
 ]
 
 
