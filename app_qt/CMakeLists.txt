@@ -566,11 +566,15 @@ add_test(NAME qt_scroll_to_task_gate
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================
-# WAVE 30 (G1, W30-1.8): Fill Down fills a Start-column selection through the
-# measured start writer (one transaction, one undo step) and refuses every
-# other shape before staging: a non-Start column, a one-row selection, the
-# project summary row and a pending insert.  The wave23-outline fixture gives
-# it two distinct start dates to fill and a pending row it can insert.
+# WAVE 30 (G1, W30-1.8) / WAVE 31 (G0, W31-0.4 / R30-4): Fill Down is DISABLED.
+# Project's committed Fill Down pair (tests/data/wave31-fill-*.mpp, measured
+# by scripts/oracle_w31_fill.py) shows its save is a scheduler rewrite -- the
+# edited row's calculated/effective dates and slack, the project-row roll-up,
+# a Task Var2 record, the DSI summary strings -- while the port's start writer
+# writes only the constraint window, so rule 1 keeps the command off.  The
+# gate asserts the ribbon control and the row-menu entry are disabled with the
+# exact decision-9 tooltip and stage nothing, and opens the committed pair
+# read-only to pin the facts a future full start writer must reproduce.
 # ===========================================================================
 add_executable(qt_fill_gate_tests tests/fill_gate_test.cpp)
 target_link_libraries(qt_fill_gate_tests PRIVATE qt_shell)

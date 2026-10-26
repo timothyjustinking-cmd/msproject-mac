@@ -476,6 +476,20 @@ DOCUMENTED = {
         "DE7CBDC3D4C9822551297DC028F1938D75EC5E43D2AB555F2A197BD685B1D985",
     "tests/data/wave30-wbs-control-null.mpp":
         "D627370E48C4595C911A425398727D29D072E89F0FE6B97C4062CA3242A9CE2A",
+    # Wave 31 (W31-0.4 / R30-4): Project's Fill Down of Start over two
+    # top-level automatic leaf rows, built by scripts/oracle_w31_fill.py, with
+    # the control's no-edit save.  The fill's save is a scheduler rewrite of
+    # the edited row (constraint AND calculated/effective dates and slack),
+    # the project-row roll-up, an appended Task Var2 record and the
+    # DocumentSummaryInformation summary strings; the port's start writer
+    # writes only the constraint window, so Fill Down stays disabled
+    # (tests/data/README.md).
+    "tests/data/wave31-fill-control.mpp":
+        "594C80CCC9D1C25F70B66BA1A86DC26E3FC21758CCB633342750AACE2F4FBAE7",
+    "tests/data/wave31-fill.mpp":
+        "9DCFE5D48BCCA159231564CB80F952CF8BDEA35E01BDA452FFE1F3A3E3B7CA9C",
+    "tests/data/wave31-fill-control-null.mpp":
+        "875C2AD5BBE198766174ADAA5E2FA5549458B81588B56313090D2745D06270A8",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and

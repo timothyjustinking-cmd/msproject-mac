@@ -2165,8 +2165,12 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             scroll_to_task();
             return;
         case RibbonCommand::fill_down:
-            // W30-1.8: fills a Start-column selection through the measured
-            // start writer; every other column is refused.
+            // W30-1.8: fills a Start-column selection through the start
+            // writer.  W31-0.4 (R30-4): the ribbon button and the row menu are
+            // disabled (the committed Project pair shows the save is a
+            // scheduler rewrite the port's start writer does not reproduce),
+            // so this handler is unreachable from the UI; it stays for the
+            // shape refusals (summary rows, U1) behind the disabled control.
             fill_down();
             return;
         case RibbonCommand::toggle_details:
@@ -4315,6 +4319,18 @@ void MainWindow::fill_down() {
         update_status();
         return;
     }
+    // W31-0.4 (R30-4's U1): a summary's dates are Project's roll-up, not an
+    // input, so filling one would stage a start the file does not own.  Refuse
+    // the WHOLE selection before staging (the same before-any-staging rule the
+    // other refusals above follow), source and targets alike.
+    for (std::size_t row : rows) {
+        if (sheet->is_summary(row)) {
+            set_message("Fill Down cannot fill a summary row: its dates are a roll-up",
+                        true);
+            update_status();
+            return;
+        }
+    }
     const core::view::Value* found = sheet->cell_value(source_row, column);
     if (found == nullptr || found->kind != core::view::ValueKind::Date) {
         set_message("the top selected Start cell has no date to fill", false);
@@ -4691,9 +4707,11 @@ QMenu* MainWindow::build_row_menu() {
                                     : QStringLiteral("Manually Schedule")));
     menu->addSeparator();
     disabled(menu->addAction(QStringLiteral("Assign Resources...")));
-    // W30-1.8: the row menu and the Task tab's Fill button share one path.
-    QAction* fill = menu->addAction(QStringLiteral("Fill Down"));
-    connect(fill, &QAction::triggered, this, [this](bool) { fill_down(); });
+    // W30-1.8: the row menu and the Task tab's Fill button shared one path.
+    // W31-0.4 (R30-4): disabled with the decision-9 tooltip; the measured
+    // Fill Down pair (tests/data/wave31-fill-*.mpp) is a scheduler rewrite the
+    // port's start writer does not reproduce.
+    disabled(menu->addAction(QStringLiteral("Fill Down")));
     disabled(menu->addAction(QStringLiteral("Clear Contents")));
     menu->addSeparator();
     QAction* information = menu->addAction(QStringLiteral("Information..."));

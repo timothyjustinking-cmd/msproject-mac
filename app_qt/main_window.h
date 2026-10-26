@@ -496,7 +496,11 @@ class MainWindow final : public QMainWindow {
     // Wave 30 (W30-1.8): Task > Editing > Fill Down on a Start-column
     // selection.  Only Start has a measured cell writer in this port, so a
     // selection that names any other column, the project summary row, a
-    // pending insert or an empty source is refused before anything is staged.
+    // summary row, a pending insert or an empty source is refused before
+    // anything is staged.  W31-0.4 (R30-4) DISABLED the command: Project's
+    // measured Fill Down save is a scheduler rewrite the port's start writer
+    // does not reproduce, so the handler is unreachable from the UI and stays
+    // only as the guarded shape behind the disabled control.
     void fill_down();
     // Mirrors the core model's rectangle onto the QTableView (one cell when the
     // rectangle is one cell; a clear-and-select range otherwise).

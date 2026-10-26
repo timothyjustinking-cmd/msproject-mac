@@ -503,9 +503,10 @@ const EnabledWiring kEnabledWiring[] = {
     {"Task", "Properties", "Details", "", "task_details"},
     // W30-1.7: Scroll to Task scrolls the sheet and pans the chart (view only).
     {"Task", "Editing", "Scroll to Task", "", "scroll_to_task"},
-    // W30-1.8: Fill Down fills a Start-column selection through the measured
-    // start writer (a view-free file edit; non-Start columns are refused).
-    {"Task", "Editing", "Fill", "", "fill_down"},
+    // W31-0.4 (R30-4): Fill is no longer in this list.  Project's measured
+    // Fill Down save is a scheduler rewrite the port's start writer does not
+    // reproduce, so the control is DISABLED (pinned in ribbon_pin.tsv) and the
+    // generic pin check below asserts it plus the exact decision-9 tooltip.
     {"Task", "Editing", "Find", "show_filter", ""},
     {"Task", "Editing", "Clear", "clear_filter", ""},
     {"View", "Task Views", "Task Usage", "view_task_usage", ""},

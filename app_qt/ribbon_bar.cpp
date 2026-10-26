@@ -336,9 +336,16 @@ const std::vector<TabSpec>& tab_specs() {
               "editing.find");
         small(editing, "Clear", app::MenuAction::clear_filter, 60, 1, 1, true, 1, false,
               "editing.clear");
-        // W30-1.8: fills a Start selection through the measured start writer;
-        // every other column is refused (no measured cell writer).
-        small(editing, "Fill", app::MenuAction::none, 60, 2, 1, true, 1, false,
+        // W30-1.8: fills a Start selection through the start writer; every
+        // other column is refused (no measured cell writer).  W31-0.4 (R30-4):
+        // DISABLED.  Project's committed Fill Down pair
+        // (tests/data/wave31-fill-*.mpp) shows its save rewrites the edited
+        // row's calculated/effective dates and slack words, the project-row
+        // roll-up, a Task Var2 record and the DocumentSummaryInformation
+        // summary strings; the port's start writer writes only the constraint
+        // window, so the pair cannot be reproduced and rule 1 keeps the
+        // command off until a full start writer is measured.
+        small(editing, "Fill", app::MenuAction::none, 60, 2, 1, false, 1, false,
               "editing.fill", RibbonCommand::fill_down);
         tabs.push_back(std::move(task));
 

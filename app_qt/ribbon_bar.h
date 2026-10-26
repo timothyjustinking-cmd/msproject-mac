@@ -82,9 +82,12 @@ enum class RibbonCommand : std::uint8_t {
     // to the selected row and pans the chart to the task's start; a view
     // command, never a file write.
     scroll_to_task,
-    // Wave 30 (W30-1.8): the Task tab's Fill Down.  It copies the top selected
-    // cell down a Start-column selection through the measured start writer; a
-    // column with no measured cell writer is refused, never filled.
+    // Wave 30 (W30-1.8): the Task tab's Fill Down.  W31-0.4 (R30-4) DISABLED
+    // it: Project's measured Fill Down save rewrites the edited row's
+    // calculated dates, the project roll-up and the DSI summary strings, while
+    // the port's start writer writes only the constraint window.  The control
+    // keeps this command for the disabled-control wiring and the guarded
+    // handler, but no UI path reaches it.
     fill_down,
     // Wave 30 (W30-1.10): the Task tab's Inspect.  It toggles the read-only
     // Task Inspector pane (the selected row's scheduler facts, from the plan
