@@ -56,6 +56,8 @@ CONTROLS = [
     "wave30-move-forward-control.mpp",
     "wave30-notes-control.mpp",
     "wave30-timeline-control.mpp",
+    # W30-1.9: the Font Bold pair (Application.FontBold on one Name cell).
+    "wave30-textstyle-control.mpp",
 ]
 
 
