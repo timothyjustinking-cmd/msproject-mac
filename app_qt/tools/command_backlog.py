@@ -32,6 +32,9 @@ MISSING_REASON = {
     "window_switch": "chrome: the single-document shell has no window list to switch",
     "window_arrange": "chrome: the single-document shell has one window and nothing to arrange",
     "window_hide": "chrome: the single-document shell cannot hide its only window",
+    # W31-2.4: the View tab's Macros button.  Project opens the VBA macro
+    # dialog; this port has no VBA engine, editor or macro storage.
+    "macros": "engine: no VBA engine, so there is no macro to list or run",
     # W26-6.1: the View drop-downs' unimplemented entries are MenuAction::none,
     # and so are the ribbon commands with no MenuAction at all.  One neutral
     # wording covers both tables.

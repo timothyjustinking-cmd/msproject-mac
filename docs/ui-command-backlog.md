@@ -88,7 +88,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | View | Window | Switch Windows | disabled | chrome: the single-document shell has no window list to switch |
 | View | Window | Arrange All | disabled | chrome: the single-document shell has one window and nothing to arrange |
 | View | Window | Hide | disabled | chrome: the single-document shell cannot hide its only window |
-| View | Macros | Macros | disabled | future: not implemented in this port |
+| View | Macros | Macros | disabled | engine: no VBA engine, so there is no macro to list or run |
 | Help | Help | Help | disabled | future: not implemented in this port |
 | Help | Help | Feedback | disabled | future: not implemented in this port |
 | Help | Help | Show Training | disabled | future: not implemented in this port |

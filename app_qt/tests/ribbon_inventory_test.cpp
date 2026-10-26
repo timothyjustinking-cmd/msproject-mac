@@ -573,13 +573,13 @@ const EnabledWiring kEnabledWiring[] = {
      "toggle_project_summary"},
 };
 
-// W31-2.3: the View tab's Window group stays DISABLED -- this port is a
-// single-document shell, so there is no second window to open or list, one
-// window has nothing to arrange, and hiding the only window would leave no UI.
-// The generic pin check below asserts the disabled state and the exact
-// decision-9 tooltip; this table pins each control's own command id, so every
-// row keeps a specific backlog reason and a command cannot silently become
-// none.
+// W31-2.3/2.4: controls that stay DISABLED with their own command id.  The
+// Window group has no capability in a single-document shell (no second window
+// to open or list, one window has nothing to arrange, hiding the only window
+// would leave no UI); Macros has no VBA engine.  The generic pin check below
+// asserts each one's disabled state and exact decision-9 tooltip; this table
+// pins the command id, so every row keeps a specific backlog reason and a
+// command cannot silently become none.
 struct DisabledWiring {
     const char* tab;
     const char* group;
@@ -591,6 +591,7 @@ const DisabledWiring kDisabledWiring[] = {
     {"View", "Window", "Switch Windows", "window_switch"},
     {"View", "Window", "Arrange All", "window_arrange"},
     {"View", "Window", "Hide", "window_hide"},
+    {"View", "Macros", "Macros", "macros"},
 };
 
 const char* command_name(RibbonCommand command) {
@@ -641,6 +642,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::window_switch: return "window_switch";
         case RibbonCommand::window_arrange: return "window_arrange";
         case RibbonCommand::window_hide: return "window_hide";
+        case RibbonCommand::macros: return "macros";
     }
     return "none";
 }
@@ -687,9 +689,10 @@ void check_action_wiring(msqt::RibbonBar* ribbon, const TabPin& pin) {
     }
 }
 
-// W31-2.3: each disabled Window control still carries its own command id and
-// stays disabled with the exact decision-9 tooltip (the pin check asserts the
-// same state from the independent pin; this reads it back by command name).
+// W31-2.3/2.4: each disabled Window or Macros control still carries its own
+// command id and stays disabled with the exact decision-9 tooltip (the pin
+// check asserts the same state from the independent pin; this reads it back by
+// command name).
 void check_disabled_wiring(msqt::RibbonBar* ribbon, const TabPin& pin) {
     for (const DisabledWiring& wiring : kDisabledWiring) {
         if (pin.title != wiring.tab) {
@@ -711,22 +714,22 @@ void check_disabled_wiring(msqt::RibbonBar* ribbon, const TabPin& pin) {
             break;
         }
         if (group_index < 0 || control_index < 0) {
-            gate::check(false, "a disabled Window command exists in the pin");
+            gate::check(false, "a disabled command exists in the pin");
             continue;
         }
         const RibbonCommand command =
             ribbon->group_control_command(group_index, control_index);
         gate::check(std::string(command_name(command)) == wiring.command,
-                    (std::string("disabled Window control '") + wiring.label + "' runs " +
+                    (std::string("disabled control '") + wiring.label + "' runs " +
                      wiring.command)
                         .c_str());
         QWidget* live = ribbon->group_control(group_index, control_index);
         gate::check(live != nullptr && !live->isEnabled(),
-                    (std::string("Window control '") + wiring.label + "' stays disabled")
+                    (std::string("control '") + wiring.label + "' stays disabled")
                         .c_str());
         gate::check(live != nullptr &&
                         live->toolTip() == QStringLiteral("not implemented in this port"),
-                    (std::string("Window control '") + wiring.label +
+                    (std::string("control '") + wiring.label +
                      "' carries the exact decision-9 tooltip")
                         .c_str());
     }

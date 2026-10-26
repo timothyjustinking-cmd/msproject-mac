@@ -156,6 +156,11 @@ enum class RibbonCommand : std::uint8_t {
     window_switch,
     window_arrange,
     window_hide,
+    // Wave 31 (W31-2.4): the View tab's Macros button.  There is no VBA engine
+    // (no runtime, no editor, no macro storage), so the button stays DISABLED
+    // with the decision-9 tooltip; the id exists for the disabled-control
+    // wiring and the specific backlog reason.
+    macros,
 };
 
 class RibbonBar final : public QWidget {

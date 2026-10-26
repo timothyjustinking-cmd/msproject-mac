@@ -519,7 +519,8 @@ const std::vector<TabSpec>& tab_specs() {
         small(window, "Hide", app::MenuAction::none, 128, 2, 1, false, 1, false,
               "window.hide", RibbonCommand::window_hide);
         GroupSpec& macros = add_group(view, "Macros", 60);
-        large(macros, "Macros", app::MenuAction::none, 50, 0, false, "macros.macros");
+        large(macros, "Macros", app::MenuAction::none, 50, 0, false, "macros.macros",
+              RibbonCommand::macros);
         tabs.push_back(std::move(view));
 
         // --- Help -----------------------------------------------------------
