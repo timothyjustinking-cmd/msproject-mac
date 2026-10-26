@@ -158,6 +158,11 @@ inline constexpr std::size_t kProgressFlags = 168;    /* u32 */
 inline constexpr std::size_t kStartAnchor = 174;      /* u32 packed date */
 /* +178: i32 task calendar UniqueID, -1 = the project calendar (reader.cpp). */
 inline constexpr std::size_t kCalendarUid = 178;      /* i32 */
+/* +182: u32 packed date, the task Deadline (0xFFFFFFFF = none).  MEASURED by
+ * core/mpp/reader.cpp (Task::deadline, kRowDeadline); this port does not write
+ * it yet.  W31-0.2 reads it to refuse an automatic outline save on a file whose
+ * slack Project would compute with a deadline. */
+inline constexpr std::size_t kDeadline = 182;         /* u32 packed date, unaligned */
 
 } /* namespace task_row */
 /* The PjFormatUnit value a duration/lag edit in MINUTES stores (measured on the

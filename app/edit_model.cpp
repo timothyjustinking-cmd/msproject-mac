@@ -939,6 +939,104 @@ bool build_outline_slack(const std::vector<mppwrite::OutlineRow>& rows,
     return true;
 }
 
+// W31-0.2 (R30-2, High): build_outline_slack rewrites the slack and late dates
+// of EVERY live automatic row in the file, but every Project pair that measured
+// it is the three-row automatic base: all rows 0 %, no deadline, no constraint,
+// no summary outside the edit.  Project's recalculation differs for the other
+// shapes (a completed row's slack is 0 with the actual dates as its late pair; a
+// deadline or a non-ASAP constraint changes the backward pass), so the file-wide
+// shape is refused before the edit is built.  `rows` is the file's outline;
+// `moved`/`anchor` are the row indices the edit itself touches (the moved
+// subtree may hold summaries -- the automatic-summary pair measured one).
+bool check_automatic_outline_file(
+    const mppwrite::CfbDocument& document,
+    const std::vector<mppwrite::OutlineRow>& rows, std::size_t moved,
+    std::size_t anchor, std::string& error) {
+    mppwrite::TaskTable table;
+    try {
+        table = mppwrite::TaskTable::from_document(document);
+    } catch (const std::exception& table_error) {
+        error = std::string("the saved task table could not be read (") +
+                table_error.what() + ")";
+        return false;
+    }
+    std::set<std::size_t> edit_rows;
+    std::vector<std::size_t> stack(1, moved);
+    while (!stack.empty()) {
+        const std::size_t index = stack.back();
+        stack.pop_back();
+        if (index >= rows.size() || !edit_rows.insert(index).second) {
+            continue;
+        }
+        for (const std::size_t child : rows[index].child_rows) {
+            stack.push_back(child);
+        }
+    }
+    edit_rows.insert(anchor);
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        const mppwrite::OutlineRow& row = rows[index];
+        if (row.deleted) {
+            continue;
+        }
+        std::size_t table_row = 0;
+        try {
+            table_row = table.row_for_uid(row.uid);
+        } catch (const std::exception&) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " has no FixedData row, so the automatic outline save's "
+                    "recalculation cannot be checked";
+            return false;
+        }
+        const std::uint16_t percent =
+            table.u16(table_row, mppwrite::task_row::kPercentComplete);
+        const std::uint32_t actual_duration =
+            table.u32(table_row, mppwrite::task_row::kActualDuration);
+        const std::uint32_t actual_start =
+            table.u32(table_row, mppwrite::task_row::kActualStart);
+        const std::uint32_t actual_finish =
+            table.u32(table_row, mppwrite::task_row::kActualFinish);
+        if (percent != 0 || actual_duration != 0 ||
+            mppwrite::is_date(actual_start) ||
+            mppwrite::is_date(actual_finish)) {
+            error = "task uid " + std::to_string(row.uid) + " stores " +
+                    std::to_string(percent) +
+                    " % complete (or stored actuals); the automatic outline save "
+                    "recalculates every live automatic row, and every Project "
+                    "save pair measured 0 % rows with no actual dates";
+            return false;
+        }
+        const std::uint16_t constraint =
+            table.u16(table_row, mppwrite::task_row::kConstraintType);
+        if (constraint != 0) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " stores constraint type " + std::to_string(constraint) +
+                    "; the automatic outline save's slack and late dates are "
+                    "measured only on ASAP rows, and a constraint changes "
+                    "Project's backward pass";
+            return false;
+        }
+        const std::uint32_t deadline =
+            table.u32(table_row, mppwrite::task_row::kDeadline);
+        if (mppwrite::is_date(deadline)) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " carries a deadline; no Project save pair measures the "
+                    "automatic outline save's slack and late dates with a "
+                    "deadline in the file";
+            return false;
+        }
+        if (index != 0 && edit_rows.find(index) == edit_rows.end() &&
+            ((row.fixed2_flags & mppwrite::kOutlineSummaryFlag) != 0 ||
+             row.stored_children || !row.child_rows.empty())) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " is a summary outside the outline edit; every measured "
+                    "automatic pair has the project row and leaves only, so "
+                    "Project's recalculation of another summary has no pair";
+            return false;
+        }
+    }
+    return true;
+}
+
 // The percent transitions the committed Project pairs measured
 // (tests/data/wave28-percent-*, wave29-percent-*): on a FLAT top-level leaf,
 // automatic 0 -> 40, 40 -> 100 and 100 -> 0 and manual 0 -> 40; the wave-29
@@ -1989,6 +2087,12 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                         "Project save pair measures a linked automatic indent";
                 return false;
             }
+            // W31-0.2 (R30-2, High): the file-wide conditions the measured
+            // three-row, 0 %, ASAP base did not vary.
+            if (!check_automatic_outline_file(document, rows, moved,
+                                              parent_index, error)) {
+                return false;
+            }
             if (rows[0].manual) {
                 error = "the project row is manually scheduled; the measured "
                         "automatic indent needs the automatic project row";
@@ -2140,6 +2244,11 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                     " unreadable); the automatic outdent's slack and late "
                     "dates are measured only on an unlinked file, and no "
                     "Project save pair measures a linked automatic outdent";
+            return false;
+        }
+        // W31-0.2 (R30-2, High): the same file-wide shape check as the indent.
+        if (!check_automatic_outline_file(document, rows, moved, parent_index,
+                                          error)) {
             return false;
         }
         if (rows[0].manual) {

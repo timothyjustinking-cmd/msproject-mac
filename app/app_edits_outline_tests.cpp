@@ -1288,6 +1288,193 @@ bool write_auto_row_copy(const std::filesystem::path& source,
     }
 }
 
+/* W31-0.2: one FixedData word patch on a copy (the committed controls are never
+ * opened in place, and the shape under test is one word of one row). */
+bool write_task_word_copy(const std::filesystem::path& source,
+                          const std::filesystem::path& target,
+                          std::uint32_t uid, std::size_t offset,
+                          const Bytes& value, std::string& failure) {
+    try {
+        mppwrite::CfbDocument document =
+            mppwrite::CfbDocument::from_file(source.string());
+        mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
+        const std::size_t row = table.row_for_uid(uid);
+        if ((value.size() != 2 && value.size() != 4) ||
+            offset + value.size() > mppwrite::task_row::kStride) {
+            failure = "the word patch needs two or four bytes inside one row";
+            return false;
+        }
+        if (value.size() == 2) {
+            table.set_u16(row, offset,
+                          static_cast<std::uint16_t>(value[0] | (value[1] << 8)));
+        } else {
+            table.set_u32(row, offset, get_u32(value, 0));
+        }
+        table.store_into(document);
+        std::error_code remove_error;
+        std::filesystem::remove(target, remove_error);
+        document.save(target.string());
+        return true;
+    } catch (const std::exception& error) {
+        failure = error.what();
+        return false;
+    }
+}
+
+/* W31-0.2: the Fixed2Data per-row flags byte (+42), where 0x40 is Project's
+ * stored summary flag.  A row that carries it but has no children is still a
+ * summary to the file-wide check (the stored word is what the writer and the
+ * reader see). */
+bool write_task_summary_flag_copy(const std::filesystem::path& source,
+                                  const std::filesystem::path& target,
+                                  std::uint32_t uid, std::uint8_t flags,
+                                  std::string& failure) {
+    constexpr std::size_t kFixed2Record = 64;
+    constexpr std::size_t kFixed2Flags = 42;
+    try {
+        mppwrite::CfbDocument document =
+            mppwrite::CfbDocument::from_file(source.string());
+        mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
+        Bytes fixed2 = document.read_stream(task_stream("Fixed2Data"));
+        const std::size_t row = table.row_for_uid(uid);
+        if (fixed2.size() != kFixed2Record * (table.rows() + 3)) {
+            failure = "Task Fixed2Data is " + std::to_string(fixed2.size()) +
+                      " bytes, not 64 * (rows + 3)";
+            return false;
+        }
+        fixed2[kFixed2Record * (row + 3) + kFixed2Flags] = flags;
+        document.replace_stream(task_stream("Fixed2Data"), fixed2);
+        std::error_code remove_error;
+        std::filesystem::remove(target, remove_error);
+        document.save(target.string());
+        return true;
+    } catch (const std::exception& error) {
+        failure = error.what();
+        return false;
+    }
+}
+
+/* W31-0.2 (R30-2, High): the automatic save rewrites every live automatic
+ * row's slack and late dates, but every Project pair measured the three-row
+ * automatic base at 0 %, ASAP, no deadline, no summary outside the edit.  Each
+ * file-wide shape is refused from a patched copy; the outdent path runs the
+ * same check. */
+void check_automatic_outline_file_shape() {
+    const std::filesystem::path indent_control =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave29-outline-auto-indent-control.mpp";
+    const std::filesystem::path outdent_control =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave29-outline-auto-outdent-control.mpp";
+    if (!std::filesystem::exists(indent_control) ||
+        !std::filesystem::exists(outdent_control)) {
+        std::printf("SKIP: the automatic outline controls are not present\n");
+        return;
+    }
+    app::PlanInput indent_plan;
+    app::PlanInput outdent_plan;
+    try {
+        indent_plan =
+            app::plan_input_from_document(mpp::load_file(indent_control.string()));
+        outdent_plan =
+            app::plan_input_from_document(mpp::load_file(outdent_control.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the automatic outline controls load");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        return;
+    }
+    app::StructuralEdit edit;
+    std::string error;
+    check(app::make_outline_edit(indent_plan, indent_control.string(), 2, true,
+                                 edit, error),
+          "the unpatched automatic indent stays accepted (W31-0.2)");
+    check(app::make_outline_edit(outdent_plan, outdent_control.string(), 2, false,
+                                 edit, error),
+          "the unpatched automatic outdent stays accepted (W31-0.2)");
+
+    std::error_code out_error;
+    std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
+                                        out_error);
+    const std::filesystem::path out_dir(APP_TEST_OUT_DIR);
+    const auto refused_words =
+        [&](const std::filesystem::path& control,
+            const std::filesystem::path& patched, std::uint32_t uid,
+            std::size_t offset, const Bytes& value, bool indent, const char* slug,
+            const char* want) {
+            std::string failure;
+            check(write_task_word_copy(control, patched, uid, offset, value,
+                                       failure),
+                  (std::string(slug) + ": the patched copy is written").c_str());
+            if (!std::filesystem::exists(patched)) {
+                std::printf("PATCH ERROR: %s\n", failure.c_str());
+                return;
+            }
+            app::PlanInput patched_plan;
+            try {
+                patched_plan = app::plan_input_from_document(
+                    mpp::load_file(patched.string()));
+            } catch (const std::exception& load_error) {
+                check(false, (std::string(slug) + ": the patched copy loads").c_str());
+                std::printf("LOAD ERROR: %s\n", load_error.what());
+                return;
+            }
+            check(!app::make_outline_edit(patched_plan, patched.string(), 2u,
+                                          indent, edit, error),
+                  (std::string(slug) + ": the automatic outline edit is refused")
+                      .c_str());
+            check(error.find(want) != std::string::npos,
+                  (std::string(slug) + ": the refusal names the shape").c_str());
+        };
+
+    const Bytes word40 = {40, 0};
+    refused_words(indent_control, out_dir / "w31-02-progress.mpp", 3,
+                  mppwrite::task_row::kPercentComplete, word40, true,
+                  "a progressed row outside the edit", "40 % complete");
+    const Bytes word100 = {100, 0};
+    refused_words(indent_control, out_dir / "w31-02-completed.mpp", 3,
+                  mppwrite::task_row::kPercentComplete, word100, true,
+                  "a completed row outside the edit", "100 % complete");
+    const Bytes deadline = {0xC0, 0x12, 0xF2, 0x3B};
+    refused_words(indent_control, out_dir / "w31-02-deadline.mpp", 3,
+                  mppwrite::task_row::kDeadline, deadline, true,
+                  "a deadline outside the edit", "deadline");
+    const Bytes constraint = {4, 0};
+    refused_words(indent_control, out_dir / "w31-02-constraint.mpp", 3,
+                  mppwrite::task_row::kConstraintType, constraint, true,
+                  "a non-ASAP constraint outside the edit", "constraint type 4");
+    refused_words(outdent_control, out_dir / "w31-02-outdent-progress.mpp", 3,
+                  mppwrite::task_row::kPercentComplete, word40, false,
+                  "a progressed row beside an automatic outdent", "40 % complete");
+
+    const std::filesystem::path summary_path =
+        out_dir / "w31-02-summary.mpp";
+    std::string summary_failure;
+    check(write_task_summary_flag_copy(indent_control, summary_path, 3, 0x40,
+                                       summary_failure),
+          "a stored summary flag outside the edit: the copy is written");
+    if (std::filesystem::exists(summary_path)) {
+        app::PlanInput summary_plan;
+        try {
+            summary_plan = app::plan_input_from_document(
+                mpp::load_file(summary_path.string()));
+        } catch (const std::exception& load_error) {
+            check(false, "the stored-summary copy loads");
+            std::printf("LOAD ERROR: %s\n", load_error.what());
+            summary_plan.tasks.clear();
+        }
+        if (!summary_plan.tasks.empty() &&
+            !app::make_outline_edit(summary_plan, summary_path.string(), 2, true,
+                                    edit, error)) {
+            check(error.find("summary outside the outline edit") !=
+                      std::string::npos,
+                  "the stored-summary refusal names the outside summary");
+        } else {
+            check(false,
+                  "the stored summary flag outside the edit is refused (W31-0.2)");
+        }
+    }
+}
+
 void check_refusals() {
     const std::filesystem::path indent_control =
         std::filesystem::path(APP_TEST_DATA_DIR) /
@@ -1775,6 +1962,7 @@ int main() {
         check_pair(pair);
     }
     check_refusals();
+    check_automatic_outline_file_shape();
     std::printf("app_edits_outline_tests: %d checks passed\n",
                 g_checks - g_failures);
     if (g_failures != 0) {
