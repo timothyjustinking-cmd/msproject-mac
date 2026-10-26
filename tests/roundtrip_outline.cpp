@@ -1144,13 +1144,13 @@ int main() {
         PairCase const cases[] = {
             {"indent", "wave28-outline-indent-control.mpp",
              "wave28-outline-indent.mpp",
-             OutlineEdit{2, true, 0x2ee0, 0, 0, kInvalidDate, kInvalidDate}},
+             OutlineEdit{2, true, 0x2ee0, 0, 0, kInvalidDate, kInvalidDate, {}}},
             {"summary", "wave28-outline-summary-control.mpp",
              "wave28-outline-summary.mpp",
-             OutlineEdit{2, true, 0x2ee0, 0, 0, kInvalidDate, kInvalidDate}},
+             OutlineEdit{2, true, 0x2ee0, 0, 0, kInvalidDate, kInvalidDate, {}}},
             {"outdent", "wave28-outline-outdent-control.mpp",
              "wave28-outline-outdent.mpp",
-             OutlineEdit{2, false, 0, 0x5dc0, 0x0007, 0x3bf212c0, 0x3bf627d8}},
+             OutlineEdit{2, false, 0, 0x5dc0, 0x0007, 0x3bf212c0, 0x3bf627d8, {}}},
             /* W29-0.4: the four automatic-scheduling pairs.  The edit carries
              * every recalculated row's +74/+112/+116/+186/+190 words (project
              * row included), plus the restored manual parent in the hybrid
