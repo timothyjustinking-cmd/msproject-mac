@@ -1531,6 +1531,25 @@ int main(int argc, char** argv) {
                                 QStringLiteral("not implemented in this port"),
                         message.c_str());
         }
+        // W30-3.4: inserting a project as a subproject is out of scope for this
+        // port.  A subproject is a second file whose tasks, links and resource
+        // pool the host reads through a Project-specific reference; the port's
+        // plan model is one file (app::PlanInput has one tasks table, one
+        // resources table and one assignments table, and no inserted-project
+        // field), and neither the reader nor the outline/actuals writers have a
+        // path for the host/subproject relationship.  The brief keeps Subproject
+        // disabled and no measurement is wanted.  The pin loop already holds the
+        // Project tab's button to its pin; this named check states the brief's
+        // requirement for it.
+        {
+            QWidget* control = find_control(ribbon, QStringLiteral("Project"),
+                                            QStringLiteral("Insert"),
+                                            QStringLiteral("Subproject"));
+            gate::check(control != nullptr && !control->isEnabled() &&
+                            control->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                        "Subproject (inserted projects) stays disabled with the exact tooltip");
+        }
     }
 
     std::printf("qt_ribbon_inventory: ");
