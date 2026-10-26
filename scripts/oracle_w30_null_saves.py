@@ -73,6 +73,8 @@ CONTROLS = [
     "wave30-calculate-control.mpp",
     # W30-3.1: Set Baseline 0 for the entire project.
     "wave30-baseline-control.mpp",
+    # W30-3.2: the WBS code definition (Define Code + Renumber).
+    "wave30-wbs-control.mpp",
 ]
 
 

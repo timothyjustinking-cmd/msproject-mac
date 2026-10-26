@@ -463,6 +463,19 @@ DOCUMENTED = {
         "6CF2142905DE7A8AC5CC1B44FF198DB0A23B0F9D45A2976CA4B3603DBBCF718E",
     "tests/data/wave30-baseline-control-null.mpp":
         "003D490B0C350A89825FE7EB83AC71E808A5CD555197102B5A724B9F81B9DC2E",
+    # Wave 30 (W30-3.2): Define Code + Renumber -- WBSCodeMaskEdit("W", level
+    # 1, ordered, length 2, ".", generate, verify) then WBSCodeRenumber(All)
+    # on the synthetic base, built by scripts/oracle_w30_project_pairs.py, with
+    # the control's no-edit save.  Task WBS becomes W01/W02/W03; the save
+    # inserts 24 bytes into 114/Props (the mask fields) and appends four WBS
+    # Var2Data records plus four VarMeta entries, which the port cannot write;
+    # the menu stays disabled (tests/data/README.md).
+    "tests/data/wave30-wbs-control.mpp":
+        "29C60D6DAF12B028FCD0025F1BC51ACE25A5ACB2055E71D3F8F958612028E628",
+    "tests/data/wave30-wbs-code.mpp":
+        "DE7CBDC3D4C9822551297DC028F1938D75EC5E43D2AB555F2A197BD685B1D985",
+    "tests/data/wave30-wbs-control-null.mpp":
+        "D627370E48C4595C911A425398727D29D072E89F0FE6B97C4062CA3242A9CE2A",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
