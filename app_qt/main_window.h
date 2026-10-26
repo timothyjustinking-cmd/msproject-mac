@@ -392,6 +392,20 @@ class MainWindow final : public QMainWindow {
     // numbers and summary bar show at once.  A shape Project's three save
     // pairs did not measure is refused with a status message.
     void indent_selected(bool indent);
+    // W30-1.0: the Task tab's Manually Schedule button and Mode > Manually
+    // Scheduled share this.  It builds the edit with app::make_task_mode_edit
+    // (the measured automatic -> manual save pair), queues it and rebuilds the
+    // sheet so the Task Mode column shows the change at once.  A shape no
+    // Project pair measured (a summary, a linked file, a progressed file, a
+    // resource assignment, ...) is refused with the edit model's reason.  Auto
+    // Schedule stays disabled: the reverse pair shows Project also reschedules
+    // the row, and this port has no scheduler.
+    void manually_schedule_selected();
+    // W30-1.0: the Mode button's menu.  "Automatically Scheduled" is Project's
+    // other mode but has no measured save in this port, so it is disabled with
+    // the exact decision-9 tooltip; "Manually Scheduled" runs the same handler
+    // as the Manually Schedule button.
+    void show_task_mode_menu();
     void unlink_selected_task();
     // W26-6.3: pushes the selected task's values into the docked Task Form.
     // W28-4.1: also records the uid the form was populated for and enables a

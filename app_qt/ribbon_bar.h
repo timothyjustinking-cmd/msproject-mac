@@ -60,6 +60,13 @@ enum class RibbonCommand : std::uint8_t {
     unlink_tasks,
     outdent,
     indent,
+    // Wave 30 (W30-1.0): the Task tab's Manually Schedule button and the Mode
+    // button's menu, both on the measured automatic -> manual task-mode writer
+    // (app::make_task_mode_edit -> mppwrite::write_task_mode).  Auto Schedule
+    // stays a plain disabled control (decision 9 tooltip): the reverse pair
+    // shows Project also reschedules the row and this port has no scheduler.
+    manually_schedule,
+    task_mode,
     split_task,
     toggle_critical_tasks,
     toggle_project_summary,

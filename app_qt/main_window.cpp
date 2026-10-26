@@ -2085,6 +2085,12 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::indent:
             indent_selected(true);
             return;
+        case RibbonCommand::manually_schedule:
+            manually_schedule_selected();
+            return;
+        case RibbonCommand::task_mode:
+            show_task_mode_menu();
+            return;
         case RibbonCommand::split_task:
             // Not wired (no engine split edit); disabled until then.
             return;
@@ -2424,6 +2430,58 @@ void MainWindow::indent_selected(bool indent) {
                     "; File > Save writes it",
                 false);
     update_status();
+}
+
+void MainWindow::manually_schedule_selected() {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr) {
+        set_message("manually schedule is available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (!selected.has_selection || selected.uid == 0) {
+        set_message("select a task first", true);
+        update_status();
+        return;
+    }
+    // W30-1.0: the file-side shape (the stored precondition bytes and the
+    // whole-file conditions) lives in make_task_mode_edit; the shell supplies
+    // the displayed plan and the path the edit must agree with.  Auto Schedule
+    // never reaches here: its button is disabled and the Mode menu's automatic
+    // entry is disabled, and the edit model would refuse it anyway.
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_task_mode_edit(doc_.plan(), doc_.path(), selected.uid, true, edit,
+                                  error)) {
+        set_message("manually schedule: " + error, true);
+        update_status();
+        return;
+    }
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
+        set_message("manually schedule: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(selected.uid);
+    set_message("queued manually scheduled for task uid " +
+                    std::to_string(selected.uid) + "; File > Save writes it",
+                false);
+    update_status();
+}
+
+void MainWindow::show_task_mode_menu() {
+    QMenu menu(this);
+    QAction* automatic = menu.addAction(QStringLiteral("Automatically Scheduled"));
+    // The reverse save pair shows Project also reschedules the row, and this
+    // port has no scheduler; the direction stays disabled with decision 9's
+    // exact tooltip.
+    automatic->setEnabled(false);
+    automatic->setToolTip(QStringLiteral("not implemented in this port"));
+    QAction* manual = menu.addAction(QStringLiteral("Manually Scheduled"));
+    connect(manual, &QAction::triggered, this,
+            [this]() { manually_schedule_selected(); });
+    menu.exec(QCursor::pos());
 }
 
 void MainWindow::open_dialog(const QString& start_dir) {

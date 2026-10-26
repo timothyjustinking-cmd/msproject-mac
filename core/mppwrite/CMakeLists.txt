@@ -34,6 +34,7 @@ add_library(core_mppwrite STATIC
     field_values.cpp
     actuals.cpp
     outline.cpp
+    task_mode.cpp
     project_props.cpp
     summary_info.cpp
     edit_marker.cpp

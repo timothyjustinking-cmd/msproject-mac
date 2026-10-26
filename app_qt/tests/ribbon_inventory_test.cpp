@@ -537,6 +537,10 @@ const EnabledWiring kEnabledWiring[] = {
     // buttons must stay wired to their own commands.
     {"Task", "Schedule", "outdent", "", "outdent"},
     {"Task", "Schedule", "indent", "", "indent"},
+    // W30-1.0: Manually Schedule and Mode are enabled on the measured
+    // automatic -> manual task-mode writer.
+    {"Task", "Tasks", "Manually Schedule", "", "manually_schedule"},
+    {"Task", "Tasks", "Mode", "", "task_mode"},
     {"View", "Split View", "Timeline", "", "toggle_timeline"},
     {"Gantt Chart Format", "Bar Styles", "Critical Tasks", "", "toggle_critical_tasks"},
     {"Gantt Chart Format", "Show/Hide", "Project Summary Task", "",
@@ -555,6 +559,8 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::unlink_tasks: return "unlink_tasks";
         case RibbonCommand::outdent: return "outdent";
         case RibbonCommand::indent: return "indent";
+        case RibbonCommand::manually_schedule: return "manually_schedule";
+        case RibbonCommand::task_mode: return "task_mode";
         case RibbonCommand::split_task: return "split_task";
         case RibbonCommand::toggle_critical_tasks: return "toggle_critical_tasks";
         case RibbonCommand::toggle_project_summary: return "toggle_project_summary";

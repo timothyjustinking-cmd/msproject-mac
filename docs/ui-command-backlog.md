@@ -21,11 +21,11 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Task | Schedule | Mark on Track | implemented |  |
 | Task | Schedule | Respect Links | disabled | future: not implemented in this port |
 | Task | Schedule | Inactivate | disabled | future: not implemented in this port |
-| Task | Tasks | Manually Schedule | disabled | future: not implemented in this port |
+| Task | Tasks | Manually Schedule | implemented |  |
 | Task | Tasks | Auto Schedule | disabled | future: not implemented in this port |
 | Task | Tasks | Inspect | disabled | future: not implemented in this port |
 | Task | Tasks | Move | disabled | future: not implemented in this port |
-| Task | Tasks | Mode | disabled | future: not implemented in this port |
+| Task | Tasks | Mode | implemented | gap: Manually Scheduled only; Auto Schedule would also reschedule the task and this port has no scheduler |
 | Task | Insert | Task | implemented |  |
 | Task | Insert | Summary | disabled | future: not implemented in this port |
 | Task | Insert | Milestone | disabled | future: not implemented in this port |
@@ -162,6 +162,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 95 (77 disabled)
+* ribbon commands: 95 (75 disabled)
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

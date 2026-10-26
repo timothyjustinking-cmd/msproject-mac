@@ -43,6 +43,10 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W29-4.1: both open the captured dialog; the dialog itself only dismisses.
     "compare_projects",
     "visual_reports",
+    # W30-1.0: the Task tab's Manually Schedule button and Mode menu, both on
+    # the measured automatic -> manual task-mode writer.
+    "manually_schedule",
+    "task_mode",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine
@@ -58,6 +62,9 @@ RIBBON_GAPS = {
         "disabled",
     "compare_projects":
         "gap: laid out; comparison engine not implemented, OK disabled",
+    "task_mode":
+        "gap: Manually Scheduled only; Auto Schedule would also reschedule the "
+        "task and this port has no scheduler",
 }
 
 

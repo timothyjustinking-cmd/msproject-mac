@@ -292,11 +292,20 @@ const std::vector<TabSpec>& tab_specs() {
         small_cmd(schedule, "split task", RibbonCommand::split_task, 26, 1, 4, false, true,
                   "schedule.split");
         GroupSpec& tasks = add_group(task, "Tasks", 269);
-        large(tasks, "Manually\nSchedule", app::MenuAction::none, 52, 0, false, "tasks.manual");
+        // W30-1.0: Manually Schedule and Mode are ENABLED on the measured
+        // automatic -> manual task-mode writer (app::make_task_mode_edit ->
+        // mppwrite::write_task_mode), which reproduces Project's own save pair
+        // (tests/data/wave30-task-mode-*.mpp) byte for byte.  The handler
+        // refuses every shape the pair did not measure.  Auto Schedule stays
+        // disabled with decision 9's tooltip: the reverse pair shows Project
+        // also reschedules the row, and this port has no scheduler.
+        large(tasks, "Manually\nSchedule", app::MenuAction::none, 52, 0, true,
+              "tasks.manual", RibbonCommand::manually_schedule);
         large(tasks, "Auto\nSchedule", app::MenuAction::none, 50, 1, false, "tasks.auto");
         large(tasks, "Inspect", app::MenuAction::none, 52, 2, false, "tasks.inspect");
         large(tasks, "Move", app::MenuAction::none, 38, 3, false, "tasks.move");
-        large(tasks, "Mode", app::MenuAction::none, 40, 4, false, "tasks.mode");
+        large(tasks, "Mode", app::MenuAction::none, 40, 4, true, "tasks.mode",
+              RibbonCommand::task_mode);
         GroupSpec& insert = add_group(task, "Insert", 240);
         large(insert, "Task", app::MenuAction::insert_task, 48, 0, true, "insert.task");
         large(insert, "Summary", app::MenuAction::none, 56, 1, false, "insert.summary");

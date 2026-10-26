@@ -126,6 +126,15 @@ enum class StructuralKind : std::uint8_t {
     // Project save bytes are core/mppwrite/project_props.h).  The mode is also
     // what Insert Task's new row is scheduled with (`manually_scheduled`).
     set_new_task_mode = 11,
+    // Wave 30 (W30-1.0): one saved task changed from automatic to manually
+    // scheduled, written by mppwrite::write_task_mode (core/mppwrite/
+    // task_mode.h).  `uid` is the row; `task_manual` is true for the only
+    // measured direction (Manually Schedule) and false is refused -- Auto
+    // Schedule needs Project's reschedule, which this port does not have.  The
+    // edit is EXCLUSIVE: it may only be queued alone, and no other structural
+    // edit may be queued over it (the measured pair is one mode change on an
+    // otherwise untouched save).
+    set_task_mode = 12,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -218,6 +227,11 @@ struct StructuralEdit {
     // set_new_task_mode (W28-3.1): true for Manually Scheduled, false for Auto
     // Scheduled -- Project's NewTasksCreatedAsManual.
     bool new_tasks_manual = true;
+    // set_task_mode (W30-1.0): true = Manually Scheduled, the measured
+    // automatic -> manual direction.  False (Auto Schedule) is refused: the
+    // reverse pair shows Project also reschedules the row, and this port has no
+    // scheduler.
+    bool task_manual = true;
 
     // --- outline_indent / outline_outdent (W28-2.1) -------------------------
     // outline_indent: the new summary's FixedData +84 -- the project
@@ -388,6 +402,28 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
 bool make_new_task_mode_edit(std::string_view source_path, bool manual,
                              StructuralEdit& out, std::string& error);
 
+// ---------------------------------------------------------------------------
+// Wave 30 (W30-1.0): one task's scheduling mode
+// ---------------------------------------------------------------------------
+//
+// Builds a ready-to-push set_task_mode edit that changes `uid` from automatic
+// to manually scheduled, the direction Project's committed pair measured
+// (tests/data/wave30-task-mode-auto-control.mpp -> wave30-task-mode-manual.mpp;
+// core/mppwrite/task_mode.h).  The FILE is the authority: the whole-file shape
+// (an empty link table, every task row a top-level leaf with a duration, the
+// project calendar, no progress anywhere, one live placeholder assignment per
+// task) and the edited row's measured precondition bytes are checked with
+// mppwrite::read_task_mode_shape when the edit is built, so the refusal is
+// never deferred to save time.  The plan is checked too: the displayed row must
+// be a saved, live, non-summary, top-level, automatic row whose start, finish
+// and duration are the file's, with no links, no progress and one placeholder
+// assignment.  `manual == false` (Auto Schedule) is refused: Project's reverse
+// save also reschedules the row, and this port has no scheduler.  `out` is left
+// default-constructed on refusal with `error` naming the reason.
+bool make_task_mode_edit(const PlanInput& plan, std::string_view source_path,
+                         std::uint32_t uid, bool manual, StructuralEdit& out,
+                         std::string& error);
+
 // The pending edits, in application order, with an undo/redo cursor.
 class StructuralEdits {
   public:
@@ -433,6 +469,14 @@ class StructuralEdits {
     // refusal (the file does not store the record) is make_new_task_mode_edit's
     // file-side check.  Two pending mode edits are allowed; the LAST one wins at
     // save, matching the display's "the newest user choice is what is shown".
+    //
+    // A set_task_mode edit (W30-1.0) REQUIRES `plan` and is EXCLUSIVE in both
+    // directions: it may only be queued when no other edit is applied, and
+    // while it is applied every other push is refused.  It also refuses
+    // `task_manual == false`, a row a pending delete names, and (from the plan)
+    // a non-saved, non-top-level, summary, already-manual, linked, progressed
+    // or non-placeholder-assigned row.  make_task_mode_edit performs the
+    // file-side checks when the edit is built.
     //
     // Pushing a delete_task also removes the set/clear field edits, percent
     // edits, update_actuals edits that name the task and add_link edits: those
@@ -534,6 +578,8 @@ struct StructuralSaveResult {
     std::size_t outline_rows_written = 0;
     // Wave 28 (W28-3.1): 1 when the project's new-task mode was written.
     std::size_t new_task_mode_written = 0;
+    // Wave 30 (W30-1.0): 1 when a task's scheduling mode was written.
+    std::size_t task_mode_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the
@@ -641,6 +687,16 @@ struct StructuralDocumentEdits {
 //                        wrongly shaped record fails the save (this is the one
 //                        step whose refusal is not a warning, because there is
 //                        no measured record to add);
+//   5e. task mode      -> mppwrite::write_task_mode (W30-1.0): the ONE pending
+//                        set_task_mode edit writes the measured automatic ->
+//                        manual bytes (core/mppwrite/task_mode.h).  The step
+//                        REQUIRES the edit to be the only structural edit in
+//                        the save and refuses any writable start edit: the
+//                        Project pair is one mode change on an otherwise
+//                        untouched save, and combining it with a date write
+//                        would produce a shape no pair measures.  It runs after
+//                        the hook and before the final write.  The writer's
+//                        shape refusal is a warning, like steps 5a/5b;
 //   6. start dates    -> the normal mppwrite::save_date_edits path; when no start
 //                        edit is writable but a hook ran, the final write is an
 //                        explicit mppwrite::CfbDocument::save instead.

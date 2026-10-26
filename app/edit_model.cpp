@@ -31,6 +31,7 @@
 #include "reader.h"
 #include "save.h"
 #include "table.h"
+#include "task_mode.h"
 
 namespace app {
 namespace {
@@ -1176,6 +1177,135 @@ std::uint32_t manual_finish_date(const core::sched::Calendar& calendar,
     return calendar.add_work(start, duration_ticks - charge);
 }
 
+// W30-1.0 (rule 1): the plan-side half of the measured task-mode shape.  The
+// shell builds the edit from the sheet's plan; the file half (read_task_mode_shape)
+// proves the stored bytes.  `file_shape` is null for the check push() runs on a
+// hand-built queue, and the shape read from the source file for
+// make_task_mode_edit, which additionally requires the sheet and the file to
+// agree (a pending outline or date edit would otherwise change a row the user is
+// not looking at).  Refusals are the standing "one measured shape" rule: only
+// the committed pair's conditions are known to reproduce Project's bytes.
+bool check_task_mode_plan(const PlanInput& plan, std::uint32_t uid,
+                          const mppwrite::TaskModeShape* file_shape,
+                          std::string& error) {
+    error.clear();
+    if (uid == 0) {
+        error = "the project summary row has no scheduling mode of its own; a "
+                "task-mode edit names one task";
+        return false;
+    }
+    const TaskRow* row = task_row_for_uid(plan.tasks, uid);
+    if (row == nullptr) {
+        error = "task uid " + std::to_string(uid) + " is not in the sheet";
+        return false;
+    }
+    if (row->file_row == 0) {
+        error = "task uid " + std::to_string(uid) +
+                " has not been saved yet; a task-mode change applies to a saved "
+                "task only";
+        return false;
+    }
+    if (row->summary) {
+        error = "task uid " + std::to_string(uid) +
+                " is a summary; Project derives a summary's scheduling mode from "
+                "its tasks, and no save pair measures a summary's mode change";
+        return false;
+    }
+    if (row->outline_level != 0) {
+        error = "task uid " + std::to_string(uid) +
+                " is not a top-level task; the measured task-mode pair changes "
+                "one top-level leaf";
+        return false;
+    }
+    if (row->manually_scheduled) {
+        error = "task uid " + std::to_string(uid) +
+                " is already manually scheduled";
+        return false;
+    }
+    if (row->duration_ticks <= 0) {
+        error = "task uid " + std::to_string(uid) +
+                " has no duration; the measured task-mode pair has a positive "
+                "duration";
+        return false;
+    }
+    if (row->start == kDateNa || row->finish == kDateNa) {
+        error = "task uid " + std::to_string(uid) +
+                " has no valid start or finish; the measured task-mode pair "
+                "stores both dates";
+        return false;
+    }
+    if (row->calendar_uid != -1) {
+        error = "task uid " + std::to_string(uid) +
+                " has its own calendar; the measured task-mode pair uses the "
+                "project calendar";
+        return false;
+    }
+    if (!plan.links.empty() || plan.skipped_links != 0) {
+        error = "the project has " + std::to_string(plan.links.size()) +
+                " link(s) (" + std::to_string(plan.skipped_links) +
+                " unreadable); the task-mode write is measured only on an "
+                "unlinked file";
+        return false;
+    }
+    for (const TaskRow& task : plan.tasks) {
+        if (task.uid != 0 && task.percent_complete != 0) {
+            error = "task uid " + std::to_string(task.uid) + " records " +
+                    std::to_string(task.percent_complete) +
+                    " % complete; the task-mode write is measured only on a file "
+                    "with no progress anywhere";
+            return false;
+        }
+    }
+    std::size_t assignments = 0;
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.task_uid != uid) {
+            continue;
+        }
+        ++assignments;
+        if (assignment.resource_uid != 0) {
+            error = "task uid " + std::to_string(uid) +
+                    " has a resource assignment; the measured task-mode pair "
+                    "has exactly one Project placeholder assignment per task";
+            return false;
+        }
+        // W30-1.0: the measured placeholder assignment stores planned work
+        // equal to its task's duration (the control's three rows: 2400/1440/960
+        // stored minutes for 24000/14400/9600-tick tasks).  A different value
+        // is an assignment shape no pair measured.
+        if (assignment.work_ticks !=
+            static_cast<std::int64_t>(row->duration_ticks)) {
+            error = "task uid " + std::to_string(uid) +
+                    " has a placeholder assignment whose planned work is not "
+                    "the task duration; the measured task-mode pair stores the "
+                    "duration as the placeholder's work";
+            return false;
+        }
+    }
+    if (assignments != 1) {
+        error = "task uid " + std::to_string(uid) + " has " +
+                std::to_string(assignments) +
+                " assignment(s); the measured task-mode pair has exactly one "
+                "Project placeholder assignment per task";
+        return false;
+    }
+    if (file_shape != nullptr) {
+        if (row->duration_ticks !=
+            static_cast<std::int64_t>(file_shape->duration_ticks)) {
+            error = "task uid " + std::to_string(uid) +
+                    ": the sheet's duration does not match the saved file; save "
+                    "or undo the pending edit first";
+            return false;
+        }
+        if (row->start != file_shape->start || row->finish != file_shape->finish) {
+            error = "task uid " + std::to_string(uid) +
+                    ": the sheet's start or finish does not match the saved "
+                    "file; save or undo the pending date edit first";
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 bool is_measured_task_field(std::uint32_t field_id) noexcept {
@@ -2015,7 +2145,70 @@ bool make_new_task_mode_edit(std::string_view source_path, bool manual,
     return true;
 }
 
+bool make_task_mode_edit(const PlanInput& plan, std::string_view source_path,
+                         std::uint32_t uid, bool manual, StructuralEdit& out,
+                         std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    if (!manual) {
+        // The reverse pair (wave30-task-mode-manual-control.mpp ->
+        // wave30-task-mode-auto.mpp) shows Project also RESCHEDULES the row:
+        // its calculated and effective start/finish words move and its
+        // Fixed2Data copies are rewritten.  This port has no scheduler, so the
+        // automatic direction would write a mode bit that contradicts the dates
+        // Project would have recalculated.  Auto Schedule stays disabled.
+        error = "Auto Schedule would also reschedule the task, and this port has "
+                "no scheduler; only the measured automatic -> manual direction "
+                "can be saved";
+        return false;
+    }
+    std::string plan_error;
+    if (!check_task_mode_plan(plan, uid, nullptr, plan_error)) {
+        error = plan_error;
+        return false;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    mppwrite::TaskModeShape shape;
+    std::string shape_error;
+    if (!mppwrite::read_task_mode_shape(document, uid, shape, shape_error,
+                                        "114/TBkndTask")) {
+        error = "the saved file does not have the measured task-mode shape (" +
+                shape_error + ")";
+        return false;
+    }
+    if (!check_task_mode_plan(plan, uid, &shape, plan_error)) {
+        error = plan_error;
+        return false;
+    }
+    out.kind = StructuralKind::set_task_mode;
+    out.uid = uid;
+    out.task_manual = true;
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
+    // W30-1.0: the measured task-mode pair is one mode change on an otherwise
+    // untouched save, so the edit is exclusive in both directions.  It may only
+    // be queued into an empty list, and no other edit may be queued over it.
+    // (The save cascade repeats the check for a hand-built queue.)
+    if (edit.kind == StructuralKind::set_task_mode) {
+        if (!applied_.empty()) {
+            return false;
+        }
+    } else {
+        for (const StructuralEdit& existing : applied_) {
+            if (existing.kind == StructuralKind::set_task_mode) {
+                return false;
+            }
+        }
+    }
     switch (edit.kind) {
         case StructuralKind::insert_task: {
             edit.name = trim_ascii(std::move(edit.name));
@@ -2275,6 +2468,24 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
             // file with no 0x024013c8 record) is make_new_task_mode_edit's.
             // Last one wins at save, like the priority above.
             edit.uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::set_task_mode: {
+            // W30-1.0: the plan-side half of the measured automatic -> manual
+            // shape.  The file-side half (the stored precondition bytes and the
+            // whole-file conditions) ran in make_task_mode_edit; this keeps a
+            // hand-built queue from reaching the writer's refusal or writing a
+            // shape no pair measured.  applied_ is empty by the exclusivity
+            // check above, so no displaced or pending edit can name the row.
+            if (plan == nullptr || !edit.task_manual) {
+                return false;
+            }
+            std::string plan_error;
+            if (!check_task_mode_plan(*plan, edit.uid, nullptr, plan_error)) {
+                return false;
+            }
+            edit.anchor_uid = 0;
             edit.dependants = 0;
             break;
         }
@@ -2683,6 +2894,21 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
             }
         }
     }
+    // Wave 30 (W30-1.0): the measured task-mode save changes exactly the row's
+    // stored Manually Scheduled bit.  A manual row keeps its dates and duration
+    // (the measured pair's edit leaves every date word alone), so the display
+    // changes only the flag.
+    for (const StructuralEdit& edit : applied_) {
+        if (edit.kind != StructuralKind::set_task_mode) {
+            continue;
+        }
+        for (TaskRow& row : tasks) {
+            if (row.uid == edit.uid) {
+                row.manually_scheduled = true;
+                break;
+            }
+        }
+    }
     // Wave 28 (W28-2.1): the indented/outdented outline, in edit order, then
     // the OutlineNumber pass.  This is what makes the sheet's indentation and
     // collapse triangles and the Gantt's summary bars follow the move on the
@@ -2781,6 +3007,26 @@ PlanInput StructuralEdits::without_structural_edits(const PlanInput& shown,
             const TaskRow* file_row = task_row_for_uid(loaded.tasks, row.uid);
             if (file_row != nullptr) {
                 row.percent_complete = file_row->percent_complete;
+            }
+        }
+    }
+    // Wave 30 (W30-1.0): apply() sets a task-mode edit's row to manually
+    // scheduled.  An UNDONE edit is not replayed, so restore the file's bit for
+    // the uids it named, the same shape as the percent restore above.
+    std::set<std::uint32_t> undone_task_mode_uids;
+    for (const StructuralEdit& edit : undone_) {
+        if (edit.kind == StructuralKind::set_task_mode) {
+            undone_task_mode_uids.insert(edit.uid);
+        }
+    }
+    if (!undone_task_mode_uids.empty()) {
+        for (TaskRow& row : edited.tasks) {
+            if (undone_task_mode_uids.count(row.uid) == 0) {
+                continue;
+            }
+            const TaskRow* file_row = task_row_for_uid(loaded.tasks, row.uid);
+            if (file_row != nullptr) {
+                row.manually_scheduled = file_row->manually_scheduled;
             }
         }
     }
@@ -2915,6 +3161,42 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // Wave 30 (W30-1.0): the task-mode edit.  The measured pair is ONE mode
+    // change on an otherwise untouched save, so the edit is exclusive: push()
+    // refuses the combination for the shell, and this check refuses a
+    // hand-built queue before the first write (the cascade would otherwise
+    // emit the mode bit and the other edit in separate writes, an order no
+    // Project pair measures).
+    const StructuralEdit* task_mode_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::set_task_mode) {
+            task_mode_edit = &edit;
+        }
+    }
+    if (task_mode_edit != nullptr) {
+        if (edits.applied().size() != 1) {
+            result.error =
+                "a task-mode edit must be the only edit in a save; another edit "
+                "is queued with it, and the measured Project pair is one mode "
+                "change on an otherwise untouched save";
+            return result;
+        }
+        if (!task_mode_edit->task_manual) {
+            result.error =
+                "Auto Schedule would also reschedule the task, and this port has "
+                "no scheduler; only the measured automatic -> manual direction "
+                "can be saved";
+            return result;
+        }
+        if (!writable.empty()) {
+            result.error =
+                "a task-mode edit cannot be combined with a start-date edit; the "
+                "measured Project pair is one mode change on an otherwise "
+                "untouched save";
+            return result;
+        }
+    }
+
     // Field edits: the last edit for a (task, field) wins, exactly as the display
     // plan applies them.  A set is stored through one save_field_values call; a
     // clear uses the measured empty-value shape, one clear_field_value call.
@@ -3040,6 +3322,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (mode_edit != nullptr) {
         ++write_ops;  // the Props record patch, one file
+    }
+    if (task_mode_edit != nullptr) {
+        ++write_ops;  // the five task-mode streams plus the marker, one file
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -3500,6 +3785,37 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             document.save(next_write_path());
         }
 
+        // 5e (wave 30, W30-1.0).  The measured automatic -> manual task-mode
+        // write: the five owned streams plus the Props14 edit marker, one file
+        // (core/mppwrite/task_mode.h).  The edit is exclusive (checked above),
+        // so this write is the whole content of the save.  write_task_mode
+        // re-validates the file shape as defence in depth; a refusal here means
+        // the file changed after the edit was queued, and there is no other
+        // edit whose save could still be kept -- fail rather than emit an
+        // unchanged file the shell would report as a successful save.
+        if (task_mode_edit != nullptr) {
+            std::vector<mppwrite::TaskModeEdit> mode_edits(1);
+            mode_edits[0].uid = task_mode_edit->uid;
+            const mppwrite::TaskModeWriteResult written =
+                mppwrite::write_task_mode(document, mode_edits, "114/TBkndTask");
+            result.task_mode_written = written.rows_written;
+            if (written.rows_written == 0) {
+                cleanup();
+                result.ok = false;
+                result.error = written.warnings.empty()
+                                   ? "the task-mode write was refused"
+                                   : written.warnings.front();
+                return result;
+            }
+            for (const std::string& warning : written.warnings) {
+                result.warnings.push_back(warning);
+            }
+            result.notes.push_back("task uid " +
+                                   std::to_string(task_mode_edit->uid) +
+                                   " is now manually scheduled");
+            document.save(next_write_path());
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -3561,6 +3877,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (mode_edit != nullptr) {
             result.api += " write_new_task_mode";
+        }
+        if (result.task_mode_written != 0) {
+            result.api += " write_task_mode";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";
