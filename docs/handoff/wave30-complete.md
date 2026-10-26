@@ -212,3 +212,362 @@ The numbers belong to `b2517bc`; the marker commit that follows is docs-only.
   CLOSE or the next wave, so the falsified rule cannot be re-derived.
 
 WAVE-30-G0-COMPLETE
+
+## G1 - the Task tab's commands
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W30-1.0 | Manually Schedule / Auto Schedule / Mode (task-mode write) | **DONE (manual direction)** | commits `0d0770e` (pairs), `d51bcc0` (writer + UI); gates `build/w30/W30-1.0-*.log` |
+| W30-1.1 | Insert Summary and Insert Milestone | **DEFERRED (measured)** | commit `70b757a`; pairs `wave30-insert-*`; gates `build/w30/W30-1.1-*.log` |
+| W30-1.2 | Inactivate | **DEFERRED (measured)** | commit `2a99c98`; pairs `wave30-inactivate-*`; gates `build/w30/W30-1.2-*.log` |
+| W30-1.3 | Respect Links | **DEFERRED (measured)** | commit `ac008fa`; pairs `wave30-respect-links-*`; gates `build/w30/W30-1.3-*.log` |
+| W30-1.4 | Move (one working day forward and back) | **DEFERRED (measured)** | commit `8c1861b`; pairs `wave30-move-*`; gates `build/w30/W30-1.4-*.log` |
+| W30-1.5 | Notes and Details | **Notes DEFERRED (measured); Details DONE** | commits `9ee38f6` (pair), `2e79aec` (view); gates `build/w30/W30-1.5-*.log` |
+| W30-1.6 | Add to Timeline | **DEFERRED (measured; Project's own command inert)** | commit `b2c3366`; pair `wave30-timeline-*`; gates `build/w30/W30-1.6-*.log` |
+| W30-1.7 | Scroll to Task | **DONE** | commit `2b131ec`; gate `qt_scroll_to_task_gate`; gates `build/w30/W30-1.7-*.log` |
+| W30-1.8 | Fill (the selected cells) | **DONE (Start column; every other column refused)** | commit `daaf3a1`; gate `qt_fill_gate`; gates `build/w30/W30-1.8-*.log` |
+| W30-1.9 | Font B/I/U and colours, Format Painter | **DEFERRED (Bold measured)** | commit `36298e9`; pair `wave30-textstyle-*`; gates `build/w30/W30-1.9-*.log` |
+| W30-1.10 | Inspect (read-only pane of the scheduler's facts) | **DONE** | commit `5bbcf17`; gate `qt_inspect_gate`; gates `build/w30/W30-1.10-*.log` |
+| W30-1.11 | Deliverable (Project Online) | **DONE (stays disabled, exact tooltip)** | commit `3aa4549`; `qt_ribbon_inventory`; gates `build/w30/W30-1.11-*.log` |
+
+Five items are closed DONE (1.0's manual direction, 1.7, 1.8, 1.10 and 1.11),
+1.5 is half done (Details live, Notes deferred), and seven command shapes are
+deferred with a committed Project pair (1.1, 1.2, 1.3, 1.4, 1.5 Notes, 1.6 and
+1.9).  No disabled button changed state without a measured pair; 1.11 is the
+one item the brief names as staying disabled, and it does.  G1 added 39
+tracked `.mpp` fixtures (101 at G0's close, 140 at G1's) and one new app test
+target per implemented command (plus the ribbon inventory's named Deliverable
+check).
+
+W30-1.0 detail:
+
+- Two Project 2021 save pairs for the Manually Schedule write, measured by the
+  committed `scripts/oracle_w30_task_mode.py` on the synthetic base: three
+  0 % top-level manual leaves with durations 24000/14400/9600 ticks, the
+  project calendar, one placeholder assignment per task, no links and no
+  progress.  The auto -> manual pair changes Task ID 1's Manual flag and
+  reopens with Start/Finish/Duration/Percent unchanged; the manual -> auto
+  pair RESCHEDULES the row (Start Sun 2026-01-04 13:00 -> Mon 2026-01-05
+  08:00, Finish Fri 2026-01-09 12:00 -> 17:00), so Auto Schedule stays
+  disabled with the decision-9 tooltip.
+- `core/mppwrite/task_mode.{h,cpp}` writes the measured 18 bytes in five
+  streams plus the Props14 edit marker: Task FixedData +174 start anchor,
+  FixedMeta +17 |= 0x04 and +18 &= ~0x20, Fixed2Meta +8 |= 0x80, Fixed2Data
+  +50/+54/+58 start/finish/duration copies, the placeholder assignment's
+  Fixed2Meta +8 |= 0x80, and the marker payload 0 -> 1.  Validation completes
+  before the first mutation.  The whole-file shape check refuses every
+  unmeasured condition: links, summaries/non-leaves, non-positive durations,
+  task calendars, any progress, anything but one live placeholder assignment
+  per task whose stored work equals the task's duration, real resources, a
+  missing automatic precondition, and an already-manual row.  One row per
+  save.
+- `app::make_task_mode_edit` applies the plan check and then the file check
+  when the command runs, so the refusal is never deferred to save; a sheet/file
+  date or duration mismatch is refused too.  The edit is exclusive in both
+  directions in `push()`, and the save cascade re-checks it.  Undo/redo
+  restores the file's bit from the displayed plan.  Qt enables the Task tab's
+  Manually Schedule button and Mode's Manually Scheduled entry; Auto Schedule
+  and Mode's automatic entry stay disabled with the exact tooltip.
+- `app_edits_task_mode_tests` (331 checks) saves the control through the real
+  cascade and compares every owned stream and Props14 with Project's file
+  under `tests/save_pair_noise.h` (19 effect bytes, 0 mismatches), reopens the
+  port's save, and pins each refusal with its own check.
+
+W30-1.1 detail:
+
+- Measured by `scripts/oracle_w30_insert.py` in one session per command (sheet
+  row 2 selected, control saved, `InsertSummaryTask()` /
+  `InsertMilestoneTask()`, saved, every file reopened).  Both APPEND a
+  202-byte task record at the tail (uid 4 / ID 2, fractional Fixed2Data
+  ordinal 2.5), RENUMBER the old IDs 2/3 to 3/4, and REPARENT the selected
+  row.  Summary writes the summary words and appends a TOMBSTONED assignment
+  row; Milestone writes the milestone words and appends a LIVE zero-work
+  placeholder assignment with a 72-byte contour block.
+- DEFERRED: Insert Task's measured writer appends an integer-ordinal row with
+  its own eight-key VarMeta set; it has no ID renumbering, fractional ordinal,
+  reparenting, summary/milestone words, assignment tombstone, placeholder
+  sentinel or contour writer, and `add_assignment_row` refuses resource 0.
+  The appended tails lie beyond the control's size, so
+  `tests/save_pair_noise.h`'s fixed-block mask (computed over the control's
+  size) leaves them unmasked, and they carry Project's per-session creation
+  stamps.  The port's reader also ignores the 2.5 ordinal, so it prints the
+  new row last where Project reopens it at sheet row 2.  Both buttons stay
+  disabled with the exact tooltip; the two pairs and their null saves are
+  committed as the oracle.
+
+W30-1.2 detail:
+
+- Measured by `scripts/oracle_w30_inactivate.py` and
+  `oracle_w30_inactivate_second.py`.  Pair 1 inactivates ID 2 (finish before
+  the project finish): four effect sites and no date movement -- Fixed2Meta
+  +8 0xff -> 0xbf, the placeholder assignment's Fixed2Meta +8 0xcf -> 0x8f,
+  the project row's active-ID list [3,1,2,3] -> [2,1,3], and 114/Props byte
+  3358.  Pair 2 inactivates ID 1 (whose finish IS the project finish) and
+  Project RECALCULATES: project duration 21600 -> 7200 ticks, the remaining
+  rows' slack words zeroed, the inactivated row's FixedMeta +18 loses 0x40,
+  Props bytes 390/3358 rewrite, and DocumentSummaryInformation changes the
+  project Finish "Fri 9/01/26" -> "Tue 6/01/26" and Duration "4.5 days" ->
+  "1.5 days".
+- DEFERRED: the save shape depends on whether the task defines the project
+  boundary, which is a scheduler question; the reader does not carry
+  `Task.Active`; and Project's button is a toggle, so reactivation would need
+  a second measured shape.  The button stays disabled with the exact tooltip;
+  the two pairs are committed as the oracle.
+
+W30-1.3 detail:
+
+- Measured on the committed linked fixtures by
+  `scripts/oracle_w30_respect_links.py` -- the manual shape from
+  `wave23-outline.mpp`, the automatic shape from `wave25-auto.mpp`.  The six
+  tasks carry links 3 -> 4 FS+2 d, 3 -> 5 SS+1 d and 4 -> 6 FF; the target
+  ID 4 is already link-satisfied.  `TaskRespectLinks()` returns True and no
+  date moves in either shape (the manual shape records the undo entry
+  "Respect Links").  Every Task, assignment, link, project and calendar stream
+  and DocumentSummaryInformation has ZERO effects; each pair's only unmasked
+  byte is the universal Props14 edit marker (211 noise bytes).
+- DEFERRED: the command's real effect is a reschedule, and no stable off-link
+  shape could be produced through COM -- the manual date setters pin the
+  opposite end, a lag edit under the automatic option reschedules the
+  predecessor, and a violated link created with the option off produced no
+  date change.  The port has no scheduler, so there is no measured reschedule
+  save shape to reproduce.  The button stays disabled; the two pairs are the
+  oracle and negative baseline for a later writer.
+
+W30-1.4 detail:
+
+- Measured by `scripts/oracle_w30_move.py`: `TaskMove` one working day forward
+  and one back on a manual row (`IsWorkingDuration = True`).  Forward moves
+  Start and Finish one day, keeps the duration and the project row, and writes
+  57 effect bytes under the mask: the row's slack words 9600 -> 4800 ticks,
+  Start/Finish copy words and StartAnchor, FixedMeta field count 0x0b -> 0x09,
+  Fixed2Data +50/+54, Fixed2Meta +88 clears 0x0C, REMOVES the row's StartText
+  and FinishText VarMeta entries, moves the placeholder assignment's four date
+  words, and bumps 114/Props byte 3366.  Back moves only Start (the stored
+  Finish stays) and additionally rewrites the project row's Start words and
+  DocumentSummaryInformation's project Start; 59 effect bytes.
+- DEFERRED: there is no TaskMove edit model; the writer never removes a
+  VarMeta entry; and the date writes carry no slack/late/anchor words or the
+  project summary's DocumentSummaryInformation date.  Rule 1 would also
+  require refusing automatic rows, links, constraints, summaries, progress,
+  real assignments, task calendars, multiple selected rows and the elapsed-day
+  option.  The button stays disabled; both pairs are committed as the oracle.
+
+W30-1.5 detail:
+
+- Notes was measured by `scripts/oracle_w30_notes.py` (`Task.Notes` set to one
+  plain ASCII line on row 2).  The save APPENDS one 198-byte RichEdit block to
+  Task Var2Data (516 -> 718) and INSERTS a 12-byte VarMeta entry (key
+  0x0B40000F) at slot 21 (logical count 42 -> 43), bumps the row's FixedMeta
+  +2/+14/+44 and the 114/Props Task Var2Data size; 271 effect bytes.
+- Notes DEFERRED: the RichEdit serialisation's escaping (RTF metacharacters,
+  line breaks, non-ANSI text), its header/font-table/generator version and its
+  re-render on edit or clear are unmeasured; the writer never inserts or
+  deletes VarMeta entries; Rule 1 would also require refusing an existing
+  note, multi-line or non-ASCII text, summaries, milestones, progress and
+  multiple rows.  The Notes button stays disabled with the exact tooltip and
+  Task Information's Notes tab keeps its laid-out-only note.  The pair is
+  committed as the oracle.
+- Details is a view, so it has no save path and no pair.  RibbonCommand
+  `task_details` enables the Task tab's Properties > Details row and calls
+  `set_details_visible(true)` on the Task Form pane that View > Details
+  already docks.  The View tab's check box became member-driven
+  (`details_checked_`), survives tab switches and reflects the open pane; the
+  Task-tab button only SHOWS the pane, the View check box stays the toggle.
+  `qt_split_view_gate` section 5 clicks the live button and proves the pane
+  docks, the document stays clean and the check box follows.
+
+W30-1.6 detail:
+
+- Measured by `scripts/oracle_w30_timeline.py`
+  (`TaskOnTimeline(TaskID=2, Remove=False)` on sheet row 2).  The call returns
+  True and every COM fact is unchanged, but Project 16.0.20430's own Add to
+  Timeline command is DISABLED and inert: the UIA toggle `TaskAddToTimeline`
+  reports IsEnabled False with rows 1-3 selected, with Select All, and on a
+  fresh Project-created project; a direct Toggle() leaves it Off; and the
+  documented corrupted-Timeline-view repair did not re-enable it.  The save
+  carries no timeline state -- every Task/assignment/link/project/calendar/
+  view stream has zero effects, DocumentSummaryInformation is byte-identical,
+  and the only unmasked byte is the Props14 edit marker (137 noise bytes).
+- DEFERRED: no measurable save shape exists on this Project build, so Rule 1
+  forbids a save path.  The button stays disabled with the exact tooltip; the
+  pair is the negative baseline and oracle for a later wave that finds a
+  working Project build.
+
+W30-1.7 detail:
+
+- Scroll to Task is view only, so there is no save shape and no pair.
+  `MainWindow::scroll_to_task()` scrolls the sheet to the current row and, when
+  a task is selected, asks `PlanDocument::scroll_gantt_to(uid, zoom)` to pin
+  the chart's left edge to the task's start day through the existing
+  `Timescale` origin path; the row menu's action calls the same method.  The
+  origin is session state: `reset()` (load or File > New) clears it,
+  structural rebuilds and zoom changes keep it; uid 0 and a start-less task
+  refuse without moving the axis.  No path touches the RecordSet, the plan or
+  the save diff.
+- `qt_scroll_to_task_gate` clicks the LIVE Task-tab button on
+  `wave23-outline.mpp`: uid 6 starts 2026-12-11 and uid 4 starts 2026-12-16;
+  after each selection + click the layout's timescale origin equals that
+  literal day and the selected bar sits at x = 0, and the second click clips
+  the earlier bar left.  A shrunken window with 96-px user-resizable rows
+  proves the button scrolls a genuinely out-of-viewport selected row back in.
+  Selection unchanged and `document_dirty()` false at every step.
+
+W30-1.8 detail:
+
+- Fill is scoped to the one measured cell writer: a Start edit becomes an
+  `app::StartEdit` through the existing start/SNET writer (Project's
+  `manual-start-edit.json` pair; the port's cell-to-file path is pinned by
+  `save_reopen_test`).  `MainWindow::fill_down()` copies the top visible Start
+  cell's typed Value down the visible rows of the selection in ONE sheet
+  transaction, so the existing save diff emits one StartEdit per changed row;
+  no new writer and no new save shape are introduced.  The row menu's Fill
+  Down runs the same method.
+- Refused before anything is staged: a selection whose visible columns are not
+  Start (the message names the column with no measured writer), fewer than two
+  visible rows, a top cell with no date, the project summary row as the source
+  (it is always row 0 and read-only for paste/cut), and a target row that is a
+  pending insert.  The whole fill is ONE undo step.
+- `qt_fill_gate` clicks the live button: a two-row Task Name selection, a
+  one-row Start selection, the project row as source and a Cut-cleared top
+  Start cell each leave the cells, pending edits, undo and `document_dirty()`
+  untouched; filling rows 4..6 in Start writes both targets, stages exactly
+  two start edits, marks the document dirty, and ONE Undo restores both and
+  cleans it; the row menu is one more undo step; a Start selection ending on
+  a pending Insert Task row is refused with no edit staged.
+
+W30-1.9 detail:
+
+- One measurement: `Application.FontBold(True)` on the Name cell of sheet row
+  1 of the synthetic base.  COM reopens both files with unchanged dates,
+  durations, percent, manual flags and IDs, so the edit lives only in the
+  view.  Under the mask the save has 6607 effect bytes: it APPENDS one
+  `0x2240000C` record to the applied view's main block in
+  `214/CV_iew/Var2Data` -- 12 header bytes plus one 44-byte entry (uid 1,
+  field 0x0B40000E Name, flags 0x01000003, automatic background, pattern 1,
+  font word 0x90000001) -- bumps the block length 42692 -> 42748, its two
+  size words 0x0000A6C0 -> 0x0000A6F8 and the item count 10 -> 11, shifts
+  every later block +56 as a byte-identical copy, rewrites
+  VarMeta's var2_size and five later-block offsets, writes 214/Props +9962
+  (the stored CV_iew Var2Data size), and carries the Props14 marker.  Every
+  Task, assignment, link, project and calendar stream has zero effects;
+  DocumentSummaryInformation is byte-identical.
+- DEFERRED: the port has no 214 view-stream writer at all -- the write is a
+  mid-stream insertion plus a VarMeta offset rewrite and a Props size byte --
+  the font word's bits are opaque beyond this one bold measurement, and Rule 1
+  would need every sibling shape refused or measured (I/U/strikethrough, font
+  and highlight colours, patterns, name/size, cell vs row vs multi-row
+  selection, every field id, the project summary row, other views, and Format
+  Painter's copy between two selections).  The Font B/I/U, highlight colour,
+  font colour and Format Painter rows stay disabled with the exact tooltip.
+  The pair is committed as the oracle for a later writer.
+
+W30-1.10 detail:
+
+- The Task tab's Inspect button toggles a Task Inspector pane docked at the
+  right of the chart pane.  Every value is read from the loaded PlanInput by
+  UniqueID (never a RecordSet row index): Name, ID, Unique ID, Outline, Type,
+  Mode, Start, Finish, Duration, % Complete, Critical, Calendar,
+  Predecessors, Successors and Resources, plus a selection line.  The
+  predecessor/successor and resource texts use the same `app::` helpers as
+  the sheet's computed columns; dates, durations and percent use the sheet
+  formatters.  All fifteen fields are read-only QLineEdits (read-only, never
+  disabled).
+- Honest states: the project summary row is synthesised from
+  `app::project_summary_row` ("Project summary"); a pending Insert Task row
+  is "Task (not saved yet)" with Mode "not saved yet"; a task calendar reads
+  "Task calendar (UniqueID %1)"; no selection reads "No task selected" with
+  every field empty.  The pane is a hidden 260-px item in the chart pane's
+  horizontal layout, so hidden it changes no measured rectangle; it is shown
+  only in the task-sheet view.  The ribbon button toggles it (second click
+  hides, third shows and refreshes) and its own Close button hides it.
+- `qt_inspect_gate` runs nine sections on `wave23-outline.mpp` plus a fresh
+  window with a pending insert: the live button's wiring, the facts for uid
+  4/1/6 and the project row, selection following, toggle semantics, view
+  switches, Close, the pending row, and the document clean at every step.
+
+W30-1.11 detail:
+
+- The brief keeps Project Online's Deliverable disabled with the exact
+  tooltip, and no measurement is wanted.  The control is unchanged:
+  `ribbon_pin.tsv` carries enabled 0 for `insert.deliverable`;
+  `ribbon_bar.cpp:318` passes `MenuAction::none`, no RibbonCommand and
+  enabled = false, so the disabled builder sets exactly "not implemented in
+  this port"; no `RibbonCommand::deliverable` and no `main_window` handler
+  exist; the generated backlog row stays disabled with that reason.
+- W30-1.11 adds a named live check next to the Split Task check in
+  `qt_ribbon_inventory`: the Deliverable button on the live Task tab's Insert
+  group is present, disabled and carries exactly the decision-9 string.  The
+  pin loop already enforces this for every disabled control; the named check
+  states the brief's requirement for this one button, so enabling it without a
+  measured pair fails there with the item's wording.  No product code changed.
+
+Per-commit gates (logs under `build/w30/`, named `W30-1.x-*.log`).  Every
+commit's fixture log reports fixtures OK and every client-name scan reports
+0 files / 0 hits with `guard_names` exit 0; the per-commit logs carry the
+then-current counts (104 documented hashes throughout; 107 tracked `.mpp` at
+W30-1.0 rising to 140 by W30-1.9; 154 -> 187 tracked test-data files; 8
+oracles at the end).  Fixtures-only commits changed no code and ran no build
+or ctest.
+
+| commit | builds | item tests | ctest |
+|---|---|---|---|
+| W30-1.0 pairs `0d0770e` | core exit 0; app exit 0 | core 52/52 | app 20/20 |
+| W30-1.0 `d51bcc0` | core, app, app_qt exit 0 | `app_edits_task_mode` 331 checks, 0 mismatches; `qt_ribbon_inventory` | app 21/21; app_qt 27/27 |
+| W30-1.1 `70b757a` | -- (fixtures only) | -- | -- |
+| W30-1.2 `2a99c98` | -- (fixtures only) | -- | -- |
+| W30-1.3 `ac008fa` | -- (fixtures only) | -- | -- |
+| W30-1.4 `8c1861b` | -- (fixtures only) | -- | -- |
+| W30-1.5 Notes `9ee38f6` | -- (fixtures only) | -- | -- |
+| W30-1.5 Details `2e79aec` | core, app, app_qt exit 0 | `qt_split_view_gate`; `qt_ribbon_inventory` | app 21/21; app_qt 27/27 |
+| W30-1.6 `b2c3366` | -- (fixtures only) | -- | -- |
+| W30-1.7 `2b131ec` | core, app, app_qt exit 0 | `qt_scroll_to_task_gate` (new); `qt_ribbon_inventory` | app 21/21; app_qt 28/28 |
+| W30-1.8 `daaf3a1` | core, app, app_qt exit 0 | `qt_fill_gate` (new); `qt_ribbon_inventory` | app 21/21; app_qt 29/29 |
+| W30-1.9 `36298e9` | -- (fixtures only) | -- | -- |
+| W30-1.10 `5bbcf17` | app_qt exit 0 | `qt_inspect_gate` (new), 0 failures; `qt_ribbon_inventory` | app_qt 30/30 |
+| W30-1.11 `3aa4549` | app_qt exit 0 | `qt_ribbon_inventory` 1.48 s | app_qt 30/30 |
+
+G1 group gates (fresh trees configured from scratch on `3aa4549` under
+`build/w30-fresh{,-app,-qt}`, built serially, log
+`build/w30/W30-G1-fresh-gates.log`; the run started 17:36 and finished 17:50):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 / 266 checks passed, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 / 420 checks passed, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 21/21 / 30/30 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (104 documented hashes, 140 tracked `.mpp`); paths OK (187 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `wave29..HEAD` / `guard_names wave29..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The numbers belong to `3aa4549`; the marker commit that follows is docs-only.
+The gate script's process status was 1 on this run because its final expected
+hex grep returns 1; every gate line exited 0 (the log carries the note, and
+the script now ends with an explicit exit 0).
+
+## Found, not fixed
+
+- **The reader cannot represent Project's inserted summary/milestone result.**
+  `read_outline` walks FixedData row order and ignores the fractional
+  Fixed2Data ordinal (2.5) and the reparenting, so Project's saved result reads
+  with the new row last where Project reopens it at sheet row 2 (W30-1.1).
+  `TaskRow` also carries no `Task.Active` (W30-1.2), so Inactivate cannot be
+  enabled without a reader change.  A later insert or inactivate writer needs
+  both.
+- **`tests/save_pair_noise.h`'s fixed-block mask is bounded by the control's
+  size.**  The insert pairs append their new rows beyond it, so those tails
+  (which carry Project's per-session creation stamps) stay unmasked; a later
+  writer needs the mask extended or the tails compared as effects.  The writer
+  also never inserts or removes VarMeta entries and has no 214 view-stream
+  writer at all: Move removes StartText/FinishText, Notes inserts a note
+  entry, and the text style appends to `214/CV_iew/Var2Data`.  Each deferral
+  above is blocked on one of these writers, not only on a scheduler.
+- **Project 16.0.20430's own Add to Timeline command is disabled and inert**
+  (UIA toggle, Select All, a fresh Project-created project, and the documented
+  view repair).  The committed timeline pair is the negative baseline; a
+  later wave needs a Project build where the command runs before a positive
+  save shape can be measured.
+
+WAVE-30-G1-COMPLETE
