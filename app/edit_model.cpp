@@ -131,8 +131,10 @@ const TaskRow* outline_anchor_in_plan(const PlanInput& plan, std::uint32_t uid,
 // resource sentinel (AssignmentRow::resource_uid is 0), and every committed
 // pair is that shape -- Project's own save updates the placeholder's actual-work
 // block, which W29-0.1 implements.  A resource-loaded assignment (R28-2(b)'s
-// "% Work Complete / task actual work / assignment actual work") has no pair at
-// all.  The wave-28 headers' "the placeholder assignments carry no work"
+// "% Work Complete / task actual work / assignment actual work") has exactly
+// ONE pair -- the wave-29 work pair, which W30-0.6 pins to one measured
+// duration, units and calendar.  The wave-28 headers' "the placeholder
+// assignments carry no work"
 // described RESOURCE work; the stored +20 word is non-zero on every fixture row
 // (2400/1440/960 minutes on the three tasks).
 bool has_work_resource_assignment(const PlanInput& plan, std::uint32_t uid) {
@@ -259,9 +261,71 @@ ActualsRowShape actuals_row_shape(const PlanInput& plan, const TaskRow& row) {
     return shape;
 }
 
+// W30-0.6 (R29-6, High): the resource-loaded contour rule has ONE measured
+// point -- the wave-29 work pair (tests/data/wave29-percent-work-control.mpp,
+// uid 6): a 9600-tick (two 8-hour-day) automatic task whose 100 % work-resource
+// assignment carries 9600 ticks of work, no task calendar, 0 -> 40.  The writer
+// rebuilds 0F400031 with ceil(duration / 4800) identical records; at the
+// measured 9600 ticks "one record per started 8-hour day" and "an actual
+// segment plus a remaining segment" both give the same two records, but any
+// other duration would write a record count Project has never been seen to
+// write.  The same applies to units (the record's units word) and to a task
+// calendar (whose day length the writer's 4800 constant ignores).  Until a
+// second Project pair measures another point, a percent edit is enabled only at
+// this shape.  The source assignment's own contour is not a PlanInput field
+// (the reader does not expose it), so these are the axes the model can see.
+constexpr std::int64_t kMeasuredWorkDurationTicks =
+    2 * static_cast<std::int64_t>(mppwrite::kTicksPerDay);
+constexpr double kMeasuredWorkUnitsPercent = 100.0;
+
+bool check_measured_work_resource_shape(const PlanInput& plan,
+                                        const TaskRow& row,
+                                        std::string& error) {
+    if (row.duration_ticks != kMeasuredWorkDurationTicks) {
+        error = "task uid " + std::to_string(row.uid) + " is " +
+                std::to_string(row.duration_ticks) +
+                " ticks long; the resource-loaded contour (one record per "
+                "4800-tick day) is measured only on the 9600-tick work pair, "
+                "where the day and actual/remaining readings agree";
+        return false;
+    }
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.task_uid != row.uid || assignment.resource_uid == 0 ||
+            assignment.work_ticks <= 0) {
+            continue;
+        }
+        if (assignment.units_percent != kMeasuredWorkUnitsPercent) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " has assignment uid " + std::to_string(assignment.uid) +
+                    " at " + std::to_string(assignment.units_percent) +
+                    " % units; the resource-loaded contour is measured only at "
+                    "100 % units";
+            return false;
+        }
+        if (assignment.work_ticks != kMeasuredWorkDurationTicks) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " has assignment uid " + std::to_string(assignment.uid) +
+                    " carrying " + std::to_string(assignment.work_ticks) +
+                    " ticks of work; the resource-loaded contour is measured "
+                    "only with the work pair's 9600 ticks of work";
+            return false;
+        }
+    }
+    if (row.calendar_uid != -1) {
+        error = "task uid " + std::to_string(row.uid) +
+                " uses task calendar uid " + std::to_string(row.calendar_uid) +
+                "; the resource-loaded contour is measured only on the project "
+                "calendar (no task calendar)";
+        return false;
+    }
+    return true;
+}
+
 bool check_actuals_row_shape(const PlanInput& plan, const TaskRow& row,
                              bool percent_edit, std::string& error) {
     const ActualsRowShape shape = actuals_row_shape(plan, row);
+    const ActualsAssignmentShape assignment =
+        actuals_assignment_shape(plan, row.uid);
     if (!percent_edit) {
         // W29-0.3 measures date updates; until its pairs land a date update
         // keeps every W29-0.0 refusal.
@@ -286,6 +350,20 @@ bool check_actuals_row_shape(const PlanInput& plan, const TaskRow& row,
                     "placeholders)";
             return false;
         }
+        // W30-0.6 (R29-6): a real assignment with ZERO work never reaches
+        // has_work_resource_assignment above, yet the writer still takes its
+        // real-assignment branch for the row.  No pair measures an actuals
+        // write on a real assignment except the percent work pair, so a date
+        // update is refused too (the measured date-update rows are all
+        // Project's unassigned placeholders).
+        if (assignment.real) {
+            error = "task uid " + std::to_string(row.uid) +
+                    " has a real resource assignment that carries no work; no "
+                    "Project save pair measures an actuals write on a real "
+                    "assignment (the measured rows carry only Project's "
+                    "unassigned placeholders)";
+            return false;
+        }
         return true;
     }
     if (shape.under_summary && shape.milestone) {
@@ -304,6 +382,21 @@ bool check_actuals_row_shape(const PlanInput& plan, const TaskRow& row,
         error = "task uid " + std::to_string(row.uid) +
                 " is a milestone with a resource assignment that carries work; "
                 "no Project save pair measures that combination";
+        return false;
+    }
+    if (shape.work_resource) {
+        if (!check_measured_work_resource_shape(plan, row, error)) {
+            return false;
+        }
+    } else if (assignment.real) {
+        // W30-0.6 (R29-6): a real assignment whose work is zero still takes the
+        // writer's real-assignment branch (the resource word, not the work,
+        // selects it), and the work pair is its only measurement.
+        error = "task uid " + std::to_string(row.uid) +
+                " has a real resource assignment that carries no work; the "
+                "only measured real-assignment actuals write is the 9600-tick "
+                "work pair, and no Project save pair measures a percent edit on "
+                "a zero-work real assignment";
         return false;
     }
     return true;

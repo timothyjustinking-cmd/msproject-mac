@@ -103,6 +103,12 @@ struct TaskRow {
     // file row and is false.  app/start_edit_warning.h uses it to warn that a date
     // save cannot keep a manual task manual.
     bool manually_scheduled = false;
+    // W30-0.6 (R29-6): the task's own calendar UniqueID (FixedData +178;
+    // core/mpp/reader.h Task::calendar_uid).  -1 means no task calendar, so the
+    // project calendar applies.  The resource-loaded percent writer's contour
+    // rule (one 9600-tick record pair) is measured only on the project calendar,
+    // so the edit model refuses a task calendar.
+    std::int32_t calendar_uid = -1;
     // Wave 12: the stored custom-field values the reader decoded (W48's measured
     // encodings; see core/mpp/field_value.h).  Only values the file actually
     // stores are listed, plus Flag1 for every live row (a clear bit is a stored

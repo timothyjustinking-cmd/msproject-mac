@@ -250,13 +250,83 @@ void test_percent_edit_model() {
         check(error.find("milestone") != std::string::npos,
               "the milestone refusal names the shape");
 
-        // make_plan() gives task 2 an assignment carrying 4800 ticks of work;
-        // W29-0.2 measured that row shape at 0 -> 40.
-        app::PlanInput working = make_plan();
+        // make_plan() gives task 2 a real assignment; W29-0.2 measured that row
+        // shape at 0 -> 40, and W30-0.6 pins the ONE measured point: a
+        // 9600-tick task whose 100 % assignment carries 9600 ticks of work.
+        auto measured_work_plan = []() {
+            app::PlanInput plan = make_plan();
+            plan.tasks[1].duration_ticks = 9600;
+            for (app::AssignmentRow& assignment : plan.assignments) {
+                if (assignment.task_uid == plan.tasks[1].uid) {
+                    assignment.work_ticks = 9600;
+                }
+            }
+            return plan;
+        };
+        app::PlanInput working = measured_work_plan();
         check(app::make_percent_edit(working, working.tasks[1].uid, 40,
                                      accepted_edit, error),
               "a task with a work-bearing assignment is accepted on the "
               "measured 0 -> 40 shape (W29-0.2)");
+
+        // W30-0.6 (R29-6, High): the resource-loaded contour rule has one data
+        // point.  One check per refused axis -- duration, units, work and the
+        // task calendar -- and the measured plan above stays accepted.
+        app::StructuralEdit work_refused;
+        app::PlanInput other_duration = measured_work_plan();
+        other_duration.tasks[1].duration_ticks = 4800;
+        check(!app::make_percent_edit(other_duration, other_duration.tasks[1].uid,
+                                      40, work_refused, error),
+              "a work-bearing row at another duration is refused");
+        check(error.find("9600") != std::string::npos &&
+                  error.find("contour") != std::string::npos,
+              "the duration refusal names the measured ticks and the contour");
+
+        app::PlanInput other_units = measured_work_plan();
+        for (app::AssignmentRow& assignment : other_units.assignments) {
+            if (assignment.task_uid == other_units.tasks[1].uid) {
+                assignment.units_percent = 50.0;
+            }
+        }
+        check(!app::make_percent_edit(other_units, other_units.tasks[1].uid, 40,
+                                      work_refused, error),
+              "a work-bearing row at non-measured units is refused");
+        check(error.find("100 % units") != std::string::npos,
+              "the units refusal names the measured 100 %");
+
+        app::PlanInput other_work = measured_work_plan();
+        for (app::AssignmentRow& assignment : other_work.assignments) {
+            if (assignment.task_uid == other_work.tasks[1].uid) {
+                assignment.work_ticks = 4800;
+            }
+        }
+        check(!app::make_percent_edit(other_work, other_work.tasks[1].uid, 40,
+                                      work_refused, error),
+              "a work-bearing row carrying other work is refused");
+        check(error.find("9600 ticks of work") != std::string::npos,
+              "the work refusal names the measured ticks of work");
+
+        app::PlanInput task_calendar = measured_work_plan();
+        task_calendar.tasks[1].calendar_uid = 3;
+        check(!app::make_percent_edit(task_calendar, task_calendar.tasks[1].uid,
+                                      40, work_refused, error),
+              "a work-bearing row with its own task calendar is refused");
+        check(error.find("task calendar") != std::string::npos,
+              "the calendar refusal names the task calendar");
+
+        // R29-1's residual on the percent path: a real assignment with ZERO
+        // work still takes the writer's real-assignment branch.
+        app::PlanInput zero_work = measured_work_plan();
+        for (app::AssignmentRow& assignment : zero_work.assignments) {
+            if (assignment.task_uid == zero_work.tasks[1].uid) {
+                assignment.work_ticks = 0;
+            }
+        }
+        check(!app::make_percent_edit(zero_work, zero_work.tasks[1].uid, 40,
+                                      work_refused, error),
+              "a real assignment that carries no work is refused");
+        check(error.find("carries no work") != std::string::npos,
+              "the zero-work refusal names the missing work");
 
         // The four measured transitions: auto 0->40, 40->100, 100->0 and
         // manual 0->40.  0->50, 40->0 and either manual transition are not.

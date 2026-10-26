@@ -2011,6 +2011,98 @@ void check_summary_rollup_scope() {
           "20 %)");
 }
 
+/* W30-0.6 (R29-6, High): the resource-loaded contour rule has one measured
+ * point -- the work pair's 9600-tick task, 100 % units, 9600 ticks of work, no
+ * task calendar.  The reader gives the model all four values (calendar_uid is
+ * the new W30-0.6 field), the measured plan stays accepted, and each other axis
+ * is refused with its own reason. */
+void check_work_contour_shape() {
+    const std::filesystem::path control_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave29-percent-work-control.mpp";
+    if (!std::filesystem::exists(control_path)) {
+        std::printf("SKIP: wave29-percent-work-control.mpp is not present\n");
+        return;
+    }
+    app::PlanInput plan;
+    try {
+        plan = app::plan_input_from_document(mpp::load_file(control_path.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the W30-0.6 work control loads");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        return;
+    }
+    const app::TaskRow* task6 = nullptr;
+    for (const app::TaskRow& task : plan.tasks) {
+        if (task.uid == 6) {
+            task6 = &task;
+        }
+    }
+    const app::AssignmentRow* assignment7 = nullptr;
+    for (const app::AssignmentRow& assignment : plan.assignments) {
+        if (assignment.uid == 7) {
+            assignment7 = &assignment;
+        }
+    }
+    check(task6 != nullptr && task6->duration_ticks == 9600 &&
+              task6->calendar_uid == -1,
+          "the work pair's task is 9600 ticks on the project calendar");
+    check(assignment7 != nullptr && assignment7->task_uid == 6 &&
+              assignment7->resource_uid == 1 &&
+              assignment7->units_percent == 100.0 &&
+              assignment7->work_ticks == 9600,
+          "the work pair's assignment is 100 % units and 9600 ticks of work");
+
+    app::StructuralEdit edit;
+    std::string error;
+    check(app::make_percent_edit(plan, 6, 40, edit, error),
+          "the measured work pair stays accepted");
+
+    app::PlanInput other_duration = plan;
+    for (app::TaskRow& task : other_duration.tasks) {
+        if (task.uid == 6) {
+            task.duration_ticks = 4800;
+        }
+    }
+    check(!app::make_percent_edit(other_duration, 6, 40, edit, error),
+          "the work pair at another duration is refused");
+    check(error.find("9600") != std::string::npos,
+          "the duration refusal names the measured 9600 ticks");
+
+    app::PlanInput other_units = plan;
+    for (app::AssignmentRow& assignment : other_units.assignments) {
+        if (assignment.uid == 7) {
+            assignment.units_percent = 50.0;
+        }
+    }
+    check(!app::make_percent_edit(other_units, 6, 40, edit, error),
+          "the work pair at 50 % units is refused");
+    check(error.find("100 % units") != std::string::npos,
+          "the units refusal names the measured 100 %");
+
+    app::PlanInput task_calendar = plan;
+    for (app::TaskRow& task : task_calendar.tasks) {
+        if (task.uid == 6) {
+            task.calendar_uid = 1;
+        }
+    }
+    check(!app::make_percent_edit(task_calendar, 6, 40, edit, error),
+          "the work pair with a task calendar is refused");
+    check(error.find("task calendar") != std::string::npos,
+          "the calendar refusal names the task calendar");
+
+    app::PlanInput zero_work = plan;
+    for (app::AssignmentRow& assignment : zero_work.assignments) {
+        if (assignment.uid == 7) {
+            assignment.work_ticks = 0;
+        }
+    }
+    check(!app::make_percent_edit(zero_work, 6, 40, edit, error),
+          "the work pair with zero work on its real assignment is refused");
+    check(error.find("carries no work") != std::string::npos,
+          "the zero-work refusal names the missing work");
+}
+
 } /* namespace */
 
 int main() {
@@ -2024,6 +2116,7 @@ int main() {
     check_update_save_shape_refusals();
     check_zero_update_noop();
     check_summary_rollup_scope();
+    check_work_contour_shape();
     std::printf("app_edits_actuals_tests: %d checks passed, %d expected failure(s)\n",
                 g_checks - g_failures, g_expected_failures);
     if (g_failures != 0) {

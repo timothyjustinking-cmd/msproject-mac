@@ -1641,10 +1641,25 @@ PercentActualsResult write_percent_actuals(
                  * 2 records, from a 1-record control); a placeholder keeps
                  * the record count it had (wave-28: 2 at 40 %; the leaf pair:
                  * 2).  The placeholder count is not recomputed, because
-                 * Project did not recompute it on any measured pair. */
+                 * Project did not recompute it on any measured pair.
+                 * W30-0.6 (R29-6, High): that rule has ONE data point, and only
+                 * at the measured point do "one record per 8-hour day" and "an
+                 * actual segment plus a remaining segment" agree.  The edit
+                 * model refuses every other duration, units and calendar; this
+                 * guard is the last line of defence for a hand-built queue.  The
+                 * assignment's +12 word is Units x100 (10000.0 = 100 %). */
                 std::size_t records =
                     (old_work.size() - kAssnWorkHeader) / kAssnWorkRecord;
                 if (item.real_assignment) {
+                    constexpr std::uint32_t kMeasuredWorkTicks = 2u * kTicksPerDay;
+                    constexpr double kMeasuredUnitsX100 = 10000.0;
+                    if (item.duration != kMeasuredWorkTicks ||
+                        units != kMeasuredUnitsX100) {
+                        throw Error(
+                            "assignment uid " + std::to_string(assn_uid) +
+                            ": the resource-loaded contour is measured only on "
+                            "a 9600-tick task with a 100 % assignment");
+                    }
                     records = std::max<std::size_t>(
                         1, static_cast<std::size_t>(
                                (static_cast<std::uint64_t>(item.duration) + 4799u) /
