@@ -143,10 +143,6 @@ bool link_table_is_empty(CfbDocument const& doc, std::string_view table) {
     return true;
 }
 
-std::uint16_t get_u16(std::vector<std::uint8_t> const& b, std::size_t o) {
-    return static_cast<std::uint16_t>(b[o] | (b[o + 1] << 8));
-}
-
 std::uint32_t get_u32(std::vector<std::uint8_t> const& b, std::size_t o) {
     return static_cast<std::uint32_t>(b[o]) |
            (static_cast<std::uint32_t>(b[o + 1]) << 8) |

@@ -96,8 +96,6 @@ constexpr std::size_t kFixed2Record = 64;
 
 /* TBkndAssn geometry (task_mode.cpp). */
 constexpr std::size_t kAssnStride = 110;
-constexpr std::size_t kAssnMetaHeader = 16;
-constexpr std::size_t kAssnMetaEntry = 34;
 constexpr std::size_t kAssnFixed2MetaHeader = 16;
 constexpr std::size_t kAssnFixed2MetaEntry = 53;
 constexpr std::size_t kAssnFixed2Record = 48;
@@ -194,11 +192,6 @@ std::uint32_t get_u32(const Bytes& bytes, std::size_t offset) {
            (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
 }
 
-void put_u16(Bytes& bytes, std::size_t offset, std::uint16_t value) {
-    bytes[offset] = static_cast<std::uint8_t>(value & 0xffu);
-    bytes[offset + 1] = static_cast<std::uint8_t>((value >> 8) & 0xffu);
-}
-
 void put_u32(Bytes& bytes, std::size_t offset, std::uint32_t value) {
     bytes[offset] = static_cast<std::uint8_t>(value & 0xffu);
     bytes[offset + 1] = static_cast<std::uint8_t>((value >> 8) & 0xffu);
@@ -216,15 +209,6 @@ std::string assn_stream(const char* tail) {
 
 Bytes stream_or_empty(mppwrite::CfbDocument& document, const std::string& path) {
     return document.has_stream(path) ? document.read_stream(path) : Bytes{};
-}
-
-bool same_span(const Bytes& a, const Bytes& b, std::size_t at, std::size_t n) {
-    if (at + n > a.size() || at + n > b.size()) {
-        return false;
-    }
-    return std::equal(a.begin() + static_cast<std::ptrdiff_t>(at),
-                      a.begin() + static_cast<std::ptrdiff_t>(at + n),
-                      b.begin() + static_cast<std::ptrdiff_t>(at));
 }
 
 std::size_t uid_row(const Bytes& fixed_data, std::uint32_t uid) {
