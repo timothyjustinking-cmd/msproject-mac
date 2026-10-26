@@ -66,6 +66,10 @@ inline constexpr int kFontFamilyCount = 6;
 // ---------------------------------------------------------------------------
 
 inline constexpr int kRowHeight = 22;
+// Wave 31 (W31-4.4): Project's usage sheets draw one 21 px sub-row per detail
+// and stack two per logical row (measured row_pitch_px 21, logical_row_pitch_px
+// 42 in tests/data/reference/wave31-usage.measures.json).
+inline constexpr int kUsageRowHeight = 21;
 inline constexpr int kSheetHeaderHeight = 42;  // caption band, top rule included
 inline constexpr int kGutterWidth = 60;        // frozen row-number gutter (sheet edge 60)
 inline constexpr int kSplitHandleWidth = 6;    // visible drag thumb

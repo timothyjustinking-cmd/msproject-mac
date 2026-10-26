@@ -102,6 +102,8 @@
 #include "theme.h"
 #include "timeline_strip.h"
 #include "usage.h"
+#include "usage_grid.h"
+#include "usage_sheet.h"
 #include "view_label.h"
 #include "view_model.h"
 
@@ -491,6 +493,15 @@ void MainWindow::build_central_widget() {
             after_model_change();
         });
     sheet_view_->setItemDelegate(entry_delegate);
+    // Wave 31 (W31-4.4): the usage sheet's period columns mix Work/Actual Work
+    // (Duration) and Cost sub-rows; the lookup answers per physical row and
+    // returns Auto in every other view.
+    sheet_model_.set_value_kind_lookup(
+        [this](int display_row, int display_column) {
+            return usage_sheet_ != nullptr
+                       ? usage_sheet_->value_kind(display_row, display_column)
+                       : core::sheet::CellKind::Auto;
+        });
     // Wave 21: the selected row/cell is Project's measured green (162,211,160),
     // the same value the delegate and the Gantt row highlight use (kSelection).
     sheet_view_->setStyleSheet(QStringLiteral(
@@ -1320,6 +1331,7 @@ void MainWindow::configure_sheet() {
             sheet_view_->setColumnWidth(static_cast<int>(index), columns[index].width);
         }
     }
+    sheet_view_->verticalHeader()->setMinimumSectionSize(kRowHeight);
     sheet_view_->verticalHeader()->setDefaultSectionSize(kRowHeight);
 }
 
@@ -1327,6 +1339,58 @@ void MainWindow::configure_generic_columns() {
     if (sheet_view_ == nullptr || view_sheet_ == nullptr) {
         return;
     }
+    auto* header = static_cast<SheetHeaderView*>(sheet_view_->horizontalHeader());
+    // W31-4.4: the usage sheets' widths are measured PIXELS (147/123 label,
+    // 48 Details, 64/84/105 period, 84 Total), their rows the measured 21 px
+    // pitch, their parent rows the only numbered gutters, their label column
+    // merged across each logical row, and their period columns two-tier.
+    if (usage_sheet_ != nullptr) {
+        const std::vector<int>& widths = usage_sheet_->column_widths();
+        const std::size_t count =
+            std::min(widths.size(), view_sheet_->visible_column_count());
+        for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
+            sheet_view_->setColumnWidth(static_cast<int>(ordinal), widths[ordinal]);
+        }
+        if (auto* gutter =
+                static_cast<SheetRowHeader*>(sheet_view_->verticalHeader());
+            gutter != nullptr) {
+            gutter->setMinimumSectionSize(kUsageRowHeight);
+            gutter->setDefaultSectionSize(kUsageRowHeight);
+        }
+        std::vector<QString> numbers;
+        numbers.reserve(usage_sheet_->row_numbers().size());
+        for (const std::string& text : usage_sheet_->row_numbers()) {
+            numbers.push_back(QString::fromStdString(text));
+        }
+        sheet_model_.set_row_numbers(std::move(numbers));
+        for (const UsageRowSpan& span : usage_sheet_->label_spans()) {
+            sheet_view_->setSpan(span.row, UsageSheet::kLabelColumn, span.rows, 1);
+        }
+        if (header != nullptr) {
+            std::vector<HeaderTierCell> cells;
+            const std::vector<UsageHeaderCell>& source = usage_sheet_->header_cells();
+            cells.reserve(source.size());
+            for (const UsageHeaderCell& tier : source) {
+                HeaderTierCell cell;
+                cell.major = QString::fromStdString(tier.major);
+                cell.minor = QString::fromStdString(tier.minor);
+                cell.tiered = tier.tiered;
+                cell.group_start = tier.group_start;
+                cell.major_align = tier.major_align;
+                cell.minor_align = tier.minor_align;
+                cells.push_back(std::move(cell));
+            }
+            header->set_tier_cells(std::move(cells));
+        }
+        return;
+    }
+    if (header != nullptr) {
+        header->clear_tier_cells();
+    }
+    // Leaving a usage view restores the shared presentation: ordinal gutters
+    // and the measured 22 px row pitch of every other sheet.
+    sheet_model_.clear_row_numbers();
+    sheet_view_->verticalHeader()->setMinimumSectionSize(kRowHeight);
     // W31-3.6: the Resource Sheet's stored widths are CHARACTERS and Project
     // paints chars * unit + 3 px, the same rule the Task Sheet follows
     // (W29-1.1).  The unit is measured from the file's default text font: the
@@ -5276,6 +5340,7 @@ void MainWindow::apply_zoom_choice(const ZoomChoice& choice) {
 
 void MainWindow::rebuild_generic_view() {
     view_sheet_.reset();
+    usage_sheet_.reset();
     if (!doc_.has_document()) {
         return;
     }
@@ -5293,17 +5358,29 @@ void MainWindow::rebuild_generic_view() {
         }
         return;
     }
-    // The two usage grids: the same core::usage projection the macOS shell draws
-    // (app/view_model.h), on the stock standard week the app documents.
-    const core::usage::UsageProjection projection = core::usage::project_usage(
-        app::usage_input_from_plan(doc_.plan()), app::standard_calendar(),
-        prefs_.usage_period);
+    // W31-4.4: the two usage grids render app::make_usage_grid -- the file's own
+    // stored details (Work by default; Actual Work, Cost when stored) and
+    // timescale tiers, with the shell's Day/Week/Month choice as the fallback
+    // for a file that stores no usage view.  Work is phased on the same stock
+    // standard week the macOS shell uses.
     const bool resource = prefs_.view == app::ViewMode::resource_usage;
-    const app::UsageView usage =
-        app::make_usage_view(projection, resource, doc_.plan(), doc_.format());
-    view_records_ = app::make_usage_record_set(usage);
+    const app::UsageViewStyle& style =
+        resource ? doc_.resource_usage_style() : doc_.task_usage_style();
+    const app::UsageGrid grid = app::make_usage_grid(
+        doc_.plan(), style, resource, app::standard_calendar(),
+        prefs_.usage_period);
+    usage_sheet_ = std::make_unique<UsageSheet>(grid);
+    view_records_ = usage_sheet_->records();
     view_sheet_ = std::make_unique<core::sheet::SheetModel>(view_records_,
-                                                           app::usage_sheet_columns(usage));
+                                                           usage_sheet_->columns());
+    // Project's measured currency symbol on the fixture ("$"; W31-3.5 measured
+    // the same application option for the Resource Sheet).  Every other format
+    // value follows the document's own.
+    core::sheet::SheetFormat format = doc_.format();
+    if (format.currency_symbol.empty()) {
+        format.currency_symbol = "$";
+    }
+    view_sheet_->set_format(std::move(format));
 }
 
 void MainWindow::show_view(app::ViewMode mode) {
@@ -5319,6 +5396,10 @@ void MainWindow::show_view(app::ViewMode mode) {
     // Detach the adapter first: the branches below destroy or replace the
     // SheetModel the adapter points at (view_sheet_/doc_.sheet_).
     sheet_model_.set_sheet(nullptr);
+    // W31-4.4: the usage presentation's spans and per-cell value kinds belong
+    // to the view being left; drop them before the branches rebuild.
+    usage_sheet_.reset();
+    sheet_view_->clearSpans();
     if (mode == app::ViewMode::task_sheet) {
         view_sheet_.reset();
         view_records_.clear();

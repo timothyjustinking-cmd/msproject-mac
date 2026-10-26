@@ -117,6 +117,58 @@ bool is_indicators_column(const QAbstractItemModel* model, int column) {
     return table_model != nullptr && table_model->indicators_column() == column;
 }
 
+// Wave 31 (W31-4.4): one usage-sheet period column's two-tier header, painted
+// from the measured rules (tests/data/reference/wave31-usage.measures.json):
+// no vertical rule in the top tier except the stronger group boundary, 1 px
+// light-grey rules in the bottom tier only, and no horizontal rule between the
+// tiers.  `next_tiered`/`has_next` place the period band's right edge: a light
+// bottom-half rule against another period column, the ordinary full-height
+// separator against the port's Total column.
+void paint_tier_header(QPainter& painter, const QRect& rect, const HeaderTierCell& cell,
+                       bool next_tiered, bool has_next, const ChromePalette& chrome) {
+    const int mid = rect.top() + rect.height() / 2;
+    const QColor kTierRule(0xdc, 0xdc, 0xdc);  // measured 217-224 light grey
+    if (next_tiered) {
+        painter.setPen(QPen(kTierRule, 1));
+        painter.drawLine(rect.right(), mid, rect.right(), rect.bottom());
+    } else if (has_next) {
+        painter.setPen(QPen(chrome.sheet_header_separator, 1));
+        painter.drawLine(rect.right(), rect.top(), rect.right(), rect.bottom());
+    }
+    if (cell.group_start) {
+        painter.setPen(QPen(chrome.sheet_header_separator, 1));
+        painter.drawLine(rect.left(), rect.top(), rect.left(), rect.bottom());
+    }
+    // The measured tier text rows are shorter than the 11 pt captions; 9 pt is
+    // the chosen size (the row positions are measured, the point size is not).
+    QFont font = header_font();
+    font.setPointSize(9);
+    painter.setFont(font);
+    painter.setPen(chrome.sheet_header_text);
+    const auto align = [](int value) {
+        if (value == 1) {
+            return static_cast<int>(Qt::AlignHCenter | Qt::AlignVCenter);
+        }
+        if (value == 2) {
+            return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
+        }
+        return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
+    };
+    constexpr int kPad = 4;
+    const QRect major_rect(rect.left() + kPad, rect.top() + 2,
+                           std::max(0, rect.width() - 2 * kPad),
+                           std::max(0, mid - rect.top() - 4));
+    const QRect minor_rect(rect.left() + 2, mid + 2,
+                           std::max(0, rect.width() - 4),
+                           std::max(0, rect.bottom() - mid - 3));
+    if (!cell.major.isEmpty()) {
+        painter.drawText(major_rect, align(cell.major_align), cell.major);
+    }
+    if (!cell.minor.isEmpty()) {
+        painter.drawText(minor_rect, align(cell.minor_align), cell.minor);
+    }
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -337,6 +389,20 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
     painter->save();
     painter->fillRect(rect, chrome.sheet_header_background);
 
+    // Wave 31 (W31-4.4): a usage sheet's time-phased columns paint the two-tier
+    // caption and its measured rules instead of the single-band caption.
+    if (logicalIndex >= 0 &&
+        static_cast<std::size_t>(logicalIndex) < tier_cells_.size() &&
+        tier_cells_[static_cast<std::size_t>(logicalIndex)].tiered) {
+        const std::size_t index = static_cast<std::size_t>(logicalIndex);
+        const bool next_tiered =
+            index + 1 < tier_cells_.size() && tier_cells_[index + 1].tiered;
+        paint_tier_header(*painter, rect, tier_cells_[index], next_tiered,
+                          index + 1 < tier_cells_.size(), chrome);
+        painter->restore();
+        return;
+    }
+
     // The caption band's column separators.  The band's TOP rule is the timeline
     // strip's bottom border (directly above), and its BOTTOM rule is drawn by the
     // row-0 cells (EntryItemDelegate) so it lands exactly on the first row's
@@ -473,14 +539,21 @@ void SheetRowHeader::paintSection(QPainter* painter, const QRect& rect, int logi
     // stored out of ID order, and the project row is ID 0.
     const QRect text_rect = rect.adjusted(0, 0, -8, 0);
     QString number = QString::number(logicalIndex + 1);
+    bool paint_number = true;
     if (auto* table_model = dynamic_cast<SheetTableModel*>(model()); table_model != nullptr) {
         const QString id_text = table_model->row_number_text(logicalIndex);
         if (!id_text.isEmpty()) {
             number = id_text;
+        } else if (table_model->custom_row_numbers()) {
+            // Wave 31 (W31-4.4): the usage sheets number parent rows only; an
+            // assignment's gutter cell is blank, never the display ordinal.
+            paint_number = false;
         }
     }
-    painter->drawText(text_rect, static_cast<int>(Qt::AlignRight | Qt::AlignVCenter),
-                      number);
+    if (paint_number) {
+        painter->drawText(text_rect, static_cast<int>(Qt::AlignRight | Qt::AlignVCenter),
+                          number);
+    }
     // The caption band's bottom rule (the first row's top edge) starts in the
     // gutter; the delegate draws it from x = 60 on.
     if (logicalIndex == 0) {

@@ -62,6 +62,22 @@ struct HeaderCaptionLayout {
 HeaderCaptionLayout layout_header_caption(const QRect& section, const QString& title,
                                           const QFontMetrics& metrics);
 
+// Wave 31 (W31-4.4): one time-phased column's two-tier caption.  Project's
+// usage sheets draw a top tier (the week/month group label on the group's first
+// column only) over a bottom tier (the day letter, centred), with light rules
+// in the bottom tier only and a stronger rule at each group boundary (measured
+// on the wave-31 captures; tests/data/reference/wave31-usage.measures.json).
+// `tiered == false` keeps the ordinary single-band caption of the label,
+// Details and Total columns.
+struct HeaderTierCell {
+    QString major;
+    QString minor;
+    bool tiered = false;
+    bool group_start = false;
+    int major_align = 0;  // stored TimescaleTier::align: 0 left, 1 centre, 2 right
+    int minor_align = 1;
+};
+
 // Wave 20: the column header's arrow menu -- a compact format mini-bar
 // (font family/size, B/I/U, alignment) followed by the product's measured
 // command order (Cut/Copy/Paste, Wrap Text, Insert/Hide Column, Font/Text
@@ -97,12 +113,26 @@ class SheetHeaderView final : public QHeaderView {
     void set_theme(Theme theme);
     Theme theme() const noexcept { return theme_; }
 
+    // Wave 31 (W31-4.4): the usage sheets' two-tier captions, one entry per
+    // logical column.  An empty list (the default, and every task/resource
+    // view) paints the single-band captions above.
+    void set_tier_cells(std::vector<HeaderTierCell> cells) {
+        tier_cells_ = std::move(cells);
+        update();
+    }
+    void clear_tier_cells() {
+        tier_cells_.clear();
+        update();
+    }
+    const std::vector<HeaderTierCell>& tier_cells() const noexcept { return tier_cells_; }
+
   protected:
     void paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const override;
 
   private:
     bool model_titles_ = false;
     std::vector<DisplayColumn> display_columns_;
+    std::vector<HeaderTierCell> tier_cells_;
     std::function<void(const QString&, int)> column_handler_;
     Theme theme_ = Theme::light;
 };

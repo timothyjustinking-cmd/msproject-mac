@@ -40,6 +40,41 @@ bool detail_is_valued(UsageDetailKind kind) noexcept {
     return kind != UsageDetailKind::other;
 }
 
+// The rendered bottom tier for a fallback period.  Formats 20 (single-letter
+// day) and 13 (week date) are the wave-31 fixture's stored choices; a week
+// column's label is the week's Monday date.
+msproject::viewstate::TimescaleTier tier_for_period(Period period) {
+    using msproject::viewstate::TimescaleUnit;
+    msproject::viewstate::TimescaleTier tier;
+    tier.unit = period == Period::day     ? TimescaleUnit::days
+                : period == Period::week  ? TimescaleUnit::weeks
+                                          : TimescaleUnit::months;
+    tier.count = 1;
+    tier.format = period == Period::day ? 20 : 13;
+    tier.align = 1;  // centred, the fixture's measured bottom alignment
+    return tier;
+}
+
+// The rendered top tier for a fallback period: the measured weeks-over-days
+// pair, months over weeks, and no top tier over months (no year label is
+// measured).
+msproject::viewstate::TimescaleTier default_major_for(Period period) {
+    using msproject::viewstate::TimescaleUnit;
+    msproject::viewstate::TimescaleTier tier;
+    tier.count = 1;
+    tier.align = 0;  // left, the fixture's measured middle alignment
+    tier.format = 13;
+    if (period == Period::day) {
+        tier.unit = TimescaleUnit::weeks;
+    } else if (period == Period::week) {
+        tier.unit = TimescaleUnit::months;
+    } else {
+        tier.unit = TimescaleUnit::none;
+        tier.format = 35;
+    }
+    return tier;
+}
+
 // round(work * percent / 100) with half-up rounding, so 0 % is exactly zero
 // and 100 % is exactly the work total.
 std::int64_t scaled_actual(std::int64_t work, int percent) noexcept {
@@ -273,7 +308,8 @@ UsageGridRow parent_row(UsageGridRowKind kind, std::uint32_t uid,
 }  // namespace
 
 UsageGrid make_usage_grid(const PlanInput& input, const app::UsageViewStyle& style,
-                          bool resource, const core::sched::Calendar& calendar) {
+                          bool resource, const core::sched::Calendar& calendar,
+                          core::usage::Period fallback_period) {
     UsageGrid grid;
     grid.resource = resource;
     grid.stored_style = style.decoded;
@@ -296,6 +332,8 @@ UsageGrid make_usage_grid(const PlanInput& input, const app::UsageViewStyle& sty
         grid.warnings = style.stored.warnings;
         grid.periods_per_column =
             style.stored.minor.count > 0 ? style.stored.minor.count : 1;
+        grid.major_tier = style.stored.major;
+        grid.minor_tier = style.stored.minor;
         switch (style.stored.minor.unit) {
             case msproject::viewstate::TimescaleUnit::days:
                 grid.period = Period::day;
@@ -314,14 +352,37 @@ UsageGrid make_usage_grid(const PlanInput& input, const app::UsageViewStyle& sty
                     "; this wave draws days");
                 grid.period = Period::day;
                 grid.periods_per_column = 1;
+                grid.minor_tier = tier_for_period(Period::day);
                 break;
         }
+        // The top tier renders the measured week-date and month shapes; a
+        // tierless view draws no top labels, and a unit this wave cannot draw
+        // falls back to weeks with a warning.
+        if (grid.major_tier.unit != msproject::viewstate::TimescaleUnit::weeks &&
+            grid.major_tier.unit != msproject::viewstate::TimescaleUnit::months &&
+            grid.major_tier.unit != msproject::viewstate::TimescaleUnit::none) {
+            grid.warnings.push_back(
+                std::string("the stored top timescale unit is ") +
+                msproject::viewstate::timescale_unit_name(grid.major_tier.unit) +
+                "; this wave draws weeks");
+            grid.major_tier = default_major_for(grid.period);
+        }
     } else {
-        // The brief's default: Work, day columns.
+        // The brief's default: Work, and the shell's Day/Week/Month choice.
         UsageGridDetail work;
         work.kind = UsageDetailKind::work;
         work.label = detail_label(UsageDetailKind::work);
         grid.details.push_back(std::move(work));
+        grid.period = fallback_period;
+        grid.periods_per_column = 1;
+        grid.minor_tier = tier_for_period(fallback_period);
+        grid.major_tier = default_major_for(fallback_period);
+    }
+    if (grid.minor_tier.count <= 0) {
+        grid.minor_tier.count = 1;
+    }
+    if (grid.major_tier.count <= 0) {
+        grid.major_tier.count = 1;
     }
 
     const core::usage::UsageProjection projection = core::usage::project_usage(
@@ -343,6 +404,8 @@ UsageGrid make_usage_grid(const PlanInput& input, const app::UsageViewStyle& sty
                 kind, resource_row.uid,
                 resource_label_for(input, resource_row.uid), grid);
             parent.parent_index = parent_index;
+            parent.display_id = resource_row.id;
+            parent.numbered = true;
             grid.rows.push_back(std::move(parent));
             for (std::size_t index = 0; index < input.assignments.size();
                  ++index) {
@@ -365,6 +428,8 @@ UsageGrid make_usage_grid(const PlanInput& input, const app::UsageViewStyle& sty
             UsageGridRow parent = parent_row(UsageGridRowKind::task, 0,
                                              project.name, grid);
             parent.parent_index = parent_index;
+            parent.display_id = project.id;
+            parent.numbered = true;
             grid.rows.push_back(std::move(parent));
             for (std::size_t index = 0; index < input.assignments.size();
                  ++index) {
@@ -388,6 +453,8 @@ UsageGrid make_usage_grid(const PlanInput& input, const app::UsageViewStyle& sty
                                              task_label_for(input, task.uid),
                                              grid);
             parent.parent_index = parent_index;
+            parent.display_id = task.id;
+            parent.numbered = true;
             grid.rows.push_back(std::move(parent));
             for (std::size_t index = 0; index < input.assignments.size();
                  ++index) {

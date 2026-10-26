@@ -221,6 +221,18 @@ void test_task_usage(const app::PlanInput& plan,
     check(grid.period == core::usage::Period::day,
           "task usage: day columns");
     check_i64(grid.periods_per_column, 1, "task usage: one day per column");
+    // W31-4.4: the stored MIDDLE tier is the rendered TOP row and the stored
+    // BOTTOM tier the rendered bottom row (core/viewstate/usage_style.h).
+    check(grid.major_tier.unit ==
+                  msproject::viewstate::TimescaleUnit::weeks &&
+              grid.major_tier.count == 1 && grid.major_tier.format == 13 &&
+              grid.major_tier.align == 0,
+          "task usage: weeks/format 13/left renders as the top tier");
+    check(grid.minor_tier.unit ==
+                  msproject::viewstate::TimescaleUnit::days &&
+              grid.minor_tier.count == 1 && grid.minor_tier.format == 20 &&
+              grid.minor_tier.align == 1,
+          "task usage: days/format 20/centre renders as the bottom tier");
     check(grid.periods.size() == 5, "task usage: five daily columns");
     if (grid.periods.size() == 5) {
         const core::sched::CivilDate first =
@@ -261,6 +273,18 @@ void test_task_usage(const app::PlanInput& plan,
                "task usage: the third parent is the third task");
     check_text(grid.rows[9].label, "Total", "task usage: the Total row label");
 
+    // W31-4.4: the frozen gutter numbers the parent rows with their stored ID
+    // and leaves every assignment row (and the port's Total row) blank.
+    const std::array<std::size_t, 3> parent_indices = {0, 3, 6};
+    for (std::size_t index = 0; index < parent_indices.size(); ++index) {
+        const app::UsageGridRow& row = grid.rows[parent_indices[index]];
+        check(row.numbered && row.display_id != 0,
+              "task usage: a parent row is numbered");
+        check(row.display_id == plan.tasks[index].id,
+              "task usage: the parent's gutter number is its stored task ID");
+    }
+    check(!grid.rows[9].numbered, "task usage: the Total row leaves the gutter blank");
+
     // Children hang off their parent and carry the RESOURCE name.  The uids are
     // the file's assignment-row uids (the reader's uid); Project's COM
     // Assignment.UniqueID values in the measures file are session ids, so the
@@ -268,6 +292,10 @@ void test_task_usage(const app::PlanInput& plan,
     const std::array<std::size_t, 6> parents = {0, 0, 3, 3, 6, 6};
     const std::array<std::size_t, 6> row_indices = {1, 2, 4, 5, 7, 8};
     const std::array<std::uint32_t, 6> assignment_uids = {4, 5, 6, 7, 8, 9};
+    for (std::size_t index = 0; index < row_indices.size(); ++index) {
+        check(!grid.rows[row_indices[index]].numbered,
+              "task usage: an assignment row leaves the gutter blank");
+    }
     for (std::size_t index = 0; index < assignment_uids.size(); ++index) {
         const app::UsageGridRow& row = grid.rows[row_indices[index]];
         check(row.child, "task usage: an assignment row is a child row");
@@ -363,6 +391,14 @@ void test_resource_usage(const app::PlanInput& plan,
         check_text(grid.details[1].label, "Cost", "resource usage: Cost label");
         check(grid.details[1].cost, "resource usage: Cost is a money detail");
     }
+    check(grid.major_tier.unit ==
+                  msproject::viewstate::TimescaleUnit::weeks &&
+              grid.major_tier.format == 13,
+          "resource usage: the same stored top tier (weeks, format 13)");
+    check(grid.minor_tier.unit ==
+                  msproject::viewstate::TimescaleUnit::days &&
+              grid.minor_tier.format == 20,
+          "resource usage: the same stored bottom tier (days, format 20)");
     check(grid.periods.size() == 5, "resource usage: five daily columns");
 
     check(grid.rows.size() == 10, "resource usage: nine logical rows plus Total");
@@ -385,6 +421,12 @@ void test_resource_usage(const app::PlanInput& plan,
                "resource usage: the second parent is the second resource");
     check_text(grid.rows[6].label, plan.resources[2].name,
                "resource usage: the third parent is the third resource");
+    const std::array<std::size_t, 3> parent_rows_check = {0, 4, 6};
+    for (std::size_t index = 0; index < parent_rows_check.size(); ++index) {
+        const app::UsageGridRow& row = grid.rows[parent_rows_check[index]];
+        check(row.numbered && row.display_id == plan.resources[index].id,
+              "resource usage: the parent's gutter number is its resource ID");
+    }
 
     // Children hang off their resource and carry the TASK name, in the measured
     // row order: Crew A's three assignments, then Crew B's one, then Crew C's
@@ -392,6 +434,10 @@ void test_resource_usage(const app::PlanInput& plan,
     const std::array<std::size_t, 6> parents = {0, 0, 0, 4, 6, 6};
     const std::array<std::size_t, 6> row_indices = {1, 2, 3, 5, 7, 8};
     const std::array<std::uint32_t, 6> assignment_uids = {4, 6, 8, 5, 7, 9};
+    for (std::size_t index = 0; index < row_indices.size(); ++index) {
+        check(!grid.rows[row_indices[index]].numbered,
+              "resource usage: an assignment row leaves the gutter blank");
+    }
     for (std::size_t index = 0; index < assignment_uids.size(); ++index) {
         const app::UsageGridRow& row = grid.rows[row_indices[index]];
         check(row.child, "resource usage: an assignment row is a child row");
@@ -480,6 +526,35 @@ void test_fallbacks(const app::PlanInput& fixture_plan,
     check(plain.warnings.empty(), "default: no warnings");
     check(plain.period == core::usage::Period::day && plain.periods.size() == 5,
           "default: the five measured days");
+    // W31-4.4's default tiers: weeks over days, the measured pair.
+    check(plain.major_tier.unit == msproject::viewstate::TimescaleUnit::weeks &&
+              plain.major_tier.format == 13 && plain.major_tier.align == 0 &&
+              plain.major_tier.count == 1,
+          "default: weeks/format 13/left is the top tier");
+    check(plain.minor_tier.unit == msproject::viewstate::TimescaleUnit::days &&
+              plain.minor_tier.format == 20 && plain.minor_tier.align == 1 &&
+              plain.minor_tier.count == 1,
+          "default: days/format 20/centre is the bottom tier");
+    // The shell's Day/Week/Month choice applies only when nothing is stored.
+    const app::UsageGrid weekly = app::make_usage_grid(
+        fixture_plan, none, false, fixture_calendar, core::usage::Period::week);
+    check(weekly.period == core::usage::Period::week &&
+              weekly.minor_tier.unit ==
+                  msproject::viewstate::TimescaleUnit::weeks &&
+              weekly.minor_tier.format == 13,
+          "default: a Week choice draws weeks");
+    check(weekly.major_tier.unit ==
+                  msproject::viewstate::TimescaleUnit::months &&
+              weekly.major_tier.format == 13,
+          "default: weeks draw under a months top tier");
+    const app::UsageGrid monthly = app::make_usage_grid(
+        fixture_plan, none, false, fixture_calendar, core::usage::Period::month);
+    check(monthly.period == core::usage::Period::month &&
+              monthly.minor_tier.unit ==
+                  msproject::viewstate::TimescaleUnit::months &&
+              monthly.major_tier.unit ==
+                  msproject::viewstate::TimescaleUnit::none,
+          "default: month columns draw no top tier");
     check(plain.rows.size() == 10, "default: the same logical rows");
     if (plain.rows.size() == 10) {
         check_values(plain.rows[0].values[0], {960, 960, 960, 960, 960},

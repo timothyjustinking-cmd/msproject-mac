@@ -93,6 +93,12 @@ struct UsageGridRow {
     std::size_t parent_index = 0;  // assignment: index of its parent row;
                                    // otherwise the row's own index
     bool child = false;            // an assignment sub-row (indent 1)
+    // The frozen gutter's number.  Measured on the wave-31 captures: Project's
+    // usage sheets number the parent task/resource rows with their stored ID
+    // (1, 2, 3) and leave every assignment row's gutter blank.  The port's
+    // Total row (an affordance Project has no counterpart for) is blank too.
+    std::uint32_t display_id = 0;  // Task.ID / Resource.ID for a parent row
+    bool numbered = false;         // parents true; assignments and Total false
     std::string label;
     // values[detail][period], totals[detail]; both sized from the grid's
     // details.  Work/Actual Work are minutes, Cost is cents.
@@ -106,6 +112,14 @@ struct UsageGrid {
     // The column granularity and the stored count (1 for the default).
     core::usage::Period period = core::usage::Period::day;
     int periods_per_column = 1;
+    // The rendered header tiers: the stored MIDDLE tier is the TOP row and the
+    // stored BOTTOM tier the bottom row (core/viewstate/usage_style.h).  The
+    // wave-31 fixture stores weeks/days with formats 13/20 and alignments
+    // left/centre; W31-4.4 renders exactly those shapes.  An undecoded file
+    // gets weeks over the fallback period, and a stored unit this wave cannot
+    // draw is replaced (with a warning in `warnings`).
+    msproject::viewstate::TimescaleTier major_tier;
+    msproject::viewstate::TimescaleTier minor_tier;
     std::vector<core::usage::PeriodSpan> periods;
     std::vector<UsageGridDetail> details;
     std::vector<UsageGridRow> rows;  // parents+children, then the Total row
@@ -116,11 +130,15 @@ struct UsageGrid {
 
 // Build the grid from `input` with the view's stored presentation.  `style`
 // may be default-constructed (undecoded): the grid then shows the Work detail
-// over day columns, the brief's default.  `calendar` phases Work (the fixture
-// uses the standard week; the shell may pass the file's own calendar).
+// over `fallback_period` columns (day unless the shell passes its Day/Week/Month
+// choice), the brief's default.  A DECODED style's own bottom tier wins over
+// `fallback_period` -- the file's stored timescale is the fidelity target.
+// `calendar` phases Work (the fixture uses the standard week; the shell may
+// pass the file's own calendar).
 [[nodiscard]] UsageGrid make_usage_grid(
     const PlanInput& input, const app::UsageViewStyle& style, bool resource,
-    const core::sched::Calendar& calendar);
+    const core::sched::Calendar& calendar,
+    core::usage::Period fallback_period = core::usage::Period::day);
 
 }  // namespace app
 

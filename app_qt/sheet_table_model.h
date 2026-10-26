@@ -130,6 +130,26 @@ class SheetTableModel final : public QAbstractTableModel {
         }
     }
 
+    // Wave 31 (W31-4.4): per-cell value kinds for a presentation whose rows mix
+    // kinds inside one column -- the usage sheets' period columns hold Work
+    // durations on one detail sub-row and Cost on another.  The lookup takes a
+    // DISPLAY row and display column; Auto defers to the sheet's own kind
+    // resolution.  The shell points this at its live UsageSheet; nullptr keeps
+    // the stock path.
+    using ValueKindLookup =
+        std::function<core::sheet::CellKind(int display_row, int display_column)>;
+    void set_value_kind_lookup(ValueKindLookup lookup);
+
+    // Wave 31 (W31-4.4): the frozen gutter's text per display row, for a
+    // presentation that numbers only SOME rows (Project's usage sheets number
+    // the parent rows with their stored ID and leave every assignment blank).
+    // While set, row_number_text() returns exactly this list's entry, and ""
+    // means a BLANK gutter cell -- never the display ordinal.  set_sheet()
+    // clears it.
+    void set_row_numbers(std::vector<QString> numbers);
+    void clear_row_numbers();
+    bool custom_row_numbers() const noexcept { return custom_row_numbers_; }
+
     // Wave 31 (W31-3.6): the generic presentation's Indicators column (the
     // display ordinal), or -1 when the sheet has no such column.  A resource
     // sheet stores Resource.Indicators; the header paints its (i) badge there.
@@ -190,6 +210,9 @@ class SheetTableModel final : public QAbstractTableModel {
     std::vector<DisplayColumn> display_columns_;
     bool filter_active_ = false;
     std::vector<std::size_t> display_rows_;
+    ValueKindLookup value_kind_lookup_;
+    std::vector<QString> row_numbers_;
+    bool custom_row_numbers_ = false;
     CommitHandler commit_handler_;
 };
 

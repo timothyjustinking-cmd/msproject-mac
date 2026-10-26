@@ -65,6 +65,7 @@ add_library(qt_shell STATIC
     ribbon_bar.cpp
     ribbon_glyphs.cpp
     sheet_views.cpp
+    usage_sheet.cpp
     task_form.cpp
     task_inspector.cpp
     resource_form.cpp
@@ -261,6 +262,25 @@ add_test(NAME qt_resource_sheet_gate
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_resource_sheet_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/wave31-resource-sheet.mpp")
+
+# ===========================================================================
+# WAVE 31 (G4, W31-4.4): Task Usage / Resource Usage at Gantt fidelity.  The
+# gate loads the synthetic resource-loaded fixture, opens both usage views in
+# the real MainWindow and pins the measured presentation (21 px detail
+# sub-rows, 147/123 px labels, 48 px Details, 64/84/105 px periods, the stored
+# Details captions, the two-tier timescale and the parent-only gutter numbers)
+# and the per-period numbers against Project's COM TimeScaleData facts
+# (tests/data/reference/wave31-usage.measures.json).
+# ===========================================================================
+add_executable(qt_usage_gate_tests tests/usage_gate_test.cpp)
+target_link_libraries(qt_usage_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_usage_gate_tests)
+
+add_test(NAME qt_usage_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_usage_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave31-usage.mpp"
+                 "${QT_REPO_ROOT}/tests/data/reference/wave31-usage.measures.json")
 
 # Each dialog (Preferences, Table/Date Format, Custom Formula, Task Fields,
 # Predecessors, Filter): fixed size, margin/spacing contract, measured control

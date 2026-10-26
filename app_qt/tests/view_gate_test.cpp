@@ -6,13 +6,18 @@
 // visible in a grid view could ship.  This test loads the committed fixture and
 // asserts, from the live widget tree:
 //
-//   * the frozen 60 px gutter, the 42 px caption band and the 22 px row pitch;
+//   * the frozen 60 px gutter, the 42 px caption band, the 22 px row pitch of
+//     the task and Resource Sheets (the usage sheets draw Project's 21 px
+//     detail sub-rows, W31-4.4);
 //   * the Resource Sheet's six-column set and its measured pixel widths (W31-3.6:
 //     Project's chars * font unit + 3 rule, the stock 6 px unit when the file
 //     stores no Resource Sheet view);
-//   * Task Usage's Label column, its day-period columns and the Total column,
-//     and that Day/Week/Month switch the period column width (98/126/84 px);
-//   * Resource Usage's "Resource Name" label column;
+//   * Task Usage's 147 px label, 48 px Details column, 64 px day-period columns
+//     and 84 px port Total column, and that Day/Week/Month re-phase the grid at
+//     the measured 64 px period width (this fixture stores no usage view, so the
+//     shell's own fallback presentation applies -- the stored presentation is
+//     gated by qt_usage_gate on wave31-usage.mpp);
+//   * Resource Usage's 123 px "Resource Name" label column;
 //   * the Gantt/chart pane is hidden in every grid view.
 #include <QAbstractItemModel>
 #include <QApplication>
@@ -42,7 +47,7 @@ QString title_of(QAbstractItemModel* model, int column) {
     return model->headerData(column, Qt::Horizontal, Qt::DisplayRole).toString();
 }
 
-void check_view_chrome(msqt::MainWindow& window, const char* what) {
+void check_view_chrome(msqt::MainWindow& window, const char* what, int row_pitch) {
     QTableView* sheet = window.sheet_view();
     gate::check(sheet != nullptr, "the view owns a sheet view");
     if (sheet == nullptr) {
@@ -54,8 +59,8 @@ void check_view_chrome(msqt::MainWindow& window, const char* what) {
         gate::check(msqt::kViewLabelWidth + sheet->verticalHeader()->width() ==
                         msqt::kGutterWidth,
                     "the gutter is 60 px in every view (caption + numbers)");
-        gate::check(sheet->verticalHeader()->defaultSectionSize() == msqt::kRowHeight,
-                    "the row pitch is 22 px in every view");
+        gate::check(sheet->verticalHeader()->defaultSectionSize() == row_pitch,
+                    "the row pitch is the view's measured pitch");
     }
     gate::check(sheet->horizontalHeader() != nullptr && sheet->horizontalHeader()->isVisible(),
                 "the caption band exists in every view");
@@ -122,7 +127,7 @@ int main(int argc, char** argv) {
     }
     gate::check(window.view_mode() == app::ViewMode::resource_sheet,
                 "the Resource Sheet action switches the view");
-    check_view_chrome(window, "resource sheet");
+    check_view_chrome(window, "resource sheet", msqt::kRowHeight);
     QAbstractItemModel* resource_model = window.sheet_view()->model();
     gate::check(title_of(resource_model, 0) == QStringLiteral("ID"),
                 "Resource Sheet column 1 is ID");
@@ -148,37 +153,44 @@ int main(int argc, char** argv) {
     }
     gate::check(window.view_mode() == app::ViewMode::task_usage,
                 "the Task Usage action switches the view");
-    check_view_chrome(window, "task usage");
+    check_view_chrome(window, "task usage", msqt::kUsageRowHeight);
     QAbstractItemModel* usage = window.sheet_view()->model();
-    gate::check(usage != nullptr && usage->columnCount() >= 2,
-                "Task Usage has a label and a Total column at least");
+    gate::check(usage != nullptr && usage->columnCount() >= 3,
+                "Task Usage has a label, Details and a Total column at least");
     if (usage != nullptr) {
         gate::check(title_of(usage, 0) == QStringLiteral("Task Name"),
                     "Task Usage's first column is Task Name");
+        gate::check(title_of(usage, 1) == QStringLiteral("Details"),
+                    "Task Usage's second column is Details");
         const int last = usage->columnCount() - 1;
         gate::check(title_of(usage, last) == QStringLiteral("Total"),
                     "Task Usage's last column is Total");
-        for (int column = 1; column < last; ++column) {
+        for (int column = 2; column < last; ++column) {
             gate::check(!title_of(usage, column).isEmpty(),
-                        "every Task Usage period column has a date label");
-            gate::check(window.sheet_view()->columnWidth(column) == 98,
-                        "a day period column is 14 chars * 7 = 98 px");
+                        "every Task Usage period column has a day label");
+            gate::check(window.sheet_view()->columnWidth(column) == 64,
+                        "a fallback day period column is the measured 64 px");
         }
     }
-    gate::check(window.sheet_view()->columnWidth(0) == 210,
-                "the usage label column is 30 chars * 7 = 210 px");
+    gate::check(window.sheet_view()->columnWidth(0) == 147,
+                "the usage label column is the measured 147 px");
+    gate::check(usage != nullptr && window.sheet_view()->columnWidth(1) == 48,
+                "the Details column is the measured 48 px");
     gate::check(usage != nullptr &&
                     window.sheet_view()->columnWidth(usage->columnCount() - 1) == 84,
-                "the usage Total column is 12 chars * 7 = 84 px");
+                "the usage Total column keeps the port's 84 px");
 
     // --- the period switch -------------------------------------------------
     if (QAction* week = action(window, app::MenuAction::usage_week); week != nullptr) {
         week->trigger();
         QApplication::processEvents();
         QAbstractItemModel* week_model = window.sheet_view()->model();
-        if (week_model != nullptr && week_model->columnCount() > 2) {
-            gate::check(window.sheet_view()->columnWidth(1) == 126,
-                        "a week period column is 18 chars * 7 = 126 px");
+        if (week_model != nullptr && week_model->columnCount() > 3) {
+            gate::check(window.sheet_view()->columnWidth(0) == 147 &&
+                            window.sheet_view()->columnWidth(1) == 48,
+                        "the week grid keeps the measured label/Details widths");
+            gate::check(window.sheet_view()->columnWidth(2) == 64,
+                        "a fallback week period column keeps the 64 px minimum");
             gate::check(title_of(week_model, week_model->columnCount() - 1) ==
                             QStringLiteral("Total"),
                         "the week grid still ends with Total");
@@ -188,9 +200,9 @@ int main(int argc, char** argv) {
         month->trigger();
         QApplication::processEvents();
         if (window.sheet_view()->model() != nullptr &&
-            window.sheet_view()->model()->columnCount() > 2) {
-            gate::check(window.sheet_view()->columnWidth(1) == 84,
-                        "a month period column is 12 chars * 7 = 84 px");
+            window.sheet_view()->model()->columnCount() > 3) {
+            gate::check(window.sheet_view()->columnWidth(2) == 64,
+                        "a fallback month period column keeps the 64 px minimum");
         }
     }
 
@@ -202,7 +214,7 @@ int main(int argc, char** argv) {
     }
     gate::check(window.view_mode() == app::ViewMode::resource_usage,
                 "the Resource Usage action switches the view");
-    check_view_chrome(window, "resource usage");
+    check_view_chrome(window, "resource usage", msqt::kUsageRowHeight);
     QAbstractItemModel* resource_usage_model = window.sheet_view()->model();
     gate::check(resource_usage_model != nullptr &&
                     title_of(resource_usage_model, 0) == QStringLiteral("Resource Name"),
@@ -211,6 +223,17 @@ int main(int argc, char** argv) {
                     title_of(resource_usage_model, resource_usage_model->columnCount() - 1) ==
                         QStringLiteral("Total"),
                 "Resource Usage ends with Total");
+    if (resource_usage_model != nullptr) {
+        gate::check(window.sheet_view()->columnWidth(0) == 123,
+                    "Resource Usage's label column is the measured 123 px");
+        gate::check(window.sheet_view()->columnWidth(1) == 48,
+                    "Resource Usage's Details column is the measured 48 px");
+        for (int column = 2; column < resource_usage_model->columnCount() - 1;
+             ++column) {
+            gate::check(window.sheet_view()->columnWidth(column) == 64,
+                        "Resource Usage's fallback period column is 64 px");
+        }
+    }
 
     // --- back to the Task Sheet (the chart must come back) ------------------
     if (QAction* task_sheet = action(window, app::MenuAction::view_task_sheet);

@@ -73,6 +73,7 @@ class Backstage;
 class PreferencesStore;
 class RibbonBar;
 class TimelineStrip;
+class UsageSheet;
 class ViewLabel;
 
 // The process's one resolved UI font family (see shell_style.h).  Used by the
@@ -627,6 +628,12 @@ class MainWindow final : public QMainWindow {
     // for the SheetModel's reference.
     core::view::RecordSet view_records_;
     std::unique_ptr<core::sheet::SheetModel> view_sheet_;
+    // Wave 31 (W31-4.4): the usage views' logical-to-physical rows, columns,
+    // measured widths, label spans, gutter numbers and two-tier captions
+    // (app_qt/usage_sheet.h).  Null in every other view; the adapter's
+    // value-kind lookup reads it through this member, so it must stay alive
+    // exactly as long as the sheet model that shows its data.
+    std::unique_ptr<UsageSheet> usage_sheet_;
 };
 
 }  // namespace msqt

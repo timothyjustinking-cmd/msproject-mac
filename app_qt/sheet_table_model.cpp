@@ -87,6 +87,8 @@ void SheetTableModel::set_sheet(core::sheet::SheetModel* model) {
     sheet_ = model;
     display_rows_.clear();
     filter_active_ = false;
+    row_numbers_.clear();
+    custom_row_numbers_ = false;
     endResetModel();
 }
 
@@ -113,6 +115,33 @@ void SheetTableModel::set_display_rows(std::vector<std::size_t> rows, bool activ
 
 void SheetTableModel::set_commit_handler(CommitHandler handler) {
     commit_handler_ = std::move(handler);
+}
+
+void SheetTableModel::set_value_kind_lookup(ValueKindLookup lookup) {
+    value_kind_lookup_ = std::move(lookup);
+    if (rowCount() > 0 && columnCount() > 0) {
+        emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1),
+                         {Qt::DisplayRole});
+    }
+}
+
+void SheetTableModel::set_row_numbers(std::vector<QString> numbers) {
+    row_numbers_ = std::move(numbers);
+    custom_row_numbers_ = true;
+    if (rowCount() > 0) {
+        emit headerDataChanged(Qt::Vertical, 0, rowCount() - 1);
+    }
+}
+
+void SheetTableModel::clear_row_numbers() {
+    if (!custom_row_numbers_) {
+        return;
+    }
+    row_numbers_.clear();
+    custom_row_numbers_ = false;
+    if (rowCount() > 0) {
+        emit headerDataChanged(Qt::Vertical, 0, rowCount() - 1);
+    }
 }
 
 std::size_t SheetTableModel::record_row(int display_row) const {
@@ -143,6 +172,13 @@ std::size_t SheetTableModel::visible_column_for_field(core::view::FieldId field)
 }
 
 QString SheetTableModel::row_number_text(int display_row) const {
+    if (custom_row_numbers_) {
+        if (display_row < 0 ||
+            static_cast<std::size_t>(display_row) >= row_numbers_.size()) {
+            return {};
+        }
+        return row_numbers_[static_cast<std::size_t>(display_row)];
+    }
     if (sheet_ == nullptr || display_row < 0) {
         return {};
     }
@@ -270,6 +306,29 @@ QVariant SheetTableModel::data(const QModelIndex& index, int role) const {
     switch (role) {
         case Qt::DisplayRole:
         case Qt::EditRole:
+            // Wave 31 (W31-4.4): an explicit per-cell kind (the usage sheets'
+            // Work/Cost detail sub-rows) formats the value as that kind.  A
+            // Duration cell keeps the app's duration-style preference through
+            // app::cell_text; Cost renders through the sheet's own format so
+            // the "$" symbol, grouping and two decimals stay one
+            // implementation.
+            if (value_kind_lookup_ != nullptr) {
+                const core::sheet::CellKind kind =
+                    value_kind_lookup_(index.row(), index.column());
+                if (kind != core::sheet::CellKind::Auto) {
+                    if (kind == core::sheet::CellKind::Duration &&
+                        preferences_ != nullptr) {
+                        return QString::fromStdString(
+                            app::cell_text(*sheet_, row, column, *preferences_));
+                    }
+                    const core::view::Value* cell = sheet_->cell_value(row, column);
+                    if (cell == nullptr || cell->is_null()) {
+                        return {};
+                    }
+                    return QString::fromStdString(
+                        sheet_->format_value_as(*cell, kind));
+                }
+            }
             // The one formatter: SheetModel formats the value exactly once
             // (core/sheet/sheet.h), so the sheet and the Gantt label agree.  The
             // duration-style preference is applied by app::cell_text on top of
