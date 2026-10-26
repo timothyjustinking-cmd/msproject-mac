@@ -50,6 +50,8 @@ CONTROLS = [
     "wave30-insert-milestone-control.mpp",
     "wave30-inactivate-control.mpp",
     "wave30-inactivate-second-control.mpp",
+    "wave30-respect-links-auto-control.mpp",
+    "wave30-respect-links-manual-control.mpp",
 ]
 
 
