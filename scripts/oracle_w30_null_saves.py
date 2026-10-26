@@ -48,6 +48,8 @@ CONTROLS = [
     "wave30-task-mode-manual-control.mpp",
     "wave30-insert-summary-control.mpp",
     "wave30-insert-milestone-control.mpp",
+    "wave30-inactivate-control.mpp",
+    "wave30-inactivate-second-control.mpp",
 ]
 
 
