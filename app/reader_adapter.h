@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <exception>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -97,6 +98,9 @@ inline AssignmentRow assignment_row_from_mpp(const mpp::Assignment& assignment) 
     row.uid = assignment.uid;
     row.task_uid = assignment.task_uid;
     row.resource_uid = assignment.resource_uid();  // 0 when the row has no resource
+    // W30-C5: keep the raw +8 word; 0 and 0xFFFF0001 both read as "no
+    // resource" but only the sentinel is the measured placeholder.
+    row.resource_uid_raw = assignment.resource_uid_raw;
     row.work_ticks = static_cast<std::int64_t>(assignment.work_ticks());
     row.units_percent = assignment.units();
     row.start = date32_from_packed(assignment.start.raw);
@@ -162,8 +166,26 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     input.status_date_stored = document.project.status_date_stored;
 
     input.tasks.reserve(document.tasks.size());
+    // W30-C5 (R29-8): the shape checks count a task's PHYSICAL assignment rows
+    // -- the ones the writers walk, skipped tombstones included -- while
+    // PlanInput carries only the live rows.  Count both here, then attach the
+    // count to the task row so the edit model can refuse a save the writers
+    // would fail on before any edit is staged.
+    std::unordered_map<std::uint32_t, std::size_t> physical_assignments;
+    for (const mpp::Assignment& assignment : document.assignments) {
+        ++physical_assignments[assignment.task_uid];
+    }
+    for (const mpp::SkippedRow& skipped : document.skipped_assignments) {
+        if (skipped.task_uid != 0) {
+            ++physical_assignments[skipped.task_uid];
+        }
+    }
     for (const mpp::Task& task : document.tasks) {
-        input.tasks.push_back(task_row_from_mpp(task));
+        TaskRow row = task_row_from_mpp(task);
+        const auto physical = physical_assignments.find(task.uid);
+        row.assignment_rows =
+            physical == physical_assignments.end() ? 0 : physical->second;
+        input.tasks.push_back(std::move(row));
     }
     // Wave 23 (B-1): Project displays tasks in ID order (the ID column is the
     // row order), while the file stores them in FixedData/creation order -- on
@@ -181,6 +203,10 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     for (const mpp::Link& link : document.links) {
         if (!link.predecessor_known || !link.successor_known) {
             ++input.skipped_links;
+            // W30-C5 (C3): this count names the links a FILE row still holds;
+            // the edit model refuses shapes it cannot see through it.  A link
+            // a pending edit drops is counted in skipped_links only.
+            ++input.unreadable_links;
             continue;
         }
         LinkRow row;

@@ -2103,6 +2103,55 @@ void check_work_contour_shape() {
           "the zero-work refusal names the missing work");
 }
 
+/* W30-C5 (C3, High): the W30-2.3 save keeps the deleted real assignment as a
+ * tombstone and appends a live placeholder, so task 1 has three PHYSICAL
+ * TBkndAssn rows but one live row in the plan.  The plan must expose the
+ * physical count (reader_adapter) and the edit model must refuse a percent edit
+ * up front: the actuals writer walks every physical row naming the task and
+ * throws "more than one TBkndAssn row" at save. */
+void check_assign_delete_shape() {
+    std::printf("-- assign-delete fixture (refused shape):\n");
+    const std::filesystem::path path =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave30-assign-delete.mpp";
+    if (!std::filesystem::exists(path)) {
+        std::printf("SKIP: the assign-delete fixture is not present\n");
+        return;
+    }
+    app::PlanInput plan;
+    try {
+        plan = app::plan_input_from_document(mpp::load_file(path.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the assign-delete fixture loads through the reader");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        return;
+    }
+    const app::TaskRow* task = nullptr;
+    for (const app::TaskRow& row : plan.tasks) {
+        if (row.uid == 1) {
+            task = &row;
+        }
+    }
+    check(task != nullptr, "the assign-delete fixture has task uid 1");
+    if (task != nullptr) {
+        check_size(task->assignment_rows, 3,
+                   "task 1 has three PHYSICAL assignment rows (two live plus "
+                   "one tombstone)");
+    }
+    std::size_t live = 0;
+    for (const app::AssignmentRow& assignment : plan.assignments) {
+        if (assignment.task_uid == 1) {
+            ++live;
+        }
+    }
+    check_size(live, 1, "task 1 has one live assignment row in the plan");
+    app::StructuralEdit edit;
+    std::string error;
+    check(!app::make_percent_edit(plan, 1, 40, edit, error),
+          "a percent edit on the tombstoned task is refused up front");
+    check(error.find("physical") != std::string::npos,
+          "the refusal names the physical assignment rows");
+}
+
 } /* namespace */
 
 int main() {
@@ -2117,6 +2166,7 @@ int main() {
     check_zero_update_noop();
     check_summary_rollup_scope();
     check_work_contour_shape();
+    check_assign_delete_shape();
     std::printf("app_edits_actuals_tests: %d checks passed, %d expected failure(s)\n",
                 g_checks - g_failures, g_expected_failures);
     if (g_failures != 0) {

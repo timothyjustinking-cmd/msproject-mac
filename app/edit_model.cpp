@@ -165,8 +165,18 @@ bool has_work_resource_assignment(const PlanInput& plan, std::uint32_t uid) {
 //     two-record contour was measured.
 struct ActualsAssignmentShape {
     std::size_t rows = 0;
+    // W30-C5 (C3): the PHYSICAL TBkndAssn rows whose +4 word names the task
+    // (tombstones and rows without a FixedMeta entry included), when the plan
+    // was loaded from a file; `physical_known` is false for a hand-built plan.
+    std::size_t physical_rows = 0;
+    bool physical_known = false;
     bool real = false;         // names a resource other than the placeholder
     bool work_bearing = false; // real AND carries work (the W29-0.2 shape)
+    // W30-C5: a live row's +8 word is 0, not Project's 0xFFFF0001 placeholder.
+    // resource_uid() collapses both to "no resource"; only the sentinel is the
+    // word the actuals placeholder rule and the indent tombstone were measured
+    // on (outline.cpp refuses a raw 0 outright).
+    bool raw_zero = false;
 };
 
 ActualsAssignmentShape actuals_assignment_shape(const PlanInput& plan,
@@ -177,12 +187,28 @@ ActualsAssignmentShape actuals_assignment_shape(const PlanInput& plan,
             continue;
         }
         ++shape.rows;
+        if (assignment.resource_uid_raw == 0) {
+            shape.raw_zero = true;
+        }
         if (assignment.resource_uid != 0) {
             shape.real = true;
             if (assignment.work_ticks > 0) {
                 shape.work_bearing = true;
             }
         }
+    }
+    // W30-C5 (C3, High): the writers count PHYSICAL assignment rows -- the
+    // actuals writer's TBkndAssn loop (actuals.cpp:1527-1535) and the indent's
+    // assn_rows_for_task (outline.cpp:561-571) both walk every FixedData row
+    // naming the task, tombstones included -- while PlanInput holds only the
+    // live rows the reader exposes.  A file whose deleted assignment is a
+    // tombstone plus a live placeholder (tests/data/wave30-assign-delete.mpp)
+    // therefore looks like the measured one-row shape to the model and fails at
+    // save.  The adapter records the physical count on the task row.
+    const TaskRow* row = task_row_for_uid(plan.tasks, uid);
+    if (row != nullptr && row->assignment_rows != kAssignmentRowsUnknown) {
+        shape.physical_rows = row->assignment_rows;
+        shape.physical_known = true;
     }
     return shape;
 }
@@ -207,12 +233,49 @@ bool check_actuals_save_shape(const PlanInput& plan, std::uint32_t uid,
                               std::string& error) {
     const ActualsAssignmentShape assignment =
         actuals_assignment_shape(plan, uid);
+    // W30-C5 (C3, High): the writer walks the file's PHYSICAL TBkndAssn rows;
+    // a tombstone or an entry-less row naming the task is invisible in
+    // PlanInput, so a live count of one is not the measured shape.
+    if (assignment.physical_known && assignment.physical_rows != assignment.rows) {
+        error = "task uid " + std::to_string(uid) + " has " +
+                std::to_string(assignment.physical_rows) +
+                " physical assignment rows in the file but " +
+                std::to_string(assignment.rows) +
+                " live assignment row(s) in the plan; the actuals writer counts "
+                "every physical row naming the task (tombstones included), and "
+                "the save would fail on this shape";
+        return false;
+    }
     if (assignment.rows != 1) {
         error = "task uid " + std::to_string(uid) + " has " +
                 std::to_string(assignment.rows) +
                 " assignment rows; the actuals writer is measured only on a "
                 "task with Project's one placeholder assignment, and the save "
                 "would fail on this shape";
+        return false;
+    }
+    // W30-C5: resource word 0 also reads as "no resource", but the actuals
+    // writer's placeholder rules were measured only on Project's 0xFFFF0001
+    // word, so a raw-0 row is an unmeasured shape.
+    if (assignment.raw_zero) {
+        error = "task uid " + std::to_string(uid) +
+                "'s assignment carries resource word 0; Project's placeholder "
+                "is 0xFFFF0001 and the actuals writer's placeholder rule is "
+                "measured only on that word, so the save would apply unmeasured "
+                "rules to this row";
+        return false;
+    }
+    // W30-C5 (C3): a link whose endpoint task is not live is dropped from
+    // PlanInput but still counted by the writer's stage_progress_link_flags
+    // (which matches live link rows by successor uid regardless of the
+    // predecessor).  A skipped incoming link into this task cannot be seen, so
+    // the measured one-link shape cannot be proved.  Links a PENDING edit
+    // dropped are excluded: the same save tombstones them.
+    if (plan.unreadable_links != 0) {
+        error = "the plan has " + std::to_string(plan.unreadable_links) +
+                " link(s) whose endpoint task is not live, so the actuals "
+                "writer's link-flag shape cannot be proved for task uid " +
+                std::to_string(uid) + " and the save could fail";
         return false;
     }
     const std::size_t incoming = live_incoming_link_count(plan, uid);
@@ -573,6 +636,22 @@ bool check_new_summary_shape(const PlanInput& plan, std::uint32_t uid,
     // see -- is DELETED by that tombstone (the review's R29-1).  Refuse unless
     // the row carries exactly one assignment row, Project's placeholder.
     const ActualsAssignmentShape assignment = actuals_assignment_shape(plan, uid);
+    // W30-C5 (C3, High): the indent writer counts the file's PHYSICAL
+    // TBkndAssn rows (outline.cpp:561-571, tombstones included) and, unlike
+    // the actuals writer, refuses with a WARNING the save path can drop -- the
+    // edit would simply be absent from the saved file.  A live count of one is
+    // not enough when a tombstoned row names the task.
+    if (assignment.physical_known && assignment.physical_rows != assignment.rows) {
+        error = "task uid " + std::to_string(uid) + " has " +
+                std::to_string(assignment.physical_rows) +
+                " physical assignment rows in the file but " +
+                std::to_string(assignment.rows) +
+                " live assignment row(s) in the plan and would become the "
+                "summary; the indent tombstone is measured only on Project's "
+                "one placeholder row, and the save would refuse or damage an "
+                "assignment";
+        return false;
+    }
     if (assignment.rows != 1) {
         error = "task uid " + std::to_string(uid) + " has " +
                 std::to_string(assignment.rows) +
@@ -587,6 +666,17 @@ bool check_new_summary_shape(const PlanInput& plan, std::uint32_t uid,
                 "placeholder) and would become the summary; the indent "
                 "tombstones that assignment, so the edit would delete it, and "
                 "Project's indent of a real assignment was never measured";
+        return false;
+    }
+    // W30-C5 (C3): `real` tests resource_uid(), which maps raw 0 and
+    // 0xFFFF0001 alike; the outline writer refuses any word other than the
+    // 0xFFFF0001 sentinel, so a raw-0 row would be refused late (and silently
+    // dropped by the save path) unless the model refuses it here.
+    if (assignment.raw_zero) {
+        error = "task uid " + std::to_string(uid) +
+                "'s assignment carries resource word 0 and would become the "
+                "summary; the indent tombstone is measured only on Project's "
+                "0xFFFF0001 placeholder, so the edit would be refused at save";
         return false;
     }
     if (std::find(pending_actuals.begin(), pending_actuals.end(), uid) !=

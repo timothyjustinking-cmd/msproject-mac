@@ -903,6 +903,12 @@ NewTaskMode read_new_task_mode(std::string const& path);
 struct SkippedRow {
     std::uint32_t row = 0;
     std::uint32_t uid = 0;
+    /* W30-C5: for a skipped ASSIGNMENT row, the task UniqueID its +4 word
+     * names (0 for a placeholder row).  The writers count PHYSICAL assignment
+     * rows by task, tombstones included (actuals.cpp throws on >1, outline.cpp
+     * refuses), while PlanInput carries only the live rows; the app counts the
+     * skipped ones through this word so the edit model can refuse up front. */
+    std::uint32_t task_uid = 0;
     std::string reason;
     /* When the slot still has variable blocks but no metadata, the name block
      * in the gap between its neighbours is reported here as evidence. */

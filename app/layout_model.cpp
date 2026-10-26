@@ -444,6 +444,7 @@ PlanInput sync_plan_from_records(const PlanInput& base, const core::view::Record
         }
     }
     input.skipped_links = base.skipped_links;
+    input.unreadable_links = base.unreadable_links;
     return input;
 }
 

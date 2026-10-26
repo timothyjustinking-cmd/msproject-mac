@@ -388,6 +388,46 @@ void test_percent_edit_model() {
         check(error.find("assignment") != std::string::npos,
               "the two-assignment refusal names the assignment table");
 
+        // W30-C5 (C3): the writer counts PHYSICAL TBkndAssn rows, tombstones
+        // included, while the plan carries only live rows.  One live row over a
+        // tombstoned sibling (wave30-assign-delete.mpp's task 1) looks like the
+        // measured shape here and throws at save.
+        app::PlanInput hidden_assignment = make_plan();
+        hidden_assignment.tasks[0].assignment_rows = 2;
+        check(!app::make_percent_edit(hidden_assignment, 1, 40, refused_edit,
+                                      error),
+              "a row with two PHYSICAL assignment rows is refused");
+        check(error.find("physical") != std::string::npos,
+              "the physical-row refusal names the file's physical rows");
+        hidden_assignment.tasks[0].assignment_rows = 1;
+        check(app::make_percent_edit(hidden_assignment, 1, 40, refused_edit,
+                                     error),
+              "one physical row matching the one live row stays accepted");
+
+        // W30-C5: raw resource word 0 reads as "no resource" like Project's
+        // 0xFFFF0001 placeholder, but the placeholder rules were measured only
+        // on the sentinel.
+        app::PlanInput raw_zero = make_plan();
+        for (app::AssignmentRow& assignment : raw_zero.assignments) {
+            if (assignment.task_uid == 1) {
+                assignment.resource_uid_raw = 0;
+            }
+        }
+        check(!app::make_percent_edit(raw_zero, 1, 40, refused_edit, error),
+              "a placeholder with raw resource word 0 is refused");
+        check(error.find("0xFFFF0001") != std::string::npos,
+              "the raw-zero refusal names the measured placeholder word");
+
+        // W30-C5: a link whose endpoint task is not live is dropped from the
+        // plan but still counted by the writer's link scan.
+        app::PlanInput skipped_link = make_plan();
+        skipped_link.skipped_links = 1;
+        skipped_link.unreadable_links = 1;
+        check(!app::make_percent_edit(skipped_link, 1, 40, refused_edit, error),
+              "a plan with a skipped link is refused");
+        check(error.find("not live") != std::string::npos,
+              "the skipped-link refusal names the dropped link");
+
         app::LinkRow first_incoming;
         first_incoming.predecessor_uid = 3;
         first_incoming.successor_uid = 1;

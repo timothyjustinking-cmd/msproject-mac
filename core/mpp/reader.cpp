@@ -2348,6 +2348,7 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                     SkippedRow skipped;
                     skipped.row = row;
                     skipped.uid = assn_uid_by_row[row];
+                    skipped.task_uid = task_uid;
                     skipped.reason =
                         assn_live[row]
                             ? "FixedMeta entry is a tombstone (+0 = 0x02): deleted "
@@ -2374,6 +2375,7 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                     SkippedRow skipped;
                     skipped.row = row;
                     skipped.uid = assignment.uid;
+                    skipped.task_uid = 0;
                     skipped.reason = "placeholder row with task UniqueID 0";
                     document.skipped_assignments.push_back(std::move(skipped));
                     continue;
@@ -3571,6 +3573,7 @@ void parse_mpp12(const CompoundFile& cfb, std::string_view root, Document& docum
                     SkippedRow skipped;
                     skipped.row = static_cast<std::uint32_t>(row);
                     skipped.uid = u32_at(bytes, k12AssnUid);
+                    skipped.task_uid = u32_at(bytes, k12AssnTaskUid);
                     skipped.reason = state == kFixedMetaStateDeleted
                                          ? "FixedMeta entry is a tombstone (+0 = 0x02)"
                                          : "FixedMeta state " + hex32(state);
@@ -3591,6 +3594,7 @@ void parse_mpp12(const CompoundFile& cfb, std::string_view root, Document& docum
                     SkippedRow skipped;
                     skipped.row = static_cast<std::uint32_t>(row);
                     skipped.uid = assignment.uid;
+                    skipped.task_uid = 0;
                     skipped.reason = "placeholder row with task UniqueID 0";
                     document.skipped_assignments.push_back(std::move(skipped));
                     continue;

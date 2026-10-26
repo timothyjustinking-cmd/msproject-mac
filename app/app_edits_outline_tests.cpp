@@ -1461,6 +1461,38 @@ void check_refusals() {
     check(error.find("assignment rows") != std::string::npos,
           "the no-assignment refusal names the assignment table");
 
+    // W30-C5 (C3, High): the indent writer counts the file's PHYSICAL TBkndAssn
+    // rows (tombstones included) and refuses with a warning the save path can
+    // drop, so a tombstoned sibling naming the task would make the edit vanish
+    // from the saved file.  Refuse it in the model.
+    app::PlanInput hidden_assignment = indent_plan;
+    for (app::TaskRow& task : hidden_assignment.tasks) {
+        if (task.uid == 1) {
+            task.assignment_rows = 2;
+        }
+    }
+    check(!app::make_outline_edit(hidden_assignment, indent_control.string(), 2,
+                                  true, edit, error),
+          "indent under a row whose file has two physical assignment rows is "
+          "refused");
+    check(error.find("physical") != std::string::npos,
+          "the physical-row refusal names the file's physical rows");
+
+    // W30-C5 (C3): `real` collapses raw resource word 0 and Project's
+    // 0xFFFF0001 placeholder to "no resource"; the outline writer refuses any
+    // word but the sentinel.
+    app::PlanInput raw_zero = indent_plan;
+    for (app::AssignmentRow& assignment : raw_zero.assignments) {
+        if (assignment.task_uid == 1) {
+            assignment.resource_uid_raw = 0;
+        }
+    }
+    check(!app::make_outline_edit(raw_zero, indent_control.string(), 2, true,
+                                  edit, error),
+          "indent under a raw-0 placeholder word is refused");
+    check(error.find("0xFFFF0001") != std::string::npos,
+          "the raw-zero refusal names the measured placeholder word");
+
     // W30-0.2 (R29-2, High): the AUTOMATIC save rewrites every live automatic
     // row's slack and late dates, a backward pass that only holds with no
     // links; every outline pair was measured on an unlinked file.  The MANUAL

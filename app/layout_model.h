@@ -68,6 +68,15 @@ inline constexpr core::view::FieldId kUidField = 0x0b4fff01u;
 // The reader-independent plan model
 // ---------------------------------------------------------------------------
 
+// W30-C5: how many PHYSICAL `TBkndAssn/FixedData` rows name a task -- the live
+// assignment plus any tombstoned row the reader skipped.  The actuals writer
+// throws when the count is not one and the indent writer refuses, while
+// PlanInput's assignments hold only the live rows; the adapter fills this so the
+// edit model can refuse the shape up front instead of failing inside Save.  A
+// plan built without a file (the synthetic tests) leaves kAssignmentRowsUnknown
+// and the model falls back to the live count.
+inline constexpr std::size_t kAssignmentRowsUnknown = static_cast<std::size_t>(-1);
+
 // One task row.  `outline_level` is 0-based (0 = top level) because that is what
 // core::sheet::SheetModel::outline_level() returns; the reader's Project
 // OutlineLevel (1-based) is decremented in reader_adapter.h.
@@ -109,6 +118,9 @@ struct TaskRow {
     // rule (one 9600-tick record pair) is measured only on the project calendar,
     // so the edit model refuses a task calendar.
     std::int32_t calendar_uid = -1;
+    // W30-C5: the physical TBkndAssn row count naming this task (tombstones
+    // included), or kAssignmentRowsUnknown for a plan not loaded from a file.
+    std::size_t assignment_rows = kAssignmentRowsUnknown;
     // Wave 12: the stored custom-field values the reader decoded (W48's measured
     // encodings; see core/mpp/field_value.h).  Only values the file actually
     // stores are listed, plus Flag1 for every live row (a clear bit is a stored
@@ -171,6 +183,12 @@ struct AssignmentRow {
     std::uint32_t uid = 0;
     std::uint32_t task_uid = 0;
     std::uint32_t resource_uid = 0;  // 0 = no resource
+    /* W30-C5: the raw FixedData +8 word.  Project writes the null sentinel
+     * 0xFFFF0001; 0 also occurs in the corpus for "no resource", and the writers
+     * measured only the sentinel (the indent tombstone refuses a raw 0), so the
+     * edit model distinguishes them.  The default is the measured placeholder so
+     * a synthetic row with resource_uid 0 means the same thing to the writer. */
+    std::uint32_t resource_uid_raw = 0xFFFF0001u;
     std::int64_t work_ticks = 0;
     double units_percent = 100.0;
     date32 start = kDateNa;
@@ -196,6 +214,12 @@ struct PlanInput {
      * the file's. */
     std::uint16_t project_priority = 500;
     std::size_t skipped_links = 0;  // links whose endpoint the reader did not know
+    /* W30-C5 (C3): how many of `skipped_links` the READER could not resolve
+     * (a link row whose endpoint task is not live).  Such a row stays a live
+     * link in the file, so the edit model cannot prove its link shape; the
+     * remainder of `skipped_links` is links a pending edit dropped, which the
+     * same save tombstones and which therefore do not block an edit. */
+    std::size_t unreadable_links = 0;
 
     /* Wave 23 (B-1) / wave 24 (W24-2): Project's project-summary row, shown as
      * ID 0 above the top-level tasks.  The values come from the file's project

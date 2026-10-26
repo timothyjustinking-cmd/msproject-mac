@@ -436,6 +436,19 @@ std::string validate_link_add(const PlanInput& plan, const StructuralEdits& edit
     if (has_pending_link_add(edits, predecessor_uid, successor_uid, type)) {
         return std::string("that predecessor is already pending as ") + link_type_name(type);
     }
+    // W30-C5 (C3): a link whose endpoint task is not live is dropped from
+    // PlanInput, so the duplicate and incoming-link tests below cannot see one.
+    // The file may still hold a live link into the successor (the writer
+    // matches live link rows by successor uid, whatever the predecessor), which
+    // would make the Fixed2Meta byte shape unmeasured and could duplicate this
+    // pair.  Refuse rather than guess.  Links a pending edit dropped are
+    // excluded: the same save tombstones them (the measured delete-and-re-add).
+    if (plan.unreadable_links != 0) {
+        return "the plan has " + std::to_string(plan.unreadable_links) +
+               " link(s) whose endpoint task is not live, so an incoming link "
+               "into task uid " + std::to_string(successor_uid) +
+               " cannot be ruled out; Add Link is refused";
+    }
     // W30-0.7 (R29-7): Wave 29 measured the link Fixed2Meta +8 byte as the
     // successor's driving state -- 0x07 once the successor enters progress, not
     // "a later link" (the percent-mid25 control's FIRST of three links into

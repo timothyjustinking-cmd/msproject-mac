@@ -249,6 +249,18 @@ void test_validation() {
     check(app::validate_link_add(open, edits, 1, 3, LinkType::finish_to_start) == "",
           "a new relation into a free successor is allowed");
 
+    // W30-C5 (C3): a link whose endpoint task is not live is dropped from the
+    // plan but stays a live row in the file; the file's link row could name this
+    // successor, so the free-successor proof above does not hold.
+    app::PlanInput skipped = open;
+    skipped.skipped_links = 1;
+    skipped.unreadable_links = 1;
+    const std::string skipped_error =
+        app::validate_link_add(skipped, app::StructuralEdits{}, 1, 3,
+                               LinkType::finish_to_start);
+    check(skipped_error.find("not live") != std::string::npos,
+          "an add with a skipped link in the plan is refused (W30-C5)");
+
     // W30-0.7 (R29-7): the other falsified shape -- a link into a progressed
     // successor.  Wave 29 measured +8 as driving state (0x07 when the successor
     // has progress); no pair adds a link into a progressed task.
