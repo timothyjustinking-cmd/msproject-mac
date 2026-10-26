@@ -328,20 +328,52 @@ void check_qt_model(const msqt::PlanDocument& document) {
     QApplication::processEvents();
 
     const QImage header_image = header->grab().toImage();
-    const int section_center =
-        header->sectionViewportPosition(0) + header->sectionSize(0) / 2;
-    const QColor badge = header_image.pixelColor(section_center - 5, header->height() / 2);
-    check(badge.isValid() && badge.blue() > 150 && badge.blue() > badge.red() + 50,
+    // W31-C6: grab() returns device pixels, and the Windows CI runner failed
+    // the old single-pixel sample while every neighbouring check passed.  Scan
+    // the painted area instead (scaled by the image's device pixel ratio); the
+    // check still fails a header that paints no badge.
+    const auto count_matching = [](const QImage& image, const QRect& logical_rect,
+                                   const auto& matches) {
+        if (image.isNull()) {
+            return 0;
+        }
+        const qreal ratio = image.devicePixelRatio();
+        const int left = qMax(0, qRound(logical_rect.left() * ratio));
+        const int top = qMax(0, qRound(logical_rect.top() * ratio));
+        const int right = qMin(image.width(), qRound(logical_rect.right() * ratio) + 1);
+        const int bottom = qMin(image.height(), qRound(logical_rect.bottom() * ratio) + 1);
+        int count = 0;
+        for (int y = top; y < bottom; ++y) {
+            for (int x = left; x < right; ++x) {
+                if (matches(image.pixelColor(x, y))) {
+                    ++count;
+                }
+            }
+        }
+        return count;
+    };
+    const QRect indicators_header_rect(header->sectionViewportPosition(0), 0,
+                                       header->sectionSize(0), header->height());
+    const int blue_pixels =
+        count_matching(header_image, indicators_header_rect, [](const QColor& colour) {
+            return colour.isValid() && colour.blue() > 150 &&
+                   colour.blue() > colour.red() + 50;
+        });
+    check(blue_pixels >= 20,
           "resource gate: the Indicators header paints the measured blue (i) badge");
 
     const QImage body = view.viewport()->grab().toImage();
-    const QColor glyph = body.pixelColor(indicators_width / 2, 6);
-    check(glyph.isValid() && glyph.red() > 150 && glyph.green() < 130 &&
-              glyph.blue() < 130,
+    const auto is_red_glyph = [](const QColor& colour) {
+        return colour.isValid() && colour.red() > 150 && colour.green() < 130 &&
+               colour.blue() < 130;
+    };
+    const int glyph_pixels =
+        count_matching(body, QRect(0, 0, indicators_width, 22), is_red_glyph);
+    check(glyph_pixels >= 5,
           "resource gate: the overallocated row paints the red indicator glyph");
-    const QColor blank = body.pixelColor(indicators_width / 2, 22 + 6);
-    check(!(blank.isValid() && blank.red() > 150 && blank.green() < 130 &&
-            blank.blue() < 130),
+    const int blank_pixels =
+        count_matching(body, QRect(0, 22, indicators_width, 22), is_red_glyph);
+    check(blank_pixels == 0,
           "resource gate: an ordinary row's Indicators cell has no red glyph");
 }
 
