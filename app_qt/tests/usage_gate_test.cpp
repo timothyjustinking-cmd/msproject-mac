@@ -749,6 +749,27 @@ void check_live_view(const LiveUsage& live, const app::UsageGrid& grid,
     }
 }
 
+// W31-C2: a task sheet must never paint what the usage view left behind.  The
+// two-tier captions, the label merge, the parent-only gutter numbers and the
+// 21 px pitch all belong to the usage presentation, not to prefs_.view.
+void check_usage_torn_down(msqt::MainWindow& window, const char* what) {
+    QTableView* view = window.sheet_view();
+    check(window.view_mode() == app::ViewMode::task_sheet, what);
+    check(view != nullptr && view->model() != nullptr, what);
+    if (view == nullptr || view->model() == nullptr) {
+        return;
+    }
+    auto* header = static_cast<msqt::SheetHeaderView*>(view->horizontalHeader());
+    check(header != nullptr && header->tier_cells().empty(), what);
+    auto* model = dynamic_cast<msqt::SheetTableModel*>(view->model());
+    check(model != nullptr && !model->custom_row_numbers(), what);
+    check(model != nullptr && model->columnCount() > 0, what);
+    check(view->rowSpan(0, msqt::UsageSheet::kLabelColumn) <= 1, what);
+    check(view->verticalHeader() != nullptr &&
+              view->verticalHeader()->defaultSectionSize() == msqt::kRowHeight,
+          what);
+}
+
 void check_live_window(const std::string& fixture, const QJsonObject& measures) {
     msqt::configure_application();
     msqt::MainWindow window;
@@ -782,6 +803,16 @@ void check_live_window(const std::string& fixture, const QJsonObject& measures) 
         document.resource_usage_style(), true, app::standard_calendar(),
         core::usage::Period::day);
     check_live_view(resource, resource_grid, measures, "resource_usage", true);
+
+    // W31-C2: switching from Resource Usage back to the task sheet must clear
+    // the usage presentation instead of painting its tiers over the task
+    // columns.
+    (void)switch_to(window, app::MenuAction::view_task_sheet,
+                    app::ViewMode::task_sheet,
+                    "usage gate (live): the task sheet opens after Resource Usage");
+    check_usage_torn_down(window,
+                          "usage gate (live): Resource Usage -> task sheet drops "
+                          "the usage presentation");
 }
 
 }  // namespace

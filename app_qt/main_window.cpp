@@ -5383,6 +5383,30 @@ void MainWindow::rebuild_generic_view() {
     view_sheet_->set_format(std::move(format));
 }
 
+void MainWindow::reset_usage_presentation() {
+    // W31-C2: the usage presentation belongs to the view being left.  The grid
+    // model, its label spans, the header's two-tier captions and the
+    // parent-only gutter numbers all outlive a plain prefs_.view change, so
+    // leaving Resource/Task Usage for the task sheet painted the usage
+    // captions over the task columns.  One helper drops every piece; the
+    // callers then rebuild the presentation the next view wants.
+    usage_sheet_.reset();
+    if (sheet_view_ == nullptr) {
+        return;
+    }
+    sheet_view_->clearSpans();
+    if (auto* header = static_cast<SheetHeaderView*>(sheet_view_->horizontalHeader());
+        header != nullptr) {
+        header->clear_tier_cells();
+    }
+    sheet_model_.clear_row_numbers();
+    if (auto* gutter = static_cast<SheetRowHeader*>(sheet_view_->verticalHeader());
+        gutter != nullptr) {
+        gutter->setMinimumSectionSize(kRowHeight);
+        gutter->setDefaultSectionSize(kRowHeight);
+    }
+}
+
 void MainWindow::show_view(app::ViewMode mode) {
     prefs_.view = mode;
     if (sheet_view_ == nullptr) {
@@ -5396,10 +5420,10 @@ void MainWindow::show_view(app::ViewMode mode) {
     // Detach the adapter first: the branches below destroy or replace the
     // SheetModel the adapter points at (view_sheet_/doc_.sheet_).
     sheet_model_.set_sheet(nullptr);
-    // W31-4.4: the usage presentation's spans and per-cell value kinds belong
-    // to the view being left; drop them before the branches rebuild.
-    usage_sheet_.reset();
-    sheet_view_->clearSpans();
+    // W31-4.4/W31-C2: the usage presentation's spans, captions and gutter
+    // numbers belong to the view being left; drop them before the branches
+    // rebuild.
+    reset_usage_presentation();
     if (mode == app::ViewMode::task_sheet) {
         view_sheet_.reset();
         view_records_.clear();

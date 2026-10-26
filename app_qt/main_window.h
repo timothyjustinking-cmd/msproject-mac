@@ -534,6 +534,10 @@ class MainWindow final : public QMainWindow {
     void after_cell_commit(bool ok, const std::string& message);
     void rebind_sheet();
     void configure_generic_columns();
+    // W31-C2: drop every piece of a usage view's presentation (the grid model,
+    // its label spans, its two-tier captions and its parent-only numbers) when
+    // the window leaves the view for a task sheet or another document.
+    void reset_usage_presentation();
     void apply_filter_to_sheet_model();
     void refresh_view_buttons();
 
