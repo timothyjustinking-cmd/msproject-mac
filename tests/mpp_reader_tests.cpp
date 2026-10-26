@@ -2627,6 +2627,52 @@ void test_resources(TestContext& context) {
                   "PROJECT_B has 22 resources");
 }
 
+/* ---- Wave 31 (W31-3.2): the committed Resource Sheet fixture.  Project
+ * reopens it with three resources; deleting the file's original resource left
+ * its 172-byte FixedData row (uid 1), its VarMeta group and a FixedMeta entry
+ * whose +0 state byte is 0x02.  FixedMeta coverage alone therefore reported a
+ * fourth, blank resource -- Project reports three. */
+void test_resource_sheet_fixture(TestContext& context) {
+    const std::string path =
+        (test_data_dir() / "wave31-resource-sheet.mpp").string();
+    if (!file_exists(path)) {
+        std::cout << "SKIP: " << path << " is not present\n";
+        return;
+    }
+    const mpp::Document document = mpp::load_file(path);
+    context.equal(document.resources.size(), std::size_t{3},
+                  "wave31-resource-sheet has Project's three resources");
+    context.check(find_resource(document, 1) == nullptr,
+                  "the uid 1 resource row is a tombstone, not a resource");
+    const std::uint32_t uids[] = {2, 3, 4};
+    const std::uint32_t ids[] = {1, 2, 3};
+    const char* names[] = {"Crew A", "Crew B", "Crew C"};
+    for (std::size_t i = 0; i < 3; ++i) {
+        const mpp::Resource* resource = find_resource(document, uids[i]);
+        context.check(resource != nullptr,
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " is present");
+        if (resource == nullptr) {
+            continue;
+        }
+        context.equal(resource->row_id, ids[i],
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " ID");
+        context.equal(resource->name, std::string(names[i]),
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " name");
+    }
+    bool tombstone_skipped = false;
+    for (const mpp::SkippedRow& skipped : document.skipped_resources) {
+        if (skipped.uid == 1 &&
+            skipped.reason.find("tombstone") != std::string::npos) {
+            tombstone_skipped = true;
+        }
+    }
+    context.check(tombstone_skipped,
+                  "the uid 1 row is reported as a FixedMeta tombstone");
+}
+
 /* ---- 7. Links: FixedData = 20*links, no header.  +12 type (0 FF / 1 FS /
  * 2 SF / 3 SS), +14 signed lag in 6-second ticks (4800 = one working day). */
 void test_links(TestContext& context) {
@@ -3925,6 +3971,7 @@ int run_tests() {
     test_probe_fixtures(context);
     test_bad_input(context);
     test_resources(context);
+    test_resource_sheet_fixture(context);
     test_links(context);
     test_assignments(context);
     test_mpp12(context);

@@ -208,7 +208,10 @@
  *             rows have no resource; Assignment::has_resource() says so.
  *
  * LIVENESS.  Tasks: a VarMeta group (Name).  Resources: FixedMeta coverage of
- * rows 1..; row 0 is structural.  Assignments: FixedMeta coverage (PROJECT_A has 69
+ * rows 1.. plus the entry's +0 state byte (0x02 is a tombstone: deleting a base
+ * resource leaves its FixedData row and VarMeta group behind, and Project does
+ * not report it; measured on tests/data/wave31-resource-sheet.mpp, W31-3.2);
+ * row 0 is structural.  Assignments: FixedMeta coverage (PROJECT_A has 69
  * rows but only 67 covered; its row 52 belongs to the deleted task 10856 and
  * row 65 is all zero).  Links: FixedMeta coverage, i.e. a link is live only
  * when a FixedMeta entry names its FixedData row (through the entry's +4
@@ -2072,12 +2075,13 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                 cfb.has_stream(std::string(root) + "/TBkndRsc/FixedMeta");
             std::vector<std::uint32_t> rsc_meta_offsets;
             std::vector<std::uint8_t> rsc_meta_type;
+            std::vector<std::int16_t> rsc_meta_state;
             const std::vector<bool> rsc_live =
                 fixed_meta_coverage(cfb, root, "TBkndRsc", "Resource", kRscHeaderSize,
                                     kRscRowSize, kRscFixedMetaEntrySize,
                                     kFixedMetaDescriptors, rsc_rows, rsc_uid_by_row,
                                     document.warnings, &rsc_meta_offsets, nullptr,
-                                    nullptr, nullptr, nullptr, &rsc_meta_type);
+                                    &rsc_meta_state, nullptr, nullptr, &rsc_meta_type);
             /* W49: the Cost/Material half of the type is the Fixed2Meta entry's
              * +8 bit 0x10 (measured, see reader.h "Resource Type").  The two
              * metadata streams pair by ENTRY INDEX, as the Task outline does. */
@@ -2124,17 +2128,52 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
             for (std::uint32_t row = 1; row < rsc_rows; ++row) {
                 const std::uint32_t uid = rsc_uid_by_row[row];
                 const std::size_t base = kRscHeaderSize + row * kRscRowSize;
-                if (uid == 0 || !rsc_live[row]) {
+                /* W31 (G3): resource liveness is FixedMeta coverage AND the
+                 * entry's +0 state byte, exactly as for tasks.  Deleting the
+                 * base resource leaves its 172-byte FixedData row, its VarMeta
+                 * group and a FixedMeta entry whose +0 is 0x02; coverage alone
+                 * therefore reported a blank resource row that MS Project does
+                 * not have.  The committed wave31-resource-sheet.mpp is the
+                 * measured file: Project reopens it with three resources, and
+                 * the deleted uid 1 is the 0x02 entry. */
+                const std::int16_t state = row < rsc_meta_state.size()
+                                               ? rsc_meta_state[row]
+                                               : kStateNoMetaEntry;
+                const bool state_live = state == kStateNoMetaStream || state == 0;
+                if (uid == 0 || !rsc_live[row] || !state_live) {
                     SkippedRow skipped;
                     skipped.row = row;
                     skipped.uid = uid;
-                    skipped.reason = uid == 0 ? "UniqueID 0" : "no FixedMeta entry";
+                    if (uid == 0) {
+                        skipped.reason = "UniqueID 0";
+                    } else if (!rsc_live[row]) {
+                        skipped.reason = "no FixedMeta entry";
+                    } else if (state ==
+                               static_cast<std::int16_t>(kFixedMetaStateDeleted)) {
+                        skipped.reason =
+                            "FixedMeta entry is a tombstone (+0 = 0x02): deleted row";
+                    } else {
+                        skipped.reason = "FixedMeta state byte " +
+                                         hex32(static_cast<std::uint32_t>(state)) +
+                                         " is not a live row (0x00)";
+                    }
                     document.skipped_resources.push_back(std::move(skipped));
+                    std::string detail;
+                    if (uid == 0) {
+                        detail = "its UniqueID is 0";
+                    } else if (!rsc_live[row]) {
+                        detail = "FixedMeta has no entry for it";
+                    } else if (state ==
+                               static_cast<std::int16_t>(kFixedMetaStateDeleted)) {
+                        detail = "its FixedMeta entry is a tombstone (+0 = 0x02)";
+                    } else {
+                        detail = "its FixedMeta state is " +
+                                 hex32(static_cast<std::uint32_t>(state));
+                    }
                     document.warnings.emplace_back(
                         "Resource row " + std::to_string(row) + " (uid " +
                         std::to_string(uid) + ") is treated as a deleted slot: " +
-                        (uid == 0 ? std::string("its UniqueID is 0")
-                                  : std::string("FixedMeta has no entry for it")));
+                        detail);
                     continue;
                 }
                 Resource resource;
