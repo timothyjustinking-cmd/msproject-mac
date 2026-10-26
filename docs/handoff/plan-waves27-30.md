@@ -87,6 +87,16 @@ Estimate: 8-12 hours, likely split into waves 30 and 31.
 - Plus the wave-28 record's own "Found, not fixed" list (F4-F7, A1-A9 and the
   carried residuals).
 
+## Queued from the wave-29 review (Medium/Low; `wave29-verification/review.md`)
+
+- R29-8 Medium: refusals the edit model accepts but the writer raises at save fail
+  the whole save, and every later Save until undo (move them up front).
+- R29-9 Medium: several W29-0.0 refusals have no test.
+- R29-10 Medium: the new-task-mode pair test still compares with the control.
+- R29-11 Medium: R28-5 still open - the user-profile check in
+  `scripts/check_fixtures.py` cannot fire on backslash paths.
+- The eight Lows in the review.
+
 ## After wave 30 (not planned in detail)
 
 Team Planner, Network Diagram, Calendar and Report views; the constraint-mso engine
