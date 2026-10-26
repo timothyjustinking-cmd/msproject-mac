@@ -176,6 +176,7 @@ add_library(app_layout STATIC
     start_edit_warning.cpp
     smoke.cpp
     view_style.cpp
+    usage_grid.cpp
     project_dialogs.cpp
     spelling.cpp
 )
@@ -351,6 +352,23 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_usage_style COMMAND usage_style_tests)
     set_tests_properties(app_usage_style PROPERTIES
+        WORKING_DIRECTORY "${APP_REPO_ROOT}"
+    )
+
+    # Wave 31 (W31-4.3): the usage grid's logical rows, details and per-period
+    # values, against Project's COM TimeScaleData committed in the wave-31
+    # measures file.
+    add_executable(usage_grid_tests usage_grid_tests.cpp)
+    target_compile_features(usage_grid_tests PRIVATE cxx_std_20)
+    set_target_properties(usage_grid_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(usage_grid_tests PRIVATE app_layout)
+    target_compile_definitions(usage_grid_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+    )
+    app_set_warnings(usage_grid_tests)
+
+    add_test(NAME app_usage_grid COMMAND usage_grid_tests)
+    set_tests_properties(app_usage_grid PROPERTIES
         WORKING_DIRECTORY "${APP_REPO_ROOT}"
     )
 
