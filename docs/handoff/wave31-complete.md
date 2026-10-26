@@ -697,3 +697,232 @@ belong to `bb0568d`; the marker commit that follows is docs-only.
   rendered there and claims no other indicator glyph.
 
 WAVE-31-G3-COMPLETE
+
+## G4 - Task Usage and Resource Usage at Gantt fidelity
+
+The brief's G4 is one prose item; the five rows below are the work breakdown
+`W31-4.1 .. W31-4.5` that closes it.  All of it is **presentation-only and
+session-only**: the fixture's stored usage views -- their Details lists, their
+5,199-byte timescale records and their table references -- are read and
+applied to the loaded session, and no path writes them back (wave-31 brief
+section 1: the file's bytes are kept).  The time-phased numbers are Project's
+own COM `TimeScaleData`; the live gate opens the window and reads it.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W31-4.1 | The synthetic usage fixture and Project's time-phased facts | **DONE** | commit `6a8fd96`; fixture `tests/data/wave31-usage.mpp` SHA-256 `AF8DFE1DCC4EE319378FDBD3F454D398F5ACDC924BB66E9F0B4CC8879A1D600A`; measures `tests/data/reference/wave31-usage.measures.json` SHA-256 `A2312B41E0C32D97240A98E225329B4CFB3653FAC144F1B941EFEE10BDA10C7C`; COM dump `build/w31/W31-G4-usage.json` (not committed); gates `build/w31/W31-4.1-*.log` |
+| W31-4.2 | The stored Details lists and timescale tiers decoded from `214/CV_iew` | **DONE** | commit `fe35886`; gates `build/w31/W31-4.2-*.log` |
+| W31-4.3 | The usage grid's logical rows and per-period Work/Actual Work/Cost against COM `TimeScaleData` | **DONE** | commit `4c32189`; gates `build/w31/W31-4.3-*.log` |
+| W31-4.4 | The measured presentation: detail sub-rows, captions, widths, label spans, gutter and tiers; typed Cost | **DONE (session-only; file bytes kept)** | commit `f0ffb6f`; gates `build/w31/W31-4.4-*.log` |
+| W31-4.5 | The live Qt gate against the committed COM facts | **DONE** | commit `830d414`; gates `build/w31/W31-4.5-*.log` |
+
+No G4 item was deferred.  The group raised one Low finding (the usage left
+table's other stored fields are not drawn) and six residual notes, all under
+"Found, not fixed" below; no Critical or High finding was found.
+
+W31-4.1 detail:
+
+- `tests/data/wave31-usage.mpp` is `synthetic-base.mpp` saved by Project 2021
+  through COM (read-only, under `scripts/oracle_lock.py`) with the two usage
+  views' details set, built by `scripts/oracle_w31_usage.py` under the neutral
+  root `C:/w31/usage-fixture` with neutral Author/Manager/Company/UserName/
+  Title, and documented (with the SHA-256 above) in `tests/data/README.md` and
+  `scripts/check_fixtures.py`.
+- The fixture reopens with three tasks (4800/2880/1920 minutes of Work; task 1
+  is 100 % complete and carries 4800 actual minutes), three Work resources
+  (stored IDs 1/2/3 at `$50.00`/`$60.00`/`$40.00` per hour, Accrue At
+  Prorated) and six 100 % assignments (2400/2400/1440/1440/960/960 minutes;
+  task 1 has resources 1 and 2, tasks 2 and 3 have resources 1 and 3).  The
+  plan spans 5-9 January 2026.
+- Both 5,199-byte `0x22400008` records store the same timescale: middle unit
+  3 = weeks, bottom unit 2 = days, counts 1/1, formats 13/20, middle/bottom
+  align 0/1, start 14400 (1984-01-01, the unset value), size 100.  Task Usage
+  stores detail ids `00 02` (Work, Actual Work); Resource Usage stores `00 09`
+  (Work, Cost).
+- COM `TimeScaleData` (unit 4, days, 5-9 January) measures every task,
+  assignment and resource bucket.  The committed facts include task 1's
+  960 Work + 960 Actual Work minutes on each of the five days and 88,000 cost
+  cents per day; task 2's 960/960/960 Work with the last two days blank;
+  resource 1's 1440/1440/960/480/480 Work and
+  120,000/120,000/80,000/40,000/40,000 cost cents; resource 2's 480 Work and
+  48,000 cents on every day; resource 3's 960/960/480 Work.  Blank buckets
+  are recorded as null.
+- The measured pixels: 21 px row pitch, 42 px per logical row (two detail
+  lines), 48 px Details column, 64 px Task Usage / 105 px Resource Usage day
+  columns, 84 px Task Usage columns with Cost, 147/123 px label columns, and
+  no total row or total column in Project's sheets (captured at the bottom and
+  at later periods).
+
+W31-4.2 detail:
+
+- The Details list is `214/CV_iew` item `0x2240003c`: 111 raw selector bytes,
+  no count prefix, 0xff-padded, and the first 0xff ends the list.  The
+  measured selectors are `0x00` Work, `0x02` Actual Work and `0x09` Cost
+  (Project's decompiled decoder names the item `VPID_ASSNFIELDORDER`).  Stock
+  files store `00 48` (Task Usage) / `00 43` (Resource Usage) yet render one
+  Work line; `DetailStylesAdd(24)` alone adds no line, so an id with no value
+  rule is kept as `other`, draws nothing and warns -- Project's measured
+  render, not an invented line.
+- The timescale is the same record the Gantt reads, at the Gantt offsets:
+  middle unit +1152, bottom unit +1154, counts +1156/+1158, formats
+  +1160/+1162, bottom/middle alignment +1164/+1166, saved scroll origin +1176
+  and size +1180.  The stored MIDDLE tier is the rendered TOP row and the
+  stored BOTTOM tier the bottom row, as the captures' text rows measure.
+- New `core/viewstate/usage_style.{h,cpp}` plus the generic
+  `record_data_from_view()` accessor; the app seam
+  `app::read_usage_view_style()` and PlanDocument's
+  `task_usage_style()`/`resource_usage_style()`.  The fixture stores the
+  table references as `Usa&ge` / `&Usage`; the accelerator placement is the
+  file's and the tests pin those bytes.
+- Tests: core `viewstate_tests` 1133 checks (usage-style 27), `app_usage_style`
+  31 checks; core ctest 53/53, app ctest 24/24, app_qt 35/35.
+
+W31-4.3 detail:
+
+- `app::UsageGrid` builds the measured logical rows: Task Usage draws each
+  task then its assignment rows labelled with the RESOURCE; Resource Usage
+  draws each resource then its assignment rows labelled with the TASK.  On
+  the fixture that is nine logical data rows per view in the committed order
+  (plus the port's Total row, the tenth logical row).
+  Each row carries one value series per STORED detail (Work + Actual Work, or
+  Work + Cost), and a file with no stored usage view gets one default Work
+  detail.
+- Every bucket is checked against `com.per_period`: the assignment rows are
+  480 minutes in their tasks' periods at costs of 40,000/48,000 cents for
+  task 1's two resources and 40,000/32,000 cents for the task 2 and task 3
+  resource pairs; the Total row is
+  9600 Work minutes (and 4800 Actual Work minutes) in Task Usage and 800,000
+  cost cents in Resource Usage.  The measures key their series by Project's
+  session Assignment.UniqueIDs (2097156-2097161); the file's assignment rows
+  carry uids 4-9 and the test maps the measured structural order onto them.
+- Value rules measured on the fixture: Work is the flat spread on the
+  standard week; Actual Work is Work x the task's stored percent complete
+  (exact at the fixture's 0 % and 100 %); Cost is Work x the resource's
+  standard rate in cents and does not scale with completion -- the fixture's
+  resources Accrue At Prorated, the measured mode.
+- The port's final Total row (and its Total column) is an affordance, not a
+  Project row: the measures record that Project's usage sheets have neither.
+- Tests: `app_usage_grid` 214 checks 0 failures; app ctest 25/25, app_qt
+  35/35.
+
+W31-4.4 detail:
+
+- `app_qt/UsageSheet` turns the logical grid into Project's physical rows --
+  one 21 px sub-row per stored detail, two per logical row -- with the label
+  merged across the pair and a Details caption per sub-row: "Work" then
+  "Act. W" in Task Usage, "Work" then "Cost" in Resource Usage.
+- The columns are the measured pixels: 147 px Task Usage / 123 px Resource
+  Usage label, 48 px Details, 64 px Task Usage or 105 px Resource Usage day
+  period (84 px when Task Usage stores Cost), 84 px port Total.  The header
+  is the stored two-tier shape: "5 Jan '26" over M/T/W/T/F for the fixture's
+  weeks-over-days record, single-band captions for label/Details/Total.
+- Only parent rows carry a gutter ID (stored Task/Resource IDs 1/2/3);
+  assignment rows and the Total row are blank.  The label column spans each
+  logical row's two sub-rows; the Details column does not.
+- Values are typed per detail: Work and Actual Work are Duration ticks
+  (minutes x 10) and keep the app's duration-style preference; Cost is a
+  Number in dollars (cents / 100) and renders through the sheet format as
+  "$880.00" (task 1's first period: 8 h at $50 plus 8 h at $60), "$1,200.00"
+  (resource 1's first period) and "$400.00" (an assignment bucket).
+  Project's blank buckets stay blank.
+- `MainWindow` installs the per-cell value-kind lookup, the custom gutter
+  numbers, the label spans and the header tier cells with the usage sheet's
+  lifetime, and restores the ordinary 22 px numbered presentation when
+  another view opens.  A file with no stored usage view uses the shell's
+  Day/Week/Month choice for the period, at the same 64 px minimum and 21 px
+  pitch; a stored view's own timescale wins over that choice.
+- `app::UsageGrid` carries the rendered tiers (stored middle = top, stored
+  bottom = bottom), parent `display_id`/`numbered`, and the fallback period;
+  the stored unit shapes this wave cannot draw fall back with a warning.
+- Tests: `app_usage_grid` 245 checks; `qt_usage_gate`'s static sections
+  (stored views, COM per-period equality, sheet shape, typed values and the
+  Cost width probe); the updated `qt_view_gate` fallback expectations; app
+  ctest 25/25, app_qt 36/36.
+
+W31-4.5 detail:
+
+- `qt_usage_gate` now drives the real `MainWindow` through the View menu's own
+  Task Usage and Resource Usage actions and reads the live widget tree back:
+  - eight columns (label, Details, five days, Total) and twenty physical rows
+    (ten logical rows x two detail sub-rows);
+  - widths 147/48/64 x 5/84 in Task Usage and 123/48/105 x 5/84 in Resource
+    Usage, with the 21 px detail pitch;
+  - the parent-only gutter numbers 1/2/3 (Task parents at physical rows
+    0/6/12, Resource parents 0/8/12; every assignment blank);
+  - label-column spans of two rows and a single-row Details span;
+  - eight tier cells: "5 Jan '26"/M at the first period, "F" alone at the
+    last, and single-band label/Details/Total captions;
+  - every period of every logical row converted back to the measured units --
+    Work and Actual Work by dividing Duration ticks by 10, Cost by rounding
+    the Number dollars x 100 -- equal to `com.per_period`; Project's blank
+    buckets stay null and render empty;
+  - the rendered Cost text "$1,200.00" and "$400.00".
+- The test compares the stored tier names as `std::string_view`; comparing two
+  `const char*` with `==` compares pointers and passes only when the linker
+  merges the translation units' literals.
+- Tests: `qt_usage_gate` 1/1; app_qt ctest 36/36.
+
+Per-commit gates (logs under `build/w31/`, named `W31-4.x-*.log`).  Every
+commit's scan reports 0 files / 0 hits, guard exits 0, the hex grep finds no
+match and `check_fixtures.py` is OK (139 documented hashes, 173 tracked
+`.mpp`).  W31-4.1 is the fixture commit and was gated by fixtures/privacy; the
+code commits rebuilt the touched trees and ran their suites:
+
+| commit | item tests | core ctest | app ctest | app_qt ctest |
+|---|---|---|---|---|
+| W31-4.1 `6a8fd96` | fixture + oracle script; `check_fixtures.py` registers the hash | -- (fixture commit) | -- | -- |
+| W31-4.2 `fe35886` | `viewstate_tests` 1133 checks (usage-style 27), `app_usage_style` 31 checks | 53/53 | 24/24 | 35/35 |
+| W31-4.3 `4c32189` | `app_usage_grid` 214 checks | -- | 25/25 | 35/35 |
+| W31-4.4 `f0ffb6f` | `app_usage_grid` 245 checks; `qt_usage_gate` static sections; `qt_view_gate` | -- | 25/25 | 36/36 |
+| W31-4.5 `830d414` | `qt_usage_gate` live window | -- | -- | 36/36 |
+
+G4 group gates (fresh trees configured from scratch on `830d414` under
+`build/w31-g4-fresh{,-app,-qt}`, log `build/w31/W31-G4-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 25/25 / 36/36 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (139 documented hashes, 173 tracked `.mpp`); fixture paths OK (222 tracked test-data files, no local path); scenario oracle provenance OK (8 oracle(s)) |
+| client-name scan on HEAD / messages `wave30..HEAD` / `guard_names wave30..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The run started 2026-10-27 06:43 and finished 2026-10-27 06:59 with no lock
+retries.  The numbers belong to `830d414`; the marker commit that follows is
+docs-only.
+
+## Found, not fixed
+
+- **Low (W31-4.4): the usage left table's other stored fields are not
+  drawn.**  Project's stored tables carry fields beside the name column: Task
+  Usage's COM `TableFields` measure eight fields at 6/6/9/24/10/13/13/13
+  characters (the 24-character field is the name column the port paints at
+  147 px; ID is the frozen gutter) and Resource Usage's four at 6/6/20/10
+  (the 20-character name at 123 px).  The port paints the name, the 48 px
+  Details column and the periods only; the remaining left-table columns are
+  measured and committed but not painted.  G4's list is the time-phased grid
+  (details, tiers, assignment rows, totals, per-period values), so this is
+  recorded for a later pass rather than invented now.
+- Residual notes (not findings): the port's Total row and Total column are its
+  own affordances -- the committed captures record that Project's usage
+  sheets have neither, so the brief's "totals" are the port's per-row and
+  per-detail totals, not a Project layout; Actual Work is Work x the stored
+  percent complete (exact at the fixture's 0 %/100 %, partial percent is a
+  documented approximation); Cost is Work x the standard rate and is not
+  scaled by completion (the measured resources Accrue At Prorated), so
+  overtime, cost/use and the other accrual modes are unmeasured; only the
+  measured header shapes are drawn (stored formats 13/20, weeks over days),
+  an undrawable bottom unit falls back to days with a warning, and the 9 pt
+  tier text size is chosen -- the tier text rows are measured, the point size
+  is not; the port keeps its shared 42 px caption band where Project measured
+  41 px for Resource Usage and 42 px for Task Usage (the left table's tallest
+  caption, Task Usage's Task Mode caption being two lines, which the port
+  does not draw); the stored scroll origin (start 14400, the unset value) is
+  decoded and reported but not applied -- no measured state shows a shifted
+  grid.
+
+WAVE-31-G4-COMPLETE
