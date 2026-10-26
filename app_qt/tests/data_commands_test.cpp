@@ -90,10 +90,6 @@ std::vector<std::uint32_t> display_uids(const msqt::PlanDocument& document) {
     return uids;
 }
 
-std::vector<std::uint32_t> row_map_uids(const msqt::PlanDocument& document) {
-    return document.rows().uids;
-}
-
 std::vector<std::uint32_t> bar_uids(const msqt::PlanDocument& document) {
     std::vector<std::uint32_t> uids;
     for (const core::gantt::Bar& bar : document.gantt().bars) {
