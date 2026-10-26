@@ -847,3 +847,257 @@ The numbers belong to `cd85fd3`; the marker commit that follows is docs-only.
   dialog layout is the blocker for any of them; a later wave needs those
   writers before any of these commands can be enabled.
 WAVE-30-G2-COMPLETE
+
+## G3 - the Project tab's commands
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W30-3.0 | Calculate Project (F9 on a file with a pending change - measure) | **DEFERRED (measured)** | commit `e6b50e5`; pair `wave30-calculate-*`; gates `build/w30/W30-3.0-*.log` |
+| W30-3.1 | Set Baseline (Baseline 0 for the entire project - measure) | **DEFERRED (measured)** | commit `fb89190`; pair `wave30-baseline-*`; gates `build/w30/W30-3.1-*.log` |
+| W30-3.2 | WBS code definition (measure, or keep disabled with evidence) | **DEFERRED (measured)** | commit `df0c484`; pair `wave30-wbs-*`; gates `build/w30/W30-3.2-*.log` |
+| W30-3.3 | Spelling (read-only check over task names; no Project dictionary) | **DONE (read-only report)** | commit `5a87d6d`; `app_spelling`; `qt_spelling_gate`; gates `build/w30/W30-3.3-*.log` |
+| W30-3.4 | Subproject (stays disabled: inserted projects out of scope) | **DONE (stays disabled, exact tooltip)** | commit `ada5e66`; `qt_ribbon_inventory`; gates `build/w30/W30-3.4-*.log` |
+| W30-3.5 | Get Add-ins / My Add-ins (online - stay disabled) | **DONE (stay disabled, exact tooltip)** | commit `7c189b7`; `qt_ribbon_inventory`; gates `build/w30/W30-3.5-*.log` |
+
+One item is DONE as a read-only command (3.3 Spelling), two are the items the
+brief names as staying disabled (3.4 Subproject and 3.5's two Add-ins
+commands, each with a named live check), and three are measured and deferred
+with a committed Project pair: Calculate Project, Set Baseline 0 for the whole
+project, and the WBS code definition.  No disabled button was enabled without a
+measured pair or an implementation: Calculate Project, every item of the Set
+Baseline and WBS split menus, Subproject and both Add-ins commands stay
+disabled with decision 9's exact tooltip.  G3 added 9 tracked `.mpp` fixtures
+(158 at G2's close, 167 at G3's close) -- three measured edits, each with a
+control, a no-edit null save and the edit -- one new app test target
+(`app_spelling`) and one new app_qt gate target (`qt_spelling_gate`).
+
+W30-3.0 detail:
+
+- Measured by `scripts/oracle_w30_project_pairs.py` on a MANUAL-calculation
+  project: two AUTOMATIC, unassigned, 0 % tasks on the project calendar linked
+  FS+0.  Task A was lengthened 2400 -> 4800 min while calculation was manual,
+  so the control stores A's new finish but B is still at the stale
+  2026-01-05 08:00 -> 2026-01-07 17:00 and the project row still reads 0 min /
+  2026-10-26 08:00.  The control is saved from a REOPENED seed (the first save
+  after FileNew is not reopen-stable).  `Application.CalculateProject()` (F9)
+  moves B to 2026-01-19 08:00 -> 2026-01-21 17:00, marks both rows Critical
+  True, and rolls the project row up to 6240 min / 2026-01-21 17:00; A's dates
+  do not move, and COM reopens both files with those facts.
+- Effects: 549 bytes under the save-pair mask, including the Props14 edit
+  marker.  `114/TBkndTask` FixedData 41 bytes (the stale row's recalculated
+  start/finish/anchor words, the project row's roll-up and later rows' cached
+  start words), FixedMeta 8, Fixed2Data 13, Fixed2Meta 3, Var2Data 264 -> 372
+  and VarMeta 252 -> 360 (NINE new 12-byte entries); `114/TBkndAssn` FixedData
+  8; `114/TBkndCons` Fixed2Meta byte 24 0x07 -> 0x0f; `114/TBkndRsc` FixedMeta
+  byte 139 0x1c -> 0x5c; `114/Props` 6 bytes at 388-391/840/3388;
+  `214/CEdl/Var2Data` 4 bytes at 248-250/260; and
+  `DocumentSummaryInformation` 1100 -> 1104 with 179 effect bytes (the project
+  Finish and Duration strings `Mon 26/10/26`/`0 days?` -> `Wed 21/01/26`/
+  `13 days?` plus the per-task rows).  Every other stream is noise-only.
+- DEFERRED: the save is a scheduler rewrite of the task, assignment and project
+  rows plus nine new VarMeta entries and the summary strings.  The port's
+  recalculation engine is read-only (`plan_recalc`), and it has no VarMeta
+  inserter and no `DocumentSummaryInformation` writer.  Calculate Project stays
+  disabled with decision 9's exact tooltip; the pair and its null save are the
+  oracle for a later F9 save path.
+
+W30-3.1 detail:
+
+- Measured by `scripts/oracle_w30_project_pairs.py` on a synthetic-base copy:
+  the base's three top-level 0 % MANUAL leaves (2400/1440/960 ticks, starts
+  2026-01-04 13:00), the project calendar, no links and no progress, one
+  Project placeholder assignment per task, and neutral metadata.
+  `Application.BaselineSave(All=True, Copy=pjCopyCurrent(0),
+  Into=pjIntoBaseline(0))` is the Set Baseline dialog's Baseline 0 /
+  entire-project default.  COM reopens the control with BaselineStart/
+  BaselineFinish NA and BaselineDuration/Work/Cost zero on all three rows, and
+  the edit with each row's own Start/Finish as its baseline dates,
+  BaselineDuration 2400/1440/960 and work/cost still zero; every Start, Finish,
+  Duration and PercentComplete is identical, so this is purely the baseline
+  write.
+- Effects: 4036 bytes under the save-pair mask.  `114/TBkndTask` FixedMeta 17,
+  Fixed2Meta 11, Var2Data 522 -> 1742 and VarMeta 528 -> 1176 (54 new 12-byte
+  entries); `114/TBkndAssn` FixedMeta 15, Fixed2Meta 3, Var2Data 396 -> 1140
+  and VarMeta 132 -> 456 (27 new entries); `114/TBkndRsc` FixedMeta 7,
+  Fixed2Meta 4, Var2Data 86 -> 406 and VarMeta 108 -> 252 (12 new entries);
+  `114/TBkndCal` FixedData 100 -> 112, FixedMeta 86 -> 96, Fixed2Data
+  336 -> 384, Fixed2Meta 12, Var2Data 22 -> 122 and VarMeta 36 -> 48 -- the new
+  calendar row and Var2Data block carry the UTF-16 name `Used for Microsoft
+  Project 98 Baseline Calendar`; and `114/Props` 88734 -> 88844 with a 110-byte
+  record appended (kind 0x02401393, the same name).  `DocumentSummaryInformation`
+  has ZERO effects and every other stream is noise-only.  The save adds 94 new
+  VarMeta entries in total.
+- DEFERRED: the save appends baseline blocks to the task, assignment, resource
+  and calendar tables plus a Props record.  The port has no baseline fields in
+  its reader rows, no baseline writer and no VarMeta-inserter; Baseline 1-10,
+  selected-task and intervening-baseline shapes were not measured.  The split
+  button still opens its captured menu (the existing `qt_project_dialog_gate`
+  holds every item disabled with decision 9's exact tooltip); no item was
+  enabled.
+
+W30-3.2 detail:
+
+- Measured by `scripts/oracle_w30_project_pairs.py` on a synthetic-base copy
+  with the same three top-level 0 % MANUAL leaves, calendar and placeholder
+  assignments.  `Application.WBSCodeMaskEdit("W", Level=1,
+  Sequence=ordered numbers(0), Length=2, Separator=".",
+  CodeGenerate=True, VerifyUniqueness=True)` then
+  `Application.WBSCodeRenumber(All=True)` is the Define Code + Renumber shape.
+  COM reopens the control with WBS `1`/`2`/`3` and the edit with `W01`/`W02`/
+  `W03`; Start/Finish/Duration/PercentComplete and every other task fact are
+  identical.
+- Effects: the naive fixed-offset report counts 57134 bytes, but that is an
+  alignment artifact: the edit INSERTS 24 bytes into `114/Props` and every
+  later offset word moves.  The edit's tail from 3401 is byte-identical to the
+  null's from 3377 (85347 bytes), and the shift-aware count is 234 bytes:
+  `114/Props` 88724 -> 88748 (the storage-header words at 0/4, a record size
+  4 -> 24 plus 20 inserted mask bytes -- 0x2e `.` and 0x57 `W` among them, a
+  second record size 2 -> 6 plus 4 inserted `00 00 00 57` bytes, and a
+  property-id word 0x200 -> 0x228); Task FixedMeta 8; Task Var2Data
+  512 -> 552 (four 10-byte records holding UTF-16 03/01/02/03); Task VarMeta
+  528 -> 576 (four new 12-byte entries for
+  0x0B400505/0x0B400506/0x0B400563/0x0B400564); and the Props14 edit marker.
+  `DocumentSummaryInformation` and every other stream have ZERO effects.
+- DEFERRED: the save needs a Props-record insertion and a VarMeta insertion,
+  neither of which the port's writer does, and the port has no WBS
+  code-definition or renumber writer.  The split button still opens its
+  captured menu (`qt_project_dialog_gate` items disabled); WBS stays disabled
+  with decision 9's exact tooltip.
+
+W30-3.3 detail:
+
+- No Project Spelling window was captured or measured in this wave, and the
+  dialog claims none: it is a port-owned report, with port-owned captions and
+  geometry.  The word list is the port's own -- 1867 lower-case ASCII words,
+  one per line, sorted, no duplicates, authored from general English and
+  project/construction/software-plan vocabulary (`app/spelling_words.h`) --
+  and no Microsoft Project, Office or OS dictionary was copied.
+  `app/spelling.cpp` adds conservative suffix rules (-s/-es/-ies, -ed/-er,
+  -ing/-est with silent e and doubled final consonant, -ly), possessive `'s`
+  and a trailing apostrophe.  Tokens split on hyphens, digits and punctuation;
+  one-letter tokens (article `a`, column letters) and any token with a
+  non-ASCII byte are skipped rather than guessed at.
+- `app::spelling_issues(PlanInput)` returns one `SpellingIssue` per task name
+  with a word outside the list (uid, ID, the name as stored, and the unknown
+  words in first-seen order, de-duplicated case-insensitively);
+  `app::spelling_names_checked` counts the non-empty names.  Empty names are
+  skipped, and a pending Insert Task row is checked because the display plan
+  carries it.
+- The Proofing group's Spelling button is live (`RibbonCommand::spelling`, pin
+  enabled, inventory wiring row, backlog `implemented` with the gap "the
+  port's own word list only; no Microsoft Project dictionary and no
+  correction").  `MainWindow::show_spelling()` reads the open plan and shows
+  `SpellingDialog`: a summary of names checked/found, a three-column table
+  (ID, Task name, Not in the port's word list), a note saying whose list is
+  used and that a finding is not a correction, and Close as the only button.
+  The table has NoEditTriggers and every item lacks `Qt::ItemIsEditable`; no
+  suggestion, Change, Change All, Ignore or dictionary edit exists.  The
+  document's dirty state and pending edits are untouched; with no document
+  open the button explains itself and opens nothing.
+- `app_qt/tests/spelling_gate_test.cpp` (new) runs on
+  `wave23-outline.mpp`: no-document click opens no modal; the fixture's rows
+  equal `app::spelling_issues(window.plan())`; the summary counts agree; the
+  table is read-only and Close is the only button; a second open agrees; and a
+  pending Insert Task name `Speling Chek` is listed with `Speling, Chek` while
+  the dirty state and pending start edits are unchanged.  0 failures;
+  `app_spelling` reports 99 checks passed against 1867 listed words.
+
+W30-3.4 detail:
+
+- The brief keeps Subproject disabled because inserted projects are out of
+  scope; nothing was measured and no save path was opened.  A subproject is a
+  second project file whose tasks, links and resource pool participate in the
+  host's schedule through a Project-specific inserted-project reference.  The
+  port's plan model is one file: `app::PlanInput` holds one tasks table, one
+  resources table and one assignments table, with no inserted-project field,
+  and the reader, outline writer and actuals writer have no host/subproject
+  path (outside the ribbon key, `subproject` occurs nowhere in `app/` or
+  `app_qt/`).
+- The control is unchanged: `ribbon_pin.tsv` line 120 carries enabled 0 for
+  `insert.subproject`; `ribbon_bar.cpp:413-414` passes `MenuAction::none`, no
+  RibbonCommand and enabled = false, so the disabled builder sets exactly "not
+  implemented in this port"; no `RibbonCommand::subproject` and no
+  `main_window` handler exist; there is no menu-bar Subproject entry; the
+  generated backlog row stays disabled with that reason.
+- W30-3.4 adds a named live check in `qt_ribbon_inventory`: the Project tab's
+  Insert group button is present, disabled and carries exactly the decision-9
+  string.  No product code changed.
+
+W30-3.5 detail:
+
+- The brief keeps both Add-ins commands disabled: Get Add-ins opens Microsoft's
+  online add-in store and My Add-ins manages the Office add-ins installed for
+  the signed-in user.  Both are online Office features, and the port has no
+  add-in host, no network code and no measured capture of either window;
+  nothing was measured and no save path was opened.
+- Both controls are unchanged: `ribbon_pin.tsv` lines 122-123 carry enabled 0
+  for `addins.get` and `addins.my`; `ribbon_bar.cpp:416-419` builds both small
+  buttons with `MenuAction::none`, enabled = false and no RibbonCommand, so the
+  disabled builder sets exactly "not implemented in this port"; no
+  RibbonCommand for either and no `main_window` handler exist; there are no
+  menu-bar entries; the generated backlog rows stay disabled with that reason.
+- W30-3.5 adds a named live check in `qt_ribbon_inventory` for BOTH small
+  buttons: each is present, disabled and carries exactly the decision-9
+  string.  No product code changed.
+
+Per-commit gates (logs under `build/w30/`, named `W30-3.x-*.log`).  Every
+commit's fixture log reports fixtures OK and every client-name scan reports
+0 files / 0 hits with `guard_names` exit 0 and the hex sentinel grep exit 1 as
+expected.  The measurement commits changed only measurement scripts, fixtures
+and their README/hash table, so they ran no build or ctest.
+
+| commit | builds | item tests | ctest |
+|---|---|---|---|
+| W30-3.0 `e6b50e5` | -- (scripts and fixtures only) | -- | -- |
+| W30-3.0a `ec0138d` | -- (line endings only) | -- | -- |
+| W30-3.1 `fb89190` | -- (fixtures only) | -- | -- |
+| W30-3.2 `df0c484` | -- (fixtures and analysis only) | -- | -- |
+| W30-3.3 `5a87d6d` | app exit 0; app_qt exit 0 | `app_spelling` 99 checks / 1867 words; `qt_spelling_gate` 0 failures; `qt_ribbon_inventory` | app 22/22; app_qt 32/32 |
+| W30-3.4 `ada5e66` | app_qt exit 0 | `qt_ribbon_inventory` 0 failures | app_qt 32/32 |
+| W30-3.5 `7c189b7` | app_qt exit 0 | `qt_ribbon_inventory` 0 failures | app_qt 32/32 |
+
+G3 group gates (fresh trees configured from scratch on `7c189b7` under
+`build/w30-fresh{,-app,-qt}`, built serially, log
+`build/w30/W30-G3-fresh-gates.log`; the run started 20:10 and finished 20:26
+with no lock retries):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 / 266 checks passed, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 / 420 checks passed, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 22/22 / 32/32 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (131 documented hashes, 167 tracked `.mpp`); paths OK (214 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `wave29..HEAD` / `guard_names wave29..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The numbers belong to `7c189b7`; the marker commit that follows is docs-only.
+
+## Found, not fixed
+
+- **The three Project-tab deferrals share writer gaps.**  Calculate Project is
+  blocked on a scheduler save path plus VarMeta-entry insertion and a
+  `DocumentSummaryInformation` writer; Set Baseline on baseline fields, a
+  baseline writer and the same VarMeta insertion; WBS on a whole
+  code-definition/renumber writer and a `114/Props` record insertion.  No
+  dialog layout is the blocker for any of them: a later wave needs those
+  writers before any of the three can be enabled, and the committed pairs are
+  their oracles.
+- **Spelling's word list is deliberately modest and can report a correct
+  name.**  The 1867-word list plus suffix rules covers common English and
+  project vocabulary, not proper nouns, other languages or every specialist
+  acronym; a name outside it is reported, and there is no suggestion,
+  correction or custom-dictionary path.  The dialog and the backlog's gap
+  ("the port's own word list only; no Microsoft Project dictionary and no
+  correction") say so, so a finding is a prompt for the reader, not a claim
+  that the name is misspelt.
+- **The generated backlog shows Set Baseline's label with a literal line-break
+  escape.**  `docs/ui-command-backlog.md` line 70 reads
+  `Set\nBaseline` because the split-label path in
+  `app_qt/tools/command_backlog.py` does not apply the `\n` -> space
+  replacement that the `large`/`small` path does.  It is a Low documentation
+  defect, outside G3's six items; the row's status and reason are correct, and
+  a one-line generator change plus regeneration would fix it.
+WAVE-30-G3-COMPLETE
