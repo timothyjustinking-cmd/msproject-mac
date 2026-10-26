@@ -646,6 +646,29 @@ struct Resource {
     /* MaxUnits as stored: double at +8, x100 (10000.0 = 100 %, 5000.0 = 50 %;
      * the 50 % row is the wave-11 measurement of the scale). */
     double max_units_x100 = 0.0;
+    /* Group / Code: VarMeta text 0x0c400003 / 0x0c40000a, display form
+     * trimmed and raw form verbatim.  Empty when the file stores no block
+     * (MS Project omits an empty text field rather than storing ""). */
+    std::string group;
+    std::string group_raw;
+    std::string code;
+    std::string code_raw;
+    /* The rate and accrual words of the 172-byte MPP14 resource row, measured
+     * on tests/data/wave31-resource-sheet.mpp (W31-3.3; the two byte-diff
+     * probes are build/w31/g3-rate-probe*.json):
+     *   +16  StandardRate  currency per HOUR (Project normalises
+     *                      "$400.00/day" to 50.0 before saving)
+     *   +24  OvertimeRate  currency per hour
+     *   +72  CostPerUse    in hundredths ($10.00 -> 1000.0, $1.23 -> 123.0)
+     *   +80  AccrueAt      PjAccrueAt: 1 Start, 2 End, 3 Prorated
+     * `cost_fields_stored` is true only where that row geometry was supplied
+     * (MPP14).  No MPP12 rate word has been measured, so MPP12 rows report
+     * false and the view leaves those cells blank instead of inventing 0. */
+    double standard_rate_per_hour = 0.0;
+    double overtime_rate_per_hour = 0.0;
+    double cost_per_use = 0.0; /* currency units (stored hundredths / 100) */
+    std::uint32_t accrue_at = 0;
+    bool cost_fields_stored = false;
     /* MEASURED on w9-resourcetypes (Work / Material / Cost); see "Resource
      * Type" in the file comment.  `type_stored` is false only when the file's
      * per-row metadata did not supply the value. */
@@ -665,6 +688,14 @@ struct Resource {
      * exist, so -1 is reported rather than guessed).  Resolved after both
      * tables are parsed; it is not a byte in the resource row. */
     std::int32_t calendar_uid = -1;
+    /* The Resource Sheet's Base Calendar text, resolved from TBkndCal the same
+     * way: a resource-calendar row is a copy whose base_uid names the base
+     * calendar, and Project prints that base calendar's name.  Measured on
+     * tests/data/wave31-resource-sheet.mpp (W31-3.3): the three resource rows
+     * point at calendar uids 4/5/6, each with base_uid 1, and COM's
+     * Resource.BaseCalendar reads "Standard" -- calendar 1's stored name.
+     * Empty when no calendar row matches or no name was stored. */
+    std::string base_calendar;
 
     double max_units() const { return max_units_x100 / 100.0; }
     /* The MSPDI spelling: a fraction, 1.0 == 100 %.  Project's exports write

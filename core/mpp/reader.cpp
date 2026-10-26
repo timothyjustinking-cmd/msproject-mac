@@ -483,12 +483,28 @@ constexpr std::size_t kRscRowSize = 172;
 constexpr std::size_t kRscFixedMetaEntrySize = 37;
 constexpr std::uint32_t kFieldRscName = 0x0C400001u;
 constexpr std::uint32_t kFieldRscInitials = 0x0C400002u;
+/* Group and Code are VarMeta text keys.  Measured on
+ * tests/data/wave31-resource-sheet.mpp (W31-3.3): Project saves "North" under
+ * 0x0c400003 and "CR-A" under 0x0c40000a, and omits the key when the cell is
+ * empty. */
+constexpr std::uint32_t kFieldRscGroup = 0x0C400003u;
+constexpr std::uint32_t kFieldRscCode = 0x0C40000Au;
 /* MaterialLabel is VarMeta key 0x0c40012b (a Material resource only; measured
  * on corpus/probe/w9-resourcetypes.mpp, COM-built R2 with "metre"). */
 constexpr std::uint32_t kFieldRscMaterialLabel = 0x0C40012Bu;
 constexpr std::size_t kRscRowId = 0;
 constexpr std::size_t kRscRowUid = 4;
 constexpr std::size_t kRscRowMaxUnits = 8; /* double, x100: 5000.0 = 50 % */
+/* Rate and accrual words of the same 172-byte row, measured by the two byte
+ * diffs in build/w31/g3-rate-probe*.json (W31-3.3): Project normalises
+ * "$400.00/day" to "$50.00/hr" and stores 50.0 at +16; +24 is the overtime
+ * rate in currency per hour; CostPerUse is hundredths at +72 ($10.00 ->
+ * 1000.0, $1.23 -> 123.0); AccrueAt is the u32 at +80 (1 Start, 2 End,
+ * 3 Prorated).  These offsets are MPP14's; no MPP12 rate word is measured. */
+constexpr std::size_t kRscRowStandardRate = 16;
+constexpr std::size_t kRscRowOvertimeRate = 24;
+constexpr std::size_t kRscRowCostPerUse = 72;
+constexpr std::size_t kRscRowAccrueAt = 80;
 /* Resource Type is not a row byte: FixedMeta entry +12 bit 0x10 = Work, and
  * when that is clear Fixed2Meta entry +8 bit 0x10 = Cost (clear = Material).
  * Both words are measured on w9-resourcetypes.mpp (Work/Material/Cost).  The
@@ -2221,6 +2237,26 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                                     resource.material_label_raw)) {
                     resource.material_label = trim_ascii_spaces(resource.material_label_raw);
                 }
+                if (rsc_table.usable &&
+                    read_text_field(rsc_table, rsc_var2, uid, kFieldRscGroup,
+                                    resource.group_raw)) {
+                    resource.group = trim_ascii_spaces(resource.group_raw);
+                }
+                if (rsc_table.usable &&
+                    read_text_field(rsc_table, rsc_var2, uid, kFieldRscCode,
+                                    resource.code_raw)) {
+                    resource.code = trim_ascii_spaces(resource.code_raw);
+                }
+                /* The four fixed words are present in every MPP14 resource
+                 * row (a default row stores 0.0 rates and Prorated). */
+                resource.standard_rate_per_hour =
+                    f64_at(rsc_fixed, base + kRscRowStandardRate);
+                resource.overtime_rate_per_hour =
+                    f64_at(rsc_fixed, base + kRscRowOvertimeRate);
+                resource.cost_per_use =
+                    f64_at(rsc_fixed, base + kRscRowCostPerUse) / 100.0;
+                resource.accrue_at = u32_at(rsc_fixed, base + kRscRowAccrueAt);
+                resource.cost_fields_stored = true;
                 document.resources.push_back(std::move(resource));
             }
         }
@@ -3514,6 +3550,16 @@ void parse_mpp12(const CompoundFile& cfb, std::string_view root, Document& docum
                     resource.material_label =
                         trim_ascii_spaces(resource.material_label_raw);
                 }
+                if (rsc_var.usable &&
+                    read_text_field(rsc_var, rsc_var2, uid, kFieldRscGroup,
+                                    resource.group_raw)) {
+                    resource.group = trim_ascii_spaces(resource.group_raw);
+                }
+                if (rsc_var.usable &&
+                    read_text_field(rsc_var, rsc_var2, uid, kFieldRscCode,
+                                    resource.code_raw)) {
+                    resource.code = trim_ascii_spaces(resource.code_raw);
+                }
                 document.resources.push_back(std::move(resource));
             }
         }
@@ -3741,8 +3787,17 @@ bool has_storage(const CompoundFile& cfb, std::string_view name) {
  * no such row keeps -1: the file stores no word to read, and the project
  * calendar then applies -- reporting a guessed uid would be invented state. */
 void resolve_resource_calendars(Document& document) {
+    const auto calendar_name = [&document](std::int32_t uid) {
+        for (Calendar const& calendar : document.calendars) {
+            if (calendar.uid == uid && !calendar.name.empty()) {
+                return calendar.name;
+            }
+        }
+        return std::string{};
+    };
     for (Resource& resource : document.resources) {
         resource.calendar_uid = -1;
+        resource.base_calendar.clear();
         for (Calendar const& calendar : document.calendars) {
             if (calendar.resource_uid != static_cast<std::int32_t>(resource.uid)) {
                 continue;
@@ -3757,6 +3812,15 @@ void resolve_resource_calendars(Document& document) {
                 break;
             }
             resource.calendar_uid = calendar.uid;
+            /* A resource-calendar row is a copy of its base calendar; Project
+             * prints the BASE calendar's name in the Resource Sheet's Base
+             * Calendar column (W31-3.3: all three fixture rows have base_uid 1
+             * and COM reads "Standard", calendar 1's stored name).  A row with
+             * no stored base falls back to its own name, and an unnamed row
+             * leaves the cell blank rather than inventing a name. */
+            std::string base = calendar_name(calendar.base_uid);
+            resource.base_calendar =
+                base.empty() ? calendar.name : std::move(base);
         }
     }
 }

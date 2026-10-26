@@ -2647,6 +2647,12 @@ void test_resource_sheet_fixture(TestContext& context) {
     const std::uint32_t uids[] = {2, 3, 4};
     const std::uint32_t ids[] = {1, 2, 3};
     const char* names[] = {"Crew A", "Crew B", "Crew C"};
+    const char* groups[] = {"North", "South", "North"};
+    const char* codes[] = {"CR-A", "CR-B", "CR-C"};
+    const double standard_rates[] = {0.0, 50.0, 0.0};
+    const double overtime_rates[] = {0.0, 75.0, 0.0};
+    const double costs[] = {0.0, 10.0, 0.0};
+    const std::uint32_t accruals[] = {3, 1, 2};
     for (std::size_t i = 0; i < 3; ++i) {
         const mpp::Resource* resource = find_resource(document, uids[i]);
         context.check(resource != nullptr,
@@ -2661,6 +2667,30 @@ void test_resource_sheet_fixture(TestContext& context) {
         context.equal(resource->name, std::string(names[i]),
                       "wave31-resource-sheet uid " + std::to_string(uids[i]) +
                           " name");
+        context.equal(resource->group, std::string(groups[i]),
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " Group (VarMeta 0x0c400003)");
+        context.equal(resource->code, std::string(codes[i]),
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " Code (VarMeta 0x0c40000a)");
+        context.equal(resource->standard_rate_per_hour, standard_rates[i],
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " StandardRate (+16, per hour)");
+        context.equal(resource->overtime_rate_per_hour, overtime_rates[i],
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " OvertimeRate (+24, per hour)");
+        context.equal(resource->cost_per_use, costs[i],
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " CostPerUse (+72 hundredths -> currency)");
+        context.equal(resource->accrue_at, accruals[i],
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " AccrueAt (+80)");
+        context.check(resource->cost_fields_stored,
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " reports the rate/accrual words as stored");
+        context.equal(resource->base_calendar, std::string("Standard"),
+                      "wave31-resource-sheet uid " + std::to_string(uids[i]) +
+                          " BaseCalendar resolves through TBkndCal base_uid");
     }
     bool tombstone_skipped = false;
     for (const mpp::SkippedRow& skipped : document.skipped_resources) {
