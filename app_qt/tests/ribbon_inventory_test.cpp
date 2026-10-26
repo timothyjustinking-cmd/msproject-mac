@@ -1505,6 +1505,29 @@ int main(int argc, char** argv) {
                                 QStringLiteral("not implemented in this port"),
                         "Resource Pool (shared pools) stays disabled with the exact tooltip");
         }
+        // W30-2.6: Team Planner is a whole view (resource lanes with assigned
+        // work laid out per day), not a command this port can honour.  The brief
+        // puts it in wave 31 or later and keeps it disabled.  It appears twice
+        // on the ribbon -- Resource tab / View and View tab / Resource Views --
+        // and as a disabled status-bar view button; no view mode, widget or
+        // model exists behind any of them, so every occurrence stays disabled
+        // with decision 9's exact tooltip.  This named check states the brief's
+        // requirement for both ribbon buttons; the pin loop already holds them
+        // to their pins.
+        for (const char* tab : {"Resource", "View"}) {
+            const QString group = QString::fromLatin1(tab) == QStringLiteral("Resource")
+                                      ? QStringLiteral("View")
+                                      : QStringLiteral("Resource Views");
+            QWidget* control = find_control(ribbon, QString::fromLatin1(tab), group,
+                                            QStringLiteral("Team Planner"));
+            const std::string message =
+                std::string("Team Planner on the ") + tab +
+                " tab stays disabled with the exact tooltip";
+            gate::check(control != nullptr && !control->isEnabled() &&
+                            control->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                        message.c_str());
+        }
     }
 
     std::printf("qt_ribbon_inventory: ");
