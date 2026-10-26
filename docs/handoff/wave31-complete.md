@@ -48,8 +48,7 @@ W31-0.2 detail:
 - Both automatic branches (indent and outdent) call it after the linked-file
   refusal, so a refused shape builds no edit.
 - Tests: `app_edits_outline` patches one word of one row on copies of the
-  committed controls and checks a refusal per shape, plus the outdent path
-  (3201 checks).
+  committed controls and checks a refusal per shape, plus the outdent path.
 
 W31-0.3 detail:
 
@@ -63,7 +62,7 @@ W31-0.3 detail:
 - Test (e) of `check_summary_rollup_scope`, which used to accept a 40 % row
   outside the edited set, now asserts the refusal, the message, the push
   refusal and the Entire project exception; a patched flat control proves the
-  date-edit half (`app_edits_actuals` 3782 checks, 50 expected failures).
+  date-edit half (`app_edits_actuals` with its 50 expected failures).
 
 W31-0.4 detail:
 
@@ -120,8 +119,8 @@ hex grep no match and fixtures OK):
 | commit | builds | item tests | app ctest |
 |---|---|---|---|
 | W31-0.1 `33fbb3d` | app build exit 0 | targeted 5/5: `app_edit`, `app_edits_links`, `app_edits_actuals`, `app_edits_outline`, `app_smoke` | not run (targeted) |
-| W31-0.2 `d9d8d8d` | app build exit 0 | `app_edits_outline` 3201 checks | 22/22 |
-| W31-0.3 `659fd97` | app build exit 0; app_qt build exit 0 | `app_edits_actuals` 3782 checks, 50 expected failures; app_qt 32/32 | 22/22 |
+| W31-0.2 `d9d8d8d` | app build exit 0 | `app_edits_outline` passed | 22/22 |
+| W31-0.3 `659fd97` | app build exit 0; app_qt build exit 0 | `app_edits_actuals` passed with its 50 expected failures; app_qt 32/32 | 22/22 |
 | W31-0.4 `9c3213e` | app build exit 0; app_qt build exit 0 | `qt_fill_gate`, `qt_ribbon_inventory`; app_qt 32/32 | 22/22 |
 
 G0 group gates (fresh trees configured from scratch on `9c3213e` under
@@ -381,7 +380,7 @@ W31-2.2 detail:
   90.176458333 d.
 - Project draws the span at 85 % of the pane and floors the origin to its
   bottom tier; on these windows that tier is finer than a day, which the
-  port's day tier cannot express.  `qt_zoom_commands` (103 checks) therefore
+  port's day tier cannot express.  `qt_zoom_commands` therefore
   compares the measured window with the 85 % ideal within 1.5 %, then
   separately requires the port's exact rule: origin floored to the day and at
   or before the span, visible = max(ideal, span from the floored origin to the
@@ -438,7 +437,7 @@ exists beside the commit.
 | commit | item tests | app ctest | app_qt ctest |
 |---|---|---|---|
 | W31-2.1 `712be75` | `layout_model_tests` 328 checks; Zoom dialog gate (480x420); `qt_ribbon_inventory` | 23/23 | 33/33 |
-| W31-2.2 `6439e70` | `qt_zoom_commands` 103 checks; oracle two-session agreement on both fixtures | 23/23 | 34/34 |
+| W31-2.2 `6439e70` | `qt_zoom_commands`; oracle two-session agreement on both fixtures | 23/23 | 34/34 |
 | W31-2.3 `25121ff` | `qt_ribbon_inventory` (Window ids, disabled state, exact tooltip) | 23/23 | 34/34 |
 | W31-2.4 `e477012` | `qt_ribbon_inventory` (Macros id, disabled state, exact tooltip) | 23/23 | 34/34 |
 
@@ -774,8 +773,8 @@ W31-4.2 detail:
   `task_usage_style()`/`resource_usage_style()`.  The fixture stores the
   table references as `Usa&ge` / `&Usage`; the accelerator placement is the
   file's and the tests pin those bytes.
-- Tests: core `viewstate_tests` 1133 checks (usage-style 27), `app_usage_style`
-  31 checks; core ctest 53/53, app ctest 24/24, app_qt 35/35.
+- Tests: core `viewstate_tests` (including the usage-style cases),
+  `app_usage_style` 31 checks; core ctest 53/53, app ctest 24/24, app_qt 35/35.
 
 W31-4.3 detail:
 
@@ -871,7 +870,7 @@ code commits rebuilt the touched trees and ran their suites:
 | commit | item tests | core ctest | app ctest | app_qt ctest |
 |---|---|---|---|---|
 | W31-4.1 `6a8fd96` | fixture + oracle script; `check_fixtures.py` registers the hash | -- (fixture commit) | -- | -- |
-| W31-4.2 `fe35886` | `viewstate_tests` 1133 checks (usage-style 27), `app_usage_style` 31 checks | 53/53 | 24/24 | 35/35 |
+| W31-4.2 `fe35886` | `viewstate_tests` (including the usage-style cases), `app_usage_style` 31 checks | 53/53 | 24/24 | 35/35 |
 | W31-4.3 `4c32189` | `app_usage_grid` 214 checks | -- | 25/25 | 35/35 |
 | W31-4.4 `f0ffb6f` | `app_usage_grid` 245 checks; `qt_usage_gate` static sections; `qt_view_gate` | -- | 25/25 | 36/36 |
 | W31-4.5 `830d414` | `qt_usage_gate` live window | -- | -- | 36/36 |
@@ -949,7 +948,7 @@ W31-5.1 detail:
   (`app_qt/ribbon_pin.tsv` records enabled 0 for all four).
 - The four View-menu entries are `MenuAction::none`, so
   `menu_item_supported()` is false and `MainWindow::build_menus()` disables each
-  with the same exact tooltip.  `app_menu` (988 checks) now includes Resource
+  with the same exact tooltip.  `app_menu` now includes Resource
   Views > Other Views in its disabled set beside the three Task Views entries,
   and `qt_shell_offscreen` reads the disabled state and the exact tooltip back
   from the live View menu's two drop-downs.
@@ -967,7 +966,7 @@ finds no match (exit 1, expected) and `check_fixtures.py` is OK):
 
 | commit | item tests | app ctest | app_qt ctest |
 |---|---|---|---|
-| W31-5.1 `45d1206` | `qt_ribbon_inventory` (four View ids, disabled, exact tooltip); `qt_shell_offscreen` (live View menu); `app_menu` 988 checks; backlog 95/51 rows | 25/25 | 36/36 |
+| W31-5.1 `45d1206` | `qt_ribbon_inventory` (four View ids, disabled, exact tooltip); `qt_shell_offscreen` (live View menu); `app_menu`; backlog 95/51 rows | 25/25 | 36/36 |
 
 G5 group gates (fresh trees configured from scratch on `45d1206` under
 `build/w31-g5-fresh{,-app,-qt}`, log `build/w31/W31-G5-fresh-gates.log`; the run
@@ -998,3 +997,342 @@ The numbers belong to `45d1206`; the marker commit that follows is docs-only.
   refresh this row and the generated backlog.
 
 WAVE-31-G5-COMPLETE
+
+## CLOSE - the wave record
+
+The wave ran as six groups plus this close, one fresh session each: G0 (the
+wave-30 review's four Highs), G1 (the View tab's data commands), G2 (zoom and
+the window commands), G3 (the Resource Sheet at Gantt fidelity), G4 (Task Usage
+and Resource Usage at Gantt fidelity) and G5 (the views left out).  Every item
+in G0..G5 is DONE; none was deferred, and no item was left without a committed
+fixture, measurement log or test.  The group marker lines end each section
+above.  The CLOSE work was the fresh-tree gate run, both privacy scans, the
+review pass over `git diff wave30..wave31`, seven CLOSE fixes (W31-C1..W31-C7),
+the push, the first dispatch (red on all three Qt jobs), the second (red on the
+two Unix Qt jobs, one further platform warning) and the third dispatch that
+gates the final tree, the START-HERE / INDEX / memory update, the regenerated
+backlog and the re-scored 16 decisions.
+
+The record below belongs to the final tree `072773b`; the CLOSE docs commit
+after it changes docs only.  W31-C2, W31-C3, W31-C5, W31-C6 and W31-C7 change
+compiled files, so the fresh-tree gates were re-run on the final tree (below);
+W31-C4 adds the backlog check to the app_qt test set (37 tests).  W31-C1
+(`644afe0`) is generator/docs only.
+
+### The CLOSE fixes
+
+| id | finding | commit | gates |
+|---|---|---|---|
+| W31-C1 | The generated backlog listed Fill as `implemented` with no note while W31-0.4's live ribbon control is disabled, so a reader of decision 9's backlog would take it as live | `644afe0` | generator and regenerated doc only, no build; `build/w31/W31-C1-checks.log`: regenerate exit 0, backlog-vs-pin 95/95 rows agree, scan HEAD 0 files / 0 hits, messages 0 commits, `guard_names wave30..HEAD` exit 0, hex grep no matches (exit 1, expected), `check_fixtures.py` OK (139 documented hashes, 173 tracked `.mpp`) |
+| W31-C2 (U1) | Leaving Resource/Task Usage for the task sheet cleared the grid and spans but not `SheetHeaderView::tier_cells_`, so the usage two-tier captions painted over the task columns | `5fa3d5d` | app_qt build exit 0, ctest 36/36, `qt_usage_gate` 0 failures (it now switches Resource Usage -> task sheet), fixtures OK (139/173), scan HEAD 0/0, guard exit 0, hex exit 1 (expected) -- `build/w31/W31-C2-*.log` |
+| W31-C3 (U2) | `open_file` (success and failure) and `new_project` skipped the usage teardown; `new_project` also left `generic_` true, so File > New from usage had no columns until a rebind | `165e497` | app_qt build exit 0, ctest 36/36, `qt_usage_gate` 0 failures (open, failed open and Blank Project each from a usage view), fixtures OK (139/173), scan HEAD 0/0, guard exit 0, hex exit 1 (expected) -- `build/w31/W31-C3-*.log` |
+| W31-C4 (U3) | The generator parsed only `large`/`small`/`split`, so 19 command buttons built with `small_cmd`/`add(Kind::button)` had no backlog row; five disabled ones had no decision-9 reason, and the one-way cross-check could not see a missing row | `113d16a` | regenerate exit 0, **114 ribbon rows (69 disabled, 45 implemented)** and 51 menu rows, bidirectional pin check **114/114, 0 mismatches**, app_qt ctest 37/37 (with `qt_command_backlog`), fixtures OK (139/173), scan HEAD 0/0, guard exit 0, hex exit 1 (expected) -- `build/w31/W31-C4-*.log` |
+| W31-C5 | The eight View-tab command ids added in W31-2.3/2.4/5.1 had no case in `handle_ribbon_command`'s `RibbonCommand` switch; MSVC accepted the unhandled enumerators, but `linux-qt` and `macos-qt` build with `-Werror=switch` and failed the first dispatch | `cb69a0b` | app_qt build exit 0, ctest 37/37 (`build/w31/W31-C5-app-qt.log`); the disabled controls keep a no-op case in the switch; the second dispatch's build cleared it (that run then failed only on W31-C7) |
+| W31-C6 | `qt_resource_sheet_gate` sampled one logical pixel of a grabbed image; `windows-qt` failed only the Indicators-badge check while every neighbouring check passed (the sample assumed a unit device-pixel ratio and a fixed glyph footprint) | `c6e4314` | app_qt build exit 0, ctest 37/37, `qt_resource_sheet_gate` 0 failures (`build/w31/W31-C6-app-qt.log`), and the gate also passes at `QT_SCALE_FACTOR=1.25`; the check now scans the painted header and cell areas scaled by the image's device-pixel ratio, so a header that paints no badge still fails; the second dispatch cleared `windows-qt` |
+| W31-C7 | `app_qt/tests/data_commands_test.cpp` kept `row_map_uids`, a helper left unused by W31-1.1; MSVC accepted it, but the Linux and macOS Qt jobs build with `-Werror=unused-function` and failed the second dispatch | `072773b` | app_qt configure/build exit 0, ctest 37/37 (`build/w31/W31-C7-app-qt.log`); the helper is removed; the third dispatch below is the platform re-gate |
+
+W31-C1 makes the backlog's Fill row agree with its disabled control: the
+generator checks `DISABLED_RIBBON_COMMANDS` before `IMPLEMENTED_RIBBON_COMMANDS`,
+so a command whose handler exists behind a control that standing rule 1 keeps
+disabled carries the measurement reason.  Project's Fill Down save rewrites the
+row's calculated/effective dates and slack, the project roll-up and the DSI
+strings, which the port's start writer cannot reproduce.
+
+W31-C2 adds `reset_usage_presentation()` (grid, label spans, tier captions,
+parent-only gutter numbers, 21 px pitch) and uses it in `show_view`; W31-C3
+calls the same helper from both `open_file` outcomes and `new_project`, and
+clears `generic_` there.  `qt_usage_gate` now covers Usage -> task sheet, File >
+Open (success and failure) and Blank Project, all from a usage view.
+
+W31-C4 completes the backlog: the Task tab's five percent buttons,
+Indent/Outdent, Link/Unlink and Split Task, the Project tab's five
+property/schedule/status buttons and the four alignment buttons now have rows.
+The live ones carry their real scope (Project Information writes only the
+priority; Links Between Projects, Change Working Time and Move Project say what
+they cannot change); Split Task names the missing split-edit writer.  The local
+one-way check became the committed `scripts/check_command_backlog.py`, which
+compares the backlog and the pin in both directions and the enabled column
+against the status; it is registered as `qt_command_backlog`.  The summary is
+now 114 ribbon commands (69 disabled, 45 implemented) and 51 menu commands
+(7 disabled).
+
+W31-C5 and W31-C6 are the first CI dispatch's findings, not review findings.
+W31-C5 names the eight disabled View commands (W31-2.3/2.4/5.1) in
+`handle_ribbon_command`'s switch: MSVC accepted the unhandled enumerators, but
+the Linux and macOS Qt jobs build with `-Werror=switch` and refused them.
+W31-C6 replaces `qt_resource_sheet_gate`'s single-pixel sample with a scan of
+the painted Indicators-header area and of the red/blank cell areas, scaled by
+the grabbed image's device-pixel ratio: on `windows-qt` only that one check
+failed while every neighbouring paint check passed, and the old sample assumed
+a unit ratio and a fixed glyph footprint.  The gate still fails a header that
+paints no badge (the scan requires 20 blue pixels in the Indicators section).
+W31-C7 is the second dispatch's finding: the Linux and macOS Qt jobs build
+app_qt with `-Werror=unused-function`, and `row_map_uids` had been left unused
+by W31-1.1.  MSVC accepted it; removing the helper is the whole fix, and the
+third dispatch is the platform re-gate.
+
+### Errata from the record audit
+
+The record audit (A1-A9) checked the committed group sections as well as the
+working CLOSE draft.  A1 (the CLOSE draft was uncommitted) and A3 (START-HERE,
+INDEX and the memory file were not yet updated) are what this commit closes:
+the record, the docs and the marker are committed together.  A2 is the push
+and the three dispatches below.  The remaining corrections are:
+
+- **A4, five direct-run counts with no retained log.**  W31-0.2's 3201,
+  W31-0.3's 3782, W31-2.2's 103, W31-4.2's 1133/27 and W31-5.1's 988 were
+  printed by the binaries but not captured in a log.  The group sections now
+  name the tests without those counts; the ctest totals in the same rows are
+  logged and unchanged, the 50 expected failures are the source-level loop the
+  review verified, and `app_usage_style`'s 31 checks are in
+  `build/w31/W31-4.2-app-usage-style.log`.  No log was reconstructed.
+- **A5, zero-byte per-commit guard/hex logs.**  Both tools print nothing on a
+  clean scan, so many of the 49 per-commit logs are empty; their exit codes
+  were not captured individually.  The group fresh-tree logs and this CLOSE
+  run's scans (below) are the retained evidence for the range; the per-commit
+  rows quote only the exit lines that exist.
+- **A6, the usage oracle's stale hash line.**  `W31-4.1-oracle.log` prints
+  `0459871A...`, an earlier save; the fixture committed in `6a8fd96` is
+  `AF8DFE1D...`.  The oracle's own JSON, `build/w31/W31-G4-usage.json`, records
+  the committed fixture's SHA-256 under `fixture.sha256` together with the
+  time-phased values, and `qt_usage_gate` reads the same fixture and measures;
+  the re-save happened after the text log's fixture line and changed no
+  measured value.
+- **A7, the finding-id convention.**  The four G0 commits say
+  `W31-0.x (R30-x)` because each answers one wave-30 review id; `aff4710` is
+  the brief and carries no work id; `W31-C1`..`W31-C4` are this CLOSE's review
+  ids, `W31-C5`/`W31-C6` are the first CI dispatch's two findings and `W31-C7`
+  is the second dispatch's.  One commit carries one finding (the G0 ones name
+  both ends of the same mapping).
+- **A9, the check's home.**  The backlog-vs-pin check was a local `build/`
+  script, so the claim could not be rerun.  W31-C4 commits the bidirectional
+  `scripts/check_command_backlog.py` and registers it as `qt_command_backlog`
+  wherever Python is available; its W31-C4 run reports 114 pin command
+  controls, 114 backlog rows, 0 mismatches.
+
+### Fresh-tree gates (final compiled tree)
+
+One run from three trees configured from scratch under
+`build/w31-close-fresh{,-app,-qt}` on the final compiled tree `072773b` and
+built serially with `CORE_WARNINGS_AS_ERRORS=ON`; log
+`build/w31/W31-CLOSE-fresh-gates.log` (logged 08:26, finished 08:36 local, no
+lock retries).  The CLOSE docs commit after it changes no compiled file.
+
+| gate | result |
+|---|---|
+| core configure / build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 / 266 checks passed, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 / 456 checks passed, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app configure / build / ctest | exit 0 / exit 0 / 25/25 passed |
+| app_qt configure / build / ctest | exit 0 / exit 0 / 37/37 passed |
+| `check_fixtures.py` / paths / oracle provenance | fixtures OK (139 documented hashes, 173 tracked `.mpp`); fixture paths OK (222 tracked test-data files, no local path); scenario oracle provenance OK (8 oracle(s)) |
+| line endings | no new CRLF file versus `wave30` (173 grandfathered at each tip, `tests/data` excluded; `build/w31/W31-CLOSE-fresh-gates.log`); `git diff --check` exit 0 with the same two grandfathered CRLF files excluded as at the wave-30 close (`app/app_edits_links_tests.cpp`, `app/field_link_edits.cpp`; log `build/w31/W31-CLOSE-diff-check-072773b.log`).  Without those exclusions the pre-existing CRLF line endings are reported as trailing whitespace (exit 2, 124 reported lines in those two files) -- both files are wholly CRLF at both tips, and the wave added lines to them without changing any line ending |
+| client-name scan on HEAD / messages `wave30..HEAD` / `guard_names wave30..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+Parity gates on the fresh Qt shell from the same run (offscreen, scale 1, at
+`072773b`): `wave23-outline` reports **10 comparable measures, 0 failing, 0
+missing, PASS**, and `wave25-auto` colour-only reports **1 comparable measure,
+0 failing, PASS**.  The pixel score is not re-run (no PROJECT_A reference PNG
+is local).
+
+### Privacy
+
+The final tree is clean under both scans: the line-based
+`scan_client_names.py HEAD --messages wave30..HEAD` reports **0 files / 0 hits**
+and **0 commit messages**, the whitespace-normalised `guard_names.py
+wave30..HEAD` is **0 hits, exit 0**, and `git grep -nE
+"client-string-[0-9a-f]{8}"` has no match (exit 1, expected).  The six new
+fixtures were built through Project on the neutral `C:/w31` roots with neutral
+Author/Manager/Company/UserName/Title and are documented in
+`tests/data/README.md`; no client task/resource/project/person name, profile
+path, screenshot or unsalted name hash is committed.  The two pre-wave fixtures
+and 69 tracked text files still carrying the operator's name, and the 13
+unsalted hashes in older history, are unchanged and belong to the operator's
+decision.
+The wave-31 brief records the repository's own path (`D:\dev\msproject-mac`) --
+machine layout, not client data, not a name-scan hit -- and the new oracle
+scripts and record name the policy-allowed neutral `C:/w31` roots.
+
+### Independent review of `wave30..wave31`
+
+Three independent read-only reviews covered `git diff wave30..wave31` at
+`644afe0` (compiled tree `d222ef3`, before the CLOSE fixes): a save-path/core
+review, a UI/ribbon/gates review and an audit of the record itself.  They found
+**1 Critical / 4 High / 3 Medium / 8 Low**; every Critical and High is fixed in
+this wave, as are the three Mediums and all four process/repo Lows of the
+record audit.  The four core Lows are queued with directions below.  The CI
+dispatches then found three platform-only failures (W31-C5 and W31-C6 on the
+first, W31-C7 on the second); they are CI findings, fixed and re-dispatched, and
+are not counted in these review numbers; the third dispatch is green on the
+final tree.
+
+| id | severity | finding | disposition |
+|---|---|---|---|
+| A1 | Critical | The committed record ended at G5; the only CLOSE was the uncommitted draft with `{{REVIEW}}`/`{{CI}}`/`{{FOUND}}` placeholders, whose text already claimed the push, visits and docs | Fixed by this commit: the record, START-HERE, INDEX and memory are committed with the evidence, and the push/dispatch claims are true |
+| A2 | High | No `origin/wave31` and no CI run existed; the only pre-push guard log was a REFUSED whole-branch (`main..HEAD`) scan listing seven wave-23/wave-27 fixtures already on their own origin branches | Fixed by the three pushes and the three dispatches below: the first dispatch was red on the three Qt jobs for W31-C5/W31-C6, the second was red on the two Unix Qt jobs for W31-C7, and the third is green on `072773b` (qt.yml 40404390641, ci.yml 40404395191); the hook's actual new-branch range (`HEAD --not --remotes=origin`) was clean at every push (preflight logs below) and the refused log is the known grandfathering residual, not this wave's commits |
+| A3 | High | START-HERE, `memory/coordinator.md` and INDEX had no wave-31 update | Fixed by this commit (see the file list in the push section) |
+| U1 | High | Leaving a usage view for the task sheet kept `tier_cells_`, painting the usage week/day captions over the task columns; no gate switched back | Fixed `5fa3d5d` (W31-C2); `qt_usage_gate` covers the switch |
+| U2 | High | `open_file` (both outcomes) and `new_project` skipped the usage teardown, and `new_project` kept `generic_` true (no columns from usage) | Fixed `165e497` (W31-C3); `qt_usage_gate` covers open, failed open and Blank Project from a usage view |
+| A4 | Medium | Five quoted direct-run check counts had no retained log | Fixed in this commit by removing the counts and recording the errata; the ctest totals stay |
+| A5 | Medium | 49 per-commit guard/hex logs are zero bytes, so their exit codes are not individually evidenced | Documented in the errata; the group and CLOSE scans are the retained evidence for the range |
+| U3 | Medium | 19 command buttons built with `small_cmd`/`add(Kind::button)` had no backlog row, five of them disabled without a reason; the one-way check could not see missing rows | Fixed `113d16a` (W31-C4): parser, 19 rows, bidirectional committed check, ctest |
+| A6 | Low | The usage oracle's text log printed an earlier fixture hash than the committed fixture | Documented in the errata; the oracle's own JSON records the committed SHA-256 with the measured values |
+| A7 | Low | The G0 commits carry two ids (`W31-0.x (R30-x)`); the brief and CLOSE ids fall outside the `W31-x.y` pattern | Documented in the errata as the review-id mapping, not two findings per commit |
+| A8 | Low | The working CLOSE draft used the operator's first name three times | Fixed before commit: all three now say "the operator" (and INDEX's wave-28 line likewise) |
+| A9 | Low | The backlog/pin check lived only in untracked `build/`, so its claim could not be rerun | Fixed `113d16a`: `scripts/check_command_backlog.py` is committed and registered as `qt_command_backlog` |
+| C1 | Low | MPP12 (or stored 0) Accrue At formats as the literal "0" in the Resource Sheet, contradicting the adapter's blank intent; presentation only | Queued: map `accrue_at` outside 1..3 to empty Text and add an MPP12/view assertion |
+| C2 | Low | W31-0.3's entire-project exception is read from the caller-writable `StructuralEdit::update_entire_project` at push time; production constructors compute it correctly | Queued: recompute the scope in `push()`/`save_structural_edits()` or make the flag factory-set |
+| S1 | Low | A corrupt/extreme standard rate reaches `std::llround` after only a `> 0` test; an extreme rate can overflow the int64 cost multiply; display only, never a write | Queued: require `std::isfinite` plus a bound before `llround` and use a checked multiply |
+| S2 | Low | With no "Resource Sheet" view, any applied view with a style record in [634, 41362) bytes supplies the Resource Sheet's fonts/colours; presentation only | Queued: accept the fallback only when the applied view's table names a stored resource table |
+
+The core review also disclosed that it briefly wrote a scratch diff inside the
+repository during its read-only pass and removed it; `git status` afterwards
+showed only the two docs that were already modified.  The three reviews ran in
+separate contexts and read the code; they did not run builds or change the
+tree.
+
+### Push and CI
+
+The branch was pushed to `origin/wave31` **three times, never with force**, each
+after a clean preflight on the hook's actual range (`HEAD --not
+--remotes=origin`: `scan_client_names.py HEAD`, `guard_names.py <new range>`,
+`guard_names.py HEAD --not --remotes=origin`, the `client-string-` hex grep and
+`check_fixtures.py`; logs `build/w31/W31-CLOSE-push-preflight*.log`).  Both
+pushes and the third passed the repository's pre-push hook.
+
+| push | tree | new commits | preflight | log |
+|---|---|---|---|---|
+| 1 | `113d16a` | created `origin/wave31` | 0 scans, guard exit 0, hex exit 1, fixtures OK | `build/w31/W31-CLOSE-push.log`, `...-push-preflight.log` |
+| 2 | `c6e4314` | `113d16a..c6e4314` (W31-C5, W31-C6) | scan 0/0, guard `113d16a..HEAD` exit 0, hex exit 1 | `build/w31/W31-CLOSE-push-2.log`, `...-push-preflight-2.log` |
+| 3 | `072773b` | `c6e4314..072773b` (W31-C7) | scan 0/0, guard `c6e4314..HEAD` and `HEAD --not --remotes=origin` exit 0, hex exit 1 | `build/w31/W31-CLOSE-push-3.log`, `...-push-preflight-3.log` |
+
+Both workflows were dispatched explicitly after each push with `gh workflow run
+qt.yml --ref wave31` and `gh workflow run ci.yml --ref wave31` (the
+`workflow_run` trigger only fires from `main`).  Three dispatches were needed
+because the Qt jobs on Linux and macOS build with `-Werror=switch` and
+`-Werror=unused-function` while MSVC tolerates both, and one Windows gate
+sampled pixels:
+
+| dispatch | tree | qt.yml (`qt-shell`) | ci.yml (`ci`) |
+|---|---|---|---|
+| 1 | `113d16a` | **40400256617 failure**: `windows-qt` failed `qt_resource_sheet_gate` (W31-C6) after its build; `linux-qt` and `macos-qt` failed the build on `-Werror=switch` (W31-C5) | **40400261717 success**: `windows-msvc`, `ubuntu-gcc` |
+| 2 | `c6e4314` | **40401372235 failure**: `windows-qt` green (C6 fixed); `linux-qt` and `macos-qt` failed the build on `-Werror=unused-function` (W31-C7) | **40401377893 success** |
+| 3 | `072773b` | **40404390641 success**: `windows-qt`, `linux-qt` and `macos-qt`, including the two parity gates | **40404395191 success**: `windows-msvc`, `ubuntu-gcc` |
+
+The final-run status snapshots are `build/w31/close-ci-{qt,ci}-status.json`
+(all five jobs `success` on `072773b`); the first and second dispatches are
+snapshotted as `close-ci-{qt,ci}-firstdispatch-status.json` and
+`close-ci-{qt,ci}-seconddispatch-status.json`, and the watches are
+`build/w31/W31-CLOSE-ci-watch*.log`.  The two platform findings and their
+fixes are W31-C5/W31-C6 (first dispatch) and W31-C7 (second dispatch), each
+fixed in its own commit with an app_qt build and 37/37 test run on the tree it
+claims.  The record and marker commit after `072773b` changes docs only; it is
+pushed without force after the third dispatch and needs no re-dispatch, so the
+five green jobs cover the final code tree.
+
+### The 16 decisions re-scored (wave-30 close as the starting point)
+
+| # | decision | wave 30 | after wave 31 | why |
+|---|---|---|---|---|
+| 1 | all seven tabs | DONE | **DONE** | the View tab's Data and Zoom groups became live (six controls) on the measured/session-only path; the tab/group structure is unchanged |
+| 2 | full backstage | DONE | **DONE** | unchanged; no backstage work this wave |
+| 3 | original icon set | DONE (stronger) | **DONE (stronger)** | unchanged; no icon was redrawn or regressed |
+| 4 | measured chrome metrics | DONE | **DONE** | unchanged; no ribbon geometry change beyond enabled/disabled state |
+| 5 | timeline strip | DONE | **DONE** | unchanged; the wave-30 negative baseline for Add to Timeline is untouched |
+| 6 | real Entry table | DONE | **DONE** | the Entry table is still real and file-driven; Tables now switches between the task tables the file stores, session only |
+| 7 | render what the file says | DONE (stronger) | **DONE (stronger)** | the Resource Sheet renders the file's stored resource Entry table, its Text Styles and its stored widths; both usage views render the stored Details lists, timescale tiers and measured widths; no writer was added, so every enabled save path is still pinned to its measured bytes |
+| 8 | status bar | PARTIAL (stronger) | **PARTIAL (stronger)** | unchanged; Team Planner and Report still have no working view to switch to |
+| 9 | disabled commands + backlog | DONE (stronger) | **DONE (stronger)** | the regenerated backlog lists 114 ribbon commands with 69 disabled and 45 implemented, and 51 menu commands with 7 disabled (95/64/31 after W31-C1 corrected Fill's row; W31-C4 then listed the 19 command buttons the generator had skipped, five of them disabled with reasons); six View controls became live, the Window group and Macros stay disabled with their own reasons, and G5 names the out-of-scope views; a committed bidirectional check pins all 114 rows to the independent pin |
+| 10 | light and dark themes | PARTIAL (stronger) | **PARTIAL (stronger)** | unchanged; the White theme is still laid out and disabled, and this wave made no theme change |
+| 11 | new-project defaults | DONE (stronger) | **DONE (stronger)** | unchanged; no new-project path changed this wave |
+| 12 | structural measurement | PARTIAL (stronger) | **PARTIAL (stronger)** | wave 31 adds four Project measurement sets (the Fill Down pair, the stored-tables fixture, the Resource Sheet fixture and the Task/Resource Usage fixture) and two numbers-only references (zoom, time-phased values); 6 new fixtures (167 -> 173 tracked `.mpp`), 8 new documented hashes (131 -> 139), four new app_qt gate targets (`qt_data_commands`, `qt_zoom_commands`, `qt_resource_sheet_gate`, `qt_usage_gate`; `qt_fill_gate`, `qt_ribbon_inventory`, `qt_shell_offscreen` and `qt_view_gate` extended) and four new test targets (`app_sort`, `app_usage_style`, `app_usage_grid`, and the `qt_command_backlog` script test); every view-state change is session-only, so no persisted view-state writer was measured; the pixel score is still not re-run (no PROJECT_A reference PNG is local) |
+| 13 | Carlito bundled | DONE | **DONE** | unchanged |
+| 14 | every dialog on every tab | DONE (stronger) | **DONE (stronger)** | the Sort dialog and the Zoom dialog are now live (session-only effects); no other missing dialog was added |
+| 15 | dialog semantics | PARTIAL (stronger) | **PARTIAL (stronger)** | the Sort and Zoom dialogs apply a real, tested effect and never fake success; the laid-out-only dialogs (Visual Reports, Compare Projects, Page Setup's stored styles) are unchanged |
+| 16 | split view | DONE (stronger) | **DONE (stronger)** | unchanged; the Details splitter still hosts one form per view and follows the selection by UID |
+
+### Found, not fixed
+
+- **The four core review Lows (C1, C2, S1, S2).**  Each is presentation-only or
+  a defence-in-depth contract, never a save-path risk, and each has its fix
+  direction in the review table above.  They are the only review findings not
+  fixed in this wave.
+- **The G3 and G4 disclosed gaps.**  The Resource Sheet does not paint the
+  un-stored Add New Column stub and uses the shell's shared caption font
+  instead of slot 1; the usage views do not draw the left table's other stored
+  fields, their Total row/column are the port's affordances, Actual Work is
+  Work x stored percent (approximate at a partial percent), Cost ignores
+  overtime and the non-prorated accrual modes, only the measured header
+  formats/week-day shapes are drawn, the stored scroll origin is decoded but
+  not applied, and the tier point size is chosen rather than measured.  These
+  are named in the G3/G4 sections; none is a regression against wave 30.
+- **The per-commit evidence gap (A5).**  The clean guard/hex runs print no
+  output, and 49 per-commit logs are empty without captured exit codes.  The
+  range evidence is the group fresh-tree logs and the CLOSE scans; the wave
+  does not reconstruct per-commit exit lines.
+- **The wave-30 and wave-29 queues and the plan's after-run list** are unchanged
+  and itemised under "What remains after this run" below.
+
+### What remains after this run
+
+This is the last wave of the approved run of waves 27-31.  The plan's "After
+wave 30" list stands, and wave 31 adds the view-state and second-view-family
+items below.  Nothing here blocks the tree: every item is either disabled with
+the exact tooltip or a documented fidelity gap.
+
+- **The measured-and-deferred commands from wave 30 and the shared writers they
+  need.**  Insert Summary/Milestone, Inactivate, Respect Links, Move, Notes, Add
+  to Timeline and the text-style group (Task tab); Add Resources, Information,
+  Notes and Assign Resources' remove direction (Resource tab); Calculate Project,
+  Set Baseline and WBS (Project tab) stay disabled with committed Project pairs
+  and the decision-9 tooltip.  The writers they wait on:
+  - a VarMeta entry inserter/remover (Information, Notes, Move, Add Resources,
+    Calculate Project, Set Baseline);
+  - a `214` view-stream writer (the text-style group, Move's StartText/
+    FinishText removal, Notes' entry) and Project's RichEdit note serialisation
+    for Notes;
+  - a `TBkndCal` resource-calendar row plus three `114/Props` count words for
+    Add Resources; Props-record insertion for WBS;
+  - append-and-re-key table growth for Assign Resources' remove direction;
+  - a scheduler save path and a `DocumentSummaryInformation` writer for
+    Calculate Project; a baseline writer for Set Baseline; a code-definition/
+    renumber writer for WBS;
+  - the reader's inserted summary/milestone result (the fractional Fixed2Data
+    ordinal and the reparenting), `Task.Active`, and an extended
+    `tests/save_pair_noise.h` mask for the append tails;
+  - a Project build where Add to Timeline actually runs: 16.0.20430's own
+    command is inert, so the committed pair is only a negative baseline.
+- **The View tab's persistence gap.**  Sort order, the applied table, the shown
+  outline level, zoom and window arrangement are view state Project persists in
+  the file.  Wave 31 applied all of them for the session only and kept the
+  file's bytes (asserted by SHA-256).  A later wave that writes them must first
+  measure Project's save of each shape (standing rule 1).  The Sort dialog is
+  single-key; the outline level is lost on a structural rebuild; the initially
+  applied table is the first stored task table, not the file's applied-view
+  table; the Zoom Custom span was never measured against Project.
+- **The second view family's fidelity gaps.**  Resource Sheet: the un-stored Add
+  New Column stub is not painted (the group's Low), and the header rows use the
+  shell's shared caption font rather than the view's slot-1 font.  Usage: the
+  left table's other stored fields are not drawn (the group's Low); the Total
+  row/column are the port's affordances where Project's sheets have none;
+  Actual Work is Work x stored percent (an approximation at partial percent);
+  Cost ignores overtime, cost/use and the other accrual modes; only the measured
+  header formats and week/day shapes are drawn; the stored scroll origin is
+  decoded but not applied; the tier point size is chosen, not measured.
+- **The wave-30 and wave-29 queues carried unchanged** (see
+  `wave30-complete.md` and `wave29-complete.md`, "Found, not fixed"): C4 (task
+  mode beside a queued view-state/formula edit), C5 (off-chain progress and the
+  project row), U1, U3-U7, the A1 process item, Spelling's modest word list, F3
+  (the operator-name purge -- the operator's decision), F6, F7, R28-5/6/8/9/11, the named
+  refusals and conventions, the theme gate's sample gap, the stored combination
+  view and the White theme, Split Task, the 13 unsalted hashes (the operator's
+  decision) and the 174 grandfathered CRLF files.
+- **After the run** (the plan's "After wave 30" list): Team Planner, Network
+  Diagram, Calendar and Report views; the `constraint-mso` engine case; macOS
+  launch and notarisation; the hashed task names in
+  `tests/data/project_a_golden.tsv`; the remaining review Lows.
+
+WAVE-31-COMPLETE

@@ -1,17 +1,24 @@
 # Handoff index — read only the group you need
 
-100 handoffs, ~1.3 MB: do **not** read the directory.  Start with
+116 handoffs, ~2.0 MB: do **not** read the directory.  Start with
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Now (26 October 2026)
+## Now (27 October 2026)
 
 | file | what |
 |---|---|
 | `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
 | `assessment-2026-10-24.md` | where the port stands after wave 26, and the workflow review |
-| `plan-waves27-30.md` | the proposed next rounds |
-| `wave30-complete.md` | **the wave-30 gate** (below), the current record |
+| `plan-waves27-30.md` | the plan of the 27-31 run (wave 31 was its last wave) |
+| `wave31-complete.md` | **the wave-31 gate** (below), the current record |
+
+## Wave 31 (closed on branch `wave31` - pushed; CI on the final tree; not merged)
+
+| file | what |
+|---|---|
+| `wave31-complete.md` | **the wave-31 gate**: G0..G5 + CLOSE, every item DONE, the fresh-tree gates on the final code tree, both privacy scans, the independent review and its findings, the push and the three CI dispatches (the third green on `072773b`), the re-scored 16 decisions, "Found, not fixed" and what the end of the run leaves |
+| `wave31-brief.md` | **the work order**: G0 the wave-30 review's four Highs, G1 the View tab's data commands, G2 zoom and window commands, G3 the Resource Sheet at Gantt fidelity, G4 Task/Resource Usage at Gantt fidelity, G5 the views left out |
 
 ## Wave 30 (closed on branch `wave30` - pushed; CI on the final code tree; not merged)
 
@@ -27,7 +34,7 @@ kept for investigation; each is the record of its stream at that wave.
 | `wave29-complete.md` | **the wave-29 gate**: G0..G5 + CLOSE, every item DONE, the fresh-tree gates on `7e14aaa`, both privacy scans, the independent review (0 Critical / 2 High / 2 Medium / 2 Low, plus the CI findings C7/C9/C10 and the audit's C8 - all Highs fixed) and its errata, the push and the two CI dispatches, the re-scored 16 decisions, "Found, not fixed" |
 | `wave29-brief.md` | **the work order**: rule 1 for wave 28's commands (G0 from the wave-28 review), the PROJECT_A gaps, the format dialogs, Page Setup, Visual Reports / Compare Projects, the chrome finish |
 
-## Wave 28 (closed on branch `wave28` - pushed after Tim approved the `076438f` rewrite; not merged)
+## Wave 28 (closed on branch `wave28` - pushed after the operator approved the `076438f` rewrite; not merged)
 
 | file | what |
 |---|---|
