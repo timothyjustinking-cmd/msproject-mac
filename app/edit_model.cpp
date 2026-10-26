@@ -309,6 +309,101 @@ bool check_actuals_row_shape(const PlanInput& plan, const TaskRow& row,
     return true;
 }
 
+// W30-0.5 (R29-5, High): every actuals save rolls up the edited rows' ancestor
+// summaries.  The roll-up arithmetic and its Resume/Stop rule were measured
+// with ONE progressed leaf under automatic summaries (the wave-29 leaf pair),
+// so a chain summary with a second progressed leaf -- pre-existing or another
+// row of the same save -- and a manually scheduled chain summary are refused:
+// "earliest" cannot be told apart from the other rules with one data point.
+struct RollupEditRow {
+    std::uint32_t uid = 0;
+    bool progressed_after = false;
+};
+
+bool check_summary_rollup_scope(const PlanInput& plan,
+                                const std::vector<RollupEditRow>& edited,
+                                std::string& error) {
+    std::vector<bool> ancestor(plan.tasks.size(), false);
+    for (const RollupEditRow& edit : edited) {
+        std::size_t target = plan.tasks.size();
+        for (std::size_t index = 0; index < plan.tasks.size(); ++index) {
+            if (plan.tasks[index].uid == edit.uid) {
+                target = index;
+                break;
+            }
+        }
+        if (target == plan.tasks.size()) {
+            continue;
+        }
+        int level = plan.tasks[target].outline_level;
+        for (std::size_t index = target; index-- > 0;) {
+            if (plan.tasks[index].outline_level >= level) {
+                continue;
+            }
+            ancestor[index] = true;
+            level = plan.tasks[index].outline_level;
+            if (level == 0) {
+                break;
+            }
+        }
+    }
+    for (std::size_t summary_index = 0; summary_index < plan.tasks.size();
+         ++summary_index) {
+        if (!ancestor[summary_index] || !plan.tasks[summary_index].summary) {
+            continue;
+        }
+        const TaskRow& summary = plan.tasks[summary_index];
+        if (summary.manually_scheduled) {
+            error = "task row uid " + std::to_string(summary.uid) +
+                    " is a summary on the edited rows' ancestor chain and is "
+                    "manually scheduled; the summary roll-up is measured only "
+                    "on automatic summaries";
+            return false;
+        }
+        std::size_t progressed = 0;
+        std::uint32_t first_uid = 0;
+        std::uint32_t second_uid = 0;
+        for (std::size_t index = summary_index + 1; index < plan.tasks.size();
+             ++index) {
+            if (plan.tasks[index].outline_level <= summary.outline_level) {
+                break;
+            }
+            const TaskRow& leaf = plan.tasks[index];
+            if (leaf.summary) {
+                continue;
+            }
+            bool after = leaf.percent_complete > 0;
+            // Last write wins, so a duplicated uid takes its newest state.
+            for (std::size_t edit_index = edited.size(); edit_index-- > 0;) {
+                if (edited[edit_index].uid == leaf.uid) {
+                    after = edited[edit_index].progressed_after;
+                    break;
+                }
+            }
+            if (!after) {
+                continue;
+            }
+            if (progressed == 0) {
+                first_uid = leaf.uid;
+            } else if (progressed == 1) {
+                second_uid = leaf.uid;
+            }
+            ++progressed;
+        }
+        if (progressed > 1) {
+            error = "summary uid " + std::to_string(summary.uid) +
+                    " is on the edited rows' ancestor chain and would hold " +
+                    std::to_string(progressed) + " progressed leaves (uids " +
+                    std::to_string(first_uid) + ", " + std::to_string(second_uid) +
+                    (progressed > 2 ? ", ..." : "") +
+                    "); the summary roll-up was measured with ONE progressed "
+                    "leaf, so no Project save pair measures this save";
+            return false;
+        }
+    }
+    return true;
+}
+
 // The row rules a percent edit and a date update share: a saved, live,
 // non-summary task of a measured shape.  `row` receives the plan row on
 // acceptance; `percent_edit` selects the wave-29 shape rules (W29-0.2).
@@ -1044,6 +1139,13 @@ bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t p
                                   false, error)) {
         return false;
     }
+    // W30-0.5 (R29-5, High): the save rolls up the row's ancestor chain; a
+    // chain summary with another progressed leaf (or manual scheduling) has no
+    // measured roll-up.
+    if (!check_summary_rollup_scope(
+            plan, std::vector<RollupEditRow>{{uid, percent > 0}}, error)) {
+        return false;
+    }
     error.clear();
     return true;
 }
@@ -1318,6 +1420,19 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
                 "already their stored percent; Project leaves those rows "
                 "untouched, so there is nothing to write";
         return false;
+    }
+    // W30-0.5 (R29-5, High): the whole update is one actuals write, so the
+    // chain summaries see every target at once; two progressed leaves under
+    // one summary are unmeasured.
+    {
+        std::vector<RollupEditRow> edited;
+        edited.reserve(built.actuals.size());
+        for (const ActualsTarget& target : built.actuals) {
+            edited.push_back({target.uid, target.percent > 0});
+        }
+        if (!check_summary_rollup_scope(plan, edited, error)) {
+            return false;
+        }
     }
     // W29-0.3: Update Project's "Entire project" scope is the only one whose
     // project row takes the earliest per-row Resume/Stop.  `uids` IS the scope,
@@ -1912,6 +2027,25 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 return false;
             }
             edit = std::move(checked);
+            // W30-0.5 (R29-5, High): the save writes every queued actuals
+            // edit in ONE actuals call, so a chain summary sees this row and
+            // the queued ones at once.
+            {
+                std::vector<RollupEditRow> edited;
+                for (const StructuralEdit& existing : applied_) {
+                    if (existing.kind == StructuralKind::set_percent) {
+                        edited.push_back({existing.uid, existing.percent > 0});
+                    } else if (existing.kind == StructuralKind::update_actuals) {
+                        for (const ActualsTarget& target : existing.actuals) {
+                            edited.push_back({target.uid, target.percent > 0});
+                        }
+                    }
+                }
+                edited.push_back({edit.uid, edit.percent > 0});
+                if (!check_summary_rollup_scope(*plan, edited, error)) {
+                    return false;
+                }
+            }
             // W30-0.3 (R29-3, High): step 5a writes this percent against the
             // file's old outline; a pending outline edit for this row, its
             // subtree or an ancestor has no measured combination with it.
@@ -2007,6 +2141,28 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                         existing.uid == target.uid) {
                         return false;
                     }
+                }
+            }
+            // W30-0.5 (R29-5, High): the whole save is one actuals write; a
+            // chain summary with two progressed leaves (this update's or an
+            // earlier queued edit's) has no measured roll-up.
+            {
+                std::vector<RollupEditRow> edited;
+                for (const StructuralEdit& existing : applied_) {
+                    if (existing.kind == StructuralKind::set_percent) {
+                        edited.push_back({existing.uid, existing.percent > 0});
+                    } else if (existing.kind == StructuralKind::update_actuals) {
+                        for (const ActualsTarget& target : existing.actuals) {
+                            edited.push_back({target.uid, target.percent > 0});
+                        }
+                    }
+                }
+                for (const ActualsTarget& target : edit.actuals) {
+                    edited.push_back({target.uid, target.percent > 0});
+                }
+                std::string scope_error;
+                if (!check_summary_rollup_scope(*plan, edited, scope_error)) {
+                    return false;
                 }
             }
             edit.dependants = 0;

@@ -639,14 +639,23 @@ std::vector<bool> deleted_rows(std::vector<std::uint8_t> const& meta,
  *                            3d462418, uid 3's working-time values).
  * A summary with no progressed leaf descendant is left byte for byte, and so
  * are every summary's flag/anchor words.  Returns the rows written so the
- * project roll-up can take its Resume/Stop from them. */
+ * project roll-up can take its Resume/Stop from them.
+ *
+ * W30-0.5 (R29-5, High): the rules above were measured with ONE progressed
+ * leaf, so only the edited rows' ancestor chain (`recompute`) is written.  A
+ * summary elsewhere with progressed leaves keeps Project's stored roll-up: the
+ * old every-summary sweep overwrote it with the one-leaf "earliest" rule. */
 std::vector<bool> write_summary_rollup(TaskTable& table, Outline const& outline,
-                                       std::vector<bool> const& deleted) {
+                                       std::vector<bool> const& deleted,
+                                       std::vector<bool> const& recompute) {
     std::size_t const rows = table.rows();
     std::vector<bool> written(rows, false);
     for (std::size_t summary = 1; summary < rows; ++summary) {
         if (summary >= outline.summary.size() || !outline.summary[summary] ||
             (summary < deleted.size() && deleted[summary])) {
+            continue;
+        }
+        if (summary >= recompute.size() || !recompute[summary]) {
             continue;
         }
         std::uint64_t sum_duration = 0;
@@ -1426,8 +1435,30 @@ PercentActualsResult write_percent_actuals(
      * write_summary_rollup skips leaf rows that are summaries itself, so it
      * needs only the tombstoned rows -- `excluded` above also marks every
      * summary (the project sum must not charge a summary's roll-up twice). */
+    /* W30-0.5 (R29-5, High): the recompute set is the edited rows' ancestor
+     * chain only.  The measured roll-up rules have one progressed leaf, so a
+     * summary elsewhere in the file must keep Project's stored words rather
+     * than take the one-leaf "earliest Resume/Stop" rule. */
+    std::vector<bool> rollup_chain(row_count, false);
+    for (AppliedEdit const& item : applied) {
+        std::size_t row = item.row;
+        for (std::size_t guard = 0; guard <= row_count; ++guard) {
+            if (row >= outline.parent.size()) {
+                break;
+            }
+            const std::size_t parent = outline.parent[row];
+            if (parent == static_cast<std::size_t>(-1) || parent >= row_count ||
+                parent == row) {
+                break;
+            }
+            if (outline.summary[parent]) {
+                rollup_chain[parent] = true;
+            }
+            row = parent;
+        }
+    }
     std::vector<bool> const summary_written =
-        write_summary_rollup(rows, outline, tombstones);
+        write_summary_rollup(rows, outline, tombstones, rollup_chain);
 
     /* Header words: the entry count and the Var2Data size. */
     std::size_t const entry_count = count_var_entries(var_meta);

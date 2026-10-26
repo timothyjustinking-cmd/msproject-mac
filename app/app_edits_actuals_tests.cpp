@@ -1791,6 +1791,226 @@ void check_zero_update_noop() {
           "a hand-built 0 -> 0 date target is refused");
 }
 
+/* W30-0.5 (R29-5, High): the summary roll-up rules were measured with ONE
+ * progressed leaf under automatic summaries.  The model refuses a second
+ * progressed leaf on an edited row's ancestor chain -- pre-existing (a) or
+ * queued in the same save (d) -- and a manually scheduled chain summary (b).
+ * The writer recomputes only that chain: (e) saves a copy whose uid 5 is a
+ * summary of a 40 % uid 6, so the old every-summary sweep would overwrite uid
+ * 5's stored roll-up with the one-leaf rule; the save must leave it byte for
+ * byte while still rolling up the edited row's real chain. */
+void check_summary_rollup_scope() {
+    const std::filesystem::path leaf_path =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave29-percent-leaf-control.mpp";
+    if (!std::filesystem::exists(leaf_path)) {
+        std::printf("SKIP: wave29-percent-leaf-control.mpp is not present\n");
+        return;
+    }
+    app::PlanInput plan;
+    try {
+        plan = app::plan_input_from_document(mpp::load_file(leaf_path.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the W30-0.5 leaf control loads");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        return;
+    }
+    app::StructuralEdit edit;
+    std::string error;
+
+    /* (a) a second progressed leaf under the edited row's chain summary. */
+    app::PlanInput two_leaves = plan;
+    for (app::TaskRow& task : two_leaves.tasks) {
+        if (task.uid == 4) {
+            task.percent_complete = 40;
+        }
+    }
+    check(!app::make_percent_edit(two_leaves, 3, 40, edit, error),
+          "a percent edit with another progressed leaf on the chain is refused");
+    check(error.find("would hold 2 progressed leaves") != std::string::npos &&
+              error.find("ONE progressed leaf") != std::string::npos,
+          "the second-leaf refusal names the leaves and the one-leaf measurement");
+
+    /* (b) a manually scheduled chain summary. */
+    app::PlanInput manual_chain = plan;
+    for (app::TaskRow& task : manual_chain.tasks) {
+        if (task.uid == 2) {
+            task.manually_scheduled = true;
+        }
+    }
+    check(!app::make_percent_edit(manual_chain, 3, 40, edit, error),
+          "a percent edit under a manually scheduled summary is refused");
+    check(error.find("manually scheduled") != std::string::npos,
+          "the manual-summary refusal names the scheduling mode");
+
+    /* (c) the unmodified plan is the measured one-leaf shape. */
+    check(app::make_percent_edit(plan, 3, 40, edit, error),
+          "the measured one-leaf percent edit stays accepted");
+
+    /* (d) one save is one actuals write: a queued edit on the sibling leaf and
+     * this one put two progressed leaves under summary 2 at push time. */
+    app::StructuralEdits queued;
+    app::StructuralEdit fourth;
+    check(app::make_percent_edit(plan, 4, 40, fourth, error),
+          "the sibling leaf's percent edit builds alone");
+    check(queued.push(fourth, &plan), "the sibling leaf's percent edit queues");
+    app::StructuralEdit third;
+    check(app::make_percent_edit(plan, 3, 40, third, error),
+          "the second leaf's edit builds against the plan alone");
+    check(!queued.push(third, &plan),
+          "push refuses the edit that would make two progressed leaves in one save");
+    app::StructuralEdits fresh;
+    check(fresh.push(third, &plan),
+          "the same edit queues when no sibling edit is pending");
+
+    /* (e) the writer's scope.  Patch a copy: uid 6 becomes a child of uid 5
+     * and carries 40 %, so uid 5 is an off-chain summary with a progressed
+     * leaf; then save the measured uid 3 edit. */
+    std::error_code fs_error;
+    std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
+                                        fs_error);
+    const std::filesystem::path patched_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "w30-05-two-summary.mpp";
+    const std::filesystem::path saved_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "w30-05-two-summary-save.mpp";
+    std::string patch_error;
+    bool patched_ok = false;
+    try {
+        mppwrite::CfbDocument document =
+            mppwrite::CfbDocument::from_file(leaf_path.string());
+        mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
+        const std::size_t row5 = table.row_for_uid(5);
+        const std::size_t row6 = table.row_for_uid(6);
+        constexpr std::size_t kRecord = 64;
+        constexpr std::size_t kParent = 24;
+        Bytes fixed2 = document.read_stream(task_stream("Fixed2Data"));
+        if (fixed2.size() != kRecord * (table.rows() + 3)) {
+            patch_error = "Task Fixed2Data is " + std::to_string(fixed2.size()) +
+                          " bytes, not 64 * (rows + 3)";
+        } else {
+            /* uid 5 moves to the project row (top level) and uid 6 becomes its
+             * child: a summary one level above the edited row's chain, with a
+             * progressed leaf, in valid parent-before-child display order. */
+            const std::size_t project_id = kRecord * 3;
+            const std::size_t id5 = kRecord * (row5 + 3);
+            const std::size_t parent5 = id5 + kParent;
+            const std::size_t parent6 = kRecord * (row6 + 3) + kParent;
+            std::copy(fixed2.begin() + static_cast<std::ptrdiff_t>(project_id),
+                      fixed2.begin() + static_cast<std::ptrdiff_t>(project_id + 16),
+                      fixed2.begin() + static_cast<std::ptrdiff_t>(parent5));
+            std::copy(fixed2.begin() + static_cast<std::ptrdiff_t>(id5),
+                      fixed2.begin() + static_cast<std::ptrdiff_t>(id5 + 16),
+                      fixed2.begin() + static_cast<std::ptrdiff_t>(parent6));
+            document.replace_stream(task_stream("Fixed2Data"), fixed2);
+            table.set_u16(row6, mppwrite::task_row::kPercentComplete, 40);
+            const std::uint32_t duration6 =
+                table.u32(row6, mppwrite::task_row::kDuration);
+            table.set_u32(row6, mppwrite::task_row::kActualDuration,
+                          duration6 * 40 / 100);
+            table.store_into(document);
+            std::filesystem::remove(patched_path, fs_error);
+            document.save(patched_path.string());
+            patched_ok = true;
+        }
+    } catch (const std::exception& error_in_patch) {
+        patch_error = error_in_patch.what();
+    }
+    check(patched_ok, "the two-summary copy is written");
+    if (!patched_ok) {
+        std::printf("PATCH ERROR: %s\n", patch_error.c_str());
+        return;
+    }
+    app::PlanInput patched;
+    try {
+        patched = app::plan_input_from_document(
+            mpp::load_file(patched_path.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the two-summary copy loads");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        return;
+    }
+    const app::TaskRow* plan5 = nullptr;
+    const app::TaskRow* plan6 = nullptr;
+    for (const app::TaskRow& task : patched.tasks) {
+        if (task.uid == 5) {
+            plan5 = &task;
+        } else if (task.uid == 6) {
+            plan6 = &task;
+        }
+    }
+    check(plan5 != nullptr && plan5->summary && plan5->outline_level == 0 &&
+              plan6 != nullptr && plan6->outline_level == 1 &&
+              plan6->percent_complete == 40,
+          "the patched copy reads uid 5 as a top-level summary of uid 6");
+
+    app::StructuralEdit chain_edit;
+    check(app::make_percent_edit(patched, 3, 40, chain_edit, error),
+          "the chain edit is the measured shape on the patched copy");
+    app::StructuralEdits edits;
+    check(edits.push(chain_edit, &patched),
+          "the chain edit queues on the patched copy");
+    std::filesystem::remove(saved_path, fs_error);
+    const app::StructuralSaveResult saved = app::save_structural_edits(
+        edits, {}, patched_path.string(), saved_path.string(), false);
+    check(saved.ok, "the two-summary save succeeds");
+    if (!saved.ok) {
+        std::printf("SAVE ERROR: %s\n", saved.error.c_str());
+        return;
+    }
+
+    mppwrite::CfbDocument input_document;
+    mppwrite::CfbDocument output_document;
+    mppwrite::TaskTable in_table;
+    mppwrite::TaskTable out_table;
+    try {
+        input_document = mppwrite::CfbDocument::from_file(patched_path.string());
+        output_document = mppwrite::CfbDocument::from_file(saved_path.string());
+        in_table = mppwrite::TaskTable::from_document(input_document);
+        out_table = mppwrite::TaskTable::from_document(output_document);
+    } catch (const std::exception& open_error) {
+        check(false, "the patched copy and the port's save open");
+        std::printf("OPEN ERROR: %s\n", open_error.what());
+        return;
+    }
+    const Bytes in_fixed = input_document.read_stream(task_stream("FixedData"));
+    const Bytes out_fixed = output_document.read_stream(task_stream("FixedData"));
+    constexpr std::size_t kTaskRowSize = 202;
+    const std::size_t in_row5 = in_table.row_for_uid(5);
+    const std::size_t out_row5 = out_table.row_for_uid(5);
+    check(in_table.u16(in_row5, mppwrite::task_row::kPercentComplete) == 0,
+          "the patched copy's own summary still stores the source roll-up");
+    check(in_table.u16(in_table.row_for_uid(6),
+                       mppwrite::task_row::kPercentComplete) == 40 &&
+              in_table.u32(in_table.row_for_uid(6),
+                           mppwrite::task_row::kActualDuration) != 0,
+          "the off-chain summary has a progressed leaf");
+    check(same_span(in_fixed, out_fixed, kTaskRowSize * in_row5, kTaskRowSize) &&
+              same_span(in_fixed, out_fixed,
+                        kTaskRowSize * in_table.row_for_uid(6), kTaskRowSize),
+          "the off-chain summary and its leaf keep their FixedData rows");
+    check(in_table.u16(in_row5, mppwrite::task_row::kPercentComplete) ==
+                  out_table.u16(out_row5, mppwrite::task_row::kPercentComplete) &&
+              in_table.u32(in_row5, mppwrite::task_row::kActualDuration) ==
+                  out_table.u32(out_row5, mppwrite::task_row::kActualDuration) &&
+              in_table.u32(in_row5, mppwrite::task_row::kRemainingDuration) ==
+                  out_table.u32(out_row5,
+                                mppwrite::task_row::kRemainingDuration) &&
+              in_table.u32(in_row5, mppwrite::task_row::kActualStart) ==
+                  out_table.u32(out_row5, mppwrite::task_row::kActualStart) &&
+              in_table.u32(in_row5, mppwrite::task_row::kResume) ==
+                  out_table.u32(out_row5, mppwrite::task_row::kResume) &&
+              in_table.u32(in_row5, mppwrite::task_row::kStop) ==
+                  out_table.u32(out_row5, mppwrite::task_row::kStop),
+          "the off-chain summary keeps its stored roll-up words (the old "
+          "every-summary sweep rewrote them)");
+    const std::size_t in_row2 = in_table.row_for_uid(2);
+    const std::size_t out_row2 = out_table.row_for_uid(2);
+    check(in_table.u16(in_row2, mppwrite::task_row::kPercentComplete) == 0 &&
+              out_table.u16(out_row2, mppwrite::task_row::kPercentComplete) == 20,
+          "the edited row's chain summary is still written (Project's measured "
+          "20 %)");
+}
+
 } /* namespace */
 
 int main() {
@@ -1803,6 +2023,7 @@ int main() {
     check_update_refusals();
     check_update_save_shape_refusals();
     check_zero_update_noop();
+    check_summary_rollup_scope();
     std::printf("app_edits_actuals_tests: %d checks passed, %d expected failure(s)\n",
                 g_checks - g_failures, g_expected_failures);
     if (g_failures != 0) {
