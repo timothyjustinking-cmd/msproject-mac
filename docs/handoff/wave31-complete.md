@@ -926,3 +926,75 @@ docs-only.
   grid.
 
 WAVE-31-G4-COMPLETE
+
+## G5 - Network Diagram, Calendar and Other Views (decide, do not build)
+
+The brief's G5 is a decision, not a build: Network Diagram, Calendar and both
+Other Views entries stay out of this run's scope, disabled with decision 9's
+exact tooltip on the ribbon and in the View menu, and the generated backlog now
+names the scope reason in both tables.  The group's one item is below.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W31-5.1 | Network Diagram, Calendar and Other Views stay disabled with the exact tooltip; the backlog says why | **DONE (decision recorded; nothing built)** | commit `45d1206`; gates `build/w31/W31-5.1-*.log` |
+
+W31-5.1 detail:
+
+- The four ribbon controls (Task Views > Network Diagram, Calendar, Other Views;
+  Resource Views > Other Views) each carry their own `RibbonCommand` id
+  (`view_network_diagram`, `view_calendar`, `view_other_views`); every one is
+  built with `enabled=false`, so it stays disabled with the exact decision-9
+  tooltip `not implemented in this port`.  `qt_ribbon_inventory` holds the id,
+  the disabled state and the exact tooltip against the independent pin
+  (`app_qt/ribbon_pin.tsv` records enabled 0 for all four).
+- The four View-menu entries are `MenuAction::none`, so
+  `menu_item_supported()` is false and `MainWindow::build_menus()` disables each
+  with the same exact tooltip.  `app_menu` (988 checks) now includes Resource
+  Views > Other Views in its disabled set beside the three Task Views entries,
+  and `qt_shell_offscreen` reads the disabled state and the exact tooltip back
+  from the live View menu's two drop-downs.
+- The generated backlog says why, not just that: the four ribbon rows and the
+  four menu rows read `scope: ... out of this run's scope`
+  (`docs/ui-command-backlog.md`, regenerated to 95 ribbon and 51 menu rows).
+  Team Planner and the other `none` rows keep the generic future wording: the
+  brief's G5 names Network Diagram, Calendar and Other Views only.
+- Nothing was built: no view engine, no stored-definition decode, no file bytes
+  and no view behaviour changed.
+
+Per-commit gates (logs under `build/w31/`, named `W31-5.1-*.log`; the commit's
+scan reports 0 files / 0 hits, `guard_names wave30..HEAD` exits 0, the hex grep
+finds no match (exit 1, expected) and `check_fixtures.py` is OK):
+
+| commit | item tests | app ctest | app_qt ctest |
+|---|---|---|---|
+| W31-5.1 `45d1206` | `qt_ribbon_inventory` (four View ids, disabled, exact tooltip); `qt_shell_offscreen` (live View menu); `app_menu` 988 checks; backlog 95/51 rows | 25/25 | 36/36 |
+
+G5 group gates (fresh trees configured from scratch on `45d1206` under
+`build/w31-g5-fresh{,-app,-qt}`, log `build/w31/W31-G5-fresh-gates.log`; the run
+started 07:08 and finished 07:17 with no lock retries):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 25/25 / 36/36 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (139 documented hashes, 173 tracked `.mpp`); fixture paths OK (222 tracked test-data files, no local path); scenario oracle provenance OK (8 oracle(s)) |
+| client-name scan on HEAD / messages `wave30..HEAD` / `guard_names wave30..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The numbers belong to `45d1206`; the marker commit that follows is docs-only.
+
+## Found, not fixed
+
+- Nothing new.  G5 raised no Critical, High, Medium or Low finding: it decided
+  the four entries, built no view and changed no view behaviour.
+- Residual note (not a finding): the decision is deliberately static.  The four
+  entries remain disabled and their stored view definitions are not surfaced by
+  this run; a later wave that builds one must measure its rendering and any view
+  state Project persists against Project first (standing rule 1), and only then
+  refresh this row and the generated backlog.
+
+WAVE-31-G5-COMPLETE
