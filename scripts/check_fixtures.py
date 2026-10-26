@@ -510,6 +510,22 @@ DOCUMENTED = {
     # the neutral root C:/w31/resource-sheet with neutral metadata.
     "tests/data/wave31-resource-sheet.mpp":
         "E8166300CA35B6042BEA4967C0E54894AC5ECE99613EBDE72EF907CFC093EF48",
+    # Wave 31 (W31-4.1): synthetic-base.mpp saved by Project 2021 with the
+    # Task Usage and Resource Usage details set (stored ids 00 02 and 00 09),
+    # both timescale style items at weeks/days 1/1, formats 13/20, 100 %.
+    # Three 100 %-loaded resources on three automatic tasks, task 1 100 %
+    # complete; the COM and TimeScaleData facts and the measured 21/42 px
+    # rows, 48 px Details and 64/105 px day columns are in the paired
+    # measures file.
+    "tests/data/wave31-usage.mpp":
+        "AF8DFE1DCC4EE319378FDBD3F454D398F5ACDC924BB66E9F0B4CC8879A1D600A",
+    # Wave 31 (W31-4.1): numbers-only Project 2021 measurements of the Task
+    # Usage and Resource Usage sheets -- stored details/tiers, the reopened
+    # COM facts, daily TimeScaleData over 5-9 January 2026, the logical row
+    # order, the stored TableFields widths and the measured pixel geometry.
+    # No capture or name.
+    "tests/data/reference/wave31-usage.measures.json":
+        "A2312B41E0C32D97240A98E225329B4CFB3653FAC144F1B941EFEE10BDA10C7C",
     # Wave 31 (W31-2.2): numbers-only Project 2021 measurements of the View
     # tab's Zoom commands -- Entire Project and Selected Tasks on the two
     # committed fixtures, plus the Zoom dialog's week/month presets.  Measured

@@ -1,0 +1,890 @@
+{
+  "source": {
+    "oracle": "scripts/oracle_w31_usage.py (pure COM through scripts/oracle_lock.py)",
+    "raw": "build/w31/W31-G4-usage.json (git-ignored local output)",
+    "measured": "2026-10-27",
+    "project_version": "16.0",
+    "builder": "synthetic-base.mpp copied to the wave-31 neutral root, opened, neutralised (metadata, three automatic tasks, three work resources at $50/$60/$40 per hour, six 100 % assignments, task 1 100 % complete), Task Usage DetailStylesRemoveAll/Add(0)/Add(4), Resource Usage DetailStylesRemoveAll/Add(0)/Add(1), saved and reopened",
+    "capture": "build/w31/probe_usage_drag.py (plain python; PIL ImageGrab + win32api mouse drag) on a frozen copy in that neutral root; the captures stay in the git-ignored build/w31/shots.  Pixels are absolute client pixels at the capture window's 100 % timescale size.",
+    "capture_note": "Task Usage's sheet header is 42 px and Resource Usage's is 41 px in these captures: the full sheet header height follows the left table's tallest caption, and Task Usage's two-line Task Mode caption makes it one pixel taller.  The port keeps its shared 42 px sheet header (the left table's non-label captions are outside G4's time-phased grid scope); the time-phased tier text rows and the row/period pitches below are identical in both views."
+  },
+  "fixture": {
+    "file": "wave31-usage.mpp",
+    "bytes": 268800,
+    "sha256": "af8dfe1dcc4ee319378fdbd3f454d398f5acdc924bb66e9f0b4cc8879a1d600a"
+  },
+  "stored_views": {
+    "task_usage": {
+      "ordinal": 4,
+      "detail_item_bytes": 111,
+      "detail_ids": [
+        0,
+        2
+      ],
+      "details": [
+        "work",
+        "actual_work"
+      ],
+      "style_item_bytes": 5199,
+      "middle_unit": 3,
+      "middle_unit_name": "weeks",
+      "bottom_unit": 2,
+      "bottom_unit_name": "days",
+      "middle_count": 1,
+      "bottom_count": 1,
+      "middle_format": 13,
+      "bottom_format": 20,
+      "bottom_align": 1,
+      "middle_align": 0,
+      "timescale_start_tenths_min": 14400,
+      "size_percent": 100
+    },
+    "resource_usage": {
+      "ordinal": 5,
+      "detail_item_bytes": 111,
+      "detail_ids": [
+        0,
+        9
+      ],
+      "details": [
+        "work",
+        "cost"
+      ],
+      "style_item_bytes": 5199,
+      "middle_unit": 3,
+      "middle_unit_name": "weeks",
+      "bottom_unit": 2,
+      "bottom_unit_name": "days",
+      "middle_count": 1,
+      "bottom_count": 1,
+      "middle_format": 13,
+      "bottom_format": 20,
+      "bottom_align": 1,
+      "middle_align": 0,
+      "timescale_start_tenths_min": 14400,
+      "size_percent": 100
+    }
+  },
+  "com": {
+    "types": {
+      "tasks": {
+        "work": 0,
+        "actual_work": 2,
+        "cost": 5
+      },
+      "assignments": {
+        "work": 8,
+        "actual_work": 10,
+        "cost": 26
+      },
+      "resources": {
+        "work": 13,
+        "actual_work": 14,
+        "cost": 12
+      }
+    },
+    "window": {
+      "start": "2026-01-05 08:00:00",
+      "end_argument": "2026-01-09 08:00:00",
+      "unit": 4,
+      "unit_name": "days",
+      "count": 1,
+      "buckets": 5,
+      "bucket_starts": [
+        "2026-01-05 00:00:00",
+        "2026-01-06 00:00:00",
+        "2026-01-07 00:00:00",
+        "2026-01-08 00:00:00",
+        "2026-01-09 00:00:00"
+      ],
+      "blank": null
+    },
+    "tasks": {
+      "1": {
+        "work_minutes": 4800,
+        "actual_work_minutes": 4800,
+        "cost_cents": 440000,
+        "percent_complete": 100,
+        "start": "2026-01-05 08:00:00",
+        "finish": "2026-01-09 17:00:00",
+        "duration_minutes": 2400
+      },
+      "2": {
+        "work_minutes": 2880,
+        "actual_work_minutes": 0,
+        "cost_cents": 216000,
+        "percent_complete": 0,
+        "start": "2026-01-05 08:00:00",
+        "finish": "2026-01-07 17:00:00",
+        "duration_minutes": 1440
+      },
+      "3": {
+        "work_minutes": 1920,
+        "actual_work_minutes": 0,
+        "cost_cents": 144000,
+        "percent_complete": 0,
+        "start": "2026-01-05 08:00:00",
+        "finish": "2026-01-06 17:00:00",
+        "duration_minutes": 960
+      }
+    },
+    "assignments": {
+      "2097156": {
+        "task_id": 1,
+        "resource_id": 1,
+        "units_percent": 100,
+        "work_minutes": 2400,
+        "actual_work_minutes": 2400,
+        "cost_cents": 200000,
+        "start": "2026-01-05 08:00:00",
+        "finish": "2026-01-09 17:00:00"
+      },
+      "2097157": {
+        "task_id": 1,
+        "resource_id": 2,
+        "units_percent": 100,
+        "work_minutes": 2400,
+        "actual_work_minutes": 2400,
+        "cost_cents": 240000,
+        "start": "2026-01-05 08:00:00",
+        "finish": "2026-01-09 17:00:00"
+      },
+      "2097158": {
+        "task_id": 2,
+        "resource_id": 1,
+        "units_percent": 100,
+        "work_minutes": 1440,
+        "actual_work_minutes": 0,
+        "cost_cents": 120000,
+        "start": "2026-01-05 08:00:00",
+        "finish": "2026-01-07 17:00:00"
+      },
+      "2097159": {
+        "task_id": 2,
+        "resource_id": 3,
+        "units_percent": 100,
+        "work_minutes": 1440,
+        "actual_work_minutes": 0,
+        "cost_cents": 96000,
+        "start": "2026-01-05 08:00:00",
+        "finish": "2026-01-07 17:00:00"
+      },
+      "2097160": {
+        "task_id": 3,
+        "resource_id": 1,
+        "units_percent": 100,
+        "work_minutes": 960,
+        "actual_work_minutes": 0,
+        "cost_cents": 80000,
+        "start": "2026-01-05 08:00:00",
+        "finish": "2026-01-06 17:00:00"
+      },
+      "2097161": {
+        "task_id": 3,
+        "resource_id": 3,
+        "units_percent": 100,
+        "work_minutes": 960,
+        "actual_work_minutes": 0,
+        "cost_cents": 64000,
+        "start": "2026-01-05 08:00:00",
+        "finish": "2026-01-06 17:00:00"
+      }
+    },
+    "resources": {
+      "1": {
+        "work_minutes": 4800,
+        "actual_work_minutes": 2400,
+        "cost_cents": 400000,
+        "standard_rate_cents_per_hour": 5000,
+        "accrue_at": 3
+      },
+      "2": {
+        "work_minutes": 2400,
+        "actual_work_minutes": 2400,
+        "cost_cents": 240000,
+        "standard_rate_cents_per_hour": 6000,
+        "accrue_at": 3
+      },
+      "3": {
+        "work_minutes": 2400,
+        "actual_work_minutes": 0,
+        "cost_cents": 160000,
+        "standard_rate_cents_per_hour": 4000,
+        "accrue_at": 3
+      }
+    },
+    "per_period": {
+      "tasks": {
+        "1": {
+          "work_minutes": [
+            960,
+            960,
+            960,
+            960,
+            960
+          ],
+          "actual_work_minutes": [
+            960,
+            960,
+            960,
+            960,
+            960
+          ],
+          "cost_cents": [
+            88000,
+            88000,
+            88000,
+            88000,
+            88000
+          ]
+        },
+        "2": {
+          "work_minutes": [
+            960,
+            960,
+            960,
+            null,
+            null
+          ],
+          "actual_work_minutes": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "cost_cents": [
+            72000,
+            72000,
+            72000,
+            null,
+            null
+          ]
+        },
+        "3": {
+          "work_minutes": [
+            960,
+            960,
+            null,
+            null,
+            null
+          ],
+          "actual_work_minutes": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "cost_cents": [
+            72000,
+            72000,
+            null,
+            null,
+            null
+          ]
+        }
+      },
+      "assignments": {
+        "2097156": {
+          "work_minutes": [
+            480,
+            480,
+            480,
+            480,
+            480
+          ],
+          "actual_work_minutes": [
+            480,
+            480,
+            480,
+            480,
+            480
+          ],
+          "cost_cents": [
+            40000,
+            40000,
+            40000,
+            40000,
+            40000
+          ]
+        },
+        "2097157": {
+          "work_minutes": [
+            480,
+            480,
+            480,
+            480,
+            480
+          ],
+          "actual_work_minutes": [
+            480,
+            480,
+            480,
+            480,
+            480
+          ],
+          "cost_cents": [
+            48000,
+            48000,
+            48000,
+            48000,
+            48000
+          ]
+        },
+        "2097158": {
+          "work_minutes": [
+            480,
+            480,
+            480,
+            null,
+            null
+          ],
+          "actual_work_minutes": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "cost_cents": [
+            40000,
+            40000,
+            40000,
+            null,
+            null
+          ]
+        },
+        "2097159": {
+          "work_minutes": [
+            480,
+            480,
+            480,
+            null,
+            null
+          ],
+          "actual_work_minutes": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "cost_cents": [
+            32000,
+            32000,
+            32000,
+            null,
+            null
+          ]
+        },
+        "2097160": {
+          "work_minutes": [
+            480,
+            480,
+            null,
+            null,
+            null
+          ],
+          "actual_work_minutes": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "cost_cents": [
+            40000,
+            40000,
+            null,
+            null,
+            null
+          ]
+        },
+        "2097161": {
+          "work_minutes": [
+            480,
+            480,
+            null,
+            null,
+            null
+          ],
+          "actual_work_minutes": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "cost_cents": [
+            32000,
+            32000,
+            null,
+            null,
+            null
+          ]
+        }
+      },
+      "resources": {
+        "1": {
+          "work_minutes": [
+            1440,
+            1440,
+            960,
+            480,
+            480
+          ],
+          "actual_work_minutes": [
+            480,
+            480,
+            480,
+            480,
+            480
+          ],
+          "cost_cents": [
+            120000,
+            120000,
+            80000,
+            40000,
+            40000
+          ]
+        },
+        "2": {
+          "work_minutes": [
+            480,
+            480,
+            480,
+            480,
+            480
+          ],
+          "actual_work_minutes": [
+            480,
+            480,
+            480,
+            480,
+            480
+          ],
+          "cost_cents": [
+            48000,
+            48000,
+            48000,
+            48000,
+            48000
+          ]
+        },
+        "3": {
+          "work_minutes": [
+            960,
+            960,
+            480,
+            null,
+            null
+          ],
+          "actual_work_minutes": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "cost_cents": [
+            64000,
+            64000,
+            32000,
+            null,
+            null
+          ]
+        }
+      }
+    }
+  },
+  "table_fields": {
+    "task_usage": {
+      "stored": [
+        {
+          "field": 188743703,
+          "chars": 6
+        },
+        {
+          "field": 188743885,
+          "chars": 6
+        },
+        {
+          "field": 188744960,
+          "chars": 9
+        },
+        {
+          "field": 188743694,
+          "chars": 24
+        },
+        {
+          "field": 188743680,
+          "chars": 10
+        },
+        {
+          "field": 188744967,
+          "chars": 13
+        },
+        {
+          "field": 188744965,
+          "chars": 13
+        },
+        {
+          "field": 188744966,
+          "chars": 13
+        }
+      ],
+      "add_new_column_stub": [
+        {
+          "field": -1,
+          "chars": 20
+        }
+      ]
+    },
+    "resource_usage": {
+      "stored": [
+        {
+          "field": 205520896,
+          "chars": 6
+        },
+        {
+          "field": 205520982,
+          "chars": 6
+        },
+        {
+          "field": 205520897,
+          "chars": 20
+        },
+        {
+          "field": 205520909,
+          "chars": 10
+        }
+      ],
+      "add_new_column_stub": [
+        {
+          "field": -1,
+          "chars": 20
+        }
+      ]
+    },
+    "rendered_px_rule": "chars * 6 + 3 for every stored field and for the un-stored Add New Column stub"
+  },
+  "rendered_grid": {
+    "task_usage": {
+      "logical_row_count": 9,
+      "logical_rows": [
+        {
+          "row": 0,
+          "kind": "task",
+          "work_minutes": 4800,
+          "task_id": 1
+        },
+        {
+          "row": 1,
+          "kind": "assignment",
+          "assignment_uid": 2097156,
+          "task_id": 1,
+          "resource_id": 1,
+          "work_minutes": 2400
+        },
+        {
+          "row": 2,
+          "kind": "assignment",
+          "assignment_uid": 2097157,
+          "task_id": 1,
+          "resource_id": 2,
+          "work_minutes": 2400
+        },
+        {
+          "row": 3,
+          "kind": "task",
+          "work_minutes": 2880,
+          "task_id": 2
+        },
+        {
+          "row": 4,
+          "kind": "assignment",
+          "assignment_uid": 2097158,
+          "task_id": 2,
+          "resource_id": 1,
+          "work_minutes": 1440
+        },
+        {
+          "row": 5,
+          "kind": "assignment",
+          "assignment_uid": 2097159,
+          "task_id": 2,
+          "resource_id": 3,
+          "work_minutes": 1440
+        },
+        {
+          "row": 6,
+          "kind": "task",
+          "work_minutes": 1920,
+          "task_id": 3
+        },
+        {
+          "row": 7,
+          "kind": "assignment",
+          "assignment_uid": 2097160,
+          "task_id": 3,
+          "resource_id": 1,
+          "work_minutes": 960
+        },
+        {
+          "row": 8,
+          "kind": "assignment",
+          "assignment_uid": 2097161,
+          "task_id": 3,
+          "resource_id": 3,
+          "work_minutes": 960
+        }
+      ],
+      "details_column_raises": true
+    },
+    "resource_usage": {
+      "logical_row_count": 9,
+      "logical_rows": [
+        {
+          "row": 0,
+          "kind": "resource",
+          "work_minutes": 4800,
+          "resource_id": 1
+        },
+        {
+          "row": 1,
+          "kind": "assignment",
+          "assignment_uid": 2097156,
+          "task_id": 1,
+          "resource_id": 1,
+          "work_minutes": 2400
+        },
+        {
+          "row": 2,
+          "kind": "assignment",
+          "assignment_uid": 2097158,
+          "task_id": 2,
+          "resource_id": 1,
+          "work_minutes": 1440
+        },
+        {
+          "row": 3,
+          "kind": "assignment",
+          "assignment_uid": 2097160,
+          "task_id": 3,
+          "resource_id": 1,
+          "work_minutes": 960
+        },
+        {
+          "row": 4,
+          "kind": "resource",
+          "work_minutes": 2400,
+          "resource_id": 2
+        },
+        {
+          "row": 5,
+          "kind": "assignment",
+          "assignment_uid": 2097157,
+          "task_id": 1,
+          "resource_id": 2,
+          "work_minutes": 2400
+        },
+        {
+          "row": 6,
+          "kind": "resource",
+          "work_minutes": 2400,
+          "resource_id": 3
+        },
+        {
+          "row": 7,
+          "kind": "assignment",
+          "assignment_uid": 2097159,
+          "task_id": 2,
+          "resource_id": 3,
+          "work_minutes": 1440
+        },
+        {
+          "row": 8,
+          "kind": "assignment",
+          "assignment_uid": 2097161,
+          "task_id": 3,
+          "resource_id": 3,
+          "work_minutes": 960
+        }
+      ],
+      "details_column_raises": true
+    },
+    "no_total_row_or_column": {
+      "task_usage": true,
+      "resource_usage": true,
+      "evidence": "build/w31/probe_usage_bottom.py scrolled both sheets to the last rows: the data ends after the ninth logical row and the sheet continues with blank grid rows (their Work/detail cells are empty); no Total row appears.  build/w31/probe_usage_right.py moved Task Usage to 2026-01-20..01-29 and Resource Usage to 2026-01-18..01-25: every extra period column is empty and no Total column follows the periods."
+    }
+  },
+  "measured_pixels": {
+    "sheet_top_px": 455,
+    "sheet_internal_header_line_px": 459,
+    "week_label_text_rows_px": {
+      "task_usage": [
+        466,
+        473
+      ],
+      "resource_usage": [
+        465,
+        472
+      ]
+    },
+    "day_label_text_rows_px": {
+      "task_usage": [
+        482,
+        489
+      ],
+      "resource_usage": [
+        481,
+        488
+      ]
+    },
+    "header_band_px": {
+      "task_usage": 42,
+      "resource_usage": 41
+    },
+    "first_data_row_top_px": {
+      "task_usage": 497,
+      "resource_usage": 496
+    },
+    "row_pitch_px": {
+      "task_usage": 21,
+      "resource_usage": 21
+    },
+    "logical_row_pitch_px": {
+      "task_usage": 42,
+      "resource_usage": 42,
+      "note": "two 21 px detail sub-rows per logical row in both views (Work + Actual Work, Work + Cost)"
+    },
+    "task_usage": {
+      "left_table_boundaries_px": [
+        603,
+        642,
+        699,
+        846,
+        909,
+        990,
+        1071,
+        1152
+      ],
+      "left_table_widths_px": [
+        39,
+        57,
+        147,
+        63,
+        81,
+        81,
+        81
+      ],
+      "details_px": 48,
+      "period_edges_px": [
+        1204,
+        1268,
+        1332,
+        1396,
+        1460,
+        1524,
+        1588,
+        1652,
+        1716,
+        1780
+      ],
+      "period_widths_px": [
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64,
+        64
+      ]
+    },
+    "resource_usage": {
+      "left_table_boundaries_px": [
+        603,
+        642,
+        765,
+        828,
+        951
+      ],
+      "left_table_widths_px": [
+        39,
+        123,
+        63,
+        123
+      ],
+      "details_px": 48,
+      "period_edges_px": [
+        1003,
+        1108,
+        1213,
+        1318,
+        1423,
+        1528,
+        1633,
+        1738
+      ],
+      "period_widths_px": [
+        105,
+        105,
+        105,
+        105,
+        105,
+        105,
+        105
+      ]
+    },
+    "probes": {
+      "task_usage_actual_work": {
+        "details_px": 48,
+        "period_widths_px": [
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64
+        ]
+      },
+      "task_usage_cost": {
+        "details_px": 48,
+        "period_widths_px": [
+          84,
+          84,
+          84,
+          84,
+          84,
+          84,
+          84
+        ]
+      },
+      "resource_usage_cost": {
+        "details_px": 48,
+        "period_widths_px": [
+          105,
+          105,
+          105,
+          105,
+          105,
+          105,
+          105
+        ]
+      }
+    }
+  },
+  "notes": [
+    "DetailStylesAdd maps 0 -> stored 0x00 (Work), 4 -> 0x02 (Actual Work), 1 -> 0x09 (Cost); the 0x2240003c payload is raw ids with no count prefix, 0xff-padded to 111 bytes.",
+    "The stored timescale units decode as MPXJ kUnits[stored + 1]: middle 3 = weeks, bottom 2 = days; counts 1/1, formats 13/20, bottom align 1 (centre), middle align 0 (left), start 14400 tenths-minutes (1984-01-01, the unset value), size 100.",
+    "COM TimeScaleData returns minutes for Work/Actual Work and currency units for Cost; blank buckets are the empty string and are recorded here as null.  Costs are recorded in integer cents to avoid the measured float noise (2400.0000000000005).",
+    "The Task Usage grid's time-phased columns are 64 px for Work + Actual Work, 84 px with Cost; Resource Usage's Work + Cost is 105 px.  The minimum is 64 px and the width follows the widest rendered cost text; the probe pair isolates the detail set."
+  ]
+}
