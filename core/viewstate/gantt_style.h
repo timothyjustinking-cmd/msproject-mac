@@ -228,6 +228,13 @@ struct GanttStyle {
 inline constexpr std::size_t kGanttStyleMinSize = 41362;
 inline constexpr std::size_t kGanttFontStyleOffset = 26;
 inline constexpr std::size_t kGanttFontStyleStride = 32;
+// Wave 31 (W31-3.4): a view record that stores ONLY the Text Styles dialog --
+// the Resource Sheet's `0x22400008` record is 1,530 bytes on the measured
+// fixture -- keeps the same 19 records at +26 with stride +32.  Reading those
+// slots needs 26 + 19 * 32 bytes; the Gantt record decodes the same slots and
+// then continues with its bar styles and timescale tiers.
+inline constexpr std::size_t kViewTextStyleMinSize =
+    kGanttFontStyleOffset + kTextStyleItemCount * kGanttFontStyleStride;
 inline constexpr std::size_t kGanttFontBaseHeaderSize = 2;
 inline constexpr std::size_t kGanttFontBaseRecordSize = 68;
 inline constexpr std::size_t kGanttFontBaseNameBytes = 64;
@@ -290,6 +297,35 @@ inline constexpr std::size_t kGanttTimescaleSizeOffset = 1180;
                                      std::span<const FontBase> fonts,
                                      GanttStyle& out,
                                      ParseError* error = nullptr);
+
+// Wave 31 (W31-3.4): the Text Styles half of a view record that is not a Gantt
+// record.  The Resource Sheet stores only this dialog state, so its record is
+// 1,530 bytes and has no bar count at kGanttBarCountOffset -- calling
+// parse_gantt_style() on it would refuse it for being short.  The 19 slots and
+// the colour/font rules are the ones measured for the Gantt record.
+struct ViewTextStyles {
+    bool decoded = false;
+    std::vector<FontBase> fonts;
+    std::array<TextStyle, kTextStyleItemCount> text{};
+    std::vector<std::string> warnings;
+};
+
+// Decodes the 19 text-style records of a view whose style payload is at least
+// kViewTextStyleMinSize bytes.  A shorter payload is refused; a style whose
+// font index does not resolve is kept with `valid == false` and a warning, the
+// same rule parse_gantt_style() applies.
+[[nodiscard]] bool parse_view_text_styles(std::span<const std::uint8_t> style_data,
+                                          std::span<const FontBase> fonts,
+                                          ViewTextStyles& out,
+                                          ParseError* error = nullptr);
+
+// The view whose stored name or display name matches `name`, ignoring the
+// accelerator (`&`) and ASCII case.  Unlike find_applied_view() this accepts
+// any view, whatever its style record's size, which is what locates the
+// Resource Sheet view in a file left in the Gantt.  An empty or unmatched name
+// yields nullptr.
+[[nodiscard]] const ViewDef* find_view_by_name(const ViewState& state,
+                                               std::string_view name);
 
 // The `0x22400008` record payload of a decoded CV_iew view, or an empty span
 // when the view's main block did not decode or carries no such record.

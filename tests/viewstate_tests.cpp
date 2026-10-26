@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
@@ -1182,6 +1183,141 @@ void test_gantt_style() {
     check(!partial.text[static_cast<std::size_t>(TextStyleItem::highlighted)].valid,
           "gantt style: a bad font index marks the style invalid");
     check(!partial.warnings.empty(), "gantt style: a bad font index warns");
+}
+
+// ---------------------------------------------------------------------------
+// Wave 31 (W31-3.4): a view whose style record stops after the Text Styles
+// slots -- the Resource Sheet.  The record is the measured fixture's shape
+// (1,530 bytes) and the slot values are that file's, read from
+// build/w31/W31-G3-fonts.log: highlight fill FFFF66, titles Segoe UI 9,
+// noncritical Calibri 11 automatic, overallocated Calibri 11 bold A5 00 00,
+// summary fill EFF3FF.
+// ---------------------------------------------------------------------------
+
+void test_view_text_styles() {
+    using msproject::viewstate::FontBase;
+    using msproject::viewstate::ParseError;
+    using msproject::viewstate::Rgb;
+    using msproject::viewstate::TextStyleItem;
+    using msproject::viewstate::ViewDef;
+    using msproject::viewstate::ViewState;
+    using msproject::viewstate::ViewTextStyles;
+
+    std::vector<FontBase> fonts(6);
+    fonts[0] = FontBase{"Segoe UI", 10, true};
+    fonts[3] = FontBase{"Calibri", 11, true};
+    fonts[5] = FontBase{"Segoe UI", 9, true};
+
+    std::vector<std::uint8_t> record(1530, 0);
+    const auto slot = [](std::size_t index) {
+        return msproject::viewstate::kGanttFontStyleOffset +
+               index * msproject::viewstate::kGanttFontStyleStride;
+    };
+    // slot 0: Calibri 11 with the stored pale-yellow fill.
+    record[slot(0) + 0] = 3;
+    record[slot(0) + 16] = 0xff;
+    record[slot(0) + 17] = 0xff;
+    record[slot(0) + 18] = 0x66;
+    // slot 1: Segoe UI 9, every colour automatic (flag 255).
+    record[slot(1) + 0] = 5;
+    record[slot(1) + 7] = 0xff;
+    record[slot(1) + 19] = 0xff;
+    // slot 2: Calibri 11, automatic foreground and background.
+    record[slot(2) + 0] = 3;
+    record[slot(2) + 7] = 0xff;
+    record[slot(2) + 19] = 0xff;
+    // slot 3: Calibri 11 bold with the stored RGB 165,0,0.
+    record[slot(3) + 0] = 3;
+    record[slot(3) + 3] = 0x01;
+    record[slot(3) + 4] = 0xa5;
+    record[slot(3) + 7] = 0x00;
+    record[slot(3) + 19] = 0xff;
+    // slot 4: Calibri 11 with the pale-blue fill.
+    record[slot(4) + 0] = 3;
+    record[slot(4) + 16] = 0xef;
+    record[slot(4) + 17] = 0xf3;
+    record[slot(4) + 18] = 0xff;
+
+    ViewTextStyles styles;
+    ParseError error;
+    check(msproject::viewstate::parse_view_text_styles(record, fonts, styles, &error),
+          "view text styles: the 1,530-byte record parses");
+    check(styles.decoded, "view text styles: decoded flag");
+    check(styles.text.size() == msproject::viewstate::kTextStyleItemCount,
+          "view text styles: all 19 slots are present");
+    check(styles.fonts.size() == fonts.size(),
+          "view text styles: the FONT_BASES table is kept with the record");
+
+    const auto& highlighted =
+        styles.text[static_cast<std::size_t>(TextStyleItem::highlighted)];
+    check(highlighted.valid && highlighted.font_name == "Calibri" &&
+              highlighted.point_size == 11,
+          "view text styles: slot 0 resolves Calibri 11");
+    check(highlighted.has_background && highlighted.background == (Rgb{255, 255, 102}),
+          "view text styles: slot 0 keeps the stored pale-yellow fill");
+
+    const auto& titles =
+        styles.text[static_cast<std::size_t>(TextStyleItem::row_column_titles)];
+    check(titles.valid && titles.font_name == "Segoe UI" && titles.point_size == 9,
+          "view text styles: slot 1 resolves Segoe UI 9");
+    check(!titles.has_colour && !titles.has_background,
+          "view text styles: slot 1's automatic colours stay unset");
+
+    const auto& noncritical =
+        styles.text[static_cast<std::size_t>(TextStyleItem::non_critical)];
+    check(noncritical.valid && noncritical.font_name == "Calibri" &&
+              !noncritical.bold,
+          "view text styles: slot 2 is the upright Calibri 11 row style");
+    check(!noncritical.has_colour && !noncritical.has_background,
+          "view text styles: slot 2's automatic colours stay unset");
+
+    const auto& overallocated =
+        styles.text[static_cast<std::size_t>(TextStyleItem::critical)];
+    check(overallocated.valid && overallocated.bold,
+          "view text styles: slot 3 is bold");
+    check(overallocated.has_colour && overallocated.colour == (Rgb{165, 0, 0}),
+          "view text styles: slot 3 keeps the stored dark red");
+    check(!overallocated.has_background,
+          "view text styles: slot 3's background is automatic");
+
+    const auto& summary =
+        styles.text[static_cast<std::size_t>(TextStyleItem::summary)];
+    check(summary.has_background && summary.background == (Rgb{0xef, 0xf3, 0xff}),
+          "view text styles: slot 4 keeps the stored pale-blue fill");
+
+    // A record one byte short of the 19 slots is refused, not read past.
+    std::vector<std::uint8_t> short_record(
+        record.begin(),
+        record.begin() + static_cast<std::ptrdiff_t>(
+                             msproject::viewstate::kViewTextStyleMinSize - 1));
+    ViewTextStyles refused;
+    check(!msproject::viewstate::parse_view_text_styles(short_record, fonts, refused,
+                                                        &error),
+          "view text styles: a record shorter than the 19 slots is refused");
+
+    // Accelerator-insensitive lookup by stored name and by display name.
+    ViewState state;
+    ViewDef gantt;
+    gantt.name = "&Gantt Chart";
+    gantt.display_name = "Gantt Chart";
+    ViewDef sheet;
+    sheet.name = "Resource &Sheet";
+    sheet.display_name = "Resource Sheet";
+    state.views.push_back(gantt);
+    state.views.push_back(sheet);
+    check(msproject::viewstate::find_view_by_name(state, "Resource Sheet") ==
+              &state.views[1],
+          "view lookup: the Resource Sheet matches by display name");
+    check(msproject::viewstate::find_view_by_name(state, "&Resource &Sheet") ==
+              &state.views[1],
+          "view lookup: the stored name matches with accelerators ignored");
+    check(msproject::viewstate::find_view_by_name(state, "gantt chart") ==
+              &state.views[0],
+          "view lookup: the Gantt view matches by display name, case ignored");
+    check(msproject::viewstate::find_view_by_name(state, "Task Form") == nullptr,
+          "view lookup: an unknown name yields nullptr");
+    check(msproject::viewstate::find_view_by_name(state, "") == nullptr,
+          "view lookup: an empty name yields nullptr");
 }
 
 // ---------------------------------------------------------------------------
@@ -3667,6 +3803,7 @@ int main(int argc, char** argv) {
     run("errors", test_errors_and_warnings);
     run("text", test_text_helpers);
     run("gantt-style", test_gantt_style);
+    run("view-text-styles", test_view_text_styles);
     // Wave 29 (W29-1.2): the per-cell formatting record
     run("cell-format", test_cell_format);
     // Wave 27 (W27-2.1): one controlled save per decoder field

@@ -41,6 +41,7 @@
 #include "sort.h"  // core::view::SortDefinition (wave 31, W31-1.1)
 #include "cell_format.h"  // msproject::viewstate::CellFormatTable (wave 29)
 #include "gantt_style.h"  // msproject::viewstate::GanttStyle (wave 26)
+#include "view_style.h"  // app::ResourceSheetStyle (wave 31, W31-3.4)
 #include "viewstate.h"  // msproject::viewstate::TableDef (wave 21)
 
 namespace app {
@@ -264,6 +265,22 @@ class PlanDocument {
     // this reader cannot decode), and the sheet keeps app::default_sheet_columns().
     const msproject::viewstate::TableDef& table() const noexcept { return table_; }
 
+    // Wave 31 (W31-3.4): the file's Resource Sheet presentation, read for the
+    // session only.  `resource_table()` is the stored resource table the
+    // Resource Sheet view names in 0x2240000a (the measured fixture's "&Entry"
+    // table, 14 columns with their stored character widths); a file with no
+    // resource table leaves it empty and the shell keeps its stock columns.
+    // `resource_sheet_style()` is that view's own Text Styles record -- the
+    // fonts and the slots Project paints ordinary and overallocated resources
+    // with.  Neither reaches the save diff: no write path reads them.
+    const msproject::viewstate::TableDef& resource_table() const noexcept {
+        return resource_table_;
+    }
+    std::size_t resource_table_count() const noexcept { return resource_tables_.size(); }
+    const app::ResourceSheetStyle& resource_sheet_style() const noexcept {
+        return resource_sheet_style_;
+    }
+
     // Wave 31 (W31-1.3): the TASK tables the file stores, in file order.  A
     // table is a task table when it has at least one task-field column
     // (0x0b40xxxx) and no resource-field column (0x0c40xxxx); resource tables
@@ -316,6 +333,10 @@ class PlanDocument {
     std::vector<std::size_t> ordered_display_rows() const;
     void read_table(const std::string& source_path);
     void read_applied_view(const std::string& source_path);
+    // Wave 31 (W31-3.4): the Resource Sheet ViewDef and its Text Styles record
+    // (app::read_resource_sheet_style).  Read before read_table() so the table
+    // selection can follow the view's 0x2240000a name.
+    void read_resource_sheet_style(const std::string& source_path);
     void read_style(const std::string& source_path);
     // Wave 22: writes the three computed texts (predecessors_text() and friends)
     // into the RecordSet for every row, from the CURRENT view plan.  Runs at the
@@ -350,6 +371,12 @@ class PlanDocument {
     std::vector<msproject::viewstate::TableDef> tables_;
     msproject::viewstate::TableDef table_;
     std::size_t selected_table_ = 0;
+    // Wave 31 (W31-3.4): the resource tables in file order, the one the
+    // Resource Sheet view names, and that view's stored Text Styles.  All
+    // presentation metadata, never part of the save diff.
+    std::vector<msproject::viewstate::TableDef> resource_tables_;
+    msproject::viewstate::TableDef resource_table_;
+    app::ResourceSheetStyle resource_sheet_style_;
     msproject::viewstate::GanttStyle gantt_style_;
     msproject::viewstate::CellFormatTable cell_formats_;
     // Wave 29 (W29-1.4): true from a load until the user picks one of the

@@ -333,6 +333,65 @@ void check_stock_fixture() {
     check(texts.empty(), "view style: a stock summary row shows no bar label");
 }
 
+// Wave 31 (W31-3.4): the Resource Sheet view's own record on the committed
+// fixture (tests/data/wave31-resource-sheet.mpp).  Project 2021 stored the view
+// "Resource &Sheet"/"Resource Sheet", table "&Entry", filter "&All Resources";
+// its 1,530-byte style record holds the 19 Text Styles slots read in
+// build/w31/W31-G3-fonts.log.  Slot 2 is the ordinary-resource text (Calibri
+// 11, automatic colours) and slot 3 the overallocated one (Calibri 11 bold,
+// RGB 165,0,0) -- the red the Project capture shows on the fixture's Crew A
+// row.  Those two slots are what W31-3.6 paints; this test pins that the file
+// really stores them.
+void check_resource_sheet_fixture() {
+    app::ResourceSheetStyle style;
+    std::string reason;
+    const std::string path =
+        std::string(APP_TEST_DATA_DIR) + "/wave31-resource-sheet.mpp";
+    check(app::read_resource_sheet_style(path, style, &reason),
+          "resource style: the committed fixture's Resource Sheet view decodes (" +
+              reason + ")");
+    check(style.decoded, "resource style: the view is marked decoded");
+    check(style.view_name == "Resource &Sheet",
+          "resource style: the stored view name");
+    check(style.display_name == "Resource Sheet",
+          "resource style: the stored display name");
+    check(style.table_name == "&Entry", "resource style: the view names '&Entry'");
+    check(style.filter_name == "&All Resources",
+          "resource style: the view names the '&All Resources' filter");
+    check(style.text.fonts.size() == 64,
+          "resource style: the shared FONT_BASES table has 64 slots");
+    check(style.text.text.size() == msproject::viewstate::kTextStyleItemCount,
+          "resource style: all 19 text-style slots decode");
+
+    const auto& normal = style.text.text[static_cast<std::size_t>(
+        msproject::viewstate::TextStyleItem::non_critical)];
+    check(normal.valid && normal.font_name == "Calibri" && normal.point_size == 11 &&
+              !normal.bold,
+          "resource style: slot 2 is the upright Calibri 11 row style");
+    check(!normal.has_colour && !normal.has_background,
+          "resource style: slot 2's colours are automatic");
+
+    const auto& overallocated = style.text.text[static_cast<std::size_t>(
+        msproject::viewstate::TextStyleItem::critical)];
+    check(overallocated.valid && overallocated.font_name == "Calibri" &&
+              overallocated.point_size == 11 && overallocated.bold,
+          "resource style: slot 3 is bold Calibri 11");
+    check(overallocated.has_colour &&
+              overallocated.colour == (Rgb{165, 0, 0}),
+          "resource style: slot 3 is the stored RGB 165,0,0");
+    check(!overallocated.has_background,
+          "resource style: slot 3's background is automatic");
+
+    const auto& titles = style.text.text[static_cast<std::size_t>(
+        msproject::viewstate::TextStyleItem::row_column_titles)];
+    check(titles.valid && titles.font_name == "Segoe UI" && titles.point_size == 9,
+          "resource style: slot 1 is the Segoe UI 9 title style");
+    const auto& summary = style.text.text[static_cast<std::size_t>(
+        msproject::viewstate::TextStyleItem::summary)];
+    check(summary.has_background && summary.background == (Rgb{0xef, 0xf3, 0xff}),
+          "resource style: slot 4 keeps the stored pale-blue fill");
+}
+
 void check_corpus_fixture() {
     const std::string path = std::string(APP_CORPUS_DIR) + "/project_a.mpp";
     if (!file_exists(path)) {
@@ -533,6 +592,13 @@ void test_refusals() {
                                 style, &reason),
           "view style: a missing file is refused");
     check(!reason.empty(), "view style: the refusal carries a reason");
+
+    app::ResourceSheetStyle resource;
+    check(!app::read_resource_sheet_style(std::string(APP_TEST_DATA_DIR) +
+                                              "/does-not-exist.mpp",
+                                          resource, &reason),
+          "resource style: a missing file is refused");
+    check(!reason.empty(), "resource style: the refusal carries a reason");
 }
 
 }  // namespace
@@ -543,6 +609,7 @@ int main() {
     test_cell_fill_rule();
     test_bar_label_matching();
     check_stock_fixture();
+    check_resource_sheet_fixture();
     check_corpus_fixture();
     test_refusals();
     if (g_failures == 0) {

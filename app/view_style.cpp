@@ -56,6 +56,35 @@ msproject::viewstate::PartSet part_set(const std::array<std::vector<std::uint8_t
     return parts;
 }
 
+// The `214/Props` FONT_BASES table (record 0x03400000).  Shared by the Gantt
+// and Resource Sheet style reads: both resolve their font indices through it.
+bool read_font_bases(const mppwrite::CfbDocument& document,
+                     std::vector<msproject::viewstate::FontBase>& fonts,
+                     std::string* reason) {
+    if (!document.has_stream(kPropsStream)) {
+        fail(reason, "the file has no 214/Props stream");
+        return false;
+    }
+    msproject::props::PropsDocument props;
+    const std::vector<std::uint8_t> props_bytes = document.read_stream(kPropsStream);
+    if (!msproject::props::parse_props(props_bytes, props, nullptr)) {
+        fail(reason, "214/Props does not parse");
+        return false;
+    }
+    const msproject::props::PropsRecord* font_record = props.find(kFontBasesRecordId);
+    if (font_record == nullptr) {
+        fail(reason, "214/Props carries no FONT_BASES record (0x03400000)");
+        return false;
+    }
+    msproject::viewstate::ParseError parse_error;
+    if (!msproject::viewstate::parse_font_bases(props.payload(*font_record), fonts,
+                                                &parse_error)) {
+        fail(reason, "FONT_BASES: " + parse_error.message);
+        return false;
+    }
+    return true;
+}
+
 // The applied view's name, as `214/CEdl` records it (0x26400018), or "".
 std::string applied_view_name(const mppwrite::CfbDocument& document) {
     std::array<std::vector<std::uint8_t>, 4> raw;
@@ -292,29 +321,11 @@ bool read_gantt_style(const std::string& path, msproject::viewstate::GanttStyle&
     try {
         const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(path);
 
-        if (!document.has_stream(kPropsStream)) {
-            fail(reason, "the file has no 214/Props stream");
-            return false;
-        }
-        msproject::props::PropsDocument props;
-        const std::vector<std::uint8_t> props_bytes = document.read_stream(kPropsStream);
-        if (!msproject::props::parse_props(props_bytes, props, nullptr)) {
-            fail(reason, "214/Props does not parse");
-            return false;
-        }
-        const msproject::props::PropsRecord* font_record =
-            props.find(kFontBasesRecordId);
-        if (font_record == nullptr) {
-            fail(reason, "214/Props carries no FONT_BASES record (0x03400000)");
-            return false;
-        }
         std::vector<msproject::viewstate::FontBase> fonts;
-        msproject::viewstate::ParseError parse_error;
-        if (!msproject::viewstate::parse_font_bases(props.payload(*font_record), fonts,
-                                                    &parse_error)) {
-            fail(reason, "FONT_BASES: " + parse_error.message);
+        if (!read_font_bases(document, fonts, reason)) {
             return false;
         }
+        msproject::viewstate::ParseError parse_error;
 
         std::array<std::vector<std::uint8_t>, 4> raw;
         if (!read_parts(document, kViewParts, raw)) {
@@ -352,6 +363,77 @@ bool read_gantt_style(const std::string& path, msproject::viewstate::GanttStyle&
             fail(reason, "cell formats: " + parse_error.message);
             return false;
         }
+        if (reason != nullptr) {
+            reason->clear();
+        }
+        return true;
+    } catch (const std::exception& failure) {
+        fail(reason, std::string("cannot open the container: ") + failure.what());
+        return false;
+    }
+}
+
+bool read_resource_sheet_style(const std::string& path, ResourceSheetStyle& out,
+                               std::string* reason) {
+    out = ResourceSheetStyle{};
+    try {
+        const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(path);
+
+        std::vector<msproject::viewstate::FontBase> fonts;
+        if (!read_font_bases(document, fonts, reason)) {
+            return false;
+        }
+
+        std::array<std::vector<std::uint8_t>, 4> raw;
+        if (!read_parts(document, kViewParts, raw)) {
+            fail(reason, "the file has no complete 214/CV_iew stream");
+            return false;
+        }
+        msproject::viewstate::ViewState views;
+        msproject::viewstate::ParseError parse_error;
+        if (!msproject::viewstate::parse_view_state("CV_iew", part_set(raw), views,
+                                                    &parse_error)) {
+            fail(reason, "214/CV_iew: " + parse_error.message);
+            return false;
+        }
+
+        // The Resource Sheet view exists independently of the view the file
+        // was left in, so the display name is the primary key.  Only when the
+        // file has no view by that name is the applied view considered, and
+        // then only when its record is too small to be a Gantt record: a
+        // Gantt record at that size would be a different view's presentation.
+        const msproject::viewstate::ViewDef* view =
+            msproject::viewstate::find_view_by_name(views, "Resource Sheet");
+        if (view == nullptr) {
+            const msproject::viewstate::ViewDef* applied =
+                msproject::viewstate::find_view_by_name(views,
+                                                        applied_view_name(document));
+            if (applied != nullptr) {
+                const std::size_t size =
+                    msproject::viewstate::style_data_from_view(views, *applied).size();
+                if (size >= msproject::viewstate::kViewTextStyleMinSize &&
+                    size < msproject::viewstate::kGanttStyleMinSize) {
+                    view = applied;
+                }
+            }
+        }
+        if (view == nullptr) {
+            fail(reason, "the file stores no Resource Sheet view");
+            return false;
+        }
+
+        const std::span<const std::uint8_t> style_data =
+            msproject::viewstate::style_data_from_view(views, *view);
+        if (!msproject::viewstate::parse_view_text_styles(style_data, fonts, out.text,
+                                                          &parse_error)) {
+            fail(reason, "view '" + view->name + "': " + parse_error.message);
+            return false;
+        }
+        out.view_name = view->name;
+        out.display_name = view->display_name;
+        out.table_name = view->table_or_top;
+        out.filter_name = view->filter_or_bottom;
+        out.decoded = true;
         if (reason != nullptr) {
             reason->clear();
         }

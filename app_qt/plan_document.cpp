@@ -61,6 +61,50 @@ bool is_task_table(const msproject::viewstate::TableDef& table) {
     }
     return has_task;
 }
+
+// Wave 31 (W31-3.4): the mirror rule for the Resource Sheet.  A table with a
+// resource field (0x0c40xxxx) and no task field is a resource table; the
+// measured fixture's Entry table has all 14 resource columns.  A table mixing
+// the two families is neither: Project's two sheets never address the same
+// table, so such a record is not offered to either.
+bool is_resource_table(const msproject::viewstate::TableDef& table) {
+    bool has_resource = false;
+    for (const msproject::viewstate::ColumnDef& column : table.columns) {
+        const std::uint32_t group = column.field_id & 0xffff0000u;
+        if (group == 0x0b400000u) {
+            return false;
+        }
+        if (group == 0x0c400000u) {
+            has_resource = true;
+        }
+    }
+    return has_resource;
+}
+
+// A table caption/selector comparison: Project stores the menu accelerator in
+// the caption ("&Entry") and the view's 0x2240000a record stores the selector
+// the same way, so compare without it and without ASCII case.
+std::string selector_text(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (const char ch : text) {
+        if (ch != '&') {
+            out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+        }
+    }
+    return out;
+}
+
+bool table_matches_selector(const msproject::viewstate::TableDef& table,
+                            std::string_view selector) {
+    if (selector.empty()) {
+        return false;
+    }
+    const std::string needle = selector_text(selector);
+    return (!table.caption.empty() && selector_text(table.caption) == needle) ||
+           (!table.display_caption.empty() &&
+            selector_text(table.display_caption) == needle);
+}
 // `214/CEdl` -- the applied view/table records (wave 23, B-2).
 const char* const kEdlParts[4] = {"214/CEdl/FixedData", "214/CEdl/FixedMeta",
                                   "214/CEdl/VarMeta", "214/CEdl/Var2Data"};
@@ -371,6 +415,9 @@ void PlanDocument::reset() {
     tables_.clear();
     table_ = msproject::viewstate::TableDef{};
     selected_table_ = 0;
+    resource_tables_.clear();
+    resource_table_ = msproject::viewstate::TableDef{};
+    resource_sheet_style_ = app::ResourceSheetStyle{};
     gantt_style_ = msproject::viewstate::GanttStyle{};
     use_stored_timescale_ = false;
     scroll_origin_ = core::sched::kDateNa;
@@ -409,13 +456,17 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         show_project_summary_ = loaded_.show_project_summary;
         project_summary_override_ = false;
 
+        // Wave 23 (B-2): which view the file was left in, for the Timeline strip.
+        read_applied_view(source_path);
+        // Wave 31 (W31-3.4): the Resource Sheet view and its stored text styles.
+        // Read before the tables so read_table() can follow the view's table
+        // selector; a file that stores no such view stays stock.
+        read_resource_sheet_style(source_path);
         // Wave 21 (operator decision 7): the file's own table decides the sheet's
         // columns/order/titles/widths.  Reading it BEFORE the sheet is built is
         // what makes the presentation the file's rather than the Entry default.
         // A decode failure only means the sheet keeps app::default_sheet_columns().
         read_table(source_path);
-        // Wave 23 (B-2): which view the file was left in, for the Timeline strip.
-        read_applied_view(source_path);
         // Wave 26 (W26-3.1): the applied Gantt view's own style record.  The
         // applied-view name read above selects the view; a decode failure only
         // means the sheet keeps the stock presentation.
@@ -998,6 +1049,8 @@ void PlanDocument::read_table(const std::string& source_path) {
     tables_.clear();
     table_ = msproject::viewstate::TableDef{};
     selected_table_ = 0;
+    resource_tables_.clear();
+    resource_table_ = msproject::viewstate::TableDef{};
     try {
         const mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(source_path);
         std::array<std::vector<std::uint8_t>, 4> raw;
@@ -1026,9 +1079,28 @@ void PlanDocument::read_table(const std::string& source_path) {
         // also the table the Gantt view names.  Keeping the whole TableDef --
         // caption, date format and every ColumnDef in file order -- is what the
         // sheet, the menu and a later CTable write need.
+        //
+        // Wave 31 (W31-3.4): the same pass keeps the RESOURCE tables for the
+        // Resource Sheet.  The one that sheet shows is the table its view names
+        // in 0x2240000a ("&Entry" on the measured fixture); when the view is
+        // missing or names a table this file does not store, the first resource
+        // table in file order is the fallback.  No resource table ever reaches
+        // tables_ or the Task Sheet.
         for (const msproject::viewstate::TableDef& definition : state.tables) {
             if (is_task_table(definition)) {
                 tables_.push_back(definition);
+            } else if (is_resource_table(definition)) {
+                resource_tables_.push_back(definition);
+            }
+        }
+        if (!resource_tables_.empty()) {
+            resource_table_ = resource_tables_.front();
+            for (const msproject::viewstate::TableDef& definition : resource_tables_) {
+                if (table_matches_selector(definition,
+                                           resource_sheet_style_.table_name)) {
+                    resource_table_ = definition;
+                    break;
+                }
             }
         }
         if (tables_.empty()) {
@@ -1040,6 +1112,8 @@ void PlanDocument::read_table(const std::string& source_path) {
         tables_.clear();
         table_ = msproject::viewstate::TableDef{};
         selected_table_ = 0;
+        resource_tables_.clear();
+        resource_table_ = msproject::viewstate::TableDef{};
     }
 }
 
@@ -1103,6 +1177,18 @@ void PlanDocument::read_applied_view(const std::string& source_path) {
         // View state is presentation metadata; a decode failure never fails the
         // load.
         return;
+    }
+}
+
+// Wave 31 (W31-3.4): the Resource Sheet view's own stored presentation.  A
+// file without the view (or with a record shorter than the 19 Text Styles
+// slots need) is presentation metadata only, so a failure never fails the load;
+// the shell then keeps its stock generic columns/fonts.
+void PlanDocument::read_resource_sheet_style(const std::string& source_path) {
+    resource_sheet_style_ = app::ResourceSheetStyle{};
+    std::string reason;
+    if (!app::read_resource_sheet_style(source_path, resource_sheet_style_, &reason)) {
+        resource_sheet_style_ = app::ResourceSheetStyle{};
     }
 }
 

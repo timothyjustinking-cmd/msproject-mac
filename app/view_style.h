@@ -219,4 +219,38 @@ struct BarLabelTexts {
                                     msproject::viewstate::CellFormatTable*
                                         cell_formats = nullptr);
 
+// Wave 31 (W31-3.4): the Resource Sheet view as the FILE stores it.  The
+// measured fixture (tests/data/wave31-resource-sheet.mpp) carries the view
+// "Resource &Sheet" with display name "Resource Sheet", table "&Entry" and
+// filter "&All Resources"; its `0x22400008` record is 1,530 bytes of Text
+// Styles dialog state -- 19 slots, no bar styles.  Project paints an
+// overallocated resource with slot 3 (measured: Calibri 11 bold, RGB
+// 165,0,0) and an ordinary resource with slot 2 (Calibri 11, automatic
+// colour); the shell maps those slots, it does not invent a red.
+//
+// The view is found by its display name even when the file was left in the
+// Gantt; if no such view exists, a non-Gantt applied view is accepted (a
+// small record is the shape of a sheet view).  A file that stores neither
+// stays undecoded and the shell keeps its stock presentation.  Presentation
+// only: nothing here is ever written back.
+struct ResourceSheetStyle {
+    bool decoded = false;
+    std::string view_name;     // stored name, accelerator included
+    std::string display_name;  // stored display name ("Resource Sheet")
+    std::string table_name;    // 0x2240000a ("&Entry")
+    std::string filter_name;   // 0x2240000b ("&All Resources")
+    msproject::viewstate::ViewTextStyles text;
+};
+
+// Reads the Resource Sheet view through the shared core decoders:
+//
+//   * `214/Props` record 0x03400000 -> the FONT_BASES table
+//   * `214/CV_iew`                  -> the view definitions
+//
+// False with a reason when the streams do not parse, no Resource Sheet view
+// exists, or its style record is shorter than the 19 slots need.
+[[nodiscard]] bool read_resource_sheet_style(const std::string& path,
+                                             ResourceSheetStyle& out,
+                                             std::string* reason = nullptr);
+
 }  // namespace app

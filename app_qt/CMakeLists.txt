@@ -243,6 +243,23 @@ add_test(NAME qt_view_gate
                  $<TARGET_FILE:qt_view_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
 
+# ===========================================================================
+# WAVE 31 (G3, W31-3.4): the Resource Sheet's own stored presentation, read
+# through the real PlanDocument.  The fixture is the neutral Project 2021 save
+# with the Resource Sheet applied; the test pins the Resource Entry table's 14
+# stored fields and character widths, the view's "&Entry"/"&All Resources"
+# selectors, and the two text-style slots that paint ordinary and overallocated
+# rows.  W31-3.5..3.7 grow this target into the live Qt/COM-fact gate.
+# ===========================================================================
+add_executable(qt_resource_sheet_gate_tests tests/resource_sheet_gate_test.cpp)
+target_link_libraries(qt_resource_sheet_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_resource_sheet_gate_tests)
+
+add_test(NAME qt_resource_sheet_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_resource_sheet_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave31-resource-sheet.mpp")
+
 # Each dialog (Preferences, Table/Date Format, Custom Formula, Task Fields,
 # Predecessors, Filter): fixed size, margin/spacing contract, measured control
 # geometry, the OK/result path over app/, and Preferences persistence through

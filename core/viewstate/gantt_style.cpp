@@ -86,6 +86,40 @@ bool is_gantt_style(const ViewState& state, const ViewDef& view) {
     return data.size() >= kGanttStyleMinSize;
 }
 
+// The 19 Text Styles records both decoders share.  The caller has already
+// checked that `style_data` holds them (parse_gantt_style has a larger
+// minimum); a style whose font index does not resolve keeps its decoded bits
+// and is reported through `warnings`.
+void decode_text_styles(std::span<const std::uint8_t> style_data,
+                        std::span<const FontBase> fonts,
+                        std::array<TextStyle, kTextStyleItemCount>& text,
+                        std::vector<std::string>& warnings) {
+    for (std::size_t index = 0; index < kTextStyleItemCount; ++index) {
+        const std::size_t offset = kGanttFontStyleOffset + index * kGanttFontStyleStride;
+        TextStyle& style = text[index];
+        style.font_index = style_data[offset];
+        const std::uint8_t bits = style_data[offset + 3];
+        style.bold = (bits & 0x01u) != 0;
+        style.italic = (bits & 0x02u) != 0;
+        style.underline = (bits & 0x04u) != 0;
+        style.strikethrough = (bits & 0x08u) != 0;
+        style.has_colour = read_colour(style_data, offset + 4, style.colour);
+        style.has_background = read_colour(style_data, offset + 16, style.background);
+        style.background_pattern = read_u16(style_data, offset + 28);
+        if (style.font_index < fonts.size() && fonts[style.font_index].valid) {
+            style.valid = true;
+            style.font_name = fonts[style.font_index].name;
+            style.point_size = fonts[style.font_index].point_size;
+        } else {
+            warnings.push_back(
+                std::string("text style '") +
+                text_style_item_name(static_cast<TextStyleItem>(index)) +
+                "' names font base " + std::to_string(style.font_index) +
+                ", which the FONT_BASES table does not define");
+        }
+    }
+}
+
 TimescaleUnit decode_timescale_unit(std::uint8_t byte) {
     // MPXJ's TimescaleUnitsHelper: stored byte + 1 indexes
     // [NONE, MINUTES, HOURS, DAYS, WEEKS, THIRDS_OF_MONTHS, MONTHS, QUARTERS,
@@ -197,30 +231,7 @@ bool parse_gantt_style(std::span<const std::uint8_t> style_data,
         return false;
     }
     out.fonts.assign(fonts.begin(), fonts.end());
-    for (std::size_t index = 0; index < kTextStyleItemCount; ++index) {
-        const std::size_t offset = kGanttFontStyleOffset + index * kGanttFontStyleStride;
-        TextStyle& style = out.text[index];
-        style.font_index = style_data[offset];
-        const std::uint8_t bits = style_data[offset + 3];
-        style.bold = (bits & 0x01u) != 0;
-        style.italic = (bits & 0x02u) != 0;
-        style.underline = (bits & 0x04u) != 0;
-        style.strikethrough = (bits & 0x08u) != 0;
-        style.has_colour = read_colour(style_data, offset + 4, style.colour);
-        style.has_background = read_colour(style_data, offset + 16, style.background);
-        style.background_pattern = read_u16(style_data, offset + 28);
-        if (style.font_index < fonts.size() && fonts[style.font_index].valid) {
-            style.valid = true;
-            style.font_name = fonts[style.font_index].name;
-            style.point_size = fonts[style.font_index].point_size;
-        } else {
-            out.warnings.push_back(
-                std::string("text style '") +
-                text_style_item_name(static_cast<TextStyleItem>(index)) +
-                "' names font base " + std::to_string(style.font_index) +
-                ", which the FONT_BASES table does not define");
-        }
-    }
+    decode_text_styles(style_data, fonts, out.text, out.warnings);
 
     const std::size_t bar_count = style_data[kGanttBarCountOffset];
     const std::size_t bars_end = kGanttBarFirstOffset + bar_count * kGanttBarStride;
@@ -288,6 +299,43 @@ bool parse_gantt_style(std::span<const std::uint8_t> style_data,
     out.bottom.fiscal_year = (out.view_flags & 0x10) != 0;
     out.decoded = true;
     return true;
+}
+
+bool parse_view_text_styles(std::span<const std::uint8_t> style_data,
+                            std::span<const FontBase> fonts, ViewTextStyles& out,
+                            ParseError* error) {
+    out = ViewTextStyles{};
+    if (style_data.size() < kViewTextStyleMinSize) {
+        if (error != nullptr) {
+            error->message = "view text-style record is " +
+                             std::to_string(style_data.size()) +
+                             " bytes; the 19 Text Styles records need at least " +
+                             std::to_string(kViewTextStyleMinSize);
+            error->offset = style_data.size();
+        }
+        return false;
+    }
+    out.fonts.assign(fonts.begin(), fonts.end());
+    decode_text_styles(style_data, fonts, out.text, out.warnings);
+    out.decoded = true;
+    return true;
+}
+
+const ViewDef* find_view_by_name(const ViewState& state, std::string_view name) {
+    if (name.empty()) {
+        return nullptr;
+    }
+    for (const ViewDef& view : state.views) {
+        if (same_view_name(view.name, name)) {
+            return &view;
+        }
+    }
+    for (const ViewDef& view : state.views) {
+        if (!view.display_name.empty() && same_view_name(view.display_name, name)) {
+            return &view;
+        }
+    }
+    return nullptr;
 }
 
 std::span<const std::uint8_t> style_data_from_view(const ViewState& state,
