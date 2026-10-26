@@ -44,7 +44,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Resource | Insert | Add Resources | disabled | model: no resource writer; the resource sheet is read-only |
 | Resource | Properties | Information | disabled | future: not implemented in this port |
 | Resource | Properties | Notes | disabled | future: not implemented in this port |
-| Resource | Properties | Details | disabled | future: not implemented in this port |
+| Resource | Properties | Details | implemented |  |
 | Resource | Level | Level Selection | disabled | future: not implemented in this port |
 | Resource | Level | Level Resource | disabled | future: not implemented in this port |
 | Resource | Level | Level All | disabled | future: not implemented in this port |
@@ -162,6 +162,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 95 (70 disabled)
+* ribbon commands: 95 (69 disabled)
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.
