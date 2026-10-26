@@ -1112,6 +1112,9 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     // SheetModel, and the Qt model must not keep pointing at it.
     sheet_model_.set_sheet(nullptr);
     sheet_model_.set_generic(false);
+    // W31-C3: both outcomes below rebuild the task sheet, so a usage
+    // presentation left by the previous document must not survive either one.
+    reset_usage_presentation();
     std::string failure;
     if (!doc_.load(path.toStdString(), prefs_.zoom, failure)) {
         // The macOS shell leaves the previous state cleared rather than
@@ -1648,6 +1651,11 @@ void MainWindow::show_backstage(bool open) {
 void MainWindow::new_project() {
     // The File > New page: forget the open file and rebuild the empty shell.
     sheet_model_.set_sheet(nullptr);
+    // W31-C3: File > New from a usage view leaves the task sheet bound to the
+    // generic presentation otherwise: the usage captions/spans would paint over
+    // it and columnCount() would return 0 until something rebinds the model.
+    sheet_model_.set_generic(false);
+    reset_usage_presentation();
     doc_.clear();
     document_.reset();
     structural_ = app::StructuralEdits{};

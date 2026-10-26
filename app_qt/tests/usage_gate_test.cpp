@@ -30,6 +30,7 @@
 #include <string_view>
 #include <vector>
 
+#include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
 #include <QFile>
@@ -43,6 +44,7 @@
 #include <QTableView>
 #include <QVariant>
 
+#include "backstage.h"
 #include "layout_model.h"
 #include "main_window.h"
 #include "plan_document.h"
@@ -813,6 +815,45 @@ void check_live_window(const std::string& fixture, const QJsonObject& measures) 
     check_usage_torn_down(window,
                           "usage gate (live): Resource Usage -> task sheet drops "
                           "the usage presentation");
+
+    // W31-C3: File > Open and File > New from a usage view take the same
+    // teardown path.  A successful open, a failed open and a new project all
+    // end on the task sheet with no usage captions, spans or gutter numbers.
+    (void)switch_to(window, app::MenuAction::view_task_usage,
+                    app::ViewMode::task_usage,
+                    "usage gate (live): Task Usage reopens before File > Open");
+    check(window.open_file(QString::fromStdString(fixture), &error),
+          "usage gate (live): File > Open from Task Usage succeeds");
+    QApplication::processEvents();
+    check_usage_torn_down(window,
+                          "usage gate (live): File > Open from Task Usage drops "
+                          "the usage presentation");
+
+    (void)switch_to(window, app::MenuAction::view_resource_usage,
+                    app::ViewMode::resource_usage,
+                    "usage gate (live): Resource Usage reopens before File > New");
+    msqt::Backstage* backstage = window.backstage();
+    check(backstage != nullptr && backstage->new_blank_button() != nullptr,
+          "usage gate (live): the backstage offers Blank Project");
+    if (backstage != nullptr && backstage->new_blank_button() != nullptr) {
+        backstage->new_blank_button()->click();
+    }
+    QApplication::processEvents();
+    check_usage_torn_down(window,
+                          "usage gate (live): File > New from Resource Usage "
+                          "drops the usage presentation");
+
+    check(window.open_file(QString::fromStdString(fixture), &error),
+          "usage gate (live): the fixture reopens after File > New");
+    (void)switch_to(window, app::MenuAction::view_resource_usage,
+                    app::ViewMode::resource_usage,
+                    "usage gate (live): Resource Usage reopens before a failed open");
+    check(!window.open_file(QStringLiteral("w31-no-such-file.mpp"), &error),
+          "usage gate (live): the missing file fails to open");
+    QApplication::processEvents();
+    check_usage_torn_down(window,
+                          "usage gate (live): a failed File > Open from Resource "
+                          "Usage drops the usage presentation");
 }
 
 }  // namespace
