@@ -1792,11 +1792,15 @@ AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
     }
 
     std::size_t const rows = links.rows.rows.size();
+    bool successor_has_live_link = false;
     for (std::size_t row = 0; row < rows; ++row) {
         if (!links.rows.rows[row].live) {
             continue;
         }
         std::size_t const base = row * kLinkRowSize;
+        if (get_u32(links.rows.fixed, base + kConsSuccessor) == successor_uid) {
+            successor_has_live_link = true;
+        }
         if (get_u32(links.rows.fixed, base + kConsPredecessor) != predecessor_uid ||
             get_u32(links.rows.fixed, base + kConsSuccessor) != successor_uid) {
             continue;
@@ -1809,6 +1813,31 @@ AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
                         std::to_string(get_u32(links.rows.fixed, base + kLinkRowUid)) +
                         "); a duplicate relation is refused");
         }
+    }
+
+    /* W30-0.7 (R29-7): Wave 29 measured Fixed2Meta +8 as the successor's
+     * driving state, not a first/later position -- in the percent-mid25 control
+     * the first of three links into distinct successors is 0x07 because that
+     * successor has progress, and the work pair moves 0x0f -> 0x07 when its
+     * successor enters progress.  The wave-47 rule this function used to write
+     * (0x07 whenever a live link already names the successor, 0x0f for a
+     * progressed successor's first link) is falsified, and no Project save pair
+     * adds either shape.  Both are refused instead of inventing the byte; the
+     * two measured adds (a first link into a 0 % successor) still write 0x0f. */
+    TaskTable const successor_table = TaskTable::from_document(doc);
+    std::uint16_t const successor_percent =
+        successor_table.u16(successor_row, task_row::kPercentComplete);
+    if (successor_has_live_link) {
+        throw Error(function + ": successor uid " + std::to_string(successor_uid) +
+                    " already has a live incoming link; the Fixed2Meta +8 byte "
+                    "for a second incoming link is not measured (Wave 29 "
+                    "falsified the later-link rule), so the add is refused");
+    }
+    if (successor_percent != 0) {
+        throw Error(function + ": successor uid " + std::to_string(successor_uid) +
+                    " is " + std::to_string(successor_percent) +
+                    "% complete; no Project save pair adds a link into a "
+                    "progressed successor, so the add is refused");
     }
 
     std::uint32_t max_uid = 0;
@@ -1829,21 +1858,11 @@ AddedLink add_task_link(CfbDocument& doc, std::uint32_t predecessor_uid,
         task_identity(doc, successor_row, function);
     LinkIdentity const link_identity = make_link_identity(doc, function);
 
-    /* Fixed2Meta +8: keep `add_task_link`'s wave-47 choice -- 0x0f, or 0x07
-     * when a live link already names this successor.  W29-1.0b measured the
-     * byte as a driving-state flag rather than a position marker (see
-     * add_delete.h); the two measured adds do not exercise the distinction. */
-    std::uint8_t flag = kLinkFixed2BaseFlag;
-    for (std::size_t row = 0; row < rows; ++row) {
-        if (!links.rows.rows[row].live) {
-            continue;
-        }
-        if (get_u32(links.rows.fixed, row * kLinkRowSize + kConsSuccessor) ==
-            successor_uid) {
-            flag = kLinkFixed2EnteredProgressFlag;
-            break;
-        }
-    }
+    /* Fixed2Meta +8: every add this function allows is a first link into a
+     * 0 % successor, the only shape the two measured adds cover, and both
+     * wrote 0x0f.  0x07 is the measured progress-transition state, written by
+     * the actuals path when a successor enters progress -- not here. */
+    std::uint8_t const flag = kLinkFixed2BaseFlag;
 
     std::vector<std::uint8_t> fixed = links.rows.fixed;
     std::vector<std::uint8_t> meta = links.rows.meta;

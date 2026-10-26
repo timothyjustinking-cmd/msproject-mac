@@ -195,13 +195,15 @@ void test_predecessor_list() {
                "a pending link delete is not listed");
     app::StructuralEdit add;
     std::string pending_error;
-    check(app::make_link_add(plan, edits, 2, 3, LinkType::finish_to_finish, "2d", add,
+    // Successor 3 already has the live link 2 -> 3, which W30-0.7 refuses; the
+    // pending row is added into task 1, which has no incoming link.
+    check(app::make_link_add(plan, edits, 2, 1, LinkType::finish_to_finish, "2d", add,
                              pending_error),
           "a link add is built");
     check(edits.push(add), "the link add is queued");
     const app::PlanInput shown = edits.apply(plan);
     const std::vector<app::PredecessorListItem> pending =
-        app::predecessors_of(shown, edits, 3);
+        app::predecessors_of(shown, edits, 1);
     bool saw_pending = false;
     for (const app::PredecessorListItem& item : pending) {
         if (item.pending && item.predecessor_uid == 2) {
@@ -220,8 +222,13 @@ void test_validation() {
     std::string error;
     check(app::validate_link_add(plan, edits, 1, 2, LinkType::finish_to_start) != "",
           "a duplicate relation is refused");
-    check(app::validate_link_add(plan, edits, 1, 2, LinkType::start_to_start) == "",
-          "the same pair with another type is allowed");
+    // W30-0.7 (R29-7): successor 2 already has 1 -> 2 FS.  A second incoming
+    // link -- even of another type -- is the shape whose Fixed2Meta byte the
+    // old first/later rule fabricated, so it is refused.
+    const std::string later = app::validate_link_add(
+        plan, edits, 1, 2, LinkType::start_to_start);
+    check(later.find("incoming link") != std::string::npos,
+          "a second incoming link is refused with the later-link reason (W30-0.7)");
     check(app::validate_link_add(plan, edits, 2, 2, LinkType::finish_to_start) != "",
           "a self-link is refused");
     check(app::validate_link_add(plan, edits, 0, 2, LinkType::finish_to_start) != "",
@@ -230,19 +237,39 @@ void test_validation() {
           "an unknown predecessor is refused");
     check(app::validate_link_add(plan, edits, 1, 99, LinkType::finish_to_start) != "",
           "an unknown successor is refused");
-    check(app::validate_link_add(plan, edits, 1, 3, LinkType::finish_to_start) == "",
-          "a new relation is allowed");
+    check(app::validate_link_add(plan, edits, 1, 3, LinkType::finish_to_start) != "",
+          "a successor with a file incoming link is refused (W30-0.7)");
+
+    // The measured shape: first links into successors with no incoming link and
+    // no progress (synthetic-base's empty link table, 0 % rows).
+    app::PlanInput open = make_plan();
+    open.links.clear();
+    check(app::validate_link_add(open, edits, 1, 2, LinkType::start_to_start) == "",
+          "the same pair with another type is allowed when the successor is free");
+    check(app::validate_link_add(open, edits, 1, 3, LinkType::finish_to_start) == "",
+          "a new relation into a free successor is allowed");
+
+    // W30-0.7 (R29-7): the other falsified shape -- a link into a progressed
+    // successor.  Wave 29 measured +8 as driving state (0x07 when the successor
+    // has progress); no pair adds a link into a progressed task.
+    app::PlanInput progressed = open;
+    progressed.tasks[2].percent_complete = 25;
+    const std::string progress_error =
+        app::validate_link_add(progressed, app::StructuralEdits{}, 1, 3,
+                               LinkType::finish_to_start);
+    check(progress_error.find("25% complete") != std::string::npos,
+          "a link into a progressed successor is refused (W30-0.7)");
 
     app::StructuralEdit add;
     error.clear();
     check(!app::make_link_add(plan, edits, 1, 2, LinkType::finish_to_start, "0", add, error),
           "the builder rejects the duplicate through validate");
     check(!error.empty(), "the duplicate refusal explains itself");
-    check(!app::make_link_add(plan, edits, 1, 3, LinkType::finish_to_start, "nope", add,
+    check(!app::make_link_add(open, edits, 1, 3, LinkType::finish_to_start, "nope", add,
                               error),
           "the builder rejects only the lag");
     check(!error.empty(), "the lag refusal explains itself");
-    check(app::make_link_add(plan, edits, 1, 3, LinkType::finish_to_start, "2d", add,
+    check(app::make_link_add(open, edits, 1, 3, LinkType::finish_to_start, "2d", add,
                              error),
           "a valid add is built");
     check(add.kind == app::StructuralKind::add_link && add.uid == 3 &&
@@ -250,7 +277,7 @@ void test_validation() {
               add.lag_ticks == 9600,
           "the built edit carries the relation");
     check(edits.push(add), "the add is queued");
-    check(app::validate_link_add(plan, edits, 1, 3, LinkType::finish_to_start) != "",
+    check(app::validate_link_add(open, edits, 1, 3, LinkType::finish_to_start) != "",
           "a duplicate pending add is refused");
 
     // A pending insert has no file row yet.
@@ -635,7 +662,9 @@ void test_real_round_trip() {
             check(mixed.push(remove), "the mixed delete is queued");
         }
         app::StructuralEdit add;
-        check(app::make_link_add(mixed.apply(mixed_base.plan), mixed, second_uid, third_uid,
+        // Into task 1, whose only links are outgoing: task 3 already has the
+        // untouched incoming link, and W30-0.7 refuses a second one.
+        check(app::make_link_add(mixed.apply(mixed_base.plan), mixed, second_uid, first_uid,
                                  LinkType::finish_to_finish, "-1d", add, error_text),
               "the mixed add is validated against the display plan");
         check(mixed.push(add), "the mixed add is queued");
@@ -652,7 +681,7 @@ void test_real_round_trip() {
                            "the mixed file has two live links");
                 check(has_signature(after_mixed.document, "1->3 SS 4800"),
                       "the untouched link survives");
-                check(has_signature(after_mixed.document, "2->3 FF -4800"),
+                check(has_signature(after_mixed.document, "2->1 FF -4800"),
                       "the added link reads back with its negative lag");
             }
         }

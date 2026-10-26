@@ -418,7 +418,8 @@ std::string validate_link_add(const PlanInput& plan, const StructuralEdits& edit
         return "predecessor uid " + std::to_string(predecessor_uid) +
                " is not a task in the plan";
     }
-    if (find_task(plan, successor_uid) == nullptr) {
+    const TaskRow* successor = find_task(plan, successor_uid);
+    if (successor == nullptr) {
         return "successor task is not in the plan";
     }
     if (has_pending_delete(edits, predecessor_uid) ||
@@ -434,6 +435,29 @@ std::string validate_link_add(const PlanInput& plan, const StructuralEdits& edit
     }
     if (has_pending_link_add(edits, predecessor_uid, successor_uid, type)) {
         return std::string("that predecessor is already pending as ") + link_type_name(type);
+    }
+    // W30-0.7 (R29-7): Wave 29 measured the link Fixed2Meta +8 byte as the
+    // successor's driving state -- 0x07 once the successor enters progress, not
+    // "a later link" (the percent-mid25 control's FIRST of three links into
+    // distinct successors is 0x07).  add_task_link used to write 0x07 whenever
+    // the successor already had a live link, and 0x0f for a progressed
+    // successor's first link; no Project save pair adds either shape.  Refuse
+    // both up front (standing rule 1).  `plan` is the display plan, so a pending
+    // link delete that frees the successor -- the measured delete-and-re-add
+    // save -- has already been applied here.
+    for (const LinkRow& link : plan.links) {
+        if (link.successor_uid == successor_uid) {
+            return "task uid " + std::to_string(successor_uid) +
+                   " already has an incoming link; the Fixed2Meta byte for a "
+                   "second incoming link is not measured (Wave 29 falsified the "
+                   "later-link rule), so Add Link is refused";
+        }
+    }
+    if (successor->percent_complete > 0) {
+        return "task uid " + std::to_string(successor_uid) + " is " +
+               std::to_string(successor->percent_complete) +
+               "% complete; no Project save pair adds a link into a progressed "
+               "task, so Add Link is refused";
     }
     return {};
 }

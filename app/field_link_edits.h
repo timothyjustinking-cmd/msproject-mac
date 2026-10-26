@@ -126,7 +126,13 @@ std::string format_link_lag(std::int32_t ticks);
 // Validates a proposed add: the successor and predecessor must be live file
 // tasks (not a pending insert), different, not pending-deleted, and the
 // (predecessor, successor, type) relation must not already exist in `plan` or in
-// the pending add list.  Returns "" when the add is acceptable; otherwise a
+// the pending add list.  It also refuses a successor that already has any
+// live incoming link or has progress: Wave 29 measured the link Fixed2Meta +8
+// byte as the successor's driving state (0x07 once it enters progress), not the
+// "later link = 0x07" rule the writer used to assume, and no Project save pair
+// adds either shape (W30-0.7, R29-7).  `plan` must be the DISPLAY plan so a
+// pending delete that frees the successor (the measured delete-and-re-add save)
+// is already applied.  Returns "" when the add is acceptable; otherwise a
 // message for the dialog.
 std::string validate_link_add(const PlanInput& plan, const StructuralEdits& edits,
                               std::uint32_t predecessor_uid, std::uint32_t successor_uid,

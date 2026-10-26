@@ -15,8 +15,15 @@
  *                                         link, predecessor task, successor task
  *   Fixed2Meta  16 + 9 * rows             one 9-byte entry per row:
  *                                         +0..3 = 0, +4 record offset,
- *                                         +8 = 0x0f (first link into that
- *                                         successor) / 0x07 (a later one)
+ *                                         +8 = 0x0f on every measured add
+ *
+ * The wave-47 comment here used to call +8 "0x0f (first link into that
+ * successor) / 0x07 (a later one)".  Wave 29 falsified that (R29-7): +8 is the
+ * successor's driving state, 0x07 once it has progress, and the percent-mid25
+ * control's FIRST of three links into distinct successors is 0x07.  W30-0.7
+ * therefore makes add_task_link refuse a successor that already has a live
+ * incoming link or has progress; every add this test performs is a first link
+ * into a 0 % successor, and every flag it writes is 0x0f.
  *
  * A delete is a TOMBSTONE: FixedMeta entry +0 = 0x02, +2 = 0, header +4 |= 0x02
  * (the same contract W48's task-delete cascade implements), and no stream changes
@@ -509,10 +516,11 @@ void test_add_sequence(TestContext& t) {
     emit(t, doc, "w52-links.mpp",
          "synthetic-base + 1->2 FS+0 and 1->3 SS+1d; four Cons streams grown");
 
-    /* Link 3: 2 -> 3 FF, lag -1 day.  Successor 3 already has a link, so the
-     * Fixed2Meta flag must be 0x07 (measured rule). */
+    /* Link 3: 2 -> 1 FF, lag -1 day.  Successor 1 has no incoming link and no
+     * progress, so this is the shape the two measured adds cover; W30-0.7
+     * refuses a successor that already has a live link or progress. */
     mppwrite::AddedLink const third =
-        mppwrite::add_task_link(doc, 2, 3, mppwrite::kLinkTypeFF, -4800,
+        mppwrite::add_task_link(doc, 2, 1, mppwrite::kLinkTypeFF, -4800,
                                 out_path("w52-step3.mpp"));
     t.equal(third.uid, 3, "add3: uid is max+1");
     t.equal(third.row, 2, "add3: row 2");
@@ -521,14 +529,14 @@ void test_add_sequence(TestContext& t) {
     t.check(row.lag == -4800, "add3: negative lag");
     t.equal(row.type, mppwrite::kLinkTypeFF, "add3: type FF");
     std::vector<std::uint8_t> const fixed2_meta3 = doc.read_stream(kFixed2Meta);
-    t.equal(fixed2_meta3[16 + 9 + 8], 0x0F,
-            "add3: link 2 is the first into successor 3 (0x0f)");
-    t.equal(fixed2_meta3[16 + 2 * 9 + 8], 0x07,
-            "add3: link 3 is a later link into successor 3 (0x07)");
+    for (std::size_t entry = 0; entry < 3; ++entry) {
+        t.equal(fixed2_meta3[16 + entry * 9 + 8], 0x0F,
+                "add3: everyone's first link into a 0 % successor is 0x0f");
+    }
     t.check(cons_identity(doc, 2, 1) == task2_identity,
             "add3: record identity 1 is task 2's identity");
-    t.check(cons_identity(doc, 2, 2) == task3_identity,
-            "add3: record identity 2 is task 3's identity");
+    t.check(cons_identity(doc, 2, 2) == task1_identity,
+            "add3: record identity 2 is task 1's identity");
     t.check(doc.to_bytes() == read_file(out_path("w52-step3.mpp")),
             "add3: document equals the file on disk");
 }
@@ -541,7 +549,8 @@ void test_delete(TestContext& t) {
                                   out_path("w52-del-a.mpp"));
     (void)mppwrite::add_task_link(doc, 1, 3, mppwrite::kLinkTypeSS, 4800,
                                   out_path("w52-del-b.mpp"));
-    (void)mppwrite::add_task_link(doc, 2, 3, mppwrite::kLinkTypeFF, -4800,
+    /* 2 -> 1, not 2 -> 3: W30-0.7 refuses a second incoming link into 3. */
+    (void)mppwrite::add_task_link(doc, 2, 1, mppwrite::kLinkTypeFF, -4800,
                                   out_path("w52-del-c.mpp"));
     check_link_geometry(t, doc, 3, "delete source");
     mppwrite::CfbDocument const before = doc;
@@ -638,7 +647,8 @@ void test_delete(TestContext& t) {
                                   out_path("w52-del-last-a.mpp"));
     (void)mppwrite::add_task_link(last_doc, 1, 3, mppwrite::kLinkTypeSS, 4800,
                                   out_path("w52-del-last-b.mpp"));
-    (void)mppwrite::add_task_link(last_doc, 2, 3, mppwrite::kLinkTypeFF, -4800,
+    /* 2 -> 1: successor 3 already has a live incoming link (W30-0.7). */
+    (void)mppwrite::add_task_link(last_doc, 2, 1, mppwrite::kLinkTypeFF, -4800,
                                   out_path("w52-del-last-c.mpp"));
     mppwrite::DeletedLink const last =
         mppwrite::delete_task_link(last_doc, 3, out_path("w52-del-last.mpp"));
@@ -687,6 +697,11 @@ void test_refusals(TestContext& t) {
     expect_refusal(
         [&] { mppwrite::add_task_link(doc, 1, 2, 1, 99, missing); },
         "duplicate", "duplicate relation with a different lag refused");
+    /* W30-0.7 (R29-7): the doc already has 1 -> 2, so 3 -> 2 would be a second
+     * incoming link -- the shape whose Fixed2Meta byte the old rule fabricated. */
+    expect_refusal(
+        [&] { mppwrite::add_task_link(doc, 3, 2, 1, 0, missing); },
+        "incoming link", "second incoming link refused (W30-0.7)");
     expect_refusal(
         [&] { mppwrite::add_task_link(doc, 99, 2, 1, 0, missing); },
         "live task row", "unknown predecessor refused");
@@ -705,6 +720,26 @@ void test_refusals(TestContext& t) {
                                     mppwrite::kMaxLinkLagTicks + 1, missing);
         },
         "outside", "out-of-range lag refused");
+
+    /* W30-0.7 (R29-7): the second shape the old rule got wrong -- a link into a
+     * progressed successor.  Wave 29 measured +8 as the successor's driving
+     * state (0x07 once it has progress), and no Project save pair adds a link
+     * into a progressed task.  Task 1 is patched to 40 % in its FixedData. */
+    {
+        mppwrite::CfbDocument progressed = synthetic_source();
+        mppwrite::TaskTable table = mppwrite::TaskTable::from_document(progressed);
+        table.set_u16(table.row_for_uid(1), mppwrite::task_row::kPercentComplete, 40);
+        table.store_into(progressed);
+        mppwrite::CfbDocument const before = progressed;
+        expect_error(
+            t,
+            [&] { mppwrite::add_task_link(progressed, 2, 1, 1, 0, missing); },
+            "progress", "progressed successor refused (W30-0.7)");
+        t.check(progressed.to_bytes() == before.to_bytes(),
+                "progressed successor: the document changed on refusal");
+        t.check(!file_exists(missing),
+                "progressed successor: the output file was created");
+    }
 
     /* A damaged Cons table: each refusal leaves the document untouched. */
     {
@@ -831,10 +866,12 @@ void test_measured_fixtures(TestContext& t) {
         t.equal(fixed2_meta[16 + 0 * 9 + 8], 0x0F, "link1: row 0 flag 0x0f");
         t.equal(fixed2_meta[16 + 1 * 9 + 8], 0x0F, "link1: row 1 flag 0x0f");
         t.equal(fixed2_meta[16 + 2 * 9 + 8], 0x0F, "link1: row 2 flag 0x0f");
+        /* 0x07 is the measured driving-state value, not "a later link"
+         * (W29-1.0b); this fixture is where the old reading came from. */
         t.equal(fixed2_meta[16 + 3 * 9 + 8], 0x07,
-                "link1: row 3 is a later link (0x07)");
+                "link1: row 3 is in the 0x07 driving state");
         t.equal(fixed2_meta[16 + 4 * 9 + 8], 0x07,
-                "link1: row 4 is a later link (0x07)");
+                "link1: row 4 is in the 0x07 driving state");
         t.equal(live_link_count(doc), 5, "link1: five live links");
     } else {
         std::cout << "SKIP: " << link1 << " is missing (corpus/ is git-ignored)\n";
@@ -879,16 +916,18 @@ void test_measured_fixtures(TestContext& t) {
             mppwrite::CfbDocument::from_file(add_fixture);
         mppwrite::CfbDocument grown =
             mppwrite::CfbDocument::from_file(add_fixture);
+        /* Into task 1, not task 3: Project's own table already names 3 as a
+         * successor, and W30-0.7 refuses a second incoming link. */
         mppwrite::AddedLink const added = mppwrite::add_task_link(
-            grown, 2, 3, mppwrite::kLinkTypeFS, 0,
+            grown, 2, 1, mppwrite::kLinkTypeFS, 0,
             out_path("w52-add-on-measured.mpp"));
         t.equal(added.uid, 3, "w12-linkadd: appended uid is 3");
         t.equal(added.row, 2, "w12-linkadd: appended row is 2");
         check_link_geometry(t, grown, 3, "w12-linkadd + add");
         t.check(cons_identity(grown, 2, 1) == task_identity(grown, 2),
                 "w12-linkadd: appended predecessor identity is task 2's");
-        t.check(cons_identity(grown, 2, 2) == task_identity(grown, 3),
-                "w12-linkadd: appended successor identity is task 3's");
+        t.check(cons_identity(grown, 2, 2) == task_identity(grown, 1),
+                "w12-linkadd: appended successor identity is task 1's");
         t.check(cons_identity(grown, 0, 0) == cons_identity(original, 0, 0),
                 "w12-linkadd: the existing link identity is untouched");
         std::vector<std::uint8_t> const meta = grown.read_stream(kMeta);

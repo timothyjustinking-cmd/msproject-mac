@@ -329,9 +329,12 @@ DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
  * has three live links into three distinct successors, yet the first is 0x07
  * and the other two are 0x0f, and wave29-percent-work40 shows the one live
  * incoming link to the edited row move 0x0f -> 0x07 when that row enters
- * progress (W29-1.0b).  `add_task_link` still writes 0x0f for a new link (the
- * two measured adds had no driving-state reason for 0x07), and
- * `stage_progress_link_flags` performs the measured edit-time change.
+ * progress (W29-1.0b).  `add_task_link` writes 0x0f only for a first link into a
+ * 0 % successor -- the shape the two measured adds cover.  It refuses a
+ * successor that already has a live incoming link (the old rule's 0x07 shape)
+ * and a progressed successor (the old rule's 0x0f shape), because no pair adds
+ * either (W30-0.7, R29-7).  `stage_progress_link_flags` performs the measured
+ * edit-time change.
  *
  * A delete changes only FixedMeta: the entry's +0 becomes 0x02, +2 stays 0, the
  * table header +4 gets bit 0x02, and FixedData/Fixed2Data/Fixed2Meta keep every
@@ -371,12 +374,14 @@ inline constexpr std::size_t kLinkFixed2RecordSize = 48;
 inline constexpr std::size_t kLinkIdentitySize = 16;
 /* Link Fixed2Meta: a 16-byte header plus one 9-byte entry per row. */
 inline constexpr std::size_t kLinkFixed2MetaEntrySize = 9;
-/* Entry byte +8 is a driving-state byte, not a position marker (see the note
- * above): 0x0f is the ordinary state, 0x07 the state the measured progress
- * transition writes.  `add_task_link` keeps its wave-47 choice (0x0f, or 0x07
- * when a live link already names the successor), which the two measured adds
- * accepted; the names below describe the states it writes, not the falsified
- * first/later reading. */
+/* Entry byte +8 is the successor's driving state, not a position marker (see
+ * the note above): 0x0f is the ordinary state, 0x07 the state the measured
+ * progress transition writes (the wave-29 percent pair moves 0x0f -> 0x07 when
+ * its successor enters progress; the mid25 control's first of three links is
+ * already 0x07 because that successor has progress).  `add_task_link` writes
+ * only the ordinary 0x0f: W30-0.7 refuses the two shapes whose byte the wave-47
+ * first/later rule got wrong -- a second incoming link and a progressed
+ * successor -- until a Project pair measures them. */
 inline constexpr std::uint8_t kLinkFixed2BaseFlag = 0x0F;
 inline constexpr std::uint8_t kLinkFixed2EnteredProgressFlag = 0x07;
 
@@ -439,6 +444,11 @@ struct DeletedLink {
  *     -- the lag is not part of the identity, so a second FS 1->2 with a
  *     different lag is the same relation and is refused.  A tombstoned row with
  *     that triple does not block a re-add;
+ *   - any live link row already naming the successor (a second incoming link)
+ *     -- Wave 29 falsified the first/later reading of Fixed2Meta +8 and no pair
+ *     adds a second incoming link (W30-0.7);
+ *   - a successor whose stored percent is non-zero -- no pair adds a link into a
+ *     progressed successor (W30-0.7);
  *   - a damaged link table: FixedData not 20*n, FixedMeta not 16 + 10*n,
  *     Fixed2Data not 48*n, Fixed2Meta not 16 + 9*n, a declared entry count
  *     (+8) that disagrees with the entries present, a declared size (+12) that
