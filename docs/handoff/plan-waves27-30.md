@@ -97,6 +97,22 @@ Estimate: 8-12 hours, likely split into waves 30 and 31.
   `scripts/check_fixtures.py` cannot fire on backslash paths.
 - The eight Lows in the review.
 
+## Queued from the wave-30 review (Medium/Low; `wave30-verification/review.md`)
+
+- R30-5 Medium: the task-mode edit should be alone in its save; a queued view-state
+  or formula edit is not refused, and a Start edit or Fill on another row fails only
+  at save.
+- R30-6 Medium: outdent's parent-assignment shape is refused only by the writer (a
+  warning), so the edit silently drops from the saved file (W30-C5 fixed indent only).
+- R30-7 Medium: the resource-loaded rule does not check the project or resource
+  calendar or the contour; the work-not-9600 refusal has no test.
+- R30-8 Medium (unverified): the task-mode shape does not check constraint,
+  deadline, duration format or task type.
+- R30-9..R30-14 Low: SKIP-and-pass tests on a missing fixture; 33 of 66 new
+  fixtures without a pinned hash in `check_fixtures.py`; six doc lines naming the
+  operator by first name; commit-message counts contradicted by logs; the outline
+  progress check sees only percent and work; the R29-11 UTF-16 profile regex.
+
 ## After wave 30 (not planned in detail)
 
 Team Planner, Network Diagram, Calendar and Report views; the constraint-mso engine
