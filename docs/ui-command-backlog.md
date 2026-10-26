@@ -84,10 +84,10 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | View | Zoom | Zoom | implemented |  |
 | View | Zoom | Entire Project | implemented |  |
 | View | Zoom | Selected Tasks | implemented |  |
-| View | Window | New Window | disabled | future: not implemented in this port |
-| View | Window | Switch Windows | disabled | future: not implemented in this port |
-| View | Window | Arrange All | disabled | future: not implemented in this port |
-| View | Window | Hide | disabled | future: not implemented in this port |
+| View | Window | New Window | disabled | chrome: the single-document shell has no second window to open |
+| View | Window | Switch Windows | disabled | chrome: the single-document shell has no window list to switch |
+| View | Window | Arrange All | disabled | chrome: the single-document shell has one window and nothing to arrange |
+| View | Window | Hide | disabled | chrome: the single-document shell cannot hide its only window |
 | View | Macros | Macros | disabled | future: not implemented in this port |
 | Help | Help | Help | disabled | future: not implemented in this port |
 | Help | Help | Feedback | disabled | future: not implemented in this port |

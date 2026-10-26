@@ -146,6 +146,16 @@ enum class RibbonCommand : std::uint8_t {
     // Project uses and measured against its windows on both fixtures.
     zoom_entire,
     zoom_selected,
+    // Wave 31 (W31-2.3): the View tab's Window group.  This port is a
+    // single-document shell: there is no second window to open or list, one
+    // window has nothing to arrange, and hiding the only window would leave no
+    // UI.  Each control keeps its own command id for the disabled-control
+    // wiring and a specific backlog reason, and stays DISABLED with the
+    // decision-9 tooltip.
+    window_new,
+    window_switch,
+    window_arrange,
+    window_hide,
 };
 
 class RibbonBar final : public QWidget {

@@ -24,6 +24,14 @@ OUT = ROOT / "docs" / "ui-command-backlog.md"
 MISSING_REASON = {
     "insert_resource": "model: no resource writer; the resource sheet is read-only",
     "hide_app": "chrome: Qt has no portable hide-application command",
+    # W31-2.3: the View tab's Window group.  The shell is single-document (one
+    # MainWindow, one PlanDocument), so each command names the capability the
+    # shell does not have; the controls stay disabled with the decision-9
+    # tooltip.
+    "window_new": "chrome: the single-document shell has no second window to open",
+    "window_switch": "chrome: the single-document shell has no window list to switch",
+    "window_arrange": "chrome: the single-document shell has one window and nothing to arrange",
+    "window_hide": "chrome: the single-document shell cannot hide its only window",
     # W26-6.1: the View drop-downs' unimplemented entries are MenuAction::none,
     # and so are the ribbon commands with no MenuAction at all.  One neutral
     # wording covers both tables.

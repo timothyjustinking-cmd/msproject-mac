@@ -510,12 +510,14 @@ const std::vector<TabSpec>& tab_specs() {
         check(split_view, "Details", RibbonCommand::toggle_details, 64, 1, 0, true, -1);
         combo(split_view, "Details options", "", 112, 1, 1);
         GroupSpec& window = add_group(view, "Window", 198);
-        large(window, "New\nWindow", app::MenuAction::none, 62, 0, false, "window.new");
+        large(window, "New\nWindow", app::MenuAction::none, 62, 0, false, "window.new",
+              RibbonCommand::window_new);
         small(window, "Switch\nWindows", app::MenuAction::none, 128, 0, 1, false, 1, false,
-              "window.switch");
+              "window.switch", RibbonCommand::window_switch);
         small(window, "Arrange All", app::MenuAction::none, 128, 1, 1, false, 1, false,
-              "window.arrange");
-        small(window, "Hide", app::MenuAction::none, 128, 2, 1, false, 1, false, "window.hide");
+              "window.arrange", RibbonCommand::window_arrange);
+        small(window, "Hide", app::MenuAction::none, 128, 2, 1, false, 1, false,
+              "window.hide", RibbonCommand::window_hide);
         GroupSpec& macros = add_group(view, "Macros", 60);
         large(macros, "Macros", app::MenuAction::none, 50, 0, false, "macros.macros");
         tabs.push_back(std::move(view));

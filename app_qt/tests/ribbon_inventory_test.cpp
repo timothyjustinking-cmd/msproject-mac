@@ -573,6 +573,26 @@ const EnabledWiring kEnabledWiring[] = {
      "toggle_project_summary"},
 };
 
+// W31-2.3: the View tab's Window group stays DISABLED -- this port is a
+// single-document shell, so there is no second window to open or list, one
+// window has nothing to arrange, and hiding the only window would leave no UI.
+// The generic pin check below asserts the disabled state and the exact
+// decision-9 tooltip; this table pins each control's own command id, so every
+// row keeps a specific backlog reason and a command cannot silently become
+// none.
+struct DisabledWiring {
+    const char* tab;
+    const char* group;
+    const char* label;
+    const char* command;
+};
+const DisabledWiring kDisabledWiring[] = {
+    {"View", "Window", "New Window", "window_new"},
+    {"View", "Window", "Switch Windows", "window_switch"},
+    {"View", "Window", "Arrange All", "window_arrange"},
+    {"View", "Window", "Hide", "window_hide"},
+};
+
 const char* command_name(RibbonCommand command) {
     switch (command) {
         case RibbonCommand::none: return "none";
@@ -617,6 +637,10 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::zoom_dialog: return "zoom_dialog";
         case RibbonCommand::zoom_entire: return "zoom_entire";
         case RibbonCommand::zoom_selected: return "zoom_selected";
+        case RibbonCommand::window_new: return "window_new";
+        case RibbonCommand::window_switch: return "window_switch";
+        case RibbonCommand::window_arrange: return "window_arrange";
+        case RibbonCommand::window_hide: return "window_hide";
     }
     return "none";
 }
@@ -660,6 +684,51 @@ void check_action_wiring(msqt::RibbonBar* ribbon, const TabPin& pin) {
                          wiring.command)
                             .c_str());
         }
+    }
+}
+
+// W31-2.3: each disabled Window control still carries its own command id and
+// stays disabled with the exact decision-9 tooltip (the pin check asserts the
+// same state from the independent pin; this reads it back by command name).
+void check_disabled_wiring(msqt::RibbonBar* ribbon, const TabPin& pin) {
+    for (const DisabledWiring& wiring : kDisabledWiring) {
+        if (pin.title != wiring.tab) {
+            continue;
+        }
+        int group_index = -1;
+        int control_index = -1;
+        for (std::size_t g = 0; g < pin.groups.size(); ++g) {
+            if (pin.groups[g].title != wiring.group) {
+                continue;
+            }
+            group_index = static_cast<int>(g);
+            for (std::size_t c = 0; c < pin.groups[g].controls.size(); ++c) {
+                if (pin.groups[g].controls[c].label == wiring.label) {
+                    control_index = static_cast<int>(c);
+                    break;
+                }
+            }
+            break;
+        }
+        if (group_index < 0 || control_index < 0) {
+            gate::check(false, "a disabled Window command exists in the pin");
+            continue;
+        }
+        const RibbonCommand command =
+            ribbon->group_control_command(group_index, control_index);
+        gate::check(std::string(command_name(command)) == wiring.command,
+                    (std::string("disabled Window control '") + wiring.label + "' runs " +
+                     wiring.command)
+                        .c_str());
+        QWidget* live = ribbon->group_control(group_index, control_index);
+        gate::check(live != nullptr && !live->isEnabled(),
+                    (std::string("Window control '") + wiring.label + "' stays disabled")
+                        .c_str());
+        gate::check(live != nullptr &&
+                        live->toolTip() == QStringLiteral("not implemented in this port"),
+                    (std::string("Window control '") + wiring.label +
+                     "' carries the exact decision-9 tooltip")
+                        .c_str());
     }
 }
 
@@ -912,6 +981,7 @@ int main(int argc, char** argv) {
         check_inventory(ribbon, pin, measures, static_cast<int>(tab_index), top_offset,
                         row_height);
         check_action_wiring(ribbon, pin);
+        check_disabled_wiring(ribbon, pin);
         for (int group = 0; group < ribbon->group_titles().size(); ++group) {
             for (int control = 0; control < ribbon->group_control_count(group); ++control) {
                 const QString kind = ribbon->group_control_kind(group, control);
