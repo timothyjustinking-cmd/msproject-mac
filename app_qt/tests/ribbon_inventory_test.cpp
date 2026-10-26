@@ -544,6 +544,8 @@ const EnabledWiring kEnabledWiring[] = {
     // buttons must stay wired to their own commands.
     {"Task", "Schedule", "outdent", "", "outdent"},
     {"Task", "Schedule", "indent", "", "indent"},
+    // W30-1.10: Inspect opens/toggles the read-only Task Inspector pane.
+    {"Task", "Tasks", "Inspect", "", "inspect"},
     // W30-1.0: Manually Schedule and Mode are enabled on the measured
     // automatic -> manual task-mode writer.
     {"Task", "Tasks", "Manually Schedule", "", "manually_schedule"},
@@ -576,6 +578,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::task_details: return "task_details";
         case RibbonCommand::scroll_to_task: return "scroll_to_task";
         case RibbonCommand::fill_down: return "fill_down";
+        case RibbonCommand::inspect: return "inspect";
         case RibbonCommand::project_information: return "project_information";
         case RibbonCommand::change_working_time: return "change_working_time";
         case RibbonCommand::links_between_projects: return "links_between_projects";

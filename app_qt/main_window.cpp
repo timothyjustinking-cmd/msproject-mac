@@ -585,6 +585,14 @@ void MainWindow::build_central_widget() {
     chart_layout->setContentsMargins(0, 0, 0, 0);
     chart_layout->setSpacing(0);
     chart_layout->addWidget(gantt_canvas_, 1);
+    // W30-1.10: the read-only Task Inspector docks at the right of the canvas
+    // when Task > Tasks > Inspect is clicked.  Hidden by default, so the chart
+    // pane's minimum width (and every parity rectangle) is the canvas alone;
+    // a hidden layout item is not part of the layout's minimum size hint.
+    inspector_ = new TaskInspector(chart_panel_);
+    inspector_->setVisible(false);
+    inspector_->set_close_handler([this]() { set_inspector_visible(false); });
+    chart_layout->addWidget(inspector_);
 
     splitter_->addWidget(sheet_panel);
     splitter_->addWidget(chart_panel_);
@@ -732,6 +740,8 @@ void MainWindow::build_central_widget() {
         }
         // W26-6.3: the Task Form shows the newly selected task.
         refresh_task_form();
+        // W30-1.10: the Task Inspector follows the same selection.
+        refresh_inspector();
         update_menu_state();
     });
 
@@ -1096,6 +1106,9 @@ bool MainWindow::open_file(const QString& path, QString* error) {
         gantt_canvas_->set_layout(doc_.gantt());
         gantt_canvas_->set_selected_uid(0);
         refresh_timeline();
+        // W30-1.10: the failed load forgot the document; the inspector must
+        // not keep the previous file's task.
+        refresh_inspector();
         update_chrome();
         setWindowTitle(QStringLiteral("MS Project Shell"));
         refresh_view_buttons();
@@ -1298,6 +1311,8 @@ void MainWindow::sync_view_selection() {
     // that re-derives it (load, rebuild, click, structural edit), because this
     // is the one place the view selection is mirrored.
     refresh_task_form();
+    // W30-1.10: the Task Inspector is a second selection-following pane.
+    refresh_inspector();
     if (!doc_.has_document() || sheet_view_ == nullptr ||
         prefs_.view != app::ViewMode::task_sheet) {
         return;
@@ -1544,6 +1559,9 @@ void MainWindow::new_project() {
     ribbon_->set_critical_tasks(false);
     ribbon_->set_font_default(QString(), 0);
     refresh_timeline();
+    // W30-1.10: a new project has no task to inspect; an open pane shows the
+    // cleared state instead of the file that was open before.
+    refresh_inspector();
     setWindowTitle(QStringLiteral("MS Project Shell"));
     refresh_view_buttons();
     update_chrome();
@@ -2084,6 +2102,13 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             }
             set_details_visible(true);
             return;
+        case RibbonCommand::inspect:
+            // W30-1.10: the Task Inspector is a read-only pane of the
+            // scheduler's facts.  There is no View menu check box for it, so
+            // the ribbon button toggles it.  A view command: nothing is
+            // queued, written or marked dirty.
+            set_inspector_visible(!inspector_visible_);
+            return;
         case RibbonCommand::scroll_to_task:
             // W30-1.7: scrolls the sheet and pans the chart; a view command,
             // never a file write.
@@ -2193,6 +2218,21 @@ void MainWindow::set_details_visible(bool visible) {
     update_status();
 }
 
+void MainWindow::set_inspector_visible(bool visible) {
+    // W30-1.10: the Task Inspector is a task-view pane.  The preference
+    // survives a view switch (show_view() re-applies it), exactly like Details.
+    inspector_visible_ = visible;
+    if (inspector_ != nullptr) {
+        const bool show = visible && prefs_.view == app::ViewMode::task_sheet;
+        inspector_->setVisible(show);
+        if (show) {
+            refresh_inspector();
+        }
+    }
+    set_message(visible ? "task inspector shown" : "task inspector hidden", false);
+    update_status();
+}
+
 void MainWindow::scroll_to_task() {
     // W30-1.7: Task > Editing > Scroll to Task.  The sheet scrolls the selected
     // row into view (the row menu has run the same call since wave 21) and the
@@ -2275,6 +2315,93 @@ void MainWindow::refresh_task_form() {
     task_form_->set_field_enabled(TaskFormField::start, editable("Start"));
     task_form_->set_field_enabled(TaskFormField::finish, editable("Finish"));
     task_form_->set_field_enabled(TaskFormField::percent, true);
+}
+
+void MainWindow::refresh_inspector() {
+    // W30-1.10: the read-only Task Inspector.  Facts come from the PLAN, by
+    // UID: the task form reads the sheet's RecordSet presentation, while this
+    // pane reports the scheduler's inputs (the same plan the Gantt and the
+    // computed columns are built from).  uid 0 is the synthetic project row;
+    // it is not a task and has no file row, so it is presented from the file's
+    // project facts instead.
+    if (inspector_ == nullptr) {
+        return;
+    }
+    if (!doc_.has_document() || doc_.sheet() == nullptr ||
+        prefs_.view != app::ViewMode::task_sheet) {
+        inspector_->clear();
+        return;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    if (!selected.has_selection) {
+        inspector_->clear();
+        return;
+    }
+
+    const app::PlanInput& plan = doc_.plan();
+    TaskInspectorValues values;
+    values.has_task = true;
+
+    const app::TaskRow* task = nullptr;
+    app::TaskRow project_row;
+    if (selected.uid == 0) {
+        project_row = app::project_summary_row(plan);
+        task = &project_row;
+        values.project = true;
+        values.type = QStringLiteral("Project summary");
+        values.calendar = QStringLiteral("Project calendar");
+        values.selection = QStringLiteral("Project summary (ID 0)");
+    } else {
+        task = doc_.task_by_uid(selected.uid);
+        if (task == nullptr) {
+            inspector_->clear();
+            return;
+        }
+        values.outline = to_q(task->outline_number);
+        if (task->file_row == 0) {
+            // A pending Insert Task row has no file row and no stored mode:
+            // saying "Automatic" would report a fact the file does not hold.
+            values.type = QStringLiteral("Task (not saved yet)");
+            values.mode = QStringLiteral("not saved yet");
+        } else {
+            values.type = task->milestone ? QStringLiteral("Milestone")
+                         : task->summary ? QStringLiteral("Summary")
+                                         : QStringLiteral("Task");
+            values.mode = task->manually_scheduled ? QStringLiteral("Manually Scheduled")
+                                                   : QStringLiteral("Auto Scheduled");
+        }
+        values.calendar = task->calendar_uid < 0
+                              ? QStringLiteral("Project calendar")
+                              : QStringLiteral("Task calendar (UniqueID %1)")
+                                    .arg(task->calendar_uid);
+        values.selection = QStringLiteral("Task ID %1 (UniqueID %2)")
+                               .arg(task->id)
+                               .arg(task->uid);
+    }
+
+    values.name = to_q(task->name);
+    values.id = QString::number(task->id);
+    values.uid = QString::number(task->uid);
+    const auto date_text = [this](core::sched::date32 day) {
+        return core::sched::is_na(day)
+                   ? QString()
+                   : to_q(core::sheet::format_date_text(
+                         app::date_value_from_date32(day), doc_.format()));
+    };
+    values.start = date_text(task->start);
+    values.finish = date_text(task->finish);
+    values.duration = to_q(core::sheet::format_duration_text(task->duration_ticks,
+                                                             doc_.format()));
+    values.percent = to_q(core::sheet::format_value_text(
+        core::view::Value::of_int(task->percent_complete),
+        core::sheet::CellKind::Percent, doc_.format()));
+    values.critical = task->critical ? QStringLiteral("Yes") : QStringLiteral("No");
+    // The three computed texts are the SAME derivations PlanDocument writes
+    // into the computed sheet columns, so the pane and the sheet cannot drift.
+    values.predecessors = to_q(predecessors_text(plan, task->uid, doc_.format()));
+    values.successors = to_q(successors_text(plan, task->uid, doc_.format()));
+    values.resources = to_q(resource_names_text(plan, task->uid));
+    inspector_->set_values(values);
 }
 
 void MainWindow::commit_task_form_field(TaskFormField field, const QString& text) {
@@ -2627,6 +2754,9 @@ void MainWindow::after_cell_change() {
     // W26-6.3: an edited start/finish/percent is visible in the Task Form at
     // once.
     refresh_task_form();
+    // W30-1.10: and the inspector's facts (dates/duration/percent) follow the
+    // committed cell, not the RecordSet's uncommitted text.
+    refresh_inspector();
     update_window_title();
     update_menu_state();
     update_status();
@@ -4818,7 +4948,13 @@ void MainWindow::show_view(app::ViewMode mode) {
     if (task_form_ != nullptr) {
         task_form_->setVisible(details_visible_ && mode == app::ViewMode::task_sheet);
     }
+    // W30-1.10: the Task Inspector is a task-view pane too; its preference
+    // survives the switch the same way.
+    if (inspector_ != nullptr) {
+        inspector_->setVisible(inspector_visible_ && mode == app::ViewMode::task_sheet);
+    }
     refresh_task_form();
+    refresh_inspector();
     refresh_view_buttons();
     update_menu_state();
     update_status();

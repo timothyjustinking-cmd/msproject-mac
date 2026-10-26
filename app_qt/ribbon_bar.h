@@ -86,6 +86,10 @@ enum class RibbonCommand : std::uint8_t {
     // cell down a Start-column selection through the measured start writer; a
     // column with no measured cell writer is refused, never filled.
     fill_down,
+    // Wave 30 (W30-1.10): the Task tab's Inspect.  It toggles the read-only
+    // Task Inspector pane (the selected row's scheduler facts, from the plan
+    // by UID); a view command, never a file write.
+    inspect,
     // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
     // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
     // commands with no menu-bar item.

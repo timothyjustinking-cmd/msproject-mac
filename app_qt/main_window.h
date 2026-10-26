@@ -36,7 +36,8 @@
 #include "prefs.h"
 #include "ribbon_bar.h"  // RibbonCommand (wave 26)
 #include "sheet_table_model.h"
-#include "task_form.h"  // TaskFormField (W28-4.1)
+#include "task_form.h"       // TaskFormField (W28-4.1)
+#include "task_inspector.h"  // TaskInspector (W30-1.10)
 #include "theme.h"
 
 class QAction;
@@ -296,6 +297,17 @@ class MainWindow final : public QMainWindow {
     TaskForm* task_form() const noexcept { return task_form_; }
     QSplitter* details_splitter() const noexcept { return details_splitter_; }
 
+    // --- wave 30 (W30-1.10): Task > Tasks > Inspect -------------------------
+    // A read-only pane of the selected task's scheduler facts, docked at the
+    // RIGHT of the Gantt canvas inside the chart pane.  Like Details it belongs
+    // to the task view (the preference survives a view switch); unlike Details
+    // there is no View menu check box, so the ribbon button toggles it.  View
+    // only: showing it never writes or dirties the document.  Public so the
+    // offscreen gate drives the same path the ribbon button does.
+    void set_inspector_visible(bool visible);
+    bool inspector_visible() const noexcept { return inspector_visible_; }
+    TaskInspector* task_inspector() const noexcept { return inspector_; }
+
     // --- wave 26: Gantt Chart Format toggles (W26-1.4) ----------------------
     // Project Summary Task: the initial state is the file's stored setting and a
     // toggle rebuilds the displayed rows (never the file).
@@ -424,6 +436,11 @@ class MainWindow final : public QMainWindow {
     // selected task is dropped (the line edit's focus-out can arrive after a
     // selection click moved the sheet).
     void commit_task_form_field(TaskFormField field, const QString& text);
+    // W30-1.10: pushes the selected row's scheduler facts (by UID, from the
+    // plan) into the Task Inspector, or clears the pane when nothing is
+    // selected/in the task view.  Never reads a RecordSet row index and never
+    // writes anything.
+    void refresh_inspector();
     void open_dialog(const QString& start_dir = QString());
     void show_about();
     void show_shortcuts();
@@ -498,6 +515,11 @@ class MainWindow final : public QMainWindow {
     // fraction and every parity rectangle unchanged while Details is hidden.
     QSplitter* details_splitter_ = nullptr;
     TaskForm* task_form_ = nullptr;
+    // W30-1.10: the read-only Task Inspector, hidden by default.  It lives in
+    // the chart pane (right of the Gantt canvas) and is hidden while another
+    // view is shown, like the Task Form below.
+    TaskInspector* inspector_ = nullptr;
+    bool inspector_visible_ = false;
     // W28-4.1: the task uid the docked form's values were populated for.  A
     // commit for any other row is refused rather than written to the wrong
     // task; refresh_task_form() sets both this and the field texts together.

@@ -57,6 +57,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # start writer; a non-Start column is refused, so the command is live but
     # its measured scope is the Start column only.
     "fill_down",
+    # W30-1.10: Inspect opens the read-only Task Inspector pane (the selected
+    # row's scheduler facts); a view, never a file write.
+    "inspect",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine

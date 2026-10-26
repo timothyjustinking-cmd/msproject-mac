@@ -67,7 +67,7 @@ Task	0	Schedule	small	split task	0	schedule.split	1	-
 Task	0	Tasks	group	-	-	-	-	-
 Task	0	Tasks	button	Manually Schedule	1	tasks.manual	0	-
 Task	0	Tasks	button	Auto Schedule	0	tasks.auto	0	-
-Task	0	Tasks	button	Inspect	0	tasks.inspect	0	-
+Task	0	Tasks	button	Inspect	1	tasks.inspect	0	-
 Task	0	Tasks	button	Move	0	tasks.move	0	-
 Task	0	Tasks	button	Mode	1	tasks.mode	0	-
 Task	0	Insert	group	-	-	-	-	-

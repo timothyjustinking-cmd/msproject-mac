@@ -66,6 +66,7 @@ add_library(qt_shell STATIC
     ribbon_glyphs.cpp
     sheet_views.cpp
     task_form.cpp
+    task_inspector.cpp
     timeline_strip.cpp
     dialogs.cpp
     project_dialogs_qt.cpp
@@ -559,6 +560,24 @@ qt_set_warnings(qt_fill_gate_tests)
 add_test(NAME qt_fill_gate
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_fill_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# ===========================================================================
+# WAVE 30 (G1, W30-1.10): Inspect is a READ-ONLY pane of the scheduler's
+# facts.  The gate proves the Task-tab button is live and wired, every field
+# is read-only, the pane follows the selection by UID (a leaf, a summary, the
+# project summary row and a pending insert), and no click/view switch ever
+# dirties the document.  The wave23-outline fixture carries the link and
+# assignment texts the pane must show (COM-measured in task_order_test).
+# ===========================================================================
+add_executable(qt_inspect_gate_tests tests/inspect_gate_test.cpp)
+target_link_libraries(qt_inspect_gate_tests PRIVATE qt_shell Qt6::Test)
+qt_set_warnings(qt_inspect_gate_tests)
+
+add_test(NAME qt_inspect_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_inspect_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 

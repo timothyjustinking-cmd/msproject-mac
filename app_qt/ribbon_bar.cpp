@@ -302,7 +302,12 @@ const std::vector<TabSpec>& tab_specs() {
         large(tasks, "Manually\nSchedule", app::MenuAction::none, 52, 0, true,
               "tasks.manual", RibbonCommand::manually_schedule);
         large(tasks, "Auto\nSchedule", app::MenuAction::none, 50, 1, false, "tasks.auto");
-        large(tasks, "Inspect", app::MenuAction::none, 52, 2, false, "tasks.inspect");
+        // W30-1.10: Inspect opens the read-only Task Inspector pane (the
+        // selected row's scheduler facts).  A view command -- it never writes
+        // the file -- and the button toggles the pane, because there is no
+        // View menu check box for it.
+        large(tasks, "Inspect", app::MenuAction::none, 52, 2, true,
+              "tasks.inspect", RibbonCommand::inspect);
         large(tasks, "Move", app::MenuAction::none, 38, 3, false, "tasks.move");
         large(tasks, "Mode", app::MenuAction::none, 40, 4, true, "tasks.mode",
               RibbonCommand::task_mode);
