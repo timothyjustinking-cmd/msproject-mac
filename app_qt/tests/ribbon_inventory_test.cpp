@@ -1447,6 +1447,21 @@ int main(int argc, char** argv) {
                                 QStringLiteral("not implemented in this port"),
                         "a schedule icon without an engine edit is disabled with the exact tooltip");
         }
+        // W30-1.11: Deliverable is Project Online's command, and the brief keeps
+        // it disabled with decision 9's exact tooltip.  No measured pair exists
+        // and none is wanted.  The pin loop above already holds every disabled
+        // control to its pin; this named check states the brief's requirement
+        // for this one button, so enabling it without a measured pair fails
+        // here with the item's wording.
+        {
+            QWidget* control = find_control(ribbon, QStringLiteral("Task"),
+                                            QStringLiteral("Insert"),
+                                            QStringLiteral("Deliverable"));
+            gate::check(control != nullptr && !control->isEnabled() &&
+                            control->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                        "Deliverable (Project Online) stays disabled with the exact tooltip");
+        }
     }
 
     std::printf("qt_ribbon_inventory: ");
