@@ -518,6 +518,9 @@ const EnabledWiring kEnabledWiring[] = {
     {"View", "Data", "Tables", "", "data_tables"},
     // W31-2.1: Zoom opens the session-only Zoom dialog.
     {"View", "Zoom", "Zoom", "", "zoom_dialog"},
+    // W31-2.2: the two span commands fit the measured Project windows.
+    {"View", "Zoom", "Entire Project", "", "zoom_entire"},
+    {"View", "Zoom", "Selected Tasks", "", "zoom_selected"},
     {"View", "Resource Views", "Resource Usage", "view_resource_usage", ""},
     {"View", "Resource Views", "Resource Sheet", "view_resource_sheet", ""},
     {"Project", "Properties", "Custom Fields", "custom_fields", ""},
@@ -612,6 +615,8 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::data_outline: return "data_outline";
         case RibbonCommand::data_tables: return "data_tables";
         case RibbonCommand::zoom_dialog: return "zoom_dialog";
+        case RibbonCommand::zoom_entire: return "zoom_entire";
+        case RibbonCommand::zoom_selected: return "zoom_selected";
     }
     return "none";
 }

@@ -82,8 +82,8 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | View | Data | Outline | implemented |  |
 | View | Data | Tables | implemented |  |
 | View | Zoom | Zoom | implemented |  |
-| View | Zoom | Entire Project | disabled | future: not implemented in this port |
-| View | Zoom | Selected Tasks | disabled | future: not implemented in this port |
+| View | Zoom | Entire Project | implemented |  |
+| View | Zoom | Selected Tasks | implemented |  |
 | View | Window | New Window | disabled | future: not implemented in this port |
 | View | Window | Switch Windows | disabled | future: not implemented in this port |
 | View | Window | Arrange All | disabled | future: not implemented in this port |
@@ -162,6 +162,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 95 (65 disabled)
+* ribbon commands: 95 (63 disabled)
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

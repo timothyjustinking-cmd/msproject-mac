@@ -74,9 +74,13 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W31-1.3: the View tab's Tables lists the task tables the open file
     # stores and applies one for the session only.
     "data_tables",
-    # W31-2.1: the View tab's Zoom opens the Zoom dialog; its fixed presets and
-    # the two span commands fit the chart's timescale for the session only.
+    # W31-2.1: the View tab's Zoom opens the Zoom dialog; its fixed presets fit
+    # the chart's timescale for the session only.
     "zoom_dialog",
+    # W31-2.2: the Zoom group's Entire Project and Selected Tasks fit the chart
+    # to Project's measured 85 % window on both fixtures, session only.
+    "zoom_entire",
+    "zoom_selected",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine

@@ -1,0 +1,110 @@
+{
+  "source": {
+    "oracle": "scripts/oracle_w31_zoom.py (pure COM through scripts/oracle_lock.py)",
+    "raw": "build/w31/W31-2.2-zoom-oracle.json (git-ignored local output)",
+    "measured": "2026-10-27",
+    "project_version": "16.0",
+    "window_pt": {
+      "requested": [
+        1500,
+        800
+      ],
+      "reported": [
+        1452,
+        653
+      ]
+    },
+    "chart_pane_px": 1020,
+    "chart_pane_note": "measured from the clean capture of the same 1500 x 800 pt window at a 1920 px client width: the day tier drew 87 px per 12-hour column and the chart pane spanned 1020 px. The pane width is not a COM property; the oracle records only the command windows.",
+    "fit_rule": "Project draws the fitted span across 85 % of the chart pane (15 % margin, centred) and floors the window's start to its bottom-tier column start. That tier is finer than a day on these windows, so several carry sub-day margins (the base Selected window starts at 06:00) that the port's day tier cannot express; the comparison therefore checks the 85 % ideal and containment, not an equal window length.",
+    "selection_note": "Selected Tasks is the first zoom command in each session, with one row selected: Application.SelectRow(2), after which ActiveSelection reports task ID 3 on both fixtures. Project 2021 raises a COM exception (E_FAIL) when ZoomSelectedTasks runs after another zoom command, and on synthetic-base it also raises for the two-row selection; a single row is the only reproducible shape. On both fixtures task 3 is shorter than the project (1.958 vs 4.958 days; 3.375 vs 7.375), so Selected Tasks cannot be confused with Entire Project. Two fresh sessions per fixture produced identical windows.",
+    "dialog_source": "build/w31/zoom_dialog_facts.py through the local UI Automation driver (build/w31/uia_drive.ps1), one sequential session on synthetic-base.mpp, output build/w31/zoom-dialog-facts.json. The presets were applied in the order listed; the 3-month step's origin moved one day because the 1-month step had already re-anchored the view, so only the window lengths are used. The custom 42-day control did not apply in that run (the window equalled 3 months), so no custom measurement is recorded."
+  },
+  "cases": [
+    {
+      "fixture": "synthetic-base.mpp",
+      "project_span": {
+        "start": "2026-01-04 13:00:00",
+        "finish": "2026-01-09 12:00:00",
+        "days": 4.958333333
+      },
+      "selected_task_id": 3,
+      "selected_span": {
+        "start": "2026-01-04 13:00:00",
+        "finish": "2026-01-06 12:00:00",
+        "days": 1.958333333
+      },
+      "entire": {
+        "window_start": "2026-01-04 00:00:00",
+        "window_finish": "2026-01-09 20:57:54",
+        "visible_days": 5.873541667,
+        "ideal_85_days": 5.833333333,
+        "deviation_fraction": 0.006892857
+      },
+      "selected": {
+        "window_start": "2026-01-04 06:00:00",
+        "window_finish": "2026-01-06 13:44:42",
+        "visible_days": 2.322708333,
+        "ideal_85_days": 2.303921568,
+        "deviation_fraction": 0.008154255
+      }
+    },
+    {
+      "fixture": "wave23-outline.mpp",
+      "project_span": {
+        "start": "2026-12-11 08:00:00",
+        "finish": "2026-12-18 17:00:00",
+        "days": 7.375
+      },
+      "selected_task_id": 3,
+      "selected_span": {
+        "start": "2026-12-11 08:00:00",
+        "finish": "2026-12-14 17:00:00",
+        "days": 3.375
+      },
+      "entire": {
+        "window_start": "2026-12-10 12:00:00",
+        "window_finish": "2026-12-19 03:51:48",
+        "visible_days": 8.660972222,
+        "ideal_85_days": 8.676470588,
+        "deviation_fraction": -0.001786252
+      },
+      "selected": {
+        "window_start": "2026-12-11 00:00:00",
+        "window_finish": "2026-12-14 23:48:42",
+        "visible_days": 3.992152778,
+        "ideal_85_days": 3.970588235,
+        "deviation_fraction": 0.00543107
+      }
+    }
+  ],
+  "dialog_presets": {
+    "fixture": "synthetic-base.mpp",
+    "presets": [
+      {
+        "preset": "1week",
+        "window_start": "2026-10-11 00:00:00",
+        "window_finish": "2026-10-18 00:00:00",
+        "days": 7.0
+      },
+      {
+        "preset": "2weeks",
+        "window_start": "2026-10-11 00:00:00",
+        "window_finish": "2026-10-25 00:00:00",
+        "days": 14.0
+      },
+      {
+        "preset": "1month",
+        "window_start": "2026-10-11 00:00:00",
+        "window_finish": "2026-11-10 23:16:18",
+        "days": 30.969652778
+      },
+      {
+        "preset": "3months",
+        "window_start": "2026-10-12 00:00:00",
+        "window_finish": "2027-01-10 04:14:06",
+        "days": 90.176458333
+      }
+    ]
+  }
+}

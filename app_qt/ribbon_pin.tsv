@@ -157,8 +157,8 @@ View	0	Data	combo	Group by	0	-	2	No Group
 View	0	Zoom	group	-	-	-	-	-
 View	0	Zoom	combo	Timescale	0	-	0	Days
 View	0	Zoom	button	Zoom	1	zoom.zoom	0	-
-View	0	Zoom	button	Entire Project	0	zoom.entire	0	-
-View	0	Zoom	button	Selected Tasks	0	zoom.selected	0	-
+View	0	Zoom	button	Entire Project	1	zoom.entire	0	-
+View	0	Zoom	button	Selected Tasks	1	zoom.selected	0	-
 View	0	Split View	group	-	-	-	-	-
 View	0	Split View	checkbox	Timeline	1	-	0	file
 View	0	Split View	combo	Timeline options	0	-	0	Timeline

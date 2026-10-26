@@ -500,8 +500,10 @@ const std::vector<TabSpec>& tab_specs() {
         combo(zoom, "Timescale", "Days", 96, 0, 0);
         large(zoom, "Zoom", app::MenuAction::none, 46, 1, true, "zoom.zoom",
               RibbonCommand::zoom_dialog);
-        large(zoom, "Entire\nProject", app::MenuAction::none, 42, 2, false, "zoom.entire");
-        large(zoom, "Selected\nTasks", app::MenuAction::none, 50, 3, false, "zoom.selected");
+        large(zoom, "Entire\nProject", app::MenuAction::none, 42, 2, true, "zoom.entire",
+              RibbonCommand::zoom_entire);
+        large(zoom, "Selected\nTasks", app::MenuAction::none, 50, 3, true, "zoom.selected",
+              RibbonCommand::zoom_selected);
         GroupSpec& split_view = add_group(view, "Split View", 185);
         check(split_view, "Timeline", RibbonCommand::toggle_timeline, 64, 0, 0, true, -1);
         combo(split_view, "Timeline options", "Timeline", 112, 0, 1);

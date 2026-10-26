@@ -656,6 +656,26 @@ add_test(NAME qt_data_commands
                  "${QT_TEST_DATA_DIR_CMAKE}/wave31-tables.mpp")
 
 # ===========================================================================
+# WAVE 31 (G2, W31-2.2): Entire Project and Selected Tasks are fitted to the
+# span Project 2021 shows.  The gate loads both fixtures, selects the same task
+# Project selected (ID 3), and compares the port's 85 % fit with the four
+# measured windows in tests/data/reference/w31-zoom.measures.json; it also
+# pins the port's floored-origin window rule, the no-selection fallback, the
+# Zoom dialog's fixed spans, and that all of it is session state (the fixture
+# hash never changes).
+# ===========================================================================
+add_executable(qt_zoom_commands_tests tests/zoom_commands_test.cpp)
+target_link_libraries(qt_zoom_commands_tests PRIVATE qt_shell)
+qt_set_warnings(qt_zoom_commands_tests)
+
+add_test(NAME qt_zoom_commands
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_zoom_commands_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
+                 "${QT_REPO_ROOT}/tests/data/reference/w31-zoom.measures.json")
+
+# ===========================================================================
 # WAVE 20 (operator decision 13): Carlito is BUNDLED on every platform.  The
 # four OFL faces live in app_qt/fonts/ and are compiled into each executable as
 # Qt resources, so the shell never depends on the host having the font and the

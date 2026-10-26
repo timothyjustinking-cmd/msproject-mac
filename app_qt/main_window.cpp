@@ -2205,6 +2205,19 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             // session-only timescale fit (apply_zoom_choice).
             show_zoom_dialog();
             return;
+        case RibbonCommand::zoom_entire: {
+            // Wave 31 (W31-2.2): the ribbon's two span commands run the same
+            // fits as the dialog's Entire project / Selected tasks choices.
+            ZoomChoice choice;
+            apply_zoom_choice(choice);
+            return;
+        }
+        case RibbonCommand::zoom_selected: {
+            ZoomChoice choice;
+            choice.target = ZoomTarget::selected_tasks;
+            apply_zoom_choice(choice);
+            return;
+        }
         case RibbonCommand::split_task:
             // Not wired (no engine split edit); disabled until then.
             return;

@@ -140,9 +140,12 @@ enum class RibbonCommand : std::uint8_t {
     // switches the sheet's columns for the session only.
     data_tables,
     // Wave 31 (W31-2.1): the View tab's Zoom group.  The dialog's result replaces
-    // the chart's timescale for the session only (PlanDocument::zoom_fixed_span);
-    // Entire Project and Selected Tasks are wired in W31-2.2.
+    // the chart's timescale for the session only (PlanDocument::zoom_fixed_span).
     zoom_dialog,
+    // Wave 31 (W31-2.2): the two span commands, fitted to the same 85 % rule
+    // Project uses and measured against its windows on both fixtures.
+    zoom_entire,
+    zoom_selected,
 };
 
 class RibbonBar final : public QWidget {

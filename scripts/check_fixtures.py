@@ -500,6 +500,14 @@ DOCUMENTED = {
     # neutral Author/Manager/Company/UserName/Title.
     "tests/data/wave31-tables.mpp":
         "5AEB9C4F6A97893E1C8F3A16BE3FFF4AB100EF3D23D66AB1C595810596C987E8",
+    # Wave 31 (W31-2.2): numbers-only Project 2021 measurements of the View
+    # tab's Zoom commands -- Entire Project and Selected Tasks on the two
+    # committed fixtures, plus the Zoom dialog's week/month presets.  Measured
+    # by scripts/oracle_w31_zoom.py (pure COM) and the local UI Automation
+    # driver; the windows, the 85 % fit rule and the origin-flooring rule are
+    # recorded, no capture or name.
+    "tests/data/reference/w31-zoom.measures.json":
+        "C660012035C1FF922D82C35A33DE224F8DA781ED4B426A86E3E38206A8D111B5",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
