@@ -86,6 +86,114 @@ const ResourceColumnSpec kResourceColumns[] = {
     {core::view::kResourceMaxUnitsField, core::sheet::CellKind::Percent, "Max. Units", 10},
 };
 
+// W31-3.5: Project's measured display currency symbol.  The FILE stores only
+// the currency CODE (114/Props 0x024013bb = "AUD"); COM on the same fixture
+// reports Project.CurrencySymbol "$" (build/w31/W31-G3-probe.json), an
+// application option rather than file data.  The rate/cost strings below are
+// that measured rendering.
+constexpr const char* kMeasuredCurrencySymbol = "$";
+
+// "$50.00", "$1,234.50" -- the sheet's own Cost formatting, so the group
+// separator and two decimals are one implementation.
+std::string currency_text(double value) {
+    core::sheet::SheetFormat format;
+    format.currency_symbol = kMeasuredCurrencySymbol;
+    return core::sheet::format_value_text(Value::of_number(value),
+                                          core::sheet::CellKind::Cost, format);
+}
+
+// PjAccrueAt -> the word Project shows.  nullptr for a value outside 1..3.
+const char* accrue_at_text(std::int64_t value) {
+    switch (value) {
+        case 1: return "Start";
+        case 2: return "End";
+        case 3: return "Prorated";
+        default: return nullptr;
+    }
+}
+
+// The caption Project displays for an Entry-table field whose stored title is
+// empty.  Measured sources: analysis/res/pjintl_strings.tsv RT_RCDATA 436_1033
+// (the field captions: ID, Type, Material Label, Initials, Group, Accrue At,
+// Base Calendar, Code), 173_1033 (the table's own captions: Resource Name,
+// Max. Units, Std. Rate, Ovt. Rate, Cost/Use) and the W31-3.5 capture for
+// Indicators, whose header carries the (i) glyph and no text.
+std::string resource_column_caption(FieldId field) {
+    switch (field) {
+        case core::view::kResourceIdField: return "ID";
+        case core::view::kResourceIndicatorsField: return "";
+        case core::view::kResourceNameField: return "Resource Name";
+        case core::view::kResourceTypeField: return "Type";
+        case core::view::kResourceMaterialLabelField: return "Material Label";
+        case core::view::kResourceInitialsField: return "Initials";
+        case core::view::kResourceGroupField: return "Group";
+        case core::view::kResourceMaxUnitsField: return "Max. Units";
+        case core::view::kResourceStandardRateField: return "Std. Rate";
+        case core::view::kResourceOvertimeRateField: return "Ovt. Rate";
+        case core::view::kResourceCostPerUseField: return "Cost/Use";
+        case core::view::kResourceAccrueAtField: return "Accrue At";
+        case core::view::kResourceBaseCalendarField: return "Base Calendar";
+        case core::view::kResourceCodeField: return "Code";
+        default:
+            return core::view::field_name(field, core::model::RecordType::Resource);
+    }
+}
+
+// COM's TableField.AlignData on the fixture's stored Entry table: ID is centre
+// (1), the numeric fields are right (2) and every text field is left (0).
+core::view::ColumnAlign resource_column_align(FieldId field) noexcept {
+    switch (field) {
+        case core::view::kResourceIdField:
+            return core::view::ColumnAlign::Center;
+        case core::view::kResourceMaxUnitsField:
+        case core::view::kResourceStandardRateField:
+        case core::view::kResourceOvertimeRateField:
+        case core::view::kResourceCostPerUseField:
+        case core::view::kResourcePeakUnitsField:
+            return core::view::ColumnAlign::Right;
+        default:
+            return core::view::ColumnAlign::Left;
+    }
+}
+
+// The cell rendering for a stored resource column.  Rate and Cost/Use cells
+// already hold Project's display TEXT (make_resource_view_records), so their
+// kind must be Text or the sheet would reformat them; Max. Units stays a
+// Number rendered as a percentage ("100%").
+core::sheet::CellKind resource_column_kind(FieldId field) noexcept {
+    switch (field) {
+        case core::view::kResourceIdField:
+            return core::sheet::CellKind::Integer;
+        case core::view::kResourceMaxUnitsField:
+        case core::view::kResourcePeakUnitsField:
+            return core::sheet::CellKind::Percent;
+        case core::view::kResourceOverallocatedField:
+            return core::sheet::CellKind::Bool;
+        case core::view::kResourceNameField:
+        case core::view::kResourceIndicatorsField:
+        case core::view::kResourceTypeField:
+        case core::view::kResourceMaterialLabelField:
+        case core::view::kResourceInitialsField:
+        case core::view::kResourceGroupField:
+        case core::view::kResourceStandardRateField:
+        case core::view::kResourceOvertimeRateField:
+        case core::view::kResourceCostPerUseField:
+        case core::view::kResourceAccrueAtField:
+        case core::view::kResourceBaseCalendarField:
+        case core::view::kResourceCodeField:
+            return core::sheet::CellKind::Text;
+        default:
+            return core::sheet::CellKind::Auto;
+    }
+}
+
+// One boundary of an assignment's load interval.
+struct LoadEvent {
+    date32 day = kDateNa;
+    bool start = false;
+    double units = 0.0;
+};
+
 core::sheet::SheetColumn make_column(FieldId field, std::string title, int width,
                                      core::view::ColumnAlign align, core::sheet::CellKind kind,
                                      bool read_only) {
@@ -207,6 +315,67 @@ core::usage::UsageInput usage_input_from_plan(const PlanInput& input) {
 // Resource sheet
 // ---------------------------------------------------------------------------
 
+ResourceLoad resource_load(const PlanInput& input, std::uint32_t resource_uid) {
+    ResourceLoad load;
+    if (resource_uid == 0) {
+        return load;
+    }
+    double fallback_units = 0.0;
+    bool any_assignment = false;
+    std::vector<LoadEvent> events;
+    for (const AssignmentRow& assignment : input.assignments) {
+        if (assignment.resource_uid != resource_uid) {
+            continue;
+        }
+        any_assignment = true;
+        fallback_units = std::max(fallback_units, assignment.units_percent);
+        if (core::sched::is_na(assignment.start) ||
+            core::sched::is_na(assignment.finish) ||
+            assignment.finish <= assignment.start) {
+            continue;  // cannot be placed on the time axis (see the header)
+        }
+        events.push_back(LoadEvent{assignment.start, true, assignment.units_percent});
+        events.push_back(LoadEvent{assignment.finish, false, assignment.units_percent});
+    }
+    if (events.empty()) {
+        load.peak_units_percent = fallback_units;
+    } else {
+        // Half-open [start, finish): one day's endings and beginnings are
+        // summed together, so a finish and a start at the same instant never
+        // overlap.  Only the day matters to the sweep.
+        std::sort(events.begin(), events.end(),
+                  [](const LoadEvent& left, const LoadEvent& right) {
+                      return left.day < right.day;
+                  });
+        double current = 0.0;
+        double peak = 0.0;
+        std::size_t index = 0;
+        while (index < events.size()) {
+            const date32 day = events[index].day;
+            double delta = 0.0;
+            while (index < events.size() && events[index].day == day) {
+                delta += events[index].start ? events[index].units : -events[index].units;
+                ++index;
+            }
+            current += delta;
+            peak = std::max(peak, current);
+        }
+        load.peak_units_percent = peak;
+        load.computed = true;
+    }
+    if (!any_assignment) {
+        return load;  // no assignments: Project's PeakUnits 0, not overallocated
+    }
+    for (const ResourceRow& resource : input.resources) {
+        if (resource.uid == resource_uid) {
+            load.overallocated =
+                load.peak_units_percent > resource.max_units_percent + 1e-6;
+            break;
+        }
+    }
+    return load;
+}
+
 std::vector<core::view::ResourceRecord> resource_records_from_plan(const PlanInput& input) {
     std::vector<core::view::ResourceRecord> records;
     records.reserve(input.resources.size());
@@ -218,6 +387,18 @@ std::vector<core::view::ResourceRecord> resource_records_from_plan(const PlanInp
         record.initials = row.initials;
         record.type = row.type;
         record.max_units_percent = row.max_units_percent;
+        record.group = row.group;
+        record.code = row.code;
+        record.material_label = row.material_label;
+        record.base_calendar = row.base_calendar;
+        record.standard_rate_per_hour = row.standard_rate_per_hour;
+        record.overtime_rate_per_hour = row.overtime_rate_per_hour;
+        record.cost_per_use = row.cost_per_use;
+        record.accrue_at = row.accrue_at;
+        record.cost_fields_stored = row.cost_fields_stored;
+        const ResourceLoad load = resource_load(input, row.uid);
+        record.peak_units_percent = load.peak_units_percent;
+        record.overallocated = load.overallocated;
         records.push_back(std::move(record));
     }
     return records;
@@ -234,15 +415,49 @@ core::view::RecordSet make_resource_view_records(const PlanInput& input,
         // Type: the builder stores PjResourceTypes (0/1/2); this view shows the
         // product's name.  An out-of-range stored value keeps the builder value
         // rather than being relabelled as Work.
+        bool work_resource = true;
         if (const Value* value = records.get(row, core::view::kResourceTypeField);
             value != nullptr && value->kind == core::view::ValueKind::Integer) {
             const std::int64_t type = value->integer;
             if (type >= 0 && type <= 2) {
+                work_resource = type == static_cast<std::int64_t>(
+                                          core::view::ResourceType::work);
                 records.set_field(
                     row, core::view::kResourceTypeField,
                     Value::of_text(core::view::resource_type_name(
                         static_cast<core::view::ResourceType>(type))));
             }
+        }
+        // Accrue At: the stored PjAccrueAt word becomes the word Project shows.
+        if (const Value* value = records.get(row, core::view::kResourceAccrueAtField);
+            value != nullptr && value->kind == core::view::ValueKind::Integer) {
+            if (const char* text = accrue_at_text(value->integer); text != nullptr) {
+                records.set_field(row, core::view::kResourceAccrueAtField,
+                                  Value::of_text(text));
+            }
+        }
+        // Rates and Cost/Use: Project's measured display strings.  A Work
+        // resource's rate is per hour ("$50.00/hr"); for a Material/Cost
+        // resource the file's rate unit is not measured, so only the currency
+        // amount is printed (see view_model.h).  Null (MPP12) stays blank.
+        if (const Value* value = records.get(row, core::view::kResourceStandardRateField);
+            value != nullptr && value->kind == core::view::ValueKind::Number) {
+            records.set_field(
+                row, core::view::kResourceStandardRateField,
+                Value::of_text(currency_text(value->number) +
+                               (work_resource ? "/hr" : "")));
+        }
+        if (const Value* value = records.get(row, core::view::kResourceOvertimeRateField);
+            value != nullptr && value->kind == core::view::ValueKind::Number) {
+            records.set_field(
+                row, core::view::kResourceOvertimeRateField,
+                Value::of_text(currency_text(value->number) +
+                               (work_resource ? "/hr" : "")));
+        }
+        if (const Value* value = records.get(row, core::view::kResourceCostPerUseField);
+            value != nullptr && value->kind == core::view::ValueKind::Number) {
+            records.set_field(row, core::view::kResourceCostPerUseField,
+                              Value::of_text(currency_text(value->number)));
         }
         // Work: the resource's total assignment work, in duration ticks.
         std::int64_t minutes = 0;
@@ -294,6 +509,43 @@ std::vector<core::sheet::SheetColumn> resource_sheet_columns() {
     columns.push_back(make_column(kResourceWorkField, "Work", 11,
                                   core::view::ColumnAlign::Right,
                                   core::sheet::CellKind::Duration, true));
+    return columns;
+}
+
+std::vector<core::sheet::SheetColumn> resource_sheet_columns(
+    const msproject::viewstate::TableDef& table) {
+    if (!table.decoded || table.columns.empty()) {
+        return resource_sheet_columns();
+    }
+    std::vector<core::sheet::SheetColumn> columns;
+    columns.reserve(table.columns.size());
+    for (const msproject::viewstate::ColumnDef& record : table.columns) {
+        if (record.field_id == 0) {
+            continue;  // not a column
+        }
+        const FieldId field = static_cast<FieldId>(record.field_id);
+        core::sheet::SheetColumn column;
+        column.field = field;
+        // Keep the stored id too, like the task sheet's stored columns.
+        column.table_field = record.field_id;
+        column.title =
+            record.title.empty() ? resource_column_caption(field) : record.title;
+        // The stored character width: the first of the nine opaque header bytes.
+        column.width = static_cast<int>(record.opaque_header[0]);
+        column.align = resource_column_align(field);
+        column.kind = resource_column_kind(field);
+        // Width 0 is "Project does not draw this column" (the task sheet's
+        // measured rule).  ID is the sheet's frozen row-number gutter, not a
+        // scrolling column, so it stays in the model hidden.
+        column.visible = column.width > 0 && field != core::view::kResourceIdField;
+        // A resource view has no measured save path in this port: every column
+        // refuses an edit rather than offering one Save would drop.
+        column.read_only = true;
+        columns.push_back(std::move(column));
+    }
+    if (columns.empty()) {
+        return resource_sheet_columns();
+    }
     return columns;
 }
 

@@ -166,7 +166,16 @@ void test_usage_input_from_plan() {
 }
 
 void test_resource_sheet() {
-    const PlanInput input = make_plan();
+    PlanInput input = make_plan();
+    // W31-3.5: the stored Entry values Alpha's row carries.
+    input.resources[0].group = "North";
+    input.resources[0].code = "CR-A";
+    input.resources[0].base_calendar = "Standard";
+    input.resources[0].standard_rate_per_hour = 50.0;
+    input.resources[0].overtime_rate_per_hour = 75.0;
+    input.resources[0].cost_per_use = 10.0;
+    input.resources[0].accrue_at = 3;
+    input.resources[0].cost_fields_stored = true;
     const core::usage::UsageInput usage = app::usage_input_from_plan(input);
     const core::usage::UsageProjection projection =
         core::usage::project_usage(usage, app::standard_calendar(), Period::day);
@@ -200,6 +209,44 @@ void test_resource_sheet() {
     check(material != nullptr && material->kind == ValueKind::Text &&
               material->text == "Material",
           "a Material resource reads Material");
+    // W31-3.5: the stored Entry values render as Project prints them.
+    const Value* group = records.get(0, core::view::kResourceGroupField);
+    check(group != nullptr && group->kind == ValueKind::Text && group->text == "North",
+          "Group is carried into the resource sheet");
+    const Value* code = records.get(0, core::view::kResourceCodeField);
+    check(code != nullptr && code->kind == ValueKind::Text && code->text == "CR-A",
+          "Code is carried into the resource sheet");
+    const Value* calendar = records.get(0, core::view::kResourceBaseCalendarField);
+    check(calendar != nullptr && calendar->kind == ValueKind::Text &&
+              calendar->text == "Standard",
+          "Base Calendar is carried into the resource sheet");
+    const Value* std_rate = records.get(0, core::view::kResourceStandardRateField);
+    check(std_rate != nullptr && std_rate->kind == ValueKind::Text &&
+              std_rate->text == "$50.00/hr",
+          "Standard Rate renders as Project's '$50.00/hr'");
+    const Value* ovt_rate = records.get(0, core::view::kResourceOvertimeRateField);
+    check(ovt_rate != nullptr && ovt_rate->kind == ValueKind::Text &&
+              ovt_rate->text == "$75.00/hr",
+          "Overtime Rate renders as Project's '$75.00/hr'");
+    const Value* cost_per_use = records.get(0, core::view::kResourceCostPerUseField);
+    check(cost_per_use != nullptr && cost_per_use->kind == ValueKind::Text &&
+              cost_per_use->text == "$10.00",
+          "Cost/Use renders as Project's '$10.00'");
+    const Value* accrue = records.get(0, core::view::kResourceAccrueAtField);
+    check(accrue != nullptr && accrue->kind == ValueKind::Text &&
+              accrue->text == "Prorated",
+          "Accrue At 3 renders as Prorated");
+    // Beta's MPP12-style row (no decoded rate words) stays blank, not "$0.00".
+    const Value* no_rate = records.get(1, core::view::kResourceStandardRateField);
+    check(no_rate != nullptr && no_rate->kind == ValueKind::Null,
+          "an undecoded rate stays Null in the view");
+    // One 100 % assignment on a 100 % resource: PeakUnits 100, not overallocated.
+    const Value* peak = records.get(0, core::view::kResourcePeakUnitsField);
+    check(peak != nullptr && peak->kind == ValueKind::Number && peak->number == 100.0,
+          "PeakUnits is the assignment peak (100 %)");
+    const Value* overallocated = records.get(0, core::view::kResourceOverallocatedField);
+    check(overallocated != nullptr && !overallocated->boolean,
+          "one 100 % assignment is not overallocated");
     const Value* work = records.get(0, app::kResourceWorkField);
     check(work != nullptr && work->kind == ValueKind::Duration &&
               work->integer == 2400 * core::view::kTicksPerMinute,
@@ -236,6 +283,142 @@ void test_resource_sheet() {
     const core::view::RecordSet none = app::make_resource_view_records(empty, nullptr);
     check_size(none.row_count(), 0, "an empty plan has no resource rows");
     check(none.has_field(app::kResourceWorkField), "the Work field exists without data");
+}
+
+void test_resource_load() {
+    // The measured shape of the wave-31 fixture: three 100 % assignments on one
+    // resource overlap exactly, so PeakUnits is 300 % while MaxUnits is 100 %.
+    PlanInput input;
+    input.resources.push_back(
+        resource(1, "Crew A", "C", 100.0, core::view::ResourceType::work));
+    input.resources.push_back(
+        resource(2, "Crew B", "C", 100.0, core::view::ResourceType::work));
+    input.resources.push_back(
+        resource(3, "Half", "H", 50.0, core::view::ResourceType::work));
+    const core::sched::date32 monday = civil(2026, 10, 19, 8, 0);
+    const core::sched::date32 friday = civil(2026, 10, 23, 17, 0);
+    for (std::uint32_t index = 0; index < 3; ++index) {
+        app::AssignmentRow row = assignment(200 + index, 1, 1, 4800,
+                                            monday, friday);
+        row.units_percent = 100.0;
+        input.assignments.push_back(row);
+    }
+    // Crew B's two assignments are back to back: [Mon, Wed) and [Wed, Fri).
+    app::AssignmentRow first = assignment(210, 2, 2, 4800, monday,
+                                          civil(2026, 10, 21, 17, 0));
+    app::AssignmentRow second = assignment(211, 3, 2, 4800,
+                                           civil(2026, 10, 21, 17, 0), friday);
+    input.assignments.push_back(first);
+    input.assignments.push_back(second);
+    // Half is 50 % MaxUnits with one 100 % assignment: overallocated.
+    input.assignments.push_back(assignment(220, 4, 3, 4800, monday, friday));
+
+    const app::ResourceLoad a = app::resource_load(input, 1);
+    check(a.computed, "Crew A's peak is a real interval sweep");
+    check(a.peak_units_percent == 300.0, "three overlapping 100 % assignments peak at 300 %");
+    check(a.overallocated, "300 % exceeds MaxUnits 100 %: overallocated");
+
+    const app::ResourceLoad b = app::resource_load(input, 2);
+    check(b.computed, "Crew B's peak is a real interval sweep");
+    check(b.peak_units_percent == 100.0,
+          "back-to-back assignments do not overlap (peak 100 %, not 200 %)");
+    check(!b.overallocated, "100 % on a 100 % resource is not overallocated");
+
+    const app::ResourceLoad half = app::resource_load(input, 3);
+    check(half.peak_units_percent == 100.0, "a single 100 % assignment peaks at 100 %");
+    check(half.overallocated, "100 % on a 50 % resource is overallocated");
+
+    const app::ResourceLoad none = app::resource_load(input, 99);
+    check(!none.computed && none.peak_units_percent == 0.0 && !none.overallocated,
+          "a resource with no assignments has no load and is not overallocated");
+
+    // An assignment with no usable dates cannot be placed: the peak falls back
+    // to the largest single assignment and `computed` says so.
+    PlanInput untimed;
+    untimed.resources.push_back(
+        resource(4, "Untimed", "U", 100.0, core::view::ResourceType::work));
+    app::AssignmentRow row = assignment(230, 1, 4, 4800, core::sched::kDateNa,
+                                        core::sched::kDateNa);
+    row.units_percent = 150.0;
+    untimed.assignments.push_back(row);
+    const app::ResourceLoad fallback = app::resource_load(untimed, 4);
+    check(!fallback.computed, "an undated assignment is not a timed sweep");
+    check(fallback.peak_units_percent == 150.0, "the fallback peak is the single assignment");
+    check(fallback.overallocated, "a 150 % assignment on 100 % is overallocated regardless of dates");
+}
+
+void test_stored_resource_columns() {
+    // The stored Entry table as the wave-31 fixture carries it: 14 columns in
+    // file order, each with its stored character width (W31-3.4 gate).
+    msproject::viewstate::TableDef table;
+    table.decoded = true;
+    struct Stored {
+        std::uint32_t field;
+        std::uint8_t width;
+    };
+    const Stored stored[] = {
+        {0x0c400000u, 6},  {0x0c400056u, 6},  {0x0c400001u, 20}, {0x0c40012cu, 11},
+        {0x0c40012bu, 13}, {0x0c400002u, 11}, {0x0c400003u, 10}, {0x0c400004u, 10},
+        {0x0c400006u, 11}, {0x0c400007u, 11}, {0x0c400012u, 11}, {0x0c400013u, 10},
+        {0x0c400005u, 14}, {0x0c40000au, 13},
+    };
+    for (const Stored& column : stored) {
+        msproject::viewstate::ColumnDef record;
+        record.field_id = column.field;
+        record.opaque_header[0] = column.width;
+        table.columns.push_back(record);
+    }
+    // Project stores the table-specific captions for these five and "" for the
+    // rest; the view supplies the field captions for the empty ones.
+    table.columns[2].title = "Resource Name";
+    table.columns[7].title = "Max. Units";
+    table.columns[8].title = "Std. Rate";
+    table.columns[9].title = "Ovt. Rate";
+    table.columns[10].title = "Cost/Use";
+
+    const std::vector<core::sheet::SheetColumn> columns =
+        app::resource_sheet_columns(table);
+    check_size(columns.size(), 14, "the stored resource table has 14 columns");
+    if (columns.size() != 14) {
+        return;
+    }
+    const char* const titles[] = {
+        "ID", "", "Resource Name", "Type", "Material Label", "Initials", "Group",
+        "Max. Units", "Std. Rate", "Ovt. Rate", "Cost/Use", "Accrue At",
+        "Base Calendar", "Code",
+    };
+    for (std::size_t index = 0; index < columns.size(); ++index) {
+        check(columns[index].field == stored[index].field,
+              "stored column field id follows the file order");
+        check(columns[index].width == stored[index].width,
+              "stored column width is the record's opaque header byte");
+        check_text(columns[index].title, titles[index], "stored column caption");
+        check(columns[index].read_only, "every stored resource column is read-only");
+    }
+    check(!columns[0].visible, "ID is hidden: Project draws it as the row-number gutter");
+    check(columns[0].align == core::view::ColumnAlign::Center,
+          "ID is centre aligned (COM AlignData 1)");
+    check(columns[1].visible, "Indicators is a visible column");
+    check(columns[1].title.empty(), "Indicators' header carries no text");
+    check(columns[1].kind == core::sheet::CellKind::Text,
+          "Indicators keeps a text cell for the glyph column");
+    check(columns[7].kind == core::sheet::CellKind::Percent,
+          "Max. Units renders as a percentage");
+    check(columns[7].align == core::view::ColumnAlign::Right,
+          "Max. Units is right aligned (COM AlignData 2)");
+    check(columns[8].kind == core::sheet::CellKind::Text &&
+              columns[10].kind == core::sheet::CellKind::Text,
+          "the pre-formatted rate/cost columns render their text verbatim");
+    check(columns[11].kind == core::sheet::CellKind::Text,
+          "Accrue At renders the word");
+    check(columns[3].align == core::view::ColumnAlign::Left,
+          "Type is left aligned (COM AlignData 0)");
+
+    // No stored table -> the registry fallback (a new file and the Qt view gate).
+    msproject::viewstate::TableDef absent;
+    const std::vector<core::sheet::SheetColumn> fallback =
+        app::resource_sheet_columns(absent);
+    check_size(fallback.size(), 6, "an undecoded resource table falls back to six columns");
 }
 
 void test_usage_day_and_week() {
@@ -656,6 +839,8 @@ int main() {
     test_standard_calendar();
     test_usage_input_from_plan();
     test_resource_sheet();
+    test_resource_load();
+    test_stored_resource_columns();
     test_usage_day_and_week();
     test_formula_columns();
     test_view_modes_and_preferences();

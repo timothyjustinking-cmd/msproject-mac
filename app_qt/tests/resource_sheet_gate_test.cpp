@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "plan_document.h"
+#include "view_model.h"
 
 namespace {
 
@@ -129,12 +130,105 @@ void check_resources(const msqt::PlanDocument& document) {
               "resource gate: resource names follow the stored order");
     }
     // COM's Resource.MaxUnits is 1.0 on all three rows; the 300 % crew A
-    // reaches is PeakUnits, computed from its three overlapping assignments
-    // (W31-3.5 makes the port compute the same number).
+    // reaches is PeakUnits, computed from its three overlapping assignments.
     for (const app::ResourceRow& resource : resources) {
         check(resource.max_units_percent == 100.0,
               "resource gate: every stored Max. Units is 100 %");
     }
+    // W31-3.5: the stored Entry values the reader decoded (COM facts in
+    // build/w31/W31-G3-resource-sheet.json and W31-G3-probe.json).
+    check(resources[0].group == "North" && resources[0].code == "CR-A" &&
+              resources[0].base_calendar == "Standard" &&
+              resources[0].accrue_at == 3 && resources[0].cost_fields_stored,
+          "resource gate: Crew A carries its stored Entry text/accrual");
+    check(resources[0].standard_rate_per_hour == 0.0 &&
+              resources[0].overtime_rate_per_hour == 0.0 &&
+              resources[0].cost_per_use == 0.0,
+          "resource gate: Crew A's stored rates are zero");
+    check(resources[1].standard_rate_per_hour == 50.0 &&
+              resources[1].overtime_rate_per_hour == 75.0 &&
+              resources[1].cost_per_use == 10.0,
+          "resource gate: Crew B's stored rates are 50/75 per hour, 10 per use");
+    check(resources[1].accrue_at == 1 && resources[2].accrue_at == 2,
+          "resource gate: Crew B accrues at Start, Crew C at End");
+    check(resources[1].group == "South" && resources[2].group == "North",
+          "resource gate: groups follow the stored text");
+}
+
+// W31-3.5: the app model renders the stored table's 14 columns, its measured
+// captions/alignments, and Project's cell texts, with Crew A overallocated.
+void check_resource_model(const msqt::PlanDocument& document) {
+    const std::vector<core::sheet::SheetColumn> columns =
+        app::resource_sheet_columns(document.resource_table());
+    check(columns.size() == std::size(kResourceEntryColumns),
+          "resource gate: the model uses all 14 stored columns");
+    if (columns.size() != std::size(kResourceEntryColumns)) {
+        return;
+    }
+    for (std::size_t index = 0; index < columns.size(); ++index) {
+        check(columns[index].field == kResourceEntryColumns[index].field,
+              "resource gate: model column field follows file order");
+        check(columns[index].width == kResourceEntryColumns[index].chars,
+              "resource gate: model column keeps the stored width");
+        check(columns[index].read_only,
+              "resource gate: the resource sheet is read-only");
+    }
+    check(!columns[0].visible, "resource gate: the ID column is the row-number gutter");
+    check(columns[1].visible && columns[1].title.empty(),
+          "resource gate: Indicators is visible with no caption text");
+    check(columns[2].title == "Resource Name" &&
+              columns[7].title == "Max. Units" &&
+              columns[8].title == "Std. Rate" && columns[9].title == "Ovt. Rate" &&
+              columns[10].title == "Cost/Use",
+          "resource gate: the stored table's titles are kept");
+
+    const core::view::RecordSet records =
+        app::make_resource_view_records(document.plan(), nullptr);
+    check(records.row_count() == 3, "resource gate: the model has three rows");
+    if (records.row_count() != 3) {
+        return;
+    }
+    const auto text_of = [&records](std::size_t row, core::view::FieldId field,
+                                    const char* want, const char* what) {
+        const core::view::Value* value = records.get(row, field);
+        check(value != nullptr && value->kind == core::view::ValueKind::Text &&
+                  value->text == want,
+              what);
+    };
+    text_of(0, core::view::kResourceTypeField, "Work",
+            "resource gate: Type renders Work");
+    text_of(0, core::view::kResourceGroupField, "North",
+            "resource gate: Crew A group text");
+    text_of(0, core::view::kResourceStandardRateField, "$0.00/hr",
+            "resource gate: Crew A standard rate renders $0.00/hr");
+    text_of(0, core::view::kResourceOvertimeRateField, "$0.00/hr",
+            "resource gate: Crew A overtime rate renders $0.00/hr");
+    text_of(0, core::view::kResourceCostPerUseField, "$0.00",
+            "resource gate: Crew A cost/use renders $0.00");
+    text_of(0, core::view::kResourceAccrueAtField, "Prorated",
+            "resource gate: Crew A accrues Prorated");
+    text_of(1, core::view::kResourceStandardRateField, "$50.00/hr",
+            "resource gate: Crew B standard rate renders $50.00/hr");
+    text_of(1, core::view::kResourceOvertimeRateField, "$75.00/hr",
+            "resource gate: Crew B overtime rate renders $75.00/hr");
+    text_of(1, core::view::kResourceCostPerUseField, "$10.00",
+            "resource gate: Crew B cost/use renders $10.00");
+    text_of(1, core::view::kResourceAccrueAtField, "Start",
+            "resource gate: Crew B accrues at Start");
+    text_of(2, core::view::kResourceAccrueAtField, "End",
+            "resource gate: Crew C accrues at End");
+    const core::view::Value* peak = records.get(0, core::view::kResourcePeakUnitsField);
+    check(peak != nullptr && peak->kind == core::view::ValueKind::Number &&
+              peak->number == 300.0,
+          "resource gate: Crew A PeakUnits is 300 %");
+    const core::view::Value* overallocated =
+        records.get(0, core::view::kResourceOverallocatedField);
+    check(overallocated != nullptr && overallocated->boolean,
+          "resource gate: Crew A is overallocated");
+    const core::view::Value* normal =
+        records.get(1, core::view::kResourceOverallocatedField);
+    check(normal != nullptr && !normal->boolean,
+          "resource gate: Crew B is not overallocated");
 }
 
 }  // namespace
@@ -164,6 +258,7 @@ int main(int argc, char** argv) {
     check_stored_table(document);
     check_resource_sheet_style(document);
     check_resources(document);
+    check_resource_model(document);
 
     std::printf("qt_resource_sheet_gate: %d failure(s)\n", g_failures);
     return g_failures == 0 ? 0 : 1;

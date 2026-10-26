@@ -15,12 +15,17 @@
 namespace core::view {
 namespace {
 
+// W31-3.5: the stored Entry table's fields in file order, less the Indicators
+// glyph column, then Project's computed PeakUnits and Overallocated.  The
+// stored file order is ID, Indicators, Name, Type, Material Label, Initials,
+// Group, Max Units, Std. Rate, Ovt. Rate, Cost/Use, Accrue At, Base Calendar,
+// Code (build/w31/W31-3.5-probe.json).
 constexpr FieldId kBuilderFields[] = {
-    kResourceIdField,
-    kResourceNameField,
-    kResourceTypeField,
-    kResourceInitialsField,
-    kResourceMaxUnitsField,
+    kResourceIdField,           kResourceNameField,        kResourceTypeField,
+    kResourceMaterialLabelField, kResourceInitialsField,   kResourceGroupField,
+    kResourceMaxUnitsField,     kResourceStandardRateField, kResourceOvertimeRateField,
+    kResourceCostPerUseField,   kResourceAccrueAtField,    kResourceBaseCalendarField,
+    kResourceCodeField,         kResourcePeakUnitsField,   kResourceOverallocatedField,
 };
 
 std::string hex_field(FieldId field) {
@@ -48,12 +53,23 @@ ValueKind resource_field_kind(FieldId field) noexcept {
         case kResourceIdField:
         case kResourceUniqueIdField:
         case kResourceTypeField:
+        case kResourceAccrueAtField:
             return ValueKind::Integer;
         case kResourceNameField:
         case kResourceInitialsField:
+        case kResourceGroupField:
+        case kResourceCodeField:
+        case kResourceMaterialLabelField:
+        case kResourceBaseCalendarField:
             return ValueKind::Text;
         case kResourceMaxUnitsField:
+        case kResourceStandardRateField:
+        case kResourceOvertimeRateField:
+        case kResourceCostPerUseField:
+        case kResourcePeakUnitsField:
             return ValueKind::Number;
+        case kResourceOverallocatedField:
+            return ValueKind::Bool;
         default:
             return ValueKind::Null;
     }
@@ -73,6 +89,31 @@ RecordSet build_resource_record_set(const std::vector<ResourceRecord>& resources
         set.set_field(row, kResourceInitialsField, Value::of_text(resource.initials));
         set.set_field(row, kResourceMaxUnitsField,
                       Value::of_number(resource.max_units_percent));
+        set.set_field(row, kResourceMaterialLabelField,
+                      Value::of_text(resource.material_label));
+        set.set_field(row, kResourceGroupField, Value::of_text(resource.group));
+        set.set_field(row, kResourceBaseCalendarField,
+                      Value::of_text(resource.base_calendar));
+        set.set_field(row, kResourceCodeField, Value::of_text(resource.code));
+        set.set_field(row, kResourceAccrueAtField, Value::of_int(resource.accrue_at));
+        // MPP12 does not decode the rate/cost words: Null keeps a renderer from
+        // printing a value the file does not carry.
+        if (resource.cost_fields_stored) {
+            set.set_field(row, kResourceStandardRateField,
+                          Value::of_number(resource.standard_rate_per_hour));
+            set.set_field(row, kResourceOvertimeRateField,
+                          Value::of_number(resource.overtime_rate_per_hour));
+            set.set_field(row, kResourceCostPerUseField,
+                          Value::of_number(resource.cost_per_use));
+        } else {
+            set.set_field(row, kResourceStandardRateField, Value::null());
+            set.set_field(row, kResourceOvertimeRateField, Value::null());
+            set.set_field(row, kResourceCostPerUseField, Value::null());
+        }
+        set.set_field(row, kResourcePeakUnitsField,
+                      Value::of_number(resource.peak_units_percent));
+        set.set_field(row, kResourceOverallocatedField,
+                      Value::of_bool(resource.overallocated));
     }
     return set;
 }

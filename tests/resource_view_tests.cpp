@@ -31,6 +31,17 @@ constexpr FieldId kName = core::view::kResourceNameField;
 constexpr FieldId kInitials = core::view::kResourceInitialsField;
 constexpr FieldId kType = core::view::kResourceTypeField;
 constexpr FieldId kMaxUnits = core::view::kResourceMaxUnitsField;
+constexpr FieldId kMaterialLabel = core::view::kResourceMaterialLabelField;
+constexpr FieldId kGroup = core::view::kResourceGroupField;
+constexpr FieldId kStdRate = core::view::kResourceStandardRateField;
+constexpr FieldId kOvtRate = core::view::kResourceOvertimeRateField;
+constexpr FieldId kCostPerUse = core::view::kResourceCostPerUseField;
+constexpr FieldId kAccrueAt = core::view::kResourceAccrueAtField;
+constexpr FieldId kBaseCalendar = core::view::kResourceBaseCalendarField;
+constexpr FieldId kCode = core::view::kResourceCodeField;
+constexpr FieldId kPeakUnits = core::view::kResourcePeakUnitsField;
+constexpr FieldId kOverallocated = core::view::kResourceOverallocatedField;
+constexpr FieldId kIndicators = core::view::kResourceIndicatorsField;
 
 ResourceRecord make_record(std::uint32_t uid, const std::string& name,
                            ResourceType type, double max_units) {
@@ -49,20 +60,45 @@ void test_builder(TestContext& ctx) {
     records.push_back(make_record(10, "Alpha", ResourceType::work, 100.0));
     records.push_back(make_record(11, "Beta", ResourceType::material, 50.0));
     records.push_back(make_record(12, "Gamma", ResourceType::cost, 0.0));
+    // Alpha carries every stored Entry value; Beta is the MPP12 case (no
+    // decoded rate words); Gamma has no custom values at all.
+    records[0].group = "North";
+    records[0].code = "CR-A";
+    records[0].material_label = "";
+    records[0].base_calendar = "Standard";
+    records[0].standard_rate_per_hour = 50.0;
+    records[0].overtime_rate_per_hour = 75.0;
+    records[0].cost_per_use = 10.0;
+    records[0].accrue_at = 3;
+    records[0].cost_fields_stored = true;
+    records[0].peak_units_percent = 300.0;
+    records[0].overallocated = true;
+    records[1].peak_units_percent = 50.0;
 
     const RecordSet set = core::view::build_resource_record_set(records);
     ctx.check(set.record_type() == RecordType::Resource, "builder record type is Resource");
     ctx.equal(set.row_count(), std::size_t{3}, "three resource rows");
-    ctx.equal(set.field_count(), std::size_t{5}, "five builder fields");
-    ctx.check(set.schema().size() == 5, "schema has five entries");
-    if (set.schema().size() == 5) {
+    ctx.equal(set.field_count(), std::size_t{15}, "fifteen builder fields");
+    ctx.check(set.schema().size() == 15, "schema has fifteen entries");
+    if (set.schema().size() == 15) {
+        // The stored Entry order without Indicators, then the computed fields.
         ctx.equal(set.schema()[0], kId, "schema[0] is ID");
         ctx.equal(set.schema()[1], kName, "schema[1] is Name");
         ctx.equal(set.schema()[2], kType, "schema[2] is Type");
-        ctx.equal(set.schema()[3], kInitials, "schema[3] is Initials");
-        ctx.equal(set.schema()[4], kMaxUnits, "schema[4] is MaxUnits");
+        ctx.equal(set.schema()[3], kMaterialLabel, "schema[3] is Material Label");
+        ctx.equal(set.schema()[4], kInitials, "schema[4] is Initials");
+        ctx.equal(set.schema()[5], kGroup, "schema[5] is Group");
+        ctx.equal(set.schema()[6], kMaxUnits, "schema[6] is MaxUnits");
+        ctx.equal(set.schema()[7], kStdRate, "schema[7] is Std. Rate");
+        ctx.equal(set.schema()[8], kOvtRate, "schema[8] is Ovt. Rate");
+        ctx.equal(set.schema()[9], kCostPerUse, "schema[9] is Cost/Use");
+        ctx.equal(set.schema()[10], kAccrueAt, "schema[10] is Accrue At");
+        ctx.equal(set.schema()[11], kBaseCalendar, "schema[11] is Base Calendar");
+        ctx.equal(set.schema()[12], kCode, "schema[12] is Code");
+        ctx.equal(set.schema()[13], kPeakUnits, "schema[13] is PeakUnits");
+        ctx.equal(set.schema()[14], kOverallocated, "schema[14] is Overallocated");
     }
-    ctx.equal(set.column_of(kMaxUnits), 4, "column_of(MaxUnits)");
+    ctx.equal(set.column_of(kMaxUnits), 6, "column_of(MaxUnits)");
     ctx.equal(set.row_of_uid(11), 1, "row_of_uid(11)");
     ctx.equal(set.row_of_uid(99), -1, "row_of_uid(unknown)");
     ctx.equal(set.uid(0), 10u, "row 0 uid");
@@ -101,12 +137,57 @@ void test_builder(TestContext& ctx) {
     ctx.equal(set.get(1, kMaxUnits)->number, 50.0, "second MaxUnits");
     ctx.equal(set.get(2, kMaxUnits)->number, 0.0, "third MaxUnits");
 
-    // A column the builder does not supply is simply absent, not fabricated.
-    ctx.check(set.get(0, 0x0c400003u) == nullptr, "Group is not in the builder schema");
+    // The stored text fields.
+    ctx.check(set.get(0, kGroup) != nullptr &&
+                  set.get(0, kGroup)->kind == ValueKind::Text &&
+                  set.get(0, kGroup)->text == "North",
+              "Group is the stored text");
+    ctx.equal_string(set.get(0, kCode)->text, "CR-A", "Code value");
+
+    ctx.equal_string(set.get(0, kBaseCalendar)->text, "Standard", "Base Calendar value");
+    ctx.check(set.get(0, kMaterialLabel) != nullptr &&
+                  set.get(0, kMaterialLabel)->kind == ValueKind::Text,
+              "an empty Material Label is a stored empty Text");
+    // Accrue At stays the PjAccrueAt integer; the app maps it to a word.
+    ctx.check(set.get(0, kAccrueAt) != nullptr &&
+                  set.get(0, kAccrueAt)->kind == ValueKind::Integer &&
+                  set.get(0, kAccrueAt)->integer == 3,
+              "Accrue At is the stored integer");
+    // The rates and Cost/Use are numbers in reader units when stored.
+    ctx.check(set.get(0, kStdRate) != nullptr &&
+                  set.get(0, kStdRate)->kind == ValueKind::Number &&
+                  set.get(0, kStdRate)->number == 50.0,
+              "Standard Rate is the decoded per-hour number");
+    ctx.equal(set.get(0, kOvtRate)->number, 75.0, "Overtime Rate value");
+    ctx.equal(set.get(0, kCostPerUse)->number, 10.0, "Cost/Use value");
+    // Beta's row has no decoded rate words: the values exist and are Null, not
+    // an invented zero a renderer would print as "$0.00".
+    for (const FieldId field : {kStdRate, kOvtRate, kCostPerUse}) {
+        const core::view::Value* value = set.get(1, field);
+        ctx.check(value != nullptr && value->kind == ValueKind::Null,
+                  "MPP12 rate/cost values are Null");
+    }
+    // The computed load fields are passed through as stored by the caller.
+    ctx.check(set.get(0, kPeakUnits) != nullptr &&
+                  set.get(0, kPeakUnits)->kind == ValueKind::Number &&
+                  set.get(0, kPeakUnits)->number == 300.0,
+              "PeakUnits is a Number in percent");
+    ctx.check(set.get(0, kOverallocated) != nullptr &&
+                  set.get(0, kOverallocated)->kind == ValueKind::Bool &&
+                  set.get(0, kOverallocated)->boolean,
+              "Overallocated is a Bool");
+    ctx.check(set.get(1, kOverallocated) != nullptr &&
+                  !set.get(1, kOverallocated)->boolean,
+              "a load within MaxUnits is not overallocated");
+
+    // Indicators is deliberately not a builder field: its value is the status
+    // glyph, and a table column for it renders from the overallocated flag.
+    ctx.check(set.get(0, kIndicators) == nullptr,
+              "Indicators is not a builder field");
 
     const RecordSet empty = core::view::build_resource_record_set({});
     ctx.equal(empty.row_count(), std::size_t{0}, "empty input has no rows");
-    ctx.equal(empty.field_count(), std::size_t{5}, "empty input keeps the schema");
+    ctx.equal(empty.field_count(), std::size_t{15}, "empty input keeps the schema");
     ctx.check(empty.empty(), "empty RecordSet reports empty()");
 }
 
@@ -124,7 +205,29 @@ void test_field_kinds(TestContext& ctx) {
               "Type kind Integer");
     ctx.check(core::view::resource_field_kind(kMaxUnits) == ValueKind::Number,
               "MaxUnits kind Number (view kind, not descriptor i64)");
-    ctx.check(core::view::resource_field_kind(0x0c400003u) == ValueKind::Null,
+    ctx.check(core::view::resource_field_kind(kGroup) == ValueKind::Text,
+              "Group kind Text");
+    ctx.check(core::view::resource_field_kind(kCode) == ValueKind::Text,
+              "Code kind Text");
+    ctx.check(core::view::resource_field_kind(kMaterialLabel) == ValueKind::Text,
+              "Material Label kind Text");
+    ctx.check(core::view::resource_field_kind(kBaseCalendar) == ValueKind::Text,
+              "Base Calendar kind Text");
+    ctx.check(core::view::resource_field_kind(kStdRate) == ValueKind::Number,
+              "Standard Rate kind Number");
+    ctx.check(core::view::resource_field_kind(kOvtRate) == ValueKind::Number,
+              "Overtime Rate kind Number");
+    ctx.check(core::view::resource_field_kind(kCostPerUse) == ValueKind::Number,
+              "Cost/Use kind Number");
+    ctx.check(core::view::resource_field_kind(kAccrueAt) == ValueKind::Integer,
+              "Accrue At kind Integer");
+    ctx.check(core::view::resource_field_kind(kPeakUnits) == ValueKind::Number,
+              "PeakUnits kind Number");
+    ctx.check(core::view::resource_field_kind(kOverallocated) == ValueKind::Bool,
+              "Overallocated kind Bool");
+    ctx.check(core::view::resource_field_kind(kIndicators) == ValueKind::Null,
+              "Indicators has no builder value kind");
+    ctx.check(core::view::resource_field_kind(0x0c4000feu) == ValueKind::Null,
               "unknown resource field kind Null");
 
     ctx.equal_string(core::view::resource_type_name(ResourceType::work), "Work",
@@ -264,7 +367,10 @@ void test_table_columns_against_builder(TestContext& ctx) {
         const core::view::Value* value = set.get(0, column.field);
         ctx.check(value != nullptr, "table column resolves to a RecordSet value");
     }
-    ctx.equal(resolved, 5, "five Entry columns are supplied by the builder");
+    // The registry's Entry table has 15 columns; the builder supplies every
+    // stored one it models (13) and deliberately leaves Indicators and
+    // Phonetics absent.
+    ctx.equal(resolved, 13, "thirteen Entry columns are supplied by the builder");
     // The other Entry columns are not fabricated by the builder; a table read
     // returns null and renders blank, which is the documented RecordSet rule.
     bool saw_absent = false;
@@ -276,6 +382,8 @@ void test_table_columns_against_builder(TestContext& ctx) {
         }
     }
     ctx.check(saw_absent, "the Entry table has columns the builder does not supply");
+    ctx.check(!set.has_field(kIndicators) && !set.has_field(0x0c4000fcu),
+              "Indicators and Phonetics are the absent Entry columns");
 }
 
 }  // namespace

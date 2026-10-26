@@ -5254,8 +5254,16 @@ void MainWindow::rebuild_generic_view() {
     }
     if (prefs_.view == app::ViewMode::resource_sheet) {
         view_records_ = app::make_resource_view_records(doc_.plan(), nullptr);
-        view_sheet_ = std::make_unique<core::sheet::SheetModel>(view_records_,
-                                                               app::resource_sheet_columns());
+        // W31-3.5: a loaded file's Resource Sheet uses the columns its own
+        // stored `214/CTable` resource table carries (widths and captions
+        // measured); a file without one keeps the registry fallback.
+        if (doc_.resource_table().decoded) {
+            view_sheet_ = std::make_unique<core::sheet::SheetModel>(
+                view_records_, app::resource_sheet_columns(doc_.resource_table()));
+        } else {
+            view_sheet_ = std::make_unique<core::sheet::SheetModel>(
+                view_records_, app::resource_sheet_columns());
+        }
         return;
     }
     // The two usage grids: the same core::usage projection the macOS shell draws

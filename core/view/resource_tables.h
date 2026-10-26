@@ -23,6 +23,18 @@
 // MaxUnits is i64, but the view/interchange value is a fractional quantity, so
 // this module states the kind explicitly and the test pins it.
 //
+// WAVE 31 (W31-3.5): the builder now carries every value the Resource Sheet's
+// stored Entry table shows -- Group, Code, Material Label, Base Calendar, the
+// rates, Cost/Use and Accrue At -- plus Project's two computed resource fields,
+// Overallocated and PeakUnits (0x0c400019 / 0x0c40001a).  The values are the
+// READER's decoded values (core/mpp/reader.h Resource: the MPP14 rate words at
+// +16/+24/+72/+80 and the Base Calendar resolved through TBkndCal); a caller
+// that has no reader leaves the defaults.  `cost_fields_stored` keeps the
+// MPP12 case honest: the rate words are not decoded there, so the builder
+// stores Null rather than an invented 0.  PeakUnits uses the view's percent
+// convention (300.0 == 300 %), the same as MaxUnits, and is the caller's
+// computed maximum concurrent assignment load.
+//
 // TYPE VALUES are Project's PjResourceTypes order -- 0 Work, 1 Material,
 // 2 Cost -- which is also core/mpp's ResourceType (analysis/typelib.tsv).  It
 // is NOT the MSPDI export spelling: Project's MSPDI export writes Type 1 for a
@@ -51,8 +63,19 @@ namespace core::view {
 inline constexpr FieldId kResourceIdField = 0x0c400000u;
 inline constexpr FieldId kResourceNameField = 0x0c400001u;
 inline constexpr FieldId kResourceInitialsField = 0x0c400002u;
+inline constexpr FieldId kResourceGroupField = 0x0c400003u;
 inline constexpr FieldId kResourceMaxUnitsField = 0x0c400004u;
+inline constexpr FieldId kResourceBaseCalendarField = 0x0c400005u;
+inline constexpr FieldId kResourceStandardRateField = 0x0c400006u;
+inline constexpr FieldId kResourceOvertimeRateField = 0x0c400007u;
+inline constexpr FieldId kResourceCodeField = 0x0c40000au;
+inline constexpr FieldId kResourceCostPerUseField = 0x0c400012u;
+inline constexpr FieldId kResourceAccrueAtField = 0x0c400013u;
+inline constexpr FieldId kResourceOverallocatedField = 0x0c400019u;
+inline constexpr FieldId kResourcePeakUnitsField = 0x0c40001au;
 inline constexpr FieldId kResourceUniqueIdField = 0x0c40001bu;
+inline constexpr FieldId kResourceIndicatorsField = 0x0c400056u;
+inline constexpr FieldId kResourceMaterialLabelField = 0x0c40012bu;
 inline constexpr FieldId kResourceTypeField = 0x0c40012cu;
 
 // Project's PjResourceTypes order (see the header comment).
@@ -69,16 +92,36 @@ struct ResourceRecord {
     ResourceType type = ResourceType::work;
     // MaxUnits in percent: 100.0 == 100 % (the MSPDI importer's convention).
     double max_units_percent = 100.0;
+
+    // W31-3.5: the rest of the stored Entry table, in the reader's units.
+    std::string group;
+    std::string code;
+    std::string material_label;
+    std::string base_calendar;            // resolved calendar name, may be empty
+    double standard_rate_per_hour = 0.0;  // currency units per hour
+    double overtime_rate_per_hour = 0.0;  // currency units per hour
+    double cost_per_use = 0.0;            // currency units once per use
+    std::uint32_t accrue_at = 1;          // PjAccrueAt: 1 Start, 2 End, 3 Prorated
+    bool cost_fields_stored = false;      // false -> rate/cost values are Null
+
+    // Project's computed load fields, in the view's percent convention.
+    double peak_units_percent = 0.0;      // PeakUnits (0x0c40001a)
+    bool overallocated = false;           // Overallocated (0x0c400019)
 };
 
 // The Value kind build_resource_record_set() writes for a resource field, or
 // ValueKind::Null when the field is not part of the builder's schema.
 ValueKind resource_field_kind(FieldId field) noexcept;
 
-// Build a Resource RecordSet with the Entry table's builder fields, in Entry
-// order: ID, Name, Type, Initials, MaxUnits.  Row order is input order and
-// RecordSet::uid(row) is ResourceRecord::uid.  The five columns are declared
-// even when the input is empty, so a sheet's schema does not depend on data.
+// Build a Resource RecordSet with the stored Entry table's fields, in stored
+// order minus Indicators (whose value is a status glyph, not a cell): ID, Name,
+// Type, Material Label, Initials, Group, MaxUnits, Standard Rate, Overtime
+// Rate, Cost/Use, Accrue At, Base Calendar, Code, then the two computed fields
+// PeakUnits and Overallocated.  Row order is input order and
+// RecordSet::uid(row) is ResourceRecord::uid.  The columns are declared even
+// when the input is empty, so a sheet's schema does not depend on data; when
+// `cost_fields_stored` is false the three cost fields hold Value::null() so a
+// renderer cannot print an invented "$0.00".
 RecordSet build_resource_record_set(const std::vector<ResourceRecord>& resources);
 
 // The nine resource tables decoded by W42 (RT_RCDATA 311, Export excluded).

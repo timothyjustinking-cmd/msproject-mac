@@ -90,6 +90,20 @@ inline ResourceRow resource_row_from_mpp(const mpp::Resource& resource) {
     // Resource::max_units() is already the view convention (100.0 == 100 %,
     // from the stored x100 value); the builder wants the same quantity.
     row.max_units_percent = resource.max_units();
+    // W31-3.5: the rest of the stored Entry row (see app/layout_model.h).
+    row.group = resource.group;
+    row.code = resource.code;
+    row.material_label = resource.material_label;
+    row.base_calendar = resource.base_calendar;
+    row.standard_rate_per_hour = resource.standard_rate_per_hour;
+    row.overtime_rate_per_hour = resource.overtime_rate_per_hour;
+    row.cost_per_use = resource.cost_per_use;
+    // The reader leaves +80 at 0 when the row's metadata carries no value; a
+    // resource defaults to Start (PjAccrueAt 1) in Project, but the word's
+    // absence is not the same as a stored 0, so keep 0 and let the view print
+    // nothing for it rather than inventing "Start".
+    row.accrue_at = resource.accrue_at;
+    row.cost_fields_stored = resource.cost_fields_stored;
     return row;
 }
 

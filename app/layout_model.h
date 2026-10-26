@@ -173,6 +173,14 @@ struct LinkRow {
 // so a later reader change needs no model change.  `max_units_percent` is the
 // view convention (100.0 == 100 %), the same one core/view/resource_tables.h
 // documents for its builder.
+//
+// Wave 31 (W31-3.5): the rest of the Resource Sheet's stored Entry row --
+// Group, Code, Material Label, Base Calendar, the per-hour rates, Cost/Use and
+// Accrue At -- are carried too, straight from the reader's measured decodings
+// (core/mpp/reader.h Resource).  `cost_fields_stored` is the MPP14 geometry
+// flag: false means the file has no decoded rate words and the view leaves
+// those cells blank.  PeakUnits/Overallocated are NOT stored here; they are
+// computed from the assignment rows by app::resource_load().
 struct ResourceRow {
     std::uint32_t uid = 0;
     std::uint32_t id = 0;
@@ -180,6 +188,15 @@ struct ResourceRow {
     std::string initials;
     core::view::ResourceType type = core::view::ResourceType::work;
     double max_units_percent = 100.0;
+    std::string group;
+    std::string code;
+    std::string material_label;
+    std::string base_calendar;
+    double standard_rate_per_hour = 0.0;
+    double overtime_rate_per_hour = 0.0;
+    double cost_per_use = 0.0;
+    std::uint32_t accrue_at = 1;        // PjAccrueAt: 1 Start, 2 End, 3 Prorated
+    bool cost_fields_stored = false;
 };
 
 // One assignment, as the reader exposes it (wave 11).  Work is carried in

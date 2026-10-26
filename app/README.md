@@ -178,17 +178,21 @@ again on the next load.
 | view | what it shows | selection/editing |
 |---|---|---|
 | Task Sheet | the task sheet + Gantt, as before | yes (the only view with a Gantt) |
-| Resource Sheet | one row per live resource: ID, Name, Type, Initials, Max. Units, Work | none (read-only) |
+| Resource Sheet | one row per live resource, the file's stored Entry table (ID gutter, Indicators, Name, Type, Material Label, Initials, Group, Max. Units, Std. Rate, Ovt. Rate, Cost/Use, Accrue At, Base Calendar, Code), plus Work | none (read-only) |
 | Task Usage | one row per task, one column per day/week/month period, a Total column and a TOTAL row | none (read-only) |
 | Resource Usage | the same grid per resource | none (read-only) |
 
 The resource rows and columns come from `core/view/resource_tables.h`:
-`build_resource_record_set()` supplies ID/Name/Type/Initials/MaxUnits, the shell shows
-the Type as its display name and adds **Work** (the resource's assignment total, in
-duration ticks, from `core::usage`). **Cost is not shown** — the reader decodes no
-resource rates, so a cost column would be invented. The Entry table's captions and
-widths are read from the registry (`find_resource_table("resource-entry")`), so a
-registry change moves this view with it.
+`build_resource_record_set()` supplies the stored Entry fields (ID, Name, Type,
+Material Label, Initials, Group, Max. Units, Std. Rate, Ovt. Rate, Cost/Use, Accrue At,
+Base Calendar, Code) and Project's computed PeakUnits/Overallocated. The shell shows
+Type and Accrue At as their product words, the measured "$"-formatted rate and
+Cost/Use text, and adds **Work** (the resource's assignment total, in duration ticks,
+from `core::usage`). A loaded file's columns are its own stored `214/CTable` resource
+table (`app::resource_sheet_columns(const TableDef&)`): the stored widths and captions,
+with ID hidden because Project draws it as the row-number gutter; a file without one
+falls back to the registry Entry table (`find_resource_table("resource-entry")`). An
+overallocated resource is painted with the view's slot-3 red bold style (wave 31).
 
 The two usage grids are `core::usage::project_usage()` rows rendered as a sheet:
 one label column, one column per period (day, week or month), a **Total** column and a

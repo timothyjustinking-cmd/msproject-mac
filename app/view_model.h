@@ -118,28 +118,91 @@ core::usage::UsageInput usage_input_from_plan(const PlanInput& input);
 // ---------------------------------------------------------------------------
 
 // PlanInput::resources -> the neutral records core/view's builder takes.
+// W31-3.5 fills every stored Entry field and computes the two load fields
+// (PeakUnits, Overallocated) through resource_load().
 std::vector<core::view::ResourceRecord> resource_records_from_plan(const PlanInput& input);
 
+// Wave 31 (W31-3.5): Project's resource liveness, computed from the plan's
+// assignments.  MEASURED on tests/data/wave31-resource-sheet.mpp: Crew A has
+// three concurrent 100 % assignments, COM reports PeakUnits 3.0 and
+// Overallocated true while MaxUnits is 1.0; Crews B and C have one assignment
+// each, PeakUnits 1.0, Overallocated false.
+//
+// Peak is the maximum CONCURRENT assignment units, in the view's percent
+// convention (300.0 == 300 %), over the half-open interval [start, finish) of
+// every assignment naming `resource_uid`; at one instant a finishing assignment
+// is removed before a starting one is added, so back-to-back assignments do not
+// overlap.  An assignment with an unusable start/finish cannot be placed on the
+// time axis: when the resource has no timed assignment at all the peak falls
+// back to the largest single assignment's units and `computed` stays false, so
+// a caller can tell a real sweep from that fallback.
+//
+// Overallocated is the stored Project rule this fixture measures: peak exceeds
+// the resource's MaxUnits (by more than 1e-6) -- a resource with no assignment
+// is not overallocated even at 0 % MaxUnits.  Project also weighs resource
+// availability calendars; this port has one standard week and does not, so the
+// rule is stated as measured rather than general.
+struct ResourceLoad {
+    double peak_units_percent = 0.0;
+    bool overallocated = false;
+    bool computed = false;  // at least one assignment had a usable interval
+};
+
+ResourceLoad resource_load(const PlanInput& input, std::uint32_t resource_uid);
+
 // The resource sheet's RecordSet.  Starts from
-// core::view::build_resource_record_set() (the measured Entry-table schema:
-// ID, Name, Type, Initials, MaxUnits) and then:
+// core::view::build_resource_record_set() (the stored Entry-table fields, in
+// file order, plus the computed PeakUnits/Overallocated) and then, because this
+// view is read-only and Project displays the measured strings:
 //   * replaces the Type integer with its display name ("Work"/"Material"/
-//     "Cost"), because this view is read-only and the product shows the name;
+//     "Cost");
+//   * replaces Accrue At 1/2/3 with "Start"/"End"/"Prorated" (other values stay
+//     the stored integer);
+//   * replaces the rate values with the text Project prints --
+//     "$50.00/hr", "$10.00" -- through the measured "$" display symbol.  The
+//     FILE stores only the currency CODE ("AUD", 0x024013bb); "$" is Project's
+//     application option (COM Project.CurrencySymbol), so the port carries it
+//     as this view's measured default until the shell grows a currency option.
+//     MPP12 rows (`cost_fields_stored` false) keep the builder's Null values
+//     and therefore print nothing;
 //   * adds a Work column (Resource.Work, 0x0c40000d) holding the resource's
 //     total work as duration ticks.  `work_by_resource` is
 //     UsageProjection::resources for any period (the row total is
 //     period-independent); null means "no Work column value", and the column
 //     still exists so the schema does not depend on data.
-// Cost is NOT shown: the reader decodes no resource rates, so a cost column
-// would be invented (README "open").
 core::view::RecordSet make_resource_view_records(const PlanInput& input,
                                                  const core::usage::UsageTable* work_by_resource);
 
 // ID, Name, Type, Initials, MaxUnits in the registry's Entry-table order and
 // widths, then Work.  Every column is read-only.  The first five resolve
 // through core::view::find_resource_table("resource-entry"), so a registry
-// change moves this view with it.
+// change moves this view with it.  This is the fallback for a file with no
+// stored resource table; a loaded file uses the overload below.
 std::vector<core::sheet::SheetColumn> resource_sheet_columns();
+
+// The Resource Sheet's columns from the file's stored `214/CTable` resource
+// table (PlanDocument::resource_table()).  Order is `table.columns` (file
+// order), the width is the stored character width (opaque_header[0]), and the
+// title is the stored title or, when Project stores "", the caption Project
+// displays (measured: RT_RCDATA 436_1033 field captions plus the Entry table's
+// own 173_1033 captions -- "Resource Name", "Max. Units", "Std. Rate",
+// "Ovt. Rate", "Cost/Use").
+//
+// Two measured presentation rules:
+//   * ID is kept (width and caption as stored) but hidden: Project draws a
+//     table's ID column as the sheet's frozen row-number gutter, not as a
+//     scrolling column (the W31-3.5 clean capture shows the IDs left of the
+//     Indicators column, which is the first scrolling column);
+//   * Indicators stays visible with an EMPTY caption: Project draws the (i)
+//     header glyph and no word.
+// Width 0 is the task sheet's measured rule (a column Project does not draw),
+// so it also hides a column here.  Every column is read-only: this view has no
+// measured save path for a resource edit.
+//
+// A table that is not decoded or has no usable column returns
+// resource_sheet_columns() -- the registry fallback above.
+std::vector<core::sheet::SheetColumn> resource_sheet_columns(
+    const msproject::viewstate::TableDef& table);
 
 // ---------------------------------------------------------------------------
 // Usage views
