@@ -55,6 +55,7 @@ CONTROLS = [
     "wave30-move-back-control.mpp",
     "wave30-move-forward-control.mpp",
     "wave30-notes-control.mpp",
+    "wave30-timeline-control.mpp",
 ]
 
 
