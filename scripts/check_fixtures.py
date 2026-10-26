@@ -450,6 +450,19 @@ DOCUMENTED = {
         "B50359BFA22C628E6204747B1E2ABD08ED262AA21608819D49245F3636918A50",
     "tests/data/wave30-calculate-control-null.mpp":
         "8FF4083A6F1416D9046A45472DB83132A29003A3E1BA5D75F03D2C9088DD473F",
+    # Wave 30 (W30-3.1): Set Baseline -- Application.BaselineSave(All=True,
+    # Copy=pjCopyCurrent, Into=Baseline) on the synthetic base -- built by
+    # scripts/oracle_w30_project_pairs.py, with the control's no-edit save.
+    # Project writes BaselineStart/Finish/Duration for every task and appends
+    # baseline blocks to the task, assignment, resource and calendar tables
+    # (Task Var2Data 522 -> 1742), which the port's writer cannot reproduce;
+    # the menu stays disabled (tests/data/README.md).
+    "tests/data/wave30-baseline-control.mpp":
+        "F665EA3882FE006AB97E33C105CF1CE17E03A97A41EB12DCDCF744F05A2C7445",
+    "tests/data/wave30-baseline-set.mpp":
+        "6CF2142905DE7A8AC5CC1B44FF198DB0A23B0F9D45A2976CA4B3603DBBCF718E",
+    "tests/data/wave30-baseline-control-null.mpp":
+        "003D490B0C350A89825FE7EB83AC71E808A5CD555197102B5A724B9F81B9DC2E",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and

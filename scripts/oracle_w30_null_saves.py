@@ -71,6 +71,8 @@ CONTROLS = [
     # W30-3.0: Calculate Project (F9 on a manual-calculation project with a
     # pending duration change).
     "wave30-calculate-control.mpp",
+    # W30-3.1: Set Baseline 0 for the entire project.
+    "wave30-baseline-control.mpp",
 ]
 
 
