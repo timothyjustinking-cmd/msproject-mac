@@ -37,7 +37,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Task | Editing | Scroll to Task | implemented |  |
 | Task | Editing | Find | implemented |  |
 | Task | Editing | Clear | implemented |  |
-| Task | Editing | Fill | implemented |  |
+| Task | Editing | Fill | disabled | measurement: Project's Fill Down save rewrites the row's dates and slack, the project roll-up and the DSI strings; the port's start writer cannot reproduce it, so the control stays disabled |
 | Resource | View | Team Planner | disabled | future: not implemented in this port |
 | Resource | Assignments | Assign Resources | disabled | future: not implemented in this port |
 | Resource | Assignments | Resource Pool | disabled | future: not implemented in this port |
@@ -162,6 +162,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 95 (63 disabled)
+* ribbon commands: 95 (64 disabled)
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

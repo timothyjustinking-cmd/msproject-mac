@@ -87,10 +87,6 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W30-1.7: Scroll to Task scrolls the sheet to the selected row and pans
     # the chart to the task's start; a view, never a file write.
     "scroll_to_task",
-    # W30-1.8: Fill Down fills a Start-column selection through the measured
-    # start writer; a non-Start column is refused, so the command is live but
-    # its measured scope is the Start column only.
-    "fill_down",
     # W30-1.10: Inspect opens the read-only Task Inspector pane (the selected
     # row's scheduler facts); a view, never a file write.
     "inspect",
@@ -112,6 +108,20 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # to Project's measured 85 % window on both fixtures, session only.
     "zoom_entire",
     "zoom_selected",
+}
+
+# W31-C1: controls whose handler exists but which stay DISABLED by standing
+# rule 1, so the backlog must not list them as implemented.  W30-1.8's Fill
+# command is implemented behind the ribbon control, but W31-0.4's committed
+# Project Fill Down pair shows its save is a scheduler rewrite the port's start
+# writer cannot reproduce, so the control (ribbon_bar.cpp) and the pin
+# (ribbon_pin.tsv) keep it disabled with the decision-9 tooltip and this row
+# carries the measurement reason.
+DISABLED_RIBBON_COMMANDS = {
+    "fill_down":
+        "measurement: Project's Fill Down save rewrites the row's dates and "
+        "slack, the project roll-up and the DSI strings; the port's start "
+        "writer cannot reproduce it, so the control stays disabled",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine
@@ -254,6 +264,8 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
 
 
 def status(action: str, implemented: set[str], label: str = "") -> tuple[str, str]:
+    if action in DISABLED_RIBBON_COMMANDS:
+        return "disabled", DISABLED_RIBBON_COMMANDS[action]
     if action in implemented or action in IMPLEMENTED_RIBBON_COMMANDS:
         return "implemented", RIBBON_GAPS.get(action, "")
     if action == "none" and label in MENU_SCOPE_REASON:
