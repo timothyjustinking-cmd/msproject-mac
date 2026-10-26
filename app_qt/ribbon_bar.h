@@ -161,6 +161,15 @@ enum class RibbonCommand : std::uint8_t {
     // with the decision-9 tooltip; the id exists for the disabled-control
     // wiring and the specific backlog reason.
     macros,
+    // Wave 31 (W31-5.1): the View tab's Task Views / Resource Views entries for
+    // the views this run does not build.  Network Diagram, Calendar and both
+    // Other Views pickers are a SCOPE decision (the brief's G5 decides, it does
+    // not build), so each control keeps a command id for the disabled-control
+    // wiring and a specific backlog reason, and stays DISABLED with the
+    // decision-9 tooltip.
+    view_network_diagram,
+    view_calendar,
+    view_other_views,
 };
 
 class RibbonBar final : public QWidget {

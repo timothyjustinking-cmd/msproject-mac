@@ -35,10 +35,30 @@ MISSING_REASON = {
     # W31-2.4: the View tab's Macros button.  Project opens the VBA macro
     # dialog; this port has no VBA engine, editor or macro storage.
     "macros": "engine: no VBA engine, so there is no macro to list or run",
+    # W31-5.1: the View tab's Task Views / Resource Views entries for the view
+    # families this run does not build.  This is a SCOPE decision (the brief's
+    # G5 decides, it does not build), not a capability gap, so each row names
+    # the scope rather than the generic "future" wording; the controls stay
+    # disabled with the decision-9 tooltip.
+    "view_network_diagram":
+        "scope: the Network Diagram view is out of this run's scope",
+    "view_calendar": "scope: the Calendar view is out of this run's scope",
+    "view_other_views":
+        "scope: Project's other task/resource views are out of this run's scope",
     # W26-6.1: the View drop-downs' unimplemented entries are MenuAction::none,
     # and so are the ribbon commands with no MenuAction at all.  One neutral
     # wording covers both tables.
     "none": "future: not implemented in this port",
+}
+
+# W31-5.1: the menu-bar rows of the same four View entries carry MenuAction::none,
+# so the action alone cannot name the scope decision.  Their labels are unique in
+# the menu bar (the two "Other Views" entries share one reason), and the map
+# makes the menu table say why as the ribbon table does.
+MENU_SCOPE_REASON = {
+    "Network Diagram": "scope: the Network Diagram view is out of this run's scope",
+    "Calendar": "scope: the Calendar view is out of this run's scope",
+    "Other Views": "scope: Project's other task/resource views are out of this run's scope",
 }
 
 # W28-1.3 / W29-2.1: controls whose click runs a RibbonCommand rather than a
@@ -233,9 +253,11 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
     return rows
 
 
-def status(action: str, implemented: set[str]) -> tuple[str, str]:
+def status(action: str, implemented: set[str], label: str = "") -> tuple[str, str]:
     if action in implemented or action in IMPLEMENTED_RIBBON_COMMANDS:
         return "implemented", RIBBON_GAPS.get(action, "")
+    if action == "none" and label in MENU_SCOPE_REASON:
+        return "disabled", MENU_SCOPE_REASON[label]
     return "disabled", MISSING_REASON.get(action, "future: not implemented in this port")
 
 
@@ -275,7 +297,7 @@ def main() -> int:
     lines.append("|---|---|---|---|")
     disabled_menu = 0
     for menu, label, action in menus:
-        state, why = status(action, implemented)
+        state, why = status(action, implemented, label)
         if state == "disabled":
             disabled_menu += 1
         lines.append(f"| {menu} | {label} | {state} | {why} |")

@@ -263,6 +263,28 @@ int main(int argc, char** argv) {
             check(submenu_titles == (QStringList{QStringLiteral("Task Views"),
                                                  QStringLiteral("Resource Views")}),
                   "View has the Task Views and Resource Views drop-downs in order");
+            // W31-5.1: the entries for the view families this run does not
+            // build (Network Diagram, Calendar and both Other Views pickers)
+            // stay DISABLED with decision 9's exact tooltip.  qt_ribbon_inventory
+            // asserts the same four controls on the ribbon against its pin.
+            auto check_out_of_scope = [](QMenu* drop_down) {
+                for (QAction* child : drop_down->actions()) {
+                    if (child->isSeparator()) {
+                        continue;
+                    }
+                    const QString title = child->text();
+                    if (title != QStringLiteral("Network Diagram") &&
+                        title != QStringLiteral("Calendar") &&
+                        title != QStringLiteral("Other Views")) {
+                        continue;
+                    }
+                    check(!child->isEnabled(),
+                          "an out-of-scope View entry is disabled in the menu");
+                    check(child->toolTip() ==
+                              QStringLiteral("not implemented in this port"),
+                          "an out-of-scope View entry carries the exact decision-9 tooltip");
+                }
+            };
             for (QAction* action : view_menu->actions()) {
                 if (action->menu() == nullptr) {
                     continue;
@@ -288,6 +310,7 @@ int main(int argc, char** argv) {
                                                  QStringLiteral("Other Views")}),
                           "Resource Views carries the capture's four entries in order");
                 }
+                check_out_of_scope(drop_down);
             }
         }
     }

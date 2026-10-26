@@ -573,13 +573,14 @@ const EnabledWiring kEnabledWiring[] = {
      "toggle_project_summary"},
 };
 
-// W31-2.3/2.4: controls that stay DISABLED with their own command id.  The
+// W31-2.3/2.4/5.1: controls that stay DISABLED with their own command id.  The
 // Window group has no capability in a single-document shell (no second window
 // to open or list, one window has nothing to arrange, hiding the only window
-// would leave no UI); Macros has no VBA engine.  The generic pin check below
-// asserts each one's disabled state and exact decision-9 tooltip; this table
-// pins the command id, so every row keeps a specific backlog reason and a
-// command cannot silently become none.
+// would leave no UI); Macros has no VBA engine; and the View drop-downs' Network
+// Diagram, Calendar and Other Views entries are out of this run's scope.  The
+// generic pin check below asserts each one's disabled state and exact decision-9
+// tooltip; this table pins the command id, so every row keeps a specific backlog
+// reason and a command cannot silently become none.
 struct DisabledWiring {
     const char* tab;
     const char* group;
@@ -592,6 +593,14 @@ const DisabledWiring kDisabledWiring[] = {
     {"View", "Window", "Arrange All", "window_arrange"},
     {"View", "Window", "Hide", "window_hide"},
     {"View", "Macros", "Macros", "macros"},
+    // W31-5.1: the View tab's Task Views / Resource Views entries for the
+    // views this run does not build.  The brief's G5 DECIDES (they stay out of
+    // scope), so each control keeps its own command id and a specific backlog
+    // reason, and stays disabled with the exact decision-9 tooltip.
+    {"View", "Task Views", "Network Diagram", "view_network_diagram"},
+    {"View", "Task Views", "Calendar", "view_calendar"},
+    {"View", "Task Views", "Other Views", "view_other_views"},
+    {"View", "Resource Views", "Other Views", "view_other_views"},
 };
 
 const char* command_name(RibbonCommand command) {
@@ -643,6 +652,9 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::window_arrange: return "window_arrange";
         case RibbonCommand::window_hide: return "window_hide";
         case RibbonCommand::macros: return "macros";
+        case RibbonCommand::view_network_diagram: return "view_network_diagram";
+        case RibbonCommand::view_calendar: return "view_calendar";
+        case RibbonCommand::view_other_views: return "view_other_views";
     }
     return "none";
 }
@@ -689,10 +701,10 @@ void check_action_wiring(msqt::RibbonBar* ribbon, const TabPin& pin) {
     }
 }
 
-// W31-2.3/2.4: each disabled Window or Macros control still carries its own
-// command id and stays disabled with the exact decision-9 tooltip (the pin
-// check asserts the same state from the independent pin; this reads it back by
-// command name).
+// W31-2.3/2.4/5.1: each disabled Window, Macros or out-of-scope View control
+// still carries its own command id and stays disabled with the exact decision-9
+// tooltip (the pin check asserts the same state from the independent pin; this
+// reads it back by command name).
 void check_disabled_wiring(msqt::RibbonBar* ribbon, const TabPin& pin) {
     for (const DisabledWiring& wiring : kDisabledWiring) {
         if (pin.title != wiring.tab) {

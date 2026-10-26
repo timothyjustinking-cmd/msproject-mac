@@ -467,11 +467,11 @@ const std::vector<TabSpec>& tab_specs() {
         large(task_views, "Task\nUsage", app::MenuAction::view_task_usage, 58, 1, true,
               "view.task_usage");
         small(task_views, "Network Diagram", app::MenuAction::none, 130, 0, 2, false, 1, false,
-              "view.network_diagram");
+              "view.network_diagram", RibbonCommand::view_network_diagram);
         small(task_views, "Calendar", app::MenuAction::none, 130, 1, 2, false, 1, false,
-              "view.calendar");
+              "view.calendar", RibbonCommand::view_calendar);
         small(task_views, "Other Views", app::MenuAction::none, 130, 2, 2, false, 1, false,
-              "view.other");
+              "view.other", RibbonCommand::view_other_views);
         GroupSpec& resource_views = add_group(view, "Resource Views", 214);
         large(resource_views, "Team\nPlanner", app::MenuAction::none, 64, 0, false,
               "view.team_planner");
@@ -480,7 +480,7 @@ const std::vector<TabSpec>& tab_specs() {
         small(resource_views, "Resource Sheet", app::MenuAction::view_resource_sheet, 138, 1, 1,
               true, 1, false, "view.resource_sheet");
         small(resource_views, "Other Views", app::MenuAction::none, 138, 2, 1, false, 1, false,
-              "view.other");
+              "view.other", RibbonCommand::view_other_views);
         GroupSpec& data = add_group(view, "Data", 323);
         // W31-1.1: Sort is ENABLED; its order is session-only (the file keeps
         // its row order), and the dialog says so.

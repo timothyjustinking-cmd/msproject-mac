@@ -71,13 +71,13 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Project | Proofing | Spelling | implemented | gap: the port's own word list only; no Microsoft Project dictionary and no correction |
 | View | Task Views | Gantt Chart | disabled | future: not implemented in this port |
 | View | Task Views | Task Usage | implemented |  |
-| View | Task Views | Network Diagram | disabled | future: not implemented in this port |
-| View | Task Views | Calendar | disabled | future: not implemented in this port |
-| View | Task Views | Other Views | disabled | future: not implemented in this port |
+| View | Task Views | Network Diagram | disabled | scope: the Network Diagram view is out of this run's scope |
+| View | Task Views | Calendar | disabled | scope: the Calendar view is out of this run's scope |
+| View | Task Views | Other Views | disabled | scope: Project's other task/resource views are out of this run's scope |
 | View | Resource Views | Team Planner | disabled | future: not implemented in this port |
 | View | Resource Views | Resource Usage | implemented |  |
 | View | Resource Views | Resource Sheet | implemented |  |
-| View | Resource Views | Other Views | disabled | future: not implemented in this port |
+| View | Resource Views | Other Views | disabled | scope: Project's other task/resource views are out of this run's scope |
 | View | Data | Sort | implemented |  |
 | View | Data | Outline | implemented |  |
 | View | Data | Tables | implemented |  |
@@ -134,13 +134,13 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Edit | Custom Field Formula... | implemented |  |
 | View | Gantt Chart | implemented |  |
 | View | Task Usage | implemented |  |
-| View | Network Diagram | disabled | future: not implemented in this port |
-| View | Calendar | disabled | future: not implemented in this port |
-| View | Other Views | disabled | future: not implemented in this port |
+| View | Network Diagram | disabled | scope: the Network Diagram view is out of this run's scope |
+| View | Calendar | disabled | scope: the Calendar view is out of this run's scope |
+| View | Other Views | disabled | scope: Project's other task/resource views are out of this run's scope |
 | View | Team Planner | disabled | future: not implemented in this port |
 | View | Resource Usage | implemented |  |
 | View | Resource Sheet | implemented |  |
-| View | Other Views | disabled | future: not implemented in this port |
+| View | Other Views | disabled | scope: Project's other task/resource views are out of this run's scope |
 | View | Usage Period: Day | implemented |  |
 | View | Usage Period: Week | implemented |  |
 | View | Usage Period: Month | implemented |  |

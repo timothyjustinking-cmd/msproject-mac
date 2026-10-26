@@ -418,9 +418,12 @@ void test_documented_menu_contents() {
               "Resource Views > Resource Usage is the usage view");
         check(resource_views->children[2].action == MenuAction::view_resource_sheet,
               "Resource Views > Resource Sheet is the resource sheet");
-        const MenuItemSpec* const unimplemented[4] = {
+        const MenuItemSpec* const unimplemented[5] = {
             &task_views->children[2], &task_views->children[3],
-            &task_views->children[4], &resource_views->children[0]};
+            &task_views->children[4], &resource_views->children[0],
+            // W31-5.1: Resource Views > Other Views is the second out-of-scope
+            // Other Views entry; the brief's G5 keeps it disabled too.
+            &resource_views->children[3]};
         for (const MenuItemSpec* item : unimplemented) {
             check(item->action == MenuAction::none,
                   "an unimplemented View entry carries no action");
