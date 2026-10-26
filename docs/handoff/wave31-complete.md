@@ -473,3 +473,227 @@ The numbers belong to `e477012`; the marker commit that follows is docs-only.
   disabled controls for the Window group.
 
 WAVE-31-G2-COMPLETE
+
+## G3 - Resource Sheet at Gantt fidelity
+
+The brief's G3 is one prose item; the seven rows below are the work breakdown
+`W31-3.1 .. W31-3.7` that closes it.  All of it is **presentation-only and
+session-only**: the fixture's stored Resource Sheet view, its Entry table and
+its Text Styles record are read and applied to the loaded session, and no path
+writes them back (wave-31 brief section 1 -- the file's bytes are kept, nothing
+is measured-and-written because nothing in this group changes a persisted view
+setting).  The live gate opens the window and reads it; no save path was added
+or enabled.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W31-3.1 | The synthetic Resource Sheet fixture and Project's rendering facts | **DONE** | commit `3aefddd`; fixture `tests/data/wave31-resource-sheet.mpp` SHA-256 `E8166300CA35B6042BEA4967C0E54894AC5ECE99613EBDE72EF907CFC093EF48`; COM dumps `build/w31/W31-G3-resource-sheet.json`, `build/w31/W31-G3-probe.json` (not committed) |
+| W31-3.2 | Resource liveness from the FixedMeta state byte (the tombstoned base resource) | **DONE** | commit `25a45a5`; gates `build/w31/W31-3.2-*.log` |
+| W31-3.3 | The reader exposes the stored Entry values (Group, Code, rates, Cost/Use, Accrue At, Base Calendar) | **DONE** | commit `af3efd4`; gates `build/w31/W31-3.3-*.log` |
+| W31-3.4 | The stored resource table and the view's Text Styles record are read | **DONE** | commit `815b974`; gates `build/w31/W31-3.4-*.log` |
+| W31-3.5 | The model carries the stored values and Project's computed PeakUnits/Overallocated | **DONE** | commit `d4adbb0`; gates `build/w31/W31-3.5-*.log` |
+| W31-3.6 | The Resource Sheet paints the stored table, rows, fonts and indicators | **DONE (session-only; file bytes kept)** | commit `2b00548`; gates `build/w31/W31-3.6-*.log` |
+| W31-3.7 | The live Qt gate measured against Project's COM facts | **DONE** | commit `bb0568d`; gates `build/w31/W31-3.7-*.log` |
+
+No G3 item was deferred.  The group raised one Low finding (the un-stored Add
+New Column stub) and two residual notes, all under "Found, not fixed" below;
+no Critical or High finding was found.
+
+W31-3.1 detail:
+
+- `tests/data/wave31-resource-sheet.mpp` is `synthetic-base.mpp` saved by
+  Project 2021 through COM with the Resource Sheet applied
+  (`ViewApply("Resource Sheet")`) and the resource `Entry` table applied
+  (`TableApply("Entry")`).  It was built by the committed read-only oracle
+  `scripts/oracle_w31_resource_sheet.py` under the neutral root
+  `C:/w31/resource-sheet` with neutral Author/Manager/Company/UserName/Title,
+  and is documented (with the SHA-256 above) in `tests/data/README.md` and
+  `scripts/check_fixtures.py`.
+- The measured rows Project reopens: three Work resources, uids 2/3/4, IDs
+  1/2/3, Crew A/B/C.  Crew A is on all three tasks at 100 % (PeakUnits 300 %,
+  Overallocated), Crew B on task 1 and Crew C on tasks 2 and 3 at 50 % each
+  (PeakUnits 100 %, not overallocated); Work 4800/2400/2400 minutes.  Group
+  North/South/North, Code CR-A/B/C, Crew B's `$50.00/hr` and `$75.00/hr`
+  rates and `$10.00` cost/use, Accrue At Prorated/Start/End, Base Calendar
+  Standard.
+- Project's TableFields reports the stored 14-column Entry table (ID 6,
+  Indicators 6, Resource Name 20, Type 11, Material Label 13, Initials 11,
+  Group 10, Max. Units 10, Std. Rate 11, Ovt. Rate 11, Cost/Use 11, Accrue At
+  10, Base Calendar 14, Code 13 characters) plus an un-stored field -1 width
+  20 Add New Column stub.
+- The base file's placeholder resource was deleted; its FixedData row stays in
+  the file as uid 1 with a FixedMeta state byte of 0x02.  Project reports three
+  resources, which is the fact W31-3.2 makes the reader reproduce.
+- `build/w31/W31-G3-probe.json` (read-only COM probe
+  `scripts/oracle_w31_resource_sheet_probe.py`, added in W31-3.5) is the fact
+  sheet the later gates compare against: the field order/char widths/alignments,
+  `Table.RowHeight` 1 and `AdjustHeaderRowHeight` true, `Project.CurrencyCode`
+  AUD with application symbol `$`, and every resource cell value.
+
+W31-3.2 detail:
+
+- `fixed_meta_coverage` now returns each row's state vector.  The resource
+  decode skips a row whose state is neither live (0x00) nor "no FixedMeta
+  stream", with a skipped-row reason naming the tombstone -- the same rule the
+  MPP12 resource loop (`state != 0`) and the task decode (since W45) already
+  apply.
+- The committed-fixture test pins the three live resources (uids 2/3/4, IDs
+  1/2/3), the absence of uid 1, and the tombstone skipped-row report, so the
+  reader agrees with the Project reopen rather than inventing a fourth blank
+  resource.  Core 53/53, `mpp_reader` 1112 checks.
+
+W31-3.3 detail:
+
+- Group and Code come from VarMeta keys `0x0c400003` / `0x0c40000a` (both
+  formats).  MPP14 resource rows carry StandardRate at +16 and OvertimeRate at
+  +24 (currency per hour), CostPerUse at +72 in hundredths, and AccrueAt at +80
+  (1 Start, 2 End, 3 Prorated).  The offsets are the measured ones from two
+  byte-diff probes (`build/w31/g3-rate-probe*.json`, not committed): Project
+  normalised a typed `$400.00/day` to 50.0 at +16 and stored `$10.00` / `$1.23`
+  as 1000.0 / 123.0 at +72.
+- BaseCalendar is derived rather than a resource-row word: the resource-calendar
+  row whose resource column is the resource's uid has base_uid 1, and Project
+  prints calendar 1's stored name, `Standard`; `resolve_resource_calendars`
+  resolves that name onto the resource.
+- No MPP12 rate word has been measured, so MPP12 resources keep
+  `cost_fields_stored == false` instead of reporting invented zeroes.
+- The fixture test pins all three rows against the COM facts.  Core 53/53,
+  `mpp_reader` 1136 checks.
+
+W31-3.4 detail:
+
+- `PlanDocument` keeps the file's resource tables separately from the task
+  tables and selects the table the Resource Sheet ViewDef names in
+  `0x2240000a`; on the fixture that is the measured 14-column `&Entry` table
+  with its stored character widths.
+- The view's own 1,530-byte `0x22400008` record parses as the 19 Text Styles
+  slots (the same decoder as the Gantt record, no bar styles): slot 2 is
+  ordinary resources (Calibri 11, automatic) and slot 3 is overallocated
+  (bold Calibri 11, RGB 165,0,0).
+- `core/viewstate` gains `parse_view_text_styles()` and
+  `find_view_by_name()`; `parse_gantt_style()` shares the slot decoder;
+  `app::read_resource_sheet_style()` joins the FONT_BASES/CV_iew seam.  This is
+  presentation metadata read for the session; no write path touches it.
+- The `qt_resource_sheet_gate` target starts here: it loads the fixture through
+  the real `PlanDocument` and pins the stored table, the view selectors
+  (`&Entry`, `&All Resources`) and both style slots.
+
+W31-3.5 detail:
+
+- The resource builder carries every stored Entry value the reader decodes --
+  Group, Code, Material Label, Base Calendar, the per-hour rates, Cost/Use and
+  Accrue At -- plus Project's computed PeakUnits and Overallocated.
+  `build_resource_record_set` declares fifteen fields in stored file order
+  (Indicators excluded, the two load fields appended); MPP12 rows store Null
+  for the rate/cost cells.
+- `app::resource_load()` sweeps the assignments naming a resource over their
+  half-open `[start, finish)` intervals and returns the peak concurrent units.
+  On the fixture Crew A peaks at 300 % (three concurrent 100 % assignments)
+  and is overallocated while MaxUnits is 100 %; Crews B and C peak at 100 %
+  and are not.
+- `make_resource_view_records` renders the measured cell texts: Type and
+  Accrue At words, `$50.00/hr` and `$10.00` through the measured `$` symbol
+  (the file stores only the currency code AUD; `Project.CurrencySymbol` is the
+  application option the probe read), and Max. Units as a percentage.
+- `resource_sheet_columns(TableDef)` builds the columns from the file's own
+  `214/CTable` resource table: file order, stored character widths, the
+  measured COM alignments (ID centre, numeric right, text left) and Project's
+  captions (436_1033 / 173_1033), with ID hidden as the row-number gutter and
+  Indicators visible but captionless.  The registry fallback stays for a file
+  without a stored resource table; the Qt shell picks the stored overload when
+  `PlanDocument` decoded one.
+
+W31-3.6 detail:
+
+- The frozen gutter reads Resource.ID (`0x0c400000`), so the stored IDs 1/2/3
+  appear even when the display order is not the storage order.
+- Resource rows take the Resource Sheet view's own Text Styles: slot 3 (bold
+  Calibri 11, RGB 165,0,0) when the stored/computed Overallocated flag is set,
+  slot 2 (upright Calibri 11, automatic colour) otherwise.  The choice lives
+  in `app/view_style.h` beside the task rule.
+- Generic resource column widths use Project's `chars * unit + 3` rule with
+  the unit measured from the view's own FONT_BASES (Segoe UI 10 -> 6 px): the
+  fallback Entry list paints 39/123/69/69/63/69.  A file without the view
+  keeps the stock 6 px unit; the usage grids are unchanged (G4 owns them).
+- The captionless Indicators column paints Project's measured blue (i) header
+  badge and an overallocated row paints the measured red person glyph (only
+  that row); the Task Sheet's Indicators cells stay blank as before.
+- The 22 px row pitch and 42 px caption band are unchanged.  Presentation
+  only: the stored table, widths and styles are applied for the session and
+  the file's bytes do not change.
+
+W31-3.7 detail:
+
+- The gate now opens the real `MainWindow` on the committed fixture, switches
+  through the View menu's own Resource Sheet action, and reads the live widget
+  tree back against `build/w31/W31-G3-probe.json`:
+  - the 13 scrolling fields in COM TableFields order (ID is the frozen gutter;
+    the -1 Add New Column sentinel is not a stored field), with the stored
+    table/field captions;
+  - Project's pixel widths from COM's character counts at this view's measured
+    6 px/char plus 3 px: 39/123/69/81/69/63/63/69/69/69/63/87/81.  COM's
+    TableField.Width reports characters (6/20/11/...), so the gate compares the
+    live pixels with the measured Project rendering rule rather than pretending
+    COM has a pixel-width property;
+  - Resource.ID 1/2/3 in the frozen gutter, the 22 px row pitch, 60 px gutter
+    and 42 px caption band;
+  - every resource cell: names, Work type, empty Material Label, initials,
+    Group, Max. Units 100 %, the measured currency rates/cost, Accrue At
+    words, Standard calendar and codes;
+  - only Crew A's row in slot 3's bold RGB 165,0,0; the others in slot 2.
+- The gate is part of `qt_resource_sheet_gate`; Qt 35/35.
+
+Per-commit gates (logs under `build/w31/`, named `W31-3.x-*.log`).  Every
+commit's scan reports 0 files / 0 hits, guard exits 0, the hex grep finds no
+match and `check_fixtures.py` is OK (137 documented hashes, 172 tracked
+`.mpp`).  W31-3.1 is the fixture commit (fixture, provenance script,
+documentation) and was gated by fixtures/privacy; the code commits rebuilt the
+touched trees and ran their suites:
+
+| commit | item tests | core ctest | app ctest | app_qt ctest |
+|---|---|---|---|---|
+| W31-3.1 `3aefddd` | fixture + oracle script; `check_fixtures.py` registers the hash | -- (fixture commit) | -- | -- |
+| W31-3.2 `25a45a5` | `mpp_reader_tests` 1112 checks (tombstone row, three live resources) | 53/53 | -- | -- |
+| W31-3.3 `af3efd4` | `mpp_reader_tests` 1136 checks (Group/Code/rates/cost/accrual/calendar) | 53/53 | -- | -- |
+| W31-3.4 `815b974` | `viewstate_tests`, `view_style_tests`; `qt_resource_sheet_gate` (stored table, view selectors, slots 2/3) | 53/53 | 23/23 | 35/35 |
+| W31-3.5 `d4adbb0` | `views_tests`, `resource_view_tests`; `qt_resource_sheet_gate` (cell values, PeakUnits/Overallocated) | 53/53 | 23/23 | 35/35 |
+| W31-3.6 `2b00548` | `view_style_tests`; `qt_resource_sheet_gate` (gutter, slot-2/3 styles, badge/glyph pixels); `qt_view_gate` | 53/53 | 23/23 | 35/35 |
+| W31-3.7 `bb0568d` | `qt_resource_sheet_gate` live MainWindow (fields, widths, IDs, values, styles) | -- | -- | 35/35 |
+
+G3 group gates (fresh trees configured from scratch on `bb0568d` under
+`build/w31-fresh{,-app,-qt}`, log `build/w31/W31-G3-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 23/23 / 35/35 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (137 documented hashes, 172 tracked `.mpp`); paths OK (220 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `wave30..HEAD` / `guard_names wave30..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The run started 03:26 and finished 03:34 with no lock retries.  The numbers
+belong to `bb0568d`; the marker commit that follows is docs-only.
+
+## Found, not fixed
+
+- **Low (W31-3.1, left by design): the un-stored Add New Column stub.**  COM's
+  `TableFields` enumerates a field -1, width 20 sentinel after Code.  It is not
+  in the file's `214/CTable` (the stored table has 14 fields) and the captured
+  Resource Sheet window never showed it, so the port's resource grid ends at
+  Code and the live gate pins the 13 scrolling stored fields.  The task sheet
+  already paints its own shell-appended Add New Column affordance; adding the
+  resource one would be an unmeasured pixel change, so it is recorded here for
+  a later pass rather than invented in this wave.
+- Residual notes (not findings): `Table.RowHeight` is 1, Project's default
+  encoding, and the port keeps the measured 22 px row pitch shared with the
+  Gantt; the caption band keeps the shell's measured 11 pt header (shared with
+  the Gantt), so the view's slot 1 row/column-title font (Segoe UI 9) is not
+  applied to header captions in either view; the fixture has only the
+  overallocation indicator, so the gate covers the indicator Project actually
+  rendered there and claims no other indicator glyph.
+
+WAVE-31-G3-COMPLETE
