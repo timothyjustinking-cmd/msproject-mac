@@ -62,6 +62,36 @@ using Rgb = msproject::viewstate::Rgb;
     return item.valid ? &item : nullptr;
 }
 
+// Wave 31 (W31-3.6): the Text Styles item Project applies to a RESOURCE row of
+// the Resource Sheet.  The view stores the same 19 slots as a Gantt view; the
+// measured fixture paints an overallocated resource with slot 3 (critical:
+// bold Calibri 11, RGB 165,0,0 -- the red the capture shows on Crew A) and an
+// ordinary resource with slot 2 (non-critical: upright Calibri 11, automatic
+// colour).  A resource row has no summary/milestone/project-summary category,
+// so Project's stored overallocated flag is the only choice.
+[[nodiscard]] inline msproject::viewstate::TextStyleItem
+text_style_item_for_resource_row(bool overallocated) noexcept {
+    return overallocated ? msproject::viewstate::TextStyleItem::critical
+                         : msproject::viewstate::TextStyleItem::non_critical;
+}
+
+// The decoded style for such a row, or nullptr when the record did not decode
+// or the slot's font index did not resolve (the same rule as text_style_for_row).
+[[nodiscard]] inline const msproject::viewstate::TextStyle*
+text_style_for_resource_row(const msproject::viewstate::ViewTextStyles& style,
+                            bool overallocated) noexcept {
+    if (!style.decoded) {
+        return nullptr;
+    }
+    const auto index =
+        static_cast<std::size_t>(text_style_item_for_resource_row(overallocated));
+    if (index >= style.text.size()) {
+        return nullptr;
+    }
+    const msproject::viewstate::TextStyle& item = style.text[index];
+    return item.valid ? &item : nullptr;
+}
+
 // Wave 26 (W26-3.2): the colours the active view's bar styles give each role.
 // A role is absent (`has_* == false`) when the file defines no such style; the
 // shell then keeps the wave-25 measured stock colour for it.

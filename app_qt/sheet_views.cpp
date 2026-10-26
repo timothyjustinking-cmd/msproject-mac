@@ -17,6 +17,7 @@
 #include <QPen>
 #include <QPoint>
 #include <QRect>
+#include <QRectF>
 #include <QSize>
 #include <QString>
 #include <QStyle>
@@ -63,6 +64,57 @@ void paint_resize_grip(QPainter& painter, const QRect& rect, const QColor& colou
     const int y = rect.center().y();
     painter.drawLine(x, y - 4, x, y + 4);
     painter.drawLine(x + 2, y - 4, x + 2, y + 4);
+}
+
+// Wave 31 (W31-3.6): the Resource Sheet's Indicators column has no caption;
+// Project draws its 16 px blue (i) badge in the empty header instead.  The
+// disc colour is measured from the Project capture (30,139,205) and the glyph
+// is white.
+void paint_info_badge(QPainter& painter, const QRect& rect) {
+    const QColor kInfoBadge(30, 139, 205);
+    constexpr int kDiameter = 16;
+    const QRect badge(rect.center().x() - kDiameter / 2,
+                      rect.center().y() - kDiameter / 2, kDiameter, kDiameter);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(kInfoBadge);
+    painter.drawEllipse(badge);
+    QFont font = painter.font();
+    font.setPointSize(8);
+    font.setBold(true);
+    painter.setFont(font);
+    painter.setPen(Qt::white);
+    painter.drawText(badge, static_cast<int>(Qt::AlignCenter), QStringLiteral("i"));
+    painter.restore();
+}
+
+// Wave 31 (W31-3.6): Project's overallocated-resource indicator -- the red
+// person glyph the Resource Sheet draws in an overallocated row's Indicators
+// cell.  The fills are measured from the capture: the body red (201,81,81) and
+// its grey outline (127,120,120).  16 px tall, centred in the measured 22 px
+// row (the same badge size wave 17 used for the header).
+void paint_overallocated_indicator(QPainter& painter, const QRect& rect) {
+    const QColor fill(201, 81, 81);
+    const QColor outline(127, 120, 120);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(outline, 1));
+    painter.setBrush(fill);
+    // Head: a 7 px disc; shoulders: a 13 px wide bust below it.
+    const int centre = rect.center().x();
+    const int top = rect.center().y() - 8;
+    painter.drawEllipse(QRectF(centre - 3.5, top, 7.0, 7.0));
+    painter.drawChord(QRectF(centre - 6.5, top + 7.5, 13.0, 8.0), 0, 180 * 16);
+    painter.restore();
+}
+
+// Wave 31 (W31-3.6): whether a display column is the Resource Sheet's
+// Indicators column, read from the adapter so the task sheet's Indicators
+// (which stays blank) never matches.
+bool is_indicators_column(const QAbstractItemModel* model, int column) {
+    const auto* table_model = dynamic_cast<const SheetTableModel*>(model);
+    return table_model != nullptr && table_model->indicators_column() == column;
 }
 
 }  // namespace
@@ -350,7 +402,13 @@ void SheetHeaderView::paintSection(QPainter* painter, const QRect& rect, int log
         painter->drawLine(arrow_x - 3, arrow_y - 1, arrow_x, arrow_y + 2);
         painter->drawLine(arrow_x, arrow_y + 2, arrow_x + 3, arrow_y - 1);
     }
-    if (!stub) {
+    // Wave 31 (W31-3.6): the Resource Sheet's Indicators header has no caption
+    // and no resize grip; Project paints the blue (i) badge in its place.
+    const bool indicators_header = is_indicators_column(model(), logicalIndex);
+    if (indicators_header) {
+        paint_info_badge(*painter, rect);
+    }
+    if (!stub && !indicators_header) {
         paint_resize_grip(*painter, rect, chrome.sheet_header_grip);
     }
     painter->restore();
@@ -613,6 +671,17 @@ void EntryItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opt
         painter->drawLine(box.left() + 4, box.center().y(), box.right() - 4,
                           box.center().y());
         painter->restore();
+    }
+
+    // Wave 31 (W31-3.6): the Resource Sheet's Indicators cell shows Project's
+    // red person glyph when the stored/computed Resource.Overallocated flag is
+    // set.  Painted over the ordinary styled item, so the grid and the row's
+    // text style keep the delegate's normal path.
+    const auto* table_model = dynamic_cast<const SheetTableModel*>(index.model());
+    if (table_model != nullptr &&
+        index.column() == table_model->indicators_column() &&
+        table_model->row_overallocated(index.row())) {
+        paint_overallocated_indicator(*painter, option.rect);
     }
 
     // The 42 px caption band's bottom rule is the first row's top edge.  Drawing

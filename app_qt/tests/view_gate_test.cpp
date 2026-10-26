@@ -7,8 +7,9 @@
 // asserts, from the live widget tree:
 //
 //   * the frozen 60 px gutter, the 42 px caption band and the 22 px row pitch;
-//   * the Resource Sheet's six-column set and its measured pixel widths
-//     (the generic view rule: column width in characters * 7, clamped 50..400);
+//   * the Resource Sheet's six-column set and its measured pixel widths (W31-3.6:
+//     Project's chars * font unit + 3 rule, the stock 6 px unit when the file
+//     stores no Resource Sheet view);
 //   * Task Usage's Label column, its day-period columns and the Total column,
 //     and that Day/Week/Month switch the period column width (98/126/84 px);
 //   * Resource Usage's "Resource Name" label column;
@@ -135,7 +136,9 @@ int main(int argc, char** argv) {
                 "Resource Sheet column 5 is Max. Units");
     gate::check(title_of(resource_model, 5) == QStringLiteral("Work"),
                 "Resource Sheet column 6 is Work");
-    check_widths(window, {50, 140, 77, 77, 70, 77});
+    // W31-3.6: the fallback column list's stored character widths at Project's
+    // measured unit (6 px/char + 3 px): 6/20/11/11/10/11 characters.
+    check_widths(window, {39, 123, 69, 69, 63, 69});
 
     // --- Task Usage, day ---------------------------------------------------
     QAction* task_usage = action(window, app::MenuAction::view_task_usage);

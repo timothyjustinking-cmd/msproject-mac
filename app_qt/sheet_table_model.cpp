@@ -13,6 +13,7 @@
 
 #include "entry_columns.h"
 #include "layout_model.h"  // app::task_field_id (the stored ID field)
+#include "resource_tables.h"  // core::view resource field ids (wave 31)
 #include "shell_style.h"
 #include "view_style.h"  // app::text_style_for_row (wave 26)
 
@@ -151,13 +152,53 @@ QString SheetTableModel::row_number_text(int display_row) const {
     }
     // Project's ID column is the frozen gutter.  It is read from the RecordSet
     // by field, not by looking for a visible column: the stored table for a
-    // loaded file does not carry ID as a scrolling column.
-    const core::view::FieldId id_field = app::task_field_id("ID");
+    // loaded file does not carry ID as a scrolling column.  W31-3.6: a Resource
+    // record set stores its ID under Resource.ID (0x0c400000); the task field
+    // is absent there, so the task id would fall back to the display ordinal.
+    const core::view::FieldId id_field =
+        sheet_->record_type() == core::model::RecordType::Resource
+            ? core::view::kResourceIdField
+            : app::task_field_id("ID");
     const std::string text = sheet_->field_text(row, id_field);
     if (!text.empty()) {
         return QString::fromStdString(text);
     }
     return QString::number(display_row + 1);
+}
+
+// Wave 31 (W31-3.6): the Indicators column of the Resource Sheet.  In generic
+// mode the display ordinal IS the visible ordinal, so the field lookup is the
+// same walk visible_column_for_field() does; a task sheet never matches (the
+// resource field id is not in its schema).
+int SheetTableModel::indicators_column() const {
+    if (sheet_ == nullptr || !generic_ ||
+        sheet_->record_type() != core::model::RecordType::Resource) {
+        return -1;
+    }
+    const std::size_t count = sheet_->visible_column_count();
+    for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
+        const std::size_t column = sheet_->visible_column(ordinal);
+        if (column != core::sheet::kNoIndex &&
+            sheet_->column(column).field == core::view::kResourceIndicatorsField) {
+            return static_cast<int>(ordinal);
+        }
+    }
+    return -1;
+}
+
+bool SheetTableModel::row_overallocated(int display_row) const {
+    return resource_overallocated(record_row(display_row));
+}
+
+bool SheetTableModel::resource_overallocated(std::size_t row) const {
+    if (sheet_ == nullptr || row == core::sheet::kNoIndex ||
+        sheet_->record_type() != core::model::RecordType::Resource) {
+        return false;
+    }
+    const core::view::Value* value =
+        sheet_->records().get(row, core::view::kResourceOverallocatedField);
+    return value != nullptr && value->kind == core::view::ValueKind::Bool &&
+           value->boolean;
 }
 
 std::size_t SheetTableModel::column_for_display(int display_column) const {
@@ -329,6 +370,13 @@ QVariant SheetTableModel::headerData(int section, Qt::Orientation orientation, i
                 if (column == core::sheet::kNoIndex) {
                     return {};
                 }
+                // W31-3.6: Project's Indicators column carries no caption; its
+                // header is the (i) badge alone.  SheetModel::column_title()
+                // would otherwise fill in the field's generic "Indicators".
+                if (sheet_->column(column).field ==
+                    core::view::kResourceIndicatorsField) {
+                    return {};
+                }
                 return QString::fromStdString(sheet_->column_title(column));
             }
             // An empty project keeps the Entry captions: the header band is part
@@ -427,9 +475,24 @@ void SheetTableModel::report_commit(bool ok, const std::string& message) {
 // the stock fallback uses); uid 0 is the synthetic project row, which Project
 // styles with the Project Summary item.  The category precedence itself lives
 // in app/view_style.h, so the headless app test pins it.
+//
+// Wave 31 (W31-3.6): a Resource record set reads the Resource Sheet view's own
+// record instead.  Project paints the stored/computed overallocated flag with
+// slot 3 (bold RGB 165,0,0) and every other resource with slot 2; the task
+// sheet's summary/milestone categories do not exist on a resource row.
 const msproject::viewstate::TextStyle* SheetTableModel::row_text_style(
     std::size_t row) const {
-    if (style_ == nullptr || sheet_ == nullptr) {
+    if (sheet_ == nullptr) {
+        return nullptr;
+    }
+    if (sheet_->record_type() == core::model::RecordType::Resource) {
+        if (resource_style_ == nullptr) {
+            return nullptr;
+        }
+        return app::text_style_for_resource_row(*resource_style_,
+                                                resource_overallocated(row));
+    }
+    if (style_ == nullptr) {
         return nullptr;
     }
     const bool project_row = sheet_->row_uid(row) == 0;

@@ -98,6 +98,37 @@ void test_style_lookup() {
           "view style: a record with no font base yields no style");
 }
 
+// Wave 31 (W31-3.6): the Resource Sheet's slot choice.  A resource row is
+// either overallocated (slot 3) or not (slot 2); Project stores those slots in
+// its own view record and the Qt row painter maps them without inventing a red.
+void test_resource_style_lookup() {
+    using msproject::viewstate::ViewTextStyles;
+    ViewTextStyles style;
+    check(app::text_style_for_resource_row(style, true) == nullptr,
+          "view style: an undecoded resource record yields no style");
+    style.decoded = true;
+    style.text[static_cast<std::size_t>(TextStyleItem::non_critical)] =
+        make_style("Calibri", 11, false, false, Rgb{});
+    TextStyle overallocated = make_style("Calibri", 11, false, true, Rgb{165, 0, 0});
+    overallocated.bold = true;
+    style.text[static_cast<std::size_t>(TextStyleItem::critical)] = overallocated;
+
+    check(app::text_style_item_for_resource_row(false) == TextStyleItem::non_critical,
+          "view style: an ordinary resource takes the non-critical slot");
+    check(app::text_style_item_for_resource_row(true) == TextStyleItem::critical,
+          "view style: an overallocated resource takes the critical slot");
+    const TextStyle* plain = app::text_style_for_resource_row(style, false);
+    const TextStyle* over = app::text_style_for_resource_row(style, true);
+    check(plain != nullptr && !plain->bold && !plain->has_colour,
+          "view style: the ordinary resource is upright with automatic colour");
+    check(over != nullptr && over->bold && over->has_colour &&
+              over->colour == (Rgb{165, 0, 0}),
+          "view style: the overallocated resource is the stored bold red");
+    style.text[static_cast<std::size_t>(TextStyleItem::critical)].valid = false;
+    check(app::text_style_for_resource_row(style, true) == nullptr,
+          "view style: an unresolved font base yields no resource style");
+}
+
 // Wave 29 (W29-1.2): the fill rule the sheet model applies to one cell.
 void test_cell_fill_rule() {
     CellFormat specific;
@@ -390,6 +421,20 @@ void check_resource_sheet_fixture() {
         msproject::viewstate::TextStyleItem::summary)];
     check(summary.has_background && summary.background == (Rgb{0xef, 0xf3, 0xff}),
           "resource style: slot 4 keeps the stored pale-blue fill");
+
+    // W31-3.6: the slot choice the Qt row painter makes on this record.
+    const msproject::viewstate::TextStyle* normal_row =
+        app::text_style_for_resource_row(style.text, false);
+    const msproject::viewstate::TextStyle* overallocated_row =
+        app::text_style_for_resource_row(style.text, true);
+    check(normal_row == &normal && !normal_row->has_colour,
+          "resource style: an ordinary row resolves to the fixture's slot 2");
+    check(overallocated_row == &overallocated && overallocated_row->bold &&
+              overallocated_row->colour == (Rgb{165, 0, 0}),
+          "resource style: an overallocated row resolves to slot 3's bold red");
+    msproject::viewstate::ViewTextStyles undecoded;
+    check(app::text_style_for_resource_row(undecoded, true) == nullptr,
+          "resource style: a file without the view keeps the stock presentation");
 }
 
 void check_corpus_fixture() {
@@ -606,6 +651,7 @@ void test_refusals() {
 int main() {
     test_category_precedence();
     test_style_lookup();
+    test_resource_style_lookup();
     test_cell_fill_rule();
     test_bar_label_matching();
     check_stock_fixture();

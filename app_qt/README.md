@@ -28,8 +28,8 @@ render exposed.  The numbers are P1's measurements, not estimates:
 | `main_window.{h,cpp}` | the window: Fusion palette, font resolution, ribbon + timeline + splitter, sheet, Gantt, status bar, menus, command dispatch, `--open`, the 0.459/table-edge split, data-driven column widths |
 | `shell_style.h` | the fidelity contract's fixed numbers and colours, in one place (`kParityWidth`/`kParityHeight` included) |
 | `entry_columns.{h,cpp}` | the nine Entry columns: titles, model fields, stock character widths, `214/CTable` field ids, `chars*6+3` rule |
-| `sheet_table_model.{h,cpp}` | `QAbstractTableModel` over `core::sheet::SheetModel`: the nine Entry columns (the gutter is the row header), cell editing through `begin_edit`/`commit_edit`, a filtered display-row list, and a generic read-only presentation for the resource/usage grids |
-| `sheet_views.{h,cpp}` | 42 px caption-band painter, the FROZEN `SheetRowHeader` gutter, the white top-left corner, the Task Mode pin delegate (Indicators cells stay blank), splitter handle with a visible drag thumb |
+| `sheet_table_model.{h,cpp}` | `QAbstractTableModel` over `core::sheet::SheetModel`: the nine Entry columns (the gutter is the row header), cell editing through `begin_edit`/`commit_edit`, a filtered display-row list, and a generic read-only presentation for the resource/usage grids (the resource gutter reads Resource.ID; the view's slot-2/slot-3 text styles) |
+| `sheet_views.{h,cpp}` | 42 px caption-band painter, the FROZEN `SheetRowHeader` gutter, the white top-left corner, the Task Mode pin delegate (task Indicators cells stay blank; a Resource Sheet overallocated row draws Project's red person glyph, and the Indicators header its blue (i) badge), splitter handle with a visible drag thumb |
 | `ribbon_bar.{h,cpp}` | tabs (Task/Resource/Report/Project/View/Help + contextual Gantt Chart Format), groups, buttons sized from their labels, 105 px, whole-group overflow |
 | `timeline_strip.{h,cpp}` | Start/Finish labels + "Add tasks with dates to the timeline", 44 px |
 | `gantt_canvas.{h,cpp}` | `QWidget` + `QPainter`: two-tier weekly/day header, bars, labels, links, weekend shading, `header_info()` |
@@ -130,19 +130,15 @@ modelled commands dispatch through the same handler as the menu; the rest report
   brief puts pixel-exact ribbon icons out of scope).  Buttons are sized from
   their own labels, and a window too narrow for a group drops the whole group
   (in ribbon order) instead of clipping its labels.
-* The **Indicators cells are blank**, like the reference capture's (MS Project
-  shows an indicator only when a task has one; the fixture's tasks have none).
-  This is also load-bearing: P1's harness calls a body-band column a grid line
-  when it differs from its row background for ≥80 % of the band, so a 16 px icon
-  in the 39 px column reads as a tenth sheet column.  `qt_parity_geometry`
-  asserts the cells stay blank.
-* The task-bar colour is the shell palette: the current reference capture has
-  no bars (docs/parity.md §2.3), so no bar colour is claimed.  Bar labels follow
-  the product: a label that fits inside the bar (its text plus 4 px padding
-  either side) is drawn centred inside it, otherwise it is drawn to the right
-  and elided only at the canvas edge.
-
-## Scoring against the reference
+* The **Task Sheet's Indicators cells are blank**, like the reference capture's
+  (MS Project shows an indicator only when a task has one; the fixture's tasks
+  have none).  This is also load-bearing: P1's harness calls a body-band column a
+  grid line when it differs from its row background for ≥80 % of the band, so a
+  16 px icon in the 39 px column reads as a tenth sheet column.
+  `qt_parity_geometry` asserts the cells stay blank.  (The Resource Sheet is a
+  different view: an overallocated resource draws Project's red person glyph,
+  measured from the same Project capture, and its captionless Indicators header
+  carries the blue (i) badge -- see "The Resource Sheet" below.)
 
 ```sh
 # the reference's size, so the column-width comparison is 9 vs 9
@@ -171,6 +167,18 @@ are the fallback when a file has no CTable for a field.  A stored width of 0 is
 a column Project does not draw (the corpus file's Indicators), so the sheet
 model keeps it hidden.  The status line reports the stored characters.
 
+For the **Resource Sheet** the same rule applies to the stored resource
+`214/CTable` (`app::resource_sheet_columns(const TableDef&)`): that view's own
+FONT_BASES table gives the unit (the committed wave-31 fixture's Segoe UI 10 →
+6 px, so Indicators 6 chars → 39 px, Resource Name 20 → 123, Type 11 → 69, …),
+the stored ID column is hidden because Project draws it as the frozen gutter,
+and a file with no Resource Sheet view falls back to the stock 6 px unit.  The
+rows read the view's own 19 Text Styles slots: slot 2 (Calibri 11, automatic)
+for an ordinary resource and slot 3 (bold, RGB 165,0,0) for one the
+stored/computed Overallocated flag marks.  The captionless Indicators column's
+header paints the measured blue (i) badge, and an overallocated row paints the
+measured red person glyph; the Task Sheet's Indicators cells stay blank.
+
 The splitter is the table's own right edge when the window can hold it: gutter
 + nine columns = 879 px, with the 6 px handle after it, which at 1920 is
 881 = 0.45885 of the width.  The 0.459 fraction decides the split on a narrower
@@ -195,12 +203,14 @@ line.
   brief puts pixel-exact ribbon icons out of scope).  Buttons are sized from
   their own labels, and a window too narrow for a group drops the whole group
   (in ribbon order) instead of clipping its labels.
-* The **Indicators cells are blank**, like the reference capture's (MS Project
-  shows an indicator only when a task has one; the fixture's tasks have none).
-  This is also load-bearing: P1's harness calls a body-band column a grid line
-  when it differs from its row background for ≥80 % of the band, so a 16 px icon
-  in the 39 px column reads as a tenth sheet column.  `qt_parity_geometry`
-  asserts the cells stay blank.
+* The **Task Sheet's Indicators cells are blank**, like the reference capture's
+  (MS Project shows an indicator only when a task has one; the fixture's tasks
+  have none).  This is also load-bearing: P1's harness calls a body-band column a
+  grid line when it differs from its row background for ≥80 % of the band, so a
+  16 px icon in the 39 px column reads as a tenth sheet column.
+  `qt_parity_geometry` asserts the cells stay blank.  The Resource Sheet's own
+  Indicators column is the measured exception (the red overallocation glyph and
+  the header's (i) badge; see "The Resource Sheet").
 * The task-bar colour is the shell palette: the current reference capture has
   no bars (docs/parity.md §2.3), so no bar colour is claimed.  Bar labels follow
   the product: a label that fits inside the bar (its text plus 4 px padding

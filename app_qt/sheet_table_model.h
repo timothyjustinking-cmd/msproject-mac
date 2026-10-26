@@ -115,6 +115,30 @@ class SheetTableModel final : public QAbstractTableModel {
         }
     }
 
+    // Wave 31 (W31-3.6): the Resource Sheet view's own Text Styles record (the
+    // same stable-member pointer rule as set_gantt_style).  Project paints an
+    // ordinary resource row with slot 2 and an overallocated one with slot 3
+    // (bold Calibri 11, RGB 165,0,0); app/view_style.h owns that choice.  Only
+    // a Resource record set reads this pointer, and nullptr or an undecoded
+    // record keeps the stock presentation.
+    void set_resource_style(const msproject::viewstate::ViewTextStyles* style) {
+        resource_style_ = style;
+        if (rowCount() > 0) {
+            emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1),
+                             {Qt::FontRole, Qt::ForegroundRole,
+                              Qt::BackgroundRole});
+        }
+    }
+
+    // Wave 31 (W31-3.6): the generic presentation's Indicators column (the
+    // display ordinal), or -1 when the sheet has no such column.  A resource
+    // sheet stores Resource.Indicators; the header paints its (i) badge there.
+    int indicators_column() const;
+
+    // Wave 31 (W31-3.6): Project's stored/computed Resource.Overallocated flag
+    // for a displayed row.  False for every other record type.
+    bool row_overallocated(int display_row) const;
+
     core::sheet::SheetModel* sheet() const noexcept { return sheet_; }
 
     // Displayed row -> RecordSet row.  core::sheet::kNoIndex when out of range.
@@ -151,10 +175,14 @@ class SheetTableModel final : public QAbstractTableModel {
     // Wave 26: the file text style for a RecordSet row (nullptr when the file
     // has no decoded style or the row's item has no font base).
     const msproject::viewstate::TextStyle* row_text_style(std::size_t row) const;
+    // Wave 31 (W31-3.6): the stored Resource.Overallocated flag on `row`
+    // (RecordSet row), false when the sheet is not a resource sheet.
+    bool resource_overallocated(std::size_t row) const;
 
     core::sheet::SheetModel* sheet_ = nullptr;
     const app::Preferences* preferences_ = nullptr;
     const msproject::viewstate::GanttStyle* style_ = nullptr;
+    const msproject::viewstate::ViewTextStyles* resource_style_ = nullptr;
     const msproject::viewstate::CellFormatTable* cell_formats_ = nullptr;
     bool generic_ = false;
     // The task-sheet presentation, in display order.  Initialised to the Entry

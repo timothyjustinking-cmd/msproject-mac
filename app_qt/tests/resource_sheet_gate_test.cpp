@@ -25,7 +25,21 @@
 #include <string>
 #include <vector>
 
+#include <QApplication>
+#include <QColor>
+#include <QFont>
+#include <QHeaderView>
+#include <QImage>
+#include <QModelIndex>
+#include <QPoint>
+#include <QTableView>
+#include <QVariant>
+
+#include "entry_columns.h"
 #include "plan_document.h"
+#include "sheet.h"
+#include "sheet_table_model.h"
+#include "sheet_views.h"
 #include "view_model.h"
 
 namespace {
@@ -231,6 +245,99 @@ void check_resource_model(const msqt::PlanDocument& document) {
           "resource gate: Crew B is not overallocated");
 }
 
+// W31-3.6: the live adapter paints Project's Resource Sheet -- the stored ID in
+// the frozen gutter, slot 3's bold red on the overallocated row against slot
+// 2's upright automatic text on the others, and the Indicators column's (i)
+// header badge plus the red overallocation glyph (the column widths of that
+// paint are the W31-3.7 live-window gate).
+void check_qt_model(const msqt::PlanDocument& document) {
+    core::view::RecordSet records =
+        app::make_resource_view_records(document.plan(), nullptr);
+    core::sheet::SheetModel sheet(
+        records, app::resource_sheet_columns(document.resource_table()));
+    msqt::SheetTableModel model;
+    model.set_sheet(&sheet);
+    model.set_generic(true);
+    model.set_resource_style(&document.resource_sheet_style().text);
+
+    check(model.columnCount() == 13,
+          "resource gate: the Qt model shows the 13 stored scrolling columns");
+    if (model.columnCount() != 13) {
+        return;
+    }
+    check(model.indicators_column() == 0,
+          "resource gate: Indicators is the first scrolling column");
+    check(model.headerData(0, Qt::Horizontal, Qt::DisplayRole).toString().isEmpty(),
+          "resource gate: the Qt header's Indicators column is captionless");
+    check(model.headerData(1, Qt::Horizontal, Qt::DisplayRole).toString() ==
+              QStringLiteral("Resource Name"),
+          "resource gate: the Qt header carries the stored Resource Name caption");
+
+    check(model.rowCount() == 3, "resource gate: the Qt model has the three resources");
+    if (model.rowCount() != 3) {
+        return;
+    }
+    check(model.row_number_text(0) == QStringLiteral("1") &&
+              model.row_number_text(1) == QStringLiteral("2") &&
+              model.row_number_text(2) == QStringLiteral("3"),
+          "resource gate: the frozen gutter reads the stored Resource.ID");
+    check(model.row_overallocated(0) && !model.row_overallocated(1) &&
+              !model.row_overallocated(2),
+          "resource gate: only Crew A carries the overallocated flag");
+    check(model.index(0, 1).data(Qt::DisplayRole).toString() == QStringLiteral("Crew A"),
+          "resource gate: the Qt model shows the stored resource name");
+
+    // Slot 3 (overallocated) vs slot 2 (ordinary), from the view's own record.
+    const QFont overallocated_font = model.index(0, 1).data(Qt::FontRole).value<QFont>();
+    check(overallocated_font.bold() && overallocated_font.pointSize() == 11 &&
+              overallocated_font.family() == QStringLiteral("Calibri"),
+          "resource gate: Crew A paints slot 3's bold Calibri 11");
+    const QColor overallocated_colour =
+        model.index(0, 1).data(Qt::ForegroundRole).value<QColor>();
+    check(overallocated_colour.isValid() && overallocated_colour.red() == 165 &&
+              overallocated_colour.green() == 0 && overallocated_colour.blue() == 0,
+          "resource gate: Crew A paints the stored RGB 165,0,0");
+    const QFont normal_font = model.index(1, 1).data(Qt::FontRole).value<QFont>();
+    check(!normal_font.bold() && normal_font.pointSize() == 11,
+          "resource gate: Crew B paints slot 2's upright Calibri 11");
+    check(!model.index(1, 1).data(Qt::ForegroundRole).isValid(),
+          "resource gate: Crew B paints the automatic colour");
+
+    // The painted chrome: the 16 px (i) badge in the captionless header and the
+    // red person glyph on the overallocated row only.
+    QTableView view;
+    view.setModel(&model);
+    auto* delegate = new msqt::EntryItemDelegate(&view);
+    delegate->set_entry_mode(false);
+    view.setItemDelegate(delegate);
+    auto* header = new msqt::SheetHeaderView(Qt::Horizontal, &view);
+    header->set_model_titles(true);
+    view.setHorizontalHeader(header);
+    view.verticalHeader()->setDefaultSectionSize(22);
+    const int indicators_width = msqt::column_width_px(6, msqt::kColumnCharPx);
+    view.setColumnWidth(0, indicators_width);
+    view.resize(500, 3 * 22 + 10);
+    view.show();
+    QApplication::processEvents();
+
+    const QImage header_image = header->grab().toImage();
+    const int section_center =
+        header->sectionViewportPosition(0) + header->sectionSize(0) / 2;
+    const QColor badge = header_image.pixelColor(section_center - 5, header->height() / 2);
+    check(badge.isValid() && badge.blue() > 150 && badge.blue() > badge.red() + 50,
+          "resource gate: the Indicators header paints the measured blue (i) badge");
+
+    const QImage body = view.viewport()->grab().toImage();
+    const QColor glyph = body.pixelColor(indicators_width / 2, 6);
+    check(glyph.isValid() && glyph.red() > 150 && glyph.green() < 130 &&
+              glyph.blue() < 130,
+          "resource gate: the overallocated row paints the red indicator glyph");
+    const QColor blank = body.pixelColor(indicators_width / 2, 22 + 6);
+    check(!(blank.isValid() && blank.red() > 150 && blank.green() < 130 &&
+            blank.blue() < 130),
+          "resource gate: an ordinary row's Indicators cell has no red glyph");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -240,9 +347,11 @@ int main(int argc, char** argv) {
                      "<wave31-resource-sheet.mpp>\n");
         return 2;
     }
+    const std::string fixture = argv[1];
+    QApplication application(argc, argv);
     msqt::PlanDocument document;
     std::string error;
-    if (!document.load(argv[1], app::ZoomLevel::week, error)) {
+    if (!document.load(fixture, app::ZoomLevel::week, error)) {
         std::fprintf(stderr, "FAIL: cannot load the fixture: %s\n", error.c_str());
         return 1;
     }
@@ -259,6 +368,7 @@ int main(int argc, char** argv) {
     check_resource_sheet_style(document);
     check_resources(document);
     check_resource_model(document);
+    check_qt_model(document);
 
     std::printf("qt_resource_sheet_gate: %d failure(s)\n", g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -313,6 +313,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // stored per-cell fills (PROJECT_A's yellow Highlighted row and the shaded
     // summary rows).
     sheet_model_.set_cell_formats(&doc_.cell_formats());
+    // Wave 31 (W31-3.6): the Resource Sheet view's own Text Styles.  `doc_` is
+    // a stable member and PlanDocument::load() replaces the record in place, so
+    // the pointer survives loads; the adapter only reads it for Resource rows
+    // (slot 3 overallocated, slot 2 ordinary).
+    sheet_model_.set_resource_style(&doc_.resource_sheet_style().text);
     build_central_widget();
     // Wave 26 (W26-3.2): the same stable pointer for the Gantt's bar palette.
     // GanttCanvas::set_layout() re-reads it on every rebuild.
@@ -1322,6 +1327,24 @@ void MainWindow::configure_generic_columns() {
     if (sheet_view_ == nullptr || view_sheet_ == nullptr) {
         return;
     }
+    // W31-3.6: the Resource Sheet's stored widths are CHARACTERS and Project
+    // paints chars * unit + 3 px, the same rule the Task Sheet follows
+    // (W29-1.1).  The unit is measured from the file's default text font: the
+    // Resource Sheet view's own FONT_BASES table (the fixture's Segoe UI 10 ->
+    // 6).  A file without that view keeps the stock 6 px unit, which is the
+    // measured presentation of the fallback column list.  The usage grids keep
+    // their wave-20 rule (G4 owns those widths).
+    int char_px = kColumnCharPx;
+    if (prefs_.view == app::ViewMode::resource_sheet) {
+        const app::ResourceSheetStyle& resource_style = doc_.resource_sheet_style();
+        if (resource_style.decoded && !resource_style.text.fonts.empty()) {
+            const msproject::viewstate::FontBase& font = resource_style.text.fonts.front();
+            if (font.valid) {
+                char_px = column_char_px(font.name, font.point_size);
+            }
+        }
+    }
+    const bool resource_sheet = prefs_.view == app::ViewMode::resource_sheet;
     const std::size_t count = view_sheet_->visible_column_count();
     for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
         const std::size_t column = view_sheet_->visible_column(ordinal);
@@ -1329,8 +1352,12 @@ void MainWindow::configure_generic_columns() {
             continue;
         }
         const int chars = view_sheet_->column(column).width;
-        int width = chars > 0 ? chars * 7 : 100;
-        width = std::clamp(width, 50, 400);
+        int width = chars > 0 ? (resource_sheet ? column_width_px(chars, char_px)
+                                               : chars * 7)
+                              : 100;
+        if (!resource_sheet) {
+            width = std::clamp(width, 50, 400);
+        }
         sheet_view_->setColumnWidth(static_cast<int>(ordinal), width);
     }
     sheet_view_->verticalHeader()->setDefaultSectionSize(kRowHeight);
