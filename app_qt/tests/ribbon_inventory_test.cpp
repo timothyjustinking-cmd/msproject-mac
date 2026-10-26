@@ -1487,6 +1487,24 @@ int main(int argc, char** argv) {
                                 QStringLiteral("not implemented in this port"),
                         message.c_str());
         }
+        // W30-2.5: a shared resource pool is a cross-file feature.  The port's
+        // plan model is one file (app::PlanInput holds one resources and one
+        // assignments table, with no pool file name, pool GUID or sharer list),
+        // and its one assignment writer appends a row inside the same file
+        // (mppwrite::add_assignment_row).  Sharing would need a pool file plus
+        // a sharer table and a writer for both; the brief keeps Resource Pool
+        // disabled, and no measurement is wanted (W30-2.3 measured only the
+        // in-file assign/remove pair).  The pin loop holds the control to its
+        // pin; this named check states the brief's requirement for it.
+        {
+            QWidget* control = find_control(ribbon, QStringLiteral("Resource"),
+                                            QStringLiteral("Assignments"),
+                                            QStringLiteral("Resource Pool"));
+            gate::check(control != nullptr && !control->isEnabled() &&
+                            control->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                        "Resource Pool (shared pools) stays disabled with the exact tooltip");
+        }
     }
 
     std::printf("qt_ribbon_inventory: ");
