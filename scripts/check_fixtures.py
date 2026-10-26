@@ -500,6 +500,16 @@ DOCUMENTED = {
     # neutral Author/Manager/Company/UserName/Title.
     "tests/data/wave31-tables.mpp":
         "5AEB9C4F6A97893E1C8F3A16BE3FFF4AB100EF3D23D66AB1C595810596C987E8",
+    # Wave 31 (W31-3.1): synthetic-base.mpp saved by Project 2021 with the
+    # Resource Sheet applied and the resource Entry table applied.  Three Work
+    # resources: Crew A is overallocated at 300 %, and the rows carry
+    # Group/Code/rates/AccrueAt and Project's computed PeakUnits/Work.  The
+    # saved file also keeps a TOMBSTONED resource row (uid 1, FixedMeta entry
+    # +0 = 0x02) left by deleting the base resource, which the reader skips
+    # from W31-3.2 on.  Built by scripts/oracle_w31_resource_sheet.py under
+    # the neutral root C:/w31/resource-sheet with neutral metadata.
+    "tests/data/wave31-resource-sheet.mpp":
+        "E8166300CA35B6042BEA4967C0E54894AC5ECE99613EBDE72EF907CFC093EF48",
     # Wave 31 (W31-2.2): numbers-only Project 2021 measurements of the View
     # tab's Zoom commands -- Entire Project and Selected Tasks on the two
     # committed fixtures, plus the Zoom dialog's week/month presets.  Measured
