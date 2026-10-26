@@ -2074,6 +2074,16 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             update_status();
             return;
         }
+        case RibbonCommand::task_details:
+            // W30-1.5: the Task tab's Details opens the same Task Form pane
+            // View > Details toggles (decision 16).  It only SHOWS the pane --
+            // the View check box is the toggle -- and it is a view command,
+            // never a file write.
+            if (ribbon_ != nullptr) {
+                ribbon_->set_details_checked(true);
+            }
+            set_details_visible(true);
+            return;
         case RibbonCommand::toggle_details:
             // W26-6.3: dock/undock the Task Form; a view toggle, never a file
             // write.

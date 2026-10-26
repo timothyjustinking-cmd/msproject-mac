@@ -166,8 +166,8 @@ GroupSpec& split(GroupSpec& group, const char* label, int width, int row, int co
 
 GroupSpec& small(GroupSpec& group, const char* label, app::MenuAction action, int width, int row,
                  int col, bool enabled = false, int col_span = 1, bool icon_only = false,
-                 const char* icon = nullptr) {
-    add(group, label, Kind::small, width, row, col, 1, col_span, action, RibbonCommand::none,
+                 const char* icon = nullptr, RibbonCommand command = RibbonCommand::none) {
+    add(group, label, Kind::small, width, row, col, 1, col_span, action, command,
         nullptr, 0, enabled, icon_only, icon);
     return group;
 }
@@ -316,8 +316,11 @@ const std::vector<TabSpec>& tab_specs() {
               "properties.information");
         small(properties, "Notes", app::MenuAction::none, 130, 0, 1, false, 1, false,
               "properties.notes");
-        small(properties, "Details", app::MenuAction::none, 130, 1, 1, false, 1, false,
-              "properties.details");
+        // W30-1.5: Project's Details opens the Task Form details pane, which
+        // this port already has (decision 16).  The button SHOWS the pane;
+        // the View tab's check box stays the toggle.
+        small(properties, "Details", app::MenuAction::none, 130, 1, 1, true, 1,
+              false, "properties.details", RibbonCommand::task_details);
         small(properties, "Add to Timeline", app::MenuAction::none, 130, 2, 1, false, 1, false,
               "properties.add_to_timeline");
         GroupSpec& editing = add_group(task, "Editing", 140);
@@ -470,7 +473,7 @@ const std::vector<TabSpec>& tab_specs() {
         GroupSpec& split_view = add_group(view, "Split View", 185);
         check(split_view, "Timeline", RibbonCommand::toggle_timeline, 64, 0, 0, true, -1);
         combo(split_view, "Timeline options", "Timeline", 112, 0, 1);
-        check(split_view, "Details", RibbonCommand::toggle_details, 64, 1, 0, true, 0);
+        check(split_view, "Details", RibbonCommand::toggle_details, 64, 1, 0, true, -1);
         combo(split_view, "Details options", "", 112, 1, 1);
         GroupSpec& window = add_group(view, "Window", 198);
         large(window, "New\nWindow", app::MenuAction::none, 62, 0, false, "window.new");
@@ -1235,7 +1238,9 @@ void RibbonBar::build_page(int tab_index) {
                                       ? timeline_checked_
                                       : (spec.command == RibbonCommand::toggle_project_summary
                                              ? project_summary_checked_
-                                             : critical_checked_);
+                                             : (spec.command == RibbonCommand::toggle_details
+                                                    ? details_checked_
+                                                    : critical_checked_));
                     }
                     box_check->setChecked(checked);
                     box_check->setEnabled(spec.enabled);
@@ -1246,6 +1251,8 @@ void RibbonBar::build_page(int tab_index) {
                             timeline_checked_ = on;
                         } else if (command == RibbonCommand::toggle_project_summary) {
                             project_summary_checked_ = on;
+                        } else if (command == RibbonCommand::toggle_details) {
+                            details_checked_ = on;
                         } else if (command == RibbonCommand::toggle_critical_tasks) {
                             critical_checked_ = on;
                         }

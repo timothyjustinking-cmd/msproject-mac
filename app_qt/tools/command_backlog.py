@@ -47,6 +47,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # the measured automatic -> manual task-mode writer.
     "manually_schedule",
     "task_mode",
+    # W30-1.5: the Task tab's Details opens the Task Form details pane the
+    # View tab already docks (decision 16); a view, never a file write.
+    "task_details",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine

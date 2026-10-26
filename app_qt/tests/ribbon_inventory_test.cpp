@@ -499,6 +499,8 @@ const EnabledWiring kEnabledWiring[] = {
     {"Task", "Clipboard", "Copy", "copy", ""},
     {"Task", "Insert", "Task", "insert_task", ""},
     {"Task", "Properties", "Information", "task_fields", ""},
+    // W30-1.5: the Task tab's Details shows the existing Task Form pane.
+    {"Task", "Properties", "Details", "", "task_details"},
     {"Task", "Editing", "Find", "show_filter", ""},
     {"Task", "Editing", "Clear", "clear_filter", ""},
     {"View", "Task Views", "Task Usage", "view_task_usage", ""},
@@ -566,6 +568,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::toggle_project_summary: return "toggle_project_summary";
         case RibbonCommand::toggle_timeline: return "toggle_timeline";
         case RibbonCommand::toggle_details: return "toggle_details";
+        case RibbonCommand::task_details: return "task_details";
         case RibbonCommand::project_information: return "project_information";
         case RibbonCommand::change_working_time: return "change_working_time";
         case RibbonCommand::links_between_projects: return "links_between_projects";

@@ -78,7 +78,7 @@ Task	0	Insert	button	Deliverable	0	insert.deliverable	0	-
 Task	0	Properties	group	-	-	-	-	-
 Task	0	Properties	button	Information	1	properties.information	0	-
 Task	0	Properties	small	Notes	0	properties.notes	0	-
-Task	0	Properties	small	Details	0	properties.details	1	-
+Task	0	Properties	small	Details	1	properties.details	1	-
 Task	0	Properties	small	Add to Timeline	0	properties.add_to_timeline	2	-
 Task	0	Editing	group	-	-	-	-	-
 Task	0	Editing	button	Scroll to Task	0	editing.scroll_to_task	0	-

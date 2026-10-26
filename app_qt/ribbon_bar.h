@@ -72,6 +72,12 @@ enum class RibbonCommand : std::uint8_t {
     toggle_project_summary,
     toggle_timeline,
     toggle_details,
+    // Wave 30 (W30-1.5): the Task tab's Details button.  Project's button
+    // opens the Task Form details pane, which this port already docks through
+    // View > Details (operator decision 16).  The Task-tab button SHOWS the
+    // pane (the View check box remains the toggle), so a click can never hide
+    // a pane the user is reading; a view command, never a file write.
+    task_details,
     // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
     // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
     // commands with no menu-bar item.
@@ -175,6 +181,13 @@ class RibbonBar final : public QWidget {
         critical_checked_ = checked;
         set_stack_check(QStringLiteral("Critical Tasks"), checked);
     }
+    // W30-1.5: the View tab's Details box reflects the pane the Task tab's
+    // Details button (or the box itself) opened.  Held here so it survives a
+    // tab switch, like the two document check boxes.
+    void set_details_checked(bool checked) {
+        details_checked_ = checked;
+        set_stack_check(QStringLiteral("Details"), checked);
+    }
 
     // W26-REV-4: the Font group's two value displays.  The shell sets the
     // FILE's decoded default text style on load; an empty family / non-positive
@@ -271,6 +284,9 @@ class RibbonBar final : public QWidget {
     bool project_summary_checked_ = false;
     // Critical Tasks is a view toggle whose measured default is OFF.
     bool critical_checked_ = false;
+    // W30-1.5: the Details pane's shown state (the View box and the Task tab's
+    // Details button share it).
+    bool details_checked_ = false;
     // W26-REV-4: the Font group's value displays (the file's decoded default,
     // else Project's captured new-project default).
     QString font_family_ = QStringLiteral("Calibri");

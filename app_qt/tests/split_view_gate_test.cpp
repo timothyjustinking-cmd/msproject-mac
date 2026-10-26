@@ -83,6 +83,34 @@ QCheckBox* details_check_box(msqt::MainWindow& window) {
     return nullptr;
 }
 
+// W30-1.5: the Task tab's Details button, found through the LIVE control
+// inventory (the same rule as the View check box above).
+QAbstractButton* task_details_button(msqt::MainWindow& window) {
+    msqt::RibbonBar* ribbon = window.ribbon();
+    if (ribbon == nullptr) {
+        return nullptr;
+    }
+    const int task_tab = ribbon->tab_titles().indexOf(QStringLiteral("Task"));
+    if (task_tab < 0) {
+        return nullptr;
+    }
+    ribbon->set_active_tab(task_tab);
+    QApplication::processEvents();
+    const QStringList groups = ribbon->group_titles();
+    const int properties = groups.indexOf(QStringLiteral("Properties"));
+    if (properties < 0) {
+        return nullptr;
+    }
+    for (int control = 0; control < ribbon->group_control_count(properties); ++control) {
+        auto* button =
+            qobject_cast<QAbstractButton*>(ribbon->group_control(properties, control));
+        if (button != nullptr && button->text() == QStringLiteral("Details")) {
+            return button;
+        }
+    }
+    return nullptr;
+}
+
 int name_column(QAbstractItemModel* model) {
     for (int column = 0; column < model->columnCount(); ++column) {
         if (model->headerData(column, Qt::Horizontal).toString() ==
@@ -359,6 +387,24 @@ int main(int argc, char** argv) {
     gate::check(form->isHidden(), "the Task Form is hidden again");
     gate::check(!window.document_dirty(),
                 "toggling Details never marks the document for saving");
+
+    // --- 5. the Task tab's Details shows the same pane (W30-1.5) -----------
+    QAbstractButton* task_details = task_details_button(window);
+    gate::check(task_details != nullptr, "the Task tab carries the Details button");
+    gate::check(task_details != nullptr && task_details->isEnabled(),
+                "the Task tab's Details is live (W30-1.5)");
+    if (task_details != nullptr) {
+        task_details->click();
+        QApplication::processEvents();
+        QApplication::processEvents();
+    }
+    gate::check(window.details_visible(), "the Task tab's Details docks the pane");
+    gate::check(!form->isHidden(), "the Task Form is visible again");
+    gate::check(!window.document_dirty(),
+                "opening Details never marks the document for saving");
+    QCheckBox* after_task = details_check_box(window);
+    gate::check(after_task != nullptr && after_task->isChecked(),
+                "the View tab's Details check reflects the open pane");
 
     return gate::finish();
 }
