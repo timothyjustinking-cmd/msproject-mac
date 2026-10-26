@@ -90,6 +90,11 @@ enum class RibbonCommand : std::uint8_t {
     // Task Inspector pane (the selected row's scheduler facts, from the plan
     // by UID); a view command, never a file write.
     inspect,
+    // Wave 30 (W30-2.2): the Resource tab's Details.  Project opens the
+    // Resource Form; this port docks its read-only Resource Form in the
+    // Details splitter and switches to the Resource Sheet so the pane has a
+    // selection to follow.  A view command, never a file write.
+    resource_details,
     // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
     // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
     // commands with no menu-bar item.

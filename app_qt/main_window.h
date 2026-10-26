@@ -35,6 +35,7 @@
 #include "plan_document.h"
 #include "prefs.h"
 #include "ribbon_bar.h"  // RibbonCommand (wave 26)
+#include "resource_form.h"   // ResourceForm (W30-2.2)
 #include "sheet_table_model.h"
 #include "task_form.h"       // TaskFormField (W28-4.1)
 #include "task_inspector.h"  // TaskInspector (W30-1.10)
@@ -295,6 +296,9 @@ class MainWindow final : public QMainWindow {
     // so the offscreen gate drives the same path the ribbon button does.
     void scroll_to_task();
     TaskForm* task_form() const noexcept { return task_form_; }
+    // W30-2.2: the read-only Resource Form shares the Details splitter with
+    // the Task Form; MainWindow shows it only in the Resource Sheet view.
+    ResourceForm* resource_form() const noexcept { return resource_form_; }
     QSplitter* details_splitter() const noexcept { return details_splitter_; }
 
     // --- wave 30 (W30-1.10): Task > Tasks > Inspect -------------------------
@@ -441,6 +445,10 @@ class MainWindow final : public QMainWindow {
     // selected/in the task view.  Never reads a RecordSet row index and never
     // writes anything.
     void refresh_inspector();
+    // W30-2.2: pushes the resource selected in the Resource Sheet (by UID,
+    // from the plan) into the Resource Form, or clears the pane when the view
+    // or the sheet's current row has no resource.  Read-only, no write path.
+    void refresh_resource_form();
     void open_dialog(const QString& start_dir = QString());
     void show_about();
     void show_shortcuts();
@@ -515,6 +523,11 @@ class MainWindow final : public QMainWindow {
     // fraction and every parity rectangle unchanged while Details is hidden.
     QSplitter* details_splitter_ = nullptr;
     TaskForm* task_form_ = nullptr;
+    // W30-2.2: the read-only Resource Form, docked in the same Details
+    // splitter.  Exactly one of the two forms is visible: the Task Form in the
+    // task view, the Resource Form in the Resource Sheet; the Details
+    // preference is shared, so a view switch re-docks the matching form.
+    ResourceForm* resource_form_ = nullptr;
     // W30-1.10: the read-only Task Inspector, hidden by default.  It lives in
     // the chart pane (right of the Gantt canvas) and is hidden while another
     // view is shown, like the Task Form below.

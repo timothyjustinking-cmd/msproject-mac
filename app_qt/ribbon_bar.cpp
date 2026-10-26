@@ -361,8 +361,11 @@ const std::vector<TabSpec>& tab_specs() {
               "properties.resource_information");
         small(resource_properties, "Notes", app::MenuAction::none, 100, 0, 1, false, 1, false,
               "properties.notes");
-        small(resource_properties, "Details", app::MenuAction::none, 100, 1, 1, false, 1, false,
-              "properties.resource_details");
+        // W30-2.2: Details docks the read-only Resource Form in the Details
+        // pane and switches to the Resource Sheet, whose rows it follows.  A
+        // view command: nothing is queued, written or marked dirty.
+        small(resource_properties, "Details", app::MenuAction::none, 100, 1, 1, true, 1,
+              false, "properties.resource_details", RibbonCommand::resource_details);
         GroupSpec& level = add_group(resource, "Level", 307);
         large(level, "Level\nSelection", app::MenuAction::none, 60, 0, false,
               "level.selection");

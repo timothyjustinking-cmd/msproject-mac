@@ -95,7 +95,7 @@ Resource	0	Insert	button	Add Resources	0	insert.add_resources	0	-
 Resource	0	Properties	group	-	-	-	-	-
 Resource	0	Properties	button	Information	0	properties.resource_information	0	-
 Resource	0	Properties	small	Notes	0	properties.notes	0	-
-Resource	0	Properties	small	Details	0	properties.resource_details	1	-
+Resource	0	Properties	small	Details	1	properties.resource_details	1	-
 Resource	0	Level	group	-	-	-	-	-
 Resource	0	Level	button	Level Selection	0	level.selection	0	-
 Resource	0	Level	button	Level Resource	0	level.resource	0	-

@@ -67,6 +67,7 @@ add_library(qt_shell STATIC
     sheet_views.cpp
     task_form.cpp
     task_inspector.cpp
+    resource_form.cpp
     timeline_strip.cpp
     dialogs.cpp
     project_dialogs_qt.cpp
@@ -578,6 +579,25 @@ qt_set_warnings(qt_inspect_gate_tests)
 add_test(NAME qt_inspect_gate
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_inspect_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# ===========================================================================
+# WAVE 30 (G2, W30-2.2): the Resource tab's Details docks a READ-ONLY Resource
+# Form in the Details splitter and switches to the Resource Sheet, whose rows
+# it follows by UID.  The gate proves the button is live and wired, every field
+# is read-only, the pane shows the plan's resource/assignment facts, exactly one
+# of the Task/Resource forms is visible per view, usage views show neither, and
+# no click, pane or view switch ever dirties the document.  The same
+# wave23-outline fixture carries the one resource and its 2-day assignment.
+# ===========================================================================
+add_executable(qt_resource_details_gate_tests tests/resource_details_gate_test.cpp)
+target_link_libraries(qt_resource_details_gate_tests PRIVATE qt_shell Qt6::Test)
+qt_set_warnings(qt_resource_details_gate_tests)
+
+add_test(NAME qt_resource_details_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_resource_details_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 

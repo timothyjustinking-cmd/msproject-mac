@@ -615,6 +615,13 @@ void MainWindow::build_central_widget() {
         [this](TaskFormField field, const QString& text) { commit_task_form_field(field, text); });
     details_splitter_->addWidget(task_form_);
     task_form_->setVisible(false);
+    // W30-2.2: the Resource Form is the Details pane of the Resource Sheet.
+    // Both forms live in the same splitter and only one is shown at a time
+    // (the hidden one is not part of the layout's size hint), so a task-view
+    // layout is unchanged by the second pane.
+    resource_form_ = new ResourceForm(details_splitter_);
+    details_splitter_->addWidget(resource_form_);
+    resource_form_->setVisible(false);
     outer->addWidget(details_splitter_, 1);
 
     central->setLayout(outer);
@@ -717,7 +724,30 @@ void MainWindow::build_central_widget() {
     // mirrors the selection onto the Gantt bar.  Shift-click extends the model's
     // rectangle: that rectangle is what Copy/Cut read and what Paste fills.
     connect(sheet_view_, &QAbstractItemView::clicked, this, [this](const QModelIndex& index) {
-        if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
+        if (!doc_.has_document()) {
+            return;
+        }
+        // W30-2.2: the Resource Sheet is read-only -- core::sheet's selection
+        // model owns task rows only -- but a click still moves the Resource
+        // Form, which follows the sheet's current row by the resource UID the
+        // generic RecordSet carries.  This branch never selects through the
+        // task sheet and never stages an edit.
+        if (prefs_.view == app::ViewMode::resource_sheet) {
+            if (view_sheet_ == nullptr || sheet_view_ == nullptr) {
+                return;
+            }
+            const std::size_t row = sheet_model_.record_row(index.row());
+            if (row == core::sheet::kNoIndex || view_sheet_->row_uid(row) == 0) {
+                return;
+            }
+            // The clicked signal follows the view's own current-index update
+            // in the common case; setting it here makes the pane's lookup
+            // independent of that ordering.
+            sheet_view_->setCurrentIndex(index);
+            refresh_resource_form();
+            return;
+        }
+        if (prefs_.view != app::ViewMode::task_sheet) {
             return;
         }
         const std::size_t row = sheet_model_.record_row(index.row());
@@ -1313,6 +1343,8 @@ void MainWindow::sync_view_selection() {
     refresh_task_form();
     // W30-1.10: the Task Inspector is a second selection-following pane.
     refresh_inspector();
+    // W30-2.2: the Resource Form follows the Resource Sheet's current row.
+    refresh_resource_form();
     if (!doc_.has_document() || sheet_view_ == nullptr ||
         prefs_.view != app::ViewMode::task_sheet) {
         return;
@@ -2109,6 +2141,22 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             // queued, written or marked dirty.
             set_inspector_visible(!inspector_visible_);
             return;
+        case RibbonCommand::resource_details:
+            // W30-2.2: the Resource tab's Details docks the read-only Resource
+            // Form, which follows the Resource Sheet's selected row.  Project's
+            // form is a Resource-view pane, so a click from another view first
+            // switches to the Resource Sheet (the pane then follows clicks
+            // there).  Like the Task tab's Details it only SHOWS the pane; the
+            // View check box stays the toggle.  A view command, never a file
+            // write.
+            if (prefs_.view != app::ViewMode::resource_sheet) {
+                set_view(app::ViewMode::resource_sheet);
+            }
+            if (ribbon_ != nullptr) {
+                ribbon_->set_details_checked(true);
+            }
+            set_details_visible(true);
+            return;
         case RibbonCommand::scroll_to_task:
             // W30-1.7: scrolls the sheet and pans the chart; a view command,
             // never a file write.
@@ -2198,20 +2246,30 @@ void MainWindow::set_timeline_visible(bool visible) {
 
 void MainWindow::set_details_visible(bool visible) {
     details_visible_ = visible;
+    const bool task_view = prefs_.view == app::ViewMode::task_sheet;
+    const bool resource_view = prefs_.view == app::ViewMode::resource_sheet;
     if (task_form_ != nullptr) {
-        // Details is a Task Form: it is only meaningful in the Gantt/Task Sheet
-        // view.  The preference survives a view switch, so returning to the
-        // task view re-docks it.
-        const bool show = visible && prefs_.view == app::ViewMode::task_sheet;
-        task_form_->setVisible(show);
-        if (show && details_splitter_ != nullptr) {
-            const int total = details_splitter_->height();
-            const int form_height = std::max(150, total / 4);
-            details_splitter_->setSizes(
-                QList<int>{std::max(1, total - form_height -
-                                           details_splitter_->handleWidth()),
-                           form_height});
+        // Details docks the Task Form in the Gantt/Task Sheet view and the
+        // Resource Form in the Resource Sheet (W30-2.2).  The preference
+        // survives a view switch, so returning re-docks the matching form.
+        task_form_->setVisible(visible && task_view);
+    }
+    if (resource_form_ != nullptr) {
+        resource_form_->setVisible(visible && resource_view);
+    }
+    if (visible && (task_view || resource_view) && details_splitter_ != nullptr) {
+        const int total = details_splitter_->height();
+        const int form_height = std::max(150, total / 4);
+        details_splitter_->setSizes(
+            QList<int>{std::max(1, total - form_height -
+                                       details_splitter_->handleWidth()),
+                       form_height});
+    }
+    if (visible) {
+        if (task_view) {
             refresh_task_form();
+        } else if (resource_view) {
+            refresh_resource_form();
         }
     }
     set_message(visible ? "details pane shown" : "details pane hidden", false);
@@ -2402,6 +2460,71 @@ void MainWindow::refresh_inspector() {
     values.successors = to_q(successors_text(plan, task->uid, doc_.format()));
     values.resources = to_q(resource_names_text(plan, task->uid));
     inspector_->set_values(values);
+}
+
+void MainWindow::refresh_resource_form() {
+    // W30-2.2: the Resource Form reports the plan's own resource facts, by
+    // UID.  The Resource Sheet's generic RecordSet does not participate in the
+    // task sheet's selection model, so the selected row is the view's current
+    // index mapped through the adapter; the UID it carries is the plan key.
+    if (resource_form_ == nullptr) {
+        return;
+    }
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::resource_sheet ||
+        sheet_view_ == nullptr || view_sheet_ == nullptr) {
+        resource_form_->clear();
+        return;
+    }
+    const QModelIndex current = sheet_view_->currentIndex();
+    if (!current.isValid()) {
+        resource_form_->clear();
+        return;
+    }
+    const std::size_t row = sheet_model_.record_row(current.row());
+    if (row == core::sheet::kNoIndex) {
+        resource_form_->clear();
+        return;
+    }
+    const std::uint32_t uid = view_sheet_->row_uid(row);
+    const app::ResourceRow* resource = nullptr;
+    for (const app::ResourceRow& candidate : doc_.plan().resources) {
+        if (candidate.uid == uid) {
+            resource = &candidate;
+            break;
+        }
+    }
+    if (resource == nullptr) {
+        resource_form_->clear();
+        return;
+    }
+
+    ResourceFormValues values;
+    values.has_resource = true;
+    values.name = to_q(resource->name);
+    values.id = QString::number(resource->id);
+    values.uid = QString::number(resource->uid);
+    values.type = to_q(core::view::resource_type_name(resource->type));
+    values.initials = to_q(resource->initials);
+    values.max_units = to_q(core::sheet::format_value_text(
+        core::view::Value::of_number(resource->max_units_percent),
+        core::sheet::CellKind::Percent, doc_.format()));
+    // Work and Assignments are the plan's assignment facts for this UID: the
+    // same rows the usage views are built from, totalled in the file's ticks.
+    std::int64_t work_ticks = 0;
+    std::size_t assignment_count = 0;
+    for (const app::AssignmentRow& assignment : doc_.plan().assignments) {
+        if (assignment.resource_uid != uid) {
+            continue;
+        }
+        ++assignment_count;
+        work_ticks += assignment.work_ticks;
+    }
+    values.work = to_q(core::sheet::format_duration_text(work_ticks, doc_.format()));
+    values.assignments = QString::number(assignment_count);
+    values.selection = QStringLiteral("Resource ID %1 (UniqueID %2)")
+                           .arg(resource->id)
+                           .arg(resource->uid);
+    resource_form_->set_values(values);
 }
 
 void MainWindow::commit_task_form_field(TaskFormField field, const QString& text) {
@@ -4937,6 +5060,11 @@ void MainWindow::show_view(app::ViewMode mode) {
         }
         sheet_view_->horizontalScrollBar()->setValue(0);
         rebind_sheet();
+        // W30-2.2: a generic view has no selection model of its own, and the
+        // Resource Form follows the view's current row; start a freshly shown
+        // view with no current row so the pane says nothing is selected rather
+        // than carrying a stale index over from the previous view.
+        sheet_view_->setCurrentIndex(QModelIndex());
         configure_generic_columns();
     }
     if (ribbon_ != nullptr) {
@@ -4948,6 +5076,11 @@ void MainWindow::show_view(app::ViewMode mode) {
     if (task_form_ != nullptr) {
         task_form_->setVisible(details_visible_ && mode == app::ViewMode::task_sheet);
     }
+    // W30-2.2: the Resource Form is the same Details preference in the
+    // Resource Sheet view; only one of the two forms is ever visible.
+    if (resource_form_ != nullptr) {
+        resource_form_->setVisible(details_visible_ && mode == app::ViewMode::resource_sheet);
+    }
     // W30-1.10: the Task Inspector is a task-view pane too; its preference
     // survives the switch the same way.
     if (inspector_ != nullptr) {
@@ -4955,6 +5088,7 @@ void MainWindow::show_view(app::ViewMode mode) {
     }
     refresh_task_form();
     refresh_inspector();
+    refresh_resource_form();
     refresh_view_buttons();
     update_menu_state();
     update_status();
