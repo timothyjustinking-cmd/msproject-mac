@@ -331,8 +331,10 @@ const std::vector<TabSpec>& tab_specs() {
               "editing.find");
         small(editing, "Clear", app::MenuAction::clear_filter, 60, 1, 1, true, 1, false,
               "editing.clear");
-        small(editing, "Fill", app::MenuAction::none, 60, 2, 1, false, 1, false,
-              "editing.fill");
+        // W30-1.8: fills a Start selection through the measured start writer;
+        // every other column is refused (no measured cell writer).
+        small(editing, "Fill", app::MenuAction::none, 60, 2, 1, true, 1, false,
+              "editing.fill", RibbonCommand::fill_down);
         tabs.push_back(std::move(task));
 
         // --- Resource -------------------------------------------------------

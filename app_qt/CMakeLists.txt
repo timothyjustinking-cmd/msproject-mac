@@ -546,6 +546,23 @@ add_test(NAME qt_scroll_to_task_gate
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================
+# WAVE 30 (G1, W30-1.8): Fill Down fills a Start-column selection through the
+# measured start writer (one transaction, one undo step) and refuses every
+# other shape before staging: a non-Start column, a one-row selection, the
+# project summary row and a pending insert.  The wave23-outline fixture gives
+# it two distinct start dates to fill and a pending row it can insert.
+# ===========================================================================
+add_executable(qt_fill_gate_tests tests/fill_gate_test.cpp)
+target_link_libraries(qt_fill_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_fill_gate_tests)
+
+add_test(NAME qt_fill_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_fill_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
+# ===========================================================================
 # WAVE 28 (G2, W28-2.2): the sheet and Gantt show a queued Indent/Outdent at
 # once -- level and OutlineNumber, the one-level indent, the summary's working
 # collapse triangle, and the Gantt summary bracket, then undo/redo.  The two

@@ -2089,6 +2089,11 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             // never a file write.
             scroll_to_task();
             return;
+        case RibbonCommand::fill_down:
+            // W30-1.8: fills a Start-column selection through the measured
+            // start writer; every other column is refused.
+            fill_down();
+            return;
         case RibbonCommand::toggle_details:
             // W26-6.3: dock/undock the Task Form; a view toggle, never a file
             // write.
@@ -3970,6 +3975,133 @@ void MainWindow::paste_selection() {
     update_status();
 }
 
+void MainWindow::fill_down() {
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr) {
+        set_message("Fill Down is available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    core::sheet::SheetModel* sheet = doc_.sheet();
+    if (sheet->editing()) {
+        set_message("finish the cell edit before Fill Down", true);
+        update_status();
+        return;
+    }
+    const core::sheet::CellRange range = sheet->selection_range();
+    if (!range.valid) {
+        set_message("select the Start cell to fill and the cells below it first", false);
+        update_status();
+        return;
+    }
+    // Only the visible columns in the rectangle are filled: a hidden column
+    // shows no cell to copy.  In this port's stored table exactly one column
+    // (Start) has a measured cell writer; every other column is refused up
+    // front rather than filled and silently dropped by the save diff.
+    std::vector<std::size_t> columns;
+    for (std::size_t column : sheet->visible_columns()) {
+        if (column >= range.column_begin && column <= range.column_end) {
+            columns.push_back(column);
+        }
+    }
+    if (columns.empty()) {
+        set_message("the selection holds no visible column", false);
+        update_status();
+        return;
+    }
+    const core::view::FieldId start_field = app::task_field_id("Start");
+    for (std::size_t column : columns) {
+        if (start_field == 0 || sheet->column(column).field != start_field) {
+            set_message("Fill Down fills only the Start column: " +
+                            sheet->column_title(column) +
+                            " has no measured cell writer in this port",
+                        true);
+            update_status();
+            return;
+        }
+    }
+    const std::vector<std::size_t> rows = sheet->selected_rows();
+    if (rows.size() < 2) {
+        set_message("select the Start cell and at least one cell below it", false);
+        update_status();
+        return;
+    }
+    // A contiguous selection's top visible row is the source.  The synthetic
+    // project summary row is always the first row, so it can only be the
+    // source here; its start is a roll-up and the row is read-only for every
+    // other cell write (paste/cut), so refuse it before any staging.
+    const std::size_t column = columns.front();
+    const std::size_t source_row = rows.front();
+    if (sheet->row_uid(source_row) == 0) {
+        set_message("the project summary row is read-only", true);
+        update_status();
+        return;
+    }
+    const core::view::Value* found = sheet->cell_value(source_row, column);
+    if (found == nullptr || found->kind != core::view::ValueKind::Date) {
+        set_message("the top selected Start cell has no date to fill", false);
+        update_status();
+        return;
+    }
+    const core::view::Value source = *found;
+    const core::sched::date32 source_date = app::date32_from_date_value(source.date);
+    if (core::sched::is_na(source_date) || core::sched::is_overflow(source_date)) {
+        set_message("the top selected Start cell has no date to fill", false);
+        update_status();
+        return;
+    }
+    // Refuse before staging anything: collect_start_edits() skips a row that
+    // is not in the loaded file (a pending insert), so filling one would show
+    // a value the save silently drops.
+    for (std::size_t index = 1; index < rows.size(); ++index) {
+        const std::uint32_t uid = sheet->row_uid(rows[index]);
+        bool loaded = false;
+        for (const app::TaskRow& task : doc_.loaded().tasks) {
+            if (task.uid == uid) {
+                loaded = true;
+                break;
+            }
+        }
+        if (!loaded) {
+            set_message("Fill Down cannot fill a row that has not been saved yet", true);
+            update_status();
+            return;
+        }
+    }
+    // ONE transaction for every target cell: validation is atomic and the
+    // whole fill is one undo step, the way Paste and Cut stage their ranges.
+    if (!sheet->begin_transaction(core::sheet::UndoKind::Transaction, "Fill Down")) {
+        set_message("the sheet is busy; finish the edit or transaction first", true);
+        update_status();
+        return;
+    }
+    std::size_t staged = 0;
+    for (std::size_t index = 1; index < rows.size(); ++index) {
+        if (sheet->stage_value(rows[index], column, source)) {
+            ++staged;
+        }
+    }
+    if (staged != rows.size() - 1) {
+        sheet->cancel_transaction();
+        set_message("Fill Down could not stage every selected cell", true);
+        update_status();
+        return;
+    }
+    const core::sheet::TransactionResult result = sheet->apply_transaction();
+    if (!result.ok) {
+        sheet->cancel_transaction();
+        set_message("Fill Down failed: " + result.error, true);
+        update_status();
+        return;
+    }
+    // A cell edit ends the structural redo list: the two stacks stay
+    // chronological (app/edit_model.h), as after_cell_commit() does.
+    structural_.clear_redo();
+    after_cell_change();
+    set_message("filled " + std::to_string(result.changed) + " Start cell(s) down", false);
+    update_status();
+}
+
 void MainWindow::select_core_range_in_view() {
     if (sheet_view_ == nullptr || doc_.sheet() == nullptr || sheet_view_->model() == nullptr ||
         prefs_.view != app::ViewMode::task_sheet) {
@@ -4281,7 +4413,9 @@ QMenu* MainWindow::build_row_menu() {
                                     : QStringLiteral("Manually Schedule")));
     menu->addSeparator();
     disabled(menu->addAction(QStringLiteral("Assign Resources...")));
-    disabled(menu->addAction(QStringLiteral("Fill Down")));
+    // W30-1.8: the row menu and the Task tab's Fill button share one path.
+    QAction* fill = menu->addAction(QStringLiteral("Fill Down"));
+    connect(fill, &QAction::triggered, this, [this](bool) { fill_down(); });
     disabled(menu->addAction(QStringLiteral("Clear Contents")));
     menu->addSeparator();
     QAction* information = menu->addAction(QStringLiteral("Information..."));

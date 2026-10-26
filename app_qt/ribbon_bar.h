@@ -82,6 +82,10 @@ enum class RibbonCommand : std::uint8_t {
     // to the selected row and pans the chart to the task's start; a view
     // command, never a file write.
     scroll_to_task,
+    // Wave 30 (W30-1.8): the Task tab's Fill Down.  It copies the top selected
+    // cell down a Start-column selection through the measured start writer; a
+    // column with no measured cell writer is refused, never filled.
+    fill_down,
     // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
     // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
     // commands with no menu-bar item.

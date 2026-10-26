@@ -461,6 +461,11 @@ class MainWindow final : public QMainWindow {
     void copy_selection();
     void cut_selection();
     void paste_selection();
+    // Wave 30 (W30-1.8): Task > Editing > Fill Down on a Start-column
+    // selection.  Only Start has a measured cell writer in this port, so a
+    // selection that names any other column, the project summary row, a
+    // pending insert or an empty source is refused before anything is staged.
+    void fill_down();
     // Mirrors the core model's rectangle onto the QTableView (one cell when the
     // rectangle is one cell; a clear-and-select range otherwise).
     void select_core_range_in_view();

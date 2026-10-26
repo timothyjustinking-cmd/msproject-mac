@@ -53,6 +53,10 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W30-1.7: Scroll to Task scrolls the sheet to the selected row and pans
     # the chart to the task's start; a view, never a file write.
     "scroll_to_task",
+    # W30-1.8: Fill Down fills a Start-column selection through the measured
+    # start writer; a non-Start column is refused, so the command is live but
+    # its measured scope is the Start column only.
+    "fill_down",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine
