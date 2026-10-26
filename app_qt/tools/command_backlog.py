@@ -199,7 +199,7 @@ def ribbon_commands() -> list[tuple[str, str, str, str]]:
                     (
                         tab_titles.get(context[0], context[0]),
                         context[1],
-                        split.group(2),
+                        split.group(2).replace("\\n", " "),
                         command,
                     )
                 )

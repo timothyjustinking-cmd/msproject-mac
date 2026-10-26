@@ -67,7 +67,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Project | Properties | Custom Fields | implemented |  |
 | Project | Properties | WBS | disabled | future: not implemented in this port |
 | Project | Schedule | Calculate Project | disabled | future: not implemented in this port |
-| Project | Schedule | Set\nBaseline | disabled | future: not implemented in this port |
+| Project | Schedule | Set Baseline | disabled | future: not implemented in this port |
 | Project | Proofing | Spelling | implemented | gap: the port's own word list only; no Microsoft Project dictionary and no correction |
 | View | Task Views | Gantt Chart | disabled | future: not implemented in this port |
 | View | Task Views | Task Usage | implemented |  |
