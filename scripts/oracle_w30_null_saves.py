@@ -58,6 +58,8 @@ CONTROLS = [
     "wave30-timeline-control.mpp",
     # W30-1.9: the Font Bold pair (Application.FontBold on one Name cell).
     "wave30-textstyle-control.mpp",
+    # W30-2.0: the Resource tab's first pair (Add Resources, a work row).
+    "wave30-resource-add-control.mpp",
 ]
 
 

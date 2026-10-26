@@ -377,6 +377,18 @@ DOCUMENTED = {
         "AEE6A9F12112224809543F95D7A017BCF5FB0503D18075FCEFA432A87620A723",
     "tests/data/wave30-task-mode-auto.mpp":
         "9E8ECD8F4E554C72D0FFF79F1C43254CF06141248188849C196F8E73927AE3F1",
+    # Wave 30 (W30-2.0): the Resource tab's Add Resources pair, built by
+    # scripts/oracle_w30_resource_pairs.py under C:/w30/fixtures-g2 with
+    # neutral metadata, plus the control's no-edit save from
+    # scripts/oracle_w30_null_saves.py.  Project adds a Work resource row AND
+    # a resource-calendar row; the port's add_resource_row writes only the six
+    # TBkndRsc streams, so the command stays disabled (tests/data/README.md).
+    "tests/data/wave30-resource-add-control.mpp":
+        "A5B12A50D56BAFD097680E5F078EA007BAB7CFEB30B69BAFEBEDF3387937EC55",
+    "tests/data/wave30-resource-add.mpp":
+        "527578E5C62E11FF2B32298D5E28A4A080707E219DD083809D46370B164FCCE2",
+    "tests/data/wave30-resource-add-control-null.mpp":
+        "A07A5F75F0AE7F7678965A87F3FFBB8DFA7212A9379A3A849CA3FC36CE5BDFD6",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
