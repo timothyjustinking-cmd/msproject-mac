@@ -152,3 +152,167 @@ The numbers belong to `9c3213e`; the marker commit that follows is docs-only.
   refusal itself.
 
 WAVE-31-G0-COMPLETE
+
+## G1 - View tab: data commands
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W31-1.1 | Sort (ID, Start, Finish, Priority, Name; the Sort dialog) | **DONE (session-only; file bytes kept)** | commit `0707d4d`; gates `build/w31/W31-1.1-sort.log` |
+| W31-1.2 | Outline (show level 1..9, all subtasks) | **DONE (session-only; file bytes kept)** | commit `eb39bd4`; gates `build/w31/W31-1.2-outline.log` |
+| W31-1.3 | Tables (switch between the file's stored tables) | **DONE (session-only; file bytes kept)** | commit `2852bd6`; fixture `tests/data/wave31-tables.mpp`; gates `build/w31/W31-1.3-tables.log` |
+
+All three items are done.  Project persists each of these view changes in the
+file (sort order, applied table, outline level shown); per wave-31 brief
+section 1 the port applies each to the loaded session only, and the gates
+assert the file's SHA-256 and the RecordSet's row order are unchanged, so
+no persisted view-state save path was measured or enabled.
+The three commands are enabled on View > Data and wired to
+`RibbonCommand::data_sort`, `data_outline` and `data_tables`; the pin, the
+inventory and the generated backlog agree.  Group by and Highlight are
+ribbon combos, not command controls: the generator lists only commands
+("the combos ... are controls, not menu commands",
+`app_qt/tools/command_backlog.py`), so the backlog does not list them
+disabled and the brief's condition for changing them is not met; the pin
+keeps both as they were (View Data combo rows with enabled 0).
+
+W31-1.1 detail:
+
+- The dialog (`app_qt/dialogs.cpp`, `SortDialog`) offers the brief's five
+  keys -- ID, Start, Finish, Priority, Name -- one Order combo
+  (Ascending/Descending) and Sort / Clear Sort / Cancel; the hint states
+  that the sort is session-only and that children stay under their summary.
+  `app::build_sort` builds one primary key; `app::sort_display_rows` runs the
+  tested `core::view::apply_sort` with `keep_outline` and then keeps only the
+  sheet's visible rows.  The RecordSet's OutlineLevel is 0-based while
+  `apply_sort` expects Project's 1-based levels, so the sort runs on a
+  short-lived copy whose app-only field `0x0b4fff02` carries level + 1; that
+  field is never written to a file.  The synthetic project row (uid 0) stays
+  first.
+- `TaskRow` gains the reader's Priority word (Task.Priority `0x0b400019`,
+  FixedData +78) and `make_record_set` exposes it; no other reader field
+  changes.
+- `PlanDocument` owns the definition and one display-order path
+  (`ordered_display_rows()`: visible rows -> sort -> filter) used by both
+  `display_rows()` and the Gantt `RowMap`, so sheet and chart agree.
+  `SheetTableModel`'s display list activates for filter OR sort, otherwise a
+  sort-only document would draw file order.
+- Gates: `sort_tests` 36 checks; the dialog gate measures `SortDialog`;
+  `qt_data_commands` asserts the sorted display order, the RowMap/Gantt
+  order, the RecordSet's unchanged file order and the fixture's unchanged
+  SHA-256.  app ctest 23/23 and app_qt ctest 33/33.
+- Residual note (not a finding): the dialog sorts on one key, where
+  Project's dialog offers up to three levels; the brief asked for the
+  commonest keys and the single-key shape is what this item delivers.
+
+W31-1.2 detail:
+
+- `PlanDocument::show_outline_level(N)` expands everything, then collapses
+  every summary at port outline level N-1, so exactly the rows through
+  Project's (1-based) level N stay visible; levels outside 1..9 are refused.
+  `show_all_subtasks()` is `expand_all()`.  Both reuse the tested
+  `core::sheet::SheetModel` collapse state, which the display row list and
+  the Gantt RowMap already follow; an active sort still orders the rows that
+  remain (visible rows first, then sort).
+- The shell's Outline menu (Task Sheet view) lists Level 1..9 and All
+  Subtasks and reports each choice in the status bar.  The ribbon control is
+  enabled and wired (`RibbonCommand::data_outline`); the pin, inventory and
+  backlog agree.
+- Gates: `qt_data_commands` adds the outline cases -- Level 1 -> uids
+  {1,6}, Level 2 -> {1,2,5,6}, Levels 3 and 9 -> all six, 0 and 10 refused,
+  All Subtasks restores everything, and under an ID-descending sort Level 1
+  -> {6,1} while All Subtasks -> {6,1,5,2,4,3}.  The RecordSet stays in file
+  order and the fixture's SHA-256 is unchanged in every case (59 checks at
+  this commit; the same case runs in the 96-check target now).  app ctest
+  23/23 and app_qt ctest 33/33.
+- Residual note (not a finding): the shown level is session collapse state;
+  a structural rebuild constructs a fresh `SheetModel`
+  (`plan_document.cpp`, `rebuild_from_base`) and so returns to the sheet's
+  default expansion.  The level shown is not persisted, which is the
+  session-only choice above.
+
+W31-1.3 detail:
+
+- `PlanDocument` keeps every task table `214/CTable` stores, in file order.
+  A table is a task table when it has a task-field column (`0x0b40xxxx`) and
+  no resource-field column (`0x0c40xxxx`), so a Resource Sheet/Usage table is
+  never offered in the Task Sheet.  The load still applies the file's first
+  task table, so every earlier fixture renders as before.  An index the file
+  does not store is refused.
+- `select_table()` applies one through the sheet's stored columns
+  (`SheetModel::set_columns` + `app::apply_edit_policy`) and keeps the
+  RecordSet, display order, collapse state and selected task.
+  `MainWindow::apply_table()` then rebuilds the adapter's display columns,
+  the header band and the widths through `configure_task_columns()` before
+  the row refresh and selection sync, so the sheet really shows the newly
+  applied table.
+- The shell's Tables menu is built from the stored captions (display
+  caption preferred, Project's "&" accelerator stripped) with the applied
+  table checked, and reports `table: <caption> (session only)`.  The ribbon
+  control is enabled and wired (`RibbonCommand::data_tables`); the pin,
+  inventory and backlog agree.
+- Fixture: `tests/data/wave31-tables.mpp`, built by the new
+  `scripts/oracle_w31_tables.py` through Project 2021 under the neutral root
+  `C:/w31/tables` (a synthetic-base copy with neutral metadata;
+  `TableEdit(Create=True, NewName="Review")`, then a replacement Text1
+  column at ColumnPosition 0).  COM reopens it with `TaskTables.Count == 2`
+  and Entry applied; the port decodes Entry (9 columns, second
+  `0x0b4000cd`) and Review (9 columns, second `0x0b400033` titled "Text1").
+  Provenance is in `tests/data/README.md` and the hash is pinned in
+  `scripts/check_fixtures.py`.
+- Gates: `qt_data_commands` now takes both fixtures and asserts the two
+  captions, the applied table, Entry's Indicators column, Review's Text1
+  title, a selection kept across two switches, unchanged display/RecordSet
+  and file SHA-256, refusal of a missing index, and the one-table outline
+  fixture listing only Entry (96 checks total).  app ctest 23/23 and app_qt
+  ctest 33/33.  Fixture privacy check: no UTF-16LE/ASCII local path or
+  operator name and no embedded `C:/w31` string.
+- Residual note (not a finding): the initially applied table is the first
+  stored task table; the file's applied-view table (which Project persists)
+  is not read, and the applied table is not written.  Both belong to the
+  unmeasured persisted view-state path above.
+
+Per-commit gates (logs under `build/w31/`, named `W31-1.x-*.log`; all three
+logs report scan HEAD 0 files / 0 hits, guard `wave30..HEAD` exit 0, hex
+grep no match and fixtures OK; every commit's app and app_qt configure/build
+exited 0):
+
+| commit | item tests | app ctest | app_qt ctest |
+|---|---|---|---|
+| W31-1.1 `0707d4d` | `sort_tests` 36 checks; dialog gate; `qt_data_commands` sort case | 23/23 | 33/33 |
+| W31-1.2 `eb39bd4` | `qt_data_commands` 59 checks | 23/23 | 33/33 |
+| W31-1.3 `2852bd6` | `qt_data_commands` 96 checks; oracle and fixture privacy check | 23/23 | 33/33 |
+
+G1 group gates (fresh trees configured from scratch on `2852bd6` under
+`build/w31-fresh{,-app,-qt}`, log `build/w31/W31-G1-fresh-gates.log`; the
+run started 23:42 and finished 23:50 with no lock retries):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 23/23 / 33/33 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (135 documented hashes, 171 tracked `.mpp`); paths OK (218 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `wave30..HEAD` / `guard_names wave30..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The numbers belong to `2852bd6`; the marker commit that follows is
+docs-only.  G1 adds one tracked `.mpp` fixture (`wave31-tables.mpp`), taking
+the count from 170 at G0's close to 171.
+
+## Found, not fixed
+
+- Nothing new.  G1 raised no Critical, High, Medium or Low finding beyond
+  the three items above.
+- Residual notes (not findings): the Sort dialog is single-key; the Outline
+  level is lost on a structural rebuild; the initially applied table is the
+  first stored task table rather than the file's applied-view table; and
+  all three view-state save paths stay unmeasured by the session-only
+  choice, with the file's bytes asserted unchanged.  Group by and
+  Highlight are combos, so the generated backlog (which lists command
+  controls only) does not list them disabled and the brief's condition does
+  not apply.
+
+WAVE-31-G1-COMPLETE
