@@ -377,6 +377,29 @@ bool check_new_summary_shape(const PlanInput& plan, std::uint32_t uid,
                 "resource-loaded row";
         return false;
     }
+    // W30-0.1 (R29-1, Critical): the indent writer TOMBSTONES the new summary's
+    // one assignment, but only Project's placeholder has a measured tombstone.
+    // A real assignment -- including a cost/material resource or a work
+    // resource at zero work, which has_work_resource_assignment above does not
+    // see -- is DELETED by that tombstone (the review's R29-1).  Refuse unless
+    // the row carries exactly one assignment row, Project's placeholder.
+    const ActualsAssignmentShape assignment = actuals_assignment_shape(plan, uid);
+    if (assignment.rows != 1) {
+        error = "task uid " + std::to_string(uid) + " has " +
+                std::to_string(assignment.rows) +
+                " assignment rows and would become the summary; the indent "
+                "tombstone is measured only on Project's one placeholder "
+                "assignment, so this edit would lose or damage an assignment";
+        return false;
+    }
+    if (assignment.real) {
+        error = "task uid " + std::to_string(uid) +
+                " has a real resource assignment (not Project's unassigned "
+                "placeholder) and would become the summary; the indent "
+                "tombstones that assignment, so the edit would delete it, and "
+                "Project's indent of a real assignment was never measured";
+        return false;
+    }
     if (std::find(pending_actuals.begin(), pending_actuals.end(), uid) !=
         pending_actuals.end()) {
         error = "task uid " + std::to_string(uid) +

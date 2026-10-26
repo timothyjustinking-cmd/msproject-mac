@@ -23,6 +23,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <map>
 #include <string>
@@ -92,7 +93,12 @@ constexpr std::uint32_t kProjectUid = 0;
 constexpr std::size_t kAssnStride = 110;
 constexpr std::size_t kAssnUid = 0;
 constexpr std::size_t kAssnTask = 4;
+constexpr std::size_t kAssnResource = 8;
 constexpr std::size_t kAssnPlannedWork = 20;
+/* Project's UNASSIGNED PLACEHOLDER: the assignment row stores this in +8 and
+ * the reader maps it to AssignmentRow::resource_uid 0.  It is the only
+ * assignment kind the measured indent tombstones (W30-0.1). */
+constexpr std::uint32_t kNullResource = 0xFFFF0001u;
 /* +52 Start / +56 Finish / +60 Resume copy the assigned task's effective +104 /
  * +108 (reader.h), and +104 repeats the start.  Measured on the re-created
  * outdent assignment in all three pairs: the automatic wave-29 pairs mirror the
@@ -1491,6 +1497,26 @@ bool apply_indent(State& state, OutlineEdit const& edit,
                   std::to_string(summary.uid) +
                   " already carries a tombstoned assignment; that shape is not"
                   " measured for an indent";
+        return false;
+    }
+    /* W30-0.1 (R29-1, Critical): the measured tombstone is Project's UNASSIGNED
+     * PLACEHOLDER, whose FixedData +8 word is the 0xFFFF0001 null resource.
+     * Tombstoning a row that names a real resource would delete a real
+     * assignment from the file (a cost/material resource or a work resource at
+     * zero work), a shape no pair measured.  Defence in depth: the edit model
+     * refuses this too, but a hand-built queue must not reach the write. */
+    std::uint32_t const assigned_resource = get_u32(
+        state.assn.fixed, assn_rows.front() * kAssnStride + kAssnResource);
+    if (assigned_resource != kNullResource) {
+        char resource_hex[16] = {};
+        std::snprintf(resource_hex, sizeof(resource_hex), "0x%08x",
+                      static_cast<unsigned>(assigned_resource));
+        warning = task_label(edit.uid) + ": task uid " +
+                  std::to_string(summary.uid) +
+                  " has an assignment whose resource word is " +
+                  std::string(resource_hex) +
+                  ", not Project's 0xffff0001 placeholder; the indent would "
+                  "tombstone a real assignment, so the edit is refused";
         return false;
     }
 

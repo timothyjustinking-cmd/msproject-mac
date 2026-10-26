@@ -221,6 +221,13 @@ std::uint32_t get_u32(const Bytes& bytes, std::size_t offset) {
            (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
 }
 
+void put_u32(Bytes& bytes, std::size_t offset, std::uint32_t value) {
+    bytes[offset] = static_cast<std::uint8_t>(value & 0xffu);
+    bytes[offset + 1] = static_cast<std::uint8_t>((value >> 8) & 0xffu);
+    bytes[offset + 2] = static_cast<std::uint8_t>((value >> 16) & 0xffu);
+    bytes[offset + 3] = static_cast<std::uint8_t>((value >> 24) & 0xffu);
+}
+
 std::string task_stream(const char* tail) {
     return std::string("114/TBkndTask/") + tail;
 }
@@ -1216,6 +1223,38 @@ void check_pair(const PairCase& pair) {
  * can be tested without waiting for a Project auto-scheduled pair.  The
  * FixedMeta/Fixed2Meta pairing is the one mppwrite uses (47-byte entry +4
  * names the FixedData row offset; the same index in the 96-byte Fixed2Meta). */
+/* W30-0.1: write a copy of `source` whose TBkndAssn row for `uid` names a REAL
+ * resource (FixedData +8 = 7) instead of Project's 0xFFFF0001 placeholder.  The
+ * plan loaded from the untouched control keeps saying "placeholder", so the
+ * edit model accepts the indent and only the writer's defence-in-depth guard
+ * can refuse it at save time. */
+bool write_real_assignment_copy(const std::filesystem::path& source,
+                                const std::filesystem::path& target,
+                                std::uint32_t uid, std::string& failure) {
+    constexpr std::size_t kAssnResource = 8;
+    constexpr std::uint32_t kRealResource = 7;
+    try {
+        mppwrite::CfbDocument document =
+            mppwrite::CfbDocument::from_file(source.string());
+        Bytes fixed = document.read_stream(assn_stream("FixedData"));
+        const std::size_t row = assn_uid_row(fixed, uid);
+        if (row == kNoIndex) {
+            failure = "the control has no assignment row for uid " +
+                      std::to_string(uid);
+            return false;
+        }
+        put_u32(fixed, kAssnStride * row + kAssnResource, kRealResource);
+        document.replace_stream(assn_stream("FixedData"), fixed);
+        std::error_code remove_error;
+        std::filesystem::remove(target, remove_error);
+        document.save(target.string());
+        return true;
+    } catch (const std::exception& error) {
+        failure = error.what();
+        return false;
+    }
+}
+
 bool write_auto_row_copy(const std::filesystem::path& source,
                          const std::filesystem::path& target, std::uint32_t uid,
                          std::string& failure) {
@@ -1370,6 +1409,37 @@ void check_refusals() {
     check(error.find("carries work") != std::string::npos,
           "the work refusal names the assignment");
 
+    // W30-0.1 (R29-1, Critical): the indent tombstones the new summary's one
+    // assignment, so a REAL assignment -- including a work resource at zero
+    // work, which the "carries work" rule above does not see -- is refused
+    // before the save can delete it.
+    app::PlanInput real_zero = indent_plan;
+    for (app::AssignmentRow& assignment : real_zero.assignments) {
+        if (assignment.task_uid == 1) {
+            assignment.resource_uid = 7;
+            assignment.work_ticks = 0;
+        }
+    }
+    check(!app::make_outline_edit(real_zero, indent_control.string(), 2, true,
+                                  edit, error),
+          "indent under a real zero-work assignment is refused");
+    check(error.find("real resource assignment") != std::string::npos,
+          "the real-assignment refusal names the assignment kind");
+
+    app::PlanInput no_assignment = indent_plan;
+    no_assignment.assignments.erase(
+        std::remove_if(no_assignment.assignments.begin(),
+                       no_assignment.assignments.end(),
+                       [](const app::AssignmentRow& assignment) {
+                           return assignment.task_uid == 1;
+                       }),
+        no_assignment.assignments.end());
+    check(!app::make_outline_edit(no_assignment, indent_control.string(), 2, true,
+                                  edit, error),
+          "indent under a row with no assignment row is refused");
+    check(error.find("assignment rows") != std::string::npos,
+          "the no-assignment refusal names the assignment table");
+
     check(!app::make_outline_edit(indent_plan, indent_control.string(), 2, true, edit,
                                   error, {1u}),
           "indent under a row with a pending actuals edit is refused");
@@ -1416,6 +1486,61 @@ void check_refusals() {
         check(displaced.applied().front().kind ==
                   app::StructuralKind::outline_indent,
               "the restored edit is the outline indent");
+    }
+
+    /* W30-0.1 (R29-1, Critical): the writer's own guard.  The plan loaded from
+     * the untouched control says "placeholder", so the edit model and push()
+     * accept the indent; the SOURCE file the save reads has an assignment row
+     * that names a real resource.  The writer must refuse the tombstone and
+     * leave the assignment in the output. */
+    const std::filesystem::path real_assignment_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "w30-outline-real-assignment.mpp";
+    std::string copy_failure;
+    check(write_real_assignment_copy(indent_control, real_assignment_path, 1,
+                                     copy_failure),
+          "the real-assignment source copy is written");
+    if (std::filesystem::exists(real_assignment_path)) {
+        app::StructuralEdit real_edit;
+        check(app::make_outline_edit(indent_plan, real_assignment_path.string(), 2,
+                                     true, real_edit, error),
+              "the indent builds against the unpatched plan");
+        app::StructuralEdits real_edits;
+        check(real_edits.push(real_edit, &indent_plan),
+              "the indent is queued against the unpatched plan");
+        const std::filesystem::path real_out =
+            std::filesystem::path(APP_TEST_OUT_DIR) /
+            "w30-outline-real-assignment-out.mpp";
+        std::error_code remove_error;
+        std::filesystem::remove(real_out, remove_error);
+        const app::StructuralSaveResult real_saved = app::save_structural_edits(
+            real_edits, {}, real_assignment_path.string(), real_out.string(),
+            false);
+        check(real_saved.ok, "the save completes with the indent refused");
+        check_size(real_saved.outline_rows_written, 0,
+                   "the writer refused to tombstone the real assignment");
+        bool named_placeholder = false;
+        for (const std::string& warning : real_saved.warnings) {
+            if (warning.find("0xffff0001") != std::string::npos) {
+                named_placeholder = true;
+            }
+        }
+        check(named_placeholder,
+              "the writer's refusal names Project's placeholder resource");
+        if (std::filesystem::exists(real_out)) {
+            try {
+                mppwrite::CfbDocument out_document =
+                    mppwrite::CfbDocument::from_file(real_out.string());
+                const Bytes out_fixed =
+                    out_document.read_stream(assn_stream("FixedData"));
+                const std::size_t row = assn_uid_row(out_fixed, 1);
+                check(row != kNoIndex &&
+                          get_u32(out_fixed, kAssnStride * row + 8) == 7,
+                      "the real assignment is still in the saved file");
+            } catch (const std::exception& open_error) {
+                check(false, "the refused save reopens");
+                std::printf("OPEN ERROR: %s\n", open_error.what());
+            }
+        }
     }
 }
 
