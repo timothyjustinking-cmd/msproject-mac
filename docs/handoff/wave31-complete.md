@@ -316,3 +316,160 @@ the count from 170 at G0's close to 171.
   not apply.
 
 WAVE-31-G1-COMPLETE
+
+## G2 - View tab: zoom and window commands
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W31-2.1 | Zoom (the Zoom dialog) | **DONE (session-only; file bytes kept)** | commit `712be75`; gates `build/w31/W31-2.1-*.log` |
+| W31-2.2 | Entire Project and Selected Tasks (timescale fit, measured against Project on two fixtures) | **DONE (session-only; measured on both fixtures)** | commit `6439e70`; reference `tests/data/reference/w31-zoom.measures.json`; gates `build/w31/W31-2.2-*.log` |
+| W31-2.3 | New Window, Switch Windows, Arrange All and Hide | **DONE (all four stay disabled with the exact tooltip)** | commit `25121ff`; gates `build/w31/W31-2.3-*.log` |
+| W31-2.4 | Macros | **DONE (stays disabled with the exact tooltip; no VBA)** | commit `e477012`; gates `build/w31/W31-2.4-*.log` |
+
+Items 2.1 and 2.2 are done as session-only view changes: Project persists
+zoom (and the Window group's arrangement) in the file, so per wave-31 brief
+section 1 the port applies each to the loaded session and keeps the file's
+bytes; `qt_zoom_commands` asserts the fixture's SHA-256 is unchanged in every
+case.  Items 2.3 and 2.4 cannot change the view at all in this shell and stay
+disabled with decision 9's exact tooltip `not implemented in this port`.
+
+W31-2.1 detail:
+
+- Project's View > Zoom > Zoom... (dialog 756) is live: seven Zoom to choices
+  (1 week, 2 weeks, 1 month, 3 months, Selected tasks, Entire project, Custom
+  N Days/Weeks/Months), OK / Reset / Cancel, measured 480x420 by the dialog
+  gate.  The dialog's default is Entire project, matching the captured dialog.
+- `app/layout_model` owns the measured fit: 85 % of the chart pane, centred,
+  origin floored to the unit start, window grown to contain the finish.  It
+  also carries the fixed-span helper and the mean month used by the 1-month
+  and 3-month choices.
+- `PlanDocument` keeps the session-only timescale override behind
+  `zoom_entire_project()`, `zoom_selected_tasks()` and `zoom_fixed_span()`; a
+  shell zoom change, a changed zoom preference, a load or File > New clears
+  it, and no path writes the file.
+- The ribbon's Zoom button is enabled and wired to
+  `RibbonCommand::zoom_dialog`; the pin, the inventory and the generated
+  backlog agree.
+- Gates: app ctest 23/23 and app_qt ctest 33/33; `layout_model_tests` 328
+  checks; the Zoom dialog gate reports its pinned geometry and zero failures;
+  `qt_ribbon_inventory` passes; scan/guard 0 hits; `check_fixtures.py` OK.
+- Residual note (not a finding): the custom span did not apply in the measured
+  Project run, so the dialog's Custom branch is covered by the port's own
+  tests only; it is not compared with a Project window.
+
+W31-2.2 detail:
+
+- Measurement: `scripts/oracle_w31_zoom.py`, pure COM under
+  `scripts/oracle_lock.py`.  On each fixture it selects one row
+  (`Application.SelectRow(2)`; `ActiveSelection.Tasks` then reports task ID 3)
+  and runs ZoomSelectedTasks FIRST, then ZoomEntireProject.  That order is the
+  reproducible one: ZoomSelectedTasks raises `E_FAIL` after another zoom
+  command and on multi-row selections.  Two fresh sessions per fixture agreed
+  exactly.
+- The numbers-only reference is
+  `tests/data/reference/w31-zoom.measures.json` (SHA-256
+  `C660012035C1FF922D82C35A33DE224F8DA781ED4B426A86E3E38206A8D111B5`,
+  documented in `scripts/check_fixtures.py` and the reference README).
+  Window 1500x800 pt requested; COM reports 1452x653 and a 1020 px chart pane.
+  The four windows: base entire 2026-01-04 00:00 -> 2026-01-09 20:57:54
+  (5.873541667 d, +0.689 % of the 85 % ideal), base selected task ID 3
+  2026-01-04 06:00 -> 2026-01-06 13:44:42 (2.322708333 d, +0.815 %), outline
+  entire 2026-12-10 12:00 -> 2026-12-19 03:51:48 (8.660972222 d, -0.179 %),
+  outline selected task ID 3 2026-12-11 00:00 -> 2026-12-14 23:48:42
+  (3.992152778 d, +0.543 %).  The Zoom dialog's preset windows are recorded
+  alongside: 1 week 7.0 d, 2 weeks 14.0 d, 1 month 30.969652778 d, 3 months
+  90.176458333 d.
+- Project draws the span at 85 % of the pane and floors the origin to its
+  bottom tier; on these windows that tier is finer than a day, which the
+  port's day tier cannot express.  `qt_zoom_commands` (103 checks) therefore
+  compares the measured window with the 85 % ideal within 1.5 %, then
+  separately requires the port's exact rule: origin floored to the day and at
+  or before the span, visible = max(ideal, span from the floored origin to the
+  finish), the finish contained, and the whole window equal to
+  `width / pixels_per_day`.  It also pins the no-selection fallback (Selected
+  Tasks with nothing selected equals the Entire Project window), the dialog's
+  fixed spans (weeks exact, mean months within 2 % of the measured windows for
+  the recorded reason), `session_timescale_active()` and the fixture's
+  unchanged SHA-256.
+- Enable and wire the ribbon's Entire Project and Selected Tasks to the same
+  fits (`RibbonCommand::zoom_entire`, `zoom_selected`); the pin and the
+  generated backlog agree.
+- Gates: app ctest 23/23; app_qt ctest 34/34 (`qt_zoom_commands` included);
+  scan 0 hits; guard 0; no hex labels; fixtures OK (136 documented hashes).
+
+W31-2.3 detail:
+
+- Brief clause: "within the port's single-document shell: implement what the
+  shell can honestly do; the rest stays disabled with the exact tooltip".
+  New Window would need a second window onto the same document; the shell has
+  one MainWindow and one PlanDocument and no view-sharing or per-window close
+  semantics.  Switch Windows would list only that one window.  Arrange All has
+  nothing to arrange with one window.  Hide would hide the only window and
+  leave no UI.  For all four, the honest capability is none, so all four stay
+  disabled with the exact decision-9 tooltip.
+- Each control keeps its own `RibbonCommand` id (`window_new`, `window_switch`,
+  `window_arrange`, `window_hide`) and each backlog row names the missing
+  capability instead of the generic "future" wording.  `qt_ribbon_inventory`
+  pins the id, the disabled state and the exact tooltip for all four against
+  the independent pin; the generated backlog and `ribbon_pin.tsv` agree.
+- Gates: app ctest 23/23; app_qt ctest 34/34; scan 0 hits; guard 0; no hex
+  labels; fixtures OK (136 documented hashes).
+
+W31-2.4 detail:
+
+- Project's Macros button opens the VBA macro dialog.  The port has no VBA
+  engine, editor or macro storage, so there is no macro to list or run; the
+  control stays disabled with the exact decision-9 tooltip and is wired to no
+  handler.
+- The control keeps its own `RibbonCommand` id (`macros`) and its backlog row
+  says `engine: no VBA engine, so there is no macro to list or run`.
+  `qt_ribbon_inventory` pins the id, the disabled state and the exact tooltip
+  against the independent pin.
+- Gates: app ctest 23/23; app_qt ctest 34/34; scan 0 hits; guard 0; no hex
+  labels; fixtures OK (136 documented hashes).
+
+Per-commit gates (logs under `build/w31/`, named `W31-2.x-*.log`; every
+commit's scan reports 0 files / 0 hits, guard exits 0, hex grep finds no match
+and `check_fixtures.py` is OK; every commit's app and app_qt configure/build
+exit 0).  W31-2.4's build and test evidence is the group fresh-tree run at
+`e477012`; W31-2.3's were re-run in a detached worktree at `25121ff` so its log
+exists beside the commit.
+
+| commit | item tests | app ctest | app_qt ctest |
+|---|---|---|---|
+| W31-2.1 `712be75` | `layout_model_tests` 328 checks; Zoom dialog gate (480x420); `qt_ribbon_inventory` | 23/23 | 33/33 |
+| W31-2.2 `6439e70` | `qt_zoom_commands` 103 checks; oracle two-session agreement on both fixtures | 23/23 | 34/34 |
+| W31-2.3 `25121ff` | `qt_ribbon_inventory` (Window ids, disabled state, exact tooltip) | 23/23 | 34/34 |
+| W31-2.4 `e477012` | `qt_ribbon_inventory` (Macros id, disabled state, exact tooltip) | 23/23 | 34/34 |
+
+G2 group gates (fresh trees configured from scratch on `e477012` under
+`build/w31-fresh{,-app,-qt}`, log `build/w31/W31-G2-fresh-gates.log`; the run
+started 01:11 and finished 01:19 with no lock retries):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 52/52 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1100 checks / 420 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app ctest / app_qt ctest | 23/23 / 34/34 passed |
+| `check_fixtures.py` / oracle provenance | fixtures OK (136 documented hashes, 171 tracked `.mpp`); paths OK (219 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `wave30..HEAD` / `guard_names wave30..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+
+The numbers belong to `e477012`; the marker commit that follows is docs-only.
+
+## Found, not fixed
+
+- Nothing new.  G2 raised no Critical, High, Medium or Low finding beyond the
+  four items above.
+- Residual notes (not findings): the port's day tier cannot express Project's
+  sub-day zoom margin, so the four measured windows are compared on the 85 %
+  ideal (within 1.5 %) plus the port's own exact rule rather than pixel for
+  pixel; the Zoom dialog's Custom span was not measured against Project
+  because the measured run did not apply it; and the persisted zoom/arrangement
+  save path stays unmeasured by the session-only choice for zoom and the
+  disabled controls for the Window group.
+
+WAVE-31-G2-COMPLETE
