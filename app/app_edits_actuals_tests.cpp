@@ -1791,14 +1791,37 @@ void check_zero_update_noop() {
           "a hand-built 0 -> 0 date target is refused");
 }
 
+/* W31-0.3: one % Complete word on a copy (the committed controls are never
+ * opened in place). */
+bool write_percent_word_copy(const std::filesystem::path& source,
+                             const std::filesystem::path& target,
+                             std::uint32_t uid, std::uint16_t percent,
+                             std::string& failure) {
+    try {
+        mppwrite::CfbDocument document =
+            mppwrite::CfbDocument::from_file(source.string());
+        mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
+        table.set_u16(table.row_for_uid(uid),
+                      mppwrite::task_row::kPercentComplete, percent);
+        table.store_into(document);
+        std::error_code remove_error;
+        std::filesystem::remove(target, remove_error);
+        document.save(target.string());
+        return true;
+    } catch (const std::exception& error) {
+        failure = error.what();
+        return false;
+    }
+}
+
 /* W30-0.5 (R29-5, High): the summary roll-up rules were measured with ONE
  * progressed leaf under automatic summaries.  The model refuses a second
  * progressed leaf on an edited row's ancestor chain -- pre-existing (a) or
  * queued in the same save (d) -- and a manually scheduled chain summary (b).
- * The writer recomputes only that chain: (e) saves a copy whose uid 5 is a
- * summary of a 40 % uid 6, so the old every-summary sweep would overwrite uid
- * 5's stored roll-up with the one-leaf rule; the save must leave it byte for
- * byte while still rolling up the edited row's real chain. */
+ * The writer recomputes only that chain.  W31-0.3 (R30-3, High): the project
+ * row's roll-up sums the WHOLE file, and every measured pair but Update
+ * Project's Entire project scope has progress on the edited rows only, so (e)
+ * a copy with a 40 % row outside the edited set is now refused. */
 void check_summary_rollup_scope() {
     const std::filesystem::path leaf_path =
         std::filesystem::path(APP_TEST_DATA_DIR) /
@@ -1863,16 +1886,15 @@ void check_summary_rollup_scope() {
     check(fresh.push(third, &plan),
           "the same edit queues when no sibling edit is pending");
 
-    /* (e) the writer's scope.  Patch a copy: uid 6 becomes a child of uid 5
+    /* (e) the save's scope.  Patch a copy: uid 6 becomes a child of uid 5
      * and carries 40 %, so uid 5 is an off-chain summary with a progressed
-     * leaf; then save the measured uid 3 edit. */
+     * leaf.  W31-0.3 then refuses the uid 3 edit: the project row's roll-up
+     * sums the whole file, and only the Entire project scope measured that. */
     std::error_code fs_error;
     std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
                                         fs_error);
     const std::filesystem::path patched_path =
         std::filesystem::path(APP_TEST_OUT_DIR) / "w30-05-two-summary.mpp";
-    const std::filesystem::path saved_path =
-        std::filesystem::path(APP_TEST_OUT_DIR) / "w30-05-two-summary-save.mpp";
     std::string patch_error;
     bool patched_ok = false;
     try {
@@ -1943,72 +1965,88 @@ void check_summary_rollup_scope() {
               plan6->percent_complete == 40,
           "the patched copy reads uid 5 as a top-level summary of uid 6");
 
+    /* W31-0.3 (R30-3, High): the save rolls the project row up over the whole
+     * file, and the only measured save with progress outside the edited rows is
+     * Update Project's Entire project scope.  The patched copy -- a 40 % uid 6
+     * outside the edited uid 3 -- is exactly the unmeasured shape, so the edit
+     * test (e) used to accept is now refused before any write. */
     app::StructuralEdit chain_edit;
-    check(app::make_percent_edit(patched, 3, 40, chain_edit, error),
-          "the chain edit is the measured shape on the patched copy");
-    app::StructuralEdits edits;
-    check(edits.push(chain_edit, &patched),
-          "the chain edit queues on the patched copy");
-    std::filesystem::remove(saved_path, fs_error);
-    const app::StructuralSaveResult saved = app::save_structural_edits(
-        edits, {}, patched_path.string(), saved_path.string(), false);
-    check(saved.ok, "the two-summary save succeeds");
-    if (!saved.ok) {
-        std::printf("SAVE ERROR: %s\n", saved.error.c_str());
-        return;
-    }
+    check(!app::make_percent_edit(patched, 3, 40, chain_edit, error),
+          "a percent edit with progress outside the edited rows is refused");
+    check(error.find("outside the edited rows") != std::string::npos &&
+              error.find("40 % complete") != std::string::npos &&
+              error.find("Entire project") != std::string::npos,
+          "the outside-progress refusal names the row, its percent and the one "
+          "measured file-wide scope");
 
-    mppwrite::CfbDocument input_document;
-    mppwrite::CfbDocument output_document;
-    mppwrite::TaskTable in_table;
-    mppwrite::TaskTable out_table;
-    try {
-        input_document = mppwrite::CfbDocument::from_file(patched_path.string());
-        output_document = mppwrite::CfbDocument::from_file(saved_path.string());
-        in_table = mppwrite::TaskTable::from_document(input_document);
-        out_table = mppwrite::TaskTable::from_document(output_document);
-    } catch (const std::exception& open_error) {
-        check(false, "the patched copy and the port's save open");
-        std::printf("OPEN ERROR: %s\n", open_error.what());
-        return;
+    /* The same edit is measured on the clean control; push() judges it against
+     * the file it would save. */
+    app::StructuralEdit clean_edit;
+    check(app::make_percent_edit(plan, 3, 40, clean_edit, error),
+          "the same percent edit still builds on the clean control");
+    app::StructuralEdits refused_queue;
+    check(!refused_queue.push(clean_edit, &patched),
+          "push() refuses the edit against a file with progress outside it");
+
+    /* The date-edit half: a one-row selection in a flat control whose other
+     * leaf carries 40 % is refused by make_update_actuals_edit. */
+    const std::filesystem::path date_control =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-update-control.mpp";
+    const std::filesystem::path date_patched =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "w31-03-date-progress.mpp";
+    std::string date_patch_error;
+    bool date_patched_ok = false;
+    if (std::filesystem::exists(date_control)) {
+        date_patched_ok =
+            write_percent_word_copy(date_control, date_patched, 3, 40,
+                                    date_patch_error);
     }
-    const Bytes in_fixed = input_document.read_stream(task_stream("FixedData"));
-    const Bytes out_fixed = output_document.read_stream(task_stream("FixedData"));
-    constexpr std::size_t kTaskRowSize = 202;
-    const std::size_t in_row5 = in_table.row_for_uid(5);
-    const std::size_t out_row5 = out_table.row_for_uid(5);
-    check(in_table.u16(in_row5, mppwrite::task_row::kPercentComplete) == 0,
-          "the patched copy's own summary still stores the source roll-up");
-    check(in_table.u16(in_table.row_for_uid(6),
-                       mppwrite::task_row::kPercentComplete) == 40 &&
-              in_table.u32(in_table.row_for_uid(6),
-                           mppwrite::task_row::kActualDuration) != 0,
-          "the off-chain summary has a progressed leaf");
-    check(same_span(in_fixed, out_fixed, kTaskRowSize * in_row5, kTaskRowSize) &&
-              same_span(in_fixed, out_fixed,
-                        kTaskRowSize * in_table.row_for_uid(6), kTaskRowSize),
-          "the off-chain summary and its leaf keep their FixedData rows");
-    check(in_table.u16(in_row5, mppwrite::task_row::kPercentComplete) ==
-                  out_table.u16(out_row5, mppwrite::task_row::kPercentComplete) &&
-              in_table.u32(in_row5, mppwrite::task_row::kActualDuration) ==
-                  out_table.u32(out_row5, mppwrite::task_row::kActualDuration) &&
-              in_table.u32(in_row5, mppwrite::task_row::kRemainingDuration) ==
-                  out_table.u32(out_row5,
-                                mppwrite::task_row::kRemainingDuration) &&
-              in_table.u32(in_row5, mppwrite::task_row::kActualStart) ==
-                  out_table.u32(out_row5, mppwrite::task_row::kActualStart) &&
-              in_table.u32(in_row5, mppwrite::task_row::kResume) ==
-                  out_table.u32(out_row5, mppwrite::task_row::kResume) &&
-              in_table.u32(in_row5, mppwrite::task_row::kStop) ==
-                  out_table.u32(out_row5, mppwrite::task_row::kStop),
-          "the off-chain summary keeps its stored roll-up words (the old "
-          "every-summary sweep rewrote them)");
-    const std::size_t in_row2 = in_table.row_for_uid(2);
-    const std::size_t out_row2 = out_table.row_for_uid(2);
-    check(in_table.u16(in_row2, mppwrite::task_row::kPercentComplete) == 0 &&
-              out_table.u16(out_row2, mppwrite::task_row::kPercentComplete) == 20,
-          "the edited row's chain summary is still written (Project's measured "
-          "20 %)");
+    check(date_patched_ok, "the flat date-update control is patched with a 40 % "
+                           "row outside the selection");
+    if (date_patched_ok) {
+        app::PlanInput date_plan;
+        bool date_plan_ok = true;
+        try {
+            date_plan = app::plan_input_from_document(
+                mpp::load_file(date_patched.string()));
+        } catch (const std::exception& load_error) {
+            check(false, "the patched date-update control loads");
+            std::printf("LOAD ERROR: %s\n", load_error.what());
+            date_plan_ok = false;
+        }
+        if (date_plan_ok) {
+            app::StructuralEdit date_edit;
+            check(!app::make_update_actuals_edit(
+                      date_plan, date_patched.string(), {1u},
+                      app::date32_from_packed(kThroughRaw), false, date_edit,
+                      error),
+                  "make_update_actuals_edit refuses a selection with progress "
+                  "outside it");
+            check(error.find("outside the edited rows") != std::string::npos,
+                  "the date refusal names the outside-progress rule");
+
+            /* Entire project is the measured exception: push()'s scope check
+             * takes the edit's flag (make_update_actuals_edit sets it only for
+             * the measured All scope).  The same hand-built one-row date update
+             * passes with the flag and is refused without it. */
+            app::StructuralEdit selected_update;
+            selected_update.kind = app::StructuralKind::update_actuals;
+            selected_update.through_date = app::date32_from_packed(kThroughRaw);
+            app::ActualsTarget target;
+            target.uid = 1;
+            target.percent = 50;
+            target.actual_ticks = 12000;
+            target.step_percent = 50.0;
+            selected_update.actuals.push_back(target);
+            app::StructuralEdits selected_scope;
+            check(!selected_scope.push(selected_update, &date_plan),
+                  "a hand-built date update over part of the file is refused");
+            selected_update.update_entire_project = true;
+            app::StructuralEdits entire_scope;
+            check(entire_scope.push(selected_update, &date_plan),
+                  "the Entire project flag is the one measured exception");
+        }
+    }
 }
 
 /* W30-0.6 (R29-6, High): the resource-loaded contour rule has one measured

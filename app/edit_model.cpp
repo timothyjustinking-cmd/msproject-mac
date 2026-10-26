@@ -479,7 +479,11 @@ struct RollupEditRow {
 
 bool check_summary_rollup_scope(const PlanInput& plan,
                                 const std::vector<RollupEditRow>& edited,
-                                std::string& error) {
+                                bool entire_project, std::string& error) {
+    std::set<std::uint32_t> edited_uids;
+    for (const RollupEditRow& edit : edited) {
+        edited_uids.insert(edit.uid);
+    }
     std::vector<bool> ancestor(plan.tasks.size(), false);
     for (const RollupEditRow& edit : edited) {
         std::size_t target = plan.tasks.size();
@@ -555,6 +559,30 @@ bool check_summary_rollup_scope(const PlanInput& plan,
                     (progressed > 2 ? ", ..." : "") +
                     "); the summary roll-up was measured with ONE progressed "
                     "leaf, so no Project save pair measures this save";
+            return false;
+        }
+    }
+    // W31-0.3 (R30-3, High): the actuals save rolls the project row up over the
+    // WHOLE file -- its percent, actual duration and work are the file's stored
+    // sums, and its Resume/Stop fall back to the project start when no chain
+    // summary carries progress -- but every measured pair except Update
+    // Project's Entire project scope has progress on the edited rows only.  A
+    // progressed row outside the edited set (an off-chain summary's leaf, or
+    // another top-level task) is left in place by a save whose project row is
+    // then rewritten with a different sum; no Project pair measures it.  The
+    // project row itself is the measured roll-up target and is not counted.
+    if (!entire_project) {
+        for (const TaskRow& row : plan.tasks) {
+            if (row.uid == 0 || edited_uids.count(row.uid) != 0 ||
+                row.percent_complete == 0) {
+                continue;
+            }
+            error = "task uid " + std::to_string(row.uid) + " is outside the "
+                    "edited rows and stores " +
+                    std::to_string(row.percent_complete) +
+                    " % complete; the project row's roll-up sums the whole file, "
+                    "and the only measured save with progress outside the edited "
+                    "rows is Update Project's Entire project scope";
             return false;
         }
     }
@@ -1554,7 +1582,7 @@ bool make_percent_edit(const PlanInput& plan, std::uint32_t uid, std::uint16_t p
     // chain summary with another progressed leaf (or manual scheduling) has no
     // measured roll-up.
     if (!check_summary_rollup_scope(
-            plan, std::vector<RollupEditRow>{{uid, percent > 0}}, error)) {
+            plan, std::vector<RollupEditRow>{{uid, percent > 0}}, false, error)) {
         return false;
     }
     error.clear();
@@ -1832,6 +1860,23 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
                 "untouched, so there is nothing to write";
         return false;
     }
+    // W29-0.3: Update Project's "Entire project" scope is the only one whose
+    // project row takes the earliest per-row Resume/Stop.  `uids` IS the scope,
+    // so the flag is true exactly when it names every live, saved, non-summary
+    // task of the plan -- the list the app's All scope builds.  A pending insert
+    // (file_row 0) has no file row and a pending delete is already out of the
+    // plan, so neither changes the comparison.  W31-0.3 computes it before the
+    // roll-up scope check, whose one exception is this measured scope.
+    built.update_entire_project = true;
+    for (const TaskRow& candidate : plan.tasks) {
+        if (candidate.uid == 0 || candidate.summary || candidate.file_row == 0) {
+            continue;
+        }
+        if (seen.find(candidate.uid) == seen.end()) {
+            built.update_entire_project = false;
+            break;
+        }
+    }
     // W30-0.5 (R29-5, High): the whole update is one actuals write, so the
     // chain summaries see every target at once; two progressed leaves under
     // one summary are unmeasured.
@@ -1841,24 +1886,9 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
         for (const ActualsTarget& target : built.actuals) {
             edited.push_back({target.uid, target.percent > 0});
         }
-        if (!check_summary_rollup_scope(plan, edited, error)) {
+        if (!check_summary_rollup_scope(plan, edited,
+                                        built.update_entire_project, error)) {
             return false;
-        }
-    }
-    // W29-0.3: Update Project's "Entire project" scope is the only one whose
-    // project row takes the earliest per-row Resume/Stop.  `uids` IS the scope,
-    // so the flag is true exactly when it names every live, saved, non-summary
-    // task of the plan -- the list the app's All scope builds.  A pending insert
-    // (file_row 0) has no file row and a pending delete is already out of the
-    // plan, so neither changes the comparison.
-    built.update_entire_project = true;
-    for (const TaskRow& candidate : plan.tasks) {
-        if (candidate.uid == 0 || candidate.summary || candidate.file_row == 0) {
-            continue;
-        }
-        if (seen.find(candidate.uid) == seen.end()) {
-            built.update_entire_project = false;
-            break;
         }
     }
     out = std::move(built);
@@ -2537,7 +2567,7 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                     }
                 }
                 edited.push_back({edit.uid, edit.percent > 0});
-                if (!check_summary_rollup_scope(*plan, edited, error)) {
+                if (!check_summary_rollup_scope(*plan, edited, false, error)) {
                     return false;
                 }
             }
@@ -2656,7 +2686,9 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                     edited.push_back({target.uid, target.percent > 0});
                 }
                 std::string scope_error;
-                if (!check_summary_rollup_scope(*plan, edited, scope_error)) {
+                if (!check_summary_rollup_scope(*plan, edited,
+                                                edit.update_entire_project,
+                                                scope_error)) {
                     return false;
                 }
             }
