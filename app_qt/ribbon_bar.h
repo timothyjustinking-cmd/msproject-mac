@@ -90,6 +90,11 @@ enum class RibbonCommand : std::uint8_t {
     // Task Inspector pane (the selected row's scheduler facts, from the plan
     // by UID); a view command, never a file write.
     inspect,
+    // Wave 30 (W30-3.3): the Project tab's Spelling.  It opens a read-only
+    // report of the task names that contain a word outside the port's own
+    // word list (app::spelling_issues).  No Microsoft Project dictionary data,
+    // no correction and no write path: a view command.
+    spelling,
     // Wave 30 (W30-2.2): the Resource tab's Details.  Project opens the
     // Resource Form; this port docks its read-only Resource Form in the
     // Details splitter and switches to the Resource Sheet so the pane has a

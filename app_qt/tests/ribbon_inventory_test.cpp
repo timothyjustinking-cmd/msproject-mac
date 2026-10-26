@@ -519,6 +519,8 @@ const EnabledWiring kEnabledWiring[] = {
     {"Project", "Schedule", "Set Baseline", "", "set_baseline_menu"},
     {"Project", "Schedule", "Move Project", "", "move_project"},
     {"Project", "Status", "Update Project", "", "update_project"},
+    // W30-3.3: Spelling opens the read-only word-list report over task names.
+    {"Project", "Proofing", "Spelling", "", "spelling"},
     {"Gantt Chart Format", "Columns", "Custom Fields", "custom_fields", ""},
     // W29-2.1: the Format group's two dialog launchers and the Bar Styles
     // group's Format split open live dialogs.
@@ -582,6 +584,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::scroll_to_task: return "scroll_to_task";
         case RibbonCommand::fill_down: return "fill_down";
         case RibbonCommand::inspect: return "inspect";
+        case RibbonCommand::spelling: return "spelling";
         case RibbonCommand::resource_details: return "resource_details";
         case RibbonCommand::project_information: return "project_information";
         case RibbonCommand::change_working_time: return "change_working_time";

@@ -68,7 +68,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Project | Properties | WBS | disabled | future: not implemented in this port |
 | Project | Schedule | Calculate Project | disabled | future: not implemented in this port |
 | Project | Schedule | Set\nBaseline | disabled | future: not implemented in this port |
-| Project | Proofing | Spelling | disabled | future: not implemented in this port |
+| Project | Proofing | Spelling | implemented | gap: the port's own word list only; no Microsoft Project dictionary and no correction |
 | View | Task Views | Gantt Chart | disabled | future: not implemented in this port |
 | View | Task Views | Task Usage | implemented |  |
 | View | Task Views | Network Diagram | disabled | future: not implemented in this port |
@@ -162,6 +162,6 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 
 ## Summary
 
-* ribbon commands: 95 (71 disabled)
+* ribbon commands: 95 (70 disabled)
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

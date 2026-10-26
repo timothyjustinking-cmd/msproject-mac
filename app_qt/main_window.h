@@ -226,6 +226,13 @@ class MainWindow final : public QMainWindow {
     // drive the ribbon's real path.
     void show_visual_reports();
     void show_compare_projects();
+
+    // --- wave 30 (W30-3.3): the Project tab's Spelling ----------------------
+    // A read-only report over the task names: app::spelling_issues() finds the
+    // words outside the port's own word list (no Microsoft Project dictionary,
+    // no correction path), and the dialog lists them.  Nothing is queued or
+    // saved.  Public so the offscreen gate can drive it without a modal.
+    void show_spelling();
     // Applies an edited style to the open view (the dialogs' OK path).
     void apply_session_gantt_style(const msproject::viewstate::GanttStyle& style);
 

@@ -135,7 +135,7 @@ Project	0	Status	group	-	-	-	-	-
 Project	0	Status	field	Status Date	0	-	0	NA
 Project	0	Status	small	Update Project	1	status.update	1	-
 Project	0	Proofing	group	-	-	-	-	-
-Project	0	Proofing	button	Spelling	0	proofing.spelling	0	-
+Project	0	Proofing	button	Spelling	1	proofing.spelling	0	-
 View	0	Task Views	group	-	-	-	-	-
 View	0	Task Views	button	Gantt Chart	0	view.gantt	0	-
 View	0	Task Views	button	Task Usage	1	view.task_usage	0	-

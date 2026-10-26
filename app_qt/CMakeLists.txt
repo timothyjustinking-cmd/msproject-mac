@@ -74,6 +74,7 @@ add_library(qt_shell STATIC
     format_dialogs_qt.cpp
     page_setup_dialog.cpp
     report_dialogs_qt.cpp
+    spelling_dialog.cpp
     options_dialog.cpp
     print_page.cpp
     preferences_store.cpp
@@ -491,6 +492,23 @@ add_test(NAME qt_report_dialog_gate
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp")
 
 # ===========================================================================
+# WAVE 30 (G3, W30-3.3): the Project tab's Spelling.  The gate drives the live
+# ribbon button and compares the dialog's summary, headers and every row with
+# app::spelling_issues() recomputed from MainWindow::plan(); it also proves the
+# table is read-only (no edit trigger, non-editable items, Close the only
+# button), that the command never dirties the document, that a pending Insert
+# Task row's typed name is checked, and that no document means no dialog.
+# ===========================================================================
+add_executable(qt_spelling_gate_tests tests/spelling_gate_test.cpp)
+target_link_libraries(qt_spelling_gate_tests PRIVATE qt_shell Qt6::Test)
+qt_set_warnings(qt_spelling_gate_tests)
+
+add_test(NAME qt_spelling_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_spelling_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave23-outline.mpp")
+
+# ===========================================================================
 # WAVE 26 (G6, W26-6.2), extended by WAVE 29 (G5, W29-5.1): the dark themes
 # darken ONLY the chrome.  The gate renders Colorful, Dark Gray and Black,
 # compares the live ribbon/status pixels with the committed Project
@@ -645,7 +663,7 @@ foreach(carlito_target
         qt_ux_gate_tests qt_ribbon_inventory_tests qt_uid_routing_tests
         qt_icon_gate_tests qt_backstage_gate_tests qt_project_dialog_gate_tests
         qt_format_dialog_gate_tests qt_page_setup_gate_tests
-        qt_report_dialog_gate_tests)
+        qt_report_dialog_gate_tests qt_spelling_gate_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 

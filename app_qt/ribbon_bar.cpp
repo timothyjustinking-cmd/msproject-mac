@@ -444,7 +444,12 @@ const std::vector<TabSpec>& tab_specs() {
         small_cmd(status, "Update Project", RibbonCommand::update_project, 100, 1, 0, true,
                   false, "status.update");
         GroupSpec& proofing = add_group(project, "Proofing", 63);
-        large(proofing, "Spelling", app::MenuAction::none, 52, 0, false, "proofing.spelling");
+        // W30-3.3: Spelling opens the read-only word-list report over the task
+        // names (app::spelling_issues).  The port has no Microsoft Project
+        // dictionary and no correction path, so the command is a report, never
+        // a file write.
+        large(proofing, "Spelling", app::MenuAction::none, 52, 0, true,
+              "proofing.spelling", RibbonCommand::spelling);
         tabs.push_back(std::move(project));
 
         // --- View -----------------------------------------------------------

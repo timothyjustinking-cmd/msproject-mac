@@ -60,6 +60,8 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W30-1.10: Inspect opens the read-only Task Inspector pane (the selected
     # row's scheduler facts); a view, never a file write.
     "inspect",
+    # W30-3.3: Spelling opens the read-only word-list report over task names.
+    "spelling",
 }
 
 # W29-2.1 (operator decision 15): a dialog can be live while part of its engine
@@ -78,6 +80,9 @@ RIBBON_GAPS = {
     "task_mode":
         "gap: Manually Scheduled only; Auto Schedule would also reschedule the "
         "task and this port has no scheduler",
+    "spelling":
+        "gap: the port's own word list only; no Microsoft Project dictionary and "
+        "no correction",
 }
 
 

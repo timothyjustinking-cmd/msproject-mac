@@ -95,6 +95,8 @@
 #include "sheet_views.h"
 #include "shell_icons.h"
 #include "shell_style.h"
+#include "spelling.h"         // app::spelling_issues for the Proofing report
+#include "spelling_dialog.h"  // the Proofing Spelling report (W30-3.3)
 #include "start_edit_warning.h"
 #include "task_form.h"
 #include "theme.h"
@@ -2228,6 +2230,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::compare_projects:
             show_compare_projects();
             return;
+        case RibbonCommand::spelling:
+            show_spelling();
+            return;
     }
 }
 
@@ -3881,6 +3886,26 @@ void MainWindow::show_visual_reports() {
     dialog.exec();
     set_message("visual reports are not generated in this port; nothing was changed",
                 false);
+    update_status();
+}
+
+void MainWindow::show_spelling() {
+    // W30-3.3: Project > Proofing > Spelling.  The brief's Spelling is a
+    // read-only check over task names with no dictionary data from Project;
+    // this port's check uses its own word list (app::spelling_issues) and
+    // reports, per task, the words the list does not know.  The dialog has no
+    // correction, replacement or dictionary path -- it reads a const plan --
+    // so the command can never write the file or dirty the document.
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    const std::vector<app::SpellingIssue> issues = app::spelling_issues(doc_.plan());
+    const std::size_t checked = app::spelling_names_checked(doc_.plan());
+    SpellingDialog dialog(issues, checked, this);
+    dialog.exec();
+    set_message("spelling check is read-only; nothing was changed", false);
     update_status();
 }
 

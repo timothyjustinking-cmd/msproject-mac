@@ -176,6 +176,7 @@ add_library(app_layout STATIC
     smoke.cpp
     view_style.cpp
     project_dialogs.cpp
+    spelling.cpp
 )
 add_library(msproject::app_layout ALIAS app_layout)
 target_compile_features(app_layout PUBLIC cxx_std_20)
@@ -554,6 +555,19 @@ if(APP_BUILD_TESTS)
 
     add_test(NAME app_project_dialogs COMMAND project_dialogs_tests)
     set_tests_properties(app_project_dialogs PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
+    # Wave 30 (W30-3.3): the read-only spelling check.  The word list's hygiene,
+    # its vocabulary, the suffix rules and their refusals, the token rules the
+    # Spelling dialog states, and spelling_issues() over synthetic PlanInput
+    # rows.  No fixture, no writer: the check only reads a const plan.
+    add_executable(spelling_tests spelling_tests.cpp)
+    target_compile_features(spelling_tests PRIVATE cxx_std_20)
+    set_target_properties(spelling_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(spelling_tests PRIVATE app_layout)
+    app_set_warnings(spelling_tests)
+
+    add_test(NAME app_spelling COMMAND spelling_tests)
+    set_tests_properties(app_spelling PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 endif()
 
 # ---------------------------------------------------------------------------
