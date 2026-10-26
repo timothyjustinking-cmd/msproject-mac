@@ -63,6 +63,9 @@ CONTROLS = [
     # W30-2.1: the resource writes (Information's one-field rename, Notes).
     "wave30-resource-rename-control.mpp",
     "wave30-resource-notes-control.mpp",
+    # W30-2.3: Assign Resources (one assignment added, then removed).
+    "wave30-assign-add-control.mpp",
+    "wave30-assign-delete-control.mpp",
 ]
 
 

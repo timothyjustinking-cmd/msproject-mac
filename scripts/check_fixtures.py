@@ -406,6 +406,24 @@ DOCUMENTED = {
         "EE755F6FA06FF3BF7E1C56F40D47ACD6EF034C9E97A0C969386A2B8F7F4CCF76",
     "tests/data/wave30-resource-notes-control-null.mpp":
         "A8DB92428104996C0C4B85FE43510FC717DDC7ED689E4415782C8EC3FC69B096",
+    # Wave 30 (W30-2.3): Assign Resources -- one work assignment added to
+    # task 1, then removed -- built by scripts/oracle_w30_resource_pairs.py,
+    # with each control's no-edit save.  Project tombstones/churns the
+    # assignment table and updates scheduler pointer words, which the port's
+    # append-only add_assignment_row and FixedMeta-only delete_assignment_row
+    # cannot write; the command stays disabled (tests/data/README.md).
+    "tests/data/wave30-assign-add-control.mpp":
+        "A7F5ACD93B1CA7E79FE6D8E764C2EC7AE14E396641C0C61BEFBF290F72AEF489",
+    "tests/data/wave30-assign-add.mpp":
+        "5F328B959D5E368B266BDB65FE30BFE806FBD36C9828EAF3F931A02D266E1471",
+    "tests/data/wave30-assign-add-control-null.mpp":
+        "648947C79352BC8D1700D3D5AE894D592356AE307928FC55490A29841D2F9122",
+    "tests/data/wave30-assign-delete-control.mpp":
+        "F889991BB76075FB51F0A6D0964B53478F0B41ED85CB1EA11ABC769F9D292B3B",
+    "tests/data/wave30-assign-delete.mpp":
+        "ABFF616786BA1F1F5F0D0D845FC8B9A7C1575A9F20E48E1A899185F4FA812E2D",
+    "tests/data/wave30-assign-delete-control-null.mpp":
+        "1D3AEA3AE7CF364BC68FEDBF10B5D68BEC00B567180D23E02D9F543B9FBB8490",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
