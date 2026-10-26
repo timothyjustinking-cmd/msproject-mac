@@ -1123,7 +1123,7 @@ inferred except where explicitly flagged.
 | `TBkndCons/FixedData` | `20*n` (no header) | uid +0, pred +4, succ +8, u16 type +12, i32 lag ticks +14, u16 lag format +18 (7) |
 | `TBkndCons/FixedMeta` | `16 + 10*n` | one entry: +0 state, +2 count (0), +4 row byte offset, +8/+9 = `dd 00` |
 | `TBkndCons/Fixed2Data` | `48*n` | three 16-byte identities: link, predecessor task, successor task |
-| `TBkndCons/Fixed2Meta` | `16 + 9*n` | one entry: +0..3 = 0, +4 record offset (row*48), +8 = 0x0f first link into that successor / 0x07 later ones |
+| `TBkndCons/Fixed2Meta` | `16 + 9*n` | one entry: +0..3 = 0, +4 record offset (row*48), +8 = the successor's driving state: 0x0f at 0 %, 0x07 once it enters progress (measured wave 29; NOT a first/later position marker) |
 
 `VarMeta` (24-byte empty header) and `Var2Data` (0 B) exist and never change.
 Header magic is `0xfa df ad ba` (LE `ba ad df fa`) for both FixedMeta and
@@ -1141,9 +1141,17 @@ Project uses a file-global counter we have not identified. W52 therefore:
   deterministic and collision-free. **INFERRED acceptable to Project; the gate is
   the proof.** A link identity is NOT Project's number (ours are 0x01, 0x02 in
   `w52-links.mpp`; Project's own would be 0x12, 0x13 on that base).
-* `Fixed2Meta +8` = 0x0f for the first LIVE link naming that successor, 0x07 for
-  a later one. **INFERRED rule** from link1 (rows 0/1/2 first, rows 3/4 second
-  links into successors 3/4) and w12-linkadd (both first, both 0x0f).
+* `Fixed2Meta +8` is the successor's DRIVING STATE, not a position marker:
+  0x0f for a link into a successor at 0 %, 0x07 once the successor enters
+  progress.  **MEASURED in wave 29 and re-checked by W30-0.7.**  The old
+  "0x0f first link / 0x07 later ones" reading of link1 and w12-linkadd was a
+  coincidence of those fixtures (every successor there was 0 %); the
+  percent-mid25 control's FIRST of three links into distinct successors is
+  0x07 because that successor has progress, and the work pair moves its
+  incoming link 0x0f -> 0x07 when its successor enters progress.  Do not
+  re-derive the falsified rule.  `add_task_link` therefore refuses a second
+  live incoming link and a successor with any progress, and writes 0x0f only
+  for a first link into a 0 % successor (the one measured add shape).
 
 **Delete** is the same tombstone contract as W48's cascade: FixedMeta entry
 `+0 = 0x02`, `+2 = 0`, header `+4 |= 0x02`; no size changes and
@@ -1252,10 +1260,12 @@ empty blocks (46 B).
 
 Verified by Project: the four-stream add shape and 48/9 strides (coordinator's
 `w12-linkadd.mpp`); the delete tombstone/header contract (W48 cascade); the
-field-tail presence bits (W48 gate). NOT yet verified by Project: acceptance of
-our deterministic link identity values and the 0x0f/0x07 rule; that a cleared
-value displays blank (the empty encodings and cleared presence bits are our
-defined semantics). M2 not run here (no plan changes).
+field-tail presence bits (W48 gate); the Fixed2Meta +8 driving-state meaning
+and our deterministic link identity values (wave 29 measured add saves, and
+W30-0.7's two-add and delete-and-re-add saves, all reopened by Project).
+NOT yet verified by Project: that a cleared value displays blank (the empty
+encodings and cleared presence bits are our defined semantics). M2 not run
+here (no plan changes).
 
 ### Open items / next actions
 
