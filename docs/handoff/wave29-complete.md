@@ -136,6 +136,12 @@ W29-0.3 detail:
   payload: wave-28 40 -> 100 counts 56, 100 -> 0 counts 76).  The raise's
   second record is (old actual work, units 0, new tick word); the lower's
   second record is the old record byte for byte.
+- Citation for the raw words above (CLOSE errata B4): the 0x0B40015E
+  sizes/offsets are in `build/w29/W29-0.3-15e-mark.log`; the 0F400032 counts
+  and the per-stream changes are in `build/w29/W29-0.3-changed-streams.log`;
+  the full-row walks (including the 3bf status words) are in
+  `build/w29/W29-0.3-fullrow.log`.  The committed JSON carries the COM date
+  strings, not those raw words.
 - Scope: only the entire-project Update Project makes the project row's
   Resume/Stop the earliest per-row dates (3bf31c20) and stores the status
   date (0x3bf60000 / 0x3bf40000).  The two-of-three Selected scope keeps
@@ -239,10 +245,13 @@ Gates for commit `8f80c2a` (parent `7fc719b`), logs under `build/w29/`
 | `project_dialogs_tests` | 70 checks, 0 failures, exit 0 |
 | `start_edit_warning_tests` | 41 checks, 0 failures, exit 0 |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 78 tracked `.mpp`); paths OK (120 files); provenance OK (8 oracles) |
-| client-name scan on HEAD and the staged tree / name guard `7fc719b..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected) |
+| client-name scan on HEAD and the staged tree / name guard `7fc719b..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected). CLOSE errata A3: the cited per-item guard and grep logs are empty; the G0 group log's `guard_names 21646f4..HEAD` exit 0 and zero named commits are the range evidence. |
 
 Gates for commit `bd9e13d` (parent `61f19c8`), logs under `build/w29/`
-(`gates-61f19c8-W29-0.3-*.log`):
+(`gates-61f19c8-W29-0.3-*.log`; only four files carry that prefix -- the
+remaining test logs recorded in this table are the same run's
+`61f19c8-W29-0.3-*.log` files without `gates-`, as recorded in CLOSE errata
+B2):
 
 | gate | result |
 |---|---|
@@ -258,9 +267,11 @@ Gates for commit `bd9e13d` (parent `61f19c8`), logs under `build/w29/`
 | `project_dialogs_tests` | 70 checks, 0 failures, exit 0 |
 | `start_edit_warning_tests` | 41 checks, 0 failures, exit 0 |
 | `check_fixtures.py` | fixtures OK (90 documented hashes, 70 tracked `.mpp`); paths OK (112 files); provenance OK (8 oracles) |
-| client-name scan on HEAD and the staged tree / name guard `61f19c8..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected) |
+| client-name scan on HEAD and the staged tree / name guard `61f19c8..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected). CLOSE errata A3: the cited per-item guard and grep logs are empty; the G0 group log's `guard_names 21646f4..HEAD` exit 0 and zero named commits are the range evidence. |
 
-Gates for commit `b751435` (parent `4a644c7`), logs under `build/w29/`
+Gates for commit `b751435` (real parent `6581a74`, the sha-map commit; the log
+tag `4a644c7` is the pre-rewrite ID of the W29-0.2 fixture commit, mapped to
+`eddd9e9` in `wave29-sha-map.txt`), logs under `build/w29/`
 (`gates-4a644c7-W29-0.2-*.log`):
 
 | gate | result |
@@ -272,7 +283,7 @@ Gates for commit `b751435` (parent `4a644c7`), logs under `build/w29/`
 | `app_edits_outline_tests` | 988 checks, 0 failures, 42 expected failures, exit 0 |
 | `app_edits_new_task_mode_tests` | 1933 checks, 0 failures, exit 0 |
 | `check_fixtures.py` | fixtures OK (80 documented hashes, 60 tracked `.mpp`); paths OK (102 files); provenance OK (8 oracles) |
-| client-name scan on HEAD and the staged tree / name guard `4a644c7..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected) |
+| client-name scan on HEAD and the staged tree / name guard `4a644c7..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected). CLOSE errata A3: the cited per-item guard and grep logs are empty; the G0 group log's `guard_names 21646f4..HEAD` exit 0 and zero named commits are the range evidence. |
 
 Gates for commit `f650c10` (parent `21ca5b2`), logs under `build/w29/`
 (`gates-21ca5b2-W29-0.1-*.log`):
@@ -286,7 +297,7 @@ Gates for commit `f650c10` (parent `21ca5b2`), logs under `build/w29/`
 | `app_edits_outline_tests` | 988 checks, 0 failures, 42 expected failures, exit 0 |
 | `app_edits_new_task_mode_tests` | 1933 checks, 0 failures, exit 0 |
 | `check_fixtures.py` | fixtures OK (72 documented hashes, 52 tracked `.mpp`); paths OK (94 files); provenance OK (8 oracles) |
-| client-name scan on HEAD and the staged tree / name guard `21ca5b2..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected) |
+| client-name scan on HEAD and the staged tree / name guard `21ca5b2..HEAD` / `client-string` grep | 0 files, 0 hits / exit 0 / no matches (exit 1, expected). CLOSE errata A3: the cited per-item guard and grep logs are empty; the G0 group log's `guard_names 21646f4..HEAD` exit 0 and zero named commits are the range evidence. |
 
 G0 group gates (fresh trees configured from scratch on `50df4b2` under
 `build/w29-fresh{,-app,-qt}`, built serially, log
@@ -303,7 +314,7 @@ over the code tree `8f80c2a`):
 | M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
 | app ctest / app_qt ctest | 20/20 / 24/24 passed |
 | `check_fixtures.py` / oracle provenance | fixtures OK (98 documented hashes, 78 tracked `.mpp`); paths OK (120 files); provenance OK (8 oracles) |
-| client-name scan on HEAD / messages `wave28..HEAD` / `guard_names` `21646f4..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+| client-name scan on HEAD / messages `21646f4..HEAD` / `guard_names` `wave28..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
 
 The numbers belong to `50df4b2`; the marker commit that follows is docs-only.
 
@@ -331,9 +342,13 @@ W29-1.0a detail:
   other instance of the two patterns
   (`build/w29/W29-1.0a-pattern-scan.log`); the scan is falsified on the two
   pre-fix blobs, which it does flag
-  (`build/w29/w29-1.0a-falsify.py`, "FALSIFICATION OK").  No clang or GCC is
+  (`build/w29/w29-1.0a-falsify.py`; CLOSE re-run at
+  `build/w29/W29-1.0a-falsification.log`, "FALSIFICATION OK: both pre-fix
+  files are flagged").  No clang or GCC is
   installed on this machine, so this record makes no claim that the Windows
-  gates see either error; the CLOSE dispatch is the real compiler check.
+  gates see either error; the CLOSE dispatch is the real compiler check --
+  and on the first dispatch it did see a third one (the unused constant
+  `kPropSessionWordCopy`, fixed as W29-C3).
 
 W29-1.0b detail:
 
@@ -461,7 +476,11 @@ W29-1.4 detail:
   00:00, tenths of a minute since 1983-12-31) and bytes 06 01 = 262, not
   MPXJ's low-byte 6.  Every other 41363-byte view stores +1181 = 0; several
   store exactly 14400 (1984-01-01, Project's stock default), which must not
-  pin the axis.
+  pin the axis.  CLOSE errata (W29-C6): a stock start with the stock 100 %
+  day tier now changes nothing at all.  That width is the shell's own week
+  zoom (168 px / 7 = 24 px/day), and re-basing the axis to days moved the
+  wave-23 outline parity left edge from the measured week start to the
+  project-start day (fixed in `7e14aaa`).
 - The size is a u16 in Project too: on the same synthetic view and window, a
   copy patched only at +1180 from 0x0064 (100) to 0x0106 (262) renders 2.625x
   wider (15.583 -> 5.936 visible days, 23.6 -> 61.8 px/day).  A copy patched
@@ -496,7 +515,7 @@ Gates for commit `a790a24` (parent `4fee013`), logs under `build/w29/`
 | core Release build (`mppwrite_roundtrip_outline`, tree configured from `50df4b2`, `CORE_WARNINGS_AS_ERRORS=ON`) | exit 0 |
 | `mppwrite_roundtrip_outline` | 1081 checks, 0 failures, 108 expected failures, exit 0 |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 78 tracked `.mpp`); paths OK (120 files); provenance OK (8 oracles) |
-| client-name scan on HEAD / staged tree / name guard `4fee013..HEAD` / hex grep | 0 files, 0 hits / 0 files, 0 hits / exit 0 / no matches (exit 1, expected) |
+| client-name scan on HEAD / staged tree / name guard `4fee013..HEAD` / hex grep | 0 files, 0 hits / 0 files, 0 hits / exit 0 / no matches (exit 1, expected). CLOSE errata A3: the cited per-item guard and grep logs are empty; the G1 group log records `guard_names 4fee013..HEAD` exit 0 and zero named commit messages. |
 
 Gates for commit `fed21fb` (parent `a790a24`, fixtures only), logs under
 `build/w29/` (`gates-a790a24-W29-1.0b-*.log`):
@@ -540,7 +559,7 @@ Gates for commit `1a743b6` (parent `7b01d37`), logs under `build/w29/`
 | app Release build | exit 0 |
 | `app_view_style_tests` | 70 checks, 0 failures (corpus: 213 entries, 10742/0x0b40000e = 255,242,0; project row grey; default 0,55,103; automatic rows no fill) |
 | `views_tests` | 219 checks passed, exit 0 |
-| app_qt Release build / ctest | exit 0 / 24/24 passed; `qt_stored_table_corpus`: all eight scrolling cells of ID 10 yellow, 6407 yellow / 18892 grey pixels |
+| app_qt Release build / ctest | exit 0 / 24/24 passed; `qt_stored_table_corpus`: all eight scrolling cells of ID 10 yellow, 6407 yellow / 18892 grey pixels (test output in `build/w29/w29-1.3-qt-corpus.log`, line 36; CLOSE errata B3) |
 | client-name scan / client-string grep | 156 corpus names; HEAD 0 files/0 hits; `--cached` 0 files/0 hits; no matches |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`, 143 tracked test-data files, no local path, 8 scenario oracles) |
 
@@ -553,7 +572,7 @@ Gates for commit `aaf05fe` (parent `1a743b6`), logs under `build/w29/`
 | `gantt_tests` | 766 checks passed, exit 0 (all five label sides, the bare stored bar, the fallback when nothing is stored) |
 | app Release build / app tests | exit 0 / `app_layout`, `app_views`, `app_view_style` exit 0 |
 | `app_view_style_tests` | 94 checks, 0 failures (stock auto/manual/milestone/summary; PROJECT_A's masks and field ids; first-match, unmapped id, unknown category) |
-| app_qt Release build / ctest | exit 0 / 24/24 passed; `qt_stored_table_corpus` notes the four label classes and both 4 px gaps |
+| app_qt Release build / ctest | exit 0 / 24/24 passed; `qt_stored_table_corpus` notes the four label classes and both 4 px gaps (test output in `build/w29/w29-1.3-qt-corpus.log`, line 37; CLOSE errata B3) |
 | client-name scan / client-string grep | 156 corpus names; HEAD 0 files/0 hits; `--cached` 0 files/0 hits; no matches |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`, 143 tracked test-data files, no local path, 8 scenario oracles) |
 
@@ -819,7 +838,7 @@ follow it are docs-only over it):
 | M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
 | app ctest / app_qt ctest | 20/20 / 26/26 passed |
 | `check_fixtures.py` / oracle provenance | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (146 tracked test-data files, no local path); provenance OK (8 oracles) |
-| client-name scan on HEAD / messages `624903d..HEAD` / `guard_names` `624903d..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected) |
+| client-name scan on HEAD / messages `624903d..HEAD` / `guard_names` `624903d..HEAD` / hex grep | 0 files, 0 hits / 0 commits / exit 0 / no matches (exit 1, expected). These values are from the corrected re-run `build/w29/g3-final-privacy.log`; `g3-fresh-gates.log` carries the unquoted-range bug described in the resume notes below. |
 
 Resume notes for the group run:
 
@@ -944,9 +963,16 @@ Gates for commit `56f0ffa` (parent `4ee0cf3`), logs under `build/w29/`
 | `qt_ribbon_inventory` | passed |
 | app_qt ctest | 27/27 passed (13.28 s) |
 | client-name scan on HEAD / on the staged tree | 156 corpus names; 0 files, 0 hits / 0 files, 0 hits |
-| client-string grep / `git diff --check` | no matches (exit 1, expected) / clean |
+| client-string grep / `git diff --check` | no matches (exit 1, expected) / clean (`build/w29/CLOSE-citation-checks.log`) |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (147 tracked test-data files, no local path); provenance OK (8 oracles) |
 | `guard_names` `4ee0cf3..56f0ffa` | exit 0 |
+
+CLOSE errata A2: only the build and `qt_report_dialog_gate` rows above have
+their own item logs (`...-appqt.log`, `...-report-gate.log`); the staged-tree
+scan, `git diff --check`, fixture (147) and guard rows are evidenced in
+`build/w29/g4-fresh-gates.log` (fixtures/paths at lines 1385-1386; the
+corrected guard and message re-run at lines 1410-1418).  There is no separate
+guard log for `4ee0cf3..56f0ffa`; the group log is the evidence.
 
 G4 group gates (fresh trees configured from scratch on the worktree at
 `4448df3` under `build/w29-g4-fresh{,-app,-qt}`, log
@@ -1009,7 +1035,11 @@ W29-5.1 detail:
   `#646464`; the frozen row-number gutter, the corner above it and the chart
   timescale band are the SWAPPED pair, Dark Gray `#666666` / Black `#262626`.
   The chart's ordinary cell rules are `#5F5F5F` (DG) / `#2D2D2D` (Black) and
-  its Monday/week and tier rules `#545454` / `#323232`: Dark Gray's rules are
+  its Monday/week vertical rules the strong `#545454` / `#323232`; the
+  horizontal tier boundary samples match the WEAK rule (`chart_tier_rule`
+  `#5D5D5D` DG / `#2D2D2D` Black), so W29-C4 paints that boundary with
+  `chart_header_rule` in both dark themes (light keeps the wave-26 strong
+  line; no light tier measurement exists).  Dark Gray's rules are
   DARKER than its band and Black's are LIGHTER, so the pair is not one "dark
   rule" value.  The chart's label ink does NOT follow the theme: the cores are
   the file's `#333333` in both dark themes, so Black's labels stay
@@ -1125,7 +1155,7 @@ logs under `build/w29/` (`gates-7ea220c-W29-5.2-window-ink-*.log`):
 | `qt_icon_gate` (with the new contrast assertions) / `qt_chrome_gate` / `qt_theme_gate` | passed, 0 failures / passed, 0 failures / passed, 0 failures |
 | app_qt ctest | 27/27 passed |
 | client-name scan on HEAD tree `8ac04bb` / client-string grep | 0 files, 0 hits / no matches (exit 1, expected) |
-| `guard_names` `10ad181..7ea220c` / `git diff --check` | exit 0 / clean |
+| `guard_names` `10ad181..7ea220c` / `git diff --check` | exit 0 / clean (`build/w29/CLOSE-citation-checks.log`) |
 | `check_fixtures.py` | fixtures OK (98 documented hashes, 101 tracked `.mpp`); paths OK (148 tracked test-data files, no local path); provenance OK (8 oracles) |
 
 G5 group gates (fresh trees configured from scratch on the worktree at
@@ -1147,8 +1177,12 @@ G5 group gates (fresh trees configured from scratch on the worktree at
 
 Resume notes for the group run:
 
-- The app_qt fresh build hit this environment's transient MSB6003 tlog lock
-  once; the script's retry rebuilt the same tree and the build ended exit 0.
+- The fresh builds hit this environment's transient MSB6003/LNK1104 file
+  locks three times (`g5-fresh-gates.log` lines 291, 848, 959, 1348): the
+  core `fuzz_writer`/`fuzz_parsers` stage (retry 1), the app
+  `core_sched`/`document_tests` stage (retries 1-2) and the app_qt build
+  (retry 1).  Every retry rebuilt the same tree, no code changed, and each
+  build ended exit 0.
 - Part A's `Add-Content` log writes lost one block to the same file-lock
   problem ("Stream was not readable" / file in use, reported on the console):
   the `plan_recalc MPP_NO_CORPUS=1` output.  The gate itself exited 0 in
@@ -1162,3 +1196,390 @@ The numbers belong to `7ea220c`; the two record commits (`10ad181`,
 `d70e97e`) and this marker are docs-only.
 
 WAVE-29-G5-COMPLETE
+
+## CLOSE - the wave record
+
+The wave ran as six groups plus this close, one fresh session each.  Every item
+in G0..G5 is DONE; nothing is deferred.  The group marker lines end each
+section above.  The CLOSE work is the fresh-tree gate run, both privacy scans,
+the review pass over `git diff wave28..wave29`, the push and the two workflow
+dispatches, the START-HERE / INDEX / memory update and the re-scored 16
+decisions.  The record below belongs to the final code tree
+`7e14aaa` (the CLOSE code commits `02b720a`, `4b03ecb`, `f7434d2`, `31bb11b`,
+`133cb3f` and `7e14aaa` are the last code changes; the CLOSE docs commits that
+follow are docs-only).
+
+### Fresh-tree gates (final code tree `7e14aaa`)
+
+The first CLOSE gate run was on `7262148` and was green (its numbers are kept
+as **`build/w29/gates-7262148-W29-CLOSE.log`**, sha256
+`aad948c84af5eb62826ff0e201c270da1c227d306209b0876cf34eaf39b364ab`).  The
+independent review then found two Highs whose fixes changed `app/` and
+`app_qt/` (`02b720a`, `4b03ecb`), the first CI dispatch found a third High on
+macOS (`f7434d2`, W29-C3) and a GCC-only test initializer (133cb3f, W29-C5),
+the record audit found a measured-paint mismatch (`31bb11b`, W29-C4), and the
+parity gate found the stock-timescale axis shift (`7e14aaa`, W29-C6), so the
+whole fresh-tree set was re-run FROM SCRATCH on the final code tree
+`7e14aaa`; the table below is that re-run.
+An earlier part-A attempt on `31bb11b` is kept as
+`build/w29/close-final-fresh-gates-attempt1.log`: it hit two transient
+"Process not started" core tests and an MSB3061 file lock, so the re-run's
+script retries those as well.
+Three trees were configured FROM SCRATCH on 2026-10-26 and built serially:
+`build/w29-close-fresh` (core, `-DCORE_WARNINGS_AS_ERRORS=ON`),
+`build/w29-close-fresh-app` (headless app tests) and `build/w29-close-fresh-qt`
+(Qt shell and its tests).  The numbers are in
+**`build/w29/close-final-fresh-gates.log`**, filed for standing rule 3 as
+**`build/w29/gates-7e14aaa-W29-CLOSE.log`** (sha256
+`530176474571e04d62d7cdea46204fd721bb5f4100d38d7d8a1fc33a06d79c5c`).
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | **52/52** |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | **512 checks / 266 checks** |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | **53 checks, 0 failures** / 8 recorded, **7 pass, 1 expected fail**, 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | **1100 checks / 420 checks** |
+| M2 `recalc --compare` | **332/332**, **268/268** and **64/64** fields match |
+| app ctest / app_qt ctest | **20/20** / **27/27** |
+| `check_fixtures.py` / oracle provenance | fixtures **OK** (98 documented hashes, 101 tracked `.mpp`); paths OK (148 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name line scan / messages / normalised guard / hex grep | HEAD **0 files / 0 hits**; messages `wave28..HEAD` **0 commits**; `guard_names` `wave28..HEAD` and `origin/wave28..HEAD` **exit 0**; hex grep **no matches** |
+
+Resume notes:
+
+- The final re-run needed no build or ctest retry.  The only retries in the
+  log are the tree-removal retries at the start (the previous attempt's trees
+  were still held: retries 1-2 on `build/w29-close-fresh` and
+  `build/w29-close-fresh-app`).  The earlier part-A attempt on `31bb11b` hit
+  two transient "Process not started" core tests and an MSB3061 file lock
+  (`close-final-fresh-gates-attempt1.log`); the re-run script retries those,
+  and the retry path was not needed here.
+- Part B's final native command is the expected-failure hex grep (exit 1); the
+  script then writes `FINISHED` and exits 0 because its last statement is a
+  PowerShell cmdlet, so the log's `hex grep exit: 1 (1 = no matches,
+  expected)` line is the record.
+- The app_qt ctest finished in 39.92 s on the fresh tree (the same 27 tests
+  that took 2866-2903 s in the incremental trees during G2/G3; the timings
+  follow file hydration on this machine and the same checks ran).
+
+### Privacy
+
+Both scans ran on the final tree `7e14aaa` (the CLOSE docs commits after it
+are docs-only):
+
+- line-based `scan_client_names.py HEAD --messages wave28..HEAD`: **0 files /
+  0 hits** on HEAD and **0 commit messages** quote a client name.
+- whitespace-normalised `guard_names.py`: **0 hits, exit 0** on
+  `wave28..HEAD` and on the push range `origin/wave28..HEAD`.  The preflights
+  are `build/w29/close-push4-{scan,messages,guard,hex}.log` (the earlier
+  `31bb11b` preflight is `build/w29/close-push3-guard.log`).  The guard and
+  hex-grep files are zero-byte because those commands print only on failure;
+  their explicit exit codes are the `guard_names ... exit: 0` and
+  `hex grep exit: 1 (expected)` lines in
+  `build/w29/gates-7e14aaa-W29-CLOSE.log`, and the docs commit's final range
+  is logged with exit codes in `build/w29/close-push5-preflight.log`.
+- `git grep -nE "client-string-[0-9a-f]{8}"`: no matches.
+
+The wave-28 push blocker is gone: Tim approved the `076438f` rewrite, `wave28`
+was replayed with the clean blob and pushed (`21646f4`), and `wave29` was
+moved onto it (`docs/handoff/wave29-sha-map.txt`); the guard now passes the
+whole range.  The residual tree state is unchanged: two pre-wave fixtures
+(`tests/data/synthetic-base.mpp`, `tests/data/wave23-outline.mpp`) and 69
+tracked text files (historical docs) still carry the operator's name, no gate
+scans the whole tree for it, the 13 unsalted FNV-1a display-name hashes remain
+in older wave-26 commits and `tests/data/project_a_golden.tsv`, and the
+156-name scanner still cannot see skipped-row names.  Those are listed under
+Found, not fixed; a repo-wide purge is Tim's decision.
+
+### Independent review of `wave28..wave29`
+
+One read-only reviewer ran the code review of `git diff wave28..wave29` (156
+files); the record audit is the second reviewer.  The code review found **0
+Critical / 2 High / 2 Medium / 2 Low** (C1-C6).  The first CI dispatch then
+found C7 (High: the macOS build's unused-constant rejection), C9 (High: the
+ubuntu-gcc test initializer) and C10 (High: the windows-qt parity gate's axis
+shift); the record audit found C8 (Medium: the tier-boundary paint contradicts
+the measurement, and the record repeated the code's claim).  C7, C9 and C10
+are fixed before this record: `f7434d2` (W29-C3), `133cb3f` (commit label
+W29-C5) and `7e14aaa` (commit label W29-C6); C8 is fixed in `31bb11b`
+(W29-C4).  The findings, with the record's dispositions:
+
+| id | severity | finding | disposition |
+|---|---|---|---|
+| C1 | **High** | Two unused anonymous-namespace functions added by this wave (`bar_text_field_items()` in `app_qt/format_dialogs_qt.cpp:311`, `exact_count()` in `app_qt/tests/theme_gate_test.cpp:127`, one occurrence each) fail GCC/Clang `-Wall -Wextra -Wpedantic -Werror`; MSVC /W4 does not warn, so the Windows gates and the W29-1.0a pattern scan saw neither. | **FIXED** in `02b720a`: both removed; app_qt 27/27.  The CI dispatch is the GCC/Clang check (no local clang/GCC). |
+| C2 | **High** | `measured_progress_update_shape` accepted any recomputed mid-range percent (61, 59, 99, 20, ...) on the stored-60 % row; only the 60 -> 80 and 60 -> 40 payloads were measured.  The writer then encoded an unmeasured step percent. | **FIXED** in `4b03ecb`: only exactly 40 % and 80 % with a whole step percent pass; a 20 % date is now refused and tested; app 20/20, actuals 3725 checks / 50 expected failures. |
+| C3 | Medium | `add_task_link` still writes Fixed2Meta +8 with the falsified "first/later link row" rule when the successor already has a live incoming link (`core/mppwrite/add_delete.cpp:1836-1845`); W29-1.0b measured the byte as driving state, and no pair exercises a second incoming link. | queued; the writer change needs a Project pair for a second incoming link (rule 1). |
+| C4 | Medium | The null-save classifier masks a whole 16-byte block on any control-vs-null difference, so an edit effect sharing the block is skipped, and the props14/cedl tail is printed (`masked_tail`) rather than asserted; a truncated null fixture cannot fail a check (`tests/save_pair_noise.h:227-249`). | queued (tooling); the measured numbers are in the record and the effect checks that exist are field-level. |
+| C5 | Low | A percent edit on a row with a live incoming link is enabled and refused only during Save (by `stage_progress_link_flags`), not at `make_percent_edit`. | queued; no committed pair exercises the combined shape. |
+| C6 | Low | The record's Props-mask sentence (W29-0.3) describes a whole 4-byte payload word; the tests mask 2 bytes at payload +2 (`tests/roundtrip_outline.cpp:1093-1094`) and byte +3 (`app/app_edits_new_task_mode_tests.cpp:359-363`). | errata below; documentation only. |
+| C7 | **High** | The first CI dispatch (run 40245417658) failed the `macos-qt` Build step: clang `-Werror` rejects the unused file-scope constant `kPropSessionWordCopy` at `core/mppwrite/outline.cpp:167`.  MSVC /W4 does not warn, so no Windows gate saw it. | **FIXED** in `f7434d2` (W29-C3): constant removed, tree-wide scan of the 81 touched files finds no other unused file-scope constant; re-dispatch is the compiler check. |
+| C8 | Medium | The dark-theme timescale tier boundary is painted with `chart_header_rule_strong` (`app_qt/gantt_canvas.cpp:887`), but the measured `chart_tier_rule` samples match the WEAK rule (`#5D5D5D` DG / `#2D2D2D` Black), and the theme gate pins neither.  The W29-5.1 record sentence repeated the code's claim ("tier rules #545454/#323232"), which the measurement falsifies. | **FIXED** in `31bb11b` (W29-C4): dark themes paint the horizontal boundary with `chart_header_rule`; light keeps the wave-26 strong line (no light tier measurement); record sentence corrected (A1).  Gate coverage gap listed under Found, not fixed. |
+| C9 | **High** | The first CI dispatch (run 40245429060) failed `ubuntu-gcc`: `tests/roundtrip_outline.cpp:1147/1150/1153` still used the seven-member `OutlineEdit{...}` initializer after W29-0.4 added the `slack` vector, and GCC rejects the missing member under `-Werror=missing-field-initializers`.  MSVC does not warn. | **FIXED** in `133cb3f` (commit label W29-C5): the three manual cases carry an empty initializer; core /WX build exit 0, `mppwrite_roundtrip_outline` 1749 checks / 0 failures / 7 expected failures.  The re-dispatch is the GCC check. |
+| C10 | **High** | The first CI dispatch (run 40245417658) failed `windows-qt` on the wave23-outline parity gate: splitter 0.41146 vs 0.45885, tiers 1 vs 2, widths +88.  W29-1.4 applied the stock stored record (start 14400, day tier 100 %) and the day-unit origin snapped to the project-start day (Fri 11 Dec) instead of the week start (Sun 6 Dec); the first full weekend then began 1 day after the chart edge, the detector inferred `chart_left` = 790, and the splitter/width measures followed it.  The measured capture starts on the Monday of the project-start week. | **FIXED** in `7e14aaa` (commit label W29-C6): a stock start plus the 100 % day tier is Project's default record and its width is the shell's own week zoom (168 px / 7 = 24 px/day), so it now changes nothing; any saved start or non-default size still applies.  Parity wave23-outline 10/10 PASS, wave25-auto colour-only PASS, app_qt 27/27; re-dispatch is the CI check. |
+
+The reviewer confirmed as sound: the target file is written only on the final
+copy and byte-compared; the new writers validate before mutation and leave the
+document unchanged on refusal; `normalise_record`'s bounds checks have no
+off-by-one; Page Setup's semantics and arithmetic match the record; the format
+and report dialogs are session-only with no fake success; the icon/theme gates
+prove their claims; session styles do not set `document_dirty`; and the wave-29
+additions carry no operator name, local user path or unsalted name hash.
+
+#### The record audit
+
+A second read-only reviewer audited this record file (1164 lines at `7262148`)
+against the git history and the `build/w29/` logs.  It found **no Critical or
+High**.  Its findings are record defects, not code defects; every one is
+corrected in place in the sections above, and the corrected text names the
+errata id.  A1 also exposed the code/measurement mismatch C8.
+
+| id | severity | finding | disposition |
+|---|---|---|---|
+| A1 | Medium | The W29-5.1 sentence "its Monday/week and tier rules `#545454` / `#323232`" is false for the tier half: `chart_tier_rule` is `#5D5D5D` DG / `#2D2D2D` Black and the JSON note says the boundary matches the weak rule; the painter used the strong field and the gate maps neither tier sample. | sentence corrected in place; paint fixed by C8 (`31bb11b`) |
+| A2 | Medium | The G4 item gate table cited `gates-4ee0cf3-W29-4.1-*.log` for build/scan/fixture/guard rows, but that glob holds only the app_qt and report-gate logs; the other numbers and the corrected guard re-run are in `g4-fresh-gates.log`, and no guard log exists for the range. | note after the G4 item table (A2) |
+| A3 | Medium | Five per-commit privacy rows assert guard exit 0 / hex grep exit 1 citing zero-byte or absent per-item logs (`gates-21ca5b2-W29-0.1-{name-guard,client-string-grep}.log`, `gates-4a644c7-W29-0.2-{guard,client-string}.log`, `61f19c8-W29-0.3-guard*.log`, `gates-4fee013-W29-1.0a-{guard,client-string}.log`, no `7fc719b` guard log). | each row annotated: the G0/G1 group logs' range scans (0 named commits, guard exit 0) are the evidence, not the empty logs (A3) |
+| A4 | Low | "Gates for commit `b751435` (parent `4a644c7`)" is false: its real parent is `6581a74`, the sha-map commit; `4a644c7` maps to `eddd9e9`. | heading corrected with the mapping (A4) |
+| A5 | Low | The G5 resume note said only the app_qt build hit a file lock; the log also shows core `fuzz_*` retry 1 and app `core_sched`/`document_tests` retries 1-2. | note corrected (A5) |
+| A6 | Low | "FALSIFICATION OK" had no log; only the script and a commit message contained it. | the script was re-run at CLOSE on the same pre-fix blobs; `W29-1.0a-falsification.log` records "FALSIFICATION OK: both pre-fix files are flagged" (A6) |
+| B1 | Medium | The G3 privacy row's cited `g3-fresh-gates.log` reports 1 named commit from the unquoted-range bug; the true 0/0/0/1 numbers are in `g3-final-privacy.log`. | citation corrected (B1) |
+| B2 | Low | The W29-0.3 commit table's `gates-61f19c8-W29-0.3-*.log` glob matches only four files; nine rows' numbers are in `61f19c8-W29-0.3-*.log` without the prefix. | heading annotated (B2) |
+| B3 | Low | The 6407/18892 pixel counts and the 57/16/10/1 label counts appear only in `w29-1.3-qt-corpus.log`. | citations added (B3) |
+| B4 | Low | The 76 -> 96 / 616 -> 716 and 3bf status words are not in the committed JSON; they are in the three `W29-0.3-*.log` files. | citation bullet added (B4) |
+| B5 | Low | The G0 privacy row swapped the message/guard range labels relative to `g0-fresh-gates.log`, and the G4/G5 `git diff --check` clean claims had no log. | labels corrected to the log's; checks logged in `CLOSE-citation-checks.log` (B5) |
+
+### Errata to the sections above (from the CLOSE review and the record audit)
+
+The corrections below were applied in place in the earlier sections, so the
+text above now matches its evidence; this list keeps the before/after record.
+
+- **W29-5.1 (G5):** "its Monday/week and tier rules `#545454` / `#323232`" was
+  false for the tier half (A1).  The measured `chart_tier_rule` samples match
+  the weak rule, and the painter used the strong field; `31bb11b` (C8) paints
+  the dark tier boundary with `chart_header_rule` and the sentence is
+  corrected.  Light keeps the wave-26 strong line because no light tier
+  measurement exists; the theme gate still does not pin the tier sample, which
+  is listed under Found, not fixed.
+- **W29-1.4 (G1):** the stock record's 100 % day tier is Project's default, not
+  a stored zoom: its 24 px/day is the shell's own week zoom.  Applying it moved
+  the wave-23 outline parity left edge to the project-start day and turned the
+  first weekend band into the detector's "full band" case (C10).  `7e14aaa`
+  returns before re-basing the axis for that default; the W29-1.4 detail above
+  is corrected in place.
+- **W29-0.4 (G0):** the `OutlineEdit` aggregate gained the `slack` vector, but
+  the three wave-28 manual cases kept their seven-member initializers; MSVC
+  accepted them and GCC did not (C9).  `133cb3f` supplies the empty member;
+  the manual rows' bytes and expectations are unchanged.
+- **W29-1.0a (G1) record citations:** the A6 falsification is now logged
+  (`W29-1.0a-falsification.log`); the W29-C3 unused constant is the third
+  compile error the pattern scan did not look for and the macOS dispatch
+  found.
+- **Record citations (A2-A5, B1-B5):** corrected in place as listed in the
+  record-audit table above; no gate number changed, only its cited evidence.
+- **W29-1.0a (G1):** the pattern scan looked for the two wave-28 compile-error
+  patterns in the 43 touched files; it did not look for unused internal-linkage
+  functions.  Two such functions were added by this wave and are removed in
+  `02b720a` (C1).  The claim "found no other instance of the two patterns"
+  stands only for those two patterns.
+- **W29-0.3 (G0):** "the commands stay enabled only for the shapes the
+  committed pairs measured" was true for the stored-percent and progress-block
+  conditions but not for the recomputed percent; the gate accepted any
+  mid-range value.  `4b03ecb` (C2) confines it to the measured 40 % and 80 %.
+- **W29-1.0b (G1):** the falsified "first/later link row" reading is corrected
+  in the `add_delete.h` comment, but the `add_task_link` writer still produces
+  that byte rule for a second incoming link (C3).  The byte's driving-state
+  meaning is measured; the writer's extension to that unmeasured shape is
+  queued.
+- **W29-0.1 (G0):** the null-save discipline's masked tail and whole-block
+  masking are not asserted (C4); the per-stream effect counts quoted in G0 are
+  measured but the tail is reported, not gated.
+- **W29-0.3 Props mask:** the W29-0.3 text describes masking the whole 4-byte
+  per-save id word; the committed tests mask 2 bytes at payload +2 in the core
+  round-trip and byte +3 in the new-task-mode test (C6).  The files compare
+  equal because the remaining two bytes are equal in those pairs; the sentence
+  overstates the mechanism.
+
+### Push and CI
+
+The pre-push guard passes the whole range (the wave-28 rewrite blocker is
+gone).  `origin/wave29` was advanced without force three times, each after a
+clean `scan_client_names.py HEAD --messages origin/wave28..HEAD` and
+`guard_names.py origin/wave28..HEAD`:
+
+| push | range | log |
+|---|---|---|
+| 1 | `21646f4..7262148` (G5 record) | `build/w29/close-push*.log` |
+| 2 | `4b03ecb..31bb11b` (review + audit fixes) | `build/w29/close-push3.log`, guard `close-push3-guard.log` |
+| 3 | `31bb11b..7e14aaa` (CI fixes C9/C10) | `build/w29/close-push4.log`, guard `close-push4-guard.log` |
+
+Both workflows were dispatched explicitly on `wave29` (the `workflow_run`
+trigger still only fires from `main`).  The first dispatch ran on `31bb11b`:
+
+| workflow | run | result |
+|---|---|---|
+| qt-shell | 40245417658 | **RED**: `linux-qt` pass; `macos-qt` Build fails on the unused constant `kPropSessionWordCopy` (C7); `windows-qt` fails the wave23-outline parity step (C10) |
+| ci | 40245429060 | **RED**: `windows-msvc` pass; `ubuntu-gcc` fails the `roundtrip_outline` compile on the missing `slack` initializer (C9) |
+
+C7, C9 and C10 were fixed (`f7434d2`, `133cb3f`, `7e14aaa`) and both workflows
+re-dispatched on the final code tree `7e14aaa`:
+
+| workflow | run | result |
+|---|---|---|
+| qt-shell | 40248190323 | **success**: `windows-qt`, `macos-qt` and `linux-qt` all green, including the wave23-outline parity and wave25-auto colour steps |
+| ci | 40248193087 | **success**: `windows-msvc` and `ubuntu-gcc` both green |
+
+Dispatch logs: `build/w29/close-dispatch.log` (first) and
+`build/w29/close-dispatch4-{qt,ci}.log` (second).  The first-run job logs are
+`build/w29/close-ci1-*.log`; the second-run status snapshots are
+`build/w29/close-ci4-{qt,ci}-status.json`.  The CLOSE docs commit that carries
+this record is pushed after it with the final preflight
+`build/w29/close-push5-preflight.log`; it changes docs only, so the CI result
+above belongs to the final code tree `7e14aaa`.  No history was rewritten and
+the guard was never worked round.
+
+### The 16 decisions re-scored (wave-28 close as the starting point)
+
+| # | decision | wave 28 | after wave 29 | why |
+|---|---|---|---|---|
+| 1 | all seven tabs | DONE | **DONE** | the tab/group structure is unchanged; the Report tab's two buttons (W29-4.1) and the Format tab's three dialogs (W29-2.1) became live in their measured groups |
+| 2 | full backstage | DONE | **DONE** | unchanged; the Print page's Page Setup button is now wired to the measured dialog (W29-3.1) |
+| 3 | original icon set | DONE | **DONE (stronger)** | W29-5.2 re-authors the menu-bar, QAT and status-bar glyphs on the wave-26 one-ink grid and re-inks them live per theme (`window_ink`, contrast pinned); this closes the wave-28 "older drawings" note |
+| 4 | measured chrome metrics | DONE | **DONE** | unchanged metrics; W29-5.1's one measured geometry fix (timescale rules end at the band edge) is a painter boundary, not a chrome rectangle |
+| 5 | timeline strip | DONE | **DONE** | unchanged |
+| 6 | real Entry table | DONE | **DONE** | unchanged |
+| 7 | render what the file says | PARTIAL (stronger) | **DONE (stronger)** | W29-1.1 stores the `CTable` widths through the default font's measured unit, 1.2 paints the stored per-cell yellow fill, 1.3 draws every label the stored bar styles call for, and 1.4 pins a saved timescale origin and zoom (a stock start plus the 100 % day tier is Project's default record and deliberately changes nothing, W29-C6); top/bottom/inside label placement is a stated convention the capture cannot show, and the stored combination view is still undecoded |
+| 8 | status bar | PARTIAL (stronger) | **PARTIAL (stronger)** | W29-5.2 gives all five view glyphs distinct one-ink drawings, re-inked per theme; Team Planner and Report still have no working view, so two buttons cannot switch to one |
+| 9 | disabled commands + backlog | DONE (stronger) | **DONE (stronger)** | the generated backlog (95 ribbon rows, 77 disabled at this close) marks every newly live dialog command implemented with its named gap; W29-0.0's refusal gate pins every enabled command to its measured shapes, and each write path was lifted only against its own Project pair |
+| 10 | light and dark themes | PARTIAL (stronger) | **PARTIAL (stronger)** | W29-5.1 closes the wave-26 gaps: the sheet caption band, gutter and corner and the Gantt timescale band paint from the measured dark palettes, and the ribbon ink follows the theme; the dropdown's White theme stays laid out and disabled |
+| 11 | new-project defaults | DONE | **DONE (stronger)** | unchanged code; W29-0.1's Project reopen proves both new-task-mode port saves store the measured Manual value on their highest ID (True for the manual insert, False for the auto insert) |
+| 12 | structural measurement | PARTIAL (stronger) | **PARTIAL (stronger)** | wave 29 adds field-by-field pairs for 7 new Project save pairs (three percent shapes, five progress-update saves, four auto-outline saves), three new live dialog gates (format, page setup, report) and five numbers-only measures files; the pixel score is still not re-run (no PROJECT_A reference PNG is local) |
+| 13 | Carlito bundled | DONE | **DONE** | unchanged |
+| 14 | every dialog on every tab | PARTIAL (stronger) | **DONE (stronger)** | the six wave-28 backlog dialogs now exist: Text Styles, Gridlines and Bar Styles (W29-2.1), Page Setup (W29-3.1), Visual Reports and Compare Projects (W29-4.1), each laid out from a Project capture |
+| 15 | dialog semantics | PARTIAL (stronger) | **PARTIAL (stronger)** | Page Setup is fully functional (six tabs, every field edits the shared print layout, OK/Preview/Print gated pixel-for-pixel); Text Styles and Bar Styles apply to the open view only (no stored-style write exists), and Gridlines plus both report dialogs stay inert with the exact tooltip and an inline note |
+| 16 | split view | DONE (stronger) | **DONE** | unchanged |
+
+## Found, not fixed
+
+* **F3 - no gate scans the whole tree for the operator's name.**  Two
+  pre-wave fixtures (`tests/data/synthetic-base.mpp`,
+  `tests/data/wave23-outline.mpp`) still carry it three times each, 69 tracked
+  text files carry it, and the wave-29 privacy gates are HEAD/range scans for
+  client names.  The 156-name scanner cannot see skipped-row names.  A
+  whole-tree check and the purge are Tim's decision.  [High - privacy scope]
+* **F6 - the `project_a` task-order gate still expects `""` / level `-1` for
+  the project row** where Project measures `"0"` / 0
+  (`app_qt/tests/task_order_test.cpp:342-344`); the twelve task rows are
+  Project's values.  [Low]
+* **F7 - `write_project_status_date` still accepts a status-date record longer
+  than 4 bytes** (`core/mppwrite/actuals.cpp:1972` checks `length < 4u`)
+  although its error text names the measured 4/4 shape.  [Low]
+* **R28-5 - the UTF-16 user-profile check is still dead on the backslash
+  forms**: `scripts/check_fixtures.py:452` builds `PROFILE_UTF16` without
+  `re.escape`, UNC paths are covered by no branch, and there is no positive
+  self-test.  [Medium - the privacy gate]
+* **R28-6 - save-time ordering and late refusals remain.**  A percent edit plus
+  a Start edit on one task in one save is unmeasured; a percent or date-update
+  edit on a row with its own calendar, or with no start, is accepted and shown,
+  then refused at save as a warning and the shell reloads.  [Medium]
+* **R28-8 - the docked Task Form still enables view-only Name, Duration and
+  Finish edits** with no sign they never save, and a commit after the selection
+  moves is dropped silently.  [Low]
+* **R28-9 - a missing committed pair fixture still prints SKIP and exits 0**;
+  there is no minimum-check floor, so a deleted fixture weakens the gate
+  silently.  [Low]
+* **R28-11/A6 - `tests/data/README.md`'s "complete inventory" still lacks 21
+  tracked files**: the 12 wave-28 mark/update/outline `.mpp` pairs, the four
+  wave-26 reference JSONs, and the five wave-29 reference JSONs this wave
+  added; every pin that exists matches bytes.  [Low - record keeping]
+* **Carried process items**: A2/A5 (gate logs that mix trees or do not carry
+  the quoted counters), A4 (rule-3 log-naming gaps in wave-28 commits), A7
+  (fixture commits that also carry scripts/pins - repeated by `eddd9e9`,
+  `b751435`, `bd9e13d` and `8f80c2a` this wave) and R28-12 (a wave-28
+  per-commit gate omitted the core tree).  History cannot be rewritten.
+  [Low/Medium - process]
+* **W29-0.2's mid-to-mid pair is a named expected failure.**  A 25 -> 60 %
+  save makes Project reschedule the chain (50 moved fields, summary durations
+  26400 -> 23040 ticks); the port has no scheduler on that path, so the
+  transition stays refused and the test pins all 50 fields as EXPECTED
+  FAILURE.  [Medium - deliberate refusal with evidence]
+* **W29-0.3's lowering rule is measured only on the two-record assignment
+  block.**  A real assignment or any other block shape refuses to lower, and
+  date updates stay refused on every progressed shape outside the measured
+  automatic top-level 60 % one.  [Medium - deliberate refusal]
+* **W29-1.3's top/bottom/inside bar-label sides are a stated convention**, not
+  a measurement (the capture shows only left/right), and W29-1.4 clips a task
+  before the stored timescale origin at x < 0 instead of pulling the axis
+  back.  [Low]
+* **W29-2.1's Text Styles and Bar Styles apply to the open view only.**  No
+  stored-style write exists, so Save keeps the file's bytes; the
+  background-pattern combo and the start/end/middle shape and pattern lists
+  stay disabled with the decision-9 tooltip.  Gridlines is laid out and inert.
+  [Medium - decision 15]
+* **W29-4.1's Visual Reports and Compare Projects have no engine.**  Every
+  current-affecting control is present, disabled and carries the decision-9
+  tooltip; each dialog carries an inline note.  [Medium - decision 15]
+* **There is no local clang, GCC or Xcode.**  The macOS/GCC code fixes (C1,
+  C7, C9) were verified only by the wave-29 CI dispatch, which is green on
+  `7e14aaa` (all three Qt jobs and both ci jobs); the Windows parity gate was
+  reproduced and fixed locally before the re-dispatch (C10).  [Resolved for
+  this wave; the local gap remains]
+* **The theme gate does not pin the timescale tier-boundary colour.**  C8
+  fixed the paint from the measured JSON, but the gate samples tier fills and
+  not the one-pixel boundary, so a later change back to the strong rule would
+  pass.  A line sample (or a rendered-boundary assertion) is queued.  [Low -
+  W29-C4 coverage gap]
+* **W29-0.1's reopen covers 10 port saves x the project row and IDs 1..3.**
+  The TBkndAssn layer is field-compared, not reopened, because the wave-28
+  fixtures' assignments are resource-less.  [Low]
+* **The stored combination view is still undecoded and the White theme is
+  still an unimplemented dropdown choice.**  [Low]
+* **Split Task is still deferred** (W28-5.1): the segmented 128-byte assignment
+  work contour, its VarMeta relocation and the plan-wide slack/date rewrite are
+  not decoded; the button keeps the exact decision-9 tooltip and the committed
+  pair is the later writer's comparison.  [Medium - deferred with its
+  measurement, as the brief allows]
+* **The engines with no writer remain** (project move, baselines, WBS codes,
+  calendars), laid out and honestly inert; Custom Fields still covers the six
+  measured families only (Start/Finish custom fields and the Resource/Project
+  scopes are absent).  [Low]
+* **The pixel score is still not re-run**: no PROJECT_A reference PNG is
+  local.  [Low]
+* **A stored point size of 0xFFFF still reaches Qt unguarded** in
+  `app_qt/gantt_canvas.cpp:743` and `app_qt/sheet_table_model.cpp:261` (both
+  test `> 0` only).  [Medium - wave-26 review]
+* **Unlink still acts on the one selected task**, and a pending link ADD naming
+  an unlinked task survives Unlink (it has no saved row to tombstone); undo is
+  its removal path today.  [Medium/Low - W27-3.3]
+* **The ribbon check-box accessible-name sync and the Task Information
+  validate-then-commit ordering remain.**  [Medium - wave-26 review]
+* **`scripts/mpp_diff.py` still truncates `first_diffs` at 8/10/12 offsets
+  with no truncation marker.**  [Low - tooling]
+* **The 156-name scanner still cannot see skipped-row names**, so the
+  corpus-backed reader warning can print a name into the local-only CLOSE log;
+  the warning should carry the uid/row only.  [Low - tooling/privacy]
+* **174 tracked text files still contain CRLF lines** (measured at HEAD; the
+  count is unchanged).  [Low]
+* **The 13 unsalted FNV-1a display-name hashes remain in older wave-26 commits
+  and `tests/data/project_a_golden.tsv`.**  Rewriting history is forbidden by
+  the brief; both remain Tim's decision.  [Privacy]
+* **The generated backlog still does not list the five dynamic %-complete
+  ribbon controls, Update Project or Split Task.**  [Low - decision 9's
+  backlog stays incomplete]
+
+* **C3 - `add_task_link` still writes the falsified Fixed2Meta +8 rule for a
+  second incoming link** (`core/mppwrite/add_delete.cpp:1836-1845`).  The byte
+  is measured as driving state for the first link; the "later link row"
+  extension has no Project pair, and no test exercises it.  Queued for a pair
+  in the next wave.  [Medium - review]
+* **C4 - the null-save classifier's masked tail is reported, not asserted**,
+  and a whole 16-byte block is masked on any control-vs-null difference
+  (`tests/save_pair_noise.h:227-249`).  The effect checks that exist are
+  field-level; a truncated null fixture cannot fail a check.  Queued
+  (tooling).  [Medium - review]
+* **C5 - a percent edit on a row with a live incoming link is refused only
+  during Save**, not by `make_percent_edit`; the file is not written, but the
+  refusal is late and no pair combines the two shapes.  [Low - review]
+* **C6 - the record's W29-0.3 Props-mask sentence overstates the tests' mask**
+  (2 bytes at payload +2 and byte +3, not the whole 4-byte word); corrected in
+  the errata above.  [Low - review]
+
+WAVE-29-COMPLETE

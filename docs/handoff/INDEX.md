@@ -4,20 +4,27 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Now (25 October 2026)
+## Now (26 October 2026)
 
 | file | what |
 |---|---|
 | `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
 | `assessment-2026-10-24.md` | where the port stands after wave 26, and the workflow review |
 | `plan-waves27-30.md` | the proposed next rounds |
-| `wave28-complete.md` | **the wave-28 gate** (below), the current record |
+| `wave29-complete.md` | **the wave-29 gate** (below), the current record |
 
-## Wave 28 (closed on branch `wave28` - local only; push refused by the pre-push guard on `076438f`; not merged)
+## Wave 29 (closed on branch `wave29` - pushed; CI on the final code tree; not merged)
 
 | file | what |
 |---|---|
-| `wave28-complete.md` | **the wave-28 gate**: G0..G5 + CLOSE, G0..G4 DONE and G5 DEFERRED with its measurement, the fresh-tree gates on `7a69a40`, both privacy scans and the history residuals, the independent review (0 Critical, 3 High - first in wave 29) and its errata, the push refusal, the re-scored 16 decisions, "Found, not fixed" |
+| `wave29-complete.md` | **the wave-29 gate**: G0..G5 + CLOSE, every item DONE, the fresh-tree gates on `7e14aaa`, both privacy scans, the independent review (0 Critical / 2 High / 2 Medium / 2 Low, plus the CI findings C7/C9/C10 and the audit's C8 - all Highs fixed) and its errata, the push and the two CI dispatches, the re-scored 16 decisions, "Found, not fixed" |
+| `wave29-brief.md` | **the work order**: rule 1 for wave 28's commands (G0 from the wave-28 review), the PROJECT_A gaps, the format dialogs, Page Setup, Visual Reports / Compare Projects, the chrome finish |
+
+## Wave 28 (closed on branch `wave28` - pushed after Tim approved the `076438f` rewrite; not merged)
+
+| file | what |
+|---|---|
+| `wave28-complete.md` | **the wave-28 gate**: G0..G5 + CLOSE, G0..G4 DONE and G5 DEFERRED with its measurement, the fresh-tree gates on `7a69a40`, both privacy scans and the history residuals, the independent review (0 Critical, 3 High - first in wave 29) and its errata, the push refusal and its resolution, the re-scored 16 decisions, "Found, not fixed" |
 | `wave28-brief.md` | **the work order**: the editing core - the actuals writer, outline editing, the new-task mode, the editable Task Form, split |
 
 ## Wave 27 (closed on branch `wave27` - pushed; CI green on all three OSs; not merged)
