@@ -1550,6 +1550,23 @@ int main(int argc, char** argv) {
                                 QStringLiteral("not implemented in this port"),
                         "Subproject (inserted projects) stays disabled with the exact tooltip");
         }
+        // W30-3.5: Get Add-ins opens Microsoft's online add-in store and My
+        // Add-ins manages installed Office add-ins; both are online Office
+        // features.  The port has no add-in host, no network code and no
+        // measurement for either window, and the brief keeps both disabled.
+        // The pin loop already holds both small buttons to their pins; this
+        // named check states the brief's requirement for each of them.
+        for (const char* label : {"Get Add-ins", "My Add-ins"}) {
+            QWidget* control = find_control(ribbon, QStringLiteral("Project"),
+                                            QStringLiteral("Add-ins"),
+                                            QString::fromUtf8(label));
+            const std::string message =
+                std::string(label) + " (online add-ins) stays disabled with the exact tooltip";
+            gate::check(control != nullptr && !control->isEnabled() &&
+                            control->toolTip() ==
+                                QStringLiteral("not implemented in this port"),
+                        message.c_str());
+        }
     }
 
     std::printf("qt_ribbon_inventory: ");
