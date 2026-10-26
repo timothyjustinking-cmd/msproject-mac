@@ -46,6 +46,8 @@ RESULT = os.path.join(ROOT, "build", "w30", "W30-null-saves.json")
 CONTROLS = [
     "wave30-task-mode-auto-control.mpp",
     "wave30-task-mode-manual-control.mpp",
+    "wave30-insert-summary-control.mpp",
+    "wave30-insert-milestone-control.mpp",
 ]
 
 
