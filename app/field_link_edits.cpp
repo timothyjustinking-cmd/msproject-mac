@@ -414,6 +414,23 @@ std::string validate_link_add(const PlanInput& plan, const StructuralEdits& edit
     if (edits.is_pending_insert(predecessor_uid) || edits.is_pending_insert(successor_uid)) {
         return "a pending inserted task has no file row yet; save it before linking";
     }
+    // W31-0.1 (R30-1, High): an automatic outline edit queued before this link
+    // carries the slack and late dates Project computed on the UNLINKED file
+    // (build_outline_slack), and the save writes them after the link (step 2
+    // then step 5b).  No Project save pair measures a link added after the
+    // outline recalculated slack, so Add Link is refused until that edit is
+    // saved or undone.
+    for (const StructuralEdit& pending : edits.applied()) {
+        if ((pending.kind == StructuralKind::outline_indent ||
+             pending.kind == StructuralKind::outline_outdent) &&
+            !pending.slack.empty()) {
+            return "an automatic outline edit is pending; its save rewrites "
+                   "every live automatic row's slack and late dates on the "
+                   "unlinked file, so a link added now would be saved beside "
+                   "unlinked slack (no Project pair measures that); save or "
+                   "undo the outline edit first";
+        }
+    }
     if (find_task(plan, predecessor_uid) == nullptr) {
         return "predecessor uid " + std::to_string(predecessor_uid) +
                " is not a task in the plan";

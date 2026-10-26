@@ -2363,6 +2363,16 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                 edit.lag_ticks < -mppwrite::kMaxLinkLagTicks) {
                 return false;
             }
+            // W31-0.1 (R30-1, High): an automatic outline edit already queued
+            // carries the slack and late dates computed on the unlinked file;
+            // adding a link now would save both (step 2 then step 5b), a shape
+            // no Project pair measures.  validate_link_add refuses it for the
+            // dialog; this keeps a hand-built queue from bypassing the model.
+            for (const StructuralEdit& existing : applied_) {
+                if (is_outline_edit(existing.kind) && !existing.slack.empty()) {
+                    return false;
+                }
+            }
             for (const StructuralEdit& existing : applied_) {
                 if (existing.kind == StructuralKind::delete_task &&
                     (existing.uid == edit.uid ||
@@ -3285,6 +3295,28 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 "untouched save";
             return result;
         }
+    }
+
+    // W31-0.1 (R30-1, High): a link add and a slack-carrying outline edit in
+    // the same save would write the link at step 2 and the UNLINKED slack and
+    // late dates at step 5b.  push() and validate_link_add refuse the order the
+    // shell can build; this check refuses a hand-built queue before the first
+    // write, because no Project pair measures the combination.
+    bool has_link_add = false;
+    bool has_automatic_outline = false;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::add_link) {
+            has_link_add = true;
+        } else if (is_outline_edit(edit.kind) && !edit.slack.empty()) {
+            has_automatic_outline = true;
+        }
+    }
+    if (has_link_add && has_automatic_outline) {
+        result.error =
+            "a link add and an automatic outline edit are queued for one save; "
+            "the outline edit carries the slack and late dates computed on the "
+            "unlinked file, and no Project save pair measures the combination";
+        return result;
     }
 
     // Field edits: the last edit for a (task, field) wins, exactly as the display

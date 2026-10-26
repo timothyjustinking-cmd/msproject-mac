@@ -444,6 +444,9 @@ class StructuralEdits {
     // Push is plan-free for the edit kinds whose refusal the edit itself proves.
     // The duplicate-against-the-file and live-endpoint checks need the plan, so
     // the shell calls app::validate_link_add() first (app/field_link_edits.h).
+    // An add_link is also refused while a slack-carrying (automatic) outline
+    // edit is applied: that edit's save would write the unlinked slack and late
+    // dates beside the new link (W31-0.1).
     //
     // A set_percent edit REQUIRES `plan` (W27-0.2): the row must be a live,
     // non-summary, saved file task (make_percent_edit; file_row != 0), and a

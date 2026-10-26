@@ -884,7 +884,113 @@ void test_real_unlink_matches_project() {
     }
 }
 
+// W31-0.1 (R30-1, High): a link added after a queued automatic outline edit.
+// Each entry point is exercised through what the shell calls: the Predecessors
+// dialog's validate_link_add/make_link_add, push(add_link), the reverse order
+// (an outline edit while a link add is queued), and save_structural_edits for a
+// queue push() accepts only when the outline push is handed the unlinked plan
+// instead of the display plan it is meant to receive.
+void test_pending_outline_link_order() {
+    const std::filesystem::path control =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave29-outline-auto-indent-control.mpp";
+    if (!std::filesystem::exists(control)) {
+        std::printf("SKIP: wave29-outline-auto-indent-control.mpp is not present\n");
+        return;
+    }
+    Loaded base = load(control);
+    if (!base.ok) {
+        return;
+    }
+    check_size(base.plan.tasks.size(), 3,
+               "the automatic outline control has three task rows");
+    app::StructuralEdit outline_edit;
+    std::string error;
+    check(app::make_outline_edit(base.plan, base.path, 2, true, outline_edit, error),
+          "the automatic indent builds for the W31-0.1 test");
+    check(!outline_edit.slack.empty(),
+          "the automatic indent carries the slack list that makes it automatic");
+
+    // 1. The Predecessors dialog: validate_link_add receives the display plan
+    // and the local queue, so the pending outline edit must be visible.
+    app::StructuralEdits pending;
+    check(pending.push(outline_edit, &base.plan),
+          "the automatic indent queues against the unlinked plan");
+    const app::PlanInput display = pending.apply(base.plan);
+    const std::string refused = app::validate_link_add(
+        display, pending, 1, 3, LinkType::finish_to_start);
+    check(!refused.empty(),
+          "validate_link_add refuses a link after the automatic outline edit");
+    check(refused.find("outline edit is pending") != std::string::npos,
+          "the dialog refusal names the pending outline edit");
+    app::StructuralEdit add;
+    error.clear();
+    check(!app::make_link_add(display, pending, 1, 3, LinkType::finish_to_start,
+                              "0", add, error),
+          "the Predecessors dialog's builder refuses the same link");
+    check(error.find("outline edit is pending") != std::string::npos,
+          "the builder's refusal names the pending outline edit");
+
+    // 2. push(add_link) itself, for a caller that skipped validate_link_add.
+    app::StructuralEdit hand;
+    hand.kind = app::StructuralKind::add_link;
+    hand.uid = 3;
+    hand.predecessor_uid = 1;
+    hand.link_type = LinkType::finish_to_start;
+    hand.lag_ticks = 0;
+    check(!pending.push(hand),
+          "push(add_link) refuses the link while the outline edit is queued");
+
+    // 3. The reverse order stays refused: the display plan make_outline_edit
+    // sees carries the queued link, and push sees the plan's links.
+    app::StructuralEdits linked;
+    check(app::make_link_add(base.plan, linked, 1, 3, LinkType::finish_to_start,
+                             "0", add, error),
+          "the reverse-order link builds on the unlinked control");
+    check(linked.push(add), "the reverse-order link add queues");
+    const app::PlanInput linked_display = linked.apply(base.plan);
+    app::StructuralEdit reverse_edit;
+    check(!app::make_outline_edit(linked_display, base.path, 2, true,
+                                  reverse_edit, error),
+          "make_outline_edit refuses the automatic indent after the link add");
+    check(error.find("link") != std::string::npos,
+          "the reverse-order refusal names the link");
+    check(!linked.push(outline_edit, &linked_display),
+          "push refuses the automatic outline edit when the plan carries the link");
+
+    // 4. save_structural_edits refuses a queue that holds both.  push() builds
+    // it only because the outline push was handed the unlinked plan; the save
+    // must not trust its input and must write nothing.
+    app::StructuralEdits mixed;
+    app::StructuralEdit link_edit;
+    check(app::make_link_add(base.plan, mixed, 1, 3, LinkType::finish_to_start,
+                             "0", link_edit, error),
+          "the coexistence link builds");
+    check(mixed.push(link_edit), "the coexistence link queues");
+    check(mixed.push(outline_edit, &base.plan),
+          "the automatic outline edit queues against the unlinked plan");
+    std::error_code out_error;
+    std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
+                                        out_error);
+    const std::filesystem::path out_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) /
+        "w31-01-link-outline-refused.mpp";
+    std::filesystem::remove(out_path, out_error);
+    const app::StructuralSaveResult saved = app::save_structural_edits(
+        mixed, {}, base.path, out_path.string(), false);
+    check(!saved.ok,
+          "the save refuses a link add beside an automatic outline edit");
+    check(saved.error.find("link add") != std::string::npos &&
+              saved.error.find("outline edit") != std::string::npos,
+          "the save's coexistence refusal names both edits");
+    check(!std::filesystem::exists(out_path),
+          "the refused coexistence save writes no target file");
+}
+
 #else
+void test_pending_outline_link_order() {
+    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+}
 void test_real_round_trip() {
     std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
 }
@@ -904,6 +1010,7 @@ int main() {
     test_push_and_display();
     test_delete_prunes_adds();
     test_saved_links_touching();
+    test_pending_outline_link_order();
     test_real_round_trip();
     test_real_unlink_matches_project();
 
