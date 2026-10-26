@@ -2364,6 +2364,22 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::spelling:
             show_spelling();
             return;
+        // Wave 31 (W31-2.3, W31-2.4, W31-5.1): the View tab controls that stay
+        // DISABLED -- the single-document shell has no second window to open,
+        // list, arrange or hide, there is no macro engine, and Network Diagram,
+        // Calendar and Other Views are outside this run's scope.  Each keeps a
+        // command id for the disabled-control wiring and its own backlog
+        // reason; no UI path reaches these cases, but they must be named so a
+        // GCC/Clang -Wswitch build stays clean (W31-C5).
+        case RibbonCommand::window_new:
+        case RibbonCommand::window_switch:
+        case RibbonCommand::window_arrange:
+        case RibbonCommand::window_hide:
+        case RibbonCommand::macros:
+        case RibbonCommand::view_network_diagram:
+        case RibbonCommand::view_calendar:
+        case RibbonCommand::view_other_views:
+            return;
     }
 }
 
