@@ -60,6 +60,9 @@ CONTROLS = [
     "wave30-textstyle-control.mpp",
     # W30-2.0: the Resource tab's first pair (Add Resources, a work row).
     "wave30-resource-add-control.mpp",
+    # W30-2.1: the resource writes (Information's one-field rename, Notes).
+    "wave30-resource-rename-control.mpp",
+    "wave30-resource-notes-control.mpp",
 ]
 
 

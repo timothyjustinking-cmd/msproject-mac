@@ -389,6 +389,23 @@ DOCUMENTED = {
         "527578E5C62E11FF2B32298D5E28A4A080707E219DD083809D46370B164FCCE2",
     "tests/data/wave30-resource-add-control-null.mpp":
         "A07A5F75F0AE7F7678965A87F3FFBB8DFA7212A9379A3A849CA3FC36CE5BDFD6",
+    # Wave 30 (W30-2.1): the resource writes on the resource-add copy --
+    # Information's one-field Name change and a first Notes entry -- built by
+    # scripts/oracle_w30_resource_pairs.py, with each control's no-edit save.
+    # Both are deferred: the port has no resource-field writer and its writer
+    # never inserts or updates a VarMeta entry (tests/data/README.md).
+    "tests/data/wave30-resource-rename-control.mpp":
+        "CFCA5DFCA33F673FE1536E995E835C40CD14CE6D9C8E8EEA748A6BD43629BC3A",
+    "tests/data/wave30-resource-rename.mpp":
+        "7F4540A5F7258CEE3AFDD41107C021DE6EB8F2B832414990F6C1A7D5A12B674D",
+    "tests/data/wave30-resource-rename-control-null.mpp":
+        "8A3DC36D0802D8CB3A96DB1F7855BD33F784365D887B45CF695C9EB360BEA998",
+    "tests/data/wave30-resource-notes-control.mpp":
+        "5335C5781F2B15C28145B7EA981237604EB86588C4426A60AE6F33C7326207C5",
+    "tests/data/wave30-resource-notes.mpp":
+        "EE755F6FA06FF3BF7E1C56F40D47ACD6EF034C9E97A0C969386A2B8F7F4CCF76",
+    "tests/data/wave30-resource-notes-control-null.mpp":
+        "A8DB92428104996C0C4B85FE43510FC717DDC7ED689E4415782C8EC3FC69B096",
     # Wave 27 (W27-3.3): the SAME Project 2021 session's save of
     # wave23-outline.mpp before and after Task > Unlink Tasks on the one task
     # with both a predecessor and a successor (uid 4: 3 -> 4 FS+2 d and
