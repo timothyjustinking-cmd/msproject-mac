@@ -127,6 +127,18 @@ Estimate: 8-12 hours, likely split into waves 30 and 31.
   naming the operator; the outside-progress test sees only percent, and the usage
   gate accepts a longer or absent series.
 
+## Queued from the wave-32 review (Medium/Low; `wave32-verification/review.md`)
+
+- R32-1 Medium: Task Information queues custom-field edits before the percent push,
+  so a refused percent leaves the field edits queued with only the refusal shown.
+- R32-2 Medium: the macOS shell's filter still does range select, copy, multi-row
+  paste and Indent/Outdent in file order (no saved field is reachable today).
+- R32-3..R32-7 Low: `Document::save`/`save_start_edits` still write a Start if handed
+  one; a one-row paste into a pre-sort range lands on the first file row; Indent,
+  Outdent and Insert under a filter; three weak tests (paste-refusal column, a filter
+  that hides nothing, no ID-ascending case); `sort_reorders_rows()` re-sorts on every
+  menu update.
+
 ## After wave 30 (not planned in detail)
 
 Team Planner, Network Diagram, Calendar and Report views; the constraint-mso engine
