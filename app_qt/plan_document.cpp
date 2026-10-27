@@ -1050,6 +1050,21 @@ std::vector<std::size_t> PlanDocument::display_rows() const {
     return ordered_display_rows();
 }
 
+bool PlanDocument::sort_reorders_rows() const {
+    if (!sort_active_ || sheet_ == nullptr) {
+        return false;
+    }
+    const std::vector<std::size_t> visible = sheet_->visible_rows();
+    return app::sort_display_rows(sort_definition_, records_, visible) != visible;
+}
+
+bool PlanDocument::display_order_differs_from_file() const {
+    // A filter always narrows or reorders through a display list; the caller
+    // must not assume its rows are the file's.  A sort only matters when it
+    // actually moved a row (ID ascending over an ID-ordered file did not).
+    return filter_active_ || sort_reorders_rows();
+}
+
 void PlanDocument::read_table(const std::string& source_path) {
     tables_.clear();
     table_ = msproject::viewstate::TableDef{};

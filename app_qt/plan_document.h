@@ -168,6 +168,16 @@ class PlanDocument {
     // This is what the table and the Gantt draw.
     std::vector<std::size_t> display_rows() const;
 
+    // W32-0.3 (R31-3, High): core SheetModel selection coordinates and
+    // SheetModel::paste walk FILE rows.  When a filter is active, or a sort
+    // puts the visible rows in an order other than the file's, a displayed
+    // range is not the file rectangle the core would read or fill, so the
+    // shell refuses range operations first.  The sort half compares the sorted
+    // list with the sheet's unsorted visible rows, so an ID ascending sort that
+    // leaves the file order alone is still allowed; ID descending is refused.
+    bool sort_reorders_rows() const;
+    bool display_order_differs_from_file() const;
+
     const app::PlanInput& loaded() const noexcept { return loaded_; }
     const app::PlanInput& plan() const noexcept { return view_; }
     app::PlanSummary summary() const { return app::summarize(view_); }

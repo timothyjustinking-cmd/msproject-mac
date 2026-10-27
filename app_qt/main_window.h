@@ -260,6 +260,27 @@ class MainWindow final : public QMainWindow {
     // The task-row right-click menu (distinct from the column header menu).
     QMenu* build_row_menu();
 
+    // --- wave 32 (W32-0.3): reordered display refusals ----------------------
+    // show_sort_dialog()/show_filter_dialog() call these with the dialog's
+    // result; the offscreen gates call them directly, which is how a test puts
+    // the window into the sorted/filtered state the refusal policy is about.
+    void apply_session_sort(core::view::SortDefinition definition, std::string description);
+    void apply_session_filter(core::view::FilterDefinition definition, std::string description);
+    // The dialogs' Clear paths, exposed for the same gates.
+    void clear_session_sort();
+    void clear_session_filter();
+    bool sort_active() const noexcept { return doc_.sort_active(); }
+    // True when a filter is active, or a sort put the visible rows in an order
+    // other than the file's; core selection/paste coordinates are file rows.
+    bool display_order_differs_from_file() const {
+        return doc_.display_order_differs_from_file();
+    }
+    // The View's clicked-cell entry point.  `extend` is the Shift-click range
+    // extension; the clicked() lambda passes the live keyboard modifier and
+    // the offscreen gates call it directly.  A refused extension leaves the
+    // core selection as a single cell.
+    void clicked_cell(int display_row, int display_column, bool extend);
+
     QTableView* sheet_view() const noexcept { return sheet_view_; }
     GanttCanvas* gantt_view() const noexcept { return gantt_canvas_; }
     QSplitter* splitter() const noexcept { return splitter_; }

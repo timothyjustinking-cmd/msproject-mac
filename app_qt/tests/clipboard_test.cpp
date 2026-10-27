@@ -26,10 +26,13 @@
 #include <vector>
 
 #include "entry_columns.h"
+#include "filter.h"
+#include "layout_model.h"
 #include "main_window.h"
 #include "menu_model.h"
 #include "sheet.h"
 #include "shell_style.h"
+#include "sort.h"
 
 #include "gate_util.h"
 
@@ -48,6 +51,21 @@ void trigger(msqt::MainWindow& window, app::MenuAction id) {
     QAction* action = gate::find_action(window, id);
     gate::check(action != nullptr, "the menu carries the clipboard action");
     if (action != nullptr) {
+        action->trigger();
+        QApplication::processEvents();
+    }
+}
+
+// W32-0.3: QAction::trigger() does nothing on a disabled action, so a gate that
+// only calls trigger() proves the enablement rule and not the handler's own
+// refusal.  Force-enabling first exercises the handler (a ribbon button or any
+// direct caller bypasses the menu); refresh_menu_state() restores the real
+// enablement afterwards.
+void force_trigger(msqt::MainWindow& window, app::MenuAction id) {
+    QAction* action = gate::find_action(window, id);
+    gate::check(action != nullptr, "the menu carries the clipboard action");
+    if (action != nullptr) {
+        action->setEnabled(true);
         action->trigger();
         QApplication::processEvents();
     }
@@ -241,6 +259,185 @@ int main(int argc, char** argv) {
     trigger(window, app::MenuAction::undo);
     gate::check(cell_text(window, 2, name_column) == row2_before,
                 "single-cell paste is undone in one step");
+
+    // --- W32-0.3 (R31-3, High): a reordered display refuses range operations --
+    // Core selection coordinates and SheetModel::paste walk FILE rows.  The
+    // block below is three rows of Duration text, so any write into the Name
+    // column would be visible; it is copied BEFORE the sort/filter because a
+    // range copy is itself refused once the display is reordered.
+    const int name_display_column =
+        window.sheet_table_model()->display_column_for_field(app::name_field_id());
+    gate::check(name_display_column >= 0, "the display has a Name column");
+    gate::check(sheet->select_range(0, 2, duration_column, duration_column),
+                "a three-row Duration block is selected");
+    window.refresh_menu_state();
+    trigger(window, app::MenuAction::copy);
+    gate::check(window.clipboard_block().rows == 3,
+                "the three-row Duration block is on the clipboard");
+    const std::string block3_text = window.clipboard_block().to_text();
+    gate::check(!block3_text.empty(), "the three-row block carries text");
+
+    // `label` names the state in every message, so the sort and filter runs
+    // cannot be confused in a failure log.
+    const auto check_reordered = [&](const std::string& label) {
+        auto check = [&label](bool condition, const std::string& what) {
+            gate::check(condition, (label + ": " + what).c_str());
+        };
+        core::sheet::SheetModel* core = window.sheet();
+        check(core != nullptr, "the window exposes the sheet");
+        if (core == nullptr || name_display_column < 0) {
+            return;
+        }
+        check(window.display_order_differs_from_file(),
+              "the display order is not the file order");
+        check(window.sheet_table_model()->record_row(0) != core::sheet::kNoIndex,
+              "display row 0 maps to a record");
+
+        std::vector<std::string> names;
+        for (std::size_t row = 0; row < core->row_count(); ++row) {
+            names.push_back(cell_text(window, row, name_column));
+        }
+
+        // Range Copy and Cut are disabled, and their handlers refuse too.
+        check(core->select_range(0, 2, name_column, name_column),
+              "a three-row Name range is selected");
+        window.refresh_menu_state();
+        check(!action_enabled(window, app::MenuAction::copy),
+              "Copy of a range is disabled");
+        check(!action_enabled(window, app::MenuAction::cut),
+              "Cut of a range is disabled");
+        force_trigger(window, app::MenuAction::copy);
+        check(window.clipboard_block().to_text() == block3_text,
+              "the refused Copy leaves the clipboard block unchanged");
+        check(window.status_left_text().contains(QStringLiteral("copy: a range is refused")),
+              "the Copy handler names the range refusal");
+        window.refresh_menu_state();
+        force_trigger(window, app::MenuAction::cut);
+        check(window.clipboard_block().to_text() == block3_text,
+              "the refused Cut leaves the clipboard block unchanged");
+        bool names_intact = true;
+        for (std::size_t row = 0; row < core->row_count(); ++row) {
+            names_intact = names_intact && cell_text(window, row, name_column) == names[row];
+        }
+        check(names_intact, "the refused Cut leaves every Name cell unchanged");
+        check(window.status_left_text().contains(QStringLiteral("cut: a range is refused")),
+              "the Cut handler names the range refusal");
+        window.refresh_menu_state();
+
+        // The paste target must be a REAL task row: the project-summary row is
+        // refused by a different guard (wave 25's uid-0 rule), so a paste there
+        // would pass "nothing changed" without exercising this refusal.
+        int task_display_row = -1;
+        for (int display = 0; display < window.sheet_table_model()->rowCount(); ++display) {
+            const std::size_t record = window.sheet_table_model()->record_row(display);
+            if (record != core::sheet::kNoIndex && core->row_uid(record) != 0) {
+                task_display_row = display;
+                break;
+            }
+        }
+        check(task_display_row >= 0, "the display shows a real task row");
+        if (task_display_row < 0) {
+            return;
+        }
+
+        // A three-row Paste is disabled and the handler writes nothing.
+        window.clicked_cell(task_display_row, name_display_column, false);
+        window.refresh_menu_state();
+        check(!action_enabled(window, app::MenuAction::paste),
+              "a three-row Paste is disabled");
+        force_trigger(window, app::MenuAction::paste);
+        names_intact = true;
+        for (std::size_t row = 0; row < core->row_count(); ++row) {
+            names_intact = names_intact && cell_text(window, row, name_column) == names[row];
+        }
+        check(names_intact, "the refused Paste leaves every Name cell unchanged");
+        check(window.status_left_text().contains(QStringLiteral("multi-row block is refused")),
+              "the Paste handler names the multi-row refusal");
+        window.refresh_menu_state();
+
+        // A single-cell edit on a clicked display row changes exactly the
+        // record shown there (the adapter maps display row -> file row).  The
+        // project-summary row is skipped: a cell edit there is refused for a
+        // different reason (wave 25's uid-0 rule).
+        const std::size_t shown = window.sheet_table_model()->record_row(task_display_row);
+        check(window.sheet_table_model()
+                      ->data(window.sheet_table_model()->index(task_display_row,
+                                                               name_display_column),
+                             Qt::DisplayRole)
+                      .toString()
+                      .toStdString() == names[shown],
+              "the task display row shows the mapped record's Name");
+        const QString edited = QStringLiteral("edited on a display row");
+        check(window.sheet_table_model()->setData(
+                  window.sheet_table_model()->index(task_display_row, name_display_column),
+                  edited, Qt::EditRole),
+              "a single-cell edit on the task display row commits");
+        check(core->field_text(shown, app::name_field_id()) == edited.toStdString(),
+              "the edit changed exactly the record shown there");
+        bool others_intact = true;
+        for (std::size_t row = 0; row < core->row_count(); ++row) {
+            if (row == shown) {
+                continue;
+            }
+            others_intact =
+                others_intact && cell_text(window, row, name_column) == names[row];
+        }
+        check(others_intact, "no other record's Name changed");
+        check(window.sheet_table_model()->setData(
+                  window.sheet_table_model()->index(task_display_row, name_display_column),
+                  QString::fromStdString(names[shown]), Qt::EditRole),
+              "the display-row edit is restored");
+
+        // Shift-click does not extend the selection.
+        const int other_display_row = task_display_row == 0 ? 1 : 0;
+        window.clicked_cell(task_display_row, name_display_column, false);
+        check(core->selected_cells().size() == 1, "a plain click selects one cell");
+        const std::size_t anchor_row = core->anchor().row;
+        window.clicked_cell(other_display_row, name_display_column, true);
+        check(core->selected_cells().size() == 1, "a Shift-click does not extend");
+        check(core->anchor().row == anchor_row, "the Shift-click leaves the anchor");
+        check(window.status_left_text().contains(QStringLiteral("shift-click")),
+              "the refused extension explains itself");
+    };
+
+    // W32-0.3: an ID-DESCENDING sort reorders the display even though it names
+    // the ID field, so every range operation is refused until the sort clears.
+    core::view::SortDefinition sort;
+    sort.id = "w32-id-desc";
+    sort.name = "ID descending";
+    sort.keys.push_back(core::view::SortKey{app::task_field_id("ID"), false});
+    window.apply_session_sort(std::move(sort), "ID descending");
+    QApplication::processEvents();
+    gate::check(window.sort_active(), "the ID-descending sort is active");
+    check_reordered("ID-descending sort");
+    // R31-4 folded into W32-0.3: the file-order commands refuse while a sort
+    // reorders the rows.  The selection is a real task cell, so without the
+    // sort rule Indent and Outdent would be enabled.
+    gate::check(!action_enabled(window, app::MenuAction::insert_task),
+                "ID-descending sort: Insert is disabled");
+    gate::check(!action_enabled(window, app::MenuAction::indent),
+                "ID-descending sort: Indent is disabled");
+    gate::check(!action_enabled(window, app::MenuAction::outdent),
+                "ID-descending sort: Outdent is disabled");
+    window.clear_session_sort();
+    QApplication::processEvents();
+    gate::check(!window.sort_active(), "the sort is cleared");
+    gate::check(action_enabled(window, app::MenuAction::insert_task),
+                "clearing the sort enables Insert again");
+
+    // An active filter is refused even when it keeps every row and the file's
+    // order: the shell cannot know a display list is the file's.
+    core::view::FilterDefinition filter;
+    filter.id = "w32-named";
+    filter.name = "named tasks";
+    filter.criteria = core::view::FilterCriterion::is_not_null(app::name_field_id());
+    window.apply_session_filter(std::move(filter), "named tasks");
+    QApplication::processEvents();
+    gate::check(window.filter_active(), "the filter is active");
+    check_reordered("filter");
+    window.clear_session_filter();
+    QApplication::processEvents();
+    gate::check(!window.filter_active(), "the filter is cleared");
 
     std::printf("qt_clipboard: ");
     return gate::finish();

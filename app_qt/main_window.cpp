@@ -741,6 +741,8 @@ void MainWindow::build_central_widget() {
     // A click selects through the sheet model (the single source of truth), then
     // mirrors the selection onto the Gantt bar.  Shift-click extends the model's
     // rectangle: that rectangle is what Copy/Cut read and what Paste fills.
+    // W32-0.3 (R31-3): the task-sheet body is clicked_cell(), so the offscreen
+    // gates drive the same entry point; only the Shift modifier comes from here.
     connect(sheet_view_, &QAbstractItemView::clicked, this, [this](const QModelIndex& index) {
         if (!doc_.has_document()) {
             return;
@@ -768,29 +770,8 @@ void MainWindow::build_central_widget() {
         if (prefs_.view != app::ViewMode::task_sheet) {
             return;
         }
-        const std::size_t row = sheet_model_.record_row(index.row());
-        const std::size_t column = sheet_model_.model_column(index.column());
-        if (row == core::sheet::kNoIndex || column == core::sheet::kNoIndex) {
-            return;
-        }
-        const bool extend = (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0;
-        if (extend) {
-            if (!doc_.sheet()->extend_to(row, column)) {
-                return;
-            }
-            select_core_range_in_view();
-        } else if (!app::select_cell(*doc_.sheet(), row, column)) {
-            return;
-        }
-        gantt_canvas_->set_selected_uid(doc_.selected_uid());
-        if (sheet_view_->viewport() != nullptr) {
-            sheet_view_->viewport()->update();
-        }
-        // W26-6.3: the Task Form shows the newly selected task.
-        refresh_task_form();
-        // W30-1.10: the Task Inspector follows the same selection.
-        refresh_inspector();
-        update_menu_state();
+        clicked_cell(index.row(), index.column(),
+                     (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0);
     });
 
     // The task-row right-click menu (distinct from the column header menu).
@@ -802,6 +783,46 @@ void MainWindow::build_central_widget() {
     });
 
     apply_split_fraction();
+}
+
+void MainWindow::clicked_cell(int display_row, int display_column, bool extend) {
+    if (doc_.sheet() == nullptr || prefs_.view != app::ViewMode::task_sheet) {
+        return;
+    }
+    const std::size_t row = sheet_model_.record_row(display_row);
+    const std::size_t column = sheet_model_.model_column(display_column);
+    if (row == core::sheet::kNoIndex || column == core::sheet::kNoIndex) {
+        return;
+    }
+    if (extend) {
+        // W32-0.3 (R31-3, High): extend_to() fills a rectangle in FILE rows
+        // between the anchor and the clicked row.  Under a sort or filter the
+        // display rows between them are not that rectangle, so the selection
+        // would silently cover different records than the user dragged across.
+        // Refuse the extension and leave the single-cell selection as it is.
+        if (doc_.display_order_differs_from_file()) {
+            set_message("shift-click range selection is refused while a sort or filter "
+                        "changes the row order; clear the sort and filter first",
+                        true);
+            update_status();
+            return;
+        }
+        if (!doc_.sheet()->extend_to(row, column)) {
+            return;
+        }
+        select_core_range_in_view();
+    } else if (!app::select_cell(*doc_.sheet(), row, column)) {
+        return;
+    }
+    gantt_canvas_->set_selected_uid(doc_.selected_uid());
+    if (sheet_view_->viewport() != nullptr) {
+        sheet_view_->viewport()->update();
+    }
+    // W26-6.3: the Task Form shows the newly selected task.
+    refresh_task_form();
+    // W30-1.10: the Task Inspector follows the same selection.
+    refresh_inspector();
+    update_menu_state();
 }
 
 void MainWindow::build_menus() {
@@ -1921,6 +1942,19 @@ void MainWindow::update_menu_state() {
         task_view && sheet != nullptr && sheet->has_selection() && !clipboard_.empty();
     state.dirty = document_dirty();
     state.filter_active = doc_.filter_active();
+    // W32-0.3 (R31-3, High): core selection/paste walk FILE rows, so a range
+    // copied, cut or pasted across a sorted or filtered display would touch
+    // different records than the user sees.  Disable the RANGE forms first: a
+    // single-cell copy/cut is still mapped by display row, and a one-row paste
+    // writes only its anchor row.  Shift-click extension is refused in
+    // clicked_cell(); Indent/Outdent/Insert need file order and are refused
+    // while a sort reorders the rows.  Both predicates are computed once: the
+    // sort one re-sorts the visible rows, and this loop runs per action.
+    const bool sort_reorders = doc_.sort_reorders_rows();
+    const bool reordered = doc_.filter_active() || sort_reorders;
+    const bool range_selection =
+        task_view && sheet != nullptr && sheet->selected_cells().size() > 1;
+    const bool multi_row_paste = clipboard_.rows > 1;
     state.task_view = task_view;
     if (task_view && sheet != nullptr) {
         for (std::size_t row = 0; row < sheet->row_count(); ++row) {
@@ -1939,6 +1973,22 @@ void MainWindow::update_menu_state() {
         bool enabled = app::menu_item_enabled(id, state) && shell_implements(id);
         if (id == app::MenuAction::cut) {
             enabled = state.task_view && state.has_document && state.can_copy && !state.editing;
+        }
+        // W32-0.3 (R31-3, High): the range forms of the clipboard and the
+        // file-order commands are disabled while the display order is not the
+        // file's.  The handlers repeat the refusal (a ribbon button or a test
+        // can bypass the menu).
+        if (reordered && range_selection &&
+            (id == app::MenuAction::copy || id == app::MenuAction::cut)) {
+            enabled = false;
+        }
+        if (reordered && multi_row_paste && id == app::MenuAction::paste) {
+            enabled = false;
+        }
+        if ((id == app::MenuAction::insert_task || id == app::MenuAction::indent ||
+             id == app::MenuAction::outdent) &&
+            sort_reorders) {
+            enabled = false;
         }
         action->setEnabled(enabled);
     }
@@ -2835,6 +2885,17 @@ void MainWindow::indent_selected(bool indent) {
         set_message(std::string(indent ? "indent" : "outdent") +
                         " is available in the Task Sheet view",
                     false);
+        update_status();
+        return;
+    }
+    // W32-0.3 (R31-3/R31-4, High): an outline edit names the row by its FILE
+    // position (siblings and the row above/below).  A sorted display puts a
+    // different task there, so refuse first and name the remedy.
+    if (doc_.sort_reorders_rows()) {
+        set_message(std::string(indent ? "indent" : "outdent") +
+                        ": clear the sort first; the sorted order is not the file's row "
+                        "order",
+                    true);
         update_status();
         return;
     }
@@ -4307,6 +4368,16 @@ void MainWindow::copy_selection() {
         update_status();
         return;
     }
+    // W32-0.3 (R31-3, High): copy_selection() reads a rectangle of FILE rows;
+    // under a filter or a reordering sort that rectangle is not what the user
+    // dragged across.  A single cell is mapped by display row and stays safe.
+    if (doc_.display_order_differs_from_file() && sheet->selected_cells().size() > 1) {
+        set_message("copy: a range is refused while a sort or filter changes the row order; "
+                    "clear the sort and filter first (a single cell still copies)",
+                    true);
+        update_status();
+        return;
+    }
     clipboard_ = sheet->copy_selection();
     if (clipboard_.empty()) {
         set_message("nothing to copy", false);
@@ -4336,6 +4407,15 @@ void MainWindow::cut_selection() {
     core::sheet::SheetModel* sheet = doc_.sheet();
     if (!sheet->has_selection()) {
         set_message("select a cell or a range first", false);
+        update_status();
+        return;
+    }
+    // W32-0.3 (R31-3, High): the same range rule as Copy, and here a wrong
+    // rectangle would also CLEAR the wrong records.
+    if (doc_.display_order_differs_from_file() && sheet->selected_cells().size() > 1) {
+        set_message("cut: a range is refused while a sort or filter changes the row order; "
+                    "clear the sort and filter first (a single cell still cuts)",
+                    true);
         update_status();
         return;
     }
@@ -4434,6 +4514,17 @@ void MainWindow::paste_selection() {
     }
     if (!sheet->has_selection()) {
         set_message("select the target cell first", false);
+        update_status();
+        return;
+    }
+    // W32-0.3 (R31-3, High): SheetModel::paste walks the sheet's VISIBLE rows
+    // in file order, so a block with more than one row fills records that are
+    // not the display rows under the anchor.  Refuse it whole; a one-row block
+    // writes its anchor row only and is still mapped by display row.
+    if (doc_.display_order_differs_from_file() && clipboard_.rows > 1) {
+        set_message("paste: a multi-row block is refused while a sort or filter changes "
+                    "the row order; clear the sort and filter first",
+                    true);
         update_status();
         return;
     }
@@ -4663,6 +4754,16 @@ void MainWindow::select_core_range_in_view() {
 void MainWindow::insert_task() {
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("Insert Task is available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    // W32-0.3 (R31-3/R31-4, High): the insert anchors after the selected task's
+    // FILE position, so a sorted display would put the new row somewhere other
+    // than where the user sees the selection.
+    if (doc_.sort_reorders_rows()) {
+        set_message("insert: clear the sort first; the sorted order is not the file's row "
+                    "order",
+                    true);
         update_status();
         return;
     }
@@ -5251,9 +5352,28 @@ void MainWindow::show_filter_dialog() {
         doc_.clear_filter();
         set_message("filter cleared", false);
     } else {
-        doc_.set_filter(std::move(definition), description);
         set_message("filter: " + description, false);
+        apply_session_filter(std::move(definition), std::move(description));
+        return;
     }
+    doc_.rebuild_views(prefs_.zoom);
+    apply_filter_to_sheet_model();
+    sync_view_selection();
+    gantt_canvas_->set_layout(doc_.gantt());
+    gantt_canvas_->set_selected_uid(doc_.selected_uid());
+    update_menu_state();
+    update_status();
+}
+
+// W32-0.3 (R31-3, High): the session filter, exposed so an offscreen gate can
+// put the window into the filtered state the refusal policy is about.  This is
+// the exact path show_filter_dialog() takes with the dialog's result.
+void MainWindow::apply_session_filter(core::view::FilterDefinition definition,
+                                      std::string description) {
+    if (!doc_.has_document()) {
+        return;
+    }
+    doc_.set_filter(std::move(definition), std::move(description));
     doc_.rebuild_views(prefs_.zoom);
     apply_filter_to_sheet_model();
     sync_view_selection();
@@ -5305,11 +5425,34 @@ void MainWindow::show_sort_dialog() {
     if (cleared) {
         doc_.clear_sort();
         set_message("sort cleared", false);
-    } else {
-        doc_.set_sort(std::move(definition), description);
-        set_message("sort: " + description + " (session only)", false);
+        after_model_change();
+        return;
     }
+    set_message("sort: " + description + " (session only)", false);
+    apply_session_sort(std::move(definition), std::move(description));
+}
+
+// W32-0.3 (R31-3, High): the session sort, exposed for the offscreen gates; the
+// Sort dialog's accepted definition takes this exact path.
+void MainWindow::apply_session_sort(core::view::SortDefinition definition,
+                                    std::string description) {
+    if (!doc_.has_document()) {
+        return;
+    }
+    doc_.set_sort(std::move(definition), std::move(description));
     after_model_change();
+}
+
+void MainWindow::clear_session_sort() {
+    if (!doc_.has_document()) {
+        return;
+    }
+    doc_.clear_sort();
+    after_model_change();
+}
+
+void MainWindow::clear_session_filter() {
+    clear_filter();
 }
 
 // Wave 31 (W31-1.2): Project's View > Outline.  "Level N" leaves levels 1..N
