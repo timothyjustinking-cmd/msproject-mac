@@ -1,7 +1,7 @@
-# memory — coordinator (2026-10-27, wave 31 closed on branch)
+# memory — coordinator (2026-10-27, wave 32 closed on branch)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
-`docs/handoff/wave31-complete.md`.  History:
+`docs/handoff/wave32-complete.md`.  History:
 `memory/archive/coordinator-through-wave20-full.md`.
 
 ## Where the branches are
@@ -32,102 +32,95 @@ C7 `072773b` (the unused `row_map_uids` helper removed for GCC/Clang
 (`WAVE-31-G0-COMPLETE` .. `WAVE-31-G5-COMPLETE`, then `WAVE-31-COMPLETE`) is in
 `wave31-complete.md`.
 
-## Numbers (wave 31 close, fresh trees build/w31-close-fresh{,-app,-qt}, final code tree 072773b)
+**Wave 32 is closed on `wave32`, cut from `wave31` (`3a18e64`), pushed and not
+merged**; `origin/wave32` = the CLOSE docs commit, final code tree `7727760`.
+Wave 32 commits: brief `b16a9fa`; W32-0.1 `4834b40`, W32-0.2 `290a73a`, W32-0.3
+`5650b53`, G0 record `123ec83` and `0c0e014`; CLOSE fixes W32-C1 `17e24ef`
+(plan-waves27-30 back to LF), W32-C2 `017ef44` (backlog states the wave-32
+refusals), W32-C3 `64fa2fc` (the three texts no longer say Start is written),
+then the review fixes W32-C4 `71383a6` (the Entry column index is int; app_qt
+builds with warnings as errors), W32-C5 `786024a` (order-1 actuals test), W32-C6
+`3d0c80f` (macOS funnel refuses Start; stale Start-save texts gone), W32-C7
+`0e6e74c` (ribbon handlers clicked under the sort), W32-C8 `7727760` (the save
+check's unreachability recorded); then the CLOSE docs commit.  The markers are
+`WAVE-32-G0-COMPLETE` and `WAVE-32-COMPLETE` in `wave32-complete.md`.
 
-* core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` exit 0 / exit 0;
-  core ctest `-E plan_recalc` **52/52**; plan_recalc **512** with corpus /
-  **266** without; reader **1136** with corpus / **456** without; M2
-  **332/332**, **268/268** and **64/64**; app **25/25**; app_qt **37/37**;
-  fixtures OK (**139** documented hashes, **173** tracked `.mpp`), paths OK
-  (222), oracle provenance OK (8).  The final-tree run (072773b) logged 08:26 and
-  finished 08:36; the log is `build/w31/W31-CLOSE-fresh-gates.log`.
+## Numbers (wave 32 close, fresh trees build/w32-close-fresh{,-app,-qt}, final code tree 7727760)
+
+* core, app and app_qt configured with `CORE_WARNINGS_AS_ERRORS=ON` (the
+  review's H1 hole is closed); core configure/build exit 0 / exit 0; core ctest
+  `-E plan_recalc` **52/52**; plan_recalc **512** with corpus / **266** without;
+  reader **1136** with corpus / **456** without; M2 **332/332**, **268/268** and
+  **64/64**; app **25/25** and `app_edits_outline_tests` **3230 checks**;
+  app_qt **37/37**; fixtures OK (**139** documented hashes, **173** tracked
+  `.mpp`), paths OK (222), oracle provenance OK (8).  The log is
+  `build/w32/W32-CLOSE-fresh-gates.log`; the earlier runs are preserved as
+  `...-64fa2fc.log` and `...-run1.log`.
 * Engine **7/8** (`constraint-mso` deliberately expected-failing;
   `mppwrite::save_plan` is test-only); selftest 53 checks, suite 8 recorded
   (7 pass + 1 expected), 0 unrecorded, exit 0.
-* Parity: **wave23-outline 10/10** and **wave25-auto colour 1/0**, re-run on
-  the fresh Qt shell at 072773b (`build/w31/W31-CLOSE-fresh-gates.log`); every
-  measure PASS.  The pixel score is not re-run (no reference PNG locally).
-* CI: **green on 072773b, the third dispatch**: qt.yml **40404390641**
-  (`windows-qt`, `macos-qt`, `linux-qt`, both parity gates) and ci.yml
-  **40404395191** (`windows-msvc`, `ubuntu-gcc`); the first dispatch was red on
-  all three Qt jobs (W31-C5/W31-C6) and the second on the two Unix Qt jobs
-  (W31-C7), ci.yml green each time.  Snapshots
-  `build/w31/close-ci-{qt,ci}-status.json`.
+* CI: `origin/wave32` = `7727760` pushed without force after a clean preflight
+  (`build/w32/W32-CLOSE-push-preflight-7727760.log`), then `qt.yml` run
+  **40456047971** (windows-qt, linux-qt, macos-qt) and `ci.yml` run
+  **40456051113** (windows-msvc, ubuntu-gcc) dispatched explicitly on `wave32`;
+  all five jobs `success` on `7727760`, no re-dispatch needed.  The CLOSE docs
+  commit that follows changes docs only.
 * Privacy: line scan **0 files / 0 hits** on HEAD and **0 commit messages** on
-  `wave30..HEAD`; normalised `guard_names.py` **0 hits, exit 0** on
-  `wave30..HEAD` and on the push range `HEAD --not --remotes=origin`; no
-  `client-string-<8 hex>`.  The six new fixtures use the neutral `C:/w31` root
-  and neutral metadata.  Residuals (the operator's decision): two pre-wave
-  fixtures (`synthetic-base.mpp`, `wave23-outline.mpp`) carry the operator's
-  name three times each, 69 tracked text files (historical docs) carry it, and
-  the 13 unsalted FNV-1a name hashes removed in wave 27 remain in older
-  wave-26 commits plus `tests/data/project_a_golden.tsv`.  **Run BOTH scans.**
-* Backlog: **114 ribbon commands with 69 disabled** (45 enabled; 95/64 at
-  wave 30), and 51 menu commands with 7 disabled.  `scripts/check_command_backlog.py`
-  is committed as ctest `qt_command_backlog` and checks the generated file
-  against the pin both ways (114 rows, 0 mismatches).
+  `wave31..HEAD`; normalised `guard_names.py` **0 hits, exit 0** on
+  `wave31..HEAD` and on the push range `HEAD --not --remotes=origin`; no
+  `client-string-<8 hex>`.  Wave 32 adds no fixture.  Residuals (the operator's
+  decision): two pre-wave fixtures (`synthetic-base.mpp`, `wave23-outline.mpp`)
+  carry the operator's name three times each, 69 tracked text files (historical
+  docs) carry it, the 13 unsalted FNV-1a name hashes remain in older wave-26
+  commits plus `tests/data/project_a_golden.tsv`, and R31-11 (one wave-31 brief
+  line) stays queued.  **Run BOTH scans.**
+* Backlog: **114 ribbon commands with 69 disabled** (45 enabled) and 51 menu
+  commands with 7 disabled.  `scripts/check_command_backlog.py` checks the
+  generated file against the pin both ways (114 rows, 0 mismatches); the six
+  wave-32 session refusals and the Start editing row carry their reasons.
 
-## Wave 31 result (what a later session must not re-break)
+## Wave 32 result (what a later session must not re-break)
 
-* **No persisted view-state writer exists or was enabled.**  The View tab's
-  Sort (five keys + Sort dialog), Outline (Level 1..9 / All Subtasks) and Tables
-  (the file's stored task tables) are applied to the loaded session, and
-  `qt_data_commands` asserts the file's SHA-256 is unchanged.  Zoom (Zoom
-  dialog), Entire Project and Selected Tasks fit Project's measured windows on
-  two fixtures (`tests/data/reference/w31-zoom.measures.json`) and are also
-  session-only.  New Window, Switch Windows, Arrange All, Hide and Macros stay
-  disabled with the exact tooltip and their own backlog reasons.
-* **G3 Resource Sheet fidelity (presentation only):** the file's stored
-  resource Entry table, view Text Styles (overallocated rows bold RGB 165,0,0),
-  stored widths under `chars * unit + 3`, the tombstone-skipped base resource
-  (`FixedMeta` liveness, W31-3.2), Project's computed PeakUnits and
-  overallocation, and the (i) indicators badge.  `qt_resource_sheet_gate` reads
-  the live window back against Project's COM facts.
-* **G4 Task Usage and Resource Usage fidelity (presentation only):** stored
-  Details lists (Work + Actual Work / Work + Cost), stored two-tier timescale,
-  assignment rows under each task/resource, typed per-period Work/Cost values
-  and measured widths.  `qt_usage_gate` compares every bucket with COM
-  `TimeScaleData` on `tests/data/reference/wave31-usage.measures.json`.
-* **G0 closed the wave-30 review's four Highs:** a link added after a queued
-  automatic outline edit is refused in both orders; the automatic outline save
-  refuses file shapes no Project pair measured (progress/actuals, constraints,
-  deadlines, other summaries); percent/date edits refuse progress outside the
-  edited rows unless the edit is the measured Entire project update; Fill Down
-  was measured and its refused save is why Fill stays disabled.
-* **G5:** Network Diagram, Calendar and the two Other Views entries stay
-  disabled with the exact tooltip and the backlog's scope reason.
-* **G3/G4 left presentation gaps** (in the record's "Found, not fixed"): Add
-  New Column is a stub, other stored usage fields are not painted, the port's
-  Total row/column, Actual Work/Cost approximations, selected tier size, and a
-  decoded-but-not-applied scroll origin.
-* **The CLOSE review is binding**: 1 Critical / 4 High / 3 Medium / 8 Low
-  (C1/C2/S1/S2 core, U1-U3 UI, A1-A9 record audit).  The Critical/High are
-  closed (A1/A3 by committing the record and docs, A2 by push + CI, U1
-  `5fa3d5d`, U2 `165e497`); the Mediums are closed (U3 `113d16a`, the A4-A9
-  errata).  The queued Lows have fix directions: C1 (MPP12 Accrue At 0 prints
-  "0"), C2 (caller-set `update_entire_project`), S1 (unchecked rate reaches
-  `llround`/cost multiply), S2 (Resource Sheet style fallback can take a
-  non-resource view).  A5 (per-commit gate logs not written for three items)
-  is recorded as a gap.  The CI dispatches added three platform findings --
-  W31-C5 `cb69a0b` (the disabled View command ids named in the ribbon switch,
-  because GCC/Clang build with `-Werror=switch`), W31-C6 `c6e4314` (the
-  Resource Sheet gate scans the painted badge/glyph areas scaled by the
-  device-pixel ratio instead of sampling one pixel, which failed only on
-  windows-qt) and W31-C7 `072773b` (the unused `row_map_uids` helper in
-  `data_commands_test.cpp` failed Linux/macOS under `-Werror=unused-function`);
-  all are fixed and the third dispatch is green on the final tree.
-* **The wave-30 measured-and-deferred commands still wait on their shared
-  writers** (VarMeta insert/remove, 214 view stream, TBkndCal + Props counts,
-  RichEdit notes, append-and-re-key, scheduler/DSI, baseline, WBS code
-  definition/renumber).  The view-state saves (sort/table/outline/zoom/window
-  arrangement) were never measured against Project.
+* **The automatic-outline cross-refusal is file-wide, both orders.**  An
+  automatic (slack-carrying) indent/outdent is refused while any percent,
+  actuals or typed-Start edit is queued on any row, and `push` refuses a
+  percent/actuals edit while an automatic outline edit is applied;
+  `save_structural_edits` repeats both (plus the Start half no `StructuralEdit`
+  sees).  The manual outline rules stay narrower.
+* **Start is read-only at every shell entry** (W32-0.2): `task_column_editable`,
+  Task Information (read-only), the Task Form (read-only + disabled), Cut of a
+  selection touching Start and Paste of a block covering Start, plus the save
+  funnel and a `push` refusal for a collected/writable start edit.  The writer
+  stays in the tree; **do not enable Start without the measured Project pair**
+  (the wave-31 Fill pair shows the writer cannot reproduce the save).
+* **A sorted or filtered display refuses range operations** (W32-0.3):
+  multi-cell Copy/Cut, multi-row Paste and Shift-click extension are disabled
+  and refused whole while `display_order_differs_from_file()`; Indent, Outdent
+  and Insert are refused while `sort_reorders_rows()`.  Single-cell copy/cut,
+  a one-row paste and single-cell edits stay and are mapped from the display row
+  to its record.
+* **No writer and no measurement were added.**  The wave is fix-only; Fill
+  stays disabled on its W31-1 measurement and the view state stays session-only.
+* **The independent review** (0 Critical / 1 High / 4 Medium / 6 Low) was
+  triaged in CLOSE: W32-C4 fixed the High (the `std::size_t` Entry column index
+  that would have failed all three qt jobs under warnings-as-errors) and closed
+  the gate hole by configuring app/app_qt with `CORE_WARNINGS_AS_ERRORS=ON`;
+  W32-C5..W32-C8 fixed the four required Mediums.  L1..L6 (test strength and
+  the filter wording) are queued in the record with directions.
+* **The G0 record has three errata** in `wave32-complete.md`: the shell passes
+  Start uids rather than naming them in the refusal; Task Information makes
+  Start read-only while the Task Form also disables it; the G0 per-commit logs
+  captured no exit lines and the G0 guard log is empty.  CLOSE logs capture
+  exits.
 
 ## Next
 
-Wave 31 is the last wave of the approved run of waves 27-31.  The operator's
-next step is to **verify and merge the unmerged branches** (wave23 through
-wave31), then choose the next scope from `wave31-complete.md` "What remains
-after this run": Team Planner, Network Diagram, Calendar and Report views, the
-`constraint-mso` engine case, macOS launch/notarisation, the hashed task names,
-and the queued review Lows (including the carried wave-30/29 queues).  Keep the
-CLOSE gates green before every commit and run BOTH name scans.
+Wave 32 closes the wave-31 verifier's High findings.  The operator's next step
+is to **verify and merge the unmerged branches** (wave23 through wave32), then
+choose the next scope from `wave32-complete.md` "Found, not fixed" and
+`wave31-complete.md` "What remains after this run": Team Planner, Network
+Diagram, Calendar and Report views, the `constraint-mso` engine case, macOS
+launch/notarisation, the hashed task names, and the queued review Lows
+(R31-5..R31-12, the four core Lows C1/C2/S1/S2, and the carried wave-30/29
+queues).  Keep the CLOSE gates green before every commit and run BOTH name
+scans.

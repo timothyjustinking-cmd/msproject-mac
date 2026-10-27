@@ -1,6 +1,6 @@
 # Handoff index — read only the group you need
 
-116 handoffs, ~2.0 MB: do **not** read the directory.  Start with
+123 handoffs, ~2.1 MB: do **not** read the directory.  Start with
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
@@ -11,7 +11,14 @@ kept for investigation; each is the record of its stream at that wave.
 | `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
 | `assessment-2026-10-24.md` | where the port stands after wave 26, and the workflow review |
 | `plan-waves27-30.md` | the plan of the 27-31 run (wave 31 was its last wave) |
-| `wave31-complete.md` | **the wave-31 gate** (below), the current record |
+| `wave32-complete.md` | **the wave-32 gate** (below), the current record |
+
+## Wave 32 (closed on branch `wave32` - pushed; CI on the final tree; not merged)
+
+| file | what |
+|---|---|
+| `wave32-complete.md` | **the wave-32 gate**: G0 (the wave-31 verifier's three Highs, refuse-first) + CLOSE, the eight CLOSE fixes (three stale records; the independent review's High and four required Mediums), the errata, the fresh-tree gates, both privacy scans, the independent review of `wave31..wave32`, the push and the CI dispatch, "Found, not fixed" |
+| `wave32-brief.md` | **the work order**: fix-only - R31-1 the queued-edit bypass, R31-2 the Start writer, R31-3 sorted/filtered range operations (R31-4 folded in) |
 
 ## Wave 31 (closed on branch `wave31` - pushed; CI on the final tree; not merged)
 
