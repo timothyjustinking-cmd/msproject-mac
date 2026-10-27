@@ -2803,7 +2803,7 @@ void MainWindow::set_selected_percent(std::uint16_t percent) {
         }
     }
     if (!structural_.push(std::move(edit), &doc_.plan())) {
-        set_message("percent complete: the edit was refused", true);
+        set_message(push_refusal("percent complete"), true);
         update_status();
         return;
     }
@@ -2812,6 +2812,15 @@ void MainWindow::set_selected_percent(std::uint16_t percent) {
                     std::to_string(selected.uid) + "; File > Save writes it",
                 false);
     update_status();
+}
+
+std::string MainWindow::push_refusal(const std::string& command) const {
+    if (structural_.has_automatic_outline_edit()) {
+        return command +
+               ": save or undo the pending automatic outline edit first; its save "
+               "rewrites every row's slack and late dates";
+    }
+    return command + ": the edit was refused";
 }
 
 void MainWindow::indent_selected(bool indent) {
@@ -2846,15 +2855,24 @@ void MainWindow::indent_selected(bool indent) {
             }
         }
     }
+    // W32-0.1 (R31-1, High): a typed Start is a queued edit too.  The
+    // automatic outline save recomputes every row's slack from the file's
+    // dates, so make_outline_edit and push refuse it beside a pending start
+    // (save_structural_edits repeats the refusal before the first write).
+    std::vector<std::uint32_t> pending_starts;
+    for (const app::StartEdit& start :
+         app::collect_start_edits(doc_.records(), doc_.loaded())) {
+        pending_starts.push_back(start.uid);
+    }
     app::StructuralEdit edit;
     std::string error;
     if (!app::make_outline_edit(doc_.plan(), doc_.path(), selected.uid, indent,
-                                edit, error, pending_actuals)) {
+                                edit, error, pending_actuals, pending_starts)) {
         set_message(std::string(indent ? "indent: " : "outdent: ") + error, true);
         update_status();
         return;
     }
-    if (!structural_.push(std::move(edit), &doc_.plan())) {
+    if (!structural_.push(std::move(edit), &doc_.plan(), pending_starts)) {
         set_message(std::string(indent ? "indent" : "outdent") +
                         ": the edit was refused",
                     true);
@@ -3911,7 +3929,7 @@ void MainWindow::show_update_project() {
         return;
     }
     if (!structural_.push(std::move(edit), &plan)) {
-        set_message("update project: the edit was refused", true);
+        set_message(push_refusal("update project"), true);
         update_status();
         return;
     }
@@ -3959,7 +3977,7 @@ void MainWindow::mark_on_track() {
     const std::uint16_t percent =
         edit.actuals.empty() ? 0 : edit.actuals.front().percent;
     if (!structural_.push(std::move(edit), &plan)) {
-        set_message("mark on track: the edit was refused", true);
+        set_message(push_refusal("mark on track"), true);
         update_status();
         return;
     }
@@ -5089,7 +5107,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
     if (ok && has_percent_edit) {
         if (!structural_.push(percent_edit, &doc_.plan())) {
             ok = false;
-            set_message(prefix + ": the percent edit was refused", true);
+            set_message(push_refusal(prefix + ": the percent edit"), true);
         } else {
             structural_applied = true;
         }

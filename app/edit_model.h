@@ -382,10 +382,20 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
 // `pending_actuals`), and the shapes outline.h lists as unmeasured are refused
 // with `error` naming the reason.  `out` is left default-constructed on
 // refusal.
+//
+// W32-0.1 (R31-1, High): an AUTOMATIC edit (one that carries slack) is also
+// refused while ANY percent or actuals edit is queued in the same save
+// (`pending_actuals`, on any row, not only the moved subtree and anchor) or any
+// task start edit is pending (`pending_start_uids`, the uids
+// app::collect_start_edits would write).  The automatic save rewrites every
+// live automatic row's slack and late dates from the FILE's progress and dates,
+// so a queued edit changes the shape the file-wide check cannot see.  A manual
+// edit carries no slack and keeps the narrower moved-row rule.
 bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                        std::uint32_t uid, bool indent, StructuralEdit& out,
                        std::string& error,
-                       const std::vector<std::uint32_t>& pending_actuals = {});
+                       const std::vector<std::uint32_t>& pending_actuals = {},
+                       const std::vector<std::uint32_t>& pending_start_uids = {});
 
 // ---------------------------------------------------------------------------
 // Wave 28 (W28-3.1): the project's new-task scheduling mode
@@ -489,7 +499,23 @@ class StructuralEdits {
     // displaced, not half-applied.  They are not lost: the delete keeps them in
     // StructuralEdit::displaced, undo() restores them and redo() removes them
     // again (W27-3.2).  Documented in app/README.md.
-    bool push(StructuralEdit edit, const PlanInput* plan = nullptr);
+    //
+    // W32-0.1 (R31-1, High): an AUTOMATIC outline edit (slack non-empty) is
+    // exclusive with every percent/actuals edit and every pending task start
+    // edit in the same save, in both orders.  Queueing the outline edit while
+    // one is applied is refused; queueing a percent/actuals edit while an
+    // automatic outline edit is applied is refused on every row (the old
+    // subtree/anchor rule, outline_edit_pending_for, remains for manual outline
+    // edits).  A start edit is not a StructuralEdit, so the shell names the
+    // pending start uids in `pending_start_uids`; save_structural_edits repeats
+    // both refusals before the first write.
+    bool push(StructuralEdit edit, const PlanInput* plan = nullptr,
+              const std::vector<std::uint32_t>& pending_start_uids = {});
+
+    // True while an applied outline edit carries slack (the automatic shape
+    // whose save rewrites every live automatic row).  The shell uses it to name
+    // the reason when push() refuses a percent/actuals edit.
+    bool has_automatic_outline_edit() const noexcept;
 
     // Moves the newest applied edit to the redo list; a delete_task's
     // displaced edits return to the applied list in their original order.

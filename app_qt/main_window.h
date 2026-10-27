@@ -424,6 +424,10 @@ class MainWindow final : public QMainWindow {
     // numbers and summary bar show at once.  A shape Project's three save
     // pairs did not measure is refused with a status message.
     void indent_selected(bool indent);
+    // W32-0.1: StructuralEdits::push() returns only a bool, so when it refuses
+    // because an automatic outline edit is queued, name that reason instead of
+    // the generic one.  The caller passes its command prefix.
+    std::string push_refusal(const std::string& command) const;
     // W30-1.0: the Task tab's Manually Schedule button and Mode > Manually
     // Scheduled share this.  It builds the edit with app::make_task_mode_edit
     // (the measured automatic -> manual save pair), queues it and rebuilds the

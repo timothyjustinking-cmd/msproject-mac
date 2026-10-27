@@ -1475,6 +1475,148 @@ void check_automatic_outline_file_shape() {
     }
 }
 
+/* W32-0.1 (R31-1, High): a percent, date-update (Mark on Track / Update) or
+ * typed-Start edit queued in the SAME save as an automatic outline edit.
+ * check_automatic_outline_file reads only the file on disk, so the queued edit
+ * changes the file shape it cannot see.  Both orders are refused by
+ * make_outline_edit() and push(), on every row (not only the moved subtree and
+ * anchor), and save_structural_edits() repeats the start-edit refusal before
+ * the first write.  The 3-row automatic control is indent uid 2 under uid 1;
+ * the queued edit names uid 3, OUTSIDE the moved subtree and not its anchor --
+ * the exact shape the wave-31 review found getting through. */
+void check_pending_edit_cross_refusals() {
+    const std::filesystem::path auto_control =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave29-outline-auto-indent-control.mpp";
+    const std::filesystem::path manual_control =
+        std::filesystem::path(APP_TEST_DATA_DIR) /
+        "wave28-outline-indent-control.mpp";
+    // W32 rule: a test that needs a committed fixture FAILS when it is missing.
+    check(std::filesystem::exists(auto_control),
+          "wave29-outline-auto-indent-control.mpp is present (W32-0.1)");
+    check(std::filesystem::exists(manual_control),
+          "wave28-outline-indent-control.mpp is present (W32-0.1)");
+    if (!std::filesystem::exists(auto_control) ||
+        !std::filesystem::exists(manual_control)) {
+        return;
+    }
+    app::PlanInput plan;
+    app::PlanInput manual_plan;
+    try {
+        plan = app::plan_input_from_document(mpp::load_file(auto_control.string()));
+        manual_plan =
+            app::plan_input_from_document(mpp::load_file(manual_control.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the W32-0.1 controls load");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        return;
+    }
+    check_size(plan.tasks.size(), 3, "the automatic control has three task rows");
+
+    app::StructuralEdit outline_edit;
+    std::string error;
+    check(app::make_outline_edit(plan, auto_control.string(), 2, true,
+                                 outline_edit, error),
+          "the automatic indent builds on the three-row control");
+    check(!outline_edit.slack.empty(),
+          "the indent is the automatic shape that rewrites every row's slack");
+
+    app::StructuralEdit percent_edit;
+    check(app::make_percent_edit(plan, 3, 40, percent_edit, error),
+          "a 40 % edit on uid 3 builds (outside the moved subtree)");
+
+    // Order 1: the actuals edit is queued first, the automatic outline second.
+    {
+        app::StructuralEdits actuals_first;
+        check(actuals_first.push(percent_edit, &plan),
+              "the uid 3 percent edit queues first");
+        check(!actuals_first.push(outline_edit, &plan),
+              "push refuses the automatic indent over a queued percent edit");
+        app::StructuralEdit refused;
+        check(!app::make_outline_edit(plan, auto_control.string(), 2, true,
+                                      refused, error, {3u}),
+              "make_outline_edit refuses the automatic indent with a pending "
+              "percent edit outside the subtree");
+        check(error.find("pending") != std::string::npos &&
+                  error.find("percent") != std::string::npos,
+              "the refusal names the queued percent edit");
+    }
+
+    // Order 2: the automatic outline is queued first; a percent edit on any row
+    // and a date update on any row are then refused.
+    {
+        app::StructuralEdits outline_first;
+        check(outline_first.push(outline_edit, &plan),
+              "the automatic indent queues first");
+        const app::PlanInput display = outline_first.apply(plan);
+        app::StructuralEdit after_percent;
+        check(app::make_percent_edit(display, 3, 40, after_percent, error),
+              "the uid 3 percent edit builds on the displayed plan");
+        check(!outline_first.push(after_percent, &display),
+              "push refuses a percent edit on any row while the automatic "
+              "outline edit is queued");
+        check(app::make_update_actuals_edit(display, auto_control.string(), {3u},
+                                            core::sched::from_ymd(2026, 1, 7),
+                                            false, after_percent, error),
+              "a date update on uid 3 builds on the displayed plan");
+        app::StructuralEdits lone_update;
+        check(lone_update.push(after_percent, &display),
+              "the same date update is accepted without the outline edit");
+        check(!outline_first.push(after_percent, &display),
+              "push refuses a date update on any row while the automatic "
+              "outline edit is queued");
+    }
+
+    // Order 1 with a typed Start: the Start is not a StructuralEdit, so the
+    // shell names its uid; both make_outline_edit and push refuse the automatic
+    // outline edit.
+    {
+        app::StructuralEdit refused;
+        check(!app::make_outline_edit(plan, auto_control.string(), 2, true,
+                                      refused, error, {}, {3u}),
+              "make_outline_edit refuses the automatic indent with a pending "
+              "start edit on uid 3");
+        check(error.find("start edit") != std::string::npos,
+              "the refusal names the pending start edit");
+        app::StructuralEdits starts_first;
+        check(!starts_first.push(outline_edit, &plan, {3u}),
+              "push refuses the automatic outline edit beside a pending start");
+        // A MANUAL outline edit carries no slack, so the start rule does not
+        // apply to it: the narrower moved-row rules stay in force.
+        app::StructuralEdit manual_edit;
+        check(app::make_outline_edit(manual_plan, manual_control.string(), 2,
+                                     true, manual_edit, error, {}, {3u}),
+              "a manual indent stays accepted beside a pending start edit");
+    }
+
+    // Order 2 with a typed Start: the automatic edit is queued alone and the
+    // save refuses the start edit before the first write.
+    {
+        app::StructuralEdits outline_only;
+        check(outline_only.push(outline_edit, &plan),
+              "the automatic indent queues alone for the save refusal");
+        app::StartEdit start;
+        start.uid = 3;
+        start.start = core::sched::from_ymd(2026, 1, 7);
+        std::error_code out_error;
+        std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
+                                            out_error);
+        const std::filesystem::path out_path =
+            std::filesystem::path(APP_TEST_OUT_DIR) /
+            "w32-01-start-outline-refused.mpp";
+        std::filesystem::remove(out_path, out_error);
+        const app::StructuralSaveResult saved = app::save_structural_edits(
+            outline_only, {start}, auto_control.string(), out_path.string(), false);
+        check(!saved.ok,
+              "the save refuses a start edit beside an automatic outline edit");
+        check(saved.error.find("start edit") != std::string::npos &&
+                  saved.error.find("outline edit") != std::string::npos,
+              "the save's refusal names both edits");
+        check(!std::filesystem::exists(out_path),
+              "the refused save writes no target file (no partial write)");
+    }
+}
+
 void check_refusals() {
     const std::filesystem::path indent_control =
         std::filesystem::path(APP_TEST_DATA_DIR) /
@@ -1963,6 +2105,7 @@ int main() {
     }
     check_refusals();
     check_automatic_outline_file_shape();
+    check_pending_edit_cross_refusals();
     std::printf("app_edits_outline_tests: %d checks passed\n",
                 g_checks - g_failures);
     if (g_failures != 0) {

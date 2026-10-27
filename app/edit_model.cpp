@@ -1898,7 +1898,8 @@ bool make_update_actuals_edit(const PlanInput& plan, std::string_view source_pat
 bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
                        std::uint32_t uid, bool indent, StructuralEdit& out,
                        std::string& error,
-                       const std::vector<std::uint32_t>& pending_actuals) {
+                       const std::vector<std::uint32_t>& pending_actuals,
+                       const std::vector<std::uint32_t>& pending_start_uids) {
     out = StructuralEdit{};
     error.clear();
     out.kind = indent ? StructuralKind::outline_indent
@@ -2103,7 +2104,28 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
             return false;
         }
         if (!summary.manual) {
-            // W30-0.2 (R29-2, High): the automatic save rewrites EVERY live
+            // W32-0.1 (R31-1, High): the file-wide check below sees only the
+            // file on disk.  The automatic save rewrites every live automatic
+            // row's slack and late dates from the FILE's progress and dates, so
+            // an actuals edit or a start edit queued in the same save would be
+            // written beside slack computed for the old row (step 5a/6 vs 5b).
+            // No Project pair measures that, on any row.
+            if (!pending_actuals.empty()) {
+                error = "a percent or actuals edit is pending in the same save; "
+                        "the automatic outline save rewrites every automatic "
+                        "row's slack and late dates against the file's old "
+                        "progress, and no Project save pair measures that "
+                        "combination";
+                return false;
+            }
+            if (!pending_start_uids.empty()) {
+                error = "a task start edit is pending in the same save; the "
+                        "automatic outline save rewrites every automatic row's "
+                        "slack and late dates from the file's dates, and no "
+                        "Project save pair measures a start edit beside it";
+                return false;
+            }
+            // W30-0.2 (R29-2, High): an automatic save rewrites EVERY live
             // automatic row's slack and late dates (build_outline_slack), a
             // backward pass that only holds when no link constrains the
             // schedule; every outline pair was measured on an unlinked file.
@@ -2266,6 +2288,23 @@ bool make_outline_edit(const PlanInput& plan, std::string_view source_path,
         return false;
     }
     if (!moved_manual) {
+        // W32-0.1 (R31-1, High): the same in-save exclusivity as the automatic
+        // indent -- the outdent's save rewrites every live automatic row's
+        // slack from the FILE's progress and dates.
+        if (!pending_actuals.empty()) {
+            error = "a percent or actuals edit is pending in the same save; "
+                    "the automatic outline save rewrites every automatic row's "
+                    "slack and late dates against the file's old progress, and "
+                    "no Project save pair measures that combination";
+            return false;
+        }
+        if (!pending_start_uids.empty()) {
+            error = "a task start edit is pending in the same save; the "
+                    "automatic outline save rewrites every automatic row's "
+                    "slack and late dates from the file's dates, and no "
+                    "Project save pair measures a start edit beside it";
+            return false;
+        }
         // W30-0.2 (R29-2, High): the same linked-file refusal as the automatic
         // indent -- the outdent's slack rewrite is the same backward pass.
         if (!plan.links.empty() || plan.skipped_links != 0) {
@@ -2422,7 +2461,8 @@ bool make_task_mode_edit(const PlanInput& plan, std::string_view source_path,
     return true;
 }
 
-bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
+bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
+                           const std::vector<std::uint32_t>& pending_start_uids) {
     // W30-1.0: the measured task-mode pair is one mode change on an otherwise
     // untouched save, so the edit is exclusive in both directions.  It may only
     // be queued into an empty list, and no other edit may be queued over it.
@@ -2571,6 +2611,17 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                     return false;
                 }
             }
+            // W32-0.1 (R31-1, High): an applied AUTOMATIC outline edit (one
+            // carrying slack) makes every row's percent/actuals edit
+            // unmeasured, not only the moved subtree and anchor: its save
+            // rewrites the slack computed for the file's OLD progress.  The
+            // narrower subtree/anchor rule below remains for manual outline
+            // edits.
+            for (const StructuralEdit& existing : applied_) {
+                if (is_outline_edit(existing.kind) && !existing.slack.empty()) {
+                    return false;
+                }
+            }
             // W30-0.3 (R29-3, High): step 5a writes this percent against the
             // file's old outline; a pending outline edit for this row, its
             // subtree or an ancestor has no measured combination with it.
@@ -2595,6 +2646,14 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
             if (plan == nullptr || edit.actuals.empty() ||
                 packed_from_date32(edit.through_date) == mppwrite::kInvalidDate) {
                 return false;
+            }
+            // W32-0.1 (R31-1, High): an applied automatic outline edit makes
+            // every row's date update unmeasured, not only the moved rows --
+            // its save rewrites the slack computed for the file's old progress.
+            for (const StructuralEdit& existing : applied_) {
+                if (is_outline_edit(existing.kind) && !existing.slack.empty()) {
+                    return false;
+                }
             }
             std::set<std::uint32_t> seen;
             for (const ActualsTarget& target : edit.actuals) {
@@ -2770,6 +2829,15 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
                     }
                 }
             }
+            // W32-0.1 (R31-1, High): an AUTOMATIC outline edit is refused
+            // while ANY percent/actuals edit is applied or any task start edit
+            // is pending, on any row -- the automatic save would write those
+            // edits beside slack computed for the file's old progress and
+            // dates.  The per-row checks below stay for manual outline edits.
+            if (!edit.slack.empty() &&
+                (!pending_actuals.empty() || !pending_start_uids.empty())) {
+                return false;
+            }
             std::string shape_error;
             if (edit.kind == StructuralKind::outline_indent) {
                 if (row->outline_level != 0 || anchor->summary) {
@@ -2841,6 +2909,15 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan) {
     applied_.push_back(std::move(edit));
     undone_.clear();
     return true;
+}
+
+bool StructuralEdits::has_automatic_outline_edit() const noexcept {
+    for (const StructuralEdit& edit : applied_) {
+        if (is_outline_edit(edit.kind) && !edit.slack.empty()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<StructuralEdit> StructuralEdits::detach_edits_naming(std::uint32_t uid) {
@@ -3458,6 +3535,34 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             "the outline edit carries the slack and late dates computed on the "
             "unlinked file, and no Project save pair measures the combination";
         return result;
+    }
+
+    // W32-0.1 (R31-1, High): the same rule for the edits the automatic
+    // outline save recalculates against.  push() and make_outline_edit refuse
+    // both orders for the shell; this check refuses a hand-built queue before
+    // the first write, because the cascade would write the actuals at step 5a
+    // and the starts at step 6 beside the slack step 5b computed for the file's
+    // old progress and dates.
+    if (has_automatic_outline) {
+        for (const StructuralEdit& edit : edits.applied()) {
+            if (edit.kind == StructuralKind::set_percent ||
+                edit.kind == StructuralKind::update_actuals) {
+                result.error =
+                    "a percent or actuals edit and an automatic outline edit are "
+                    "queued for one save; the outline edit's slack and late dates "
+                    "were computed for the file's old progress, and no Project "
+                    "save pair measures the combination";
+                return result;
+            }
+        }
+        if (!writable.empty()) {
+            result.error =
+                "a task start edit and an automatic outline edit are queued for "
+                "one save; the outline edit's slack and late dates were computed "
+                "from the file's dates, and no Project save pair measures the "
+                "combination";
+            return result;
+        }
     }
 
     // Field edits: the last edit for a (task, field) wins, exactly as the display
