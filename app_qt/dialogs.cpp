@@ -1131,11 +1131,12 @@ TaskInformationDialog::TaskInformationDialog(const TaskInformationValues& curren
     general_layout->addLayout(timeline_row);
     general_layout->addWidget(make_hint(
         general, size,
-        QStringLiteral("Name, Duration, Start and Finish are written through the sheet's "
-                       "edit model; Percent complete is queued as Project's measured "
-                       "actuals edit.  Estimated, Priority, Schedule mode and the Display "
-                       "on Timeline options are read-only in this port: there is no writer "
-                       "for them yet (decision 15).")));
+        QStringLiteral("Name, Duration and Finish are written through the sheet's edit "
+                       "model; Start is read-only in this port because a Start edit's save "
+                       "is not measured against Project; Percent complete is queued as "
+                       "Project's measured actuals edit.  Estimated, Priority, Schedule "
+                       "mode and the Display on Timeline options are read-only in this "
+                       "port: there is no writer for them yet (decision 15).")));
     general_layout->addStretch(1);
     tabs_->addTab(general, QStringLiteral("General"));
 

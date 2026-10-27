@@ -282,6 +282,8 @@ The three jobs' artifacts are `qt-window-<OS>-<sha>` containing
 Behaviour is now covered by six offscreen tests on every platform
 (`qt_render_smoke`, `qt_render_document`, `qt_render_parity`, `qt_shell_offscreen`,
 `qt_parity_geometry`, `qt_save_reopen`): 6/6 passed on all three in that run.
-`qt_save_reopen` edits Duration and Start through the shell's own model, undoes and
-redoes through the menu actions, saves through `app::Document` to a build-local
-file, reopens it and asserts the edit persisted.
+`qt_save_reopen` edits Duration through the shell's own model and undoes/redoes
+it through the menu actions; a Start edit is refused (W32-0.2: the field is
+read-only because a Start save is not measured against Project); it saves a
+queued Text1 custom-field edit through `app::Document` to a build-local file,
+reopens it and asserts the edit persisted.

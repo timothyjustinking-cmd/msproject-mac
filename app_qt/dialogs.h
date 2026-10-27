@@ -280,9 +280,10 @@ bool edit_predecessors(QWidget* parent, const app::PlanInput& loaded,
 // ---------------------------------------------------------------------------
 // Task Information (wave 21; the operator's Project capture shows six tabs)
 //
-// GENERAL is functional over app/: Name, Duration, Start and Finish are the four
-// task fields the sheet's edit model writes (Start is also what a save collects),
-// and Percent complete (wave 28, W28-1.2) is queued by OK as the same
+// GENERAL is functional over app/: Name, Duration and Finish are the task fields
+// the sheet's edit model writes; Start is read-only (W32-0.2: a Start edit's
+// save is not measured against Project), and Percent complete (wave 28, W28-1.2)
+// is queued by OK as the same
 // app::StructuralKind::set_percent edit the ribbon's five % buttons make -- the
 // measured actuals writer, not a sheet cell.  Estimated, Priority, Schedule mode
 // and the Display on Timeline options have no writer in this port, so they are
