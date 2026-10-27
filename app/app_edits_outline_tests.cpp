@@ -1542,6 +1542,31 @@ void check_pending_edit_cross_refusals() {
               "the refusal names the queued percent edit");
     }
 
+    // Order 1 with a real update_actuals edit (review M2): the percent case
+    // above exercises the same scans, but the brief asks for each edit kind in
+    // each order, and make_outline_edit's pending_actuals path and push's
+    // update_actuals scan must see an actuals edit, not a percent edit.
+    {
+        app::StructuralEdit actuals_edit;
+        check(app::make_update_actuals_edit(plan, auto_control.string(), {3u},
+                                            core::sched::from_ymd(2026, 1, 7),
+                                            false, actuals_edit, error),
+              "a date update on uid 3 builds on the file plan");
+        app::StructuralEdits actuals_first;
+        check(actuals_first.push(actuals_edit, &plan),
+              "the uid 3 date update queues first");
+        check(!actuals_first.push(outline_edit, &plan),
+              "push refuses the automatic indent over a queued date update");
+        app::StructuralEdit refused;
+        check(!app::make_outline_edit(plan, auto_control.string(), 2, true,
+                                      refused, error, {3u}),
+              "make_outline_edit refuses the automatic indent with a pending "
+              "date update outside the subtree");
+        check(error.find("pending") != std::string::npos &&
+                  error.find("actuals") != std::string::npos,
+              "the refusal names the queued actuals edit");
+    }
+
     // Order 2: the automatic outline is queued first; a percent edit on any row
     // and a date update on any row are then refused.
     {
