@@ -3543,6 +3543,15 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     // the first write, because the cascade would write the actuals at step 5a
     // and the starts at step 6 beside the slack step 5b computed for the file's
     // old progress and dates.
+    //
+    // Review M1: unlike the wave-31 link case, push() cannot build this
+    // percent/actuals pair even by handing it a stale plan -- its forward scan
+    // refuses the automatic outline while a percent/actuals edit is applied and
+    // its reverse scan refuses either edit while an automatic outline is
+    // applied.  The check therefore guards a state the queue API cannot
+    // currently produce; it stays because save_structural_edits must not trust
+    // its input, and its Start half below is reachable (a StartEdit is not a
+    // StructuralEdit).
     if (has_automatic_outline) {
         for (const StructuralEdit& edit : edits.applied()) {
             if (edit.kind == StructuralKind::set_percent ||
