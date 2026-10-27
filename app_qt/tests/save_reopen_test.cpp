@@ -264,7 +264,10 @@ int main(int argc, char** argv) {
     // fixture the committed field round trip itself uses).  A Name cell edit
     // rides along to keep W26-REV-2's original guard: the project-summary
     // toggle rebuilds from the plan, so it must fold the RecordSet back.
-    const std::size_t name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+    // entry_column_index returns int (-1 for absent), so the local is int too:
+    // as a std::size_t the >= 0 check would be vacuous and the int parameters
+    // below trip MSVC C4267 / GCC -Wtype-limits under warnings-as-errors.
+    const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
     check(name_column >= 0, "the Entry table has a Name column");
     if (name_column >= 0) {
         check(model->setData(model->index(0, name_column),
