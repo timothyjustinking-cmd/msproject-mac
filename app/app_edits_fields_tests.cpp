@@ -526,8 +526,10 @@ void test_real_round_trip() {
         }
     }
 
-    // Field + structural + start in one Save: the field write runs after the
-    // insert and before the start pin, all on one target.
+    // Field + structural in one Save: the field write runs after the insert on
+    // one target.  W32-0.2 (R31-2, High): a Start edit used to ride along; it is
+    // refused before the first write now (checked below), so this save carries
+    // no start.
     app::StructuralEdits combined;
     app::StructuralEdit set_text;
     set_text.kind = app::StructuralKind::set_field;
@@ -541,25 +543,18 @@ void test_real_round_trip() {
     insert.uid = combined.next_placeholder_uid(base.plan);
     check(combined.push(insert), "the combined insert is queued");
     const date32 new_start = from_ymd(2026, 3, 2, 8, 0);
-    std::vector<app::StartEdit> starts;
-    app::StartEdit start_edit;
-    start_edit.uid = uid;
-    start_edit.start = new_start;
-    starts.push_back(start_edit);
     const std::filesystem::path both =
         std::filesystem::path(APP_TEST_OUT_DIR) / "app-fields-combined.mpp";
     std::filesystem::remove(both, error);
     const app::StructuralSaveResult combined_outcome =
-        app::save_structural_edits(combined, starts, copy.string(), both.string(), false);
-    check(combined_outcome.ok, "field + insert + start save together");
+        app::save_structural_edits(combined, {}, copy.string(), both.string(), false);
+    check(combined_outcome.ok, "field + insert save together");
     if (combined_outcome.ok) {
         check_size(combined_outcome.added, 1, "the insert landed");
         check_size(combined_outcome.fields_written, 1, "the field landed");
-        check_size(combined_outcome.start_rows_written, 1, "the start landed");
+        check_size(combined_outcome.start_rows_written, 0, "no start was written");
         check(combined_outcome.api.find("save_field_values") != std::string::npos,
               "the combined save ran the field writer");
-        check(combined_outcome.api.find("save_date_edits") != std::string::npos,
-              "the combined save ran the start path");
         Loaded after_combined = load(both);
         if (after_combined.ok) {
             check_size(after_combined.plan.tasks.size(), 4, "the combined file has four tasks");
@@ -569,15 +564,34 @@ void test_real_round_trip() {
                     continue;
                 }
                 found = true;
-                check_size(task.constraint_type, 4, "the start edit is a SNET pin");
-                check(task.constraint_date.raw == app::packed_from_date32(new_start),
-                      "the constraint date is the edited start");
                 const mpp::CustomFieldValue* text = find_field(task, kText1);
                 check(text != nullptr && text->text == "combined",
                       "the field value is in the combined file");
             }
             check(found, "the edited task is in the combined file");
         }
+    }
+
+    // W32-0.2 (R31-2, High): the same queue plus a Start edit is refused before
+    // the first write, so neither the field nor the insert lands.
+    {
+        std::vector<app::StartEdit> starts;
+        app::StartEdit start_edit;
+        start_edit.uid = uid;
+        start_edit.start = new_start;
+        starts.push_back(start_edit);
+        const std::filesystem::path refused_target =
+            std::filesystem::path(APP_TEST_OUT_DIR) / "app-fields-start-refused.mpp";
+        std::filesystem::remove(refused_target, error);
+        const app::StructuralSaveResult refused = app::save_structural_edits(
+            combined, starts, copy.string(), refused_target.string(), false);
+        check(!refused.ok, "a field + insert + start save is refused");
+        check(refused.error.find("Start is read-only") != std::string::npos,
+              "the refusal names Start");
+        check(refused.error.find("not measured against Project") != std::string::npos,
+              "the refusal names decision 9");
+        check(!std::filesystem::exists(refused_target),
+              "the refused save leaves no target file");
     }
 
     // Refusals -----------------------------------------------------------------

@@ -81,6 +81,14 @@ void check_date(date32 got, date32 want, const char* what) {
     }
 }
 
+void check_text(const std::string& got, const std::string& want, const char* what) {
+    ++g_checks;
+    if (got != want) {
+        ++g_failures;
+        std::printf("FAIL: %s: got \"%s\" want \"%s\"\n", what, got.c_str(), want.c_str());
+    }
+}
+
 app::TaskRow make_task(std::uint32_t uid, std::uint32_t id, const char* outline, const char* name,
                        std::int64_t ticks, date32 start, date32 finish, std::uint16_t percent,
                        int level, bool summary, bool milestone, bool critical) {
@@ -357,34 +365,33 @@ void test_edit_and_undo() {
     check(!sheet.begin_edit(1, kOutlineColumn), "Outline number is read-only");
     check(sheet.column_read_only(kUidColumn), "UID column reports read-only");
     check(!sheet.column_read_only(kNameColumn), "Name column is editable");
-    check(!sheet.column_read_only(kStartColumn), "Start column is editable");
+    // W32-0.2 (R31-2, High): Start is read-only -- Project's measured Start save
+    // rewrites more than this port's writer does, so no edit session opens.
+    check(sheet.column_read_only(kStartColumn), "Start column reports read-only");
+    check(!sheet.begin_edit(2, kStartColumn), "Start refuses an edit session");
 
-    // Typing a date: begin_edit seeds the cell text, commit writes through.
-    check(sheet.begin_edit(2, kStartColumn), "begin_edit on Start");
+    // Typing a name: begin_edit seeds the cell text, commit writes through.
+    check(sheet.begin_edit(2, kNameColumn), "begin_edit on Name");
     check(sheet.editing(), "the model is in an edit session");
     check(!sheet.edit_text().empty(), "the edit session is seeded with the cell text");
-    sheet.set_edit_text("2026-11-02 08:00");
+    sheet.set_edit_text("Second child renamed");
     const core::sheet::EditOutcome outcome = sheet.commit_edit(false);
-    check(outcome.ok, "the new start commits");
+    check(outcome.ok, "the new name commits");
     check(outcome.changed, "the commit changed the value");
     check(!sheet.editing(), "the edit session closed on commit");
+    check_text(sheet.cell_text(2, kNameColumn), "Second child renamed",
+               "the edited Name is the cell text");
+    check(sheet.undo(), "the edit is one undo step");
+    check_text(sheet.cell_text(2, kNameColumn), "Second child", "undo restores the loaded Name");
+    check(sheet.can_redo(), "the undo left a redo step");
+    check(sheet.redo(), "redo succeeds");
+    check_text(sheet.cell_text(2, kNameColumn), "Second child renamed", "redo re-applies the name");
+    check(sheet.undo(), "a second undo returns the loaded name");
 
-    // The Gantt follows the edit: the synced plan carries the new start.
-    app::PlanInput view = app::sync_plan_from_records(input, fixture.records);
-    check_date(view.tasks[2].start, from_ymd(2026, 11, 2, 8, 0), "synced plan has the new start");
-    check_date(input.tasks[2].start, from_ymd(2026, 10, 22, 8, 0),
-               "the loaded baseline is unchanged");
-
-    // The save diff sees exactly that row.
-    std::vector<app::StartEdit> edits = app::collect_start_edits(fixture.records, input);
-    check_size(edits.size(), 1, "one start differs from the loaded plan");
-    if (!edits.empty()) {
-        check(edits[0].uid == kSecondChildUid, "the edited row is the second child");
-        check_date(edits[0].start, from_ymd(2026, 11, 2, 8, 0), "the diff carries the new date");
-    }
-
-    // A rejected commit keeps the session open and shows why.
-    check(sheet.begin_edit(3, kStartColumn), "begin_edit on the milestone start");
+    // A rejected date commit keeps the session open: Finish is still an
+    // editable date column (Start is not).
+    constexpr std::size_t kFinishColumn = 5;
+    check(sheet.begin_edit(3, kFinishColumn), "begin_edit on the milestone Finish");
     sheet.set_edit_text("not a date");
     const core::sheet::EditOutcome rejected = sheet.commit_edit(false);
     check(!rejected.ok, "a bad date is rejected");
@@ -393,17 +400,26 @@ void test_edit_and_undo() {
     sheet.cancel_edit();
     check(!sheet.editing(), "cancel closes the session");
 
-    // Undo restores the loaded value; the save diff goes empty; redo re-applies.
-    check(sheet.can_undo(), "the commit is on the undo stack");
-    check(sheet.undo(), "undo succeeds");
-    check(app::collect_start_edits(fixture.records, input).empty(),
-          "undo restores the loaded start, so there is nothing to save");
-    check(sheet.can_redo(), "the undo left a redo step");
-    check(sheet.redo(), "redo succeeds");
-    check_size(app::collect_start_edits(fixture.records, input).size(), 1,
-               "redo brings the edit back");
+    // W32-0.2: no sheet path writes a Start now.  The save diff still detects a
+    // RecordSet start change (defence in depth for a pre-policy edit or another
+    // shell): mutate the record directly, then prove sync/collect/accept work.
+    const core::view::FieldId start_field = app::task_field_id("Start");
+    fixture.records.set_field(
+        2, start_field,
+        core::view::Value::of_date(app::date_value_from_date32(from_ymd(2026, 11, 2, 8, 0))));
+    app::PlanInput view = app::sync_plan_from_records(input, fixture.records);
+    check_date(view.tasks[2].start, from_ymd(2026, 11, 2, 8, 0), "synced plan has the new start");
+    check_date(input.tasks[2].start, from_ymd(2026, 10, 22, 8, 0),
+               "the loaded baseline is unchanged");
 
-    // accept_start_edits makes the saved value the new baseline.
+    std::vector<app::StartEdit> edits = app::collect_start_edits(fixture.records, input);
+    check_size(edits.size(), 1, "one start differs from the loaded plan");
+    if (!edits.empty()) {
+        check(edits[0].uid == kSecondChildUid, "the edited row is the second child");
+        check_date(edits[0].start, from_ymd(2026, 11, 2, 8, 0), "the diff carries the new date");
+    }
+
+    // accept_start_edits makes the value the new baseline.
     app::accept_start_edits(input, app::collect_start_edits(fixture.records, input));
     check(app::collect_start_edits(fixture.records, input).empty(),
           "after a save the baseline follows the records");

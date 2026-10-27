@@ -564,6 +564,23 @@ void case_window(const QString& fixture, const QString& out_dir) {
     check(window.sheet() != nullptr && window.sheet()->undo(),
           "the apply is one undo step like a typed edit");
 
+    // W32-0.2 (R31-2, High): Task Information's Start field is read-only by
+    // policy, and a hand-built values struct carrying a changed Start is
+    // refused with the decision-9 reason before any other field commits.
+    check(dialog.start_edit() != nullptr && dialog.start_edit()->isReadOnly(),
+          "Task Information's Start field is read-only");
+    msqt::TaskInformationValues start_values;
+    check(window.task_information_values(&start_values),
+          "the selected task's values are readable for the Start refusal");
+    start_values.start_text += " ";
+    const std::size_t pending_before_start = window.pending_edits().size();
+    check(!window.apply_task_information(start_values),
+          "a changed Start from Task Information is refused");
+    check(window.status_left_text().contains(QStringLiteral("not measured against Project")),
+          "the Start refusal gives the decision-9 reason");
+    check(window.pending_edits().size() == pending_before_start,
+          "the refused Start edit queues nothing");
+
     // W28-1.2: Task Information's Percent complete field is ENABLED on the
     // measured actuals writer, and OK queues one set_percent edit instead of a
     // sheet-cell write (wave 27 W27-0.1 had it read-only).

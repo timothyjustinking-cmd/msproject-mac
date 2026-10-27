@@ -480,12 +480,14 @@ void test_save_round_trip() {
     const std::uint32_t uid = plan.loaded.tasks[0].uid;
     const date32 new_start = from_ymd(2026, 3, 2, 8, 0);
 
-    // Edit the first task's Start through the sheet, as the keyboard does.
-    check(plan.sheet->begin_edit(0, 4), "begin_edit on the first task's Start");
-    plan.sheet->set_edit_text("2026-03-02 08:00");
-    const core::sheet::EditOutcome outcome = plan.sheet->commit_edit(false);
-    check(outcome.ok, "the edited date is accepted");
-    check(outcome.changed, "the edited date changes the value");
+    // W32-0.2 (R31-2, High): the sheet refuses a Start edit now.  The writer
+    // stays in the tree for a later wave, so drive the SAME start diff by
+    // writing the RecordSet value a pre-policy edit would have left -- this is
+    // the defence-in-depth path collect_start_edits still detects.
+    check(!plan.sheet->begin_edit(0, 4), "the sheet refuses a Start edit session");
+    plan.records.set_field(
+        0, app::task_field_id("Start"),
+        core::view::Value::of_date(app::date_value_from_date32(new_start)));
 
     const std::vector<app::StartEdit> edits = app::collect_start_edits(plan.records, plan.loaded);
     check_size(edits.size(), 1, "exactly one start is pending");
@@ -558,10 +560,10 @@ void test_save_round_trip() {
     // A cleared start has no date to write: reported, nothing written, ok.
     Plan cleared_plan;
     if (load_plan(source, cleared_plan) && cleared_plan.sheet != nullptr) {
-        check(cleared_plan.sheet->begin_edit(0, 4), "begin_edit before clearing");
-        cleared_plan.sheet->set_edit_text("");
-        const core::sheet::EditOutcome cleared = cleared_plan.sheet->commit_edit(false);
-        check(cleared.ok, "an empty date clears the cell");
+        check(!cleared_plan.sheet->begin_edit(0, 4),
+              "the sheet refuses the Start edit that would clear it");
+        cleared_plan.records.set_field(0, app::task_field_id("Start"),
+                                       core::view::Value::null());
         const std::vector<app::StartEdit> cleared_edits =
             app::collect_start_edits(cleared_plan.records, cleared_plan.loaded);
         check_size(cleared_edits.size(), 1, "the cleared start is a pending change");
@@ -1100,12 +1102,9 @@ void test_save_formula_and_view_state() {
 //   1. the pre-wave-17 signature (five arguments, no request at all);
 //   2. the new signature with an EMPTY StructuralDocumentEdits request;
 //   3. the documented writer sequence applied by hand -- append the row, write the
-//      value, then the one date write -- which is what the cascade does.
-// The same three runs, and app_edits_fields_tests' own combined file, are all
-// SHA-256 52ECE9E1E4BF6F621AE621AA913F94433B71CE7014B0C13D31D6BC9903A4FB01 on
-// the committed fixture; the pre-change binary (build\a1-app, built before this
-// stream's edit) produces exactly that file, so "byte-identical to today's
-// cascade output" is a checked fact, not a hope (docs/handoff/b1.md section 5).
+//      value, then the final container save -- which is what the cascade does.
+// W32-0.2 (R31-2, High): the Start pin that used to ride along is refused before
+// the first write, so the triple compares the structural + field cascade alone.
 void test_cascade_without_hook_is_unchanged() {
     const std::filesystem::path source = kFixture;
     const std::size_t source_bytes = bytes_on_disk(source);
@@ -1121,8 +1120,8 @@ void test_cascade_without_hook_is_unchanged() {
     }
     const std::uint32_t uid = plan.tasks.front().uid;
 
-    // The edit set app_edits_fields_tests already runs: one Text1 value, one
-    // appended task, one Start pin.
+    // The edit set app_edits_fields_tests already runs: one Text1 value and one
+    // appended task.
     app::StructuralEdits edits;
     check(edits.push(text1_edit(uid, "combined")), "the no-hook field edit is queued");
     check(edits.push(insert_edit("Field Task", edits.next_placeholder_uid(plan))),
@@ -1130,14 +1129,28 @@ void test_cascade_without_hook_is_unchanged() {
     check_size(edits.size(), 2, "two structural edits are pending");
     const std::vector<app::StartEdit> starts{{uid, new_start}};
 
-    // (1) Today's call shape.
+    // W32-0.2 (R31-2, High): a Start edit is refused before the first write.
+    const std::filesystem::path refused_target = out_path("app-cascade-start-refused.mpp");
+    std::error_code refused_error;
+    std::filesystem::remove(refused_target, refused_error);
+    const app::StructuralSaveResult refused =
+        app::save_structural_edits(edits, starts, source.string(), refused_target.string(), false);
+    print_cascade("start-refused", refused);
+    check(!refused.ok, "a start edit refuses the cascade");
+    check(refused.error.find("Start is read-only") != std::string::npos,
+          "the refusal names Start and its read-only reason");
+    check(refused.error.find("not measured against Project") != std::string::npos,
+          "the refusal names decision 9");
+    check(!std::filesystem::exists(refused_target), "the refused save writes no target file");
+
+    // (1) Today's call shape, with no start edit.
     const app::StructuralSaveResult plain =
-        app::save_structural_edits(edits, starts, source.string(), target.string(), false);
+        app::save_structural_edits(edits, {}, source.string(), target.string(), false);
     print_cascade("no-hook", plain);
     check(plain.ok, "the no-hook cascade still saves");
     check_size(plain.added, 1, "the no-hook cascade added the row");
     check_size(plain.fields_written, 1, "the no-hook cascade wrote the value");
-    check_size(plain.start_rows_written, 1, "the no-hook cascade wrote the start pin");
+    check_size(plain.start_rows_written, 0, "the no-hook cascade writes no start");
     check(!plain.document_edits_requested, "no document edits were requested");
     check(!plain.document_edits_written, "no document-edit hook ran");
     check(plain.api.find("apply_document_edits") == std::string::npos,
@@ -1148,7 +1161,7 @@ void test_cascade_without_hook_is_unchanged() {
 
     // (2) The new parameter with an empty request: same path, same bytes.
     const app::StructuralSaveResult empty_request = app::save_structural_edits(
-        edits, starts, source.string(), again.string(), false, app::StructuralDocumentEdits{});
+        edits, {}, source.string(), again.string(), false, app::StructuralDocumentEdits{});
     print_cascade("empty-request", empty_request);
     check(empty_request.ok, "an empty document-edit request still saves");
     check(!empty_request.document_edits_written, "an empty request runs no hook");
@@ -1170,18 +1183,7 @@ void test_cascade_without_hook_is_unchanged() {
         field.value.text = "combined";
         mppwrite::save_field_values(document, std::vector<mppwrite::FieldEdit>{field},
                                     scratch.string());
-#if APP_MPPWRITE_SAVE_HEADER
-        mppwrite::DateEdit date;
-        date.uid = uid;
-        date.start = app::packed_from_date32(new_start);
-        mppwrite::save_date_edits(document, std::vector<mppwrite::DateEdit>{date},
-                                  reference.string());
-#else
-        const mppwrite::TaskTable table = mppwrite::TaskTable::from_document(document);
-        mppwrite::pin_task_start(document, table.row_for_uid(uid),
-                                 app::packed_from_date32(new_start));
         document.save(reference.string());
-#endif
         reference_ok = true;
     } catch (const std::exception& error) {
         check(false, ("the hand-built reference cascade failed: " + std::string(error.what()))
@@ -1350,43 +1352,21 @@ void test_cascade_with_document_edits_in_one_write() {
               "Document::save_structural is byte-identical to the free-function call");
     }
 
-    // A Start pin riding along: the date writer is then the single target write,
-    // AFTER the hook (the other half of the routing rule).
+    // W32-0.2 (R31-2, High): a Start edit riding along is refused before the
+    // hook or any writer runs, so no target file is written.  (The one-write
+    // routing itself is proved by the hook-only save above.)
     {
         const std::vector<app::StartEdit> starts{{uid, from_ymd(2026, 3, 2, 8, 0)}};
-        const app::StructuralSaveResult pinned = app::save_structural_edits(
+        std::error_code start_error;
+        std::filesystem::remove(with_start, start_error);
+        const app::StructuralSaveResult refused = app::save_structural_edits(
             edits, starts, prepped.string(), with_start.string(), false, request);
-        print_cascade("one-write-with-start", pinned);
-        check(pinned.ok, "structural + field + view-state + formula + start saves in one write");
-        check_size(pinned.start_rows_written, 1, "the start pin was written");
-        check(pinned.document_edits_written, "the hook ran before the date writer");
-        check(pinned.api.find("save_date_edits") != std::string::npos,
-              "the final write was the date writer");
-        check(pinned.api.find("CfbDocument::save") == std::string::npos,
-              "no separate container save was needed");
-        check(file_bytes(with_start) != file_bytes(target), "the start pin changed the file");
-        try {
-            const mpp::Document reread = mpp::load_file(with_start.string());
-            const mpp::Task* task = task_with_uid(reread, uid);
-            check(task != nullptr, "the pinned task reopens");
-            if (task != nullptr) {
-                check_size(task->constraint_type, 4, "the start edit is a SNET pin");
-                check(task->constraint_date.raw ==
-                          app::packed_from_date32(from_ymd(2026, 3, 2, 8, 0)),
-                      "the pin carries the edited date");
-            }
-        } catch (const std::exception& error) {
-            check(false, ("the one-write-with-start file does not load: " +
-                          std::string(error.what())).c_str());
-        }
-        const ParsedCTable pinned_table = parse_ctable_at(with_start);
-        check(pinned_table.ok && pinned_table.state.tables.size() == 1 &&
-                  pinned_table.state.tables[0].date_format == 0x05u,
-              "the pinned file also carries the date format");
-        std::uint16_t pinned_flag = 0;
-        check(props_flag(stream_bytes(with_start, "114/Props"), pinned_flag),
-              "the pinned file has the flag record");
-        check_size(pinned_flag, 1, "the pinned file keeps the flag at 1");
+        print_cascade("one-write-with-start", refused);
+        check(!refused.ok, "a start edit refuses the one-write cascade");
+        check(refused.error.find("not measured against Project") != std::string::npos,
+              "the refusal names decision 9");
+        check(!refused.document_edits_written, "the hook did not run before the refusal");
+        check(!std::filesystem::exists(with_start), "the refused save leaves no target file");
     }
 
     // What A1's second-write fallback would do if it were left in place: re-open
@@ -1444,9 +1424,10 @@ void test_cascade_hook_refusal() {
         return outcome;
     };
 
-    // A start pin rides along, so the date writer WOULD have been the final write:
-    // the refusal must stop it before it reaches the target.
-    const std::vector<app::StartEdit> starts{{plan.tasks.front().uid, from_ymd(2026, 3, 2, 8, 0)}};
+    // W32-0.2 (R31-2, High): no start pin rides along any more -- the edit
+    // model refuses one before the hook -- so this test drives the hook refusal
+    // with the structural edit alone.
+    const std::vector<app::StartEdit> starts;
     const app::StructuralSaveResult refused =
         app::save_structural_edits(edits, starts, source.string(), target.string(), false, request);
     print_cascade("hook-refused", refused);

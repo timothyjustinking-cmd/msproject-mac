@@ -417,14 +417,18 @@ void case_synthetic_non_entry(const QString& fixture, const QString& out_dir) {
     check(window.sheet()->cell_text(0, name_model_column) != "Renamed by the gate",
           "undo restored the loaded name");
 
-    // A Start edit is what the save diff collects: it must mark the document dirty.
+    // W32-0.2 (R31-2, High): the Begin (Start) column is read-only by policy --
+    // its save is not measured against Project -- so the table model refuses
+    // the edit and nothing becomes a pending save change.
     check(!window.document_dirty(), "a freshly loaded file has nothing pending");
     const QModelIndex begin = model->index(0, 1);
-    check(model->flags(begin).testFlag(Qt::ItemIsEditable), "the Begin (Start) column is editable");
-    check(model->setData(begin, QStringLiteral("2026-11-02 08:00"), Qt::EditRole),
-          "a date edit on the file's Begin column commits");
-    check(window.pending_start_edits() == 1,
-          "the Start edit is the pending change the save would write");
+    check(!model->flags(begin).testFlag(Qt::ItemIsEditable),
+          "the Begin (Start) column is read-only");
+    check(!model->setData(begin, QStringLiteral("2026-11-02 08:00"), Qt::EditRole),
+          "a date edit on the file's Begin column is refused");
+    check(window.pending_start_edits() == 0,
+          "the refused Start edit is not a pending save change");
+    check(!window.document_dirty(), "the refused Start edit leaves the document clean");
 
     // A column with no save path is read-only: no fake edit.
     const QModelIndex discipline = model->index(0, 4);

@@ -761,10 +761,13 @@ void test_table_sheet_columns() {
                "Indicators stays unlabelled (the reference shows no caption)");
     check_text(app::task_column_caption(0x0b400020u), "% Complete", "% Complete has a caption");
 
-    // The read-only policy: only the four writable task fields edit.
+    // The read-only policy: only the three writable task fields edit.
     check(columns[0].read_only, "the ID column is read-only (identity)");
     check(!columns[1].read_only, "Task Name is editable");
-    check(!columns[2].read_only, "Start is editable");
+    // W32-0.2 (R31-2, High): Start is read-only -- Project's measured Start save
+    // rewrites calculated and effective dates, slack, the project roll-up, a
+    // Var2 record and DSI; this port's writer stores only the constraint window.
+    check(columns[2].read_only, "Start is read-only (not measured against Project)");
     check(!columns[3].read_only, "Duration is editable");
     check(columns[4].read_only, "Text1 is read-only (no save path)");
     check(columns[5].read_only, "% Complete is read-only (no save path)");
@@ -819,18 +822,25 @@ void test_table_sheet_columns() {
     check_text(sheet.cell_text(0, 3), "5 days",
                "the mapped Duration column renders the task's duration");
     check(!sheet.begin_edit(0, 4), "the read-only Text1 column refuses an edit");
-    check(sheet.begin_edit(0, 2), "the Start column opens an edit session");
-    sheet.set_edit_text("2026-11-02 08:00");
+    // W32-0.2: Start is read-only; the mapped Name column still proves the sheet
+    // writes the model field the app reads back.
+    check(!sheet.begin_edit(0, 2), "the read-only Start column refuses an edit");
+    check(sheet.begin_edit(0, 1), "the Task Name column opens an edit session");
+    sheet.set_edit_text("Task A renamed");
     const core::sheet::EditOutcome outcome = sheet.commit_edit(false);
-    check(outcome.ok && outcome.changed, "the Start edit commits");
-    check_text(sheet.cell_text(0, 2), "Mon 02/11/26", "the edited Start is the cell text");
+    check(outcome.ok && outcome.changed, "the Name edit commits");
+    check_text(sheet.cell_text(0, 1), "Task A renamed", "the edited Name is the cell text");
     check(sheet.undo(), "the edit is one undo step");
-    check_text(sheet.cell_text(0, 2), "Mon 19/10/26", "undo restores the loaded Start");
+    check_text(sheet.cell_text(0, 1), "Task A", "undo restores the loaded Name");
     // The edit reached the RecordSet, which is what the Gantt and the save diff
     // read (the sheet is not a display-only copy).
+    check(sheet.redo(), "redo re-applies the Name edit");
+    const Value* name = records.get(0, app::task_field_id("Name"));
+    check(name != nullptr && name->text == "Task A renamed",
+          "the mapped column writes the model field the app reads back");
     const Value* start = records.get(0, app::task_field_id("Start"));
     check(start != nullptr && start->kind == ValueKind::Date,
-          "the mapped column writes the model field the app reads back");
+          "the Start column still renders the model field");
 }
 
 }  // namespace

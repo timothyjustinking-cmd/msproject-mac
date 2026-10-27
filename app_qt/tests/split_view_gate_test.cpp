@@ -246,16 +246,20 @@ int main(int argc, char** argv) {
     // --- 3b. W28-4.1: the form's fields edit through the sheet's own paths --
     // Each field reports its value to MainWindow, which hands it to the SAME
     // apply_task_information path the sheet cells and Task Information use:
-    // a begin_edit/commit_edit sheet session for the four cell fields and the
+    // a begin_edit/commit_edit sheet session for the cell fields and the
     // measured set_percent structural edit for % Complete.  The form adds no
-    // writer of its own; the two fields the sheet declares read-only stay
-    // disabled rather than offering an edit a save would drop.
+    // writer of its own; the fields the sheet declares read-only stay disabled
+    // rather than offering an edit a save would drop.  W32-0.2 (R31-2): Start
+    // is one of them now -- its save is not measured against Project.
     gate::check(!form->name_field()->isReadOnly(),
                 "the form's Name field is editable");
     gate::check(!form->duration_field()->isReadOnly(),
                 "the form's Duration field is editable");
-    gate::check(!form->start_field()->isReadOnly(),
-                "the form's Start field is editable");
+    gate::check(form->start_field()->isReadOnly() && !form->start_field()->isEnabled(),
+                "the form's Start field is read-only (W32-0.2)");
+    gate::check(form->start_field()->toolTip().contains(
+                    QStringLiteral("not measured against Project")),
+                "the form's Start field names the decision-9 reason");
     gate::check(!form->finish_field()->isReadOnly(),
                 "the form's Finish field is editable");
     gate::check(!form->percent_field()->isReadOnly(),
@@ -291,28 +295,17 @@ int main(int argc, char** argv) {
     gate::check(form->name_field()->text() == original_name,
                 "the form follows the Name undo");
 
-    // Start: the one cell field the save path persists.  The form's edit is
-    // the same pending start the sheet's in-cell editor makes.
+    // Start: W32-0.2 -- the form disables the field, so a typed start never
+    // becomes a pending save edit (its save is not measured against Project).
     gate::check(window.pending_start_edits() == 0,
                 "the fixture opens with no pending start edit");
-    const QString original_start = form->start_field()->text();
     form->start_field()->setFocus();
-    form->start_field()->setText(QStringLiteral("2026-02-02"));
     QTest::keyClick(form->start_field(), Qt::Key_Return);
     QApplication::processEvents();
-    gate::check(window.pending_start_edits() == 1,
-                "the form's Start edit is one pending save edit");
-    gate::check(window.document_dirty(), "the document is dirty after the Start edit");
-    gate::check(form->start_field()->text() != original_start,
-                "the form shows the new start");
-    if (undo != nullptr) {
-        undo->trigger();
-        QApplication::processEvents();
-    }
     gate::check(window.pending_start_edits() == 0,
-                "Edit > Undo reverses the form's Start edit");
-    gate::check(form->start_field()->text() == original_start,
-                "the form follows the Start undo");
+                "a Return in the form's read-only Start queues no save edit");
+    gate::check(!window.document_dirty(),
+                "the form's Start leaves the document clean");
 
     // % Complete: no sheet cell path (that column is read-only); the form
     // queues the same measured set_percent edit the ribbon's % buttons and Task

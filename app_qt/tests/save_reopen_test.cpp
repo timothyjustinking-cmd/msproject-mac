@@ -9,9 +9,11 @@
 //     setData -> SheetModel::begin_edit/commit_edit -- and Undo/Redo move the
 //     real SheetModel stack through the menu actions;
 //   * the dirty flag tracks exactly what a save would write;
+//   * a Start edit is REFUSED by the shell (W32-0.2, R31-2: its save is not
+//     measured against Project) and the refused attempt writes nothing;
 //   * Save goes through the shared app::Document path to a new file, and the
-//     edit is persisted (the writer's measured form: an SNET constraint, which
-//     is what Project honours on open);
+//     structural edit is persisted (the writer's measured form: a stored Text1
+//     custom-field value, written by mppwrite::save_field_values);
 //   * reopening the saved file in the same real window yields the same plan
 //     (row/bar counts, no remaining pending edits);
 //   * a save with nothing pending writes the source container byte-identically
@@ -47,6 +49,7 @@
 #include <vector>
 
 #include "backstage.h"
+#include "dialogs.h"
 #include "document.h"
 #include "entry_columns.h"
 #include "layout_model.h"
@@ -235,18 +238,74 @@ int main(int argc, char** argv) {
               "a second Undo returns to the original Duration");
     }
 
-    // --- A Start edit: the one cell edit the file writer persists ------------
+    // --- W32-0.2 (R31-2, High): a Start edit is REFUSED ----------------------
     // Row 0 is the first task now that the file hides the project row.
     const QModelIndex start_index = model->index(0, start_column);
-    check(model->setData(start_index, QStringLiteral("2026-03-02 08:00"), Qt::EditRole),
-          "a Start edit commits through the shell's model path");
-    check(window.pending_start_edits() == 1, "exactly one start edit is pending");
-    check(window.document_dirty(), "the start edit makes the document dirty");
+    check(!model->flags(start_index).testFlag(Qt::ItemIsEditable),
+          "the Entry Start column is read-only");
+    check(!model->setData(start_index, QStringLiteral("2026-03-02 08:00"), Qt::EditRole),
+          "a Start edit through the shell's model path is refused");
+    check(window.pending_start_edits() == 0, "the refused Start edit is not pending");
+    check(!window.document_dirty(), "the refused Start edit leaves the document clean");
 
-    // --- W26-REV-2: a project-summary toggle must not drop a pending cell edit.
-    // The RecordSet is the source of truth for cell edits; the toggle rebuilds
-    // from the plan, so it must fold the records back first.  Before the fix,
-    // pending_start_edits() fell to 0 here and the save wrote no start row.
+    // The brief's third test sentence: after the refused attempt a save writes
+    // nothing, so no .mpp can differ from the null save.
+    const std::filesystem::path refused_target = out_dir / "refused-start.mpp";
+    std::filesystem::remove(refused_target, fs_error);
+    error.clear();
+    check(window.save_document_path(QString::fromStdString(refused_target.string()), &error),
+          "a save with nothing pending succeeds without writing");
+    check(!std::filesystem::exists(refused_target),
+          "the refused Start attempt left no .mpp behind");
+
+    // --- A structural edit: the persisted change this gate saves -------------
+    // W32-0.2: Start is read-only now, so the saved change is the measured
+    // Text1 set_field the Custom Fields tab queues (synthetic-base is the
+    // fixture the committed field round trip itself uses).  A Name cell edit
+    // rides along to keep W26-REV-2's original guard: the project-summary
+    // toggle rebuilds from the plan, so it must fold the RecordSet back.
+    const std::size_t name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+    check(name_column >= 0, "the Entry table has a Name column");
+    if (name_column >= 0) {
+        check(model->setData(model->index(0, name_column),
+                             QStringLiteral("Renamed by the save gate"), Qt::EditRole),
+              "a Name cell edit commits through the shell's model path");
+        check(!window.document_dirty(),
+              "a view-only Name edit does not claim unsaved file changes");
+    }
+    core::sheet::SheetModel* core_sheet = window.sheet();
+    const std::size_t name_model_column =
+        window.sheet_table_model()->visible_column_for_field(app::name_field_id());
+    check(core_sheet != nullptr && name_model_column != core::sheet::kNoIndex,
+          "the core sheet exposes the first task's Name column");
+    if (core_sheet != nullptr && name_model_column != core::sheet::kNoIndex) {
+        core_sheet->select_cell(0, name_model_column);
+        window.refresh_menu_state();
+    }
+    constexpr std::uint32_t kText1Field = 0x0b400033u;
+    const std::string kText1Value = "save-gate";
+    msqt::TaskInformationValues field_values;
+    check(window.task_information_values(&field_values),
+          "Task Information reads the first task's custom fields");
+    bool text1_set = false;
+    for (std::size_t index = 0; index < field_values.custom_field_ids.size(); ++index) {
+        if (field_values.custom_field_ids[index] == kText1Field) {
+            field_values.custom_field_texts[index] = kText1Value;
+            text1_set = true;
+            break;
+        }
+    }
+    check(text1_set, "the Custom Fields list carries Text1");
+    check(window.apply_task_information(field_values),
+          "the Custom Fields edit queues the measured set_field");
+    check(window.pending_edits().size() == 1,
+          "the Text1 set_field is the one pending structural edit");
+    check(window.document_dirty(), "the structural edit makes the document dirty");
+
+    // --- W26-REV-2: a project-summary toggle must not drop a pending edit.
+    // The RecordSet is the source of truth for cell edits and the structural
+    // queue for the Text1 edit; the toggle rebuilds from the plan, so it must
+    // fold the records back first and leave the queue alone.
     QCheckBox* summary_box = find_ribbon_checkbox(
         window.ribbon(), QStringLiteral("Gantt Chart Format"), QStringLiteral("Show/Hide"),
         QStringLiteral("Project Summary Task"));
@@ -258,14 +317,25 @@ int main(int argc, char** argv) {
         check(window.project_summary_visible(), "the toggle shows the project row");
         check(window.sheet_row_count() == rows_before_toggle + 1,
               "the project row is the one row added");
-        check(window.pending_start_edits() == 1,
-              "the pending Start edit survives the project-summary toggle");
+        check(window.pending_edits().size() == 1,
+              "the pending Text1 edit survives the project-summary toggle");
         check(window.document_dirty(), "the document stays dirty after the toggle");
+        if (name_column >= 0) {
+            bool name_found = false;
+            for (int row = 0; row < model->rowCount(); ++row) {
+                if (model->data(model->index(row, name_column), Qt::DisplayRole).toString() ==
+                    QStringLiteral("Renamed by the save gate")) {
+                    name_found = true;
+                }
+            }
+            check(name_found,
+                  "the pending Name cell edit survives the project-summary toggle");
+        }
         summary_box->click();
         QApplication::processEvents();
         check(!window.project_summary_visible(), "the second click hides the row again");
-        check(window.pending_start_edits() == 1,
-              "the pending Start edit survives the second toggle");
+        check(window.pending_edits().size() == 1,
+              "the pending Text1 edit survives the second toggle");
         check(window.sheet_row_count() == rows_before_toggle,
               "the sheet returns to its original row count");
     }
@@ -304,8 +374,8 @@ int main(int argc, char** argv) {
             QApplication::processEvents();
         }
         check(saw_recent_prompt, "a Recent row on a dirty document asks first");
-        check(window.pending_start_edits() == 1 && window.document_dirty(),
-              "Cancel on the Recent prompt keeps the pending Start edit");
+        check(window.pending_edits().size() == 1 && window.document_dirty(),
+              "Cancel on the Recent prompt keeps the pending Text1 edit");
         check(window.loaded_task_count() == 3,
               "Cancel on the Recent prompt keeps the open project");
 
@@ -326,8 +396,8 @@ int main(int argc, char** argv) {
             QApplication::processEvents();
         }
         check(saw_blank_prompt, "Blank Project on a dirty document asks first");
-        check(window.pending_start_edits() == 1 && window.document_dirty(),
-              "Cancel on the Blank Project prompt keeps the pending Start edit");
+        check(window.pending_edits().size() == 1 && window.document_dirty(),
+              "Cancel on the Blank Project prompt keeps the pending Text1 edit");
         check(window.loaded_task_count() == 3,
               "Cancel on the Blank Project prompt keeps the open project");
     }
@@ -339,7 +409,7 @@ int main(int argc, char** argv) {
         ++g_failures;
     } else {
         check(std::filesystem::exists(saved), "the saved file exists");
-        check(window.last_save_rows_written() == 1, "the save wrote one start row");
+        check(window.last_save_rows_written() == 0, "the structural save wrote no start row");
         check(!window.document_dirty(), "the document is clean after a successful save");
     }
 
@@ -360,9 +430,9 @@ int main(int argc, char** argv) {
     }
 
     // --- The edit persisted, in the writer's measured form -------------------
-    // pin_task_start stores an SNET constraint (PjConstraint 4); that is the
-    // store Project was measured to honour on open (docs/audit-handoff.md 4.2).
-    const core::sched::date32 expected_start = core::sched::from_ymd(2026, 3, 2, 8, 0);
+    // W32-0.2: the persisted change is the measured Text1 set_field (wave 15's
+    // mppwrite::save_field_values), not a Start pin -- Start is refused now.
+    // The field round-trip test reads the same six stored values back.
     try {
         const mpp::Document reread = mpp::load_file(saved.string());
         check(reread.tasks.size() == 3, "the saved file reads back 3 tasks");
@@ -376,9 +446,17 @@ int main(int argc, char** argv) {
         if (task == nullptr) {
             check(false, "the edited task is in the saved file");
         } else {
-            check(task->constraint_type == 4, "the saved Start is pinned by an SNET constraint");
-            check(task->constraint_date.raw == app::packed_from_date32(expected_start),
-                  "the constraint date is the edited Start");
+            const mpp::CustomFieldValue* value = nullptr;
+            for (const mpp::CustomFieldValue& field : task->custom_fields) {
+                if (field.field_id == kText1Field) {
+                    value = &field;
+                    break;
+                }
+            }
+            check(value != nullptr, "the saved file stores the Text1 value");
+            if (value != nullptr) {
+                check(value->present, "the stored Text1 value is present");
+                check(value->text == kText1Value, "the stored Text1 text is the applied value");            }
         }
     } catch (const std::exception& failure) {
         std::fprintf(stderr, "FAIL: the saved file does not load: %s\n", failure.what());

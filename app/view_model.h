@@ -321,12 +321,16 @@ core::view::FieldId table_column_field(std::uint32_t table_field_id) noexcept;
 // field nothing names also stays empty rather than printing "0x...".
 std::string task_column_caption(core::view::FieldId field);
 
-// True for the four task fields a save can write back -- Name, Start, Finish and
+// True for the three task fields a save can write back -- Name, Finish and
 // Duration, exactly the editable columns of app::default_sheet_columns() after
 // app::apply_edit_policy().  Every other field the table can name (Indicators,
-// Task Mode, Predecessors, % Complete, custom fields, ...) is presentation only
-// in this app, so a loaded table's column for it is declared read-only rather
-// than offering an edit whose value a save would silently drop.
+// Task Mode, Predecessors, % Complete, Start, custom fields, ...) is
+// presentation only in this app, so a loaded table's column for it is declared
+// read-only rather than offering an edit whose value a save would silently drop.
+// W32-0.2 (R31-2, High): Start was the fourth until the wave-31 Fill pair showed
+// Project's Start save rewrites calculated and effective dates, slack, the
+// project roll-up, a Var2 record and DSI -- not the constraint-window-only shape
+// this port's writer produces.  Start is read-only with the decision-9 reason.
 bool task_column_editable(core::view::FieldId field) noexcept;
 
 // The task sheet's column set from the file's stored `214/CTable` table.

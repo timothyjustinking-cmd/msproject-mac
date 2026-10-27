@@ -320,7 +320,8 @@ void test_real_plan() {
     check_named(report, "task_fields", "the display plan shows the queued value");
     check_named(report, "predecessors", "the dialog accepts the first -> second FS add");
     check_named(report, "predecessors", "the display plan shows the linked row");
-    check_named(report, "start_edit", "the typed date is accepted");
+    check_named(report, "start_edit", "the first task's Start cell is read-only");
+    check_named(report, "start_edit", "no edit session opens on Start");
     check_named(report, "start_edit", "exactly one start edit is pending");
     check_named(report, "warning", "an FS predecessor clamps an earlier start");
     check_named(report, "warning", "the save about to run warns once for the edited row");

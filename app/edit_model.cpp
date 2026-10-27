@@ -3565,6 +3565,25 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // W32-0.2 (R31-2, High): Start is read-only in the shell.  A StartEdit is
+    // not a StructuralEdit, so this is where the edit model receives one;
+    // refuse it before the first write as defence in depth.  The wave-31 Fill
+    // pair shows Project's Start save also rewrites the calculated and
+    // effective dates, slack, the project roll-up, a Var2 record and DSI, while
+    // mppwrite::save_date_edits stores only the constraint window and the
+    // manual bit.  The writer stays in the tree for a later wave; this path
+    // refuses starts now.  (Placed after the task-mode and automatic-outline
+    // checks so their more specific combination messages still win.)
+    if (!writable.empty()) {
+        result.error =
+            "a task start edit is queued for this save; Start is read-only in this "
+            "port because a Start edit's save is not measured against Project -- "
+            "Project also rewrites the calculated and effective dates, slack, the "
+            "project roll-up, a Var2 record and DSI, while this port's writer "
+            "stores only the constraint window";
+        return result;
+    }
+
     // Field edits: the last edit for a (task, field) wins, exactly as the display
     // plan applies them.  A set is stored through one save_field_values call; a
     // clear uses the measured empty-value shape, one clear_field_value call.

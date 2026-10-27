@@ -2525,6 +2525,12 @@ void MainWindow::refresh_task_form() {
     task_form_->set_field_enabled(TaskFormField::start, editable("Start"));
     task_form_->set_field_enabled(TaskFormField::finish, editable("Finish"));
     task_form_->set_field_enabled(TaskFormField::percent, true);
+    // W32-0.2 (R31-2, High): Start is read-only by policy; name the decision-9
+    // reason instead of leaving a greyed field with no explanation.
+    if (QLineEdit* start = task_form_->start_field(); start != nullptr) {
+        start->setToolTip(QStringLiteral(
+            "Read-only: a Start edit's save is not measured against Project"));
+    }
 }
 
 void MainWindow::refresh_inspector() {
@@ -3105,6 +3111,15 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
     }
     const std::vector<app::StartEdit> edits =
         app::collect_start_edits(doc_.records(), doc_.loaded());
+    // W32-0.2 (R31-2, High): Start is read-only, and the edit model refuses a
+    // start edit too, but the shell names the decision-9 reason first: the
+    // wave-31 Fill pair shows Project's Start save rewrites calculated and
+    // effective dates, slack, the project roll-up, a Var2 record and DSI, none
+    // of which this port's writer produces.
+    if (!edits.empty()) {
+        return fail("Start is read-only in this port; a Start edit's save is not measured "
+                    "against Project");
+    }
     const bool structural = !structural_.empty();
     const bool document_edits = document_ != nullptr && document_->has_pending_edits();
     if (edits.empty() && !structural && !document_edits) {
@@ -4324,6 +4339,23 @@ void MainWindow::cut_selection() {
         update_status();
         return;
     }
+    // W32-0.2 (R31-2, High): Cut writes the RecordSet directly.  The Start
+    // column is read-only now, and the old loop merely SKIPPED read-only cells,
+    // so a range spanning Start would clear the other columns and leave the
+    // start behind -- a partial edit of a selection the user made as one.  A
+    // selection that touches Start is refused whole, with the decision-9
+    // reason, before anything is copied or staged.
+    const core::view::FieldId start_field = app::task_field_id("Start");
+    for (const core::sheet::CellRef& cell : sheet->selected_cells()) {
+        if (cell.column < sheet->column_count() &&
+            sheet->column(cell.column).field == start_field) {
+            set_message("cut: Start is read-only in this port; a Start edit's save is not "
+                        "measured against Project",
+                        true);
+            update_status();
+            return;
+        }
+    }
     // Cut is Copy + one clearing transaction: the shared action table has no cut
     // operation, and the sheet's own transaction records one undoable step.
     clipboard_ = sheet->copy_selection();
@@ -4416,7 +4448,21 @@ void MainWindow::paste_selection() {
     const core::sheet::PasteResult result =
         sheet->paste(clipboard_, core::sheet::PasteMode::Values);
     if (!result.ok) {
-        set_message("paste failed: " + result.error, true);
+        // W32-0.2 (R31-2, High): core::sheet refuses the WHOLE block before
+        // staging anything when a target column is read-only, so a block that
+        // covers Start leaves every cell unchanged.  The core's message names
+        // only "column is read-only"; when that column is Start, name the
+        // decision-9 reason in plain words instead.
+        const core::view::FieldId start_field = app::task_field_id("Start");
+        const bool start_target =
+            result.error.find("column is read-only") != std::string::npos &&
+            result.failed_cell.column < sheet->column_count() &&
+            sheet->column(result.failed_cell.column).field == start_field;
+        set_message(start_target
+                        ? "paste: Start is read-only in this port; a Start edit's save is "
+                          "not measured against Project, so the whole block was refused"
+                        : "paste failed: " + result.error,
+                    true);
         update_status();
         return;
     }
@@ -5023,15 +5069,40 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
             has_percent_edit = task->percent_complete != percent;
         }
     }
+    // W32-0.2 (R31-2, High): Start is not an editable cell any more (the sheet
+    // policy makes the column read-only), and the dialog and Task Form disable
+    // the field.  A changed start text from any caller is still refused HERE,
+    // before Name/Duration/Finish are committed, so a hand-built values struct
+    // cannot half-apply an edit whose Start save is not measured against
+    // Project.  A blank Start column in the file's table reads "" and accepts
+    // an empty value.
+    {
+        std::string current_start;
+        const core::view::FieldId start_field = app::task_field_id("Start");
+        for (std::size_t column = 0; column < sheet->column_count(); ++column) {
+            if (sheet->column(column).field == start_field) {
+                current_start = app::cell_text(*sheet, selected.row, column, prefs_);
+                break;
+            }
+        }
+        if (values.start_text != current_start) {
+            set_message(prefix +
+                            ": Start is read-only in this port; a Start edit's save is not "
+                            "measured against Project",
+                        true);
+            update_status();
+            return false;
+        }
+    }
     struct FieldEdit {
         const char* name;
         const std::string* text;
     };
     // (The percent edit computed above is pushed with the other structural
-    // edits, after every part of the dialog has validated.)
+    // edits, after every part of the dialog has validated.  Start is absent:
+    // W32-0.2 refuses it above.)
     const FieldEdit edits[] = {{"Name", &values.name},
                                {"Duration", &values.duration_text},
-                               {"Start", &values.start_text},
                                {"Finish", &values.finish_text}};
     bool ok = true;
     bool applied = false;

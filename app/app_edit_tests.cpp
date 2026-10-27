@@ -877,11 +877,12 @@ void test_real_save_round_trip() {
         check(row.uid != doomed, "the deleted uid is not a live task");
     }
 
-    // ---- structural + start-date edits in one save ------------------------
-    // W27-3.4: every load below is checked explicitly.  A block wrapped only in
-    // `if (load.ok)` used to skip all its assertions on a load failure (and a
-    // successful load with an empty plan skipped them with no failure either),
-    // so the save tests could pass without checking anything.
+    // ---- structural + start-date edits: REFUSED (W32-0.2, R31-2) -----------
+    // Start is read-only in this port: Project's measured Start save also
+    // rewrites calculated and effective dates, slack, the project roll-up, a
+    // Var2 record and DSI, while this port's writer stores only the constraint
+    // window.  The edit model refuses the combination before the first write,
+    // so the insert beside it does not land either.
     Loaded combined_base = load(copy);
     check(combined_base.ok, "the source re-loads for the combined save");
     check(!combined_base.plan.tasks.empty(),
@@ -902,28 +903,14 @@ void test_real_save_round_trip() {
         std::filesystem::remove(both, error);
         const app::StructuralSaveResult outcome = app::save_structural_edits(
             combined, starts, copy.string(), both.string(), false);
-        check(outcome.ok, "a structural and a start edit save together");
-        if (outcome.ok) {
-            check_size(outcome.added, 1, "the insert landed");
-            check_size(outcome.start_rows_written, 1, "the start edit landed");
-            check(outcome.api.find("save_date_edits") != std::string::npos,
-                  "the normal start-date path ran too");
-            check(!std::filesystem::exists(both.string() + ".w51-structural-tmp"),
-                  "the intermediate file is removed");
-            Loaded reread = load(both);
-            check(reread.ok, "the combined save re-loads");
-            if (reread.ok) {
-                check_size(reread.plan.tasks.size(), 4, "the combined file has four tasks");
-                for (const mpp::Task& task : mpp::load_file(both.string()).tasks) {
-                    if (task.uid != start_edit.uid) {
-                        continue;
-                    }
-                    check_size(task.constraint_type, 4, "the edited start is a SNET pin");
-                    check(task.constraint_date.raw == app::packed_from_date32(new_start),
-                          "the constraint date is the edited start");
-                }
-            }
-        }
+        check(!outcome.ok, "a structural and a start edit are refused together");
+        check(outcome.error.find("Start is read-only") != std::string::npos,
+              "the refusal names Start");
+        check(outcome.error.find("not measured against Project") != std::string::npos,
+              "the refusal names decision 9");
+        check(!std::filesystem::exists(both), "the refused save writes no target file");
+        check(!std::filesystem::exists(both.string() + ".w51-structural-tmp"),
+              "the refused save leaves no intermediate file");
     }
 
     // ---- percent complete (wave 26, W26-1.2; ENABLED by wave 28, W28-1.2) --

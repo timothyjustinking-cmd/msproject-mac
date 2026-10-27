@@ -729,6 +729,16 @@ struct StructuralDocumentEdits {
 //   6. start dates    -> the normal mppwrite::save_date_edits path; when no start
 //                        edit is writable but a hook ran, the final write is an
 //                        explicit mppwrite::CfbDocument::save instead.
+//
+// W32-0.2 (R31-2, High): a writable start edit is REFUSED before the first
+// write.  The wave-31 Fill pair shows Project's Start save rewrites the
+// calculated and effective dates, slack, the project roll-up, a Var2 record and
+// DSI; mppwrite::save_date_edits stores only the constraint window and the
+// manual bit, so no Start save (alone or beside a structural edit) is measured
+// against Project.  The shell makes Start read-only and the writer stays in the
+// tree for a later wave; this refusal is the model's defence in depth.  The
+// task-mode check's start combination (5e) is refused earlier, with its own
+// message, because the mode pair's exclusivity is the narrower rule.
 // Every writer call writes a file, so all but the LAST one write an intermediate
 // file beside the target and it is removed afterwards (a refusal removes it too).
 // With a hook the LAST write is always the one after it -- step 6, or that

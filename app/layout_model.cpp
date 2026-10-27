@@ -458,7 +458,15 @@ void apply_edit_policy(core::sheet::SheetModel& sheet) {
     const TaskFields& field = task_fields();
     for (std::size_t index = 0; index < sheet.column_count(); ++index) {
         const core::view::FieldId id = sheet.column(index).field;
-        if (id == field.uid || id == field.id || id == field.outline_number) {
+        // W32-0.2 (R31-2, High): Start joins UID/ID/Outline.  The wave-31 Fill
+        // pair shows Project's Start save also rewrites calculated and
+        // effective dates, slack, the project roll-up, a Var2 record and DSI;
+        // this port's writer stores only the constraint window and the manual
+        // bit, so no typed, pasted or Task Information start may reach a save.
+        // The refusal is here, in the shared policy, so every sheet (the
+        // stored table and the default Entry list) refuses it.
+        if (id == field.uid || id == field.id || id == field.outline_number ||
+            id == field.start) {
             sheet.set_column_read_only(index, true);
         }
     }

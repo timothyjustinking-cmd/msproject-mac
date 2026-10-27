@@ -1094,6 +1094,14 @@ TaskInformationDialog::TaskInformationDialog(const TaskInformationValues& curren
 
     start_ = make_line_edit(general);
     start_->setText(to_q(current.start_text));
+    // W32-0.2 (R31-2, High): Start is read-only.  Project's measured Start save
+    // (the wave-31 Fill pair) rewrites calculated and effective dates, slack,
+    // the project roll-up, a Var2 record and DSI; this port's writer stores only
+    // the constraint window, so a Start edit here would save a shape Project
+    // does not produce.  Refuse first with the decision-9 reason.
+    start_->setReadOnly(true);
+    start_->setToolTip(QStringLiteral(
+        "Read-only: a Start edit's save is not measured against Project"));
     form->addRow(make_form_label(general, QStringLiteral("S&tart:")), start_);
 
     finish_ = make_line_edit(general);

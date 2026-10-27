@@ -607,7 +607,9 @@ SmokeReport smoke_plan(const SmokeOptions& options) {
         }
     }
 
-    // ---- 6. start_edit: a Start edited through the sheet, as the keyboard does
+    // ---- 6. start_edit: the sheet REFUSES Start (W32-0.2); the save diff and
+    // the writer stay tested through the RecordSet change a pre-policy edit
+    // would have left (defence in depth).
     app::date32 new_start = kDateNa;
     std::vector<app::StartEdit> start_edits;
     {
@@ -616,16 +618,18 @@ SmokeReport smoke_plan(const SmokeOptions& options) {
         step.check(start_column != core::sheet::kNoIndex, "the sheet has a Start column");
         if (start_column != core::sheet::kNoIndex) {
             new_start = from_ymd(2026, 3, 2, 8, 0);
-            step.check(plan.sheet->begin_edit(0, start_column),
-                       "the first task's Start cell opens for editing");
-            plan.sheet->set_edit_text("2026-03-02 08:00");
-            const core::sheet::EditOutcome committed = plan.sheet->commit_edit(false);
-            step.check(committed.ok, "the typed date is accepted", committed.error);
-            step.check(committed.changed, "the typed date changes the cell");
-            step.text(plan.sheet->cell_text(0, start_column),
-                      date_text(new_start, plan.format),
-                      "the Start cell shows the typed date");
+            step.check(!plan.sheet->begin_edit(0, start_column),
+                       "the first task's Start cell is read-only");
+            step.check(!plan.sheet->editing(), "no edit session opens on Start");
 
+            const int row = plan.records.row_of_uid(first_uid);
+            const core::view::FieldId start_field = app::task_field_id("Start");
+            step.check(row >= 0 && start_field != 0, "the first task has a Start field");
+            if (row >= 0 && start_field != 0) {
+                plan.records.set_field(
+                    static_cast<std::size_t>(row), start_field,
+                    core::view::Value::of_date(app::date_value_from_date32(new_start)));
+            }
             start_edits = app::collect_start_edits(plan.records, plan.loaded);
             step.count(start_edits.size(), 1, "exactly one start edit is pending");
             if (!start_edits.empty()) {
@@ -635,12 +639,20 @@ SmokeReport smoke_plan(const SmokeOptions& options) {
                           "the pending edit carries the typed date", plan.format);
             }
 
-            step.check(plan.sheet->undo(), "the edit undoes through the sheet model");
+            if (row >= 0 && start_field != 0) {
+                plan.records.set_field(static_cast<std::size_t>(row), start_field,
+                                       core::view::Value::of_date(
+                                           app::date_value_from_date32(plan.loaded.tasks.front().start)));
+            }
             step.count(app::collect_start_edits(plan.records, plan.loaded).size(), 0,
-                       "an undone start edit is no longer pending");
-            step.check(plan.sheet->redo(), "the edit redoes");
+                       "restoring the loaded date leaves nothing pending");
+            if (row >= 0 && start_field != 0) {
+                plan.records.set_field(
+                    static_cast<std::size_t>(row), start_field,
+                    core::view::Value::of_date(app::date_value_from_date32(new_start)));
+            }
             step.count(app::collect_start_edits(plan.records, plan.loaded).size(), 1,
-                       "the redone start edit is pending again");
+                       "the start edit is pending again for the save");
         }
     }
 
@@ -1027,14 +1039,16 @@ bool smoke_row_shown(const SmokeOptions& options, SmokeReport& report, std::stri
                       "row 1's Name cell is the first task's name");
         }
 
-        // The R5 guard through the one entry point both shells call.
+        // The R5 guard through the one entry point both shells call.  W32-0.2:
+        // Start is read-only now, so the guard is exercised on the Name column;
+        // a Start cell would refuse for the field policy instead of the uid rule.
         std::string guard_error;
-        step.check(!app::begin_cell_edit(*plan.sheet, 0, start_column, guard_error),
+        step.check(!app::begin_cell_edit(*plan.sheet, 0, name_column, guard_error),
                    "uid 0 (the project row) refuses an edit session");
         step.check(!guard_error.empty(), "the refusal explains itself", guard_error);
         step.check(!plan.sheet->editing(), "no edit session is left open after the refusal");
         guard_error.clear();
-        step.check(app::begin_cell_edit(*plan.sheet, 1, start_column, guard_error),
+        step.check(app::begin_cell_edit(*plan.sheet, 1, name_column, guard_error),
                    "the first task's row opens an edit session", guard_error);
         plan.sheet->cancel_edit();
         step.check(!plan.sheet->editing(), "the task-row session cancels cleanly");

@@ -379,10 +379,10 @@ PlanInput sync_plan_from_records(const PlanInput& base, const core::view::Record
 
 // The columns the shell declares read-only: UID, ID and Outline number are
 // identity or calculated columns (RecordSet identity, Project's own ID column,
-// the outline path), so core::sheet refuses begin_edit on them while Name,
-// Start, Finish and Duration stay editable.  core/sheet deliberately does not
-// infer this ("read-only is host configuration"), so the policy lives here and
-// the headless test asserts it.
+// the outline path), and (W32-0.2, R31-2) Start is read-only because its save
+// is not measured against Project.  Name, Finish and Duration stay editable.
+// core/sheet deliberately does not infer this ("read-only is host
+// configuration"), so the policy lives here and the headless test asserts it.
 void apply_edit_policy(core::sheet::SheetModel& sheet);
 
 // Wave 25 (W25-1/S1, the R5 guard): the one edit-entry decision every shell

@@ -174,20 +174,40 @@ int main(int argc, char** argv) {
     const std::string source_finish = cell_text(window, 0, finish_column);
     gate::check(!source_start.empty() && !source_finish.empty(),
                 "the 2x2 source cells carry values");
-    // Paste at row 1, Start: it writes rows 1 and 2 (row 0 was the source).
+    // W32-0.2 (R31-2, High): a paste block covering Start is refused WHOLE
+    // before any write (no partial write of the Finish column either), with the
+    // decision-9 reason in the status line.
     gate::check(sheet->select_cell(1, start_column), "the 2x2 paste target is selected");
     window.refresh_menu_state();
     trigger(window, app::MenuAction::paste);
-    gate::check(cell_text(window, 1, start_column) == source_start,
-                "the 2x2 paste wrote Start at the target row");
-    gate::check(cell_text(window, 1, finish_column) == source_finish,
-                "the 2x2 paste wrote Finish at the target row");
-    trigger(window, app::MenuAction::undo);
-    gate::check(cell_text(window, 1, start_column) == start1 &&
-                    cell_text(window, 1, finish_column) == finish1 &&
-                    cell_text(window, 2, start_column) == start2 &&
+    gate::check(cell_text(window, 1, start_column) == start1,
+                "the refused 2x2 paste leaves the target Start unchanged");
+    gate::check(cell_text(window, 1, finish_column) == finish1,
+                "the refused 2x2 paste leaves the target Finish unchanged (no partial write)");
+    gate::check(cell_text(window, 2, start_column) == start2 &&
                     cell_text(window, 2, finish_column) == finish2,
-                "one Undo restores the whole 2x2 paste");
+                "the refused 2x2 paste leaves the second target row unchanged");
+    const QString refusal = window.status_left_text();
+    std::fprintf(stderr, "note: 2x2 paste refusal: %s\n", refusal.toLocal8Bit().constData());
+    gate::check(refusal.contains(QStringLiteral("Start is read-only")),
+                "the 2x2 refusal names Start read-only");
+    gate::check(refusal.contains(QStringLiteral("not measured against Project")),
+                "the 2x2 refusal gives the decision-9 reason");
+
+    // --- W32-0.2: Cut refuses a selection that touches Start ----------------
+    const std::string cut_start_before = cell_text(window, 0, start_column);
+    gate::check(sheet->select_cell(0, start_column), "a Start cell is selected for Cut");
+    window.refresh_menu_state();
+    trigger(window, app::MenuAction::cut);
+    gate::check(cell_text(window, 0, start_column) == cut_start_before,
+                "the refused Cut leaves the Start cell unchanged");
+    const QString cut_refusal = window.status_left_text();
+    std::fprintf(stderr, "note: Cut Start refusal: %s\n",
+                 cut_refusal.toLocal8Bit().constData());
+    gate::check(cut_refusal.contains(QStringLiteral("Start is read-only")),
+                "the Cut refusal names Start read-only");
+    gate::check(cut_refusal.contains(QStringLiteral("not measured against Project")),
+                "the Cut refusal gives the decision-9 reason");
 
     // --- Cut: copy + one clearing transaction -------------------------------
     const std::string cut_row0 = cell_text(window, 0, name_column);

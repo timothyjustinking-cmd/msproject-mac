@@ -800,8 +800,14 @@ std::string task_column_caption(core::view::FieldId field) {
 
 bool task_column_editable(core::view::FieldId field) noexcept {
     const StockFields& stock = stock_fields();
-    return field != 0 && (field == stock.name || field == stock.start || field == stock.finish ||
-                          field == stock.duration);
+    // W32-0.2 (R31-2, High): Start is NOT editable.  The wave-31 Fill pair shows
+    // Project's Start save also rewrites the calculated and effective dates,
+    // slack, the project roll-up, a Var2 record and DSI; this port's writer
+    // stores only the constraint window and the manual bit, so a typed or
+    // pasted Start would save a shape Project does not produce.  Refuse first
+    // (decision 9) until a Start writer passes that pair.
+    return field != 0 &&
+           (field == stock.name || field == stock.finish || field == stock.duration);
 }
 
 std::vector<core::sheet::SheetColumn> table_sheet_columns(
