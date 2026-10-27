@@ -23,12 +23,21 @@ and it is read-only, which the verifier confirmed: `collect_start_edits` is the 
 sheet-edit collector); R31-4 closed for sort.  The reviewer's own fresh app and app_qt
 builds also passed (25/25, 37/37).
 
-**Merge into main: the rule is met (CI green on all three OSs, no Critical/High) but
-the push of wave32 to main was refused by the local pre-push guard.**  The range
-fcb1c10..wave32 still holds the original blobs of seven pre-wave-28 fixtures
-(`wave23-flags`, `wave23-outline` and five `wave27-*`) with the operator's save path
-embedded; W28-0.1 stripped them at the tip, so the tree at wave32 is clean, but the
-old blobs stay in history.  They are already public on the origin wave23..wave32
-branches.  Main is unchanged at fcb1c10 pending the operator's decision (rewrite those
-blobs out of the range, or approve a one-time push past the guard).  The Medium/Low
-findings are queued in `plan-waves27-30.md` ("Queued from the wave-32 review").
+**Merged into main after a history rewrite (operator-approved, 2026-10-27).**  The
+merge rule was met (CI green on all three OSs, no Critical/High), but the pre-push
+guard refused main: the range fcb1c10..wave32 held the original blobs of seven
+fixtures (`wave23-flags`, `wave23-outline` and five `wave27-*`) with the operator's
+save path or name embedded.  Every commit in the range was rewritten with
+`git filter-branch --index-filter`, swapping each flagged blob for its cleaned
+version: the six W28-0.1 re-saves, and for `wave23-outline` (which W28-0.1 had not
+cleaned) an in-place, same-length neutral replacement of the author name (3
+occurrences; size and every offset unchanged).  Commit messages, authors and dates are
+unchanged; `rewrite-sha-map.txt` maps the 329 old commit ids to the new ones, so the
+ids quoted in the wave 23-32 records (CI runs included) are the old ones.  The tip tree
+differs from the verified tip only in `wave23-outline.mpp` and its documented hash; with
+the neutralised fixture the verifier re-ran core 52/52, qt 37/37, app 25/25 and the
+engine suite (7 pass, constraint-mso the known failure) before the rewrite, and CI runs
+again on main.  The old wave23..wave32 branches were deleted on GitHub.  Still on main
+from before wave 23: `synthetic-base.mpp` carries the same author-name marker (not in
+the guarded range; left for the operator's history decision).  The Medium/Low findings
+are queued in `plan-waves27-30.md` ("Queued from the wave-32 review").

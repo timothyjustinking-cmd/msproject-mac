@@ -42,9 +42,12 @@ DOCUMENTED = {
     # Wave 23 (W23-1/W23-7/W23-8): the 3-level outline fixture built through
     # Project 2021 by scripts/oracle_w23.py -- six synthetic tasks, an FS+2 d
     # link, an SS+1 d link, an FF link and "Resource A" assigned to the last
-    # task.  No client content.
+    # task.  No client content.  Rewritten 2026-10-27 (history rewrite before the
+    # wave-32 merge): the author name in SummaryInformation and one UTF-16 copy
+    # were replaced in place by a same-length neutral string; every offset and
+    # length word is unchanged.
     "tests/data/wave23-outline.mpp":
-        "055721FF07E93F8C8C06B8428E9EF3495D10A38BE8C432506FCB5FF3A786DA20",
+        "36419EF271E2FBDB9DC3BC325FFE44552ABBB0D01A51891FBBFD1F4DA742462D",
     # Wave 23 (A-1d): the MEASUREMENTS of Project 2021's own capture of that
     # fixture.  The screenshot itself stays local (operator ruling 2026-10-23);
     # only the numbers are committed, and this is the CI parity reference.
