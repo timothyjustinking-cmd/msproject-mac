@@ -113,6 +113,20 @@ Estimate: 8-12 hours, likely split into waves 30 and 31.
   operator by first name; commit-message counts contradicted by logs; the outline
   progress check sees only percent and work; the R29-11 UTF-16 profile regex.
 
+## Queued from the wave-31 review (Medium/Low; `wave31-verification/review.md`)
+
+- R31-4 Medium: Indent, Outdent and Insert ignore the session sort (folded into
+  wave 32's W32-0.3 as a refusal).
+- R31-5 Medium: the automatic-outline file check does not pin task calendars,
+  inactive rows, elapsed or estimated durations, or manual rows outside the edit.
+- R31-6 Medium (performance): `usage_grid.cpp` `column_work` scans columns
+  linearly per day bucket; walk both sorted lists together.
+- R31-7..R31-12 Low: overallocation is a port-computed approximation; the Resource
+  Sheet gate's COM facts are not a committed JSON; four SKIP-and-pass tests on
+  missing fixtures; commit-message counts not in the cited logs; one brief line
+  naming the operator; the outside-progress test sees only percent, and the usage
+  gate accepts a longer or absent series.
+
 ## After wave 30 (not planned in detail)
 
 Team Planner, Network Diagram, Calendar and Report views; the constraint-mso engine
