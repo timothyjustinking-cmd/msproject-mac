@@ -13,6 +13,7 @@
 //   * the shell's own can_paste()/can_copy() rules drive the menu enablement.
 //
 // Nothing is written under tests/data; the fixture is opened read-only.
+#include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
@@ -69,6 +70,42 @@ void force_trigger(msqt::MainWindow& window, app::MenuAction id) {
         action->trigger();
         QApplication::processEvents();
     }
+}
+
+// W32-C7 (review M3): the Task tab's ribbon controls call the same handlers as
+// the menu actions but are not disabled with them -- Indent and Outdent are
+// small command buttons and Insert Task is a MenuAction control -- so a QAction
+// enablement check alone does not prove the handlers' own sort refusals.  Find
+// the live control (icon-only buttons carry no text) and let the test click it.
+QAbstractButton* ribbon_button_for(msqt::MainWindow& window,
+                                   msqt::RibbonCommand command,
+                                   app::MenuAction action = app::MenuAction::none) {
+    msqt::RibbonBar* ribbon = window.ribbon();
+    if (ribbon == nullptr) {
+        return nullptr;
+    }
+    const int task_tab = ribbon->tab_titles().indexOf(QStringLiteral("Task"));
+    if (task_tab < 0) {
+        return nullptr;
+    }
+    ribbon->set_active_tab(task_tab);
+    QApplication::processEvents();
+    const int groups = static_cast<int>(ribbon->group_titles().size());
+    for (int group = 0; group < groups; ++group) {
+        const int controls = ribbon->group_control_count(group);
+        for (int control = 0; control < controls; ++control) {
+            const bool command_match =
+                command != msqt::RibbonCommand::none &&
+                ribbon->group_control_command(group, control) == command;
+            const bool action_match =
+                action != app::MenuAction::none &&
+                ribbon->group_control_action(group, control) == action;
+            if (command_match || action_match) {
+                return qobject_cast<QAbstractButton*>(ribbon->group_control(group, control));
+            }
+        }
+    }
+    return nullptr;
 }
 
 }  // namespace
@@ -419,6 +456,35 @@ int main(int argc, char** argv) {
                 "ID-descending sort: Indent is disabled");
     gate::check(!action_enabled(window, app::MenuAction::outdent),
                 "ID-descending sort: Outdent is disabled");
+
+    // W32-C7 (review M3): the ribbon controls above stay enabled and call the
+    // handlers directly.  Click them and prove each handler refuses before it
+    // touches the plan or opens the insert dialog.
+    const auto check_ribbon_refusal = [&](msqt::RibbonCommand command,
+                                          app::MenuAction action, const char* label) {
+        const std::string prefix(label);
+        QAbstractButton* button = ribbon_button_for(window, command, action);
+        gate::check(button != nullptr, (prefix + ": the Task-tab control exists").c_str());
+        if (button == nullptr) {
+            return;
+        }
+        gate::check(button->isEnabled(),
+                    (prefix + ": the ribbon control is enabled (the bypass)").c_str());
+        const std::size_t rows_before = window.sheet_row_count();
+        const std::size_t edits_before = window.pending_edits().size();
+        button->click();
+        QApplication::processEvents();
+        gate::check(window.status_left_text().contains(QStringLiteral("clear the sort first")),
+                    (prefix + ": the handler refuses with the sort remedy").c_str());
+        gate::check(window.pending_edits().size() == edits_before,
+                    (prefix + ": the refusal queues no edit").c_str());
+        gate::check(window.sheet_row_count() == rows_before,
+                    (prefix + ": the refusal leaves the rows alone").c_str());
+    };
+    check_ribbon_refusal(msqt::RibbonCommand::indent, app::MenuAction::none, "Indent");
+    check_ribbon_refusal(msqt::RibbonCommand::outdent, app::MenuAction::none, "Outdent");
+    check_ribbon_refusal(msqt::RibbonCommand::none, app::MenuAction::insert_task,
+                         "Insert Task");
     window.clear_session_sort();
     QApplication::processEvents();
     gate::check(!window.sort_active(), "the sort is cleared");
