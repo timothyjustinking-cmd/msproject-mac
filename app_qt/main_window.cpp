@@ -1819,8 +1819,9 @@ std::string MainWindow::summary_text() const {
                 std::to_string(total) + ")";
     }
     if (document_dirty()) {
-        text += "  |  unsaved: " + std::to_string(pending_start_edits()) + " start(s), " +
-                std::to_string(structural_.size()) + " structural edit(s)";
+        // W32-0.2: a Start edit is refused at every entry, so the dirty state
+        // Save would write is the structural/custom-field count.
+        text += "  |  unsaved: " + std::to_string(structural_.size()) + " structural edit(s)";
     }
     if (doc_.table_widths_read() && prefs_.view == app::ViewMode::task_sheet) {
         text += "  |  Entry widths (chars) " + stored_widths_text();
@@ -3102,7 +3103,10 @@ void MainWindow::after_cell_commit(bool ok, const std::string& message) {
     // chronological (app/edit_model.h).
     structural_.clear_redo();
     after_cell_change();
-    set_message("cell edit applied; File > Save writes task starts", false);
+    // W32-0.2: Start is read-only, so a cell edit is view-only or a measured
+    // structural edit; Save no longer writes task starts.
+    set_message("cell edit applied; File > Save writes custom-field and structural edits",
+                false);
     update_status();
 }
 
@@ -3183,9 +3187,8 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
     }
     const bool structural = !structural_.empty();
     const bool document_edits = document_ != nullptr && document_->has_pending_edits();
-    if (edits.empty() && !structural && !document_edits) {
-        set_message("nothing to save: no task start, insert/delete, custom-field or link edit "
-                    "is pending",
+    if (!structural && !document_edits) {
+        set_message("nothing to save: no insert/delete, custom-field or link edit is pending",
                     false);
         update_status();
         return true;
@@ -3216,9 +3219,6 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
         if (result.fields_written != 0) {
             summary += ", " + std::to_string(result.fields_written) +
                        " custom-field value(s) written";
-        }
-        if (result.start_rows_written != 0) {
-            summary += ", " + std::to_string(result.start_rows_written) + " start(s)";
         }
         summary += " to " + result.path;
 
@@ -3256,8 +3256,9 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
     last_save_warnings_ = outcome.warnings;
     note_recent_file(to_q(outcome.path));
 
-    std::string message = "saved " + std::to_string(outcome.rows_written) + " start(s) to " +
-                          outcome.path + " (" + outcome.api + ")";
+    // W32-0.2: no Start edit reaches this save (refused above), so the status
+    // names the file and the container writer, never a start-row count.
+    std::string message = "saved " + outcome.path + " (" + outcome.api + ")";
     if (!outcome.warnings.empty()) {
         message += ", " + std::to_string(outcome.warnings.size()) + " warning(s)";
     }
@@ -3287,32 +3288,21 @@ bool MainWindow::save_document(bool force_panel, const QString& start_dir) {
     const std::vector<app::StartEdit> edits =
         app::collect_start_edits(doc_.records(), doc_.loaded());
 
-    // Warn BEFORE the write when a start edit cannot take effect (a linked pin
-    // behind the predecessor's finish, or a manual task the writer converts to
-    // an auto-scheduled SNET pin).  Once per save, as app/main.mm does.
+    // W32-0.2 (R31-2, High): the panel funnel refuses a collected Start edit
+    // with the decision-9 reason before the save prompt, exactly as
+    // save_document_path does before the write.  Start is read-only in every
+    // shell entry, so this is the guard a later measured editor must not
+    // remove; the writer stays in the tree.
     if (!edits.empty()) {
-        const app::StartEditWarningReport warning =
-            app::warn_start_edits(edits, doc_.plan(), doc_.format());
-        if (warning.warnings != 0) {
-            const QMessageBox::StandardButton choice = QMessageBox::warning(
-                this, QStringLiteral("Some start edits may not take effect"),
-                to_q(warning.text) +
-                    QStringLiteral("\n\nThe writer still stores the exact dates, but Project "
-                                   "may reopen a linked task at a later date or reschedule a "
-                                   "manual task.\n\nSave anyway?"),
-                QMessageBox::Save | QMessageBox::Cancel, QMessageBox::Cancel);
-            if (choice != QMessageBox::Save) {
-                set_message("save cancelled at the start-edit warning", false);
-                update_status();
-                return false;
-            }
-        }
+        set_message("Start is read-only in this port; a Start edit's save is not measured "
+                    "against Project",
+                    true);
+        update_status();
+        return false;
     }
 
-    if (edits.empty() && structural_.empty() &&
-        (!document_ || !document_->has_pending_edits())) {
-        set_message("nothing to save: no task start, insert/delete, custom-field or link edit "
-                    "is pending",
+    if (structural_.empty() && (!document_ || !document_->has_pending_edits())) {
+        set_message("nothing to save: no insert/delete, custom-field or link edit is pending",
                     false);
         update_status();
         return true;
@@ -3352,11 +3342,9 @@ bool MainWindow::save_document(bool force_panel, const QString& start_dir) {
         for (const std::string& warning : last_save_warnings_) {
             details += to_q(warning) + QStringLiteral("\n");
         }
-        QMessageBox::warning(
-            this, QStringLiteral("Saved with warnings"),
-            QStringLiteral("Wrote ") + QString::number(last_save_rows_written_) +
-                QStringLiteral(" task start(s) to:\n") + to_q(target) +
-                QStringLiteral("\n\n") + details);
+        QMessageBox::warning(this, QStringLiteral("Saved with warnings"),
+                             QStringLiteral("Saved to:\n") + to_q(target) +
+                                 QStringLiteral("\n\n") + details);
     }
     return true;
 }
@@ -3365,13 +3353,14 @@ bool MainWindow::confirm_proceed_with_discard() {
     if (!document_dirty()) {
         return true;
     }
-    const std::size_t starts = pending_start_edits();
     const std::size_t structural = structural_.size();
+    // W32-0.2: a Start edit is read-only and refused at every entry, so the
+    // prompt counts the edits Save would write and says so about Start.
     const QString text =
         QStringLiteral(
-            "This project has edits that Save would write: %1 task start(s) and %2 "
-            "structural/custom-field edit(s).\n\nThe other edits are view-only in memory.")
-            .arg(static_cast<qulonglong>(starts))
+            "This project has %1 structural/custom-field edit(s) that Save would write. "
+            "A Start edit is not saved in this port (read-only; not measured against "
+            "Project).\n\nThe other edits are view-only in memory.")
             .arg(static_cast<qulonglong>(structural));
     const QMessageBox::StandardButton choice = QMessageBox::warning(
         this, QStringLiteral("Unsaved changes"),

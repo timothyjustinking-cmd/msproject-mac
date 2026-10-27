@@ -33,11 +33,12 @@
 //     single source of truth for the selection -- see selection_model.h
 //   * Cmd-C / Cmd-V copy/paste through the general pasteboard; Cut is greyed out
 //     (SheetModel has no cut operation)
-//   * Cmd-S writes the edited task starts (document.h) to the last save target,
-//     asking for a path the first time; Cmd-Shift-S always asks.  A pending
-//     View > Table Date Format or Edit > Custom Field Formula edit rides the same
-//     container write (app::Document::save, wave 16).  Closing or quitting with
-//     pending edits prompts Save / Don't Save / Cancel.
+//   * Cmd-S writes the pending container edits (structural/custom-field, via
+//     app::Document) to the last save target, asking for a path the first time;
+//     Cmd-Shift-S always asks.  A Start edit is refused before the prompt:
+//     Start is read-only because its save is not measured against Project
+//     (W32-0.2).  Closing or quitting with pending edits prompts Save / Don't
+//     Save / Cancel.
 //   * Cmd-F filters the displayed rows (app/filter_model.h); Cmd-Shift-F clears it
 //   * Cmd-1/2/3 and Cmd-=/Cmd-- set the Gantt timescale; Cmd-Shift-D toggles the
 //     working-day shading; both persist in NSUserDefaults (app/prefs.h)
@@ -542,7 +543,7 @@ void ensure_selection_visible(PlanState& plan) {
 
 // Re-evaluates the task sheet's computed columns into the RecordSet and
 // refreshes the sheet's cached per-row/column facts.  Read-only: nothing here
-// can become a save edit (document.h diffs task starts only).
+// can become a save edit (the save diff reads the RecordSet's stored fields).
 void refresh_computed_columns(PlanState& plan) {
     if (plan.sheet == nullptr || plan.formula_set.columns.empty()) {
         return;
@@ -1893,9 +1894,10 @@ void show_about() {
     show_alert(@"About MS Project Shell",
                @"A native macOS shell over the portable MS Project core.\n\n"
                 @"Open a .mpp, browse the sheet and Gantt, edit cells, filter the "
-                @"task list, and save edited task start dates with File > Save. "
-                @"Start dates are the only edit the file writer persists; every "
-                @"other edit stays in memory (see the README).\n\n"
+                @"task list, and save custom-field and structural edits with File > Save. "
+                @"A Start edit is read-only in this port because its save is not "
+                @"measured against Project; view-only edits stay in memory (see the "
+                @"README).\n\n"
                 @"Version 0.4 (wave 11, stream W47).  The View menu and the "
                  @"control bar switch between the task sheet, the resource sheet and "
                  @"the task/resource usage grids; the computed columns are read-only.");
@@ -3623,7 +3625,7 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     [alert setMessageText:@"Table Date Format"];
     [alert setInformativeText:
                @"Sets the active table's date-format byte in the .mpp. It is written "
-               @"when you save, in the same write as the task start dates."];
+               @"when you save, in the same container write as the other pending edits."];
     [alert addButtonWithTitle:@"Set Format"];
     [alert addButtonWithTitle:@"Cancel"];
     NSPopUpButton* popup =
@@ -4027,35 +4029,28 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     const bool document_edits =
         plan.document != nullptr && plan.document->has_pending_edits();
 
-    // Wave 14: warn BEFORE the write when a start edit cannot take effect (a
-    // linked pin behind the predecessor's finish, or a manual task that the
-    // writer converts to an auto-scheduled SNET pin).  Once per save: this is
-    // the single place every save passes through.  The writer still stores the
-    // exact dates -- the warning is about what Project will reopen, not about
-    // changing the write (docs/audit-handoff.md sections 3 and 4.2).
+    // W32-0.2 (R31-2, High): Start is read-only in both shells, and the
+    // wave-31 Fill pair shows Project's Start save rewrites the calculated and
+    // effective dates, slack, the project roll-up, a Var2 record and DSI, while
+    // mppwrite::save_date_edits stores only the constraint window and the
+    // manual bit.  This funnel is the macOS entry point that reaches
+    // collect_start_edits, so it refuses a collected Start edit whole, with the
+    // decision-9 reason, before the save prompt and before any write.  Today's
+    // macOS UI has no editor that leaves one pending; the refusal is the guard
+    // a later measured editor must not remove.  (The writer stays in the tree.)
     if (!edits.empty()) {
-        const app::StartEditWarningReport warning =
-            app::warn_start_edits(edits, plan.view, plan.format);
-        if (warning.warnings != 0) {
-            NSAlert* alert = [[NSAlert alloc] init];
-            [alert setMessageText:@"Some start edits may not take effect"];
-            [alert setInformativeText:to_ns(
-                warning.text +
-                "\n\nThe writer still stores the exact dates, but Project may reopen a "
-                "linked task at a later date or reschedule a manual task.\n\nSave "
-                "anyway?")];
-            [alert addButtonWithTitle:@"Save Anyway"];
-            [alert addButtonWithTitle:@"Cancel"];
-            if ([alert runModal] != NSAlertFirstButtonReturn) {
-                note(plan, "save cancelled at the start-edit warning", false);
-                [g_view setNeedsDisplay:YES];
-                return NO;
-            }
-        }
+        note(plan,
+             "not saved: Start is read-only in this port because a Start edit's save "
+             "is not measured against Project -- Project also rewrites the calculated "
+             "and effective dates, slack, the project roll-up, a Var2 record and DSI, "
+             "while this port's writer stores only the constraint window",
+             true);
+        [g_view setNeedsDisplay:YES];
+        return NO;
     }
-    if (edits.empty() && !structural && !document_edits) {
-        note(plan, "nothing to save: no task start has been edited and no insert, delete, "
-                   "custom-field, link, table-format or formula edit is pending",
+    if (!structural && !document_edits) {
+        note(plan, "nothing to save: no insert, delete, custom-field, link, "
+                   "table-format or formula edit is pending",
              false);
         [g_view refreshAfterChange];
         return YES;
@@ -4112,10 +4107,10 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     plan.document->discard_view_state_edits();
     plan.document->discard_custom_formula();
     g_target_path = outcome.path;
+    // W32-0.2: no Start edit reaches this save (refused above), so the saved
+    // parts name only the container edits.  rows_written stays in the outcome
+    // for the writer's own tests; the shell no longer advertises it.
     std::string saved_parts;
-    if (outcome.rows_written != 0) {
-        saved_parts = std::to_string(outcome.rows_written) + " start(s)";
-    }
     if (outcome.view_state_written) {
         if (!saved_parts.empty()) {
             saved_parts += " + ";
@@ -4158,8 +4153,7 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
             details += warning + "\n";
         }
         show_alert(@"Saved with warnings",
-                   to_ns("Wrote " + std::to_string(outcome.rows_written) + " task start(s) to:\n" +
-                         outcome.path + "\n\n" + details));
+                   to_ns("Saved to:\n" + outcome.path + "\n\n" + details));
     }
     return YES;
 }
@@ -4198,9 +4192,8 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         message += ", " + std::to_string(outcome.fields_written) +
                    " custom-field value(s) written";
     }
-    if (outcome.start_rows_written != 0) {
-        message += ", " + std::to_string(outcome.start_rows_written) + " start(s)";
-    }
+    // W32-0.2: starts are refused before this save, so start_rows_written is
+    // structural result state, not a shell claim.
     if (outcome.links_tombstoned != 0 || outcome.assignments_tombstoned != 0) {
         message += ", tombstoned " + std::to_string(outcome.links_tombstoned) + " link(s) and " +
                    std::to_string(outcome.assignments_tombstoned) + " assignment(s)";
