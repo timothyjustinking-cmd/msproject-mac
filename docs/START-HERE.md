@@ -1,8 +1,9 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-10-30, wave 33 complete on branch `wave33` (cut from
-`main` = `17f5782`; `WAVE-33-COMPLETE` appended, not yet pushed -- the
-coordinator replays and pushes after CLOSE).  Keep this file current at every
+_Updated 2026-10-30, wave 33b complete on branch `wave33b` (cut from
+`wave33` = `da5f4da`, itself cut from `main` = `17f5782`;
+`WAVE-33b-COMPLETE` appended, not yet pushed -- the coordinator pushes and
+dispatches both CI workflows after CLOSE).  Keep this file current at every
 wave close; it is the only file a new session must read first._
 
 ## The 30-second state
@@ -11,10 +12,10 @@ wave close; it is the only file a new session must read first._
   23-32 were merged into `main` on 27 October 2026 as **`17f5782`** after an
   operator-approved `git filter-branch` rewrite (the pre-push guard refused
   the range: seven fixtures' original blobs carried the operator's save path
-  or name).  **GitHub holds only `main`**; `origin/wave23`..`origin/wave32`
-  were deleted after the merge.  The local branches `wave23`..`wave31` still
-  point at pre-rewrite commits and are superseded history; `wave32` points at
-  `17f5782` itself.
+  or name).  **GitHub holds `main`, `wave33` and `wave33b`**; the old
+  `origin/wave23`..`origin/wave32` branches were deleted after the merge.  The
+  local branches `wave23`..`wave31` still point at pre-rewrite commits and are
+  superseded history; `wave32` points at `17f5782`.
 * **Every commit id quoted in the wave 23-32 records is a PRE-rewrite id**,
   including the CI run ids' commits and the "final code tree" ids.  To map
   one, look its left-hand column up in
@@ -35,98 +36,109 @@ wave close; it is the only file a new session must read first._
   custom-field edit queued behind a percent refusal) is **closed by wave 33
   W33-1.5**; **R32-2** (the macOS shell's filter range path acts in file
   order) is **still open**.
-* **Wave 33 is the 29 October audit's fix-only work order**
-  (`docs/handoff/wave33-brief.md`, from
-  `docs/handoff/assessment-2026-10-29.md` sections 7-8).  Groups G0-G4 and
-  CLOSE are **DONE** (record `docs/handoff/wave33-complete.md`):
-  * **G0** — atomic `.mpp` saves through one helper that writes beside the
-    target, re-reads and self-checks, then renames; the non-structural save
-    route adopts its written file as the open document.
-  * **G1** — refusals and disables: Delete Task on a summary, Insert Task
-    cloning a progressed last row, formula SET outside Text/Number, formula
-    CLEAR, a second pending formula op, Task Information/Task Fields decided
-    on a trial copy, the shown table's date format, and FAT-slack files open
-    read-only with a reason.
-  * **G2** — writer DIFAT walk bound and visited set, Resource Fixed2Meta
-    count bound, CFB v4 refused, fuzz targets for both container parsers and
-    the MSPDI importer, and an `ubuntu-asan` job.
-  * **G3** — the `app/` suite runs in CI on windows-msvc and ubuntu-gcc,
-    `app-macos.yml` runs on push and derives its registration check from
-    CMake, the save-pair mask is exactly the noisy bytes and the appended
-    tail is compared, a missing committed fixture is a FAILURE, both app_qt
-    counts are quoted, the backlog states the pin truth, the first CI ctest
-    pass sets `MPP_NO_CORPUS=1`, and `qt_render_parity` is
-    `qt_render_1920`.
-* **G4 (records and privacy) is complete.**  It rewrote these records, the
-  coordinator memory and INDEX; restored LF and added the `.gitattributes` /
-  CI line-ending gate; neutralised the operator's name in
-  `tests/data/synthetic-base.mpp` and `analysis/test_project.mpp` in place;
-  added `scripts/check_markers.py` (tracked-file and commit-message marker
-  guard in `ci.yml`); cleaned the tracked text and the phase-script paths;
-  and shared the oracle neutralisation helper.  **CLOSE is complete too**:
-  two independent reviews of `git diff main..wave33` (their findings and
-  fixes are in the record), the final fresh-tree gates, both name scans and
-  the marker guard, the START-HERE / INDEX / memory / backlog update, and
-  `WAVE-33-COMPLETE`.  Push and CI are the coordinator's after the approved
-  replay.
-* **Fresh-tree gates at the final code tree** (`617e836` plus the docs-only
-  CLOSE record; log `build/w33/W33-CLOSE-final-gates.log`): core
-  `ctest -E plan_recalc` **55/55**; `plan_recalc` **512 / 266** (with /
-  without corpus); engine selftest 53 checks, suite 7 pass + `constraint-mso`
-  expected; reader **1136 / 456**; M2 **332/332**, **268/268**, **64/64**;
-  app **25/25** and **25/25** with `MPP_NO_CORPUS=1`; app_qt **41/41**;
-  sanitizer `fuzz_reader` and `fuzz_xml` 2000 cases each (`PASS`, 20 and 10
-  checks, 0 failures); fixtures OK
-  (**140** documented hashes, **174** tracked `.mpp`), paths OK (223), oracle
-  provenance OK (8); backlog **114/114**, 0 mismatches.  The earlier run on
-  the pre-record tree is `build/w33/W33-CLOSE-fresh-gates-8281f95.log` (its
-  sanitizer steps lacked the MSVC ASan DLL on PATH; the final run adds it).
-* **Privacy after G4**: the two `.mpp` metadata blocks were neutralised in
-  place and the tracked text was scrubbed by W33-4.3 and W33-4.5; the marker
-  guard is tracked and runs in CI.  At CLOSE the file half is clean (0
-  files), with exactly one commit message left -- `964594d` -- which the
-  approved replay must reword.  The 13 unsalted name hashes in older history
-  and `tests/data/project_a_golden.tsv` remain the operator's decision (Q3).
+* **Wave 33 is closed and pushed after the approved replay** (`wave33` =
+  `origin/wave33` = `da5f4da`; `WAVE-33-COMPLETE` in
+  `docs/handoff/wave33-complete.md`).  The 29 October audit's fix-only work
+  order: G0 atomic saves + save adoption; G1 the refusal set (summary delete,
+  Insert Task clone, formula SET field kinds, formula CLEAR disabled, trial
+  copies, shown-table edits, FAT-slack read-only, one pending formula); G2
+  DIFAT/Fixed2Meta bounds, CFB v4 refused, fuzz targets and an `ubuntu-asan`
+  job; G3 the `app/` suite in CI, the save-pair mask, fixture SKIPs, honest
+  numbers; G4 records and privacy; CLOSE two independent reviews, the final
+  gates and the START-HERE / INDEX / memory update.
+* **Its post-replay CI was red in three jobs, fixed in wave 33b.**
+  `ci` 40947728764 (da5f4da) failed ubuntu-gcc and ubuntu-asan; `app-macos`
+  40947715383 failed macos-appkit; `qt-shell` 40947723497 was green.  The
+  compile errors stopped each build at the first one, so 33b fixed them in
+  order and re-dispatched: **CI-1** `tests/fixture_guard.h`'s `/*` glob inside
+  a block comment; **CI-2** `tests/atomic_write.cpp`'s unused `join` (plus
+  four orphaned `file_exists` helpers and the CAL/MPP forced-absent switch);
+  **CI-3** `core/plan/plan.cpp`'s dead `manual_pin_failures` counter (found
+  from the CI run of the 33b G0 commit, `ci` 40958074116).
+* **Wave 33b is a fix-only follow-up** (`docs/handoff/wave33b-brief.md`;
+  record `docs/handoff/wave33b-complete.md`).  G0 and G1 are DONE:
+  * **W33b-0.1 (R33-1, High)** — W33-1.6 had carried the shown table index
+    into the `214/CTable` date-format save, so File > Save could write the
+    date-format byte of ANY table, while only table 0 has a Project save
+    pair.  The Qt shell now refuses Table / Date Format with the decision-9
+    reason before the dialog opens when the shown table is not the first;
+    `Document::request_view_state_edits` returns a bool and refuses before
+    queueing; `apply_view_state_edit` refuses the same as a save-hook
+    warning, leaving `214/` byte-identical.  The macOS shell checks the
+    request result (its view is always table 0).  The wave-33 record gains an
+    erratum: its "added no writer" sentence was false.
+  * **W33b-1.1 (R33-2, Medium)** — the formula-clear save hook refuses
+    `Operation::clear` with the decision-9 reason before reading `114/Props`;
+    the target is untouched and the save fails.  The unmeasured clear writer
+    stays beneath the refusal for a future Project pair.
+  * **W33b-1.2 (R33-3, Medium)** — the macOS Task Fields handler pushes onto
+    a trial copy and moves it into `plan.edits` only when every edit is
+    accepted, so a refused batch queues nothing (the Qt shell's rule).
+* **Fresh-tree gates at the final code tree** (`5efc8a5`; the CLOSE record
+  commit differs by documentation only; log
+  `build/w33b/W33b-CLOSE-fresh-gates.log`, all three trees configured from
+  scratch):
+* **Fresh-tree gates at the final code tree** (`5efc8a5`; the CLOSE record
+  commit differs by documentation only; log
+  `build/w33b/W33b-CLOSE-fresh-gates.log`, all three trees configured from
+  scratch): core `ctest -E plan_recalc` **55/55**; `plan_recalc`
+  **512 / 266** (with / without corpus); engine selftest 53 checks, suite 7
+  pass + `constraint-mso` expected, 0 unrecorded; reader **1136 / 456**; M2
+  **332/332**, **268/268**, **64/64**; app **25/25** and **25/25** with
+  `MPP_NO_CORPUS=1`; app_qt **41/41**; fixtures OK (**140** documented
+  hashes, **174** tracked `.mpp`), paths OK (223), provenance OK (8); markers
+  self-test 19 checks, worktree and range 0 hits over 1306 files; the
+  client-name scan 0 files/0 hits and 0 message commits; `guard_names` exit
+  0; backlog **114/114**, 0 mismatches; block-comment and unused-helper
+  sweeps 0; line endings 0 CRLF; `git diff --check` clean (`main..HEAD` shows
+  only the 13 known wave-33 CRLF-json hits, RW33-10).
+* **Privacy after the replay**: the replay replaced the FAT-slack fixture
+  blob and reworded the one commit message the marker guard named
+  (`964594d`); `guard_names.py main..HEAD` exits 0 and
+  `check_markers.py --range main..HEAD` is 0 hits over 1306 tracked files.
+  The 13 unsalted name hashes in older history and
+  `tests/data/project_a_golden.tsv` remain the operator's decision (Q3).
   **Run BOTH name scans and the marker check.**
-* **Push blocker carried from G1 (disposition approved)**: commit `3b53b9d`
-  added the FAT-slack fixture as imported `synthetic-base` bytes, and that
-  intermediate blob carries the pre-wave privacy residual; `964594d`
-  replaced the tip blob, but the local pre-push guard (`guard_names.py`)
-  checks every blob in the range and refuses `3b53b9d`.  The operator
-  approved a coordinator replay of the unpushed range on 30 October (brief,
-  05:50 CLOSE note); CLOSE does not push -- the coordinator replays, pushes
-  and dispatches both workflows after CLOSE.  The tip tree is clean.
 * **Engine stays 7/8** (`constraint-mso` deliberately expected-failing;
   `mppwrite::save_plan` is test-only).
-* **Branch state**: `main` = **`17f5782`** = `origin/main`.  `wave33` is this
-  branch, closed with `WAVE-33-COMPLETE`; it is not yet pushed -- the
-  coordinator replays and pushes after CLOSE.  The unmerged pre-rewrite
-  branches are local leftovers; their content is on `main` under the mapped
-  ids.
+* **Branch state**: `main` = **`17f5782`** = `origin/main`; `wave33` =
+  **`da5f4da`** = `origin/wave33`; `wave33b` is this branch, closed with
+  `WAVE-33b-COMPLETE`.  `origin/wave33b` = **`6fdf3af`** (the coordinator's
+  single pre-CLOSE push at the G0 gates commit, whose CI run found CI-3);
+  the CI-3 fix and this record are local until the coordinator pushes after
+  CLOSE.  The unmerged pre-rewrite branches are local leftovers; their
+  content is on `main` under the mapped ids.
 
 ## Still open
 
+* **R33-9** (the wave-33 record's three CI-dependent DONE items) closes only
+  when the coordinator's post-replay CI run is green; the asan job has not
+  run since CI-3 was fixed, so any further clang error or sanitizer report
+  behind it is still unknown.
+* **Wave-33b CLOSE-review Lows**: RW33b-1 (the save-hook backstop covers a
+  date format but not a hand-built column replacement on a non-zero table)
+  and RW33b-2 (the retained clear/flag heuristic beneath the refusal is no
+  longer exercised) are queued in `plan-waves27-30.md`.
+* **The wave-33 verification review's Lows**: R33-4 (the phase-2d script
+  saves onto a tracked file without neutralising it), R33-5 and R33-6 (the
+  gap matcher's "exact" wording and the unproven flag-byte mechanism), R33-7
+  (the warning still points at the disabled Clear Formulas button) and R33-8
+  (the atomic-write temp can truncate a file it did not create) are queued in
+  `plan-waves27-30.md`; the wave-33b fixes closed R33-1..R33-3.
 * **The wave-32 verifier's two Mediums** (`wave32-verification/review.md`):
-  **R32-1** (Task Information could leave a custom-field edit queued behind a
-  refused percent push) is **closed by W33-1.5**; **R32-2** (the macOS
-  shell's filter range path still selects, copies, pastes and indents in file
-  order) is **still open** — since wave 32 no such sheet edit reaches a save,
-  but it remains a Medium for the shell.
+  **R32-1** is **closed by W33-1.5**; **R32-2** (the macOS shell's filter
+  range path still selects, copies, pastes and indents in file order) is
+  **still open** — since wave 32 no such sheet edit reaches a save, but it
+  remains a Medium for the shell.
 * **The carried review queues**: R31-5..R31-12 and the wave-32 review's
-  L1..L6 (test strength, the filter wording) are queued in
-  `plan-waves27-30.md` and `wave32-complete.md` with directions; the four core
-  review Lows C1/C2/S1/S2 and the wave-30/29 queues stand.  The wave-33 CLOSE
-  review's ten Lows are queued as RW33-1..RW33-10 in `plan-waves27-30.md`.
-* **The push blocker before CLOSE** (disposition approved): the intermediate
-  blob added by `3b53b9d` carries the pre-wave privacy residual, so the local
-  `guard_names.py` pre-push guard refuses the range even though `964594d`
-  cleaned the tip.  The operator approved the coordinator replay on 30
-  October (brief, 05:50 CLOSE note); push and CI: by the coordinator after
-  the replay.
+  L1..L6 are queued in `plan-waves27-30.md` and `wave32-complete.md` with
+  directions; the four core review Lows C1/C2/S1/S2 and the wave-30/29
+  queues stand.  The wave-33 CLOSE review's ten Lows are RW33-1..RW33-10
+  (RW33-3 is closed by W33b-1.2).
 * **Privacy residuals the operator owns**: the pre-scrub public history and
   CI artifacts (Q1), the unsalted name hashes in older history and
   `tests/data/project_a_golden.tsv` (Q3), and `6056f15`'s commit message plus
-  the two local pre-push backup branches (Q4).
+  the local pre-push backup branches (Q4).
 * **The after-run list**: Team Planner, Network Diagram, Calendar and Report
   views, the `constraint-mso` engine case, macOS launch/notarisation, and the
   hashed task names.
@@ -136,9 +148,9 @@ wave close; it is the only file a new session must read first._
 **Coordinator starting the next group or wave** (≈5 files):
 
 1. this file;
-2. `docs/handoff/wave33-complete.md` — the current record: G0-CLOSE detail,
-   per-commit and fresh-tree gates, both CLOSE reviews, "Found, not fixed";
-3. `docs/handoff/wave33-brief.md` — the work order;
+2. `docs/handoff/wave33b-complete.md` — the current record: G0/G1 detail,
+   CI-3, the CLOSE review, the fresh-tree gates, "Found, not fixed";
+3. `docs/handoff/wave33b-brief.md` — the work order;
 4. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
 5. `docs/ui-reference-set.md` — the local captures and palettes (git-ignored);
 6. `memory/coordinator.md` — the compact current memory.
@@ -213,7 +225,11 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
   enabled.  The wave-29 dialogs are session-only over the open view; no Style
   dialog writes stored style records.  Waves 31-33 added NO writer: Sort,
   Outline, Tables and Zoom are session state; wave 32 refuses or disables; wave
-  33 is fix-only (atomic save, refusals, bounds, tests, CI, records).
+  33 is fix-only (atomic save, refusals, bounds, tests, CI, records).  **Wave
+  33b fix-only erratum (W33b-0.1 / R33-1):** wave 33's W33-1.6 gave the
+  date-format save the shown table index, so it could write a non-zero table's
+  unmeasured byte; wave 33b refuses any table but the first at the request and
+  in the save hook, and adds no writer.
 * **`plan_recalc`** never rewrites the golden by default; refreshing needs the
   exact value `PLAN_RECALC_UPDATE_GOLDEN=1`, and the local/CI gate runs
   `ctest -E plan_recalc` plus the corpus-free binary/step.
@@ -229,30 +245,36 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
   CI fails on a CR in those types.  The older CRLF `.tsv`/`.json`/`.txt`
   fixtures stay as committed.
 * **CI:** one dispatch per milestone; red runs are triaged, fixed and dispatched
-  again with the reason recorded.  Wave 33's push and both dispatches belong to
-  the coordinator after CLOSE and after the approved replay; the record carries
-  the run ids and the final status once they exist.
+  again with the reason recorded.  Wave 33's post-replay run was red (CI-1,
+  CI-2 and, after those, CI-3); wave 33b fixed all three and left its own
+  dispatch to the coordinator after CLOSE.  The record carries the run ids and
+  the final status once they exist.
 * **Commits:** one finding id per commit; honest numbers; a gate number must
-  belong to the tree it is written in and name its log under `build/w33/`; no
-  test claimed unless run.  A known gap is an expected failure **by name**,
-  never an assertion of the wrong output.  The committed
-  `scripts/check_command_backlog.py` (ctest `qt_command_backlog`) keeps the
-  generated backlog and the ribbon pin in step both ways.
+  belong to the tree it is written in and name its log under `build/w33b/` for
+  wave 33b (older waves: their own `build/wNN/`); no test claimed unless run.
+  A known gap is an expected failure **by name**, never an assertion of the
+  wrong output.  The committed `scripts/check_command_backlog.py` (ctest
+  `qt_command_backlog`) keeps the generated backlog and the ribbon pin in step
+  both ways.
 
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md and docs/handoff/wave33-complete.md.  Waves 23-32 are
+Read docs/START-HERE.md and docs/handoff/wave33b-complete.md.  Waves 23-32 are
 merged into main as 17f5782 (27 Oct 2026, after a history rewrite); every id in
 the wave 23-32 records is pre-rewrite and maps through
-docs/handoff/wave32-verification/rewrite-sha-map.txt.  Wave 33 is the 29 Oct
-audit's fix-only work order on branch wave33 and is COMPLETE: G0-G4 and CLOSE
-are done (atomic save and save adoption; the refusal set; parser bounds, CFB
-v4 and ASan fuzzing; the app suite in CI, the save-pair mask, fixture SKIPs
-and honest numbers; records and privacy; the two CLOSE reviews and the final
-gates), and WAVE-33-COMPLETE is appended.  The coordinator's next step is the
-approved replay of the unpushed range, then the push and both CI dispatches;
-the replay must also reword one commit message (964594d) and replace
-3b53b9d's blob.  Keep every gate in wave33-complete green before each commit
-and run BOTH name scans and scripts/check_markers.py.
+docs/handoff/wave32-verification/rewrite-sha-map.txt.  Wave 33 is COMPLETE and
+pushed after the approved replay (wave33 = origin/wave33 = da5f4da); its
+post-replay CI was red in ubuntu-gcc, ubuntu-asan and macos-appkit.  Wave 33b
+is the fix-only follow-up on branch wave33b, cut from wave33: it fixed the
+review's High (the unmeasured table date format), its two Mediums (the
+formula-clear save hook; the macOS Task Fields queue) and the CI compile
+errors CI-1..CI-3, and WAVE-33b-COMPLETE is appended.  origin/wave33b is
+6fdf3af (one pre-CLOSE push at the G0 gates commit, whose CI run found CI-3);
+the CI-3 fix and the CLOSE record are local.  The coordinator's next step is
+to push wave33b and dispatch both CI workflows, then record the run ids;
+R33-9 closes when that run is green.  The wave is not merged until CI is green
+and the review has no Critical/High (the CLOSE review has none).  Keep every
+gate in wave33b-complete green before each commit and run BOTH name scans and
+scripts/check_markers.py.
 ```

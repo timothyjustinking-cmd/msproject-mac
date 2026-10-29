@@ -4,15 +4,18 @@ One table row per brief item.  A group ends only when its exact
 `WAVE-33b-<group>-COMPLETE` line is appended below (wave-33b-brief section 1).
 Deferrals need the attempt evidence the standing rules and the brief name.
 
-## G0 - the review's High and the two CI compile errors
+## G0 - the review's High and the CI compile errors
 
 | item | finding | status | evidence |
 |---|---|---|---|
 | W33b-0.1 | R33-1 (High): Table / Date Format writes an unmeasured table | **DONE** | commit `3257a4f`; gates `build/w33b/W33b-0.1-*.log` |
 | CI-1 | ubuntu-gcc, macos-appkit: `tests/fixture_guard.h:9` `"/*" within comment` | **DONE** | commit `eeee5c4`; gates `build/w33b/CI-1-*.log` |
 | CI-2 | ubuntu-asan: `tests/atomic_write.cpp:50` unused function `join` | **DONE** | commit `26c0fb1`; gates `build/w33b/CI-2-*.log` |
+| CI-3 | ubuntu-asan: `core/plan/plan.cpp:584` `manual_pin_failures` set but not used (`-Werror,-Wunused-but-set-variable`) | **DONE** | commit `939ddc8`; gates `build/w33b/CI-3-green-core.log`; found at CLOSE from the CI run of the G0 gates commit (`ci` 40958074116) |
 
-No G0 item was deferred.
+No G0 item was deferred.  CI-3 was added at CLOSE from the CI run of the G0
+gates commit; the G0 history above is unchanged and its detail is under
+CLOSE.
 
 W33b-0.1 detail:
 
@@ -178,3 +181,169 @@ raw-binary usage errors and are superseded by its CORRECTION section):
 | client-name scan HEAD / messages / `guard_names main..HEAD` | 0 files, 0 hits / 0 commits / exit 0 |
 
 WAVE-33b-G1-COMPLETE
+
+## CLOSE
+
+| item | status | evidence |
+|---|---|---|
+| fresh-tree gates on the final commit, logged (core, app with `CORE_WARNINGS_AS_ERRORS=ON`, app_qt, M2, engine suite, `check_fixtures`, `check_markers`) | **DONE** | log `build/w33b/W33b-CLOSE-fresh-gates.log`, all three trees configured from scratch on the final code tree `5efc8a5`; table below |
+| both name scans and the marker check clean on `main..HEAD` | **DONE** | client-name scan HEAD 0 files/0 hits and messages `main..HEAD` 0 commits; `guard_names.py main..HEAD` exit 0; `check_markers.py --range main..HEAD` 0 hits over 1306 tracked files (9 markers) |
+| one review pass over `git diff wave33..wave33b` | **DONE** | independent review of baseline `da5f4da`..`HEAD 21bdf13`: 0 Critical / 0 High / 0 Medium, 7 Low; repairs `5efc8a5`; queue RW33b-1/RW33b-2 |
+| record "push and CI: by the coordinator" | **DONE** | "Push and CI" below |
+| update START-HERE and `memory/coordinator.md` (wave 33 + 33b, not merged until CI is green and the review has no Critical/High) | **DONE** | `docs/START-HERE.md`, `memory/coordinator.md`; INDEX and the queue also updated |
+| add R33-4..R33-8 to the queue in `plan-waves27-30.md` with file:line (R33-9 closes when the post-replay CI run is green) | **DONE** | `plan-waves27-30.md`, "Queued from the wave-33 verification review"; R33-9 stays open |
+| append `WAVE-33b-COMPLETE` | **DONE** | last line |
+
+CLOSE did not push or dispatch CI (wave-33b-brief sections 0 and 2).
+
+### CI-3, added at CLOSE from the G0 gates commit's CI run
+
+The `ci` run of the G0 gates commit (`6fdf3af`, run 40958074116, 2026-10-29
+21:28Z) was red in one job: ubuntu-asan `Build` stopped at 76% on
+
+```
+core/plan/plan.cpp:584:17: error: variable 'manual_pin_failures' set but not
+used [-Werror,-Wunused-but-set-variable]
+```
+
+(log `build/w33b/CI-3-asan-build-failed.log`; ubuntu-gcc and windows-msvc were
+green, and `qt-shell` 40958079007 and `app-macos` 40958074537 were green --
+CI-1 and CI-2 are therefore confirmed fixed on that commit).  The counter was
+incremented when a manual pin's finish ran off the calendar but nothing read
+it: `PlanResult::manual_unpinned` is `manual_rows - manual_pinned`
+(`core/plan/plan.cpp:763`), so those rows were already counted.  The
+declaration and the increment are removed; the comment now names
+`manual_unpinned`.  No behaviour change.
+
+Commit `939ddc8`; gates `build/w33b/CI-3-green-core.log` on tree `21bdf13`
+plus the change, incremental in a tree configured
+`CORE_WARNINGS_AS_ERRORS=ON` (plan.cpp was recompiled): core build exit 0;
+core ctest `-E plan_recalc` 55/55; `plan_recalc` 512 checks with corpus /
+266 with `MPP_NO_CORPUS=1`; M2 `recalc --compare` 332/332, 268/268 and 64/64
+fields match; fixtures OK (140 documented hashes, 174 tracked `.mpp`);
+`check_markers --range main..HEAD` 0 hits; scan HEAD and messages 0;
+`guard_names main..HEAD` exit 0; backlog 114/114, 0 mismatches;
+`git diff --check` clean.
+
+### The CLOSE review
+
+An independent review read `git diff wave33..wave33b` (baseline `da5f4da`,
+HEAD `21bdf13`), the brief, this record, the standing rules and the
+surrounding call sites, read-only.  Its verdict: **safe for CLOSE**, with no
+Critical, High or Medium finding and seven Lows.  It re-checked refusal
+reachability (the only production caller of `core::viewstate::set_table_date_format`
+sits inside `apply_view_state_edit`, reachable only through the two save
+paths; a non-zero table date format cannot be written through a public save),
+the ordering of both refusals (before any stream read or queue change), the
+formula-clear refusal in the cascade (target byte-identical), both shells, the
+RED/GREEN numbers against the named logs, the record's gate numbers, privacy
+and portability.  It confirmed the wave-33 erratum is accurate.
+
+| # | severity | site | disposition |
+|---|---|---|---|
+| 1 | Low | `app/document.cpp:344,574-583` -- the backstops cover a date format but not a hand-built `replace_column` on a non-zero table, measured only at table 0; no production caller can build it | queued RW33b-1 |
+| 2 | Low | `app/document.h:239` -- the refusal comment said "Empty for index 0"; the function always returns its message | fixed `5efc8a5` |
+| 3 | Low | `app_qt/CMakeLists.txt:192-198` -- the `qt_table_date_format` comment still described the wave-33 gate (second table saves format 4) | fixed `5efc8a5` |
+| 4 | Low | `memory/app-save.md:34` -- the snippet ignored the new `[[nodiscard]]` bool | fixed `5efc8a5` |
+| 5 | Low | `tests/cal_tests.cpp:107ff` -- `corpus_gated` restores the documented forced-absent switch instead of deleting the helper | accepted: justified in the CI-2 commit; the CAL/MPP forced-absent outcomes are proven in its logs |
+| 6 | Low | `tools/deepseek/run-wave.ps1:9` -- `[int]$Wave` to `[string]$Wave` is outside the brief's fix list | accepted: needed to run wave "33b"; `$Wave` is interpolated and used via `-f {0}`, never in arithmetic |
+| 7 | Low | `app/document_tests.cpp` -- removing the no-value control leg leaves the retained clear/flag heuristic beneath the refusal untested | queued RW33b-2 |
+
+The review's condition 1 (the in-flight CI-3 fix must be committed and gated)
+is met by `939ddc8`; CI-3 was outside the reviewed range and the coordinator
+checked the removed counter against `manual_unpinned` (above).  Condition 2
+(the pre-CLOSE CI dispatch) is reconciled under "Push and CI".
+
+### Fresh-tree gates
+
+The table is written from `build/w33b/W33b-CLOSE-fresh-gates.log`: the three
+trees (`build/w33b-close-fresh{,-app,-qt}`) were deleted and configured from
+scratch on the final code tree `5efc8a5` (the CLOSE record commit differs from
+it by documentation only).
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 55/55 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` (via `scripts/engine_diff.py`) | 53 checks, 0 failure(s) / 8 recorded (7 pass, 1 fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| app ctest / app ctest with `MPP_NO_CORPUS=1` (the CI step) | 25/25 / 25/25 passed |
+| app_qt configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| app_qt ctest | 41/41 passed |
+| `check_fixtures.py` | fixtures OK (140 documented hashes, 174 tracked `.mpp`); paths OK (223 tracked test-data files, no local path); provenance OK (8 oracles) |
+| `check_markers.py` self-test / worktree / `--range main..HEAD` | 19 checks, 0 failures / 0 hits over 1306 tracked files / 0 hits, 0 messages |
+| client-name scan HEAD / messages `main..HEAD` / `guard_names main..HEAD` | 0 files, 0 hits / 0 commits / exit 0 |
+| block-comment sweep / unused-helper sweep | 0 hit classes over 342 files / 0 over the 13 changed files |
+| line endings / client-string hashes | 0 CRLF or mixed among the pinned types / no match |
+| `git diff --check` worktree / `main..HEAD` | exit 0 / exit 2: the 13 known wave-33 CRLF-json whitespace hits (RW33-10); `wave33..HEAD` is clean |
+
+The log's working-tree section lists the four CLOSE documents being written
+(`docs/START-HERE.md`, `docs/handoff/INDEX.md`,
+`docs/handoff/wave33b-complete.md`, `memory/coordinator.md`); they are the
+only files the CLOSE record commit adds.
+
+### Push and CI
+
+* `main` = **`17f5782`** = `origin/main`; **`wave33` = `da5f4da`** =
+  `origin/wave33`, pushed after the operator-approved replay of the unpushed
+  range (the replay replaced the FAT-slack fixture blob and reworded the one
+  commit message the marker guard named; see
+  `docs/handoff/wave33-verification/`).  `guard_names.py main..HEAD` exits 0.
+* **`origin/wave33b` = `6fdf3af`**: the coordinator pushed the branch once
+  before CLOSE, at the G0 gates commit, and dispatched both workflows.  That
+  run is how CI-3 was found (`ci` 40958074116 red in ubuntu-asan only;
+  `qt-shell` 40958079007 and `app-macos` 40958074537 green).  CLOSE itself
+  did not push and did not dispatch (brief sections 0 and 2); this is the
+  coordinator's pre-CLOSE push, recorded so the CI-3 evidence is not
+  mistaken for a CLOSE action.
+* **Push and CI: by the coordinator.**  The CI-3 fix `939ddc8`, the review
+  repairs `5efc8a5` and this record are local.  The coordinator pushes them
+  to `wave33b` and dispatches both CI workflows (`app-macos.yml` runs on the
+  push) after CLOSE, then records the run ids.  R33-9 (the wave-33 record's
+  CI-pending DONE items) closes when that post-replay run is green; the red
+  runs of `da5f4da` and `6fdf3af` are the evidence that the first attempts
+  were not.
+* The wave is **not merged** until that CI is green and the review has no
+  Critical or High finding -- this review has none, so the merge decision is
+  the operator's after the coordinator's dispatch.
+
+### Records updated
+
+`docs/START-HERE.md` (wave 33 pushed after the replay; wave 33b complete;
+CI-3 and the review; branch state; the new paste-in prompt),
+`memory/coordinator.md` (waves 33 and 33b), `docs/handoff/INDEX.md` (the
+wave-33b section, the wave-33 verification entries, the Now table),
+`docs/handoff/plan-waves27-30.md` (R33-4..R33-8, RW33b-1/RW33b-2, RW33-3
+closed by W33b-1.2).  The command backlog row for `table_date_format` was
+regenerated by W33b-0.1 (`docs/ui-command-backlog.md`, 114/114, 0
+mismatches).
+
+### Found, not fixed
+
+* **R33-9 stays open**: the wave-33 record's three CI-dependent DONE items
+  are unproven until the coordinator's post-CLOSE dispatch is green.  The
+  wave-33 run of `da5f4da` was red in CI-1 (ubuntu-gcc, macos-appkit) and
+  CI-2 (ubuntu-asan); CI-3 (ubuntu-asan) sat behind CI-2 and only surfaced on
+  the 33b G0 run of `6fdf3af`, and ubuntu-asan has not run since CI-3 was
+  fixed -- so any further clang error or sanitizer report behind it is still
+  unknown.
+* **The review's Lows**: RW33b-1 (column-replacement backstop on a non-zero
+  table) and RW33b-2 (the retained clear/flag heuristic is untested), plus
+  R33-4..R33-8 from the wave-33 verification review, are queued in
+  `plan-waves27-30.md`.
+* **Local evidence limits**: `app/main.mm` is not compiled by any local tree
+  (the W33b-1.2 change is brace-checked and proxied by the Qt trial-copy test;
+  macos-appkit CI compiles it), and no sanitizer ran locally -- the asan job
+  is the only sanitizer gate.
+* **Pre-existing whitespace**: `git diff --check main..HEAD` reports the 13
+  trailing-whitespace hits in five CRLF `docs/analysis/oracle/*.json` files
+  inherited from wave 33 (RW33-10); `git diff --check wave33..HEAD` is clean
+  and no wave-33b file adds one.
+* **The wave-33b push history**: the branch carries one pre-CLOSE push at
+  `6fdf3af`; the CLOSE rule ("CLOSE does neither") binds this session, and
+  the coordinator's post-CLOSE push is the one that carries the fixes.
+
+WAVE-33b-COMPLETE

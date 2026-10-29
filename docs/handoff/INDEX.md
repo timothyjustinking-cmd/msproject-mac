@@ -12,6 +12,9 @@ kept for investigation; each is the record of its stream at that wave.
 | `assessment-2026-10-29.md` | **the 29 October progress assessment and adversarial audit**: sections 7-8 are wave 33's work order |
 | `wave33-brief.md` | **the wave-33 work order**: fix-only - G0 data safety (Critical), G1 refusals and disables (High/Medium), G2 robustness, G3 gates and CI, G4 records and privacy |
 | `wave33-complete.md` | **the wave-33 gate**: G0-G4 and CLOSE DONE with per-commit and fresh-tree gates, the two independent CLOSE reviews and their fixes (W33-CLOSE-H1/M2/M3/M4), both name scans and the marker guard, "Found, not fixed"; `WAVE-33-COMPLETE`; push and CI by the coordinator after the approved replay |
+| `wave33-verification/gates.md` | **the wave-33 verification**: the replay's old-to-new sha map, the verifier's fresh-tree gates and the independent review `review.md` (R33-1 High, R33-2/R33-3 Medium, R33-4..R33-9 Low) |
+| `wave33b-brief.md` | **the wave-33b work order**: fix-only follow-up - R33-1 (High), R33-2/R33-3 (Medium) and the three CI compile errors behind the wave-33 red jobs |
+| `wave33b-complete.md` | **the wave-33b gate**: G0 and G1 DONE with RED/GREEN evidence, the CLOSE fresh-tree gates, both name scans and the marker guard, the CI-3 fix, the CLOSE review; `WAVE-33b-COMPLETE`; push and CI by the coordinator |
 | `assessment-2026-10-24.md` | where the port stood after wave 26, and the workflow review |
 | `plan-waves27-30.md` | the plan of the 27-31 run (wave 31 was its last wave) |
 
@@ -23,12 +26,20 @@ PRE-rewrite id; `wave32-verification/rewrite-sha-map.txt` maps the 329 old ids
 to the current ones (left = old, right = new; look one up with
 `git show 17f5782:docs/handoff/wave32-verification/rewrite-sha-map.txt | grep <old-id>`).
 
-## Wave 33 (closed on branch `wave33`, cut from `17f5782`; `WAVE-33-COMPLETE`; not yet pushed)
+## Wave 33b (fix-only follow-up, cut from `wave33` after its verification record; `WAVE-33b-COMPLETE`; not yet pushed)
+
+| file | what |
+|---|---|
+| `wave33b-brief.md` | **the work order** (also listed under Now): R33-1 the unmeasured table date format (High), R33-2 the formula-clear save hook and R33-3 the macOS Task Fields queue (Medium), and the CI compile errors from the wave-33 red jobs (now also CI-3) |
+| `wave33b-complete.md` | **the wave-33b gate**: G0 (W33b-0.1, CI-1, CI-2, CI-3) and G1 (W33b-1.1, W33b-1.2) with RED/GREEN logs, the CLOSE fresh-tree gates, the name scans and marker guard, the CLOSE review; push and both CI dispatches by the coordinator |
+
+## Wave 33 (closed on branch `wave33`, cut from `17f5782`; `WAVE-33-COMPLETE`; pushed after the approved replay -- `origin/wave33` = `da5f4da`; its post-replay CI red jobs are fixed in wave 33b)
 
 | file | what |
 |---|---|
 | `wave33-brief.md` | **the work order** (also listed under Now): the fix-only wave from the 29 October audit |
-| `wave33-complete.md` | **the wave-33 gate**: G0 atomic save + save adoption, G1 the refusal set, G2 parser bounds + fuzzing + ASan, G3 the `app/` suite in CI and the honest gates, G4 records and privacy, CLOSE the final gates, the two reviews and their fixes; `WAVE-33-COMPLETE` |
+| `wave33-complete.md` | **the wave-33 gate**: G0 atomic save + save adoption, G1 the refusal set, G2 parser bounds + fuzzing + ASan, G3 the `app/` suite in CI and the honest gates, G4 records and privacy, CLOSE the final gates, the two reviews and their fixes; `WAVE-33-COMPLETE`; the W33b-0.1 erratum |
+| `wave33-verification/gates.md` | the replay and the verifier's fresh-tree gates; `review.md` holds R33-1..R33-9; `rewrite-sha-map.txt` maps the replayed ids |
 
 ## Wave 32 (merged into `main` on 27 Oct 2026 as `17f5782`, after a history rewrite; ids pre-rewrite)
 
