@@ -78,13 +78,14 @@ only file a new session must read first._
   W33-4.3 and W33-4.5 remove them.  The 13 unsalted name hashes in older
   history and `tests/data/project_a_golden.tsv` remain the operator's
   decision (Q3).  **Run BOTH name scans and the new marker check.**
-* **Push blocker carried from G1 (wave owner only)**: commit `3b53b9d` added
-  the FAT-slack fixture as imported `synthetic-base` bytes, and that
+* **Push blocker carried from G1 (disposition approved)**: commit `3b53b9d`
+  added the FAT-slack fixture as imported `synthetic-base` bytes, and that
   intermediate blob carries the pre-wave privacy residual; `964594d`
   replaced the tip blob, but the local pre-push guard (`guard_names.py`)
-  checks every blob in the range and refuses `3b53b9d`.  Section 0 forbids
-  rewriting history and working round the guard, so the wave owner must
-  authorise a disposition before the CLOSE push.  The tip tree is clean.
+  checks every blob in the range and refuses `3b53b9d`.  The operator
+  approved a coordinator replay of the unpushed range on 30 October (brief,
+  05:50 CLOSE note); CLOSE does not push -- the coordinator replays, pushes
+  and dispatches both workflows after CLOSE.  The tip tree is clean.
 * **Engine stays 7/8** (`constraint-mso` deliberately expected-failing;
   `mppwrite::save_plan` is test-only).
 * **Branch state**: `main` = **`17f5782`** = `origin/main`.  `wave33` is this
@@ -103,11 +104,12 @@ only file a new session must read first._
   L1..L6 (test strength, the filter wording) are queued in
   `plan-waves27-30.md` and `wave32-complete.md` with directions; the four core
   review Lows C1/C2/S1/S2 and the wave-30/29 queues stand.
-* **The push blocker before CLOSE** (wave owner only): the intermediate blob
-  added by `3b53b9d` carries the pre-wave privacy residual, so the local
+* **The push blocker before CLOSE** (disposition approved): the intermediate
+  blob added by `3b53b9d` carries the pre-wave privacy residual, so the local
   `guard_names.py` pre-push guard refuses the range even though `964594d`
-  cleaned the tip.  Section 0 forbids rewriting history; the owner must
-  authorise a disposition.
+  cleaned the tip.  The operator approved the coordinator replay on 30
+  October (brief, 05:50 CLOSE note); push and CI: by the coordinator after
+  the replay.
 * **Privacy residuals the operator owns**: the pre-scrub public history and
   CI artifacts (Q1), the unsalted name hashes in older history and
   `tests/data/project_a_golden.tsv` (Q3), and `6056f15`'s commit message plus
@@ -214,9 +216,9 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
   CI fails on a CR in those types.  The older CRLF `.tsv`/`.json`/`.txt`
   fixtures stay as committed.
 * **CI:** one dispatch per milestone; red runs are triaged, fixed and dispatched
-  again with the reason recorded.  Wave 33 CLOSE pushes `wave33` and dispatches
-  both workflows; the record carries the run ids and the final status, and the
-  CLOSE docs commit after the dispatch changes docs only.
+  again with the reason recorded.  Wave 33's push and both dispatches belong to
+  the coordinator after CLOSE and after the approved replay; the record carries
+  the run ids and the final status once they exist.
 * **Commits:** one finding id per commit; honest numbers; a gate number must
   belong to the tree it is written in and name its log under `build/w33/`; no
   test claimed unless run.  A known gap is an expected failure **by name**,
@@ -234,8 +236,9 @@ docs/handoff/wave32-verification/rewrite-sha-map.txt.  Wave 33 is the 29 Oct
 audit's fix-only work order on branch wave33: G0-G3 are done (atomic save and
 save adoption; the refusal set; parser bounds, CFB v4 and ASan fuzzing; the
 app suite in CI, the save-pair mask, fixture SKIPs and honest numbers); G4
-(records and privacy) is in progress or done; CLOSE owns the fresh-tree gates,
-the wave-33 diff review, the push and the CI dispatch.  Keep every gate in
+(records and privacy) is in progress or done; CLOSE owns the fresh-tree gates
+and the wave-33 diff review, and the coordinator pushes and dispatches CI
+after CLOSE and after the approved replay.  Keep every gate in
 wave33-complete green before each commit and run BOTH name scans and
 scripts/check_markers.py.
 ```

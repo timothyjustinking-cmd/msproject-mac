@@ -11,10 +11,13 @@ mechanism, a test, a CI job or a record._
 
 ## 0. Publication
 
-Push `wave33` and dispatch both CI workflows in CLOSE; fix and re-dispatch on red (check
-for unused functions and constants GCC and Clang reject before the first push).  Never
-rewrite or force-push history; never work round the pre-push guard.  G3 adds the `app/`
-suite to CI, so the CLOSE CI run must show it.
+Push `wave33` and dispatch both CI workflows AFTER CLOSE: the coordinator does both
+after the approved replay of the unpushed range (the 05:50 CLOSE note in section 1);
+CLOSE itself does neither.  The replay is the only sanctioned history rewrite; outside
+it, never rewrite or force-push history and never work round the pre-push guard.  Fix
+and re-dispatch on red (check for unused functions and constants GCC and Clang reject
+before the first push).  G3 adds the `app/` suite to CI, so the post-replay CI run must
+show it.
 
 ## 1. Rules for this wave
 
@@ -262,8 +265,9 @@ Fresh-tree gates on the final commit, logged (core, app with `CORE_WARNINGS_AS_E
 app_qt, M2, engine suite, check_fixtures, check_markers, the sanitizer build if local
 tooling allows); both name scans and the new marker check clean; a review pass over
 `git diff main..wave33` (two agents: one on the safety and refusal code, one on the gates
-and records); push and dispatch as section 0 says, and confirm the CI logs show the `app/`
-ctest total, the asan job and the marker check; `wave33-complete.md`, START-HERE, INDEX,
+and records); record "push and CI: by the coordinator after the replay" as section 0 and
+the 05:50 note say (the post-replay CI logs must show the `app/` ctest total, the asan
+job and the marker check); `wave33-complete.md`, START-HERE, INDEX,
 `memory/coordinator.md` and the regenerated `docs/ui-command-backlog.md`.  Then append
 `WAVE-33-COMPLETE`.
 

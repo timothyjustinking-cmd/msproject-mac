@@ -89,11 +89,12 @@ progress; CLOSE remains.**  Current wave-33 ids (post-merge history):
   `scripts/phase*.py` hard-code the old absolute root.  W33-4.3 and W33-4.5
   remove them; `scripts/check_markers.py` (W33-4.4) is the acceptance test and
   runs in CI on both OSs.
-* **Push blocker (wave owner only)**: `3b53b9d`'s intermediate blob (the
+* **Push blocker (disposition approved)**: `3b53b9d`'s intermediate blob (the
   first FAT-slack fixture, imported `synthetic-base` bytes) carries the
   pre-wave residual, so the local `guard_names.py` pre-push guard refuses the
-  range even though `964594d` cleaned the tip.  History rewriting is
-  forbidden; the owner must authorise a disposition before CLOSE pushes.
+  range even though `964594d` cleaned the tip.  The operator approved a
+  coordinator replay of the unpushed range on 30 October (brief, 05:50 CLOSE
+  note); CLOSE does not push.  The replay is the only sanctioned rewrite.
 * Residuals left for the operator: the 13 unsalted name hashes in older
   history plus `tests/data/project_a_golden.tsv` (Q3), `6056f15`'s commit
   message (Q4), and the pre-scrub public history (Q1).  Run BOTH name scans
@@ -101,10 +102,12 @@ progress; CLOSE remains.**  Current wave-33 ids (post-merge history):
 
 ## Next
 
-G4 completes with its marker line; CLOSE then runs the fresh-tree gates on
-the final commit (all three trees with `CORE_WARNINGS_AS_ERRORS=ON`, the
-sanitizer build if local tooling allows), both name scans plus
-`check_markers.py`, a review pass over `git diff 17f5782..wave33`, the push
-and the two CI dispatches, and the final `WAVE-33-COMPLETE` marker.  The
-operator's step after that is to verify and merge `wave33`, then choose wave
-34 (the parity/shared-writers brief exists).
+G4 is complete with its marker line.  CLOSE runs the fresh-tree gates on the
+final commit (all three trees with `CORE_WARNINGS_AS_ERRORS=ON`, the sanitizer
+build if local tooling allows), both name scans plus `check_markers.py`, a
+review pass over `git diff 17f5782..wave33`, then appends the final
+`WAVE-33-COMPLETE` marker.  The push and the two CI dispatches are NOT
+CLOSE's: the coordinator does them after CLOSE and after the approved replay
+of the unpushed range (brief, 05:50 note).  The operator's step after that is
+to verify and merge `wave33`, then choose wave 34 (the parity/shared-writers
+brief exists).

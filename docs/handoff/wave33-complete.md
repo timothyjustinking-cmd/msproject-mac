@@ -109,8 +109,9 @@ follows is docs-only.
   brief's "keep it mechanical" is met: the edit uses only fields the
   structural route already sets.
 - CLOSE is out of scope for this group session: the fresh-tree gates on the
-  final commit, the review pass over the wave-33 diff, the push and the CI
-  dispatch belong to the CLOSE section (wave-33-brief section 2).
+  final commit and the review pass over the wave-33 diff belong to the CLOSE
+  section (wave-33-brief section 2); the push and CI dispatch belong to the
+  coordinator after the approved replay (brief, 05:50 CLOSE note).
 
 WAVE-33-G0-COMPLETE
 
@@ -380,9 +381,10 @@ The G1 marker commit is docs-only; the code tree it records is `6a58e05`.
   name in SummaryInformation and in one Var2Data value, plus the local
   path), so the pre-push guard refuses that commit.  `964594d` replaced the
   tip blob with an equal-length neutral version (21 bytes changed, every
-  other byte identical, size unchanged); section 0 forbids rewriting or
-  force-pushing history and working round the guard, so only the wave owner
-  can authorise a rewrite or another disposition.  Scans of HEAD and of the
+  other byte identical, size unchanged); the operator approved a coordinator
+  replay of the unpushed range on 30 October (brief, 05:50 CLOSE note), and
+  outside that replay section 0 still forbids rewriting or force-pushing
+  history and working round the guard.  Scans of HEAD and of the
   G1 tip's staged snapshot are clean.  `guard_names.py 22218de^..HEAD`
   (`build/w33/W33-G1-guard-range.log`) refuses on `3b53b9d` alone with its
   "blob ... embedded local path or operator name" line; the blocker is that
@@ -397,8 +399,9 @@ The G1 marker commit is docs-only; the code tree it records is `6a58e05`.
   lines W33-1.7 adds to it are LF, so that commit adds no CRLF and
   `git diff --check` is clean.
 - CLOSE is out of scope for this group session: the fresh-tree gates on the
-  final commit, the review pass over the wave-33 diff, the push and the CI
-  dispatch belong to the CLOSE section (wave-33-brief section 2).
+  final commit and the review pass over the wave-33 diff belong to the CLOSE
+  section (wave-33-brief section 2); the push and CI dispatch belong to the
+  coordinator after the approved replay (brief, 05:50 CLOSE note).
 
 WAVE-33-G1-COMPLETE
 
@@ -520,7 +523,8 @@ W33-2.4 detail:
   `-fsanitize=address,undefined -fno-sanitize-recover=all`,
   `CORE_WARNINGS_AS_ERRORS=ON`, and `ctest -E plan_recalc` with
   `MPP_NO_CORPUS=1` (the fuzz targets included).  The job cannot be
-  dispatched from this session; the brief requires it green before CLOSE.
+  dispatched from this session; the brief requires it green in the
+  post-CLOSE CI run.
 - RED (the coverage gap) on HEAD `60d8f06`,
   `build/w33/W33-2.4-red-coverage.log`: the writer parse on HEAD exists only
   at source line 347 on the pristine bytes, while the mutated bytes reach only
@@ -576,8 +580,8 @@ The run started 2026-10-29 23:45 and finished 2026-10-30 00:13.
   G2 item.
 - The `ubuntu-asan` job is written and structurally reviewed but cannot be
   dispatched from this session (no workflow dispatch from this environment);
-  the brief requires it green before CLOSE, so CLOSE owns the dispatch and the
-  green record.
+  the brief requires it green in the post-CLOSE CI run, so the coordinator
+  owns the dispatch and the green record after the approved replay.
 - The local MSVC ASan smoke used `/fsanitize=address` with the MSVC linker's
   LNK4044/LNK4302 warnings and only `abort_on_error=1` (MSVC ASan rejects
   `detect_leaks=1`); it is evidence for this machine, not a substitute for the
@@ -599,8 +603,9 @@ The run started 2026-10-29 23:45 and finished 2026-10-30 00:13.
   fixture exists to measure a correct implementation against.  A correct v4
   implementation and its round-trip test remain unmeasured.
 - CLOSE is out of scope for this group session: the fresh-tree gates on the
-  final commit, the review pass over the wave-33 diff, the push and the CI
-  dispatch belong to the CLOSE section (wave-33-brief section 2).
+  final commit and the review pass over the wave-33 diff belong to the CLOSE
+  section (wave-33-brief section 2); the push and CI dispatch belong to the
+  coordinator after the approved replay (brief, 05:50 CLOSE note).
 
 WAVE-33-G2-COMPLETE
 
@@ -631,9 +636,10 @@ W33-3.1 detail:
   old list named 15 of the 25 tests.  At the G3 tree the same step reports
   registered 25 / declared 25 with an empty diff
   (`build/w33/W33-G3-registration.log`).
-- The CI jobs themselves are not dispatchable from this session; CLOSE owns
-  the push and the green logs, including this item's acceptance ("the CLOSE CI
-  logs show the app ctest total on both OSs").
+- The CI jobs themselves are not dispatchable from this session; the
+  coordinator owns the push and the green logs after the approved replay,
+  including this item's acceptance ("the post-replay CI logs show the app
+  ctest total on both OSs").
 
 W33-3.2 detail:
 
@@ -780,9 +786,9 @@ G3 group gates (fresh trees configured from scratch on the G3 code tree
   `corpus/` and therefore cannot run on a CI runner.  The brief allowed either
   the rename or a real comparison; this wave took the rename.
 - The CI jobs changed by W33-3.1, W33-3.4 and G2's `ubuntu-asan` cannot be
-  dispatched from this session.  CLOSE owns the push and the green logs,
-  including W33-3.1's acceptance that the CLOSE CI logs show the app ctest
-  total on both OSs.
+  dispatched from this session.  The coordinator owns the push and the green
+  logs after the approved replay, including W33-3.1's acceptance that the
+  post-replay CI logs show the app ctest total on both OSs.
 - `docs/handoff/wave32-verification/gates.md` remains CRLF except this wave's
   added LF line; W33-4.2 (G4) restores LF on the whole file.
 
@@ -1105,9 +1111,10 @@ G4 group gates (fresh trees configured from scratch on the G4 code tree
   neutralised in the tip (the operator name in SummaryInformation and in one
   Var2Data value, plus the local path).  The pre-push guard refuses that
   commit; `964594d` replaced the tip blob with an equal-length neutral
-  version, and the G1 record above states the disposition options (section 0
-  forbids rewriting or force-pushing history and working round the guard, so
-  only the wave owner can authorise a rewrite or another disposition).
+  version, and the G1 record above states the disposition options (the
+  operator approved the coordinator replay on 30 October -- brief, 05:50
+  CLOSE note; outside that replay section 0 forbids rewriting or
+  force-pushing history and working round the guard).
   G4's own range and tip are clean; every G4 item commit quotes the refusal
   and names it as the G1 blocker, not a G4 deferral.
 - W33-4.6 leaves three non-oracle COM savers untouched:
@@ -1125,7 +1132,8 @@ G4 group gates (fresh trees configured from scratch on the G4 code tree
   the save would defeat the measurement.  The exception is documented in
   both scripts and in `scripts/oracle_privacy.py`; it is not a deferral.
 - CLOSE is out of scope for this group session: the fresh-tree gates on the
-  final commit, the review pass over the wave-33 diff, the push and the CI
-  dispatch belong to the CLOSE section (wave-33-brief section 2).
+  final commit and the review pass over the wave-33 diff belong to the CLOSE
+  section (wave-33-brief section 2); the push and CI dispatch belong to the
+  coordinator after the approved replay (brief, 05:50 CLOSE note).
 
 WAVE-33-G4-COMPLETE
