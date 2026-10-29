@@ -575,13 +575,12 @@ PlanResult recalculate(const PlanInput& input) {
     std::vector<std::size_t> cpm_input_index;
     cpm_tasks.reserve(count - result.summaries);
     cpm_input_index.reserve(count - result.summaries);
-    // Manual rows the effective pass saw, pinned, and could not pin.  An unpinned
-    // manual row (no stored Start, an elapsed duration or actuals) is scheduled
-    // like an auto row, which must be visible in PlanResult rather than silently
-    // assumed away.
+    // Manual rows the effective pass saw and pinned.  An unpinned manual row (no
+    // stored Start, an elapsed duration, actuals, or a pin whose finish ran off
+    // the calendar) is scheduled like an auto row, which must be visible in
+    // PlanResult (`manual_unpinned`) rather than silently assumed away.
     std::size_t manual_rows = 0;
     std::size_t manual_pinned = 0;
-    std::size_t manual_pin_failures = 0;
     // Which input rows the effective pass pinned (indexed like input.tasks).  The
     // stored late pair's manual rule (MANUAL LATE PAIR, plan.h) applies only to a
     // pinned row: an unpinned manual row is scheduled like an auto row.
@@ -660,7 +659,6 @@ PlanResult recalculate(const PlanInput& input) {
                 // an unset date (the engine would report overflow on a bad pin).
                 mapped.manual_start = kDateNa;
                 mapped.manual_finish = kDateNa;
-                ++manual_pin_failures;
             } else {
                 ++manual_pinned;
                 pinned_row[index] = 1;

@@ -70,9 +70,17 @@ sweep every file wave 33 added or changed under `tests/`, `core/`, `app/` and `a
 - **CI-2  (ubuntu-asan)  `tests/atomic_write.cpp:50`: unused function `join`
   (`-Werror,-Wunused-function`).**  Remove it (or use it).  Sweep the anonymous-namespace
   and `static` helpers in every test file wave 33 added for others nothing calls.
+- **CI-3  (ubuntu-asan)  `core/plan/plan.cpp:584`: `manual_pin_failures` set but not
+  used (`-Werror,-Wunused-but-set-variable`).**  Added at CLOSE from the CI run of the
+  G0 gates commit (`ci` 40958074116, ubuntu-asan `Build`, 2026-10-29T21:32Z): clang
+  stops the build at 76%.  The counter counted manual rows whose finish ran off the
+  calendar, but `PlanResult::manual_unpinned = manual_rows - manual_pinned` already
+  counts them and nothing read it; the declaration and the increment are removed (no
+  behaviour change).  Log: `build/w33b/CI-3-asan-build-failed.log`.
 - After CI-1 and CI-2 the asan job reaches its tests for the first time: any sanitizer
   report it then raises is a G0 item of this wave (the coordinator re-dispatches and adds
-  it here).
+  it here).  CI-3 shows the same rule applies to any further compile error behind the
+  first one.
 
 ### G1 - the review's Mediums
 
