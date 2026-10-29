@@ -2,7 +2,7 @@
 
 _Written 2026-10-26 by the Opus verifier session.  Baseline: branch `wave31`, cut
 from `wave30` (its verification commit).  The last wave of the unattended run of
-waves 27-31 Tim approved (`plan-waves27-30.md`: wave 31 is "commands part 2", the
+waves 27-31 the operator approved (`plan-waves27-30.md`: wave 31 is "commands part 2", the
 View tab, plus the second view family at Gantt fidelity).
 `docs/handoff/standing-rules.md` binds this wave.  Sources: the plan,
 `docs/ui-command-backlog.md`, and `wave30-verification/review.md` (its

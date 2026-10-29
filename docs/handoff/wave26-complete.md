@@ -246,7 +246,7 @@ Acceptance:
   `build/w26/icons-task.png`, `icons-resource.png`, `icons-report.png`,
   `icons-project.png`, `icons-view.png`, `icons-help.png`,
   `icons-gantt-chart-format.png` - each command's 32 px and 16 px glyph with
-  its group/label/key, for Tim.
+  its group/label/key, for the operator.
 
 Glyph reuse, cross-tab (allowed only where Project reuses the mark):
 `properties.notes` (Task/Resource Notes), `view.gantt` (Task/View Task Views),
@@ -1042,7 +1042,7 @@ check is `build/w26/close-privacy-normalised.log` (labels only).  It is removed
 in `759a856` (W26-REV-1): the row is named by ID, and the normalised scan on the
 CLOSE tree and on every commit message reports **0**.  The name remains in the
 history of those 18 wave-26 commits; removing it needs a history rewrite, which
-the publication hold leaves to Tim, as with the wave-23/24 names.  Future
+the publication hold leaves to the operator, as with the wave-23/24 names.  Future
 scans must run the normalised pass, not only `git grep -F`.
 
 Beyond that: **0 commit messages** on `wave25..wave26` quote a name after the
@@ -1050,7 +1050,7 @@ fix, 0 trees contain a `client-string-<8 hex>` token, and the only tracked
 binary additions in the wave are the two synthetic Gantt-style blobs
 (`tests/data/synthetic-gantt-{style,fonts}.bin`).  The wave-25 residual
 (`tests/data/project_a_golden.tsv`'s unsalted 16-hex task-name hashes) and the
-wave-23/24 plaintext names in history are unchanged and remain Tim's decision
+wave-23/24 plaintext names in history are unchanged and remain the operator's decision
 with the hold.
 
 ### Independent review of `wave25..wave26`

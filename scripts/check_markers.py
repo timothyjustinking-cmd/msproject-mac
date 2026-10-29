@@ -8,6 +8,10 @@ strings and paths -- and it is deliberately broader than that hook:
 
   * EVERY tracked file is scanned, binary included (analysis/*.mpp, *.bin,
     *.tsv), not only text and not only tests/data;
+  * the operator's name, in its full, long-first-name and short-first-name
+    variants, the Windows account, the company folder and the profile paths
+    are all markers; the short first name is matched on ASCII word boundaries
+    so a longer word that merely contains its letters is not a hit;
   * each marker is searched as case-insensitive ASCII, and as UTF-16LE and
     UTF-16BE at BOTH byte alignments (a CFB property set stores UTF-16 and a
     string can start on an odd byte);
@@ -41,6 +45,13 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# W33-CLOSE-H1: a marker matched on ASCII word boundaries.  The short first
+# name is three letters and appears inside ordinary words ("time", "timeout"),
+# so a substring scan would either miss it (if left out, as before this fix)
+# or drown the gate in false positives (if added bare).
+WORD = True
+SUBSTRING = False
+
 
 def _spell(*codes):
     """A marker from its code points, so this file does not contain it."""
@@ -48,21 +59,23 @@ def _spell(*codes):
 
 
 # The committed marker list (audit B-3/B-4).  The client-term list is NOT here.
+# (label, literal, word-bounded)
 MARKERS = [
-    ("operator name", _spell(84, 105, 109, 32, 75, 105, 110, 103)),
-    ("operator first name", _spell(84, 105, 109, 111, 116, 104, 121)),
-    ("Windows account name", _spell(116, 105, 109, 111, 116)),
+    ("operator name", _spell(84, 105, 109, 32, 75, 105, 110, 103), SUBSTRING),
+    ("operator first name", _spell(84, 105, 109, 111, 116, 104, 121), SUBSTRING),
+    ("operator short first name", _spell(84, 105, 109), WORD),
+    ("Windows account name", _spell(116, 105, 109, 111, 116), SUBSTRING),
     ("company folder", _spell(83, 116, 97, 102, 102, 32, 68, 114, 111, 112,
-                              98, 111, 120)),
+                              98, 111, 120), SUBSTRING),
     # User-profile directory fragments, in all three spellings this machine
     # has seen: Windows backslash, Windows drive-slash and POSIX.
-    ("profile path, backslash", _spell(92, 85, 115, 101, 114, 115, 92)),
-    ("profile path, slash", _spell(67, 58, 47, 85, 115, 101, 114, 115, 47)),
-    ("profile path, POSIX", _spell(47, 85, 115, 101, 114, 115, 47)),
+    ("profile path, backslash", _spell(92, 85, 115, 101, 114, 115, 92), SUBSTRING),
+    ("profile path, slash", _spell(67, 58, 47, 85, 115, 101, 114, 115, 47), SUBSTRING),
+    ("profile path, POSIX", _spell(47, 85, 115, 101, 114, 115, 47), SUBSTRING),
     # The pre-Vista profile directory name, still present in old records.
     ("legacy profile folder", _spell(68, 111, 99, 117, 109, 101, 110, 116,
                                      115, 32, 97, 110, 100, 32, 83, 101,
-                                     116, 116, 105, 110, 103, 115)),
+                                     116, 116, 105, 110, 103, 115), SUBSTRING),
 ]
 
 
@@ -74,28 +87,45 @@ def _ascii_class(char):
     return re.escape(char.encode("ascii"))
 
 
-def _utf16_pattern(text, little_endian):
+def _utf16_pattern(text, little_endian, word):
     """The marker as UTF-16 code units at any byte offset, case-insensitive.
 
     Building the pattern as bytes (one unit per character, the low byte padded
     with NUL on the matching side) means `re.search` finds the string whether
     it starts on an even or an odd byte -- which is exactly what "both
     alignments" asks for, without decoding an entire binary file.
+
+    A word-bounded marker also rejects an adjacent ASCII letter code unit, in
+    either byte order, so UTF-16 text is held to the same rule as ASCII text.
     """
     units = []
     for char in text:
         unit = _ascii_class(char)
         units.append(unit + b"\x00" if little_endian else b"\x00" + unit)
-    return re.compile(b"".join(units))
+    body = b"".join(units)
+    if word:
+        body = b"(?<![A-Za-z]\\x00)(?<!\\x00[A-Za-z])" + body + \
+            b"(?![A-Za-z]\\x00)(?!\\x00[A-Za-z])"
+    return re.compile(body)
 
 
 # (label, ASCII, UTF-16LE, UTF-16BE) compiled once.
 _PATTERNS = [
     (label,
-     re.compile(re.escape(text.encode("ascii")), re.IGNORECASE),
-     _utf16_pattern(text, True),
-     _utf16_pattern(text, False))
-    for label, text in MARKERS
+     re.compile((b"(?<![A-Za-z])" + re.escape(text.encode("ascii")) +
+                 b"(?![A-Za-z])") if word
+                else re.escape(text.encode("ascii")), re.IGNORECASE),
+     _utf16_pattern(text, True, word),
+     _utf16_pattern(text, False, word))
+    for label, text, word in MARKERS
+]
+
+# Decoded text (a commit message, a property value): the same word rule.
+_TEXT_PATTERNS = [
+    (label,
+     re.compile((r"(?<![A-Za-z])" + re.escape(text) + r"(?![A-Za-z])") if word
+                else re.escape(text), re.IGNORECASE))
+    for label, text, word in MARKERS
 ]
 
 
@@ -115,8 +145,7 @@ def find_markers(data):
 
 def find_markers_in_text(text):
     """Labels present in already-decoded text (a commit message, a property)."""
-    lowered = text.lower()
-    return [label for label, marker in MARKERS if marker.lower() in lowered]
+    return [label for label, regex in _TEXT_PATTERNS if regex.search(text)]
 
 
 def labels(hits):
@@ -126,8 +155,10 @@ def labels(hits):
 def redact(text):
     """Replace every marker in decoded text with its label, for a failure line."""
     out = text
-    for label, marker in sorted(MARKERS, key=lambda item: -len(item[1])):
-        out = re.sub(re.escape(marker), "[%s]" % label, out, flags=re.IGNORECASE)
+    for label, text_value, word in sorted(MARKERS, key=lambda item: -len(item[1])):
+        pattern = ((r"(?<![A-Za-z])" + re.escape(text_value) + r"(?![A-Za-z])")
+                   if word else re.escape(text_value))
+        out = re.sub(pattern, "[%s]" % label, out, flags=re.IGNORECASE)
     return out
 
 
@@ -281,8 +312,9 @@ def self_test():
 
     name = MARKERS[0][1]
     first = MARKERS[1][1]
-    account = MARKERS[2][1]
-    folder = MARKERS[3][1]
+    short = MARKERS[2][1]
+    account = MARKERS[3][1]
+    folder = MARKERS[4][1]
 
     planted = [
         ("ASCII, mixed case", b"prefix " + name.swapcase().encode("ascii") +
@@ -295,9 +327,26 @@ def self_test():
          "Windows account name"),
         ("UTF-16BE at offset 1, mixed case",
          b"X" + folder.swapcase().encode("utf-16-be"), "company folder"),
+        ("ASCII short name, mixed case", b"a " + short.swapcase().encode("ascii") +
+         b" b", "operator short first name"),
+        ("UTF-16LE short name at offset 1", b"X" + short.encode("utf-16-le"),
+         "operator short first name"),
+        ("UTF-16BE short name at offset 1",
+         b"X" + short.swapcase().encode("utf-16-be"),
+         "operator short first name"),
     ]
     for label, data, expected in planted:
         expect(expected in [hit for hit, _ in find_markers(data)], label)
+
+    # The short name must not be found inside an ordinary word.
+    for label, data in (
+            ("ASCII word containing the short name",
+             b"time timeout timer estimated"),
+            ("UTF-16LE word containing the short name",
+             b"X" + "time".encode("utf-16-le")),
+            ("UTF-16BE word containing the short name",
+             b"X" + "time".encode("utf-16-be"))):
+        expect(find_markers(data) == [], label)
 
     clean = (b"a clean line with no operator marker, and a UTF-16LE word\n"
              + "a clean line".encode("utf-16-le"))
@@ -306,8 +355,16 @@ def self_test():
            "a clean message reports no marker")
     expect("operator name" in find_markers_in_text(name.upper()),
            "a message in upper case is found")
+    expect("operator short first name" in find_markers_in_text("for " + short),
+           "a message carries the short first name")
+    expect(find_markers_in_text("time and timeout") == [],
+           "a message word is not the short first name")
     expect(redact("x" + name + "y") == "x[operator name]y",
            "redact replaces the literal with its label")
+    expect(redact("x " + short + " y") == "x [operator short first name] y",
+           "redact keeps the short name's word boundaries")
+    expect(redact("x time y") == "x time y",
+           "redact leaves a word containing the short name alone")
 
     if failures:
         for failure in failures:

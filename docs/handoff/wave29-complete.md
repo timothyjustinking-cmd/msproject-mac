@@ -1280,7 +1280,7 @@ are docs-only):
   is logged with exit codes in `build/w29/close-push5-preflight.log`.
 - `git grep -nE "client-string-[0-9a-f]{8}"`: no matches.
 
-The wave-28 push blocker is gone: Tim approved the `076438f` rewrite, `wave28`
+The wave-28 push blocker is gone: The operator approved the `076438f` rewrite, `wave28`
 was replayed with the clean blob and pushed (`21646f4`), and `wave29` was
 moved onto it (`docs/handoff/wave29-sha-map.txt`); the guard now passes the
 whole range.  The residual tree state is unchanged: two pre-wave fixtures
@@ -1289,7 +1289,7 @@ tracked text files (historical docs) still carry the operator's name, no gate
 scans the whole tree for it, the 13 unsalted FNV-1a display-name hashes remain
 in older wave-26 commits and `tests/data/project_a_golden.tsv`, and the
 156-name scanner still cannot see skipped-row names.  Those are listed under
-Found, not fixed; a repo-wide purge is Tim's decision.
+Found, not fixed; a repo-wide purge is the operator's decision.
 
 ### Independent review of `wave28..wave29`
 
@@ -1464,7 +1464,7 @@ the guard was never worked round.
   `tests/data/wave23-outline.mpp`) still carry it three times each, 69 tracked
   text files carry it, and the wave-29 privacy gates are HEAD/range scans for
   client names.  The 156-name scanner cannot see skipped-row names.  A
-  whole-tree check and the purge are Tim's decision.  [High - privacy scope]
+  whole-tree check and the purge are the operator's decision.  [High - privacy scope]
 * **F6 - the `project_a` task-order gate still expects `""` / level `-1` for
   the project row** where Project measures `"0"` / 0
   (`app_qt/tests/task_order_test.cpp:342-344`); the twelve task rows are
@@ -1560,7 +1560,7 @@ the guard was never worked round.
   count is unchanged).  [Low]
 * **The 13 unsalted FNV-1a display-name hashes remain in older wave-26 commits
   and `tests/data/project_a_golden.tsv`.**  Rewriting history is forbidden by
-  the brief; both remain Tim's decision.  [Privacy]
+  the brief; both remain the operator's decision.  [Privacy]
 * **The generated backlog still does not list the five dynamic %-complete
   ribbon controls, Update Project or Split Task.**  [Low - decision 9's
   backlog stays incomplete]

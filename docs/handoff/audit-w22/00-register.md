@@ -1,11 +1,11 @@
-# Wave-22 audit register (closed 2026-10-23, Tim + Fable)
+# Wave-22 audit register (closed 2026-10-23, the operator + Fable)
 
 Baseline: docs e252041, code abeafd2 (CI run 39912313201). Checkpoints live here (build/ is git-ignored); finals go to docs/handoff/.
 
 DECISIONS (closed - do not reopen)
 1. Fable runs both audits on this box as coordinator: corpus, COM oracle, desktop control of MS Project, git, one CI dispatch.
 2. DeepSeek runs the fix session from the work order, as coordinator with full access, on deepseek-flash via the Claude CLI at https://api.deepseek.com/anthropic, plus a Python relay.
-3. Tim stores the key himself (DEEPSEEK_API_KEY, user scope).
+3. The operator stores the key (DEEPSEEK_API_KEY, user scope).
 4. Setup: global npm Claude CLI; per-process launcher tools/deepseek/deepseek-claude.cmd; relay tools/deepseek/relay.py (urllib).
 5. The work order IS the wave-23 brief (docs/handoff/wave23-brief.md): audit fixes first, then the wave-22 ranked open items.
 6. No ask-first queue: DeepSeek fixes everything and reports after. Backstop: gates are hard stops, golden/fixture changes justified per commit, verifier pass on the fix diff.

@@ -3,7 +3,7 @@
 _Written 2026-10-23 by the Fable audit session from `docs/handoff/audit-w22-findings.md`.
 Baseline audited: docs `e252041`, code `abeafd2`.  Drift at hand-over: none in code;
 this brief, the findings file, `docs/handoff/audit-w22/*` and `tools/deepseek/*`
-are the only additions.  Operator rulings (Tim, 2026-10-23) are final and are
+are the only additions.  Operator rulings (2026-10-23) are final and are
 listed in section 6.  This file is the one document the fix session reads; when
 something here conflicts with an older handoff, this file wins._
 
@@ -27,7 +27,7 @@ something here conflicts with an older handoff, this file wins._
   in the generated backlog; nothing is faked.
 - **Branch:** work on `wave23` (create from `main` at e252041).  Commit per finding
   id (`A-7: ...`, `B-1: ...`), one lane per commit, honest numbers in the message.
-  Push the branch.  **Do not merge to `main` and do not force-push**: Tim merges
+  Push the branch.  **Do not merge to `main` and do not force-push**: The operator merges
   after reading `wave23-complete.md`.
 - **Gates are hard stops.**  Before every commit: `ctest -E plan_recalc` on the core
   tree, `plan_recalc_tests` with `MPP_NO_CORPUS=1`, M2 `recalc --compare` 332/332,
@@ -265,7 +265,7 @@ captures do not settle), record the question and the default you took in
 
 ## 7. Talking to the auditor
 
-The Fable session that wrote this can be reached through Tim; a relay to DeepSeek
+The Fable session that wrote this can be reached through the operator; a relay to DeepSeek
 exists at `tools/deepseek/relay.py` and the CLI launcher at
 `tools/deepseek/deepseek-claude.cmd` (reads the key from
 `%LOCALAPPDATA%\deepseek\api_key.txt` or `DEEPSEEK_API_KEY`).  Questions about a

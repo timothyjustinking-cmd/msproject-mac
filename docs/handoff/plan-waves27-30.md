@@ -5,8 +5,8 @@ _Proposed by the Opus verifier session after the wave-26 assessment
 fresh session per group, then verified by fresh-tree gates and one independent
 review.  Only Critical or High findings jump the queue; everything else goes to the
 wave it belongs to.  The workflow changes below were approved and implemented by
-Tim's instruction on 24 October 2026 (`standing-rules.md`); the wave order still
-awaits his go-ahead._
+the operator's instruction on 24 October 2026 (`standing-rules.md`); the wave order still
+awaits the operator's go-ahead._
 
 ## How every wave runs (changes from wave 26)
 
@@ -20,7 +20,7 @@ awaits his go-ahead._
 - **CI every wave** once the publication hold is lifted: push the wave branch, run
   both workflows on all three OSs.
 - **Watching.** The watcher wakes only on BLOCKED, STALLED or done.
-- **Builds outside Dropbox sync** (Tim's decision).
+- **Builds outside Dropbox sync** (the operator's decision).
 
 ## Wave 27 - make the save safe, get CI back (small; then merge)
 
@@ -77,7 +77,7 @@ Estimate: 8-12 hours, likely split into waves 30 and 31.
   percent edit on a task with its own calendar is accepted, shown, then dropped at
   save as a warning (refuse it up front).
 - R28-7 Medium: `076438f` keeps the operator's name in local history; the push is
-  blocked until Tim rules (verifier's job, not a wave item).
+  blocked until the operator rules (verifier's job, not a wave item).
 - R28-8 Low: the Task Form offers Name, Duration and Finish as editable but never
   saves them; a typed value can be dropped silently when the selection moves.
 - R28-9 Low: new tests print SKIP and pass when a fixture is missing.
@@ -145,7 +145,7 @@ Team Planner, Network Diagram, Calendar and Report views; the constraint-mso eng
 case; macOS launch and notarisation; the hashed task names in
 `tests/data/project_a_golden.tsv`; the remaining review Lows.
 
-## Decisions needed from Tim before wave 27
+## Decisions needed from the operator before wave 27
 
 1. ~~Lift the publication hold so waves are pushed and CI runs.~~ Done 24 Oct 2026.
 2. ~~Move builds out of Dropbox sync (Dropbox-ignore `build/`).~~ Done 24 Oct 2026.

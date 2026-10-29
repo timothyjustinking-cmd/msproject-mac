@@ -42,7 +42,7 @@ W28-0.1 detail:
   reason.  The task-calendar scenario's recorded expectations still hold (the
   engine suite passes) because only those text bytes moved.
 - History is not rewritten; the old blobs still hold the path and the name,
-  and that decision is Tim's (see the blocker below).
+  and that decision is the operator's (see the blocker below).
 
 W28-0.2 detail:
 
@@ -127,7 +127,7 @@ check pass); only the blob committed in `076438f` still carries the name.
   follow-up replaced the name), but the blob added in `076438f` still carries
   the operator's name, and `guard_names.py wave27..wave28` scans every added
   blob in the range.  Section 0 forbids rewriting history or working round the
-  guard.  Only Tim can authorize a rewrite of that commit or rule on the
+  guard.  Only the operator can authorize a rewrite of that commit or rule on the
   guard; until then CLOSE cannot push the branch.  This is recorded here and
   in `d1b5a8a` rather than resolved locally.
 - **Two pre-wave fixtures still embed the operator's name at HEAD.**
@@ -140,7 +140,7 @@ check pass); only the blob committed in `076438f` still carries the name.
   same in-place method could clean the tip, but it would move those pins and
   would not remove the historical blobs; the tree also carries the name in 69
   tracked text files (historical docs).  A repo-wide name purge is a history
-  decision for Tim, not a fixture edit under this wave.
+  decision for the operator, not a fixture edit under this wave.
 - **Project's stored date cache and its displayed schedule differ.**  Project's
   own Unlink save stores ID 4 at 2026-12-11..12-14 but displays
   2026-12-17..12-18 after the automatic recalculation on open; the same
@@ -731,7 +731,7 @@ the fixture pins are exact (72 documented hashes, 52 tracked `.mpp`, 94 paths,
 |---|---|---|---|
 | F1 | **High** | The actuals save-pair test's FixedMeta expectation is the control with only the edited rows' `+2/+3` count taken from Project.  Project also changes `+44` (`00<->08`) on the edited entry in 6/7 pairs and bytes in the `+8..23` blob in 6/7; the writer does not produce either, and the test still passes.  Under brief section 1 those unproduced fields are a failing check, not a masked one.  Record line 183 overstated the match. | **first in wave 29**: measure `+44`/blob semantics through Project, write them, or carry them as a named expected-failing check; errata below states the current truth. |
 | F2 | **High** | The outline test does not check the assignment side effect.  Indent and summary tombstones task 1's assignment (FixedMeta state 0/count 3 -> state 2/count 0); outdent creates a new live assignment (uid 4, FixedData 330->440, Var2Data 376->500, VarMeta 96->144).  The port leaves `TBkndAssn` at the control and the test only prints row counts. | **first in wave 29**: a measured assignment tombstone/create writer, then a real check; `outline.h` already documents that the rows are not written. |
-| F3 | **High** | The privacy claim is scoped to the seven path fixtures, not the tree: two pre-wave fixtures still carry the operator's name at HEAD, `check_fixtures.py` scans paths only, `scan_client_names.py` scans client names only and `guard_names.py` is range-based, so no gate scans the whole tree for the operator's name.  The residual is disclosed in Found, not fixed. | **record corrected here**; a whole-tree operator-name scan (or a tree-wide check in `check_fixtures.py`) and the Tim-owned purge are wave 29 items. |
+| F3 | **High** | The privacy claim is scoped to the seven path fixtures, not the tree: two pre-wave fixtures still carry the operator's name at HEAD, `check_fixtures.py` scans paths only, `scan_client_names.py` scans client names only and `guard_names.py` is range-based, so no gate scans the whole tree for the operator's name.  The residual is disclosed in Found, not fixed. | **record corrected here**; a whole-tree operator-name scan (or a tree-wide check in `check_fixtures.py`) and the operator's purge are wave 29 items. |
 | F4 | Medium | The outline `+8..23` blob mask is broader than the measurement: Project changes only `+9,+12,+16,+17,+18` on the edited entry, 11 of 16 blob bytes stay identical and untouched entries are unchanged, so the "fresh per-save identity token" justification is unsupported. | wave 29 with F2/A1; errata corrects the wording. |
 | F5 | Medium | Code and test comments claim "Project's reopen of the port's save is the acceptance" for actuals, outline and new-task mode, but no reopen artifact exists for those three port saves (the only reopen JSON is W28-0.4 Unlink; the other oracles reopen Project's own files). | wave 29: run Project's reopen on the three port saves and record it; comments corrected then. |
 | F6 | Low | W28-0.2 row 0: Project measures OutlineNumber `"0"` / level 0; the test expects `""` / `-1`.  Task rows 1..12 are pinned correctly. | queued (wave 29). |
@@ -780,7 +780,7 @@ exactly one item: the `tests/data/synthetic-calendars.mpp` blob added in
 is clean).  Because the branch is not on the remote, both `gh workflow run`
 dispatches failed with `HTTP 422: No ref found for: wave28` (qt.yml and
 ci.yml).  The full output is `build/w28/close-push.log`.  Section 0 forbids
-rewriting history or working round the guard, so only Tim can authorize a
+rewriting history or working round the guard, so only the operator can authorize a
 rewrite of `076438f` or rule on the guard; **no CI run exists for wave 28**.
 The rest of the guard's checks pass: no screenshots or corpus files are added,
 and every other added blob is clean.  The attempt was made at the final code
@@ -826,7 +826,7 @@ tree `7a69a40`; the CLOSE commit is docs-only and is not pushed either.
   each, 69 tracked text files carry it, `check_fixtures.py` checks paths only,
   the line-based scan looks for client names, and `guard_names.py` is
   range-based.  The residual is disclosed; a whole-tree check and the purge are
-  Tim's decision and wave 29's tooling item.  [High - privacy scope]
+  the operator's decision and wave 29's tooling item.  [High - privacy scope]
 * **F5 - the reopen acceptance was never run for the actuals, outline and
   new-task saves.**  The only reopen artifact is W28-0.4 Unlink; the code
   comments that cite reopen acceptance must be corrected with it.  Wave 29.
@@ -849,13 +849,13 @@ tree `7a69a40`; the CLOSE commit is docs-only and is not pushed either.
 * **A7 - fixture commits carry the hash registry, README row and provenance
   script** (`ae1a065`, `b427bde`, `fc7272e`, `64c3b4c`), though rule 6 says a
   fixture commit carries fixtures only; the rule text and practice need
-  reconciling by Tim.  [Medium - process]
+  reconciling by the operator.  [Medium - process]
 * **The push is blocked by the local pre-push guard.**  Commit `076438f`
   added `tests/data/synthetic-calendars.mpp` with the operator's name inside the
   re-saved calendar blob; `d1b5a8a` replaced the name at the tip, but the blob
   is still in the push range `origin/wave27..wave28`.  The final tree is clean
   and every other guard check passes.  Section 0 forbids rewriting history or
-  working round the guard; only Tim can authorize a rewrite of that commit or
+  working round the guard; only the operator can authorize a rewrite of that commit or
   rule on the guard.  Until then the branch cannot be pushed and CI cannot run.
   [High - privacy/process]
 * **Two pre-wave fixtures at HEAD still store the operator's name** three times
@@ -865,7 +865,7 @@ tree `7a69a40`; the CLOSE commit is docs-only and is not pushed either.
   and `synthetic-base.mpp` is the engine suite's base with seven scenario
   oracles and two scripts pinned to its hash; the same in-place method could
   clean the tip but would move those pins and would not remove the historical
-  blobs.  A repo-wide purge is Tim's decision.  [Privacy]
+  blobs.  A repo-wide purge is the operator's decision.  [Privacy]
 * **Split Task is deferred** (W28-5.1): the segmented 128-byte assignment work
   contour, its VarMeta relocation and the whole-plan slack/date rewrite are not
   decoded; the button keeps the exact decision-9 tooltip and the committed pair
@@ -913,7 +913,7 @@ tree `7a69a40`; the CLOSE commit is docs-only and is not pushed either.
 * **The 13 unsalted FNV-1a display-name hashes** removed in wave 27 remain in
   the older wave-26 commits, and `tests/data/project_a_golden.tsv` still carries
   unsalted 16-hex name hashes.  Rewriting history is forbidden by the brief;
-  both remain Tim's decision.  [Privacy - recorded in the Privacy section]
+  both remain the operator's decision.  [Privacy - recorded in the Privacy section]
 * **The generated backlog does not list the five dynamic %-complete ribbon
   controls, Update Project or Split Task**: `docs/ui-command-backlog.md` is
   generated from the menu/ribbon command model; `ribbon_pin.tsv` and the live

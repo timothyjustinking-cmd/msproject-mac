@@ -11,9 +11,9 @@ wins._
 
 ## 0. Publication hold - unchanged from wave 24 section 0
 
-Tim has not yet ruled on the client data already on the public repo.  Every rule in
+The operator has not yet ruled on the client data already on the public repo.  Every rule in
 `wave24-brief.md` section 0 still applies: **no push, no history rewrite, no
-force-push, no deletion of the backup branches, CI only if Tim lifts the hold**, and
+force-push, no deletion of the backup branches, CI only if the operator lifts the hold**, and
 `build/audit-w22/scan_client_names.py HEAD --messages HEAD~1..HEAD` must report 0
 hits for every commit.  When the hold is the only thing left, end with `BLOCKED:
 publication hold` as wave 24 did.
@@ -62,7 +62,7 @@ again ON (captures local).  Derive each colour from the row whose type is unambi
 re-pin the parity/ux/shell gates from that measurement, and add an
 auto-scheduled reference to the parity JSON so this class of error fails the gate.
 
-### 2.2 The privacy scrub, done properly (tree only; history is Tim's)
+### 2.2 The privacy scrub, done properly (tree only; history is the operator's)
 
 **W25-3  S3 / S4 (Medium)  Replace `client-string-<sha8>` and the person-name
 hash pins.**  Unsalted 8-hex prefixes of short names are invertible from a guess;

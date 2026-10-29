@@ -275,7 +275,7 @@ new binary fixtures (UTF-16 strings are only stock bar-style names and the fonts
 Calibri / Segoe UI), or the four new measures JSON files (no file names; only
 local capture paths under corpus/reference/).  The history residual the record
 discloses (a task name in 18 wave-26 commit trees) is unchanged and remains
-Tim's decision.
+the operator's decision.
 
 ## Claims in wave26-complete.md not supported by the diff
 

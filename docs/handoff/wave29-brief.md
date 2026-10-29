@@ -2,13 +2,13 @@
 
 _Written 2026-10-25 by the Opus verifier session.  Baseline: branch `wave29`, cut
 from `wave28` (its verification commit).  Part of the unattended run of waves 27-31
-Tim approved (`plan-waves27-30.md`).  `docs/handoff/standing-rules.md` binds this
+the operator approved (`plan-waves27-30.md`).  `docs/handoff/standing-rules.md` binds this
 wave.  Sources: the plan, and `wave28-verification/review.md` (its four High
 findings are G0; it found no Critical)._
 
 ## 0. Publication
 
-_Update 2026-10-25: Tim approved rewriting `076438f`; `wave28` was replayed with
+_Update 2026-10-25: The operator approved rewriting `076438f`; `wave28` was replayed with
 the clean blob, pushed, and `wave29` was moved onto it (same trees; old-to-new ids
 in `docs/handoff/wave28-verification/sha-map.txt` and
 `docs/handoff/wave29-sha-map.txt`).  The guard should now pass: push and
@@ -16,7 +16,7 @@ dispatch normally in CLOSE.  The paragraph below is the original text._
 
 `wave28` is not on the remote: the pre-push guard refuses the intermediate
 `tests/data/synthetic-calendars.mpp` blob added in `076438f` (the operator's name;
-`d1b5a8a` cleaned the tip).  Whether that commit is rewritten is Tim's decision and
+`d1b5a8a` cleaned the tip).  Whether that commit is rewritten is the operator's decision and
 the verifier's job, not this wave's.  So in CLOSE: run the guard over the push range
 and record its result; attempt the push and the two dispatches only if the guard
 passes; otherwise record the refusal exactly as wave 28 did and finish CLOSE.  Never
@@ -97,7 +97,7 @@ measured shape at a time.
 
 ### G1 - PROJECT_A gaps (decision 7)
 
-_Verifier addendum 2026-10-25 ~05:30 (Tim asked for the High findings to be
+_Verifier addendum 2026-10-25 ~05:30 (the operator asked for the High findings to be
 actioned): G1 starts with these two items, before W29-1.1._
 
 - **W29-1.0a  (High, CI)  Wave 28's CI is red on two platforms; both errors are

@@ -9,7 +9,7 @@ over Remote Control._
 
 You are the Opus coordinator for MS Project port waves 33 and 34 in `D:\dev\msproject-mac`.
 
-Background. Tim is porting Microsoft Project (WINPROJ.EXE, Project 2021 installed on this
+Background. The operator is porting Microsoft Project (WINPROJ.EXE, Project 2021 installed on this
 box) to a native app for personal use, with 100 % parity as the acceptance bar. `main` =
 `17f5782` holds waves 23-32, merged 27 Oct 2026 after a history rewrite, CI green on all
 three OSs. The build method: a Claude coordinator and verifier; DeepSeek (deepseek-flash
@@ -30,8 +30,8 @@ evidence under `build/audit-w32/`, git-ignored) with two work orders:
 say main = fcb1c10, nothing merged); trust `git` and the assessment until wave 33 G4 fixes
 them. Audit finding B-8: the DeepSeek driver runs with `--permission-mode auto`,
 Bash/Write/Edit/WebFetch, no human gate, on a box where `corpus/` and the company Dropbox
-are readable, with the DeepSeek key in the agent's environment; Tim decided on 29 Oct to
-run waves 33 and 34 here anyway. Tim's standing instruction for unattended runs: run the
+are readable, with the DeepSeek key in the agent's environment; the operator decided on 29 Oct to
+run waves 33 and 34 here anyway. The operator's standing instruction for unattended runs: run the
 waves back to back, verify each, merge when the rule is met, then STOP and give a thorough
 status report; never force-push; never work round the pre-push guard; never commit client
 task names, project titles or people's names (rows by ID). The previous coordinator
@@ -54,7 +54,7 @@ Step 0, before any DeepSeek launch (on branch `wave33`, cut from `main`):
 2. Edit `tools/deepseek/run-wave.ps1`: remove `WebFetch` and `WebSearch` from `$tools`
    (B-8: no network reads for the DeepSeek agent). Commit as "B-8: the DeepSeek agent gets
    no WebFetch or WebSearch".
-3. Tell Tim in your first report that two items are his alone: rotate the DeepSeek key
+3. Tell the operator in your first report that two items are the operator's alone: rotate the DeepSeek key
    (B-8), and send the GitHub purge request (B-1, Critical;
    `build/audit-w22/scrub/github-support-request.md` in the Dropbox clone, adding the 329
    ids from `docs/handoff/wave32-verification/rewrite-sha-map.txt`).
@@ -75,10 +75,10 @@ dispatch `qt.yml` and `ci.yml` on `wave33`; confirm the CI logs show the `app/` 
 total on both OSs, the asan job and the marker check. Merge rule: merge `wave33` into
 `main` only if CI is green on all three OSs and the review has no Critical or High;
 otherwise write a fix-only `wave33b` brief (G0 = the review's Critical/High) and run it
-first. Report to Tim before starting wave 34.
+first. Report to the operator before starting wave 34.
 
 Run wave 34 the same way (`-Groups G0,G1,G2,G3,G4,G5,G6,CLOSE`) on `wave34` cut from the
-merged `main`, honouring the brief's decisions table defaults unless Tim has answered them
+merged `main`, honouring the brief's decisions table defaults unless the operator has answered them
 (decision 1: sequential; decision 5: stop after G4 and report if the wave passes 12 hours,
 G5-G6 become wave 35). COM measurements run only through `scripts/oracle_lock.py` on copies
 under `C:\w34\`; Project closed and the lock released after each. Verify, review, push, CI,
@@ -88,7 +88,7 @@ Rules for you: never force-push, never rewrite history, never bypass the pre-pus
 never commit a client task name, project title or person's name, never touch `corpus/`
 beyond read-only use by the existing tooling, never build inside the Dropbox folder. Commit
 messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. If a group
-reports BLOCKED on something only Tim can resolve, record it, continue with the next
+reports BLOCKED on something only the operator can resolve, record it, continue with the next
 independent group, then report. Report partial results at every wave boundary; never go
 silent for hours. At the end of wave 34 (or its stop point): STOP, start nothing, write a
 thorough status report as `docs/handoff/status-2026-11-NN.md` (date from the clock)
@@ -101,5 +101,5 @@ to `TASKS.md` under `## Open` with a default outcome and owner on every dated ro
 
 Done looks like: wave 33 merged into `main` with CI green including the `app/` suite; wave
 34 merged or stopped at its decision-5 point with the decode notes and pairs committed; the
-status report written; memory and tasks updated; a final message to Tim with the commit
-ids, what closed, what is still open, and what only he can do.
+status report written; memory and tasks updated; a final message to the operator with the commit
+ids, what closed, what is still open, and what only the operator can do.

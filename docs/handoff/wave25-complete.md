@@ -170,15 +170,15 @@ summary-line geometry), not a palette error.
   with opaque labels would either weaken the gate or need a keyed hash whose
   key is not committed, and re-recording needs the full export (the readable
   copy is not on this machine).  No new client-derived hash was added in wave
-  25; this is wave-24 carrier state and belongs with Tim's publication decision.
+  25; this is wave-24 carrier state and belongs with the operator's publication decision.
 * **Fixed by the second review (W25-REV2):** a dead row's orphaned client name
   was a plaintext string literal in `test_project_a`.  The name scanner only
   sees LIVE rows (it dumps tasks/resources/titles), so it could not catch an
   orphan block; this was the one real name literal left in the tree, and it is
   removed.  The scanner's live-row blind spot is noted here for the next scrub.
-* **Residual 2 (Tim only):** the plaintext names remain in public git history
+* **Residual 2 (operator only):** the plaintext names remain in public git history
   (waves 23-24 commits).  The tree scrub cannot remove history; the publication
-  hold and the rewrite/visibility decision remain Tim's.
+  hold and the rewrite/visibility decision remain the operator's.
 
 ## 6. Gate holes that are now closed (a summary of §1)
 
@@ -191,8 +191,8 @@ summary-line geometry), not a palette error.
 
 ## 7. CI (per brief section 0)
 
-**CI not dispatched: publication hold.**  Tim has not lifted the hold
-(`START-HERE.md` carries no lift line and there is no commit from him saying so),
+**CI not dispatched: publication hold.**  The operator has not lifted the hold
+(`START-HERE.md` carries no lift line and there is no commit from the operator saying so),
 so nothing was pushed and no workflow was run.  `origin/wave25` does not exist;
 a `workflow_dispatch` needs the ref on the remote, which the hold forbids.  The
 local fresh-tree gates in §9 are the evidence.  When the hold is lifted:
@@ -274,7 +274,7 @@ styles (it closes the two named expected failures in `qt_stored_table_corpus`),
 then W25-13's file bar styles and W25-14's timescale tiers.  Keep every gate in
 §9 green before each commit; the publication hold still governs any push.  The
 R16/R17 dispositions in §2.3 belong to W25-21, and the privacy residual in §5
-(golden-TSV hashes, history) is Tim's decision with the hold.
+(golden-TSV hashes, history) is the operator's decision with the hold.
 
 ## 11. Independent review of `2561a51..wave25` (verification gate 3)
 
@@ -292,7 +292,7 @@ is fixed or listed below.  The review-fix commits are named in §1.
 | 5 | Medium | the macOS PDF subtitle still counted the project row | **FIXED** in `4c28039` using `task_row_count` (main.mm is compiled only by the macOS CI job; not compiled locally) |
 | 6 | Medium | the W25-8 fixture-label pin was a pointer comparison (`const char*` against a literal) | **FIXED** in `85e03d3` (`std::string(label) == "project_a"`) |
 | 7 | Medium | `kLinkCritical` was the one measured colour no test pinned | **FIXED** in `d61af79` (qt_parity_geometry asserts (221,37,34)) |
-| 8 | Medium | the golden TSV still carries unsalted 16-hex task-name hashes; START-HERE overclaimed that every name-hash pin was gone | **START-HERE corrected**; the carrier is the documented residual in §5 (Tim's decision with the hold) |
+| 8 | Medium | the golden TSV still carries unsalted 16-hex task-name hashes; START-HERE overclaimed that every name-hash pin was gone | **START-HERE corrected**; the carrier is the documented residual in §5 (the operator's decision with the hold) |
 | 9 | Low/Med | `task_row_count` could not tell an empty zero-match filter from no filter | **FIXED** in `4c28039` (two overloads; empty list = 0); export_tests pins it |
 | 10 | Low | the smoke chart count compared the layout to the source it was built from | **FIXED** in `a4ac887` (independent fixture expectation).  The smoke is still only run on synthetic-base; running `smoke_plan` on a row-shown fixture is listed for a W25-10 follow-up |
 | 11 | Low | the status marker borrowed `kBarCritical` | **FIXED** in `d61af79` (`kStatusLine`, explicitly unmeasured chrome) |

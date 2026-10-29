@@ -1,7 +1,7 @@
 # Wave 27 brief - make the save safe, get CI back (for DeepSeek, coordinator role)
 
 _Written 2026-10-24 by the Opus verifier session.  Baseline: branch `wave27`, cut
-from `wave26` = `1299cc7` (pushed).  Tim approved the plan (`plan-waves27-30.md`) and
+from `wave26` = `1299cc7` (pushed).  The operator approved the plan (`plan-waves27-30.md`) and
 asked for waves 27-31 to run back to back.  `docs/handoff/standing-rules.md` binds
 this wave; read it first.  Sources: `wave26-verification/review.md` (its two High
 findings are G0), the first CI runs on `wave26`, and the queued review items._
@@ -53,7 +53,7 @@ rest listed under "Found, not fixed").
 - **W27-1.3** Push, dispatch both workflows on `wave27`, and fix whatever the first
   complete macOS and Linux runs report (`app/main.mm` has not been compiled since
   wave 24).  Repeat until both workflows are green on all three OSs or a failure needs
-  Tim (then BLOCKED with the run id).
+  the operator (then BLOCKED with the run id).
 
 ### G2 - commit the decoding evidence
 

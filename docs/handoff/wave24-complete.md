@@ -184,8 +184,8 @@ client string is quoted; rows are named by ID.
 
 ## 5. CI (per brief section 0)
 
-**CI not run: publication hold.**  Tim has not lifted the hold (`START-HERE.md`
-carries no lift line and there is no commit from him saying so), so no workflow
+**CI not run: publication hold.**  The operator has not lifted the hold (`START-HERE.md`
+carries no lift line and there is no commit from the operator saying so), so no workflow
 was dispatched and nothing was pushed.  The local gates above are the evidence.
 When the hold is lifted, dispatch **both** workflows explicitly
 (`workflow_dispatch` on `ci.yml` and `qt.yml`): `workflow_run` only registers
@@ -240,7 +240,7 @@ close record).  Its findings and dispositions:
 | sev | finding | disposition |
 |---|---|---|
 | HIGH | a NINE-character multi-word client resource name survived in an `app_qt/sheet_views.cpp` comment; the scan's `MIN_LEN = 10` never saw it, so "0 hits" was not evidence | **FIXED**: the comment no longer quotes any string; the scanner now also searches multi-word RESOURCE names down to 6 characters (generic short words are not added); re-scanned tip is 0 |
-| MED | the five older tracked `.mpp` fixtures (and two of them) embed the operator name / company path; wave 24 neutralised only the new fixtures | **DEFERRED (R14 residual)**: rebuilding synthetic-base/calendars and the wave-23 pair would change their pinned bytes and the eight engine oracles recorded from them; listed for Tim's decision together with the publication hold |
+| MED | the five older tracked `.mpp` fixtures (and two of them) embed the operator name / company path; wave 24 neutralised only the new fixtures | **DEFERRED (R14 residual)**: rebuilding synthetic-base/calendars and the wave-23 pair would change their pinned bytes and the eight engine oracles recorded from them; listed for the operator's decision together with the publication hold |
 | MED | MPP12 Flag11..20 were copied into the wrong slots: their ids are not contiguous with Flag10, and Number1..5 ids fell in the accepted range | **FIXED**: the MPP12 path maps through `custom_field_kind()` / `custom_field_index()`; two MPP12 assertions pin the id mapping (the available MPP12 fixture has only Flag1 set, so the Flag11 branch is asserted against the custom field, not a set bit) |
 | MED | the project-row editability assertion was removed from shell_test and its replacement did not exist | **FIXED**: `qt_uid_routing` now asserts the project row's cell is not editable AND `setData` is refused |
 | MED | the project-row double-click test could pass without the click landing on row 0 | **FIXED**: `indexAt` must resolve to the project cell and the `doubleClicked` signal must fire exactly once; the first real-click block now also asserts the dialog's Name field is ID 1 |

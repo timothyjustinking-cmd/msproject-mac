@@ -207,7 +207,7 @@ commit (IDs only), but
   contain some of them.
 
 Removing them from the **history** needs a rewrite and a force-push, which the
-brief forbids and the harness blocks.  That decision is Tim's.  Until it is
+brief forbids and the harness blocks.  That decision is the operator's.  Until it is
 made, the final review-fix/docs commits are local only, and CI has not run on
 the final sha.  The honest state at hand-over:
 

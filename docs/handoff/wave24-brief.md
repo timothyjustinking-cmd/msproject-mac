@@ -9,12 +9,12 @@ gates and independent review (`docs/handoff/wave23-verification/gates.md`,
 the items `wave23-complete.md` deferred.  This file is the one document the fix
 session reads; where it conflicts with an older handoff, this file wins._
 
-## 0. Publication hold (read first; Tim decides, you do not)
+## 0. Publication hold (read first; the operator decides, you do not)
 
 Client data is already on the PUBLIC GitHub repo: corpus task names, both client
 project titles and two people's names, in about 15 files on `main` (mostly from
-wave 22's `abeafd2`) and in pushed wave-23 commits.  Tim has not yet ruled on making
-the repo private or rewriting history.  Until he does:
+wave 22's `abeafd2`) and in pushed wave-23 commits.  The operator has not yet ruled on making
+the repo private or rewriting history.  Until the operator does:
 
 - **Do not push anything.** Commit locally on `wave24` only.  A local pre-push
   guard (`.git/hooks/pre-push` + `build/audit-w22/guard_names.py`) refuses any push
@@ -23,8 +23,8 @@ the repo private or rewriting history.  Until he does:
   round either.
 - **Do not rewrite history or force-push** any branch.  Do not delete the local
   `wave23-with-screenshot` / `wave23-pre-push` branches.
-- **CI:** the end-of-wave dispatch happens only if Tim has lifted the hold by then
-  (look for a line in `docs/START-HERE.md` or a commit from Tim saying so).
+- **CI:** the end-of-wave dispatch happens only if the operator has lifted the hold by then
+  (look for a line in `docs/START-HERE.md` or a commit from the operator saying so).
   Otherwise record "CI not run: publication hold" in `wave24-complete.md` and rely on
   the local gates.
 - **Never write a client task name, project title, resource/person name or the
@@ -179,7 +179,7 @@ B-14 dialogs.  **W24-23** W23-18 dark theme (chrome only; sheet/chart unchanged)
 
 **W24-26  Section 0 / R14.**  Replace every client task name, project title and
 person name in the CURRENT tree (tests, comments, docs, specs, scripts,
-`docs/analysis/oracle/*.json`) with IDs or hashes, so the tip is clean whatever Tim
+`docs/analysis/oracle/*.json`) with IDs or hashes, so the tip is clean whatever the operator
 decides about history.  The scan above lists the files (labels only).  Do not touch
 history.
 
@@ -192,7 +192,7 @@ history.
 | W24-3 | trust the 214-only diff | it already missed W24-2 | diff every stream + behavioural test |
 | W24-4 | drop `-E plan_recalc` with the corpus present | CI has no corpus; locally it reads the corpus | run the binary with `MPP_NO_CORPUS=1` |
 | W24-11 | relax the gate when a colour is missing | that is the A-1 gap again | recapture with bars in view |
-| W24-26 | `git filter-branch` / force-push | history is Tim's decision | scrub the tree forward only |
+| W24-26 | `git filter-branch` / force-push | history is the operator's decision | scrub the tree forward only |
 
 ## 4. Verification gate (before `wave24-complete.md` says done)
 

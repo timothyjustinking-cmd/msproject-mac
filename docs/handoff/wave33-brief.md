@@ -52,7 +52,7 @@ committing it as W33-4.3; then W33-4.4 onward.
 
 **Coordinator note (30 Oct 2026 05:50, CLOSE).**  Do NOT push `wave33` and do not
 dispatch CI in CLOSE: the range still holds G1's 3b53b9d blob, so the pre-push guard
-refuses it.  Tim approved a coordinator replay of the unpushed range; the coordinator
+refuses it.  The operator approved a coordinator replay of the unpushed range; the coordinator
 replays, pushes, dispatches both workflows and checks the logs after CLOSE.  Do
 everything else in CLOSE, record "push and CI: by the coordinator after the replay", and
 append the marker.
@@ -267,16 +267,16 @@ ctest total, the asan job and the marker check; `wave33-complete.md`, START-HERE
 `memory/coordinator.md` and the regenerated `docs/ui-command-backlog.md`.  Then append
 `WAVE-33-COMPLETE`.
 
-## 3. Queued - Tim's rulings (not for this wave)
+## 3. Queued - the operator's rulings (not for this wave)
 
 | id | item | default |
 |---|---|---|
-| Q1 | B-1 (Critical), B-7, B-15: send the GitHub support purge request with the 329 ids from `rewrite-sha-map.txt`; delete the 62 pre-scrub CI artifacts; consider private until confirmed and removing the sha map from the public tree afterwards | Tim; if not sent by Sat 31 Oct 2026 the coordinator asks once more on Mon 2 Nov 2026 |
-| Q2 | B-8: the DeepSeek sandbox (dedicated account/container without `corpus/` or Dropbox reads; key via `apiKeyHelper`; rotate the key) | Tim decided 29 Oct 2026 to run waves 33-34 on the current box; the coordinator removes WebFetch/WebSearch from the driver's tool list before launch; rotation stays with Tim |
+| Q1 | B-1 (Critical), B-7, B-15: send the GitHub support purge request with the 329 ids from `rewrite-sha-map.txt`; delete the 62 pre-scrub CI artifacts; consider private until confirmed and removing the sha map from the public tree afterwards | The operator; if not sent by Sat 31 Oct 2026 the coordinator asks once more on Mon 2 Nov 2026 |
+| Q2 | B-8: the DeepSeek sandbox (dedicated account/container without `corpus/` or Dropbox reads; key via `apiKeyHelper`; rotate the key) | The operator decided 29 Oct 2026 to run waves 33-34 on the current box; the coordinator removes WebFetch/WebSearch from the driver's tool list before launch; rotation stays with the operator |
 | Q3 | B-5: the SHA-256 name column in `project_a_golden.tsv` | if silent by Fri 6 Nov 2026: drop the column (uid is the key), coarsen dates to the week - a wave-34 item |
-| Q4 | B-6 (commit `6056f15` quotes corpus label N17), B-11 (two local pre-push backup branches) | Tim rules; delete the branches on his word |
+| Q4 | B-6 (commit `6056f15` quotes corpus label N17), B-11 (two local pre-push backup branches) | The operator rules; delete the branches on the operator's word |
 | Q5 | A-6: synthetic Project pairs for Insert Task, Delete Task, link ADD, custom-field set/clear | wave 34 G0 |
-| Q6 | the stale Dropbox clone `Projects/MS Project Decompile` (22 GB `build/`) | Tim; leave a MOVED.md |
+| Q6 | the stale Dropbox clone `Projects/MS Project Decompile` (22 GB `build/`) | The operator; leave a MOVED.md |
 
 ## 4. Verification gate (the verifier session, after CLOSE)
 

@@ -482,7 +482,7 @@ HEAD and working-tree name scans 0, `guard_names` 0, hex grep none):
 - **Privacy**: the 13 unsalted FNV-1a display-name hashes removed by W27-3.5
   remain in git history (added in `912b3fa`, removed in `c7283d7`).  The
   standing rules forbid rewriting commits, so they are still recoverable from
-  `git log`; if the repository is published, CLOSE/Tim must decide between
+  `git log`; if the repository is published, CLOSE or the operator must decide between
   accepting that history and the rewrite the rules currently rule out.
 - **Repo hygiene**: the W27-3.6 audit (`build/w27/tools/eol_scan.py`, read-only)
   still reports 173 tracked text files containing CRLF lines -- mostly
@@ -755,7 +755,7 @@ none Critical and no confirmed High (the one High raised was disproved, R1):
   [Medium - record audit R4, process]
 * **Four fixture commits also carry the hash registry, the provenance README
   and the oracle script**, and two say "Fixture only"; the rule text and the
-  practice need reconciling by Tim.  No client data.
+  practice need reconciling by the operator.  No client data.
   [Medium - record audit R5, process]
 * **`scripts/mpp_diff.py` truncates its per-row diff at ten offsets** with no
   marker; it hid the date words from a reviewer and from the G0 log.
@@ -766,7 +766,7 @@ none Critical and no confirmed High (the one High raised was disproved, R1):
 * **The 13 unsalted FNV-1a display-name hashes** the wave removed from the tree
   remain in the wave-26 history reachable from `wave27` (`912b3fa`..`c7283d7`),
   and `tests/data/project_a_golden.tsv` still carries unsalted 16-hex name
-  hashes.  Rewriting history is forbidden by the brief; both remain Tim's
+  hashes.  Rewriting history is forbidden by the brief; both remain the operator's
   decision.  [Privacy - recorded in the Privacy section]
 * **`app_qt/CMakeLists.txt:302` is stale**: the comment still says the corpus
   task-order case records a "name HASH only", which W27-3.5 removed.  It is a

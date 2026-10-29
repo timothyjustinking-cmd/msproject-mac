@@ -2,7 +2,7 @@
 
 _Written 2026-10-29 by the Fable assessment session.  Baseline: branch `wave34`, cut from
 `wave33`'s tip once wave 33 G0 has committed (the atomic-save helper is a dependency of
-every writer here).  Tim's intent for this wave: assess MS Project's live behaviour and
+every writer here).  The operator's intent for this wave: assess MS Project's live behaviour and
 code to work out what the port must change to get closer to 100 % parity, and then make
 those changes.  `docs/handoff/standing-rules.md` binds this wave.  The repo lives at
 `D:\dev\msproject-mac`; the neutral root for any Project save is `C:\w34\`.  Estimate: 12
@@ -31,8 +31,8 @@ deferral notes in `wave30-complete.md` name the gaps exactly:
 
 Wave 33 is fix-only and touches `app/`, `app_qt/`, the CFB writer's I/O, CI, scripts and
 records.  Wave 34's G1-G3 touch NEW files under `core/mppwrite/` and `tests/`; G4-G6 touch
-the shells.  **Sequencing (Tim's call, decision 1 below): default is sequential (34 after
-33 closes).  If Tim says "alongside", G1-G3 may run in a separate worktree
+the shells.  **Sequencing (the operator's call, decision 1 below): default is sequential (34 after
+33 closes).  If the operator says "alongside", G1-G3 may run in a separate worktree
 (`D:\dev\wt\wave34`, branch `wave34` cut from `wave33` after its G0 commit) under a strict
 ownership rule: no edits to `app/`, `app_qt/`, `.github/`, `scripts/check_*.py`,
 `docs/START-HERE.md`, `docs/handoff/INDEX.md`, `memory/coordinator.md` or any `wave33*`
@@ -71,7 +71,7 @@ addition:
 
 ### G0 - the decoding lane: assess what Project actually does (coordinator-led; DeepSeek writes the notes and scripts)
 
-This group is the "assess the live process and the code" Tim asked for, done with what
+This group is the "assess the live process and the code" the operator asked for, done with what
 the project already has.  Deliverable: one decode note per shared writer in
 `spec/writers/<writer>.md` (new folder), each with a "rule", "evidence", "limits" and
 "pairs still needed" section, plus any new pairs it required.
@@ -101,7 +101,7 @@ the project already has.  Deliverable: one decode note per shared writer in
   in the decode notes which rules (if any) remain open after W34-0.1-0.3 and would need a
   live trace of `WINPROJ.EXE` during a save (break on `WriteFile`/`NtWriteFile` and the
   serialisation routines found in W34-0.2, record which routine writes which stream
-  bytes).  That trace, if Tim approves it (decision 3), is the coordinator's job on an
+  bytes).  That trace, if the operator approves it (decision 3), is the coordinator's job on an
   isolated VM with WinDbg Preview Time Travel Debugging or API Monitor, both free and
   from Microsoft or long-established vendors, not DeepSeek's and not on the company
   workstation.  `w0ldan/exoproc` is NOT used: it is a day-old public release that injects
@@ -211,7 +211,7 @@ indexed from `spec/README.md`; `wave34-complete.md`, START-HERE, INDEX,
 `memory/coordinator.md`, the regenerated backlog; the 16 decisions re-scored.  Then
 append `WAVE-34-COMPLETE`.
 
-## 3. Decisions for Tim (defaults apply if silent)
+## 3. Decisions for the operator (defaults apply if silent)
 
 | # | decision | recommendation | default |
 |---|---|---|---|

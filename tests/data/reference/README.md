@@ -4,7 +4,7 @@ A reference here is derived from **MS Project itself** running a committed
 synthetic fixture — never from a render of this port (the audit's A-1 verifier:
 our own earlier render is not a reference).
 
-**Operator ruling (Tim, 2026-10-23): Project screenshots stay local and never
+**Operator ruling (2026-10-23): Project screenshots stay local and never
 reach the repository.**  Only the NUMBERS measured from them are committed.
 The coordinator's local pre-push guard (not tracked in the repo) enforces this,
 and the ruling stands for any clone regardless of the hook.

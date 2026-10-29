@@ -1,6 +1,6 @@
 # Progress assessment and workflow review - 24 October 2026
 
-_Written by the Opus verifier session after wave 26, at Tim's request: "stop and give
+_Written by the Opus verifier session after wave 26, at the operator's request: "stop and give
 me a thorough assessment of where we stand", plus "look over the DeepSeek chats and
 work out if we can improve the workflow".  Sources: the audit of wave 22
 (`audit-w22-findings.md`), the four verification records (`wave23-verification/` ..
@@ -82,7 +82,7 @@ before it is enabled.
   names wrapped across lines), `main` and `wave23` were force-pushed, and the five
   stale branches were deleted.  A fresh clone of GitHub contains no client strings,
   images or corpus files.  Remaining: GitHub still serves the old commits to anyone
-  who has their exact hash until support purges them (request drafted for Tim);
+  who has their exact hash until support purges them (request drafted for the operator);
   `tests/data/project_a_golden.tsv` still holds 64-bit unsalted hashes of the 83
   task names (a guessed name can be confirmed); pre-scrub backups are local only
   under `D:\backup\`.
@@ -166,7 +166,7 @@ more, and is where the value of finding defects came from.
 6. **Lift the publication hold now** that the history is clean, so CI runs again on
    every wave.
 
-## 7. Decisions for Tim
+## 7. Decisions for the operator
 
 1. Send the GitHub support request (draft: `build/audit-w22/scrub/github-support-request.md`).
 2. Lift the publication hold: push `wave26` and run CI on all three OSs.

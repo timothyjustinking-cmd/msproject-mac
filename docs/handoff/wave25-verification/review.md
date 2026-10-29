@@ -174,7 +174,7 @@ Counts: Critical 0, High 1, Medium 6, Low 10.
      and uid.
    - **What would fix it.** A keyed HMAC whose key stays in corpus/, or
      comparing against a local-only export.  Either keeps the gate
-     discriminating.  The decision belongs with Tim and the publication hold.
+     discriminating.  The decision belongs with the operator and the publication hold.
 
 7. **Medium -- 7a64baf/a35a01f (W25-3) -- tests/mpp_reader_tests.cpp:
    2607-2625 (resources 1 and 3), 869-880 (uid 10733), 772-781 (orphan name).**

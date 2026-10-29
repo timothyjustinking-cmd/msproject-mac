@@ -1,6 +1,6 @@
 # Progress assessment and adversarial audit - 29 October 2026
 
-_Written by the Fable session on 29 October 2026 at Tim's request ("have a look over the
+_Written by the Fable session on 29 October 2026 at the operator's request ("have a look over the
 state of the MS Project port ... what still needs to be done ... an adversarial audit at
 the same time").  Baseline for every statement and finding: `main` = **17f5782** in
 `D:\dev\msproject-mac` (= `origin/main`; CI green on it, runs 40469833962 and
@@ -32,7 +32,7 @@ No client data is quoted; rows are referred to by ID._
   happened after they were written and nobody updated them.  Dropbox
   `Projects/MS Project Decompile` is a stale second clone (branch `wave30`, 26 Oct) that
   still carries a multi-gigabyte `build/` tree.  The master `MEMORY.md` has no entry for
-  any port work after 24 October, and the "thorough status report" Tim asked for at the
+  any port work after 24 October, and the "thorough status report" the operator asked for at the
   end of wave 31 exists only in a chat transcript.  This document is that report.
 - **The audit (section 7) is in progress** at the time of writing; its findings and the
   work order are appended as they land.
@@ -42,7 +42,7 @@ No client data is quoted; rows are referred to by ID._
 | wave | scope | outcome | review (Critical / High) |
 |---|---|---|---|
 | 27 | save safety, CI back, decoding evidence | % Complete disabled until measured; Priority kept (measured); CI green on all three OSs | 0 / 2 (fixture paths carried the operator's name; outline numbers) |
-| 28 | editing core: actuals writer, indent/outdent, new-task mode, Task Form, split | every item DONE but split (measured and deferred); the branch was rewritten once with Tim's approval to remove the operator's name | 0 / 3 |
+| 28 | editing core: actuals writer, indent/outdent, new-task mode, Task Form, split | every item DONE but split (measured and deferred); the branch was rewritten once with the operator's approval to remove the operator's name | 0 / 3 |
 | 29 | wave-28 Highs, PROJECT_A visible gaps, six format dialogs, Page Setup, dark chrome | every item DONE; Project reopened 10 port saves with 0 differing fields | 1 / 6 (indent could delete a real zero-work assignment; six unmeasured shapes) |
 | 30 | the wave-29 Critical and Highs, then the Task, Resource and Project tab commands | G0 closed all eight; of 24 commands, 9 DONE (mostly view-only or "stays disabled with the exact tooltip"), 15 DEFERRED with a committed Project pair each | 0 / 4 |
 | 31 | the wave-30 Highs, the View tab, Resource Sheet and both Usage views at Gantt fidelity | every item DONE; all view state is session-only (file bytes kept) | 1 / 4 (the Critical was a record claiming a push and CI run that had not happened; fixed in CLOSE) |
@@ -97,7 +97,7 @@ Fixtures: 173 tracked `.mpp`, 139 with documented hashes.
 
 ## 5a. Progress to parity: about 50 % of the behaviour surface, about 35 % of the effort
 
-Tim asked for a percentage.  There is no single honest number, so here are three, each
+The operator asked for a percentage.  There is no single honest number, so here are three, each
 with its basis; the headline is the first.
 
 **By behaviour surface (weighted areas of what Project does for one user): about 50 %.**
@@ -135,7 +135,7 @@ about 58 % (editing from 20 % to 40 %, commands from 41 % to about 55 %).
 
 ## 6. On `w0ldan/exoproc`
 
-Tim asked whether github.com/w0ldan/exoproc would help this assessment.  **No, not for
+The operator asked whether github.com/w0ldan/exoproc would help this assessment.  **No, not for
 the assessment, and not yet for the port.**
 
 - **What it is.**  A TypeScript/Bun toolkit (npm `exoproc` 0.6.10, 32 MB unpacked, on
@@ -270,7 +270,7 @@ carries fixtures only; LF.  Nothing here adds a writer or lifts a refusal._
 | 16 | D-3 | Fuzz `CfbDocument::from_bytes` and the MSPDI/CSV importers with the same mutators; add an ubuntu ASan/UBSan job running the core suite. | sanitizer job green |
 | 17 | A-8 / D-7 | At open, a file whose container has FAT slack is marked read-only in both shells with a status reason ("saved by Project with unreferenced sectors; saving is not supported yet"), so the user learns at open, not at Save. | test on the reader's cited slack case |
 
-### Queued, ask Tim first
+### Queued, ask the operator first
 
 | # | finding | proposal |
 |---|---|---|
@@ -293,12 +293,12 @@ carries fixtures only; LF.  Nothing here adds a writer or lifts a refusal._
 
 | # | decision | recommendation | default |
 |---|---|---|---|
-| 1 | B-1: purge request and repo visibility | send today; private until confirmed | if not sent by Sat 31 Oct 2026, Claude asks once more on Mon 2 Nov 2026 and proposes flipping to private; Tim owns |
+| 1 | B-1: purge request and repo visibility | send today; private until confirmed | if not sent by Sat 31 Oct 2026, Claude asks once more on Mon 2 Nov 2026 and proposes flipping to private; the operator owns |
 | 2 | B-8: DeepSeek sandbox | dedicated account, no corpus or Dropbox, key via helper, rotate now | no wave launches until decided |
 | 3 | B-5: the golden hashes | drop the name column | if silent by Fri 6 Nov 2026, item Q3 "drop the column" is authorised |
-| 4 | next scope | wave 33 = this work order (fix-only); wave 34 = the shared writers (VarMeta insert/remove, `214` view-stream, Props record) | wave 33 only, nothing after it until Tim says |
+| 4 | next scope | wave 33 = this work order (fix-only); wave 34 = the shared writers (VarMeta insert/remove, `214` view-stream, Props record) | wave 33 only, nothing after it until the operator says |
 | 5 | A-8: FAT-slack files | item 17 (read-only at open) now; a slack-preserving save later if real files need it | item 17 |
-| 6 | Q6: the Dropbox clone | delete with a pointer file | stays until Tim says; nothing is built or read from it |
+| 6 | Q6: the Dropbox clone | delete with a pointer file | stays until the operator says; nothing is built or read from it |
 
 ### Verification gate
 

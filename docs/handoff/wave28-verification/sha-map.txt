@@ -1,4 +1,4 @@
-# wave28 history rewrite, 2026-10-25 (Tim approved)
+# wave28 history rewrite, 2026-10-25 (the operator approved)
 # Commit 076438f's tests/data/synthetic-calendars.mpp was replaced by the clean blob
 # from d1b5a8a; every other commit keeps its exact tree.  Columns: old-id new-id.
 # The wave-28 record cites the old ids; look them up here.

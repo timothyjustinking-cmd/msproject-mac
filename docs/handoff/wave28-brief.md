@@ -1,7 +1,7 @@
 # Wave 28 brief - the editing core (for DeepSeek, coordinator role)
 
 _Written 2026-10-24 by the Opus verifier session.  Baseline: branch `wave28`, cut
-from `wave27` (its final commit).  Part of the unattended run of waves 27-31 Tim
+from `wave27` (its final commit).  Part of the unattended run of waves 27-31 the operator
 approved (`plan-waves27-30.md`).  `docs/handoff/standing-rules.md` binds this wave;
 rule 1 (every save path measured against a Project-saved file before it is enabled)
 is the heart of it.  Sources: the plan, and `wave27-verification/review.md` (its
@@ -48,7 +48,7 @@ the verifier promotes because they undermine every gate:
   engine suite's calendar base), replace each path string in place with a neutral
   string of exactly the same length and record why the hash changed.  Add a check to
   `scripts/check_fixtures.py` that fails on any tracked fixture containing a drive path
-  or user-profile path at either byte alignment.  Do not rewrite history (Tim decides).
+  or user-profile path at either byte alignment.  Do not rewrite history (the operator decides).
 - **W28-0.2  High (probable)  Outline numbers in `app_qt/tests/task_order_test.cpp`.**
   W27-3.5 pins outline numbers that cannot occur in Project (ID 1 = "2", ID 12 = "1",
   while the rows display in ID order at levels implying 1, 1.1, ... 2); the port derives

@@ -2,7 +2,7 @@
 
 _Written 2026-10-26 by the Opus verifier session.  Baseline: branch `wave30`, cut
 from `wave29` (its verification commit).  Part of the unattended run of waves 27-31
-Tim approved (`plan-waves27-30.md`; wave 30 is "commands part 1": the Task,
+the operator approved (`plan-waves27-30.md`; wave 30 is "commands part 1": the Task,
 Resource and Project tabs; wave 31 takes the View tab and the second view family).
 `docs/handoff/standing-rules.md` binds this wave.  Sources: the plan,
 `docs/ui-command-backlog.md`, and `wave29-verification/review.md` (1 Critical and 6

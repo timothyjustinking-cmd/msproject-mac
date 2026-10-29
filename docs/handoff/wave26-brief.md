@@ -3,14 +3,14 @@
 _Written 2026-10-24 by the Opus verifier session.  Baseline: branch `wave26`, cut
 from local `wave25` = `3b4da5f` (its final commit; fresh-tree gates all green, see
 `docs/handoff/wave25-verification/gates.md`).  `wave23`, `wave24`, `wave25` are not
-merged; nothing is pushed.  Tim's ruling for this wave (2026-10-24): **parity work
+merged; nothing is pushed.  The operator's ruling for this wave (2026-10-24): **parity work
 comes first; only Critical or High findings may be put ahead of it.**  Waves 23-25
 each deferred the same parity items behind a new fix list; this wave reverses that.
 This file is the one document the fix session reads._
 
 ## 0. Publication hold - unchanged (see wave24-brief section 0)
 
-No push, no history rewrite, no force-push, CI only if Tim lifts the hold; the
+No push, no history rewrite, no force-push, CI only if the operator lifts the hold; the
 client-name scan must report 0 hits on every commit.  Captures of Project stay
 local (`corpus/reference/...` or `build/`); commit only numbers measured from them.
 
@@ -104,7 +104,7 @@ empty or to items deferred under rule 4.
   glyph only where Project reuses one.
 Acceptance per tab: no command shows the placeholder; a uniqueness gate hashes every
 glyph on the tab and fails on an unexpected duplicate; a human-review contact sheet
-(PNG of the tab's glyphs) is written to `build/w26/` for Tim.
+(PNG of the tab's glyphs) is written to `build/w26/` for the operator.
 
 ### G3 - render what the file stores (controlled-save decoding, the flag method)
 

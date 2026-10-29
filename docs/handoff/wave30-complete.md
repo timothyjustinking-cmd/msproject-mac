@@ -1365,7 +1365,7 @@ the final code tree.
   prompt, not a claim that it is misspelt.  The Set Baseline backlog row is
   FIXED by W30-C2.
 - **The wave-29 queue carried unchanged** (see `wave29-complete.md`'s Found, not
-  fixed): F3 the operator-name purge (Tim's decision), F6 the project-row
+  fixed): F3 the operator-name purge (the operator's decision), F6 the project-row
   task-order gate, F7 the status-date length check, R28-5 the UTF-16
   user-profile check, R28-6 save-time ordering and late refusals, R28-8 the
   Task Form's view-only fields, R28-9 SKIP-on-missing fixtures, R28-11 the
@@ -1383,7 +1383,7 @@ the final code tree.
   times each, 69 tracked text files carry it, and the 13 unsalted FNV-1a name
   hashes removed in wave 27 remain in older wave-26 commits and
   `tests/data/project_a_golden.tsv`; the purge and the history handling are
-  Tim's decision.  174 grandfathered CRLF files remain
+  the operator's decision.  174 grandfathered CRLF files remain
   (`git grep -Il $'\r'`); no new one was added.
 
 WAVE-30-COMPLETE

@@ -12,7 +12,7 @@
 //     "Other Views" entries), and no two DIFFERENT keys collide either;
 //   * the live widget's own icon at its own icon size is the key's glyph;
 //   * a human-review contact sheet of the tab's glyphs at both sizes is
-//     written to the output directory (build/w26/ locally, for Tim).
+//     written to the output directory (build/w26/ locally, for the operator).
 //
 // Tabs join kPlan in their item's commit; a tab is never checked before its
 // glyphs exist, and the final item proves the pin's icon column has no '-' left

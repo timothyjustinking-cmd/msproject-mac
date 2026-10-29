@@ -51,8 +51,8 @@ That is Medium, because it affects test code only.  Counts: 0 Critical,
    none of them looks for the owner's path or name.  The branch has been
    pushed.  Two older fixtures carry the same path (synthetic-calendars.mpp,
    added 39e30b4, and wave23-flags.mpp, added 5272242), so this is a
-   pre-existing pattern that wave 27 extended fivefold.  Tim decides
-   whether his own name and path count as personal data.  At minimum, the
+   pre-existing pattern that wave 27 extended fivefold.  The operator decides
+   whether the operator's own name and path count as personal data.  At minimum, the
    "neutral metadata" claim (wave27-complete.md W27-0.1, 0.3, 3.3) is
    untrue.
 
@@ -135,7 +135,7 @@ That is Medium, because it affects test code only.  Counts: 0 Critical,
    carries pre-unlink computed dates and slack for the unlinked tasks, and
    the 114/Props changes are unexplained.  This is not data loss, because
    Project recomputes on calculation, but the claim that Unlink "matches
-   Project" holds for the link table only.  Tim should decide whether
+   Project" holds for the link table only.  The operator should decide whether
    no-CPM link saves are acceptable under rule 1.
 
    **Falsifying test:** `python -E build/verify-w27/scratch/streamdiff.py

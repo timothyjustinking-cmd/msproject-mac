@@ -1,6 +1,6 @@
 # Standing rules for every wave (from wave 27)
 
-_Adopted 24 October 2026 on Tim's approval of the workflow review
+_Adopted 24 October 2026 on the operator's approval of the workflow review
 (`assessment-2026-10-24.md` section 6).  Every wave brief inherits these; a brief may
 add rules but not relax one.  The driver (`tools/deepseek/run-wave.ps1`) tells each
 session to read this file._
