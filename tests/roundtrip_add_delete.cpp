@@ -791,7 +791,71 @@ void test_add_values(TestContext& t) {
 #endif
 }
 
-/* ---- (d) delete a middle row: tombstone + ID renumber + VarMeta removal ---- */
+/* ---- (d) W33-1.2 (A-9): the row Insert Task would clone ---- */
+void test_clone_source_check(TestContext& t) {
+    std::string const source = join(MPPWRITE_TEST_DATA, "synthetic-base.mpp");
+    mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+
+    // The clone source is the last LIVE row add_task_row picks.
+    t.check(mppwrite::last_live_task_uid(doc) == 3,
+            "clone source: synthetic-base's last live task is uid 3");
+    std::string why;
+    t.check(mppwrite::insert_task_clone_is_clean(doc, 3, why),
+            "clone source: uid 3 is a clean clone source");
+    t.check(why.empty(), "clone source: an accepted row leaves no reason");
+
+    // Not a task: the project row and an unknown uid.
+    t.check(!mppwrite::insert_task_clone_is_clean(doc, 0, why) &&
+                why.find("project row") != std::string::npos,
+            "clone source: the project row is refused as a clone source");
+    t.check(!mppwrite::insert_task_clone_is_clean(doc, 99, why) &&
+                why.find("no saved task row") != std::string::npos,
+            "clone source: an unknown uid is refused as a clone source");
+
+    // 40 % on the last live row: the clone would copy +92, so it is refused and
+    // the reason names the percent.  (The one-word setter is enough here; the
+    // full actuals write is the app pair's job.)
+    mppwrite::TaskTable table = mppwrite::TaskTable::from_document(doc);
+    std::size_t const row = table.row_for_uid(3);
+    table.set_percent_complete(row, 40);
+    table.store_into(doc);
+    doc.save(out_path("w33-clone-40.mpp"));
+    mppwrite::CfbDocument const percent_dirty =
+        mppwrite::CfbDocument::from_file(out_path("w33-clone-40.mpp"));
+    t.check(!mppwrite::insert_task_clone_is_clean(percent_dirty, 3, why) &&
+                why.find("40 % complete") != std::string::npos,
+            "clone source: a 40 % last row is refused by percent");
+    t.check(mppwrite::last_live_task_uid(percent_dirty) == 3,
+            "clone source: the refused row is still the last live one");
+
+    // Actual dates and a non-ASAP constraint are copied by the clone too.
+    mppwrite::CfbDocument dates_doc = mppwrite::CfbDocument::from_file(source);
+    mppwrite::TaskTable dates_table = mppwrite::TaskTable::from_document(dates_doc);
+    dates_table.set_u32(dates_table.row_for_uid(3), mppwrite::task_row::kActualStart,
+                        0x3BF912C0u);
+    dates_table.store_into(dates_doc);
+    dates_doc.save(out_path("w33-clone-actual.mpp"));
+    mppwrite::CfbDocument const dates_dirty =
+        mppwrite::CfbDocument::from_file(out_path("w33-clone-actual.mpp"));
+    t.check(!mppwrite::insert_task_clone_is_clean(dates_dirty, 3, why) &&
+                why.find("actual dates") != std::string::npos,
+            "clone source: an actual start is refused");
+
+    mppwrite::CfbDocument constraint_doc = mppwrite::CfbDocument::from_file(source);
+    mppwrite::TaskTable constraint_table =
+        mppwrite::TaskTable::from_document(constraint_doc);
+    constraint_table.set_u16(constraint_table.row_for_uid(3),
+                             mppwrite::task_row::kConstraintType, 2);
+    constraint_table.store_into(constraint_doc);
+    constraint_doc.save(out_path("w33-clone-constraint.mpp"));
+    mppwrite::CfbDocument const constraint_dirty =
+        mppwrite::CfbDocument::from_file(out_path("w33-clone-constraint.mpp"));
+    t.check(!mppwrite::insert_task_clone_is_clean(constraint_dirty, 3, why) &&
+                why.find("constraint") != std::string::npos,
+            "clone source: a non-ASAP constraint is refused");
+}
+
+/* ---- (e) delete a middle row: tombstone + ID renumber + VarMeta removal ---- */
 void test_delete_middle(TestContext& t) {
     std::string const source = join(MPPWRITE_TEST_DATA, "synthetic-base.mpp");
     mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
@@ -1542,6 +1606,7 @@ int main() {
         test_add_two(t);
         test_add_mid_uid(t);
         test_add_values(t);
+        test_clone_source_check(t);
         test_delete_middle(t);
         test_delete_last(t);
         test_add_delete_append(t);

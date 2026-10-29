@@ -104,6 +104,16 @@ struct TaskRow {
     std::uint16_t priority = 0;
     date32 start = kDateNa;
     date32 finish = kDateNa;
+    // W33-1.2 (A-9): the clone-source facts Insert Task must see before it
+    // queues an insert.  add_task_row clones the last live row's 202 bytes, and
+    // these are the reader's decodings of the words that make that clone carry
+    // recorded state: +80 ActualDuration, +120/+124 ActualStart/ActualFinish and
+    // +64 ConstraintType (core/mpp/reader.h Task).  A plan built without a file
+    // keeps the clean-task defaults.
+    std::int64_t actual_duration_ticks = 0;
+    date32 actual_start = kDateNa;
+    date32 actual_finish = kDateNa;
+    std::uint16_t constraint_type = 0;  // PjConstraint: 0 = ASAP
     int outline_level = 0;
     bool summary = false;
     bool milestone = false;

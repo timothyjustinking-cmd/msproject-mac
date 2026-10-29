@@ -136,6 +136,12 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     row.priority = task.priority;
     row.start = date32_from_packed(task.start.raw);
     row.finish = date32_from_packed(task.finish.raw);
+    // W33-1.2 (A-9): what Insert Task must check on the row add_task_row would
+    // clone, straight from the reader's measured decodings.
+    row.actual_duration_ticks = static_cast<std::int64_t>(task.actual_duration_ticks);
+    row.actual_start = date32_from_packed(task.actual_start.raw);
+    row.actual_finish = date32_from_packed(task.actual_finish.raw);
+    row.constraint_type = task.constraint_type;
     row.outline_level = task.outline_level > 0 ? static_cast<int>(task.outline_level) - 1 : 0;
     row.summary = task.summary;
     row.milestone = task.is_milestone() && !task.summary;

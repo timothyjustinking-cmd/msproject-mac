@@ -1030,6 +1030,147 @@ AddedRow add_task_row(CfbDocument& doc, NewTaskRow const& task,
     return result;
 }
 
+/* --- W33-1.2 (A-9): the clone source ------------------------------------- */
+
+std::uint32_t last_live_task_uid(CfbDocument const& doc, std::string_view table) {
+    std::string const function = "last_live_task_uid";
+    TaskTable const rows = TaskTable::from_document(doc, table);
+    std::vector<std::uint8_t> const meta =
+        doc.read_stream(table_stream(table, "FixedMeta"));
+    if (meta.size() < kFixedMetaHeaderSize ||
+        (meta.size() - kFixedMetaHeaderSize) % kFixedMetaEntrySize != 0) {
+        throw Error(function + ": FixedMeta is " + std::to_string(meta.size()) +
+                    " bytes, not 16 + 47*n; the clone source cannot be read");
+    }
+    std::vector<MetaEntry> const meta_entries = read_meta_entries(meta);
+    std::vector<std::uint8_t> const var_meta =
+        doc.read_stream(table_stream(table, "VarMeta"));
+    std::vector<VarEntry> const var_entries = read_var_entries(var_meta);
+    /* The same scan add_task_row runs to pick its template (keep the two in
+     * step): the last row > 0 that Project calls live and that has a variable
+     * block group to clone. */
+    for (std::size_t row = rows.rows(); row-- > 1;) {
+        std::int32_t const index = entry_index_for_offset(
+            meta_entries, static_cast<std::uint32_t>(task_row_offset(row)));
+        if (index >= 0 &&
+            meta_entries[static_cast<std::size_t>(index)].state == kStateLive &&
+            uid_has_var_group(var_entries, rows.uid(row))) {
+            return rows.uid(row);
+        }
+    }
+    return 0;
+}
+
+bool insert_task_clone_is_clean(CfbDocument const& doc, std::uint32_t uid,
+                                std::string& why, std::string_view table) {
+    why.clear();
+    std::string const function = "insert_task_clone_is_clean";
+    TaskTable const rows = TaskTable::from_document(doc, table);
+    std::size_t row = 0;
+    try {
+        row = rows.row_for_uid(uid);
+    } catch (const std::exception&) {
+        why = "has no saved task row";
+        return false;
+    }
+    if (uid == 0 || row == 0) {
+        why = "is the project row, not a task";
+        return false;
+    }
+    std::vector<std::uint8_t> const meta =
+        doc.read_stream(table_stream(table, "FixedMeta"));
+    if (meta.size() < kFixedMetaHeaderSize ||
+        (meta.size() - kFixedMetaHeaderSize) % kFixedMetaEntrySize != 0) {
+        throw Error(function + ": FixedMeta is " + std::to_string(meta.size()) +
+                    " bytes, not 16 + 47*n; the clone source cannot be read");
+    }
+    std::vector<MetaEntry> const meta_entries = read_meta_entries(meta);
+    std::int32_t const index = entry_index_for_offset(
+        meta_entries, static_cast<std::uint32_t>(task_row_offset(row)));
+    if (index < 0 ||
+        meta_entries[static_cast<std::size_t>(index)].state != kStateLive) {
+        why = "is not a live saved task row";
+        return false;
+    }
+    std::vector<std::uint8_t> const var_meta =
+        doc.read_stream(table_stream(table, "VarMeta"));
+    std::vector<VarEntry> const var_entries = read_var_entries(var_meta);
+    if (!uid_has_var_group(var_entries, uid)) {
+        why = "has no saved variable-field group";
+        return false;
+    }
+
+    /* The clone copies every one of these words verbatim (add_delete.h: the
+     * 202-byte row is cloned, and only +64/+66 and +174 are cleared). */
+    std::uint16_t const percent = rows.u16(row, task_row::kPercentComplete);
+    if (percent != 0) {
+        why = "is " + std::to_string(percent) + " % complete";
+        return false;
+    }
+    if (rows.u32(row, task_row::kActualDuration) != 0) {
+        why = "records actual work time";
+        return false;
+    }
+    std::uint16_t const percent_work =
+        rows.u16(row, task_row::kPercentWorkComplete);
+    if (percent_work != 0) {
+        why = "records percent work complete (" + std::to_string(percent_work) +
+              " %)";
+        return false;
+    }
+    if (is_date(rows.u32(row, task_row::kActualStart)) ||
+        is_date(rows.u32(row, task_row::kActualFinish))) {
+        why = "records actual dates";
+        return false;
+    }
+    if (is_date(rows.u32(row, task_row::kResume)) ||
+        is_date(rows.u32(row, task_row::kStop))) {
+        why = "records actual dates (Resume/Stop)";
+        return false;
+    }
+    if (rows.u32(row, task_row::kCalendarUid) != 0xFFFFFFFFu) {
+        why = "uses a task calendar";
+        return false;
+    }
+    if (rows.u16(row, task_row::kConstraintType) != 0) {
+        why = "has a constraint other than ASAP";
+        return false;
+    }
+    /* Project's progressed-row block.  add_task_row copies only kNewRowKeys, so
+     * a row that carries one would lose it in the clone -- the A-9 shape. */
+    constexpr std::uint32_t kProgressBlockField = 0x0B40015Eu;
+    if (!find_var_offsets(var_meta, kProgressBlockField, uid).empty()) {
+        why = "carries a 0x0B40015E progress step block";
+        return false;
+    }
+    /* The five overtime work/cost fields ARE among the copied keys; a fresh
+     * Project row stores them as eight zero bytes (w10-adddel-base.mpp). */
+    std::vector<std::uint8_t> const var2 =
+        doc.read_stream(table_stream(table, "Var2Data"));
+    for (std::uint32_t const key : {0x0B4000A4u, 0x0B4000A5u, 0x0B4000A8u,
+                                    0x0B4000A9u, 0x0B4000AAu}) {
+        for (VarEntry const& entry : var_entries) {
+            if (entry.field_id != key) {
+                continue;
+            }
+            if (entry.mid != uid && entry.mid != (uid | kSecondaryUidFamily)) {
+                continue;
+            }
+            if (static_cast<std::size_t>(entry.offset) + 4 > var2.size()) {
+                continue; /* template_payload skips this block too */
+            }
+            std::vector<std::uint8_t> const payload =
+                read_var_block(var2, entry.offset);
+            if (std::any_of(payload.begin(), payload.end(),
+                            [](std::uint8_t byte) { return byte != 0; })) {
+                why = "carries overtime work or cost values";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 /* --- delete -------------------------------------------------------------- */
 
 DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,

@@ -521,6 +521,105 @@ void test_percent_edit_model() {
           "the display plan shows the accepted 40 %");
 }
 
+void test_insert_clone_check() {
+    // W33-1.2 (A-9, High): add_task_row clones the plan's LAST SAVED row, so an
+    // insert whose clone source carries recorded state is refused with the fact
+    // named.  make_plan()'s template (uid 3, file_row 3) is Project's clean
+    // fresh-row shape -- 0 %, no actuals, project calendar, ASAP, one
+    // placeholder assignment -- which is what the measured flat insert clones.
+    app::PlanInput clean = make_plan();
+    std::string error;
+    check(app::check_insert_task(clean, "", error),
+          "a clean last live row is accepted");
+    check(error.empty(), "an accepted clone check leaves no error");
+    app::StructuralEdits accepted;
+    check(accepted.push(insert_after("New Task", 4, 0), &clean),
+          "push with a clean plan accepts the insert");
+
+    // The template is the row with the largest file_row, not the first vector
+    // element and not a pending insert.
+    clean.tasks[0].percent_complete = 40;  // uid 1, an earlier saved row
+    check(app::check_insert_task(clean, "", error),
+          "progress on a row that is not the clone source does not refuse");
+    clean.tasks[0].percent_complete = 0;
+    const app::PlanInput with_pending = accepted.apply(clean);
+    check(app::check_insert_task(with_pending, "", error),
+          "a pending insert with no file row is not treated as the clone source");
+
+    // One refusal per fact: progress, actual work, actual dates, task calendar,
+    // a non-ASAP constraint, and an assignment beyond the placeholder.
+    app::PlanInput dirty = make_plan();
+    dirty.tasks[2].percent_complete = 40;
+    check(!app::check_insert_task(dirty, "", error),
+          "a last live row at 40 % is refused");
+    check(error.find("task uid 3") != std::string::npos &&
+              error.find("40 % complete") != std::string::npos,
+          "the progress refusal names the row and the percent");
+    app::StructuralEdits refused;
+    check(!refused.push(insert_after("New Task", 4, 0), &dirty),
+          "push with the dirty plan refuses the insert too");
+
+    dirty.tasks[2].percent_complete = 0;
+    dirty.tasks[2].actual_duration_ticks = 4800;
+    check(!app::check_insert_task(dirty, "", error), "actual work is refused");
+    check(error.find("actual work") != std::string::npos,
+          "the actual-work refusal names the fact");
+    dirty.tasks[2].actual_duration_ticks = 0;
+
+    dirty.tasks[2].actual_start = from_ymd(2026, 1, 7, 8, 0);
+    check(!app::check_insert_task(dirty, "", error), "actual dates are refused");
+    check(error.find("actual dates") != std::string::npos,
+          "the actual-date refusal names the fact");
+    dirty.tasks[2].actual_start = kDateNa;
+
+    dirty.tasks[2].calendar_uid = 3;
+    check(!app::check_insert_task(dirty, "", error), "a task calendar is refused");
+    check(error.find("task calendar") != std::string::npos,
+          "the calendar refusal names the task calendar");
+    dirty.tasks[2].calendar_uid = -1;
+
+    dirty.tasks[2].constraint_type = 2;  // Start No Earlier Than
+    check(!app::check_insert_task(dirty, "", error),
+          "a constraint other than ASAP is refused");
+    check(error.find("constraint") != std::string::npos,
+          "the constraint refusal names the constraint");
+    dirty.tasks[2].constraint_type = 0;
+
+    dirty.assignments.back().resource_uid_raw = 100;
+    dirty.assignments.back().resource_uid = 100;
+    check(!app::check_insert_task(dirty, "", error),
+          "an assignment beyond Project's placeholder is refused");
+    check(error.find("0xFFFF0001") != std::string::npos,
+          "the assignment refusal names the measured placeholder");
+    dirty.assignments.back().resource_uid_raw = 0xFFFF0001u;
+    dirty.assignments.back().resource_uid = 0;
+
+    // A file-loaded plan also counts PHYSICAL assignment rows (tombstones
+    // included), which the plan's live assignment list cannot show.
+    dirty.tasks[2].assignment_rows = 2;
+    check(!app::check_insert_task(dirty, "", error),
+          "a second physical assignment row is refused");
+    check(error.find("assignment rows") != std::string::npos,
+          "the physical-row refusal names the row count");
+    dirty.tasks[2].assignment_rows = 1;
+    check(app::check_insert_task(dirty, "", error),
+          "the cleaned clone source is accepted again");
+
+    // No saved row at all: add_task_row has nothing to clone.
+    app::PlanInput empty_plan;
+    check(!app::check_insert_task(empty_plan, "", error),
+          "a plan with no saved task row is refused");
+    check(error.find("saved task row") != std::string::npos,
+          "the empty-plan refusal names the missing clone source");
+    app::PlanInput pending_only;
+    pending_only.tasks.push_back(make_task(5, 4800, from_ymd(2026, 1, 9, 8, 0)));
+    pending_only.tasks[0].file_row = 0;
+    check(!app::check_insert_task(pending_only, "", error),
+          "a plan holding only a pending insert is refused");
+    check(!refused.push(insert_after("New Task", 6, 0), &pending_only),
+          "push refuses an insert with no saved clone source");
+}
+
 void test_delete_undo_restores_edits() {
     // W27-3.2: a delete removes the pending field/percent/link-add edits for
     // its task (they could never reach the file), but undo must restore them.
@@ -1120,8 +1219,165 @@ void test_real_save_round_trip() {
     check_size(bytes_on_disk(copy), copy_bytes, "the source copy is untouched by every save");
 }
 
+// W33-1.2 (A-9): the brief's case -- a fixture whose last live row is 40 % is
+// refused, synthetic-base's clean last row is accepted.  No committed fixture
+// ends at 40 %, so the dirty file is built in the build tree from a COPY of
+// synthetic-base with the port's own measured percent writer; the committed
+// fixture is only ever read.
+void test_real_insert_clone_check() {
+    const std::filesystem::path fixture =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "synthetic-base.mpp";
+    if (!std::filesystem::exists(fixture)) {
+        std::printf("SKIP: %s is not present; the clone check needs the committed fixture\n",
+                    fixture.string().c_str());
+        return;
+    }
+    std::error_code error;
+    std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR), error);
+    const std::filesystem::path clean_copy =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-clone-clean.mpp";
+    std::filesystem::remove(clean_copy, error);
+    std::filesystem::copy_file(fixture, clean_copy,
+                               std::filesystem::copy_options::overwrite_existing, error);
+    check(!error, "the clone-check source copy was made");
+
+    Loaded clean = load(clean_copy);
+    if (!clean.ok || clean.plan.tasks.empty()) {
+        return;
+    }
+    // The clone source: the saved row with the largest file_row (the plan is in
+    // ID order, not file order).
+    auto clone_source = [](const app::PlanInput& plan) -> const app::TaskRow* {
+        const app::TaskRow* last = nullptr;
+        for (const app::TaskRow& row : plan.tasks) {
+            if (row.file_row != 0 &&
+                (last == nullptr || row.file_row > last->file_row)) {
+                last = &row;
+            }
+        }
+        return last;
+    };
+    const app::TaskRow* template_row = clone_source(clean.plan);
+    check(template_row != nullptr, "the fixture has a saved last live row");
+    if (template_row == nullptr) {
+        return;
+    }
+    std::string check_error;
+    check(app::check_insert_task(clean.plan, clean_copy.string(), check_error),
+          "synthetic-base's clean last live row is accepted");
+    check(check_error.empty(), "the accepted file check leaves no error");
+
+    // Build the 40 % file: the measured 0 -> 40 actuals write on that row.
+    app::StructuralEdit percent;
+    std::string percent_error;
+    check(app::make_percent_edit(clean.plan, template_row->uid, 40, percent,
+                                 percent_error),
+          "the last live row takes the measured 0 -> 40 edit");
+    app::StructuralEdits percents;
+    check(percents.push(percent, &clean.plan), "the percent edit is queued");
+    const std::filesystem::path dirty_path =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-clone-40.mpp";
+    std::filesystem::remove(dirty_path, error);
+    const app::StructuralSaveResult percent_outcome = app::save_structural_edits(
+        percents, {}, clean_copy.string(), dirty_path.string(), false);
+    check(percent_outcome.ok, "the 40 % last-row fixture is written in the build tree");
+    if (!percent_outcome.ok) {
+        std::printf("SAVE ERROR: %s\n", percent_outcome.error.c_str());
+        return;
+    }
+
+    Loaded dirty = load(dirty_path);
+    check(dirty.ok, "the 40 % file re-loads");
+    if (!dirty.ok) {
+        return;
+    }
+    const app::TaskRow* dirty_row = clone_source(dirty.plan);
+    check(dirty_row != nullptr && dirty_row->uid == template_row->uid &&
+              dirty_row->percent_complete == 40,
+          "the file's last live row reads back at 40 %");
+
+    std::string refusal;
+    check(!app::check_insert_task(dirty.plan, dirty_path.string(), refusal),
+          "Insert Task is refused when the last live row is 40 %");
+    check(refusal.find("task uid " + std::to_string(template_row->uid)) !=
+              std::string::npos,
+          "the refusal names the row add_task_row would clone");
+    check(refusal.find("40 % complete") != std::string::npos,
+          "the refusal says the row is 40 % complete");
+
+    app::StructuralEdits refused_insert;
+    check(!refused_insert.push(
+              insert_after("New Task", refused_insert.next_placeholder_uid(dirty.plan), 0),
+              &dirty.plan),
+          "push with the 40 % plan refuses the insert");
+
+    // The cascade defends itself: a hand-built queue (push without a plan)
+    // cannot append a clone of the dirty row -- the save refuses the WHOLE
+    // write with the reason and leaves no file behind.
+    app::StructuralEdits planless;
+    check(planless.push(insert_after("New Task", 777, 0)),
+          "a plan-less insert is still queued (display queue)");
+    const std::filesystem::path refused_target =
+        std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-clone-refused.mpp";
+    std::filesystem::remove(refused_target, error);
+    const app::StructuralSaveResult cascade = app::save_structural_edits(
+        planless, {}, dirty_path.string(), refused_target.string(), false);
+    check(!cascade.ok, "the save cascade refuses to clone the 40 % row");
+    check(cascade.error.find("40 % complete") != std::string::npos,
+          "the cascade refusal names the percent");
+    check(cascade.error.find("(uid " + std::to_string(template_row->uid) + ")") !=
+              std::string::npos,
+          "the cascade refusal names the clone source");
+    check(!std::filesystem::exists(refused_target),
+          "the refused insert save leaves no target file");
+    check(!std::filesystem::exists(refused_target.string() + ".w51-structural-tmp"),
+          "the refused insert save leaves no intermediate file");
+
+    // The check follows the row add_task_row would clone, not progress anywhere:
+    // 40 % on an EARLIER saved row leaves the last live row clean, and the
+    // insert is accepted against that file.
+    const app::TaskRow* earlier = nullptr;
+    for (const app::TaskRow& row : clean.plan.tasks) {
+        if (row.file_row != 0 && row.uid != template_row->uid) {
+            earlier = &row;
+            break;
+        }
+    }
+    check(earlier != nullptr, "the fixture has an earlier saved row");
+    if (earlier != nullptr) {
+        app::StructuralEdit earlier_percent;
+        std::string earlier_error;
+        check(app::make_percent_edit(clean.plan, earlier->uid, 40, earlier_percent,
+                                     earlier_error),
+              "an earlier saved row takes the measured 0 -> 40 edit");
+        app::StructuralEdits earlier_edits;
+        check(earlier_edits.push(earlier_percent, &clean.plan),
+              "the earlier percent edit is queued");
+        const std::filesystem::path mid_path =
+            std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-clone-mid40.mpp";
+        std::filesystem::remove(mid_path, error);
+        const app::StructuralSaveResult mid_outcome = app::save_structural_edits(
+            earlier_edits, {}, clean_copy.string(), mid_path.string(), false);
+        check(mid_outcome.ok, "the earlier-row 40 % file is written");
+        Loaded mid = load(mid_path);
+        check(mid.ok, "the earlier-row 40 % file re-loads");
+        if (mid.ok) {
+            const app::TaskRow* mid_source = clone_source(mid.plan);
+            check(mid_source != nullptr && mid_source->uid == template_row->uid &&
+                      mid_source->percent_complete == 0,
+                  "the earlier-row file's last live row is still clean");
+            std::string mid_error;
+            check(app::check_insert_task(mid.plan, mid_path.string(), mid_error),
+                  "progress on a row that is not the clone source is accepted");
+        }
+    }
+}
+
 #else
 void test_real_save_round_trip() {
+    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+}
+void test_real_insert_clone_check() {
     std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
 }
 #endif
@@ -1131,10 +1387,12 @@ void test_real_save_round_trip() {
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     test_push_and_undo();
+    test_insert_clone_check();
     test_percent_edit_model();
     test_delete_undo_restores_edits();
     test_without_structural_edits();
     test_apply_placement();
+    test_real_insert_clone_check();
     test_real_save_round_trip();
 
     if (g_failures != 0) {

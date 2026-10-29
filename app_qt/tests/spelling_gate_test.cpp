@@ -24,6 +24,7 @@
 #include <QAbstractButton>
 #include <QAbstractItemView>
 #include <QApplication>
+#include <QFileInfo>
 #include <QInputDialog>
 #include <QLabel>
 #include <QPushButton>
@@ -323,11 +324,19 @@ void test_fixture(const QString& fixture) {
 }
 
 void test_pending_insert(const QString& fixture) {
+    // W33-1.2 (A-9): Insert Task clones the file's LAST live saved row, and
+    // wave23-outline's last row carries a real resource assignment, so the
+    // command is now (correctly) refused there.  This window exists to check
+    // the pending row's NAME, so it opens a file whose last row is Project's
+    // clean placeholder row; synthetic-base sits beside the gate fixture and
+    // is the committed fixture of that shape.
+    const QString clean_fixture =
+        QFileInfo(fixture).absolutePath() + QStringLiteral("/synthetic-base.mpp");
     msqt::MainWindow window;
     window.resize(1400, 900);
     window.show();
     QString error;
-    gate::check(window.open_file(fixture, &error),
+    gate::check(window.open_file(clean_fixture, &error),
                 "the fixture opens in the pending-insert window");
     QApplication::processEvents();
     gate::check(window.sheet() != nullptr, "the pending-insert window has a sheet");

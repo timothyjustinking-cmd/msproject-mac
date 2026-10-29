@@ -469,6 +469,12 @@ class StructuralEdits {
     // builds the edit and names the refusal for the shell; push() re-checks the
     // same facts so a hand-built queue cannot bypass them.
     //
+    // An insert_task edit uses `plan` when one is given (W33-1.2, A-9): the row
+    // add_task_row would clone must be a clean fresh task (check_insert_task
+    // names the reason for the shell), and push() refuses without it.  A
+    // plan-less insert is still accepted for a hand-built display/test queue;
+    // the save cascade checks the file's actual clone source.
+    //
     // `plan` is ignored for the remaining kinds.
     //
     // An update_actuals edit also REQUIRES `plan` (W28-1.3): every target must
@@ -599,6 +605,30 @@ std::size_t count_delete_dependants(const PlanInput& plan, std::uint32_t uid) no
 // the plan checks.
 bool make_delete_edit(const PlanInput& plan, std::uint32_t uid, StructuralEdit& out,
                       std::string& error);
+
+// W33-1.2 (A-9, High): Insert Task clones the file's LAST live row
+// (mppwrite::add_task_row: its 202 FixedData bytes and its five overtime VarMeta
+// payloads, with only the constraint and the start anchor cleared).  A clone of a
+// row that carries recorded state saves the new task with that state -- after a
+// progressed last row, in progress and without the 0x0B40015E block Project
+// writes.  Project's own Insert Task pair measured a fresh 0 % row, so this
+// refuses up front instead.
+//
+// `plan` supplies the row the save would clone: the live saved row with the
+// largest file_row, i.e. the display plan with pending deletes already removed
+// (a pending insert has file_row 0 and is not cloned by the edit being checked).
+// The plan facts are checked first (progress, actual dates and work time, a task
+// calendar, a constraint other than ASAP, an assignment beyond Project's
+// 0xFFFF0001 placeholder).  `source_path`, when non-empty, is the saved file the
+// plan was loaded from; it supplies the words the plan does not carry
+// (Resume/Stop, percent work complete, the 0x0B40015E progress block and the
+// overtime work/cost payloads) through mppwrite::insert_task_clone_is_clean.
+// On refusal `error` names the row and the fact in plain words; on acceptance it
+// is cleared.  The shells call this before asking for a name; push() repeats the
+// plan half and the save cascade repeats the file half (an undo can restore a
+// row after the insert was queued).
+bool check_insert_task(const PlanInput& plan, std::string_view source_path,
+                       std::string& error);
 
 // What save_structural_edits() proved / reported.
 struct StructuralSaveResult {

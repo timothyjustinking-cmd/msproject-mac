@@ -30,6 +30,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -495,10 +496,17 @@ int main(int argc, char** argv) {
 
     // --- 9. a pending Insert Task row: no invented stored facts ------------
     {
+        // W33-1.2 (A-9): Insert Task clones the file's LAST live saved row, and
+        // the gate fixture's last row carries a real resource assignment, so the
+        // command is now (correctly) refused there.  This window only needs a
+        // pending row, so it opens the committed fixture whose last row is
+        // Project's clean placeholder row, beside the gate fixture.
+        const QString clean_fixture =
+            QFileInfo(fixture).absolutePath() + QStringLiteral("/synthetic-base.mpp");
         msqt::MainWindow insert_window;
         insert_window.resize(msqt::kParityWidth, 800);
         QString insert_error;
-        gate::check(insert_window.open_file(fixture, &insert_error),
+        gate::check(insert_window.open_file(clean_fixture, &insert_error),
                     "the fixture loads in the second window");
         insert_window.show();
         QApplication::processEvents();
@@ -507,8 +515,8 @@ int main(int argc, char** argv) {
         gate::check(insert_sheet != nullptr, "the second window has a sheet");
         if (insert_sheet != nullptr) {
             const std::set<std::uint32_t> before = uids_in_sheet(insert_window);
-            gate::check(click_task(insert_window, 6),
-                        "uid 6 is selected so the insert lands below it");
+            gate::check(click_task(insert_window, 3),
+                        "uid 3 (the last live row) is selected for the insert");
             InputDialogResult seen;
             accept_input_dialog(&seen, QStringLiteral("Inspector Pending Row"));
             trigger(insert_window, app::MenuAction::insert_task);

@@ -256,6 +256,43 @@ AddedRow add_task_row(CfbDocument& doc, NewTaskRow const& task,
                       std::string const& path,
                       std::string_view table = "114/TBkndTask");
 
+/* --- W33-1.2 (A-9): the clone source ------------------------------------ */
+
+/*
+ * `add_task_row` clones the LAST LIVE task row: its 202 FixedData bytes and its
+ * five overtime VarMeta payloads are copied verbatim (only the constraint and the
+ * start anchor are cleared), so a template that carries recorded state makes the
+ * new task carry it too.  Project's own Insert Task pair (w10-adddel-*) starts
+ * from a fresh 0 % row, and the port has no measured save shape for a clone of
+ * anything else.  These two functions let a caller check that source before it
+ * appends.
+ */
+
+/*
+ * The UniqueID of the row `add_task_row` would clone (the same predicate: the
+ * highest FixedData row > 0 whose FixedMeta entry is live and whose uid has a
+ * VarMeta group), or 0 when the table has no such row.  Throws when the table
+ * cannot be read.
+ */
+std::uint32_t last_live_task_uid(CfbDocument const& doc,
+                                 std::string_view table = "114/TBkndTask");
+
+/*
+ * True when task `uid` is a clean clone source: a live task row with no
+ * progress (percent complete, percent work complete, actual duration), no
+ * actual dates (ActualStart/ActualFinish/Resume/Stop), no 0x0B40015E progress
+ * step block, the project calendar (no task calendar), an ASAP constraint and no
+ * stored overtime work or cost payload.  Assignments are the caller's check: the
+ * clone copies no assignment row.
+ *
+ * On refusal `why` is a verb phrase for the caller to name the row with, e.g.
+ * "is 40 % complete".  `uid` that is not a live saved task row is refused too.
+ * Throws when the table streams cannot be read as a task table.
+ */
+bool insert_task_clone_is_clean(CfbDocument const& doc, std::uint32_t uid,
+                                std::string& why,
+                                std::string_view table = "114/TBkndTask");
+
 /*
  * Tombstone the task row whose UniqueID is `uid` AND cascade the delete into the
  * dependent tables, write the package to `path`, re-open it and prove the

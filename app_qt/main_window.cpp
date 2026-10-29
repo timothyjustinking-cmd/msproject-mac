@@ -4771,6 +4771,15 @@ void MainWindow::insert_task() {
         update_status();
         return;
     }
+    // W33-1.2 (A-9, High): add_task_row clones the last live saved row.  Refuse
+    // before asking for a name when that row carries recorded state, and say
+    // which fact in the status line.
+    std::string refusal;
+    if (!app::check_insert_task(doc_.plan(), doc_.path(), refusal)) {
+        set_message(refusal, true);
+        update_status();
+        return;
+    }
     QString name;
     if (!ask_task_name(this, &name)) {
         return;
@@ -4785,7 +4794,7 @@ void MainWindow::insert_task() {
     // Schedule choice).  An unknown mode shows/displays Manual (operator
     // decision 11), so the inserted row is manual there too.
     edit.manually_scheduled = !new_tasks_manual_known_ || new_tasks_manual_;
-    if (edit.uid == 0 || !structural_.push(edit)) {
+    if (edit.uid == 0 || !structural_.push(edit, &doc_.plan())) {
         set_message("could not queue the insert", true);
         update_status();
         return;

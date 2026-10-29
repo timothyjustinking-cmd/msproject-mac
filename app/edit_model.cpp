@@ -1206,6 +1206,73 @@ TaskRow placeholder_row(const StructuralEdit& edit, const TaskRow* template_row)
     return row;
 }
 
+// W33-1.2 (A-9): the row add_task_row would clone, from the display plan.  The
+// plan a shell holds already has its pending deletes removed (apply()), so the
+// saved row (file_row != 0) with the largest file_row is the clone source; a
+// pending insert (file_row 0) has no stored bytes and is not what the next
+// insert clones.  nullptr when the plan holds no saved task row at all.
+const TaskRow* insert_clone_row(const PlanInput& plan) noexcept {
+    const TaskRow* last = nullptr;
+    for (const TaskRow& row : plan.tasks) {
+        if (row.file_row == 0) {
+            continue;
+        }
+        if (last == nullptr || row.file_row > last->file_row) {
+            last = &row;
+        }
+    }
+    return last;
+}
+
+// W33-1.2 (A-9): the plan half of the clone-source check -- a verb phrase for
+// the first fact that makes `row` an unsafe source, empty when it is clean.  The
+// file half (Resume/Stop, percent work complete, the 0x0B40015E block and the
+// copied overtime payloads) is mppwrite::insert_task_clone_is_clean.  Work and
+// assignments: a Project placeholder assignment (raw resource uid 0 or
+// 0xFFFF0001) may carry planned work equal to the duration -- every measured
+// fresh row does -- but anything beyond that one placeholder is recorded state
+// no measured insert clones.
+std::string insert_clone_plan_refusal(const PlanInput& plan, const TaskRow& row) {
+    if (row.percent_complete != 0) {
+        return "is " + std::to_string(row.percent_complete) + " % complete";
+    }
+    if (row.actual_duration_ticks != 0) {
+        return "records actual work time";
+    }
+    if (row.actual_start != kDateNa || row.actual_finish != kDateNa) {
+        return "records actual dates";
+    }
+    if (row.calendar_uid != -1) {
+        return "uses a task calendar";
+    }
+    if (row.constraint_type != 0) {
+        return "has a constraint other than ASAP";
+    }
+    constexpr std::uint32_t kNullResourceUid = 0xFFFF0001u;
+    std::size_t assignments = 0;
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.task_uid != row.uid) {
+            continue;
+        }
+        ++assignments;
+        if (assignment.resource_uid_raw != 0 &&
+            assignment.resource_uid_raw != kNullResourceUid) {
+            return "has an assignment beyond Project's 0xFFFF0001 placeholder";
+        }
+    }
+    // A plan loaded from a file also counts physical rows (tombs included,
+    // kAssignmentRowsUnknown otherwise); more than the one placeholder is a
+    // shape no measured insert clones even if the extra row is dead.
+    const std::size_t physical = row.assignment_rows == kAssignmentRowsUnknown
+                                     ? assignments
+                                     : row.assignment_rows;
+    if (physical > 1) {
+        return "has " + std::to_string(physical) +
+               " assignment rows, not Project's one placeholder";
+    }
+    return {};
+}
+
 // Applies one field edit to the display row: a set replaces (or appends) the
 // stored value, a clear removes it so app::value_of_custom_field reads Null.
 void apply_field_to_row(TaskRow& row, const StructuralEdit& edit) {
@@ -2489,6 +2556,18 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                     return false;
                 }
             }
+            // W33-1.2 (A-9, High): add_task_row clones the plan's last saved
+            // row, so a queue whose clone source carries recorded state is
+            // refused here too (check_insert_task names the reason for the
+            // shell).  A plan-less push is a hand-built display/test queue; the
+            // save cascade checks the file's actual source before it appends.
+            if (plan != nullptr) {
+                const TaskRow* clone_row = insert_clone_row(*plan);
+                if (clone_row == nullptr ||
+                    !insert_clone_plan_refusal(*plan, *clone_row).empty()) {
+                    return false;
+                }
+            }
             edit.dependants = 0;
             break;
         }
@@ -3452,6 +3531,46 @@ bool make_delete_edit(const PlanInput& plan, std::uint32_t uid, StructuralEdit& 
     return true;
 }
 
+bool check_insert_task(const PlanInput& plan, std::string_view source_path,
+                       std::string& error) {
+    error.clear();
+    const TaskRow* row = insert_clone_row(plan);
+    if (row == nullptr) {
+        error = "Insert Task needs a saved task row to clone, and the project has "
+                "none";
+        return false;
+    }
+    std::string why = insert_clone_plan_refusal(plan, *row);
+    if (!why.empty()) {
+        error = "Insert Task would clone task uid " + std::to_string(row->uid) +
+                ", which " + why;
+        return false;
+    }
+    if (source_path.empty()) {
+        return true;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    try {
+        if (!mppwrite::insert_task_clone_is_clean(document, row->uid, why)) {
+            error = "Insert Task would clone task uid " +
+                    std::to_string(row->uid) + ", which " + why;
+            return false;
+        }
+    } catch (const std::exception& read_error) {
+        error = std::string("the saved task row could not be read (") +
+                read_error.what() + ")";
+        return false;
+    }
+    return true;
+}
+
 std::size_t count_delete_dependants(const PlanInput& plan, std::uint32_t uid) noexcept {
     std::size_t count = 0;
     for (const LinkRow& link : plan.links) {
@@ -3854,6 +3973,21 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         for (const StructuralEdit& edit : applied) {
             if (edit.kind != StructuralKind::insert_task) {
                 continue;
+            }
+            // W33-1.2 (A-9, High): add_task_row clones the LAST LIVE row of the
+            // bytes in hand.  The up-front check saw the plan as it stood when
+            // Insert Task was pressed, and an undo can restore a pending-deleted
+            // row after that; a hand-built queue skips push()'s half entirely.
+            // Check the row this append is about to clone before it runs.
+            const std::uint32_t clone_uid = mppwrite::last_live_task_uid(document);
+            if (clone_uid != 0) {
+                std::string clone_why;
+                if (!mppwrite::insert_task_clone_is_clean(document, clone_uid,
+                                                          clone_why)) {
+                    throw mppwrite::Error(
+                        "insert task: the row it would clone (uid " +
+                        std::to_string(clone_uid) + ") " + clone_why);
+                }
             }
             mppwrite::NewTaskRow row;
             row.name = edit.name;

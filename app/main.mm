@@ -3124,6 +3124,16 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         plan.sheet->cancel_edit();
     }
 
+    // W33-1.2 (A-9, High): add_task_row clones the last live saved row.  Refuse
+    // before asking for a name when that row carries recorded state, and say
+    // which fact in the status line.
+    std::string refusal;
+    if (!app::check_insert_task(plan.base, plan.path, refusal)) {
+        note(plan, refusal, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+
     NSAlert* alert = [[NSAlert alloc] init];
     [alert setMessageText:@"Insert Task"];
     [alert setInformativeText:@"The task is shown in the sheet now and written to the .mpp "
@@ -3160,7 +3170,7 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     edit.name = name;
     edit.uid = plan.edits.next_placeholder_uid(plan.base);
     edit.anchor_uid = selected.has_selection ? selected.uid : 0;
-    if (edit.uid == 0 || !plan.edits.push(edit)) {
+    if (edit.uid == 0 || !plan.edits.push(edit, &plan.base)) {
         show_alert(@"Insert Task", @"The task could not be added.");
         return;
     }
