@@ -34,6 +34,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w29/anchor"
@@ -73,11 +74,7 @@ def main():
             app.UserName = "Fixture Builder"
             app.FileOpen(BASE_COPY)
             project = app.ActiveProject
-            app.UserName = "Fixture Builder"
-            project.Author = "Fixture Builder"
-            project.Manager = "Fixture Builder"
-            project.Company = "Fixture Company"
-            project.Title = "Anchor Probe"
+            neutralise(app, project, "Anchor Probe")
             project.Tasks(1).Manual = False
             facts["steps"]["a_before_save"] = task_facts(project.Tasks(1))
             app.FileSaveAs(SAVES[0])

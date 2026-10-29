@@ -38,6 +38,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log                      # noqa: E402
+from oracle_privacy import neutralise_active  # noqa: E402
 from oracle_w3 import (Guard, add_task, calc, new_project,       # noqa: E402
                        read_task, rows_of, save, setattr_safe, utc, val,
                        OUT, PROBE)                               # noqa: E402
@@ -68,6 +69,7 @@ def try_save_as(app, path, attempts, expect="xml"):
     for attempt in attempts:
         if os.path.exists(path):
             os.remove(path)
+        neutralise_active(app)
         try:
             app.FileSaveAs(Name=path, **attempt)
         except Exception as exc:                             # noqa: BLE001
@@ -251,6 +253,7 @@ def cmd_holiday(args):
                 log("  " + "  ".join(f"{k}={r.get(k)}" for k in show_cols))
             if os.path.exists(HOLIDAY):
                 os.remove(HOLIDAY)
+            neutralise_active(app)
             app.FileSaveAs(Name=HOLIDAY)
             payload["saved"] = "corpus/probe/holiday1.mpp"
             payload["saved_bytes"] = os.path.getsize(HOLIDAY)
@@ -261,6 +264,7 @@ def cmd_holiday(args):
 def _save_mpp(app, path):
     if os.path.exists(path):
         os.remove(path)
+    neutralise_active(app)
     app.FileSaveAs(Name=path)
     log(f"  saved {os.path.relpath(path, ROOT)} ({os.path.getsize(path):,} B)")
     return os.path.getsize(path)
@@ -453,6 +457,7 @@ def cmd_edit_manual_start(args):
                 f"finish={after.get('Finish')} dur={after.get('Duration')}")
             if os.path.exists(dst):
                 os.remove(dst)
+            neutralise_active(app)
             app.FileSaveAs(Name=dst)
             payload = {"case": "manual-start-edit",
                        "source": "corpus/probe/base.mpp",

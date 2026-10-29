@@ -37,6 +37,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w27"
@@ -64,15 +65,6 @@ def val(v):
     if isinstance(v, (int, float, bool, str)) or v is None:
         return v
     return repr(v)
-
-
-def neutralise(app, project, title):
-    """Neutral identity, so no committed fixture carries the operator's name."""
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = title
 
 
 def task_facts(project):

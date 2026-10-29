@@ -32,6 +32,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w30"
@@ -121,11 +122,7 @@ def main():
             result["version"] = prop(app, "Version")
             app.FileNew()
             project = app.ActiveProject
-            app.UserName = "Fixture Builder"
-            project.Author = "Fixture Builder"
-            project.Manager = "Fixture Builder"
-            project.Company = "Fixture Company"
-            project.Title = "Synthetic Leveling Fixture"
+            neutralise(app, project, "Synthetic Leveling Fixture")
 
             names = ("Task A", "Task B", "Task C")
             durations = (2400, 1440, 960)

@@ -18,6 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard, calc, rows_of, save, val  # noqa: E402
 
 
@@ -51,6 +52,7 @@ def main():
             target = os.path.abspath(args.output)
             if os.path.exists(target):
                 os.remove(target)
+            neutralise(app, proj, "Synthetic Recalc Fixture")
             app.FileSaveAs(Name=target)
             out["bytes"] = os.path.getsize(target)
             log(f"saved {target} ({out['bytes']:,} B, {len(out['tasks_after'])} tasks)")

@@ -37,6 +37,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w31/tables"
@@ -66,14 +67,6 @@ def prop(obj, name):
         return val(getattr(obj, name))
     except Exception as exc:  # noqa: BLE001
         return f"<unreadable: {exc}>"
-
-
-def neutral(app, project):
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = "Synthetic Tables Fixture"
 
 
 def table_facts(project):
@@ -115,7 +108,7 @@ def main():
             result["version"] = str(app.Version)
             app.FileOpen(BASE)
             project = app.ActiveProject
-            neutral(app, project)
+            neutralise(app, project, "Synthetic Tables Fixture")
             result["before"] = table_facts(project)
 
             # Create "Review" as a copy of Entry.  Wave 14 measured that the

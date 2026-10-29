@@ -42,6 +42,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w29"
@@ -146,14 +147,6 @@ def all_facts(project):
             project, "NewTasksCreatedAsManual"),
         "rows": rows,
     }
-
-
-def neutralise(app, project, title):
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = title
 
 
 def reopen_facts(app, path):

@@ -33,6 +33,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w24"
@@ -52,15 +53,6 @@ def prop(obj, name, default=None):
         return getattr(obj, name)
     except Exception as exc:  # noqa: BLE001
         return f"<unreadable: {exc}>"
-
-
-def neutralise(app, project, title):
-    """Neutral identity, so no committed fixture carries the operator's name."""
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = title
 
 
 def main():

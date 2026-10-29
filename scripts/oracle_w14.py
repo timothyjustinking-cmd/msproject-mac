@@ -40,6 +40,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import log, oracle_session, working_copy     # noqa: E402
+from oracle_privacy import neutralise_active  # noqa: E402
 from oracle_w3 import (Guard, add_task, calc, new_project,     # noqa: E402
                        save, utc, val)
 
@@ -61,6 +62,7 @@ def save_as(app, path):
     """Save the active project to an absolute path; return its byte size."""
     if os.path.exists(path):
         os.remove(path)
+    neutralise_active(app)
     app.FileSaveAs(Name=path)
     return os.path.getsize(path)
 

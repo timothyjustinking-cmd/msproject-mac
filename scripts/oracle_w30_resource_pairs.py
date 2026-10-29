@@ -37,6 +37,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log, working_copy  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w30"
@@ -140,14 +141,6 @@ def all_facts(project):
             facts["assignments"][str(flat)] = assignment_facts(
                 task.Assignments(a), flat)
     return facts
-
-
-def neutralise(app, project, title):
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = title
 
 
 def open_copy(app, source, tag, title):

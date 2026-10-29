@@ -28,6 +28,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import log, oracle_session                      # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import (Guard, add_task, calc, new_project,       # noqa: E402
                        rows_of, save, val)
 
@@ -76,6 +77,7 @@ def elapsedlag():
             }
             if os.path.exists(path):
                 os.remove(path)
+            neutralise(app, proj)
             app.FileSaveAs(Name=path)
             payload["saved"] = os.path.relpath(path, ROOT)
             payload["saved_bytes"] = os.path.getsize(path)
@@ -172,6 +174,7 @@ def resourcetypes():
                                  for row in rows_of(proj)]}
             if os.path.exists(mpp):
                 os.remove(mpp)
+            neutralise(app, proj)
             app.FileSaveAs(Name=mpp)
             payload["saved"] = os.path.relpath(mpp, ROOT)
             payload["saved_bytes"] = os.path.getsize(mpp)

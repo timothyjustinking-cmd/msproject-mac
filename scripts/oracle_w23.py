@@ -29,6 +29,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log, project_pids  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard, utc  # noqa: E402
 
 OUT = os.path.join(ROOT, "build", "w23")
@@ -104,6 +105,7 @@ def build_fixture(app, project, path):
     tasks["Final Task"].TaskDependencies.Add(tasks["Leaf A1b"], 0, 0)         # FF
     resource = project.Resources.Add("Resource A")
     tasks["Final Task"].Assignments.Add(ResourceID=resource.ID)
+    neutralise(app, project, "Synthetic Outline Fixture")
     app.FileSaveAs(path)
     return read_links(project)
 
@@ -122,6 +124,7 @@ def main():
             # --- the project-summary flag pair -------------------------------
             app.FileOpen(base_copy)
             project = app.ActiveProject
+            neutralise(app, project, "Synthetic Summary Fixture")
             for label, value, target in (("off", False, summary_off),
                                          ("on", True, summary_on)):
                 result["summary"][f"display_read_before_{label}"] = prop(

@@ -36,6 +36,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log, working_copy  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w30"
@@ -110,14 +111,6 @@ def undo_list(app):
     except Exception as exc:  # noqa: BLE001
         return f"<unreadable: {exc}>"
     return [app.GetUndoListItem(index) for index in range(1, count + 1)]
-
-
-def neutralise(app, project, title):
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = title
 
 
 def save_as(app, name):

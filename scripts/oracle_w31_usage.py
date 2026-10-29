@@ -55,6 +55,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard, utc, val  # noqa: E402
 
 NEUTRAL = r"C:/w31/usage-fixture"
@@ -85,14 +86,6 @@ def sha256(path):
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def neutral(app, project):
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = "Synthetic Usage Fixture"
 
 
 def task_row(task, index):
@@ -342,7 +335,7 @@ def main():
             result["version"] = str(app.Version)
             app.FileOpen(BASE)
             project = app.ActiveProject
-            neutral(app, project)
+            neutralise(app, project, "Synthetic Usage Fixture")
             result["base"] = project_facts(project)
 
             for task_id in (1, 2, 3):

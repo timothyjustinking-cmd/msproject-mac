@@ -30,6 +30,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log, project_pids  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard, calc, read_task, rows_of, save, val  # noqa: E402
 import olefile  # noqa: E402
 
@@ -185,6 +186,7 @@ def run_case(case):
             log("  after Calculate:")
             show_rows(payload["tasks_after_calc"])
             try:
+                neutralise(app, proj)
                 app.FileSaveAs(Name=saved)
                 payload["resaved"] = os.path.relpath(saved, ROOT)
                 payload["resaved_bytes"] = os.path.getsize(saved)

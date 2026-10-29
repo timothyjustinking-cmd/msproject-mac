@@ -32,6 +32,7 @@ import olefile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 from oracle_lock import oracle_session  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w25"
@@ -67,9 +68,7 @@ def main():
             app.UserName = "Fixture Builder"
             app.FileOpen(base)
             project = app.ActiveProject
-            project.Author = project.Manager = "Fixture Builder"
-            project.Company = "Fixture Company"
-            project.Title = "Synthetic Flags Fixture"
+            neutralise(app, project, "Synthetic Flags Fixture")
             task = {t.ID: t for t in project.Tasks if t is not None}[3]
             for index in range(1, 21):
                 setattr(task, f"Flag{index}", False)

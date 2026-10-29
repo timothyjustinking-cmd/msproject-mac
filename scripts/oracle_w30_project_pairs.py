@@ -52,6 +52,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w30"
@@ -131,14 +132,6 @@ def reopen(app, name):
     return result
 
 
-def neutral(app, project, title):
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = title
-
-
 def open_copy(app, source, name):
     os.makedirs(WORK, exist_ok=True)
     copy = os.path.join(WORK, name)
@@ -150,7 +143,7 @@ def open_copy(app, source, name):
 def measure_calculate(app, result):
     app.FileNew()
     project = app.ActiveProject
-    neutral(app, project, "Synthetic Calculate Fixture")
+    neutralise(app, project, "Synthetic Calculate Fixture")
     app.Calculation = 0  # pjManual: the pending change is ours to leave stale
     project.ProjectStart = dt.datetime(2026, 1, 5, 8, 0)
 
@@ -203,7 +196,7 @@ def measure_calculate(app, result):
 def measure_baseline(app, result):
     open_copy(app, SYNTHETIC_BASE, "baseline-work.mpp")
     project = app.ActiveProject
-    neutral(app, project, "Synthetic Baseline Fixture")
+    neutralise(app, project, "Synthetic Baseline Fixture")
     result["baseline_control_facts"] = facts(project)
     path = os.path.join(FIXTURE_DIR, BASE_CONTROL)
     app.FileSaveAs(path)
@@ -221,7 +214,7 @@ def measure_baseline(app, result):
 def measure_wbs(app, result):
     open_copy(app, SYNTHETIC_BASE, "wbs-work.mpp")
     project = app.ActiveProject
-    neutral(app, project, "Synthetic WBS Fixture")
+    neutralise(app, project, "Synthetic WBS Fixture")
     result["wbs_control_facts"] = facts(project)
     path = os.path.join(FIXTURE_DIR, WBS_CONTROL)
     app.FileSaveAs(path)

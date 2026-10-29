@@ -35,6 +35,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w31"
@@ -114,14 +115,6 @@ def reopen(app, name):
     return result
 
 
-def neutral(app, project, title):
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = title
-
-
 def expect(condition, message):
     if not condition:
         raise SystemExit("refusing: " + message)
@@ -145,7 +138,7 @@ def main():
             result["version"] = str(app.Version)
             app.FileNew()
             project = app.ActiveProject
-            neutral(app, project, "Synthetic Fill Fixture")
+            neutralise(app, project, "Synthetic Fill Fixture")
             app.Calculation = 0  # pjManual while the rows are set up
             project.ProjectStart = PROJECT_START
 

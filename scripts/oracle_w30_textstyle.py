@@ -40,6 +40,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log, working_copy  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w30"
@@ -96,14 +97,6 @@ def all_facts(project):
     return rows
 
 
-def neutralise(app, project):
-    app.UserName = "Fixture Builder"
-    project.Author = "Fixture Builder"
-    project.Manager = "Fixture Builder"
-    project.Company = "Fixture Company"
-    project.Title = "Synthetic Text Style Fixture"
-
-
 def main():
     for name in (CONTROL_NAME, EDITED_NAME):
         path = os.path.join(FIXTURE_DIR, name)
@@ -125,7 +118,7 @@ def main():
             facts["version"] = prop(app, "Version")
             app.FileOpen(work)
             project = app.ActiveProject
-            neutralise(app, project)
+            neutralise(app, project, "Synthetic Text Style Fixture")
             facts["control_facts_before_save"] = all_facts(project)
             app.FileSaveAs(os.path.join(FIXTURE_DIR, CONTROL_NAME))
             facts["control_facts"] = all_facts(project)

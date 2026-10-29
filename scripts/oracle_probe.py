@@ -35,6 +35,10 @@ from datetime import datetime
 
 import olefile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from oracle_privacy import neutralise  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "corpus", "probe")
 EXE = r"C:\Program Files\Microsoft Office\root\Office16\WINPROJ.EXE"
@@ -126,6 +130,7 @@ def build(app, path):
     except Exception as exc:                           # noqa: BLE001
         log(f"  ! resource/assignment failed: {exc}")
 
+    neutralise(app, proj, "Synthetic Probe Fixture")
     app.FileSaveAs(Name=path)
     log(f"  saved v1 ({os.path.getsize(path):,} bytes)")
     return proj
@@ -141,6 +146,7 @@ def mutate(app, proj, path):
         log("  task 2 Priority -> 700")
     except Exception as exc:                           # noqa: BLE001
         log(f"  ! priority not set: {exc}")
+    neutralise(app, proj, "Synthetic Probe Fixture")
     app.FileSaveAs(Name=path)
     log(f"  saved v2 ({os.path.getsize(path):,} bytes)")
 

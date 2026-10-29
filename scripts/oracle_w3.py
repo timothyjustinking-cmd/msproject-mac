@@ -30,6 +30,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log, project_pids  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 
 OUT = os.path.join(ROOT, "docs", "analysis", "oracle")
 PROBE = os.path.join(ROOT, "corpus", "probe")
@@ -265,6 +266,7 @@ def cmd_o1(args):
             mpp = os.path.join(PROBE, "w3-o1.mpp")
             if os.path.exists(mpp):
                 os.remove(mpp)
+            neutralise(app, proj)
             try:
                 app.FileSaveAs(Name=mpp)
                 payload["saved_mpp"] = os.path.relpath(mpp, ROOT)
@@ -620,6 +622,7 @@ def cmd_o4(args):
             mpp = os.path.join(PROBE, "w3-o4-last.mpp")
             if os.path.exists(mpp):
                 os.remove(mpp)
+            neutralise(app, proj)
             try:
                 app.FileSaveAs(Name=mpp)
                 out["saved_mpp"] = os.path.relpath(mpp, ROOT)
@@ -786,6 +789,7 @@ def cmd_o4xml(args):
                     f"LS={r2.get('LateStart')} slack={r2.get('TotalSlack')} "
                     f"crit={r2.get('Critical')}")
             mpp = os.path.join(PROBE, "w3-o4-last.mpp")
+            neutralise(app, proj)
             try:
                 app.FileSaveAs(Name=mpp)
                 out["saved_mpp"] = os.path.relpath(mpp, ROOT)

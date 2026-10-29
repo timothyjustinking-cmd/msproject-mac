@@ -24,6 +24,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import log, oracle_session, working_copy      # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard, calc, new_project, save, utc, val   # noqa: E402
 
 PROBE = os.path.join(ROOT, "corpus", "probe")
@@ -97,6 +98,7 @@ def exceptions():
             sizes = {}
             if os.path.exists(path):
                 os.remove(path)
+            neutralise(app, proj, "Synthetic Calendar Fixture")
             app.FileSaveAs(Name=path)
             sizes["saved"] = os.path.getsize(path)
             before = exception_rows(cal)
@@ -147,6 +149,7 @@ def linkadd():
             calc(app)
             if os.path.exists(out):
                 os.remove(out)
+            neutralise(app, proj, "Synthetic Link Fixture")
             app.FileSaveAs(Name=out)
             size = os.path.getsize(out)
             app.FileClose(0)
@@ -176,6 +179,7 @@ def assignadd():
             calc(app)
             if os.path.exists(out):
                 os.remove(out)
+            neutralise(app, proj, "Synthetic Assignment Fixture")
             app.FileSaveAs(Name=out)
             size = os.path.getsize(out)
             app.FileClose(0)
@@ -207,6 +211,7 @@ def monthpos():
                 rec["error"] = f"{exc.__class__.__name__}: {exc}"
             if os.path.exists(path):
                 os.remove(path)
+            neutralise(app, proj, "Synthetic Calendar Fixture")
             app.FileSaveAs(Name=path)
             rec["bytes"] = os.path.getsize(path)
             rec["before"] = exception_rows(cal)

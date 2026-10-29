@@ -25,14 +25,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import (Guard, add_task, calc, new_project, rows_of, save,  # noqa: E402
                        val, PROBE)
 
 
-def save_fixture(app, name):
+def save_fixture(app, name, title):
     path = os.path.join(PROBE, name)
     if os.path.exists(path):
         os.remove(path)
+    neutralise(app, app.ActiveProject, title)
     app.FileSaveAs(Name=path)          # must be absolute: Project resolves relative to its own cwd
     log(f"saved {path} ({os.path.getsize(path):,} B)")
     return os.path.basename(path), os.path.getsize(path)
@@ -56,7 +58,8 @@ def cmd_assign(args):
                    "assignments": [{"task": val(a.TaskID), "resource": val(a.ResourceID),
                                     "units": val(a.Units), "work": val(a.Work)}
                                    for a in assignments]}
-            out["saved"], out["bytes"] = save_fixture(app, "assign1.mpp")
+            out["saved"], out["bytes"] = save_fixture(
+                app, "assign1.mpp", "Synthetic Assignment Fixture")
             save("assign-probe", out)
 
 
@@ -78,7 +81,8 @@ def cmd_link(args):
             out = {"tasks": rows_of(proj),
                    "links": [{"succ": val(s.ID), "pred": val(p.ID), "type": t,
                               "lag": str(l)} for s, p, t, l in links]}
-            out["saved"], out["bytes"] = save_fixture(app, "link1.mpp")
+            out["saved"], out["bytes"] = save_fixture(
+                app, "link1.mpp", "Synthetic Link Fixture")
             save("link-probe", out)
 
 
@@ -96,7 +100,8 @@ def cmd_outline(args):
             proj.Tasks(3).OutlineIndent()
             calc(app)
             out = {"tasks": rows_of(proj)}
-            out["saved"], out["bytes"] = save_fixture(app, "outline1.mpp")
+            out["saved"], out["bytes"] = save_fixture(
+                app, "outline1.mpp", "Synthetic Outline Fixture")
             save("outline-probe", out)
 
 

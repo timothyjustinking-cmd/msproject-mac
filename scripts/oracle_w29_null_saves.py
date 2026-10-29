@@ -110,6 +110,8 @@ def main():
     with oracle_session() as app:
         with Guard(1800):
             facts["version"] = str(app.Version)
+            # A null save keeps the fixture's own neutral metadata: set only the
+            # application identity (see oracle_privacy.py).
             app.UserName = "Fixture Builder"
             for control in CONTROLS:
                 source = os.path.join(FIXTURE_DIR, control)

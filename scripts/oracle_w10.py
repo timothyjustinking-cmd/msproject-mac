@@ -43,6 +43,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import log, oracle_session                       # noqa: E402
+from oracle_privacy import neutralise_active  # noqa: E402
 from oracle_w3 import (Guard, add_task, calc, new_project,        # noqa: E402
                        rows_of, save, utc, val)
 
@@ -64,6 +65,7 @@ CUSTOM = [
 def save_as(app, path):
     if os.path.exists(path):
         os.remove(path)
+    neutralise_active(app)
     app.FileSaveAs(Name=path)
     return os.path.getsize(path)
 
@@ -237,6 +239,7 @@ def formulas():
             sizes = {"mpp": save_as(app, mpp)}
             if os.path.exists(xml):
                 os.remove(xml)
+            neutralise_active(app)
             app.FileSaveAs(Name=xml, FormatID="MSProject.xml")
             sizes["xml"] = os.path.getsize(xml)
 

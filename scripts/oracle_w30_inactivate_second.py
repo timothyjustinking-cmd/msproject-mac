@@ -30,6 +30,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from oracle_lock import oracle_session, log  # noqa: E402
+from oracle_privacy import neutralise  # noqa: E402
 from oracle_w3 import Guard  # noqa: E402
 
 NEUTRAL = r"C:/w30"
@@ -44,7 +45,7 @@ CONTROL = "wave30-inactivate-second-control.mpp"
 EDITED = "wave30-inactivate-second.mpp"
 
 sys.path.insert(0, HERE)
-from oracle_w30_inactivate import all_facts, neutralise, prop, save_as  # noqa: E402
+from oracle_w30_inactivate import all_facts, prop, save_as  # noqa: E402
 
 
 def reopen_facts(app, path):
