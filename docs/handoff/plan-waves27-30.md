@@ -152,7 +152,7 @@ Safety and refusal code (six Lows):
   (`core/mppwrite/atomic_write.cpp:106-107`).
 - RW33-3 Low: the AppKit Task Fields handler still pushes onto the live
   queue with no trial copy (`app/main.mm:3415-3423`), unlike the Qt handler
-  W33-1.5 fixed.
+  W33-1.5 fixed.  **Closed by wave 33b W33b-1.2** (R33-3).
 - RW33-4 Low: "The opened file was not modified" can be false once the
   target has been written and a follow-on step fails
   (`app/document.cpp:649-655`, `app/edit_model.cpp:4416-4424`, the alerts at
@@ -182,6 +182,50 @@ Gates and records (four Lows):
   the CR counts are unchanged).  Decide in wave 34 whether to renormalise
   those files to LF or accept CRLF and stop using the range check as a
   whitespace gate.
+
+## Queued from the wave-33 verification review (Low; `wave33-verification/review.md`)
+
+The wave-33b fix-only wave closed R33-1..R33-3; these five stay queued.
+
+- R33-4 Low: `scripts/phase2d_create_project.py:13,86` saves through COM
+  straight onto the tracked `analysis/test_project.mpp` and never calls
+  `oracle_privacy.neutralise()` (W33-4.6 covered only the `oracle_*.py`
+  scripts), so a re-run reintroduces the Author/LastAuthor residual; save
+  under `build/` or a neutral root, neutralise before saving, and refuse to
+  overwrite a tracked file.
+- R33-5 Low (test quality): the "exact" gap matcher accepts any single-effect
+  `214/Props` or `214/CEdl/VarMeta` stream at any offset as `fixed`, and
+  `open` is not tied to the pairs measured (overlaps RW33-7); require the
+  first-effect offset to equal the signature offset and key expected
+  failures by pair control name (`tests/save_pair_noise.h:266-289`).
+- R33-6 Low: the W33-3.2 detail in `wave33-complete.md` states the three 214
+  flag bytes as "Project's editor save resets ONE flag byte", but no
+  measurement settles that mechanism; describe the bytes as unexplained (a
+  per-save coincidence byte or an editor flag) and leave the mechanism to
+  the wave-34 pair work (`tests/save_pair_noise.h:239-256`).
+- R33-7 Low: the empty-formula warning still says "Use Clear Formulas to
+  remove every stored formula", pointing at a button W33-1.4 disabled;
+  reword it (`app_qt/dialogs.cpp:438`).
+- R33-8 Low: a regular file already at `<target>.tmp-<pid>` is opened with
+  `trunc` and then deleted on any failure, although the header promises to
+  remove only a file this call created; create the temp exclusively
+  (`O_EXCL` / `CREATE_NEW`) and set `created` only on exclusive creation,
+  and extend the test beyond the directory case
+  (`core/mppwrite/atomic_write.cpp:69-74`; overlaps RW33-1).
+
+## Queued from the wave-33b CLOSE review (Low; the review of `wave33..wave33b`)
+
+- RW33b-1 Low: the W33b-0.1 backstops key on `set_date_format && table_index
+  != 0` only, so a hand-built `ViewStateEdits` with `replace_column = true`
+  and a non-zero table index still reaches `set_table_column`, whose write is
+  measured only at table 0; no production caller can build it (both shells
+  refuse or show table 0), but the save-hook backstop should refuse any
+  non-zero table index when a column replacement is measured for another
+  table (`app/document.cpp:344,574-583`).
+- RW33b-2 Low (test quality): removing the cascade test's no-value control
+  leg leaves the retained clear/flag heuristic beneath the W33b-1.1 refusal
+  untested; restoring the pair that lifts the refusal restores the test
+  (`app/document_tests.cpp`, W33b-1.1 detail).
 
 ## After wave 30 (not planned in detail)
 

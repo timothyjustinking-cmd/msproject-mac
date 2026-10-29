@@ -190,11 +190,13 @@ add_test(NAME qt_save_reopen
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # ===========================================================================
-# WAVE 33 (W33-1.6 / A-11): the Table / Date Format dialog hard-coded
-# table_index 0.  This gate loads the two-table fixture, applies the SECOND
-# table through the real View > Tables popup, saves format 4, and reads the
-# saved file back: the second table's date format changed, the first table's
-# block and the applied Entry table's byte did not.
+# WAVE 33 (W33-1.6 / A-11) and WAVE 33b (W33b-0.1 / R33-1): the gate loads
+# the two-table fixture and puts the SECOND table on screen first -- Table /
+# Date Format must refuse before the dialog opens and write no file, because
+# only table 0's date-format byte is measured.  It then applies the FIRST
+# table, saves format 5, and reads the saved file back: the first table's
+# date format changed at its payload +7 and the second table's block is
+# byte-identical.
 # ===========================================================================
 add_executable(qt_table_date_format_tests tests/table_date_format_test.cpp)
 target_link_libraries(qt_table_date_format_tests PRIVATE qt_shell)

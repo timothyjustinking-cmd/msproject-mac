@@ -31,7 +31,10 @@ app::DocumentEditOutcome apply_document_edits(mppwrite::CfbDocument&, view, form
 
 // Path convenience / one-write pipeline:
 app::Document doc(source_path);
-doc.request_view_state_edits(view);
+std::string request_error;
+if (!doc.request_view_state_edits(view, &request_error)) {
+    // refused before anything was queued (a date format for table != 0, W33b-0.1)
+}
 doc.apply_custom_formula(0x0b400036u, "[Name]");   // false -> error out param
 doc.clear_custom_formula();
 app::SaveOutcome out = doc.save(start_edits, target, options);  // or save(target)

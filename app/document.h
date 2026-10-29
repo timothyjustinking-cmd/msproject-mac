@@ -236,8 +236,8 @@ struct CustomFormulaEdit {
 // Project on the FIRST table only (the col -> date pair in tests/viewstate_tests.cpp
 // sets payload +7 of table 0); `docs/handoff/w64.md` lists `table_index` other
 // than 0 as unmeasured.  Standing rule 1 therefore forbids writing the byte of
-// any other table.  Empty for index 0; otherwise the decision-9 reason both the
-// request and the save hook use:
+// any other table.  Callers use it only for a non-zero index; it returns the
+// decision-9 reason both the request and the save hook report:
 //
 //   "a date format for table N is not implemented in this port: only the first
 //    table's date-format write is measured against Project"
