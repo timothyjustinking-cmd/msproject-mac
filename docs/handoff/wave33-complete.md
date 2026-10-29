@@ -787,3 +787,345 @@ G3 group gates (fresh trees configured from scratch on the G3 code tree
   added LF line; W33-4.2 (G4) restores LF on the whole file.
 
 WAVE-33-G3-COMPLETE
+
+## G4 - records and privacy (High and Medium)
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W33-4.1 | C-1, C-7 (High): the entry-point records are false about merge state | **DONE** | commit `f677dd3`; gates `build/w33/W33-4.1-*.log` |
+| W33-4.2 | C-3 (Medium): CRLF reintroduced by the merge commits | **DONE** | commit `d570c71`; gates `build/w33/W33-4.2-*.log` |
+| W33-4.3 | B-2 (High): two tracked `.mpp` carry the operator's name as Author and LastAuthor | **DONE** | fixture commit `7361575`, pin commit `b3b4b37`; gates `build/w33/W33-4.3-*.log` |
+| W33-4.4 | B-4 marker half, B-12 (High): a tracked marker guard in CI | **DONE** | commit `abbb7b1`; gates `build/w33/W33-4.4*.log` |
+| W33-4.5 | B-3 (Medium): operator name and paths in tracked text | **DONE** | commit `0167c4f`; gates `build/w33/W33-4.5*.log` |
+| W33-4.6 | B-13 (Low): oracle scripts | **DONE** | commit `911a7a3`; gates `build/w33/W33-4.6*.log` |
+
+No G4 item was deferred.
+
+W33-4.1 detail:
+
+- `docs/START-HERE.md`, `memory/coordinator.md` and `docs/handoff/INDEX.md`
+  said `main` = `fcb1c10`, waves 23-32 "not merged", and `origin/wave32`
+  existed.  They now record the 27 Oct 2026 merge as `17f5782` after the
+  operator-approved history rewrite; that GitHub holds only `main`; that
+  every commit id quoted in the wave 23-32 records is a PRE-rewrite id; and
+  how to look one up through
+  `docs/handoff/wave32-verification/rewrite-sha-map.txt` (old -> new, with
+  the examples `92baa32 -> d7d0088` and `7727760 -> 6a4dcc2`).  START-HERE
+  gains a Still open section with the verifier's R32-1 (closed by W33-1.5)
+  and R32-2 (open), the carried review queues, the G1 push blocker and the
+  operator-owned privacy residuals; INDEX "Now" lists the 29 October
+  assessment and this wave, and the wave 23-32 headings no longer say "not
+  merged".
+- Gates (parent `ae667a9`): `git diff --check` exit 0; client-name scan on
+  HEAD 0 files / 0 hits; `check_fixtures.py` OK (140 documented hashes, 174
+  tracked `.mpp`; paths OK 223; oracle provenance OK 8);
+  `guard_names.py ae667a9..HEAD` 0 hits, exit 0.  The full
+  `17f5782..HEAD` range still refuses only the known G1 intermediate blob in
+  `3b53b9d` (`build/w33/W33-4.1-guard-range.log`), recorded under G1's
+  Found, not fixed; not a G4 deferral.  Acceptance met: a reader of
+  START-HERE alone learns the true branch state.
+
+W33-4.2 detail:
+
+- The wave-32 merge commits reintroduced CRLF in the three files the audit
+  named -- `docs/handoff/plan-waves27-30.md` (153/153 lines),
+  `scripts/check_fixtures.py` (all 849 lines) and
+  `docs/handoff/wave32-verification/gates.md` (42/42 lines) -- and twelve
+  more tracked files of the types this item pins to LF also carried CRLF or
+  a mixed ending, so converting only the three named files would not have
+  made the new gate green.  All fifteen are now LF (5567 lines converted;
+  only line endings changed): the three above plus
+  `app/app_edits_links_tests.cpp` 1008, `app/field_link_edits.cpp` 591,
+  `docs/archive/coordinator-handoff-through-wave20.md` 906,
+  `docs/handoff/coordinator.md` 191, `docs/handoff/w55.md` 238,
+  `docs/handoff/wave19-complete.md` 71, `docs/status.md` 1,
+  `memory/app.md` 802, `memory/archive/coordinator-through-wave20-full.md`
+  356, `memory/reader.md` 1, `scripts/uifile_rcdata.py` 177 and
+  `tests/io_error_paths.cpp` 181.
+- `.gitattributes` now pins `*.md`, `*.py`, `*.yml`, `*.cpp` and `*.h` to
+  `text=auto eol=lf`.  The `.tsv`/`.json`/`.txt` types stay untyped on
+  purpose: several have documented SHA-256s of their CRLF bytes, and the
+  reference-JSON rule already pins the one directory that is hashed as
+  text.
+- `ci.yml` gains a "Fail on a CR in a tracked file that must be LF" step in
+  both jobs (build-and-test and ubuntu-asan): `git ls-files --eol` over the
+  five types, and `awk` fails when the committed or working-tree
+  classification is `crlf` or `mixed`.  The classifier is used instead of a
+  `git grep` for a literal CR because it is byte-exact and does not depend
+  on passing a control character through the Windows shell: the first
+  draft's pattern degraded to a plain "r" in this environment and selected
+  all 839 files, which is exactly the kind of false result a gate must not
+  report.
+- `gates.md`'s merge paragraph said the tip tree differs from the verified
+  tip "only in wave23-outline.mpp and its documented hash"; it now names the
+  three files whose line endings the wave-32 merge commits changed as well,
+  and records that this item restored them, so apart from line endings the
+  tree differs only in the fixture and its hash.
+- Gates (parent `f677dd3`): `git ls-files --eol` over all 839 pinned files
+  reports 0 classified CRLF or mixed, and the same `awk` selects a synthetic
+  `i/crlf` line (`W33-4.2-eol.log`).  Incremental core build exit 0, ctest
+  `-E plan_recalc` 55/55, the corpus-free `plan_recalc` binary 266 checks,
+  app build exit 0 and ctest 25/25 (`W33-4.2-core-build.log`,
+  `-core-ctest.log`, `-plan-recalc-direct.log`, `-app-build.log`,
+  `-app-ctest.log`).  `check_fixtures.py` OK (140 documented hashes, 174
+  tracked `.mpp`; paths OK 223; oracle provenance OK 8).  `git diff --check`
+  exit 0; client-name scan on HEAD 0 files / 0 hits; the staged tree
+  `83a6baa` 0/0; `guard_names.py f677dd3..HEAD` 0 hits, exit 0 (post-commit
+  log).  The full `17f5782..HEAD` range still refuses only `3b53b9d`, the
+  known G1 blocker.
+
+W33-4.3 detail:
+
+- `tests/data/synthetic-base.mpp` and `analysis/test_project.mpp` each
+  stored the operator's name in three places: the SummaryInformation Author
+  and LastAuthor values (VT_LPSTR, block bytes 4256/4276 in synthetic-base
+  and 4264/4284 in test_project) and one `214/Var2Data` value (VT_LPWSTR,
+  key `0x3540000b`, block 2964-2987: u32 key, u32 byte length 16, then the
+  8-character name).  Fixture commit `7361575` replaced each 8-character
+  string IN PLACE with "W33 Base" (8 characters): 7 differing bytes per
+  copy, 21 per file.  Sizes are unchanged (237,568 and 238,080 bytes), no
+  length prefix, offset or scheduling byte moved, and the reader's 456
+  corpus-free checks pass on the new bytes.
+- Pin commit `b3b4b37` follows the new bytes:
+  `scripts/check_fixtures.py`'s DOCUMENTED synthetic-base pin
+  `55C109F2..B3FC6069 -> 6C120FBC..22C3777C` (with a comment stating what
+  was replaced and how many bytes moved), `scripts/engine_diff.py`'s
+  `BASE_FILES["synthetic-base"].sha256`, `scripts/build_calendar_fixture.py`'s
+  `BASE_SHA` (the builder reads the scheduling payload only, which is
+  byte-identical, so rebuilds still produce the same calendar data) and the
+  `tests/data/README.md` inventory row (new pin, a "Neutralised in place"
+  note, and the wave-13 copy-time hash kept as the historical record).
+  `analysis/test_project.mpp` moved `7127500F..B81FA1C2 ->
+  C6E26B14..8934317B`.
+- The box restarted mid-G4 after the fixture commit, and the hash-pin edits
+  were still uncommitted; `1089e52` is the coordinator's note recording
+  that, not a brief item.  Per the note, the scenario oracles'
+  `provenance.source_sha256` still names the PRE-neutralisation bytes
+  (`55C109F2..`) and is deliberately NOT rewritten: it records the bytes
+  the measurement was made on, and the neutralisation changed no scheduling
+  byte.  The suite never compares it with the base pin -- `compare_dumps()`
+  flattens schema/project/tasks/links/assignments/resources/calendar_table/
+  file only, so provenance is not a parity field, and `check_fixtures.py`'s
+  oracle check verifies the oracle's recorded body, not the base hash.
+  Re-recording the header would assert that Project was re-measured, which
+  it was not.
+- Every test that hashes or reads `synthetic-base` was re-run (working tree
+  on parent `1089e52`; no C++ source changed, so the suites ran on the G3
+  fresh trees' binaries, whose sources are identical; log
+  `build/w33/W33-4.3-pins.log`): `check_fixtures.py` OK (140 documented
+  hashes, 174 tracked `.mpp`; paths OK 223; provenance OK 8);
+  `engine_diff.py --selftest` 53 checks, 0 failures, base synthetic-base
+  SHA-256 `6c120fbc..c3777c` (237,568 B); `engine_diff.py --suite
+  --expect-fail constraint-mso` 8 scenarios, 8 recorded (7 pass, 1 fail), 0
+  unrecorded; core ctest `-E plan_recalc` 55/55; `plan_recalc` 512 checks
+  with corpus / 266 with `MPP_NO_CORPUS=1`; reader 1136 / 456; M2
+  `recalc --compare` 332/332, 268/268 and 64/64 fields match; app ctest
+  25/25; app_qt ctest 41/41.  The fixture commit's own gates: the two files
+  hash to the values above, sizes unchanged, the lane-B marker scan over
+  both files reports no marker for any of T01..T20 after the edit (and
+  records the three hit sites before it), reader 456 checks, exit 0.
+- The neutralisation tool is `build/w33/g4_neutralise_mpp.py`: generic, and
+  the name is passed on the command line and never written (standing rule).
+
+W33-4.4 detail:
+
+- `scripts/check_markers.py` scans every stage-0 blob in the index, text and
+  binary, for the eight operator markers recorded by the audit: the name and
+  first name, the Windows account, the company Dropbox folder, the three
+  user-profile path spellings and the pre-Vista profile directory.  Each
+  marker is matched as case-insensitive ASCII and as UTF-16LE and UTF-16BE
+  at both byte alignments, because a property set or a pasted path can start
+  on an odd byte.  It also scans the commit messages in the pushed range
+  (`origin/main..HEAD`, else `main..HEAD`).  The literals are assembled from
+  code points so the guard does not flag itself; a hit prints only the path,
+  the marker label and the first byte offset, because a CI log is public.
+  The client-term half stays in the untracked pre-push guard: its corpus
+  terms are git-ignored (B-12).
+- `ci.yml` runs the guard in build-and-test (windows-msvc and ubuntu-gcc)
+  and in ubuntu-asan, right after the LF step.  `fetch-depth: 0` is already
+  in both jobs for the commit-message scan.
+- `check_fixtures.py` now reads the SummaryInformation and
+  DocumentSummaryInformation streams of every tracked `.mpp`/`.mpt` -- a CFB
+  v3 reader with FAT, DIFAT and mini-stream support, VT_LPSTR in the section
+  code page and VT_LPWSTR -- and tests every string property against the
+  same marker list.  Values are not printed, and path failure lines are
+  redacted too.  The scan is not vacuous: the neutralised base decodes as
+  Author and LastAuthor "W33 Base", the builder fixtures as "Fixture
+  Builder", and a planted marker in a property value is reported
+  (`build/w33/W33-4.4-prop-red.log`).  The first stream lookup missed the
+  leading `0x05` byte in an OLE property-set stream name and reported every
+  tracked `.mpp` as unreadable; the gate now accepts both spellings.
+- This commit's guard run is RED BY DESIGN: the staged index reports 1300
+  tracked files, 79 carry a marker, 0 commit messages, exit 1.  The brief
+  requires the guard red on HEAD before W33-4.5 and green after; W33-4.5
+  cleans the 79 files (50 scripts, 21 docs, 5 oracle JSON records; the list
+  is in the log) and is the commit that makes CI green.  This commit must
+  not be pushed alone.
+- Gates (`build/w33/W33-4.4.log`, plus `W33-4.4-bash-check.log`):
+  `git diff --check` clean; no CRLF or mixed line endings in the pinned
+  types; `check_markers.py --self-test` PASS, 9 checks, 0 failures;
+  `check_fixtures.py` OK (140 documented hashes, 174 tracked `.mpp`; paths
+  OK 223; property sets OK 174 tracked `.mpp`/`.mpt`, no marker, no local
+  path; provenance OK 8); `ci.yml` parses and both jobs carry exactly one
+  marker step (13 and 6 steps); the same guard under Git Bash reports 1300
+  files, 79 markers, 0 messages, exit 1 (the blob read is one
+  `subprocess.run` batch, so the guard is not PowerShell-only);
+  `scan_client_names.py` HEAD 0 name hits and 0 commits on
+  `wave33..HEAD`; `guard_names.py 17f5782..HEAD` still refuses only
+  `tests/data/wave33-fat-slack.mpp` at `3b53b9d`, the known G1 blocker.
+  No C++ tree changed; the scripts are their own tests (self-test, fixture
+  check, planted-marker proof).
+
+W33-4.5 detail:
+
+- The guard from W33-4.4 was red on 79 files; it is now green on the same
+  index.  Three kinds of edit:
+  - 50 analysis scripts lose the hard-coded checkout root.  The old value
+    was always the repository root, so each now resolves it from `__file__`
+    (two parents up from `scripts/`), or, for the four string-`BASE` phase
+    scripts, with `os.path` from `__file__`.  The four uifile scripts get a
+    `REPO_ROOT` pathlib expression; `phase2d_create_project` and the
+    master-dump fallback replace their one literal path each.  No network,
+    corpus or analysis input changed; the uifile scripts' `--help` loads the
+    new paths.
+  - 5 oracle JSON records under `docs/analysis/oracle` keep their measured
+    fields but store the save path relative to the checkout root.  All 5
+    still parse.
+  - 21 docs and 3 specs: the full name becomes "the operator", the company
+    folder wording becomes "the company Dropbox", the old checkout root
+    becomes "the main checkout" or a placeholder, the repository URL owner
+    becomes `<owner>`, Qt paths become `<repo>\build\...`, and the two
+    verification snippets use `$src='core\io'`.  The review rows (R28-5,
+    R29-11) describe the dead branches without spelling the fragments.  The
+    wave-33 brief's W33-4.4 bullet keeps the requirement but not the
+    literals it used as examples.
+- Gates (`build/w33/W33-4.5.log`, `W33-4.5-green-index.log`,
+  `W33-4.5-planted.log`): `check_markers.py` on the staged index: 1300
+  tracked files, 8 markers, 0 hits, 0 commit messages, exit 0 -- the
+  acceptance the brief names.  Planted-marker red proof: a marker appended
+  to `spec/mspdi.md` makes the worktree scan fail on that one file
+  (exit 1); `git checkout` restores the staged bytes and the scan is green
+  (exit 0).  `--self-test`: 9 checks, 0 failures.  `check_fixtures.py`:
+  exit 0 -- fixtures OK (140 documented hashes, 174 tracked `.mpp`); paths
+  OK (223 files); property sets OK (174); provenance OK (8 oracles), so the
+  JSON edit did not disturb the `recording_commit` check.  50 changed
+  Python files parse; `uifile_scan.py`, `uifile_inventory.py`,
+  `uifile_rcdata.py` and `uifile_dialog.py` `--help` all exit 0.
+  `git diff --check` clean; no CRLF or mixed line endings in the pinned
+  types.  Client-name scan on HEAD 0 name hits; `--messages wave33..HEAD`
+  0 commits quote names.  `guard_names.py 17f5782..HEAD` still refuses on
+  `3b53b9d` alone, the G1 blocker; the tip blob `964594d` is neutral, this
+  commit's tree is clean, and no G4 item is blocked by it.
+- 79 files changed, 115 insertions, 112 deletions.  No C++ tree changed.
+
+W33-4.6 detail:
+
+- The neutral identity was copy-pasted: 26 local `neutralise()`/`neutral()`
+  definitions (including the five named `neutral()`), the same block inline
+  in the w29 anchor probe and the w30 leveling script, and one more copy in
+  `measure_flags.py` -- 29 copies in all.  They are now
+  `scripts/oracle_privacy.py`:
+  - `neutralise(app, project, title=None)` sets `Application.UserName`,
+    `Author`, `Manager`, `Company` and `Title` ("Fixture Builder", "Fixture
+    Company", and a synthetic title when none is given);
+  - `neutralise_active(app, title=None)` is the save-helper form
+    (`FileSaveAs` writes the active project);
+  - `AUTHOR`, `COMPANY` and `DEFAULT_TITLE` are the only definitions of the
+    neutral values.
+- Every script that saves a project now calls it before the save.  The 12
+  older scripts that saved without neutralising anything now do:
+  `oracle_fixtures` (three cases), `oracle_probe`, `oracle_recalc`,
+  `oracle_w10`, `oracle_w11`, `oracle_w12`, `oracle_w14`, `oracle_w23`,
+  `oracle_w3`, `oracle_w9`, `oracle_wave7` and `oracle_writer`.  Save
+  helpers neutralise per save; the two older inline scripts (w29 anchor
+  probe, w30 level) call the shared function.  The w30 inactivate second
+  script imports `neutralise` from the shared module rather than through
+  `oracle_w30_inactivate`.
+- The two null-save probes (w29, w30) are the deliberate exception, now
+  commented in both files and in the module: they measure whether an
+  unchanged save preserves the fixture's own metadata, so rewriting
+  `Author`, `Manager`, `Company` or `Title` just before the save would
+  defeat the measurement.  They keep setting only `Application.UserName`,
+  which their control files already carry.
+- Gates (`build/w33/W33-4.6.log`): all 45 changed Python files parse; LF
+  clean; `git diff --check` clean; the verifier
+  (`build/w33/g4_oracle_verify.py`) reports one shared copy, every call
+  imported, and no saver without a call outside the two documented null
+  probes (44 files checked, 0 failures); a no-COM unit check exercises
+  `neutralise` and `neutralise_active`; `check_fixtures.py` exit 0 (140
+  hashes, 174 `.mpp`, 223 paths, property sets, provenance);
+  `check_markers.py --self-test` 9/9, worktree and staged index 1301 files
+  0 hits, messages 0 hits; client-name scans 0.  `guard_names.py
+  17f5782..HEAD` still refuses on `3b53b9d` alone, the G1 blocker recorded
+  above (the tip blob is neutral; not a G4 deferral).
+- 45 files changed, 140 insertions, 240 deletions.  No C++ tree and no
+  fixture changed.
+
+Per-commit gates (logs under `build/w33/`; each commit's quoted gates
+include `git diff --check` exit 0, a clean client-name scan of HEAD, no
+client names in the commit messages, and `check_fixtures.py` OK; the two
+W33-4.3 commits are fixture-first and pin-second by the brief):
+
+| commit | builds | tests | fixtures |
+|---|---|---|---|
+| W33-4.1 `f677dd3` | docs only; no build | no test changed; entry records rewritten as the item says | 140 hashes / 174 `.mpp` |
+| W33-4.2 `d570c71` | core and app builds exit 0 | core ctest `-E plan_recalc` 55/55; no-corpus `plan_recalc` 266 checks; app ctest 25/25; 839 pinned files, 0 CRLF/mixed | 140 hashes / 174 `.mpp` |
+| W33-4.3 `7361575`+`b3b4b37` | no C++ source changed; suites ran on the G3 fresh binaries | fixture: sizes unchanged, 21 differing bytes per file, reader 456 checks; pins: engine self-test 53/0, suite 8 recorded (7 pass, 1 fail), core 55/55, `plan_recalc` 512/266, reader 1136/456, M2 332/332 + 268/268 + 64/64, app 25/25, app_qt 41/41 | 140 hashes / 174 `.mpp` |
+| W33-4.4 `abbb7b1` | no C++ tree; `ci.yml` parses, jobs carry one marker step each (13 and 6 steps) | marker self-test 9/0; staged index 1300 files, 79 markers, exit 1 RED BY DESIGN until W33-4.5; property scan 174 `.mpp`/`.mpt`, no marker | 140 hashes / 174 `.mpp` |
+| W33-4.5 `0167c4f` | no C++ tree | marker staged index 1300 files, 0 hits, exit 0; planted-marker red then green; self-test 9/0; 50 changed Python files parse; 4 uifile `--help` exit 0 | 140 hashes / 174 `.mpp` |
+| W33-4.6 `911a7a3` | no C++ tree; 45 changed Python files parse | verifier 44 files, 0 failures; shared `neutralise` unit check OK; marker worktree and staged 1301 files, 0 hits, messages 0; scans 0 | 140 hashes / 174 `.mpp` |
+
+G4 group gates (fresh trees configured from scratch on the G4 code tree
+`911a7a3` under `build/w33-g4-fresh{,-app,-qt}`, log
+`build/w33/W33-G4-fresh-gates.log`, started 2026-10-30 05:14 and finished
+05:35; the marker commit that follows adds this file's G4 section only):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 55/55 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failure(s) / 8 recorded (7 pass, 1 fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| app ctest / the CI step with `MPP_NO_CORPUS=1` | 25/25 passed / 25/25 passed |
+| app_qt configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| app_qt ctest | 41/41 passed |
+| `check_fixtures.py` | fixtures OK (140 documented hashes, 174 tracked `.mpp`); paths OK (223 tracked test-data files, no local path); property sets OK (174 tracked `.mpp`/`.mpt`, no marker, no local path); provenance OK (8 oracles) |
+| `check_markers.py --self-test` / `--worktree` | 9 checks, 0 failures / 1301 tracked files, 8 markers, 0 hits, 0 commit-message hits, exit 0 |
+| client-name scan on HEAD / messages `17f5782..HEAD` | 0 files, 0 name hits / 0 commits quote names |
+| `guard_names.py 17f5782..HEAD` | exit 1 on `3b53b9d` alone -- the known G1 intermediate blob recorded under G1's Found, not fixed; the G4 tip and every G4 commit are clean under that guard, so this is the wave owner's pre-existing blocker, not a G4 deferral |
+
+## Found, not fixed
+
+- Known blocker for the wave push (wave owner only): `3b53b9d` added the
+  slack fixture as imported synthetic-base bytes, and that intermediate
+  synthetic-base still carries the pre-wave privacy residual W33-4.3
+  neutralised in the tip (the operator name in SummaryInformation and in one
+  Var2Data value, plus the local path).  The pre-push guard refuses that
+  commit; `964594d` replaced the tip blob with an equal-length neutral
+  version, and the G1 record above states the disposition options (section 0
+  forbids rewriting or force-pushing history and working round the guard, so
+  only the wave owner can authorise a rewrite or another disposition).
+  G4's own range and tip are clean; every G4 item commit quotes the refusal
+  and names it as the G1 blocker, not a G4 deferral.
+- W33-4.6 leaves three non-oracle COM savers untouched:
+  `scripts/build_calendar_fixture.py:135`, `scripts/engine_diff.py:817` (the
+  `--record` harness, not exercised) and `scripts/phase2d_create_project.py:86`.
+  They are outside B-13's named scope, which is `scripts/oracle_*.py`, and
+  no committed fixture carries a marker (W33-4.4's property-set scan over
+  174 tracked `.mpp`/`.mpt` is clean), so this is a future clean-up rather
+  than a privacy defect in the tree; a later change to them should call
+  `neutralise()` too.
+- The two null-save probes (`oracle_w29_null_saves.py`,
+  `oracle_w30_null_saves.py`) set only `Application.UserName` on purpose:
+  they measure whether an unchanged save preserves the fixture's own
+  metadata, so rewriting `Author`, `Manager`, `Company` or `Title` before
+  the save would defeat the measurement.  The exception is documented in
+  both scripts and in `scripts/oracle_privacy.py`; it is not a deferral.
+- CLOSE is out of scope for this group session: the fresh-tree gates on the
+  final commit, the review pass over the wave-33 diff, the push and the CI
+  dispatch belong to the CLOSE section (wave-33-brief section 2).
+
+WAVE-33-G4-COMPLETE
