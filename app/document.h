@@ -202,6 +202,20 @@ struct CustomFormulaEdit {
     [[nodiscard]] bool any() const noexcept { return operation != Operation::none; }
 };
 
+// W33-1.3 (A-5, High): a formula SET was measured against Project only on Task
+// Text1..30 and Number1..20.  Every other Task field id -- the Duration, Date,
+// Cost and Flag custom fields, the built-in fields (Start/Finish among them)
+// and the Outline Code family -- is refused up front, before anything is
+// queued, because no Project save pair measured the store for it.  True only
+// for a Text or Number custom field id.
+[[nodiscard]] bool custom_formula_field_is_settable(std::uint32_t field_id) noexcept;
+
+// Empty when `custom_formula_field_is_settable(field_id)`; otherwise the
+// refusal both shells show and `Document::apply_custom_formula` reports: the
+// field's own name, the decision-9 text ("not implemented in this port") and
+// the two measured families.
+[[nodiscard]] std::string custom_formula_set_refusal(std::uint32_t field_id);
+
 // What applying the two operations to an in-memory container did.
 //
 // `ok == false` means a FORMULA operation was refused: the container is
@@ -254,9 +268,11 @@ class Document {
         return view_state_edits_;
     }
 
-    // Queues a formula for one Task custom field.  Rejects an empty formula or a
-    // field id of 0 here (the writer validates the rest at save time against the
-    // file's actual formula table) and leaves any previous request alone.
+    // Queues a formula for one Task custom field.  Rejects an empty formula, a
+    // field id of 0, and every id `custom_formula_field_is_settable` refuses
+    // (W33-1.3: only Text1..30 and Number1..20 were measured) here, before
+    // anything is queued; leaves any previous request alone.  The writer still
+    // validates the rest at save time against the file's actual formula table.
     [[nodiscard]] bool apply_custom_formula(std::uint32_t field_id, std::string_view formula,
                                             std::string* error = nullptr);
 

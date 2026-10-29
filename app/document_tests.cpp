@@ -983,6 +983,92 @@ void test_document_request_validation() {
     check(!document.has_pending_edits(), "discarding clears the formula request");
 }
 
+// W33-1.3 (A-5, High): formula SET was measured against Project only on Text
+// and Number custom fields.  Date, Duration, Cost and Flag custom fields, and
+// the built-in Start/Finish and Outline Code fields, are refused up front with
+// the decision-9 text ("not implemented in this port") and nothing is queued.
+// Text1..Text30 and Number1..Number20 -- the first and last of each measured
+// family -- stay accepted.
+void test_formula_set_field_kinds() {
+    struct RefusedKind {
+        const char* label;
+        std::uint32_t field_id;
+    };
+    const RefusedKind refused[] = {
+        {"Date1", mpp::custom_field_id(mpp::FieldKind::date, 1)},
+        {"Duration1", mpp::custom_field_id(mpp::FieldKind::duration, 1)},
+        {"Cost1", mpp::custom_field_id(mpp::FieldKind::cost, 1)},
+        {"Flag1", mpp::custom_field_id(mpp::FieldKind::flag, 1)},
+        {"Start", 0x0b400023u},
+        {"OutlineCode1", 0x0b4001a0u},
+    };
+    for (const RefusedKind& kind : refused) {
+        app::Document document("unused.mpp");
+        std::string error;
+        std::string why = std::string("a formula on ") + kind.label + " is refused";
+        check(!document.apply_custom_formula(kind.field_id, "[Name]", &error), why.c_str());
+        why = std::string("the ") + kind.label + " refusal carries the decision-9 text";
+        check(error.find("not implemented in this port") != std::string::npos, why.c_str());
+        why = std::string("the ") + kind.label + " refusal names the field";
+        check(error.find(kind.label) != std::string::npos, why.c_str());
+        why = std::string("a refused ") + kind.label + " formula leaves nothing pending";
+        check(!document.has_pending_edits(), why.c_str());
+    }
+
+    struct AcceptedKind {
+        const char* label;
+        std::uint32_t field_id;
+    };
+    const AcceptedKind accepted[] = {
+        {"Text1", mpp::custom_field_id(mpp::FieldKind::text, 1)},
+        {"Text30", mpp::custom_field_id(mpp::FieldKind::text, mpp::kTextFieldCount)},
+        {"Number1", mpp::custom_field_id(mpp::FieldKind::number, 1)},
+        {"Number20", mpp::custom_field_id(mpp::FieldKind::number, mpp::kNumberFieldCount)},
+    };
+    for (const AcceptedKind& kind : accepted) {
+        app::Document document("unused.mpp");
+        std::string error;
+        std::string why = std::string("a formula on ") + kind.label + " is accepted";
+        check(document.apply_custom_formula(kind.field_id, "[Name]", &error), why.c_str());
+        why = std::string("the accepted ") + kind.label + " request has no error";
+        check(error.empty(), why.c_str());
+        why = std::string("the accepted ") + kind.label + " formula is the pending request";
+        check(document.custom_formula().operation ==
+                      app::CustomFormulaEdit::Operation::set &&
+                  document.custom_formula().field_id == kind.field_id,
+              why.c_str());
+    }
+
+    // A refused request must not disturb one queued before it.
+    app::Document document("unused.mpp");
+    check(document.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
+          "the Text2 request is queued before a refused one");
+    std::string error;
+    check(!document.apply_custom_formula(mpp::custom_field_id(mpp::FieldKind::date, 1),
+                                         "[Start]", &error),
+          "the Date1 request after it is refused");
+    check(document.custom_formula().operation == app::CustomFormulaEdit::Operation::set &&
+              document.custom_formula().field_id == 0x0b400036u,
+          "the refused request leaves the queued Text2 formula alone");
+
+    // Defence in depth: a hand-built Date1 request goes around Document's
+    // queue, straight to the save hook.  It must be refused there too, with
+    // 114/Props untouched.
+    mppwrite::CfbDocument container = mppwrite::CfbDocument::from_file(kFixture.string());
+    const std::vector<std::uint8_t> props_before = container.read_stream("114/Props");
+    app::CustomFormulaEdit hand_built;
+    hand_built.operation = app::CustomFormulaEdit::Operation::set;
+    hand_built.field_id = mpp::custom_field_id(mpp::FieldKind::date, 1);
+    hand_built.formula = "[Name]";
+    const app::DocumentEditOutcome outcome =
+        app::apply_document_edits(container, app::ViewStateEdits{}, hand_built);
+    check(!outcome.ok, "a hand-built Date1 formula edit is refused");
+    check(outcome.error.find("not implemented in this port") != std::string::npos,
+          "the hand-built Date1 refusal carries the decision-9 text");
+    check(container.read_stream("114/Props") == props_before,
+          "the refused hand-built edit leaves 114/Props untouched");
+}
+
 void test_save_start_date_with_view_and_formula() {
     const std::filesystem::path source = kFixture;
     const std::filesystem::path target = out_path("app-save-pipeline.mpp");
@@ -1553,6 +1639,7 @@ void test_save_formula_clear_with_values() {}
 void test_save_formula_clear_value_free() {}
 void test_save_refused_view_state() {}
 void test_document_request_validation() {}
+void test_formula_set_field_kinds() {}
 void test_save_formula_and_view_state() {}
 void test_save_start_date_with_view_and_formula() {}
 void test_cascade_without_hook_is_unchanged() {}
@@ -1576,6 +1663,7 @@ int main() {
     test_save_formula_clear_value_free();
     test_save_refused_view_state();
     test_document_request_validation();
+    test_formula_set_field_kinds();
     test_save_start_date_with_view_and_formula();
     test_save_formula_and_view_state();
     test_cascade_without_hook_is_unchanged();

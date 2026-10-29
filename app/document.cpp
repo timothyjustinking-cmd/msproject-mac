@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <span>
@@ -21,6 +22,7 @@
 
 #include "cfb_writer.h"
 #include "edit_model.h"
+#include "field_ref.h"
 #include "field_value.h"
 #include "props.h"
 #include "row_writer.h"
@@ -32,6 +34,29 @@
 #endif
 
 namespace app {
+
+// W33-1.3 (A-5, High): only Text1..30 and Number1..20 formula SETs were
+// measured against Project.  Kept above the anonymous namespace so the save
+// hook's defence-in-depth check below can use the same decision as the queue.
+bool custom_formula_field_is_settable(std::uint32_t field_id) noexcept {
+    const mpp::FieldKind kind = mpp::custom_field_kind(field_id);
+    return kind == mpp::FieldKind::text || kind == mpp::FieldKind::number;
+}
+
+std::string custom_formula_set_refusal(std::uint32_t field_id) {
+    char hex[16];
+    std::snprintf(hex, sizeof hex, "0x%08x", static_cast<unsigned>(field_id));
+    const std::string name =
+        core::view::field_title(field_id, core::model::RecordType::Task);
+    std::string field = name;
+    if (name != hex) {
+        field += " (" + std::string(hex) + ")";
+    }
+    return "a formula on " + field +
+           " is not implemented in this port: only Text1..30 and Number1..20 formula "
+           "storage was measured against Project";
+}
+
 namespace {
 
 using core::view::Value;
@@ -222,6 +247,14 @@ void apply_formula_edit(mppwrite::CfbDocument& document, const CustomFormulaEdit
     std::string writer_error;
 
     if (edit.operation == CustomFormulaEdit::Operation::set) {
+        // W33-1.3 (A-5, High): a request that skipped Document's queue (a
+        // hand-built CustomFormulaEdit) is refused by the same rule, so no save
+        // can write a formula store Project has not been measured to accept.
+        if (!custom_formula_field_is_settable(edit.field_id)) {
+            outcome.ok = false;
+            outcome.error = "formula not written: " + custom_formula_set_refusal(edit.field_id);
+            return;
+        }
         if (!msproject::props::set_custom_field_formula(props, edit.field_id, edit.formula,
                                                         updated, &writer_error)) {
             outcome.ok = false;
@@ -514,6 +547,12 @@ bool Document::apply_custom_formula(std::uint32_t field_id, std::string_view for
     if (field_id == 0) {
         if (error != nullptr) {
             *error = "field id 0 is not a task custom field";
+        }
+        return false;
+    }
+    if (!custom_formula_field_is_settable(field_id)) {
+        if (error != nullptr) {
+            *error = custom_formula_set_refusal(field_id);
         }
         return false;
     }
