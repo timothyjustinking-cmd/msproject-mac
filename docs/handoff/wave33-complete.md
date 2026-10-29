@@ -401,3 +401,205 @@ The G1 marker commit is docs-only; the code tree it records is `6a58e05`.
   dispatch belong to the CLOSE section (wave-33-brief section 2).
 
 WAVE-33-G1-COMPLETE
+
+## G2 - robustness (Medium and Low)
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W33-2.1 | D-2 (Medium): the writer-side DIFAT walk was unbounded | **DONE** | commit `227105f`; gates `build/w33/W33-2.1-*.log` |
+| W33-2.2 | D-5 (Low, reproduced): the MPP14 Resource Fixed2Meta count was taken from the header, not the stream | **DONE** | commit `d19e201`; gates `build/w33/W33-2.2-*.log` |
+| W33-2.3 | D-6 (Low): CFB v4 was accepted by a parser whose sector formula is v3 | **DONE** | commit `60d8f06`; gates `build/w33/W33-2.3-*.log` |
+| W33-2.4 | D-3 (Medium): the fuzz lane fed only `mpp::load_bytes`; no sanitizer job existed | **DONE** | commit `a069d97`; gates `build/w33/W33-2.4-*.log` |
+
+No G2 item was deferred.
+
+W33-2.1 detail:
+
+- `CfbDocument::parse` took `num_difat` from the header and walked the
+  continuation chain with neither a visited set nor a file-size bound, while
+  the read-only reader (`core/mpp/cfb.cpp`) had both.  A header edit
+  (declared count 0xFFFFFFFF, continuation sector pointing at itself) made a
+  direct `CfbDocument::from_file` caller append ids until `bad_alloc`.  The
+  writer now mirrors the reader: the declared continuation count must fit the
+  file's sector count, a continuation sector may be visited only once, and the
+  resulting FAT-sector id list may not exceed the file's sectors.  The count
+  bound is what the brief's 0xFFFFFFFF fixture hits; the visited set stops a
+  self-pointing chain whose declared count is plausible.
+- The new gate is `mpp_cfb_hardening` (`tests/cfb_hardening_tests.cpp`, built
+  with `cfb_writer.cpp` and `atomic_write.cpp` and registered with ctest).
+  It patches the committed fixture in memory only; a missing committed fixture
+  is a FAILURE with its path, never a skip.
+- RED on the pre-fix tree (`build/w33/W33-2.1-red-build.log`, writer source
+  from HEAD with only the fix stashed; `W33-2.1-red-difat.log`):
+  `timeout 5 mpp_cfb_hardening --case difat` -- no parser error, killed at
+  5 s (exit 124).  GREEN (`W33-2.1-green-build.log` clean;
+  `W33-2.1-green-difat.log`): `PASS: 16 checks` -- the pristine fixture loads
+  through both parsers; the 0xFFFFFFFF fixture is refused by `mpp::load_bytes`
+  and by `CfbDocument::from_bytes`, each naming the DIFAT, under 0.1 s; the
+  plausible-count self-pointing fixture is refused by both with the loop
+  reason, under 0.1 s.
+
+W33-2.2 detail:
+
+- The MPP14 Resource Type path took the Fixed2Meta header's declared entry
+  count as the loop bound.  A stream that is header-only (16 bytes, so
+  `available == 0`) can declare 0xFFFFFFFF: `available % count` is then 0 with
+  stride 0 and the loop from entry 3 to 4.29 billion runs as cheap
+  `continue`s -- the same rows after 4.3 billion extra iterations (the audit
+  measured reader_dump 0.02 s -> 2.2 s; the RED run below measured 3.87 s).
+  The count is now `min(declared, available / kRscFixed2MetaEntrySize)`.
+- The sibling count sites were audited rather than changed: the Task
+  Fixed2Meta and every FixedMeta path derive their count from the stream
+  length, and the MPP12 Resource Fixed2Meta loop walks `rsc_rows` with every
+  entry range-checked, so a declared word cannot size it; a comment now says
+  so.
+- RED (`build/w33/W33-2.2-red-build.log`, reader source from HEAD with only
+  the fix stashed; `W33-2.2-red-fixed2meta.log`): 1 failed of 7 checks --
+  "the row loop is bounded by the stream size; loaded in 3872.4 ms".  The
+  other six passed: the patched file loads and returns the same task and
+  resource uid rows as the pristine fixture.  GREEN
+  (`W33-2.2-green-build.log` clean; `W33-2.2-green.log`): `PASS: 23 checks`
+  (16 from W33-2.1 plus 7 here): the patched fixture loads under 0.1 s with
+  the same task uids and the same resource uids.
+
+W33-2.3 detail:
+
+- The writer accepted major version 4 and a 4096-byte sector shift while
+  `sector_offset()` is the v3 header-relative formula; the whole-sectors
+  check then rejected every real v4 file with an accidental error.  The
+  reader was looser still: it accepted version 4 and any sector shift from
+  9 to 16.  `.mpp` is always v3 and no v4 fixture exists to measure a correct
+  implementation against, so the brief's default is taken: both
+  `core/mpp/cfb.cpp` and `core/mppwrite/cfb_writer.cpp` refuse the version
+  itself with "CFB v4 (4096-byte sectors) is not supported; only v3
+  (512-byte sectors) is", and both refuse a sector shift other than 9 with a
+  message that names the shift.
+- RED (`build/w33/W33-2.3-red-build.log`, both parser sources from HEAD with
+  only the fix stashed; `W33-2.3-red-v4.log`): 6 failed of 17 checks -- both
+  parsers accepted the v4 tag and the 4096-byte shift, and the accidental
+  messages were "sector 256 lies past the end of the file" (reader) and
+  "file is not a whole number of sectors" (writer).  GREEN
+  (`W33-2.3-core-build.log` clean; `W33-2.3-green.log`): `PASS: 42 checks` --
+  a v4 tag on the v3-shaped body is refused by both parsers with a v4
+  message; a v4 body with 4096-byte sectors is refused with the v4 message,
+  not the sector-size error; a v3 tag with a 4096-byte shift is refused for
+  the shift; every refusal is under 0.1 s and the pristine v3 fixture still
+  loads.
+
+W33-2.4 detail:
+
+- The fuzz lane was one-eyed: `fuzz_reader` mutated the synthetic `.mpp` but
+  only ever called `mpp::load_bytes`, so `CfbDocument::from_bytes` (hardened
+  in W33-2.1) never saw a mutated byte; no target called
+  `core::io::import_mspdi`; and no CI job compiled with a sanitizer.
+- `fuzz_reader` now passes every mutated case to
+  `mppwrite::CfbDocument::from_bytes` as well.  The contract is the writer's
+  own: a `mppwrite::Error`, or a `CfbDocument` whose entry and stream counts
+  agree (at least one entry, no more streams than entries); any other
+  exception, crash or hang fails the case with its seed.  It is on by
+  default; `--no-writer-parse` exists to bisect.  The pristine baseline and
+  the real-file mutation loop are covered too, and the first eight cases
+  replay both parsers.
+- `fuzz_xml` is new: a deterministic target over the three committed MSPDI
+  samples (`tests/io_sample_minimal.xml`, `io_sample_tasks.xml`,
+  `io_sample_full.xml`), six mutation families through
+  `core::io::import_mspdi`, with the `MspdiError`-or-bounded-document
+  contract (task, resource, assignment, link and warning counts and all text
+  bounded by the file size), then every imported document through
+  `core::io::export_csv` with the output parsed as RFC 4180 and checked for a
+  constant column count.
+- The audit names a CSV importer; none exists in this tree (`core/io/csv.h`
+  is export-only; the only CSV files are `csv.cpp`, `csv.h` and
+  `tests/io_csv_tests.cpp`, and no `read_csv`/`import_csv`/`parse_csv`/
+  `from_csv` exists).  `fuzz_xml` therefore fuzzes the exporter -- the surface
+  that does exist -- and the absence is recorded in the commit and in
+  `tests/fuzz/README.md`.
+- `tests/fuzz/CMakeLists.txt` can now build `core_io` standalone (the
+  standalone configure builds and runs `fuzz_xml`).  `.github/workflows/ci.yml`
+  gains the `ubuntu-asan` job: clang,
+  `-fsanitize=address,undefined -fno-sanitize-recover=all`,
+  `CORE_WARNINGS_AS_ERRORS=ON`, and `ctest -E plan_recalc` with
+  `MPP_NO_CORPUS=1` (the fuzz targets included).  The job cannot be
+  dispatched from this session; the brief requires it green before CLOSE.
+- RED (the coverage gap) on HEAD `60d8f06`,
+  `build/w33/W33-2.4-red-coverage.log`: the writer parse on HEAD exists only
+  at source line 347 on the pristine bytes, while the mutated bytes reach only
+  line 648's `mpp::load_bytes`; no MSPDI/CSV reference exists anywhere under
+  `tests/fuzz`; the registered targets are `fuzz_reader`, `fuzz_writer` and
+  `fuzz_parsers`.  GREEN: `W33-2.4-fuzz-reader-long.log` (2000 cases,
+  `PASS fuzz_reader: 18 checks, 0 failures`; writer side parsed 1101,
+  `mppwrite::Error` 899); `W33-2.4-fuzz-xml-long.log` (2000 cases,
+  `PASS fuzz_xml: 10 checks, 0 failures`; 154 imports, 1846 `MspdiError`,
+  154 CSV exports checked); `W33-2.4-fuzz-xml-standalone.log` (the standalone
+  tests/fuzz configure builds and runs `fuzz_xml` too); and an MSVC ASan
+  local smoke (`W33-2.4-msvc-asan-fuzz-reader.log`,
+  `W33-2.4-msvc-asan-fuzz-xml.log`) passes the same 2000 cases each.  The
+  local smoke is not the CI job.
+
+Per-commit gates (logs under `build/w33/`; each commit's quoted gates
+include a clean client-name scan, a clean working-tree guard and no
+client-string hashes):
+
+| commit | builds | tests | fixtures |
+|---|---|---|---|
+| W33-2.1 `227105f` | core build exit 0 | core ctest `-E plan_recalc` 54/54 (53 before; `mpp_cfb_hardening` is the new 54th); `mpp_cfb_hardening` 16 checks | 140 hashes / 174 `.mpp` |
+| W33-2.2 `d19e201` | core build exit 0 | core ctest `-E plan_recalc` 54/54; `mpp_cfb_hardening` 23 checks | 140 hashes / 174 `.mpp` |
+| W33-2.3 `60d8f06` | core build exit 0 | core ctest `-E plan_recalc` 54/54; `mpp_cfb_hardening` 42 checks | 140 hashes / 174 `.mpp` |
+| W33-2.4 `a069d97` | core build exit 0 | core ctest `-E plan_recalc` 55/55 (54 before; `fuzz_xml` is the new 55th); `fuzz_reader` 18 checks; `fuzz_xml` 10 checks | 140 hashes / 174 `.mpp` |
+
+G2 group gates (fresh trees configured from scratch on the G2 code tree
+`a069d97` under `build/w33-g2-fresh{,-app,-qt}`, log
+`build/w33/W33-G2-fresh-gates.log`; the marker commit that follows adds this
+file's G2 section only):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 55/55 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failure(s) / 8 recorded (7 pass, 1 fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app / app_qt configure and build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| app ctest / app_qt ctest | 25/25 passed / 41/41 passed (the first app_qt run was 36/41: Smart App Control blocked three freshly linked binaries at image load; the same three targets were relinked from the same sources and the suite reran 41/41, `build/w33/W33-G2-appqt-retry.log`) |
+| `check_fixtures.py` | fixtures OK (140 documented hashes, 174 tracked `.mpp`); fixture paths OK (223 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `wave33..HEAD` / `guard_names wave33..HEAD` | 0 files, 0 name hits / 0 commits / exit 0 |
+
+The run started 2026-10-29 23:45 and finished 2026-10-30 00:13.
+
+## Found, not fixed
+
+- The audit's D-3 names an MSPDI XML importer and a CSV importer.  The MSPDI
+  importer exists and is now fuzzed.  No CSV importer exists in this tree;
+  `fuzz_xml` feeds the CSV exporter instead and both the commit and
+  `tests/fuzz/README.md` record the absence.  Adding an importer was not a
+  G2 item.
+- The `ubuntu-asan` job is written and structurally reviewed but cannot be
+  dispatched from this session (no workflow dispatch from this environment);
+  the brief requires it green before CLOSE, so CLOSE owns the dispatch and the
+  green record.
+- The local MSVC ASan smoke used `/fsanitize=address` with the MSVC linker's
+  LNK4044/LNK4302 warnings and only `abort_on_error=1` (MSVC ASan rejects
+  `detect_leaks=1`); it is evidence for this machine, not a substitute for the
+  clang ASan+UBSan CI job.
+- The first app_qt gate run lost five tests to the host's Smart App Control
+  policy: it blocked the newly linked `msproject_qt.exe`,
+  `qt_table_date_format_tests.exe` and `qt_split_view_gate_tests.exe` at image
+  load (CodeIntegrity events 3033/3077, policy
+  `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`; `VerifiedAndReputablePolicyState`
+  is 1).  The older tree's same-named binaries ran, as did a renamed copy of
+  one, so the block is on those three file hashes, not on the path, the test
+  code or the G2 sources.  Relinking the same three targets from the same
+  sources produced hashes that load, and the full suite then passed 41/41
+  (`build/w33/W33-G2-appqt-retry.log`).  No source, test or build flag was
+  changed and no security setting was touched; if the policy starts blocking
+  future wave binaries, how this host runs local gates is the owner's
+  decision.
+- W33-2.3 refuses v4 by design, as the brief's default says, because no v4
+  fixture exists to measure a correct implementation against.  A correct v4
+  implementation and its round-trip test remain unmeasured.
+- CLOSE is out of scope for this group session: the fresh-tree gates on the
+  final commit, the review pass over the wave-33 diff, the push and the CI
+  dispatch belong to the CLOSE section (wave-33-brief section 2).
+
+WAVE-33-G2-COMPLETE
