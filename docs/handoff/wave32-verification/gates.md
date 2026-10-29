@@ -13,7 +13,7 @@ docs only).  CI on 7727760, first dispatch: `ci` ubuntu-gcc + windows-msvc green
 | engine --suite | 7 pass / 1 fail (constraint-mso, the known expected failure), 0 unrecorded |
 | M2 recalc --compare | 332/332 |
 | check_fixtures | OK (139 documented hashes, 173 tracked .mpp); paths OK (222 files); oracle provenance OK (8) |
-| app_qt ctest | 37/37 |
+| app_qt ctest | 37/37 locally, 35/35 in CI (two corpus-gated: `qt_stored_table_corpus`, `qt_task_order_corpus`) |
 | app/ ctest | 25/25 |
 
 Independent review (review.md): Critical 0, High 0, Medium 2, Low 5.  R31-1 and R31-2

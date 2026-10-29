@@ -98,7 +98,7 @@ difference from `5650b53` is this file's marker line):
 | engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failures / 8 recorded (7 pass, 1 expected fail), 0 unrecorded, exit 0 |
 | reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
 | M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
-| app ctest / app_qt ctest | 25/25 / 37/37 passed |
+| app ctest / app_qt ctest | 25/25 / 37/37 passed locally (35/35 in CI: `qt_stored_table_corpus` and `qt_task_order_corpus` are registered only where `corpus/project_a.mpp` exists) |
 | `check_fixtures.py` / oracle provenance | fixtures OK (139 documented hashes, 173 tracked `.mpp`); paths OK (222 tracked test-data files, no local path); provenance OK (8 oracles) |
 | client-name scan on HEAD / messages `wave31..HEAD` / `guard_names wave31..HEAD` | 0 files, 0 hits / 0 commits / exit 0 |
 
@@ -214,7 +214,7 @@ finished 16:33.  All 22 stage exit lines are 0.
 | reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
 | M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
 | app configure/build/ctest | exit 0 / exit 0 / 25/25 passed, exit 0; the fresh app tree's `app_edits_outline_tests` reports 3230 checks, exit 0 (`build/w32/W32-CLOSE-fresh-app-edits-outline.log`) |
-| app_qt configure/build/ctest | exit 0 / exit 0 / 37/37 passed, exit 0 |
+| app_qt configure/build/ctest | exit 0 / exit 0 / 37/37 passed locally (35/35 in CI; the two corpus-gated tests above), exit 0 |
 | `check_fixtures.py` / oracle provenance | fixtures OK (139 documented hashes, 173 tracked `.mpp`); paths OK (222 tracked test-data files, no local path); provenance OK (8 oracles), exit 0 |
 | backlog vs pin | 114 pin command controls, 114 backlog ribbon rows, 0 mismatch(es), exit 0 |
 | client-name scan HEAD / messages `wave31..HEAD` / `guard_names wave31..HEAD` | 0 files, 0 hits / 0 commits / 0 hits, exit 0 |

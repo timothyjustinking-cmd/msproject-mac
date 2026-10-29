@@ -60,7 +60,9 @@ it is the only file a new session must read first._
   checks, 0 failures** and the suite **7 pass + `constraint-mso` expected**, 8
   recorded, 0 unrecorded; reader **1136** with corpus / **456** without; M2
   **332/332**, **268/268** and **64/64**; app **25/25** and
-  `app_edits_outline_tests` **3230 checks**; app_qt **37/37**; fixtures **OK**
+  `app_edits_outline_tests` **3230 checks**; app_qt **37/37 locally, 35/35 in
+  CI** (two corpus-gated: `qt_stored_table_corpus` and `qt_task_order_corpus`
+  are registered only where `corpus/project_a.mpp` exists); fixtures **OK**
   (139 documented hashes, 173 tracked `.mpp`), paths OK (222), oracle
   provenance **OK (8)**.  The earlier run on `64fa2fc` is preserved as
   `build/w32/W32-CLOSE-fresh-gates-64fa2fc.log`.

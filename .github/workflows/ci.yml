@@ -132,8 +132,15 @@ jobs:
       # PLAN_RECALC_UPDATE_GOLDEN=1; the corpus-free 266 checks run in their own
       # step below, with MPP_NO_CORPUS=1 (wave 24 W24-4/R4).  The engine suite
       # IS included (51 core tests: 50 + engine_diff_suite).
+      # Wave 33 (W33-3.4, audit C-11): MPP_NO_CORPUS=1 on the FIRST pass too.
+      # A runner has no corpus/, but a self-hosted or developer machine does,
+      # and without the flag this step would silently run the corpus-aware
+      # branches there.  The flag makes the pass prove the committed-fixture
+      # path everywhere; the corpus branches keep their own local runs.
       - name: Test
         shell: bash
+        env:
+          MPP_NO_CORPUS: "1"
         run: ctest --test-dir build -C Release -E plan_recalc --output-on-failure --timeout 60
 
       # Wave 24 (W24-4/R4): wave 23 excluded plan_recalc from CI entirely and

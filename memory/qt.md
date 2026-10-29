@@ -110,7 +110,7 @@ warnings).  Do not re-implement one of those in `app_qt/`.
 
 1. Compile `app_qt` on CI; fix the reported Qt 6.2 API slips (keep each uncertain
    API behind one helper: `print_page.cpp`, `dialogs.cpp`).
-2. Confirm `qt_parity_geometry`/`qt_render_parity` still pass at 1920x1032 and
+2. Confirm `qt_parity_geometry`/`qt_render_1920` still pass at 1920x1032 and
    P1 still scores 9/9.
 3. Then wire clipboard (Copy/Paste through `SheetModel`), and optionally persist
    the chosen view/preferences.

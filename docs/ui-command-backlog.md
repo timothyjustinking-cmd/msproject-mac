@@ -190,5 +190,7 @@ Edits that are not command rows, with the reason the shell refuses them (operato
 ## Summary
 
 * ribbon commands: 114 (69 disabled)
+* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 47 enabled / 67 disabled command controls. The table above reports 69 disabled because it counts a split by its menu items; the pin counts the control.
+* the difference (2): 2 splits whose button is live while every menu item is disabled: Project > Properties > WBS, Project > Schedule > Set Baseline
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

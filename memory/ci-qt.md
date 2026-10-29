@@ -98,7 +98,8 @@ Artifact name `qt-window-${runner.os}-${github.sha}` (runner.os =
 - `build-qt/qt-render-smoke.png` — 900x560 (`qt_render_smoke`)
 - `build-qt/test-out/qt-render-document.png` — 900x560 (`qt_render_document`)
 - `build-qt/test-out/qt-shell-window.png` — 900x560 (`qt_shell_offscreen`)
-- `build-qt/test-out/qt-render-parity.png` — 1920x1032 (`qt_render_parity`)
+- `build-qt/test-out/qt-render-parity.png` — 1920x1032 (`qt_render_1920`; the
+  file name is unchanged, the test asserts the render size, not a comparison)
 
 `qt_parity_geometry` writes no PNG by design. The parity PNG is the one
 `scripts/parity_report.py` scores against `corpus/bench/msproject-gantt.png`

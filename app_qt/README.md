@@ -59,10 +59,11 @@ CTest (all offscreen, `QT_SCALE_FACTOR=1`):
 * `qt_render_document` — the same with
   `--open tests/data/synthetic-base.mpp` (read-only), writing
   `build-qt/test-out/qt-render-document.png`.
-* `qt_render_parity` — the same document rendered at the reference's own
+* `qt_render_1920` — the same document rendered at the reference's own
   1920x1032 (`--parity`), writing `build-qt/test-out/qt-render-parity.png`;
   asserts `rendered 1920x1032`.  This is the image P1's harness scores for the
-  column widths.
+  column widths; the test is the render, not the comparison (`parity_report.py`
+  needs the git-ignored `corpus/` and runs separately).
 * `qt_shell_offscreen` — builds the real window against the fixture and checks
   3 rows, the whole menu command list against `app::menu_specs()`, and that the
   saved PNG reads back at 900x560.

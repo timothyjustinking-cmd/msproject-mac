@@ -55,7 +55,7 @@ Decision 12's text above is the operator's and is unchanged.
 - Both themes render (palette swap asserted, not eyeballed).
 
 Existing tests stay green: `qt_render_smoke`, `qt_render_document`,
-`qt_render_parity`, `qt_shell_offscreen`, `qt_parity_geometry`, `qt_save_reopen`.
+`qt_render_1920`, `qt_shell_offscreen`, `qt_parity_geometry`, `qt_save_reopen`.
 
 ## Deliberate limits, stated rather than discovered
 

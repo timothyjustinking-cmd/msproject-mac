@@ -123,20 +123,24 @@ add_test(NAME qt_render_document
 set_tests_properties(qt_render_document PROPERTIES
                      PASS_REGULAR_EXPRESSION "rendered 900x560")
 
-# Wave 18 Q3: the parity render.  Same window, the REFERENCE capture's own
-# client size (1920x1032, docs/parity.md section 2), so all nine Entry columns
-# fit and P1's harness can compare the column widths (at 900 it reports them
-# N/A).  This is the image the CI artifact carries as qt-render-parity.png:
+# Wave 18 Q3: the 1920 render.  Same window, the REFERENCE capture's own client
+# size (1920x1032, docs/parity.md section 2), so all nine Entry columns fit and
+# P1's harness can compare the column widths (at 900 it reports them N/A).
+# This is the image the CI artifact carries as qt-render-parity.png:
 #   python scripts/parity_report.py corpus/bench/msproject-gantt.png \
 #          build-qt/test-out/qt-render-parity.png
 # The default window remains 900x560; --parity changes the render size only.
-add_test(NAME qt_render_parity
+# W33-3.4 (audit C-12): the test is named qt_render_1920, not qt_render_parity,
+# because it asserts only "rendered 1920x1032" -- the comparison against the
+# reference capture is the separate parity_report.py command above, which needs
+# the git-ignored corpus/ and therefore cannot run on a CI runner.
+add_test(NAME qt_render_1920
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:msproject_qt>
                  --open "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                  --render "${QT_TEST_OUT_DIR_CMAKE}/qt-render-parity.png"
                  --parity)
-set_tests_properties(qt_render_parity PROPERTIES
+set_tests_properties(qt_render_1920 PROPERTIES
                      PASS_REGULAR_EXPRESSION "rendered 1920x1032")
 
 # The headless shell test: loads the committed fixture, asserts the row count and

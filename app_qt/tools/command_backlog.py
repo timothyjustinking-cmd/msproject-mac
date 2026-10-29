@@ -225,6 +225,37 @@ FIELD_REFUSALS = [
     ),
 ]
 
+# W33-3.4 (audit C-9): the independent pin records each control's real enabled
+# state, so its count is the port's decision-9 truth.  The backlog table is
+# built from ribbon_bar.cpp, and a split whose menu items are all disabled has
+# no RibbonCommand there, so the two counts differ by exactly those splits.
+# The summary quotes both rather than letting the table's larger "disabled"
+# number stand alone.
+COMMAND_KINDS = {"button", "small", "split"}
+
+
+def pin_command_controls() -> tuple[int, int, list[tuple[str, str, str]]]:
+    """(enabled, disabled, enabled split keys) from app_qt/ribbon_pin.tsv."""
+    enabled = 0
+    disabled = 0
+    enabled_splits: list[tuple[str, str, str]] = []
+    text = (ROOT / "app_qt" / "ribbon_pin.tsv").read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        fields = line.split("\t")
+        if len(fields) < 9 or fields[3] not in COMMAND_KINDS:
+            continue
+        if fields[5] == "1":
+            enabled += 1
+            if fields[3] == "split":
+                enabled_splits.append(
+                    (fields[0], fields[2], fields[4].replace("\\n", " "))
+                )
+        else:
+            disabled += 1
+    return enabled, disabled, enabled_splits
+
 
 def implemented_actions() -> set[str]:
     text = (ROOT / "app_qt" / "command_status.h").read_text(encoding="utf-8")
@@ -427,10 +458,12 @@ def main() -> int:
     lines.append("| Tab | Group | Command | Status | Why missing |")
     lines.append("|---|---|---|---|---|")
     disabled_ribbon = 0
+    disabled_rows: set[tuple[str, str, str]] = set()
     for tab, group, label, action in ribbon:
         state, why = status(action, implemented)
         if state == "disabled":
             disabled_ribbon += 1
+            disabled_rows.add((tab, group, label))
         lines.append(f"| {tab} | {group} | {label} | {state} | {why} |")
     lines.append("")
     lines.append("## Menu bar")
@@ -459,7 +492,27 @@ def main() -> int:
     lines.append("")
     lines.append("## Summary")
     lines.append("")
+    pin_enabled, pin_disabled, pin_splits = pin_command_controls()
     lines.append(f"* ribbon commands: {len(ribbon)} ({disabled_ribbon} disabled)")
+    split_disagreements = [key for key in pin_splits if key in disabled_rows]
+    lines.append(
+        f"* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference "
+        f"captures): {pin_enabled} enabled / {pin_disabled} disabled command "
+        f"controls. The table above reports {disabled_ribbon} disabled because "
+        "it counts a split by its menu items; the pin counts the control."
+    )
+    if split_disagreements:
+        named = ", ".join(
+            f"{tab} > {group} > {label}"
+            for tab, group, label in sorted(split_disagreements)
+        )
+        count = len(split_disagreements)
+        noun = "split" if count == 1 else "splits"
+        lines.append(
+            f"* the difference ({disabled_ribbon - pin_disabled}): {count} "
+            f"{noun} whose button is live while every menu item is disabled: "
+            f"{named}"
+        )
     lines.append(f"* menu commands: {len(menus)} ({disabled_menu} disabled)")
     lines.append(
         "* implementation source: `shell_implements()` in "
