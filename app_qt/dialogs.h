@@ -35,6 +35,7 @@
 #include <QDialog>
 #include <QString>
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -146,7 +147,11 @@ bool edit_preferences(QWidget* parent, app::Preferences* prefs);
 
 class TableDateFormatDialog final : public QDialog {
   public:
+    // `table_index` is the table the view shows: the dialog's date-format and
+    // column requests address THAT table (W33-1.6).  It has no default, so a
+    // caller cannot silently edit the first table while showing another.
     explicit TableDateFormatDialog(const app::ViewStateEdits& current,
+                                   std::size_t table_index,
                                    QWidget* parent = nullptr);
 
     // The request the controls describe.  Only valid after accept() succeeded;
@@ -168,6 +173,7 @@ class TableDateFormatDialog final : public QDialog {
     void update_enabled();
     app::ViewStateEdits current_;
     app::ViewStateEdits edits_;
+    std::size_t table_index_ = 0;
     bool ok_ = false;
     QComboBox* date_format_ = nullptr;
     QCheckBox* replace_column_ = nullptr;
@@ -176,9 +182,10 @@ class TableDateFormatDialog final : public QDialog {
     QLineEdit* title_ = nullptr;
 };
 
-// Shows the dialog; on OK writes the request to `out` and returns true.
+// Shows the dialog; on OK writes the request to `out` and returns true.  The
+// request addresses `table_index`, the table the view shows.
 bool edit_table_date_format(QWidget* parent, const app::ViewStateEdits& current,
-                            app::ViewStateEdits* out);
+                            std::size_t table_index, app::ViewStateEdits* out);
 
 // ---------------------------------------------------------------------------
 // Custom Field Formula (114/Props through app::Document::save)

@@ -3672,7 +3672,10 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     app::ViewStateEdits edits = plan.document->view_state_edits();
     edits.set_date_format = true;
     edits.date_format = static_cast<std::uint8_t>([selected tag]);
-    edits.table_index = 0;  // the measured fixture's only table (the Entry table)
+    // W33-1.6 (A-11): this shell has no Tables command, so the view always shows
+    // the table the load applied, which is the first one.  That is the table this
+    // edit addresses; the Qt shell passes its applied table's index instead.
+    edits.table_index = 0;
     plan.document->request_view_state_edits(edits);
     note(plan, "table date format " +
                    std::to_string(static_cast<unsigned>(edits.date_format)) +

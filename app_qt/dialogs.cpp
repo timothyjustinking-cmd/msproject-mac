@@ -248,8 +248,8 @@ bool edit_preferences(QWidget* parent, app::Preferences* prefs) {
 // ---------------------------------------------------------------------------
 
 TableDateFormatDialog::TableDateFormatDialog(const app::ViewStateEdits& current,
-                                             QWidget* parent)
-    : QDialog(parent), current_(current) {
+                                             std::size_t table_index, QWidget* parent)
+    : QDialog(parent), current_(current), table_index_(table_index) {
     setWindowTitle(QStringLiteral("Table / Date Format"));
     auto* outer = make_outer(*this, dialog_geometry::kTableDateFormatSize);
 
@@ -312,7 +312,8 @@ void TableDateFormatDialog::accept() {
     app::ViewStateEdits edits = current_;
     edits.set_date_format = true;
     edits.date_format = static_cast<std::uint8_t>(date_format_->currentData().toInt());
-    edits.table_index = 0;
+    // W33-1.6 (A-11): address the table the view shows, not a fixed first table.
+    edits.table_index = static_cast<std::uint32_t>(table_index_);
     edits.replace_column = false;
     if (replace_column_->isChecked()) {
         // Accept the writer's "0x0b400033" form and a plain decimal id.  (Qt's
@@ -346,11 +347,11 @@ void TableDateFormatDialog::accept() {
 }
 
 bool edit_table_date_format(QWidget* parent, const app::ViewStateEdits& current,
-                            app::ViewStateEdits* out) {
+                            std::size_t table_index, app::ViewStateEdits* out) {
     if (out == nullptr) {
         return false;
     }
-    TableDateFormatDialog dialog(current, parent);
+    TableDateFormatDialog dialog(current, table_index, parent);
     if (dialog.exec() != QDialog::Accepted || !dialog.ok()) {
         return false;
     }

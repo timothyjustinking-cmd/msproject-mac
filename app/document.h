@@ -175,9 +175,9 @@ void accept_start_edits(PlanInput& loaded, const std::vector<StartEdit>& edits);
 //   overload for those, with these two operations riding the same write.
 
 // One `214/CTable` edit request.  `table_index` is the index into the parsed
-// CTable collection (0 = the first table; the measured fixture has one, the
-// Entry table).  Both operations are optional; `any()` says whether the request
-// asks for a write.
+// CTable collection (0 = the first table); the shells supply the table their
+// view shows (W33-1.6).  Both operations are optional; `any()` says whether the
+// request asks for a write.
 struct ViewStateEdits {
     bool set_date_format = false;
     std::uint8_t date_format = 0;  // 0xff = default; 0x05 = DateFormat 5 (measured)

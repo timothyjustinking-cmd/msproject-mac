@@ -4320,7 +4320,10 @@ void MainWindow::show_table_date_format() {
     if (!document_) {
         document_ = std::make_unique<app::Document>(doc_.path());
     }
-    TableDateFormatDialog dialog(document_->view_state_edits(), this);
+    // W33-1.6 (A-11): the request addresses the table the view shows (View >
+    // Tables applies one for the session); the dialog and the save write that
+    // table's 214/CTable block, never a fixed first table.
+    TableDateFormatDialog dialog(document_->view_state_edits(), doc_.selected_table(), this);
     if (dialog.exec() != QDialog::Accepted || !dialog.ok()) {
         set_message("table / date format cancelled", false);
         update_status();

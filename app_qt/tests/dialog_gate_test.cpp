@@ -276,7 +276,7 @@ int main(int argc, char** argv) {
     // -----------------------------------------------------------------------
     {
         app::ViewStateEdits current;
-        msqt::TableDateFormatDialog dialog(current);
+        msqt::TableDateFormatDialog dialog(current, 1);
         dialog.show();
         QApplication::processEvents();
         check_shell(dialog, "Table / Date Format", kTableDateFormatSize);
@@ -305,6 +305,8 @@ int main(int argc, char** argv) {
                         dialog.edits().field_id == 0x0b400033u &&
                         dialog.edits().title == "Text1",
                     "the result carries the column replacement");
+        gate::check(dialog.edits().table_index == 1,
+                    "the result carries the table index the caller shows (W33-1.6)");
         check_button_box(dialog);
     }
 

@@ -185,6 +185,23 @@ add_test(NAME qt_save_reopen
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# ===========================================================================
+# WAVE 33 (W33-1.6 / A-11): the Table / Date Format dialog hard-coded
+# table_index 0.  This gate loads the two-table fixture, applies the SECOND
+# table through the real View > Tables popup, saves format 4, and reads the
+# saved file back: the second table's date format changed, the first table's
+# block and the applied Entry table's byte did not.
+# ===========================================================================
+add_executable(qt_table_date_format_tests tests/table_date_format_test.cpp)
+target_link_libraries(qt_table_date_format_tests PRIVATE qt_shell)
+qt_set_warnings(qt_table_date_format_tests)
+
+add_test(NAME qt_table_date_format
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_table_date_format_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave31-tables.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # Wave 24 (W24-1): RecordSet row vs plan task index.  The fixture stores the
 # project row SHOWN, out-of-ID stored order and a mixed scheduling state, so
 # every uid-routed call site (Task Information, Custom Fields save, Delete,
@@ -785,7 +802,7 @@ foreach(carlito_target
         qt_icon_gate_tests qt_backstage_gate_tests qt_project_dialog_gate_tests
         qt_format_dialog_gate_tests qt_page_setup_gate_tests
         qt_report_dialog_gate_tests qt_spelling_gate_tests
-        qt_task_information_apply_tests)
+        qt_task_information_apply_tests qt_table_date_format_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 
