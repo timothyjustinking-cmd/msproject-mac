@@ -11,6 +11,8 @@
 
 #include "inplace.h"
 
+#include "atomic_write.h"
+
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -201,17 +203,10 @@ bool InPlacePatcher::differs_at(std::uint64_t offset) const {
 }
 
 void InPlacePatcher::save(std::string const& path) const {
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    if (!output) {
-        throw Error("cannot write '" + path + "'");
-    }
-    if (!bytes_.empty()) {
-        output.write(reinterpret_cast<char const*>(bytes_.data()),
-                     static_cast<std::streamsize>(bytes_.size()));
-    }
-    if (!output) {
-        throw Error("short write on '" + path + "'");
-    }
+    /* W33-0.1 (A-2 / D-1 / D-4): the same write-beside-and-rename rule as
+     * CfbDocument::save.  The bytes are compared on re-read; a failure leaves
+     * the target exactly as it was. */
+    write_file_atomically(path, bytes_);
 }
 
 } /* namespace mppwrite */

@@ -26,6 +26,7 @@ endif()
 
 add_library(core_mppwrite STATIC
     cfb_writer.cpp
+    atomic_write.cpp
     inplace.cpp
     table.cpp
     row_writer.cpp
@@ -124,6 +125,7 @@ if(MPPWRITE_BUILD_TESTS)
         )
     endfunction()
 
+    mppwrite_add_test(mppwrite_atomic_write atomic_write.cpp)
     mppwrite_add_test(mppwrite_roundtrip_cfb roundtrip_cfb.cpp)
     mppwrite_add_test(mppwrite_inplace_patch inplace_patch.cpp)
     mppwrite_add_test(mppwrite_roundtrip_stream roundtrip_stream_replace.cpp)

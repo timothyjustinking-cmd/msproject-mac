@@ -74,8 +74,11 @@ if(MPP_BUILD_TESTS)
         # G1: the MPP12 container round-trip test (test_mpp12_container) uses
         # the writer's CFB read/write model.  cfb_writer.cpp depends only on the
         # C++20 standard library, so the reader test binary stays self-contained
-        # and no order-dependent link to core_mppwrite is needed.
-        "${MPP_REPO_ROOT}/core/mppwrite/cfb_writer.cpp")
+        # and no order-dependent link to core_mppwrite is needed.  W33-0.1:
+        # CfbDocument::save routes through atomic_write.cpp, which is likewise
+        # standard-library only.
+        "${MPP_REPO_ROOT}/core/mppwrite/cfb_writer.cpp"
+        "${MPP_REPO_ROOT}/core/mppwrite/atomic_write.cpp")
     target_link_libraries(mpp_reader_tests PRIVATE core_mpp)
     target_include_directories(mpp_reader_tests PRIVATE
         "${MPP_REPO_ROOT}/core/mppwrite")

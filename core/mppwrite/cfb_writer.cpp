@@ -23,6 +23,8 @@
 
 #include "cfb_writer.h"
 
+#include "atomic_write.h"
+
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -1256,17 +1258,26 @@ std::vector<std::uint8_t> CfbDocument::to_bytes() const {
 
 void CfbDocument::save(std::string const& path) const {
     std::vector<std::uint8_t> const bytes = to_bytes();
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    if (!output) {
-        throw Error("cannot write '" + path + "'");
-    }
-    if (!bytes.empty()) {
-        output.write(reinterpret_cast<char const*>(bytes.data()),
-                     static_cast<std::streamsize>(bytes.size()));
-    }
-    if (!output) {
-        throw Error("short write on '" + path + "'");
-    }
+    /* W33-0.1 (A-2 / D-1 / D-4): write beside the target, prove the temporary
+     * file re-reads as the emitted container AND that it parses back and
+     * re-emits byte-identically, then rename it over the target.  A failure
+     * anywhere leaves the target exactly as it was; the old direct
+     * ios::trunc write could leave a truncated file in place. */
+    write_file_atomically(path, bytes,
+                          [](std::vector<std::uint8_t> const& reread) {
+                              CfbDocument const parsed =
+                                  CfbDocument::from_bytes(reread);
+                              std::string const problem = parsed.check();
+                              if (!problem.empty()) {
+                                  return problem;
+                              }
+                              if (parsed.to_bytes() != reread) {
+                                  return std::string(
+                                      "the written container does not re-emit "
+                                      "byte-identically");
+                              }
+                              return std::string();
+                          });
 }
 
 /* --- self check ---------------------------------------------------------- */
