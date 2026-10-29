@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "fixture_guard.h"
 #include "inplace.h"
 #include "row_writer.h"
 #include "table.h"
@@ -148,13 +149,7 @@ int main() {
     TestContext t;
     try {
         std::string const source = join(MPPWRITE_PROBE_DIR, "base.mpp");
-        /* corpus/ is git-ignored (it holds a client's real programme), so a
-         * build machine may not have the fixture.  That is an environment
-         * difference, not a failure. */
-        std::error_code error;
-        if (!std::filesystem::exists(source, error)) {
-            std::cout << "SKIP: corpus not present (" << source
-                      << " is missing; corpus/ is git-ignored)\n";
+        if (!fixture::corpus_present(source)) {
             return 0;
         }
         mppwrite::InPlacePatcher patcher = mppwrite::InPlacePatcher::from_file(source);

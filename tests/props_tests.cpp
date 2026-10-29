@@ -10,6 +10,7 @@
 // case; otherwise the case is skipped.
 
 #include "props.h"
+#include "fixture_guard.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -1033,13 +1034,17 @@ std::string env_value(const char* name) {
 void test_optional_corpus_blob() {
     const std::string path = env_value("PROPS_CORPUS_BLOB");
     const std::string no_corpus = env_value("MPP_NO_CORPUS");
-    if (path.empty() || !no_corpus.empty()) {
-        std::printf("SKIP: corpus Props blob (set PROPS_CORPUS_BLOB to enable)\n");
+    if (path.empty()) {
+        std::printf("SKIP: corpus absent (PROPS_CORPUS_BLOB is not set)\n");
+        return;
+    }
+    if (!no_corpus.empty()) {
+        fixture::corpus_absent(path, "MPP_NO_CORPUS is set");
         return;
     }
     const auto bytes = read_file(path.c_str());
     if (bytes.empty()) {
-        std::printf("SKIP: corpus Props blob could not be read\n");
+        fixture::corpus_absent(path, "the blob could not be read");
         return;
     }
     msproject::props::PropsDocument document;

@@ -44,6 +44,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "fixture_guard.h"
 #include "inplace.h"
 #include "table.h"
 
@@ -183,15 +184,8 @@ int main() {
         /* corpus/ is git-ignored (it holds a client's real programme), so a
          * build machine may not have the fixtures.  That is an environment
          * difference, not a failure. */
-        std::error_code error;
-        if (!std::filesystem::exists(source, error)) {
-            std::cout << "SKIP: corpus not present (" << source
-                      << " is missing; corpus/ is git-ignored)\n";
-            return 0;
-        }
-        if (!std::filesystem::exists(project_a_path, error)) {
-            std::cout << "SKIP: corpus not present (" << project_a_path
-                      << " is missing; corpus/ is git-ignored)\n";
+        if (!fixture::corpus_present(source) ||
+            !fixture::corpus_present(project_a_path)) {
             return 0;
         }
         std::filesystem::create_directories(MPPWRITE_TEST_OUT);

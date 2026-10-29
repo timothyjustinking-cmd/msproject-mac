@@ -61,6 +61,7 @@
 
 #include "cfb_writer.h"
 #include "edit_model.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 // core/mppwrite/outline.h includes core/mppwrite/table.h from its own
 // directory.  The app include path lists core/view first, so a bare "table.h"
@@ -76,8 +77,9 @@
 
 #if !defined(APP_TEST_DATA_DIR) || !defined(APP_TEST_OUT_DIR)
 int main() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
-    return 0;
+    std::printf("FAIL: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)\n");
+    return 1;
 }
 #else
 
@@ -415,13 +417,9 @@ void check_pair() {
     const std::filesystem::path null_path =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         save_pair::null_fixture_name("wave30-task-mode-auto-control.mpp");
-    if (!std::filesystem::exists(control_path) ||
-        !std::filesystem::exists(result_path)) {
-        std::printf("SKIP: the wave30 task-mode pair is not present\n");
-        return;
-    }
-    check(std::filesystem::exists(null_path),
-          "the committed null save for the task-mode control is present");
+    fixture::require_committed(control_path);
+    fixture::require_committed(result_path);
+    fixture::require_committed(null_path);
 
     app::PlanInput plan;
     try {
@@ -797,10 +795,7 @@ void check_refusals() {
     const std::filesystem::path control_path =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave30-task-mode-auto-control.mpp";
-    if (!std::filesystem::exists(control_path)) {
-        std::printf("SKIP: the wave30 task-mode control is not present\n");
-        return;
-    }
+    fixture::require_committed(control_path);
     app::PlanInput plan;
     try {
         plan = app::plan_input_from_document(mpp::load_file(control_path.string()));

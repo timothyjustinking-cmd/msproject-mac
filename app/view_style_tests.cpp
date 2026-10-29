@@ -15,10 +15,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <fstream>
 #include <string>
 
 #include "cell_format.h"
+#include "fixture_guard.h"
 #include "gantt_style.h"
 #include "view_style.h"
 
@@ -42,11 +42,6 @@ void check(bool ok, const std::string& what) {
         ++g_failures;
         std::printf("FAIL: %s\n", what.c_str());
     }
-}
-
-bool file_exists(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
-    return in.good();
 }
 
 TextStyle make_style(const char* family, int size, bool italic, bool has_colour,
@@ -439,8 +434,7 @@ void check_resource_sheet_fixture() {
 
 void check_corpus_fixture() {
     const std::string path = std::string(APP_CORPUS_DIR) + "/project_a.mpp";
-    if (!file_exists(path)) {
-        std::printf("SKIP: view style corpus checks (no corpus/project_a.mpp)\n");
+    if (!fixture::corpus_present(path, "view style corpus checks")) {
         return;
     }
     GanttStyle style;

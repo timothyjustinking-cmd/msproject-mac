@@ -41,6 +41,7 @@
 #include <system_error>
 #include <vector>
 
+#include "fixture_guard.h"
 #include "smoke.h"
 
 namespace {
@@ -234,7 +235,8 @@ void test_missing_fixture() {
 #else
 
 void test_missing_fixture() {
-    std::printf("SKIP: APP_SMOKE_OUT_DIR is not defined\n");
+    check(false, "APP_SMOKE_OUT_DIR is not defined; configure with "
+                 "APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 
 #endif
@@ -247,11 +249,7 @@ void test_missing_fixture() {
 
 void test_real_plan() {
     const fs::path fixture = fs::path(APP_TEST_DATA_DIR) / "synthetic-base.mpp";
-    if (!fs::exists(fixture)) {
-        std::printf("SKIP: %s is not present; the smoke needs the committed fixture\n",
-                    fixture.string().c_str());
-        return;
-    }
+    fixture::require_committed(fixture);
     std::string fixture_before;
     check(read_all(fixture, fixture_before), "the committed fixture can be read");
     const std::size_t fixture_size = bytes_on_disk(fixture);
@@ -397,7 +395,8 @@ void test_real_plan() {
 #else
 
 void test_real_plan() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_SMOKE_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_SMOKE_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 
 #endif
@@ -414,11 +413,7 @@ void test_real_plan() {
 // check below fails under RecordSet-row == task-row arithmetic.
 void test_row_shown_fixture() {
     const fs::path fixture = fs::path(APP_TEST_DATA_DIR) / "wave24-order.mpp";
-    if (!fs::exists(fixture)) {
-        std::printf("SKIP: %s is not present; the row-shown smoke needs the committed fixture\n",
-                    fixture.string().c_str());
-        return;
-    }
+    fixture::require_committed(fixture);
     std::string fixture_before;
     check(read_all(fixture, fixture_before), "the row-shown fixture can be read");
     const std::size_t fixture_size = bytes_on_disk(fixture);
@@ -496,7 +491,8 @@ void test_row_shown_fixture() {
 #else
 
 void test_row_shown_fixture() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_SMOKE_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_SMOKE_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 
 #endif

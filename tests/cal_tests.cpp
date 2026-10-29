@@ -35,6 +35,7 @@
 
 #include "cal.h"
 #include "cpm.h"
+#include "fixture_guard.h"
 #include "mpp_fixture_builder.h"
 #include "reader.h"
 #include "sched_test_support.h"
@@ -1825,9 +1826,7 @@ void test_mpp12_task_table(sched_test::TestContext& ctx, std::string const& path
 // Project 2007 file and a Project 2010+ file.
 void test_mpp12_agreement(sched_test::TestContext& ctx, std::string const& mpp12_path,
                           std::string const& mpp14_path) {
-    if (!file_exists(mpp14_path)) {
-        std::cout << "SKIP: " << mpp14_path
-                  << " is absent; the MPP12/MPP14 agreement case is not checked\n";
+    if (!fixture::corpus_present(mpp14_path)) {
         return;
     }
     const cal::CalendarTable table12 = cal::decode_file(mpp12_path);
@@ -2178,55 +2177,34 @@ int main() {
     const std::string mpp12_task_path = join_path(probe_dir, "mpp12task.mpp");
     const std::string project_a_path = join_path(corpus_dir, "project_a.mpp");
 
-    if (file_exists(base_path)) {
+    if (fixture::corpus_present(base_path)) {
         test_standard_probe(ctx, base_path);
-    } else {
-        std::cout << "SKIP: " << base_path << " is absent"
-                  << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
     }
-    if (file_exists(w3o1_path)) {
+    if (fixture::corpus_present(w3o1_path)) {
         const cal::CalendarTable table = cal::decode_file(w3o1_path);
         ctx.equal(table.base_calendar_count(), 1u, "w3-o1: one base calendar");
         ctx.equal(table.exception_count(), 0u, "w3-o1: no dated exceptions");
         ctx.equal(table.calendars.size(), 2u, "w3-o1: two rows (1 base + 1 resource calendar)");
-    } else {
-        std::cout << "SKIP: " << w3o1_path << " is absent\n";
     }
-    if (file_exists(holiday_path)) {
+    if (fixture::corpus_present(holiday_path)) {
         test_holiday_probe(ctx, holiday_path);
-    } else {
-        std::cout << "SKIP: " << holiday_path << " is absent\n";
     }
-    if (file_exists(w12_path)) {
+    if (fixture::corpus_present(w12_path)) {
         test_w12_exceptions(ctx, w12_path);
-    } else {
-        std::cout << "SKIP: " << w12_path << " is absent"
-                  << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
     }
-    if (file_exists(w12_monthpos_path)) {
+    if (fixture::corpus_present(w12_monthpos_path)) {
         test_w12_monthpos(ctx, w12_monthpos_path);
-    } else {
-        std::cout << "SKIP: " << w12_monthpos_path << " is absent"
-                  << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
     }
-    if (file_exists(mpp12_calendar_path)) {
+    if (fixture::corpus_present(mpp12_calendar_path)) {
         test_mpp12_identity(ctx, mpp12_calendar_path);
         test_mpp12_agreement(ctx, mpp12_calendar_path, base_path);
         test_mpp12_schedules(ctx, mpp12_calendar_path);
-    } else {
-        std::cout << "SKIP: " << mpp12_calendar_path << " is absent"
-                  << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
     }
-    if (file_exists(mpp12_task_path)) {
+    if (fixture::corpus_present(mpp12_task_path)) {
         test_mpp12_task_table(ctx, mpp12_task_path);
-    } else {
-        std::cout << "SKIP: " << mpp12_task_path << " is absent"
-                  << (corpus_hidden() ? " (CAL_NO_CORPUS is set)" : "") << '\n';
     }
-    if (file_exists(project_a_path)) {
+    if (fixture::corpus_present(project_a_path)) {
         test_project_a_counts(ctx, project_a_path);
-    } else {
-        std::cout << "SKIP: " << project_a_path << " is absent\n";
     }
 
     return ctx.finish("cal_tests");

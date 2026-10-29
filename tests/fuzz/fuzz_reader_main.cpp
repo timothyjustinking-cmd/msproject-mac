@@ -1005,14 +1005,15 @@ int run_worker(Options const& options) {
             }
         }
         if (corpus_dir.empty()) {
-            std::cout << "SKIP: no corpus directory (real-file baseline not run)\n";
+            std::cout << "SKIP: corpus absent: no corpus directory; "
+                         "real-file baseline not run\n";
         } else {
             char const* const names[] = {"project_a.mpp",
                                          "project_b.mpp"};
             for (char const* name : names) {
                 std::string const path = fuzz::join_path(corpus_dir, name);
                 if (!fuzz::file_exists(path)) {
-                    std::cout << "SKIP: " << name << " not present\n";
+                    std::cout << "SKIP: corpus absent (" << path << ")\n";
                     continue;
                 }
                 Bytes const corpus = fuzz::read_file(path);

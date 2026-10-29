@@ -54,6 +54,7 @@
 #include "document.h"
 #include "edit_model.h"
 #include "field_values.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 #include "props.h"
 #include "reader_adapter.h"
@@ -465,11 +466,7 @@ bool load_plan(const std::filesystem::path& path, Plan& plan) {
 
 void test_save_round_trip() {
     const std::filesystem::path source = kFixture;
-    if (!std::filesystem::exists(source)) {
-        std::printf("SKIP: %s is not present; the save round trip needs the committed fixture\n",
-                    source.string().c_str());
-        return;
-    }
+    fixture::require_committed(source);
     const std::size_t source_bytes = bytes_on_disk(source);
 
     Plan plan;
@@ -1274,9 +1271,7 @@ void test_cascade_with_document_edits_in_one_write() {
     const std::filesystem::path via_document = out_path("app-cascade-via-document.mpp");
     const std::filesystem::path via_expected = out_path("app-cascade-via-expected.mpp");
 
-    if (!std::filesystem::exists(source)) {
-        return;
-    }
+    fixture::require_committed(source);
 
     // A source file that already stores a FORMULA (and no custom-field value), so
     // the hook-only clear below has something to remove and the flag decision is
@@ -1618,7 +1613,8 @@ void test_cascade_delete_with_formula() {
 
 #else
 void test_save_round_trip() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 
 void test_save_view_state_date_format() {}

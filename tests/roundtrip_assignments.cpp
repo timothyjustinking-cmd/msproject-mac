@@ -68,6 +68,7 @@
 
 #include "add_delete.h"
 #include "cfb_writer.h"
+#include "fixture_guard.h"
 #include "table.h"
 
 #ifdef MPPWRITE_HAVE_READER
@@ -1025,8 +1026,7 @@ void test_refusals(TestContext& t) {
 
 void test_corpus(TestContext& t) {
     std::string const measured = join(MPPWRITE_PROBE_DIR, "w12-assignadd.mpp");
-    if (!file_exists(measured)) {
-        std::cout << "SKIP: corpus-gated case (no " << measured << ")\n";
+    if (!fixture::corpus_present(measured)) {
         return;
     }
     mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(measured);

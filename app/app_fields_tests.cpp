@@ -36,6 +36,7 @@
 #include "field_table.h"
 #include "field_value.h"
 #include "fields_model.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 #include "prefs.h"
 #include "sheet.h"
@@ -378,12 +379,9 @@ void test_column_formatting() {
 void test_formula_extraction() {
     const std::filesystem::path blob =
         std::filesystem::path(APP_TEST_DATA_DIR) / "synthetic-props.bin";
+    fixture::require_committed(blob);
     const std::vector<std::uint8_t> bytes = read_bytes(blob);
-    if (bytes.empty()) {
-        std::printf("SKIP: %s is not present; the formula extraction needs the committed blob\n",
-                    blob.string().c_str());
-        return;
-    }
+    check(!bytes.empty(), "the committed Props blob is not empty");
     const app::FormulaColumnSet load = app::read_file_formulas(bytes);
     check(load.warnings.empty(), "the committed Props blob extracts without warnings");
     check_size(load.columns.size(), 6, "the project stores six formulas");
@@ -425,12 +423,9 @@ void test_formula_extraction() {
 void test_formula_evaluation() {
     const std::filesystem::path blob =
         std::filesystem::path(APP_TEST_DATA_DIR) / "synthetic-props.bin";
+    fixture::require_committed(blob);
     const std::vector<std::uint8_t> bytes = read_bytes(blob);
-    if (bytes.empty()) {
-        std::printf("SKIP: %s is not present; the formula evaluation needs the committed blob\n",
-                    blob.string().c_str());
-        return;
-    }
+    check(!bytes.empty(), "the committed Props blob is not empty");
     const app::FormulaColumnSet columns = app::formula_columns(app::read_file_formulas(bytes));
     core::formula::ComputedColumns computed;
     std::string error;
@@ -505,10 +500,12 @@ void test_formula_evaluation() {
 
 #else
 void test_formula_extraction() {
-    std::printf("SKIP: APP_TEST_DATA_DIR is not defined\n");
+    check(false, "APP_TEST_DATA_DIR is not defined; configure with "
+                 "APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 void test_formula_evaluation() {
-    std::printf("SKIP: APP_TEST_DATA_DIR is not defined\n");
+    check(false, "APP_TEST_DATA_DIR is not defined; configure with "
+                 "APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 #endif
 

@@ -405,8 +405,8 @@ void case_status_mode(const QString& fixture, const QString& out_dir) {
     if (QFileInfo::exists(project_a)) {
         check_status_mode(project_a, false, "corpus/project_a.mpp (Auto)");
     } else {
-        std::printf("SKIP: corpus/project_a.mpp not present; the real Auto file check "
-                    "is deferred\n");
+        std::printf("SKIP: corpus absent (corpus/project_a.mpp): the real Auto "
+                    "file check is deferred\n");
     }
 }
 

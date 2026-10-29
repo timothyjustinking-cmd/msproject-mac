@@ -33,6 +33,7 @@
 #include <string>
 #include <vector>
 
+#include "fixture_guard.h"
 #include "reader.h"
 
 #ifndef MPP_PROBE_DIR
@@ -136,10 +137,8 @@ std::string writer_fixture_dir() {
  * control that proves the new predicate did not simply drop rows. */
 void test_control(TestContext& t) {
     std::string const path = join(MPP_TEST_DATA_DIR, "synthetic-base.mpp");
-    if (!file_exists(path)) {
-        std::cout << "SKIP: control: " << path << " is missing\n";
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(path);
     mpp::Document const document = mpp::load_file(path);
     t.equal(document.tasks.size(), std::size_t{3},
             "synthetic-base: three live tasks (no tombstones)");
@@ -151,13 +150,25 @@ void test_control(TestContext& t) {
             "synthetic-base: nothing is skipped when there are no tombstones");
 }
 
+/* w10 fixtures live in the git-ignored corpus/; the W45 ones are generated in
+ * this build tree by mppwrite_roundtrip_add_delete and are not committed, so
+ * they must not claim "corpus absent". */
+enum class FixtureSource { corpus, generated };
+
 /* One fixture with a known tombstoned uid and a known live set. */
 void check_fixture(TestContext& t, std::string const& path,
                    std::string const& label,
                    std::vector<std::uint32_t> const& live_uids,
-                   std::vector<std::uint32_t> const& tombstoned) {
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << label << " (" << path << " is missing)\n";
+                   std::vector<std::uint32_t> const& tombstoned,
+                   FixtureSource source = FixtureSource::corpus) {
+    if (!fixture::present(path)) {
+        if (source == FixtureSource::corpus) {
+            fixture::corpus_absent(path);
+        } else {
+            std::cout << "SKIP: generated fixture absent (run "
+                         "mppwrite_roundtrip_add_delete first): "
+                      << path << "\n";
+        }
         return;
     }
     mpp::Document const document = mpp::load_file(path);
@@ -192,7 +203,7 @@ void test_project_fixtures(TestContext& t) {
     /* The regression's own shape: uid 6 keeps its VarMeta group, so the old
      * VarMeta-only predicate returned it as a task.  The warning must say so. */
     std::string const back = join(probe, "w10-adddel-back.mpp");
-    if (file_exists(back)) {
+    if (fixture::corpus_present(back)) {
         mpp::Document const document = mpp::load_file(back);
         t.check(has_warning(document, "VarMeta group is still present"),
                 "w10-adddel-back: warns that the tombstone still has a VarMeta group");
@@ -209,16 +220,18 @@ void test_writer_fixtures(TestContext& t) {
         return;
     }
     check_fixture(t, join(dir, "w45-add.mpp"), "w45-add (one appended task)",
-                  {1, 2, 3, 4}, {});
+                  {1, 2, 3, 4}, {}, FixtureSource::generated);
     check_fixture(t, join(dir, "w45-add-back.mpp"),
-                  "w45-add-back (append then delete the appended row)", {1, 2, 3}, {4});
+                  "w45-add-back (append then delete the appended row)", {1, 2, 3}, {4},
+                  FixtureSource::generated);
     check_fixture(t, join(dir, "w45-del-middle.mpp"), "w45-del-middle (delete uid 2)",
-                  {1, 3}, {2});
+                  {1, 3}, {2}, FixtureSource::generated);
     check_fixture(t, join(dir, "w45-del-middle-b.mpp"),
                   "w45-del-middle-b (Project's VarMeta shape: entries kept)", {1, 3},
-                  {2});
+                  {2}, FixtureSource::generated);
     check_fixture(t, join(dir, "w45-append-after-delete.mpp"),
-                  "w45-append-after-delete", {1, 2, 3, 5}, {4});
+                  "w45-append-after-delete", {1, 2, 3, 5}, {4},
+                  FixtureSource::generated);
 }
 
 } /* namespace */

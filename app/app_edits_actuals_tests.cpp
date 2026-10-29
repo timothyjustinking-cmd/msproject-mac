@@ -86,6 +86,7 @@
 #include "cfb_writer.h"
 #include "date.h"
 #include "edit_model.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 #include "reader_adapter.h"
 #include "save_pair_noise.h"
@@ -93,8 +94,9 @@
 
 #if !defined(APP_TEST_DATA_DIR) || !defined(APP_TEST_OUT_DIR)
 int main() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
-    return 0;
+    std::printf("FAIL: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)\n");
+    return 1;
 }
 #else
 
@@ -668,16 +670,11 @@ void check_pair(const Pair& pair) {
     const std::filesystem::path null_path =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         save_pair::null_fixture_name(pair.control);
-    if (!std::filesystem::exists(control_path) ||
-        !std::filesystem::exists(result_path)) {
-        std::printf("SKIP: %s / %s are not present\n", pair.control, pair.result);
-        return;
-    }
+    fixture::require_committed(control_path);
+    fixture::require_committed(result_path);
     /* W29-1.0b: the mask source is committed with the pair.  A missing null
      * save would silently degrade the discipline, so it is a failure. */
-    check(std::filesystem::exists(null_path),
-          (std::string("the committed null save for ") + pair.control +
-           " is present").c_str());
+    fixture::require_committed(null_path);
 
     app::PlanInput plan;
     try {
@@ -1188,11 +1185,8 @@ void check_mid_pair_refused() {
         "wave29-percent-mid25-control.mpp";
     const std::filesystem::path result_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave29-percent-mid60.mpp";
-    if (!std::filesystem::exists(control_path) ||
-        !std::filesystem::exists(result_path)) {
-        std::printf("SKIP: the mid pair is not present\n");
-        return;
-    }
+    fixture::require_committed(control_path);
+    fixture::require_committed(result_path);
 
     app::PlanInput plan;
     try {
@@ -1295,10 +1289,7 @@ int shown_percent(const app::PlanInput& plan, std::uint32_t uid) {
 void check_percent_through() {
     const std::filesystem::path control_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-update-control.mpp";
-    if (!std::filesystem::exists(control_path)) {
-        std::printf("SKIP: wave28-update-control.mpp is not present\n");
-        return;
-    }
+    fixture::require_committed(control_path);
     app::PlanInput plan;
     core::sched::Calendar calendar;
     try {
@@ -1357,10 +1348,7 @@ void check_percent_through() {
 void check_group_edit_model() {
     const std::filesystem::path control_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-update-control.mpp";
-    if (!std::filesystem::exists(control_path)) {
-        std::printf("SKIP: wave28-update-control.mpp is not present\n");
-        return;
-    }
+    fixture::require_committed(control_path);
     app::PlanInput plan;
     try {
         plan = app::plan_input_from_document(mpp::load_file(control_path.string()));
@@ -1491,10 +1479,8 @@ void check_update_refusals() {
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-percent-auto40-control.mpp";
     const std::filesystem::path zero_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-update-control.mpp";
-    if (!std::filesystem::exists(eight_path) || !std::filesystem::exists(zero_path)) {
-        std::printf("SKIP: the W29-0.0 refusal controls are not present\n");
-        return;
-    }
+    fixture::require_committed(eight_path);
+    fixture::require_committed(zero_path);
     const app::date32 through_date = core::sched::from_ymd(2026, 1, 7);
     app::StructuralEdit edit;
     std::string error;
@@ -1520,30 +1506,27 @@ void check_update_refusals() {
      * measured that payload, so the edit must be refused up front. */
     const std::filesystem::path sixty_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave29-mark-60-after-control.mpp";
-    if (!std::filesystem::exists(sixty_path)) {
-        std::printf("SKIP: wave29-mark-60-after-control.mpp is not present\n");
-    } else {
-        app::PlanInput sixty;
-        try {
-            sixty = app::plan_input_from_document(
-                mpp::load_file(sixty_path.string()));
-        } catch (const std::exception& load_error) {
-            check(false, "the 60 % control loads");
-            std::printf("LOAD ERROR: %s\n", load_error.what());
-            sixty = {};
-        }
-        if (!sixty.tasks.empty()) {
-            app::StructuralEdit unmeasured;
-            std::string unmeasured_error;
-            check(!app::make_update_actuals_edit(
-                      sixty, sixty_path.string(), {1u},
-                      core::sched::from_ymd(2026, 1, 6), false, unmeasured,
-                      unmeasured_error),
-                  "a date computing 20 % on the 60 % row is refused");
-            check(unmeasured_error.find("40 %") != std::string::npos &&
-                      unmeasured_error.find("80 %") != std::string::npos,
-                  "the recomputed-percent refusal names the measured values");
-        }
+    fixture::require_committed(sixty_path);
+    app::PlanInput sixty;
+    try {
+        sixty = app::plan_input_from_document(
+            mpp::load_file(sixty_path.string()));
+    } catch (const std::exception& load_error) {
+        check(false, "the 60 % control loads");
+        std::printf("LOAD ERROR: %s\n", load_error.what());
+        sixty = {};
+    }
+    if (!sixty.tasks.empty()) {
+        app::StructuralEdit unmeasured;
+        std::string unmeasured_error;
+        check(!app::make_update_actuals_edit(
+                  sixty, sixty_path.string(), {1u},
+                  core::sched::from_ymd(2026, 1, 6), false, unmeasured,
+                  unmeasured_error),
+              "a date computing 20 % on the 60 % row is refused");
+        check(unmeasured_error.find("40 %") != std::string::npos &&
+                  unmeasured_error.find("80 %") != std::string::npos,
+              "the recomputed-percent refusal names the measured values");
     }
 
     std::error_code fs_error;
@@ -1643,11 +1626,8 @@ void check_update_save_shape_refusals() {
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave29-mark-60-after-control.mpp";
     const std::filesystem::path zero_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-update-control.mpp";
-    if (!std::filesystem::exists(sixty_path) ||
-        !std::filesystem::exists(zero_path)) {
-        std::printf("SKIP: the W30-0.0 save-shape controls are not present\n");
-        return;
-    }
+    fixture::require_committed(sixty_path);
+    fixture::require_committed(zero_path);
     auto load = [](const std::filesystem::path& path, app::PlanInput& plan) {
         try {
             plan = app::plan_input_from_document(mpp::load_file(path.string()));
@@ -1754,10 +1734,7 @@ void check_update_save_shape_refusals() {
 void check_zero_update_noop() {
     const std::filesystem::path control_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave28-update-control.mpp";
-    if (!std::filesystem::exists(control_path)) {
-        std::printf("SKIP: wave28-update-control.mpp is not present\n");
-        return;
-    }
+    fixture::require_committed(control_path);
     app::PlanInput plan;
     try {
         plan = app::plan_input_from_document(mpp::load_file(control_path.string()));
@@ -1861,10 +1838,7 @@ void check_summary_rollup_scope() {
     const std::filesystem::path leaf_path =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave29-percent-leaf-control.mpp";
-    if (!std::filesystem::exists(leaf_path)) {
-        std::printf("SKIP: wave29-percent-leaf-control.mpp is not present\n");
-        return;
-    }
+    fixture::require_committed(leaf_path);
     app::PlanInput plan;
     try {
         plan = app::plan_input_from_document(mpp::load_file(leaf_path.string()));
@@ -2030,12 +2004,10 @@ void check_summary_rollup_scope() {
     const std::filesystem::path date_patched =
         std::filesystem::path(APP_TEST_OUT_DIR) / "w31-03-date-progress.mpp";
     std::string date_patch_error;
-    bool date_patched_ok = false;
-    if (std::filesystem::exists(date_control)) {
-        date_patched_ok =
-            write_percent_word_copy(date_control, date_patched, 3, 40,
-                                    date_patch_error);
-    }
+    fixture::require_committed(date_control);
+    bool date_patched_ok =
+        write_percent_word_copy(date_control, date_patched, 3, 40,
+                                date_patch_error);
     check(date_patched_ok, "the flat date-update control is patched with a 40 % "
                            "row outside the selection");
     if (date_patched_ok) {
@@ -2093,10 +2065,7 @@ void check_work_contour_shape() {
     const std::filesystem::path control_path =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave29-percent-work-control.mpp";
-    if (!std::filesystem::exists(control_path)) {
-        std::printf("SKIP: wave29-percent-work-control.mpp is not present\n");
-        return;
-    }
+    fixture::require_committed(control_path);
     app::PlanInput plan;
     try {
         plan = app::plan_input_from_document(mpp::load_file(control_path.string()));
@@ -2186,10 +2155,7 @@ void check_assign_delete_shape() {
     std::printf("-- assign-delete fixture (refused shape):\n");
     const std::filesystem::path path =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave30-assign-delete.mpp";
-    if (!std::filesystem::exists(path)) {
-        std::printf("SKIP: the assign-delete fixture is not present\n");
-        return;
-    }
+    fixture::require_committed(path);
     app::PlanInput plan;
     try {
         plan = app::plan_input_from_document(mpp::load_file(path.string()));

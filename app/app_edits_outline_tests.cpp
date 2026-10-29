@@ -100,6 +100,7 @@
 
 #include "cfb_writer.h"
 #include "edit_model.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 // core/mppwrite/outline.h includes core/mppwrite/table.h from its own
 // directory.  The app include path lists core/view first, so a bare
@@ -113,8 +114,9 @@
 
 #if !defined(APP_TEST_DATA_DIR) || !defined(APP_TEST_OUT_DIR)
 int main() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
-    return 0;
+    std::printf("FAIL: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)\n");
+    return 1;
 }
 #else
 
@@ -715,15 +717,10 @@ void check_pair(const PairCase& pair) {
     const std::filesystem::path null_path =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         save_pair::null_fixture_name(pair.control);
-    if (!std::filesystem::exists(control_path) ||
-        !std::filesystem::exists(result_path)) {
-        std::printf("SKIP: %s / %s are not present\n", pair.control, pair.result);
-        return;
-    }
+    fixture::require_committed(control_path);
+    fixture::require_committed(result_path);
     /* W29-1.0b: the mask source is committed with the pair. */
-    check(std::filesystem::exists(null_path),
-          (std::string("the committed null save for ") + pair.control +
-           " is present").c_str());
+    fixture::require_committed(null_path);
 
     app::PlanInput plan;
     try {
@@ -1416,11 +1413,8 @@ void check_automatic_outline_file_shape() {
     const std::filesystem::path outdent_control =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave29-outline-auto-outdent-control.mpp";
-    if (!std::filesystem::exists(indent_control) ||
-        !std::filesystem::exists(outdent_control)) {
-        std::printf("SKIP: the automatic outline controls are not present\n");
-        return;
-    }
+    fixture::require_committed(indent_control);
+    fixture::require_committed(outdent_control);
     app::PlanInput indent_plan;
     app::PlanInput outdent_plan;
     try {
@@ -1542,14 +1536,8 @@ void check_pending_edit_cross_refusals() {
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave28-outline-indent-control.mpp";
     // W32 rule: a test that needs a committed fixture FAILS when it is missing.
-    check(std::filesystem::exists(auto_control),
-          "wave29-outline-auto-indent-control.mpp is present (W32-0.1)");
-    check(std::filesystem::exists(manual_control),
-          "wave28-outline-indent-control.mpp is present (W32-0.1)");
-    if (!std::filesystem::exists(auto_control) ||
-        !std::filesystem::exists(manual_control)) {
-        return;
-    }
+    fixture::require_committed(auto_control);
+    fixture::require_committed(manual_control);
     app::PlanInput plan;
     app::PlanInput manual_plan;
     try {
@@ -1708,19 +1696,11 @@ void check_refusals() {
     const std::filesystem::path summary_control =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave28-outline-summary-control.mpp";
-    if (!std::filesystem::exists(indent_control) ||
-        !std::filesystem::exists(outdent_control) ||
-        !std::filesystem::exists(auto_indent_control) ||
-        !std::filesystem::exists(auto_outdent_control) ||
-        !std::filesystem::exists(summary_control)) {
-        // Wave 33 (W33-1.1): a committed fixture this test needs is missing, so
-        // the test FAILS rather than skipping and passing (wave-33 brief
-        // section 1).
-        check(false,
-              "the refusal controls are present (a missing committed fixture fails)");
-        std::printf("MISSING FIXTURE: the refusal controls are not present\n");
-        return;
-    }
+    fixture::require_committed(indent_control);
+    fixture::require_committed(outdent_control);
+    fixture::require_committed(auto_indent_control);
+    fixture::require_committed(auto_outdent_control);
+    fixture::require_committed(summary_control);
     app::PlanInput indent_plan;
     app::PlanInput outdent_plan;
     app::PlanInput auto_indent_plan;

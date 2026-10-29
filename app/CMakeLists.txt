@@ -226,6 +226,8 @@ if(APP_BUILD_TESTS)
 
     add_executable(layout_model_tests layout_model_tests.cpp)
     target_compile_features(layout_model_tests PRIVATE cxx_std_20)
+    target_include_directories(layout_model_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(layout_model_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(layout_model_tests PRIVATE app_layout)
     target_compile_definitions(layout_model_tests PRIVATE
@@ -253,6 +255,8 @@ if(APP_BUILD_TESTS)
     # committed synthetic fixture and writes only under APP_TEST_OUT_DIR.
     add_executable(document_tests document_tests.cpp)
     target_compile_features(document_tests PRIVATE cxx_std_20)
+    target_include_directories(document_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(document_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(document_tests PRIVATE app_layout)
     target_compile_definitions(document_tests PRIVATE
@@ -378,6 +382,8 @@ if(APP_BUILD_TESTS)
     # dependants, refusal with no target).  Never writes tests/data or corpus/.
     add_executable(app_edit_tests app_edit_tests.cpp)
     target_compile_features(app_edit_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edit_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(app_edit_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(app_edit_tests PRIVATE app_layout)
     target_compile_definitions(app_edit_tests PRIVATE
@@ -395,6 +401,8 @@ if(APP_BUILD_TESTS)
     # core::props -> core::formula.
     add_executable(app_fields_tests app_fields_tests.cpp)
     target_compile_features(app_fields_tests PRIVATE cxx_std_20)
+    target_include_directories(app_fields_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(app_fields_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(app_fields_tests PRIVATE app_layout)
     target_compile_definitions(app_fields_tests PRIVATE
@@ -410,6 +418,8 @@ if(APP_BUILD_TESTS)
     # the committed synthetic fixture.  Writes only under APP_TEST_OUT_DIR.
     add_executable(app_edits_fields_tests app_edits_fields_tests.cpp)
     target_compile_features(app_edits_fields_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_fields_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(app_edits_fields_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(app_edits_fields_tests PRIVATE app_layout)
     target_compile_definitions(app_edits_fields_tests PRIVATE
@@ -426,6 +436,8 @@ if(APP_BUILD_TESTS)
     # committed synthetic fixture.  Writes only under APP_TEST_OUT_DIR.
     add_executable(app_edits_links_tests app_edits_links_tests.cpp)
     target_compile_features(app_edits_links_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_links_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(app_edits_links_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(app_edits_links_tests PRIVATE app_layout)
     target_compile_definitions(app_edits_links_tests PRIVATE
@@ -484,6 +496,8 @@ if(APP_BUILD_TESTS)
     # proved in both directions.  Writes only under APP_TEST_OUT_DIR.
     add_executable(app_edits_new_task_mode_tests app_edits_new_task_mode_tests.cpp)
     target_compile_features(app_edits_new_task_mode_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_new_task_mode_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(app_edits_new_task_mode_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(app_edits_new_task_mode_tests PRIVATE app_layout)
     target_compile_definitions(app_edits_new_task_mode_tests PRIVATE
@@ -525,6 +539,8 @@ if(APP_BUILD_TESTS)
     file(TO_CMAKE_PATH "${APP_REPO_ROOT}/corpus" APP_CORPUS_DIR_CMAKE)
     add_executable(view_style_tests view_style_tests.cpp)
     target_compile_features(view_style_tests PRIVATE cxx_std_20)
+    target_include_directories(view_style_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(view_style_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(view_style_tests PRIVATE app_layout)
     target_compile_definitions(view_style_tests PRIVATE
@@ -574,6 +590,8 @@ if(APP_BUILD_TESTS)
     # the development box.
     add_executable(smoke_tests smoke_tests.cpp)
     target_compile_features(smoke_tests PRIVATE cxx_std_20)
+    target_include_directories(smoke_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(smoke_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(smoke_tests PRIVATE app_layout)
     target_compile_definitions(smoke_tests PRIVATE
@@ -592,6 +610,8 @@ if(APP_BUILD_TESTS)
     # APP_TEST_OUT_DIR before it is saved from.
     add_executable(project_dialogs_tests project_dialogs_tests.cpp)
     target_compile_features(project_dialogs_tests PRIVATE cxx_std_20)
+    target_include_directories(project_dialogs_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
     set_target_properties(project_dialogs_tests PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(project_dialogs_tests PRIVATE app_layout)
     target_compile_definitions(project_dialogs_tests PRIVATE

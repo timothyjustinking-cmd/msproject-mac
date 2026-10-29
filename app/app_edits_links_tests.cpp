@@ -36,6 +36,7 @@
 #include "date.h"
 #include "edit_model.h"
 #include "field_link_edits.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 #include "reader_adapter.h"
 
@@ -518,11 +519,7 @@ bool stream_equal(const std::filesystem::path& lhs, const std::filesystem::path&
 void test_real_round_trip() {
     const std::filesystem::path fixture =
         std::filesystem::path(APP_TEST_DATA_DIR) / "synthetic-base.mpp";
-    if (!std::filesystem::exists(fixture)) {
-        std::printf("SKIP: %s is not present; the link round trip needs the fixture\n",
-                    fixture.string().c_str());
-        return;
-    }
+    fixture::require_committed(fixture);
     const std::size_t fixture_bytes = bytes_on_disk(fixture);
     std::error_code error;
     std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR), error);
@@ -774,12 +771,9 @@ void test_real_unlink_matches_project() {
     const std::filesystem::path fixture = data / "wave23-outline.mpp";
     const std::filesystem::path project_control = data / "wave27-unlink-control.mpp";
     const std::filesystem::path project_unlinked = data / "wave27-unlink.mpp";
-    if (!std::filesystem::exists(fixture) ||
-        !std::filesystem::exists(project_control) ||
-        !std::filesystem::exists(project_unlinked)) {
-        std::printf("SKIP: the outline/unlink fixtures are not present\n");
-        return;
-    }
+    fixture::require_committed(fixture);
+    fixture::require_committed(project_control);
+    fixture::require_committed(project_unlinked);
     std::error_code copy_error;
     std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
                                         copy_error);
@@ -897,10 +891,7 @@ void test_pending_outline_link_order() {
     const std::filesystem::path control =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave29-outline-auto-indent-control.mpp";
-    if (!std::filesystem::exists(control)) {
-        std::printf("SKIP: wave29-outline-auto-indent-control.mpp is not present\n");
-        return;
-    }
+    fixture::require_committed(control);
     Loaded base = load(control);
     if (!base.ok) {
         return;
@@ -992,14 +983,17 @@ void test_pending_outline_link_order() {
 
 #else
 void test_pending_outline_link_order() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 void test_real_round_trip() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 
 void test_real_unlink_matches_project() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 #endif
 

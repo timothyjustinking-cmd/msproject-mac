@@ -32,6 +32,7 @@
 #include "date.h"
 #include "edit_model.h"
 #include "field_link_edits.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 #include "reader_adapter.h"
 
@@ -383,11 +384,7 @@ Loaded load(const std::filesystem::path& path) {
 void test_real_round_trip() {
     const std::filesystem::path fixture =
         std::filesystem::path(APP_TEST_DATA_DIR) / "synthetic-base.mpp";
-    if (!std::filesystem::exists(fixture)) {
-        std::printf("SKIP: %s is not present; the field round trip needs the fixture\n",
-                    fixture.string().c_str());
-        return;
-    }
+    fixture::require_committed(fixture);
     const std::size_t fixture_bytes = bytes_on_disk(fixture);
     std::error_code error;
     std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR), error);
@@ -648,7 +645,8 @@ void test_real_round_trip() {
 
 #else
 void test_real_round_trip() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 #endif
 

@@ -27,6 +27,7 @@
 #include "cal.h"
 #include "calendar.h"
 #include "date.h"
+#include "fixture_guard.h"
 #include "reader.h"
 #include "usage.h"
 #include "usage_mpp.h"
@@ -562,12 +563,10 @@ void test_mpp_bridge(TestContext& ctx) {
 
 void test_corpus_project_a(TestContext& ctx) {
     if (corpus_hidden()) {
-        std::cout << "SKIP: PROJECT_A usage checks (MPP_NO_CORPUS is set: corpus forced absent)\n";
+        fixture::corpus_absent(USAGE_PROJECT_A_PATH, "MPP_NO_CORPUS is set");
         return;
     }
-    if (!file_exists(USAGE_PROJECT_A_PATH)) {
-        std::cout << "SKIP: " << USAGE_PROJECT_A_PATH
-                  << " is not present (corpus is git-ignored)\n";
+    if (!fixture::corpus_present(USAGE_PROJECT_A_PATH)) {
         return;
     }
 

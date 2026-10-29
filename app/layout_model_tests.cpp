@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "date.h"
+#include "fixture_guard.h"
 #include "gantt.h"
 #include "layout_model.h"
 #include "page_layout.h"
@@ -717,8 +718,7 @@ void test_empty() {
 void test_corpus_file(const std::filesystem::path& path, const char* label,
                       std::size_t pinned_tasks,
                       date32 expected_project_start = kDateNa) {
-    if (!std::filesystem::exists(path)) {
-        std::printf("SKIP: %s not present at %s\n", label, path.string().c_str());
+    if (!fixture::corpus_present(path, label)) {
         return;
     }
     mpp::Document document;
@@ -840,10 +840,7 @@ void test_displayed_rows_by_uid() {
 #if defined(APP_TEST_DATA_DIR)
     const std::filesystem::path path =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave24-order.mpp";
-    if (!std::filesystem::exists(path)) {
-        check(false, "the committed W25-1 fixture wave24-order.mpp is present");
-        return;
-    }
+    fixture::require_committed(path);
     const mpp::Document document = mpp::load_file(path.string());
     const app::PlanInput input = app::plan_input_from_document(document);
     check(input.show_project_summary, "wave24-order.mpp stores the project row SHOWN");
@@ -958,7 +955,8 @@ void test_displayed_rows_by_uid() {
     sheet.cancel_edit();
     check(!sheet.editing(), "the session opened without a reason can be cancelled");
 #else
-    std::printf("SKIP: APP_TEST_DATA_DIR is not defined; W25-1 fixture test not run\n");
+    check(false, "APP_TEST_DATA_DIR is not defined; configure with "
+                 "APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 #endif
 }
 
@@ -970,13 +968,13 @@ void test_corpus() {
     // Neither count nor date is client data.
     test_corpus_file(probe / "w3-o1.mpp", "w3-o1", 4, from_ymd(2026, 10, 19, 8, 0));
     test_corpus_file(probe / "holiday1.mpp", "holiday1", 0);
-    if (std::filesystem::exists(probe.parent_path() / "project_a.mpp")) {
+    if (fixture::corpus_present(probe.parent_path() / "project_a.mpp",
+                                "project_a")) {
         test_corpus_file(probe.parent_path() / "project_a.mpp", "project_a", 0);
-    } else {
-        std::printf("SKIP: project_a not present\n");
     }
 #else
-    std::printf("SKIP: APP_CORPUS_PROBE_DIR is not defined; corpus probes not run\n");
+    std::printf("SKIP: corpus absent: APP_CORPUS_PROBE_DIR is not defined; "
+                "corpus probes not run\n");
 #endif
 }
 

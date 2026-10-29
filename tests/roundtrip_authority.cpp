@@ -132,6 +132,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "fixture_guard.h"
 #include "row_writer.h"
 #include "table.h"
 
@@ -1046,10 +1047,7 @@ int main() {
     TestContext t;
     try {
         std::string const source = join(MPPWRITE_PROBE_DIR, "base.mpp");
-        std::error_code error;
-        if (!std::filesystem::exists(source, error)) {
-            std::cout << "SKIP: corpus not present (" << source
-                      << " is missing; corpus/ is git-ignored)\n";
+        if (!fixture::corpus_present(source)) {
             return 0;
         }
         std::filesystem::create_directories(MPPWRITE_TEST_OUT);
@@ -1108,7 +1106,7 @@ int main() {
          * above survive a Project round trip.  Skipped when absent. */
         {
             std::string const resaved = join(MPPWRITE_PROBE_DIR, "resaved-base.mpp");
-            if (std::filesystem::exists(resaved, error)) {
+            if (fixture::corpus_present(resaved)) {
                 mppwrite::CfbDocument const doc =
                     mppwrite::CfbDocument::from_file(resaved);
                 t.check(mppwrite::read_task_values(doc, kRow) ==

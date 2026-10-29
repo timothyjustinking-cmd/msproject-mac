@@ -68,6 +68,7 @@
 
 #include "add_delete.h"
 #include "cfb_writer.h"
+#include "fixture_guard.h"
 #include "table.h"
 
 #ifdef MPPWRITE_HAVE_READER
@@ -854,7 +855,7 @@ void test_reader(TestContext&) {}
 
 void test_measured_fixtures(TestContext& t) {
     std::string const link1 = join(MPPWRITE_PROBE_DIR, "link1.mpp");
-    if (file_exists(link1)) {
+    if (fixture::corpus_present(link1)) {
         mppwrite::CfbDocument const doc = mppwrite::CfbDocument::from_file(link1);
         check_link_geometry(t, doc, 5, "link1.mpp");
         t.equal(doc.read_stream(kFixed).size(), 100, "link1: FixedData 100 B");
@@ -873,12 +874,10 @@ void test_measured_fixtures(TestContext& t) {
         t.equal(fixed2_meta[16 + 4 * 9 + 8], 0x07,
                 "link1: row 4 is in the 0x07 driving state");
         t.equal(live_link_count(doc), 5, "link1: five live links");
-    } else {
-        std::cout << "SKIP: " << link1 << " is missing (corpus/ is git-ignored)\n";
     }
 
     std::string const add_fixture = join(MPPWRITE_PROBE_DIR, "w12-linkadd.mpp");
-    if (file_exists(add_fixture)) {
+    if (fixture::corpus_present(add_fixture)) {
         mppwrite::CfbDocument const doc =
             mppwrite::CfbDocument::from_file(add_fixture);
         check_link_geometry(t, doc, 2, "w12-linkadd.mpp");
@@ -905,13 +904,10 @@ void test_measured_fixtures(TestContext& t) {
                 "w12-linkadd: link 1's predecessor identity is task 1's");
         t.check(cons_identity(doc, 1, 2) == task3,
                 "w12-linkadd: link 1's successor identity is task 3's");
-    } else {
-        std::cout << "SKIP: " << add_fixture
-                  << " is missing (corpus/ is git-ignored)\n";
     }
 
     /* Append a third link to Project's own two-link table. */
-    if (file_exists(add_fixture)) {
+    if (fixture::corpus_present(add_fixture)) {
         mppwrite::CfbDocument const original =
             mppwrite::CfbDocument::from_file(add_fixture);
         mppwrite::CfbDocument grown =
@@ -936,7 +932,7 @@ void test_measured_fixtures(TestContext& t) {
     }
 
     /* Delete one of Project's own five links (link1.mpp). */
-    if (file_exists(link1)) {
+    if (fixture::corpus_present(link1)) {
         mppwrite::CfbDocument own = mppwrite::CfbDocument::from_file(link1);
         mppwrite::DeletedLink const removed = mppwrite::delete_task_link(
             own, 3, out_path("w52-del-on-measured.mpp"));
@@ -951,7 +947,7 @@ void test_measured_fixtures(TestContext& t) {
 
     std::string const pre = join(MPPWRITE_PROBE_DIR, "w11-linkdelete-pre.mpp");
     std::string const post = join(MPPWRITE_PROBE_DIR, "w11-linkdelete-post.mpp");
-    if (file_exists(pre) && file_exists(post)) {
+    if (fixture::corpus_present(pre) && fixture::corpus_present(post)) {
         mppwrite::CfbDocument const before = mppwrite::CfbDocument::from_file(pre);
         mppwrite::CfbDocument const after = mppwrite::CfbDocument::from_file(post);
         check_link_geometry(t, before, 2, "w11-linkdelete-pre");
@@ -968,9 +964,6 @@ void test_measured_fixtures(TestContext& t) {
                 "w11-linkdelete-post: Fixed2Meta byte-identical to pre");
         t.equal(after.read_stream(kMeta).size(), before.read_stream(kMeta).size(),
                 "w11-linkdelete-post: FixedMeta size unchanged");
-    } else {
-        std::cout << "SKIP: w11-linkdelete-pre/-post are missing "
-                     "(corpus/ is git-ignored)\n";
     }
 }
 

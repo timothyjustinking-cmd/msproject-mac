@@ -80,6 +80,7 @@
 #include "add_delete.h"
 #include "cfb_writer.h"
 #include "field_values.h"
+#include "fixture_guard.h"
 #include "save.h"
 #include "table.h"
 
@@ -542,15 +543,11 @@ void test_write_all(TestContext& t) {
      * identical to it: same six fields, same order, same size words. */
     {
         std::string const measured = join(MPPWRITE_PROBE_DIR, "w10-fieldvalues.mpp");
-        if (file_exists(measured)) {
+        if (fixture::corpus_present(measured)) {
             mppwrite::CfbDocument const project =
                 mppwrite::CfbDocument::from_file(measured);
             t.check(project.read_stream(kProps) == props,
                     "write: Props is byte-identical to Project's w10-fieldvalues.mpp");
-        } else {
-            std::cout << "SKIP: " << measured
-                      << " is missing (corpus/ is git-ignored); the Props "
-                         "byte-for-byte check is skipped\n";
         }
     }
     check_214_untouched(t, before, doc, "w48-fields.mpp");
@@ -983,8 +980,7 @@ void test_reader_cross_check(TestContext& t) {
  * API must reproduce exactly what defined the encodings. */
 void test_measured_fixture(TestContext& t) {
     std::string const path = join(MPPWRITE_PROBE_DIR, "w10-fieldvalues.mpp");
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << path << " is missing (corpus/ is git-ignored)\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
     mpp::Document const document = mpp::load_file(path);
@@ -1405,7 +1401,7 @@ void test_cost_write(TestContext& t) {
      * reproduce the target's VarMeta/FixedMeta/Props byte for byte. */
     std::string const control = join(MPPWRITE_PROBE_DIR, "w14-cost-control.mpp");
     std::string const target = join(MPPWRITE_PROBE_DIR, "w14-cost.mpp");
-    if (file_exists(control) && file_exists(target)) {
+    if (fixture::corpus_present(control) && fixture::corpus_present(target)) {
         mppwrite::CfbDocument oracle = mppwrite::CfbDocument::from_file(control);
         std::vector<std::uint8_t> const control_var2 = oracle.read_stream(kVar2);
         std::vector<FieldEdit> oracle_edits;
@@ -1443,9 +1439,6 @@ void test_cost_write(TestContext& t) {
                             static_cast<std::uint32_t>(control_var2.size())),
                     "cost oracle: the appended block equals Project's f64 12345.0");
         }
-    } else {
-        std::cout << "SKIP: " << control << " / " << target
-                  << " are missing (corpus/ is git-ignored)\n";
     }
 }
 
@@ -1572,7 +1565,7 @@ void test_cost_range(TestContext& t) {
     /* The measured second Project fixture: same block bytes (123.0 / 7.0). */
     std::string const control = join(MPPWRITE_PROBE_DIR, "w14-cost2-control.mpp");
     std::string const target = join(MPPWRITE_PROBE_DIR, "w14-cost2.mpp");
-    if (file_exists(control) && file_exists(target)) {
+    if (fixture::corpus_present(control) && fixture::corpus_present(target)) {
         mppwrite::CfbDocument oracle = mppwrite::CfbDocument::from_file(control);
         (void)mppwrite::save_field_values(oracle, decimal_edits,
                                           out_path("w60-cost2-oracle.mpp"));
@@ -1585,9 +1578,6 @@ void test_cost_range(TestContext& t) {
                 "cost2 oracle: Task/Props equals Project's own");
         t.check(oracle.read_stream(kAssnProps) == project.read_stream(kAssnProps),
                 "cost2 oracle: Assn/Props equals Project's own");
-    } else {
-        std::cout << "SKIP: " << control << " / " << target
-                  << " are missing (corpus/ is git-ignored)\n";
     }
 }
 
@@ -1835,7 +1825,7 @@ void test_assignment_write(TestContext& t) {
     std::string const control = join(MPPWRITE_PROBE_DIR,
                                      "w14-assignfield-control.mpp");
     std::string const target = join(MPPWRITE_PROBE_DIR, "w14-assignfield.mpp");
-    if (file_exists(control) && file_exists(target)) {
+    if (fixture::corpus_present(control) && fixture::corpus_present(target)) {
         mppwrite::CfbDocument oracle = mppwrite::CfbDocument::from_file(control);
         std::vector<std::uint8_t> const oracle_fixed = oracle.read_stream(kAssnFixed);
         std::vector<std::uint8_t> const oracle_var2 = oracle.read_stream(kAssnVar2);
@@ -1869,9 +1859,6 @@ void test_assignment_write(TestContext& t) {
                 "fixture pair differs only in the project-title block)");
         t.check(oracle_var2.size() + 40 == project.read_stream(kAssnVar2).size(),
                 "assignment oracle: Assn Var2Data grew by 40 bytes (measured)");
-    } else {
-        std::cout << "SKIP: " << control << " / " << target
-                  << " are missing (corpus/ is git-ignored)\n";
     }
 }
 

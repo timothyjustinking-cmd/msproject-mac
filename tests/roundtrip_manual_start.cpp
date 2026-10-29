@@ -83,6 +83,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "fixture_guard.h"
 #include "row_writer.h"
 #include "table.h"
 
@@ -1386,17 +1387,10 @@ std::string make_manifest(std::vector<FixtureReport> const& fixtures) {
 int main() {
     TestContext t;
     try {
-        std::error_code error;
         std::string const manual_source = join(MPPWRITE_PROBE_DIR, "base.mpp");
         std::string const snet_source = join(MPPWRITE_PROBE_DIR, "w3-o1.mpp");
-        if (!std::filesystem::exists(manual_source, error)) {
-            std::cout << "SKIP: corpus not present (" << manual_source
-                      << " is missing; corpus/ is git-ignored)\n";
-            return 0;
-        }
-        if (!std::filesystem::exists(snet_source, error)) {
-            std::cout << "SKIP: " << snet_source
-                      << " is missing; corpus/ is git-ignored\n";
+        if (!fixture::corpus_present(manual_source) ||
+            !fixture::corpus_present(snet_source)) {
             return 0;
         }
         std::filesystem::create_directories(MPPWRITE_TEST_OUT);

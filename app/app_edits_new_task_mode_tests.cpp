@@ -52,6 +52,7 @@
 
 #include "cfb_writer.h"
 #include "edit_model.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 #include "reader.h"
 #include "reader_adapter.h"
@@ -63,8 +64,9 @@
 
 #if !defined(APP_TEST_DATA_DIR) || !defined(APP_TEST_OUT_DIR)
 int main() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
-    return 0;
+    std::printf("FAIL: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)\n");
+    return 1;
 }
 #else
 
@@ -205,11 +207,8 @@ void check_pair(const PairCase& pair) {
         std::filesystem::path(APP_TEST_DATA_DIR) / pair.control;
     const std::filesystem::path result_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / pair.result;
-    if (!std::filesystem::exists(control_path) ||
-        !std::filesystem::exists(result_path)) {
-        std::printf("SKIP: %s / %s are not present\n", pair.control, pair.result);
-        return;
-    }
+    fixture::require_committed(control_path);
+    fixture::require_committed(result_path);
 
     /* --- the control's stored mode and the edit make_new_task_mode_edit --- */
     const mpp::NewTaskMode control_mode =
@@ -441,10 +440,7 @@ void check_pair(const PairCase& pair) {
 void check_insert_carries_mode(const char* control_name, bool manual) {
     const std::filesystem::path control_path =
         std::filesystem::path(APP_TEST_DATA_DIR) / control_name;
-    if (!std::filesystem::exists(control_path)) {
-        std::printf("SKIP: %s is not present\n", control_name);
-        return;
-    }
+    fixture::require_committed(control_path);
     app::PlanInput plan;
     try {
         plan = app::plan_input_from_document(mpp::load_file(control_path.string()));
@@ -512,10 +508,7 @@ void check_missing_record_refusal() {
     const std::filesystem::path control_path =
         std::filesystem::path(APP_TEST_DATA_DIR) /
         "wave28-newtask-manual-control.mpp";
-    if (!std::filesystem::exists(control_path)) {
-        std::printf("SKIP: the refusal control is not present\n");
-        return;
-    }
+    fixture::require_committed(control_path);
     mppwrite::CfbDocument document;
     try {
         document = mppwrite::CfbDocument::from_file(control_path.string());

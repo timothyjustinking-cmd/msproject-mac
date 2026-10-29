@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "fixture_guard.h"
 
 /* CMake injects absolute paths.  The relative defaults let the test be run by
  * hand from the repository root as well. */
@@ -491,8 +492,7 @@ int main(int argc, char** argv) {
 
         std::string missing;
         if (!corpus_available(missing)) {
-            std::cout << "SKIP: corpus not present (" << missing
-                      << " is missing; corpus/ is git-ignored)\n";
+            fixture::corpus_absent(missing);
             return t.report();
         }
         std::vector<std::string> files = mpp_files_in(MPPWRITE_PROBE_DIR);

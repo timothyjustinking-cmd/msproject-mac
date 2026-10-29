@@ -62,6 +62,7 @@
 #include <vector>
 
 #include "cal.h"
+#include "fixture_guard.h"
 #include "plan.h"
 #include "reader.h"
 #include "sched_test_support.h"
@@ -144,10 +145,8 @@ bool note_contains(const plan::PlanInput& input, const std::string& needle) {
 /* ---- 1. base.mpp: the small fixture that runs on every platform ---------- */
 void test_base(TestContext& context) {
     const std::string path = PLAN_BASE_PATH;
-    if (!file_exists(path)) {
-        context.check(false, "committed fixture is missing: " + std::string(PLAN_BASE_PATH));
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(path);
     const mpp::Document document = mpp::load_file(path);
     context.equal(document.tasks.size(), std::size_t{3},
                   "base.mpp has 3 live tasks (the reader's own count)");
@@ -553,10 +552,8 @@ void test_manual_scheduling(TestContext& context) {
 /* ---- 1c. The recorded oracles: plan-visible edits on the fixture --------- */
 void test_manual_oracle(TestContext& context) {
     const std::string path = PLAN_BASE_PATH;
-    if (!file_exists(path)) {
-        context.check(false, "committed fixture is missing: " + std::string(PLAN_BASE_PATH));
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(path);
     const mpp::Document document = mpp::load_file(path);
     plan::PlanInput input = from_mpp_with_calendar(document, path);
 
@@ -725,10 +722,8 @@ void test_manual_oracle(TestContext& context) {
  * the code. */
 void test_manual_late_pair(TestContext& context) {
     const std::string path = PLAN_BASE_PATH;
-    if (!file_exists(path)) {
-        context.check(false, "committed fixture is missing: " + std::string(PLAN_BASE_PATH));
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(path);
     const mpp::Document document = mpp::load_file(path);
     plan::PlanInput input = from_mpp_with_calendar(document, path);
 
@@ -1060,15 +1055,11 @@ constexpr std::size_t kRecordedSummaries = 16;
 
 void test_project_a(TestContext& context) {
     if (corpus_hidden()) {
-        std::cout << "SKIP: PROJECT_A recalculation (MPP_NO_CORPUS is set: corpus forced absent)\n";
+        fixture::corpus_absent(PLAN_PROJECT_A_PATH, "MPP_NO_CORPUS is set");
         return;
     }
-    if (!file_exists(PLAN_PROJECT_A_PATH)) {
-        std::cout << "SKIP: " << PLAN_PROJECT_A_PATH << " is not present (corpus is git-ignored)\n";
-        return;
-    }
-    if (!file_exists(PLAN_RECALC_PATH)) {
-        std::cout << "SKIP: " << PLAN_RECALC_PATH << " is not present\n";
+    if (!fixture::corpus_present(PLAN_PROJECT_A_PATH) ||
+        !fixture::corpus_present(PLAN_RECALC_PATH)) {
         return;
     }
 
@@ -1331,13 +1322,11 @@ void test_project_a(TestContext& context) {
  * place where every constraint type is proved through the bridge. */
 void test_schedin(TestContext& context) {
     if (corpus_hidden()) {
-        std::cout << "SKIP: schedin constraint fixture (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(PLAN_SCHEDIN_PATH, "MPP_NO_CORPUS is set");
         return;
     }
     const std::string path = PLAN_SCHEDIN_PATH;
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << PLAN_SCHEDIN_PATH
-                  << " is not present (corpus is git-ignored)\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
 
@@ -1517,12 +1506,11 @@ void test_schedin(TestContext& context) {
  * fields and all 8 slack values are compared now. */
 void test_elapsed_lag(TestContext& context) {
     if (corpus_hidden()) {
-        std::cout << "SKIP: elapsed-lag fixture (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(PLAN_ELAPSED_PATH, "MPP_NO_CORPUS is set");
         return;
     }
     const std::string path = PLAN_ELAPSED_PATH;
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << PLAN_ELAPSED_PATH << " is not present (corpus is git-ignored)\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
 
@@ -1616,13 +1604,11 @@ void test_elapsed_lag(TestContext& context) {
  * calendar and nothing else. */
 void test_task_calendars(TestContext& context) {
     if (corpus_hidden()) {
-        std::cout << "SKIP: per-task calendar fixture (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(PLAN_HOLIDAY_PATH, "MPP_NO_CORPUS is set");
         return;
     }
     const std::string path = PLAN_HOLIDAY_PATH;
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << PLAN_HOLIDAY_PATH
-                  << " is not present (corpus is git-ignored)\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
 
@@ -1755,12 +1741,11 @@ void test_task_calendars(TestContext& context) {
 // finishes Tue 2026-11-03 17:00.  The difference is the expanded recurrence.
 void test_recurring_task_calendar(TestContext& context) {
     if (corpus_hidden()) {
-        std::cout << "SKIP: w12 exception fixture (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(PLAN_W12_PATH, "MPP_NO_CORPUS is set");
         return;
     }
     const std::string path = PLAN_W12_PATH;
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << PLAN_W12_PATH << " is not present (corpus is git-ignored)\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
 

@@ -71,6 +71,7 @@
 
 #include "add_delete.h"
 #include "cfb_writer.h"
+#include "fixture_guard.h"
 #include "outline.h"
 #include "row_writer.h"
 #include "table.h"
@@ -1197,10 +1198,7 @@ void test_cascade_synthetic(TestContext& t) {
 void test_cascade_corpus(TestContext& t) {
     std::string const pre = join(MPPWRITE_PROBE_DIR, "w11-linkdelete-pre.mpp");
     std::string const post = join(MPPWRITE_PROBE_DIR, "w11-linkdelete-post.mpp");
-    if (!file_exists(pre)) {
-        std::cout << "SKIP: " << pre
-                  << " is missing (corpus/ is git-ignored); the measured cascade "
-                     "fixture cannot be built\n";
+    if (!fixture::corpus_present(pre)) {
         return;
     }
     mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(pre);
@@ -1262,7 +1260,7 @@ void test_cascade_corpus(TestContext& t) {
      * table bytes.  The assignment FixedMeta differs only in Project's cached
      * +2 field-count churn on the SURVIVING rows (2 -> 3), which is save churn
      * and deliberately not copied. */
-    if (file_exists(post)) {
+    if (fixture::corpus_present(post)) {
         mppwrite::CfbDocument const project_post = mppwrite::CfbDocument::from_file(post);
         t.check(doc.read_stream(cons_stream("FixedData")) ==
                     project_post.read_stream(cons_stream("FixedData")),
@@ -1289,9 +1287,6 @@ void test_cascade_corpus(TestContext& t) {
         t.check(post_row3 >= 0 && post_assn[16 + static_cast<std::size_t>(post_row3) * 34] ==
                                      0x02,
                 "cascade corpus: Project tombstoned assignment row 3 too");
-    } else {
-        std::cout << "SKIP: " << post << " is missing; the byte comparison with "
-                     "Project's own post-delete file is skipped\n";
     }
 
     check_table_headers(t, doc, 4, "w48-del-cascade.mpp");
@@ -1451,9 +1446,7 @@ void test_refusals(TestContext& t) {
 /* ---- (h) Project's own fixtures, when the corpus is present ---- */
 void test_probe_fixtures(TestContext& t) {
     std::string const base = join(MPPWRITE_PROBE_DIR, "w10-adddel-base.mpp");
-    if (!file_exists(base)) {
-        std::cout << "SKIP: probe fixtures not present (" << base
-                  << " is missing; corpus/ is git-ignored)\n";
+    if (!fixture::corpus_present(base)) {
         return;
     }
     mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(base);
@@ -1597,11 +1590,8 @@ int main() {
         test_delete_summary_refusal(t);
 
         std::string const synthetic = join(MPPWRITE_TEST_DATA, "synthetic-base.mpp");
-        if (!file_exists(synthetic)) {
-            std::cout << "SKIP: " << synthetic
-                      << " is missing; the corpus-free path needs it\n";
-            return t.report();
-        }
+        /* W33-3.3: committed, so absence is a FAILURE with the path. */
+        fixture::require_committed(synthetic);
         test_add_end(t);
         test_add_two(t);
         test_add_mid_uid(t);

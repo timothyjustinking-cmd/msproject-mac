@@ -28,6 +28,7 @@
 #include <system_error>
 
 #include "field_value.h"
+#include "fixture_guard.h"
 #include "reader.h"
 
 #ifndef MPP_PROBE_DIR
@@ -152,10 +153,8 @@ void test_id_table(TestContext& t) {
 
 void test_synthetic_control(TestContext& t) {
     std::string const path = join(MPP_TEST_DATA_DIR, "synthetic-base.mpp");
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << path << " is missing\n";
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(path);
     mpp::Document const document = mpp::load_file(path);
     t.equal(document.tasks.size(), std::size_t{3}, "synthetic: three live tasks");
     for (mpp::Task const& task : document.tasks) {
@@ -190,8 +189,7 @@ void test_synthetic_control(TestContext& t) {
 
 void test_field_values(TestContext& t) {
     std::string const path = join(MPP_PROBE_DIR, "w10-fieldvalues.mpp");
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << path << " is missing (corpus/ is git-ignored)\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
     mpp::Document const document = mpp::load_file(path);
@@ -262,8 +260,7 @@ void test_field_values(TestContext& t) {
 
 void test_cost_fixtures(TestContext& t) {
     std::string const path = join(MPP_PROBE_DIR, "w14-cost.mpp");
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << path << " is missing (corpus/ is git-ignored)\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
     mpp::Document const doc = mpp::load_file(path);
@@ -296,9 +293,7 @@ void test_cost_fixtures(TestContext& t) {
 void test_flag_pair(TestContext& t) {
     std::string const off = join(MPP_PROBE_DIR, "w10-flag-off.mpp");
     std::string const on = join(MPP_PROBE_DIR, "w10-flag-on.mpp");
-    if (!file_exists(off) || !file_exists(on)) {
-        std::cout << "SKIP: " << off << " / " << on
-                  << " are missing (corpus/ is git-ignored)\n";
+    if (!fixture::corpus_present(off) || !fixture::corpus_present(on)) {
         return;
     }
     mpp::Document const a = mpp::load_file(off);

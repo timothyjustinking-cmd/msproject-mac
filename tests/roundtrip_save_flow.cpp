@@ -68,6 +68,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "fixture_guard.h"
 #include "row_writer.h"
 #include "save.h"
 #include "table.h"
@@ -295,12 +296,14 @@ std::size_t fixed2_meta_flags_offset(mppwrite::CfbDocument const& doc,
  * The shared body of (a) and (b): pin one uid through save_date_edits, then
  * prove the result from disk.  `source` is any fixture with >= 2 rows and uid 1
  * at row 1; `pin` is the packed date.  Returns nothing; checks accumulate.
- */
+ * `committed` says whether the source is a tests/data fixture (missing is a
+ * FAILURE) or a corpus/ one (missing is a "corpus absent" SKIP). */
 void check_pin_and_save(TestContext& t, std::string const& source,
                         std::string const& out, std::uint32_t pin,
-                        std::string const& label) {
-    if (!file_exists(source)) {
-        std::cout << "SKIP: " << label << ": " << source << " is missing\n";
+                        std::string const& label, bool committed) {
+    if (committed) {
+        fixture::require_committed(source);
+    } else if (!fixture::corpus_present(source)) {
         return;
     }
     mppwrite::CfbDocument const original = mppwrite::CfbDocument::from_file(source);
@@ -474,11 +477,7 @@ void check_pin_and_save(TestContext& t, std::string const& source,
 void test_synthetic(TestContext& t) {
     std::string const source = join(MPPWRITE_TEST_DATA, "synthetic-base.mpp");
     check_pin_and_save(t, source, out_path("w37-synthetic-pinned.mpp"),
-                       kSyntheticPin, "synthetic");
-
-    if (!file_exists(source)) {
-        return;
-    }
+                       kSyntheticPin, "synthetic", true);
 
     /* ---- save_plan: shift every date copy by 7 days and save ---- */
     std::string const pinned = out_path("w37-synthetic-pinned.mpp");
@@ -601,7 +600,7 @@ void test_synthetic(TestContext& t) {
 void test_corpus(TestContext& t) {
     std::string const source = join(MPPWRITE_PROBE_DIR, "base.mpp");
     check_pin_and_save(t, source, out_path("w37-corpus-pinned.mpp"), kCorpusPin,
-                       "corpus");
+                       "corpus", false);
 }
 
 /* (c) refusals: no message, no file, no document change. */
@@ -630,10 +629,8 @@ void expect_save_error(TestContext& t, std::string const& label,
 
 void test_errors(TestContext& t) {
     std::string const source = join(MPPWRITE_TEST_DATA, "synthetic-base.mpp");
-    if (!file_exists(source)) {
-        std::cout << "SKIP: errors: " << source << " is missing\n";
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(source);
     mppwrite::DateEdit valid;
     valid.uid = kTaskUid;
     valid.start = kSyntheticPin;

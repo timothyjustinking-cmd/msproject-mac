@@ -31,17 +31,16 @@
 //      and 2 resources but NO export on disk; it prints that it is not
 //      comparable rather than pretending to compare it.
 //
-// All corpus files are git-ignored client data; a missing one prints SKIP and
-// the test passes.  No task name is read or printed.
+// All corpus files are git-ignored client data; a missing one prints
+// "SKIP: corpus absent" and the test passes.  No task name is read or printed.
 #include <algorithm>
 #include <cstdint>
 #include <exception>
-#include <filesystem>
 #include <iostream>
 #include <string>
-#include <system_error>
 
 #include "crosscheck.h"
+#include "fixture_guard.h"
 #include "mspdi.h"
 #include "reader.h"
 #include "view_test_support.h"
@@ -49,11 +48,6 @@
 namespace {
 
 using mspdi_cmp::Result;
-
-bool present(const char* path) {
-    std::error_code error;
-    return std::filesystem::is_regular_file(path, error);
-}
 
 /* A two-task document used by the in-memory case.  The dates are the reader's
  * packed form; 0x391312c0 is day 14611 = 2024-01-01 08:00 and 0x391427d8 is day
@@ -364,8 +358,8 @@ void test_in_memory(view_test::TestContext& ctx) {
 }
 
 void test_lagff1(view_test::TestContext& ctx) {
-    if (!present(IO_CROSSCHECK_LAG_MPP) || !present(IO_CROSSCHECK_LAG_XML)) {
-        std::cout << "SKIP: lagff1 fixture not present (" << IO_CROSSCHECK_LAG_MPP << ")\n";
+    if (!fixture::corpus_present(IO_CROSSCHECK_LAG_MPP) ||
+        !fixture::corpus_present(IO_CROSSCHECK_LAG_XML)) {
         return;
     }
     const mpp::Document reader = mpp::load_file(IO_CROSSCHECK_LAG_MPP);
@@ -395,8 +389,8 @@ void test_lagff1(view_test::TestContext& ctx) {
 }
 
 void test_project_a(view_test::TestContext& ctx) {
-    if (!present(IO_CROSSCHECK_PROJECT_A_MPP) || !present(IO_CROSSCHECK_PROJECT_A_XML)) {
-        std::cout << "SKIP: PROJECT_A corpus/XML not present (" << IO_CROSSCHECK_PROJECT_A_MPP << ")\n";
+    if (!fixture::corpus_present(IO_CROSSCHECK_PROJECT_A_MPP) ||
+        !fixture::corpus_present(IO_CROSSCHECK_PROJECT_A_XML)) {
         return;
     }
     const mpp::Document reader = mpp::load_file(IO_CROSSCHECK_PROJECT_A_MPP);
@@ -451,9 +445,8 @@ void test_project_a(view_test::TestContext& ctx) {
 }
 
 void test_project_b(view_test::TestContext& ctx) {
-    if (!present(IO_CROSSCHECK_PROJECT_B_MPP) || !present(IO_CROSSCHECK_PROJECT_B_XML)) {
-        std::cout << "SKIP: PROJECT_B corpus/XML not present (" << IO_CROSSCHECK_PROJECT_B_MPP
-                  << ")\n";
+    if (!fixture::corpus_present(IO_CROSSCHECK_PROJECT_B_MPP) ||
+        !fixture::corpus_present(IO_CROSSCHECK_PROJECT_B_XML)) {
         return;
     }
     const mpp::Document reader = mpp::load_file(IO_CROSSCHECK_PROJECT_B_MPP);
@@ -540,9 +533,8 @@ void test_project_b(view_test::TestContext& ctx) {
  * assign1.xml is on disk now, so this is the real-resource and Units-convention
  * cross-check. */
 void test_assign1(view_test::TestContext& ctx) {
-    if (!present(IO_CROSSCHECK_ASSIGN_MPP) || !present(IO_CROSSCHECK_ASSIGN_XML)) {
-        std::cout << "SKIP: assign1 fixture/export not present (" << IO_CROSSCHECK_ASSIGN_MPP
-                  << ", " << IO_CROSSCHECK_ASSIGN_XML << ")\n";
+    if (!fixture::corpus_present(IO_CROSSCHECK_ASSIGN_MPP) ||
+        !fixture::corpus_present(IO_CROSSCHECK_ASSIGN_XML)) {
         return;
     }
     const mpp::Document reader = mpp::load_file(IO_CROSSCHECK_ASSIGN_MPP);

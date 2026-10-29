@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "edit_model.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 #include "project_dialogs.h"
 #include "reader.h"
@@ -287,7 +288,8 @@ int main() {
     {
         const std::string exceptions_fixture =
             std::string(APP_CORPUS_DIR) + "/probe/w12-exceptions.mpp";
-        if (std::filesystem::exists(exceptions_fixture)) {
+        if (fixture::corpus_present(exceptions_fixture,
+                                    "working-time exception probe")) {
             app::WorkingTimeModel model;
             std::string error;
             const bool loaded = app::load_working_time(exceptions_fixture, "", 2026, 11, 1,
@@ -310,8 +312,6 @@ int main() {
             } else {
                 std::printf("  exception probe error: %s\n", error.c_str());
             }
-        } else {
-            std::fprintf(stderr, "note: corpus/probe/w12-exceptions.mpp absent; skipped\n");
         }
     }
 

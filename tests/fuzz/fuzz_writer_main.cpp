@@ -660,7 +660,8 @@ void check_damaged_table_refusal(fuzz::Checker& checker, std::string const& out_
                                  std::string const& corpus_dir) {
     std::string const source = fuzz::join_path(corpus_dir, "project_a.mpp");
     if (!fuzz::file_exists(source)) {
-        std::cout << "SKIP: damaged-table refusal control (no PROJECT_A corpus file)\n";
+        std::cout << "SKIP: corpus absent (" << source
+                  << "): damaged-table refusal control not run\n";
         return;
     }
     Bytes const corpus = fuzz::read_file(source);
@@ -818,7 +819,8 @@ int run_worker(Options const& options) {
             }
         }
         if (corpus_dir.empty()) {
-            std::cout << "SKIP: no corpus directory (damaged-table control not run)\n";
+            std::cout << "SKIP: corpus absent: no corpus directory; "
+                         "damaged-table control not run\n";
         } else {
             check_damaged_table_refusal(checker, out_dir, corpus_dir);
         }

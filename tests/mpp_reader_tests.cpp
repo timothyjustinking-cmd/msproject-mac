@@ -79,6 +79,7 @@
 #include <tuple>
 #include <vector>
 
+#include "fixture_guard.h"
 #include "reader.h"
 /* The container round-trip test (MPP12 fixtures) uses the writer's read/write
  * container model; see test_mpp12_container().  Compiling cfb_writer.cpp into
@@ -555,21 +556,10 @@ void compare_against_golden(TestContext& context, const mpp::Document& document)
 void test_synthetic_fixture(TestContext& context) {
     const std::filesystem::path directory = test_data_dir();
     const std::string path = (directory / "synthetic-base.mpp").string();
-    if (!file_exists(path)) {
-        /* The golden TSV is committed in the same directory.  Both present is a
-         * normal checkout; neither present is a tree without tests/data/, where
-         * skipping is right.  One without the other is a broken checkout -- most
-         * likely the fixture was never `git add`ed -- and must not hide behind a
-         * SKIP, because CI would then go green without exercising the reader. */
-        const std::string golden = (directory / "project_a_golden.tsv").string();
-        if (file_exists(golden)) {
-            context.check(false, "committed fixture " + path +
-                                     " is missing although " + golden + " is present");
-            return;
-        }
-        std::cout << "SKIP: " << path << " is not present (this tree has no tests/data/)\n";
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path.  This is the
+     * only check that can run on a clean CI checkout; it must not go green
+     * because the fixture was renamed or never `git add`ed. */
+    fixture::require_committed(path);
     const mpp::Document document = mpp::load_file(path);
     std::cout << "SYNTHETIC: " << describe(document) << '\n' << std::flush;
 
@@ -754,11 +744,10 @@ void test_synthetic_fixture(TestContext& context) {
 /* ---- 3 and 4. PROJECT_A: golden comparison, dead row, documented damage. */
 void test_project_a(TestContext& context) {
     if (corpus_hidden()) {
-        std::cout << "SKIP: PROJECT_A golden checks (MPP_NO_CORPUS is set: corpus forced absent)\n";
+        fixture::corpus_absent(MPP_PROJECT_A_PATH, "MPP_NO_CORPUS is set");
         return;
     }
-    if (!file_exists(MPP_PROJECT_A_PATH)) {
-        std::cout << "SKIP: " << MPP_PROJECT_A_PATH << " is not present (corpus is git-ignored)\n";
+    if (!fixture::corpus_present(MPP_PROJECT_A_PATH)) {
         return;
     }
     const mpp::Document document = mpp::load_file(MPP_PROJECT_A_PATH);
@@ -977,11 +966,10 @@ void test_project_a(TestContext& context) {
 /* ---- 5. PROJECT_B: 86 rows, 73 live tasks, 12 deleted slots. */
 void test_project_b(TestContext& context) {
     if (corpus_hidden()) {
-        std::cout << "SKIP: PROJECT_B checks (MPP_NO_CORPUS is set: corpus forced absent)\n";
+        fixture::corpus_absent(MPP_PROJECT_B_PATH, "MPP_NO_CORPUS is set");
         return;
     }
-    if (!file_exists(MPP_PROJECT_B_PATH)) {
-        std::cout << "SKIP: " << MPP_PROJECT_B_PATH << " is not present\n";
+    if (!fixture::corpus_present(MPP_PROJECT_B_PATH)) {
         return;
     }
     const mpp::Document document = mpp::load_file(MPP_PROJECT_B_PATH);
@@ -1139,10 +1127,8 @@ void test_project_b(TestContext& context) {
  * the record the reader consumes. */
 void test_project_property_names(TestContext& context) {
     const std::string path = MPP_PROPERTY_NAMES_PATH;
-    if (!file_exists(path)) {
-        context.check(false, "analysis/project_property_names.tsv is present");
-        return;
-    }
+    /* W33-3.3: analysis/project_property_names.tsv is committed. */
+    fixture::require_committed(path);
     std::ifstream input(path);
     std::map<std::uint32_t, std::string> names;
     std::string line;
@@ -1178,10 +1164,8 @@ void test_project_property_names(TestContext& context) {
     // agreement check.
     const auto id_at = [](std::uint32_t index) { return 0x02401388u + index; };
     const std::string fixture = (test_data_dir() / "synthetic-base.mpp").string();
-    if (!file_exists(fixture)) {
-        context.check(false, "synthetic-base.mpp is present for the props check");
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(fixture);
     const mpp::CompoundFile container = mpp::CompoundFile::from_file(fixture);
     const std::vector<std::uint8_t> props = container.read_stream("114/Props");
     std::map<std::uint32_t, std::uint16_t> int16_records;
@@ -1258,10 +1242,8 @@ void test_project_view_settings(TestContext& context) {
     };
     for (const Case& item : summary_cases) {
         const std::string path = (test_data_dir() / item.name).string();
-        if (!file_exists(path)) {
-            context.check(false, std::string(item.name) + " is present");
-            continue;
-        }
+        /* W33-3.3: committed, so absence is a FAILURE with the path. */
+        fixture::require_committed(path);
         const mpp::Document document = mpp::load_file(path);
         context.equal(document.project.summary_row_stored, item.expect_stored,
                       std::string(item.name) + ": the summary-row record is stored");
@@ -1283,10 +1265,8 @@ void test_project_view_settings(TestContext& context) {
     };
     for (const TimelineCase& item : timeline_cases) {
         const std::string path = (test_data_dir() / item.name).string();
-        if (!file_exists(path)) {
-            context.check(false, std::string(item.name) + " is present");
-            continue;
-        }
+        /* W33-3.3: committed, so absence is a FAILURE with the path. */
+        fixture::require_committed(path);
         const mpp::Document document = mpp::load_file(path);
         context.equal(document.project.timeline_stored, item.stored,
                       std::string(item.name) + ": the Timeline record is stored");
@@ -1305,10 +1285,9 @@ void test_project_view_settings(TestContext& context) {
         (test_data_dir() / "wave24-timeline-shown.mpp").string();
     const std::string hidden_path =
         (test_data_dir() / "wave24-timeline-hidden.mpp").string();
-    if (!file_exists(shown_path) || !file_exists(hidden_path)) {
-        context.check(false, "the Timeline shown/hidden pair is present");
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(shown_path);
+    fixture::require_committed(hidden_path);
     const mpp::Document shown = mpp::load_file(shown_path);
     const mpp::Document hidden = mpp::load_file(hidden_path);
     context.equal(shown.project.timeline_shown, true,
@@ -1420,10 +1399,8 @@ void test_project_view_settings(TestContext& context) {
  * single-variable measurement, committed. */
 void test_flag10(TestContext& context) {
     const std::string fixture = (test_data_dir() / "wave23-flags.mpp").string();
-    if (!file_exists(fixture)) {
-        context.check(false, "wave23-flags.mpp is present");
-        return;
-    }
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(fixture);
     const mpp::Document document = mpp::load_file(fixture);
     const auto task_of = [&document](std::uint32_t uid) -> const mpp::Task* {
         for (const mpp::Task& task : document.tasks) {
@@ -1448,7 +1425,9 @@ void test_flag10(TestContext& context) {
     // The control fixture (before the edit) has every Flag10 clear, so the
     // single changed bit really is the one the experiment set.
     const std::string control = (test_data_dir() / "wave23-outline.mpp").string();
-    if (file_exists(control)) {
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(control);
+    {
         const mpp::Document before = mpp::load_file(control);
         std::size_t set_count = 0;
         for (const mpp::Task& task : before.tasks) {
@@ -1458,15 +1437,13 @@ void test_flag10(TestContext& context) {
         }
         context.equal(set_count, std::size_t{0},
                       "the control fixture has no Flag10 set");
-    } else {
-        context.check(false,
-                      "wave23-outline.mpp is missing; the Flag10 control cannot run");
     }
 
     // Wave 24 (W24-15): all twenty Flag bits, measured one at a time.  The
     // fixture sets Flag1..Flag20 on ID 3 and nothing on the other rows.
     const std::string all_flags = (test_data_dir() / "wave24-flags20.mpp").string();
-    if (file_exists(all_flags)) {
+    fixture::require_committed(all_flags);
+    {
         const mpp::Document flag_document = mpp::load_file(all_flags);
         const auto task_of_uid = [&flag_document](std::uint32_t uid) -> const mpp::Task* {
             for (const mpp::Task& task : flag_document.tasks) {
@@ -1506,7 +1483,8 @@ void test_flag10(TestContext& context) {
                       "ID 4's twenty flags are all stored False");
         // The one-bit-per-flag rule: wave23-flags has ONLY Flag10 set.
         const std::string flag10_only = (test_data_dir() / "wave23-flags.mpp").string();
-        if (file_exists(flag10_only)) {
+        fixture::require_committed(flag10_only);
+        {
             const mpp::Document only = mpp::load_file(flag10_only);
             const mpp::Task* id3_only = nullptr;
             for (const mpp::Task& task : only.tasks) {
@@ -1526,9 +1504,6 @@ void test_flag10(TestContext& context) {
                           "wave23-flags sets Flag10 on ID 3");
             context.equal(set_in_control, std::size_t{1},
                           "wave23-flags sets no other flag bit");
-        } else {
-            context.check(false,
-                          "wave23-flags.mpp is missing; the single-bit control cannot run");
         }
         // Single-bit controls for the non-contiguous groups: Flag2 (+24/0x04)
         // and Flag20 (+34/0x04).  A swapped mask table still passes the all-20
@@ -1554,10 +1529,8 @@ void test_flag10(TestContext& context) {
         };
         for (const SingleFlagCase& item : singles) {
             const std::string path = (test_data_dir() / item.file).string();
-            if (!file_exists(path)) {
-                context.check(false, std::string(item.file) + " is present");
-                continue;
-            }
+            /* W33-3.3: committed, so absence is a FAILURE with the path. */
+            fixture::require_committed(path);
             const mpp::Document single = mpp::load_file(path);
             const mpp::Task* row = nullptr;
             for (const mpp::Task& task : single.tasks) {
@@ -1579,22 +1552,13 @@ void test_flag10(TestContext& context) {
             context.equal(total_set, std::size_t{1},
                           std::string(item.file) + " sets exactly one flag bit");
         }
-    } else {
-        // Wave 25 (W25-8/S10): a missing fixture must FAIL this test, not skip
-        // fifteen checks.  check_fixtures catches the absent file too, but this
-        // gate must not go green on its own when the file is gone.
-        context.check(false,
-                      "wave24-flags20.mpp is missing; the Flag1..20 decode cannot "
-                      "be verified");
     }
 }
 
 void test_new_task_mode(TestContext& context) {
     const std::string fixture = (test_data_dir() / "synthetic-base.mpp").string();
-    if (!file_exists(fixture)) {
-        std::cout << "SKIP: " << fixture << " is not present (the fixture checks "
-                     "report the broken checkout)\n";
-    } else {
+    fixture::require_committed(fixture);
+    {
         const mpp::Document document = mpp::load_file(fixture);
         context.check(document.project.new_tasks_manual_stored,
                       "synthetic-base stores the new-task scheduling default");
@@ -1607,7 +1571,7 @@ void test_new_task_mode(TestContext& context) {
     }
 
     if (corpus_hidden()) {
-        std::cout << "SKIP: corpus new-task-mode checks (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(MPP_PROBE_DIR, "MPP_NO_CORPUS is set");
         return;
     }
     struct Case {
@@ -1638,8 +1602,7 @@ void test_new_task_mode(TestContext& context) {
          "a writer-patched MPP14 probe without the record reports not-stored"},
     };
     for (const Case& item : cases) {
-        if (!file_exists(item.path)) {
-            std::cout << "SKIP: " << item.path << " is not present\n";
+        if (!fixture::corpus_present(item.path)) {
             continue;
         }
         const mpp::Document document = mpp::load_file(item.path);
@@ -1671,12 +1634,11 @@ void test_new_task_mode(TestContext& context) {
 void test_outline_fixture(TestContext& context) {
     const std::string directory = MPP_PROBE_DIR;
     if (corpus_hidden()) {
-        std::cout << "SKIP: outline1.mpp checks (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(directory, "MPP_NO_CORPUS is set");
         return;
     }
     const std::string path = directory + "/outline1.mpp";
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << path << " is not present\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
     const mpp::Document document = mpp::load_file(path);
@@ -1773,12 +1735,11 @@ void test_outline_fixture(TestContext& context) {
 void test_status_fixture(TestContext& context) {
     const std::string directory = MPP_PROBE_DIR;
     if (corpus_hidden()) {
-        std::cout << "SKIP: w3-o1.mpp checks (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(directory, "MPP_NO_CORPUS is set");
         return;
     }
     const std::string path = directory + "/w3-o1.mpp";
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << path << " is not present\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
     const mpp::Document document = mpp::load_file(path);
@@ -1917,7 +1878,8 @@ void test_status_fixture(TestContext& context) {
      * opens Manual=True.  The fixture is git-ignored, so guard it. */
     const std::string base_path = directory + "/base.mpp";
     const std::string auto_path = directory + "/w37-snet-auto.mpp";
-    if (file_exists(base_path) && file_exists(auto_path)) {
+    if (fixture::corpus_present(base_path) &&
+        fixture::corpus_present(auto_path)) {
         const mpp::Document base = mpp::load_file(base_path);
         for (const std::uint32_t uid : {1u, 2u, 3u}) {
             const mpp::Task* task = find_task(base, uid);
@@ -1933,9 +1895,6 @@ void test_status_fixture(TestContext& context) {
         const mpp::Task* kept = find_task(auto_doc, 2);
         context.check(kept != nullptr && kept->manually_scheduled,
                       "w37-snet-auto uid 2 keeps its manual bit (COM Manual=true)");
-    } else {
-        std::cout << "SKIP: " << auto_path
-                  << " is not present (manual-bit oracle fixture absent)\n";
     }
 }
 
@@ -1959,14 +1918,12 @@ void test_status_fixture(TestContext& context) {
 void test_w31_fixed_fields(TestContext& context) {
     const std::string directory = MPP_PROBE_DIR;
     if (corpus_hidden()) {
-        std::cout << "SKIP: W31 +174/+178 fixture checks (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(directory, "MPP_NO_CORPUS is set");
         return;
     }
 
     const std::string holiday = directory + "/holiday1.mpp";
-    if (!file_exists(holiday)) {
-        std::cout << "SKIP: " << holiday << " is not present\n";
-    } else {
+    if (fixture::corpus_present(holiday)) {
         const mpp::Document document = mpp::load_file(holiday);
         std::cout << "HOLIDAY1: " << describe(document) << '\n' << std::flush;
         context.equal(document.tasks.size(), std::size_t{3}, "holiday1 has 3 tasks");
@@ -1995,9 +1952,7 @@ void test_w31_fixed_fields(TestContext& context) {
     }
 
     const std::string manual = directory + "/manual-start-edited.mpp";
-    if (!file_exists(manual)) {
-        std::cout << "SKIP: " << manual << " is not present\n";
-    } else {
+    if (fixture::corpus_present(manual)) {
         const mpp::Document document = mpp::load_file(manual);
         const mpp::Task* edited = find_task(document, 1);
         context.check(edited != nullptr, "manual-start-edited has uid 1");
@@ -2025,9 +1980,7 @@ void test_w31_fixed_fields(TestContext& context) {
     }
 
     const std::string milestones = directory + "/milestone1.mpp";
-    if (!file_exists(milestones)) {
-        std::cout << "SKIP: " << milestones << " is not present\n";
-    } else {
+    if (fixture::corpus_present(milestones)) {
         const mpp::Document document = mpp::load_file(milestones);
         std::cout << "MILESTONE1: " << describe(document) << '\n' << std::flush;
         context.equal(document.tasks.size(), std::size_t{7},
@@ -2073,7 +2026,7 @@ void test_w31_fixed_fields(TestContext& context) {
     }
 
     const std::string schedin = directory + "/schedin.mpp";
-    if (file_exists(schedin)) {
+    if (fixture::corpus_present(schedin)) {
         const mpp::Document document = mpp::load_file(schedin);
         const std::ptrdiff_t anchors = std::count_if(
             document.tasks.begin(), document.tasks.end(),
@@ -2110,15 +2063,13 @@ void test_w31_fixed_fields(TestContext& context) {
  * "2 days" links store 7.  No task name or calendar name is used here. */
 void test_w49_fields(TestContext& context) {
     if (corpus_hidden()) {
-        std::cout << "SKIP: W49 format-word checks (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(MPP_PROBE_DIR, "MPP_NO_CORPUS is set");
         return;
     }
     const std::string directory = MPP_PROBE_DIR;
 
     const std::string elapsed_path = directory + "/w9-elapsedlag.mpp";
-    if (!file_exists(elapsed_path)) {
-        std::cout << "SKIP: " << elapsed_path << " is not present\n";
-    } else {
+    if (fixture::corpus_present(elapsed_path)) {
         const mpp::Document document = mpp::load_file(elapsed_path);
         const mpp::Task* t8 = find_task(document, 8);
         context.check(t8 != nullptr, "w9-elapsedlag has uid 8");
@@ -2157,7 +2108,7 @@ void test_w49_fields(TestContext& context) {
     }
 
     const std::string types_path = directory + "/w9-resourcetypes.mpp";
-    if (file_exists(types_path)) {
+    if (fixture::corpus_present(types_path)) {
         const mpp::Document document = mpp::load_file(types_path);
         std::size_t elapsed_tasks = 0;
         for (const mpp::Task& task : document.tasks) {
@@ -2168,13 +2119,12 @@ void test_w49_fields(TestContext& context) {
         }
         context.equal(elapsed_tasks, std::size_t{0},
                       "w9-resourcetypes has no elapsed-duration task");
-    } else {
-        std::cout << "SKIP: " << types_path << " is not present\n";
     }
 
     /* The regression guard for M2: no PROJECT_A/PROJECT_B task may be flagged elapsed,
      * or the engine's dates would move.  All of their rows store 7/9/11/21. */
-    if (file_exists(MPP_PROJECT_A_PATH) && file_exists(MPP_PROJECT_B_PATH)) {
+    if (fixture::corpus_present(MPP_PROJECT_A_PATH) &&
+        fixture::corpus_present(MPP_PROJECT_B_PATH)) {
         for (const std::string& path : {std::string(MPP_PROJECT_A_PATH),
                                         std::string(MPP_PROJECT_B_PATH)}) {
             const mpp::Document document = mpp::load_file(path);
@@ -2191,12 +2141,11 @@ void test_w49_fields(TestContext& context) {
 void test_schedin_fixture(TestContext& context) {
     const std::string directory = MPP_PROBE_DIR;
     if (corpus_hidden()) {
-        std::cout << "SKIP: schedin.mpp checks (MPP_NO_CORPUS is set)\n";
+        fixture::corpus_absent(directory, "MPP_NO_CORPUS is set");
         return;
     }
     const std::string path = directory + "/schedin.mpp";
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << path << " is not present\n";
+    if (!fixture::corpus_present(path)) {
         return;
     }
     const mpp::Document document = mpp::load_file(path);
@@ -2303,12 +2252,10 @@ void test_schedin_fixture(TestContext& context) {
 void test_probe_fixtures(TestContext& context) {
     const std::string directory = MPP_PROBE_DIR;
     if (corpus_hidden()) {
-        std::cout << "SKIP: " << directory
-                  << " sweep (MPP_NO_CORPUS is set: corpus forced absent)\n";
+        fixture::corpus_absent(directory, "MPP_NO_CORPUS is set");
         return;
     }
-    if (!file_exists(directory)) {
-        std::cout << "SKIP: " << directory << " is not present\n";
+    if (!fixture::corpus_present(directory)) {
         return;
     }
     const std::vector<std::pair<std::string, std::size_t>> expected = {
@@ -2332,7 +2279,8 @@ void test_probe_fixtures(TestContext& context) {
          * task rows instead of Project 2007's 264, and the reader refuses it
          * with a positioned error on purpose (test_mpp12 pins that). */
         if (name.size() > 11 && name.compare(name.size() - 11, 11, "-from14.mpp") == 0) {
-            std::cout << "SKIP (MPXJ-written variant): " << name << "\n";
+            std::cout << "SKIP: corpus data excluded (MPXJ-written variant): "
+                      << name << "\n";
             continue;
         }
         /* MPXJ's writer also produces MPP14 containers with 206-byte task rows
@@ -2341,7 +2289,9 @@ void test_probe_fixtures(TestContext& context) {
          * Project's 202-byte row; the reader refuses it with a positioned error
          * instead of emitting UniqueID 0 rows, and that refusal is pinned below. */
         if (name == "SubprojectA-9.mpp" || name == "SubprojectB-9.mpp") {
-            std::cout << "SKIP (MPXJ-written 206-byte MPP14 variant): " << name << "\n";
+            std::cout << "SKIP: corpus data excluded (MPXJ-written 206-byte "
+                         "MPP14 variant): "
+                      << name << "\n";
             continue;
         }
         try {
@@ -2395,7 +2345,7 @@ void test_probe_fixtures(TestContext& context) {
      * 202-byte slice used to read row 0's uid 0 four times and invent dates). */
     for (const char* name : {"SubprojectA-9.mpp", "SubprojectB-9.mpp"}) {
         const std::string path = directory + "/" + name;
-        if (!file_exists(path)) {
+        if (!fixture::corpus_present(path)) {
             continue;
         }
         bool threw = false;
@@ -2415,9 +2365,8 @@ void test_probe_fixtures(TestContext& context) {
 
 /* ---- 7. A file that is not a compound file is rejected, not guessed at. */
 void test_bad_input(TestContext& context) {
-    if (!file_exists(MPP_GOLDEN_PATH)) {
-        return;
-    }
+    /* W33-3.3: the golden TSV is committed; its absence is a FAILURE. */
+    fixture::require_committed(MPP_GOLDEN_PATH);
     bool threw = false;
     std::string message;
     try {
@@ -2504,9 +2453,9 @@ std::vector<GoldenLink> read_link_golden(const std::string& path, TestContext& c
  * x100: 10000.0 = 100 %). */
 void test_resources(TestContext& context) {
     const std::string probe = MPP_PROBE_DIR;
-    if (!file_exists(MPP_PROJECT_A_PATH) || !file_exists(MPP_PROJECT_B_PATH) ||
-        !file_exists(probe + "/base.mpp")) {
-        std::cout << "SKIP: corpus is not present\n";
+    if (!fixture::corpus_present(MPP_PROJECT_A_PATH) ||
+        !fixture::corpus_present(MPP_PROJECT_B_PATH) ||
+        !fixture::corpus_present(probe + "/base.mpp")) {
         return;
     }
     const mpp::Document base = mpp::load_file(probe + "/base.mpp");
@@ -2553,7 +2502,7 @@ void test_resources(TestContext& context) {
      * clear the Fixed2Meta entry +8 bit 0x10 selects Cost vs Material.  The 50 %
      * MaxUnits row measures the +8 double's x100 scale (5000.0). */
     const std::string type_fixture = probe + "/w9-resourcetypes.mpp";
-    if (file_exists(type_fixture)) {
+    if (fixture::corpus_present(type_fixture)) {
         const mpp::Document types = mpp::load_file(type_fixture);
         context.equal(types.resources.size(), std::size_t{3},
                       "w9-resourcetypes has three live resources (Work/Material/Cost)");
@@ -2585,13 +2534,10 @@ void test_resources(TestContext& context) {
                           r3 != nullptr && r3->calendar_uid == 5,
                       "w9-resourcetypes resource calendar uids are 3/4/5, exactly "
                       "the MSPDI <CalendarUID> values");
-    } else {
-        std::cout << "SKIP: " << type_fixture
-                  << " is not present (resource-type oracle fixture absent)\n";
     }
 
     const std::string assign1 = probe + "/assign1.mpp";
-    if (file_exists(assign1)) {
+    if (fixture::corpus_present(assign1)) {
         const mpp::Document assignments = mpp::load_file(assign1);
         context.equal(assignments.resources.size(), std::size_t{2},
                       "assign1.mpp has two resources (Crew, Crane)");
@@ -2635,10 +2581,7 @@ void test_resources(TestContext& context) {
 void test_resource_sheet_fixture(TestContext& context) {
     const std::string path =
         (test_data_dir() / "wave31-resource-sheet.mpp").string();
-    if (!file_exists(path)) {
-        std::cout << "SKIP: " << path << " is not present\n";
-        return;
-    }
+    fixture::require_committed(path);
     const mpp::Document document = mpp::load_file(path);
     context.equal(document.resources.size(), std::size_t{3},
                   "wave31-resource-sheet has Project's three resources");
@@ -2707,9 +2650,10 @@ void test_resource_sheet_fixture(TestContext& context) {
  * 2 SF / 3 SS), +14 signed lag in 6-second ticks (4800 = one working day). */
 void test_links(TestContext& context) {
     const std::string probe = MPP_PROBE_DIR;
-    if (!file_exists(MPP_PROJECT_A_PATH) || !file_exists(MPP_PROJECT_B_PATH) ||
-        !file_exists(probe + "/base.mpp") || !file_exists(probe + "/link1.mpp")) {
-        std::cout << "SKIP: corpus is not present\n";
+    if (!fixture::corpus_present(MPP_PROJECT_A_PATH) ||
+        !fixture::corpus_present(MPP_PROJECT_B_PATH) ||
+        !fixture::corpus_present(probe + "/base.mpp") ||
+        !fixture::corpus_present(probe + "/link1.mpp")) {
         return;
     }
     const mpp::Document link1 = mpp::load_file(probe + "/link1.mpp");
@@ -2816,9 +2760,9 @@ void test_links(TestContext& context) {
      * +14 i32, so the values compare directly. */
     const std::string golden_path =
         (test_data_dir() / "project_a_links_golden.tsv").string();
-    if (!file_exists(golden_path)) {
-        context.check(false, "committed link golden " + golden_path + " is missing");
-    } else {
+    /* W33-3.3: committed, so absence is a FAILURE with the path. */
+    fixture::require_committed(golden_path);
+    {
         const std::vector<GoldenLink> golden = read_link_golden(golden_path, context);
         context.equal(golden.size(), std::size_t{88},
                       "the committed PROJECT_A link golden holds the 88 MSPDI links");
@@ -2929,9 +2873,9 @@ void test_links(TestContext& context) {
  * +4 task uid, +8 resource uid, +12 Units (x100), +20 Work (minutes x1000). */
 void test_assignments(TestContext& context) {
     const std::string probe = MPP_PROBE_DIR;
-    if (!file_exists(MPP_PROJECT_A_PATH) || !file_exists(MPP_PROJECT_B_PATH) ||
-        !file_exists(probe + "/base.mpp")) {
-        std::cout << "SKIP: corpus is not present\n";
+    if (!fixture::corpus_present(MPP_PROJECT_A_PATH) ||
+        !fixture::corpus_present(MPP_PROJECT_B_PATH) ||
+        !fixture::corpus_present(probe + "/base.mpp")) {
         return;
     }
     const mpp::Document base = mpp::load_file(probe + "/base.mpp");
@@ -2970,7 +2914,7 @@ void test_assignments(TestContext& context) {
     }
 
     const std::string assign1 = probe + "/assign1.mpp";
-    if (file_exists(assign1)) {
+    if (fixture::corpus_present(assign1)) {
         const mpp::Document assignments = mpp::load_file(assign1);
         context.equal(assignments.assignments.size(), std::size_t{3},
                       "assign1.mpp has 3 real assignments (5 rows - 2 placeholders)");
@@ -2997,7 +2941,7 @@ void test_assignments(TestContext& context) {
     }
 
     const std::string link1 = probe + "/link1.mpp";
-    if (file_exists(link1)) {
+    if (fixture::corpus_present(link1)) {
         const mpp::Document assignments = mpp::load_file(link1);
         context.equal(assignments.assignments.size(), std::size_t{4},
                       "link1.mpp has one unassigned assignment row per task");
@@ -3120,7 +3064,7 @@ void test_assignments(TestContext& context) {
     context.equal(link1_dates.resume_is_start, std::size_t{4},
                   "all 4 link1.mpp assignments store Start at +60");
 
-    if (file_exists(assign1)) {
+    if (fixture::corpus_present(assign1)) {
         const DateCounts assign1_dates = count_dates(mpp::load_file(assign1));
         context.equal(assign1_dates.assignments, std::size_t{3},
                       "assign1.mpp's 3 real assignments resolve to a task");
@@ -3138,11 +3082,14 @@ void test_assignments(TestContext& context) {
 #define MPP_ASSIGNMENT_GOLDEN_PATH ""
 #endif
     const std::string assignment_golden = MPP_ASSIGNMENT_GOLDEN_PATH;
-    if (assignment_golden.empty() || !file_exists(assignment_golden)) {
-        std::cout << "SKIP: " << assignment_golden
-                  << " is not present (no assignment date oracle)\n";
+    /* W33-3.3: committed (tests/mpp_assignment_dates_golden.tsv, configured by
+     * core/mpp/CMakeLists.txt), so absence is a FAILURE, not a SKIP. */
+    if (assignment_golden.empty()) {
+        context.check(false,
+                      "MPP_ASSIGNMENT_GOLDEN_PATH is not configured (core/mpp/CMakeLists.txt)");
         return;
     }
+    fixture::require_committed(assignment_golden);
     struct GoldenAssignmentDate {
         std::uint32_t uid = 0;
         std::uint32_t task_uid = 0;
@@ -3296,8 +3243,11 @@ void test_mpp12(TestContext& context) {
     const auto exists = [&directory](const std::string& name) {
         return !corpus_hidden() && file_exists(directory + "/" + name);
     };
-    if (corpus_hidden() || !file_exists(directory + "/mpp12task.mpp")) {
-        std::cout << "SKIP: corpus/probe/mpp12*.mpp is not present\n";
+    if (corpus_hidden()) {
+        fixture::corpus_absent(directory, "MPP_NO_CORPUS is set");
+        return;
+    }
+    if (!fixture::corpus_present(directory + "/mpp12task.mpp")) {
         return;
     }
 
@@ -3930,16 +3880,18 @@ void test_mpp12(TestContext& context) {
  * ------------------------------------------------------------------------- */
 void test_mpp12_container(TestContext& context) {
     const std::string directory = MPP_PROBE_DIR;
-    if (corpus_hidden() || !file_exists(directory + "/mpp12task.mpp")) {
-        std::cout << "SKIP: corpus/probe/mpp12*.mpp is not present\n";
+    if (corpus_hidden()) {
+        fixture::corpus_absent(directory, "MPP_NO_CORPUS is set");
+        return;
+    }
+    if (!fixture::corpus_present(directory + "/mpp12task.mpp")) {
         return;
     }
     const char* names[] = {"mpp12task.mpp", "mpp12header.mpp", "mpp12relations.mpp",
                            "mpp12resource.mpp", "mpp12splittask.mpp"};
     for (const char* name : names) {
         const std::string path = directory + "/" + name;
-        if (!file_exists(path)) {
-            std::cout << "SKIP: " << path << " is not present\n";
+        if (!fixture::corpus_present(path)) {
             continue;
         }
         const std::vector<std::uint8_t> original = read_file_bytes(path);

@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "cal.h"
+#include "fixture_guard.h"
 #include "plan.h"
 #include "reader.h"
 #include "sched_test_support.h"
@@ -577,11 +578,8 @@ int main() {
         test_options(context);
         test_error_paths(context);
 
-        if (file_exists(SESSION_PROJECT_A_PATH)) {
+        if (fixture::corpus_present(SESSION_PROJECT_A_PATH)) {
             test_corpus(context, SESSION_PROJECT_A_PATH);
-        } else {
-            std::cout << "SKIP: " << SESSION_PROJECT_A_PATH << " is absent"
-                      << (corpus_hidden() ? " (MPP_NO_CORPUS is set)" : "") << '\n';
         }
     } catch (const std::exception& error) {
         std::cerr << "FAIL: exception escaped: " << error.what() << '\n';

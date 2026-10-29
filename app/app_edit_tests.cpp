@@ -35,6 +35,7 @@
 
 #include "date.h"
 #include "edit_model.h"
+#include "fixture_guard.h"
 #include "layout_model.h"
 #include "reader_adapter.h"
 
@@ -824,11 +825,7 @@ std::uint32_t busiest_uid(const app::PlanInput& plan, std::size_t& dependants) {
 void test_real_save_round_trip() {
     const std::filesystem::path fixture =
         std::filesystem::path(APP_TEST_DATA_DIR) / "synthetic-base.mpp";
-    if (!std::filesystem::exists(fixture)) {
-        std::printf("SKIP: %s is not present; the edit round trip needs the committed fixture\n",
-                    fixture.string().c_str());
-        return;
-    }
+    fixture::require_committed(fixture);
     const std::size_t fixture_bytes = bytes_on_disk(fixture);
     std::error_code error;
     std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR), error);
@@ -1227,11 +1224,7 @@ void test_real_save_round_trip() {
 void test_real_insert_clone_check() {
     const std::filesystem::path fixture =
         std::filesystem::path(APP_TEST_DATA_DIR) / "synthetic-base.mpp";
-    if (!std::filesystem::exists(fixture)) {
-        std::printf("SKIP: %s is not present; the clone check needs the committed fixture\n",
-                    fixture.string().c_str());
-        return;
-    }
+    fixture::require_committed(fixture);
     std::error_code error;
     std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR), error);
     const std::filesystem::path clean_copy =
@@ -1380,12 +1373,9 @@ void test_fat_slack_read_only() {
     // ones.  The fixture is READ, never written.
     const std::filesystem::path fixture =
         std::filesystem::path(APP_TEST_DATA_DIR) / "wave33-fat-slack.mpp";
-    if (!std::filesystem::exists(fixture)) {
-        // Wave 33: a committed fixture this test needs must FAIL when it is
-        // missing, never skip and pass.
-        check(false, "the committed wave33-fat-slack.mpp fixture is present");
-        return;
-    }
+    // Wave 33: a committed fixture this test needs must FAIL when it is
+    // missing, never skip and pass.
+    fixture::require_committed(fixture);
     bool slack_detected = false;
     try {
         const mpp::Document document = mpp::load_file(fixture.string());
@@ -1436,13 +1426,16 @@ void test_fat_slack_read_only() {
 
 #else
 void test_real_save_round_trip() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 void test_real_insert_clone_check() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 void test_fat_slack_read_only() {
-    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+    check(false, "APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined; "
+                 "configure with APP_BUILD_TESTS=ON (app/CMakeLists.txt)");
 }
 #endif
 

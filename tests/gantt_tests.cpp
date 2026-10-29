@@ -3,7 +3,8 @@
 // Almost everything here is synthetic: fixed dates, fixed 20 px/day, row height
 // 22.  The one corpus test is the holiday probe at the bottom: it decodes
 // corpus/probe/holiday1.mpp (a synthetic COM-built fixture, not client data)
-// through core::cal::load_project_calendar and SKIPs when the file is absent.
+// through core::cal::load_project_calendar and skips with "corpus absent" when
+// the file is missing.
 //
 // The numbers are the contract.  If a decision changes (row height, bar
 // height, link gap, milestone centring, label fitting), this file must change
@@ -13,12 +14,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "fixture_guard.h"
 #include "gantt.h"
 
 #if defined(GANTT_HAS_CAL)
@@ -1575,23 +1576,20 @@ void test_zoom_breadth(Context& context) {
 #if defined(GANTT_HAS_CAL)
 // tests/cal_tests.cpp), so its calendar names are not client data.  It carries
 // one dated exception (Wednesday non-working) and a 4-hour Friday in the task
-// calendar the three tasks select.  No name is printed; absence is a SKIP.
+// calendar the three tasks select.  No name is printed; a missing corpus file
+// skips as "corpus absent", and one that does not decode records why it was not
+// compared under the same wording.
 void test_holiday_probe(Context& context) {
     const std::string path = std::string(GANTT_PROBE_DIR) + "/holiday1.mpp";
-    std::ifstream probe(path, std::ios::binary);
-    if (!probe.good()) {
-        std::cout << "SKIP: corpus/probe/holiday1.mpp not found; "
-                     "decoded-calendar shading not run\n";
+    if (!fixture::corpus_present(path, "decoded-calendar shading not run")) {
         return;
     }
-    probe.close();
 
     core::sched::Calendar calendar;
     try {
         calendar = core::cal::load_project_calendar(path, "SiteCal");
     } catch (const std::exception& error) {
-        std::cout << "SKIP: holiday1.mpp has no decodable task calendar ("
-                  << error.what() << ")\n";
+        fixture::corpus_absent(path, error.what());
         return;
     }
 

@@ -25,6 +25,7 @@
 
 #include "../core/render/pdf_writer.h"
 #include "../core/render/report.h"
+#include "fixture_guard.h"
 #include "render_test.h"
 
 #ifdef RENDER_HAVE_MPP_READER
@@ -512,19 +513,15 @@ void test_gantt_minimal_and_queries(TestContext& ctx) {
 /* The real 83-task programme.  Only counts are printed. */
 void test_corpus_file(TestContext& ctx) {
     const std::string path = RENDER_PROJECT_A_MPP;
-    {
-        std::ifstream probe(path, std::ios::binary);
-        if (!probe) {
-            std::printf("[render_report] corpus file absent: SKIP (counts not asserted)\n");
-            return;
-        }
+    if (!fixture::corpus_present(path)) {
+        return;
     }
 
     mpp::Document document;
     try {
         document = mpp::load_file(path);
     } catch (const std::exception&) {
-        std::printf("[render_report] corpus file unreadable: SKIP\n");
+        fixture::corpus_absent(path, "the corpus file could not be read");
         return;
     }
     const std::size_t row_count = document.tasks.size();
