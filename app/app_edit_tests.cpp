@@ -161,6 +161,9 @@ app::StructuralEdit set_text1(std::uint32_t uid, const std::string& text) {
 // ---------------------------------------------------------------------------
 
 void test_push_and_undo() {
+    // W33-1.1 (A-3): a delete names the plan it is checked against, so the
+    // model can refuse a row with live subtasks.
+    const app::PlanInput plan = make_plan();
     app::StructuralEdits edits;
     check(edits.empty(), "a fresh edit list is empty");
     check(!edits.can_undo() && !edits.can_redo(), "nothing to undo or redo");
@@ -173,8 +176,8 @@ void test_push_and_undo() {
     check(edits.push(insert_after("New Task", 4, 1)), "a valid insert is accepted");
     check(edits.size() == 1, "one edit");
     check(!edits.push(insert_after("Other", 4, 0)), "a duplicate placeholder uid is refused");
-    check(edits.push(delete_uid(2)), "a delete is accepted");
-    check(!edits.push(delete_uid(2)), "a duplicate delete is refused");
+    check(edits.push(delete_uid(2), &plan), "a delete is accepted");
+    check(!edits.push(delete_uid(2), &plan), "a duplicate delete is refused");
     check(edits.inserted_count() == 1 && edits.deleted_count() == 1, "one insert and one delete");
 
     check(edits.undo(), "undo moves the delete to the redo list");
@@ -183,7 +186,7 @@ void test_push_and_undo() {
     check(edits.redo(), "redo applies it again");
     check(edits.deleted_count() == 1, "the delete is applied again");
 
-    check(edits.push(delete_uid(3)), "a new edit clears the redo list");
+    check(edits.push(delete_uid(3), &plan), "a new edit clears the redo list");
     check(!edits.can_redo(), "the redo list is empty");
 
     check(edits.is_pending_insert(4), "the insert placeholder is recognized");
@@ -540,7 +543,7 @@ void test_delete_undo_restores_edits() {
     check(edits.apply(plan).tasks[0].percent_complete == 40,
           "the display plan carries the queued percent");
 
-    check(edits.push(delete_uid(1)), "deleting the task is accepted");
+    check(edits.push(delete_uid(1), &plan), "deleting the task is accepted");
     check(edits.field_edit_count() == 0 && edits.link_edit_count() == 0,
           "the delete displaces the task's field and link edits");
     check_size(edits.size(), 1, "only the delete remains applied");
@@ -582,7 +585,7 @@ void test_without_structural_edits() {
 
     app::StructuralEdits edits;
     edits.push(insert_after("New Task", 4, 2));
-    edits.push(delete_uid(3));
+    edits.push(delete_uid(3), &plan);
     const app::PlanInput shown = edits.apply(plan);
     const app::PlanInput recovered = edits.without_structural_edits(shown, plan);
 
@@ -653,7 +656,7 @@ void test_apply_placement() {
     // A delete removes the task and exactly the rows the writer's cascade
     // tombstones: its links (either endpoint) and its assignments.
     app::StructuralEdits deletion;
-    deletion.push(delete_uid(2));
+    deletion.push(delete_uid(2), &plan);
     shown = deletion.apply(plan);
     check_size(shown.tasks.size(), 2, "the deleted task is gone");
     check_size(shown.links.size(), 0, "both links naming the task are gone");
@@ -669,7 +672,7 @@ void test_apply_placement() {
     // An insert anchored to a task that the same edit set deletes lands at the
     // end rather than disappearing.
     app::StructuralEdits mixed;
-    mixed.push(delete_uid(2));
+    mixed.push(delete_uid(2), &plan);
     mixed.push(insert_after("Orphan", 7, 2));
     shown = mixed.apply(plan);
     check_size(shown.tasks.size(), 3, "the delete and the insert both apply");
@@ -835,7 +838,7 @@ void test_real_save_round_trip() {
     remove.kind = app::StructuralKind::delete_task;
     remove.uid = doomed;
     remove.dependants = dependants;
-    check(deletes.push(remove), "the delete is recorded");
+    check(deletes.push(remove, &after_add.plan), "the delete is recorded");
     const app::PlanInput delete_shown = deletes.apply(after_add.plan);
     check_size(delete_shown.tasks.size(), after_add.plan.tasks.size() - 1,
                "the display plan hides the deleted task");
@@ -1019,7 +1022,8 @@ void test_real_save_round_trip() {
         undo_percent.percent = 40;
         check(undo_edits.push(undo_percent, &percent_base.plan),
               "the percent-before-delete edit is queued");
-        check(undo_edits.push(delete_uid(percent_uid)), "the task is deleted");
+        check(undo_edits.push(delete_uid(percent_uid), &percent_base.plan),
+              "the task is deleted");
         check(undo_edits.undo(), "the delete is undone");
         const std::filesystem::path undo_path =
             std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-percent-undo.mpp";
@@ -1094,9 +1098,14 @@ void test_real_save_round_trip() {
         }
     }
 
-    // A delete of a uid that is not in the file fails cleanly.
+    // A delete of a uid that is not in the file fails cleanly.  The display plan
+    // names the row (push is plan-dependent, W33-1.1); the FILE does not, so the
+    // writer's own unknown-uid refusal is what this case measures.
     app::StructuralEdits bogus;
-    check(bogus.push(delete_uid(999999u)), "the bogus delete is recorded");
+    app::PlanInput bogus_plan;
+    bogus_plan.tasks.push_back(make_task(999999u, 4800, from_ymd(2026, 1, 5, 8, 0)));
+    check(bogus.push(delete_uid(999999u), &bogus_plan),
+          "the bogus delete is recorded");
     const std::filesystem::path bogus_target =
         std::filesystem::path(APP_TEST_OUT_DIR) / "app-edit-bogus.mpp";
     std::filesystem::remove(bogus_target, error);

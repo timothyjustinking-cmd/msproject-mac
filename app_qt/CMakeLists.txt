@@ -200,6 +200,20 @@ add_test(NAME qt_uid_routing
                  "${QT_TEST_DATA_DIR_CMAKE}/wave24-order.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# Wave 33 (W33-1.1 / A-3, High): Delete Task on a summary row is refused by the
+# shell before any confirmation; a leaf still asks.  The fixture is Project's
+# own save of Task 1 as Task 2's summary; the test copies it into test-out/
+# and never opens the committed file in place.
+add_executable(qt_delete_summary_tests tests/delete_summary_test.cpp)
+target_link_libraries(qt_delete_summary_tests PRIVATE qt_shell)
+qt_set_warnings(qt_delete_summary_tests)
+
+add_test(NAME qt_delete_summary
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_delete_summary_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave28-outline-indent.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # ===========================================================================
 # WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
 # the loaded Task Sheet's geometry; these gate the empty project, the chrome,

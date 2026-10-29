@@ -3201,7 +3201,16 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         }
         return;
     }
-    const std::size_t dependants = app::count_delete_dependants(plan.base, selected.uid);
+    // W33-1.1 (A-3, High): the delete is plan-dependent and a summary row is
+    // refused before any confirmation, with the reason in plain words.
+    app::StructuralEdit edit;
+    std::string refusal;
+    if (!app::make_delete_edit(plan.base, selected.uid, edit, refusal)) {
+        note(plan, refusal, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    const std::size_t dependants = edit.dependants;
     const std::string name = plan.sheet->cell_text(selected.row, name_column_of(plan));
     std::string details = "Delete \"" +
                           (name.empty() ? "task uid " + std::to_string(selected.uid) : name) +
@@ -3222,12 +3231,8 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         [g_view setNeedsDisplay:YES];
         return;
     }
-    app::StructuralEdit edit;
-    edit.kind = app::StructuralKind::delete_task;
-    edit.uid = selected.uid;
-    edit.dependants = dependants;
-    if (!plan.edits.push(edit)) {
-        note(plan, "that task already has a pending delete", true);
+    if (!plan.edits.push(edit, &plan.base)) {
+        note(plan, "could not queue the delete (a pending delete or a changed plan)", true);
         return;
     }
     apply_structural_change(plan);

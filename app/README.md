@@ -239,7 +239,11 @@ write a stored or computed value**.
 records a **pending insert** anchored on the selected row (or at the end); `Edit ▸
 Delete Task` (Cmd-Backspace) records a **pending delete** after a confirmation that
 names how many dependent link/assignment rows the writer's cascade will tombstone (the
-count is `app::count_delete_dependants`, links plus assignments). Neither touches the
+count is `app::count_delete_dependants`, links plus assignments). A **summary row is
+refused before the confirmation** (wave 33, A-3): tombstoning it alone would leave its
+live subtasks with a parent identity pointing at a tombstone, a shape no Project save
+pair measured, so the status line says "delete the subtasks first, or outdent them".
+Neither touches the
 file until Save: the sheet and Gantt are rebuilt from `PlanState::base`, the loaded plan
 with the pending edits applied (`app::StructuralEdits::apply`), so a new row appears at
 once (a placeholder carrying the name and a copy of the file's last row's dates — the

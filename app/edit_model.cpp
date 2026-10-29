@@ -2493,7 +2493,16 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
             break;
         }
         case StructuralKind::delete_task: {
-            if (edit.uid == 0) {
+            // W33-1.1 (A-3, High): a delete is plan-dependent.  uid 0, a row
+            // no longer in the display plan, a pending insert (no saved row)
+            // and a SUMMARY row are all refused.  The writer tombstones a
+            // summary alone, leaving its live subtasks with a parent identity
+            // pointing at a tombstone; no Project pair measured that shape.
+            if (edit.uid == 0 || plan == nullptr) {
+                return false;
+            }
+            const TaskRow* row = task_row_for_uid(plan->tasks, edit.uid);
+            if (row == nullptr || row->file_row == 0 || row->summary) {
                 return false;
             }
             for (const StructuralEdit& existing : applied_) {
@@ -3411,6 +3420,36 @@ PlanInput StructuralEdits::without_structural_edits(const PlanInput& shown,
     edited.resources = loaded.resources;
     edited.skipped_links = loaded.skipped_links;
     return edited;
+}
+
+bool make_delete_edit(const PlanInput& plan, std::uint32_t uid, StructuralEdit& out,
+                      std::string& error) {
+    out = StructuralEdit{};
+    if (uid == 0) {
+        error = "no task row is selected to delete";
+        return false;
+    }
+    const TaskRow* row = task_row_for_uid(plan.tasks, uid);
+    if (row == nullptr) {
+        error = "task uid " + std::to_string(uid) +
+                " is not in the display plan; there is no saved row to delete";
+        return false;
+    }
+    if (row->file_row == 0) {
+        error = "task uid " + std::to_string(uid) +
+                " is a pending insert with no saved row; drop the insert instead";
+        return false;
+    }
+    if (row->summary) {
+        error = "task uid " + std::to_string(uid) +
+                " is a summary task; delete the subtasks first, or outdent them";
+        return false;
+    }
+    out.kind = StructuralKind::delete_task;
+    out.uid = uid;
+    out.dependants = count_delete_dependants(plan, uid);
+    error.clear();
+    return true;
 }
 
 std::size_t count_delete_dependants(const PlanInput& plan, std::uint32_t uid) noexcept {

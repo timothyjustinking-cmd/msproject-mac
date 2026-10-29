@@ -1483,7 +1483,8 @@ void test_cascade_delete_with_formula() {
     const std::uint32_t kept = plan.tasks.front().uid;
 
     app::StructuralEdits edits;
-    check(edits.push(delete_edit(doomed)), "the delete + formula delete is queued");
+    check(edits.push(delete_edit(doomed), &plan),
+          "the delete + formula delete is queued");
 
     app::CustomFormulaEdit formula;
     formula.operation = app::CustomFormulaEdit::Operation::set;

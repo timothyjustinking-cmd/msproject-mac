@@ -295,11 +295,18 @@ void test_push_validation() {
     check(edits.redo(), "redo applies it again");
     check_size(edits.field_edit_count(), 2, "the edit count is unchanged by undo/redo");
 
-    // A pending delete drops the field edits for that task.
+    // A pending delete drops the field edits for that task.  W33-1.1 (A-3):
+    // the delete is checked against the plan, which holds the leaf row it
+    // names.
+    app::PlanInput plan;
+    app::TaskRow leaf;
+    leaf.uid = 7;
+    leaf.file_row = 1;
+    plan.tasks.push_back(leaf);
     app::StructuralEdit remove;
     remove.kind = app::StructuralKind::delete_task;
     remove.uid = 7;
-    check(edits.push(remove), "the delete is accepted");
+    check(edits.push(remove, &plan), "the delete is accepted");
     check_size(edits.field_edit_count(), 0, "the delete dropped its field edits");
 }
 

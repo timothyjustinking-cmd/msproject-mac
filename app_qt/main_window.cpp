@@ -4814,7 +4814,15 @@ void MainWindow::delete_task() {
         update_status();
         return;
     }
-    const std::size_t dependants = app::count_delete_dependants(doc_.plan(), selected.uid);
+    // W33-1.1 (A-3, High): the delete is plan-dependent and a summary row is
+    // refused before any confirmation, with the reason in plain words.
+    app::StructuralEdit edit;
+    std::string refusal;
+    if (!app::make_delete_edit(doc_.plan(), selected.uid, edit, refusal)) {
+        set_message(refusal, true);
+        update_status();
+        return;
+    }
     // Wave 24 (W24-1): name the task the delete will actually tombstone -- the
     // one the selected UID names, not plan().tasks[RecordSet row].
     QString name = to_q(std::to_string(selected.uid));
@@ -4826,16 +4834,12 @@ void MainWindow::delete_task() {
         QStringLiteral("Delete \"%1\"?\n\nThe writer also tombstones %2 dependent "
                        "link/assignment row(s). This is a pending edit; File > Save writes it.")
             .arg(name)
-            .arg(static_cast<qulonglong>(dependants)),
+            .arg(static_cast<qulonglong>(edit.dependants)),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (choice != QMessageBox::Yes) {
         return;
     }
-    app::StructuralEdit edit;
-    edit.kind = app::StructuralKind::delete_task;
-    edit.uid = selected.uid;
-    edit.dependants = dependants;
-    if (!structural_.push(edit)) {
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
         set_message("could not queue the delete", true);
         update_status();
         return;

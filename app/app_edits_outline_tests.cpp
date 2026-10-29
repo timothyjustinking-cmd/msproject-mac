@@ -1663,7 +1663,12 @@ void check_refusals() {
         !std::filesystem::exists(auto_indent_control) ||
         !std::filesystem::exists(auto_outdent_control) ||
         !std::filesystem::exists(summary_control)) {
-        std::printf("SKIP: the refusal controls are not present\n");
+        // Wave 33 (W33-1.1): a committed fixture this test needs is missing, so
+        // the test FAILS rather than skipping and passing (wave-33 brief
+        // section 1).
+        check(false,
+              "the refusal controls are present (a missing committed fixture fails)");
+        std::printf("MISSING FIXTURE: the refusal controls are not present\n");
         return;
     }
     app::PlanInput indent_plan;
@@ -2038,21 +2043,55 @@ void check_refusals() {
     app::StructuralEdits wrong;
     check(!wrong.push(wrong_anchor, &indent_plan),
           "push refuses an anchor that is not the row above");
-    app::StructuralEdit remove_anchor;
-    remove_anchor.kind = app::StructuralKind::delete_task;
-    remove_anchor.uid = 1;
+    /* W33-1.1 (A-3, High): Delete Task is plan-dependent, and a row with live
+     * subtasks is refused: the writer tombstones the summary alone, leaving the
+     * children's parent identity pointing at a tombstone -- a shape no Project
+     * pair measured.  uid 1 is the summary of uid 2 in the outdent control. */
+    app::StructuralEdit remove_summary;
+    remove_summary.kind = app::StructuralKind::delete_task;
+    remove_summary.uid = 1;
+    app::StructuralEdits deleted_summary;
+    check(!deleted_summary.push(remove_summary, &outdent_plan),
+          "the summary row delete is refused");
+    check(deleted_summary.empty(), "the refused summary delete queues nothing");
+    app::StructuralEdits no_plan_delete;
+    check(!no_plan_delete.push(remove_summary, nullptr),
+          "push refuses a delete without the plan");
+    app::StructuralEdit remove_leaf = remove_summary;
     app::StructuralEdits deleted_anchor;
-    check(deleted_anchor.push(remove_anchor, &indent_plan),
-          "the summary row delete is queued");
+    check(deleted_anchor.push(remove_leaf, &indent_plan),
+          "a leaf row delete is queued");
     check(!deleted_anchor.push(good, &indent_plan),
           "an outline edit naming a pending-deleted row is refused");
 
-    /* Deleting either row of a queued outline edit displaces it; undo puts it
-     * back. */
+    /* A pending indent makes uid 1 a summary in the display plan; a delete of
+     * that row is refused for the same reason, and the queued indent stays. */
+    app::StructuralEdits pending_summary;
+    check(pending_summary.push(good, &indent_plan),
+          "the indent is queued for the display-plan delete check");
+    const app::PlanInput pending_display = pending_summary.apply(indent_plan);
+    app::StructuralEdit remove_display_summary;
+    remove_display_summary.kind = app::StructuralKind::delete_task;
+    remove_display_summary.uid = 1;
+    check(!pending_summary.push(remove_display_summary, &pending_display),
+          "a delete of a row a pending indent makes a summary is refused");
+    check_size(pending_summary.size(), 1,
+               "the refused delete leaves the queued indent in place");
+    if (pending_summary.size() == 1) {
+        check(pending_summary.applied().front().kind ==
+                  app::StructuralKind::outline_indent,
+              "the edit kept by the refusal is the outline indent");
+    }
+
+    /* Deleting the moved row of a queued outline edit displaces it; undo puts
+     * it back. */
     app::StructuralEdits displaced;
     check(displaced.push(good, &indent_plan), "the outline edit is queued first");
-    check(displaced.push(remove_anchor, &indent_plan),
-          "the summary delete is queued over it");
+    app::StructuralEdit remove_moved;
+    remove_moved.kind = app::StructuralKind::delete_task;
+    remove_moved.uid = 2;
+    check(displaced.push(remove_moved, &indent_plan),
+          "the moved leaf's delete is queued over it");
     check_size(displaced.size(), 1, "the delete displaced the outline edit");
     if (displaced.size() == 1) {
         check_size(displaced.applied().front().displaced.size(), 1,

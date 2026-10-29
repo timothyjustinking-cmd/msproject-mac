@@ -460,8 +460,16 @@ class StructuralEdits {
     //
     // A set_percent edit REQUIRES `plan` (W27-0.2): the row must be a live,
     // non-summary, saved file task (make_percent_edit; file_row != 0), and a
-    // plan-less set_percent is refused rather than trusted.  `plan` is ignored
-    // for the other kinds.
+    // plan-less set_percent is refused rather than trusted.
+    //
+    // A delete_task edit REQUIRES `plan` too (W33-1.1, A-3): the uid must name a
+    // live saved row, and a SUMMARY row is refused.  The writer tombstones the
+    // summary alone, leaving live subtasks with a parent identity pointing at a
+    // tombstone -- a shape no Project save pair measured.  make_delete_edit
+    // builds the edit and names the refusal for the shell; push() re-checks the
+    // same facts so a hand-built queue cannot bypass them.
+    //
+    // `plan` is ignored for the remaining kinds.
     //
     // An update_actuals edit also REQUIRES `plan` (W28-1.3): every target must
     // pass the same leaf/saved-row/summary rules, uids must be distinct, the
@@ -578,6 +586,19 @@ class StructuralEdits {
 // the number the confirmation dialog names, and it equals the row count
 // apply() removes from the display plan.
 std::size_t count_delete_dependants(const PlanInput& plan, std::uint32_t uid) noexcept;
+
+// W33-1.1 (A-3, High): builds a ready-to-push delete_task edit for `uid` in the
+// display plan `plan`.  A summary row is refused because the writer tombstones
+// the row alone, leaving its live subtasks with a parent identity pointing at a
+// tombstone; no Project save pair measures that shape.  The refusal names the
+// remedy in plain words: "delete the subtasks first, or outdent them".  An
+// unknown uid (including a pending insert's placeholder, which has no saved
+// row) is refused too.  On acceptance `out` carries the uid and the dependent
+// row count; on refusal it is left default-constructed and `error` names the
+// reason.  The shells call this before asking for confirmation; push() repeats
+// the plan checks.
+bool make_delete_edit(const PlanInput& plan, std::uint32_t uid, StructuralEdit& out,
+                      std::string& error);
 
 // What save_structural_edits() proved / reported.
 struct StructuralSaveResult {

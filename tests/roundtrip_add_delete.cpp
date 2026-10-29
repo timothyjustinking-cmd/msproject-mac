@@ -71,6 +71,7 @@
 
 #include "add_delete.h"
 #include "cfb_writer.h"
+#include "outline.h"
 #include "row_writer.h"
 #include "table.h"
 
@@ -1447,6 +1448,79 @@ void test_probe_fixtures(TestContext& t) {
 
 } /* namespace */
 
+/* W33-1.1 (A-3, High): a summary row cannot be tombstoned.  The committed
+ * indent control is the measured pair's source; the writer's own measured
+ * indent makes Task 1 the summary of Task 2.  Deleting Task 1 alone would leave
+ * the live child's parent identity pointing at a tombstone -- a shape no
+ * Project pair measured.  The delete must refuse before the output path is
+ * touched.  A missing control is a FAIL (wave-33 brief section 1), not a skip. */
+void test_delete_summary_refusal(TestContext& t) {
+    // Project's own indent save: Task 1 is the summary of Task 2.  It carries
+    // Project's normal stale logical count (the header names one entry fewer than
+    // the physical array), which `validate_table` refuses before any summary
+    // check could run.  This build-tree copy stamps the logical count to the
+    // physical length so the geometry check passes and only the summary guard is
+    // measured; the committed file is never modified.
+    std::string const project_save =
+        join(MPPWRITE_TEST_DATA, "wave28-outline-indent.mpp");
+    t.check(file_exists(project_save),
+            "W33-1.1: the summary-delete source wave28-outline-indent.mpp is "
+            "present");
+    if (!file_exists(project_save)) {
+        return;
+    }
+    mppwrite::CfbDocument source = mppwrite::CfbDocument::from_file(project_save);
+    std::vector<std::uint8_t> var_meta = source.read_stream(kVarMeta);
+    bool const well_formed =
+        var_meta.size() >= mppwrite::kVarMetaHeaderSize &&
+        (var_meta.size() - mppwrite::kVarMetaHeaderSize) %
+                mppwrite::kVarMetaEntrySize ==
+            0;
+    t.check(well_formed, "W33-1.1: the Project save's VarMeta is 24 + 12*n");
+    if (!well_formed) {
+        return;
+    }
+    std::size_t const physical =
+        (var_meta.size() - mppwrite::kVarMetaHeaderSize) /
+        mppwrite::kVarMetaEntrySize;
+    t.check(u32_at(var_meta, 8) + 1 == physical,
+            "W33-1.1: the Project save carries the stale logical count (one short)");
+    put_u32_at(var_meta, 8, static_cast<std::uint32_t>(physical));
+    source.replace_stream(kVarMeta, var_meta);
+
+    // The fixture must still hold a genuine live summary: uid 1 has uid 2 as a
+    // child, and uid 3 is a top-level leaf.
+    std::vector<mppwrite::OutlineRow> rows;
+    std::string outline_error;
+    t.check(mppwrite::read_outline_rows(source, "114/TBkndTask", rows,
+                                        outline_error),
+            "W33-1.1: the normalised Project save's outline reads");
+    bool found_summary = false;
+    for (mppwrite::OutlineRow const& row : rows) {
+        if (row.uid == 1 && !row.child_rows.empty()) {
+            found_summary = true;
+        }
+    }
+    t.check(found_summary, "W33-1.1: uid 1 is a live summary in the source");
+
+    std::string const summary_source = out_path("w33-summary-source.mpp");
+    source.save(summary_source);
+
+    mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(summary_source);
+    std::vector<std::uint8_t> const before = doc.to_bytes();
+    std::string const out = out_path("w33-del-summary-refused.mpp");
+    std::error_code remove_error;
+    std::filesystem::remove(out, remove_error);
+    expect_error(t,
+                 [&] { (void)mppwrite::delete_task_row(doc, 1, out); },
+                 "delete the subtasks first, or outdent them",
+                 "delete a summary row is refused");
+    t.check(doc.to_bytes() == before,
+            "delete a summary row: the in-memory document is unchanged");
+    t.check(!file_exists(out),
+            "delete a summary row: no output file was written");
+}
+
 int main() {
     try {
         std::filesystem::create_directories(MPPWRITE_TEST_OUT);
@@ -1454,11 +1528,15 @@ int main() {
         t.check(mppwrite::pack_date_ymd(2026, 1, 12, 8 * 3600) == 0x3BF912C0u,
                 "pack_date_ymd(2026-01-12 08:00) is 0x3bf912c0");
 
+        // W33-1.1 runs before the synthetic-base gate: its own fixture check
+        // fails the test when that fixture is missing.
+        test_delete_summary_refusal(t);
+
         std::string const synthetic = join(MPPWRITE_TEST_DATA, "synthetic-base.mpp");
         if (!file_exists(synthetic)) {
             std::cout << "SKIP: " << synthetic
                       << " is missing; the corpus-free path needs it\n";
-            return 0;
+            return t.report();
         }
         test_add_end(t);
         test_add_two(t);

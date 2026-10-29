@@ -11,6 +11,8 @@
 
 #include "add_delete.h"
 
+#include "outline.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -1114,6 +1116,60 @@ DeletedRow delete_task_row(CfbDocument& doc, std::uint32_t uid,
         return std::find(live_uids.begin(), live_uids.end(), value) !=
                live_uids.end();
     };
+
+    /* W33-1.1 (A-3, High): a summary row cannot be tombstoned on its own.
+     * Project reads a row as a summary from its LIVE subtasks; tombstoning the
+     * parent alone leaves them with a parent identity pointing at a tombstone,
+     * a shape no Project save pair measured.  app::push() refuses this first;
+     * this is defence in depth for every other caller. */
+    {
+        std::vector<OutlineRow> outline_rows;
+        std::string outline_error;
+        if (!read_outline_rows(doc, table, outline_rows, outline_error)) {
+            throw Error(function + ": the task outline cannot be read, so a "
+                        "summary delete cannot be ruled out (" + outline_error +
+                        ")");
+        }
+        std::size_t target = outline_rows.size();
+        for (std::size_t candidate = 0; candidate < outline_rows.size();
+             ++candidate) {
+            if (outline_rows[candidate].uid == uid) {
+                target = candidate;
+                break;
+            }
+        }
+        std::vector<std::size_t> live_children;
+        if (target < outline_rows.size()) {
+            for (std::size_t child : outline_rows[target].child_rows) {
+                if (child < live.size() && child != target && live[child] &&
+                    std::find(live_children.begin(), live_children.end(),
+                              child) == live_children.end()) {
+                    live_children.push_back(child);
+                }
+            }
+            // A stored child list can name a live row whose parent identity is
+            // absent (a stale shape Project also reads), so it is checked too.
+            for (std::uint32_t id : outline_rows[target].stored_child_ids) {
+                for (std::size_t candidate = 1; candidate < outline_rows.size();
+                     ++candidate) {
+                    if (candidate == target || !live[candidate] ||
+                        outline_rows[candidate].row_id != id) {
+                        continue;
+                    }
+                    if (std::find(live_children.begin(), live_children.end(),
+                                  candidate) == live_children.end()) {
+                        live_children.push_back(candidate);
+                    }
+                }
+            }
+        }
+        if (!live_children.empty()) {
+            throw Error(function + ": uid " + std::to_string(uid) + " has " +
+                        std::to_string(live_children.size()) +
+                        " live subtask(s); delete the subtasks first, or "
+                        "outdent them");
+        }
+    }
 
     /* ---- The delete cascade (measured, w11-oracle §2).  Project tombstones
      * every link row whose predecessor OR successor is the deleted uid and every

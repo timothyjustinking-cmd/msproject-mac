@@ -82,6 +82,9 @@ app::TaskRow make_task(std::uint32_t uid, std::uint32_t id, const std::string& n
     app::TaskRow row;
     row.uid = uid;
     row.id = id;
+    // A row the file already stores: a delete names the plan (W33-1.1) and a
+    // saved row carries its file position (0 is a pending insert).
+    row.file_row = uid;
     row.name = name;
     row.duration_ticks = 4800;
     row.start = core::sched::from_ymd(2026, 1, 5, 8, 0);
@@ -307,7 +310,7 @@ void test_validation() {
     app::StructuralEdit remove;
     remove.kind = app::StructuralKind::delete_task;
     remove.uid = 1;
-    check(deleting.push(remove), "the delete is queued");
+    check(deleting.push(remove, &plan), "the delete is queued");
     check(app::validate_link_add(plan, deleting, 1, 3, LinkType::finish_to_start) != "",
           "a task with a pending delete is refused");
 
@@ -394,7 +397,7 @@ void test_delete_prunes_adds() {
     app::StructuralEdit remove;
     remove.kind = app::StructuralKind::delete_task;
     remove.uid = 3;
-    check(edits.push(remove), "the delete is queued");
+    check(edits.push(remove, &plan), "the delete is queued");
     check_size(edits.link_edit_count(), 0, "the delete dropped the link add naming it");
 }
 
