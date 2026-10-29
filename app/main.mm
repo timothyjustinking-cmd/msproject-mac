@@ -3411,9 +3411,16 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
             [g_view refreshAfterChange];
             return;
         }
+        // W33b-1.2 (R33-3, Medium): decide every push on a TRIAL copy first.
+        // This handler used to push straight onto the live queue and return on
+        // a partial refusal, leaving the edits it HAD queued pending: the next
+        // Save then wrote edits the alert had just reported as failed, and the
+        // display never showed them.  The live queue is replaced only when
+        // every edit is accepted, matching the Qt shell (W33-1.5).
+        app::StructuralEdits trial = plan.edits;
         std::size_t pushed = 0;
         for (const app::StructuralEdit& edit : form) {
-            if (plan.edits.push(edit)) {
+            if (trial.push(edit)) {
                 ++pushed;
             }
         }
@@ -3421,6 +3428,7 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
             show_alert(@"Task Fields", @"The field edits could not all be queued.");
             return;
         }
+        plan.edits = std::move(trial);
         apply_structural_change(plan);
         std::string fields_named;
         for (const app::StructuralEdit& edit : form) {
