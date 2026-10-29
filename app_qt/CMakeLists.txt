@@ -214,6 +214,23 @@ add_test(NAME qt_delete_summary
                  "${QT_TEST_DATA_DIR_CMAKE}/wave28-outline-indent.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# Wave 33 (W33-1.5 / A-7, Medium): Task Information's Custom Fields tab (the
+# Task Fields surface) and Task Fields push their edits on a trial copy of the
+# queue; the first refused push reports it and the dialog queues nothing.  The
+# fixture is the three-row automatic-indent control: its pending automatic
+# outline edit refuses every percent edit (W32-0.1), so a Text1 + 40 % apply
+# must leave pending_edits().size() unchanged.  The test copies it into
+# test-out/ and never opens the committed file in place.
+add_executable(qt_task_information_apply_tests tests/task_information_apply_test.cpp)
+target_link_libraries(qt_task_information_apply_tests PRIVATE qt_shell)
+qt_set_warnings(qt_task_information_apply_tests)
+
+add_test(NAME qt_task_information_apply
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_task_information_apply_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave29-outline-auto-indent-control.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # ===========================================================================
 # WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
 # the loaded Task Sheet's geometry; these gate the empty project, the chrome,
@@ -767,7 +784,8 @@ foreach(carlito_target
         qt_ux_gate_tests qt_ribbon_inventory_tests qt_uid_routing_tests
         qt_icon_gate_tests qt_backstage_gate_tests qt_project_dialog_gate_tests
         qt_format_dialog_gate_tests qt_page_setup_gate_tests
-        qt_report_dialog_gate_tests qt_spelling_gate_tests)
+        qt_report_dialog_gate_tests qt_spelling_gate_tests
+        qt_task_information_apply_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 

@@ -3618,9 +3618,20 @@ void MainWindow::show_task_fields() {
         update_status();
         return;
     }
+    // W33-1.5 (A-7, Medium): decide every push on a trial copy; the first
+    // refusal names the reason and the live queue is untouched.  This handler is
+    // unreachable from the menu since W23 B-13 routes Task > Information to Task
+    // Information (whose Custom Fields tab is the Task Fields surface), but it
+    // applies the same rule so the two paths cannot diverge.
+    app::StructuralEdits trial = structural_;
     for (const app::StructuralEdit& edit : edits) {
-        structural_.push(edit);
+        if (!trial.push(edit)) {
+            set_message(push_refusal("task fields"), true);
+            update_status();
+            return;
+        }
     }
+    structural_ = std::move(trial);
     after_structural_change();
     set_message("queued " + std::to_string(edits.size()) +
                     " custom-field edit(s); File > Save writes them",
@@ -5228,6 +5239,61 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
     const FieldEdit edits[] = {{"Name", &values.name},
                                {"Duration", &values.duration_text},
                                {"Finish", &values.finish_text}};
+
+    // W33-1.5 (A-7, Medium): decide every structural push on a TRIAL copy of the
+    // queue before a single cell is committed.  The Custom Fields tab (the Task
+    // Fields surface) used to push its field edits first and ignore push()'s
+    // return, so a refused percent edit left them queued in a dialog that
+    // reported a refusal.  A push's only side effects are on the copy; the live
+    // queue is replaced only when every push succeeds.
+    app::StructuralEdits trial = structural_;
+    bool structural_applied = false;
+    std::string push_error;
+    if (!values.custom_field_ids.empty()) {
+        const app::TaskRow* row = doc_.task_by_uid(selected.uid);
+        std::vector<app::TaskFieldInput> inputs;
+        inputs.reserve(values.custom_field_ids.size());
+        for (std::size_t index = 0; index < values.custom_field_ids.size(); ++index) {
+            inputs.push_back(app::TaskFieldInput{
+                values.custom_field_ids[index],
+                index < values.custom_field_texts.size() ? values.custom_field_texts[index]
+                                                         : std::string()});
+        }
+        std::vector<app::StructuralEdit> field_edits;
+        std::string field_error;
+        if (row == nullptr ||
+            !app::make_task_field_edits(*row, inputs, doc_.format(), field_edits,
+                                        field_error)) {
+            set_message(prefix + ": " +
+                            (field_error.empty() ? std::string("no task row")
+                                                 : field_error),
+                        true);
+            update_status();
+            return false;
+        }
+        for (const app::StructuralEdit& edit : field_edits) {
+            if (!trial.push(edit)) {
+                push_error = push_refusal(prefix + ": the custom-field edit");
+                break;
+            }
+        }
+        structural_applied = !field_edits.empty();
+    }
+    // Wave 28 (W28-1.2): the validated Percent complete edit is part of the same
+    // trial, so a refused percent push leaves the Custom Fields edits unqueued.
+    if (push_error.empty() && has_percent_edit) {
+        if (!trial.push(percent_edit, &doc_.plan())) {
+            push_error = push_refusal(prefix + ": the percent edit");
+        } else {
+            structural_applied = true;
+        }
+    }
+    if (!push_error.empty()) {
+        set_message(push_error, true);
+        update_status();
+        return false;  // nothing queued and no cell committed
+    }
+
     bool ok = true;
     bool applied = false;
     for (const FieldEdit& edit : edits) {
@@ -5264,52 +5330,9 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
         applied = applied || outcome.changed;
     }
 
-    // Wave 26 (W26-5.3): the Custom Fields tab's six stored values, moved here
-    // from the old Task Fields command.  app::make_task_field_edits parses the
-    // texts and produces set_field/clear_field edits; the shared save cascade
-    // writes them.  A parse error refuses the whole tab (decision 15: never a
-    // partial, silently dropped edit).
-    bool structural_applied = false;
-    if (ok && !values.custom_field_ids.empty()) {
-        const app::TaskRow* row = doc_.task_by_uid(selected.uid);
-        std::vector<app::TaskFieldInput> inputs;
-        inputs.reserve(values.custom_field_ids.size());
-        for (std::size_t index = 0; index < values.custom_field_ids.size(); ++index) {
-            inputs.push_back(app::TaskFieldInput{
-                values.custom_field_ids[index],
-                index < values.custom_field_texts.size() ? values.custom_field_texts[index]
-                                                         : std::string()});
-        }
-        std::vector<app::StructuralEdit> field_edits;
-        std::string field_error;
-        if (row == nullptr ||
-            !app::make_task_field_edits(*row, inputs, doc_.format(), field_edits,
-                                        field_error)) {
-            ok = false;
-            set_message(prefix + ": " +
-                            (field_error.empty() ? std::string("no task row")
-                                                 : field_error),
-                        true);
-        } else {
-            for (const app::StructuralEdit& edit : field_edits) {
-                structural_.push(edit);
-            }
-            structural_applied = !field_edits.empty();
-        }
-    }
-    // Wave 28 (W28-1.2): push the validated Percent complete edit once every
-    // other part of the dialog has parsed, so a refused dialog queues nothing.
-    if (ok && has_percent_edit) {
-        if (!structural_.push(percent_edit, &doc_.plan())) {
-            ok = false;
-            set_message(push_refusal(prefix + ": the percent edit"), true);
-        } else {
-            structural_applied = true;
-        }
-    }
-
     if (ok) {
         if (structural_applied) {
+            structural_ = std::move(trial);
             structural_.clear_redo();
             // Rebuilds the display plan from the custom-field edits and folds
             // the general cell edits back through without_structural_edits.
