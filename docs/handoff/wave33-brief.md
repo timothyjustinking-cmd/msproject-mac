@@ -39,6 +39,17 @@ derived fixture BEFORE its first commit and run
 later commit that cleans the blob does not help, because the guard checks every blob in
 the range (G1's 3b53b9d is why).  Never add such a blob, even briefly.
 
+**Coordinator note (30 Oct 2026 04:35, G4 restart).**  The box restarted at 02:14 during
+G4, after W33-4.3's fixture commit (7361575).  The working tree holds that item's
+UNCOMMITTED second half: the new `synthetic-base.mpp` hash pinned in
+`scripts/check_fixtures.py`, `scripts/engine_diff.py`, `scripts/build_calendar_fixture.py`
+and `tests/data/README.md` (`check_fixtures.py` passes with it).  Start G4 by checking
+those edits, finishing W33-4.3 (re-run every test and the engine suite that hash or read
+`synthetic-base`; the scenario oracles' `source_sha256` records the bytes they were
+MEASURED on and is not rewritten as if re-measured: if the suite compares it with the
+base pin, accept the pre-neutralisation hash as the recorded source and say so), and
+committing it as W33-4.3; then W33-4.4 onward.
+
 **Fixes where the obvious change is wrong** (from the work order; do these, not the
 tempting ones):
 
