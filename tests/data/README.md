@@ -193,7 +193,7 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `scenarios/link-fs-lag.oracle.json` | `95F837781F314AC657F2045D810BFFA1BFED18DF54BC0B5FCB2F205FED76C9DC` |
 | `scenarios/recalculate.oracle.json` | `457CE73B3895BA1A1FDF9A2F4F163EE9D6C504BAD6485D6E158DE69FA2384F9B` |
 | `scenarios/task-calendar.oracle.json` | `855A7EED5E0A2F5C1DDFA9B8195216462B75017F8EDB45CB3987F901A90D58BE` |
-| `synthetic-base.mpp` | `55C109F2F62FD6B9F05789AB002C35991A424AAB18C78F92E4200DF7B3FC6069` |
+| `synthetic-base.mpp` | `6C120FBCC3D9DD8C5B4064C8555B10BA8E197DDE35CDF7C78F2D099622C3777C` |
 | `synthetic-calendars.mpp` | `BAF83A50C19A82F834CD7CCBF833E53C2DB9130C9627F2EAB6EBE44F3C5D68AE` |
 | `synthetic-gantt-fonts.bin` | `BEC0B057A37AE959A123BBC28C052366C6134DCC7DF6C5DE308FA897C568F478` |
 | `synthetic-gantt-style.bin` | `B9FD3240CCB0EBD7B94AF17824C1FE104F44BC860AD4DCE093AF7BFD75B23CF4` |
@@ -392,6 +392,15 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
   probe fixture with more than one task. Verified at copy time:
   `SHA256 55C109F2F62FD6B9F05789AB002C35991A424AAB18C78F92E4200DF7B3FC6069`,
   237,568 bytes, source and destination hashes equal.
+- **Neutralised in place, wave 33 (W33-4.3, audit B-2).** The SummaryInformation
+  Author and LastAuthor values (`VT_LPSTR`) and one `214/Var2Data` value
+  (`VT_LPWSTR`, key `0x3540000b`) still carried the operator's name. Each
+  8-character string was replaced with `W33 Base` at the same offset: 21 bytes
+  differ, the size is still 237,568 bytes and every length prefix and offset is
+  unchanged, so the tasks, dates and scheduling payload are untouched. The
+  fixture now hashes to
+  `6C120FBCC3D9DD8C5B4064C8555B10BA8E197DDE35CDF7C78F2D099622C3777C` (the
+  copy-time hash above records the wave-13 bytes).
 - **Do not replace this file with a client file**, and do not "refresh" it from
   `corpus/project_a.mpp` or `corpus/project_b.mpp`. The client
   corpus is read-only and must never enter a commit.

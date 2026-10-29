@@ -19,8 +19,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Fixtures whose exact bytes are documented (SHA256, from docs/handoff/wave14-complete.md).
 DOCUMENTED = {
+    # Wave 33 (W33-4.3 / audit B-2): the operator's name was still stored in
+    # the SummaryInformation Author and LastAuthor values (VT_LPSTR) and one
+    # 214/Var2Data value (VT_LPWSTR, key 0x3540000b).  Each 8-character string
+    # was replaced IN PLACE with "W33 Base" (7 differing bytes per copy, 21 in
+    # all; size and every offset unchanged), so the file no longer carries the
+    # name; the scheduling payload is untouched.  The hash below is the new
+    # one; tests/data/README.md's "as copied" record keeps the old hash.
     "tests/data/synthetic-base.mpp":
-        "55C109F2F62FD6B9F05789AB002C35991A424AAB18C78F92E4200DF7B3FC6069",
+        "6C120FBCC3D9DD8C5B4064C8555B10BA8E197DDE35CDF7C78F2D099622C3777C",
     # Wave 19: synthetic-base's tasks converted to automatic scheduling plus a
     # second named base calendar ("Shift A", Mon-Fri 09:00-13:00 + 14:00-18:00).
     # Built by scripts/build_calendar_fixture.py; pinned in engine_diff.py too.

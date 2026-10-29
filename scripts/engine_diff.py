@@ -130,7 +130,13 @@ SCHEMA = "engine-diff/2"
 BASE_FILES = {
     "synthetic-base": {
         "path": ROOT / "tests" / "data" / "synthetic-base.mpp",
-        "sha256": "55c109f2f62fd6b9f05789ab002c35991a424aab18c78f92e4200df7b3fc6069",
+        # Wave 33 (W33-4.3 / audit B-2): the operator's name in the
+        # SummaryInformation Author/LastAuthor values and one 214/Var2Data
+        # value (key 0x3540000b) was replaced IN PLACE with a neutral
+        # same-length string, exactly as for synthetic-calendars below.  The
+        # scheduling payload every scenario measures is byte-identical; only
+        # the pin moves.
+        "sha256": "6c120fbcc3d9dd8c5b4064c8555b10ba8e197dde35cdf7c78f2d099622c3777c",
     },
     "synthetic-calendars": {
         "path": ROOT / "tests" / "data" / "synthetic-calendars.mpp",

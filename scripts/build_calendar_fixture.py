@@ -56,7 +56,11 @@ from oracle_lock import oracle_session  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = ROOT / "tests" / "data" / "synthetic-base.mpp"
-BASE_SHA = "55c109f2f62fd6b9f05789ab002c35991a424aab18c78f92e4200df7b3fc6069"
+# Wave 33 (W33-4.3): synthetic-base's operator name was replaced in place with
+# an equal-length neutral string (see scripts/check_fixtures.py); the
+# scheduling payload this builder reads is unchanged, so rebuilding produces
+# the same calendar data with the new base's neutral strings.
+BASE_SHA = "6c120fbcc3d9dd8c5b4064c8555b10ba8e197dde35cdf7c78f2d099622c3777c"
 OUT = ROOT / "tests" / "data" / "synthetic-calendars.mpp"
 WORK = ROOT / "build" / "oracle-w19"
 CALENDAR_NAME = "Shift A"
