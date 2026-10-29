@@ -124,9 +124,14 @@ def neutral_path_hits(path):
     import olefile
 
     drive = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
-    profile = re.compile(re.escape("\\Users\\") + "|" + re.escape("/Users/") + "|" +
-                         re.escape("/home/") + "|" +
-                         re.escape("\\Documents and Settings\\"))
+    profile_text = (
+        "\x5cUsers\x5c",
+        "\x2fUsers\x2f",
+        "\x2fhome\x2f",
+        "\x5c\x44ocuments and Settings\x5c",
+    )
+    profile = re.compile("|".join(re.escape(item)
+                                  for item in profile_text))
     hits = []
     o = olefile.OleFileIO(path)
     for entry in o.listdir(streams=True, storages=False):
@@ -147,7 +152,8 @@ def neutral_path_hits(path):
                         hits.append((label, kind, "utf16", align + at * 2, value))
         drive8 = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
         profile8 = re.compile(
-            rb"\\Users\\|/Users/|/home/|\\Documents and Settings\\")
+            rb"\x5cUsers\x5c|\x2fUsers\x2f|\x2fhome\x2f|"
+            rb"\x5c\x44ocuments and Settings\x5c")
         for regex, kind in ((drive8, "drive"), (profile8, "profile")):
             for match in regex.finditer(data):
                 at = match.start()

@@ -232,7 +232,8 @@ tempting ones):
   `scripts/check_markers.py`: scans EVERY tracked file (text and binary, including
   `analysis/*.mpp`, `.bin`, `.tsv`) for the operator's name variants, the Windows
   username, the company Dropbox folder name and user-profile path fragments
-  (`C:\Users\`, `Documents and Settings`), in ASCII, UTF-16LE and UTF-16BE at both
+  (the Windows profile directory and the pre-Vista profile directory name),
+  in ASCII, UTF-16LE and UTF-16BE at both
   alignments, plus commit messages in the pushed range; the marker list lives in the
   script (these are not client terms).  Run it in `ci.yml` on both OSs.  It must be RED on
   HEAD before W33-4.3 and W33-4.5, GREEN after.  Also extend `check_fixtures.py`'s

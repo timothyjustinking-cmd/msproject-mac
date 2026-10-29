@@ -25,7 +25,7 @@ re-derive what is already established there.
 ## Files and directories
 
 - The real corpus (client files) is **read-only** and lives in the main checkout:
-  `D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile\corpus\*.mpp`.
+  `corpus/*.mpp`.
   Read them from there; never copy them into a commit. `corpus/` is git-ignored.
 - `decompiled/` (2.59 M lines) and `ghidra-project/` are git-ignored but present in
   the main checkout. Read them there.
@@ -95,8 +95,8 @@ The worktree model is withdrawn. Every agent session inherits the coordinator's
 workspace root, so trees outside it are unwritable; `D:\dev\wt\*` and the
 `wave1/*` branches are deleted. Instead:
 
-- **Work directly in the main checkout**:
-  `D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile`.
+- **Work directly in the main checkout** (the directory that contains
+  `core/`, `scripts/` and `tests/`).
 - You own only your stream's paths (see your brief). Never touch another stream's.
 - **Do not run git.** No add, commit, branch, checkout, stash, reset, push.
   Concurrent git in one working tree corrupts the index. The coordinator commits

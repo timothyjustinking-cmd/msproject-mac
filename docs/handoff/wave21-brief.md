@@ -35,7 +35,7 @@ The coordinator owns: `docs/**` outside the lane handoffs, `memory/coordinator.m
 ```
 cmake = C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe
 ctest = the same directory\ctest.exe
-Qt    = D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile\build\Qt\6.5.3\6.5.3\msvc2019_64
+Qt    = <repo>\build\Qt\6.5.3\6.5.3\msvc2019_64
 
 cmake -S app_qt -B build\q6-w21 -G "Visual Studio 17 2022" -A x64 ^
       -DCMAKE_PREFIX_PATH="...\build\Qt\6.5.3\6.5.3\msvc2019_64" -DCORE_WARNINGS_AS_ERRORS=ON

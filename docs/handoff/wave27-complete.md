@@ -661,9 +661,9 @@ with `gh workflow run <file> --ref wave27`.  All of them completed **green on
 
 | workflow | run | jobs (all success) |
 |---|---|---|
-| `qt.yml` (qt-shell) | [40064777633](https://github.com/timothyjustinking-cmd/msproject-mac/actions/runs/40064777633) | `windows-qt`, `linux-qt`, `macos-qt` |
-| `ci.yml` (ci) | [40064779873](https://github.com/timothyjustinking-cmd/msproject-mac/actions/runs/40064779873) | `windows-msvc`, `ubuntu-gcc` |
-| `app-macos.yml` (app-macos) | [40064782094](https://github.com/timothyjustinking-cmd/msproject-mac/actions/runs/40064782094) | `macos-appkit` |
+| `qt.yml` (qt-shell) | [40064777633](https://github.com/<owner>/msproject-mac/actions/runs/40064777633) | `windows-qt`, `linux-qt`, `macos-qt` |
+| `ci.yml` (ci) | [40064779873](https://github.com/<owner>/msproject-mac/actions/runs/40064779873) | `windows-msvc`, `ubuntu-gcc` |
+| `app-macos.yml` (app-macos) | [40064782094](https://github.com/<owner>/msproject-mac/actions/runs/40064782094) | `macos-appkit` |
 
 The watcher log is `build/w27/close-ci-watch.log` (each run
 `completed success` at `9323db2`).  The Linux and macOS Qt jobs are what the

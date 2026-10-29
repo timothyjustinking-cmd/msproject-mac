@@ -9,7 +9,7 @@ import csv
 from pathlib import Path
 from collections import Counter, defaultdict
 
-BASE = Path(r"C:\Users\timot\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile")
+BASE = Path(__file__).resolve().parents[1]
 ANALYSIS = BASE / "analysis"
 
 

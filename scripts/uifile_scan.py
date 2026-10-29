@@ -27,9 +27,8 @@ import re
 import struct
 import sys
 
-DEFAULT_RES = pathlib.Path(
-    r"D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile\analysis\res\pjintl"
-)
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+DEFAULT_RES = REPO_ROOT / "analysis" / "res" / "pjintl"
 
 # Printable identifier runs.  Deliberately permissive; the spec only uses names
 # that are also referenced by their length prefix.

@@ -231,7 +231,7 @@ Git history (read-only `git log --name-only -- tests/data/scenarios/`):
 - Working copy is clean against HEAD for `tests/data/scenarios/`,
   `scripts/engine_diff.py`, `tests/engine_diff_tests.cpp`.
 
-All three commits by the same author (Tim King).  Diffs are shaped exactly
+All three commits by the same author (the operator).  Diffs are shaped exactly
 as a re-record with a widened schema would produce, not as a hand edit.
 Caveat: a plain JSON file with no hash or signature cannot prove the
 negative; and because both sides of the comparison are produced by the same

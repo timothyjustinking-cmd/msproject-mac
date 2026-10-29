@@ -71,7 +71,7 @@ Estimate: 8-12 hours, likely split into waves 30 and 31.
 ## Queued from the wave-28 review (Medium/Low; `wave28-verification/review.md`)
 
 - R28-5 Medium: `scripts/check_fixtures.py`'s user-profile pattern is built without
-  `re.escape`, so the UTF-16 `\Users\` / `\Documents and Settings\` check can never
+  `re.escape`, so the UTF-16 user-profile check can never
   fire (drive-path detection works).  Fix with a falsification test.
 - R28-6 Medium: a percent edit plus a Start edit in one save is unmeasured; a
   percent edit on a task with its own calendar is accepted, shown, then dropped at

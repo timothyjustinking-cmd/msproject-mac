@@ -2,7 +2,7 @@
   "case": "open-writer-variants",
   "runs": [
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w29-manual.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w29-manual.mpp",
       "bytes": 237568,
       "project_start": "2026-01-04 13:00:00",
       "project_finish": "2026-01-16 17:00:00",
@@ -282,7 +282,7 @@
       }
     },
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w29-snet.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w29-snet.mpp",
       "bytes": 237568,
       "project_start": "2026-10-19 00:00:00",
       "project_finish": "2026-10-26 17:00:00",

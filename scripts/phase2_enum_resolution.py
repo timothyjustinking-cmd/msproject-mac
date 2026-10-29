@@ -38,7 +38,7 @@ import re
 import glob
 import collections
 
-BASE = "C:/Users/timot/SFM Staff Dropbox/Tim King/Claude/Projects/MS Project Decompile"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def load_enums():

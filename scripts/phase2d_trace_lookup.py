@@ -23,7 +23,7 @@ import win32com.client
 import time
 from pathlib import Path
 
-BASE_DIR = Path(r"C:\Users\timot\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile")
+BASE_DIR = Path(__file__).resolve().parents[1]
 
 PROCESS_VM_READ = 0x0010
 PROCESS_QUERY_INFORMATION = 0x0400

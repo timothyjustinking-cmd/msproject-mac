@@ -5,7 +5,7 @@ finished: every wave-19 lane is merged, the tree is green, and a successor may
 work.
 
 * **Final code commit:** `0865497` on `main` (this file's commit is its child).
-* **Repo:** PUBLIC, `https://github.com/timothyjusting-cmd/msproject-mac`.
+* **Repo:** PUBLIC, `https://github.com/<owner>/msproject-mac`.
   CI runs only on `workflow_dispatch` or a `v*` tag.
 * **Gates:** `ctest --test-dir build\vs-w19 -C Release -E plan_recalc` =
   **50/50 passed**.  (An earlier run hit Windows Application Control refusing to

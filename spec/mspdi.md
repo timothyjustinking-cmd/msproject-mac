@@ -360,7 +360,7 @@ write to `$env:TEMP`, so a build tree outside the workspace may not work for the
 writer's file test (that test writes under `tests/` for this reason):
 
 ```powershell
-$src='D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile\core\io'
+$src='core\io'
 cmd /c "call `"$vc`" >nul && `"$cmake`" -S `"$src`" -B `"$env:TEMP\msproj-io-wx`" -G `"Visual Studio 17 2022`" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON"
 cmd /c "call `"$vc`" >nul && `"$cmake`" --build `"$env:TEMP\msproj-io-wx`" --config Debug"
 & "$env:TEMP\msproj-io-wx\Debug\io_mspdi_tests.exe"

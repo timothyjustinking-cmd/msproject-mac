@@ -22,7 +22,7 @@ from collections import Counter, defaultdict
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
-BASE = Path(r"C:\Users\timot\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile")
+BASE = Path(__file__).resolve().parents[1]
 ANALYSIS = BASE / "analysis"
 
 REAL_STRIDE = 0xA8  # 168 bytes between entries

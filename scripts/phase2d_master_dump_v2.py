@@ -211,7 +211,9 @@ def main():
             print(f"  Loaded {len(field_names)} unique field names (get dispatchers)")
         else:
             print(f"  WARNING: {name_file} not found, trying alternate path")
-            name_file2 = r"C:\Users\timot\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile\analysis\field_id_map.tsv"
+            name_file2 = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                'analysis', 'field_id_map.tsv')
             if os.path.exists(name_file2):
                 with open(name_file2, 'r', encoding='utf-8') as f:
                     header = f.readline()

@@ -109,7 +109,7 @@ direction at a time.
 $vc='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat'
 $cmake='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
 $ctest='C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe'
-$src='D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile\core\io'
+$src='core\io'
 $build="$env:TEMP\msproj-io-wx"
 
 cmd /c "call `"$vc`" >nul && `"$cmake`" -S `"$src`" -B `"$build`" -G `"Visual Studio 17 2022`" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON"

@@ -7,8 +7,8 @@
 
 ```
 You are the coordinator for wave 19 of the MS Project -> native macOS/Windows/Linux
-port (personal use). Work in:
-D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile
+port (personal use). Work in the checkout root (the directory that contains `core/`, `scripts/`
+and `tests/`; `git rev-parse --show-toplevel` prints it).
 
 STEP 0 - WAIT GATE. Run exactly this before reading, building or writing anything:
     Test-Path docs\handoff\wave18-complete.md
@@ -21,7 +21,7 @@ STEP 0 - WAIT GATE. Run exactly this before reading, building or writing anythin
   gate and follow the same read order before touching anything.
 
 STATE YOU INHERIT (verified at the wave-18 close)
-* Repo PUBLIC: https://github.com/timothyjusting-cmd/msproject-mac, HEAD fedef15.
+* Repo PUBLIC: https://github.com/<owner>/msproject-mac, HEAD fedef15.
 * Gates: ctest --test-dir build\vs-w18 -C Release -E plan_recalc = 50/50;
   M2 recalc = 332/332 (268/268 leaves, 64/64 summaries);
   app 15/15 tests, 2,678 checks; viewstate 791; reader 958 (with corpus);

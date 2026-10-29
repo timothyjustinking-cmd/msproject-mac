@@ -5,7 +5,7 @@ finished: every wave-18 stream is merged, the tree is green, and a successor may
 work.
 
 * **Final commit:** `e1f54d8` on `main` (this file's commit is its child).
-* **Repo:** PUBLIC, `https://github.com/timothyjusting-cmd/msproject-mac`.
+* **Repo:** PUBLIC, `https://github.com/<owner>/msproject-mac`.
   CI runs only on `workflow_dispatch` or a `v*` tag — public minutes are free,
   but a run stays a deliberate act.
 * **Gates:** `ctest --test-dir build\vs-w18 -C Release -E plan_recalc` = **50/50**

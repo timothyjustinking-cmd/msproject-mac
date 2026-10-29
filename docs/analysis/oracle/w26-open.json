@@ -2,7 +2,7 @@
   "case": "open-writer-variants",
   "runs": [
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w26-base.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w26-base.mpp",
       "bytes": 237568,
       "project_start": "2026-01-04 13:00:00",
       "project_finish": "2026-01-09 12:00:00",
@@ -282,7 +282,7 @@
       }
     },
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w26-96.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w26-96.mpp",
       "bytes": 237568,
       "project_start": "2026-01-04 13:00:00",
       "project_finish": "2026-01-09 12:00:00",
@@ -562,7 +562,7 @@
       }
     },
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w26-104.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w26-104.mpp",
       "bytes": 237568,
       "project_start": "2026-01-04 13:00:00",
       "project_finish": "2026-01-09 12:00:00",
@@ -842,7 +842,7 @@
       }
     },
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w26-112.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w26-112.mpp",
       "bytes": 237568,
       "project_start": "2026-01-04 13:00:00",
       "project_finish": "2026-01-09 12:00:00",
@@ -1122,7 +1122,7 @@
       }
     },
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w26-fixed2.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w26-fixed2.mpp",
       "bytes": 237568,
       "project_start": "2026-01-04 13:00:00",
       "project_finish": "2026-01-16 17:00:00",
@@ -1402,7 +1402,7 @@
       }
     },
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w26-frame.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w26-frame.mpp",
       "bytes": 237568,
       "project_start": "2026-01-04 13:00:00",
       "project_finish": "2026-01-09 12:00:00",
@@ -1682,7 +1682,7 @@
       }
     },
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w26-dur84.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w26-dur84.mpp",
       "bytes": 237568,
       "project_start": "2026-01-04 13:00:00",
       "project_finish": "2026-01-09 12:00:00",

@@ -2,7 +2,7 @@
   "case": "open-writer-variants",
   "runs": [
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\corpus\\probe\\w3-o1.mpp",
+      "file": "corpus/probe/w3-o1.mpp",
       "bytes": 237568,
       "project_start": "2026-10-19 00:00:00",
       "project_finish": "2026-10-26 17:00:00",

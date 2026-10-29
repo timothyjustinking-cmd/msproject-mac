@@ -2,7 +2,7 @@
 
 2026-10-22. Branch: none of my own (Revision 3, coordinator commits from the
 main checkout). Files are on disk under
-`D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile`.
+the main checkout.
 
 ## Done
 

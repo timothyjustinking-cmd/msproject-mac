@@ -2,7 +2,7 @@
   "case": "open-writer-variants",
   "runs": [
     {
-      "file": "D:\\SFM Staff Dropbox\\Tim King\\Claude\\Projects\\MS Project Decompile\\core\\mppwrite\\build\\vs\\test-out\\w29-manual2.mpp",
+      "file": "core/mppwrite/build/vs/test-out/w29-manual2.mpp",
       "bytes": 237568,
       "project_start": "2026-01-04 13:00:00",
       "project_finish": "2026-01-16 17:00:00",

@@ -19,7 +19,7 @@ not in these resources at all.** Details in §8.
 ## 1. How to reproduce everything here
 
 ```powershell
-cd "D:\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile"
+cd (git rev-parse --show-toplevel)
 python scripts/uifile_scan.py       --tsv docs/analysis/ui/uifile_scan.tsv
 python scripts/uifile_inventory.py  --tsv docs/analysis/ui/uifile_inventory.tsv
 python scripts/uifile_dialog.py     --tsv docs/analysis/ui/dialogs.tsv

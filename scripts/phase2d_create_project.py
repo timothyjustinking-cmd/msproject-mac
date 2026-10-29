@@ -8,8 +8,10 @@ This should populate all the runtime caches.
 import win32com.client
 import time
 import sys
+from pathlib import Path
 
-MPP_PATH = r"C:\Users\timot\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile\analysis\test_project.mpp"
+MPP_PATH = str(Path(__file__).resolve().parents[1]
+               / "analysis" / "test_project.mpp")
 
 
 def main():

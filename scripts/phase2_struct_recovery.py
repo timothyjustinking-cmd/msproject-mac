@@ -30,7 +30,7 @@ import re
 import glob
 import collections
 
-BASE = "C:/Users/timot/SFM Staff Dropbox/Tim King/Claude/Projects/MS Project Decompile"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 GETTER_DISPATCHER = "FUN_1403cff50"
 SETTER_DISPATCHER = "FUN_1403b6810"

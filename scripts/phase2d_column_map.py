@@ -12,7 +12,7 @@ from collections import Counter
 
 IMAGE_BASE = 0x140000000
 WINPROJ = r"C:\Program Files\Microsoft Office\root\Office16\WINPROJ.EXE"
-BASE = Path(r"C:\Users\timot\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile")
+BASE = Path(__file__).resolve().parents[1]
 ANALYSIS = BASE / "analysis"
 
 

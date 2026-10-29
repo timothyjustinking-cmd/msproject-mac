@@ -29,7 +29,7 @@ evidence under `build/audit-w32/`, git-ignored) with two work orders:
 `docs/START-HERE.md`, `memory/coordinator.md` and `docs/handoff/INDEX.md` are STALE (they
 say main = fcb1c10, nothing merged); trust `git` and the assessment until wave 33 G4 fixes
 them. Audit finding B-8: the DeepSeek driver runs with `--permission-mode auto`,
-Bash/Write/Edit/WebFetch, no human gate, on a box where `corpus/` and the staff Dropbox
+Bash/Write/Edit/WebFetch, no human gate, on a box where `corpus/` and the company Dropbox
 are readable, with the DeepSeek key in the agent's environment; Tim decided on 29 Oct to
 run waves 33 and 34 here anyway. Tim's standing instruction for unattended runs: run the
 waves back to back, verify each, merge when the rule is met, then STOP and give a thorough

@@ -14,7 +14,7 @@ import csv
 from collections import defaultdict, Counter
 from pathlib import Path
 
-BASE = Path(r"C:\Users\timot\SFM Staff Dropbox\Tim King\Claude\Projects\MS Project Decompile")
+BASE = Path(__file__).resolve().parents[1]
 DECOMPILED = BASE / "decompiled"
 ANALYSIS = BASE / "analysis"
 
