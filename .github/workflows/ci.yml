@@ -119,6 +119,22 @@ jobs:
             exit 1
           fi
 
+      # Wave 33 (W33-4.4, audit B-4/B-12): the pre-push client-term guard is
+      # untracked on purpose because its term list is the client corpus, which
+      # is git-ignored.  This is the operator half and is deliberately public:
+      # it scans every tracked blob from the index (binary included) and every
+      # commit message in the pushed range for the operator's name, account,
+      # company folder and user-profile fragments.  fetch-depth: 0 above is
+      # required for the message scan.
+      - name: Operator markers absent from tracked files and commit messages
+        shell: bash
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            python3 scripts/check_markers.py
+          else
+            python scripts/check_markers.py
+          fi
+
       # bash exists on all three images (Git Bash on Windows) so the commands
       # below are identical everywhere and are exactly what docs/build.md
       # documents.  Quoted generator names survive the space in a generator name.
@@ -264,6 +280,18 @@ jobs:
             echo "CR/CRLF found in tracked files that .gitattributes pins to LF:"
             echo "$bad"
             exit 1
+          fi
+
+      # Same marker guard as the matrix job (wave 33 W33-4.4): one platform
+      # would leave the ASan lane able to publish a path that the other lane
+      # rejects.  fetch-depth: 0 above covers the commit-message scan.
+      - name: Operator markers absent from tracked files and commit messages
+        shell: bash
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            python3 scripts/check_markers.py
+          else
+            python scripts/check_markers.py
           fi
 
       - name: Configure (ASan + UBSan)

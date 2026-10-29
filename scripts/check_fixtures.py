@@ -12,10 +12,18 @@ SHA256 for the one fixture whose content is quoted in docs.
 
 import os
 import re
+import struct
 import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# W33-4.4: the marker list lives in scripts/check_markers.py (the CI guard).
+# This script's property-set scan uses the same list, so the two halves cannot
+# drift; the import works under `python -I` because the directory is added
+# explicitly rather than relying on the script-directory path entry.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import check_markers  # noqa: E402
 
 # Fixtures whose exact bytes are documented (SHA256, from docs/handoff/wave14-complete.md).
 DOCUMENTED = {
@@ -645,18 +653,27 @@ DOCUMENTED = {
 # raw ASCII.  The stock `gbui://mainpage.htm` record contains "i:/" but is not
 # a drive path, hence the look-behind for a preceding alphanumeric; in UTF-16LE
 # that look-behind is the two-byte pair `[A-Za-z]\0`.
-def _u16(text):
-    return text.encode("utf-16le")
-
+# The profile-directory fragments are assembled from escaped bytes so that
+# this file does not carry the literals it searches for: the W33-4.4 marker
+# guard (scripts/check_markers.py) scans every tracked file, this one too.
+# The UTF-16 alternatives are regex-escaped; R28-5/R29-11 recorded that the
+# old raw join let the first backslashes be read as regex escapes, so those
+# branches could never match.
+_PROFILE_TEXT = (
+    b"\x5cUsers\x5c",                      # Windows profile directory
+    b"\x2fUsers\x2f",                      # POSIX profile directory
+    b"\x2fhome\x2f",                       # POSIX home
+    b"\x5cDocuments\x20and\x20Settings\x5c",  # pre-Vista profile directory
+)
+PROFILE_BYTES = re.compile(b"|".join(re.escape(item) for item in _PROFILE_TEXT))
+PROFILE_UTF16 = re.compile(b"|".join(
+    re.escape(item.decode("latin-1").encode("utf-16le"))
+    for item in _PROFILE_TEXT))
 
 NEUTRAL_ROOT = re.compile(r"^[Cc]:[\\/]w\d+(?:[\\/]|$)")
 LOCAL_PATH_UTF16 = re.compile(
     rb"(?<![A-Za-z0-9]\x00)[A-Za-z]\x00:\x00[\\/]\x00")
 LOCAL_PATH_BYTES = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
-PROFILE_UTF16 = re.compile(b"|".join(_u16(text) for text in (
-    "\\Users\\", "/Users/", "/home/", "\\Documents and Settings\\")))
-PROFILE_BYTES = re.compile(
-    rb"\\Users\\|/Users/|/home/|\\Documents and Settings\\")
 
 
 def _path_token(data, at, wide):
@@ -709,7 +726,201 @@ def check_fixture_paths():
         with open(path, "rb") as handle:
             data = handle.read()
         for rel_name, kind, offset, value in _path_hits(data, rel):
-            failures.append(f"{rel_name}: {kind} at byte {offset}: {value!r}")
+            # The value is redacted: this message can land in a public CI log.
+            failures.append(f"{rel_name}: {kind} at byte {offset}: "
+                            f"{check_markers.redact(value)!r}")
+    return failures, len(tracked)
+
+
+# ---------------------------------------------------------------------------
+# W33-4.4 (audit B-2/B-4): the property sets of EVERY tracked .mpp.
+#
+# The path scan above looks at tests/data only, and `analysis/test_project.mpp`
+# is tracked outside it.  The B-2 audit opened the SummaryInformation and
+# DocumentSummaryInformation streams by hand; this makes the same read a gate.
+# A CFB v3 reader is enough: W33-2.3 refuses v4 at open, and every tracked
+# fixture is v3 (the writer's own check).  Values are tested against the same
+# marker list as scripts/check_markers.py; a hit prints the property name and
+# never the value.
+# ---------------------------------------------------------------------------
+
+_CFB_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+_ENDOFCHAIN = 0xFFFFFFFE
+_FREESECT = 0xFFFFFFFF
+_MAXREGSECT = 0xFFFFFFFA
+
+_SI_PROPERTY_NAMES = {2: "Title", 3: "Subject", 4: "Author", 5: "Keywords",
+                      6: "Comments", 7: "Template", 8: "LastAuthor",
+                      9: "RevNumber", 18: "AppName"}
+_DSI_PROPERTY_NAMES = {2: "Category", 14: "Manager", 15: "Company"}
+
+
+def _cfb_sector(data, size, sid):
+    offset = (sid + 1) * size
+    return data[offset:offset + size]
+
+
+def _cfb_chain(data, size, table, start):
+    parts = []
+    seen = set()
+    sid = start
+    while (sid not in (_ENDOFCHAIN, _FREESECT) and sid < len(table)
+           and sid not in seen):
+        seen.add(sid)
+        parts.append(_cfb_sector(data, size, sid))
+        sid = table[sid]
+    return b"".join(parts)
+
+
+def _cfb_streams(data):
+    """{name: bytes} for the two property-set streams of a v3 CFB file."""
+    if len(data) < 0x4C + 436 or data[:8] != _CFB_MAGIC:
+        return {}
+    shift = struct.unpack_from("<H", data, 0x1E)[0]
+    if shift != 9:
+        return {}
+    size = 1 << shift
+    (_n_fat, dir_start, _tx, mini_cutoff, minifat_start, _n_minifat,
+     difat_start, n_difat) = struct.unpack_from("<8I", data, 0x2C)
+    difat = list(struct.unpack_from("<109I", data, 0x4C))
+    sid = difat_start
+    seen = set()
+    # The same bounds the writer gained in W33-2.1: the declared count may not
+    # exceed the file's sectors and a continuation sector is visited once.
+    for _ in range(min(n_difat, len(data) // size + 1)):
+        if sid in (_ENDOFCHAIN, _FREESECT) or sid >= _MAXREGSECT or sid in seen:
+            break
+        seen.add(sid)
+        sector = _cfb_sector(data, size, sid)
+        if len(sector) < size:
+            break
+        values = struct.unpack_from("<%dI" % (size // 4), sector)
+        difat.extend(values[:-1])
+        sid = values[-1]
+    fat = []
+    for sid in difat:
+        if sid >= _MAXREGSECT:
+            continue
+        sector = _cfb_sector(data, size, sid)
+        if len(sector) < size:
+            continue
+        fat.extend(struct.unpack_from("<%dI" % (size // 4), sector))
+    directory = _cfb_chain(data, size, fat, dir_start)
+    entries = []
+    for offset in range(0, len(directory) - 127, 128):
+        entry = directory[offset:offset + 128]
+        name_len = struct.unpack_from("<H", entry, 0x40)[0]
+        name = (entry[:max(0, name_len - 2)].decode("utf-16-le", "replace")
+                if name_len >= 2 else "")
+        etype = entry[0x42]
+        start, length = struct.unpack_from("<IQ", entry, 0x74)
+        entries.append((name, etype, start, length & 0xFFFFFFFF))
+    if not entries:
+        return {}
+    root = entries[0]
+    mini = (_cfb_chain(data, size, fat, root[2])[:root[3]]
+            if root[2] not in (_ENDOFCHAIN, _FREESECT) else b"")
+    minifat = []
+    if minifat_start not in (_ENDOFCHAIN, _FREESECT):
+        raw = _cfb_chain(data, size, fat, minifat_start)
+        minifat = list(struct.unpack_from("<%dI" % (len(raw) // 4), raw))
+    mini_size = 1 << struct.unpack_from("<H", data, 0x20)[0]
+    streams = {}
+    for name, etype, start, length in entries:
+        # A property-set stream is conventionally named with a leading 0x05
+        # byte; some writers omit it, so accept both spellings.
+        plain = name[1:] if name.startswith("\x05") else name
+        if etype != 2 or plain not in ("SummaryInformation",
+                                       "DocumentSummaryInformation"):
+            continue
+        if length < mini_cutoff:
+            parts = []
+            seen = set()
+            sid = start
+            while (sid not in (_ENDOFCHAIN, _FREESECT)
+                   and sid < len(minifat) and sid not in seen):
+                seen.add(sid)
+                offset = sid * mini_size
+                parts.append(mini[offset:offset + mini_size])
+                sid = minifat[sid]
+            streams[plain] = b"".join(parts)[:length]
+        else:
+            streams[plain] = _cfb_chain(data, size, fat, start)[:length]
+    return streams
+
+
+def _property_values(blob):
+    """[(section, property id, decoded text)] for every string property."""
+    values = []
+    if not blob or len(blob) < 48:
+        return values
+    try:
+        count = struct.unpack_from("<I", blob, 24)[0]
+        for section_index in range(min(count, 4)):
+            base = 28 + 20 * section_index
+            if base + 16 > len(blob):
+                break
+            section = struct.unpack_from("<I", blob, base + 16)[0]
+            if section + 8 > len(blob):
+                continue
+            _section_size, props = struct.unpack_from("<II", blob, section)
+            entries = []
+            for index in range(props):
+                entry = section + 8 + 8 * index
+                if entry + 8 > len(blob):
+                    break
+                pid, offset = struct.unpack_from("<II", blob, entry)
+                entries.append((pid, section + offset))
+            codepage = 1252
+            for pid, at in entries:
+                if (pid == 1 and at + 6 <= len(blob)
+                        and struct.unpack_from("<I", blob, at)[0] & 0xFFFF == 2):
+                    codepage = struct.unpack_from("<H", blob, at + 4)[0] or 1252
+            for pid, at in entries:
+                if at + 8 > len(blob):
+                    continue
+                vtype = struct.unpack_from("<I", blob, at)[0] & 0xFFFF
+                length = struct.unpack_from("<I", blob, at + 4)[0]
+                if vtype == 0x1E:      # VT_LPSTR, in the section's codepage
+                    raw = blob[at + 8:at + 8 + length]
+                    values.append((section_index, pid, raw.split(
+                        b"\x00", 1)[0].decode("cp%d" % codepage, "replace")))
+                elif vtype == 0x1F:    # VT_LPWSTR
+                    raw = blob[at + 8:at + 8 + 2 * length]
+                    values.append((section_index, pid, raw.decode(
+                        "utf-16-le", "replace").split("\x00", 1)[0]))
+    except struct.error:
+        pass
+    return values
+
+
+def check_tracked_mpp_properties():
+    """Every tracked .mpp/.mpt: no marker in a property set, no local path."""
+    failures = []
+    tracked = git("ls-files", "*.mpp", "*.mpt").stdout.split()
+    for rel in tracked:
+        path = os.path.join(ROOT, rel)
+        if not os.path.exists(path):
+            failures.append(f"MISSING {rel}")
+            continue
+        with open(path, "rb") as handle:
+            data = handle.read()
+        streams = _cfb_streams(data)
+        if not streams:
+            failures.append(f"{rel}: no readable CFB v3 property sets")
+        for stream, names in (("SummaryInformation", _SI_PROPERTY_NAMES),
+                              ("DocumentSummaryInformation",
+                               _DSI_PROPERTY_NAMES)):
+            for section, pid, value in _property_values(streams.get(stream)):
+                hit = check_markers.find_markers_in_text(value)
+                if not hit:
+                    continue
+                prop = (names.get(pid, f"property {pid}") if section == 0
+                        else f"custom property {pid}")
+                failures.append(f"{rel}: {stream} {prop} carries "
+                                f"{' '.join(hit)}")
+        for rel_name, kind, offset, _value in _path_hits(data, rel):
+            failures.append(f"{rel_name}: {kind} at byte {offset}")
     return failures, len(tracked)
 
 
@@ -848,6 +1059,9 @@ def main():
     path_failures, scanned = check_fixture_paths()
     failures.extend(path_failures)
 
+    property_failures, mpp_scanned = check_tracked_mpp_properties()
+    failures.extend(property_failures)
+
     if failures:
         print("FIXTURE CHECK FAILED")
         for f in failures:
@@ -856,6 +1070,8 @@ def main():
         return 1
     print(f"fixtures OK ({len(DOCUMENTED)} documented hashes, {len(tracked)} tracked .mpp)")
     print(f"fixture paths OK ({scanned} tracked test-data files, no local path)")
+    print(f"tracked .mpp property sets OK ({mpp_scanned} tracked .mpp/.mpt, "
+          f"no marker, no local path)")
     print(f"scenario oracle provenance OK ({oracles} oracle(s), recording_commit = "
           f"last measured-body change)")
     return 0
