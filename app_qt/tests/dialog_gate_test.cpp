@@ -346,10 +346,21 @@ int main(int argc, char** argv) {
         msqt::CustomFormulaDialog dialog(current);
         dialog.show();
         QApplication::processEvents();
-        dialog.clear_button()->click();
-        gate::check(dialog.accepted_result() &&
-                        dialog.result().operation == app::CustomFormulaEdit::Operation::clear,
-                    "Clear Formulas returns the clear operation");
+        // W33-1.4 (A-4, High): formula CLEAR is disabled with decision 9's
+        // exact tooltip; clicking it queues nothing.
+        gate::check(dialog.clear_button() != nullptr && !dialog.clear_button()->isEnabled(),
+                    "Clear Formulas is disabled (formula clear is not implemented in this port)");
+        gate::check(dialog.clear_button() != nullptr &&
+                        dialog.clear_button()->toolTip() ==
+                            QStringLiteral("not implemented in this port"),
+                    "Clear Formulas carries decision 9's exact tooltip");
+        if (dialog.clear_button() != nullptr) {
+            dialog.clear_button()->click();
+            QApplication::processEvents();
+        }
+        gate::check(!dialog.accepted_result() &&
+                        dialog.result().operation == app::CustomFormulaEdit::Operation::none,
+                    "clicking the disabled Clear Formulas queues nothing");
     }
 
     // -----------------------------------------------------------------------

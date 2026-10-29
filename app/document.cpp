@@ -568,9 +568,17 @@ bool Document::apply_custom_formula(std::uint32_t field_id, std::string_view for
     return true;
 }
 
-void Document::clear_custom_formula() {
-    custom_formula_ = CustomFormulaEdit{};
-    custom_formula_.operation = CustomFormulaEdit::Operation::clear;
+bool Document::clear_custom_formula(std::string* error) {
+    // W33-1.4 (A-4, High): core/props' clear writes the 0x02401392
+    // "custom-field data in use" flag to 0, and what Project means by 0 is
+    // unmeasured.  The measured write is SET's unconditional 1; until a Project
+    // pair measures a clear, the operation is disabled with decision 9's text.
+    if (error != nullptr) {
+        *error = "clearing formulas is not implemented in this port: the 0x02401392 "
+                 "custom-field-data flag's meaning is unmeasured, so the empty formula "
+                 "table is not written";
+    }
+    return false;
 }
 
 void Document::discard_custom_formula() {

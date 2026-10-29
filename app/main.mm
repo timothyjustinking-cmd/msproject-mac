@@ -3717,12 +3717,18 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     NSAlert* alert = [[NSAlert alloc] init];
     [alert setMessageText:@"Custom Field Formula"];
     [alert setInformativeText:
-               @"Sets or clears a formula stored in the project's 114/Props stream. "
-               @"It is written when you save. An empty formula is refused; use Clear "
-               @"Formulas to remove every stored formula."];
+               @"Sets a formula stored in the project's 114/Props stream. It is "
+               @"written when you save. An empty formula is refused; Clear Formulas "
+               @"is not implemented in this port."];
     [alert addButtonWithTitle:@"Set Formula"];
     [alert addButtonWithTitle:@"Clear Formulas"];
     [alert addButtonWithTitle:@"Cancel"];
+    // W33-1.4 (A-4, High): a clear writes the 0x02401392 flag 0, whose meaning
+    // is unmeasured.  The button is disabled with decision 9's exact tooltip, so
+    // this shell cannot queue the operation.
+    NSButton* clear_button = [[alert buttons] objectAtIndex:1];
+    [clear_button setEnabled:NO];
+    [clear_button setToolTip:@"not implemented in this port"];
     const CGFloat width = 360.0;
     NSView* accessory = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, width, 62.0)];
     NSTextField* field_label = [NSTextField labelWithString:@"Field:"];
@@ -3760,11 +3766,13 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     if (response == NSAlertSecondButtonReturn) {
-        plan.document->clear_custom_formula();
-        note(plan,
-             "clearing every stored custom-field formula is pending; Save writes it",
-             false);
-        [g_view refreshAfterChange];
+        // W33-1.4 (A-4, High): unreachable -- the button is disabled.  Kept as a
+        // refusal so a reintroduced response could still not write flag 0.
+        std::string failure;
+        const bool queued = plan.document->clear_custom_formula(&failure);
+        (void)queued;  // always false: the operation is disabled
+        show_alert(@"Custom Field Formula", to_ns(failure));
+        [g_view setNeedsDisplay:YES];
         return;
     }
     NSMenuItem* selected = [field_popup selectedItem];

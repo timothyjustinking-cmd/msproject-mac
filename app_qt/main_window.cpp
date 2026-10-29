@@ -4339,21 +4339,27 @@ void MainWindow::show_custom_formula() {
     }
     const app::CustomFormulaEdit edit = dialog.result();
     if (edit.operation == app::CustomFormulaEdit::Operation::clear) {
-        document_->clear_custom_formula();
-        set_message("clearing every stored custom-field formula is pending; Save writes it",
-                    false);
-    } else {
+        // W33-1.4 (A-4, High): unreachable -- Clear Formulas is disabled with
+        // decision 9's tooltip.  Kept as a refusal so an edit that reintroduced
+        // the result could still not queue the unmeasured flag-0 write.
         std::string failure;
-        if (!document_->apply_custom_formula(edit.field_id, edit.formula, &failure)) {
-            QMessageBox::warning(this, QStringLiteral("Custom Field Formula"), to_q(failure));
-            set_message("custom field formula refused: " + failure, true);
-            update_status();
-            return;
-        }
-        set_message("custom-field formula for field " + std::to_string(edit.field_id) +
-                        " is pending; Save writes it",
-                    false);
+        const bool queued = document_->clear_custom_formula(&failure);
+        (void)queued;  // always false: the operation is disabled
+        QMessageBox::warning(this, QStringLiteral("Custom Field Formula"), to_q(failure));
+        set_message("custom field formula refused: " + failure, true);
+        update_status();
+        return;
     }
+    std::string failure;
+    if (!document_->apply_custom_formula(edit.field_id, edit.formula, &failure)) {
+        QMessageBox::warning(this, QStringLiteral("Custom Field Formula"), to_q(failure));
+        set_message("custom field formula refused: " + failure, true);
+        update_status();
+        return;
+    }
+    set_message("custom-field formula for field " + std::to_string(edit.field_id) +
+                    " is pending; Save writes it",
+                false);
     update_menu_state();
     update_window_title();
     update_status();

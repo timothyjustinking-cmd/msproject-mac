@@ -773,6 +773,28 @@ void test_save_formula_set() {
     const std::filesystem::path target = out_path("app-save-formula.mpp");
     const StreamMap before_214 = streams_with_prefix(source, "214/");
 
+    // W33-1.4 (A-4, High): the fixture stores no custom-field VALUE, so the SET
+    // below is the value-free case.  SET keeps the 0x02401392 flag at 1
+    // unconditionally (the measured value); no flag heuristic is involved.  A
+    // flag is reported present with the bit clear -- a stored False, not a
+    // value -- so only a set bit counts.
+    bool fixture_has_value = false;
+    try {
+        const mpp::Document fixture_read = mpp::load_file(source.string());
+        for (const mpp::Task& task : fixture_read.tasks) {
+            for (const mpp::CustomFieldValue& field : task.custom_fields) {
+                if (field.kind == mpp::FieldKind::flag ? (field.present && field.flag)
+                                                       : field.present) {
+                    fixture_has_value = true;
+                }
+            }
+        }
+    } catch (const std::exception& error) {
+        check(false, ("cannot read the fixture for the value-free check: " +
+                      std::string(error.what())).c_str());
+    }
+    check(!fixture_has_value, "the fixture stores no custom-field value before the set");
+
     app::Document document(source.string());
     std::string request_error;
     check(document.apply_custom_formula(0x0b400036u, "[Name]", &request_error),
@@ -816,111 +838,31 @@ void test_save_formula_set() {
 }
 
 // ---------------------------------------------------------------------------
-// Wave 15 (e): clearing formulas while a custom-field VALUE remains
+// W33-1.4 (A-4, High): formula CLEAR is disabled
 // ---------------------------------------------------------------------------
+//
+// The 0x02401392 "custom-field data in use" flag's meaning is unmeasured, so a
+// clear (which core/props writes with flag 0) is not written by any shell and
+// cannot be queued through Document.  The measured SET is unaffected.
+void test_formula_clear_disabled() {
+    // A queued SET survives the disabled clear: the refusal must not silently
+    // replace the operation the user already asked for.
+    app::Document document(kFixture.string());
+    check(document.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
+          "the Text2 formula is queued before the disabled clear");
+    std::string error;
+    check(!document.clear_custom_formula(&error), "the disabled clear reports a refusal");
+    check(error.find("not implemented in this port") != std::string::npos,
+          "the clear refusal carries the decision-9 text");
+    check(document.custom_formula().operation == app::CustomFormulaEdit::Operation::set &&
+              document.custom_formula().field_id == 0x0b400036u,
+          "the disabled clear leaves the queued Text2 formula alone");
 
-void test_save_formula_clear_with_values() {
-    const std::filesystem::path source = kFixture;
-    const std::filesystem::path formula_path = out_path("app-save-formula-for-clear.mpp");
-    const std::filesystem::path valued_path = out_path("app-save-valued.mpp");
-    const std::filesystem::path cleared_path = out_path("app-save-cleared.mpp");
-
-    // 1. A formula, so "clear" has something to remove.
-    app::Document formula_document(source.string());
-    check(formula_document.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
-          "the setup formula is queued");
-    const app::SaveOutcome formula_saved = formula_document.save(formula_path.string());
-    check(formula_saved.ok, "the setup formula save succeeds");
-
-    // 2. A Text1 value on uid 1, through the existing field-value writer (this is
-    //    the storage the flag is really about).
-    bool value_written = false;
-    try {
-        mppwrite::CfbDocument valued = mppwrite::CfbDocument::from_file(formula_path.string());
-        mppwrite::FieldEdit edit;
-        edit.uid = 1;
-        edit.value.field_id = 0x0b400033u;
-        edit.value.kind = mppwrite::FieldKind::text;
-        edit.value.text = "alpha";
-        const mppwrite::FieldWriteResult result =
-            mppwrite::save_field_values(valued, {edit}, valued_path.string());
-        value_written = result.fields_written == 1;
-    } catch (const std::exception& error) {
-        std::printf("FAIL: cannot write the Text1 value: %s\n", error.what());
-    }
-    check(value_written, "the Text1 value was written");
-
-    // 3. Clear every formula.  core/props writes the flag 0; the app must put it
-    //    back to 1 because the Text1 value is still stored.
-    app::Document clear_document(valued_path.string());
-    clear_document.clear_custom_formula();
-    const app::SaveOutcome cleared = clear_document.save(cleared_path.string());
-    print_outcome("formula-clear-values", cleared);
-    check(cleared.ok, "clearing formulas on a value-bearing file succeeds");
-    check(cleared.error.empty(), "the clear has no error");
-    check(cleared.formula_written, "the clear rewrote 114/Props");
-    check(cleared.custom_field_flag_restored,
-          "the app reports the custom-field flag was restored to 1");
-
-    const std::vector<std::uint8_t> props = stream_bytes(cleared_path, "114/Props");
-    std::uint16_t flag = 0;
-    check(props_flag(props, flag), "the cleared 114/Props has the flag record");
-    check_size(flag, 1, "the flag stays 1 because a custom-field value remains");
-
-    msproject::props::PropsDocument parsed;
-    msproject::props::ParseError parse_error;
-    check(msproject::props::parse_props(props, parsed, &parse_error),
-          "the cleared 114/Props parses");
-    check_size(msproject::props::extract_formulas(parsed).size(), 0,
-               "the cleared 114/Props has no formulas");
-
-    // 4. The value itself is still readable through the reader.
-    try {
-        const mpp::Document reread = mpp::load_file(cleared_path.string());
-        const mpp::CustomFieldValue* value = nullptr;
-        for (const mpp::Task& task : reread.tasks) {
-            if (task.uid != 1) {
-                continue;
-            }
-            for (const mpp::CustomFieldValue& field : task.custom_fields) {
-                if (field.field_id == 0x0b400033u) {
-                    value = &field;
-                }
-            }
-        }
-        check(value != nullptr, "the Text1 value is still stored after the clear");
-        if (value != nullptr) {
-            check(value->present, "the Text1 value is present");
-            check_text(value->text, "alpha", "the Text1 value is still readable");
-        }
-    } catch (const std::exception& error) {
-        check(false, ("the cleared file does not load: " + std::string(error.what())).c_str());
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Wave 15 (f): clearing on a value-free project, and a refused edit
-// ---------------------------------------------------------------------------
-
-void test_save_formula_clear_value_free() {
-    const std::filesystem::path source = kFixture;
-    const std::filesystem::path target = out_path("app-save-clear-value-free.mpp");
-    const std::vector<std::uint8_t> before_props = stream_bytes(source, "114/Props");
-
-    app::Document document(source.string());
-    document.clear_custom_formula();
-    const app::SaveOutcome saved = document.save(target.string());
-    print_outcome("formula-clear-value-free", saved);
-    check(saved.ok, "a clear on a value-free project succeeds");
-    check(saved.error.empty(), "the value-free clear has no error");
-    check(!saved.formula_written, "an empty formula table is not rewritten");
-    check(!saved.custom_field_flag_restored, "the flag is not restored without values");
-
-    const std::vector<std::uint8_t> props = stream_bytes(target, "114/Props");
-    check(props == before_props, "the value-free clear leaves 114/Props byte-identical");
-    std::uint16_t flag = 1;
-    check(props_flag(props, flag), "the value-free 114/Props has the flag record");
-    check_size(flag, 0, "the custom-field data flag is 0 on a value-free project");
+    // A fresh Document gains nothing from it.
+    app::Document empty(kFixture.string());
+    std::string empty_error;
+    check(!empty.clear_custom_formula(&empty_error), "a fresh Document's clear is refused");
+    check(!empty.has_pending_edits(), "the disabled clear queues nothing");
 }
 
 void test_save_refused_view_state() {
@@ -1297,13 +1239,16 @@ void test_cascade_with_document_edits_in_one_write() {
     const std::filesystem::path control = out_path("app-cascade-no-value-control.mpp");
     const std::filesystem::path with_start = out_path("app-cascade-one-write-start.mpp");
     const std::filesystem::path via_document = out_path("app-cascade-via-document.mpp");
+    const std::filesystem::path via_expected = out_path("app-cascade-via-expected.mpp");
 
     if (!std::filesystem::exists(source)) {
         return;
     }
 
     // A source file that already stores a FORMULA (and no custom-field value), so
-    // the clear below has something to remove and the flag decision is real.
+    // the hook-only clear below has something to remove and the flag decision is
+    // real.  (The clear reaches the hook only as a hand-built request; Document
+    // and both shells cannot queue one -- W33-1.4.)
     {
         app::Document setup(source.string());
         check(setup.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
@@ -1423,18 +1368,31 @@ void test_cascade_with_document_edits_in_one_write() {
     check_size(control_flag, 0, "the control file's flag is 0");
 
     // The Document-level wiring: `Document::save_structural()` is the shell's call
-    // shape for exactly this save, so it must be the same one-write path.
+    // shape for exactly this save, so it must be the same one-write path.  The
+    // hook-only legs above use the hand-built clear; W33-1.4 (A-4) disabled the
+    // clear on Document, so this leg queues the still measured SET and compares
+    // with the free-function call carrying the same edit.
     {
+        app::CustomFormulaEdit set_formula;
+        set_formula.operation = app::CustomFormulaEdit::Operation::set;
+        set_formula.field_id = 0x0b400036u;
+        set_formula.formula = "[Name]";
+        const app::StructuralSaveResult free_set = app::save_structural_edits(
+            edits, {}, prepped.string(), via_expected.string(), false,
+            document_edit_request(view, set_formula));
+        check(free_set.ok, "the free-function SET save succeeds");
+
         app::Document document(prepped.string());
         document.request_view_state_edits(view);
-        document.clear_custom_formula();
+        check(document.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
+              "the Document queues the Text2 formula");
         check(document.has_pending_edits(), "the Document holds the pending edits");
         const app::StructuralSaveResult via_doc =
             document.save_structural(edits, {}, via_document.string(), false);
         print_cascade("via-document", via_doc);
         check(via_doc.ok, "Document::save_structural saves");
         check(via_doc.document_edits_written, "Document::save_structural ran the hook");
-        check(file_bytes(via_document) == file_bytes(target),
+        check(file_bytes(via_document) == file_bytes(via_expected),
               "Document::save_structural is byte-identical to the free-function call");
     }
 
@@ -1456,16 +1414,15 @@ void test_cascade_with_document_edits_in_one_write() {
     }
 
     // What A1's second-write fallback would do if it were left in place: re-open
-    // the file the one write produced, with the same pending edits, and save
-    // again.  Every edit is already there, so the write is a NO-OP -- nothing is
-    // replaced and the container comes back byte-identical.  It can only cost a
+    // the file the one write produced, with the same pending view-state edit, and
+    // save again.  Every edit is already there, so the write is a NO-OP -- nothing
+    // is replaced and the container comes back byte-identical.  It can only cost a
     // write, never make a second change; the shell should still skip it
     // (docs/handoff/b1.md section 4).
     {
         const std::vector<std::uint8_t> before = file_bytes(target);
         app::Document again_document(target.string());
         again_document.request_view_state_edits(view);
-        again_document.clear_custom_formula();
         app::SaveOptions options;
         options.allow_source_overwrite = true;
         const app::SaveOutcome second = again_document.save(target.string(), options);
@@ -1635,8 +1592,7 @@ void test_save_view_state_date_format() {}
 void test_save_view_state_column() {}
 void test_save_without_edits() {}
 void test_save_formula_set() {}
-void test_save_formula_clear_with_values() {}
-void test_save_formula_clear_value_free() {}
+void test_formula_clear_disabled() {}
 void test_save_refused_view_state() {}
 void test_document_request_validation() {}
 void test_formula_set_field_kinds() {}
@@ -1659,8 +1615,7 @@ int main() {
     test_save_view_state_column();
     test_save_without_edits();
     test_save_formula_set();
-    test_save_formula_clear_with_values();
-    test_save_formula_clear_value_free();
+    test_formula_clear_disabled();
     test_save_refused_view_state();
     test_document_request_validation();
     test_formula_set_field_kinds();

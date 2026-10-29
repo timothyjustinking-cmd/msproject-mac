@@ -192,7 +192,10 @@ struct ViewStateEdits {
 
 // One `114/Props` formula request.  `set` stores/replaces the formula of one
 // Task custom field; `clear` removes the whole formula table (core/props has no
-// per-field clear; the measured empty form is one 8-byte record).
+// per-field clear; the measured empty form is one 8-byte record).  W33-1.4
+// (A-4) disabled `clear` on Document and in both shells -- only a hand-built
+// request reaches the save hook -- because the 0x02401392 flag it writes is
+// unmeasured.
 struct CustomFormulaEdit {
     enum class Operation { none, set, clear };
     Operation operation = Operation::none;
@@ -276,9 +279,12 @@ class Document {
     [[nodiscard]] bool apply_custom_formula(std::uint32_t field_id, std::string_view formula,
                                             std::string* error = nullptr);
 
-    // Queues "remove every stored formula".  Always succeeds; the writer refuses
-    // at save time only if the stream is not a layout it understands.
-    void clear_custom_formula();
+    // W33-1.4 (A-4, High): formula CLEAR is disabled.  The 0x02401392
+    // "custom-field data in use" flag it writes (0) has no measured meaning, so
+    // the port will not write the empty formula table.  Reports false with the
+    // decision-9 reason ("not implemented in this port"), queues nothing, and
+    // leaves any queued SET alone.
+    [[nodiscard]] bool clear_custom_formula(std::string* error = nullptr);
 
     void discard_custom_formula();
     [[nodiscard]] const CustomFormulaEdit& custom_formula() const noexcept {

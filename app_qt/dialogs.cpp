@@ -404,8 +404,9 @@ CustomFormulaDialog::CustomFormulaDialog(const app::CustomFormulaEdit& current,
 
     outer->addWidget(make_hint(
         this, dialog_geometry::kCustomFormulaSize,
-        QStringLiteral("Sets or clears a formula stored in the project's 114/Props stream. It "
-                       "is written when you save. An empty formula is refused.")));
+        QStringLiteral("Sets a formula stored in the project's 114/Props stream. It is "
+                       "written when you save. An empty formula is refused; Clear Formulas "
+                       "is not implemented in this port.")));
     outer->addStretch(1);
 
     auto* buttons = new QHBoxLayout();
@@ -414,6 +415,11 @@ CustomFormulaDialog::CustomFormulaDialog(const app::CustomFormulaEdit& current,
     buttons->addStretch(1);
     auto* set_button = make_button(this, QStringLiteral("Set Formula"));
     clear_ = make_button(this, QStringLiteral("Clear Formulas"));
+    // W33-1.4 (A-4, High): a clear writes the 0x02401392 flag 0, and the flag's
+    // meaning is unmeasured.  Disabled with decision 9's exact tooltip; the
+    // dialog therefore never returns the clear operation.
+    clear_->setEnabled(false);
+    clear_->setToolTip(QStringLiteral("not implemented in this port"));
     auto* cancel_button = make_button(this, QStringLiteral("Cancel"));
     buttons->addWidget(set_button);
     buttons->addWidget(clear_);
@@ -421,12 +427,6 @@ CustomFormulaDialog::CustomFormulaDialog(const app::CustomFormulaEdit& current,
     outer->addLayout(buttons);
 
     QObject::connect(set_button, &QPushButton::clicked, this, [this](bool) { accept(); });
-    QObject::connect(clear_, &QPushButton::clicked, this, [this](bool) {
-        result_ = app::CustomFormulaEdit{};
-        result_.operation = app::CustomFormulaEdit::Operation::clear;
-        accepted_ = true;
-        QDialog::accept();
-    });
     QObject::connect(cancel_button, &QPushButton::clicked, this, &QDialog::reject);
 }
 
