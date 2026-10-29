@@ -58,11 +58,17 @@
 //        uid and planned work.
 //   4. compares EVERY OTHER STREAM THROUGH THE COMMITTED NULL SAVE (W29-1.0b,
 //      the R28-1 residual): a byte that differs between the control and
-//      Project's no-edit save is per-save noise and is masked by a named rule;
-//      every unmasked byte that differs between the null save and Project's
-//      edit save is the edit's EFFECT and must equal the port's save.  Each
+//      Project's no-edit save is per-save noise and is masked by a named rule
+//      (W33-3.2: exactly those bytes, never a surrounding block); every
+//      unmasked byte that differs between the null save and Project's edit save
+//      is the edit's EFFECT and must equal the port's save.  Bytes beyond the
+//      null save's length are Project's appended tail, compared with Project's
+//      file directly.  Props14 is DECLARED changed while its control still
+//      stores marker 0 and must then show a non-empty effect set.  Each
 //      stream's noise and effect counts are printed, and a mismatch is a
-//      FAILING check -- no whole-stream expected failure remains;
+//      FAILING check -- no whole-stream expected failure remains, and the only
+//      NAMED expected failure is the 214 streams' flag byte W33-3.2 exposed
+//      (Found, not fixed);
 //   5. reopens the port's save through the independent core/mpp reader and
 //      proves the DISPLAY edit_model shows is the file Project's reader shows:
 //      outline level, OutlineNumber, summary flag, duration and the +104/+108
@@ -128,6 +134,7 @@ constexpr std::size_t kAssnFixed2Record = 48;
 
 int g_checks = 0;
 int g_failures = 0;
+int g_expected_failures = 0;
 
 void check(bool ok, const char* what) {
     ++g_checks;
@@ -137,10 +144,26 @@ void check(bool ok, const char* what) {
     }
 }
 
+/* The W25-5 convention (same as app_edits_actuals_tests): a gap Project's file
+ * shows and the port does not reproduce is a NAMED expected failure.  While
+ * the gap is open it prints EXPECTED FAIL and the test stays green; the day
+ * the port reproduces Project the same call FAILS so the list cannot rot. */
+void check_expected_failure(bool project_truth, const char* what) {
+    if (project_truth) {
+        ++g_failures;
+        std::printf("FAIL: expected failure '%s' now PASSES -- remove it from "
+                    "the expected-failure list and make it a normal check\n",
+                    what);
+        return;
+    }
+    ++g_expected_failures;
+    std::printf("EXPECTED FAIL: %s\n", what);
+}
+
 const char* kind_name(save_pair::Kind kind) {
     switch (kind) {
-        case save_pair::Kind::fixed_block:
-            return "block";
+        case save_pair::Kind::fixed:
+            return "fixed";
         case save_pair::Kind::exact:
             return "exact";
         case save_pair::Kind::props14:
@@ -167,7 +190,7 @@ save_pair::Kind kind_for_path(const std::string& path) {
     if (name == "214/CEdl/Var2Data") {
         return save_pair::Kind::cedl;
     }
-    return save_pair::Kind::fixed_block;
+    return save_pair::Kind::fixed;
 }
 
 std::string mismatch_message(const std::string& path,
@@ -193,9 +216,10 @@ void report_stream(const std::string& path, save_pair::Kind kind,
                 path.c_str(), kind_name(kind),
                 static_cast<unsigned long long>(verdict.noise),
                 static_cast<unsigned long long>(verdict.effects));
-    if (verdict.masked_tail != 0) {
-        std::printf(" masked-tail=%llu",
-                    static_cast<unsigned long long>(verdict.masked_tail));
+    if (verdict.tail_bytes != 0) {
+        std::printf(" tail=%llu tail-effects=%llu",
+                    static_cast<unsigned long long>(verdict.tail_bytes),
+                    static_cast<unsigned long long>(verdict.tail_effects));
     }
     std::printf("\n");
 }
@@ -1118,17 +1142,21 @@ void check_pair(const PairCase& pair) {
         }
     }
     /* W29-1.0b: the two per-save identity GUID records differ between the
-     * control and Project's no-edit save; the 16-byte block mask hides exactly
-     * those.  Every other Props byte must equal Project's edit save. */
+     * control and Project's no-edit save; the W33-3.2 per-byte mask hides
+     * exactly those bytes.  Every other Props byte must equal Project's edit
+     * save.  W33-3.2: this stream is DECLARED to change (the counters above),
+     * so a zero effect count is a failure, not a pass. */
     const Bytes null_props = null_save.read_stream("114/Props");
     const save_pair::Verdict props_verdict = save_pair::compare(
-        save_pair::Kind::fixed_block, control_props, null_props, project_props,
-        output_props);
+        save_pair::Kind::fixed, control_props, null_props, project_props,
+        output_props, true);
     check(props_verdict.lengths_ok,
           "Props has equal control and null-save lengths");
     check(props_verdict.mismatches == 0,
           mismatch_message("114/Props", props_verdict).c_str());
-    report_stream("114/Props", save_pair::Kind::fixed_block, props_verdict);
+    check(props_verdict.effects_ok,
+          "Props: the edit's declared effect set is non-empty");
+    report_stream("114/Props", save_pair::Kind::fixed, props_verdict);
     std::size_t total_noise = props_verdict.noise;
     std::size_t total_effects = props_verdict.effects;
 
@@ -1151,10 +1179,16 @@ void check_pair(const PairCase& pair) {
             continue;
         }
         const save_pair::Kind kind = kind_for_path(path);
+        const Bytes control_stream = stream_or_empty(control, path);
+        /* W33-3.2: Props14's edit marker is declared only when the control
+         * still stores 0; 114/Props is declared at the call above. */
+        const bool declared =
+            kind == save_pair::Kind::props14 &&
+            save_pair::props14_marker_payload(control_stream) == 0;
         const save_pair::Verdict verdict = save_pair::compare(
-            kind, stream_or_empty(control, path),
-            stream_or_empty(null_save, path), stream_or_empty(project, path),
-            stream_or_empty(output, path));
+            kind, control_stream, stream_or_empty(null_save, path),
+            stream_or_empty(project, path), stream_or_empty(output, path),
+            declared);
         report_stream(path, kind, verdict);
         total_noise += verdict.noise;
         total_effects += verdict.effects;
@@ -1167,8 +1201,24 @@ void check_pair(const PairCase& pair) {
                   (path + ": control and null save have the measured lengths")
                       .c_str());
         }
-        check(verdict.mismatches == 0,
-              mismatch_message(path, verdict).c_str());
+        /* W33-3.2: the narrowed mask exposed one flag byte per 214 sub-stream
+         * that Project's editor save resets and the port copies from the
+         * control.  Real gap -> NAMED expected failure (Found, not fixed);
+         * any other mismatch is a hard failure, and a fixed byte makes the
+         * expected failure itself fail so the entry cannot rot. */
+        const save_pair::GapState gap = save_pair::open_gap_state(path, verdict);
+        if (gap != save_pair::GapState::none) {
+            check_expected_failure(gap == save_pair::GapState::fixed,
+                                   mismatch_message(path, verdict).c_str());
+        } else {
+            check(verdict.mismatches == 0,
+                  mismatch_message(path, verdict).c_str());
+        }
+        if (declared) {
+            check(verdict.effects_ok,
+                  (path + ": the edit's declared effect set is non-empty")
+                      .c_str());
+        }
     }
     std::printf("   pair totals: noise=%llu effects=%llu\n",
                 static_cast<unsigned long long>(total_noise),
@@ -2170,8 +2220,9 @@ int main() {
     check_refusals();
     check_automatic_outline_file_shape();
     check_pending_edit_cross_refusals();
-    std::printf("app_edits_outline_tests: %d checks passed\n",
-                g_checks - g_failures);
+    std::printf("app_edits_outline_tests: %d checks passed, %d expected "
+                "failure(s)\n",
+                g_checks - g_failures, g_expected_failures);
     if (g_failures != 0) {
         std::printf("app_edits_outline_tests: %d FAILURE(S)\n", g_failures);
         return 1;

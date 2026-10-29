@@ -36,14 +36,19 @@
 //   3. compares EVERY OTHER STREAM THROUGH THE COMMITTED NULL SAVE (W29-1.0b,
 //      the R28-1 residual): Project opened each control and saved it with NO
 //      edit; a byte that differs between the control and that null save is
-//      per-save noise and is masked by a named rule (16-byte block for
-//      fixed-length streams, per-byte after normalising Props14 and
+//      per-save noise and is masked by a named rule (W33-3.2: exactly the
+//      control-vs-null difference bytes, after normalising Props14 and
 //      214/CEdl/Var2Data; DocumentSummaryInformation has no measured noise and
 //      is exact).  Every unmasked byte that differs between the null save and
 //      Project's edit save is the edit's EFFECT and must equal the port's save.
-//      The test prints each stream's noise and effect counts and the pair
-//      totals; a mismatch is a FAILING check, so a shape the port cannot
-//      reproduce cannot hide behind an expected failure.
+//      Bytes beyond the null save's length are Project's appended tail and are
+//      compared with Project's file directly.  A stream the pair declares
+//      changed (114/Props, and Props14 while its control still stores marker
+//      0) must show a non-empty effect set.  The test prints each stream's
+//      noise and effect counts and the pair totals; a mismatch is a FAILING
+//      check, so a shape the port cannot reproduce cannot hide -- the one
+//      measured exception is the 214 streams' flag byte W33-3.2 exposed,
+//      recorded as a NAMED expected failure (Found, not fixed).
 //   4. reopens the port's save and proves the reader agrees with Project's
 //      percent and status date.
 //
@@ -144,8 +149,8 @@ void check_size(std::size_t got, std::size_t want, const char* what) {
 
 const char* kind_name(save_pair::Kind kind) {
     switch (kind) {
-        case save_pair::Kind::fixed_block:
-            return "block";
+        case save_pair::Kind::fixed:
+            return "fixed";
         case save_pair::Kind::exact:
             return "exact";
         case save_pair::Kind::props14:
@@ -172,7 +177,7 @@ save_pair::Kind kind_for_path(const std::string& path) {
     if (name == "214/CEdl/Var2Data") {
         return save_pair::Kind::cedl;
     }
-    return save_pair::Kind::fixed_block;
+    return save_pair::Kind::fixed;
 }
 
 std::string mismatch_message(const std::string& path,
@@ -202,9 +207,10 @@ void report_stream(const std::string& path, save_pair::Kind kind,
                 path.c_str(), kind_name(kind),
                 static_cast<unsigned long long>(verdict.noise),
                 static_cast<unsigned long long>(verdict.effects));
-    if (verdict.masked_tail != 0) {
-        std::printf(" masked-tail=%llu",
-                    static_cast<unsigned long long>(verdict.masked_tail));
+    if (verdict.tail_bytes != 0) {
+        std::printf(" tail=%llu tail-effects=%llu",
+                    static_cast<unsigned long long>(verdict.tail_bytes),
+                    static_cast<unsigned long long>(verdict.tail_effects));
     }
     std::printf("\n");
 }
@@ -1039,19 +1045,22 @@ void check_pair(const Pair& pair) {
         }
     }
     /* W29-1.0b: Props's per-save id GUIDs are NOISE, not an expected failure:
-     * they differ between the control and Project's no-edit save, so the
-     * 16-byte block mask hides exactly those records.  Every other byte -- the
-     * counters above and the status date -- is an edit effect or untouched and
-     * must equal Project's edit save. */
+     * they differ between the control and Project's no-edit save, so the W33-3.2
+     * per-byte mask hides exactly those bytes.  Every other byte -- the counters
+     * above and the status date -- is an edit effect or untouched and must equal
+     * Project's edit save.  W33-3.2: this stream is DECLARED to change (the
+     * counters above), so a zero effect count is a failure, not a pass. */
     const Bytes null_props = null_save.read_stream("114/Props");
     const save_pair::Verdict props_verdict = save_pair::compare(
-        save_pair::Kind::fixed_block, control_props, null_props, result_props,
-        output_props);
+        save_pair::Kind::fixed, control_props, null_props, result_props,
+        output_props, true);
     check(props_verdict.lengths_ok,
           "Props has equal control and null-save lengths");
     check(props_verdict.mismatches == 0,
           mismatch_message("114/Props", props_verdict).c_str());
-    report_stream("114/Props", save_pair::Kind::fixed_block, props_verdict);
+    check(props_verdict.effects_ok,
+          "Props: the edit's declared effect set is non-empty");
+    report_stream("114/Props", save_pair::Kind::fixed, props_verdict);
     std::size_t total_noise = props_verdict.noise;
     std::size_t total_effects = props_verdict.effects;
 
@@ -1078,10 +1087,19 @@ void check_pair(const Pair& pair) {
             continue;
         }
         const save_pair::Kind kind = kind_for_path(path);
+        const Bytes control_stream = stream_or_empty(control, path);
+        /* W33-3.2: a stream this pair declares the edit changes must show a
+         * non-empty measured effect set.  Props14's edit marker is declared
+         * only when the control still stores 0 (a control an earlier edit
+         * produced already stores 1, and Project leaves it alone); 114/Props
+         * is declared at the call above. */
+        const bool declared =
+            kind == save_pair::Kind::props14 &&
+            save_pair::props14_marker_payload(control_stream) == 0;
         const save_pair::Verdict verdict = save_pair::compare(
-            kind, stream_or_empty(control, path),
-            stream_or_empty(null_save, path), stream_or_empty(result, path),
-            stream_or_empty(output, path));
+            kind, control_stream, stream_or_empty(null_save, path),
+            stream_or_empty(result, path), stream_or_empty(output, path),
+            declared);
         report_stream(path, kind, verdict);
         total_noise += verdict.noise;
         total_effects += verdict.effects;
@@ -1094,8 +1112,25 @@ void check_pair(const Pair& pair) {
                   (path + ": control and null save have the measured lengths")
                       .c_str());
         }
-        check(verdict.mismatches == 0,
-              mismatch_message(path, verdict).c_str());
+        /* W33-3.2: narrowing the mask exposed one flag byte per 214
+         * sub-stream that Project's editor save resets and the port copies
+         * from the control.  It is a real gap, recorded as a NAMED expected
+         * failure (Found, not fixed); any other mismatch is a hard failure,
+         * and the day the port reproduces the byte the expected failure
+         * itself fails so the entry cannot rot. */
+        const save_pair::GapState gap = save_pair::open_gap_state(path, verdict);
+        if (gap != save_pair::GapState::none) {
+            check_expected_failure(gap == save_pair::GapState::fixed,
+                                   mismatch_message(path, verdict).c_str());
+        } else {
+            check(verdict.mismatches == 0,
+                  mismatch_message(path, verdict).c_str());
+        }
+        if (declared) {
+            check(verdict.effects_ok,
+                  (path + ": the edit's declared effect set is non-empty")
+                      .c_str());
+        }
     }
     std::printf("   pair totals: noise=%llu effects=%llu\n",
                 static_cast<unsigned long long>(total_noise),

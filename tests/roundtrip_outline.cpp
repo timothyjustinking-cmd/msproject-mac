@@ -503,8 +503,8 @@ void check_fixed_meta(TestContext& ctx, std::string const& label,
 
 const char* kind_name(save_pair::Kind kind) {
     switch (kind) {
-        case save_pair::Kind::fixed_block:
-            return "block";
+        case save_pair::Kind::fixed:
+            return "fixed";
         case save_pair::Kind::exact:
             return "exact";
         case save_pair::Kind::props14:
@@ -531,7 +531,7 @@ save_pair::Kind kind_for_path(std::string const& path) {
     if (name == "214/CEdl/Var2Data") {
         return save_pair::Kind::cedl;
     }
-    return save_pair::Kind::fixed_block;
+    return save_pair::Kind::fixed;
 }
 
 std::string mismatch_message(std::string const& path,
@@ -557,9 +557,10 @@ void report_stream(std::string const& label, std::string const& path,
                 label.c_str(), path.c_str(), kind_name(kind),
                 static_cast<unsigned long long>(verdict.noise),
                 static_cast<unsigned long long>(verdict.effects));
-    if (verdict.masked_tail != 0) {
-        std::printf(" masked-tail=%llu",
-                    static_cast<unsigned long long>(verdict.masked_tail));
+    if (verdict.tail_bytes != 0) {
+        std::printf(" tail=%llu tail-effects=%llu",
+                    static_cast<unsigned long long>(verdict.tail_bytes),
+                    static_cast<unsigned long long>(verdict.tail_effects));
     }
     std::printf("\n");
 }
@@ -630,20 +631,23 @@ void check_owned_side_effects(TestContext& ctx, std::string const& label,
               label + ": Props keeps Project's length");
     /* W29-1.0b: Project reallocates the two per-session identity GUID records
      * on every save; the control and the no-edit save differ there and the
-     * 16-byte block mask hides exactly those records.  Every other Props byte
-     * must equal Project's edit save. */
+     * W33-3.2 per-byte mask hides exactly those bytes.  Every other Props byte
+     * must equal Project's edit save.  This stream is DECLARED to change (the
+     * counters below), so a zero effect count is a failure, not a pass. */
     std::vector<std::uint8_t> const control_props =
         stream_of(control, "114/Props");
     std::vector<std::uint8_t> const null_props =
         stream_of(null_save, "114/Props");
     save_pair::Verdict const props_verdict = save_pair::compare(
-        save_pair::Kind::fixed_block, control_props, null_props, project_props,
-        port_props);
+        save_pair::Kind::fixed, control_props, null_props, project_props,
+        port_props, true);
     ctx.check(props_verdict.lengths_ok,
               label + ": Props has equal control and null-save lengths");
     ctx.check(props_verdict.mismatches == 0,
               label + ": " + mismatch_message("114/Props", props_verdict));
-    report_stream(label, "114/Props", save_pair::Kind::fixed_block,
+    ctx.check(props_verdict.effects_ok,
+              label + ": Props: the edit's declared effect set is non-empty");
+    report_stream(label, "114/Props", save_pair::Kind::fixed,
                   props_verdict);
     std::size_t total_noise = props_verdict.noise;
     std::size_t total_effects = props_verdict.effects;
@@ -694,10 +698,17 @@ void check_owned_side_effects(TestContext& ctx, std::string const& label,
             continue;
         }
         save_pair::Kind const kind = kind_for_path(path);
+        std::vector<std::uint8_t> const control_stream =
+            stream_or_empty(control, path);
+        /* W33-3.2: Props14's edit marker is declared only when the control
+         * still stores 0; 114/Props is declared at the call above. */
+        bool const declared =
+            kind == save_pair::Kind::props14 &&
+            save_pair::props14_marker_payload(control_stream) == 0;
         save_pair::Verdict const verdict = save_pair::compare(
-            kind, stream_or_empty(control, path),
-            stream_or_empty(null_save, path), stream_or_empty(project, path),
-            stream_or_empty(port, path));
+            kind, control_stream, stream_or_empty(null_save, path),
+            stream_or_empty(project, path), stream_or_empty(port, path),
+            declared);
         report_stream(label, path, kind, verdict);
         total_noise += verdict.noise;
         total_effects += verdict.effects;
@@ -711,8 +722,25 @@ void check_owned_side_effects(TestContext& ctx, std::string const& label,
                       label + ": " + path +
                           ": control and null save have the measured lengths");
         }
-        ctx.check(verdict.mismatches == 0,
-                  label + ": " + mismatch_message(path, verdict));
+        /* W33-3.2: the narrowed mask exposed one flag byte per 214 sub-stream
+         * that Project's editor save resets and the port copies from the
+         * control.  Real gap -> NAMED expected failure (Found, not fixed);
+         * any other mismatch is a hard failure, and a fixed byte makes the
+         * expected failure itself fail so the entry cannot rot. */
+        save_pair::GapState const gap = save_pair::open_gap_state(path, verdict);
+        if (gap != save_pair::GapState::none) {
+            ctx.expected_failure(gap == save_pair::GapState::fixed,
+                                 label + ": " +
+                                     mismatch_message(path, verdict));
+        } else {
+            ctx.check(verdict.mismatches == 0,
+                      label + ": " + mismatch_message(path, verdict));
+        }
+        if (declared) {
+            ctx.check(verdict.effects_ok,
+                      label + ": " + path +
+                          ": the edit's declared effect set is non-empty");
+        }
     }
     std::cout << "   " << label << " pair totals: noise=" << total_noise
               << " effects=" << total_effects << "\n";

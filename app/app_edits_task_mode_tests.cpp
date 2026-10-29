@@ -123,8 +123,8 @@ void check_size(std::size_t got, std::size_t want, const char* what) {
 
 const char* kind_name(save_pair::Kind kind) {
     switch (kind) {
-        case save_pair::Kind::fixed_block:
-            return "block";
+        case save_pair::Kind::fixed:
+            return "fixed";
         case save_pair::Kind::exact:
             return "exact";
         case save_pair::Kind::props14:
@@ -149,7 +149,7 @@ save_pair::Kind kind_for_path(const std::string& path) {
     if (name == "214/CEdl/Var2Data") {
         return save_pair::Kind::cedl;
     }
-    return save_pair::Kind::fixed_block;
+    return save_pair::Kind::fixed;
 }
 
 std::string mismatch_message(const std::string& path,
@@ -174,9 +174,10 @@ void report_stream(const std::string& path, save_pair::Kind kind,
                 path.c_str(), kind_name(kind),
                 static_cast<unsigned long long>(verdict.noise),
                 static_cast<unsigned long long>(verdict.effects));
-    if (verdict.masked_tail != 0) {
-        std::printf(" masked-tail=%llu",
-                    static_cast<unsigned long long>(verdict.masked_tail));
+    if (verdict.tail_bytes != 0) {
+        std::printf(" tail=%llu tail-effects=%llu",
+                    static_cast<unsigned long long>(verdict.tail_bytes),
+                    static_cast<unsigned long long>(verdict.tail_effects));
     }
     std::printf("\n");
 }
@@ -539,6 +540,9 @@ void check_pair() {
     }
 
     /* --- the five owned effect streams ----------------------------------- */
+    /* W33-3.2: every one of these is DECLARED to change by this pair (the
+     * 18 effect bytes asserted below), so a mask that swallowed a whole
+     * change would fail `effects_ok` instead of passing with effects=0. */
     const std::array<std::string, 5> kOwned = {
         task_stream("FixedData"), task_stream("FixedMeta"),
         task_stream("Fixed2Meta"), task_stream("Fixed2Data"),
@@ -547,16 +551,18 @@ void check_pair() {
     std::size_t total_effects = 0;
     for (const std::string& name : kOwned) {
         const save_pair::Verdict verdict = save_pair::compare(
-            save_pair::Kind::fixed_block, control.read_stream(name),
+            save_pair::Kind::fixed, control.read_stream(name),
             null_save.read_stream(name), project.read_stream(name),
-            output.read_stream(name));
-        report_stream(name, save_pair::Kind::fixed_block, verdict);
+            output.read_stream(name), true);
+        report_stream(name, save_pair::Kind::fixed, verdict);
         total_noise += verdict.noise;
         total_effects += verdict.effects;
         check(verdict.lengths_ok,
               (name + ": control and null save have equal lengths").c_str());
         check(verdict.mismatches == 0,
               mismatch_message(name, verdict).c_str());
+        check(verdict.effects_ok,
+              (name + ": the edit's declared effect set is non-empty").c_str());
     }
     check_size(total_effects, 18,
                "the five owned streams carry the pair's 18 effect bytes");
@@ -694,9 +700,16 @@ void check_pair() {
             continue;
         }
         const save_pair::Kind kind = kind_for_path(path);
+        const Bytes control_stream = stream_or_empty(control, path);
+        /* W33-3.2: the marker checks above declare Props14 changed (control
+         * 0 -> Project 1), so its measured effect set must be non-empty. */
+        const bool declared =
+            kind == save_pair::Kind::props14 &&
+            save_pair::props14_marker_payload(control_stream) == 0;
         const save_pair::Verdict verdict = save_pair::compare(
-            kind, stream_or_empty(control, path), stream_or_empty(null_save, path),
-            stream_or_empty(project, path), stream_or_empty(output, path));
+            kind, control_stream, stream_or_empty(null_save, path),
+            stream_or_empty(project, path), stream_or_empty(output, path),
+            declared);
         report_stream(path, kind, verdict);
         total_noise += verdict.noise;
         total_effects += verdict.effects;
@@ -711,6 +724,11 @@ void check_pair() {
         }
         check(verdict.mismatches == 0,
               mismatch_message(path, verdict).c_str());
+        if (declared) {
+            check(verdict.effects_ok,
+                  (path + ": the edit's declared effect set is non-empty")
+                      .c_str());
+        }
     }
     std::printf("   pair totals: noise=%llu effects=%llu\n",
                 static_cast<unsigned long long>(total_noise),
