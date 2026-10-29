@@ -830,6 +830,16 @@ W33-4.1 detail:
   `3b53b9d` (`build/w33/W33-4.1-guard-range.log`), recorded under G1's
   Found, not fixed; not a G4 deferral.  Acceptance met: a reader of
   START-HERE alone learns the true branch state.
+- Erratum (the CLOSE gates-and-records review, 30 October): the two checks
+  quoted above have no surviving log from the W33-4.1 commit.  The row names
+  `build/w33/W33-4.1-*.log`, but `W33-4.1-guard-tip.log` is empty and
+  `W33-4.1-guard-range.log` records only the known `3b53b9d` refusal.  The
+  numbers reproduce: re-run at CLOSE on the W33-4.1 commit,
+  `guard_names.py ae667a9..f677dd3` exits 0
+  (`build/w33/W33-4.1-close-guard.log`) and `scan_client_names.py f677dd3`
+  reports 0 files / 0 hits (`build/w33/W33-4.1-close-scan.log`).  The gate
+  numbers belonged to the tree; what was broken was the record's citation,
+  and the re-run logs now carry them.
 
 W33-4.2 detail:
 
