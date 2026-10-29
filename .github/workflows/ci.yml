@@ -294,10 +294,12 @@ jobs:
             python scripts/check_markers.py
           fi
 
+      # The tree is build/asan, not build-asan: engine_diff refuses any work
+      # directory outside build/ (CI-4, the job's first test run).
       - name: Configure (ASan + UBSan)
         shell: bash
         run: |
-          cmake -S . -B build-asan \
+          cmake -S . -B build/asan \
             -G "Unix Makefiles" \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DCORE_WARNINGS_AS_ERRORS=ON \
@@ -308,7 +310,7 @@ jobs:
 
       - name: Build
         shell: bash
-        run: cmake --build build-asan --config RelWithDebInfo -j 2
+        run: cmake --build build/asan --config RelWithDebInfo -j 2
 
       # Same exclusion as the main job: plan_recalc's golden is corpus-bearing
       # and refreshed deliberately.  The corpus-free plan_recalc checks are its
@@ -317,5 +319,5 @@ jobs:
         shell: bash
         run: |
           export MPP_NO_CORPUS=1
-          ctest --test-dir build-asan -C RelWithDebInfo -E plan_recalc \
+          ctest --test-dir build/asan -C RelWithDebInfo -E plan_recalc \
                 --output-on-failure --timeout 180
