@@ -254,6 +254,92 @@ void test_self_pointing_difat(TestContext& t) {
     }
 }
 
+/* ---- W33-2.2: the Resource Fixed2Meta declared count -------------------- */
+
+/*
+ * Rebuilds the committed fixture with the Resource Fixed2Meta stream replaced
+ * by a 16-byte header-only stream that declares 0xFFFFFFFF entries.  The
+ * reader's count bound must come from the stream's bytes, not from that word;
+ * before the fix the row loop ran 4.3 billion cheap iterations (~2.2 s on the
+ * audit's reader_dump build) and still returned the same rows.
+ */
+bool resource_fixed2_hang_fixture(Bytes const& pristine, Bytes& patched,
+                                  TestContext& t) {
+    mppwrite::CfbDocument document =
+        mppwrite::CfbDocument::from_bytes(pristine);
+    std::string path;
+    for (std::string const& candidate : document.stream_paths()) {
+        if (contains(candidate, "Rsc") && contains(candidate, "Fixed2Meta")) {
+            path = candidate;
+            break;
+        }
+    }
+    t.check(!path.empty(), "the fixture has a Resource Fixed2Meta stream");
+    if (path.empty()) {
+        return false;
+    }
+    Bytes payload(16, 0);
+    put_u32(payload, 0, 0xFADFADBAu);   /* the FixedMeta magic */
+    put_u32(payload, 8, 0xFFFFFFFFu);   /* the declared entry count */
+    document.replace_stream(path, payload);
+    patched = document.to_bytes();
+    t.check(patched.size() >= 1024, "the patched container was emitted");
+    return patched.size() >= 1024;
+}
+
+struct LoadResult {
+    bool ok = false;
+    std::string error;
+    std::vector<std::uint32_t> task_uids;
+    std::vector<std::uint32_t> resource_uids;
+    double millis = 0.0;
+};
+
+LoadResult timed_load(Bytes bytes) {
+    LoadResult result;
+    const Clock::time_point start = Clock::now();
+    try {
+        const mpp::Document document = mpp::load_bytes(std::move(bytes));
+        result.ok = true;
+        for (const mpp::Task& task : document.tasks) {
+            result.task_uids.push_back(task.uid);
+        }
+        for (const mpp::Resource& resource : document.resources) {
+            result.resource_uids.push_back(resource.uid);
+        }
+    } catch (const std::exception& error) {
+        result.error = error.what();
+    }
+    result.millis = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+    return result;
+}
+
+void test_resource_fixed2_count(TestContext& t) {
+    Bytes pristine;
+    if (!read_fixture(pristine, t)) {
+        return;
+    }
+    const LoadResult baseline = timed_load(pristine);
+    t.check(baseline.ok, "the pristine fixture loads: " + baseline.error);
+
+    Bytes patched;
+    if (!resource_fixed2_hang_fixture(pristine, patched, t)) {
+        return;
+    }
+    const LoadResult result = timed_load(patched);
+    t.check(result.ok, "the Fixed2Meta fixture still loads: " + result.error);
+    if (!result.ok) {
+        return;
+    }
+    t.check(result.millis < kRefusalCeilingMs,
+            "the row loop is bounded by the stream size; loaded in " +
+                ms_text(result.millis));
+    t.check(result.task_uids == baseline.task_uids,
+            "the damaged metadata does not change the task rows");
+    t.check(result.resource_uids == baseline.resource_uids,
+            "the damaged metadata does not change the resource rows");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -267,10 +353,15 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
+    std::cout << std::unitbuf;
     TestContext context;
     if (only.empty() || only == "difat") {
         test_self_pointing_difat(context);
-    } else {
+    }
+    if (only.empty() || only == "fixed2meta") {
+        test_resource_fixed2_count(context);
+    }
+    if (!only.empty() && only != "difat" && only != "fixed2meta") {
         std::cout << "unknown case: " << only << "\n";
         return 2;
     }

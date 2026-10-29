@@ -2111,8 +2111,18 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                 const std::uint32_t declared = u32_at(rsc_fixed2_meta, 8);
                 const std::size_t available =
                     rsc_fixed2_meta.size() - kFixedMetaHeaderSize;
+                /* The declared entry count is a claim, not a size.  A
+                 * header-only stream (available == 0) can declare 0xFFFFFFFF,
+                 * which makes `available % count == 0` hold with stride 0 and
+                 * turns the loop below into 4.3 billion iterations of a cheap
+                 * `continue` (wave-33 audit D-5; reader_dump 0.02 s -> 2.2 s).
+                 * Trust at most the entries the bytes can hold, as the FixedMeta
+                 * coverage code above already does. */
+                const std::size_t physical =
+                    available / kRscFixed2MetaEntrySize;
                 const std::size_t count =
-                    declared != 0 ? declared : available / kRscFixed2MetaEntrySize;
+                    declared != 0 ? std::min<std::size_t>(declared, physical)
+                                  : physical;
                 if (count != 0 && available % count == 0) {
                     const std::size_t stride = available / count;
                     for (std::size_t i = kFixedMetaDescriptors; i < count; ++i) {
@@ -3463,6 +3473,11 @@ void parse_mpp12(const CompoundFile& cfb, std::string_view root, Document& docum
                 const std::uint32_t declared = u32_at(rsc_fixed2_meta, 8);
                 const std::size_t available =
                     rsc_fixed2_meta.size() - kFixedMetaHeaderSize;
+                /* W33-2.2 (D-5) audit: unlike the MPP14 path above, this count
+                 * is not a loop bound -- the loop below walks rsc_rows only and
+                 * every entry is range-checked against the stream, so a huge
+                 * declared word cannot make it spin.  It stays as parsed (the
+                 * warning below reports the mismatch). */
                 const std::size_t count =
                     declared != 0 ? declared : available / kRscFixed2MetaEntrySize;
                 /* The entries include the three descriptors (as FixedMeta does),
