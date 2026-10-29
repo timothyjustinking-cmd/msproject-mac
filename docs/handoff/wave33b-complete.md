@@ -79,4 +79,28 @@ sanitizer report it raises is a G0 item of this wave (wave-33b-brief section
 2), to be added by the coordinator on re-dispatch.  This group did not push
 or dispatch CI.
 
+G0 group gates (fresh trees configured from scratch on `1d5fc07` under
+`build/w33b-g0-fresh{,-app,-qt}`, log
+`build/w33b/W33b-G0-fresh-gates.log`; configured 08:14, log written 08:19 to
+08:24 on 30 October 2026; the code tree is `26c0fb1` and this record differs
+from it by documentation only):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 55/55 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failure(s) / 8 recorded (7 pass, 1 fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| app ctest | 25/25 passed |
+| app_qt configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| app_qt ctest | 41/41 passed |
+| `check_fixtures.py` | fixtures OK (140 documented hashes, 174 tracked `.mpp`); paths OK (223 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `main..HEAD` / `guard_names main..HEAD` | 0 files, 0 name hits / 0 commits / exit 0 |
+
+The same `check_markers.py --range main..HEAD` pass recorded 0 hits over
+1306 tracked files (9 markers, none an operator marker).
+
 WAVE-33b-G0-COMPLETE
