@@ -131,6 +131,7 @@ Estimate: 8-12 hours, likely split into waves 30 and 31.
 
 - R32-1 Medium: Task Information queues custom-field edits before the percent push,
   so a refused percent leaves the field edits queued with only the refusal shown.
+  **Closed by wave 33 W33-1.5** (both task dialogs now decide on a trial copy).
 - R32-2 Medium: the macOS shell's filter still does range select, copy, multi-row
   paste and Indent/Outdent in file order (no saved field is reachable today).
 - R32-3..R32-7 Low: `Document::save`/`save_start_edits` still write a Start if handed
@@ -138,6 +139,43 @@ Estimate: 8-12 hours, likely split into waves 30 and 31.
   Outdent and Insert under a filter; three weak tests (paste-refusal column, a filter
   that hides nothing, no ID-ascending case); `sort_reorders_rows()` re-sorts on every
   menu update.
+
+## Queued from the wave-33 CLOSE review (Low; the two independent CLOSE reports)
+
+Safety and refusal code (six Lows):
+
+- RW33-1 Low: `mppwrite::write_file_atomically` builds its temp name by
+  truncation and renames over a symlink; the cleanup after a failed rename
+  removes only the temp (`core/mppwrite/atomic_write.cpp:58-74`).
+- RW33-2 Low: the rename replaces the target's mode, owner, ACLs and xattrs
+  with defaults, and `atomic_write.h:21-25` does not document that
+  (`core/mppwrite/atomic_write.cpp:106-107`).
+- RW33-3 Low: the AppKit Task Fields handler still pushes onto the live
+  queue with no trial copy (`app/main.mm:3415-3423`), unlike the Qt handler
+  W33-1.5 fixed.
+- RW33-4 Low: "The opened file was not modified" can be false once the
+  target has been written and a follow-on step fails
+  (`app/document.cpp:649-655`, `app/edit_model.cpp:4416-4424`, the alerts at
+  `app/main.mm:4197,4299` and `app_qt/main_window.cpp:3404`).
+- RW33-5 Low: the FAT-slack refusal is open-side only; no save-side
+  backstop re-checks a plan whose file was swapped for a FAT-slack shape.
+- RW33-6 Low (test quality): the add/delete roundtrip builds its own clones
+  (`tests/roundtrip_add_delete.cpp:796-855`) and the second-save test never
+  asserts that no write happened (`app_qt/tests/save_reopen_test.cpp:638,685`).
+
+Gates and records (four Lows):
+
+- RW33-7 Low: CEdl/VarMeta expected-failure rot -- the mask expects the three
+  signatures by name but does not pin which rows produce them
+  (`tests/save_pair_noise.h:267-268`,
+  `app/app_edits_actuals_tests.cpp:1118-1125,2210`).
+- RW33-8 Low: three non-corpus tests still SKIP-and-pass on a missing fixture
+  (`tests/mpp_tombstone_tests.cpp:168,216`, `tests/props_tests.cpp:1079`).
+- RW33-9 Low: `scripts/check_markers.py` prints "commit-message scan skipped"
+  and exits 0 when neither `origin/main` nor `main` resolves; CI always has
+  one, but a clone without either silently loses the message half.
+- RW33-10 Low: `.gitattributes` pins `*.md`, `*.py`, `*.yml`, `*.cpp` and
+  `*.h` but not itself, so an edit to it can land CRLF.
 
 ## After wave 30 (not planned in detail)
 
