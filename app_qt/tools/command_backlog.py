@@ -207,6 +207,13 @@ RIBBON_GAPS = {
     "insert_task":
         "session refusal: refused while a sort reorders the rows (clear the sort "
         "first)",
+    # W33b-0.1 (R33-1): W33-1.6 carried the shown table index into the
+    # `214/CTable` date-format write, but only the FIRST table's byte has a
+    # Project save pair (standing rule 1), so a shown table other than index 0
+    # refuses before the dialog opens.
+    "table_date_format":
+        "session refusal: refused while a table other than the first is shown; "
+        "only table 0's date-format write is measured against Project",
 }
 
 # W32-C2: the wave-32 refusals that are not command rows.  Start is a sheet

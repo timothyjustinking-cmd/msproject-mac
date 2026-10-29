@@ -57,6 +57,12 @@ std::string custom_formula_set_refusal(std::uint32_t field_id) {
            "storage was measured against Project";
 }
 
+std::string view_state_date_format_refusal(std::uint32_t table_index) {
+    return "a date format for table " + std::to_string(table_index) +
+           " is not implemented in this port: only the first table's date-format "
+           "write is measured against Project";
+}
+
 namespace {
 
 using core::view::Value;
@@ -309,6 +315,15 @@ void apply_view_state_edit(mppwrite::CfbDocument& document, const ViewStateEdits
     if (!edits.any()) {
         return;
     }
+    // W33b-0.1 (R33-1, High): defence in depth for a hand-built request that
+    // went around Document's queue.  Only table 0's date-format byte has a
+    // Project save pair; every other index is refused, and the 214/ tree is
+    // left byte-identical (the view-state contract: a refusal is a warning).
+    if (edits.set_date_format && edits.table_index != 0) {
+        outcome.warnings.push_back("view state not written: " +
+                                   view_state_date_format_refusal(edits.table_index));
+        return;
+    }
     try {
         std::array<std::vector<std::uint8_t>, 4> raw;
         for (std::size_t i = 0; i < raw.size(); ++i) {
@@ -534,8 +549,19 @@ DocumentEditOutcome apply_document_edits(mppwrite::CfbDocument& document,
 
 Document::Document(std::string source_path) : source_path_(std::move(source_path)) {}
 
-void Document::request_view_state_edits(const ViewStateEdits& edits) {
+bool Document::request_view_state_edits(const ViewStateEdits& edits, std::string* error) {
+    // W33b-0.1 (R33-1, High): W33-1.6 carried the shown table index into the
+    // save, but only table 0's date-format byte has a Project save pair (the
+    // col -> date blobs; w64.md lists every other index as unmeasured).  Refuse
+    // before anything is queued, and leave a request queued before it alone.
+    if (edits.set_date_format && edits.table_index != 0) {
+        if (error != nullptr) {
+            *error = view_state_date_format_refusal(edits.table_index);
+        }
+        return false;
+    }
     view_state_edits_ = edits;
+    return true;
 }
 
 void Document::discard_view_state_edits() {

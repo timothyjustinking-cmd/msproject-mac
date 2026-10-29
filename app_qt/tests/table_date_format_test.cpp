@@ -1,16 +1,27 @@
-// app_qt/tests/table_date_format_test.cpp -- wave 33 (W33-1.6 / A-11, Medium).
+// app_qt/tests/table_date_format_test.cpp -- wave 33 (W33-1.6 / A-11, Medium)
+// and wave 33b (W33b-0.1 / R33-1, High).
 //
 // THE DEFECT THIS GATES
-//   View > Tables can apply any of the file's stored task tables for the
-//   session, but the Table / Date Format dialog hard-coded the request's
-//   table_index to 0.  With the second table on screen the save wrote the
-//   FIRST table's date-format byte and left the shown table's alone -- the
-//   edit silently addressed a table the user was not looking at.
+//   (a) Wave 33: View > Tables can apply any of the file's stored task tables
+//       for the session, but the Table / Date Format dialog hard-coded the
+//       request's table_index to 0.  With the second table on screen the save
+//       wrote the FIRST table's date-format byte and left the shown table's
+//       alone -- the edit silently addressed a table the user was not looking
+//       at.
+//   (b) Wave 33b: carrying the shown index into the save made the command write
+//       the date-format byte of ANY table, but only table 0 has a Project save
+//       pair (tests/viewstate_tests.cpp test_writer_date_format; w64.md lists
+//       "table_index other than 0" as unmeasured).  Standing rule 1 forbids the
+//       write.
 //
 // THE FIX
-//   The dialog carries the index of the table the view shows, and the main
-//   window supplies it from the document's applied table.  The save writes that
-//   table's 214/CTable block only.
+//   (a) The dialog carries the index of the table the view shows and the main
+//       window supplies it from the document's applied table.
+//   (b) With any table but the first on screen the command refuses in the
+//       status line with the decision-9 reason before the dialog opens; nothing
+//       is queued and Save writes the source container byte-identically.  The
+//       table index stays in the request so a later measured pair can lift the
+//       refusal.
 //
 // THE FIXTURE
 //   tests/data/wave31-tables.mpp stores two task tables (W31-1.3): Entry (index
@@ -22,10 +33,14 @@
 // WHAT IT PROVES
 //   * the View tab's Tables control applies Review through the real ribbon
 //     popup, and the sheet then shows Text1 and no longer Indicators;
-//   * after choosing format 4 in the dialog and saving, the SAVED file's second
-//     table carries date format 4;
-//   * the first table's date format, its whole stored block, and the applied
-//     Entry table's Var2Data date-format byte are unchanged.
+//   * with Review (index 1) shown, Table / Date Format refuses before the dialog
+//     opens, the status line carries the decision-9 reason and the shown index,
+//     nothing is queued, and a save with nothing pending is byte-identical to
+//     the source;
+//   * with Entry (index 0) shown the edit is accepted, and the SAVED file's
+//     first table carries format 5 in the measured shape: exactly one
+//     `214/CTable/Var2Data` byte changes, at that table's block payload +7;
+//   * the second table's whole stored block is unchanged.
 //
 // Usage: qt_table_date_format <wave31-tables.mpp> <out-dir>
 
@@ -39,15 +54,19 @@
 #include <QTimer>
 #include <QVariant>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
 #include "cfb_writer.h"
 #include "dialogs.h"
+#include "document.h"
 #include "gate_util.h"
 #include "layout_model.h"
 #include "main_window.h"
@@ -62,6 +81,31 @@ namespace {
 
 constexpr std::uint32_t kIndicatorsField = 0x0b4000cdu;  // Entry's second column
 constexpr std::uint32_t kText1Field = 0x0b400033u;       // Review's second column
+
+std::vector<std::uint8_t> file_bytes(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        std::fprintf(stderr, "FAIL: cannot read %s\n", path.string().c_str());
+        return {};
+    }
+    return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input),
+                                     std::istreambuf_iterator<char>());
+}
+
+std::vector<std::size_t> differing_offsets(const std::vector<std::uint8_t>& lhs,
+                                           const std::vector<std::uint8_t>& rhs) {
+    std::vector<std::size_t> offsets;
+    const std::size_t common = std::min(lhs.size(), rhs.size());
+    for (std::size_t i = 0; i < common; ++i) {
+        if (lhs[i] != rhs[i]) {
+            offsets.push_back(i);
+        }
+    }
+    for (std::size_t i = common; i < std::max(lhs.size(), rhs.size()); ++i) {
+        offsets.push_back(i);
+    }
+    return offsets;
+}
 
 struct StoredTables {
     bool ok = false;
@@ -308,14 +352,57 @@ int main(int argc, char** argv) {
     gate::check(model->visible_column_for_field(kIndicatorsField) == core::sheet::kNoIndex,
                 "the view no longer shows Entry's Indicators column");
 
-    // --- the dialog's format 4 must address the SHOWN (second) table ----------
-    gate::check(queue_table_date_format(window, 4),
-                "the Table / Date Format dialog is live and accepts format 4");
-    gate::check(window.document_dirty(), "the date-format request makes the document dirty");
+    // --- a shown table other than the first REFUSES the command --------------
+    // W33b-0.1 (R33-1, High): only table 0's date-format byte has a Project
+    // save pair, so Review (index 1) on screen must refuse before the dialog
+    // opens; nothing is queued and the next save is byte-identical.
+    gate::check(!window.document_dirty(),
+                "nothing is pending before the refused Table / Date Format");
+    gate::check(!queue_table_date_format(window, 5),
+                "with Review shown the Table / Date Format dialog does not open");
+    gate::check(window.status_left_text().contains(
+                    QStringLiteral("not implemented in this port")),
+                "the status line carries the decision-9 reason");
+    gate::check(window.status_left_text().contains(QStringLiteral("table 1")),
+                "the reason names the shown table's index");
+    gate::check(!window.document_dirty(), "the refused command queues nothing");
 
-    const QString target = out_dir + QStringLiteral("/w33-table-date-format.mpp");
+    // With nothing pending the shell's Save writes no file at all, so the
+    // byte-identical check goes through the same model the shell saves with:
+    // a no-pending save writes the source container back unchanged.
+    const QString refused_target =
+        out_dir + QStringLiteral("/w33b-table-date-format-refused.mpp");
+    std::filesystem::remove(refused_target.toStdString(), copy_error);
+    error.clear();
+    gate::check(window.save_document_path(refused_target, &error),
+                "the shell reports nothing to save after the refusal");
+    gate::check(!std::filesystem::exists(refused_target.toStdString()),
+                "a save with nothing pending writes no file");
+    const QString model_target =
+        out_dir + QStringLiteral("/w33b-table-date-format-model.mpp");
+    std::filesystem::remove(model_target.toStdString(), copy_error);
+    app::Document model_document(copy.toStdString());
+    const app::SaveOutcome model_saved = model_document.save(model_target.toStdString());
+    gate::check(model_saved.ok, "the model's no-pending save succeeds");
+    gate::check(file_bytes(model_target.toStdString()) == file_bytes(copy.toStdString()),
+                "the saved file is byte-identical to the source");
+
+    // --- the FIRST table (index 0) still writes, in the measured shape --------
+    gate::check(apply_table_via_ribbon(window, QStringLiteral("Entry"), &listed),
+                "the Tables control puts Entry (index 0) back on screen");
+    gate::check(model->visible_column_for_field(kIndicatorsField) != core::sheet::kNoIndex,
+                "the view shows Entry's Indicators column again");
+
+    gate::check(queue_table_date_format(window, 5),
+                "with Entry shown the Table / Date Format dialog is live");
+    gate::check(window.document_dirty(),
+                "the table-0 date-format request makes the document dirty");
+
+    const QString target = out_dir + QStringLiteral("/w33b-table-date-format.mpp");
     std::filesystem::remove(target.toStdString(), copy_error);
-    gate::check(window.save_document_path(target, &error), "the date-format save succeeds");
+    error.clear();
+    gate::check(window.save_document_path(target, &error),
+                "the table-0 date-format save succeeds");
 
     const StoredTables saved = read_tables(target.toStdString());
     gate::check(saved.ok, "the saved file's 214/CTable parses");
@@ -323,18 +410,21 @@ int main(int argc, char** argv) {
     if (!saved.ok || saved.tables.size() != 2) {
         return gate::finish();
     }
-    gate::check(saved.tables[1].date_format == 4,
-                "the second (shown) table's date format is 4 after the save");
-    gate::check(saved.tables[0].date_format == source.tables[0].date_format,
-                "the first table's date format is unchanged");
-    gate::check(table_block(saved, 0) == table_block(source, 0),
-                "the first table's stored block is byte-identical");
-    gate::check(saved.var2.size() > 11 && source.var2.size() > 11 &&
-                    saved.var2[11] == source.var2[11],
-                "the applied Entry table's Var2Data date-format byte is unchanged");
-    gate::check(saved.tables[1].block_offset == source.tables[1].block_offset &&
-                    saved.tables[1].block_length == source.tables[1].block_length,
-                "the second table's block keeps its place and length");
+    gate::check(saved.tables[0].date_format == 5,
+                "the first (shown) table's date format is 5 after the save");
+    gate::check(saved.tables[1].date_format == source.tables[1].date_format,
+                "the second table's date format is unchanged");
+    gate::check(table_block(saved, 1) == table_block(source, 1),
+                "the second table's stored block is byte-identical");
+    // The measured pair's shape (tests/viewstate_tests.cpp test_writer_date_format):
+    // exactly one Var2Data byte changes, at the edited table's block payload +7.
+    const std::vector<std::size_t> diffs = differing_offsets(source.var2, saved.var2);
+    const std::size_t date_byte = static_cast<std::size_t>(source.tables[0].block_offset) +
+                                  4u + 7u;
+    gate::check(diffs.size() == 1 && diffs[0] == date_byte,
+                "exactly one Var2Data byte changed, at the first table's payload +7");
+    gate::check(saved.var2.size() > date_byte && saved.var2[date_byte] == 0x05,
+                "the written date-format byte is 0x05");
 
     return gate::finish();
 }

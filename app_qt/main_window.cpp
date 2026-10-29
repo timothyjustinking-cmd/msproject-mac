@@ -4396,6 +4396,18 @@ void MainWindow::show_table_date_format() {
     if (!document_) {
         document_ = std::make_unique<app::Document>(doc_.path());
     }
+    // W33b-0.1 (R33-1, High): only the FIRST table's date-format byte has a
+    // Project save pair (standing rule 1), so a shown table other than index 0
+    // refuses with decision 9's reason before the dialog opens.  The index
+    // plumbing stays: a later measured pair can lift this check, and the model
+    // keeps a save-hook backstop for hand-built requests.
+    if (doc_.selected_table() != 0) {
+        set_message(app::view_state_date_format_refusal(
+                        static_cast<std::uint32_t>(doc_.selected_table())),
+                    true);
+        update_status();
+        return;
+    }
     // W33-1.6 (A-11): the request addresses the table the view shows (View >
     // Tables applies one for the session); the dialog and the save write that
     // table's 214/CTable block, never a fixed first table.
@@ -4405,7 +4417,12 @@ void MainWindow::show_table_date_format() {
         update_status();
         return;
     }
-    document_->request_view_state_edits(dialog.edits());
+    std::string request_error;
+    if (!document_->request_view_state_edits(dialog.edits(), &request_error)) {
+        set_message(request_error, true);
+        update_status();
+        return;
+    }
     update_menu_state();
     update_window_title();
     set_message("table / date format edit pending; File > Save writes 214/CTable", false);

@@ -1331,5 +1331,12 @@ number above still belongs to the `617e836` code tree.
 - Wave 33 remains fix-only: it added no writer, lifted no refusal and
   measured no new Project pair.  `constraint-mso` stays the expected
   failing engine case, by name.
+  **Erratum (wave 33b, W33b-0.1 / R33-1, High):** the "added no writer" half
+  is false.  W33-1.6 carried the table index the view shows into the
+  `214/CTable` date-format write, so File > Save could write the date-format
+  byte of a table other than index 0, and only table 0 has a Project save
+  pair.  Wave 33b refuses a non-zero index before the request is queued and
+  again in the save hook.  The sentence above is left as written: this record
+  does not rewrite its own history.
 
 WAVE-33-COMPLETE

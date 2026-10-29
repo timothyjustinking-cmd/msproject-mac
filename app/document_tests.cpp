@@ -147,6 +147,10 @@ app::TaskRow make_task(std::uint32_t uid, date32 start) {
 
 const std::filesystem::path kFixture =
     std::filesystem::path(APP_TEST_DATA_DIR) / "synthetic-base.mpp";
+// W33b-0.1: the two-table fixture the Qt Tables command also uses; table 1's
+// date-format byte has no Project save pair.
+const std::filesystem::path kTablesFixture =
+    std::filesystem::path(APP_TEST_DATA_DIR) / "wave31-tables.mpp";
 const std::filesystem::path kOutDir = std::filesystem::path(APP_TEST_OUT_DIR);
 
 std::filesystem::path out_path(const char* name) {
@@ -608,7 +612,8 @@ void test_save_view_state_date_format() {
     app::ViewStateEdits edits;
     edits.set_date_format = true;
     edits.date_format = 0x05;
-    document.request_view_state_edits(edits);
+    check(document.request_view_state_edits(edits),
+          "the table-0 date-format request is accepted");
     check(document.has_pending_edits(), "the view-state request is pending");
     check(document.view_state_edits().set_date_format, "the request kept the date-format flag");
 
@@ -662,6 +667,100 @@ void test_save_view_state_date_format() {
 }
 
 // ---------------------------------------------------------------------------
+// W33b-0.1 (R33-1, High): the date-format write is measured on table 0 only
+// ---------------------------------------------------------------------------
+
+void test_view_state_date_format_table0_only() {
+    const std::filesystem::path source = kTablesFixture;
+    check(std::filesystem::exists(source), "the two-table fixture is committed");
+
+    // (a) the request refuses a date format for any table but the first; the
+    // decision-9 reason names the index and nothing is queued.
+    app::Document document(source.string());
+    std::string error;
+    app::ViewStateEdits second;
+    second.set_date_format = true;
+    second.date_format = 0x05;
+    second.table_index = 1;
+    check(!document.request_view_state_edits(second, &error),
+          "a date-format request for table 1 is refused");
+    check(error.find("not implemented in this port") != std::string::npos,
+          "the table-1 refusal carries the decision-9 reason");
+    check(error.find("table 1") != std::string::npos,
+          "the table-1 refusal names the shown index");
+    check(!document.has_pending_edits(), "the refused table-1 request queues nothing");
+
+    // (b) a refused request leaves one queued before it alone.
+    app::ViewStateEdits first;
+    first.set_date_format = true;
+    first.date_format = 0x05;
+    error.clear();
+    check(document.request_view_state_edits(first, &error),
+          "a date-format request for table 0 is accepted");
+    check(error.empty(), "the accepted table-0 request has no error");
+    check(document.view_state_edits().set_date_format &&
+              document.view_state_edits().table_index == 0u,
+          "the table-0 request is the pending one");
+    error.clear();
+    check(!document.request_view_state_edits(second, &error),
+          "the later table-1 request is refused");
+    check(document.view_state_edits().set_date_format &&
+              document.view_state_edits().table_index == 0u,
+          "the refusal leaves the queued table-0 request alone");
+
+    // (c) defence in depth: a hand-built request that skipped Document's queue
+    // is refused by the save hook, with 214/CTable byte-identical.
+    mppwrite::CfbDocument container = mppwrite::CfbDocument::from_file(source.string());
+    const std::vector<std::uint8_t> var2_before =
+        container.read_stream("214/CTable/Var2Data");
+    const app::DocumentEditOutcome hook =
+        app::apply_document_edits(container, second, app::CustomFormulaEdit{});
+    check(hook.ok, "a refused view-state edit does not fail the save hook");
+    check(!hook.view_state_written, "the hand-built table-1 edit writes no view state");
+    bool hook_named_refusal = false;
+    for (const std::string& warning : hook.warnings) {
+        if (warning.find("not implemented in this port") != std::string::npos) {
+            hook_named_refusal = true;
+        }
+    }
+    check(hook_named_refusal, "the save hook warns with the decision-9 reason");
+    check(container.read_stream("214/CTable/Var2Data") == var2_before,
+          "the hand-built table-1 edit leaves 214/CTable byte-identical");
+
+    // (d) table 0 still writes, in the measured shape: exactly one 214/CTable
+    // Var2Data byte changes, at the first table's payload +7, to 0x05.
+    const ParsedCTable parsed_source = parse_ctable_at(source);
+    check(parsed_source.ok && parsed_source.state.tables.size() == 2,
+          "the fixture's 214/CTable parses as two tables");
+    const std::size_t source_bytes_on_disk = bytes_on_disk(source);
+    const StreamMap before_214 = streams_with_prefix(source, "214/");
+    const std::filesystem::path target = out_path("app-save-viewstate-table0.mpp");
+    const app::SaveOutcome saved = document.save(target.string());
+    print_outcome("table0-only", saved);
+    check(saved.ok, "the queued table-0 date-format save succeeds");
+    check(saved.error.empty(), "the table-0 save has no error");
+    check(saved.view_state_written, "the table-0 save reports the view state was written");
+    const StreamMap after_214 = streams_with_prefix(target, "214/");
+    std::string why;
+    check(same_stream_bytes(before_214, after_214, "214/CTable/Var2Data", why),
+          ("only 214/CTable/Var2Data changed in 214/: " + why).c_str());
+    const std::vector<std::uint8_t> var2_after = stream_bytes(target, "214/CTable/Var2Data");
+    const std::vector<std::uint8_t> var2_source = stream_bytes(source, "214/CTable/Var2Data");
+    const std::vector<std::size_t> diffs = differing_offsets(var2_source, var2_after);
+    check_size(diffs.size(), 1, "the table-0 save changes exactly one Var2Data byte");
+    if (diffs.size() == 1) {
+        if (parsed_source.ok && !parsed_source.state.tables.empty()) {
+            check_size(diffs[0],
+                       static_cast<std::size_t>(parsed_source.state.tables[0].block_offset) +
+                           4u + 7u,
+                       "the changed byte is the first table's payload +7");
+        }
+        check_size(var2_after[diffs[0]], 0x05u, "the written date format is 0x05");
+    }
+    check_size(bytes_on_disk(source), source_bytes_on_disk, "the source fixture is untouched");
+}
+
+// ---------------------------------------------------------------------------
 // Wave 15 (b): a 115-byte column record replacement
 // ---------------------------------------------------------------------------
 
@@ -680,7 +779,7 @@ void test_save_view_state_column() {
     edits.column_index = 1;              // an existing column
     edits.field_id = 0x0b400033u;        // Text1
     edits.title = "Text1";
-    document.request_view_state_edits(edits);
+    check(document.request_view_state_edits(edits), "the column replacement is accepted");
 
     const app::SaveOutcome saved = document.save(target.string());
     print_outcome("column", saved);
@@ -873,7 +972,8 @@ void test_save_refused_view_state() {
     edits.column_index = 99;         // out of range
     edits.field_id = 0x0b400033u;
     edits.title = "Text1";
-    document.request_view_state_edits(edits);
+    check(document.request_view_state_edits(edits),
+          "the out-of-range column request is accepted (the save refuses it)");
 
     const app::SaveOutcome saved = document.save(target.string());
     print_outcome("refused-viewstate", saved);
@@ -1066,7 +1166,8 @@ void test_save_start_date_with_view_and_formula() {
     app::ViewStateEdits edits;
     edits.set_date_format = true;
     edits.date_format = 0x05;
-    document.request_view_state_edits(edits);
+    check(document.request_view_state_edits(edits),
+          "the pipeline test's table-0 date-format request is accepted");
     check(document.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
           "the pipeline test queues its formula");
     const std::vector<app::StartEdit> start_edits{{uid, new_start}};
@@ -1129,7 +1230,8 @@ void test_save_formula_and_view_state() {
     app::ViewStateEdits edits;
     edits.set_date_format = true;
     edits.date_format = 0x05;
-    document.request_view_state_edits(edits);
+    check(document.request_view_state_edits(edits),
+          "the combined save's table-0 date-format request is accepted");
     check(document.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
           "the combined save queues its formula");
 
@@ -1411,7 +1513,8 @@ void test_cascade_with_document_edits_in_one_write() {
         check(free_set.ok, "the free-function SET save succeeds");
 
         app::Document document(prepped.string());
-        document.request_view_state_edits(view);
+        check(document.request_view_state_edits(view),
+              "the Document accepts the cascade's view-state request");
         check(document.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
               "the Document queues the Text2 formula");
         check(document.has_pending_edits(), "the Document holds the pending edits");
@@ -1450,7 +1553,8 @@ void test_cascade_with_document_edits_in_one_write() {
     {
         const std::vector<std::uint8_t> before = file_bytes(target);
         app::Document again_document(target.string());
-        again_document.request_view_state_edits(view);
+        check(again_document.request_view_state_edits(view),
+              "the fallback re-queue accepts the view-state request");
         app::SaveOptions options;
         options.allow_source_overwrite = true;
         const app::SaveOutcome second = again_document.save(target.string(), options);
@@ -1618,6 +1722,7 @@ void test_save_round_trip() {
 }
 
 void test_save_view_state_date_format() {}
+void test_view_state_date_format_table0_only() {}
 void test_save_view_state_column() {}
 void test_save_without_edits() {}
 void test_save_formula_set() {}
@@ -1641,6 +1746,7 @@ int main() {
     test_collect_start_edits();
     test_save_round_trip();
     test_save_view_state_date_format();
+    test_view_state_date_format_table0_only();
     test_save_view_state_column();
     test_save_without_edits();
     test_save_formula_set();

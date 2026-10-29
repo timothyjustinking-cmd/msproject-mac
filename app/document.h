@@ -177,7 +177,9 @@ void accept_start_edits(PlanInput& loaded, const std::vector<StartEdit>& edits);
 // One `214/CTable` edit request.  `table_index` is the index into the parsed
 // CTable collection (0 = the first table); the shells supply the table their
 // view shows (W33-1.6).  Both operations are optional; `any()` says whether the
-// request asks for a write.
+// request asks for a write.  W33b-0.1 (R33-1, High): only table 0's date-format
+// byte has a Project save pair, so a date-format request for any other index is
+// refused -- see `view_state_date_format_refusal`.
 struct ViewStateEdits {
     bool set_date_format = false;
     std::uint8_t date_format = 0;  // 0xff = default; 0x05 = DateFormat 5 (measured)
@@ -219,6 +221,17 @@ struct CustomFormulaEdit {
 // the two measured families.
 [[nodiscard]] std::string custom_formula_set_refusal(std::uint32_t field_id);
 
+// W33b-0.1 (R33-1, High): a `214/CTable` date-format write was measured against
+// Project on the FIRST table only (the col -> date pair in tests/viewstate_tests.cpp
+// sets payload +7 of table 0); `docs/handoff/w64.md` lists `table_index` other
+// than 0 as unmeasured.  Standing rule 1 therefore forbids writing the byte of
+// any other table.  Empty for index 0; otherwise the decision-9 reason both the
+// request and the save hook use:
+//
+//   "a date format for table N is not implemented in this port: only the first
+//    table's date-format write is measured against Project"
+[[nodiscard]] std::string view_state_date_format_refusal(std::uint32_t table_index);
+
 // What applying the two operations to an in-memory container did.
 //
 // `ok == false` means a FORMULA operation was refused: the container is
@@ -249,7 +262,7 @@ DocumentEditOutcome apply_document_edits(mppwrite::CfbDocument& document,
 // the path the shell loaded; accumulate requests; `save()` them into a new file.
 //
 //   app::Document document(source_path);
-//   document.request_view_state_edits(view);              // optional
+//   if (!document.request_view_state_edits(view, &error)) { ... }  // optional
 //   document.apply_custom_formula(0x0b400036, "[Name]");  // optional
 //   app::SaveOutcome saved = document.save(target_path);
 //
@@ -265,7 +278,13 @@ class Document {
     [[nodiscard]] const std::string& source_path() const noexcept { return source_path_; }
 
     // Replaces the pending view-state request (there is at most one per save).
-    void request_view_state_edits(const ViewStateEdits& edits);
+    // W33b-0.1 (R33-1, High): a date-format edit for a table index other than
+    // 0 is refused before anything is queued -- `error` carries
+    // `view_state_date_format_refusal`, and any request queued before it stays
+    // queued.  The table index stays in the request so a later measured Project
+    // pair can lift the refusal without changing the API again.
+    [[nodiscard]] bool request_view_state_edits(const ViewStateEdits& edits,
+                                                std::string* error = nullptr);
     void discard_view_state_edits();
     [[nodiscard]] const ViewStateEdits& view_state_edits() const noexcept {
         return view_state_edits_;

@@ -173,7 +173,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | View | Clear Filter | implemented |  |
 | View | Collapse All | implemented |  |
 | View | Expand All | implemented |  |
-| View | Table Date Format... | implemented |  |
+| View | Table Date Format... | implemented | session refusal: refused while a table other than the first is shown; only table 0's date-format write is measured against Project |
 | Insert | Task... | implemented | session refusal: refused while a sort reorders the rows (clear the sort first) |
 | Insert | Resource... | disabled | model: no resource writer; the resource sheet is read-only |
 | Help | Keyboard Shortcuts | implemented |  |

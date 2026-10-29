@@ -3734,7 +3734,15 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     // the table the load applied, which is the first one.  That is the table this
     // edit addresses; the Qt shell passes its applied table's index instead.
     edits.table_index = 0;
-    plan.document->request_view_state_edits(edits);
+    // W33b-0.1 (R33-1, High): the request refuses a date format for any table
+    // but the first; this shell always shows the first, so the refusal cannot
+    // fire here, but a later table command must still see its reason.
+    std::string request_error;
+    if (!plan.document->request_view_state_edits(edits, &request_error)) {
+        note(plan, request_error, true);
+        [g_view refreshAfterChange];
+        return;
+    }
     note(plan, "table date format " +
                    std::to_string(static_cast<unsigned>(edits.date_format)) +
                    " is pending; Save writes it",
