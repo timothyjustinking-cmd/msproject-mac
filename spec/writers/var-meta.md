@@ -1,0 +1,190 @@
+# VarMeta — entry insert, remove and resize
+
+_W34-0.2 decode note, 30 October 2026. Companion to the pair reports under
+[`evidence/`](evidence/). Static evidence is from the git-ignored Ghidra model
+(`decompiled/part_*.c`, `analysis/meta/functions.tsv`, `analysis/meta/strings.tsv`).
+No dynamic trace this wave (W34-0.4 decision)._
+
+## Rule
+
+`VarMeta` is a fixed 24-byte header followed by `entry_count` 12-byte entries,
+with no padding between entries:
+
+```
+header  +0   u32  magic = 0xFADFADBA
+        +4   u32  0
+        +8   u32  entry_count
+        +12  u32  0
+        +16  u32  0
+        +20  u32  var2_bytes        // total length of the Var2Data stream
+entry   +0   u32  uid
+        +4   u32  offset            // byte offset of the block's u32 length
+                                    // word within Var2Data
+        +8   u32  key               // PjField id: 0x0b40xxxx Task,
+                                    // 0x0c40xxxx Resource, 0x0f40xxxx
+                                    // Assignment, 0x0d40xxxx Calendar,
+                                    // 0x0740xxxx Project
+```
+
+On save the entry array is rewritten in `(uid, key)` order from the table's
+var store; the serialiser does not sort, and every measured insertion landed
+at its sorted position (`sorted by (uid, key): True` in every report).
+
+The streams are updated in place, not rebuilt compactly:
+
+- An entry's `offset` is the byte position of its block's `u32 length` word
+  in Var2Data. A block costs `4 + payload_length`, with no alignment.
+- A **new or changed** block is written at the end of the existing Var2Data
+  stream (its current high-water mark); the entry's offset becomes that
+  position. The previous block's bytes are left in place, orphaned, and are
+  not garbage-collected. **Var2Data never shrinks** in any measured pair.
+- An **unchanged** block keeps its offset and its bytes are copied through.
+  A changed block is not rewritten in place: it moves to the append point.
+- A **removed** item loses its 12-byte entry, but its block bytes stay
+  orphaned in Var2Data and the stream length does not shrink.
+- VarMeta is not truncated either. The new 24-byte header and `count × 12`
+  entry bytes are written over the old stream from offset 0; any bytes beyond
+  `24 + 12 × count` keep their previous values. Measured: count 27 → 26 with
+  the stream staying 348 B, the freed last slot retaining a byte-identical
+  copy of the previous last entry.
+- `entry_count` (header +8) and `var2_bytes` (header +20) are rewritten;
+  `var2_bytes` equals the Var2Data high-water mark.
+- An entry with no block is written with `offset = 0xFFFFFFFF`; no such entry
+  is measured on disk.
+
+The rule the port must follow is therefore:
+
+| change | VarMeta cost | Var2Data cost | other offsets |
+|---|---|---|---|
+| add a data item | +12 B live, one entry at its sorted position; stream grows only if the array passes the old length | +4 + payload, appended at the old end | none |
+| change an item (grow or shrink) | 0 | +4 + new payload, appended at the old end; the old block's bytes stay | the changed entry moves to the append point; none other |
+| remove an item | −12 B live; the array shifts; the stream is not truncated | 0; block bytes stay orphaned | none |
+
+`offset` names the block's length word, not its payload. The first block of a
+non-empty stream sits at 0 and ends at `4 + length`. Blocks are laid out in a
+store order that is *not* entry order: every measured file groups blocks by
+field across rows (`0xa4, 0xa5, 0xa8, 0xa9, 0xaa, 0x563, 0x564, 0x00e`), while
+the entries are sorted by key. The port must copy the block layout it opened,
+not sort it.
+
+## Evidence
+
+### Measured (pairs)
+
+- `wave30-notes` — `114/TBkndTask/VarMeta` 528 → 540 B. Header
+  `(0xFADFADBA, 0, 42, 0, 0, 516)` → `(0xFADFADBA, 0, 43, 0, 0, 718)`.
+  One entry ADDED at index 21: uid 2, key `0x0b40000f` (Task/Notes),
+  offset 516; the insertion point sits between uid 2 / `0x0b40000e` and the
+  next entry. `Var2Data` 516 → 718 B, the new 198-byte block at 516.
+  202 = 4 + 198 — the length word plus the payload, exactly the rule above.
+- `wave30-wbs` — `114/TBkndTask/VarMeta` 528 → 576 B. Header
+  `(0xFADFADBA, 0, 42, 0, 0, 512)` → `(0xFADFADBA, 0, 46, 0, 0, 552)`.
+  Four entries ADDED (uid 0 key `0x0b40019f`, then uids 1–3 key
+  `0x0b40018d`), offsets 512, 522, 532, 542. Each block is 6 B, so each
+  entry costs 10 B of Var2Data and every one starts at the previous
+  offset + 10. Insertion points (6, 16, 28, 40) are sorted positions.
+- `wave30-textstyle` — five entries in `214/CV_iew/VarMeta` RE-POINTED with a
+  single delta of +56 B: uid1 `0x22400014` 93548 → 93604, uid2
+  `0x22400014` 93933 → 93989, uid3 `0x20400006` 85272 → 85328, uid3
+  `0x22400014` 94346 → 94402, uid3 `0x2240002f` 94580 → 94636. The one
+  block that grew is uid 2 key `0x20400006` at 42576 (42,692 → 42,748 B
+  payload); the five moved entries are exactly the entries whose blocks
+  start after it (85,272 and everything later), each moved by the appended
+  56 B. The grown block's own entry stays at 42,576.
+- `wave30-baseline` — `114/TBkndCal/VarMeta` 36 → 48 B, one entry added:
+  uid 4, key `0x0d400001` (Calendar/Name), offset 22 (the first block ends
+  at 4 + 18 = 22). Header size word 22 → 122.
+- `wave31-fill` (the wave-31 Start/Finish/Duration fill pair) — the
+  discriminator for the update rule. `114/TBkndTask/VarMeta` stays 348 B on
+  both sides while the header count goes 27 → 26: entry [24] uid 2 key
+  `0x0b4004e5` is REMOVED, entries [25] and [26] shift down one slot, and the
+  freed slot [26] still carries the previous save's bytes — a byte-identical
+  duplicate of the new last entry (uid 2 key `0x0b400564`, offset 312).
+  `Var2Data` grows 350 → 366 B: the changed uid 0 key `0x0b4004e4` block
+  (8 → 12 B payload) is appended at 350, its entry offset moves 126 → 350
+  (delta +224), and the old 8-byte block at 126 is left orphaned; the removed
+  uid 2 key `0x0b4004e5` block at 338 is also left orphaned. No other entry
+  offset changes. This is the measured removal, the measured growth, and the
+  proof that the streams are updated in place rather than compacted.
+- All 23 pairs: `noise (control -> null): entries 0 added, 0 removed,
+  0 re-pointed` in every report where the decoder prints it. A no-edit save
+  by Project never re-frames the var store.
+
+### Static (Ghidra model)
+
+- `FUN_1408b05ac` @ `0x1408b05ac` (3,961 B), called only from
+  `FUN_1408ad2d4` — a **compacting** table serialiser in the model, and not
+  the editor-save writer. It allocates `count × 0xC` entry bytes, reads the
+  old 24-byte header and entry array, and for every entry with a block reads
+  the block from the input Var2Data and rewrites it at a running position
+  starting at 0, assigning that position to the entry's offset word; absent
+  data gets `0xFFFFFFFF`; the total is stored at header +20
+  (`param_1 + 0x344`). That produces a stream compacted in entry-array order.
+  The measured editor saves do the opposite: they keep orphaned blocks, a
+  stale duplicate entry slot, and a block layout that is field-grouped rather
+  than entry-ordered. Whatever this routine serves (the scratch copy built by
+  `FUN_1408ad2d4`), the editor-save writer is a different, not-isolated path;
+  the measured rule above is the one the port must reproduce.
+- `FUN_140376310` @ `0x140376310` (331 B) — reads and validates the 24-byte
+  header: exactly `0x18` bytes, magic `0xFADFADBA`, and a load-time guard that
+  rejects `entry_count >= 0xFF000001`. It also reports a non-zero word at
+  header +12 (`*(short *)(param_1 + 0x33c)`) as a diagnostic.
+- `FUN_1408ad20c` @ `0x1408ad20c` — reads `0x18` bytes into the same header
+  and zeroes header +4 first, confirming that +4 is not an entry field.
+- `FUN_1408ad0b4` @ `0x1408ad0b4` — initialises the 16-byte FixedMeta and
+  Fixed2Meta headers (magic at +0, word `4` at +4), the fixed-stream
+  counterpart; it shows the header fields are written, not carried.
+- `FUN_1403782a4` @ `0x1403782a4` — opens the eight table streams of a
+  container in the order FixedMeta, VarMeta, FixedData, Var1Data, Var2Data,
+  CopyUid, Fixed2Meta, Fixed2Data. `FUN_1408ad2d4` @ `0x1408ad2d4` is the
+  save-side storage builder that creates the same set in a scratch storage
+  and binds them to the serialiser.
+
+### COM facts
+
+The edits are ordinary Project 2021 editor saves through
+`scripts/oracle_lock.py`: a note typed into the task, a WBS code scheme
+applied with `WBSCodeMaskEdit` + `WBSCodeRenumber`, a baseline set, and one
+cell text-style change. No COM call touched VarMeta directly; the entries are
+Project's own serialisation of the model.
+
+## Limits
+
+- The editor-save VarMeta/Var2Data writer is not statically isolated. The one
+  compacting routine in the model (`FUN_1408b05ac`) contradicts the measured
+  bytes, so its loop cannot be used as the rule; the in-memory store's
+  insert/remove path lives behind vtable calls.
+- Removal is measured once (wave31-fill, one entry) and growth once (the same
+  pair, +4 payload). Whether two removals in one save keep both stale slots,
+  and whether a *shrunk* value also appends, are unmeasured.
+- The stale bytes are input-dependent: the port must reproduce them by
+  starting from the opened streams and writing over them, not by rebuilding a
+  minimal stream. A file that already contains orphan blocks (a second edit
+  save) is unmeasured.
+- `0xFFFFFFFF` as the "no data" offset is static only; no committed pair
+  contains such an entry.
+- The load-time cap `entry_count < 0xFF000001` is static; no pair approaches
+  it.
+- The front-end view stream `214/CV_iew/Var2Data` does NOT follow the append
+  rule: the textstyle pair grows its block in place and shifts every later
+  block (+56). The append-only rule measured here is for the `114/TBknd*`
+  table var stores.
+
+## Pairs still needed
+
+1. **Delete a task note** (clear a `0x0b40000f` value) from the synthetic
+   base: does the block stay orphaned and the entry shift exactly as the Fill
+   pair shows for `0x0b4004e5`? One factor: a text-field removal.
+2. **Shrink a value** (replace a long note with a short one): is the shorter
+   block appended at the high-water mark with the old one orphaned, or is it
+   rewritten in place? One factor: shrink.
+3. **Two changes in one save** (a note deleted and another added): do both
+   effects compose append-only, and does the stale VarMeta tail keep one slot?
+4. **A file with an existing orphan**: open the wave31-fill edit save and edit
+   it again. Confirms the append point is the high-water mark and that orphan
+   bytes persist across saves.
+5. **A block of zero payload** if any editor command produces one; this is the
+   only way to see a zero-length block's length word.
+
+Rule 1 note: the port may only enable a var-store write shape that one of
+these pairs covers; anything else is refused up front.
