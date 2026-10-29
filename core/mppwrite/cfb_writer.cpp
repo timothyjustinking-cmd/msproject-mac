@@ -300,12 +300,22 @@ void CfbDocument::parse() {
     if (byte_order_ != 0xFFFEu) {
         throw Error("big-endian CFB is not supported");
     }
-    if (major_version_ != 3 && major_version_ != 4) {
+    if (major_version_ == 4) {
+        /* v4 places sector 0 at 4096 and uses 4096-byte sectors, so
+         * sector_offset() (header-relative, v3) and the whole-sectors check
+         * below would read it at the wrong offsets.  No v4 fixture exists to
+         * measure against, so refuse the version explicitly (wave-33 audit
+         * D-6) instead of failing later with a misleading sector-size error. */
+        throw Error("CFB v4 (4096-byte sectors) is not supported; "
+                    "only v3 (512-byte sectors) is");
+    }
+    if (major_version_ != 3) {
         throw Error("unsupported CFB major version " +
                     std::to_string(major_version_));
     }
-    if (sector_shift_ != 9 && sector_shift_ != 12) {
-        throw Error("unsupported sector shift " + std::to_string(sector_shift_));
+    if (sector_shift_ != 9) {
+        throw Error("unsupported sector shift " + std::to_string(sector_shift_) +
+                    " (only 9, the 512-byte v3 sector, is supported)");
     }
     if (mini_shift_ != 6) {
         throw Error("unsupported mini sector shift " + std::to_string(mini_shift_));

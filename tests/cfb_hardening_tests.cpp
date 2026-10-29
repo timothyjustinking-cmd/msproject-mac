@@ -109,6 +109,11 @@ bool read_fixture(Bytes& bytes, TestContext& t) {
     return true;
 }
 
+void put_u16(Bytes& bytes, std::size_t offset, std::uint16_t value) {
+    bytes[offset] = static_cast<std::uint8_t>(value & 0xFFu);
+    bytes[offset + 1] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
+}
+
 void put_u32(Bytes& bytes, std::size_t offset, std::uint32_t value) {
     bytes[offset] = static_cast<std::uint8_t>(value & 0xFFu);
     bytes[offset + 1] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
@@ -340,6 +345,46 @@ void test_resource_fixed2_count(TestContext& t) {
             "the damaged metadata does not change the resource rows");
 }
 
+/* ---- W33-2.3: CFB v4 ---------------------------------------------- */
+
+/* The CFB header's major version (0x1A) and sector-shift exponent (0x1E). */
+Bytes tagged_header(Bytes const& pristine, std::uint16_t major,
+                    std::uint16_t sector_shift) {
+    Bytes bytes = pristine;
+    put_u16(bytes, 0x1A, major);
+    put_u16(bytes, 0x1E, sector_shift);
+    return bytes;
+}
+
+void test_v4_refused(TestContext& t) {
+    Bytes pristine;
+    if (!read_fixture(pristine, t)) {
+        return;
+    }
+    const Refusal baseline = reader_refusal(pristine);
+    t.check(!baseline.wrong_type && baseline.message.empty(),
+            "the pristine v3 fixture still loads through mpp::load_bytes");
+
+    /* A v4 tag on the committed v3-shaped body: before the fix both parsers
+     * accepted this, because the version word alone was not a refusal. */
+    const Bytes v4_tag = tagged_header(pristine, 4, 9);
+    check_refusal(t, reader_refusal(v4_tag), "mpp::load_bytes", "v4");
+    check_refusal(t, writer_refusal(v4_tag), "CfbDocument::from_bytes", "v4");
+
+    /* A real v4 shape: 4096-byte sectors.  The refusal must name v4, not the
+     * accidental "not a whole number of sectors". */
+    const Bytes v4_4096 = tagged_header(pristine, 4, 12);
+    check_refusal(t, reader_refusal(v4_4096), "mpp::load_bytes", "v4");
+    check_refusal(t, writer_refusal(v4_4096), "CfbDocument::from_bytes", "v4");
+
+    /* A v3 tag with a 4096-byte sector shift is equally unsupported; it must
+     * be refused for the shift, not parsed at the wrong offsets. */
+    const Bytes v3_4096 = tagged_header(pristine, 3, 12);
+    check_refusal(t, reader_refusal(v3_4096), "mpp::load_bytes", "sector shift");
+    check_refusal(t, writer_refusal(v3_4096), "CfbDocument::from_bytes",
+                  "sector shift");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -361,7 +406,10 @@ int main(int argc, char** argv) {
     if (only.empty() || only == "fixed2meta") {
         test_resource_fixed2_count(context);
     }
-    if (!only.empty() && only != "difat" && only != "fixed2meta") {
+    if (only.empty() || only == "v4") {
+        test_v4_refused(context);
+    }
+    if (!only.empty() && only != "difat" && only != "fixed2meta" && only != "v4") {
         std::cout << "unknown case: " << only << "\n";
         return 2;
     }

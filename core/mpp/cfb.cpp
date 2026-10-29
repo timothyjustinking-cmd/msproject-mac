@@ -255,12 +255,22 @@ void CompoundFile::parse() {
     const std::uint16_t major_version = read_u16(data_, 0x1A);
     const std::uint16_t sector_shift = read_u16(data_, 0x1E);
     const std::uint16_t mini_sector_shift = read_u16(data_, 0x20);
-    if (major_version != 3 && major_version != 4) {
+    if (major_version == 4) {
+        /* [MS-CFB] v4 puts sector 0 at 4096 and uses 4096-byte sectors; this
+         * parser assumes the v3 header-relative layout.  Real v4 files are
+         * rejected as "not a whole number of sectors" by accident, so refuse
+         * the version itself, by design, with a message that says why
+         * (wave-33 audit D-6).  No v4 fixture exists to measure against. */
+        throw Error("CFB v4 (4096-byte sectors) is not supported; "
+                    "only v3 (512-byte sectors) is");
+    }
+    if (major_version != 3) {
         throw Error("unsupported compound file version " +
                     std::to_string(major_version) + " (only 3 and 4 exist)");
     }
-    if (sector_shift < 9 || sector_shift > 16) {
-        throw Error("implausible sector shift " + std::to_string(sector_shift));
+    if (sector_shift != 9) {
+        throw Error("unsupported sector shift " + std::to_string(sector_shift) +
+                    " (only 9, the 512-byte v3 sector, is supported)");
     }
     sector_size_ = static_cast<std::size_t>(1) << sector_shift;
     if (mini_sector_shift != 6 && mini_sector_shift != 5) {
