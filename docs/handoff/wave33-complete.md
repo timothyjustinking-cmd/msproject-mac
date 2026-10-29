@@ -113,3 +113,291 @@ follows is docs-only.
   dispatch belong to the CLOSE section (wave-33-brief section 2).
 
 WAVE-33-G0-COMPLETE
+
+## G1 - refusals and disables (High and Medium)
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W33-1.1 | A-3 (High): Delete Task on a summary row tombstoned the summary alone | **DONE** | commit `22218de`; gates `build/w33/W33-1.1-*.log` |
+| W33-1.2 | A-9 (High): Insert Task cloned the last live row's progress, actuals and work | **DONE** | commit `f18b208`; gates `build/w33/W33-1.2-*.log` |
+| W33-1.3 | A-5 (High): Formula SET accepted unmeasured field kinds | **DONE** | commit `3c996b0`; gates `build/w33/W33-1.3-*.log` |
+| W33-1.4 | A-4 (High): Formula CLEAR wrote an unmeasured 0 to the `0x02401392` flag | **DONE** | commit `9660453`; gates `build/w33/W33-1.4-*.log` |
+| W33-1.5 | A-7 (Medium): Task Information and Task Fields ignored `push()`'s return | **DONE** | commit `0c83489`; gates `build/w33/W33-1.5-*.log` |
+| W33-1.6 | A-11 (Medium): Table edits hard-coded `table_index = 0` | **DONE** | commit `95e484a`; gates `build/w33/W33-1.6-*.log` |
+| W33-1.7 | A-8 / D-7 (Medium): FAT-slack containers opened editable and then could not save | **DONE** | fixture commits `3b53b9d` and `964594d`; fix commit `397eaf9`; gates `build/w33/W33-1.7-*.log` |
+| W33-1.8 | A-12 (Low): a second pending formula operation overwrote the first silently | **DONE** | commit `6a58e05`; gates `build/w33/W33-1.8-*.log` |
+
+No G1 item was deferred.
+
+W33-1.1 detail:
+
+- `StructuralEdits::push` now requires the plan, refuses a delete of a
+  summary row and a delete of a pending insert, and queues nothing;
+  `app::make_delete_edit` turns that refusal into the status line both
+  shells show: "delete the subtasks first, or outdent them".  The writer's
+  `delete_task_row` re-checks the same shape from the live outline as
+  defence in depth, so a hand-built queue cannot tombstone a summary either.
+- RED on the pre-fix tree: `build/w33/W33-1.1-red-writer.log` (768 checks,
+  3 failures: "delete a summary row is refused: no exception was thrown",
+  plus the document change and the file write the refused request made);
+  `build/w33/W33-1.1-red-app.log` (3232 checks passed, 5 failures -- the
+  five new `push()` assertions); `build/w33/W33-1.1-red-qt.log` (4
+  failures: the shell showed the confirmation, queued the delete, dirtied
+  the document and did not name the refusal).  GREEN:
+  `W33-1.1-green-writer.log` 768 checks, 0 failures;
+  `W33-1.1-green-app-outline.log` 3237 checks passed;
+  `W33-1.1-green-qt.log` 0 failures (`app_qt/tests/delete_summary_test.cpp`,
+  the Qt suite's 38th test).
+- The core test normalises the committed Project save's stale VarMeta
+  logical count (41 declared, 42 physical) on its build-tree copy so
+  `validate_table` passes and only the summary guard is measured; the
+  committed fixture is never opened in place.
+
+W33-1.2 detail:
+
+- `add_task_row` clones the LAST live row's 202 FixedData bytes and its five
+  overtime VarMeta payloads, clearing only the constraint and the start
+  anchor, so Insert Task after a progressed row carried the old row's
+  progress and actuals and lost Project's `0x0B40015E` block.  The model
+  now checks the clone source in three places: `app::check_insert_task`
+  names the row and the first dirty fact for both shells before they ask
+  for a name (progress, actual work time, actual dates, task calendar, a
+  constraint other than ASAP, an assignment beyond Project's `0xFFFF0001`
+  placeholder, more than one physical assignment row);
+  `StructuralEdits::push` repeats the plan half whenever a plan is given;
+  and the save cascade re-checks the file's actual last live row before
+  every append, because an undo can restore a pending-deleted row after
+  the insert was queued and a hand-built queue skips `push()`.
+  `core/mppwrite` gains `last_live_task_uid()` and
+  `insert_task_clone_is_clean()`, which also read the words the plan does
+  not carry (Resume/Stop, percent work complete, the `0x0B40015E` block,
+  the copied overtime payloads).
+- RED (`build/w33/W33-1.2-red-app.log`): on a build-tree copy of
+  synthetic-base whose last live row reads 40 %, push accepted the insert,
+  the save wrote the clone and the new row read back 40 % -- 4 of 239
+  checks failed.  GREEN: `W33-1.2-green-app-edit-out.log` 281 checks
+  passed; `W33-1.2-green-writer-out.log` 777 checks, 0 failures.  The 40 %
+  file is built in the build tree with the port's own measured percent
+  writer; no committed fixture ends at 40 % and none is written.
+- wave23-outline.mpp's last live row carries a real resource assignment,
+  so Insert Task is now (correctly) refused there; the spelling and inspect
+  Qt gates' pending-insert legs open synthetic-base instead, whose last row
+  is Project's clean placeholder row.
+
+W33-1.3 detail:
+
+- Only Text1..30 and Number1..20 custom-field formulas were measured
+  against Project.  `app::custom_formula_field_is_settable` now accepts
+  exactly `mpp::custom_field_kind` text or number ids;
+  `app::custom_formula_set_refusal` names the refused field and carries the
+  decision-9 text, "not implemented in this port";
+  `Document::apply_custom_formula` refuses before anything is queued and
+  leaves an earlier queued formula alone, and the save hook refuses a
+  hand-built `CustomFormulaEdit` that skipped the queue.  Both shells
+  already surface the returned error.
+- RED (`build/w33/W33-1.3-red-app-document.log`): with the tests written
+  against the old API, all six refused kinds were accepted (Date1,
+  Duration1, Cost1, Flag1, Start, OutlineCode1) -- 29 of 311 checks failed,
+  all 29 the new W33-1.3 checks.  GREEN
+  (`W33-1.3-green-app-document.log`): 311 checks passed -- one refusal per
+  kind, Text1/Text30/Number1/Number20 accepted, a queued request preserved
+  across a refusal, and the hand-built save-hook refusal leaving
+  `114/Props` untouched.
+
+W33-1.4 detail:
+
+- `custom_field_value_remains` decides the `0x02401392` "custom-field data
+  in use" flag from Task custom VarMeta keys, the Flag1 bit and assignment
+  keys only, and the CLEAR path writes 0 -- a value Project never measured,
+  unlike SET's unconditional 1.  Formula CLEAR is now disabled:
+  `Document::clear_custom_formula` is a `[[nodiscard]] bool` that reports
+  false with the decision-9 reason, queues nothing and leaves a queued SET
+  alone; the Qt dialog's clear button is disabled with the exact tooltip
+  and its click handler removed, so the dialog cannot return
+  `Operation::clear`; the macOS alert's second button is disabled with the
+  same tooltip; both shells keep their clear branches as refusals that call
+  the Document API.  The save hook still implements a hand-built clear
+  request -- the existing one-write cascade test uses that shape -- but
+  Document and both shells can no longer produce one.
+- The two old clear tests asserted the flag-0 write and are replaced by
+  `test_formula_clear_disabled`; `test_save_formula_set` now first proves
+  the fixture stores no custom-field VALUE, so its existing "the
+  custom-field data flag is 1 after setting a formula" check is the
+  measured value-free SET case.
+- RED (`build/w33/W33-1.4-red-app-document.log`,
+  `W33-1.4-red-qt-dialog.log`): 2 of 296 document checks failed (the
+  disabled clear queued the request and dropped the queued Text2 SET); the
+  Qt dialog gate failed 3 checks (enabled button, wrong tooltip, click
+  queued).  GREEN: 299 document checks passed
+  (`W33-1.4-green-app-document.log`); `W33-1.4-green-qt-dialog.log`
+  `qt_dialog_gate`: 0 failures.
+
+W33-1.5 detail:
+
+- `apply_task_information` pushed the Custom Fields tab's edits onto the
+  live queue and ignored `push()`'s return; with an automatic outline edit
+  pending, W32-0.1 refuses every percent push, so the dialog returned false
+  while the Text1 edit stayed queued -- half the dialog applied.  Both
+  handlers now decide on a trial copy: every Custom Fields edit is pushed
+  onto the copy, then the percent edit with the plan; a parse error or the
+  first refused push reports its reason and returns with the live queue and
+  the sheet cells untouched; only when every push succeeds is the trial
+  moved into `structural_` and the cells committed.  `show_task_fields`
+  applies the same rule (unreachable from the menu since W23 B-13 routes
+  Task > Information to Task Information, whose Custom Fields tab is the
+  Task Fields surface).
+- The new gate `qt_task_information_apply`
+  (`app_qt/tests/task_information_apply_test.cpp`, the Qt suite's 39th)
+  copies wave29-outline-auto-indent-control.mpp into `test-out`, queues the
+  automatic indent on uid 2 exactly as the menu does, then applies uid 3's
+  Task Information values with a Text1 value and 40 %: the apply is refused,
+  the status names the pending automatic outline edit,
+  `pending_edits().size()` is unchanged and the automatic indent is still
+  the only edit.  RED (`build/w33/W33-1.5-red-qt-apply.log`): 1 failure (the
+  Text1 edit was left behind).  GREEN
+  (`build/w33/W33-1.5-green-qt-apply.log`): 0 failures.
+
+W33-1.6 detail:
+
+- View > Tables applies any of the file's stored task tables for the
+  session (W31-1.3), but `TableDateFormatDialog::accept` hard-coded the
+  request's `table_index` to 0, so with the second table on screen the save
+  silently edited the FIRST table's `214/CTable` byte.  The dialog's
+  constructor now takes the shown table index with no default, so a caller
+  has to state which table it edits; `accept()` writes the request's
+  `table_index` from it and `edit_table_date_format` passes its own index
+  through.  The Qt shell supplies `doc_.selected_table()` -- the table
+  View > Tables applied.  The macOS shell has no Tables command, so its
+  view always shows the load-applied first table; it keeps index 0 and now
+  says so instead of calling it the measured fixture's only table.
+- The new gate `qt_table_date_format`
+  (`app_qt/tests/table_date_format_test.cpp`, the Qt suite's 40th) copies
+  wave31-tables.mpp (Entry applied at load, Review second) into
+  `test-out`, opens it in the real MainWindow, switches to Review through
+  the real View > Tables popup, chooses format 4 in the dialog and saves:
+  the second table's date format is 4; the first table's date format, its
+  whole stored block and the applied Entry table's Var2Data date-format
+  byte are unchanged.  `dialog_gate_test` now constructs the dialog for
+  table 1 and checks that its result carries that index.  RED
+  (`build/w33/W33-1.6-red-qt-table-date.log`): 4 failures.  GREEN
+  (`W33-1.6-green-qt-table-date.log`, `W33-1.6-green-qt-dialog.log`): 0
+  failures in both.
+
+W33-1.7 detail:
+
+- The reader opened a container with unreferenced trailing sectors (MS
+  Project writes them) and reported "N unreferenced sectors", but
+  `mppwrite::CfbDocument::to_bytes()` refuses to re-emit such a container,
+  so every Save failed after a whole session of edits: the work was
+  silently unwritable.  At open,
+  `app::document_has_unreferenced_sectors` (`app/reader_adapter.h`)
+  detects that warning and both shells mark the document read-only with the
+  brief's reason, "saved by Project with unreferenced sectors; saving is
+  not supported yet":
+  - `app::StructuralEdits::push` refuses every kind and queues nothing (the
+    model backstop); `app::begin_cell_edit` takes the reason and refuses the
+    session with it, so every cell-edit path shares one refusal;
+  - the Qt shell sets the reason on the table adapter and the structural
+    model at open, shows it in the left status segment, and refuses Insert
+    Task, Delete Task, Indent/Outdent, unlink, the %-complete buttons, the
+    task-mode menu, Task Information/Task Fields/Custom Fields/Predecessors/
+    Project Information/Update Project/Mark on Track, Table Date Format,
+    Custom Field Formula, Cut/Paste/Fill Down and both Save entries before
+    any dialog or prompt;
+  - the macOS shell stores the reason on `PlanState`, appends it to the
+    status text, and refuses the same entry points and
+    `saveDocumentWithPanel`.  (MSVC never compiles `app/main.mm`; the
+    macOS job is its compile gate.)
+- The fixture pair: `3b53b9d` added `tests/data/wave33-fat-slack.mpp` --
+  synthetic-base plus 64 zero sectors, 270336 bytes with 527 physical
+  sectors against a 512-entry FAT, so 15 are unreferenced -- and `964594d`
+  replaced its bytes in place with neutral ones, because the inherited
+  synthetic-base bytes carried the pre-wave privacy residual (the operator
+  name and the local path; W33-4.3 is the item that neutralises the base
+  fixture).  The clean blob's
+  SHA256 is
+  `E3A7D6CBBB82EA35901D6C2CE8C7E4D40DE032D424785CBA6F6BED41B93A85C8`,
+  pinned in `scripts/check_fixtures.py` with a `tests/data/README.md` row.
+- Tests: `app_qt/tests/fat_slack_test.cpp` (`qt_fat_slack`, the Qt suite's
+  41st) copies the committed fixture, opens it in the real MainWindow and
+  checks the status line, a refused cell edit that leaves the text and
+  opens no session, Insert Task / Delete Task refusing without opening a
+  dialog (a modal probe records any dialog) and Save refusing with no file
+  written; the clean fixture still accepts the same edit.
+  `app_edit_tests` gains `test_fat_slack_read_only` (the fixture is
+  detected, the clean fixture is not, the model refuses insert and delete
+  with nothing queued; a missing committed fixture FAILS, never skips);
+  `layout_model_tests` pins `begin_cell_edit`'s refusal and its reason.
+  RED (`build/w33/W33-1.7-red-qt-fat-slack.log`): 11 failures.  GREEN:
+  `W33-1.7-green-qt-fat-slack.log` 0 failures; app_edit 290 checks,
+  layout_model 333 checks.
+
+W33-1.8 detail:
+
+- `Document::apply_custom_formula` replaced the queued request with
+  whatever the next call carried: two Custom Field Formula requests before
+  Save silently dropped the first, and the save wrote the second while the
+  status line had named the first.  A second VALID request is now refused
+  before assignment with the reason "a custom-field formula is already
+  pending; save it before setting another", and the queued first request is
+  untouched.  The field-kind and empty-formula checks run first, so their
+  own refusals (including the decision-9 text) are unchanged;
+  `discard_custom_formula()` -- what a save or a shell discard runs --
+  clears the pending op, after which a new request is accepted.  Both
+  shells already show the returned error verbatim, so no shell change was
+  needed.
+- RED (`build/w33/W33-1.8-red-app-document.log`): 5 of 307 checks failed
+  (the second request was accepted, carried no reason, replaced the queued
+  first one and changed its field).  GREEN
+  (`W33-1.8-green-app-document.log`): 307 checks passed, 0 FAIL lines.
+
+Per-commit gates (logs under `build/w33/`; each commit's quoted gates
+include a clean client-name scan and no client-string hashes; the two
+fixture commits carry fixtures only and quote their own
+`check_fixtures.py` lines -- `3b53b9d` reports fixtures OK on the tree it
+was made from, `964594d` reports exactly one "differs from HEAD" line for
+the staged replacement, the wave-28 precedent -- and every behaviour commit
+quotes fixtures OK with the count in the table):
+
+| commit | builds | tests | fixtures |
+|---|---|---|---|
+| W33-1.1 `22218de` | core, app, app_qt exit 0 | core 54/54; app 25/25; app_qt 38/38 (37 before) | 139 hashes / 173 `.mpp` |
+| W33-1.2 `f18b208` | core, app, app_qt exit 0 | core 54/54; app 25/25; app_qt 38/38 | 139 hashes / 173 `.mpp` |
+| W33-1.3 `3c996b0` | core, app, app_qt exit 0 | core 54/54; app 25/25; app_qt 38/38 | 139 hashes / 173 `.mpp` |
+| W33-1.4 `9660453` | core, app, app_qt exit 0 | core 54/54; app 25/25; app_qt 38/38 | 139 hashes / 173 `.mpp` |
+| W33-1.5 `0c83489` | core, app, app_qt exit 0 | core 54/54; app 25/25; app_qt 39/39 (38 before) | 139 hashes / 173 `.mpp` |
+| W33-1.6 `95e484a` | core, app, app_qt exit 0 | core 54/54; app 25/25; app_qt 40/40 (39 before) | 139 hashes / 173 `.mpp` |
+| W33-1.7 `3b53b9d`+`964594d`+`397eaf9` | core, app, app_qt exit 0 | core 54/54; app 25/25; app_qt 41/41 (40 before) | 140 hashes / 174 `.mpp` |
+| W33-1.8 `6a58e05` | core, app, app_qt exit 0 | core 54/54; app 25/25; app_qt 41/41 | 140 hashes / 174 `.mpp` |
+
+The G1 marker commit is docs-only; the code tree it records is `6a58e05`.
+
+## Found, not fixed
+
+- Known blocker for the wave push (wave owner only): `3b53b9d` added the
+  slack fixture as imported synthetic-base bytes, and synthetic-base still
+  carries the pre-wave privacy residual recorded for W33-4.3 (the operator
+  name in SummaryInformation and in one Var2Data value, plus the local
+  path), so the pre-push guard refuses that commit.  `964594d` replaced the
+  tip blob with an equal-length neutral version (21 bytes changed, every
+  other byte identical, size unchanged); section 0 forbids rewriting or
+  force-pushing history and working round the guard, so only the wave owner
+  can authorise a rewrite or another disposition.  Scans of HEAD and of the
+  G1 tip's staged snapshot are clean.  `guard_names.py 22218de^..HEAD`
+  (`build/w33/W33-G1-guard-range.log`) refuses on `3b53b9d` alone with its
+  "blob ... embedded local path or operator name" line; the blocker is that
+  intermediate blob, not the G1 tip.
+- The Project save used by `mppwrite_roundtrip_add_delete` carries a stale
+  VarMeta logical count (41 declared, 42 physical).  W33-1.1's core test
+  normalises it on its build-tree copy so only the summary guard is
+  measured; the committed fixture is untouched.  The quirk is not a G1
+  item and no writer change is made for it.
+- `scripts/check_fixtures.py` is CRLF at HEAD because the wave-32 merge
+  commit `17f5782` rewrote the whole file (W33-4.2 restores LF).  The nine
+  lines W33-1.7 adds to it are LF, so that commit adds no CRLF and
+  `git diff --check` is clean.
+- CLOSE is out of scope for this group session: the fresh-tree gates on the
+  final commit, the review pass over the wave-33 diff, the push and the CI
+  dispatch belong to the CLOSE section (wave-33-brief section 2).
+
+WAVE-33-G1-COMPLETE
