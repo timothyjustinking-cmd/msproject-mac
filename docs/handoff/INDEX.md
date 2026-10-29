@@ -11,7 +11,7 @@ kept for investigation; each is the record of its stream at that wave.
 | `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
 | `assessment-2026-10-29.md` | **the 29 October progress assessment and adversarial audit**: sections 7-8 are wave 33's work order |
 | `wave33-brief.md` | **the wave-33 work order**: fix-only - G0 data safety (Critical), G1 refusals and disables (High/Medium), G2 robustness, G3 gates and CI, G4 records and privacy |
-| `wave33-complete.md` | **the wave-33 gate so far**: G0-G3 DONE with per-commit and fresh-tree gates, "Found, not fixed"; G4 and CLOSE still to append |
+| `wave33-complete.md` | **the wave-33 gate**: G0-G4 and CLOSE DONE with per-commit and fresh-tree gates, the two independent CLOSE reviews and their fixes (W33-CLOSE-H1/M2/M3/M4), both name scans and the marker guard, "Found, not fixed"; `WAVE-33-COMPLETE`; push and CI by the coordinator after the approved replay |
 | `assessment-2026-10-24.md` | where the port stood after wave 26, and the workflow review |
 | `plan-waves27-30.md` | the plan of the 27-31 run (wave 31 was its last wave) |
 
@@ -23,12 +23,12 @@ PRE-rewrite id; `wave32-verification/rewrite-sha-map.txt` maps the 329 old ids
 to the current ones (left = old, right = new; look one up with
 `git show 17f5782:docs/handoff/wave32-verification/rewrite-sha-map.txt | grep <old-id>`).
 
-## Wave 33 (in progress on branch `wave33`, cut from `17f5782`)
+## Wave 33 (closed on branch `wave33`, cut from `17f5782`; `WAVE-33-COMPLETE`; not yet pushed)
 
 | file | what |
 |---|---|
 | `wave33-brief.md` | **the work order** (also listed under Now): the fix-only wave from the 29 October audit |
-| `wave33-complete.md` | **the wave-33 gate**: G0 atomic save + save adoption, G1 the refusal set, G2 parser bounds + fuzzing + ASan, G3 the `app/` suite in CI and the honest gates, G4 records and privacy (appended as it lands) |
+| `wave33-complete.md` | **the wave-33 gate**: G0 atomic save + save adoption, G1 the refusal set, G2 parser bounds + fuzzing + ASan, G3 the `app/` suite in CI and the honest gates, G4 records and privacy, CLOSE the final gates, the two reviews and their fixes; `WAVE-33-COMPLETE` |
 
 ## Wave 32 (merged into `main` on 27 Oct 2026 as `17f5782`, after a history rewrite; ids pre-rewrite)
 

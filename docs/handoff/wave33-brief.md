@@ -60,6 +60,13 @@ replays, pushes, dispatches both workflows and checks the logs after CLOSE.  Do
 everything else in CLOSE, record "push and CI: by the coordinator after the replay", and
 append the marker.
 
+**Coordinator note (30 Oct 2026, CLOSE, for the replay).**  The replay has two
+requirements found at CLOSE: it must replace G1's `3b53b9d` blob (the pre-push
+guard refuses it) and reword `964594d`'s message, which carries the operator's
+short first name.  CI checks out with `fetch-depth: 0` and the marker guard
+scans `origin/main..HEAD`, so the marker step is red until that message is
+reworded.  The tracked files are clean at CLOSE (0 files, 9 markers).
+
 **Fixes where the obvious change is wrong** (from the work order; do these, not the
 tempting ones):
 

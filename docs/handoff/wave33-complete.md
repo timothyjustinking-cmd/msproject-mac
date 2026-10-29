@@ -1147,3 +1147,189 @@ G4 group gates (fresh trees configured from scratch on the G4 code tree
   coordinator after the approved replay (brief, 05:50 CLOSE note).
 
 WAVE-33-G4-COMPLETE
+
+## CLOSE
+
+Every group marker is appended (G0-G4); this section records the CLOSE gates,
+the two independent reviews of `git diff main..wave33`, the findings they
+raised and the fixes that landed in response, the privacy and CI mechanics,
+and the push disposition.  CLOSE did not push and did not dispatch CI: the
+range still holds G1's `3b53b9d` blob, so the pre-push guard refuses it, and
+the operator approved a coordinator replay after CLOSE (brief, 05:50 note).
+
+### The two independent reviews
+
+Two independent reviewers read `git diff main..wave33`, one on the safety
+and refusal code and one on the gates and records.  Their reports are local
+evidence under `build/w33/` (the tracked record keeps the findings and
+verdicts, not the raw text).
+
+- **Safety and refusal code** -- 0 Critical, 0 High, 0 Medium, 6 Low.
+  Verdict: "The safety/refusal half is sound enough for CLOSE; the Low items
+  above are residuals to record, not blockers."  The six Lows are queued as
+  RW33-1..RW33-6 in `plan-waves27-30.md`.
+- **Gates and records** -- 1 High, 2 Medium, 4 Low.  Verdict: "gates and CI
+  mechanics are sound, but the unscanned first-name marker in tracked
+  records and the contradictory CLOSE push assignment make the records half
+  not honest enough for CLOSE as it stands."  All three were fixed inside
+  CLOSE (below); the four Lows are queued as RW33-7..RW33-10.
+
+| finding | severity | disposition |
+|---|---|---|
+| The short first name is absent from the marker list and present in 34 tracked files plus one commit message | High | fixed, W33-CLOSE-H1 (`8932d20`): a ninth word-bounded marker and a 34-file scrub |
+| The brief and the records still assign the push and the CI dispatch to CLOSE | Medium | fixed, W33-CLOSE-M2 (`45e4346`) |
+| W33-4.1's quoted gate numbers are not in the logs its row names | Medium | erratum and a re-run on the W33-4.1 commit, W33-CLOSE-M3 (`9513693`) |
+| Six safety/refusal Lows and four gates/records Lows | Low x10 | queued, W33-CLOSE-M4 (`617e836`), RW33-1..RW33-10 |
+
+W33-CLOSE-H1 detail:
+
+- The marker list had eight entries and no three-letter short first name.
+  Adding it as a plain substring would drown the gate (it sits inside
+  ordinary words), so the new ninth marker is matched on ASCII word
+  boundaries in the ASCII, UTF-16LE and UTF-16BE searches and in decoded
+  commit-message text.  The self-test grows to 19 checks with planted
+  ASCII/UTF-16LE/UTF-16BE hits and the negative `time`/`timeout`/`timer`
+  cases; `redact` keeps the same boundaries.
+- The scrub replaces the name with "the operator" (or rewrites the pronoun)
+  in 34 tracked files: 116 replacements.  It touches records, tool text and
+  one test comment; no code or fixture byte changes.
+- RED on the unfixed tree (`build/w33/W33-CLOSE-H1-red.log`): 34 files and
+  the `964594d` message.  GREEN after (`build/w33/W33-CLOSE-H1-post.log`):
+  1301 tracked files, 9 markers, 0 files; exactly one message hit remains
+  (`964594d`), which the replay must reword.
+
+W33-CLOSE-M2 detail:
+
+- `wave33-brief.md` section 0 now says the push and both dispatches happen
+  AFTER CLOSE, by the coordinator after the approved replay; the replay is
+  the only sanctioned history rewrite.  The same correction is applied to
+  the brief's CLOSE section, the G0-G4 notes and two blocker paragraphs in
+  this record, START-HERE (the blocker bullets, the CI house rule and the
+  paste-in prompt) and `memory/coordinator.md`.
+
+W33-CLOSE-M3 detail:
+
+- The row cites `build/w33/W33-4.1-*.log`, but `W33-4.1-guard-tip.log` is
+  empty and `W33-4.1-guard-range.log` holds only the known `3b53b9d`
+  refusal.  The numbers reproduce on the W33-4.1 commit itself:
+  `guard_names.py ae667a9..f677dd3` exit 0
+  (`build/w33/W33-4.1-close-guard.log`) and `scan_client_names.py f677dd3`
+  0 files / 0 hits (`build/w33/W33-4.1-close-scan.log`).  The erratum is
+  recorded under W33-4.1's detail.
+
+W33-CLOSE-M4 detail:
+
+- The ten Lows are queued with file:line directions in `plan-waves27-30.md`:
+  the atomic-write temp name/cleanup and the metadata lost by the rename
+  (undocumented in the header); the AppKit Task Fields live push; the "The
+  opened file was not modified" alert after a partly written save; the
+  FAT-slack save-side backstop; two weak tests; CEdl/VarMeta
+  expected-failure rot; three non-corpus SKIPs; the marker guard's silent
+  no-base skip; `.gitattributes` not pinning itself or `*.json` (the range
+  check's 13 CRLF warnings in five oracle JSONs).  R32-1 now records
+  that W33-1.5 closed it.
+
+### Name scans and the marker guard
+
+- `check_markers.py --self-test`: 19 checks, 0 failures (9 markers).
+- `check_markers.py --worktree --no-messages`: 1301 tracked files, 0 hits.
+- `check_markers.py --worktree --range main..HEAD`: 0 files; 1 commit
+  message, `964594d` (operator short first name).  **The approved replay
+  must reword that message**: CI checks out with `fetch-depth: 0` and the
+  guard scans `origin/main..HEAD`, so the marker job stays red until then.
+- `scan_client_names.py HEAD`: 0 files / 0 hits; the message scan on
+  `17f5782..HEAD`: 0.
+- `guard_names.py ae667a9..HEAD`: exit 0.  `guard_names.py 17f5782..HEAD`
+  still refuses only `3b53b9d`'s blob, the known G1 intermediate recorded
+  under G1's Found, not fixed; the replay is what clears the range.
+- `git grep -nE "client-string-[0-9a-f]{8}"`: no match.  EOL: 0 CRLF or
+  mixed among the pinned types.
+- `git diff --check` on the working tree (the five record files): exit 0.
+  `git diff --check main..HEAD`: exit 2 -- 13 "trailing whitespace" flags,
+  all at the `"file"` lines W33-4.5 shortened in five
+  `docs/analysis/oracle/*.json` files.  Those files are CRLF in `main` and
+  stay CRLF: the CR and LF counts are identical before and after (for
+  example 284/284 in `w3-o1-open.json`), and every changed line ends CR on
+  both sides.  The CR predates wave 33 and `*.json` is not pinned to LF, so
+  this is the file's line-ending convention, not whitespace wave 33 added;
+  renormalising those files is left to wave 34 (RW33-10).
+
+### Final fresh-tree gates
+
+`build/w33/W33-CLOSE-final-gates.log`: the tree is `617e836` plus the CLOSE
+record working tree (docs-only; the WAVE-33-COMPLETE commit changes no
+code), all three trees configured from scratch with
+`CORE_WARNINGS_AS_ERRORS=ON`, and the sanitizer fuzz built with MSVC
+`/fsanitize=address` on the final tree.
+
+| gate | result |
+|---|---|
+| core `ctest -E plan_recalc` | 55/55 |
+| `plan_recalc` with corpus / without | 512 / 266 |
+| engine selftest / suite | 53 checks, 0 failures / 7 pass + `constraint-mso` expected, 0 unrecorded |
+| reader with corpus / without | 1136 / 456 |
+| M2 recalc `--compare` | 332/332, 268/268, 64/64 |
+| app ctest / with `MPP_NO_CORPUS=1` | 25/25 / 25/25 |
+| app_qt ctest | 41/41 |
+| sanitizer `fuzz_reader` / `fuzz_xml` | 2000 cases each: `PASS` 20 / 10 checks, 0 failures |
+| fixtures / paths / `.mpp` property sets / provenance | 140 hashes, 174 `.mpp` / 223 paths / all clean / 8 oracles |
+| command backlog | 114 pin controls / 114 rows, 0 mismatches |
+| marker guard, name scans, EOL | clean; the range `git diff --check` reports only the pre-existing CRLF in five oracle JSONs (see above) |
+
+Earlier in CLOSE, `build/w33/W33-CLOSE-fresh-gates-8281f95.log` ran the same
+gates on the pre-record code tree; its sanitizer steps exited -1073741515
+(`STATUS_DLL_NOT_FOUND`) because the MSVC ASan runtime directory was not on
+PATH.  The final run adds that directory (the built `fuzz_reader` was
+verified separately with it before the final run).
+
+### Push and CI
+
+**Push and CI: by the coordinator after the replay.**  CLOSE neither pushed
+`wave33` nor dispatched a workflow.  The coordinator's replay of the
+unpushed range (operator-approved, brief 05:50 note) must:
+
+- replace `3b53b9d`'s intermediate blob so the pre-push `guard_names.py`
+  passes over the whole range; and
+- reword `964594d`'s message, which the marker guard (CI uses
+  `fetch-depth: 0`) reports as the one remaining hit.
+
+Then push `wave33` and dispatch `.github/workflows/ci.yml` and
+`.github/workflows/qt.yml`; `app-macos.yml` runs on the push itself.  The CI
+logs must show the `app/` ctest total on windows-msvc and ubuntu-gcc, the
+`ubuntu-asan` job and the marker check on both OSs.  This CLOSE session
+cannot dispatch from its environment; the record carries the run ids once
+they exist.
+
+### Records updated at CLOSE
+
+`docs/START-HERE.md`, `docs/handoff/INDEX.md` and `memory/coordinator.md`
+now say wave 33 is complete, carry the CLOSE gates and the reviews, and
+record the coordinator-after-replay push disposition.
+`docs/ui-command-backlog.md` was regenerated
+(`python -I app_qt/tools/command_backlog.py`); the regeneration produced no
+content change, and `scripts/check_command_backlog.py` reports 114/114 and 0
+mismatches.  After the last record edit, the working-tree checks were re-run
+on the exact CLOSE text (`build/w33/W33-CLOSE-final-recordcheck.log`): marker
+worktree 0 files, `git diff --check` 0, EOL 0, and the staged tree's
+client-name scan 0.  The CLOSE commit is docs-only, so every build and test
+number above still belongs to the `617e836` code tree.
+
+### Found, not fixed
+
+- The ten CLOSE-review Lows, queued as RW33-1..RW33-10 in
+  `plan-waves27-30.md` with their file:line directions.
+- The range `git diff --check main..HEAD` exit 2 is the five CRLF oracle
+  JSONs' pre-existing line endings (evidence above), folded into RW33-10;
+  it is not new whitespace and no file is rewritten in CLOSE.
+- The operator-owned residuals stand: Q1 (the pre-scrub public history and
+  CI artifacts, and the purge request with the 329 ids), Q3 (the unsalted
+  name hashes and the golden TSV column), Q4 (`6056f15`'s message and the
+  two local pre-push backup branches), Q5 (the A-6 Project pairs), Q6 (the
+  stale Dropbox clone).
+- R32-2 remains open (the macOS shell's filter range path acts in file
+  order); R32-1 is closed by W33-1.5.
+- Wave 33 remains fix-only: it added no writer, lifted no refusal and
+  measured no new Project pair.  `constraint-mso` stays the expected
+  failing engine case, by name.
+
+WAVE-33-COMPLETE

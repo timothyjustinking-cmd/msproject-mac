@@ -1,8 +1,9 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-10-30, wave 33 in progress on branch `wave33` (cut from
-`main` = `17f5782`).  Keep this file current at every wave close; it is the
-only file a new session must read first._
+_Updated 2026-10-30, wave 33 complete on branch `wave33` (cut from
+`main` = `17f5782`; `WAVE-33-COMPLETE` appended, not yet pushed -- the
+coordinator replays and pushes after CLOSE).  Keep this file current at every
+wave close; it is the only file a new session must read first._
 
 ## The 30-second state
 
@@ -36,8 +37,8 @@ only file a new session must read first._
   order) is **still open**.
 * **Wave 33 is the 29 October audit's fix-only work order**
   (`docs/handoff/wave33-brief.md`, from
-  `docs/handoff/assessment-2026-10-29.md` sections 7-8).  Groups G0-G3 are
-  **DONE** (record `docs/handoff/wave33-complete.md`):
+  `docs/handoff/assessment-2026-10-29.md` sections 7-8).  Groups G0-G4 and
+  CLOSE are **DONE** (record `docs/handoff/wave33-complete.md`):
   * **G0** — atomic `.mpp` saves through one helper that writes beside the
     target, re-reads and self-checks, then renames; the non-structural save
     route adopts its written file as the open document.
@@ -56,28 +57,37 @@ only file a new session must read first._
     counts are quoted, the backlog states the pin truth, the first CI ctest
     pass sets `MPP_NO_CORPUS=1`, and `qt_render_parity` is
     `qt_render_1920`.
-* **G4 (records and privacy) is this group.**  It rewrites these records, the
-  coordinator memory and INDEX; restores LF and adds the `.gitattributes` /
-  CI line-ending gate; neutralises the operator's name in
+* **G4 (records and privacy) is complete.**  It rewrote these records, the
+  coordinator memory and INDEX; restored LF and added the `.gitattributes` /
+  CI line-ending gate; neutralised the operator's name in
   `tests/data/synthetic-base.mpp` and `analysis/test_project.mpp` in place;
-  adds `scripts/check_markers.py` (tracked-file and commit-message marker
-  guard in `ci.yml`); cleans the 69 tracked text files and the phase-script
-  paths; and shares the oracle neutralisation helper.  CLOSE follows G4.
-* **Fresh-tree gates at the G3 tree** (`f6bbb96`; log
-  `build/w33/W33-G3-fresh-gates.log`): core `ctest -E plan_recalc` **55/55**;
-  `plan_recalc` **512 / 266** (with / without corpus); engine selftest 53
-  checks, suite 7 pass + `constraint-mso` expected; reader **1136 / 456**;
-  M2 **332/332**, **268/268**, **64/64**; app **25/25**; app_qt **41/41**
-  locally (**39** registered without `corpus/`); fixtures OK (**140**
-  documented hashes, **174** tracked `.mpp`), paths OK (223), oracle
-  provenance OK (8).
-* **Privacy before G4**: `synthetic-base.mpp` and `analysis/test_project.mpp`
-  carry the operator's name as Author/LastAuthor, and 69 tracked text files
-  (15 `.md`, 5 `.json`, 49 `.py`) publish the name, the company folder or the
-  Windows username; 49 `scripts/phase*.py` hard-code the old absolute root.
-  W33-4.3 and W33-4.5 remove them.  The 13 unsalted name hashes in older
-  history and `tests/data/project_a_golden.tsv` remain the operator's
-  decision (Q3).  **Run BOTH name scans and the new marker check.**
+  added `scripts/check_markers.py` (tracked-file and commit-message marker
+  guard in `ci.yml`); cleaned the tracked text and the phase-script paths;
+  and shared the oracle neutralisation helper.  **CLOSE is complete too**:
+  two independent reviews of `git diff main..wave33` (their findings and
+  fixes are in the record), the final fresh-tree gates, both name scans and
+  the marker guard, the START-HERE / INDEX / memory / backlog update, and
+  `WAVE-33-COMPLETE`.  Push and CI are the coordinator's after the approved
+  replay.
+* **Fresh-tree gates at the final code tree** (`617e836` plus the docs-only
+  CLOSE record; log `build/w33/W33-CLOSE-final-gates.log`): core
+  `ctest -E plan_recalc` **55/55**; `plan_recalc` **512 / 266** (with /
+  without corpus); engine selftest 53 checks, suite 7 pass + `constraint-mso`
+  expected; reader **1136 / 456**; M2 **332/332**, **268/268**, **64/64**;
+  app **25/25** and **25/25** with `MPP_NO_CORPUS=1`; app_qt **41/41**;
+  sanitizer `fuzz_reader` and `fuzz_xml` 2000 cases each (`PASS`, 20 and 10
+  checks, 0 failures); fixtures OK
+  (**140** documented hashes, **174** tracked `.mpp`), paths OK (223), oracle
+  provenance OK (8); backlog **114/114**, 0 mismatches.  The earlier run on
+  the pre-record tree is `build/w33/W33-CLOSE-fresh-gates-8281f95.log` (its
+  sanitizer steps lacked the MSVC ASan DLL on PATH; the final run adds it).
+* **Privacy after G4**: the two `.mpp` metadata blocks were neutralised in
+  place and the tracked text was scrubbed by W33-4.3 and W33-4.5; the marker
+  guard is tracked and runs in CI.  At CLOSE the file half is clean (0
+  files), with exactly one commit message left -- `964594d` -- which the
+  approved replay must reword.  The 13 unsalted name hashes in older history
+  and `tests/data/project_a_golden.tsv` remain the operator's decision (Q3).
+  **Run BOTH name scans and the marker check.**
 * **Push blocker carried from G1 (disposition approved)**: commit `3b53b9d`
   added the FAT-slack fixture as imported `synthetic-base` bytes, and that
   intermediate blob carries the pre-wave privacy residual; `964594d`
@@ -89,8 +99,10 @@ only file a new session must read first._
 * **Engine stays 7/8** (`constraint-mso` deliberately expected-failing;
   `mppwrite::save_plan` is test-only).
 * **Branch state**: `main` = **`17f5782`** = `origin/main`.  `wave33` is this
-  branch.  The unmerged pre-rewrite branches are local leftovers; their
-  content is on `main` under the mapped ids.
+  branch, closed with `WAVE-33-COMPLETE`; it is not yet pushed -- the
+  coordinator replays and pushes after CLOSE.  The unmerged pre-rewrite
+  branches are local leftovers; their content is on `main` under the mapped
+  ids.
 
 ## Still open
 
@@ -103,7 +115,8 @@ only file a new session must read first._
 * **The carried review queues**: R31-5..R31-12 and the wave-32 review's
   L1..L6 (test strength, the filter wording) are queued in
   `plan-waves27-30.md` and `wave32-complete.md` with directions; the four core
-  review Lows C1/C2/S1/S2 and the wave-30/29 queues stand.
+  review Lows C1/C2/S1/S2 and the wave-30/29 queues stand.  The wave-33 CLOSE
+  review's ten Lows are queued as RW33-1..RW33-10 in `plan-waves27-30.md`.
 * **The push blocker before CLOSE** (disposition approved): the intermediate
   blob added by `3b53b9d` carries the pre-wave privacy residual, so the local
   `guard_names.py` pre-push guard refuses the range even though `964594d`
@@ -123,8 +136,8 @@ only file a new session must read first._
 **Coordinator starting the next group or wave** (≈5 files):
 
 1. this file;
-2. `docs/handoff/wave33-complete.md` — the current record: G0-G3 detail,
-   per-commit and fresh-tree gates, "Found, not fixed";
+2. `docs/handoff/wave33-complete.md` — the current record: G0-CLOSE detail,
+   per-commit and fresh-tree gates, both CLOSE reviews, "Found, not fixed";
 3. `docs/handoff/wave33-brief.md` — the work order;
 4. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
 5. `docs/ui-reference-set.md` — the local captures and palettes (git-ignored);
@@ -233,12 +246,13 @@ Read docs/START-HERE.md and docs/handoff/wave33-complete.md.  Waves 23-32 are
 merged into main as 17f5782 (27 Oct 2026, after a history rewrite); every id in
 the wave 23-32 records is pre-rewrite and maps through
 docs/handoff/wave32-verification/rewrite-sha-map.txt.  Wave 33 is the 29 Oct
-audit's fix-only work order on branch wave33: G0-G3 are done (atomic save and
-save adoption; the refusal set; parser bounds, CFB v4 and ASan fuzzing; the
-app suite in CI, the save-pair mask, fixture SKIPs and honest numbers); G4
-(records and privacy) is in progress or done; CLOSE owns the fresh-tree gates
-and the wave-33 diff review, and the coordinator pushes and dispatches CI
-after CLOSE and after the approved replay.  Keep every gate in
-wave33-complete green before each commit and run BOTH name scans and
-scripts/check_markers.py.
+audit's fix-only work order on branch wave33 and is COMPLETE: G0-G4 and CLOSE
+are done (atomic save and save adoption; the refusal set; parser bounds, CFB
+v4 and ASan fuzzing; the app suite in CI, the save-pair mask, fixture SKIPs
+and honest numbers; records and privacy; the two CLOSE reviews and the final
+gates), and WAVE-33-COMPLETE is appended.  The coordinator's next step is the
+approved replay of the unpushed range, then the push and both CI dispatches;
+the replay must also reword one commit message (964594d) and replace
+3b53b9d's blob.  Keep every gate in wave33-complete green before each commit
+and run BOTH name scans and scripts/check_markers.py.
 ```

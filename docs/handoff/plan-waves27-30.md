@@ -175,7 +175,13 @@ Gates and records (four Lows):
   and exits 0 when neither `origin/main` nor `main` resolves; CI always has
   one, but a clone without either silently loses the message half.
 - RW33-10 Low: `.gitattributes` pins `*.md`, `*.py`, `*.yml`, `*.cpp` and
-  `*.h` but not itself, so an edit to it can land CRLF.
+  `*.h` but not itself, so an edit to it can land CRLF.  It also leaves
+  `*.json` unpinned: W33-4.5's changed lines in five CRLF
+  `docs/analysis/oracle/*.json` files make `git diff --check main..HEAD`
+  report 13 trailing-whitespace hits (the CR is the file's original ending;
+  the CR counts are unchanged).  Decide in wave 34 whether to renormalise
+  those files to LF or accept CRLF and stop using the range check as a
+  whitespace gate.
 
 ## After wave 30 (not planned in detail)
 
