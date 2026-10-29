@@ -5,7 +5,8 @@
 #   pwsh -ExecutionPolicy Bypass -File tools\deepseek\run-wave.ps1 -Wave 26 -Groups G0,G1,G2,G3,G4,G5,G6,CLOSE
 # Without -Groups the wave runs as one group named ALL (marker WAVE-<n>-COMPLETE).
 param(
-    [Parameter(Mandatory = $true)][int]$Wave,
+    # A string so a fix-only follow-up wave can be named "33b" (wave33b-brief.md, branch wave33b).
+    [Parameter(Mandatory = $true)][string]$Wave,
     [string[]]$Groups = @("ALL"),
     [int]$MaxIterationsPerGroup = 40
 )
