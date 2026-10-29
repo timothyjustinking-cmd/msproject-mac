@@ -50,6 +50,13 @@ MEASURED on and is not rewritten as if re-measured: if the suite compares it wit
 base pin, accept the pre-neutralisation hash as the recorded source and say so), and
 committing it as W33-4.3; then W33-4.4 onward.
 
+**Coordinator note (30 Oct 2026 05:50, CLOSE).**  Do NOT push `wave33` and do not
+dispatch CI in CLOSE: the range still holds G1's 3b53b9d blob, so the pre-push guard
+refuses it.  Tim approved a coordinator replay of the unpushed range; the coordinator
+replays, pushes, dispatches both workflows and checks the logs after CLOSE.  Do
+everything else in CLOSE, record "push and CI: by the coordinator after the replay", and
+append the marker.
+
 **Fixes where the obvious change is wrong** (from the work order; do these, not the
 tempting ones):
 
