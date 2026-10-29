@@ -1,126 +1,110 @@
-# memory — coordinator (2026-10-27, wave 32 closed on branch)
+# memory — coordinator (2026-10-30, wave 33 in progress on branch)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
-`docs/handoff/wave32-complete.md`.  History:
-`memory/archive/coordinator-through-wave20-full.md`.
+`docs/handoff/wave33-complete.md` (G0-G3 appended; G4 and CLOSE still to come).
+History: `memory/archive/coordinator-through-wave20-full.md`.
 
-## Where the branches are
+## Where the branches are (the truth)
 
-`main` = **fcb1c10** = `origin/main`.  **`wave23`** (`e1d40b8` =
-`origin/wave23`), **`wave24`** (`6dbf126`), **`wave25`** (`c012813`),
-**`wave26`** (`1299cc7` = `origin/wave26`), **`wave27`** (`bc52cb8` =
-`origin/wave27`), **`wave28`** (`21646f4` = `origin/wave28`), **`wave29`**
-(`2a7fa4b` = `origin/wave29`) and **`wave30`** (`ca9fd50` = `origin/wave30`)
-are closed and **not merged**.
+`main` = **`17f5782`** = `origin/main`.  Waves 23-32 were **merged into `main`
+on 27 October 2026 as `17f5782` after an operator-approved
+`git filter-branch` rewrite**; GitHub holds only `main` and the
+`origin/wave23`..`origin/wave32` branches were deleted.  **Every commit id
+quoted in the wave 23-32 records is a pre-rewrite id.**  Map one with
+`git show 17f5782:docs/handoff/wave32-verification/rewrite-sha-map.txt` and
+look for it in the left-hand column; the right-hand column is the current id
+(329 pairs; old wave-32 tip `92baa32` -> `d7d0088`, old final code tree
+`7727760` -> `6a4dcc2`).  The local `wave23`..`wave31` branches are
+pre-rewrite leftovers; `wave32` points at `17f5782`.  `wave33` is the active
+branch, cut from `17f5782`.
 
-**Wave 31 is closed on `wave31`, cut from `wave30` (`ca9fd50`), pushed and not
-merged**; `origin/wave31` = the CLOSE docs commit, final code tree `072773b`.
-Wave 31 commits: brief `aff4710`; G0 0.1 `33fbb3d`, 0.2 `d9d8d8d`, 0.3
-`659fd97`, 0.4 `9c3213e`, G0 record `e47ab5f`; G1 1.1 `0707d4d`, 1.2 `eb39bd4`,
-1.3 `2852bd6`, G1 record `c0b05cb`; G2 2.1 `712be75`, 2.2 `6439e70`, 2.3
-`25121ff`, 2.4 `e477012`, G2 record `1917823`; G3 3.1 `3aefddd`, 3.2 `25a45a5`,
-3.3 `af3efd4`, 3.4 `815b974`, 3.5 `d4adbb0`, 3.6 `2b00548`, 3.7 `bb0568d`, G3
-record `8a01b11`; G4 4.1 `6a8fd96`, 4.2 `fe35886`, 4.3 `4c32189`, 4.4 `f0ffb6f`,
-4.5 `830d414`, G4 record `9d27c7f`; G5 5.1 `45d1206`, G5 record `d222ef3`;
-CLOSE fixes W31-C1 `644afe0` (backlog lists disabled Fill), C2 `5fa3d5d` (usage
-captions torn down), C3 `165e497` (Open/New tear down too), C4 `113d16a`
-(backlog covers every command button, checked both ways), C5 `cb69a0b` (the
-disabled View commands named in the ribbon switch for GCC/Clang `-Wswitch`),
-C6 `c6e4314` (the Resource Sheet gate scans painted areas, not one pixel),
-C7 `072773b` (the unused `row_map_uids` helper removed for GCC/Clang
-`-Werror=unused-function`); then the CLOSE docs commit.  Every group marker
-(`WAVE-31-G0-COMPLETE` .. `WAVE-31-G5-COMPLETE`, then `WAVE-31-COMPLETE`) is in
-`wave31-complete.md`.
+## Wave 33 state (fix-only, the 29 October audit)
 
-**Wave 32 is closed on `wave32`, cut from `wave31` (`3a18e64`), pushed and not
-merged**; `origin/wave32` = the CLOSE docs commit, final code tree `7727760`.
-Wave 32 commits: brief `b16a9fa`; W32-0.1 `4834b40`, W32-0.2 `290a73a`, W32-0.3
-`5650b53`, G0 record `123ec83` and `0c0e014`; CLOSE fixes W32-C1 `17e24ef`
-(plan-waves27-30 back to LF), W32-C2 `017ef44` (backlog states the wave-32
-refusals), W32-C3 `64fa2fc` (the three texts no longer say Start is written),
-then the review fixes W32-C4 `71383a6` (the Entry column index is int; app_qt
-builds with warnings as errors), W32-C5 `786024a` (order-1 actuals test), W32-C6
-`3d0c80f` (macOS funnel refuses Start; stale Start-save texts gone), W32-C7
-`0e6e74c` (ribbon handlers clicked under the sort), W32-C8 `7727760` (the save
-check's unreachability recorded); then the CLOSE docs commit.  The markers are
-`WAVE-32-G0-COMPLETE` and `WAVE-32-COMPLETE` in `wave32-complete.md`.
+Work order `docs/handoff/wave33-brief.md`; record
+`docs/handoff/wave33-complete.md`.  **G0, G1, G2 and G3 are DONE; G4 is in
+progress; CLOSE remains.**  Current wave-33 ids (post-merge history):
 
-## Numbers (wave 32 close, fresh trees build/w32-close-fresh{,-app,-qt}, final code tree 7727760)
+* G0: `c176a0f` W33-0.1 atomic save helper; `a6cfa05` W33-0.2 non-structural
+  save adopts its target; record `ed4864b`.
+* G1: `22218de` summary delete refused; `f18b208` insert-clone refusal;
+  `3c996b0` formula SET Text/Number only; `9660453` formula CLEAR disabled;
+  `0c83489` Task Information trial copy; `95e484a` shown-table date format;
+  `3b53b9d`+`964594d`+`397eaf9` FAT-slack read-only; `6a58e05` one pending
+  formula; record `e1fa518`.
+* G2: `227105f` DIFAT bound; `d19e201` Fixed2Meta bound; `60d8f06` CFB v4
+  refused; `a069d97` fuzz + ASan job; record `4285d29`.
+* G3: `1b51802` app suite in CI + CMake-derived macOS registration;
+  `c25d7b8` save-pair mask/tail/effects; `c92100a` committed fixture missing
+  is a failure; `f6bbb96` both app_qt counts, pin truth, `MPP_NO_CORPUS`
+  first pass, `qt_render_1920`; record `ae667a9`.
+* G4 (this group): records/privacy.  The brief's `A-`..`D-` ids apply
+  (W33-4.1 C-1/C-7, W33-4.2 C-3, W33-4.3 B-2, W33-4.4 B-4/B-12, W33-4.5
+  B-3, W33-4.6 B-13).
 
-* core, app and app_qt configured with `CORE_WARNINGS_AS_ERRORS=ON` (the
-  review's H1 hole is closed); core configure/build exit 0 / exit 0; core ctest
-  `-E plan_recalc` **52/52**; plan_recalc **512** with corpus / **266** without;
-  reader **1136** with corpus / **456** without; M2 **332/332**, **268/268** and
-  **64/64**; app **25/25** and `app_edits_outline_tests` **3230 checks**;
-  app_qt **37/37**; fixtures OK (**139** documented hashes, **173** tracked
-  `.mpp`), paths OK (222), oracle provenance OK (8).  The log is
-  `build/w32/W32-CLOSE-fresh-gates.log`; the earlier runs are preserved as
-  `...-64fa2fc.log` and `...-run1.log`.
-* Engine **7/8** (`constraint-mso` deliberately expected-failing;
-  `mppwrite::save_plan` is test-only); selftest 53 checks, suite 8 recorded
-  (7 pass + 1 expected), 0 unrecorded, exit 0.
-* CI: `origin/wave32` = `7727760` pushed without force after a clean preflight
-  (`build/w32/W32-CLOSE-push-preflight-7727760.log`), then `qt.yml` run
-  **40456047971** (windows-qt, linux-qt, macos-qt) and `ci.yml` run
-  **40456051113** (windows-msvc, ubuntu-gcc) dispatched explicitly on `wave32`;
-  all five jobs `success` on `7727760`, no re-dispatch needed.  The CLOSE docs
-  commit that follows changes docs only.
-* Privacy: line scan **0 files / 0 hits** on HEAD and **0 commit messages** on
-  `wave31..HEAD`; normalised `guard_names.py` **0 hits, exit 0** on
-  `wave31..HEAD` and on the push range `HEAD --not --remotes=origin`; no
-  `client-string-<8 hex>`.  Wave 32 adds no fixture.  Residuals (the operator's
-  decision): two pre-wave fixtures (`synthetic-base.mpp`, `wave23-outline.mpp`)
-  carry the operator's name three times each, 69 tracked text files (historical
-  docs) carry it, the 13 unsalted FNV-1a name hashes remain in older wave-26
-  commits plus `tests/data/project_a_golden.tsv`, and R31-11 (one wave-31 brief
-  line) stays queued.  **Run BOTH scans.**
-* Backlog: **114 ribbon commands with 69 disabled** (45 enabled) and 51 menu
-  commands with 7 disabled.  `scripts/check_command_backlog.py` checks the
-  generated file against the pin both ways (114 rows, 0 mismatches); the six
-  wave-32 session refusals and the Start editing row carry their reasons.
+## Numbers (G3 group gates, fresh trees on f6bbb96, log build/w33/W33-G3-fresh-gates.log)
 
-## Wave 32 result (what a later session must not re-break)
+* core `ctest -E plan_recalc` **55/55**; `plan_recalc` **512** with corpus /
+  **266** without; engine selftest 53 checks, suite **7 pass +
+  `constraint-mso` expected**, 0 unrecorded; reader **1136 / 456**; M2
+  **332/332**, **268/268**, **64/64**; app **25/25**; app_qt **41/41**
+  locally / **39** registered without `corpus/`; fixtures OK (**140**
+  documented hashes, **174** tracked `.mpp`), paths OK (223), provenance OK
+  (8).  Engine stays **7/8**.
+* Wave 33 adds no writer and no Project pair: every change is a refusal, a
+  disable, a safety mechanism, a test, a CI job or a record.
 
-* **The automatic-outline cross-refusal is file-wide, both orders.**  An
-  automatic (slack-carrying) indent/outdent is refused while any percent,
-  actuals or typed-Start edit is queued on any row, and `push` refuses a
-  percent/actuals edit while an automatic outline edit is applied;
-  `save_structural_edits` repeats both (plus the Start half no `StructuralEdit`
-  sees).  The manual outline rules stay narrower.
-* **Start is read-only at every shell entry** (W32-0.2): `task_column_editable`,
-  Task Information (read-only), the Task Form (read-only + disabled), Cut of a
-  selection touching Start and Paste of a block covering Start, plus the save
-  funnel and a `push` refusal for a collected/writable start edit.  The writer
-  stays in the tree; **do not enable Start without the measured Project pair**
-  (the wave-31 Fill pair shows the writer cannot reproduce the save).
-* **A sorted or filtered display refuses range operations** (W32-0.3):
-  multi-cell Copy/Cut, multi-row Paste and Shift-click extension are disabled
-  and refused whole while `display_order_differs_from_file()`; Indent, Outdent
-  and Insert are refused while `sort_reorders_rows()`.  Single-cell copy/cut,
-  a one-row paste and single-cell edits stay and are mapped from the display row
-  to its record.
-* **No writer and no measurement were added.**  The wave is fix-only; Fill
-  stays disabled on its W31-1 measurement and the view state stays session-only.
-* **The independent review** (0 Critical / 1 High / 4 Medium / 6 Low) was
-  triaged in CLOSE: W32-C4 fixed the High (the `std::size_t` Entry column index
-  that would have failed all three qt jobs under warnings-as-errors) and closed
-  the gate hole by configuring app/app_qt with `CORE_WARNINGS_AS_ERRORS=ON`;
-  W32-C5..W32-C8 fixed the four required Mediums.  L1..L6 (test strength and
-  the filter wording) are queued in the record with directions.
-* **The G0 record has three errata** in `wave32-complete.md`: the shell passes
-  Start uids rather than naming them in the refusal; Task Information makes
-  Start read-only while the Task Form also disables it; the G0 per-commit logs
-  captured no exit lines and the G0 guard log is empty.  CLOSE logs capture
-  exits.
+## What a later session must not re-break
+
+* **Wave 32's refusals stand**: the automatic-outline cross-refusal both
+  orders, Start read-only at every shell entry, sorted/filtered range
+  operations refused.  Do not enable Start without the measured pair.
+* **Wave 33 G0**: every `.mpp` write goes through
+  `mppwrite::write_file_atomically` (write beside, re-read, self-check,
+  rename); a failure leaves the target byte-identical.  The non-structural
+  save route reloads the written file as the document, so a second Save
+  keeps the formula/date format.
+* **Wave 33 G1**: Delete Task refuses a summary row (model, writer, both
+  shells); Insert Task refuses a clone source with progress, actuals, work,
+  a task calendar, a non-ASAP constraint or a real assignment; formula SET
+  accepts only Text1..30/Number1..20 and CLEAR is disabled with decision-9
+  text; Task Information/Task Fields decide on a trial copy; table edits use
+  the shown table index; FAT-slack files are read-only at open with the
+  reason; a second pending formula is refused.
+* **Wave 33 G2**: both container parsers bound DIFAT/Fixed2Meta walks; CFB
+  v4 is refused by design (no v4 fixture to measure); fuzz targets cover
+  both parsers and the MSPDI importer; the `ubuntu-asan` job must be green at
+  CLOSE.
+* **Wave 33 G3**: the `app/` suite runs in CI on both OSs; a missing
+  committed fixture fails with its path (only `corpus/` may skip, printed
+  "corpus absent"); the save-pair mask is exactly the noisy bytes and the
+  three named 214 flag-byte signatures are expected failures by name; the
+  first CI pass uses `MPP_NO_CORPUS=1`.
+
+## Privacy and the push
+
+* At the start of G4, `tests/data/synthetic-base.mpp` and
+  `analysis/test_project.mpp` carry the operator's name as Author/LastAuthor
+  (UTF-16LE), and 69 tracked text files (15 `.md`, 5 `.json`, 49 `.py`)
+  publish the name, the company folder or the Windows username; 49
+  `scripts/phase*.py` hard-code the old absolute root.  W33-4.3 and W33-4.5
+  remove them; `scripts/check_markers.py` (W33-4.4) is the acceptance test and
+  runs in CI on both OSs.
+* **Push blocker (wave owner only)**: `3b53b9d`'s intermediate blob (the
+  first FAT-slack fixture, imported `synthetic-base` bytes) carries the
+  pre-wave residual, so the local `guard_names.py` pre-push guard refuses the
+  range even though `964594d` cleaned the tip.  History rewriting is
+  forbidden; the owner must authorise a disposition before CLOSE pushes.
+* Residuals left for the operator: the 13 unsalted name hashes in older
+  history plus `tests/data/project_a_golden.tsv` (Q3), `6056f15`'s commit
+  message (Q4), and the pre-scrub public history (Q1).  Run BOTH name scans
+  and the marker check.
 
 ## Next
 
-Wave 32 closes the wave-31 verifier's High findings.  The operator's next step
-is to **verify and merge the unmerged branches** (wave23 through wave32), then
-choose the next scope from `wave32-complete.md` "Found, not fixed" and
-`wave31-complete.md` "What remains after this run": Team Planner, Network
-Diagram, Calendar and Report views, the `constraint-mso` engine case, macOS
-launch/notarisation, the hashed task names, and the queued review Lows
-(R31-5..R31-12, the four core Lows C1/C2/S1/S2, and the carried wave-30/29
-queues).  Keep the CLOSE gates green before every commit and run BOTH name
-scans.
+G4 completes with its marker line; CLOSE then runs the fresh-tree gates on
+the final commit (all three trees with `CORE_WARNINGS_AS_ERRORS=ON`, the
+sanitizer build if local tooling allows), both name scans plus
+`check_markers.py`, a review pass over `git diff 17f5782..wave33`, the push
+and the two CI dispatches, and the final `WAVE-33-COMPLETE` marker.  The
+operator's step after that is to verify and merge `wave33`, then choose wave
+34 (the parity/shared-writers brief exists).

@@ -4,58 +4,76 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Now (27 October 2026)
+## Now (30 October 2026)
 
 | file | what |
 |---|---|
 | `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
-| `assessment-2026-10-24.md` | where the port stands after wave 26, and the workflow review |
+| `assessment-2026-10-29.md` | **the 29 October progress assessment and adversarial audit**: sections 7-8 are wave 33's work order |
+| `wave33-brief.md` | **the wave-33 work order**: fix-only - G0 data safety (Critical), G1 refusals and disables (High/Medium), G2 robustness, G3 gates and CI, G4 records and privacy |
+| `wave33-complete.md` | **the wave-33 gate so far**: G0-G3 DONE with per-commit and fresh-tree gates, "Found, not fixed"; G4 and CLOSE still to append |
+| `assessment-2026-10-24.md` | where the port stood after wave 26, and the workflow review |
 | `plan-waves27-30.md` | the plan of the 27-31 run (wave 31 was its last wave) |
-| `wave32-complete.md` | **the wave-32 gate** (below), the current record |
 
-## Wave 32 (closed on branch `wave32` - pushed; CI on the final tree; not merged)
+**Merge state (read this before trusting any wave 23-32 id):** waves 23-32 were
+merged into `main` on 27 October 2026 as `17f5782` after an operator-approved
+`git filter-branch` rewrite; GitHub holds only `main` and the old wave branches
+were deleted.  Every commit id quoted in the wave 23-32 records below is a
+PRE-rewrite id; `wave32-verification/rewrite-sha-map.txt` maps the 329 old ids
+to the current ones (left = old, right = new; look one up with
+`git show 17f5782:docs/handoff/wave32-verification/rewrite-sha-map.txt | grep <old-id>`).
+
+## Wave 33 (in progress on branch `wave33`, cut from `17f5782`)
+
+| file | what |
+|---|---|
+| `wave33-brief.md` | **the work order** (also listed under Now): the fix-only wave from the 29 October audit |
+| `wave33-complete.md` | **the wave-33 gate**: G0 atomic save + save adoption, G1 the refusal set, G2 parser bounds + fuzzing + ASan, G3 the `app/` suite in CI and the honest gates, G4 records and privacy (appended as it lands) |
+
+## Wave 32 (merged into `main` on 27 Oct 2026 as `17f5782`, after a history rewrite; ids pre-rewrite)
 
 | file | what |
 |---|---|
 | `wave32-complete.md` | **the wave-32 gate**: G0 (the wave-31 verifier's three Highs, refuse-first) + CLOSE, the eight CLOSE fixes (three stale records; the independent review's High and four required Mediums), the errata, the fresh-tree gates, both privacy scans, the independent review of `wave31..wave32`, the push and the CI dispatch, "Found, not fixed" |
 | `wave32-brief.md` | **the work order**: fix-only - R31-1 the queued-edit bypass, R31-2 the Start writer, R31-3 sorted/filtered range operations (R31-4 folded in) |
+| `wave32-verification/gates.md` | the verifier's fresh-tree gates and the merge record; `review.md` holds R32-1..R32-7; `rewrite-sha-map.txt` maps the pre-rewrite ids |
 
-## Wave 31 (closed on branch `wave31` - pushed; CI on the final tree; not merged)
+## Wave 31 (merged into `main` on 27 Oct 2026 as `17f5782`; ids pre-rewrite)
 
 | file | what |
 |---|---|
 | `wave31-complete.md` | **the wave-31 gate**: G0..G5 + CLOSE, every item DONE, the fresh-tree gates on the final code tree, both privacy scans, the independent review and its findings, the push and the three CI dispatches (the third green on `072773b`), the re-scored 16 decisions, "Found, not fixed" and what the end of the run leaves |
 | `wave31-brief.md` | **the work order**: G0 the wave-30 review's four Highs, G1 the View tab's data commands, G2 zoom and window commands, G3 the Resource Sheet at Gantt fidelity, G4 Task/Resource Usage at Gantt fidelity, G5 the views left out |
 
-## Wave 30 (closed on branch `wave30` - pushed; CI on the final code tree; not merged)
+## Wave 30 (merged into `main` on 27 Oct 2026 as `17f5782`; ids pre-rewrite)
 
 | file | what |
 |---|---|
 | `wave30-complete.md` | **the wave-30 gate**: G0..G3 + CLOSE, every item DONE or DEFERRED with a committed Project pair, the fresh-tree gates on the final code tree, both privacy scans, the independent review (0 Critical / 4 High / 7 Medium / 10 Low - all Highs fixed) and its errata, the push and the two CI dispatches, the re-scored 16 decisions, "Found, not fixed" |
 | `wave30-brief.md` | **the work order**: G0 the wave-29 review's save-path findings, G1 the Task tab, G2 the Resource tab, G3 the Project tab, the measured-shape rule for every enabled edit |
 
-## Wave 29 (closed on branch `wave29` - pushed; CI on the final code tree; not merged)
+## Wave 29 (merged into `main` on 27 Oct 2026 as `17f5782`; ids pre-rewrite)
 
 | file | what |
 |---|---|
 | `wave29-complete.md` | **the wave-29 gate**: G0..G5 + CLOSE, every item DONE, the fresh-tree gates on `7e14aaa`, both privacy scans, the independent review (0 Critical / 2 High / 2 Medium / 2 Low, plus the CI findings C7/C9/C10 and the audit's C8 - all Highs fixed) and its errata, the push and the two CI dispatches, the re-scored 16 decisions, "Found, not fixed" |
 | `wave29-brief.md` | **the work order**: rule 1 for wave 28's commands (G0 from the wave-28 review), the PROJECT_A gaps, the format dialogs, Page Setup, Visual Reports / Compare Projects, the chrome finish |
 
-## Wave 28 (closed on branch `wave28` - pushed after the operator approved the `076438f` rewrite; not merged)
+## Wave 28 (merged into `main` on 27 Oct 2026 as `17f5782`; ids pre-rewrite)
 
 | file | what |
 |---|---|
 | `wave28-complete.md` | **the wave-28 gate**: G0..G5 + CLOSE, G0..G4 DONE and G5 DEFERRED with its measurement, the fresh-tree gates on `7a69a40`, both privacy scans and the history residuals, the independent review (0 Critical, 3 High - first in wave 29) and its errata, the push refusal and its resolution, the re-scored 16 decisions, "Found, not fixed" |
 | `wave28-brief.md` | **the work order**: the editing core - the actuals writer, outline editing, the new-task mode, the editable Task Form, split |
 
-## Wave 27 (closed on branch `wave27` - pushed; CI green on all three OSs; not merged)
+## Wave 27 (merged into `main` on 27 Oct 2026 as `17f5782`; ids pre-rewrite)
 
 | file | what |
 |---|---|
 | `wave27-complete.md` | **the wave-27 gate**: G0..G3 + CLOSE, every item DONE, the fresh-tree gates on `9323db2`, the two privacy scans and the history residuals, the independent review, the CI runs, the re-scored 16 decisions, "Found, not fixed" |
 | `wave27-brief.md` | **the work order**: publication lifted; the two wave-26 Highs (save safety), CI on all three OSs, the decoding evidence, six queued fixes |
 
-## Wave 26 (closed on branch `wave26` - verified, not merged; pushed 24 Oct for CI)
+## Wave 26 (merged into `main` on 27 Oct 2026 as `17f5782`; ids pre-rewrite)
 
 | file | what |
 |---|---|
@@ -65,7 +83,7 @@ kept for investigation; each is the record of its stream at that wave.
 | `wave25-verification/gates.md` | the verifier's fresh-tree gate run on wave 25's tip |
 | `wave25-verification/review.md` | the independent review of `wave24..wave25` (G0 answers its one High) |
 
-## Wave 25 (closed on branch `wave25` — not merged, not pushed; hold)
+## Wave 25 (merged into `main` on 27 Oct 2026 as `17f5782`; ids pre-rewrite)
 
 | file | what |
 |---|---|
@@ -74,7 +92,7 @@ kept for investigation; each is the record of its stream at that wave.
 | `wave24-verification/gates.md` | the verifier's fresh-tree gate run on wave 24's tip |
 | `wave24-verification/review.md` | the independent review of `wave23..wave24`: S1..S14 |
 
-## Wave 24 (closed on branch `wave24` — verified NOT ready to merge)
+## Wave 24 (merged into `main` on 27 Oct 2026 as `17f5782`; ids pre-rewrite)
 
 | file | what |
 |---|---|
@@ -83,7 +101,7 @@ kept for investigation; each is the record of its stream at that wave.
 | `wave23-verification/gates.md` | the verifier's fresh-tree gate run on wave 23's tip |
 | `wave23-verification/review.md` | the independent review of `main..wave23`: R1..R18, most severe first |
 
-## Wave 23 (closed on branch `wave23`, not merged; verified NOT ready to merge)
+## Wave 23 (merged into `main` on 27 Oct 2026 as `17f5782`; ids pre-rewrite)
 
 | file | what |
 |---|---|
