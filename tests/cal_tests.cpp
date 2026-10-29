@@ -98,12 +98,18 @@ std::string environment_value(char const* name) {
 
 bool corpus_hidden() { return !environment_value("CAL_NO_CORPUS").empty(); }
 
-bool file_exists(std::string const& path) {
+// A corpus-gated case: the file's documented forced-absent switch first (a set
+// CAL_NO_CORPUS behaves exactly as when corpus/ is absent and prints the same
+// SKIP), then the filesystem.  W33-3.3 converted the call sites straight to
+// corpus_gated() and left this check uncalled; the CI-2 sweep found
+// the orphan, and deleting it would drop the convention the comment above
+// documents.
+bool corpus_gated(std::string const& path) {
     if (corpus_hidden()) {
+        fixture::corpus_absent(path, "CAL_NO_CORPUS is set");
         return false;
     }
-    std::ifstream input(path, std::ios::binary);
-    return input.good();
+    return fixture::corpus_present(path);
 }
 
 // --- synthetic byte blocks --------------------------------------------------
@@ -1826,7 +1832,7 @@ void test_mpp12_task_table(sched_test::TestContext& ctx, std::string const& path
 // Project 2007 file and a Project 2010+ file.
 void test_mpp12_agreement(sched_test::TestContext& ctx, std::string const& mpp12_path,
                           std::string const& mpp14_path) {
-    if (!fixture::corpus_present(mpp14_path)) {
+    if (!corpus_gated(mpp14_path)) {
         return;
     }
     const cal::CalendarTable table12 = cal::decode_file(mpp12_path);
@@ -2177,33 +2183,33 @@ int main() {
     const std::string mpp12_task_path = join_path(probe_dir, "mpp12task.mpp");
     const std::string project_a_path = join_path(corpus_dir, "project_a.mpp");
 
-    if (fixture::corpus_present(base_path)) {
+    if (corpus_gated(base_path)) {
         test_standard_probe(ctx, base_path);
     }
-    if (fixture::corpus_present(w3o1_path)) {
+    if (corpus_gated(w3o1_path)) {
         const cal::CalendarTable table = cal::decode_file(w3o1_path);
         ctx.equal(table.base_calendar_count(), 1u, "w3-o1: one base calendar");
         ctx.equal(table.exception_count(), 0u, "w3-o1: no dated exceptions");
         ctx.equal(table.calendars.size(), 2u, "w3-o1: two rows (1 base + 1 resource calendar)");
     }
-    if (fixture::corpus_present(holiday_path)) {
+    if (corpus_gated(holiday_path)) {
         test_holiday_probe(ctx, holiday_path);
     }
-    if (fixture::corpus_present(w12_path)) {
+    if (corpus_gated(w12_path)) {
         test_w12_exceptions(ctx, w12_path);
     }
-    if (fixture::corpus_present(w12_monthpos_path)) {
+    if (corpus_gated(w12_monthpos_path)) {
         test_w12_monthpos(ctx, w12_monthpos_path);
     }
-    if (fixture::corpus_present(mpp12_calendar_path)) {
+    if (corpus_gated(mpp12_calendar_path)) {
         test_mpp12_identity(ctx, mpp12_calendar_path);
         test_mpp12_agreement(ctx, mpp12_calendar_path, base_path);
         test_mpp12_schedules(ctx, mpp12_calendar_path);
     }
-    if (fixture::corpus_present(mpp12_task_path)) {
+    if (corpus_gated(mpp12_task_path)) {
         test_mpp12_task_table(ctx, mpp12_task_path);
     }
-    if (fixture::corpus_present(project_a_path)) {
+    if (corpus_gated(project_a_path)) {
         test_project_a_counts(ctx, project_a_path);
     }
 

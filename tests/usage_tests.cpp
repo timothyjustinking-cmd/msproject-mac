@@ -94,11 +94,6 @@ std::string environment_value(const char* name) {
 
 bool corpus_hidden() { return !environment_value("MPP_NO_CORPUS").empty(); }
 
-bool file_exists(const std::string& path) {
-    std::error_code error;
-    return std::filesystem::exists(path, error);
-}
-
 AssignmentInput assignment(std::uint32_t uid, std::uint32_t task_uid,
                            std::uint32_t resource_uid, date32 start, date32 finish,
                            std::int64_t work_minutes) {

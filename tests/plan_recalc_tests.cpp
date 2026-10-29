@@ -109,11 +109,6 @@ std::string environment_value(const char* name) {
 
 bool corpus_hidden() { return !environment_value("MPP_NO_CORPUS").empty(); }
 
-bool file_exists(const std::string& path) {
-    std::error_code error;
-    return std::filesystem::exists(path, error);
-}
-
 std::string describe(const plan::PlanResult& result) {
     return "error=" + std::string(sched::to_string(result.error)) + " " + result.message;
 }

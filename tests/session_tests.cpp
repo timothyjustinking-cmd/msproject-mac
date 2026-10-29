@@ -76,14 +76,6 @@ std::string environment_value(char const* name) {
 
 bool corpus_hidden() { return !environment_value("MPP_NO_CORPUS").empty(); }
 
-bool file_exists(std::string const& path) {
-    if (corpus_hidden()) {
-        return false;
-    }
-    std::ifstream input(path, std::ios::binary);
-    return input.good();
-}
-
 // ---------------------------------------------------------------------------
 // Small independent helpers (deliberately not the session's own conversions)
 // ---------------------------------------------------------------------------
@@ -578,7 +570,9 @@ int main() {
         test_options(context);
         test_error_paths(context);
 
-        if (fixture::corpus_present(SESSION_PROJECT_A_PATH)) {
+        if (corpus_hidden()) {
+            fixture::corpus_absent(SESSION_PROJECT_A_PATH, "MPP_NO_CORPUS is set");
+        } else if (fixture::corpus_present(SESSION_PROJECT_A_PATH)) {
             test_corpus(context, SESSION_PROJECT_A_PATH);
         }
     } catch (const std::exception& error) {

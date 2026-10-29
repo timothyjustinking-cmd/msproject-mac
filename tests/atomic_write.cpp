@@ -47,8 +47,6 @@
 
 namespace {
 
-std::string join(std::string const& a, std::string const& b) { return a + "/" + b; }
-
 long test_pid() {
 #if defined(_WIN32)
     return static_cast<long>(_getpid());
