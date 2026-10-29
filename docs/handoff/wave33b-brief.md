@@ -54,7 +54,25 @@ fixture or a record.  LF line endings everywhere.
   coordinator adds the failing job, step and log excerpt here before launch (one item per
   failure).  If the section below is empty, CI was green and this item is "none".
 
-_CI failures from the `wave33` run (coordinator fills in before launch):_ none recorded.
+_CI failures from the `wave33` run (coordinator, 30 Oct 2026; runs `ci` 40947728764,
+`qt-shell` 40947723497 green on all three OSs, `app-macos` 40947715383).  All three red
+jobs stop at the FIRST compile error, so more may sit behind these: after fixing them,
+sweep every file wave 33 added or changed under `tests/`, `core/`, `app/` and `app_qt/`
+(`git diff --name-only 17f5782..wave33`) for the same two classes before committing._
+
+- **CI-1  (ubuntu-gcc, macos-appkit)  `tests/fixture_guard.h:9`: `"/*" within comment`
+  (`-Werror=comment` / `-Wcomment`).**  The block comment contains the glob `tests/*.tsv`
+  and `analysis/*.tsv`; GCC and Clang read `/*` inside a block comment as an error under
+  warnings-as-errors.  MSVC does not warn, which is why the local gates passed.  Fix:
+  reword the paths (for example "tests/ TSV files") or turn the comment into `//` lines.
+  Sweep: `git grep -nE "/\*[^/]*/\*" -- '*.h' '*.hpp' '*.cpp' '*.mm'` and any `*/` glob in
+  a block comment.
+- **CI-2  (ubuntu-asan)  `tests/atomic_write.cpp:50`: unused function `join`
+  (`-Werror,-Wunused-function`).**  Remove it (or use it).  Sweep the anonymous-namespace
+  and `static` helpers in every test file wave 33 added for others nothing calls.
+- After CI-1 and CI-2 the asan job reaches its tests for the first time: any sanitizer
+  report it then raises is a G0 item of this wave (the coordinator re-dispatches and adds
+  it here).
 
 ### G1 - the review's Mediums
 
