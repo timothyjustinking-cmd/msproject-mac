@@ -67,6 +67,22 @@ addition:
    pairs, the Ghidra model already on disk, and COM; a dynamic trace, if ever needed, is
    the coordinator's and runs on an isolated VM with free Microsoft tooling.
 
+**Coordinator note (30 Oct 2026, launch).**  Waves 33 and 33b are merged: `main` =
+`4fd9b90`, and `wave34` is cut from it (not from `wave33`), so every "`wave33..wave34`" in
+this brief means `main..wave34`.  Wave 33's helpers are in place: `mppwrite::write_file_atomically`,
+the `effects` assertion in `tests/save_pair_noise.h`, `scripts/oracle_privacy.py`'s
+`neutralise()`, `scripts/check_markers.py`, and the `ubuntu-asan` CI job (clang, ASan +
+UBSan; it rejects unused functions and variables, `/*` inside block comments and pointer
+compares of strings, which MSVC accepts).  The operator has not answered the decisions in
+section 3, so the defaults apply: sequential; enablements in the listed order; no dynamic
+trace; B-5 is NOT dropped before Fri 6 Nov 2026; stop after G4.  The coordinator runs G0
+to G4 first and starts G5, G6 and CLOSE only if the wave has run under 12 hours, otherwise
+CLOSE only.  **CLOSE does not push or dispatch CI**: record "push and CI: by the
+coordinator" and append the marker; the coordinator pushes, dispatches and merges.  The
+neutral root `C:\w34\` exists.  Before every fixture commit run
+`python -I build/audit-w22/guard_names.py main..HEAD` and
+`python scripts/check_markers.py --range main..HEAD`.
+
 ## 2. Groups
 
 ### G0 - the decoding lane: assess what Project actually does (coordinator-led; DeepSeek writes the notes and scripts)
