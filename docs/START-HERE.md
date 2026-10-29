@@ -1,5 +1,10 @@
 # START HERE — MS Project → native port
 
+> **Interim note, 29 Oct 2026 (audit C-1):** the branch state below is STALE.  Waves 23-32
+> were merged into `main` on 27 Oct 2026 as `17f5782` after a history rewrite; GitHub
+> holds only `main`.  Wave 33 works on branch `wave33` cut from it.  Trust `git` and
+> `docs/handoff/assessment-2026-10-29.md` until wave 33 G4 (W33-4.1) rewrites this file.
+
 _Updated 2026-10-27, wave 32 closed on branch `wave32` (a short fix-only wave
 that closes the wave-31 verifier's three High findings; pushed; CI recorded in
 the record's Push and CI section).  Keep this file current at every wave close;
