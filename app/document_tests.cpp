@@ -1368,7 +1368,7 @@ void test_cascade_with_document_edits_in_one_write() {
     const std::size_t source_bytes = bytes_on_disk(source);
     const std::filesystem::path prepped = out_path("app-cascade-prepped.mpp");
     const std::filesystem::path target = out_path("app-cascade-one-write.mpp");
-    const std::filesystem::path control = out_path("app-cascade-no-value-control.mpp");
+    const std::filesystem::path clear_target = out_path("app-cascade-clear-refused.mpp");
     const std::filesystem::path with_start = out_path("app-cascade-one-write-start.mpp");
     const std::filesystem::path via_document = out_path("app-cascade-via-document.mpp");
     const std::filesystem::path via_expected = out_path("app-cascade-via-expected.mpp");
@@ -1376,9 +1376,10 @@ void test_cascade_with_document_edits_in_one_write() {
     fixture::require_committed(source);
 
     // A source file that already stores a FORMULA (and no custom-field value), so
-    // the hook-only clear below has something to remove and the flag decision is
-    // real.  (The clear reaches the hook only as a hand-built request; Document
-    // and both shells cannot queue one -- W33-1.4.)
+    // the one-write SET below REPLACES a stored formula rather than adding the
+    // first one, and so the refused CLEAR would have had something to remove if
+    // the hook had let it run.  (Document and both shells cannot queue a clear;
+    // only a hand-built request reaches the hook -- W33-1.4, W33b-1.1.)
     {
         app::Document setup(source.string());
         check(setup.apply_custom_formula(0x0b400036u, "[Name]", nullptr),
@@ -1404,8 +1405,45 @@ void test_cascade_with_document_edits_in_one_write() {
     app::ViewStateEdits view;
     view.set_date_format = true;
     view.date_format = 0x05;
+
+    // W33b-1.1 (R33-2, Medium): a hand-built CLEAR is refused by the save hook
+    // with decision 9's reason, exactly as an unmeasured SET is (W33-1.3).  The
+    // 0x02401392 flag's clear form is unmeasured, so the whole save fails before
+    // the final write: a pre-existing target keeps its bytes and the source is
+    // untouched.
+    app::CustomFormulaEdit clear_formula;
+    clear_formula.operation = app::CustomFormulaEdit::Operation::clear;
+    const app::StructuralDocumentEdits clear_request = document_edit_request(view, clear_formula);
+    check(clear_request.any(), "the clear request carries pending document edits");
+    std::error_code clear_error;
+    std::filesystem::copy_file(prepped, clear_target,
+                               std::filesystem::copy_options::overwrite_existing, clear_error);
+    const std::size_t clear_target_bytes = bytes_on_disk(clear_target);
+    const app::StructuralSaveResult refused_clear = app::save_structural_edits(
+        edits, {}, prepped.string(), clear_target.string(), false, clear_request);
+    print_cascade("one-write-clear-refused", refused_clear);
+    check(!refused_clear.ok, "a formula clear refuses the one-write cascade");
+    check(refused_clear.error.find("not implemented in this port") != std::string::npos,
+          "the clear refusal is decision 9's reason");
+    check(refused_clear.error.find("0x02401392") != std::string::npos,
+          "the clear refusal names the unmeasured flag");
+    check(!refused_clear.document_edits_written,
+          "the refused clear reports no document-edit write");
+    check(!refused_clear.document_edits.formula_written,
+          "the refused clear writes no formula stream");
+    check_size(bytes_on_disk(clear_target), clear_target_bytes,
+               "the pre-existing target is byte-identical after the clear refusal");
+    check(file_bytes(clear_target) == file_bytes(prepped),
+          "the target still holds the prepared source's bytes");
+    std::filesystem::remove(clear_target, clear_error);
+
+    // The reachable formula operation still rides the same one write: a Text2
+    // SET replaces the stored formula, and the structural, field, formula and
+    // view-state edits land in ONE container save.
     app::CustomFormulaEdit formula;
-    formula.operation = app::CustomFormulaEdit::Operation::clear;
+    formula.operation = app::CustomFormulaEdit::Operation::set;
+    formula.field_id = 0x0b400036u;  // Text2
+    formula.formula = "[Duration]/240";
     app::StructuralDocumentEdits request = document_edit_request(view, formula);
     check(request.any(), "the one-write request carries pending document edits");
 
@@ -1421,20 +1459,13 @@ void test_cascade_with_document_edits_in_one_write() {
     check(outcome.document_edits_requested, "the save reports document edits were requested");
     check(outcome.document_edits_written, "the save reports the document-edit hook ran");
     check(outcome.document_edits.view_state_written, "the view state was written");
-    check(outcome.document_edits.formula_written, "the formula clear was written");
-    check(outcome.document_edits.custom_field_flag_restored,
-          "the 0x02401392 decision saw the value written in the SAME save");
+    check(outcome.document_edits.formula_written, "the formula set was written");
+    check(!outcome.document_edits.custom_field_flag_restored,
+          "a SET needs no flag restoration");
     check(outcome.api.find("apply_document_edits") != std::string::npos,
           "the outcome names apply_document_edits");
     check(outcome.api.find("CfbDocument::save") != std::string::npos,
           "the only target write was the explicit container save");
-    bool flag_warning = false;
-    for (const std::string& warning : outcome.warnings) {
-        if (warning.find("0x02401392") != std::string::npos) {
-            flag_warning = true;
-        }
-    }
-    check(flag_warning, "a warning explains the flag was kept at 1");
     check(!std::filesystem::exists(target.string() + ".w51-structural-tmp"),
           "the one-write save left no intermediate file");
     check_size(bytes_on_disk(prepped), prepped_bytes, "the prepared source is untouched");
@@ -1462,11 +1493,18 @@ void test_cascade_with_document_edits_in_one_write() {
     msproject::props::ParseError parse_error;
     check(msproject::props::parse_props(props, parsed, &parse_error),
           "the one-write file's 114/Props parses");
-    check_size(msproject::props::extract_formulas(parsed).size(), 0,
-               "the formula clear landed in the same write");
+    const std::vector<msproject::props::FormulaBlock> formulas =
+        msproject::props::extract_formulas(parsed);
+    check_size(formulas.size(), 1, "the SET formula landed in the same write");
+    if (!formulas.empty()) {
+        check_size(formulas[0].field_id, 0x0b400036u, "the one-write formula is on Text2");
+        check(msproject::props::formula_with_field_ids(formulas[0].formula).find("0x0b400507") !=
+                  std::string::npos,
+              "the one-write formula is the measured [Duration]/240");
+    }
     std::uint16_t flag = 0;
     check(props_flag(props, flag), "the one-write file has the flag record");
-    check_size(flag, 1, "the flag is 1 because a value was written in the same save");
+    check_size(flag, 1, "the SET leaves the custom-field flag at 1");
 
     const ParsedCTable table = parse_ctable_at(target);
     check(table.ok, ("the one-write CTable parses: " + table.error).c_str());
@@ -1478,30 +1516,10 @@ void test_cascade_with_document_edits_in_one_write() {
               stream_bytes(target, "214/CTable/Var2Data"),
           "the view-state edit changed the table state");
 
-    // The control: the same two document edits with NO field value written. The
-    // flag then has nothing to protect, so the clear leaves it 0 -- which proves
-    // the 1 above came from the value the field writer had just written, i.e. that
-    // the hook runs AFTER the field-value writers.
-    app::StructuralEdits control_edits;
-    check(control_edits.push(insert_edit("Hook Task", control_edits.next_placeholder_uid(plan))),
-          "the control insert is queued");
-    const app::StructuralSaveResult control_outcome = app::save_structural_edits(
-        control_edits, {}, prepped.string(), control.string(), false,
-        document_edit_request(view, formula));
-    print_cascade("no-value-control", control_outcome);
-    check(control_outcome.ok, "the no-value control saves");
-    check(!control_outcome.document_edits.custom_field_flag_restored,
-          "without a value in the same save the flag is not kept at 1");
-    std::uint16_t control_flag = 1;
-    check(props_flag(stream_bytes(control, "114/Props"), control_flag),
-          "the control file has the flag record");
-    check_size(control_flag, 0, "the control file's flag is 0");
-
     // The Document-level wiring: `Document::save_structural()` is the shell's call
-    // shape for exactly this save, so it must be the same one-write path.  The
-    // hook-only legs above use the hand-built clear; W33-1.4 (A-4) disabled the
-    // clear on Document, so this leg queues the still measured SET and compares
-    // with the free-function call carrying the same edit.
+    // shape for exactly this save, so it must be the same one-write path.  This
+    // leg queues the measured SET through Document and compares with the
+    // free-function call carrying the same edit.
     {
         app::CustomFormulaEdit set_formula;
         set_formula.operation = app::CustomFormulaEdit::Operation::set;

@@ -63,6 +63,15 @@ std::string view_state_date_format_refusal(std::uint32_t table_index) {
            "write is measured against Project";
 }
 
+// W33b-1.1 (R33-2, Medium): the decision-9 reason a formula CLEAR is refused.
+// Shared by the queue (`Document::clear_custom_formula`) and the save hook, so a
+// hand-built request reports the same words the shells show.
+std::string custom_formula_clear_refusal() {
+    return "clearing formulas is not implemented in this port: the 0x02401392 "
+           "custom-field-data flag's meaning is unmeasured, so the empty formula "
+           "table is not written";
+}
+
 namespace {
 
 using core::view::Value;
@@ -240,6 +249,19 @@ std::vector<StartEdit> writable_start_edits(const std::vector<StartEdit>& edits,
 void apply_formula_edit(mppwrite::CfbDocument& document, const CustomFormulaEdit& edit,
                         DocumentEditOutcome& outcome) {
     if (!edit.any()) {
+        return;
+    }
+    // W33b-1.1 (R33-2, Medium): W33-1.4 disabled the clear on Document and in
+    // both shells, but a hand-built request still reached the unmeasured writer
+    // below (`clear_custom_field_formula` writes the 0x02401392 flag to 0, and
+    // what that means is unmeasured).  Refuse it here exactly as W33-1.3's
+    // backstop refuses an unmeasured SET, before the stream is read: the
+    // container is untouched and the caller must not save.  The measured-clear
+    // implementation is kept beneath this refusal so a future Project pair can
+    // lift it without reconstructing the flag decision.
+    if (edit.operation == CustomFormulaEdit::Operation::clear) {
+        outcome.ok = false;
+        outcome.error = "formulas not cleared: " + custom_formula_clear_refusal();
         return;
     }
     if (!document.has_stream(kPropsStream)) {
@@ -611,10 +633,10 @@ bool Document::clear_custom_formula(std::string* error) {
     // "custom-field data in use" flag to 0, and what Project means by 0 is
     // unmeasured.  The measured write is SET's unconditional 1; until a Project
     // pair measures a clear, the operation is disabled with decision 9's text.
+    // W33b-1.1 (R33-2, Medium): the save hook refuses the same operation, so a
+    // hand-built CustomFormulaEdit cannot reach the clear writer either.
     if (error != nullptr) {
-        *error = "clearing formulas is not implemented in this port: the 0x02401392 "
-                 "custom-field-data flag's meaning is unmeasured, so the empty formula "
-                 "table is not written";
+        *error = custom_formula_clear_refusal();
     }
     return false;
 }

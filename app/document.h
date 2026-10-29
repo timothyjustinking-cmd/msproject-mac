@@ -195,8 +195,8 @@ struct ViewStateEdits {
 // One `114/Props` formula request.  `set` stores/replaces the formula of one
 // Task custom field; `clear` removes the whole formula table (core/props has no
 // per-field clear; the measured empty form is one 8-byte record).  W33-1.4
-// (A-4) disabled `clear` on Document and in both shells -- only a hand-built
-// request reaches the save hook -- because the 0x02401392 flag it writes is
+// (A-4) disabled `clear` on Document and in both shells, and W33b-1.1 (R33-2)
+// refuses it in the save hook too, because the 0x02401392 flag it writes is
 // unmeasured.
 struct CustomFormulaEdit {
     enum class Operation { none, set, clear };
@@ -220,6 +220,17 @@ struct CustomFormulaEdit {
 // field's own name, the decision-9 text ("not implemented in this port") and
 // the two measured families.
 [[nodiscard]] std::string custom_formula_set_refusal(std::uint32_t field_id);
+
+// W33b-1.1 (R33-2, Medium): the decision-9 reason every formula CLEAR is
+// refused with.  `Document::clear_custom_formula` and the save hook's
+// `apply_formula_edit` both report it, so even a hand-built
+// `CustomFormulaEdit` cannot reach the unmeasured `clear_custom_field_formula`
+// writer:
+//
+//   "clearing formulas is not implemented in this port: the 0x02401392
+//    custom-field-data flag's meaning is unmeasured, so the empty formula
+//    table is not written"
+[[nodiscard]] std::string custom_formula_clear_refusal();
 
 // W33b-0.1 (R33-1, High): a `214/CTable` date-format write was measured against
 // Project on the FIRST table only (the col -> date pair in tests/viewstate_tests.cpp
@@ -306,7 +317,9 @@ class Document {
     // "custom-field data in use" flag it writes (0) has no measured meaning, so
     // the port will not write the empty formula table.  Reports false with the
     // decision-9 reason ("not implemented in this port"), queues nothing, and
-    // leaves any queued SET alone.
+    // leaves any queued SET alone.  W33b-1.1 (R33-2): the save hook refuses the
+    // same operation (`custom_formula_clear_refusal`), so a hand-built request
+    // cannot reach the writer either.
     [[nodiscard]] bool clear_custom_formula(std::string* error = nullptr);
 
     void discard_custom_formula();
