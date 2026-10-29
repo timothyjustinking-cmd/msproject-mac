@@ -603,3 +603,187 @@ The run started 2026-10-29 23:45 and finished 2026-10-30 00:13.
   dispatch belong to the CLOSE section (wave-33-brief section 2).
 
 WAVE-33-G2-COMPLETE
+
+## G3 - gates and CI (High and Medium)
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W33-3.1 | C-2 (High): the `app/` suite never ran on any CI job; `app-macos.yml` named 15 of its 25 tests | **DONE** | commit `1b51802`; gates `build/w33/W33-3.1-*.log` |
+| W33-3.2 | C-5 (Medium): the save-pair mask hid effects and the appended tail was not compared | **DONE** | commit `c25d7b8`; gates `build/w33/W33-3.2-*.log` |
+| W33-3.3 | C-6 (Medium): a missing committed fixture printed SKIP and exited 0 | **DONE** | commit `c92100a`; gates `build/w33/W33-3.3-*.log` |
+| W33-3.4 | C-8, C-9, C-11, C-12 (Low): both app_qt counts, pin truth, the first-pass corpus flag, the render test's name | **DONE** | commit `f6bbb96`; gates `build/w33/W33-3.4-*.log` |
+
+No G3 item was deferred.
+
+W33-3.1 detail:
+
+- `.github/workflows/ci.yml` now configures `app/` as the standalone CMake
+  project it is on both matrix jobs (`APP_BUILD_TESTS=ON`,
+  `CORE_WARNINGS_AS_ERRORS=ON`), builds it and runs its ctest with
+  `MPP_NO_CORPUS=1`; the job timeout rises to 45 minutes for the second tree.
+  Until this commit none of the 25 headless app tests -- every save-pair gate
+  against a Project-saved file among them -- ran on any CI job on any OS.
+- `.github/workflows/app-macos.yml` now runs on every push (branches and tags)
+  as well as dispatch, and its registration step derives the expected names
+  from `app/CMakeLists.txt`'s `add_test(NAME ...)` calls instead of a
+  hand-typed list: it diffs `ctest -N` against the declarations in both
+  directions, so an unregistered test and a stale declaration both fail.  The
+  old list named 15 of the 25 tests.  At the G3 tree the same step reports
+  registered 25 / declared 25 with an empty diff
+  (`build/w33/W33-G3-registration.log`).
+- The CI jobs themselves are not dispatchable from this session; CLOSE owns
+  the push and the green logs, including this item's acceptance ("the CLOSE CI
+  logs show the app ctest total on both OSs").
+
+W33-3.2 detail:
+
+- `tests/save_pair_noise.h` no longer masks the whole 16-byte block around a
+  control-vs-null difference: the mask is exactly the bytes where control and
+  null differ, for every kind.  Positions beyond the null save's length are no
+  longer masked either -- they are the appended tail and are compared directly
+  with Project's edit save (`tail_bytes` / `tail_effects`).  `compare()` takes
+  `effects_declared` and sets `effects_ok`, so a stream the test declares
+  changed cannot pass with a masked-away effect set.  `Kind::fixed_block`
+  becomes `Kind::fixed`; `props14_marker_payload()` reads the edit marker so a
+  pair declares Props14 only when the control still stores 0.
+- The intent was to find what the wide mask hid, and it did.  Project's editor
+  save resets ONE flag byte in two 214 sub-streams while the port copies the
+  control's byte: `214/CEdl/VarMeta +21` port 0x02 / Project 0x01 (5 actuals
+  pairs, 3 outline pairs), `214/Props +11403` port 0x02 / Project 0x01 (the
+  same pairs), and `214/Props +8902` port 0x31 / Project 0x43 (1 actuals
+  pair).  The mask was NOT widened back: each is a named expected failure with
+  its stream and offset, any other mismatch is a hard failure, and a fixed
+  byte makes the expected failure itself fail, so an entry cannot rot.
+  `app_edits_outline_tests` gains the same `check_expected_failure` mechanism
+  the actuals and core pair tests already had.
+- Pair totals: before the mask change actuals 3782 checks passed / 50 expected,
+  outline 3237 passed, task mode 331 passed, core outline 1749 checks /
+  7 expected.  Narrowing alone, before the expected-failure record: actuals 11
+  failures, outline 6, core 6
+  (`W33-3.2-{actuals,outline,core-outline}-after.log`).  Green: actuals 3799
+  checks passed / 61 expected, outline 3245 passed / 6 expected, task mode 337
+  passed, core outline 1757 checks / 0 failures / 13 expected.  Whole suites:
+  app ctest 25/25, core ctest 55/55 (`MPP_NO_CORPUS=1`, `-E plan_recalc`).
+
+W33-3.3 detail:
+
+- `tests/fixture_guard.h` is new: `require_committed()` prints "FAIL: committed
+  fixture missing: <path>" and exits 1; `corpus_present()` / `corpus_absent()`
+  print "SKIP: corpus absent (<path>)[: why]" for the git-ignored corpus only.
+  The header states the rule: `tests/data`, `tests/*.tsv` and `analysis/*.tsv`
+  are committed, so a missing file is a FAILURE; `corpus/` may be absent and
+  only there is SKIP allowed.
+- The sweep that found the sites (`build/w33/W33-3.3-skip-lines.txt`) listed
+  171 SKIP lines across the core and app suites; 78 `require_committed()` call
+  sites and 117 corpus guards replace them.  Every committed save-pair control
+  the app suite reads now fails with the path instead of returning green.  Ten
+  app test targets gain the `tests/` include directory for the shared header.
+- 11 executable SKIP prints remain, each by design: 6 corpus-gated (four fuzz
+  probes, props and layout_model), 2 MPXJ-written corpus variants excluded
+  because they are not Project's layout, 2 generated W45 fixtures produced by
+  `mppwrite_roundtrip_add_delete` (not committed; a hard failure would break a
+  clean build), and 1 build-mode probe (`core/mpp` CFB layer not linked).
+- Acceptance: renamed `tests/data/wave28-update-control.mpp`, ran
+  `app_edits_actuals_tests` -- exit 1 with "FAIL: committed fixture missing:
+  <path>"; restored immediately and `git status --porcelain tests/data` was
+  empty.  Whole suites on the final tree: app ctest 25/25; core ctest 56/56
+  with corpus present and 56/56 with `MPP_NO_CORPUS=1`; the no-corpus run
+  exercises the new "corpus absent" branches, the corpus run the present ones.
+- `app/app_edits_links_tests.cpp` was committed with CRLF before this wave;
+  this commit's added lines are LF (W33-4.2/G4 restores the file).
+
+W33-3.4 detail:
+
+- C-8: `docs/START-HERE.md`, `docs/handoff/wave32-complete.md` (two gate rows)
+  and `docs/handoff/wave32-verification/gates.md` now quote both counts:
+  "app_qt 37/37 locally, 35/35 in CI", because `qt_stored_table_corpus` and
+  `qt_task_order_corpus` are registered only where `corpus/project_a.mpp`
+  exists.  The wave-32 numbers stay wave-32 numbers; at this wave's tree the
+  same registry has 41 tests locally and 39 without corpus.
+- C-9: `app_qt/tools/command_backlog.py` now parses `app_qt/ribbon_pin.tsv`
+  and puts the pin's own count in the generated Summary: 114 command controls
+  (kinds button/small/split), **47 enabled / 67 disabled**.  The table above it
+  reports 69 disabled because a split is counted by its menu items; the
+  summary names the two splits whose button is live while every menu item is
+  disabled: Project > Properties > WBS and Project > Schedule > Set Baseline.
+  The regenerated `docs/ui-command-backlog.md` gains two summary lines;
+  `scripts/check_command_backlog.py` reports 114 pin controls, 114 backlog
+  rows, 0 mismatches.
+- C-11: the first CI Test step (`ctest -E plan_recalc`) sets
+  `MPP_NO_CORPUS=1`, so a self-hosted or developer runner proves the
+  committed-fixture path on the first pass instead of silently running the
+  corpus-aware branches.  The exact command run locally with the flag: 55/55,
+  exit 0, 8.70 s (`W33-3.4-core-firstpass.log`).
+- C-12: `qt_render_parity` is renamed `qt_render_1920` in
+  `app_qt/CMakeLists.txt`, `app_qt/README.md`, `docs/ui-parity-spec.md` and the
+  two memory notes.  It asserts "rendered 1920x1032" and never compared
+  against the reference; the comparison is `scripts/parity_report.py`, which
+  needs the git-ignored `corpus/`.  The ctest registry lists `qt_render_1920`
+  and no `qt_render_parity`; the test passed (0.26 s) in the 41/41 run.
+  `docs/parity.md`'s "in that run" sentence is a wave-18 record and keeps the
+  old name.
+
+Per-commit gates (logs under `build/w33/`; each commit's quoted gates include
+`git diff --check` exit 0, a clean client-name scan of HEAD, no client names in
+the commit messages on `wave33..HEAD`, a clean `guard_names wave33..HEAD` and
+no client-string hashes):
+
+| commit | builds | tests | fixtures |
+|---|---|---|---|
+| W33-3.1 `1b51802` | app build exit 0 | app ctest 25/25; CMake-derived registration 25 registered / 25 declared, empty diff | 140 hashes / 174 `.mpp` |
+| W33-3.2 `c25d7b8` | app and core builds exit 0 | app ctest 25/25; core ctest 55/55 (`MPP_NO_CORPUS=1`, `-E plan_recalc`); actuals 3799 checks / 61 expected, outline 3245 / 6, task mode 337, core outline 1757 / 13 expected | 140 hashes / 174 `.mpp` |
+| W33-3.3 `c92100a` | app build exit 0; core build exit 0 | app ctest 25/25; core ctest 56/56 with corpus and 56/56 with `MPP_NO_CORPUS=1`; the renamed-fixture acceptance failed with its path and was restored | 140 hashes / 174 `.mpp` |
+| W33-3.4 `f6bbb96` | app_qt configure/build exit 0 | app_qt ctest 41/41 (`qt_render_1920` 0.26 s; `qt_command_backlog` and both corpus-gated tests passed); core first CI command with `MPP_NO_CORPUS=1` 55/55; backlog 114/114, 0 mismatches | 140 hashes / 174 `.mpp` |
+
+G3 group gates (fresh trees configured from scratch on the G3 code tree
+`f6bbb96` under `build/w33-g3-fresh{,-app,-qt}`, log
+`build/w33/W33-G3-fresh-gates.log`, started 2026-10-30 01:29 and finished
+01:50; the marker commit that follows adds this file's G3 section only):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 55/55 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine `--selftest` / `--suite --expect-fail constraint-mso` | 53 checks, 0 failure(s) / 8 recorded (7 pass, 1 fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| app ctest / the CI step with `MPP_NO_CORPUS=1` | 25/25 passed / 25/25 passed |
+| app_qt configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| app_qt ctest | 41/41 passed; the same registry has 39 entries without `corpus/` (the two corpus-gated tests are not registered) |
+| the `app-macos.yml` registration step, run locally | registered 25 / declared 25, empty diff (`W33-G3-registration.log`) |
+| `check_fixtures.py` | fixtures OK (140 documented hashes, 174 tracked `.mpp`); paths OK (223 tracked test-data files, no local path); provenance OK (8 oracles) |
+| client-name scan on HEAD / messages `wave33..HEAD` / `guard_names wave33..HEAD` | 0 files, 0 name hits / 0 commits / exit 0 |
+
+## Found, not fixed
+
+- The three 214 flag-byte signatures W33-3.2 exposed remain: Project's editor
+  save resets one byte the port copies from the control --
+  `214/CEdl/VarMeta +21` port 0x02 / Project 0x01 (5 actuals pairs, 3 outline
+  pairs), `214/Props +11403` port 0x02 / Project 0x01 (the same pairs) and
+  `214/Props +8902` port 0x31 / Project 0x43 (1 actuals pair).  They are named
+  expected failures in the actuals, outline and core outline pair tests; the
+  mask was not widened back and any other mismatch is a hard failure.  A
+  measured writer for Project's editor flag reset is not in this wave.
+- The 11 executable SKIP prints recorded under W33-3.3 are by design, not
+  leftovers: 6 corpus-gated, 2 MPXJ-written corpus variants, 2 generated W45
+  fixtures and 1 build-mode probe.  A committed fixture now never skips.
+- The backlog table still counts a split by its menu items, so its "69
+  disabled" stays as the table's number; the generated Summary now states the
+  pin truth (47 enabled / 67 disabled) and names the two enabled splits.
+  Giving the row itself a split-level status would need the generator to model
+  a split's button separately from its menu, which the pin/generator contract
+  does not carry today.
+- `qt_render_1920` is still the render, not the comparison: the comparison is
+  `parity_report.py` against the reference capture, which needs the git-ignored
+  `corpus/` and therefore cannot run on a CI runner.  The brief allowed either
+  the rename or a real comparison; this wave took the rename.
+- The CI jobs changed by W33-3.1, W33-3.4 and G2's `ubuntu-asan` cannot be
+  dispatched from this session.  CLOSE owns the push and the green logs,
+  including W33-3.1's acceptance that the CLOSE CI logs show the app ctest
+  total on both OSs.
+- `docs/handoff/wave32-verification/gates.md` remains CRLF except this wave's
+  added LF line; W33-4.2 (G4) restores LF on the whole file.
+
+WAVE-33-G3-COMPLETE
