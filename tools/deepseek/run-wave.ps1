@@ -25,7 +25,8 @@ New-Item -ItemType Directory -Force $logdir | Out-Null
 # schemas (the Artifact tool's regex pattern returned HTTP 400 on 2026-10-23), so
 # each session gets the core tools only and no MCP servers.
 # --tools is variadic, so it goes LAST: anything after it would be read as a tool name.
-$tools = "Bash,PowerShell,Read,Edit,Write,Glob,Grep,Agent,TodoWrite,WebFetch,WebSearch"
+# No WebFetch or WebSearch (audit B-8, 29 Oct 2026): the agent gets no network reads.
+$tools = "Bash,PowerShell,Read,Edit,Write,Glob,Grep,Agent,TodoWrite"
 
 function Marker([string]$g) { if ($g -eq "ALL" -or $g -eq "CLOSE") { "WAVE-$Wave-COMPLETE" } else { "WAVE-$Wave-$g-COMPLETE" } }
 function Has-Marker([string]$m) { (Test-Path $done) -and (Select-String -Path $done -SimpleMatch $m -Quiet) }
