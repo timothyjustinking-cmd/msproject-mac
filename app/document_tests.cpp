@@ -925,6 +925,39 @@ void test_document_request_validation() {
     check(!document.has_pending_edits(), "discarding clears the formula request");
 }
 
+// W33-1.8 (A-12, Low): one pending formula operation at a time.  apply_ now
+// refused a SECOND valid request with a reason, because it silently replaced
+// the first; the first stays queued until it is saved or discarded.  The
+// decision-9 field-kind refusals keep their own reason (see the test below),
+// so the pending check runs after them.
+void test_second_formula_refused() {
+    app::Document document("unused.mpp");
+    std::string error;
+    check(document.apply_custom_formula(0x0b400036u, "[Name]", &error),
+          "the first formula request is accepted");
+    const app::CustomFormulaEdit first = document.custom_formula();
+    error.clear();
+    check(!document.apply_custom_formula(mpp::custom_field_id(mpp::FieldKind::text, 1),
+                                         "[Duration]", &error),
+          "a second formula request is refused while the first is pending");
+    check(error.find("pending") != std::string::npos,
+          "the refusal says a formula is already pending");
+    check(error.find("save") != std::string::npos,
+          "the refusal says to save the pending formula first");
+    check(document.custom_formula().operation == app::CustomFormulaEdit::Operation::set &&
+              document.custom_formula().field_id == first.field_id &&
+              document.custom_formula().formula == first.formula,
+          "the refused second request leaves the first formula queued");
+    check(document.custom_formula().field_id == 0x0b400036u,
+          "the queued formula is still the first one's field");
+    document.discard_custom_formula();
+    error.clear();
+    check(document.apply_custom_formula(mpp::custom_field_id(mpp::FieldKind::text, 1),
+                                        "[Duration]", &error),
+          "a formula request is accepted again once the first is discarded");
+    check(error.empty(), "the accepted post-discard request has no error");
+}
+
 // W33-1.3 (A-5, High): formula SET was measured against Project only on Text
 // and Number custom fields.  Date, Duration, Cost and Flag custom fields, and
 // the built-in Start/Finish and Outline Code fields, are refused up front with
@@ -1618,6 +1651,7 @@ int main() {
     test_formula_clear_disabled();
     test_save_refused_view_state();
     test_document_request_validation();
+    test_second_formula_refused();
     test_formula_set_field_kinds();
     test_save_start_date_with_view_and_formula();
     test_save_formula_and_view_state();

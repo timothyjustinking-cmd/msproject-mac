@@ -274,8 +274,12 @@ class Document {
     // Queues a formula for one Task custom field.  Rejects an empty formula, a
     // field id of 0, and every id `custom_formula_field_is_settable` refuses
     // (W33-1.3: only Text1..30 and Number1..20 were measured) here, before
-    // anything is queued; leaves any previous request alone.  The writer still
-    // validates the rest at save time against the file's actual formula table.
+    // anything is queued; leaves any previous request alone.  W33-1.8 (A-12):
+    // a VALID second request is refused with a reason while one formula is
+    // still pending -- it used to replace the first silently -- and the first
+    // stays queued until save() writes it or discard_custom_formula() drops it.
+    // The writer still validates the rest at save time against the file's
+    // actual formula table.
     [[nodiscard]] bool apply_custom_formula(std::uint32_t field_id, std::string_view formula,
                                             std::string* error = nullptr);
 

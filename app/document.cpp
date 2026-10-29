@@ -562,6 +562,18 @@ bool Document::apply_custom_formula(std::uint32_t field_id, std::string_view for
         }
         return false;
     }
+    // W33-1.8 (A-12, Low): one pending formula operation at a time.  A second
+    // valid request used to replace the first silently; it is refused with the
+    // reason instead, and the first stays queued until Save writes it or the
+    // shell discards it.  The field-kind refusal above keeps its own reason, so
+    // a request this port cannot store is still reported as unimplemented.
+    if (custom_formula_.any()) {
+        if (error != nullptr) {
+            *error = "a custom-field formula is already pending; save it before setting "
+                     "another";
+        }
+        return false;
+    }
     custom_formula_.operation = CustomFormulaEdit::Operation::set;
     custom_formula_.field_id = field_id;
     custom_formula_.formula = std::string(formula);
