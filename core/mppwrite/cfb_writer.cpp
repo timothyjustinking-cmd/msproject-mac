@@ -336,7 +336,13 @@ void CfbDocument::parse() {
                     " is past the end of the file");
     }
 
-    /* DIFAT: 109 slots in the header, then continuation sectors chained. */
+    /* DIFAT: 109 slots in the header, then continuation sectors chained.
+     * A header count is not a file size and a continuation word can point at
+     * its own sector, so this walk needs the read-only reader's two guards
+     * (core/mpp/cfb.cpp): the declared count must fit the file's sectors, and
+     * a continuation sector may not be visited twice.  Without them a 12-byte
+     * header edit (num_difat = 0xFFFFFFFF, a self-pointing chain) appends ids
+     * to difat_slots_ until bad_alloc (wave-33 audit D-2). */
     difat_slots_.clear();
     for (std::size_t i = 0; i < kDifatHeaderSlots; ++i) {
         std::uint32_t const sid = read_u32(b, 0x4C + 4 * i);
@@ -344,13 +350,24 @@ void CfbDocument::parse() {
             difat_slots_.push_back(sid);
         }
     }
+    if (difat_start_ < kMaxRegularSector && num_difat > sector_total) {
+        throw Error("DIFAT claims " + std::to_string(num_difat) +
+                    " sectors, more than the file's " +
+                    std::to_string(sector_total));
+    }
     difat_extra_.clear();
     std::uint32_t sid = difat_start_;
     std::size_t const per_difat = sector_size_ / 4 - 1;
+    std::vector<bool> difat_seen(sector_total, false);
     for (std::uint32_t n = 0; n < num_difat && sid < kMaxRegularSector; ++n) {
         if (sid >= sector_total) {
             throw Error("DIFAT continuation sector past the end of the file");
         }
+        if (difat_seen[sid]) {
+            throw Error("DIFAT sector chain loops at sector " +
+                        std::to_string(sid));
+        }
+        difat_seen[sid] = true;
         difat_extra_.push_back(sid);
         std::size_t const base = static_cast<std::size_t>(sector_offset(sid));
         for (std::size_t i = 0; i < per_difat; ++i) {
@@ -360,6 +377,14 @@ void CfbDocument::parse() {
             }
         }
         sid = read_u32(b, base + sector_size_ - 4);
+    }
+    /* Each FAT sector is one sector of the file; more ids than that is damage
+     * (the reader refuses the same shape). */
+    if (difat_slots_.size() > sector_total) {
+        throw Error("FAT sector list holds " +
+                    std::to_string(difat_slots_.size()) +
+                    " ids, more than the file's " +
+                    std::to_string(sector_total) + " sectors");
     }
     if (difat_slots_.size() < num_fat) {
         throw Error("header declares " + std::to_string(num_fat) +

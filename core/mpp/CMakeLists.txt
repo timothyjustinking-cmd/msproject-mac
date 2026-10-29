@@ -144,6 +144,28 @@ if(MPP_BUILD_TESTS)
         WORKING_DIRECTORY "${MPP_REPO_ROOT}"
     )
 
+    # ---- W33 G2: malformed-container bounds.  The read-only reader and the
+    # writer's CFB parser consume the same untrusted bytes, so every case is fed
+    # to mpp::load_bytes AND CfbDocument::from_bytes.  cfb_writer.cpp is compiled
+    # in directly (as mpp_reader_tests does) to keep this binary self-contained.
+    add_executable(mpp_cfb_hardening
+        "${MPP_REPO_ROOT}/tests/cfb_hardening_tests.cpp"
+        "${MPP_REPO_ROOT}/core/mppwrite/cfb_writer.cpp"
+        "${MPP_REPO_ROOT}/core/mppwrite/atomic_write.cpp")
+    target_link_libraries(mpp_cfb_hardening PRIVATE core_mpp)
+    target_include_directories(mpp_cfb_hardening PRIVATE
+        "${MPP_REPO_ROOT}/core/mppwrite")
+    target_compile_features(mpp_cfb_hardening PRIVATE cxx_std_20)
+    set_target_properties(mpp_cfb_hardening PROPERTIES CXX_EXTENSIONS OFF)
+    mpp_set_warnings(mpp_cfb_hardening)
+    target_compile_definitions(mpp_cfb_hardening PRIVATE
+        TEST_DATA_DIR="${MPP_TEST_DATA_DIR}"
+    )
+    add_test(NAME mpp_cfb_hardening COMMAND mpp_cfb_hardening)
+    set_tests_properties(mpp_cfb_hardening PROPERTIES
+        WORKING_DIRECTORY "${MPP_REPO_ROOT}"
+    )
+
     # ---- W48: the custom-field read API (CustomFieldValue, field_value.h).
     # Project's own w10-fieldvalues.mpp / w10-flag-on.mpp / w10-flag-off.mpp are
     # the measured sources and are skipped when corpus/ is absent; the field-id
