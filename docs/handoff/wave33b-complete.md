@@ -104,3 +104,77 @@ The same `check_markers.py --range main..HEAD` pass recorded 0 hits over
 1306 tracked files (9 markers, none an operator marker).
 
 WAVE-33b-G0-COMPLETE
+
+## G1 - the review's Mediums
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W33b-1.1 | R33-2 (Medium): formula CLEAR is still live in the save hook | **DONE** | commit `b5f7e00`; gates `build/w33b/W33b-1.1-*.log` |
+| W33b-1.2 | R33-3 (Medium): macOS Task Fields leaves refused edits queued | **DONE** | commit `2f2f8fb`; gates `build/w33b/W33b-1.2-*.log` |
+
+No G1 item was deferred.
+
+W33b-1.1 detail:
+
+- `apply_formula_edit` refuses `Operation::clear` with the decision-9 reason
+  (`custom_formula_clear_refusal`, shared with `Document::clear_custom_formula`)
+  before the Props stream is read: the container is untouched and the whole
+  save fails with no target written, exactly as W33-1.3's SET backstop does.
+  The measured-clear implementation and its flag heuristic remain beneath the
+  refusal so a future Project pair can lift it without reconstructing them.
+- `test_cascade_with_document_edits_in_one_write` builds a hand-built clear,
+  asserts the refusal, no document-edit write, no formula write and an
+  unchanged pre-existing target (byte-identical to the prepared source), and
+  drives the reachable one-write leg with the measured SET `[Duration]/240`
+  (stored on Text2, decoded to `0x0b400507`, flag 1).  The no-value control
+  leg and its flag-restoration proof are removed with the unreachable
+  heuristic they tested.
+- RED: app_document "FAIL: 7 of 341 checks failed", all seven the new
+  clear-refusal assertions, with the pre-existing target growing 237,568 ->
+  243,200 bytes because the clear still ran
+  (`build/w33b/W33b-1.1-red-app-ctest.log`).  GREEN: app_document 341 checks
+  passed (`build/w33b/W33b-1.1-green-document-tests.log`); app ctest 25/25.
+- Per-commit gates: app build exit 0 and app ctest 25/25
+  (`W33b-1.1-green-build.log`, `W33b-1.1-green-app-full-ctest.log`); app_qt
+  build exit 0 and ctest 41/41 (`W33b-1.1-green-qt-build.log`,
+  `W33b-1.1-green-qt-ctest.log`); fixtures OK; staged-tree scan 0 hits;
+  `guard_names main..HEAD` exit 0; `check_markers` 0 hits.
+
+W33b-1.2 detail:
+
+- The macOS Task Fields handler pushed each edit of the dialog's batch onto
+  the live `plan.edits` and, on a later refusal, reported "The field edits
+  could not all be queued" and returned: the accepted edits stayed queued and
+  the next Save wrote edits the user had been told had failed.  It now pushes
+  onto `app::StructuralEdits trial = plan.edits` and moves the trial into
+  `plan.edits` only when every edit is accepted -- the Qt shell's W33-1.5
+  rule.  Before: a two-edit batch with a refused second edit leaves the first
+  queued.  After: a refused push leaves the live queue untouched.
+- `app/main.mm` is compiled only by the macOS app target
+  (`app/CMakeLists.txt` adds it under APPLE); no local tree compiles it, so
+  the local gate is the brace balance (`build/check_braces.py` exit 0, final
+  depth 0, `W33b-1.2-braces.log`) and, for the rule itself, the Qt test
+  `qt_task_information_apply` 1/1
+  (`W33b-1.2-qt-task-information-apply.log`).  The macos-appkit CI job
+  compiles the change.
+
+G1 group gates (final code tree `2f2f8fb`, run 08:44-08:46 on 30 October 2026
+in the G0 fresh trees `build/w33b-g0-fresh{,-app,-qt}`, log
+`build/w33b/W33b-G1-fresh-gates.log`; the log's first two engine commands were
+raw-binary usage errors and are superseded by its CORRECTION section):
+
+| gate | result |
+|---|---|
+| core build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 |
+| core ctest `-E plan_recalc` | 55/55 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine selftest / suite with `--expect-fail constraint-mso` (via `scripts/engine_diff.py`) | 53 checks, 0 failure(s) / 8 recorded (7 pass, 1 fail), 0 unrecorded, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, exit 0 |
+| app build / ctest | exit 0 / 25/25 passed |
+| app_qt build / ctest | exit 0 / 41/41 passed |
+| `check_fixtures.py` | fixtures OK (140 documented hashes, 174 tracked `.mpp`) |
+| `check_markers.py --range main..HEAD` | 0 hits over 1306 tracked files |
+| client-name scan HEAD / messages / `guard_names main..HEAD` | 0 files, 0 hits / 0 commits / exit 0 |
+
+WAVE-33b-G1-COMPLETE
