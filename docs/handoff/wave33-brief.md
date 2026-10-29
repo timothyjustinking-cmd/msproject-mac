@@ -32,6 +32,13 @@ both runs in the commit message from the log.  Do not quote check counts a cited
 not show.  Never name the operator or anyone else in docs, commits, fixtures or tests;
 refer to rows by ID.  LF line endings everywhere (`.gitattributes` enforces it from G4).
 
+**Coordinator note (29 Oct 2026, after G1).**  Until W33-4.3 lands, `synthetic-base.mpp`
+carries the operator's name, so any fixture copied from it carries it too.  Neutralise a
+derived fixture BEFORE its first commit and run
+`python -I build/audit-w22/guard_names.py 17f5782..HEAD` before every fixture commit: a
+later commit that cleans the blob does not help, because the guard checks every blob in
+the range (G1's 3b53b9d is why).  Never add such a blob, even briefly.
+
 **Fixes where the obvious change is wrong** (from the work order; do these, not the
 tempting ones):
 
