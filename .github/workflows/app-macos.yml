@@ -18,28 +18,34 @@
 #     core_model) built from this tree, with every core stream test switched off by
 #     app/CMakeLists.txt.  core_render is new in v3: File > Export PDF writes
 #     through it.
-#   * the fourteen headless tests build and pass on macOS as well as on Windows:
-#       app_layout    (layout_model_tests)   mapping + the packed-date identity
-#       app_selection (selection_model_tests) sheet<->Gantt selection, collapse,
-#                                            edit/undo through SheetModel
-#       app_document  (document_tests)       the real save round trip, on the
-#                                            committed synthetic fixture
-#       app_prefs     (prefs_tests)          the preference model + its parser
-#       app_menu      (menu_tests)           the menu bar as data: every menu,
-#                                            action, key equivalent, enablement
-#       app_filter    (filter_tests)         rule -> FilterDefinition, matching,
-#                                            the displayed-row restriction
-#       app_export    (export_tests)         real PDFs (sheet + Gantt, filtered),
-#                                            written under build-app/test-out
-#       app_views / app_edit / app_fields / app_edits_fields / app_edits_links
-#                                            views, insert/delete + undo, stored and
-#                                            formula columns, Task Fields and
-#                                            Predecessors dialogs
-#       app_print     (page_layout_tests)    page geometry shared by printing and
-#                                            Export PDF (wave 14)
-#       app_start_warning (start_edit_warning_tests)
-#                                            linked-pin / manual-task save warning
-#                                            model (wave 14)
+#   * the twenty-five headless tests build and pass on macOS as well as on Windows
+#     (the list below is the wave-33 set; the registration step derives the exact
+#     names from app/CMakeLists.txt, so this comment cannot go stale silently):
+#       app_layout       (layout_model_tests)      mapping + packed-date identity
+#       app_selection    (selection_model_tests)   sheet<->Gantt selection, collapse,
+#                                                  edit/undo through SheetModel
+#       app_document     (document_tests)          the real save round trip
+#       app_prefs        (prefs_tests)             the preference model + parser
+#       app_menu         (menu_tests)              the menu bar as data
+#       app_filter       (filter_tests)            rule -> FilterDefinition, matching
+#       app_sort         (sort_tests)              the Sort dialog model (W31)
+#       app_export       (export_tests)            real PDFs under test-out
+#       app_views        (views_tests)             resource/usage views, formulas
+#       app_usage_style  (usage_style_tests)       stored Details list (W31)
+#       app_usage_grid   (usage_grid_tests)        per-period usage values (W31)
+#       app_edit         (app_edit_tests)          insert/delete + undo
+#       app_fields       (app_fields_tests)        stored and formula columns
+#       app_edits_fields (app_edits_fields_tests)  Task Fields write round trip
+#       app_edits_links  (app_edits_links_tests)   Predecessors write round trip
+#       app_edits_actuals / app_edits_outline / app_edits_new_task_mode /
+#       app_edits_task_mode                        the measured Project save-pair
+#                                                  writers (waves 28-30)
+#       app_view_style   (view_style_tests)        Gantt style record (W26)
+#       app_print        (page_layout_tests)       print/Export PDF page geometry
+#       app_start_warning (start_edit_warning_tests) linked-pin save warning
+#       app_smoke        (smoke_tests)             the --smoke sequence
+#       app_project_dialogs (project_dialogs_tests) Project tab dialog payloads
+#       app_spelling     (spelling_tests)          the read-only spell check
 #     The corpus probes inside app_layout print SKIP on a runner (no corpus/), as
 #     they must; app_document writes only under build-app/test-out and app_export
 #     writes only its own synthetic PDFs there.
@@ -54,14 +60,16 @@
 
 name: app-macos
 
-# COST CONTROL (2026-10-23): the included Actions minutes are exhausted and
-# macOS runners bill at 10x.  Do NOT trigger on every push -- a manual dispatch
-# or a version tag is a deliberate spend.  Run locally where possible:
-#   build\vs-w14 (Windows MSVC) proves the core suite; only ObjC++/AppKit needs
-#   the macos-appkit job, so push a tag (or dispatch) once per wave, not per commit.
+# COST CONTROL (2026-10-23), amended by WAVE 33 (W33-3.1, audit C-2).  This
+# workflow used to be dispatch-or-tag only, and it last ran on wave27, so the
+# app/ suite was verified on no CI job at all.  It now runs on every push
+# (branches and tags) as well as on dispatch: the repository is public, so
+# standard runners are free, and the standing rule is CI every wave.  The Qt
+# workflow keeps its dispatch-or-tag trigger; that is a separate decision.
 on:
   workflow_dispatch:
   push:
+    branches: ["**"]
     tags: ["v*"]
 
 permissions:
@@ -100,29 +108,25 @@ jobs:
         run: cmake --build build-app --config Release
 
       # The test names are part of the contract: a silently unregistered test is
-      # as bad as a failing one.
-      - name: The fifteen headless tests are registered
+      # as bad as a failing one.  WAVE 33 (W33-3.1): the expected set is parsed
+      # from app/CMakeLists.txt's `add_test(NAME ...)` calls instead of a
+      # hand-typed list.  The old step named 15 of the 25 tests, so a new test
+      # could be added and never checked; this compares BOTH directions and
+      # fails on an unregistered name or a stale declaration.
+      - name: The registered headless tests match app/CMakeLists.txt
         shell: bash
         run: |
           set -euo pipefail
           ctest --test-dir build-app -C Release -N | tee tests.txt
-          grep -q "app_layout" tests.txt
-          grep -q "app_selection" tests.txt
-          grep -q "app_document" tests.txt
-          grep -q "app_prefs" tests.txt
-          grep -q "app_menu" tests.txt
-          grep -q "app_filter" tests.txt
-          grep -q "app_export" tests.txt
-          grep -q "app_views" tests.txt
-          grep -q "app_edit" tests.txt
-          grep -q "app_fields" tests.txt
-          grep -q "app_edits_fields" tests.txt
-          grep -q "app_edits_links" tests.txt
-          grep -q "app_print" tests.txt
-          grep -q "app_start_warning" tests.txt
-          grep -q "app_smoke" tests.txt
+          sed -n 's/^.*Test *#[0-9][0-9]*: //p' tests.txt | sort > registered.txt
+          grep -oE 'add_test\(NAME [A-Za-z0-9_]+' app/CMakeLists.txt \
+            | awk '{print $2}' | sort > expected.txt
+          echo "registered $(wc -l < registered.txt | tr -d ' ') test(s)," \
+               "declared $(wc -l < expected.txt | tr -d ' ') in app/CMakeLists.txt"
+          # -u prints every difference and exits 1 on any.
+          diff -u expected.txt registered.txt
 
-      - name: Test (headless layout, selection, save, preferences, menu, filter, export, views, edit, fields, field/link edits, print, start warning, smoke)
+      - name: Test (every headless test app/CMakeLists.txt registers)
         shell: bash
         run: ctest --test-dir build-app -C Release --output-on-failure --timeout 120
 

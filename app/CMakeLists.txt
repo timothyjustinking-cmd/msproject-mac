@@ -12,8 +12,8 @@
 #            cmake --build build-app
 #            ctest --test-dir build-app -C Release
 #            -> msproject_app.app (main.mm: NSApplication + PlanView + menus +
-#               Preferences + export + print + `--smoke`) and the fifteen headless
-#               tests
+#               Preferences + export + print + `--smoke`) and the twenty-five
+#               headless tests
 #
 #   Windows: cmake -S app -B build\vs-w47 -G "Visual Studio 17 2022" -A x64
 #            cmake --build build\vs-w47 --config Release
@@ -30,7 +30,7 @@
 #   Linux:   same as Windows (headless tests only).
 #
 # Options:
-#   APP_BUILD_TESTS         build + register the fifteen headless tests (default ON)
+#   APP_BUILD_TESTS         build + register the twenty-five headless tests (default ON)
 #   CORE_WARNINGS_AS_ERRORS same meaning as the top-level build (default OFF;
 #                           the macOS workflow passes ON).  It also reaches the
 #                           core subdirectories, which read this variable.

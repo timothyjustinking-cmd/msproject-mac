@@ -29,7 +29,7 @@ same way).
 
 | file | what it is |
 |---|---|
-| `CMakeLists.txt` | standalone project: options, core libraries with their tests off (including `core/props`), `app_layout`, fifteen headless tests, AppKit target on `APPLE` only |
+| `CMakeLists.txt` | standalone project: options, core libraries with their tests off (including `core/props`), `app_layout`, twenty-five headless tests, AppKit target on `APPLE` only |
 | `layout_model.h` / `.cpp` | **pure C++**: `mpp` packed-date → `date32` (identity, see below), task/link/resource/assignment rows → `RecordSet` + `SheetModel` columns, row → `SheetRowText`, `GanttSource`/`Timescale`/`GanttStyle`, `timescale_for_zoom`, plan summary, `sync_plan_from_records`, `make_gantt_source_for_displayed_rows`, `begin_cell_edit`, `apply_edit_policy` |
 | `view_model.h` / `.cpp` | **pure C++ (wave 11)**: the four view modes, the stock Mon-Fri calendar, `PlanInput` → `core::view::ResourceRecord`s, the registry-backed resource-sheet columns, the usage grid (labels, period columns, a TOTAL row and a Total column), the two demo formula columns, and the read-only policy |
 | `fields_model.h` / `.cpp` | **pure C++ (wave 12)**: the six stored custom-field columns from the field registry, `114/Props` → the file's formulas (`core/props` → `core/formula`), the sheet's complete column set (default + stored + formula, one column per field), read-only enforcement and the per-column visibility the preferences own |
@@ -59,7 +59,7 @@ same way).
 | `start_edit_warning_tests.cpp` | **new (wave 14)**: predecessor-finish clamp, pin-later no-warning, manual-task warning, unlinked none, unknown/cleared/unchanged/summary no-effect, FS-only and lag, the message text and the per-save report |
 | `app_edits_links_tests.cpp` | **new (wave 13)**: the Predecessors dialog model (lag syntax, type names, listing, validation, display plan, undo/redo) and the real link round trip on a copy of `synthetic-base.mpp`: two adds (0 → 2 links), one delete (2 → 1), delete+re-add in one save (deletes run first), a mixed delete+add, and a two-op refusal that leaves no target |
 | `main.mm` | Objective-C++ / AppKit: window, control bar (view switcher + usage period), menu bar built from `menu_model`, Preferences panel, filter dialog, save/export panels, dirty prompts, clipboard, keyboard, drawing (task sheet + Gantt, or a flat resource/usage grid) |
-| `../.github/workflows/app-macos.yml` | the macOS CI job: configure `app/`, build everything with `-Werror`, run the tests (`ctest` runs all fourteen; the workflow still greps the wave-10/11 names), prove the bundle exists and links AppKit + UniformTypeIdentifiers |
+| `../.github/workflows/app-macos.yml` | the macOS CI job (push, tag or dispatch since wave 33): configure `app/`, build everything with `-Werror`, compare `ctest -N` against the `add_test(NAME ...)` list in `CMakeLists.txt`, run every registered test, prove the bundle exists and links AppKit + UniformTypeIdentifiers |
 
 ## Build and run
 
@@ -568,10 +568,9 @@ byte-for-byte with the wave-13 build and are identical (`page_layout`'s defaults
 **Inferred / to be proved by macOS CI**: that `main.mm` compiles, links and behaves.
 There is no Objective-C++ compiler on the development box. `app-macos.yml` is that
 gate: configure `app/`, build `msproject_app.app` with `-Werror`, run the tests (all
-fifteen; the registration step still greps the wave-10/11 names, so the coordinator
-should add `app_edits_fields`, `app_edits_links`, `app_print` and `app_start_warning`
-there), and assert the bundle executable exists and links AppKit +
-UniformTypeIdentifiers. Wave 14's print path — `NSPrintOperation`, `PrintView`'s
+twenty-five; wave 33 replaced the hand-typed name check with a diff of `ctest -N`
+against the `add_test(NAME ...)` list in `CMakeLists.txt`), and assert the bundle
+executable exists and links AppKit + UniformTypeIdentifiers. Wave 14's print path — `NSPrintOperation`, `PrintView`'s
 `-knowsPageRange:`/`-rectForPage:`, the `NSPrintInfo` paper/margin/job settings and
 `NSPrintSaveJob` — has never been compiled, so it is the largest unproven surface in
 the tree. No runner ever opens a window, so the actual interaction (a click, a

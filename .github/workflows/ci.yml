@@ -62,7 +62,10 @@ jobs:
        github.event.workflow_run.event != 'push')
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Wave 33 (W33-3.1): the job now builds the root tree AND the standalone
+    # app/ tree, so the old 30-minute net no longer covers the work on the
+    # slower Windows runner.
+    timeout-minutes: 45
     strategy:
       # Report every platform even if one fails; a red macos job next to a green
       # windows job is the signal this workflow exists to produce.
@@ -168,6 +171,35 @@ jobs:
         run: |
           export MPP_NO_CORPUS=1
           ctest --test-dir build -C Release --output-on-failure --timeout 60 -R '^mpp_reader$'
+
+      # Wave 33 (W33-3.1, audit C-2).  app/ is a STANDALONE CMake project -- the
+      # root tree does not add_subdirectory(app) -- so it needs its own
+      # configure, build and ctest here.  Until this step existed none of its 25
+      # headless tests ran on any CI job on any OS: qt.yml builds app_qt with
+      # the app/ tests OFF and app-macos.yml is macOS-only (now push-triggered).
+      # The suite includes every save-pair gate against a Project-saved file
+      # (actuals, outline, task mode, new-task mode, links, fields), so this is
+      # the CI proof standing rule 1 relies on.  MPP_NO_CORPUS=1 is the
+      # supported way to prove the committed-fixture path; the corpus probes in
+      # app_layout/app_view_style print "corpus absent" on these runners.
+      - name: Configure the app suite (standalone project)
+        shell: bash
+        run: |
+          cmake -S app -B build-app \
+            -G "${{ matrix.generator }}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DAPP_BUILD_TESTS=ON \
+            -DCORE_WARNINGS_AS_ERRORS=ON
+
+      - name: Build the app suite
+        shell: bash
+        run: cmake --build build-app --config Release
+
+      - name: Test the app suite
+        shell: bash
+        run: |
+          export MPP_NO_CORPUS=1
+          ctest --test-dir build-app -C Release --output-on-failure --timeout 60
 
   # Wave 33 (W33-2.4, audit D-3).  The fuzz lane used to call only
   # `mpp::load_bytes`: the writer's container parser, the MSPDI importer and the
