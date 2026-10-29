@@ -1379,7 +1379,8 @@ void test_zoom_breadth(Context& context) {
     context.near(week_spec.pixels_per_unit, 140.0, "week zoom 140 px/week");
     context.equal(month_spec.unit, gantt::TimescaleUnit::month, "month zoom unit");
     context.near(month_spec.pixels_per_unit, 300.0, "month zoom 300 px/month");
-    context.equal(gantt::zoom_name(gantt::GanttZoom::month), "month",
+    // As strings: two const char* compare by address (CI-5: clang under ASan keeps the literals apart).
+    context.equal(std::string(gantt::zoom_name(gantt::GanttZoom::month)), std::string("month"),
                          "month zoom name");
     const gantt::Timescale day_scale_zoom =
         gantt::timescale_for_zoom(gantt::GanttZoom::day, day(10, 1));
