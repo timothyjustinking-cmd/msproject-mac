@@ -168,3 +168,58 @@ jobs:
         run: |
           export MPP_NO_CORPUS=1
           ctest --test-dir build -C Release --output-on-failure --timeout 60 -R '^mpp_reader$'
+
+  # Wave 33 (W33-2.4, audit D-3).  The fuzz lane used to call only
+  # `mpp::load_bytes`: the writer's container parser, the MSPDI importer and the
+  # CSV surface never saw mutated bytes, and no CI job compiled with a
+  # sanitizer.  This job builds the same core tree with clang and
+  # -fsanitize=address,undefined, then runs the core suite and every fuzz
+  # target (fuzz_reader now feeds CfbDocument::from_bytes as well; fuzz_xml
+  # feeds import_mspdi and export_csv).  -fno-sanitize-recover=all makes a UBSan
+  # report fail the run instead of printing a line nobody reads.  The same
+  # trigger guard as build-and-test, so a failed qt-shell does not spend a run.
+  ubuntu-asan:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event != 'push')
+    name: ubuntu-asan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Configure (ASan + UBSan)
+        shell: bash
+        run: |
+          cmake -S . -B build-asan \
+            -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCORE_WARNINGS_AS_ERRORS=ON \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Build
+        shell: bash
+        run: cmake --build build-asan --config RelWithDebInfo -j 2
+
+      # Same exclusion as the main job: plan_recalc's golden is corpus-bearing
+      # and refreshed deliberately.  The corpus-free plan_recalc checks are its
+      # own step below the main matrix job; they are not duplicated here.
+      - name: Test the core suite and the fuzz targets under ASan + UBSan
+        shell: bash
+        run: |
+          export MPP_NO_CORPUS=1
+          ctest --test-dir build-asan -C RelWithDebInfo -E plan_recalc \
+                --output-on-failure --timeout 180

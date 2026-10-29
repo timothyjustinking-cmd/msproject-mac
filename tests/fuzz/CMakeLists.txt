@@ -1,13 +1,16 @@
 # tests/fuzz -- wave-13 (W57) adversarial fuzzers.
 #
-# THREE TARGETS, ALL DETERMINISTIC:
+# FOUR TARGETS, ALL DETERMINISTIC:
 #   fuzz_reader   seeded mutations of tests/data/synthetic-base.mpp through
-#                 mpp::load_bytes (contract: mpp::Error or a self-consistent
-#                 Document, never a crash/hang/overread)
+#                 mpp::load_bytes AND (wave 33) mppwrite::CfbDocument::from_bytes
+#                 (contract: each parser throws its own error type or returns a
+#                 self-consistent object, never a crash/hang/overread)
 #   fuzz_writer   seeded edit sequences over the public core/mppwrite APIs;
 #                 every operation is proved from the bytes on disk, every refusal
 #                 must leave the file untouched
 #   fuzz_parsers  formula tokenize/parse/evaluate and Props blob parsing
+#   fuzz_xml      seeded mutations of the committed MSPDI samples through
+#                 core::io::import_mspdi, then through export_csv (wave 33)
 #
 # WIRING.  Two modes, like the other stream subdirectories in this tree:
 #
@@ -127,6 +130,18 @@ if(NOT TARGET core_formula)
                      "${CMAKE_CURRENT_BINARY_DIR}/core_formula")
 endif()
 
+# Wave 33 (W33-2.4): the MSPDI importer lives in core/io.  In the top-level
+# build the `io` stream has already defined core_io; a standalone fuzz configure
+# adds it here with its own tests off.  core/io links core_view, which
+# core_formula's add_subdirectory(core/sheet) has just defined.
+if(NOT TARGET core_io)
+    if(NOT FUZZ_PRODUCT_TESTS)
+        set(IO_BUILD_TESTS OFF)
+    endif()
+    add_subdirectory("${FUZZ_REPO_ROOT}/core/io"
+                     "${CMAKE_CURRENT_BINARY_DIR}/core_io")
+endif()
+
 # ---------------------------------------------------------------------------
 # Paths injected into every fuzz target.  Forward slashes: they become C string
 # literals.  FUZZ_OUT_DIR is where fuzz_writer writes its .mpp copies and where
@@ -134,8 +149,9 @@ endif()
 # ---------------------------------------------------------------------------
 set(FUZZ_TEST_DATA_DIR "${FUZZ_REPO_ROOT}/tests/data")
 set(FUZZ_CORPUS_DIR "${FUZZ_REPO_ROOT}/corpus")
+set(FUZZ_IO_SAMPLE_DIR "${FUZZ_REPO_ROOT}/tests")
 set(FUZZ_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/out")
-foreach(path_var FUZZ_TEST_DATA_DIR FUZZ_CORPUS_DIR FUZZ_OUT_DIR)
+foreach(path_var FUZZ_TEST_DATA_DIR FUZZ_CORPUS_DIR FUZZ_IO_SAMPLE_DIR FUZZ_OUT_DIR)
     file(TO_CMAKE_PATH "${${path_var}}" ${path_var})
 endforeach()
 
@@ -148,6 +164,7 @@ function(fuzz_add_target name source libs)
     target_compile_definitions(${name} PRIVATE
         FUZZ_TEST_DATA_DIR="${FUZZ_TEST_DATA_DIR}"
         FUZZ_CORPUS_DIR="${FUZZ_CORPUS_DIR}"
+        FUZZ_IO_SAMPLE_DIR="${FUZZ_IO_SAMPLE_DIR}"
         FUZZ_OUT_DIR="${FUZZ_OUT_DIR}"
     )
     add_test(NAME ${name} COMMAND ${name})
@@ -166,6 +183,11 @@ fuzz_add_target(fuzz_reader fuzz_reader_main.cpp "core_mpp;core_mppwrite")
 fuzz_add_target(fuzz_writer fuzz_writer_main.cpp "core_mpp;core_mppwrite")
 fuzz_add_target(fuzz_parsers fuzz_parsers_main.cpp
                 "core_formula;core_props;core_mpp")
+# Wave 33 (W33-2.4): the MSPDI importer was never fed mutated bytes.  There is
+# no CSV importer in this tree (core/io/csv.h is export-only), so the target
+# also exports every imported document through export_csv and checks the output
+# as RFC 4180; see the file header.
+fuzz_add_target(fuzz_xml fuzz_xml_main.cpp "core_io")
 
 # ---------------------------------------------------------------------------
 # RECURSION-GUARD REGRESSION TESTS.

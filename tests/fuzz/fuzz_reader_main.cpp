@@ -3,7 +3,12 @@
  *
  * WHAT IS FUZZED.  `tests/data/synthetic-base.mpp` (committed, synthetic) is the
  * seed.  Every case copies the bytes, applies 1..5 seeded mutations, and calls
- * `mpp::load_bytes`.  Mutation families:
+ * `mpp::load_bytes`.  Since wave 33 (W33-2.4) every case is then also handed
+ * to the writer's container parser, `mppwrite::CfbDocument::from_bytes`: the
+ * same untrusted bytes reach two independent parsers, and either may only
+ * throw its own error type (`mpp::Error` / `mppwrite::Error`) or return a
+ * self-consistent object.  `--no-writer-parse` turns the second parse off for
+ * bisecting a failure.  Mutation families:
  *
  *   0  a random byte bit flip
  *   1  a zero run at a random offset
@@ -18,8 +23,10 @@
  *   6  a one-byte overwrite with a saturated value (0x00/0x7F/0x80/0xFF)
  *
  * THE CONTRACT.  For every case the reader must EITHER throw `mpp::Error` OR
- * return a self-consistent `mpp::Document`.  Any other exception type, a crash,
- * a timeout, or a document that breaks one of the invariants below is a failure.
+ * return a self-consistent `mpp::Document`.  The writer-side parser must EITHER
+ * throw `mppwrite::Error` OR return a CfbDocument whose entry/stream counts
+ * agree.  Any other exception type, a crash, a timeout, or a document that
+ * breaks one of the invariants below is a failure.
  * ASan turns an out-of-bounds read into a process abort, which the child-process
  * watchdog reports with the seed that was running.
  *
@@ -39,7 +46,7 @@
  * USAGE
  *   fuzz_reader [--cases N] [--seed N] [--case N] [--fixture PATH]
  *               [--corpus DIR] [--no-corpus] [--timeout-ms N] [--no-watchdog]
- *               [--progress PATH]
+ *               [--writer-parse] [--no-writer-parse] [--progress PATH]
  *
  * Exit code 0 = every case satisfied the contract.  A failure prints the exact
  * case seed and mutation list; `--case N` replays that one case.
@@ -92,6 +99,10 @@ struct Options {
     unsigned timeout_ms = 30000;
     std::string progress;
     bool worker = false;
+    /* W33-2.4: feed every mutated case to the writer's container parser too.
+     * On by default, because a parser only reached by an opt-in flag is not
+     * coverage; --no-writer-parse exists to bisect a failure. */
+    bool writer_parse = true;
 };
 
 void print_usage() {
@@ -99,14 +110,17 @@ void print_usage() {
         << "usage: fuzz_reader [--cases N] [--seed N] [--case N] "
            "[--fixture PATH]\n"
            "                   [--corpus DIR] [--no-corpus] [--timeout-ms N]\n"
-           "                   [--no-watchdog] [--progress PATH]\n"
+           "                   [--no-watchdog] [--no-writer-parse] "
+           "[--progress PATH]\n"
            "  --cases N       number of mutated cases (default 240)\n"
            "  --seed N        base seed, decimal or 0x-hex (default 0x57)\n"
            "  --case N        run exactly that one case (for a failure repro)\n"
            "  --fixture PATH  .mpp seed (default tests/data/synthetic-base.mpp)\n"
            "  --corpus DIR    directory holding the real files (read only)\n"
            "  --no-corpus     skip the real-file baseline loads\n"
-           "  --no-watchdog   run in-process (a hang then blocks this process)\n";
+           "  --no-watchdog   run in-process (a hang then blocks this process)\n"
+           "  --no-writer-parse  skip mppwrite::CfbDocument::from_bytes\n"
+           "                     (default: every case is fed to both parsers)\n";
 }
 
 bool parse_u64(std::string const& text, std::uint64_t& out) {
@@ -157,6 +171,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             std::exit(0);
         } else if (argument == "--no-corpus") {
             options.use_corpus = false;
+        } else if (argument == "--writer-parse") {
+            options.writer_parse = true;
+        } else if (argument == "--no-writer-parse") {
+            options.writer_parse = false;
         } else if (argument == "--no-watchdog") {
             options.watchdog = false;
         } else if (argument == "--cases") {
@@ -669,6 +687,50 @@ Outcome run_case(Bytes bytes, std::size_t file_size) {
     return outcome;
 }
 
+/* W33-2.4: the same mutated bytes through the writer-side container parser.
+ * mppwrite::Error is the only acceptable refusal; any other exception, a crash
+ * or a hang is a failure.  A parsed document must at least agree with itself:
+ * one root entry and no more streams than directory entries. */
+struct WriterOutcome {
+    bool clean = false;          /* parsed, or refused with mppwrite::Error */
+    bool parsed = false;
+    bool wrong_exception = false;
+    std::size_t entries = 0;
+    std::size_t streams = 0;
+    double millis = 0.0;
+    std::string error;
+};
+
+WriterOutcome run_writer_case(Bytes const& bytes) {
+    WriterOutcome outcome;
+    Clock::time_point const start = Clock::now();
+    try {
+        mppwrite::CfbDocument const doc = mppwrite::CfbDocument::from_bytes(bytes);
+        outcome.clean = true;
+        outcome.parsed = true;
+        outcome.entries = doc.entry_count();
+        outcome.streams = doc.stream_count();
+        if (outcome.entries == 0) {
+            outcome.error = "a parsed document has no directory entries";
+        } else if (outcome.streams > outcome.entries) {
+            outcome.error = "stream count " + std::to_string(outcome.streams) +
+                            " exceeds the " + std::to_string(outcome.entries) +
+                            " directory entries";
+        }
+    } catch (mppwrite::Error const& error) {
+        outcome.clean = true;
+        outcome.error = error.what();
+    } catch (std::exception const& error) {
+        outcome.wrong_exception = true;
+        outcome.error = std::string("non-mppwrite exception: ") + error.what();
+    } catch (...) {
+        outcome.wrong_exception = true;
+        outcome.error = "non-std exception";
+    }
+    outcome.millis = fuzz::elapsed_ms(start);
+    return outcome;
+}
+
 std::string resolve_fixture(std::string const& requested) {
     std::vector<std::string> candidates;
     if (!requested.empty()) {
@@ -682,10 +744,13 @@ std::string resolve_fixture(std::string const& requested) {
 }
 
 /* Runs one case (case_index) and returns its outcome; used by both the loop and
- * the single-case replay mode.  `log` receives the applied mutations. */
+ * the single-case replay mode.  `log` receives the applied mutations.  When
+ * `writer_parse` is set, the same mutated bytes are also fed to
+ * CfbDocument::from_bytes and `writer` receives that parser's outcome. */
 Outcome run_indexed_case(Bytes const& pristine, Model const& model,
                          std::uint64_t base_seed, unsigned index,
-                         std::vector<std::string>& log, unsigned& last_kind) {
+                         std::vector<std::string>& log, unsigned& last_kind,
+                         bool writer_parse, WriterOutcome& writer) {
     std::uint64_t const case_seed =
         base_seed + static_cast<std::uint64_t>(index) * 0x9E3779B97F4A7C15ULL;
     Bytes bytes = pristine;
@@ -701,7 +766,11 @@ Outcome run_indexed_case(Bytes const& pristine, Model const& model,
         log.push_back(entry);
         last_kind = kind;
     }
-    return run_case(bytes, pristine.size());
+    Outcome const outcome = run_case(bytes, pristine.size());
+    if (writer_parse) {
+        writer = run_writer_case(bytes);
+    }
+    return outcome;
 }
 
 std::string case_receipt(unsigned index, std::uint64_t base_seed,
@@ -744,6 +813,18 @@ int run_worker(Options const& options) {
               << " resources, " << baseline.links << " links, "
               << baseline.assignments << " assignments, " << baseline.warnings
               << " warnings\n";
+    if (options.writer_parse) {
+        WriterOutcome const writer_baseline = run_writer_case(pristine);
+        if (!writer_baseline.parsed || !writer_baseline.error.empty()) {
+            std::cout << "FAIL: the unmutated fixture did not parse on the writer "
+                         "side: "
+                      << writer_baseline.error << "\n";
+            return 1;
+        }
+        std::cout << "writer baseline: " << writer_baseline.entries
+                  << " directory entries, " << writer_baseline.streams
+                  << " streams\n";
+    }
 
     Model const model = build_model(pristine);
     std::cout << "mutation sites: " << model.words.size() << " structured words, "
@@ -753,6 +834,7 @@ int run_worker(Options const& options) {
     if (options.single_case) {
         std::vector<std::string> log;
         unsigned last_kind = 0;
+        WriterOutcome writer;
         fuzz::Progress const single(progress_path);
         single.note("case " + std::to_string(options.case_index) + " seed " +
                     fuzz::hex64(options.seed + static_cast<std::uint64_t>(
@@ -760,7 +842,7 @@ int run_worker(Options const& options) {
                                                    0x9E3779B97F4A7C15ULL));
         Outcome const outcome =
             run_indexed_case(pristine, model, options.seed, options.case_index, log,
-                             last_kind);
+                             last_kind, options.writer_parse, writer);
         std::string const receipt = case_receipt(options.case_index, options.seed, log);
         if (outcome.wrong_exception) {
             checker.fail(receipt + " threw " + outcome.error);
@@ -775,11 +857,33 @@ int run_worker(Options const& options) {
             std::cout << receipt << ": refused with mpp::Error: " << outcome.error
                       << "\n";
         }
+        if (options.writer_parse) {
+            if (writer.wrong_exception || !writer.clean) {
+                checker.fail(receipt + " threw on the writer side: " + writer.error);
+            } else if (writer.parsed && !writer.error.empty()) {
+                checker.fail(receipt +
+                             " returned an inconsistent CfbDocument: " +
+                             writer.error);
+            } else {
+                std::cout << receipt << ": writer side "
+                          << (writer.parsed ? "parsed " +
+                                                  std::to_string(writer.entries) +
+                                                  " entries / " +
+                                                  std::to_string(writer.streams) +
+                                                  " streams"
+                                            : "refused with mppwrite::Error: " +
+                                                  writer.error)
+                          << "\n";
+            }
+        }
         return checker.report("fuzz_reader (single case)");
     }
 
     unsigned outcome_ok[kMutationKinds] = {};
     unsigned outcome_error[kMutationKinds] = {};
+    unsigned writer_ok = 0;
+    unsigned writer_refused = 0;
+    double max_writer_ms = 0.0;
     unsigned total_ok = 0;
     unsigned total_refused = 0;
     double max_case_ms = baseline.millis;
@@ -794,9 +898,12 @@ int run_worker(Options const& options) {
 
         std::vector<std::string> log;
         unsigned last_kind = 0;
+        WriterOutcome writer;
         Outcome const outcome =
-            run_indexed_case(pristine, model, options.seed, index, log, last_kind);
+            run_indexed_case(pristine, model, options.seed, index, log, last_kind,
+                             options.writer_parse, writer);
         max_case_ms = std::max(max_case_ms, outcome.millis);
+        max_writer_ms = std::max(max_writer_ms, writer.millis);
 
         std::string const receipt = case_receipt(index, options.seed, log);
         if (outcome.wrong_exception) {
@@ -807,6 +914,22 @@ int run_worker(Options const& options) {
             checker.fail(receipt + " returned an inconsistent document: " +
                          outcome.error);
             break;
+        }
+        if (options.writer_parse) {
+            if (writer.wrong_exception || !writer.clean) {
+                checker.fail(receipt + " threw on the writer side: " + writer.error);
+                break;
+            }
+            if (writer.parsed && !writer.error.empty()) {
+                checker.fail(receipt + " returned an inconsistent CfbDocument: " +
+                             writer.error);
+                break;
+            }
+            if (writer.parsed) {
+                ++writer_ok;
+            } else {
+                ++writer_refused;
+            }
         }
         if (outcome.ok) {
             ++outcome_ok[last_kind % kMutationKinds];
@@ -825,13 +948,22 @@ int run_worker(Options const& options) {
         if (index < 8) {
             std::vector<std::string> replay_log;
             unsigned replay_kind = 0;
-            Outcome const replay = run_indexed_case(pristine, model, options.seed,
-                                                    index, replay_log, replay_kind);
+            WriterOutcome replay_writer;
+            Outcome const replay = run_indexed_case(
+                pristine, model, options.seed, index, replay_log, replay_kind,
+                options.writer_parse, replay_writer);
             checker.check(replay.ok == outcome.ok &&
                               replay.tasks == outcome.tasks &&
                               replay.links == outcome.links &&
                               replay_log == log,
                           receipt + " is not reproducible on a second run");
+            if (options.writer_parse) {
+                checker.check(replay_writer.parsed == writer.parsed &&
+                                  replay_writer.entries == writer.entries &&
+                                  replay_writer.streams == writer.streams,
+                              receipt + " writer side is not reproducible on a "
+                                        "second run");
+            }
         }
     }
 
@@ -839,6 +971,11 @@ int run_worker(Options const& options) {
     std::cout << "cases: " << options.cases << ", ok " << total_ok << ", mpp::Error "
               << total_refused << ", max case " << fuzz::ms_text(max_case_ms)
               << ", total " << fuzz::ms_text(wall_ms) << "\n";
+    if (options.writer_parse) {
+        std::cout << "writer side: parsed " << writer_ok << ", mppwrite::Error "
+                  << writer_refused << ", max case " << fuzz::ms_text(max_writer_ms)
+                  << "\n";
+    }
     for (unsigned kind = 0; kind < kMutationKinds; ++kind) {
         std::cout << "  kind " << kind << ": ok " << outcome_ok[kind] << ", error "
                   << outcome_error[kind] << "\n";
@@ -912,6 +1049,9 @@ int run_worker(Options const& options) {
                         log.push_back(entry);
                     }
                     Outcome const outcome = run_case(bytes, corpus.size());
+                    WriterOutcome const writer =
+                        options.writer_parse ? run_writer_case(bytes)
+                                             : WriterOutcome{};
                     if (outcome.wrong_exception ||
                         (outcome.ok && !outcome.error.empty())) {
                         checker.fail(std::string(name) + " case " +
@@ -920,6 +1060,16 @@ int run_worker(Options const& options) {
                                      join_log(log) + "]: " +
                                      (outcome.wrong_exception ? "threw " : "inconsistent: ") +
                                      outcome.error);
+                        break;
+                    }
+                    if (options.writer_parse &&
+                        (writer.wrong_exception || !writer.clean ||
+                         (writer.parsed && !writer.error.empty()))) {
+                        checker.fail(std::string(name) + " case " +
+                                     std::to_string(index) + " seed " +
+                                     fuzz::hex64(case_seed) + " mutations [" +
+                                     join_log(log) + "]: writer side " +
+                                     (writer.wrong_exception ? "threw " : writer.error));
                         break;
                     }
                     if (outcome.ok) {

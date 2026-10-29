@@ -1,14 +1,15 @@
 # tests/fuzz — W57 adversarial lane
 
-Three deterministic fuzzers, plus two recursion-guard regression tests
+Four deterministic fuzzers, plus two recursion-guard regression tests
 (`fuzz_deep_nesting_guard_256` / `_1024`; enabled). This directory is
 test/tooling code only; it adds no product source.
 
 | target | what it attacks | default cost |
 |---|---|---|
-| `fuzz_reader` | seeded byte/count/truncation mutations of `tests/data/synthetic-base.mpp` through `mpp::load_bytes`; unmutated + 16 mutated passes over the two real files (read-only) | ~0.1 s (240 cases) |
+| `fuzz_reader` | seeded byte/count/truncation mutations of `tests/data/synthetic-base.mpp` through `mpp::load_bytes` and, since wave 33, the same bytes through `mppwrite::CfbDocument::from_bytes`; unmutated + 16 mutated passes over the two real files (read-only) | ~0.1 s (240 cases) |
 | `fuzz_writer` | seeded sequences of the public `core/mppwrite` edit APIs over a copy of the synthetic fixture; every operation (and every refusal) proved from the bytes on disk | ~0.8 s (6 × 40 ops) |
 | `fuzz_parsers` | mutated formulas through `core/formula` (tokenize → parse → evaluate) and mutated Props blobs through `core/props` | ~0.3 s (300 + 300 cases) |
+| `fuzz_xml` | seeded mutations of the three committed MSPDI samples through `core::io::import_mspdi`, then every imported document through `export_csv` (wave 33; there is no CSV importer in this tree) | ~0.1 s (240 cases) |
 | `fuzz_deep_nesting_guard_256` / `_1024` | require a positioned parse error at 256 / 1024 nesting levels (PASS in Release; FAIL under ASan until the guard depth is lowered — see F1) | ~0.04 s each |
 
 Two modes, like the other stream subdirectories:
@@ -17,7 +18,7 @@ Two modes, like the other stream subdirectories:
 REM top-level (wired by the coordinator after this lane landed): the brief's
 REM exact verify block
 cmake -S . -B build\vs-w57 -G "Visual Studio 17 2022" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON
-cmake --build build\vs-w57 --config Release --target fuzz_reader fuzz_writer fuzz_parsers
+cmake --build build\vs-w57 --config Release --target fuzz_reader fuzz_writer fuzz_parsers fuzz_xml
 ctest --test-dir build\vs-w57 -C Release --output-on-failure -R fuzz
 REM binaries land in build\vs-w57\tests\fuzz\Release\
 ```
@@ -26,7 +27,7 @@ REM binaries land in build\vs-w57\tests\fuzz\Release\
 REM standalone (how W57 first verified it; useful when the root configure is
 REM busy with another stream's mid-write)
 cmake -S tests/fuzz -B build\vs-w57-fuzz -G "Visual Studio 17 2022" -A x64 -DCORE_WARNINGS_AS_ERRORS=ON
-cmake --build build\vs-w57-fuzz --config Release --target fuzz_reader fuzz_writer fuzz_parsers
+cmake --build build\vs-w57-fuzz --config Release --target fuzz_reader fuzz_writer fuzz_parsers fuzz_xml
 ctest --test-dir build\vs-w57-fuzz -C Release --output-on-failure -R fuzz
 REM binaries land in build\vs-w57-fuzz\Release\
 ```
@@ -66,7 +67,11 @@ would be the very assertion under test. ctest also caps each test at 180 s.
 
 **Reader contract.** A case passes when `mpp::load_bytes` either throws
 `mpp::Error` or returns a `Document` that satisfies the invariants listed at the
-top of `fuzz_reader_main.cpp`. Any other exception type is a failure ("the
+top of `fuzz_reader_main.cpp`. Since wave 33 the same mutated bytes are also
+handed to `mppwrite::CfbDocument::from_bytes`, which must throw
+`mppwrite::Error` or return a document whose entry/stream counts agree; any
+other exception, crash or hang is a failure. `--no-writer-parse` disables the
+second parse for bisecting. Any other exception type is a failure ("the
 failure contract is `mpp::Error`"). The invariants are deliberately weak enough
 that the two real, damaged files still pass: they assert structural
 self-consistency (row order, size-derived bounds, link endpoint flags,
@@ -117,11 +122,15 @@ now exactly the guard.  Full detail and repros: `docs/audit-findings.md` (F1).
 - AppKit/ObjC++ (`app/main.mm`) and any UI path: only a macOS build compiles it.
 - COM/MS Project behaviour: this machine cannot drive the oracle from a confined
   shell (docs/coordination.md revision 3).
-- `core/usage`, `core/cal`, `core/plan`, `core/sheet`, `core/io`, `core/render`:
+- `core/usage`, `core/cal`, `core/plan`, `core/sheet`, `core/render`:
   other streams' units; the reader/writer fuzzers only exercise what the reader
-  and writer expose.
+  and writer expose.  `core/io` is covered only through the MSPDI importer and
+  the CSV exporter (`fuzz_xml`); the CSV *importer* named by the wave-33 audit
+  does not exist in this tree.
 - Whole-file *semantic* oracles: the writer fuzzer proves self-consistency and
   reader/writer agreement, not that Project reopens a mutated file the same way.
   That needs a Project run (coordinator).
 - ASan and memory-safety: see `docs/audit-findings.md`; the fuzzers are run
-  under `/fsanitize=address` in `build\vs-w57-asan`.
+  under `/fsanitize=address` in `build\vs-w57-asan` locally, and since wave 33
+  under `-fsanitize=address,undefined` in the `ubuntu-asan` job in
+  `.github/workflows/ci.yml`.
