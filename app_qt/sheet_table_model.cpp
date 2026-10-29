@@ -489,6 +489,12 @@ bool SheetTableModel::setData(const QModelIndex& index, const QVariant& value, i
     if (role != Qt::EditRole || sheet_ == nullptr || !index.isValid()) {
         return false;
     }
+    // W33-1.7 (A-8 / D-7): a read-only document refuses the edit before any
+    // session opens, and the status line carries the reason.
+    if (!read_only_reason_.empty()) {
+        report_commit(false, read_only_reason_);
+        return false;
+    }
     const std::size_t row = record_row(index.row());
     const std::size_t column = column_for_display(index.column());
     if (row == core::sheet::kNoIndex || column == core::sheet::kNoIndex) {

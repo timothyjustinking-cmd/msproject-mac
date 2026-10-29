@@ -522,6 +522,15 @@ DOCUMENTED = {
     # measures file.
     "tests/data/wave31-usage.mpp":
         "AF8DFE1DCC4EE319378FDBD3F454D398F5ACDC924BB66E9F0B4CC8879A1D600A",
+    # Wave 33 (W33-1.7 / A-8 / D-7): the FAT-slack fixture.  synthetic-base.mpp
+    # (237568 bytes, 463 physical sectors) plus 64 zero sectors = 270336 bytes
+    # and 527 physical sectors.  For 512-byte sectors the FAT has num_fat * 128
+    # = 512 entries, so the FAT describes 512 sectors and the reader warns that
+    # 15 are unreferenced -- the shape Project writes that mppwrite's
+    # CfbDocument::to_bytes refuses to re-emit.  Built by appending 32768 zero
+    # bytes to a copy; the committed fixture is never opened in place.
+    "tests/data/wave33-fat-slack.mpp":
+        "E3A7D6CBBB82EA35901D6C2CE8C7E4D40DE032D424785CBA6F6BED41B93A85C8",
     # Wave 31 (W31-4.1): numbers-only Project 2021 measurements of the Task
     # Usage and Resource Usage sheets -- stored details/tiers, the reopened
     # COM facts, daily TimeScaleData over 5-9 January 2026, the logical row

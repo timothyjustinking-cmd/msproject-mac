@@ -337,6 +337,13 @@ class PlanDocument {
     const std::string& title() const noexcept { return title_; }
     std::size_t warnings() const noexcept { return warnings_; }
 
+    // W33-1.7 (A-8 / D-7): non-empty when the opened container carries
+    // unreferenced trailing sectors.  mppwrite's container writer refuses to
+    // re-emit such a file, so the shell marks the document read-only for the
+    // session and every edit entry point names this reason.  Cleared by every
+    // load and by clear().
+    const std::string& read_only_reason() const noexcept { return read_only_reason_; }
+
   private:
     void reset();
     void build_gantt(app::ZoomLevel zoom);
@@ -429,6 +436,9 @@ class PlanDocument {
     std::string path_;
     std::string title_;
     std::size_t warnings_ = 0;
+    // W33-1.7 (A-8 / D-7): the reason the loaded container cannot be saved, or
+    // empty; set by load() from the reader's container warning.
+    std::string read_only_reason_;
     // Wave 26: the Project Summary Task toggle.  `override_` is false until the
     // ribbon toggles it; the initial display state is the file's stored one.
     bool show_project_summary_ = false;

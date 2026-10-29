@@ -1141,6 +1141,9 @@ bool MainWindow::open_file(const QString& path, QString* error) {
         // The macOS shell leaves the previous state cleared rather than
         // half-loaded (app/README.md); the Qt model is already detached above.
         structural_ = app::StructuralEdits{};
+        // W33-1.7 (A-8 / D-7): the failed load forgets the read-only session too.
+        read_only_reason_.clear();
+        sheet_model_.set_read_only_reason(std::string());
         document_.reset();
         owns_path_ = false;
         // Back to the new-project default: no loaded file says otherwise.
@@ -1195,6 +1198,12 @@ bool MainWindow::open_file(const QString& path, QString* error) {
 
     // A new file owns a fresh pending-edit stack and a fresh one-write holder.
     structural_ = app::StructuralEdits{};
+    // W33-1.7 (A-8 / D-7): a container with unreferenced sectors cannot be
+    // re-emitted, so this session is read-only; the reason reaches the edit
+    // model (the backstop), the table adapter and the status line.
+    read_only_reason_ = doc_.read_only_reason();
+    structural_.set_read_only_reason(read_only_reason_);
+    sheet_model_.set_read_only_reason(read_only_reason_);
     document_ = std::make_unique<app::Document>(path.toStdString());
     owns_path_ = false;
     last_save_target_.clear();
@@ -1272,7 +1281,8 @@ bool MainWindow::open_file(const QString& path, QString* error) {
     // Operator decision 8 / the reference: the LEFT status segment is "Ready",
     // not the load diagnostic (wave 21: the summary moved to the right segment and
     // its tooltip, which also keeps the reader-warning count visible).
-    set_message(std::string(), false);
+    // W33-1.7 (A-8 / D-7): a read-only session states its reason there instead.
+    set_message(read_only_reason_, false);
     update_zoom_slider();
     refresh_view_buttons();
     update_menu_state();
@@ -1587,6 +1597,15 @@ void MainWindow::set_message(std::string text, bool is_error) {
     message_is_error_ = is_error;
 }
 
+bool MainWindow::refuse_read_only() {
+    if (read_only_reason_.empty()) {
+        return false;
+    }
+    set_message(read_only_reason_, true);
+    update_status();
+    return true;
+}
+
 void MainWindow::update_zoom_slider() {
     if (zoom_slider_ == nullptr) {
         return;
@@ -1680,6 +1699,10 @@ void MainWindow::new_project() {
     doc_.clear();
     document_.reset();
     structural_ = app::StructuralEdits{};
+    // W33-1.7 (A-8 / D-7): a new project is writable; the old session's reason
+    // must not survive it.
+    read_only_reason_.clear();
+    sheet_model_.set_read_only_reason(std::string());
     owns_path_ = false;
     // Operator decision 11 / wave 22: a NEW project is Manually Scheduled,
     // whatever the file that was open before said.
@@ -2784,6 +2807,11 @@ void MainWindow::commit_task_form_field(TaskFormField field, const QString& text
 }
 
 void MainWindow::unlink_selected_task() {
+    // W33-1.7 (A-8 / D-7): a read-only session refuses every edit entry point
+    // before anything else, with the container's reason.
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message("unlinking is available in the Task Sheet view", false);
@@ -2826,6 +2854,9 @@ void MainWindow::unlink_selected_task() {
 }
 
 void MainWindow::set_selected_percent(std::uint16_t percent) {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message("percent complete is available in the Task Sheet view", false);
@@ -2881,6 +2912,9 @@ std::string MainWindow::push_refusal(const std::string& command) const {
 }
 
 void MainWindow::indent_selected(bool indent) {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message(std::string(indent ? "indent" : "outdent") +
@@ -2959,6 +2993,9 @@ void MainWindow::indent_selected(bool indent) {
 }
 
 void MainWindow::manually_schedule_selected() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message("manually schedule is available in the Task Sheet view", false);
@@ -2997,6 +3034,9 @@ void MainWindow::manually_schedule_selected() {
 }
 
 void MainWindow::show_task_mode_menu() {
+    if (refuse_read_only()) {
+        return;
+    }
     QMenu menu(this);
     QAction* automatic = menu.addAction(QStringLiteral("Automatically Scheduled"));
     // The reverse save pair shows Project also reschedules the row, and this
@@ -3171,6 +3211,11 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
     if (!doc_.has_document()) {
         return fail("no project to save");
     }
+    // W33-1.7 (A-8 / D-7): the opened container has unreferenced sectors, and
+    // mppwrite refuses to re-emit it, so no write can succeed this session.
+    if (!read_only_reason_.empty()) {
+        return fail(read_only_reason_);
+    }
     if (doc_.sheet() != nullptr && doc_.sheet()->editing()) {
         doc_.sheet()->cancel_edit();
     }
@@ -3295,6 +3340,13 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
 
 bool MainWindow::save_document(bool force_panel, const QString& start_dir) {
     if (!doc_.has_document()) {
+        return false;
+    }
+    // W33-1.7 (A-8 / D-7): refuse before the save prompt, exactly as
+    // save_document_path refuses before the write.
+    if (!read_only_reason_.empty()) {
+        set_message(read_only_reason_, true);
+        update_status();
         return false;
     }
     if (doc_.sheet() != nullptr && doc_.sheet()->editing()) {
@@ -3583,6 +3635,9 @@ void MainWindow::save_as_pdf() {
 // ---------------------------------------------------------------------------
 
 void MainWindow::show_task_fields() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("Task Fields is available in the Task Sheet view", false);
         update_status();
@@ -3640,6 +3695,9 @@ void MainWindow::show_task_fields() {
 }
 
 void MainWindow::show_custom_fields() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document()) {
         set_message("open a project first", false);
         update_status();
@@ -3698,6 +3756,9 @@ void MainWindow::show_custom_fields() {
 }
 
 void MainWindow::show_predecessors() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("Predecessors is available in the Task Sheet view", false);
         update_status();
@@ -3890,6 +3951,9 @@ void MainWindow::show_preferences() {
 }
 
 void MainWindow::show_project_information() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document()) {
         set_message("open a project first", false);
         update_status();
@@ -3937,6 +4001,9 @@ void MainWindow::show_links_between_projects() {
 }
 
 void MainWindow::show_update_project() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document()) {
         set_message("open a project first", false);
         update_status();
@@ -4034,6 +4101,9 @@ void MainWindow::show_update_project() {
 }
 
 void MainWindow::mark_on_track() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message("mark on track is available in the Task Sheet view", false);
@@ -4264,6 +4334,9 @@ void MainWindow::show_options() {
 }
 
 void MainWindow::set_new_task_mode(bool manual) {
+    if (refuse_read_only()) {
+        return;
+    }
     // W28-3.1: with a saved document, Options > Schedule's choice is a pending
     // structural edit written to 114/Props record 0x024013c8 at File > Save
     // (Project's measured bytes: core/mppwrite/project_props.h).  A file that
@@ -4312,6 +4385,9 @@ void MainWindow::set_new_task_mode(bool manual) {
 }
 
 void MainWindow::show_table_date_format() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document()) {
         set_message("open a project first", false);
         update_status();
@@ -4337,6 +4413,9 @@ void MainWindow::show_table_date_format() {
 }
 
 void MainWindow::show_custom_formula() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("Custom Field Formula is available in the Task Sheet view", false);
         update_status();
@@ -4422,6 +4501,9 @@ void MainWindow::copy_selection() {
 }
 
 void MainWindow::cut_selection() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message("cutting is available in the Task Sheet view", false);
@@ -4512,6 +4594,9 @@ void MainWindow::cut_selection() {
 }
 
 void MainWindow::paste_selection() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message("pasting is available in the Task Sheet view", false);
@@ -4592,6 +4677,9 @@ void MainWindow::paste_selection() {
 }
 
 void MainWindow::fill_down() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message("Fill Down is available in the Task Sheet view", false);
@@ -4776,6 +4864,9 @@ void MainWindow::select_core_range_in_view() {
 }
 
 void MainWindow::insert_task() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("Insert Task is available in the Task Sheet view", false);
         update_status();
@@ -4825,6 +4916,9 @@ void MainWindow::insert_task() {
 }
 
 void MainWindow::delete_task() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("Delete Task is available in the Task Sheet view", false);
         update_status();
@@ -5142,6 +5236,11 @@ bool MainWindow::task_information_values(TaskInformationValues* out) const {
 
 bool MainWindow::apply_task_information(const TaskInformationValues& values,
                                         const char* source) {
+    // W33-1.7 (A-8 / D-7): the Task Form's commits land here too, so the
+    // read-only refusal is this model's, not just the dialog's.
+    if (refuse_read_only()) {
+        return false;
+    }
     // The status prefix names the surface: Task Information's dialog or (W28-4.1)
     // the docked Task Form.  The applied edits are the same either way.
     const std::string prefix(source);
@@ -5351,6 +5450,9 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
 }
 
 void MainWindow::show_task_information() {
+    if (refuse_read_only()) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("Task Information is available in the Task Sheet view", true);
         update_status();

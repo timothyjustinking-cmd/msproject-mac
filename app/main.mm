@@ -163,6 +163,10 @@ struct PlanState {
     std::string status_text;
     std::string message;  // last action, or the last rejection/failure
     bool message_is_error = false;
+    // W33-1.7 (A-8 / D-7): non-empty when the opened container carries
+    // unreferenced sectors and no save could ever succeed; every edit entry
+    // point refuses with it and the status line shows it.
+    std::string read_only_reason;
     std::string error;
     std::size_t warnings = 0;
     std::size_t skipped_links = 0;
@@ -454,6 +458,9 @@ std::string make_status_text(const PlanState& plan) {
         }
         text += "  |  view: ";
         text += app::view_mode_title(plan.view_mode);
+        if (!plan.read_only_reason.empty()) {
+            text += "  |  " + plan.read_only_reason;
+        }
         text += "  |  " + app::preferences_summary(g_prefs);
         text += "  |  " + std::to_string(plan.warnings) + " reader warnings";
         if (!plan.path.empty()) {
@@ -515,6 +522,11 @@ std::string make_status_text(const PlanState& plan) {
     }
     if (!plan.formula_set.columns.empty()) {
         text += "  |  " + std::to_string(plan.formula_set.columns.size()) + " formula column(s)";
+    }
+    if (!plan.read_only_reason.empty()) {
+        // W33-1.7 (A-8 / D-7): the session's read-only reason, in the same
+        // status line the reader warnings use.
+        text += "  |  " + plan.read_only_reason;
     }
     text += "  |  " + app::preferences_summary(g_prefs);
     text += "  |  " + std::to_string(plan.warnings) + " reader warnings";
@@ -728,6 +740,11 @@ void outline_selected_task(PlanState& plan, bool indent) {
     if (plan.sheet == nullptr || !app::view_mode_is_task(plan.view_mode)) {
         return;
     }
+    // W33-1.7 (A-8 / D-7): a read-only session refuses every edit entry point.
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        return;
+    }
     if (plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
@@ -767,6 +784,14 @@ bool load_plan(PlanState& plan, const std::string& path) {
     try {
         const mpp::Document document = mpp::load_file(path);
         plan.warnings = document.warnings.size();
+        // W33-1.7 (A-8 / D-7): the reader's own warning says sectors after the
+        // FAT's last entry belong to no chain; mppwrite refuses to re-emit such
+        // a container, so the session is read-only and every entry point says
+        // why.  `edits` carries the same reason as the model-level backstop.
+        if (app::document_has_unreferenced_sectors(document)) {
+            plan.read_only_reason = std::string(app::kUnreferencedSectorsReason);
+            plan.edits.set_read_only_reason(plan.read_only_reason);
+        }
         plan.loaded = app::plan_input_from_document(document);
         plan.loaded.source_name = std::filesystem::path(path).filename().string();
         plan.skipped_links = plan.loaded.skipped_links;
@@ -1394,8 +1419,9 @@ bool begin_edit_at(PlanState& plan, std::size_t row, std::size_t column) {
     // Wave 25 (W25-1/S1, the R5 guard): app::begin_cell_edit refuses the
     // project-summary row (uid 0) and a declared read-only column.  Every macOS
     // edit path (double-click, Return, typing, Backspace) enters here.
+    // W33-1.7 (A-8 / D-7): a read-only session refuses before the session opens.
     std::string error;
-    if (!app::begin_cell_edit(*plan.sheet, row, column, error)) {
+    if (!app::begin_cell_edit(*plan.sheet, row, column, error, plan.read_only_reason)) {
         note(plan, error, true);
         return false;
     }
@@ -1730,6 +1756,12 @@ void copy_selection(PlanState& plan) {
 
 void paste_from_pasteboard(PlanState& plan) {
     if (plan.sheet == nullptr) {
+        return;
+    }
+    // W33-1.7 (A-8 / D-7): paste writes cells directly, so it needs the same
+    // read-only refusal as the cell session (begin_edit_at would not see it).
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
         return;
     }
     NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
@@ -3120,6 +3152,12 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     PlanState& plan = *g_plan;
+    // W33-1.7 (A-8 / D-7): a read-only session refuses every edit entry point.
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     if (plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
@@ -3194,6 +3232,11 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     if (plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
@@ -3286,6 +3329,11 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     if (plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
@@ -3408,6 +3456,11 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     if (plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
@@ -3630,6 +3683,11 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     if (plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
@@ -3696,6 +3754,11 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     if (plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
@@ -4043,6 +4106,13 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return NO;
     }
     PlanState& plan = *g_plan;
+    // W33-1.7 (A-8 / D-7): this session's container cannot be re-emitted, so
+    // refuse before the save prompt rather than after the write attempt.
+    if (!plan.read_only_reason.empty()) {
+        note(plan, "not saved: " + plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return NO;
+    }
     if (plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }

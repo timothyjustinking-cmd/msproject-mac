@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <exception>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -32,6 +33,33 @@
 #include "usage_mpp.h"
 
 namespace app {
+
+// ---------------------------------------------------------------------------
+// W33-1.7 (A-8 / D-7): a container with unreferenced trailing sectors
+// ---------------------------------------------------------------------------
+//
+// MS Project can leave sectors after the FAT's last entry (core/mpp/cfb.h: the
+// reader's own cited case, corpus/imported/sf248.mpp).  The reader opens such a
+// file and reports "N unreferenced sectors" as a container warning, but
+// mppwrite::CfbDocument::to_bytes() refuses to re-emit it, so every Save fails
+// AFTER the user has edited all session.  Both shells therefore mark the
+// document read-only at open and name this reason; every edit entry point and
+// the save path refuse with it.
+//
+// `Document::warnings` starts with the container's warnings (core/mpp/reader.h),
+// and "unreferenced sectors" is the only text the container layer emits
+// (core/mpp/cfb.cpp), so the predicate is exact for this reader version.  The
+// reason is the brief's user-facing sentence, verbatim; the shells show it in
+// the status line and in every refusal.
+inline constexpr std::string_view kUnreferencedSectorsReason =
+    "saved by Project with unreferenced sectors; saving is not supported yet";
+
+inline bool document_has_unreferenced_sectors(const mpp::Document& document) {
+    return std::any_of(document.warnings.begin(), document.warnings.end(),
+                       [](const std::string& warning) {
+                           return warning.find("unreferenced sectors") != std::string::npos;
+                       });
+}
 
 // Wave 12: the `114/Props` stream of an already-written .mpp, for the formula
 // decoder (core/props).  Returns an empty vector when the file has no such

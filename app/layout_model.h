@@ -401,8 +401,13 @@ void apply_edit_policy(core::sheet::SheetModel& sheet);
 // an edit there would be accepted and then silently dropped -- refuse it before
 // a session opens.  Any other row goes through core::sheet, which refuses a
 // declared read-only column.  `error` is the status message on a refusal.
+//
+// W33-1.7 (A-8 / D-7): a non-empty `read_only_reason` refuses the session
+// before either rule and copies the reason to `error`.  Both shells pass their
+// document's reason when the opened container carries FAT slack (no save can
+// re-emit it), so the cell-edit path shares the same refusal as every dialog.
 bool begin_cell_edit(core::sheet::SheetModel& sheet, std::size_t row, std::size_t column,
-                     std::string& error);
+                     std::string& error, std::string_view read_only_reason = {});
 
 // ---------------------------------------------------------------------------
 // Gantt mapping

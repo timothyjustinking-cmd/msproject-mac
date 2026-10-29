@@ -113,6 +113,10 @@ class MainWindow final : public QMainWindow {
     // Wave 19 dirty state: true exactly when a save would write something
     // (a pending start diff, or an Insert/Delete/Task Fields/Predecessors edit).
     bool document_dirty() const;
+    // W33-1.7 (A-8 / D-7): the session reason when the opened container carries
+    // unreferenced sectors and could never be saved, or "" for an ordinary
+    // document.  The offscreen gate asserts it, the status line shows it.
+    const std::string& read_only_reason() const noexcept { return read_only_reason_; }
     std::size_t pending_start_edits() const;
     std::size_t loaded_task_count() const;
     // Wave 26 (G5): the pending structural edits, for the project-dialog gate
@@ -427,6 +431,9 @@ class MainWindow final : public QMainWindow {
     void new_project();
     void refresh_backstage_info();
     void set_message(std::string text, bool is_error);
+    // W33-1.7 (A-8 / D-7): true when this session is read-only; puts the reason
+    // on the status line so the caller can simply return.
+    bool refuse_read_only();
     void handle_action(app::MenuAction action);
     // Wave 26: the ribbon controls that are not menu actions (Link/Unlink in
     // W26-1.2; the view/format toggles arrive with W26-1.3/1.4).  Wave 28
@@ -605,6 +612,9 @@ class MainWindow final : public QMainWindow {
     std::vector<QToolButton*> view_buttons_;
     std::string message_;
     bool message_is_error_ = false;
+    // W33-1.7 (A-8 / D-7): non-empty while the opened container has FAT slack
+    // and no save could succeed; every edit entry point refuses with it.
+    std::string read_only_reason_;
     bool splitter_user_moved_ = false;
     // Wave 26: View > Split View > Timeline; starts at the file's stored setting
     // (a new project keeps Project's shown default).

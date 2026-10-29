@@ -473,7 +473,14 @@ void apply_edit_policy(core::sheet::SheetModel& sheet) {
 }
 
 bool begin_cell_edit(core::sheet::SheetModel& sheet, std::size_t row, std::size_t column,
-                     std::string& error) {
+                     std::string& error, std::string_view read_only_reason) {
+    // W33-1.7 (A-8 / D-7): a document opened from a container with unreferenced
+    // sectors can never be saved (the container writer refuses it), so no edit
+    // session opens.  The reason is the user-facing sentence the shells show.
+    if (!read_only_reason.empty()) {
+        error = std::string(read_only_reason);
+        return false;
+    }
     // Wave 25 (W25-1/S1): uid 0 is the synthetic project-summary row.  It has
     // no row in the plan the save diff compares (sync_plan_from_records skips
     // it), so accepting an edit would lose it silently.  The check is here, in

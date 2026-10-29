@@ -84,6 +84,15 @@ class SheetTableModel final : public QAbstractTableModel {
 
     void set_commit_handler(CommitHandler handler);
 
+    // W33-1.7 (A-8 / D-7): a document opened from a container with unreferenced
+    // sectors cannot be saved, so setData refuses every cell edit and reports
+    // this reason through the commit handler.  Empty (the default) means the
+    // normal rules; the shell sets it from PlanDocument::read_only_reason().
+    void set_read_only_reason(std::string reason) {
+        read_only_reason_ = std::move(reason);
+    }
+    const std::string& read_only_reason() const noexcept { return read_only_reason_; }
+
     // Wave 20: the preferences whose date/duration rendering the cells use
     // (app::cell_text, app/prefs.h).  The pointer must outlive the adapter; the
     // shell points it at its own app::Preferences member.  nullptr falls back to
@@ -213,6 +222,8 @@ class SheetTableModel final : public QAbstractTableModel {
     ValueKindLookup value_kind_lookup_;
     std::vector<QString> row_numbers_;
     bool custom_row_numbers_ = false;
+    // W33-1.7 (A-8 / D-7): non-empty while the open document is read-only.
+    std::string read_only_reason_;
     CommitHandler commit_handler_;
 };
 

@@ -2530,6 +2530,13 @@ bool make_task_mode_edit(const PlanInput& plan, std::string_view source_path,
 
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                            const std::vector<std::uint32_t>& pending_start_uids) {
+    // W33-1.7 (A-8 / D-7): a document opened from a container with FAT slack
+    // cannot be saved at all, so every edit is refused before any validation
+    // and nothing is queued.  The shells name the reason in the status line;
+    // this is the shared backstop for a push that bypasses them.
+    if (!read_only_reason_.empty()) {
+        return false;
+    }
     // W30-1.0: the measured task-mode pair is one mode change on an otherwise
     // untouched save, so the edit is exclusive in both directions.  It may only
     // be queued into an empty list, and no other edit may be queued over it.

@@ -945,6 +945,18 @@ void test_displayed_rows_by_uid() {
           "a task row opens an edit session");
     sheet.cancel_edit();
     check(!sheet.editing(), "the task-row session can be cancelled");
+
+    // W33-1.7 (A-8 / D-7): a read-only session refuses a row that would
+    // otherwise open, before the uid-0/column checks, and names the reason.
+    const std::string read_only_reason(app::kUnreferencedSectorsReason);
+    check(!app::begin_cell_edit(sheet, 1, name_column, error, read_only_reason),
+          "a read-only document refuses a task-row edit session");
+    check(error == read_only_reason, "the refusal carries the read-only reason");
+    check(!sheet.editing(), "no edit session is left open after the read-only refusal");
+    check(app::begin_cell_edit(sheet, 1, name_column, error),
+          "the same row still opens a session when no reason is set");
+    sheet.cancel_edit();
+    check(!sheet.editing(), "the session opened without a reason can be cancelled");
 #else
     std::printf("SKIP: APP_TEST_DATA_DIR is not defined; W25-1 fixture test not run\n");
 #endif

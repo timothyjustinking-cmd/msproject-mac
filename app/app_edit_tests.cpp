@@ -1373,11 +1373,75 @@ void test_real_insert_clone_check() {
     }
 }
 
+void test_fat_slack_read_only() {
+    // W33-1.7 (A-8 / D-7).  The fixture is tests/data/wave33-fat-slack.mpp:
+    // synthetic-base.mpp plus 64 zero sectors, so the FAT describes 512 of the
+    // file's 527 physical sectors and the reader warns about 15 unreferenced
+    // ones.  The fixture is READ, never written.
+    const std::filesystem::path fixture =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "wave33-fat-slack.mpp";
+    if (!std::filesystem::exists(fixture)) {
+        // Wave 33: a committed fixture this test needs must FAIL when it is
+        // missing, never skip and pass.
+        check(false, "the committed wave33-fat-slack.mpp fixture is present");
+        return;
+    }
+    bool slack_detected = false;
+    try {
+        const mpp::Document document = mpp::load_file(fixture.string());
+        slack_detected = app::document_has_unreferenced_sectors(document);
+    } catch (const std::exception& error) {
+        std::printf("FAIL: cannot load the slack fixture: %s\n", error.what());
+        ++g_checks;
+        ++g_failures;
+        return;
+    }
+    check(slack_detected, "the FAT-slack fixture is detected as read-only");
+    check_text(std::string(app::kUnreferencedSectorsReason),
+               "saved by Project with unreferenced sectors; saving is not supported yet",
+               "the read-only reason is the brief's plain-words sentence");
+
+    // The clean fixture (the slack one is its bytes plus appended sectors) must
+    // NOT be read-only, so the detection cannot be a constant.
+    const std::filesystem::path clean =
+        std::filesystem::path(APP_TEST_DATA_DIR) / "synthetic-base.mpp";
+    bool clean_slack = true;
+    try {
+        const mpp::Document document = mpp::load_file(clean.string());
+        clean_slack = app::document_has_unreferenced_sectors(document);
+    } catch (const std::exception& error) {
+        std::printf("FAIL: cannot load synthetic-base.mpp: %s\n", error.what());
+        ++g_checks;
+        ++g_failures;
+        return;
+    }
+    check(!clean_slack, "the clean synthetic fixture is not read-only");
+
+    // The edit model's backstop, independent of either shell: while the reason
+    // is set, every push is refused and nothing queues.
+    app::StructuralEdits edits;
+    edits.set_read_only_reason(std::string(app::kUnreferencedSectorsReason));
+    const app::PlanInput plan = make_plan();
+    app::StructuralEdit insert =
+        insert_after("New Task", edits.next_placeholder_uid(plan), plan.tasks.front().uid);
+    check(!edits.push(insert), "a read-only edit model refuses an insert");
+    check_size(edits.size(), 0, "the refused insert queued nothing");
+    check(!edits.can_undo(), "the refused insert left no undo entry");
+    app::StructuralEdit remove = delete_uid(plan.tasks.front().uid);
+    check(!edits.push(remove), "a read-only edit model refuses a delete");
+    check_size(edits.size(), 0, "the refused delete queued nothing");
+    check_text(edits.read_only_reason(), std::string(app::kUnreferencedSectorsReason),
+               "the model keeps the reason it refuses with");
+}
+
 #else
 void test_real_save_round_trip() {
     std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
 }
 void test_real_insert_clone_check() {
+    std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
+}
+void test_fat_slack_read_only() {
     std::printf("SKIP: APP_TEST_DATA_DIR/APP_TEST_OUT_DIR are not defined\n");
 }
 #endif
@@ -1394,6 +1458,7 @@ int main() {
     test_apply_placement();
     test_real_insert_clone_check();
     test_real_save_round_trip();
+    test_fat_slack_read_only();
 
     if (g_failures != 0) {
         std::printf("FAIL: %d of %d checks failed\n", g_failures, g_checks);

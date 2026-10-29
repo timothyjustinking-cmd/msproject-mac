@@ -430,6 +430,7 @@ void PlanDocument::reset() {
     path_.clear();
     title_.clear();
     warnings_ = 0;
+    read_only_reason_.clear();
     show_project_summary_ = false;
     project_summary_override_ = false;
 }
@@ -449,6 +450,13 @@ bool PlanDocument::load(const std::string& source_path, app::ZoomLevel zoom,
         // Nothing is forced here: a fixture that stores 0 stays hidden.
         loaded_.source_name = std::filesystem::path(source_path).filename().string();
         warnings_ = document.warnings.size();
+        // W33-1.7 (A-8 / D-7): the container's own warning says the file has
+        // sectors no chain references.  mppwrite::CfbDocument::to_bytes refuses
+        // to re-emit such a container, so no edit could ever be saved: the
+        // document is read-only for this session and the shell shows the reason.
+        if (app::document_has_unreferenced_sectors(document)) {
+            read_only_reason_ = std::string(app::kUnreferencedSectorsReason);
+        }
         title_ = loaded_.title;
         path_ = source_path;
         // No pending structural edits yet: the display plan starts as the file.

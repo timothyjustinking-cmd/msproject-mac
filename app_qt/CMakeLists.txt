@@ -202,6 +202,25 @@ add_test(NAME qt_table_date_format
                  "${QT_TEST_DATA_DIR_CMAKE}/wave31-tables.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# ===========================================================================
+# WAVE 33 (W33-1.7 / A-8 / D-7): a container with unreferenced sectors can
+# never be re-emitted, but the shells accepted edits all session and only the
+# Save failed.  This gate opens the synthetic FAT-slack fixture (synthetic-base
+# plus 64 zero sectors), checks the status line names the read-only reason and
+# that the cell, Insert Task, Delete Task and Save entry points all refuse with
+# it (no dialog opens), then proves the clean fixture still accepts the edit.
+# ===========================================================================
+add_executable(qt_fat_slack_tests tests/fat_slack_test.cpp)
+target_link_libraries(qt_fat_slack_tests PRIVATE qt_shell)
+qt_set_warnings(qt_fat_slack_tests)
+
+add_test(NAME qt_fat_slack
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_fat_slack_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave33-fat-slack.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # Wave 24 (W24-1): RecordSet row vs plan task index.  The fixture stores the
 # project row SHOWN, out-of-ID stored order and a mixed scheduling state, so
 # every uid-routed call site (Task Information, Custom Fields save, Delete,
@@ -802,7 +821,8 @@ foreach(carlito_target
         qt_icon_gate_tests qt_backstage_gate_tests qt_project_dialog_gate_tests
         qt_format_dialog_gate_tests qt_page_setup_gate_tests
         qt_report_dialog_gate_tests qt_spelling_gate_tests
-        qt_task_information_apply_tests qt_table_date_format_tests)
+        qt_task_information_apply_tests qt_table_date_format_tests
+        qt_fat_slack_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 

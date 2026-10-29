@@ -59,6 +59,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "document.h"
@@ -445,6 +446,17 @@ class StructuralEdits {
     const StructuralEdit* next_undo() const noexcept;
     const StructuralEdit* next_redo() const noexcept;
 
+    // W33-1.7 (A-8 / D-7): an opened container with FAT slack is read-only for
+    // the session (mppwrite's to_bytes() refuses to re-emit it, so no save can
+    // ever write an edit).  While a reason is set, push() refuses EVERY kind
+    // and queues nothing; the shells set this from
+    // app::document_has_unreferenced_sectors() and show the reason in the
+    // status line.  A load/new-document clears it with the stack.
+    void set_read_only_reason(std::string reason) {
+        read_only_reason_ = std::move(reason);
+    }
+    const std::string& read_only_reason() const noexcept { return read_only_reason_; }
+
     // Records one edit.  False (changing nothing) for a malformed edit: an empty
     // name, uid 0, a duplicate delete, an insert whose placeholder uid is already
     // used, an unmeasured/wrongly typed field value, a self-link, a duplicate
@@ -585,6 +597,9 @@ class StructuralEdits {
 
     std::vector<StructuralEdit> applied_;  // in application order
     std::vector<StructuralEdit> undone_;   // a redo pops its back
+    // W33-1.7 (A-8 / D-7): non-empty only for a document the shell opened from
+    // a container with unreferenced sectors; push() then refuses every edit.
+    std::string read_only_reason_;
 };
 
 // How many dependent rows a delete of `uid` would tombstone: every link whose
