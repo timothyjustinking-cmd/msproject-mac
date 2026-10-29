@@ -341,6 +341,14 @@ void test_tokenizer(TestContext& ctx) {
                   "[inference] 4h is 2400 ticks (600/hour)");
     }
 
+    // CI-6: 1e16 days is 4.8e19 ticks, past int64; the lexer refuses it at the
+    // literal instead of converting out of range (UBSan's fuzz report).
+    const core::formula::TokenizeResult huge = core::formula::tokenize("1+10000000000000000d");
+    ctx.check(!huge.ok, "a duration literal past int64 ticks is refused");
+    ctx.equal(huge.error_position, std::size_t(2), "the refusal names the literal's offset");
+    ctx.check(huge.error.find("duration literal out of range") != std::string::npos,
+              "the refusal says the duration is out of range");
+
     const core::formula::TokenizeResult quotes = core::formula::tokenize("\"a\"\"b\"");
     ctx.check(quotes.ok, "[inference] a doubled quote is one escaped quote");
     if (quotes.ok && !quotes.tokens.empty()) {

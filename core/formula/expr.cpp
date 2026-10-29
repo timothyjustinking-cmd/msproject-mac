@@ -1,6 +1,7 @@
 #include "expr.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <string>
 #include <utility>
@@ -186,6 +187,14 @@ TokenizeResult tokenize(std::string_view source) {
             if (unit_end > unit_start &&
                 duration_unit_ticks(source.substr(unit_start, unit_end - unit_start), unit_ticks)) {
                 const double ticks = value * static_cast<double>(unit_ticks);
+                /* CI-6: a literal past int64 (or not finite) is an error, never
+                 * an out-of-range conversion; the same bound as eval.cpp's
+                 * round_to_ticks. */
+                constexpr double kLimit = 9.2e18;
+                if (!std::isfinite(ticks) || ticks <= -kLimit || ticks >= kLimit) {
+                    set_error(result, token.position, "duration literal out of range");
+                    return result;
+                }
                 token.kind = TokenKind::Duration;
                 token.ticks = static_cast<std::int64_t>(ticks < 0.0 ? ticks - 0.5 : ticks + 0.5);
                 pos = unit_end;
