@@ -226,6 +226,21 @@ The wave-33b fix-only wave closed R33-1..R33-3; these five stay queued.
   leg leaves the retained clear/flag heuristic beneath the W33b-1.1 refusal
   untested; restoring the pair that lifts the refusal restores the test
   (`app/document_tests.cpp`, W33b-1.1 detail).
+- R33b-3 Low: the Qt shell's table index counts task tables only, the request's
+  index counts every stored table (resource tables included); they agree on both
+  committed two-table fixtures (`app_qt/main_window.cpp:4404`).
+- R33b-4 Low: a stale flag-decision comment (`app/edit_model.cpp:4321-4323`).
+- R33b-5 Low: `wave33b-complete.md:211` says CI-2 was confirmed on `6fdf3af`, but
+  that asan build stopped at 76%; the `b914006` run confirms it.
+- RF-1 Low: `test_view_state_column_table0_only`'s byte-identical and "writes no
+  view state" checks pass without the guard (table 1's column 1 is already Text1);
+  use another field or column so they go RED too (`app/document_tests.cpp:773-801`).
+- RF-2 Low: the `#else` stub list lacks `test_view_state_column_table0_only`
+  (`app/document_tests.cpp:1777-1797`); latent, both macros are always defined.
+- RF-3 Low: unchecked double -> uint32 casts of file f64 values
+  (`core/mpp/reader.h:706, 787, 790`); no fuzz target reaches them yet.
+- RF-4 Low: `static_cast<int>(std::floor(number / 10.0))` before the 0..10 clamp
+  (`core/view/group.cpp:155`); NaN or > 2.1e10 is undefined behaviour.
 
 ## After wave 30 (not planned in detail)
 
