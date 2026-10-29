@@ -6,7 +6,7 @@
  * fixture turned the checks that used it green without running.  The rule is
  * now:
  *
- *   tests/data/, tests/*.tsv, analysis/*.tsv
+ *   tests/data/, and the tests/ and analysis/ TSV files
  *       committed: a missing file is a FAILURE naming the path;
  *   corpus/
  *       git-ignored client data: absence is a supported SKIP, and the words
