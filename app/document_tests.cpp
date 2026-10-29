@@ -760,6 +760,47 @@ void test_view_state_date_format_table0_only() {
     check_size(bytes_on_disk(source), source_bytes_on_disk, "the source fixture is untouched");
 }
 
+// R33b-1 (Medium): the column replacement is measured on table 0 only, so a
+// hand-built column request for table 1 is refused by the request and by the
+// save hook, with 214/CTable byte-identical.
+void test_view_state_column_table0_only() {
+    const std::filesystem::path source = kTablesFixture;
+    check(std::filesystem::exists(source), "the two-table fixture is committed");
+
+    app::ViewStateEdits second;
+    second.replace_column = true;
+    second.column_index = 1;
+    second.field_id = 0x0b400033u;  // Text1
+    second.title = "Text1";
+    second.table_index = 1;
+
+    app::Document document(source.string());
+    std::string error;
+    check(!document.request_view_state_edits(second, &error),
+          "a column request for table 1 is refused");
+    check(error.find("a column change for table 1 is not implemented in this port") !=
+              std::string::npos,
+          "the column refusal carries the decision-9 reason and the index");
+    check(!document.has_pending_edits(), "the refused column request queues nothing");
+
+    mppwrite::CfbDocument container = mppwrite::CfbDocument::from_file(source.string());
+    const std::vector<std::uint8_t> var2_before =
+        container.read_stream("214/CTable/Var2Data");
+    const app::DocumentEditOutcome hook =
+        app::apply_document_edits(container, second, app::CustomFormulaEdit{});
+    check(hook.ok, "a refused column edit does not fail the save hook");
+    check(!hook.view_state_written, "the hand-built table-1 column edit writes no view state");
+    bool hook_named_refusal = false;
+    for (const std::string& warning : hook.warnings) {
+        if (warning.find("a column change for table 1") != std::string::npos) {
+            hook_named_refusal = true;
+        }
+    }
+    check(hook_named_refusal, "the save hook warns with the column refusal");
+    check(container.read_stream("214/CTable/Var2Data") == var2_before,
+          "the hand-built table-1 column edit leaves 214/CTable byte-identical");
+}
+
 // ---------------------------------------------------------------------------
 // Wave 15 (b): a 115-byte column record replacement
 // ---------------------------------------------------------------------------
@@ -1765,6 +1806,7 @@ int main() {
     test_save_round_trip();
     test_save_view_state_date_format();
     test_view_state_date_format_table0_only();
+    test_view_state_column_table0_only();
     test_save_view_state_column();
     test_save_without_edits();
     test_save_formula_set();

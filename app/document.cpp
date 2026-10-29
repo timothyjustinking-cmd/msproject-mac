@@ -63,6 +63,12 @@ std::string view_state_date_format_refusal(std::uint32_t table_index) {
            "write is measured against Project";
 }
 
+std::string view_state_column_refusal(std::uint32_t table_index) {
+    return "a column change for table " + std::to_string(table_index) +
+           " is not implemented in this port: only the first table's column "
+           "write is measured against Project";
+}
+
 // W33b-1.1 (R33-2, Medium): the decision-9 reason a formula CLEAR is refused.
 // Shared by the queue (`Document::clear_custom_formula`) and the save hook, so a
 // hand-built request reports the same words the shells show.
@@ -341,9 +347,13 @@ void apply_view_state_edit(mppwrite::CfbDocument& document, const ViewStateEdits
     // went around Document's queue.  Only table 0's date-format byte has a
     // Project save pair; every other index is refused, and the 214/ tree is
     // left byte-identical (the view-state contract: a refusal is a warning).
-    if (edits.set_date_format && edits.table_index != 0) {
+    // R33b-1 (Medium): the column replacement is measured on table 0 only too,
+    // so ANY view-state edit of another table is refused here.
+    if (edits.table_index != 0) {
         outcome.warnings.push_back("view state not written: " +
-                                   view_state_date_format_refusal(edits.table_index));
+                                   (edits.set_date_format
+                                        ? view_state_date_format_refusal(edits.table_index)
+                                        : view_state_column_refusal(edits.table_index)));
         return;
     }
     try {
@@ -576,9 +586,11 @@ bool Document::request_view_state_edits(const ViewStateEdits& edits, std::string
     // save, but only table 0's date-format byte has a Project save pair (the
     // col -> date blobs; w64.md lists every other index as unmeasured).  Refuse
     // before anything is queued, and leave a request queued before it alone.
-    if (edits.set_date_format && edits.table_index != 0) {
+    // R33b-1 (Medium): likewise a column replacement on any table but the first.
+    if (edits.any() && edits.table_index != 0) {
         if (error != nullptr) {
-            *error = view_state_date_format_refusal(edits.table_index);
+            *error = edits.set_date_format ? view_state_date_format_refusal(edits.table_index)
+                                           : view_state_column_refusal(edits.table_index);
         }
         return false;
     }

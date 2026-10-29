@@ -243,6 +243,14 @@ struct CustomFormulaEdit {
 //    table's date-format write is measured against Project"
 [[nodiscard]] std::string view_state_date_format_refusal(std::uint32_t table_index);
 
+// R33b-1 (Medium): the column-record replacement is measured on the first table
+// only too (wave 15's pair), so a column request for any other index is refused
+// with the same decision-9 shape:
+//
+//   "a column change for table N is not implemented in this port: only the
+//    first table's column write is measured against Project"
+[[nodiscard]] std::string view_state_column_refusal(std::uint32_t table_index);
+
 // What applying the two operations to an in-memory container did.
 //
 // `ok == false` means a FORMULA operation was refused: the container is
