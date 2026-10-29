@@ -3251,10 +3251,6 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
     doc_.accept_start_edits(edits);
     document_->discard_view_state_edits();
     document_->discard_custom_formula();
-    last_save_target_ = outcome.path;
-    last_save_rows_written_ = outcome.rows_written;
-    last_save_warnings_ = outcome.warnings;
-    note_recent_file(to_q(outcome.path));
 
     // W32-0.2: no Start edit reaches this save (refused above), so the status
     // names the file and the container writer, never a start-row count.
@@ -3271,9 +3267,28 @@ bool MainWindow::save_document_path(const QString& target, QString* error) {
     for (const std::string& warning : outcome.warnings) {
         std::fprintf(stderr, "msqt: save warning: %s\n", warning.c_str());
     }
+
+    // W33-0.2 (A-1, Critical): the non-structural route adopts the file it
+    // wrote exactly as the structural route does.  app::Document::save derives
+    // every write from the ORIGINAL file, so without this reload the NEXT save
+    // (structural or not) rebuilds the target from the original and silently
+    // discards the formula / date-format write.  The reload also makes the
+    // document one this app wrote, so a later Save may overwrite its own file.
+    QString reload_error;
+    if (!open_file(to_q(outcome.path), &reload_error)) {
+        set_message(message + " | the saved file could not be re-read: " +
+                        reload_error.toStdString(),
+                    true);
+        update_status();
+        return true;  // the file WAS written; the reload is what failed
+    }
+    owns_path_ = true;
+    last_save_target_ = outcome.path;
+    last_save_rows_written_ = outcome.rows_written;
+    last_save_warnings_ = outcome.warnings;
     update_window_title();
     update_menu_state();
-    set_message(message, false);
+    set_message(message + " | reloaded the file", false);
     update_status();
     return true;
 }

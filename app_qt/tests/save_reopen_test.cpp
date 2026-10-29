@@ -26,7 +26,9 @@
 #include <QApplication>
 #include <QByteArray>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QFile>
+#include <QInputDialog>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -49,6 +51,7 @@
 #include <vector>
 
 #include "backstage.h"
+#include "cfb_writer.h"
 #include "dialogs.h"
 #include "document.h"
 #include "entry_columns.h"
@@ -56,6 +59,7 @@
 #include "main_window.h"
 #include "menu_model.h"
 #include "preferences_store.h"
+#include "props.h"
 #include "reader.h"
 #include "ribbon_bar.h"
 #include "sheet.h"
@@ -129,6 +133,124 @@ std::vector<std::uint8_t> file_bytes(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input),
                                      std::istreambuf_iterator<char>());
+}
+
+// W33-0.2: the number of FormulaBlocks the saved 114/Props stream carries.
+// -1 means the file could not be read or parsed (the test then fails loudly
+// instead of comparing a defaulted zero).
+int formula_count(const std::filesystem::path& path) {
+    try {
+        const mppwrite::CfbDocument document =
+            mppwrite::CfbDocument::from_file(path.string());
+        const std::vector<std::uint8_t> props = document.read_stream("114/Props");
+        msproject::props::PropsDocument parsed;
+        msproject::props::ParseError parse_error;
+        if (!msproject::props::parse_props(props, parsed, &parse_error)) {
+            return -1;
+        }
+        return static_cast<int>(msproject::props::extract_formulas(parsed).size());
+    } catch (const std::exception&) {
+        return -1;
+    }
+}
+
+// W33-0.2: byte 11 of 214/CTable/Var2Data is the applied table's date format
+// (document_tests.cpp's measured +7 payload byte); -1 when unreadable.
+int ctable_date_format(const std::filesystem::path& path) {
+    try {
+        const mppwrite::CfbDocument document =
+            mppwrite::CfbDocument::from_file(path.string());
+        const std::vector<std::uint8_t> var2 = document.read_stream("214/CTable/Var2Data");
+        if (var2.size() <= 11) {
+            return -1;
+        }
+        return static_cast<int>(var2[11]);
+    } catch (const std::exception&) {
+        return -1;
+    }
+}
+
+// The two dialogs the non-structural save writes are modal; the gate fills them
+// from a zero-delay timer while exec() is running (page_setup_gate_test.cpp's
+// pattern) and accepts.
+bool queue_custom_formula(msqt::MainWindow& window, const QString& formula) {
+    bool seen = false;
+    QTimer::singleShot(0, [&seen, formula]() {
+        auto* dialog =
+            dynamic_cast<msqt::CustomFormulaDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            return;
+        }
+        seen = true;
+        dialog->field_combo()->setCurrentIndex(0);
+        dialog->formula_edit()->setText(formula);
+        dialog->accept();
+    });
+    QAction* action = find_action(window, app::MenuAction::custom_field_formula);
+    if (action == nullptr || !action->isEnabled()) {
+        return false;
+    }
+    action->trigger();
+    QApplication::processEvents();
+    return seen;
+}
+
+bool queue_table_date_format(msqt::MainWindow& window, int format) {
+    bool seen = false;
+    QTimer::singleShot(0, [&seen, format]() {
+        auto* dialog =
+            dynamic_cast<msqt::TableDateFormatDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            return;
+        }
+        seen = true;
+        const int index = dialog->date_format_combo()->findData(QVariant(format));
+        if (index >= 0) {
+            dialog->date_format_combo()->setCurrentIndex(index);
+        }
+        dialog->accept();
+    });
+    QAction* action = find_action(window, app::MenuAction::table_date_format);
+    if (action == nullptr || !action->isEnabled()) {
+        return false;
+    }
+    action->trigger();
+    QApplication::processEvents();
+    return seen;
+}
+
+void select_row(msqt::MainWindow& window, std::size_t record_row) {
+    core::sheet::SheetModel* sheet = window.sheet();
+    if (sheet == nullptr) {
+        return;
+    }
+    const std::size_t column =
+        window.sheet_table_model()->visible_column_for_field(app::name_field_id());
+    sheet->select_cell(record_row, column == core::sheet::kNoIndex ? 0 : column);
+    window.refresh_menu_state();
+}
+
+bool insert_task_named(msqt::MainWindow& window, const QString& name) {
+    bool seen = false;
+    QTimer::singleShot(0, [&seen, name]() {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QInputDialog*>(widget);
+            if (dialog == nullptr || !dialog->isVisible()) {
+                continue;
+            }
+            seen = true;
+            dialog->setTextValue(name);
+            dialog->accept();
+            return;
+        }
+    });
+    QAction* action = find_action(window, app::MenuAction::insert_task);
+    if (action == nullptr || !action->isEnabled()) {
+        return false;
+    }
+    action->trigger();
+    QApplication::processEvents();
+    return seen;
 }
 
 }  // namespace
@@ -473,6 +595,106 @@ int main(int argc, char** argv) {
     if (clean.ok) {
         check(file_bytes(source) == file_bytes(untouched),
               "a save with nothing pending writes the source container byte-identically");
+    }
+
+    // =======================================================================
+    // W33-0.2 (A-1, Critical): a non-structural save ADOPTS the file it wrote.
+    // app::Document::save always derives its output from the ORIGINAL file.
+    // Before W33 the non-structural route only remembered the target, so the
+    // next Save (structural or not) rebuilt it from the original and silently
+    // discarded the formula / date-format write.  Both shells now reload the
+    // written file exactly as the structural route does.
+    // =======================================================================
+    {
+        const std::filesystem::path source2 = out_dir / "w3302-source.mpp";
+        std::filesystem::copy_file(fixture, source2,
+                                   std::filesystem::copy_options::overwrite_existing,
+                                   fs_error);
+        check(std::filesystem::exists(source2), "the W33-0.2 source copy exists");
+        msqt::MainWindow window2;
+        window2.resize(msqt::kWindowWidth, msqt::kWindowHeight);
+        error.clear();
+        check(window2.open_file(QString::fromStdString(source2.string()), &error),
+              "the W33-0.2 window opens the source copy");
+        select_row(window2, 0);
+
+        const std::filesystem::path formula_target = out_dir / "w3302-formula.mpp";
+        std::filesystem::remove(formula_target, fs_error);
+        check(queue_custom_formula(window2, QStringLiteral("[Name]")),
+              "the Custom Field Formula dialog is live and accepts a formula");
+        check(window2.document_dirty(), "the formula request makes the document dirty");
+        check(window2.save_document_path(QString::fromStdString(formula_target.string()),
+                                         &error),
+              "the formula save succeeds");
+        check(formula_count(formula_target) == 1, "the formula save wrote one formula");
+
+        // "Save again" with nothing pending is a no-op that must leave the
+        // written file alone.
+        const std::vector<std::uint8_t> after_formula = file_bytes(formula_target);
+        check(window2.save_document_path(QString::fromStdString(formula_target.string()),
+                                         &error),
+              "a second Save with nothing pending succeeds");
+        check(file_bytes(formula_target) == after_formula,
+              "the second Save with nothing pending leaves the formula file unchanged");
+        check(formula_count(formula_target) == 1,
+              "the formula is still in the file after Save again");
+
+        // The decisive case: a later structural edit and Save must derive from
+        // the file the formula save wrote, not from the original source.
+        check(insert_task_named(window2, QStringLiteral("W33 second save")),
+              "Insert Task asks for and accepts a name");
+        check(window2.pending_edits().size() == 1,
+              "the insert is the one pending structural edit");
+        check(window2.save_document_path(QString::fromStdString(formula_target.string()),
+                                         &error),
+              "the structural save over the formula file succeeds");
+        check(formula_count(formula_target) == 1,
+              "the formula survives the next save (the document adopted its own write)");
+    }
+
+    // The same two-save shape for the table date format.
+    {
+        const std::filesystem::path source3 = out_dir / "w3302-date-source.mpp";
+        std::filesystem::copy_file(fixture, source3,
+                                   std::filesystem::copy_options::overwrite_existing,
+                                   fs_error);
+        check(std::filesystem::exists(source3), "the date-format source copy exists");
+        msqt::MainWindow window3;
+        window3.resize(msqt::kWindowWidth, msqt::kWindowHeight);
+        error.clear();
+        check(window3.open_file(QString::fromStdString(source3.string()), &error),
+              "the date-format window opens the source copy");
+        select_row(window3, 0);
+
+        const std::filesystem::path format_target = out_dir / "w3302-dateformat.mpp";
+        std::filesystem::remove(format_target, fs_error);
+        check(queue_table_date_format(window3, 4),
+              "the Table / Date Format dialog is live and accepts format 4");
+        check(window3.document_dirty(), "the date-format request makes the document dirty");
+        check(window3.save_document_path(QString::fromStdString(format_target.string()),
+                                         &error),
+              "the date-format save succeeds");
+        check(ctable_date_format(format_target) == 4,
+              "the date-format save wrote format 4");
+
+        const std::vector<std::uint8_t> after_format = file_bytes(format_target);
+        check(window3.save_document_path(QString::fromStdString(format_target.string()),
+                                         &error),
+              "a second Save with nothing pending succeeds");
+        check(file_bytes(format_target) == after_format,
+              "the second Save with nothing pending leaves the date-format file unchanged");
+        check(ctable_date_format(format_target) == 4,
+              "the date format is still 4 after Save again");
+
+        check(insert_task_named(window3, QStringLiteral("W33 date second save")),
+              "Insert Task asks for and accepts a name");
+        check(window3.pending_edits().size() == 1,
+              "the insert is the one pending structural edit");
+        check(window3.save_document_path(QString::fromStdString(format_target.string()),
+                                         &error),
+              "the structural save over the date-format file succeeds");
+        check(ctable_date_format(format_target) == 4,
+              "the date format survives the next save");
     }
 
     // The committed fixture was never touched: the source copy is still there.

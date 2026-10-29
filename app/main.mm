@@ -4106,7 +4106,6 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     // The write carried them, so they are no longer pending.
     plan.document->discard_view_state_edits();
     plan.document->discard_custom_formula();
-    g_target_path = outcome.path;
     // W32-0.2: no Start edit reaches this save (refused above), so the saved
     // parts name only the container edits.  rows_written stays in the outcome
     // for the writer's own tests; the shell no longer advertises it.
@@ -4134,8 +4133,6 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     if (!outcome.notes.empty()) {
         message += ", " + std::to_string(outcome.notes.size()) + " writer note(s)";
     }
-    note(plan, message, false);
-    [g_view refreshAfterChange];
 
     // The writer's receipts go to the console (they are per-row "re-read from
     // disk" lines, and the manual-row warning that Project will ignore the pin).
@@ -4147,6 +4144,30 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         std::fprintf(stderr, "msproject-app: save warning: %s\n", warning.c_str());
     }
     std::fflush(stdout);
+
+    // W33-0.2 (A-1, Critical): adopt the file the save wrote, exactly as the
+    // structural route does.  app::Document::save always derives its output
+    // from the originally opened file, so without reloading here the next Save
+    // (structural or not) would rebuild the target from that original and
+    // silently discard the formula / date-format write.  load_plan also
+    // rebuilds plan.document for the written path, so the next save reads it.
+    if (!load_plan(plan, outcome.path)) {
+        const std::string reload_error = plan.error;
+        note(plan, message + "  |  but the saved file could not be re-read: " +
+                                 reload_error,
+             true);
+        [g_view refreshAfterChange];
+        show_alert(@"Saved, but the file could not be re-read",
+                   to_ns(reload_error + "\n\nThe file was written. Reopen it with File > Open."));
+        return YES;
+    }
+    plan.owns_path = true;
+    g_target_path = outcome.path;
+    [self updateWindowTitle:outcome.path title:plan.loaded.title];
+    [self rebuildColumnsMenu];
+    [g_view refreshAfterChange];
+    note(plan, message + "  |  reloaded the file", false);
+
     if (!outcome.warnings.empty()) {
         std::string details;
         for (const std::string& warning : outcome.warnings) {
