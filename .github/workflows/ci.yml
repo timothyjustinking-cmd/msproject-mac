@@ -103,6 +103,22 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
+      # Wave 33 (W33-4.2, audit C-3): the wave-32 merge commits reintroduced
+      # CRLF in three files, undoing W32-C1.  .gitattributes now pins *.md,
+      # *.py, *.yml, *.cpp and *.h to LF; this step fails if git classifies
+      # any of them as CRLF or mixed, in the committed bytes (i/) or in the
+      # working tree (w/, e.g. a checkout whose autocrlf ignored the rules).
+      - name: Fail on a CR in a tracked file that must be LF
+        shell: bash
+        run: |
+          bad=$(git ls-files --eol -- '*.md' '*.py' '*.yml' '*.cpp' '*.h' \
+                | awk '$1 ~ /crlf|mixed/ || $2 ~ /crlf|mixed/')
+          if [ -n "$bad" ]; then
+            echo "CR/CRLF found in tracked files that .gitattributes pins to LF:"
+            echo "$bad"
+            exit 1
+          fi
+
       # bash exists on all three images (Git Bash on Windows) so the commands
       # below are identical everywhere and are exactly what docs/build.md
       # documents.  Quoted generator names survive the space in a generator name.
@@ -236,6 +252,19 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
           fetch-depth: 0
+
+      # Same line-ending guard as the matrix job: the committed and working-tree
+      # bytes of every pinned text type must be LF (wave 33 W33-4.2).
+      - name: Fail on a CR in a tracked file that must be LF
+        shell: bash
+        run: |
+          bad=$(git ls-files --eol -- '*.md' '*.py' '*.yml' '*.cpp' '*.h' \
+                | awk '$1 ~ /crlf|mixed/ || $2 ~ /crlf|mixed/')
+          if [ -n "$bad" ]; then
+            echo "CR/CRLF found in tracked files that .gitattributes pins to LF:"
+            echo "$bad"
+            exit 1
+          fi
 
       - name: Configure (ASan + UBSan)
         shell: bash

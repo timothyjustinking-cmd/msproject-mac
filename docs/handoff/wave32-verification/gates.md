@@ -34,7 +34,10 @@ cleaned) an in-place, same-length neutral replacement of the author name (3
 occurrences; size and every offset unchanged).  Commit messages, authors and dates are
 unchanged; `rewrite-sha-map.txt` maps the 329 old commit ids to the new ones, so the
 ids quoted in the wave 23-32 records (CI runs included) are the old ones.  The tip tree
-differs from the verified tip only in `wave23-outline.mpp` and its documented hash; with
+differs from the verified tip in `wave23-outline.mpp`, its documented hash, and the three
+files the wave-32 merge commits rewrote with CRLF (`plan-waves27-30.md`,
+`scripts/check_fixtures.py` and this file); wave 33 W33-4.2 restored those three to LF,
+so apart from the line endings the tree differs only in the fixture and its hash.  With
 the neutralised fixture the verifier re-ran core 52/52, qt 37/37, app 25/25 and the
 engine suite (7 pass, constraint-mso the known failure) before the rewrite, and CI runs
 again on main.  The old wave23..wave32 branches were deleted on GitHub.  Still on main

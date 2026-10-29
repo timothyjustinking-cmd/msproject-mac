@@ -7,3 +7,14 @@ tests/data/reference/*.json text eol=lf
 *.mpp binary
 *.png binary
 *.bin binary
+
+# Wave 33 (W33-4.2, audit C-3): the wave-32 merge commits reintroduced CRLF in
+# three files, undoing W32-C1.  Source and record types are pinned to LF on
+# every checkout and CI fails on a CR in them (ci.yml).  The grandfathered
+# .tsv/.json/.txt files are deliberately NOT typed here: several have documented
+# SHA-256s of their CRLF bytes.
+*.md text=auto eol=lf
+*.py text=auto eol=lf
+*.yml text=auto eol=lf
+*.cpp text=auto eol=lf
+*.h text=auto eol=lf
