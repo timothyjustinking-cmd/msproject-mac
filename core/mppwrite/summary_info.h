@@ -43,8 +43,13 @@
  *                             when DurationFormat +164 has bit 0x20
  *   titles[5] / typed pid 2   percent  +92 as "<n>%"
  *   titles[6] / typed pid 8   % work   +94 as "<n>%"
- *   title [3] / typed pid 7   work    UNCHANGED (no measured pair changes the
- *                                     project row's total work, +8)
+ *   title [3] / typed pid 7   work    +8 total work as "<n> hrs" when it
+ *                                     changes (W34-3.1's assign pairs move
+ *                                     it 0 <-> 2400000.0, "0 hrs" <-> "40
+ *                                     hrs"; every committed fixture's string
+ *                                     is the same "<n> hrs" form, 0, 16, 40,
+ *                                     80 or 160).  An unchanged total keeps
+ *                                     the stored bytes.
  *   title [4] / typed pid 3   cost    UNCHANGED
  *
  * The date text is "Ddd D/MM/YY" (weekday, not-zero-padded day, two-digit
@@ -69,7 +74,9 @@
  *   - typed pids 2..8 missing or of an unexpected type,
  *   - a project-row DurationFormat other than 21 or 53,
  *   - an invalid project-row start or finish,
- *   - a change to the project row's total work (+8..+15).
+ *   - a project-row total work (+8..+15) that is negative, not finite, not a
+ *     whole number of hours (the total is in 60000-per-hour units), or exactly
+ *     one hour (the singular "1 hr" spelling is unmeasured).
  *
  * This is the measured-save-path rule: for a shape not measured here the
  * command must be refused, never written with a guessed value.

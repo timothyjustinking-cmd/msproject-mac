@@ -57,7 +57,9 @@
  *   stream     records                          scalars
  *   114/Props  update, existing id, kind kept,  BE 0x01000100, 0x01000002,
  *              payload equal or larger          0x02000001, 0x02000100,
- *                                               0x03000001
+ *                                               0x03000001, 0x04000001,
+ *                                               0x04000002, 0x04008000,
+ *                                               0x04000100
  *   214/Props  refused (no pair)               BE 0x01000100 only
  *   any other  refused                          refused
  *
@@ -126,6 +128,13 @@ inline constexpr std::uint32_t kPropsTaskFreedTag = 0x01000002u;
 inline constexpr std::uint32_t kPropsResourceCountTag = 0x02000001u;
 inline constexpr std::uint32_t kPropsResourceSizeTag = 0x02000100u;
 inline constexpr std::uint32_t kPropsCalendarCountTag = 0x03000001u;
+/* The assignment table's four words, measured through W34-3.1's pairs: the
+ * FixedMeta header count, the cumulative removed-payload ("freed") counter,
+ * the dirty flag and the Var2Data size. */
+inline constexpr std::uint32_t kPropsAssignmentCountTag = 0x04000001u;
+inline constexpr std::uint32_t kPropsAssignmentFreedTag = 0x04000002u;
+inline constexpr std::uint32_t kPropsAssignmentDirtyTag = 0x04008000u;
+inline constexpr std::uint32_t kPropsAssignmentSizeTag = 0x04000100u;
 
 /* One record update: the id must already exist with this kind, and the new
  * payload must be equal to or larger than the stored one. */

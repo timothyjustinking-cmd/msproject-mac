@@ -54,6 +54,87 @@ The port must reproduce the whole updated stream set, not just the new row:
 every row's FixedMeta entry may be rewritten, new var blocks append at the
 current end, and the size words of all six streams move.
 
+### W34-3.1: the assignment ADD and REMOVE shapes, byte for byte
+
+The two `wave30-assign-*` pairs fix every byte of both edits.  The writer
+`core/mppwrite/assignment_growth.cpp` encodes exactly these shapes and refuses
+every other shape before it writes.  `n` is the old FixedData row count; the
+target task's placeholder row is row `p`.
+
+ADD (wave30-assign-add: every row is an unassigned placeholder; the target
+task has exactly one, and every row's `+8` is `0xFFFF0001`):
+
+- **Assn FixedData** 330 -> 440: append a byte copy of row `p` with `+0` =
+  largest uid + 1 and `+8` = the resource uid.  Every existing row byte stays.
+- **Assn FixedMeta** 118 -> 152: row `p`'s entry `+0 := 0x02`, `+2 := 0`
+  (tombstone, offset and tail kept); append `{+0 0, +2 4, +4 n*110,
+  +8..14 f1 ff 23 f0 69 00 02}`; header `+4 := 6`, `+8 := n+1`, `+12 :=
+  (n+1)*110`.
+- **Assn Fixed2Data** 144 -> 192: append `{fresh identity, the task row's
+  Fixed2Data identity, the resource row's Fixed2Data identity}`.  Project
+  renumbers every identity's first dword on save; the pair test normalises
+  the three counter dwords of the appended record.
+- **Assn Fixed2Meta** 175 -> 228: append `{+4 n*48, +8 0xcf, +9 0x09,
+  +35 0x10, +52 0x28}`; header `+8 := n+1`, `+12 := (n+1)*48`.
+- **Assn VarMeta** 132 -> 144: remove row `p`'s uid group (three entries:
+  0x0F400031, 0x0F40027A, 0x0F400299) and append four entries for the new
+  uid in ascending key order, blocks appended in Project's order: 0x0F40027A
+  at `base`, 0x0F400031 at `base+8`, 0x0F400299 at `base+84`, 0x0F40029B at
+  `base+104`.  Header `+8 += 1` (four added, three removed), `+0x14 :=
+  base+124`.
+- **Assn Var2Data** 396 -> 520: append the 0x0F40027A block whose 4-byte
+  payload is the file's current session word (`114/Props` record 0x02400007,
+  `12 2a 18 3d` in the control as well as the result), the 0x0F400031 block
+  (72 B: header `[0x00200000][44][units*16][work][ticks8][0][1][0][0]` and
+  one 28-byte record `[work][units*16][0][0][ticks8]`, work in 60000-per-hour
+  units, ticks8 = work/100*8), then two 16-byte zero blocks (0x0F400299,
+  0x0F40029B).  Nothing here is save noise.
+- **Task FixedData**: project row and target task row `+8` and `+24 := work`.
+  **Task FixedMeta** project entry (row+3) `+16 |= 0x10`, target entry
+  `+16 |= 0x90`.  **Task Var2Data** 0x0B4004E5 leaf payload `[1][0xFFFF0001]`
+  becomes `[1][resource uid]` (the 8-byte payload's second word).
+- **Rsc FixedData**: the target resource row `+48`, `+90` and `+106 := work`.
+  **Rsc FixedMeta**: row 0's entry (index 3) `+13 := 0x00`.
+- **114/Props**: Assignment count `:=` FixedMeta header `+8` (3 -> 4),
+  freed `+=` the removed group's payload bytes (100+4+16 = 120), dirty
+  `:= 1`, size `:=` the new Var2Data size.
+- **DocumentSummaryInformation**: the project row's total work 0 -> W moves
+  the work strings `"0 hrs" -> "40 hrs"` (titles[3] and typed pid 7).
+
+REMOVE (wave30-assign-delete: the settled shape -- every row but the last is
+an unassigned placeholder, the last is the only real assignment, FixedMeta and
+Fixed2Meta have `n-1` real entries and a byte-duplicate spare at the end):
+
+- **Assn FixedData** 440 -> 550: append a copy of the real last row with `+0`
+  = largest uid + 1, `+8 = 0xFFFF0001`; the deleted row's bytes stay.
+- **Assn FixedMeta** 152 -> 152: the real row's entry `+0 := 0x02`,
+  `+2 := 0`; the spare duplicate entry `+4 := n*110`, `+13 := 0x01`; header
+  `+4 := 6`, `+8 := n`, `+12 := (n+1)*110` (the file grows by one row).
+- **Assn Fixed2Data** 192 -> 240: append `{fresh identity, the task row's
+  identity, the placeholder rows' null-resource identity}`.  **Task
+  FixedMeta** target entry `+16 &= ~0x10` (0x97 -> 0x87); the project entry
+  keeps 0x17.
+- **Assn Fixed2Meta** 228 -> 228: the spare entry `+4 := n*48`, `+9 := 0x01`
+  (0x09 -> 0x01), `+8 0xcf` and `+52 0x28` kept; header `+8 := n`, `+12 :=
+  (n+1)*48` (the header's size word tracks the grown Fixed2Data; the
+  Fixed2Meta stream itself does not grow).
+- **Assn VarMeta** 144 -> 144: re-key the real row's group from its uid to
+  the new uid and move all four block offsets `+124`; entry count stays, and
+  the four entries keep the ascending key order (0x0F400031 at `base+8`,
+  0x0F40027A at `base`, 0x0F400299 at `base+84`, 0x0F40029B at `base+104`).
+  Header `+0x14 := old Var2Data size + 124`.
+- **Assn Var2Data** 520 -> 644: append a copy of the real group's 124 bytes
+  with its 28-byte contour record (group `+56`) ZEROED.  The block headers'
+  units (`+24`), work (`+32`) and ticks8 (`+48`) bytes are kept; Project
+  zeroes only the record of the assignment that is no longer live.
+- **Task FixedData**: project row and target task row `+8`/`+24 := 0`.
+  **Task Var2Data**: leaf payload `[1][resource uid]` -> `[1][0xFFFF0001]`.
+- **Rsc FixedData**: target row `+48`, `+90`, `+106 := 0`.
+- **114/Props**: count `:=` header `+8` (3 -> 4), freed `+=` the copied
+  group's payload bytes (72+4+16+16 = 108), dirty `:= 1`, size `:=` 644.
+- **DocumentSummaryInformation**: total work W -> 0, `"40 hrs" -> "0 hrs"`.
+
+
 ## Evidence
 
 ### Measured (pairs)

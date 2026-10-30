@@ -67,8 +67,11 @@ Refusals (`mppwrite::Error`, so nothing is written): a stream whose layout is
 not the one above (checked by re-serialising it unchanged), a titles vector
 that is not seven VT_VECTOR|VT_LPSTR strings, typed pids 2..8 missing or of
 an unexpected type, a project-row DurationFormat other than 21 or 53, an
-invalid project-row start or finish, and a change to the project row's total
-work (+8..+15).
+invalid project-row start or finish, and a total work (+8..+15) that is
+negative, not finite, not a whole number of hours, or exactly one hour. The
+total work changing is measured, not refused: `wave30-assign-add` moves it
+0 → 2400000.0 and the work string `0 hrs` → `40 hrs`, and
+`wave30-assign-delete` moves it back (W34-3.1).
 
 ## Evidence
 

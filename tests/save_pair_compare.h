@@ -131,6 +131,25 @@ inline bool declared_path(char const* const* paths, std::size_t count,
     return false;
 }
 
+/* One stream's declared normalised tail ranges (W34-3.1).  The ranges apply
+ * only to `path`; every other stream compares as before. */
+struct TailNormalisation {
+    std::string path;
+    std::vector<TailRange> ranges;
+};
+
+inline std::vector<TailRange> const& normalisation_for(
+    std::vector<TailNormalisation> const& normalisations,
+    std::string const& path) {
+    static std::vector<TailRange> const kNone;
+    for (TailNormalisation const& entry : normalisations) {
+        if (path == entry.path) {
+            return entry.ranges;
+        }
+    }
+    return kNone;
+}
+
 inline void report_stream(std::string const& label, std::string const& path,
                           Kind kind, Verdict const& verdict) {
     std::printf("   %-18s %-34s %-7s noise=%-4llu effects=%-4llu",
@@ -158,7 +177,8 @@ void compare_all(Context& ctx, std::string const& label,
                  mppwrite::CfbDocument const& project,
                  mppwrite::CfbDocument const& port, KnownGap const* gaps,
                  std::size_t gap_count, char const* const* declared_paths,
-                 std::size_t declared_count) {
+                 std::size_t declared_count,
+                 std::vector<TailNormalisation> const& normalisations = {}) {
     std::vector<std::string> paths = control.stream_paths();
     for (mppwrite::CfbDocument const* doc : {&null_save, &project, &port}) {
         for (std::string const& path : doc->stream_paths()) {
@@ -181,7 +201,9 @@ void compare_all(Context& ctx, std::string const& label,
         std::vector<std::uint8_t> const port_stream = stream_or_empty(port, path);
         bool const declared = declared_path(declared_paths, declared_count, path);
         Verdict const verdict = compare(kind, control_stream, null_stream,
-                                        project_stream, port_stream, declared);
+                                        project_stream, port_stream, declared,
+                                        normalisation_for(normalisations,
+                                                          path));
         report_stream(label, path, kind, verdict);
         total_noise += verdict.noise;
         total_effects += verdict.effects + verdict.tail_effects;

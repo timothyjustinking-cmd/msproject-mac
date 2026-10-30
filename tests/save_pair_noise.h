@@ -56,6 +56,13 @@
  * from the control also counts as a tail effect.  `tail_bytes` reports how many
  * positions were compared this way.
  *
+ * SHORTER SAVES (W34-3.1).  A stream the edit SHRINKS (the assignment delete's
+ * DocumentSummaryInformation, 1104 -> 1100) leaves positions beyond BOTH
+ * Project's edit save and the port's save.  Those are compared as AGREEMENT:
+ * neither document stores a byte, so there is nothing to disagree about.  A
+ * position only one side still stores remains a mismatch, so the check still
+ * fails on any length difference between the port and Project.
+ *
  * DocumentSummaryInformation has NO measured noise in any of the pairs
  * (control and null save are byte-identical), so it is compared exactly; a
  * noise byte there fails the "this stream is noise-free" check instead of
@@ -79,6 +86,15 @@
  *           against Project's edit save as the appended tail, W33-3.2).
  * 214/CEdl/Var2Data: zero the first 12 bytes, find id 31 00 40 26, same
  *           sentinel replacement.  522 raw -> 430 normalised.
+ *
+ * DECLARED TAIL RANGES (W34-3.1).  A caller may declare, per stream, byte
+ * ranges inside the appended tail that are normalised rather than compared:
+ * Project renumbers the three identity counter dwords of an APPENDED row on
+ * every save, so no port can equal them.  The ranges exempt only the MISMATCH
+ * check; effect and tail-effect counting are unchanged, so the edit's declared
+ * effects must still be non-empty and every other appended byte is compared.
+ * wave30-assign-add and wave30-assign-delete declare the appended assignment
+ * Fixed2Data record's dwords at +0, +16 and +32.
  */
 
 #ifndef SAVE_PAIR_NOISE_H
@@ -145,6 +161,27 @@ std::string null_fixture_name(std::string const& control_name);
 Bytes normalise_props14(Bytes const& raw);
 Bytes normalise_cedl(Bytes const& raw);
 
+/* W34-3.1: a declared normalised tail range.  Project renumbers an appended
+ * row identity's first dword on every save, so the port's fresh value there
+ * cannot equal Project's.  Positions inside a range are exempt from the
+ * MISMATCH check only -- effect and tail-effect counting are unchanged -- and
+ * a range only applies inside the appended tail (i >= the null save's length).
+ */
+struct TailRange {
+    std::size_t offset = 0;
+    std::size_t length = 0;
+};
+
+inline bool in_tail_range(std::vector<TailRange> const& ranges,
+                          std::size_t at) {
+    for (TailRange const& range : ranges) {
+        if (at >= range.offset && at - range.offset < range.length) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /*
  * Compare one stream under the discipline.
  *
@@ -152,10 +189,13 @@ Bytes normalise_cedl(Bytes const& raw);
  * no-edit save of that control, `result` Project's edit save and `output` the
  * port's save.  `effects_declared` says the pair test declares this stream
  * changes with the edit; the caller must then check `effects_ok`.
+ * `normalised_tail` lists the appended-tail ranges exempt from the mismatch
+ * check (W34-3.1).
  */
 Verdict compare(Kind kind, Bytes const& control, Bytes const& null_save,
                 Bytes const& result, Bytes const& output,
-                bool effects_declared = false);
+                bool effects_declared = false,
+                std::vector<TailRange> const& normalised_tail = {});
 
 /* ---- implementation ---------------------------------------------------- */
 
@@ -330,7 +370,8 @@ inline long props14_marker_payload(Bytes const& raw) {
 
 inline Verdict compare(Kind kind, Bytes const& control,
                        Bytes const& null_save, Bytes const& result,
-                       Bytes const& output, bool effects_declared) {
+                       Bytes const& output, bool effects_declared,
+                       std::vector<TailRange> const& normalised_tail) {
     Verdict verdict;
     verdict.effects_declared = effects_declared;
     Bytes control_bytes = control;
@@ -401,9 +442,22 @@ inline Verdict compare(Kind kind, Bytes const& control,
         if (masked) {
             continue;
         }
+        /* W34-3.1: a declared tail range exempts the mismatch check only. */
+        if (in_tail && in_tail_range(normalised_tail, i)) {
+            continue;
+        }
+        /* A position beyond BOTH saves is not a difference (W34-3.1): the
+         * assignment delete SHRINKS DocumentSummaryInformation 1104 -> 1100,
+         * and Project's edit save and the port's save then both end before the
+         * control does.  Nothing is stored on either side, so there is nothing
+         * to disagree.  A position only one side still stores is a mismatch,
+         * so unequal lengths are still caught. */
+        bool const both_absent = i >= output_bytes.size() &&
+                                 i >= result_bytes.size();
         bool const output_differs =
-            i >= output_bytes.size() || i >= result_bytes.size() ||
-            output_bytes[i] != result_bytes[i];
+            !both_absent &&
+            (i >= output_bytes.size() || i >= result_bytes.size() ||
+             output_bytes[i] != result_bytes[i]);
         if (output_differs) {
             if (verdict.mismatches == 0) {
                 verdict.first_mismatch = i;

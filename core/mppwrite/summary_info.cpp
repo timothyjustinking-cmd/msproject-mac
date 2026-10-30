@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <utility>
@@ -97,6 +98,14 @@ std::uint64_t get_u64(Bytes const& b, std::size_t at, char const* what) {
     for (int i = 7; i >= 0; --i) {
         value = (value << 8) | b[at + static_cast<std::size_t>(i)];
     }
+    return value;
+}
+
+double get_f64(Bytes const& b, std::size_t at, char const* what) {
+    std::uint64_t const bits = get_u64(b, at, what);
+    double value = 0.0;
+    static_assert(sizeof value == sizeof bits, "IEEE-754 double expected");
+    std::memcpy(&value, &bits, sizeof value);
     return value;
 }
 
@@ -510,14 +519,11 @@ void write_project_summary(CfbDocument& doc, TaskTable const& before,
     if (before.rows() < 1 || after.rows() < 1) {
         fail("the task table has no project row");
     }
-    /* Work is the one display value that is not derived here: no measured pair
-     * changes the project row's total work, and the work string's rounding for
-     * a changed total is unmeasured.  A change is a new shape and must be
-     * refused rather than carried through with the old string. */
-    if (before.u32(0, kRowWork) != after.u32(0, kRowWork)) {
-        fail("the project row's total work changed; the summary work string"
-             " has no measured update rule");
-    }
+    /* Work is a display value the measured pairs DO derive: wave30-assign-add
+     * takes the project row's total work 0 -> 2400000 (40 h) and both work
+     * strings (titles[3] and section 1 pid 7) go "0 hrs" -> "40 hrs"; the
+     * delete pair goes back.  The change is checked and formatted below, where
+     * the rest of the display values are derived. */
     std::string const stream_path = summary_stream_path(doc);
     if (stream_path.empty()) {
         fail("the stream is absent from the document");
@@ -620,13 +626,54 @@ void write_project_summary(CfbDocument& doc, TaskTable const& before,
         row_day(after, task_row::kFinish, "the project row's finish") -
         row_day(before, task_row::kFinish, "the opened project row's finish");
 
-    /* Titles [3] (work) and [4] (cost) keep their bytes. */
+    /* --- the work string ------------------------------------------------ */
+    /* The measured display is "<n> hrs" for a whole, non-negative hour count
+     * (0, 16, 40, 80 and 160 hrs across the committed fixtures).  The total
+     * work double is in the same 60000-per-hour unit the assignment rows use
+     * (wave30-assign-add: 2400000.0 <-> "40 hrs").  A negative or fractional
+     * total, or the unmeasured singular spelling for one hour, is refused
+     * rather than guessed. */
+    /* The project row is row 0 of the Task table; its work word sits at the
+     * row's +8, after the table's 48-byte header (task_row_offset(0)). */
+    double const work_before =
+        get_f64(before.fixed_data(), task_row_offset(0) + kRowWork,
+                "the opened project row's work");
+    double const work_after =
+        get_f64(after.fixed_data(), task_row_offset(0) + kRowWork,
+                "the project row's work");
+    bool const work_changed = work_before != work_after;
+    std::string new_work;
+    if (work_changed) {
+        if (!std::isfinite(work_after) || work_after < 0.0) {
+            fail("the project row's total work is negative or not finite");
+        }
+        double const hours = work_after / 60000.0;
+        double const whole = std::round(hours);
+        if (!std::isfinite(hours) || std::fabs(hours - whole) > 1e-9) {
+            fail("the project row's total work is not a whole number of "
+                 "hours; the work string's fractional form is unmeasured");
+        }
+        if (whole == 1.0) {
+            fail("the project row's total work is one hour; the singular "
+                 "\"1 hr\" spelling is unmeasured");
+        }
+        if (whole > 1e15) {
+            fail("the project row's total work is too large to format");
+        }
+        new_work = std::to_string(static_cast<long long>(whole)) + " hrs";
+    }
+
+    /* Titles [4] (cost) keeps its bytes; [3] (work) moves only with the total. */
     titles[0] = Bytes(new_start.begin(), new_start.end());
     titles[0].push_back(0);
     titles[1] = Bytes(new_finish.begin(), new_finish.end());
     titles[1].push_back(0);
     titles[2] = Bytes(new_duration.begin(), new_duration.end());
     titles[2].push_back(0);
+    if (work_changed) {
+        titles[3] = Bytes(new_work.begin(), new_work.end());
+        titles[3].push_back(0);
+    }
     titles[5] = Bytes(new_percent.begin(), new_percent.end());
     titles[5].push_back(0);
     titles[6] = Bytes(new_percent_work.begin(), new_percent_work.end());
@@ -644,6 +691,9 @@ void write_project_summary(CfbDocument& doc, TaskTable const& before,
     set_prop(sections[1], kPidFinish, filetime(finish_days, finish_prop.raw));
     set_prop(sections[1], kPidStart, filetime(start_days, start_prop.raw));
     set_prop(sections[1], kPidPercentWork, lpstr(new_percent_work));
+    if (work_changed) {
+        set_prop(sections[1], kPidWork, lpstr(new_work));
+    }
 
     doc.replace_stream(stream_path, serialise(header, sections));
 }

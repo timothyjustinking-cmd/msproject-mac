@@ -108,7 +108,11 @@ bool scalar_allowed(std::string const& stream, std::uint32_t tag) {
         return tag == kPropsTaskSizeTag || tag == kPropsTaskFreedTag ||
                tag == kPropsResourceCountTag ||
                tag == kPropsResourceSizeTag ||
-               tag == kPropsCalendarCountTag;
+               tag == kPropsCalendarCountTag ||
+               tag == kPropsAssignmentCountTag ||
+               tag == kPropsAssignmentFreedTag ||
+               tag == kPropsAssignmentDirtyTag ||
+               tag == kPropsAssignmentSizeTag;
     }
     return tag == kPropsTaskSizeTag; /* 214/Props: the CV_iew size only */
 }
@@ -116,8 +120,10 @@ bool scalar_allowed(std::string const& stream, std::uint32_t tag) {
 std::string scalar_whitelist(std::string const& stream) {
     if (stream == kPropsBackEnd) {
         return "0x01000100 (Task size), 0x01000002 (Task freed), "
-               "0x02000001 (Resource count), 0x02000100 (Resource size) and "
-               "0x03000001 (Calendar count)";
+               "0x02000001 (Resource count), 0x02000100 (Resource size), "
+               "0x03000001 (Calendar count), 0x04000001 (Assignment count), "
+               "0x04000002 (Assignment freed), 0x04008000 (Assignment dirty) "
+               "and 0x04000100 (Assignment size)";
     }
     return "0x01000100 (the CV_iew Var2Data size)";
 }
