@@ -107,6 +107,15 @@ them (`git checkout -- core/mppwrite/viewstream_edit.cpp`, delete the test file)
 redo the item.  Never commit them unread.  The 12-hour stop point moves by the
 pause: 23:15 on 30 Oct 2026.
 
+**Coordinator note (30 Oct 2026 18:25, STOPPED: DeepSeek balance).**  From about 18:20
+every DeepSeek call returned "API Error: 402 Insufficient Balance"; G3 left after three
+failures with W34-3.1 committed (`281ac54`, `07046d0`, `73bc6e6`) and no marker, and the
+coordinator stopped the driver at G4's first failure.  The tree is clean.  Remaining in
+G3: W34-3.2, W34-3.3, W34-3.4 (check W34-3.1's record entry first: the session was cut
+off before writing it).  Resume only after the operator tops up the balance:
+`pwsh -NoProfile -ExecutionPolicy Bypass -File tools/deepseek/run-wave.ps1 -Wave 34 -Groups G3,G4`
+(detached).  Wave time used at the stop: about 7h15 of 12.
+
 ## 2. Groups
 
 ### G0 - the decoding lane: assess what Project actually does (coordinator-led; DeepSeek writes the notes and scripts)
