@@ -39,7 +39,13 @@ The streams are updated in place, not rebuilt compactly:
   position. The previous block's bytes are left in place, orphaned, and are
   not garbage-collected. **Var2Data never shrinks** in any measured pair.
 - An **unchanged** block keeps its offset and its bytes are copied through.
-  A changed block is not rewritten in place: it moves to the append point.
+  A changed block that is **larger** moves to the append point.  A changed
+  block that is **smaller** is rewritten IN PLACE: the length word and the new
+  payload are written at the same offset, the old tail becomes unreferenced
+  bytes, the entry does not move, and the freed-bytes counter gains
+  `old - new`.  Measured by the wave-28 outline pairs (see
+  "re-point in place" below); the grow direction is measured by
+  `wave30-resource-rename` and `wave34-note-replace`.
 - A **removed** item loses its 12-byte entry, but its block bytes stay
   orphaned in Var2Data and the stream length does not shrink.
 - VarMeta is not truncated either. The new 24-byte header and `count × 12`
@@ -57,8 +63,9 @@ The rule the port must follow is therefore:
 | change | VarMeta cost | Var2Data cost | other offsets |
 |---|---|---|---|
 | add a data item | +12 B live, one entry at its sorted position; stream grows only if the array passes the old length | +4 + payload, appended at the old end | none |
-| change an item (grow or shrink) | 0 | +4 + new payload, appended at the old end; the old block's bytes stay | the changed entry moves to the append point; none other |
-| remove an item | −12 B live; the array shifts; the stream is not truncated | 0; block bytes stay orphaned | none |
+| change an item, larger payload | 0 | +4 + new payload, appended at the old end; the old block's bytes stay | the changed entry moves to the append point; none other |
+| change an item, smaller payload | 0 | 0; the block is rewritten in place and its old tail stays as unreferenced bytes | the freed counter gains `old - new`; no entry byte moves |
+| remove an item | −12 B live; the array shifts; the stream is not truncated | 0; block bytes stay orphaned | the freed counter gains the block's payload length |
 
 `offset` names the block's length word, not its payload. The first block of a
 non-empty stream sits at 0 and ends at `4 + length`. Blocks are laid out in a
@@ -125,6 +132,18 @@ not sort it.
   715 → 906, the new 195-byte block is appended at 906 and `Var2Data` grows
   906 → 1105 B (+199); the stale tail slot [43] duplicates the new last
   entry. Both effects compose append-only with no other entry moving.
+- `wave28-outline-indent` / `wave28-outline-summary` (W29-0.1; re-measured
+  for this note) — the **re-point in place** discriminator, which the wave-30
+  and wave-31 pairs do not show.  In both, `114/TBkndTask` entry uid 0 key
+  `0x0b4004e4` keeps its offset 90 while its block shrinks: 16 → 12 B
+  (indent) and 12 → 8 B (summary).  The freed word
+  `0x01000002` moves 0 → 16 (indent: 8 + 2 + 2 of removed entries plus the
+  16 − 12 shrink) and 16 → 32 (summary: the same four bytes on top of the
+  inherited 16), which is the shrink delta measured on its own.  The same
+  pairs also measure that a *grow* re-point adds nothing to the freed word:
+  `wave28-outline-outdent` moves uid 0 key `0x0b4004e4` 90 → 548 with 12 → 16 B
+  and the freed word gains 8, exactly the 8-byte block of the entry the same
+  save removes (count 41 → 41: one removal, one addition), not the grow.
 - All 31 pairs: `noise (control -> null): entries 0 added, 0 removed,
   0 re-pointed` in every report where the decoder prints it. A no-edit save
   by Project never re-frames the var store.
@@ -196,6 +215,109 @@ an empty block (measured 52 mismatches at offset 8, port `0x2b` vs Project
 clear shape contradicts the W52 decode and is queued for the writer groups
 rather than patched blind.
 
+## W34-1.1: the writer this wave enables
+
+`core/mppwrite/varmeta_edit.{h,cpp}` is the first writer that owns the var
+store as such: it appends, re-points or removes ONE record for ONE row, and
+refuses every shape the pairs above do not measure.  Its rules, byte for
+byte:
+
+**The three enabled shapes.**
+
+| shape | VarMeta | Var2Data | FixedMeta | `114/Props` |
+|---|---|---|---|---|
+| append (the row has no entry for the key) | new 12-byte entry at `var_entry_insert_offset` (uid group, key order); header +8 +1 | `[u32 len][payload]` at the old high-water mark; header +0x14 = new size | row entry +2 +1; the caller's presence bits ORed | size word = new size |
+| re-point, larger payload | entry +4 = the old high-water mark; count unchanged | new block appended; header +0x14 = new size | untouched | size word = new size |
+| remove | the 12-byte entry erased from the logical array; header +8 −1; the stream is NOT truncated (`merge_logical_var_meta` writes the new header + entries over the old bytes, so the freed last slot keeps the previous last entry) | untouched | row entry +2 −1; the caller's presence bits AND-ed out | freed word += the removed block's payload length |
+
+The stale tail this reproduces is the measured one: wave31-fill (348 B,
+27 → 26), wave34-note-clear (540 B, 43 → 42) and wave34-field-clear (540 B,
+43 → 42) all keep the stream length and leave slot [count] as a byte-identical
+duplicate of the new last entry.  `check_table` only ever sees the declared
+entries, so the duplicate is invisible to it, exactly as it is to Project.
+
+**The `114/Props` words.**  The directory-level `114/Props` holds, per table,
+a block of 16-byte scalar properties
+`[u32 LE 4][tag 4 bytes BIG-endian][u32 LE 4][u32 LE value]`.  The two words a
+var edit moves are measured in every pair:
+
+| table | size tag | freed tag | measured |
+|---|---|---|---|
+| Task | `01 00 01 00` (BE 0x01000100) | `01 00 00 02` (BE 0x01000002) | size 516 → 718 (notes), 725 → 938 (note-replace); freed 0 → 40 (field-clear), 0 → 188 (note-clear) |
+| Resource | `02 00 01 00` (BE 0x02000100) | `02 00 00 02` (BE 0x02000002) | size 140 → 152 (resource-rename); freed unmoved |
+
+The size word always equals the table's Var2Data byte length, and the freed
+word increases by exactly the payload bytes the edit unlinks (a removed
+block's length, or a shrink's `old - new`).  A missing or duplicated tag is
+refused: the writer will not guess which word is the counter.  The sibling
+tags in the same blocks (`0x01000001` = 7, `0x01008000` = 0, `0x01000004` =
+305, `0x01004000` = 202 and the `0x0200` equivalents) are static and are
+preserved byte for byte.
+
+**FixedMeta.**  Entry +2 is the row's exact VarMeta entry count, counting the
+plain uid and the `0x80000000|uid` family; the writer recomputes it after the
+edit (measured: notes 11 → 12, note-clear and field-clear 12 → 11).  The
+presence bits are NOT derivable from the var store: they are the field's
+class-slot bitmap (`field_values.h` measures seven of them), so the caller
+passes the measured set/clear operations and the writer only applies and
+verifies them (notes ORs +14/0x10 and +44/0x10; note-clear clears the same
+two; field-clear clears +21/0x20).
+
+**Everything else.**  The Props14 edit marker (record `0x3540000a` payload
+`01 00`) is written on every save, as `edit_marker.h` does for the other
+writers.  `214/CEdl` and `214/Props` are NOT touched: their pair differences
+are save-path noise (effects 0 in every var-store pair), and the writer's
+proof fails if any stream outside
+`{table VarMeta, table Var2Data, table FixedMeta, 114/Props, Props14}` moves.
+
+**The capability matrix (rule 1).**  A command is enabled only where a pair
+measures the shape end to end, with the null save separating noise from edit:
+
+| table | append | re-point (larger) | remove |
+|---|---|---|---|
+| Task (`114/TBkndTask`), uid ≠ 0 | enabled (wave30-notes) | enabled (wave34-note-replace) | enabled (wave34-field-clear, wave34-note-clear, wave31-fill) |
+| Resource (`114/TBkndRsc`), uid ≠ 0 | refused: no pair adds one record to an existing resource row | enabled (wave30-resource-rename) | refused: no pair removes a resource value |
+| Assignment (`114/TBkndAssn`) | refused: its measured add shape belongs to `save_assignment_field_values` (append after the group, not key-sorted) | refused | refused |
+| project row (uid 0) | refused: the project row's var entries are not a task/resource field edit | refused | refused |
+
+**Refused shapes and why** (each has a test in
+`tests/roundtrip_varmeta.cpp`):
+
+- **shrink** (`new <= old`): the rule is measured (`wave28-outline-indent` /
+  `wave28-outline-summary`: in place, freed += delta), but no committed pair
+  isolates it as the only edit, so this writer refuses it rather than enable
+  a shape its own pair test cannot prove.  Equal-size payloads are refused
+  for the same reason (append vs in-place is unmeasured at equal length).
+- **zero-length payload**: no pair stores a zero-length block; a zero-length
+  source block is refused too.
+- **multi-row / multi-record**: one record per save; zero or more than one
+  edit is refused.
+- **a key already present when appending**: both the plain uid and the
+  `0x80000000|uid` family count as present; an append that collides is
+  refused (the measured add has no such entry).
+- **two entries for the same (uid, key)**: no measured file has a duplicate;
+  a re-point or remove that would have to choose is refused.
+- **`0xFFFFFFFF` offset**: static only, refused (see Limits).
+- **a table whose VarMeta has stale tails**: `declared != physical` is
+  refused, so a file Project has already shrunk once is not edited blind.
+- **an existing orphan block**: not refused directly, but it is exactly why
+  the append point is the high-water mark (the current Var2Data length),
+  never the end of the last *live* block.
+- **an unknown table path**, a damaged table geometry, a mis-declared
+  header word, a missing `114/Props` tag, an unusable output path, a uid with
+  no live FixedMeta entry, and a presence operation outside the entry or with
+  more than one bit are all refused with named messages.
+
+**Evidence trail.**  The three shapes' pair tests are
+`wave30-notes` (append), `wave30-resource-rename` and `wave34-note-replace`
+(re-point, Task and Resource), `wave34-field-clear` (remove, custom field)
+and `wave34-note-clear` (remove, free text).  The removal brief asked for
+("one new pair for a removal") is the W34-0.3/W34-0.5 pair set: the notes
+field's removal, the Text1 clear and the second removal in `wave31-fill`.
+Every save behind those pairs is an ordinary editor save through
+`scripts/oracle_lock.py`; no COM call writes VarMeta, Var2Data or the
+`114/Props` counters directly.
+
 ## Limits
 
 - The editor-save VarMeta/Var2Data writer is not statically isolated. The one
@@ -203,10 +325,12 @@ rather than patched blind.
   bytes, so its loop cannot be used as the rule; the in-memory store's
   insert/remove path lives behind vtable calls.
 - Removal is measured for one entry at a time (wave31-fill, wave34-note-clear,
-  wave34-note-two, wave34-field-clear) and per row (the W34-0.5 delete pair),
-  and growth twice (wave31-fill and the wave34-note-replace payload). Whether
-  two removals in one save keep both stale slots, and whether a *shrunk*
-  value also appends, are unmeasured.
+  wave34-note-two, wave34-field-clear) and per row (the W34-0.5 delete pair).
+  A shrink is measured only inside the wave-28 outline edits, where it is one
+  of several changes in the same save (`wave28-outline-indent`,
+  `wave28-outline-summary`): in place, entry unmoved, freed `old - new`.
+  Whether two removals in one save keep both stale slots is unmeasured, and
+  no pair isolates a shrink as the only edit.
 - The stale bytes are input-dependent: the port must reproduce them by
   starting from the opened streams and writing over them, not by rebuilding a
   minimal stream. A file that already contains orphan blocks (a second edit
@@ -222,10 +346,11 @@ rather than patched blind.
 
 ## Pairs still needed
 
-1. **Shrink a value** (replace a long note with a short one): is the shorter
-   block appended at the high-water mark with the old one orphaned, or is it
-   rewritten in place? One factor: shrink. (The wave-34 replace pair grows
-   197 → 209 B; a shrink is still unmeasured.)
+1. **An isolated shrink** (replace a long note with a short one and change
+   nothing else): confirms the in-place rule of the wave-28 outline pairs with
+   a null save of its own, which is what the W34-1.1 writer needs before it
+   can enable the shape.  The in-place bytes and the freed delta themselves
+   are already measured.
 2. **Two removals in one save** (clear two notes): do both entries vanish and
    does the freed tail keep one or two stale slots?
 3. **A file with an existing orphan**: open the wave31-fill edit save and edit

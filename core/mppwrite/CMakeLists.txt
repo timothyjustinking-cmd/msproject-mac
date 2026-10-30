@@ -39,6 +39,7 @@ add_library(core_mppwrite STATIC
     project_props.cpp
     summary_info.cpp
     edit_marker.cpp
+    varmeta_edit.cpp
 )
 add_library(msproject::mppwrite ALIAS core_mppwrite)
 
