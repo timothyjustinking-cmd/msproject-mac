@@ -132,6 +132,14 @@ PAIRS = {
         "wave31-fill-control.mpp",
         "wave31-fill-control-null.mpp",
         "wave31-fill.mpp"),
+    "wave34-assign-add-second": (
+        "wave34-assign-add-second-control.mpp",
+        "wave34-assign-add-second-control-null.mpp",
+        "wave34-assign-add-second.mpp"),
+    "wave34-assign-add-third": (
+        "wave34-assign-add-third-control.mpp",
+        "wave34-assign-add-third-control-null.mpp",
+        "wave34-assign-add-third.mpp"),
     "wave34-calculate-second": (
         "wave34-calculate-second-control.mpp",
         "wave34-calculate-second-control-null.mpp",

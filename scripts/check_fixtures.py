@@ -602,6 +602,22 @@ DOCUMENTED = {
         "19F03986C0076ED065DCDA5E4C63192D79DB0768797AC0A51148329C887A5D00",
     "tests/data/wave34-resource-add-third-control-null.mpp":
         "3FA4DDC99BBD9B093D7B964AF511098993906175BAFFD4C57141B397D11CF86F",
+    # Wave 34 (W34-3.1): the two assignment-count append pairs (count 1 -> 2
+    # and 2 -> 3 on task UniqueID 1) and each control's Project no-edit save.
+    # Measured by scripts/oracle_w34_assign_counts.py and
+    # scripts/oracle_w34_null_saves.py under C:/w34.
+    "tests/data/wave34-assign-add-second-control.mpp":
+        "1398A7DB6DB2533F8B17C44242D417656EEB43E7B05FC081BFCC1E2426DC54B2",
+    "tests/data/wave34-assign-add-second.mpp":
+        "82A611093CB9D3021C6F32E26B574D00D414DB6EAD524A9DF9E9DFD31387457E",
+    "tests/data/wave34-assign-add-second-control-null.mpp":
+        "1259166E4AF3AA385AED37353C29F01D8ABEC82395A2250C1AB815546A1A6582",
+    "tests/data/wave34-assign-add-third-control.mpp":
+        "3829429E261584B04C3C58F97C078A57C4817A69C57C4479BF405040CFCF84E2",
+    "tests/data/wave34-assign-add-third.mpp":
+        "D0B1AB50F867EB7A7C48AF47FD5569D1940BD98529F5B4EFE982E1F53CCFDA6A",
+    "tests/data/wave34-assign-add-third-control-null.mpp":
+        "5B5759A6179D04C7580B783E18DFB34D5B1A1F3082C868BF325E1A9E10E90432",
     # Wave 34 (W34-0.5): the synthetic save pairs for the five paths whose
     # Project evidence was corpus-only -- Insert Task, Delete Task, link ADD,
     # custom-field SET and CLEAR -- with each control's Project no-edit save.
