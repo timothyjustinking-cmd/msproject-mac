@@ -345,3 +345,189 @@ code tree this record follows.
   the brief amendment `9fdab79` (W34-4.0) governs their G4 enablement.
 
 WAVE-34-G1-COMPLETE
+
+## G2 - the `214` view-stream writer and Props record insertion
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W34-2.1 | brief W34-2.1: mid-stream insertion in a `214/` stream with the VarMeta offset rewrite and the Props size byte, measured against `wave30-textstyle-*` (one Bold cell), Bold only | **DONE** | commit `6b2ba05`; the pair test and the outer-length-word fix in `70cea19`; `core/mppwrite/viewstream_edit.{h,cpp}`; `spec/writers/view-stream-214.md`; gates `build/w34/d811aea-W34-2.1-*.log`, `build/w34/55b2b1e-W34-2.3-*.log` |
+| W34-2.2 | brief W34-2.2: insert and update a `114/Props` or `214/Props` record (id, kind, length, payload) keeping the table's order and the `Props14` mirror, measured against `wave30-wbs-code-*` and the three count words of `wave30-resource-add-*` | **DONE**, insert refused under rule 1 with the evidence | commit `46b49e0`; tests in `70cea19`; `core/mppwrite/props_edit.{h,cpp}`; `spec/writers/props-records.md`; gates `build/w34/6b2ba05-W34-2.2-*.log`, `build/w34/55b2b1e-W34-2.3-*.log` |
+| W34-2.3 | brief W34-2.3: tests as G1; refusals for every unmeasured sibling (I/U/strikethrough, colours, row vs cell selection, other views, the project summary row) | **DONE** | commit `70cea19`; `tests/roundtrip_viewstream.cpp`, `tests/roundtrip_props.cpp`; gates `build/w34/55b2b1e-W34-2.3-*.log` |
+
+No G2 item was deferred.  W34-2.2's brief names an insert the measured
+pairs do not perform; it is refused with the evidence below rather than
+enabled unmeasured (rule 1), and the `214/Props` record half is refused for
+the same reason.  The 15:00 restart note's uncommitted work was read,
+finished, gated and committed -- never unread -- as the brief directs.
+
+W34-2.1 detail:
+
+- `core/mppwrite/viewstream_edit.{h,cpp}`: `save_view_cell_style(doc,
+  edits, path)` appends ONE `0x2240000c` cell-format item to the applied
+  view's main block in `214/CV_iew/Var2Data`, moves the block's own
+  length/count words, re-points the VarMeta entry's Var2Data offset and
+  writes the `214/Props` CV_iew size scalar, measured end to end on
+  `wave30-textstyle` (control + null save + edit save).  The applied view
+  is the target VarMeta entry (uid 2, key 0x20400006); the block walks as
+  `u32 payload-4` twice, `u32 0x00010000`, a u16 item count (the u16 at +14
+  preserved), then items `u32 length, u32 id, u32 kind, payload` with one
+  zero pad byte after an odd length.  The W34-0.2 note is corrected: +12 is
+  a u16 count and the pad byte is part of the framing.
+- The appended item is 56 B: length 44, id 0x2240000c, kind 1, and the
+  44-byte entry wave30-textstyle stores (row uid, field id, flags
+  0x01000003, the two automatic colour words, pattern 1 and the font word
+  0x90000001).  The font word is written as the one measured literal and
+  only for Bold set: `spec/writers/view-stream-214.md` records that the
+  W34-0.2 static pass settled no other bit and the literal appears nowhere
+  in the Ghidra model; italic, underline, strikethrough, both colours and
+  Bold-off are refused.
+- Refusals: zero/two edits; a view uid other than 2; the project summary
+  row (uid 0); field id 0; the five attribute siblings; Bold not set;
+  whole-row selection; damaged VarMeta/Var2Data (not 24 + 12*n, bad magic,
+  a stale count or size word, the 0xFFFFFFFF no-block offset, an offset
+  past Var2Data, gapped blocks, trailing bytes, a missing or duplicated
+  target entry), every block-walk defect, and a `214/Props` with no,
+  two or a disagreeing CV_iew size tag.
+- The write is all-or-nothing and proved from disk: the edit goes to a
+  copy, the package is saved, the file is re-read and must hold exactly the
+  bytes built, re-emit byte-identically, pass `CfbDocument::check()`,
+  show the item, the counts, every re-pointed offset, the props value, the
+  marker and no changed stream outside {214/CV_iew/VarMeta,
+  214/CV_iew/Var2Data, 214/Props, Props14}; only then is `doc` replaced.
+- The W34-2.3 pair test proved the committed writer left the Var2Data
+  block's OUTER length word (at the block start) at its control value;
+  Project's save grows it 42,692 -> 42,748.  `70cea19` rewrites it with the
+  two inner size words and proves all four words, the preserved +14 u16 and
+  the unchanged region between the block header and the item from the
+  re-opened file.  Pair totals: noise=131, effects=6607 (Var2Data 6542,
+  VarMeta 7, 214/Props 1, Props14 1), 436 checks, 0 failures, 0 expected.
+
+W34-2.2 detail:
+
+- `core/mppwrite/props_edit.{h,cpp}`: `save_props_edit(doc, edit, path)`
+  updates a record that already exists in `114/Props` and/or one
+  typed-property scalar in the tail of `114/Props` or `214/Props`.
+  Measured pairs: wave30-wbs-code (records 0x0240138b 4 -> 24 and
+  0x024013be 2 -> 6, Task size 0x01000100 512 -> 552, stream 88,724 ->
+  88,748, tail 3,316 -> 3,340), wave34-field-set (0x02401392 equal-size
+  00 00 -> 01 00, 0x024013c5 8 -> 16, Task size 530 -> 574, stream
+  88,742 -> 88,750), wave30-resource-add's three count words (0x02000001
+  5 -> 6, 0x02000100 86 -> 140, 0x03000001 7 -> 8, stream length
+  unchanged) and wave30-textstyle's `214/Props` CV_iew size (0x01000100
+  100,178 -> 100,234).
+- The measured rules: the 16-byte header with +0/+4 = stream size - 4,
+  +8 = 0x00010000 and +12 preserved verbatim; records back to back
+  (u32 length, u32 id in the 0x00400000 family, u32 kind, payload) with
+  an update keeping id, kind and position, equal or larger payload only,
+  later records and the tail moving by the growth; a scalar is one 16-byte
+  `[LE u32 4][BE tag][LE u32 4][LE u32 value]` entry in the tail whose
+  value word alone changes.  The whitelist is per stream: `114/Props`
+  accepts 0x01000100, 0x01000002, 0x02000001, 0x02000100, 0x03000001;
+  `214/Props` accepts 0x01000100 only.  The Props14 marker is written as
+  every measured editor save writes it.
+- INSERT IS REFUSED WITH ITS EVIDENCE: wave30-wbs-code and
+  wave34-field-set keep 161 records on all three sides; wave30-baseline,
+  the one pair whose `114/Props` grows (+110 B), keeps its 161 records and
+  grows only the undecoded tail; the custom-field SET's 88-byte insert is
+  a record in `114/TBkndTask/Props` (86 -> 174), a stream family this
+  writer does not cover.  A record edit on `214/Props` is refused too
+  (every measured pair has 47 records / 13,102 B there, unchanged beyond
+  masked noise).  Shrink, kind change, an equal payload or value, a
+  duplicated target, an unlisted tag, a tag absent or twice present, a hit
+  outside the tail, a damaged header or record walk and an unusable output
+  path are all refused before `doc` or the path is touched.
+- `props-records.md` is corrected and extended: the W34-0.2 "four records
+  change" claim was wrong (0x024013b1 and 0x024013c2 differ from the null
+  save only at masked positions, a report artifact of the growth shifting
+  every later record's span); the true updates are 0x0240138b and
+  0x024013be, and field-set's 0x02401392 keeps 2 bytes.  The note now
+  records why a growing stream is compared field by field: a whole-stream
+  positional compare flags exactly one seam byte per pair (2,859: our 2b
+  vs Project's 3e; 2,865: our c6 vs d9), while the field-wise comparison
+  -- header, record list, every record payload, the tail -- has zero
+  mismatches with the effects declared only on the edited fields.
+
+W34-2.3 detail:
+
+- `tests/roundtrip_viewstream.cpp` is the pair test above plus the refusal
+  suite, each refusal also asserting the document was not modified and no
+  output file appeared.  It records one branch it cannot construct: the
+  writer refuses a document without `214/CV_iew/VarMeta`, Var2Data or
+  `214/Props`, but `CfbDocument` has no remove-stream operation and every
+  committed `.mpp` carries all three, so that branch stays a plain
+  `has_stream()` guard with no test.
+- `tests/roundtrip_props.cpp` drives the four committed pairs through
+  `save_props_edit` and compares each FIELD under its own control-vs-null
+  mask: the header, every record's header+payload walked separately in
+  each document (so the field is aligned after the shift), and the tail.
+  It additionally requires Project's record count, id, kind and offset
+  sequence for every record, and every record the request did not name to
+  be byte-identical to the control's.  Structural assertions pin the
+  measured sizes (88,724 -> 88,748 and 88,742 -> 88,750, tails 3,316 ->
+  3,340 and 3,334 -> 3,342, 214/Props 13,102 unchanged), the size words,
+  the +8/+12 words, the scalar values and the Props14 marker.  The refusal
+  suite exercises every branch `props_edit.h` lists, including the
+  fabricated damaged streams the absent/duplicate/outside-tail cases need.
+  1,645 checks, 0 failures.
+- The first props run caught one wrong test expectation, not a writer
+  defect: 0x02401392 moves by the +8 growth of the 0x024013c5 record that
+  sits before it in the stream; the assertion was corrected before the
+  commit.  The viewstream test needed no such correction: its writer fix
+  is in the same commit.
+
+Per-commit gates (logs under `build/w34/`; a log's prefix is the HEAD the
+gates ran on, i.e. the commit before the one the row names -- W34-2.1's
+logs are `d811aea-...`, W34-2.2's `6b2ba05-...`, and W34-2.3's
+`55b2b1e-...`; the post-commit scans carry the commit's own prefix):
+
+| commit | builds | tests and tracking gates |
+|---|---|---|
+| W34-2.1 `6b2ba05` | `core_mppwrite` builds clean under /W4 with warnings as errors | mppwrite ctest 14/14 (1.82 s); check_fixtures 179/213/262; check_markers worktree and range 0 hits; guard_names exit 0; scan_client_names 0 files, 0 name hits |
+| W34-2.2 `46b49e0` | `core_mppwrite` builds clean under /W4 /WX | full tree ctest 57/57 (52.70 s) including the mppwrite lane 14/14 (3.27 s); check_fixtures 179/213/262; check_markers worktree and range 0 hits; guard_names exit 0; scan_client_names 0 files, 0 name hits; git diff --check and LF check clean |
+| W34-2.3 `70cea19` | `core_mppwrite` and both new tests build clean under /W4 /WX | mppwrite ctest 16/16 (5.79 s); roundtrip_viewstream 436 checks, 0 failures, 0 expected; roundtrip_props 1,645 checks, 0 failures; check_markers worktree 1,407 files and range 0 hits (the two new tests are untracked at that point and are covered by the post-commit scan); check_fixtures 179/213/262; guard_names exit 0; scan_client_names on `70cea19` 0 files, 0 name hits, 0 commit messages |
+
+G2 group gates (fresh trees configured from scratch on `70cea19` under
+`build/w34-g2-fresh{,-app,-qt}`, log `build/w34/W34-G2-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 58/58 passed (77.82 s), including `mppwrite_roundtrip_viewstream` and `mppwrite_roundtrip_props` |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine self-test (bare exe / `engine_diff.py --selftest`) | 265 checks, 0 failures / 53 checks, 0 failures, exit 0 |
+| engine `--suite --expect-fail constraint-mso` | 8 scenarios, 7 pass, 1 fail, 0 unrecorded, expected set reached, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, 83/83 rows, 0 unexplained, exit 0 |
+| app configure/build with `CORE_WARNINGS_AS_ERRORS=ON`; ctest | exit 0 / exit 0; 25/25 passed (32.15 s) |
+| app_qt configure/build with `CORE_WARNINGS_AS_ERRORS=ON`; ctest | exit 0 / exit 0; 41/41 passed (44.10 s), the absolute Qt prefix from the start (no retry) |
+| `check_fixtures.py` | 179 documented hashes, 213 tracked `.mpp`, 262 test-data files, property sets OK, provenance OK |
+| scans on `70cea19` | check_markers 1,409 files, 0 hits; messages `main..HEAD` 0 hits; guard_names exit 0; client-name scan 0 files, 0 name hits, 0 commit messages |
+
+The run started 15:13 and finished 15:49.  The numbers belong to `70cea19`,
+the code tree this record commit follows; the marker commit is docs-only.
+
+## Found, not fixed (G2)
+
+- **G2: the Props insert.**  W34-2.2's brief names it, but no committed
+  pair inserts a directory record: the two update pairs keep 161 records
+  and wave30-baseline grows only the tail (+110 B, +12 word 262 -> 263),
+  in a section the decode note cannot yet rebuild; the custom-field SET's
+  insert is inside the per-table `114/TBkndTask/Props` family.  Rule 1
+  refuses it (and every `214/Props` record edit) until a pair exists.  The
+  same evidence is in `spec/writers/props-records.md`.
+- **G2: the view-stream siblings.**  Italic, underline, strikethrough,
+  highlight colour, font colour, whole-row selection, other views and the
+  project summary row are refused for want of a pair; one pair each would
+  enable them, and the remaining font-word bits need the W34-0.2 static
+  pass to settle them (`spec/writers/view-stream-214.md`).
+- **G2: the unconstructible missing-stream branch.**  The view writer
+  refuses a document lacking one of its three streams, but `CfbDocument`
+  has no remove-stream operation and every committed `.mpp` carries them,
+  so the branch is a plain `has_stream()` guard without a test; recorded
+  in the test header rather than counted as covered.
+- **G2: the `114/Props` +12 word.**  It is preserved verbatim on every
+  measured update and moves only in the wave30-baseline tail shape this
+  writer refuses; a decoded pair for that region is needed before anything
+  writes it.
+
+WAVE-34-G2-COMPLETE
