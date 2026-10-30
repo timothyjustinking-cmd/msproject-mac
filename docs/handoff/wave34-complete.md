@@ -183,3 +183,165 @@ the code tree this record commit follows; the marker commit is docs-only.
   the coordinator after CLOSE.
 
 WAVE-34-G0-COMPLETE
+
+## G1 - the VarMeta entry writer (insert, remove, resize)
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W34-1.1 | brief W34-1.1: add, drop and re-point one Var2Data record for one row, keeping Project's VarMeta ordering, the logical-removal-with-stale-tail convention and the Props count words | **DONE** | commits `2ef60df`, `1d2f22b`; `core/mppwrite/varmeta_edit.{h,cpp}`; `spec/writers/var-meta.md`; gates `build/w34/9fdab79-W34-1.1-*.log`, `build/w34/af01454-W34-1.1b-*.log` |
+| W34-1.2 | brief W34-1.2: compare against Project's file for all three shapes with the null save; a refusal test for every unmeasured shape | **DONE** | commits `521dbb0`, `d1883da`; `tests/roundtrip_varmeta.cpp`; five pairs, 0 KnownGap; gates `build/w34/2ef60df-W34-1.2-*.log`, `build/w34/af01454-W34-1.2b-*.log` |
+| W34-1.3 | brief W34-1.3: first consumer, core only: `rename_resource(uid, name)` through the new writer, field by field against wave30-resource-rename | **DONE** | commit `af01454`; the consumer's independent read-back and name refusals in `tests/roundtrip_varmeta.cpp`; gates `build/w34/521dbb0-W34-1.3-*.log` |
+
+No G1 item was deferred.  The Assignment and project-row shapes named in
+W34-1.1's scope sentence are refused under rule 1 for want of a pair rather
+than enabled unmeasured -- recorded in the capability matrix and in Found,
+not fixed below, with the pair each would need.
+
+W34-1.1 detail:
+
+- `core/mppwrite/varmeta_edit.{h,cpp}` is the writer the wave's field work
+  stands on: ONE 12-byte (uid, offset, key) VarMeta entry of ONE row added,
+  re-pointed or removed, with Project's bookkeeping.  Rule 1's capability
+  matrix is enforced in code: Task append/re-point/remove enabled, Resource
+  re-point only, and every other shape refused before the document or the
+  output path is touched.
+- `append` inserts the entry at the measured key position inside the uid's
+  contiguous group, appends `[u32 len][payload]` at the Var2Data high-water
+  mark, header +8 +1, FixedMeta +2 +1, the caller's measured presence bits
+  ORed, 114/Props size = the new length.  Pair: wave30-notes, 42 -> 43
+  entries, 516 -> 718.
+- `re-point` moves one entry to the high-water mark, orphans the old block,
+  leaves the counts and the freed word alone, and writes the new size to
+  +0x14 and 114/Props.  Pairs: wave30-resource-rename (114 -> 140, 6 -> 8 B)
+  and wave34-note-replace (524 -> 725, 197 -> 209 B).
+- `remove` erases the entry from the logical array, header +8 -1, FixedMeta
+  +2 -1, presence bits ANDed out, the freed word += the payload, and leaves
+  Var2Data untouched.  The stream keeps its length via
+  `merge_logical_var_meta`, so the freed last slot stays a byte-identical
+  duplicate of the new last logical entry -- the convention wave31-fill
+  measured and `outline.cpp` already uses.  Pairs: wave34-field-clear (freed
+  0 -> 40) and wave34-note-clear (0 -> 188); the brief's "one new pair for a
+  removal" is the W34-0.3/W34-0.5 removal set.
+- 114/Props is the directory stream of 16-byte scalar groups
+  `[u32 4][tag 4 BE][u32 4][u32 value]`; the Task and Resource size/freed
+  words are located by their BIG-endian tags (0x01000100 / 0x01000002 and
+  0x02000100 / 0x02000002), a missing or duplicated tag is refused, and the
+  sibling tags are preserved byte for byte.  Every save writes the Props14
+  edit marker.
+- All-or-nothing on a copy, saved atomically, re-opened and proved from
+  disk: byte-identical re-read, `CfbDocument::check`, the table geometry,
+  the exact entry state, FixedMeta +2 and the requested bits, the two Props
+  words, and every stream outside {table VarMeta, table Var2Data, table
+  FixedMeta, 114/Props, Props14} unchanged.
+- The brief's scope sentence also names the Assignment table and the project
+  row; neither has a pair, so both are refused (rule 1), recorded in the
+  capability matrix and under Found, not fixed.  `1d2f22b` adds the
+  family-entry refusal half the spec was missing.
+
+W34-1.2 detail:
+
+- Five committed Project pairs drive the writer through
+  `tests/save_pair_compare.h` with each pair's null save separating noise
+  from edit, each pair's edited streams declared externally, and NOT ONE
+  KnownGap: wave30-notes (append), wave34-note-replace and
+  wave30-resource-rename (re-point, Task and Resource), wave34-field-clear
+  and wave34-note-clear (remove).  Effects reproduced, by pair:
+  271, 219, 16, 55, 56 bytes against masked noise of 133, 137, 154, 136,
+  137.
+- The append and Task re-point payloads are the blocks Project stored, read
+  from each pair's edit save and handed back as the command's input; the
+  resource name is decoded from Project's block and re-encoded by
+  `rename_resource`, with the test asserting the encoding round-trips
+  Project's bytes.  No task or resource text appears in the test.
+- Structural assertions independent of the comparison: entry index/offset,
+  FixedMeta +2, presence bits, Var2Data length, the 114/Props size and freed
+  words, and for a removal the kept stream length and the stale-slot
+  duplicate.
+- The refusal suite exercises every refusal `varmeta_edit.h` lists, each
+  case also asserting the document is byte-identical and no output file
+  appeared: 0/2 edits, unknown table, the project row, key 0, unknown uid,
+  duplicated uid, dead FixedMeta row, a FixedMeta entry naming another row,
+  broken FixedData/Fixed2Data/Fixed2Meta geometry, VarMeta not 24 + 12*n, a
+  stale tail on the way in, a +0x14 disagreement, append collisions (plain
+  and 0x80000000|uid family), empty append, Resource append/remove, re-point
+  and remove with no entry, with two entries and with a lone family entry, a
+  0xFFFFFFFF offset, a zero-length block, smaller and equal re-points, a
+  remove with a payload, presence bytes outside the entry, a multi-bit mask,
+  a duplicated presence operation, a missing and a duplicated 114/Props tag,
+  and empty/unusable output paths.  1601 checks, 0 failures.
+- The pair harness caught two writer defects while it was written: the
+  append count word was seeded from zero (the staged re-read refused it),
+  and `matching_entries` alone would have adopted a lone family entry for
+  re-point/remove (the explicit family refusal was added to both).  Both
+  fixes are in `2ef60df`; `d1883da` then completed the refusal variants.
+
+W34-1.3 detail:
+
+- `rename_resource(uid, name)` encodes UTF-16LE + NUL under Resource/Name
+  (0x0c400001), applies the measured larger re-point to the Resource table,
+  and reads the value back from the file the writer re-opened.
+- The success path is the field-by-field resource-rename pair above (Name
+  114 -> 140, Var2Data 140 -> 152, Resource FixedMeta and the Task table
+  untouched).  The test also reads the name from the command's output with
+  the low-level helpers -- one entry, offset 140, the exact encoded block --
+  and covers the consumer's refusals: empty name, embedded NUL, past 65,535
+  bytes, an unknown uid, a shorter name and the control's own equal-size
+  name (the unmeasured shrink and equal re-points).
+
+Per-commit gates (logs under `build/w34/`; every client-name scan exits 0; a
+log's prefix is the HEAD the gates ran on, i.e. the commit before the one
+the row names -- W34-1.1's logs are `9fdab79-...`, W34-1.2's
+`2ef60df-...`, and so on):
+
+| commit | builds | tests and tracking gates |
+|---|---|---|
+| W34-1.1 `2ef60df` | `core_mppwrite` builds clean under /W4 with warnings as errors | mppwrite ctest 14/14 (2.57 s, including the new test built in the working tree); check_markers --worktree 1400 files, 9 markers, 0 hits; check_fixtures 179 hashes / 213 tracked `.mpp` / 262 test-data files; guard_names exit 0 |
+| W34-1.2 `521dbb0` | test-only; library unchanged | `mppwrite_roundtrip_varmeta` 1569 checks, 0 failures, 0 expected; pair effects 271/219/16/55/56 against noise 133/137/154/136/137; mppwrite ctest 14/14 (6.86 s); check_markers worktree 1402 files, range 1403 files, 0 hits; check_fixtures 179/213; guard_names exit 0 |
+| W34-1.3 `af01454` | test-only | 1591 checks, 0 failures, 0 expected; ctest 14/14 (3.70 s); check_markers 0 hits; check_fixtures 179/213; guard_names exit 0 |
+| W34-1.2b `d1883da` | test-only | 1601 checks, 0 failures, 0 expected; ctest 14/14 (2.76 s); check_markers 0 hits; check_fixtures 179/213; guard_names exit 0 |
+| W34-1.1b `1d2f22b` | docs only | check_fixtures 179/213/262; check_markers worktree and range 0 hits; guard_names exit 0 |
+
+G1 group gates (fresh trees configured from scratch on `af01454` under
+`build/w34-g1-fresh{,-app,-qt}`, log `build/w34/W34-G1-fresh-gates.log`;
+`d1883da` and `1d2f22b` after it are test- and docs-only):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 56/56 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine self-test (bare exe / `engine_diff.py --selftest`) | 265 checks, 0 failures, exit 0 in the fresh log / 53 checks, 0 failures, exit 0, run separately on the same tree (`build/w34/W34-G1-engine-selftest.log`) |
+| engine `--suite --expect-fail constraint-mso` | 8 scenarios, 7 pass, 1 fail, 0 unrecorded, expected set reached, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1136 checks / 456 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, 83/83 rows, 0 unexplained, exit 0 |
+| app configure/build with `CORE_WARNINGS_AS_ERRORS=ON`; ctest | exit 0 / exit 0; 25/25 passed |
+| app_qt configure/build with `CORE_WARNINGS_AS_ERRORS=ON`; ctest | exit 0 / exit 0; 41/41 passed |
+| `check_fixtures.py` | 179 documented hashes, 213 tracked `.mpp`, 262 test-data files, property sets OK, provenance OK |
+| scans on `af01454` | check_markers 1403 files, 0 hits; messages `main..HEAD` 0 hits; guard_names exit 0 |
+
+The main run took 12:46 to 13:05.  Its app_qt configure passed a relative
+`CMAKE_PREFIX_PATH`, which resolves against the build dir, and failed; the
+recorded app_qt result is the retry with the absolute Qt path, which finished
+at 13:17 and appended to the same log.  The numbers belong to `af01454`, the
+code tree this record follows.
+
+## Found, not fixed (G1)
+
+- **G1: the Assignment table and the project row.**  The brief's W34-1.1 scope
+  sentence names `114/TBkndAssn` and the uid-0 row, but no committed pair
+  exercises a var-record append/re-point/remove there.  Rule 1 forbids
+  enabling an unmeasured shape, so the capability matrix refuses both; one
+  pair each (an append and a remove on a live assignment row; a re-point or
+  remove on the uid-0 row) would enable them.  This is a rule-1 refusal
+  recorded in `spec/writers/var-meta.md`, not a silent gap.
+- **G1: the shrink and equal-size re-point.**  The in-place shrink rule is
+  measured inside the wave-28 outline edits but no committed pair isolates it
+  as the only edit, so it and the equal-size case are refused until an
+  isolated pair exists.
+- **G1: the note payload encoder.**  This writer stores bytes it is given;
+  producing Project's RichEdit note payload is G0's note-richtext rule and
+  the G4 note commands' work, not part of the var writer.
+- The five G0 `KnownGap` sets for the task-op paths are untouched by G1;
+  the brief amendment `9fdab79` (W34-4.0) governs their G4 enablement.
+
+WAVE-34-G1-COMPLETE
