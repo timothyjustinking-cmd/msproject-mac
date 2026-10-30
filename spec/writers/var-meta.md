@@ -297,6 +297,12 @@ measures the shape end to end, with the null save separating noise from edit:
   refused (the measured add has no such entry).
 - **two entries for the same (uid, key)**: no measured file has a duplicate;
   a re-point or remove that would have to choose is refused.
+- **a lone `0x80000000|uid` entry for the key**: for re-point and remove it
+  is not the plain row's record (the family is a separate owner of the key,
+  as the append rule above already says), and no pair edits one.  The lookup
+  sees the family so an append collision is caught; the two editing shapes
+  refuse it explicitly rather than adopt it, because a lone family entry
+  would otherwise look like exactly one match.
 - **`0xFFFFFFFF` offset**: static only, refused (see Limits).
 - **a table whose VarMeta has stale tails**: `declared != physical` is
   refused, so a file Project has already shrunk once is not edited blind.
