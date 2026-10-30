@@ -39,6 +39,14 @@
  * that the stream length is kept and the freed last slot is a byte-identical
  * duplicate of the new last logical entry.
  *
+ * W34-1.3, THE FIRST CONSUMER.  The resource-rename pair above goes through
+ * `rename_resource` (the command), and test_rename_resource_contract() adds the
+ * consumer's own contract: an independent read-back of the name from the file
+ * the command wrote (entry count, offset, and the exact stored bytes), and its
+ * refusals -- an empty name, an embedded NUL, a name past 65,535 bytes, an
+ * unknown uid, a shorter name and the control's own equal-size name (the
+ * shrink and equal-size re-points are unmeasured and refused).
+ *
  * REFUSALS.  Every refusal the writer offers is exercised here: a count other
  * than one, an unknown table, the project row, key 0, an unknown uid, a
  * duplicated uid, a dead FixedMeta state, damaged table geometry, a VarMeta
@@ -389,6 +397,101 @@ void test_resource_rename_pair(TestContext& t) {
                            CfbDocument::from_file(
                                out_path("w34-var-resource-rename.mpp")),
                            nullptr, 0, declared.data(), declared.size());
+
+    /* Independent read-back from the file the COMMAND wrote: one entry for the
+     * Resource name key, at the measured offset, holding exactly the measured
+     * encoding of the requested name.  This does not go through the command's
+     * own read-back check. */
+    CfbDocument const written_file =
+        CfbDocument::from_file(out_path("w34-var-resource-rename.mpp"));
+    std::vector<std::uint32_t> const offsets = mppwrite::find_var_offsets(
+        written_file.read_stream(kRscVarMeta), mppwrite::kResourceNameFieldId, 2);
+    t.equal(offsets.size(), 1, "rename: one entry for the resource name key");
+    if (offsets.size() == 1) {
+        std::vector<std::uint8_t> const block = mppwrite::read_var_block(
+            written_file.read_stream(kRscVar2), offsets.front());
+        t.equal(offsets.front(), 140, "rename: the stored offset on disk");
+        t.check(block == mppwrite::encode_utf16z(name),
+                "rename: the block on disk is the measured encoding");
+        t.check(mppwrite::decode_utf16z(block) == name,
+                "rename: the value on disk decodes to the requested name");
+    }
+}
+
+/*
+ * W34-1.3: the consumer's own contract.  Every name refusal the header lists,
+ * and -- the two unmeasured re-points the command must not silently perform --
+ * a shorter name and the control's own equal-size name.  Each refusal leaves
+ * the document byte-identical and writes no file.
+ */
+void test_rename_resource_contract(TestContext& t) {
+    std::string const control = "wave30-resource-rename-control.mpp";
+    std::string const missing = out_path("w34-ren-refused.mpp");
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, control));
+
+    auto refuses = [&](CfbDocument& doc, std::string_view name,
+                       std::string_view needle, std::string const& what) {
+        std::error_code ignored;
+        std::filesystem::remove(missing, ignored);
+        std::vector<std::uint8_t> const before = doc.to_bytes();
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::rename_resource(doc, 2, name, missing);
+                     },
+                     needle, what);
+        t.check(doc.to_bytes() == before, what + ": the document changed");
+        t.check(!file_exists(missing), what + ": an output file was written");
+    };
+
+    {
+        CfbDocument doc = doc_from_data(control);
+        refuses(doc, "", "the name is empty", "an empty name refused");
+    }
+    {
+        CfbDocument doc = doc_from_data(control);
+        refuses(doc, std::string_view("a\0b", 3), "embedded NUL",
+                "an embedded NUL refused");
+    }
+    {
+        CfbDocument doc = doc_from_data(control);
+        std::string const huge(65536, 'a');
+        refuses(doc, huge, "65,535-byte cap",
+                "a name past 65,535 bytes refused");
+    }
+    {
+        CfbDocument doc = doc_from_data(control);
+        refuses(doc, "a", "not larger than the stored",
+                "a shorter name refused (the shrink re-point is unmeasured)");
+    }
+    {
+        /* The control's own name is the equal-size case. */
+        CfbDocument doc = doc_from_data(control);
+        std::string const same = mppwrite::decode_utf16z(
+            stored_block(control, kRscVarMeta, kRscVar2, 2,
+                         mppwrite::kResourceNameFieldId));
+        refuses(doc, same, "not larger than the stored",
+                "the same name (equal size) refused");
+    }
+    {
+        /* A valid name for a uid the table does not hold reaches the row
+         * lookup and is refused there. */
+        CfbDocument doc = doc_from_data(control);
+        std::string const name = mppwrite::decode_utf16z(
+            stored_block(control, kRscVarMeta, kRscVar2, 2,
+                         mppwrite::kResourceNameFieldId));
+        std::error_code ignored;
+        std::filesystem::remove(missing, ignored);
+        std::vector<std::uint8_t> const before = doc.to_bytes();
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::rename_resource(doc, 99, name, missing);
+                     },
+                     "no row of", "an unknown uid refused");
+        t.check(doc.to_bytes() == before,
+                "an unknown uid: the document changed");
+        t.check(!file_exists(missing),
+                "an unknown uid: an output file was written");
+    }
 }
 
 /*
@@ -934,6 +1037,7 @@ int main() {
         test_append_pair(t);
         test_repoint_pair(t);
         test_resource_rename_pair(t);
+        test_rename_resource_contract(t);
         test_field_clear_pair(t);
         test_note_clear_pair(t);
         test_refusals(t);
