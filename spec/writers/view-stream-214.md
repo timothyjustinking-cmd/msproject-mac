@@ -1,8 +1,9 @@
 # The `214` view-stream writer
 
-_W34-0.2 decode note, 30 October 2026. Companion to the pair reports under
-[`evidence/`](evidence/). Static evidence is from the git-ignored Ghidra model.
-No dynamic trace this wave (W34-0.4 decision)._
+_W34-0.2 decode note, 30 October 2026, extended by W34-2.1 (the writer's
+decode confirmation and the font-word limit). Companion to the pair reports
+under [`evidence/`](evidence/). Static evidence is from the git-ignored Ghidra
+model. No dynamic trace this wave (W34-0.4 decision)._
 
 ## Rule
 
@@ -21,13 +22,21 @@ alignment. A block payload is a view-state document:
 +0   u32  payload_length - 4
 +4   u32  payload_length - 4
 +8   u32  constant 0x00010000
-+12  u32  item_count
++12  u16  item_count (the u16 at +14 is preserved)
 +16  item records, back to back:
         u32 length       // payload length of this item
         u32 id           // 0x2240000c is the cell-format item
         u32 kind
         byte[length] payload
+        byte pad         // one zero byte only when length is odd, so the
+                         // next item starts on an even offset
 ```
+
+The walk is exact: the items and their pad bytes consume the payload from +16
+to `payload_length` with no trailing byte. `wave30-textstyle`'s control block
+shows it directly: item 0 has length 37, the pad byte at payload +65 is
+`00`, and item 1 starts at payload +66. (W34-2.1 confirmed the framing on the
+committed pair; `core/viewstate/viewstate.cpp` decodes it the same way.)
 
 The cell-format item id `0x2240000c` carries a 44-byte payload (item length
 word 44, kind 1). A cell text-style change appends one such item to the end of
@@ -107,6 +116,27 @@ vector changes) when the edit does not touch the view.
   one `214/CV_iew/Var2Data` block; the routine that writes it was not isolated
   within the time box.
 
+### W34-2.1: the font word (decode confirmation and its limit)
+
+The writer needs to know which bits of the 44-byte entry's font word at +40
+mean Bold. The W34-0.2 static pass did not settle any of them, and a second
+targeted pass for W34-2.1 did not either:
+
+- the literal `0x90000001` does not appear anywhere in the Ghidra model;
+- the `0x2240000c` references the model exposes are property get/set calls —
+  `FUN_140395150` reads the record, `FUN_1402a007c` and `FUN_1403a3910` fetch
+  it by id — with no bit manipulation of the font word;
+- the only `bold`/`italic` strings are the HTML export serialiser
+  (`0x140efbe00`), which reads styles for export and does not write the item.
+
+The word is therefore NOT decoded, and the writer claims no bit. It accepts the
+measured word exactly (`0x90000001`) and only for Bold (set): the capability
+matrix in `core/mppwrite/viewstream_edit.h` enables that one append and
+refuses italic, underline, strikethrough, both colours, Bold-off, whole-row
+selection, every view uid but the measured 2, and the project summary row
+(uid 0). A future pair that varies exactly one of those factors is what would
+extend it.
+
 ### COM facts
 
 The textstyle pair is a Project 2021 editor save after a cell text-style
@@ -141,6 +171,10 @@ writer and none is written blind.
 - Replace and remove are unmeasured. Only append has been observed; whether a
   second change to the same cell appends a second item or replaces the first
   is open.
+- The font word is not decoded (W34-2.1 above): the writer stores the measured
+  `0x90000001` for Bold and refuses every other attribute and every unset.
+- The writer does not claim a second item, an item in a block that already
+  carries one, a row-default entry, or any view but the measured uid 2.
 - `214/CEdl/Var2Data` is a save-path buffer whose size changes on every save
   (518 → 502 in `wave30-notes`, 606 → 590 in `wave30-calculate`) with all of
   the movement inside the normalised save-path record. The port must keep
