@@ -96,6 +96,8 @@ char const* kTaskVarMeta = "114/TBkndTask/VarMeta";
 char const* kTaskVar2 = "114/TBkndTask/Var2Data";
 char const* kTaskFixedMeta = "114/TBkndTask/FixedMeta";
 char const* kTaskFixed = "114/TBkndTask/FixedData";
+char const* kTaskFixed2 = "114/TBkndTask/Fixed2Data";
+char const* kTaskFixed2Meta = "114/TBkndTask/Fixed2Meta";
 char const* kRscVarMeta = "114/TBkndRsc/VarMeta";
 char const* kRscVar2 = "114/TBkndRsc/Var2Data";
 char const* kProps = "114/Props";
@@ -214,6 +216,26 @@ std::vector<std::uint8_t> stored_block(std::string const& file,
 /* The FixedMeta entry for a Task/Resource row: entry index = row + 3. */
 std::size_t meta_base_for_row(std::size_t entry_size, std::size_t row) {
     return 16 + (row + 3) * entry_size;
+}
+
+/* The offset of the 16-byte 114/Props scalar group carrying `tag_be`, found
+ * the way the writer finds it (a byte-wise scan for [u32 4][tag][u32 4][u32]),
+ * or npos. */
+std::size_t props_group_for(std::vector<std::uint8_t> const& props,
+                            std::uint32_t tag_be) {
+    for (std::size_t at = 0; at + 16 <= props.size(); ++at) {
+        if (u32_at(props, at) != 4) {
+            continue;
+        }
+        std::uint32_t const tag = (static_cast<std::uint32_t>(props[at + 4]) << 24) |
+                                  (static_cast<std::uint32_t>(props[at + 5]) << 16) |
+                                  (static_cast<std::uint32_t>(props[at + 6]) << 8) |
+                                  static_cast<std::uint32_t>(props[at + 7]);
+        if (tag == tag_be) {
+            return at;
+        }
+    }
+    return static_cast<std::size_t>(-1);
 }
 
 void check_only_owned_streams(TestContext& t, CfbDocument const& before,
@@ -899,6 +921,14 @@ void test_refusals(TestContext& t) {
                      },
                      "0xFFFFFFFF no-block offset",
                      "a 0xFFFFFFFF entry offset refused");
+        std::vector<VarRecordEdit> const removals = remove_edit(2, kNotesKey);
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_var_record(
+                             damaged, mppwrite::kVarTaskTable, removals, missing);
+                     },
+                     "0xFFFFFFFF no-block offset",
+                     "a 0xFFFFFFFF entry offset refused for a remove too");
     }
     {
         /* A duplicated (uid, key) pair: overwrite a second uid 2 entry with the
@@ -929,6 +959,14 @@ void test_refusals(TestContext& t) {
                      },
                      "a re-point needs exactly one existing record",
                      "two entries for one key refused");
+        std::vector<VarRecordEdit> const removals = remove_edit(2, kNotesKey);
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_var_record(
+                             damaged, mppwrite::kVarTaskTable, removals, missing);
+                     },
+                     "a remove needs exactly one existing record",
+                     "two entries for one key refused for a remove too");
     }
     {
         /* A 0x80000000-family entry for the key: the plain uid must not adopt
@@ -949,6 +987,22 @@ void test_refusals(TestContext& t) {
                              damaged, mppwrite::kVarTaskTable, edits, missing);
                      },
                      "0x80000000", "a 0x80000000-family entry refused");
+        std::vector<VarRecordEdit> const removals = remove_edit(2, kNotesKey);
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_var_record(
+                             damaged, mppwrite::kVarTaskTable, removals, missing);
+                     },
+                     "0x80000000",
+                     "a 0x80000000-family entry refused for a remove too");
+        std::vector<VarRecordEdit> const appends = append_edit(2, kNotesKey, {1, 2});
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_var_record(
+                             damaged, mppwrite::kVarTaskTable, appends, missing);
+                     },
+                     "already has a record",
+                     "an append onto a family entry refused");
     }
     {
         /* A zero-length old block: append four zero bytes to Var2Data and point
@@ -976,6 +1030,86 @@ void test_refusals(TestContext& t) {
                              damaged, mppwrite::kVarTaskTable, edits, missing);
                      },
                      "has zero payload", "a zero-length old block refused");
+        std::vector<VarRecordEdit> const removals = remove_edit(2, kNotesKey);
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_var_record(
+                             damaged, mppwrite::kVarTaskTable, removals, missing);
+                     },
+                     "has zero payload",
+                     "a zero-length old block refused for a remove too");
+    }
+
+    {
+        /* A FixedMeta entry that names another row's FixedData offset. */
+        CfbDocument doc = doc_from_data("wave30-notes-control.mpp");
+        std::vector<std::uint8_t> meta = doc.read_stream(kTaskFixedMeta);
+        put_u32_at(meta, meta_base_for_row(47, 2) + 4,
+                   static_cast<std::uint32_t>(48 + 202 * 3));
+        CfbDocument damaged =
+            with_stream("wave30-notes-control.mpp", kTaskFixedMeta, meta);
+        std::vector<VarRecordEdit> const edits = append_edit(2, kNotesKey, {1, 2});
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_var_record(
+                             damaged, mppwrite::kVarTaskTable, edits, missing);
+                     },
+                     "does not name its FixedData row",
+                     "a FixedMeta entry that does not name its row refused");
+    }
+    {
+        CfbDocument doc = doc_from_data("wave30-notes-control.mpp");
+        std::vector<std::uint8_t> fixed2 = doc.read_stream(kTaskFixed2);
+        fixed2.pop_back();
+        CfbDocument damaged =
+            with_stream("wave30-notes-control.mpp", kTaskFixed2, fixed2);
+        std::vector<VarRecordEdit> const edits = append_edit(2, kNotesKey, {1, 2});
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_var_record(
+                             damaged, mppwrite::kVarTaskTable, edits, missing);
+                     },
+                     "Fixed2Data is", "a damaged Fixed2Data refused");
+    }
+    {
+        CfbDocument doc = doc_from_data("wave30-notes-control.mpp");
+        std::vector<std::uint8_t> fixed2_meta = doc.read_stream(kTaskFixed2Meta);
+        fixed2_meta.pop_back();
+        CfbDocument damaged =
+            with_stream("wave30-notes-control.mpp", kTaskFixed2Meta, fixed2_meta);
+        std::vector<VarRecordEdit> const edits = append_edit(2, kNotesKey, {1, 2});
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_var_record(
+                             damaged, mppwrite::kVarTaskTable, edits, missing);
+                     },
+                     "Fixed2Meta is", "a damaged Fixed2Meta refused");
+    }
+    {
+        /* The same 114/Props scalar group twice: the writer must not choose
+         * which word is the counter. */
+        CfbDocument doc = doc_from_data("wave30-notes-control.mpp");
+        std::vector<std::uint8_t> const props = doc.read_stream(kProps);
+        std::size_t const group = props_group_for(props, 0x01000100u);
+        t.check(group != static_cast<std::size_t>(-1),
+                "duplicate Props: the Task size tag exists");
+        if (group != static_cast<std::size_t>(-1)) {
+            std::vector<std::uint8_t> twice = props;
+            twice.insert(twice.begin() + static_cast<std::ptrdiff_t>(group + 16),
+                         props.begin() + static_cast<std::ptrdiff_t>(group),
+                         props.begin() + static_cast<std::ptrdiff_t>(group + 16));
+            CfbDocument damaged =
+                with_stream("wave30-notes-control.mpp", kProps, twice);
+            std::vector<VarRecordEdit> const edits =
+                append_edit(2, kNotesKey, {1, 2});
+            expect_error(t,
+                         [&] {
+                             (void)mppwrite::save_var_record(
+                                 damaged, mppwrite::kVarTaskTable, edits, missing);
+                         },
+                         "more than one scalar record",
+                         "a duplicated 114/Props tag refused");
+        }
     }
 
     /* A duplicated uid in FixedData, and a dead FixedMeta state byte. */
