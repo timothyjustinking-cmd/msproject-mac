@@ -599,28 +599,25 @@ std::size_t find_resource_row(Bytes const& fixed, std::size_t rows,
 /* ---- the task leaf ------------------------------------------------------ */
 struct TaskLeaf {
     std::uint32_t offset = 0;
+    /* The entry's index in the VarMeta array (for the append shape's re-point). */
+    std::size_t entry_index = 0;
 };
 
 TaskLeaf find_task_leaf(std::vector<VarEntryView> const& entries,
-                        Bytes const& var2, std::uint32_t task_uid,
-                        std::string const& function) {
+                        std::uint32_t task_uid, std::string const& function) {
     std::size_t found = 0;
     TaskLeaf leaf;
-    for (VarEntryView const& entry : entries) {
-        if (entry.uid == task_uid && entry.key == kTaskWorkLeafKey) {
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        if (entries[i].uid == task_uid && entries[i].key == kTaskWorkLeafKey) {
             ++found;
-            leaf.offset = entry.offset;
+            leaf.offset = entries[i].offset;
+            leaf.entry_index = i;
         }
     }
     if (found != 1) {
         fail(std::string(function) + ": the task table has " +
              std::to_string(found) + " 0x0B4004E5 blocks for UniqueID " +
              std::to_string(task_uid) + "; the measured shape has one");
-    }
-    if (block_length(var2, leaf.offset) != 8) {
-        fail(std::string(function) + ": the task's 0x0B4004E5 block is " +
-             std::to_string(block_length(var2, leaf.offset)) +
-             " bytes, not the measured 8");
     }
     return leaf;
 }
@@ -841,6 +838,7 @@ struct Built {
     Bytes assn_var2;
     Bytes task_fixed;
     Bytes task_meta;
+    Bytes task_var_meta;
     Bytes task_var2;
     Bytes rsc_fixed;
     Bytes rsc_meta;
@@ -861,6 +859,7 @@ void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
     work.replace_stream(kAssnVar2Data, built.assn_var2);
     work.replace_stream(kTaskFixedData, built.task_fixed);
     work.replace_stream(kTaskFixedMeta, built.task_meta);
+    work.replace_stream(kTaskVarMeta, built.task_var_meta);
     work.replace_stream(kTaskVar2Data, built.task_var2);
     work.replace_stream(kRscFixedData, built.rsc_fixed);
     work.replace_stream(kRscFixedMeta, built.rsc_meta);
@@ -875,6 +874,22 @@ void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
     Bytes const summary_built = work.read_stream(summary);
 
     (void)save_props_edit(work, built.props, path);
+
+    /* The edit marker is the one stream whose change is conditional: the
+     * marker writer stores 1 and leaves a file that already holds 1 untouched.
+     * Project's own save after an edit writes 1, so a control taken from such a
+     * save already carries it; drop the marker from the changed set only in
+     * exactly that byte-identical case. */
+    std::vector<std::string> expected_changed = built.expected_changed;
+    auto const marker =
+        std::find(expected_changed.begin(), expected_changed.end(),
+                  std::string(kEditMarkerStream));
+    if (marker != expected_changed.end() && doc.has_stream(kEditMarkerStream) &&
+        work.has_stream(kEditMarkerStream) &&
+        doc.read_stream(kEditMarkerStream) ==
+            work.read_stream(kEditMarkerStream)) {
+        expected_changed.erase(marker);
+    }
 
     auto require_stream = [&](char const* stream_path, Bytes const& expected) {
         if (!work.has_stream(stream_path) ||
@@ -891,6 +906,7 @@ void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
     require_stream(kAssnVar2Data, built.assn_var2);
     require_stream(kTaskFixedData, built.task_fixed);
     require_stream(kTaskFixedMeta, built.task_meta);
+    require_stream(kTaskVarMeta, built.task_var_meta);
     require_stream(kTaskVar2Data, built.task_var2);
     require_stream(kRscFixedData, built.rsc_fixed);
     require_stream(kRscFixedMeta, built.rsc_meta);
@@ -907,7 +923,7 @@ void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
         }
     }
 
-    check_changed_set(doc, work, built.expected_changed, function);
+    check_changed_set(doc, work, expected_changed, function);
     doc = std::move(work);
 }
 
@@ -939,13 +955,7 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
     Bytes task_var2 = doc.read_stream(kTaskVar2Data);
     std::vector<VarEntryView> const task_entries =
         load_var_meta(task_var_meta, task_var2, "the task VarMeta");
-    TaskLeaf const leaf = find_task_leaf(task_entries, task_var2, key.task_uid,
-                                         function);
-    if (get_u32(task_var2, leaf.offset + 4) != 1 ||
-        get_u32(task_var2, leaf.offset + 8) != kPlaceholderResourceUid) {
-        fail(function + ": the task's 0x0B4004E5 leaf is not the measured "
-             "[1][placeholder]");
-    }
+    TaskLeaf const leaf = find_task_leaf(task_entries, key.task_uid, function);
 
     Bytes rsc_fixed;
     Bytes rsc_meta;
@@ -972,17 +982,6 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
         fail(function + ": the assignment Fixed2Data is not 48 * rows bytes");
     }
 
-    /* The measured add shape: every row an unassigned placeholder, one
-     * FixedMeta and one Fixed2Meta entry per row, no spare. */
-    if (fm.flag != 4 || fm.count != rows || fm.entries != rows) {
-        fail(function + ": the assignment FixedMeta is not the measured "
-             "rows / rows / flag 4 shape (a second assignment on the same task "
-             "is a different, unmeasured shape)");
-    }
-    if (f2m.count != rows || f2m.entries != rows) {
-        fail(function + ": the assignment Fixed2Meta is not the measured "
-             "rows / rows shape");
-    }
     std::uint32_t const max_uid = [&] {
         std::uint32_t greatest = 0;
         for (std::size_t r = 0; r < rows; ++r) {
@@ -991,6 +990,398 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
         }
         return greatest;
     }();
+    std::vector<std::size_t> target_rows;
+    std::vector<std::size_t> real_rows;
+    for (std::size_t r = 0; r < rows; ++r) {
+        if (get_u32(assn_fixed, r * kAssnRowBytes + kAssnRowTask) !=
+            key.task_uid) {
+            continue;
+        }
+        target_rows.push_back(r);
+        if (get_u32(assn_fixed, r * kAssnRowBytes + kAssnRowResource) !=
+            kPlaceholderResourceUid) {
+            real_rows.push_back(r);
+        }
+    }
+
+    if (!real_rows.empty()) {
+        /* ---- the settled append shape (count 1 -> 2, 2 -> 3) -----------
+         * Measured on wave34-assign-add-second and wave34-assign-add-third:
+         * the task already holds real assignments plus one free placeholder
+         * row; Project appends a copy of a real row with the new uid and
+         * resource, appends one FixedMeta and one Fixed2Meta entry (no
+         * tombstone), appends a fresh four-block VarMeta group, appends the
+         * task leaf array and re-points its entry, and raises the roll-ups.
+         * No existing FixedMeta entry, Fixed2Data record or Var2Data byte
+         * moves. */
+        if (real_rows.size() > 2) {
+            fail(function + ": the task already has " +
+                 std::to_string(real_rows.size()) +
+                 " real assignments; the measured counts are 1 and 2");
+        }
+        if (target_rows.size() != real_rows.size() + 1) {
+            fail(function + ": the task has " +
+                 std::to_string(target_rows.size()) + " assignment rows for " +
+                 std::to_string(real_rows.size()) +
+                 " real assignments; the measured append shape is one real row "
+                 "per assignment plus one free placeholder row");
+        }
+        std::size_t placeholder_row = static_cast<std::size_t>(-1);
+        for (std::size_t r : target_rows) {
+            if (get_u32(assn_fixed, r * kAssnRowBytes + kAssnRowResource) !=
+                kPlaceholderResourceUid) {
+                continue;
+            }
+            if (placeholder_row != static_cast<std::size_t>(-1)) {
+                fail(function + ": the task has more than one free placeholder "
+                     "row; the measured append shape has one");
+            }
+            placeholder_row = r;
+        }
+        if (placeholder_row == static_cast<std::size_t>(-1)) {
+            fail(function + ": the task has no free placeholder row; the "
+                 "measured append shape has one");
+        }
+        if (fm.count != rows || fm.entries != rows) {
+            fail(function + ": the assignment FixedMeta is not the measured "
+                 "rows / rows shape");
+        }
+        if (f2m.count != rows || f2m.entries != rows) {
+            fail(function + ": the assignment Fixed2Meta is not the measured "
+                 "rows / rows shape");
+        }
+        /* Every row is either an unassigned placeholder or a real row of the
+         * target task, and each row's two meta entries match its kind. */
+        for (std::size_t r = 0; r < rows; ++r) {
+            std::uint32_t const row_task =
+                get_u32(assn_fixed, r * kAssnRowBytes + kAssnRowTask);
+            std::uint32_t const row_resource =
+                get_u32(assn_fixed, r * kAssnRowBytes + kAssnRowResource);
+            bool const placeholder = row_resource == kPlaceholderResourceUid;
+            if (!placeholder && row_task != key.task_uid) {
+                fail(function + ": assignment row " + std::to_string(r) +
+                     " names task UniqueID " + std::to_string(row_task) +
+                     " and a real resource; the measured append shape has real "
+                     "rows only for the target task");
+            }
+            Bytes const want_fm =
+                placeholder
+                    ? (r == placeholder_row
+                           ? fm_entry(2, 0,
+                                      static_cast<std::uint32_t>(
+                                          r * kAssnRowBytes),
+                                      0x01)
+                           : fm_entry(0, 3,
+                                      static_cast<std::uint32_t>(
+                                          r * kAssnRowBytes),
+                                      0x01))
+                    : fm_entry(0, 4,
+                               static_cast<std::uint32_t>(r * kAssnRowBytes),
+                               0x00);
+            if (slice(assn_meta, kMetaHeaderBytes + r * kAssnFmEntryBytes,
+                      kAssnFmEntryBytes) != want_fm) {
+                fail(function + ": assignment FixedMeta entry " +
+                     std::to_string(r) +
+                     " is not the measured entry for its row kind");
+            }
+            Bytes const want_f2m =
+                placeholder
+                    ? f2m_entry(static_cast<std::uint32_t>(r * kAssnF2RecordBytes),
+                                0x01, 0x08)
+                    : f2m_entry(static_cast<std::uint32_t>(r * kAssnF2RecordBytes),
+                                0x09, 0x28);
+            if (slice(assn_f2_meta, kMetaHeaderBytes + r * kAssnF2mEntryBytes,
+                      kAssnF2mEntryBytes) != want_f2m) {
+                fail(function + ": assignment Fixed2Meta entry " +
+                     std::to_string(r) +
+                     " is not the measured entry for its row kind");
+            }
+        }
+        /* The real rows are interchangeable copies: identical apart from uid
+         * and resource.  The new row copies the first. */
+        Bytes const model = slice(assn_fixed, real_rows[0] * kAssnRowBytes,
+                                  kAssnRowBytes);
+        for (std::size_t r : real_rows) {
+            check_assn_row_work(assn_fixed, r, function.c_str());
+            if (r == real_rows[0]) {
+                continue;
+            }
+            Bytes const other = slice(assn_fixed, r * kAssnRowBytes,
+                                      kAssnRowBytes);
+            for (std::size_t at = 0; at < kAssnRowBytes; ++at) {
+                if ((at >= kAssnRowUid && at < kAssnRowUid + 4) ||
+                    (at >= kAssnRowResource && at < kAssnRowResource + 4)) {
+                    continue;
+                }
+                if (other[at] != model[at]) {
+                    fail(function + ": the task's real assignment rows differ at "
+                         "row byte " + std::to_string(at) +
+                         " outside uid and resource; the measured rows are "
+                         "identical there");
+                }
+            }
+        }
+        std::vector<std::uint32_t> assigned;
+        double old_total = 0.0;
+        for (std::size_t r : real_rows) {
+            std::uint32_t const uid =
+                get_u32(assn_fixed, r * kAssnRowBytes + kAssnRowResource);
+            if (uid == key.resource_uid) {
+                fail(function + ": resource UniqueID " +
+                     std::to_string(key.resource_uid) +
+                     " is already assigned to the task");
+            }
+            if (std::find(assigned.begin(), assigned.end(), uid) !=
+                assigned.end()) {
+                fail(function + ": two real assignment rows name resource "
+                     "UniqueID " + std::to_string(uid));
+            }
+            assigned.push_back(uid);
+            old_total += get_f64(assn_fixed, r * kAssnRowBytes + kAssnRowWork);
+        }
+        std::sort(assigned.begin(), assigned.end());
+        double const work = get_f64(model, kAssnRowWork);
+        double const units = get_f64(model, kAssnRowUnits);
+        std::uint32_t const ticks8 = contour_ticks8(work, function.c_str());
+        std::size_t const leaf_count = real_rows.size();
+        if (block_length(task_var2, leaf.offset) != 4 + 4 * leaf_count ||
+            get_u32(task_var2, leaf.offset + 4) != leaf_count) {
+            fail(function + ": the task's 0x0B4004E5 leaf is not the measured " +
+                 std::to_string(leaf_count) + "-resource array");
+        }
+        for (std::size_t i = 0; i < leaf_count; ++i) {
+            if (get_u32(task_var2, leaf.offset + 8 + 4 * i) != assigned[i]) {
+                fail(function + ": the task's 0x0B4004E5 leaf does not name the "
+                     "task's real assignments in ascending resource order");
+            }
+        }
+        check_task_work(task_fixed, 0, old_total, function.c_str());
+        check_task_work(task_fixed, task_row, old_total, function.c_str());
+        if (task_flags(task_meta, 0) != 0x17 ||
+            task_flags(task_meta, task_row) != 0x97) {
+            fail(function + ": the project or target task flag byte is not the "
+                 "measured 0x17 / 0x97 of a task that already has assignments");
+        }
+        check_resource_work(rsc_fixed, rsc_row, 0.0, function.c_str());
+
+        std::uint32_t const count_before =
+            props_scalar(props, kPropsAssignmentCountTag, function.c_str());
+        std::uint32_t const freed_before =
+            props_scalar(props, kPropsAssignmentFreedTag, function.c_str());
+        std::uint32_t const dirty_before =
+            props_scalar(props, kPropsAssignmentDirtyTag, function.c_str());
+        std::uint32_t const size_before =
+            props_scalar(props, kPropsAssignmentSizeTag, function.c_str());
+        std::uint32_t const task_size_before =
+            props_scalar(props, kPropsTaskSizeTag, function.c_str());
+        if (count_before != fm.count || size_before != assn_var2.size() ||
+            task_size_before != task_var2.size()) {
+            fail(function + ": the 114/Props assignment scalars do not agree "
+                 "with the measured control state");
+        }
+        Bytes const session = props_record(props, kAssnSessionRecord,
+                                           function.c_str());
+        if (session.size() != 4) {
+            fail(function + ": the 114/Props record 0x02400007 is not the "
+                 "measured four-byte session word");
+        }
+
+        /* ---- build ------------------------------------------------ */
+        Built built;
+        std::uint32_t const new_uid = max_uid + 1;
+        std::size_t const new_rows = rows + 1;
+        std::size_t const var2_base = assn_var2.size();
+        std::size_t const task_var2_base = task_var2.size();
+        std::size_t const new_leaf_count = leaf_count + 1;
+        double const new_total = old_total + work;
+
+        built.assn_fixed = assn_fixed;
+        {
+            Bytes row = model;
+            put_u32(row, kAssnRowUid, new_uid);
+            put_u32(row, kAssnRowResource, key.resource_uid);
+            built.assn_fixed.insert(built.assn_fixed.end(), row.begin(),
+                                    row.end());
+        }
+        built.assn_meta = assn_meta;
+        {
+            Bytes const entry =
+                fm_entry(0, 4, static_cast<std::uint32_t>(rows * kAssnRowBytes),
+                         0x00);
+            built.assn_meta.insert(built.assn_meta.end(), entry.begin(),
+                                   entry.end());
+        }
+        put_u32(built.assn_meta, 8, static_cast<std::uint32_t>(new_rows));
+        put_u32(built.assn_meta, 12, static_cast<std::uint32_t>(
+                                         new_rows * kAssnRowBytes));
+        built.assn_f2_meta = assn_f2_meta;
+        {
+            Bytes const entry = f2m_entry(
+                static_cast<std::uint32_t>(rows * kAssnF2RecordBytes), 0x09,
+                0x28);
+            built.assn_f2_meta.insert(built.assn_f2_meta.end(), entry.begin(),
+                                      entry.end());
+        }
+        put_u32(built.assn_f2_meta, 8, static_cast<std::uint32_t>(new_rows));
+        put_u32(built.assn_f2_meta, 12,
+                static_cast<std::uint32_t>(new_rows * kAssnF2RecordBytes));
+
+        built.assn_f2 = assn_f2;
+        {
+            Bytes const fresh = fresh_identity(doc, assn_f2, function.c_str());
+            Bytes const task_identity =
+                slice(task_f2, (task_row + kF2SpacerRecords) * kTaskF2RecordBytes,
+                      16);
+            Bytes const resource_identity =
+                slice(doc.read_stream(kRscFixed2Data),
+                      static_cast<std::size_t>(rsc_row + kF2SpacerRecords) *
+                              kRscF2RecordBytes,
+                      16);
+            built.assn_f2.insert(built.assn_f2.end(), fresh.begin(),
+                                 fresh.end());
+            built.assn_f2.insert(built.assn_f2.end(), task_identity.begin(),
+                                 task_identity.end());
+            built.assn_f2.insert(built.assn_f2.end(), resource_identity.begin(),
+                                 resource_identity.end());
+        }
+
+        /* Every existing group stays; the new uid's four entries are appended
+         * in ascending key order with the blocks at the end of Var2Data. */
+        built.assn_var_meta = assn_var_meta;
+        for (BlockLayout const& block : kFourEntryLayout) {
+            append_u32(built.assn_var_meta, new_uid);
+            append_u32(built.assn_var_meta,
+                       static_cast<std::uint32_t>(var2_base + block.relative));
+            append_u32(built.assn_var_meta, block.key);
+        }
+        put_u32(built.assn_var_meta, 8,
+                static_cast<std::uint32_t>(
+                    (assn_var_meta.size() - kVarMetaHeaderBytes) /
+                        kVarMetaEntryBytes +
+                    4));
+        put_u32(built.assn_var_meta, kVar2SizeOffset,
+                static_cast<std::uint32_t>(var2_base + kFourBlockBytes));
+
+        built.assn_var2 = assn_var2;
+        append_u32(built.assn_var2, 4);
+        built.assn_var2.insert(built.assn_var2.end(), session.begin(),
+                               session.end());
+        Bytes const contour = build_contour(units * 16.0, work, ticks8);
+        append_u32(built.assn_var2, static_cast<std::uint32_t>(contour.size()));
+        built.assn_var2.insert(built.assn_var2.end(), contour.begin(),
+                               contour.end());
+        append_u32(built.assn_var2, 16);
+        built.assn_var2.resize(built.assn_var2.size() + 16);
+        append_u32(built.assn_var2, 16);
+        built.assn_var2.resize(built.assn_var2.size() + 16);
+
+        built.task_fixed = task_fixed;
+        put_f64(built.task_fixed, kTaskHeaderBytes + kTaskRowWork, new_total);
+        put_f64(built.task_fixed, kTaskHeaderBytes + kTaskRowWorkRollup,
+                new_total);
+        put_f64(built.task_fixed,
+                kTaskHeaderBytes + task_row * kTaskRowBytes + kTaskRowWork,
+                new_total);
+        put_f64(built.task_fixed,
+                kTaskHeaderBytes + task_row * kTaskRowBytes + kTaskRowWorkRollup,
+                new_total);
+        built.task_meta = task_meta;
+        built.task_var_meta = task_var_meta;
+        put_u32(built.task_var_meta,
+                kVarMetaHeaderBytes + leaf.entry_index * kVarMetaEntryBytes + 4,
+                static_cast<std::uint32_t>(task_var2_base));
+        put_u32(built.task_var_meta, kVar2SizeOffset,
+                static_cast<std::uint32_t>(task_var2_base + 8 +
+                                           4 * new_leaf_count));
+        built.task_var2 = task_var2;
+        append_u32(built.task_var2,
+                   static_cast<std::uint32_t>(4 + 4 * new_leaf_count));
+        append_u32(built.task_var2,
+                   static_cast<std::uint32_t>(new_leaf_count));
+        {
+            std::vector<std::uint32_t> leaf_uids = assigned;
+            leaf_uids.push_back(key.resource_uid);
+            std::sort(leaf_uids.begin(), leaf_uids.end());
+            for (std::uint32_t uid : leaf_uids) {
+                append_u32(built.task_var2, uid);
+            }
+        }
+        built.rsc_fixed = rsc_fixed;
+        for (std::size_t offset : {kRscRowWork1, kRscRowWork2, kRscRowWork3}) {
+            put_f64(built.rsc_fixed,
+                    kRscHeaderBytes + rsc_row * kRscRowBytes + offset, work);
+        }
+        built.rsc_meta = rsc_meta;
+
+        built.props.stream = kPropsBackEnd;
+        built.props.scalars = {
+            {kPropsAssignmentCountTag, static_cast<std::uint32_t>(new_rows)},
+            {kPropsAssignmentSizeTag,
+             static_cast<std::uint32_t>(var2_base + kFourBlockBytes)},
+            {kPropsTaskSizeTag, static_cast<std::uint32_t>(
+                                    task_var2_base + 8 + 4 * new_leaf_count)},
+        };
+        if (dirty_before != 0) {
+            built.props.scalars.push_back({kPropsAssignmentDirtyTag, 0});
+        }
+
+        built.expected_changed = {
+            kAssnFixedData,     kAssnFixedMeta,  kAssnFixed2Data,
+            kAssnFixed2Meta,    kAssnVarMeta,    kAssnVar2Data,
+            kTaskFixedData,     kTaskVarMeta,    kTaskVar2Data,
+            kRscFixedData,      kPropsBackEnd,   kDocumentSummaryStream,
+            kEditMarkerStream};
+
+        CfbDocument edited = doc;
+        save_and_prove(doc, edited, built, path, function);
+
+        AssignmentGrowthWrite written;
+        written.task_uid = key.task_uid;
+        written.resource_uid = key.resource_uid;
+        written.assignment_uid = new_uid;
+        written.tombstoned_uid = 0;
+        written.rows_before = rows;
+        written.rows_after = new_rows;
+        written.work = work;
+        written.work_ticks = static_cast<std::uint32_t>(ticks8 / 8u);
+        written.var2_bytes_before = var2_base;
+        written.var2_bytes_after = var2_base + kFourBlockBytes;
+        written.var_entries_before =
+            (assn_var_meta.size() - kVarMetaHeaderBytes) / kVarMetaEntryBytes;
+        written.var_entries_after = written.var_entries_before + 4;
+        written.props_count_before = count_before;
+        written.props_count_after = static_cast<std::uint32_t>(new_rows);
+        written.props_freed_before = freed_before;
+        written.props_freed_after = freed_before;
+        written.props_dirty_before = dirty_before;
+        written.props_dirty_after = 0;
+        written.props_size_before = size_before;
+        written.props_size_after =
+            static_cast<std::uint32_t>(var2_base + kFourBlockBytes);
+        return written;
+    }
+
+    /* The measured placeholder-only add shape (count 0 -> 1): every row an
+     * unassigned placeholder, one FixedMeta and one Fixed2Meta entry per row,
+     * no spare. */
+    if (fm.flag != 4 || fm.count != rows || fm.entries != rows) {
+        fail(function + ": the assignment FixedMeta is not the measured "
+             "rows / rows / flag 4 shape of a task with no real assignment");
+    }
+    if (f2m.count != rows || f2m.entries != rows) {
+        fail(function + ": the assignment Fixed2Meta is not the measured "
+             "rows / rows shape");
+    }
+    if (block_length(task_var2, leaf.offset) != 8) {
+        fail(function + ": the task's 0x0B4004E5 block is " +
+             std::to_string(block_length(task_var2, leaf.offset)) +
+             " bytes, not the measured 8");
+    }
+    if (get_u32(task_var2, leaf.offset + 4) != 1 ||
+        get_u32(task_var2, leaf.offset + 8) != kPlaceholderResourceUid) {
+        fail(function + ": the task's 0x0B4004E5 leaf is not the measured "
+             "[1][placeholder]");
+    }
     std::size_t const target_row =
         [&] {
             std::size_t found = static_cast<std::size_t>(-1);
@@ -1222,6 +1613,7 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
             kTaskHeaderBytes + task_row * kTaskRowBytes + kTaskRowWorkRollup,
             work);
     built.task_meta = task_meta;
+    built.task_var_meta = task_var_meta;
     put_u8(built.task_meta,
            kMetaHeaderBytes + kTaskFmEntryBytes * kF2SpacerRecords +
                kTaskFmFlags,
@@ -1322,9 +1714,9 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
     Bytes task_var2 = doc.read_stream(kTaskVar2Data);
     std::vector<VarEntryView> const task_entries =
         load_var_meta(task_var_meta, task_var2, "the task VarMeta");
-    TaskLeaf const leaf = find_task_leaf(task_entries, task_var2, key.task_uid,
-                                         function);
-    if (get_u32(task_var2, leaf.offset + 4) != 1 ||
+    TaskLeaf const leaf = find_task_leaf(task_entries, key.task_uid, function);
+    if (block_length(task_var2, leaf.offset) != 8 ||
+        get_u32(task_var2, leaf.offset + 4) != 1 ||
         get_u32(task_var2, leaf.offset + 8) != key.resource_uid) {
         fail(function + ": the task's 0x0B4004E5 leaf does not name the "
              "resource");
@@ -1660,6 +2052,7 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
             kTaskHeaderBytes + task_row * kTaskRowBytes + kTaskRowWorkRollup,
             0.0);
     built.task_meta = task_meta;
+    built.task_var_meta = task_var_meta;
     put_u8(built.task_meta,
            kMetaHeaderBytes + kTaskFmEntryBytes * (task_row + kF2SpacerRecords) +
                kTaskFmFlags,

@@ -56,7 +56,9 @@ current end, and the size words of all six streams move.
 
 ### W34-3.1: the assignment ADD and REMOVE shapes, byte for byte
 
-The two `wave30-assign-*` pairs fix every byte of both edits.  The writer
+The two `wave30-assign-*` pairs fix every byte of the first-assignment ADD and
+the REMOVE; `wave34-assign-add-second` and `wave34-assign-add-third` fix the
+settled APPEND (a task that already holds one or two assignments).  The writer
 `core/mppwrite/assignment_growth.cpp` encodes exactly these shapes and refuses
 every other shape before it writes.  `n` is the old FixedData row count; the
 target task's placeholder row is row `p`.
@@ -100,6 +102,40 @@ task has exactly one, and every row's `+8` is `0xFFFF0001`):
   `:= 1`, size `:=` the new Var2Data size.
 - **DocumentSummaryInformation**: the project row's total work 0 -> W moves
   the work strings `"0 hrs" -> "40 hrs"` (titles[3] and typed pid 7).
+
+SETTLED APPEND (wave34-assign-add-second, wave34-assign-add-third: the task
+already holds one or two real assignments plus exactly one free placeholder
+row; nothing is tombstoned and every old row, record and var block stays):
+
+- **Assn FixedData** +110: append a copy of a real row with `+0` = largest uid
+  + 1 and `+8` = the resource uid.
+- **Assn FixedMeta** +34: append `{+0 0, +2 4, +4 n*110, +8..14 f1 ff 23 f0
+  69 00 02}`; header `+8 := n+1`, `+12 := (n+1)*110`; `+4` is untouched (the
+  control's 6).
+- **Assn Fixed2Data** +48: append `{fresh identity, the task row's
+  Fixed2Data identity, the resource row's Fixed2Data identity}`.
+- **Assn Fixed2Meta** +53: append `{+4 n*48, +8 0xcf, +9 0x09, +35 0x10,
+  +52 0x28}`; header `+8 := n+1`, `+12 := (n+1)*48`.
+- **Assn VarMeta** +48: every existing entry stays; append the new uid's four
+  entries in ascending key order at `base+8`, `base`, `base+84` and
+  `base+104`; header `+8 += 4`, `+0x14 := base+124`.
+- **Assn Var2Data** +124: the same four blocks as the first-assignment add
+  (session word, 72-B contour, two 16-byte zero blocks), byte-identical to
+  the `wave30-assign-add` group apart from the session word.
+- **Task FixedData**: project row and target task row `+8`/`+24 :=` the old
+  total plus the new row's work.  **Task FixedMeta** is byte-identical (its
+  flags are already 0x17/0x97).  **Task VarMeta**: the leaf entry's `+4 :=`
+  the old Task Var2Data size; header `+0x14 :=` old size + 8 + 4 * new
+  resource count.  **Task Var2Data**: append `[4+4*k][k][sorted resource
+  uids]`; the old leaf record stays behind as a stale copy.
+- **Rsc FixedData**: target row `+48`, `+90`, `+106 :=` the new row's work.
+  **Rsc FixedMeta** is byte-identical.
+- **114/Props**: count `:= n+1`, size `:=` the new Var2Data size, dirty
+  `:= 0` when it was 1 (a control taken from an earlier edit save already
+  holds 0), and the Task size scalar (`0x01000100`) `:=` the new Task
+  Var2Data size (650 -> 666 -> 686).  The freed scalar stays 120.
+- **DocumentSummaryInformation**: the total work strings move
+  (`"40 hrs" -> "80 hrs"`, `"80 hrs" -> "120 hrs"`).
 
 REMOVE (wave30-assign-delete: the settled shape -- every row but the last is
 an unassigned placeholder, the last is the only real assignment, FixedMeta and
@@ -162,6 +198,20 @@ Fixed2Meta have `n-1` real entries and a byte-duplicate spare at the end):
   stay in place; FixedMeta stays 152 B with 8 effect bytes;
   Fixed2Data 192 → 240 (+48); VarMeta stays 144 B; Var2Data 520 → 644
   (+124). This is the deletion rule in one measurement.
+- `wave34-assign-add-second` (a second assignment on the same task, 1 -> 2)
+  — Assn FixedData 440 → 550 (+110), FixedMeta +34, Fixed2Data +48,
+  Fixed2Meta +53, VarMeta +48 (four entries), Var2Data 520 → 644 (+124);
+  Task FixedData keeps its size with only the two work words changed; Task
+  Var2Data 650 → 666 (+16, the appended two-resource leaf); the Props Task
+  size scalar 650 → 666.  Both FixedMeta streams grow, so for the first
+  time the settled append's Assn FixedMeta `+4` stays 6 while `+8`/`+12`
+  move.
+- `wave34-assign-add-third` (a third assignment, 2 -> 3) — Assn FixedData
+  550 → 660 (+110), FixedMeta +34, Fixed2Data +48, Fixed2Meta +53, VarMeta
+  +48, Var2Data 644 → 768 (+124); Task Var2Data 666 → 686 (+20); Props Task
+  size 666 → 686.  The two pairs differ only in the old row/entry counts and
+  the session word the control carries, which shows the append rule is
+  independent of the count within the measured 1 → 2 → 3 range.
 - `wave30-resource-add` — Rsc FixedData 392 → 564 (+172), FixedMeta
   201 → 238 (+37), Fixed2Data 200 → 240 (+40), Fixed2Meta 271 → 322 (+51),
   VarMeta 108 → 168 (+60, two entries), Var2Data 86 → 140 (+54); the same

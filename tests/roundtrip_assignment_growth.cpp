@@ -19,13 +19,16 @@
  * every stream size and header word, the tombstone and the appended entries,
  * the appended row, the four-block group and its contour, the task and
  * resource roll-ups and flags, the task's 0x0B4004E5 leaf, the four 114/Props
- * assignment scalars and the summary's work string.
+ * assignment scalars, the Task table's Var2Data size scalar and the summary's
+ * work string.
  *
  * REFUSALS.  Every refusal branch the committed fixtures can reach is
  * exercised: the project summary row, uid 0 and the placeholder resource word,
  * an unknown task or resource, the wrong input shape for each command, the
  * other pair's control (each command demands its own measured state), and
- * damaged input -- every table's size word, entry count and magic; assignment
+ * damaged input -- every table's size word, entry count and magic; the settled
+ * append shape's own guards (its placeholder layout, row kinds, leaf and the
+ * Task size scalar); assignment
  * row fields, FixedMeta/Fixed2Meta entries and Fixed2Data identities; the task
  * and resource roll-ups and flag bytes; the VarMeta header, entries, uid
  * groups, key order and offsets; the Var2Data block lengths and the task leaf;
@@ -110,6 +113,9 @@ constexpr std::uint32_t kCountTag = 0x04000001u;
 constexpr std::uint32_t kFreedTag = 0x04000002u;
 constexpr std::uint32_t kDirtyTag = 0x04008000u;
 constexpr std::uint32_t kSizeTag = 0x04000100u;
+/* The Task table's Var2Data size scalar, which the appended task leaf array
+ * also raises (measured: 650 -> 666 -> 686). */
+constexpr std::uint32_t kTaskSizeTag = 0x01000100u;
 constexpr std::uint32_t kSessionRecord = 0x02400007u;
 
 /* The measured null-resource identity of an unassigned placeholder row. */
@@ -816,6 +822,463 @@ void test_remove_pair(TestContext& t) {
         tail_normalisation(null_save));
 }
 
+/* ---- the settled append pairs (count 1 -> 2 and 2 -> 3) ----------------- */
+
+/* True when two equal-length streams agree outside the listed [from, to)
+ * ranges. */
+Bytes slice_of(Bytes const& bytes, std::size_t offset, std::size_t length) {
+    return Bytes(bytes.begin() + static_cast<std::ptrdiff_t>(offset),
+                 bytes.begin() + static_cast<std::ptrdiff_t>(offset + length));
+}
+
+bool equal_except(Bytes const& a, Bytes const& b,
+                  std::vector<std::pair<std::size_t, std::size_t>> const& skip) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (std::size_t at = 0; at < a.size(); ++at) {
+        bool skipped = false;
+        for (auto const& range : skip) {
+            if (at >= range.first && at < range.second) {
+                skipped = true;
+                break;
+            }
+        }
+        if (!skipped && a[at] != b[at]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* The streams the append edit changes, exactly the measured effect set: the
+ * Task and Resource FixedMeta streams stay byte-identical. */
+std::array<char const*, 13> const kAppendDeclared{{
+    kAssnFixed, kAssnMeta, kAssnF2, kAssnF2Meta, kAssnVarMeta, kAssnVar2,
+    kTaskFixed, kTaskVarMeta, kTaskVar2, kRscFixed, kProps, kSummary, kMarker}};
+/* A control taken from an earlier edit save already holds the marker's
+ * post-save value; Project's null save clears it, so the control/null mask
+ * hides the edit's 0 -> 1: the marker has no visible effect and must not be
+ * declared (it is still compared byte for byte outside the mask). */
+std::array<char const*, 12> const kAppendDeclaredNoMarker{{
+    kAssnFixed, kAssnMeta, kAssnF2, kAssnF2Meta, kAssnVarMeta, kAssnVar2,
+    kTaskFixed, kTaskVarMeta, kTaskVar2, kRscFixed, kProps, kSummary}};
+
+struct AppendPair {
+    char const* control;
+    char const* null_save;
+    char const* edit;
+    char const* label;
+    std::uint32_t resource_uid;
+    std::size_t rows_before;
+    std::uint32_t new_uid;
+    std::size_t var2_before;
+    std::size_t var2_after;
+    std::size_t entries_before;
+    std::size_t task_var2_before;
+    std::size_t leaf_offset;
+    std::size_t leaf_count;
+    double old_total;
+    double new_total;
+    std::size_t rsc_row;
+    std::uint32_t dirty_before;
+    bool marker_moves;
+    char const* summary_old;
+    char const* summary_new;
+};
+
+void test_append_pair(TestContext& t, AppendPair const& p) {
+    std::string const label = p.label;
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, p.control));
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, p.null_save));
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, p.edit));
+
+    CfbDocument doc = doc_from_data(p.control);
+    CfbDocument const before = doc;
+    Bytes const control_fixed = doc.read_stream(kAssnFixed);
+    Bytes const control_meta = doc.read_stream(kAssnMeta);
+    Bytes const control_f2m = doc.read_stream(kAssnF2Meta);
+    Bytes const control_f2 = doc.read_stream(kAssnF2);
+    Bytes const control_vm = doc.read_stream(kAssnVarMeta);
+    Bytes const control_v2 = doc.read_stream(kAssnVar2);
+    Bytes const control_task_fixed = doc.read_stream(kTaskFixed);
+    Bytes const control_task_meta = doc.read_stream(kTaskMeta);
+    Bytes const control_task_vm = doc.read_stream(kTaskVarMeta);
+    Bytes const control_task_v2 = doc.read_stream(kTaskVar2);
+    Bytes const control_rsc_fixed = doc.read_stream(kRscFixed);
+    Bytes const control_rsc_meta = doc.read_stream(kRscMeta);
+    Bytes const control_props = doc.read_stream(kProps);
+
+    std::size_t const rows_after = p.rows_before + 1;
+    t.equal(control_fixed.size(), p.rows_before * kAssnRowBytes,
+            label + " control: the assignment table's row count");
+    t.equal(control_v2.size(), p.var2_before,
+            label + " control: Var2Data size");
+    t.equal(control_vm.size(), 24 + p.entries_before * 12,
+            label + " control: VarMeta entry count");
+    t.equal(scalar_value(control_props, kCountTag), p.rows_before,
+            label + " control: count scalar");
+    t.equal(scalar_value(control_props, kFreedTag), 120,
+            label + " control: freed scalar");
+    t.equal(scalar_value(control_props, kDirtyTag), p.dirty_before,
+            label + " control: dirty scalar");
+    t.equal(scalar_value(control_props, kSizeTag), p.var2_before,
+            label + " control: size scalar");
+    t.equal(scalar_value(control_props, kTaskSizeTag), p.task_var2_before,
+            label + " control: Task size scalar");
+    Leaf const leaf = task_leaf(doc, 1);
+    t.equal(leaf.offset, p.leaf_offset, label + " control: the task 1 leaf");
+    t.equal(u32_at(control_task_v2, leaf.offset + 4), p.leaf_count,
+            label + " control: the leaf's resource count");
+    t.check(f64_at(control_task_fixed, 48 + 8) == p.old_total,
+            label + " control: the project work is the old total");
+    t.check(f64_at(control_task_fixed, 48 + 202 + 8) == p.old_total,
+            label + " control: the task work is the old total");
+
+    mppwrite::AssignmentGrowthWrite const written = mppwrite::assign_resource(
+        doc, key(1, p.resource_uid), out_path("w34-append-" + label + ".mpp"));
+    t.equal(written.assignment_uid, p.new_uid,
+            label + ": the appended row's uid");
+    t.equal(written.tombstoned_uid, 0,
+            label + ": nothing is tombstoned in this shape");
+    t.equal(written.rows_before, p.rows_before, label + ": rows before");
+    t.equal(written.rows_after, rows_after, label + ": rows after");
+    t.check(written.work == 2400000.0, label + ": the copied row's work");
+    t.equal(written.work_ticks, 24000, label + ": the tick count");
+    t.equal(written.var2_bytes_before, p.var2_before, label + ": Var2 before");
+    t.equal(written.var2_bytes_after, p.var2_after, label + ": Var2 after");
+    t.equal(written.var_entries_before, p.entries_before,
+            label + ": entries before");
+    t.equal(written.var_entries_after, p.entries_before + 4,
+            label + ": entries after");
+    t.equal(written.props_count_before, p.rows_before, label + ": count before");
+    t.equal(written.props_count_after, rows_after, label + ": count after");
+    t.equal(written.props_freed_before, 120, label + ": freed before");
+    t.equal(written.props_freed_after, 120,
+            label + ": the freed scalar is unchanged");
+    t.equal(written.props_dirty_before, p.dirty_before,
+            label + ": dirty before");
+    t.equal(written.props_dirty_after, 0, label + ": dirty after is 0");
+    t.equal(written.props_size_before, p.var2_before, label + ": size before");
+    t.equal(written.props_size_after, p.var2_after, label + ": size after");
+
+    /* The saved file's sizes. */
+    Bytes const assn_fixed = doc.read_stream(kAssnFixed);
+    Bytes const assn_meta = doc.read_stream(kAssnMeta);
+    Bytes const assn_f2m = doc.read_stream(kAssnF2Meta);
+    Bytes const assn_f2 = doc.read_stream(kAssnF2);
+    Bytes const assn_vm = doc.read_stream(kAssnVarMeta);
+    Bytes const assn_v2 = doc.read_stream(kAssnVar2);
+    Bytes const task_fixed = doc.read_stream(kTaskFixed);
+    Bytes const task_meta = doc.read_stream(kTaskMeta);
+    Bytes const task_vm = doc.read_stream(kTaskVarMeta);
+    Bytes const task_v2 = doc.read_stream(kTaskVar2);
+    Bytes const rsc_fixed = doc.read_stream(kRscFixed);
+    t.equal(assn_fixed.size(), rows_after * kAssnRowBytes,
+            label + ": Assn FixedData size");
+    t.equal(assn_meta.size(), 16 + rows_after * kFmEntry,
+            label + ": Assn FixedMeta size");
+    t.equal(assn_f2m.size(), 16 + rows_after * kF2mEntry,
+            label + ": Assn Fixed2Meta size");
+    t.equal(assn_f2.size(), rows_after * kF2Record,
+            label + ": Assn Fixed2Data size");
+    t.equal(assn_vm.size(), 24 + (p.entries_before + 4) * 12,
+            label + ": Assn VarMeta size");
+    t.equal(assn_v2.size(), p.var2_after, label + ": Assn Var2Data size");
+    t.equal(task_fixed.size(), control_task_fixed.size(),
+            label + ": Task FixedData size is unchanged");
+    t.equal(task_meta.size(), control_task_meta.size(),
+            label + ": Task FixedMeta size is unchanged");
+    t.equal(task_vm.size(), control_task_vm.size(),
+            label + ": Task VarMeta size is unchanged");
+    t.equal(task_v2.size(), p.task_var2_before + 8 + 4 * (p.leaf_count + 1),
+            label + ": Task Var2Data holds the appended leaf array");
+    t.equal(rsc_fixed.size(), control_rsc_fixed.size(),
+            label + ": Rsc FixedData size is unchanged");
+    t.check(doc.read_stream(kRscMeta) == control_rsc_meta,
+            label + ": Rsc FixedMeta is byte-identical");
+
+    /* The appended row is a copy of the first real row with the new uid and
+     * resource; every old row is kept. */
+    t.check(std::equal(control_fixed.begin(), control_fixed.end(),
+                       assn_fixed.begin()),
+            label + ": every old assignment row byte is kept");
+    std::size_t const model_row = p.rows_before - p.leaf_count;
+    Bytes const model = slice_of(control_fixed, model_row * kAssnRowBytes,
+                                 kAssnRowBytes);
+    Bytes const appended_row =
+        slice_of(assn_fixed, p.rows_before * kAssnRowBytes, kAssnRowBytes);
+    t.equal(u32_at(appended_row, 0), p.new_uid, label + ": row uid");
+    t.equal(u32_at(appended_row, 4), 1, label + ": row task uid");
+    t.equal(u32_at(appended_row, 8), p.resource_uid, label + ": row resource");
+    t.check(f64_at(appended_row, 12) == 10000.0, label + ": row units");
+    t.check(f64_at(appended_row, 20) == 2400000.0, label + ": row work");
+    t.check(equal_except(model, appended_row, {{0, 4}, {8, 12}}),
+            label + ": the appended row copies the real row's every other byte");
+
+    /* The FixedMeta and Fixed2Meta: one appended entry, no tombstone. */
+    t.check(equal_except(slice_of(assn_meta, 0, control_meta.size()),
+                         control_meta, {{8, 16}}),
+            label + ": every old FixedMeta byte including +4 is kept");
+    t.equal(u32_at(assn_meta, 8), rows_after, label + ": FixedMeta count");
+    t.equal(u32_at(assn_meta, 12), rows_after * kAssnRowBytes,
+            label + ": FixedMeta size word");
+    std::size_t const new_fm = 16 + p.rows_before * kFmEntry;
+    t.equal(u16_at(assn_meta, new_fm), 0, label + ": the new entry's state");
+    t.equal(u16_at(assn_meta, new_fm + 2), 4, label + ": the new entry's count");
+    t.equal(u32_at(assn_meta, new_fm + 4), p.rows_before * kAssnRowBytes,
+            label + ": the new entry's row offset");
+    std::array<std::uint8_t, 7> const fm_tail{{0xF1, 0xFF, 0x23, 0xF0, 0x69,
+                                               0x00, 0x02}};
+    t.check(std::equal(fm_tail.begin(), fm_tail.end(),
+                       assn_meta.begin() +
+                           static_cast<std::ptrdiff_t>(new_fm + 8)),
+            label + ": the new FixedMeta entry's tail");
+    t.check(equal_except(slice_of(assn_f2m, 0, control_f2m.size()),
+                         control_f2m, {{8, 16}}),
+            label + ": every old Fixed2Meta byte is kept");
+    t.equal(u32_at(assn_f2m, 8), rows_after, label + ": Fixed2Meta count");
+    t.equal(u32_at(assn_f2m, 12), rows_after * kF2Record,
+            label + ": Fixed2Meta size word");
+    std::size_t const new_f2m = 16 + p.rows_before * kF2mEntry;
+    t.equal(u32_at(assn_f2m, new_f2m + 4), p.rows_before * kF2Record,
+            label + ": the new Fixed2Meta entry's record offset");
+    t.equal(assn_f2m[new_f2m + 8], 0xCF, label + ": Fixed2Meta +8");
+    t.equal(assn_f2m[new_f2m + 9], 0x09, label + ": Fixed2Meta +9");
+    t.equal(assn_f2m[new_f2m + 35], 0x10, label + ": Fixed2Meta +35");
+    t.equal(assn_f2m[new_f2m + 52], 0x28, label + ": Fixed2Meta +52");
+
+    /* The appended Fixed2Data record references the control's task and
+     * resource identities; the fresh counter is greater than every old one
+     * and keeps the greatest suffix. */
+    t.check(std::equal(control_f2.begin(), control_f2.end(), assn_f2.begin()),
+            label + ": every old Fixed2Data record is kept");
+    std::size_t const fresh = p.rows_before * kF2Record;
+    std::uint32_t greatest = 0;
+    std::size_t greatest_at = 0;
+    for (std::size_t at = 0; at < fresh; at += kF2Record) {
+        if (u32_at(assn_f2, at) >= greatest) {
+            greatest = u32_at(assn_f2, at);
+            greatest_at = at;
+        }
+    }
+    t.check(u32_at(assn_f2, fresh) > greatest,
+            label + ": the fresh identity is greater than every old one");
+    t.check(std::equal(assn_f2.begin() +
+                           static_cast<std::ptrdiff_t>(greatest_at + 4),
+                       assn_f2.begin() +
+                           static_cast<std::ptrdiff_t>(greatest_at + 16),
+                       assn_f2.begin() +
+                           static_cast<std::ptrdiff_t>(fresh + 4)),
+            label + ": the fresh identity keeps the stable suffix");
+    Bytes const task_f2 = doc.read_stream(kTaskF2);
+    t.check(std::equal(task_f2.begin() + static_cast<std::ptrdiff_t>(64 * 4),
+                       task_f2.begin() +
+                           static_cast<std::ptrdiff_t>(64 * 4 + 16),
+                       assn_f2.begin() +
+                           static_cast<std::ptrdiff_t>(fresh + 16)),
+            label + ": the record's task identity is the task row's");
+    Bytes const rsc_f2 = doc.read_stream(kRscF2);
+    t.check(std::equal(rsc_f2.begin() +
+                           static_cast<std::ptrdiff_t>(40 * (p.rsc_row + 3)),
+                       rsc_f2.begin() +
+                           static_cast<std::ptrdiff_t>(40 * (p.rsc_row + 3) + 16),
+                       assn_f2.begin() +
+                           static_cast<std::ptrdiff_t>(fresh + 32)),
+            label + ": the record's resource identity is the resource row's");
+
+    /* The VarMeta: every old entry is kept and the new uid's four entries are
+     * appended in ascending key order; its blocks tile the new Var2Data. */
+    t.check(equal_except(slice_of(assn_vm, 0, control_vm.size()), control_vm,
+                         {{8, 12}, {0x14, 0x18}}),
+            label + ": every old VarMeta entry is kept");
+    t.equal(u32_at(assn_vm, 8), p.entries_before + 4, label + ": entry count");
+    t.equal(u32_at(assn_vm, 0x14), p.var2_after, label + ": Var2 size word");
+    std::vector<std::uint32_t> const new_keys = {0x0F400031u, 0x0F40027Au,
+                                                 0x0F400299u, 0x0F40029Bu};
+    std::vector<std::size_t> const new_offsets = {
+        p.var2_before + 8, p.var2_before, p.var2_before + 84,
+        p.var2_before + 104};
+    bool entries_ok = true;
+    for (std::size_t i = 0; i < 4; ++i) {
+        std::size_t const at = 24 + (p.entries_before + i) * 12;
+        entries_ok = entries_ok && u32_at(assn_vm, at) == p.new_uid &&
+                     u32_at(assn_vm, at + 4) == new_offsets[i] &&
+                     u32_at(assn_vm, at + 8) == new_keys[i];
+    }
+    t.check(entries_ok, label + ": the new uid's four entries are measured");
+    t.check(std::equal(control_v2.begin(), control_v2.end(), assn_v2.begin()),
+            label + ": every old Var2Data byte is kept");
+
+    /* The appended group: the session word, the flat contour and the two
+     * 16-byte blocks, at the measured offsets from the old end. */
+    std::size_t const base = p.var2_before;
+    t.equal(u32_at(assn_v2, base), 4, label + ": the session block is 4 B");
+    std::size_t const session = record_offset(control_props, kSessionRecord);
+    t.check(session != static_cast<std::size_t>(-1),
+            label + ": the control has the session record");
+    t.check(std::equal(control_props.begin() +
+                           static_cast<std::ptrdiff_t>(session + 12),
+                       control_props.begin() +
+                           static_cast<std::ptrdiff_t>(session + 16),
+                       assn_v2.begin() + static_cast<std::ptrdiff_t>(base + 4)),
+            label + ": the session block copies the Props payload");
+    t.equal(u32_at(assn_v2, base + 8), 72, label + ": the contour is 72 B");
+    t.equal(u32_at(assn_v2, base + 12), 0x00200000u,
+            label + ": contour magic");
+    t.equal(u32_at(assn_v2, base + 16), 44, label + ": contour header length");
+    t.check(f64_at(assn_v2, base + 20) == 160000.0, label + ": contour units");
+    t.check(f64_at(assn_v2, base + 28) == 2400000.0, label + ": contour work");
+    t.equal(u32_at(assn_v2, base + 36), 192000, label + ": contour ticks");
+    t.equal(u32_at(assn_v2, base + 44), 1, label + ": one contour record");
+    t.check(f64_at(assn_v2, base + 56) == 2400000.0, label + ": record work");
+    t.check(f64_at(assn_v2, base + 64) == 160000.0, label + ": record units");
+    t.equal(u32_at(assn_v2, base + 80), 192000, label + ": record ticks");
+    bool zeros_ok = u32_at(assn_v2, base + 84) == 16 &&
+                    u32_at(assn_v2, base + 104) == 16;
+    for (std::size_t at = base + 88; at < base + 124; ++at) {
+        if (at >= base + 104 && at < base + 108) {
+            continue; /* the second block's length word */
+        }
+        zeros_ok = zeros_ok && assn_v2[at] == 0;
+    }
+    t.check(zeros_ok, label + ": the two 16-byte blocks are length 16 and zero");
+
+    /* The task roll-ups and the leaf array. */
+    t.check(equal_except(control_task_fixed, task_fixed,
+                         {{56, 64}, {72, 80}, {258, 266}, {274, 282}}),
+            label + ": only the four task work words move");
+    t.check(f64_at(task_fixed, 56) == p.new_total, label + ": project work +8");
+    t.check(f64_at(task_fixed, 72) == p.new_total, label + ": project work +24");
+    t.check(f64_at(task_fixed, 258) == p.new_total, label + ": task work +8");
+    t.check(f64_at(task_fixed, 274) == p.new_total, label + ": task work +24");
+    t.check(task_meta == control_task_meta,
+            label + ": the Task FixedMeta is byte-identical");
+    t.check(equal_except(control_task_vm, task_vm,
+                         {{24 + leaf.entry_index * 12 + 4,
+                           24 + leaf.entry_index * 12 + 8},
+                          {0x14, 0x18}}),
+            label + ": only the leaf entry's offset and the size word move");
+    t.equal(u32_at(task_vm, 24 + leaf.entry_index * 12 + 4),
+            p.task_var2_before, label + ": the leaf entry points at the old end");
+    t.equal(u32_at(task_vm, 0x14),
+            p.task_var2_before + 8 + 4 * (p.leaf_count + 1),
+            label + ": the Task VarMeta size word");
+    t.check(std::equal(control_task_v2.begin(), control_task_v2.end(),
+                       task_v2.begin()),
+            label + ": the stale leaf record is kept");
+    std::vector<std::uint32_t> leaf_uids;
+    for (std::size_t i = 0; i < p.leaf_count; ++i) {
+        leaf_uids.push_back(u32_at(control_task_v2, p.leaf_offset + 8 + 4 * i));
+    }
+    leaf_uids.push_back(p.resource_uid);
+    std::sort(leaf_uids.begin(), leaf_uids.end());
+    bool leaf_ok = u32_at(task_v2, p.task_var2_before) ==
+                       4 + 4 * (p.leaf_count + 1) &&
+                   u32_at(task_v2, p.task_var2_before + 4) == p.leaf_count + 1;
+    for (std::size_t i = 0; i < leaf_uids.size(); ++i) {
+        leaf_ok = leaf_ok &&
+                  u32_at(task_v2, p.task_var2_before + 8 + 4 * i) ==
+                      leaf_uids[i];
+    }
+    t.check(leaf_ok, label + ": the appended leaf array is the sorted uids");
+
+    /* The resource roll-up and the four scalars. */
+    t.check(equal_except(control_rsc_fixed, rsc_fixed,
+                         {{48 + p.rsc_row * 172 + 48,
+                           48 + p.rsc_row * 172 + 56},
+                          {48 + p.rsc_row * 172 + 90,
+                           48 + p.rsc_row * 172 + 98},
+                          {48 + p.rsc_row * 172 + 106,
+                           48 + p.rsc_row * 172 + 114}}),
+            label + ": only the target resource's three work words move");
+    for (std::size_t offset : {std::size_t{48}, std::size_t{90},
+                               std::size_t{106}}) {
+        t.check(f64_at(rsc_fixed, 48 + p.rsc_row * 172 + offset) == 2400000.0,
+                label + ": the target resource's work word at +" +
+                    std::to_string(offset));
+    }
+    Bytes const props = doc.read_stream(kProps);
+    t.equal(props.size(), control_props.size(),
+            label + ": 114/Props keeps its size");
+    t.equal(scalar_value(props, kCountTag), rows_after, label + ": count");
+    t.equal(scalar_value(props, kFreedTag), 120,
+            label + ": the freed scalar is unchanged");
+    t.equal(scalar_value(props, kDirtyTag), 0, label + ": dirty scalar 0");
+    t.equal(scalar_value(props, kSizeTag), p.var2_after, label + ": size");
+    t.equal(scalar_value(props, kTaskSizeTag),
+            p.task_var2_before + 8 + 4 * (p.leaf_count + 1),
+            label + ": Task size");
+    t.check(contains_ascii(doc.read_stream(kSummary), p.summary_new),
+            label + ": the summary work string is '" +
+                std::string(p.summary_new) + "'");
+    t.check(!contains_ascii(doc.read_stream(kSummary), p.summary_old),
+            label + ": the old summary work string is gone");
+
+    check_only_owned_streams(t, before, doc, label,
+                             {kAssnFixed, kAssnMeta, kAssnF2, kAssnF2Meta,
+                              kAssnVarMeta, kAssnVar2, kTaskFixed, kTaskMeta,
+                              kTaskVarMeta, kTaskVar2, kRscFixed, kRscMeta,
+                              kProps, kSummary, kMarker});
+
+    CfbDocument const null_save = doc_from_data(p.null_save);
+    save_pair::compare_all(
+        t, label, doc_from_data(p.control), null_save,
+        doc_from_data(p.edit),
+        CfbDocument::from_file(out_path("w34-append-" + label + ".mpp")),
+        nullptr, 0,
+        p.marker_moves ? kAppendDeclared.data() : kAppendDeclaredNoMarker.data(),
+        p.marker_moves ? kAppendDeclared.size() : kAppendDeclaredNoMarker.size(),
+        tail_normalisation(null_save));
+}
+
+void test_append_pairs(TestContext& t) {
+    AppendPair const second{
+        "wave34-assign-add-second-control.mpp",
+        "wave34-assign-add-second-control-null.mpp",
+        "wave34-assign-add-second.mpp",
+        "assign-add-second",
+        1, /* resource uid */
+        4, /* rows before */
+        5, /* new uid */
+        520, /* Var2 before */
+        644, /* Var2 after */
+        10, /* assignment VarMeta entries */
+        650, /* Task Var2 before */
+        216, /* leaf offset */
+        1, /* leaf count */
+        2400000.0, /* old total work */
+        4800000.0, /* new total work */
+        1, /* resource row */
+        1, /* dirty before */
+        true, /* the control's marker is 0, so the edit moves it */
+        "40 hrs",
+        "80 hrs"};
+    AppendPair const third{
+        "wave34-assign-add-third-control.mpp",
+        "wave34-assign-add-third-control-null.mpp",
+        "wave34-assign-add-third.mpp",
+        "assign-add-third",
+        3, /* resource uid */
+        5, /* rows before */
+        6, /* new uid */
+        644, /* Var2 before */
+        768, /* Var2 after */
+        14, /* assignment VarMeta entries */
+        666, /* Task Var2 before */
+        650, /* leaf offset */
+        2, /* leaf count */
+        4800000.0, /* old total work */
+        7200000.0, /* new total work */
+        3, /* resource row */
+        0, /* dirty before */
+        false, /* the control already holds the marker's post-save value */
+        "80 hrs",
+        "120 hrs"};
+    test_append_pair(t, second);
+    test_append_pair(t, third);
+}
+
 /* ---- refusals ----------------------------------------------------------- */
 
 void check_unchanged(TestContext& t, CfbDocument const& doc, Bytes const& before,
@@ -902,12 +1365,12 @@ void test_edit_refusals(TestContext& t) {
                    "0x0B4004E5 leaf does not name the resource",
                    "remove: a resource the leaf does not name");
 
-    /* A second add on the file the first add produced: the task's leaf now
-     * names the live assignment, so the add is refused. */
+    /* A second add on the file the first add produced: the task now holds a
+     * real assignment for that resource, so the add is refused. */
     {
         CfbDocument second = doc_from_data(kAddEdit);
-        refuses_add(second, key(1, 2), "measured [1][placeholder]",
-                    "add: a task whose leaf names a live assignment");
+        refuses_add(second, key(1, 2), "is already assigned to the task",
+                    "add: a task already assigned that resource");
     }
 }
 
@@ -1166,6 +1629,82 @@ void test_add_damaged(TestContext& t) {
             target, "four-byte session word", "add: a short session record");
 }
 
+/* The settled append shape's own guards, reached through the second control:
+ * its task already holds one real assignment (row 3) and one free placeholder
+ * row (row 0), so every branch unique to the count 1 -> 2 path runs. */
+void test_settled_damaged(TestContext& t) {
+    std::string const missing = missing_path();
+    auto refuses = [&](CfbDocument const& source,
+                       mppwrite::AssignmentKey const& which,
+                       std::string_view needle, std::string const& what) {
+        std::error_code ignored;
+        std::filesystem::remove(missing, ignored);
+        CfbDocument doc = source;
+        Bytes const before = doc.to_bytes();
+        expect_error(t,
+                     [&] { (void)mppwrite::assign_resource(doc, which, missing); },
+                     needle, what);
+        check_unchanged(t, doc, before, what);
+    };
+    char const* control = "wave34-assign-add-second-control.mpp";
+    /* The control already holds resource 2's assignment; resource 1 is free. */
+    mppwrite::AssignmentKey const target = key(1, 1);
+
+    refuses(with_edit(control, kAssnFixed, [](Bytes& b) { b.push_back(0); }),
+            target, "not 0 + 110 * rows", "settled add: a ragged FixedData");
+    refuses(with_edit(control, kAssnMeta,
+                      [](Bytes& b) { put_u32_at(b, 8, 2); }),
+            target, "measured rows / rows shape",
+            "settled add: a stale FixedMeta count");
+    refuses(with_edit(control, kAssnMeta, [](Bytes& b) { b[16] = 0x00; }),
+            target, "measured entry for its row kind",
+            "settled add: a target placeholder entry at another state");
+    refuses(with_edit(control, kAssnFixed,
+                      [](Bytes& b) { put_u32_at(b, 110 + 8, 5); }),
+            target, "real rows only for the target task",
+            "settled add: a foreign task's real row");
+    refuses(with_edit(control, kAssnFixed,
+                      [](Bytes& b) { put_f64_at(b, 3 * 110 + 20, 0.0); }),
+            target, "no positive finite work",
+            "settled add: a real row with no work");
+    refuses(with_edit(control, kTaskFixed,
+                      [](Bytes& b) { put_f64_at(b, 48 + 202 + 8, 1.0); }),
+            target, "task row 1's work words", "settled add: the task work");
+    refuses(with_edit(control, kTaskMeta,
+                      [](Bytes& b) { b[16 + 47 * 4 + 16] = 0x07; }),
+            target, "0x17 / 0x97", "settled add: the task flags");
+    refuses(with_edit(control, kRscFixed,
+                      [](Bytes& b) { put_f64_at(b, 48 + 172 + 48, 1.0); }),
+            target, "resource row 1's work words",
+            "settled add: the resource work");
+    {
+        CfbDocument const source = doc_from_data(control);
+        Leaf const leaf = task_leaf(source, 1);
+        refuses(with_edit(control, kTaskVar2,
+                          [&](Bytes& b) { put_u32_at(b, leaf.offset + 4, 2); }),
+                target, "1-resource array",
+                "settled add: the task leaf's resource count");
+    }
+    refuses(with_edit(control, kTaskVarMeta,
+                      [](Bytes& b) { put_u32_at(b, 0x14, 400); }),
+            target, "header +0x14 is 400",
+            "settled add: a Task VarMeta size word");
+    refuses(with_edit(control, kProps,
+                      [](Bytes& b) {
+                          std::size_t const at = scalar_offset(b, kCountTag);
+                          put_u32_at(b, at + 12, 7);
+                      }),
+            target, "assignment scalars do not agree",
+            "settled add: a count scalar that disagrees");
+    refuses(with_edit(control, kProps,
+                      [](Bytes& b) {
+                          std::size_t const at = scalar_offset(b, kTaskSizeTag);
+                          put_u32_at(b, at + 12, 400);
+                      }),
+            target, "assignment scalars do not agree",
+            "settled add: a Task size scalar that disagrees");
+}
+
 void test_remove_damaged(TestContext& t) {
     std::string const missing = missing_path();
     auto refuses = [&](CfbDocument const& source,
@@ -1334,9 +1873,11 @@ int main() {
         TestContext t;
         test_add_pair(t);
         test_remove_pair(t);
+        test_append_pairs(t);
         test_edit_refusals(t);
         test_path_refusals(t);
         test_add_damaged(t);
+        test_settled_damaged(t);
         test_remove_damaged(t);
         return t.report();
     } catch (std::exception const& error) {
