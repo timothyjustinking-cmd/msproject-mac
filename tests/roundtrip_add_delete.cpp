@@ -74,6 +74,7 @@
 #include "fixture_guard.h"
 #include "outline.h"
 #include "row_writer.h"
+#include "save_pair_compare.h"
 #include "table.h"
 
 #ifdef MPPWRITE_HAVE_READER
@@ -118,14 +119,32 @@ class TestContext {
         check(actual == expected, what + " (actual " + std::to_string(actual) +
                                       ", expected " + std::to_string(expected) + ")");
     }
+    /* W29-0.1 / the W25-5 convention (W34-0.5 uses it for the measured pair
+     * gaps): a gap Project's file shows and the port does not reproduce is a
+     * NAMED expected failure.  While it is open the test stays green; the day
+     * the port reproduces Project the same call is a hard failure so the list
+     * cannot rot. */
+    void expected_failure(bool project_truth, std::string const& what) {
+        if (project_truth) {
+            ++failures_;
+            std::cout << "FAIL: expected failure '" << what
+                      << "' now PASSES -- remove it from the gap table and make "
+                         "it a normal check\n";
+            return;
+        }
+        ++expected_failures_;
+        std::cout << "EXPECTED FAIL: " << what << "\n";
+    }
     int report() const {
-        std::cout << checks_ << " checks, " << failures_ << " failures\n";
+        std::cout << checks_ << " checks, " << failures_ << " failures, "
+                  << expected_failures_ << " expected failures\n";
         return failures_ == 0 ? 0 : 1;
     }
 
   private:
     int checks_ = 0;
     int failures_ = 0;
+    int expected_failures_ = 0;
 };
 
 std::string join(std::string const& a, std::string const& b) {
@@ -1503,6 +1522,155 @@ void test_probe_fixtures(TestContext& t) {
 #endif
 }
 
+/* ---- (i) W34-0.5: the committed synthetic save pairs -------------------- */
+
+/*
+ * The measured gaps: streams where the port's save does not reproduce
+ * Project's edit save.  Each entry is the exact signature the comparison
+ * reports (mismatch count, first offset, the two bytes there); an empty table
+ * means every stream must match.
+ */
+std::array<save_pair::KnownGap, 15> const kInsertGaps{{
+    {"114/Props", 4, 3346, 0x07, 0x08},
+    {"114/TBkndAssn/Fixed2Data", 48, 144, 0x00, 0x28},
+    {"114/TBkndAssn/Fixed2Meta", 55, 8, 0x03, 0x04},
+    {"114/TBkndAssn/FixedData", 110, 330, 0x00, 0x04},
+    {"114/TBkndAssn/FixedMeta", 36, 8, 0x03, 0x04},
+    {"114/TBkndAssn/Var2Data", 104, 396, 0x00, 0x04},
+    {"114/TBkndAssn/VarMeta", 38, 8, 0x09, 0x0c},
+    {"114/TBkndTask/Fixed2Data", 14, 448, 0x25, 0x28},
+    {"114/TBkndTask/Fixed2Meta", 1, 776, 0x0c, 0x1c},
+    {"114/TBkndTask/FixedData", 21, 930, 0x40, 0x00},
+    {"114/TBkndTask/FixedMeta", 3, 347, 0x08, 0x0c},
+    {"114/TBkndTask/Var2Data", 78, 530, 0x24, 0x08},
+    {"114/TBkndTask/VarMeta", 61, 8, 0x32, 0x36},
+    {"214/CEdl/Var2Data", 126, 166, 0x18, 0x1c},
+    {"Props14", 1, 402, 0x00, 0x01},
+}};
+std::array<save_pair::KnownGap, 6> const kDeleteGaps{{
+    {"114/Props", 4, 3362, 0x00, 0x4e},
+    {"114/TBkndAssn/VarMeta", 7, 8, 0x09, 0x06},
+    {"114/TBkndTask/Var2Data", 3, 90, 0x10, 0x0c},
+    {"114/TBkndTask/VarMeta", 132, 396, 0x00, 0x03},
+    {"214/CEdl/Var2Data", 125, 166, 0x18, 0x14},
+    {"Props14", 1, 402, 0x00, 0x01},
+}};
+
+/*
+ * The streams the pair anatomy measures the edit changing (non-zero effect or
+ * tail-effect bytes).  The declaration is external to save_pair::compare so a
+ * widened mask cannot hide the edit's effect.
+ */
+std::array<char const*, 15> const kInsertDeclared{{
+    "114/Props",
+    "114/TBkndAssn/Fixed2Data",
+    "114/TBkndAssn/Fixed2Meta",
+    "114/TBkndAssn/FixedData",
+    "114/TBkndAssn/FixedMeta",
+    "114/TBkndAssn/Var2Data",
+    "114/TBkndAssn/VarMeta",
+    "114/TBkndTask/Fixed2Data",
+    "114/TBkndTask/Fixed2Meta",
+    "114/TBkndTask/FixedData",
+    "114/TBkndTask/FixedMeta",
+    "114/TBkndTask/Var2Data",
+    "114/TBkndTask/VarMeta",
+    "214/CEdl/Var2Data",
+    "Props14",
+}};
+std::array<char const*, 9> const kDeleteDeclared{{
+    "114/Props",
+    "114/TBkndAssn/FixedMeta",
+    "114/TBkndAssn/VarMeta",
+    "114/TBkndTask/FixedData",
+    "114/TBkndTask/FixedMeta",
+    "114/TBkndTask/Var2Data",
+    "114/TBkndTask/VarMeta",
+    "214/CEdl/Var2Data",
+    "Props14",
+}};
+
+/*
+ * Insert Task's command shape is app/edit_model.cpp's insert step: a
+ * NewTaskRow carrying the typed name and the project's stored mode, every
+ * value inherited from the last live row.  The control is Project's own save
+ * of synthetic-base; Project's edit is Tasks.Add(name) on a fresh copy, which
+ * appends one 480-minute manual task.  Every stream of the port's save is
+ * compared with Project's through save_pair::compare.
+ */
+void test_w34_insert_pair(TestContext& t) {
+    std::string const control_name = "wave34-insert-task-control.mpp";
+    std::string const edit_name = "wave34-insert-task.mpp";
+    std::string const null_name = save_pair::null_fixture_name(control_name);
+    bool const present =
+        file_exists(join(MPPWRITE_TEST_DATA, control_name)) &&
+        file_exists(join(MPPWRITE_TEST_DATA, edit_name)) &&
+        file_exists(join(MPPWRITE_TEST_DATA, null_name));
+    t.check(present, "W34 insert pair: the committed control, edit and null "
+                     "save are present");
+    if (!present) {
+        return;
+    }
+    mppwrite::CfbDocument doc =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    mppwrite::NewTaskRow task;
+    task.name = "W34 Inserted Task";
+    task.manually_scheduled = true;
+    mppwrite::AddedRow const added =
+        mppwrite::add_task_row(doc, task, out_path("w34-pair-insert-task.mpp"));
+    t.check(added.uid == 4, "W34 insert pair: the writer appended uid 4");
+
+    mppwrite::CfbDocument const control =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    mppwrite::CfbDocument const null_save =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, null_name));
+    mppwrite::CfbDocument const project =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, edit_name));
+    mppwrite::CfbDocument const port =
+        mppwrite::CfbDocument::from_file(out_path("w34-pair-insert-task.mpp"));
+    save_pair::compare_all(t, "insert-task", control, null_save, project, port,
+                           kInsertGaps.data(), kInsertGaps.size(),
+                           kInsertDeclared.data(), kInsertDeclared.size());
+}
+
+/*
+ * Delete Task's command shape is app/edit_model.cpp's delete step: delete the
+ * selected task's row with the default cascade.  Project's pair deleted the
+ * task with UniqueID 2 (row ID 2, the 1440-minute row); the remaining third
+ * task is renumbered to ID 2.
+ */
+void test_w34_delete_pair(TestContext& t) {
+    std::string const control_name = "wave34-delete-task-control.mpp";
+    std::string const edit_name = "wave34-delete-task.mpp";
+    std::string const null_name = save_pair::null_fixture_name(control_name);
+    bool const present =
+        file_exists(join(MPPWRITE_TEST_DATA, control_name)) &&
+        file_exists(join(MPPWRITE_TEST_DATA, edit_name)) &&
+        file_exists(join(MPPWRITE_TEST_DATA, null_name));
+    t.check(present, "W34 delete pair: the committed control, edit and null "
+                     "save are present");
+    if (!present) {
+        return;
+    }
+    mppwrite::CfbDocument doc =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    mppwrite::DeletedRow const deleted =
+        mppwrite::delete_task_row(doc, 2, out_path("w34-pair-delete-task.mpp"));
+    t.check(deleted.uid == 2, "W34 delete pair: the writer tombstoned uid 2");
+
+    mppwrite::CfbDocument const control =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    mppwrite::CfbDocument const null_save =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, null_name));
+    mppwrite::CfbDocument const project =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, edit_name));
+    mppwrite::CfbDocument const port =
+        mppwrite::CfbDocument::from_file(out_path("w34-pair-delete-task.mpp"));
+    save_pair::compare_all(t, "delete-task", control, null_save, project, port,
+                           kDeleteGaps.data(), kDeleteGaps.size(),
+                           kDeleteDeclared.data(), kDeleteDeclared.size());
+}
+
 } /* namespace */
 
 /* W33-1.1 (A-3, High): a summary row cannot be tombstoned.  The committed
@@ -1604,6 +1772,8 @@ int main() {
         test_refusals(t);
         test_probe_fixtures(t);
         test_cascade_corpus(t);
+        test_w34_insert_pair(t);
+        test_w34_delete_pair(t);
         write_manifest(t);
         return t.report();
     } catch (std::exception const& error) {

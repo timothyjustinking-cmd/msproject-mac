@@ -69,6 +69,7 @@
 #include "add_delete.h"
 #include "cfb_writer.h"
 #include "fixture_guard.h"
+#include "save_pair_compare.h"
 #include "table.h"
 
 #ifdef MPPWRITE_HAVE_READER
@@ -109,14 +110,30 @@ class TestContext {
         check(actual == expected, what + " (actual " + std::to_string(actual) +
                                       ", expected " + std::to_string(expected) + ")");
     }
+    /* W34-0.5: a measured pair gap is a NAMED expected failure while it is
+     * open; the day the port reproduces Project the same call is a hard
+     * failure, so the gap table cannot rot. */
+    void expected_failure(bool project_truth, std::string const& what) {
+        if (project_truth) {
+            ++failures_;
+            std::cout << "FAIL: expected failure '" << what
+                      << "' now PASSES -- remove it from the gap table and make "
+                         "it a normal check\n";
+            return;
+        }
+        ++expected_failures_;
+        std::cout << "EXPECTED FAIL: " << what << "\n";
+    }
     int report() const {
-        std::cout << checks_ << " checks, " << failures_ << " failures\n";
+        std::cout << checks_ << " checks, " << failures_ << " failures, "
+                  << expected_failures_ << " expected failures\n";
         return failures_ == 0 ? 0 : 1;
     }
 
   private:
     int checks_ = 0;
     int failures_ = 0;
+    int expected_failures_ = 0;
 };
 
 std::string join(std::string const& a, std::string const& b) {
@@ -997,6 +1014,95 @@ void test_add_after_delete(TestContext& t) {
             "add-after-delete: Fixed2Data grew");
 }
 
+/* ---- (g) W34-0.5: the committed synthetic link-add pair ------------------ */
+
+/*
+ * The measured gaps: streams where the port's save does not reproduce
+ * Project's edit save.  Each entry is the exact signature the comparison
+ * reports (mismatch count, first offset, the two bytes there); an empty table
+ * means every stream must match.
+ */
+std::array<save_pair::KnownGap, 13> const kLinkAddGaps{{
+    /* The path carries the OLE control-stream marker 0x05, exactly as
+     * CfbDocument::stream_paths() reports it. */
+    {"\005DocumentSummaryInformation", 584, 64, 0x24, 0x28},
+    {"114/Props", 4, 390, 0xf6, 0xfb},
+    {"114/TBkndAssn/Fixed2Meta", 2, 25, 0x01, 0x00},
+    {"114/TBkndAssn/FixedData", 4, 164, 0xf1, 0xf6},
+    {"114/TBkndCons/Fixed2Data", 3, 3, 0x01, 0x9b},
+    {"114/TBkndTask/Fixed2Data", 6, 362, 0x30, 0x28},
+    {"114/TBkndTask/Fixed2Meta", 3, 488, 0x0c, 0x00},
+    {"114/TBkndTask/FixedData", 34, 132, 0x60, 0xa0},
+    {"114/TBkndTask/FixedMeta", 4, 206, 0x0b, 0x09},
+    {"114/TBkndTask/Var2Data", 15, 90, 0x10, 0x0c},
+    {"114/TBkndTask/VarMeta", 70, 8, 0x2a, 0x27},
+    {"214/CEdl/Var2Data", 32, 456, 0x1a, 0x38},
+    {"Props14", 1, 402, 0x00, 0x01},
+}};
+
+/*
+ * The streams the pair anatomy measures the edit changing (non-zero effect or
+ * tail-effect bytes).  The declaration is external to save_pair::compare so a
+ * widened mask cannot hide the edit's effect.
+ */
+std::array<char const*, 16> const kLinkAddDeclared{{
+    "114/Props",
+    "114/TBkndAssn/Fixed2Meta",
+    "114/TBkndAssn/FixedData",
+    "114/TBkndCons/Fixed2Data",
+    "114/TBkndCons/Fixed2Meta",
+    "114/TBkndCons/FixedData",
+    "114/TBkndCons/FixedMeta",
+    "114/TBkndTask/Fixed2Data",
+    "114/TBkndTask/Fixed2Meta",
+    "114/TBkndTask/FixedData",
+    "114/TBkndTask/FixedMeta",
+    "114/TBkndTask/Var2Data",
+    "114/TBkndTask/VarMeta",
+    "214/CEdl/Var2Data",
+    "\005DocumentSummaryInformation",
+    "Props14",
+}};
+
+/*
+ * Project's pair adds one FS link with lag 0 from UniqueID 1 to UniqueID 2 on
+ * a Project save of synthetic-base and saves.  The port's command shape is
+ * mppwrite::add_task_link(doc, 1, 2, FS, 0).  The pair's COM facts show
+ * Project ALSO reschedules the successor (start 5 days later, finish with it),
+ * which the link writer does not do; the comparison records every such stream.
+ */
+void test_w34_link_add_pair(TestContext& t) {
+    std::string const control_name = "wave34-link-add-control.mpp";
+    std::string const edit_name = "wave34-link-add.mpp";
+    std::string const null_name = save_pair::null_fixture_name(control_name);
+    bool const present = file_exists(join(MPPWRITE_TEST_DATA, control_name)) &&
+                         file_exists(join(MPPWRITE_TEST_DATA, edit_name)) &&
+                         file_exists(join(MPPWRITE_TEST_DATA, null_name));
+    t.check(present, "W34 link-add pair: the committed control, edit and null "
+                     "save are present");
+    if (!present) {
+        return;
+    }
+    mppwrite::CfbDocument doc =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    mppwrite::AddedLink const added = mppwrite::add_task_link(
+        doc, 1, 2, mppwrite::kLinkTypeFS, 0, out_path("w34-pair-link-add.mpp"));
+    t.check(added.uid == 1 && added.type == mppwrite::kLinkTypeFS,
+            "W34 link-add pair: the writer appended the FS 1 -> 2 row");
+
+    mppwrite::CfbDocument const control =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    mppwrite::CfbDocument const null_save =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, null_name));
+    mppwrite::CfbDocument const project =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, edit_name));
+    mppwrite::CfbDocument const port =
+        mppwrite::CfbDocument::from_file(out_path("w34-pair-link-add.mpp"));
+    save_pair::compare_all(t, "link-add", control, null_save, project, port,
+                           kLinkAddGaps.data(), kLinkAddGaps.size(),
+                           kLinkAddDeclared.data(), kLinkAddDeclared.size());
+}
+
 } /* namespace */
 
 int main() {
@@ -1009,6 +1115,7 @@ int main() {
         test_reader(t);
         test_measured_fixtures(t);
         test_add_after_delete(t);
+        test_w34_link_add_pair(t);
         write_manifest(t);
         return t.report();
     } catch (std::exception const& error) {

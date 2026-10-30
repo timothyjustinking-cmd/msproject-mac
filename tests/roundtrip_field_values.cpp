@@ -82,6 +82,7 @@
 #include "field_values.h"
 #include "fixture_guard.h"
 #include "save.h"
+#include "save_pair_compare.h"
 #include "table.h"
 
 #ifdef MPPWRITE_HAVE_READER
@@ -130,14 +131,30 @@ class TestContext {
         check(actual == expected, what + " (actual " + std::to_string(actual) +
                                       ", expected " + std::to_string(expected) + ")");
     }
+    /* W34-0.5: a measured pair gap is a NAMED expected failure while it is
+     * open; the day the port reproduces Project the same call is a hard
+     * failure, so the gap table cannot rot. */
+    void expected_failure(bool project_truth, std::string const& what) {
+        if (project_truth) {
+            ++failures_;
+            std::cout << "FAIL: expected failure '" << what
+                      << "' now PASSES -- remove it from the gap table and make "
+                         "it a normal check\n";
+            return;
+        }
+        ++expected_failures_;
+        std::cout << "EXPECTED FAIL: " << what << "\n";
+    }
     int report() const {
-        std::cout << checks_ << " checks, " << failures_ << " failures\n";
+        std::cout << checks_ << " checks, " << failures_ << " failures, "
+                  << expected_failures_ << " expected failures\n";
         return failures_ == 0 ? 0 : 1;
     }
 
   private:
     int checks_ = 0;
     int failures_ = 0;
+    int expected_failures_ = 0;
 };
 
 std::string join(std::string const& a, std::string const& b) { return a + "/" + b; }
@@ -2130,6 +2147,134 @@ void test_pin_predicate(TestContext& t) {
             "an invalid pin gives no warning");
 }
 
+/* ---- (g) W34-0.5: the committed synthetic save pairs -------------------- */
+
+/*
+ * The measured gaps: streams where the port's save does not reproduce
+ * Project's edit save.  Each entry is the exact signature the comparison
+ * reports (mismatch count, first offset, the two bytes there); an empty table
+ * means every stream must match.
+ */
+std::array<save_pair::KnownGap, 2> const kFieldSetGaps{{
+    {"114/Props", 51662, 0, 0xa2, 0xaa},
+    {"Props14", 1, 402, 0x00, 0x01},
+}};
+std::array<save_pair::KnownGap, 5> const kFieldClearGaps{{
+    {"114/Props", 1, 3370, 0x00, 0x28},
+    {"114/TBkndTask/FixedMeta", 1, 253, 0x0c, 0x0b},
+    {"114/TBkndTask/Var2Data", 6, 574, 0x02, 0x00},
+    {"114/TBkndTask/VarMeta", 52, 8, 0x2b, 0x2a},
+    {"Props14", 1, 402, 0x00, 0x01},
+}};
+
+/*
+ * The streams the pair anatomy measures the edit changing (non-zero effect or
+ * tail-effect bytes).  The declaration is external to save_pair::compare so a
+ * widened mask cannot hide the edit's effect.
+ */
+std::array<char const*, 7> const kFieldSetDeclared{{
+    "114/Props",
+    "114/TBkndAssn/Props",
+    "114/TBkndTask/FixedMeta",
+    "114/TBkndTask/Props",
+    "114/TBkndTask/Var2Data",
+    "114/TBkndTask/VarMeta",
+    "Props14",
+}};
+std::array<char const*, 4> const kFieldClearDeclared{{
+    "114/Props",
+    "114/TBkndTask/FixedMeta",
+    "114/TBkndTask/VarMeta",
+    "Props14",
+}};
+
+/*
+ * Field SET's command shape is app/edit_model.cpp's field step: Text1 on
+ * UniqueID 2 set to the typed value.  Project's pair set the same value on a
+ * Project save of synthetic-base; its edit appends one 40-byte VarMeta block
+ * and one 88-byte registration record to BOTH Props streams, plus the
+ * presence tail bit.  Every stream of the port's save is compared with
+ * Project's through save_pair::compare.
+ */
+void test_w34_field_set_pair(TestContext& t) {
+    std::string const control_name = "wave34-field-set-control.mpp";
+    std::string const edit_name = "wave34-field-set.mpp";
+    std::string const null_name = save_pair::null_fixture_name(control_name);
+    bool const present =
+        file_exists(join(MPPWRITE_TEST_DATA, control_name)) &&
+        file_exists(join(MPPWRITE_TEST_DATA, edit_name)) &&
+        file_exists(join(MPPWRITE_TEST_DATA, null_name));
+    t.check(present, "W34 field-set pair: the committed control, edit and null "
+                     "save are present");
+    if (!present) {
+        return;
+    }
+    mppwrite::CfbDocument doc =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    FieldEdit edit;
+    edit.uid = 2;
+    edit.value = value_for(FieldKind::text, mppwrite::kText1FieldId);
+    edit.value.text = "Synthetic text one.";
+    std::vector<FieldEdit> const edits{edit};
+    mppwrite::FieldWriteResult const written = mppwrite::save_field_values(
+        doc, edits, out_path("w34-pair-field-set.mpp"));
+    t.equal(written.fields_written, 1,
+            "W34 field-set pair: one field was written");
+
+    mppwrite::CfbDocument const control =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    mppwrite::CfbDocument const null_save =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, null_name));
+    mppwrite::CfbDocument const project =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, edit_name));
+    mppwrite::CfbDocument const port =
+        mppwrite::CfbDocument::from_file(out_path("w34-pair-field-set.mpp"));
+    save_pair::compare_all(t, "field-set", control, null_save, project, port,
+                           kFieldSetGaps.data(), kFieldSetGaps.size(),
+                           kFieldSetDeclared.data(), kFieldSetDeclared.size());
+}
+
+/*
+ * Field CLEAR's command shape: Text1 on UniqueID 2 cleared from a stored
+ * value, with the seeded control.  Project's edit REMOVES the VarMeta entry
+ * (header count 43 -> 42, later entries shifted) and keeps Var2Data at 574 B;
+ * the port keeps the entry and appends the measured empty block.  The
+ * comparison records that difference rather than patching it blind.
+ */
+void test_w34_field_clear_pair(TestContext& t) {
+    std::string const control_name = "wave34-field-clear-control.mpp";
+    std::string const edit_name = "wave34-field-clear.mpp";
+    std::string const null_name = save_pair::null_fixture_name(control_name);
+    bool const present =
+        file_exists(join(MPPWRITE_TEST_DATA, control_name)) &&
+        file_exists(join(MPPWRITE_TEST_DATA, edit_name)) &&
+        file_exists(join(MPPWRITE_TEST_DATA, null_name));
+    t.check(present, "W34 field-clear pair: the committed control, edit and "
+                     "null save are present");
+    if (!present) {
+        return;
+    }
+    mppwrite::CfbDocument doc =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    mppwrite::ClearedField const cleared = mppwrite::clear_field_value(
+        doc, 2, mppwrite::kText1FieldId, out_path("w34-pair-field-clear.mpp"));
+    t.check(cleared.uid == 2 && cleared.was_present && cleared.entry_kept,
+            "W34 field-clear pair: the stored Text1 was cleared, entry kept");
+
+    mppwrite::CfbDocument const control =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, control_name));
+    mppwrite::CfbDocument const null_save =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, null_name));
+    mppwrite::CfbDocument const project =
+        mppwrite::CfbDocument::from_file(join(MPPWRITE_TEST_DATA, edit_name));
+    mppwrite::CfbDocument const port =
+        mppwrite::CfbDocument::from_file(out_path("w34-pair-field-clear.mpp"));
+    save_pair::compare_all(t, "field-clear", control, null_save, project, port,
+                           kFieldClearGaps.data(), kFieldClearGaps.size(),
+                           kFieldClearDeclared.data(),
+                           kFieldClearDeclared.size());
+}
+
 } /* namespace */
 
 int main() {
@@ -2149,6 +2294,8 @@ int main() {
         test_assignment_refusals(t);
         test_store_controls(t);
         test_pin_predicate(t);
+        test_w34_field_set_pair(t);
+        test_w34_field_clear_pair(t);
         write_manifest(t);
         return t.report();
     } catch (std::exception const& error) {
