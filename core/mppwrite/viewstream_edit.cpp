@@ -493,11 +493,15 @@ ViewCellStyleWrite save_view_cell_style(
         throw Error(function + ": Var2Data would grow past the 32-bit size word");
     }
 
-    /* The block payload: both size words, the count word and the appended
-     * item; every other byte is the control's. */
+    /* The block's outer length word, its two inner size words and the count
+     * word, plus the appended item; every other byte is the control's.  The
+     * outer word is part of the walk (`block_end` reads it), so it grows with
+     * the payload exactly as Project's save grows it. */
     Bytes var2 = state.var2;
     var2.insert(var2.begin() + static_cast<std::ptrdiff_t>(insert_at),
                 item.begin(), item.end());
+    put_u32(var2, state.block_offset,
+            static_cast<std::uint32_t>(payload_before + item.size()));
     put_u32(var2, payload_at + kBlockSizeWord,
             static_cast<std::uint32_t>(payload_before + item.size() - 4));
     put_u32(var2, payload_at + kBlockSizeWord2,
@@ -563,7 +567,8 @@ ViewCellStyleWrite save_view_cell_style(
     }
     ViewState const after = load_view(reread, edit.view_uid, function, true);
 
-    /* Var2Data: the control's bytes, one 56-byte item at the insertion point. */
+    /* Var2Data: the control's bytes, the block's own header words, and one
+     * 56-byte item at the insertion point. */
     Bytes const opened_var2 =
         opened.read_stream(std::string(kViewTable) + "/Var2Data");
     if (after.var2.size() != var2_before + item.size()) {
@@ -573,10 +578,32 @@ ViewCellStyleWrite save_view_cell_style(
     }
     if (!std::equal(opened_var2.begin(),
                     opened_var2.begin() +
-                        static_cast<std::ptrdiff_t>(insert_at),
+                        static_cast<std::ptrdiff_t>(state.block_offset),
                     after.var2.begin())) {
-        throw Error(function + ": the written Var2Data changed before the "
-                    "insertion point");
+        throw Error(function + ": the written Var2Data changed before the view "
+                    "block");
+    }
+    std::size_t const block_header_end = payload_at + kBlockHeaderSize;
+    if (get_u32(after.var2, state.block_offset) !=
+            payload_before + item.size() ||
+        get_u32(after.var2, payload_at + kBlockSizeWord) !=
+            payload_before + item.size() - 4 ||
+        get_u32(after.var2, payload_at + kBlockSizeWord2) !=
+            payload_before + item.size() - 4 ||
+        get_u16(after.var2, payload_at + kBlockCountWord) !=
+            static_cast<std::uint16_t>(state.item_count + 1) ||
+        get_u16(after.var2, payload_at + kItemCountWord) !=
+            get_u16(opened_var2, payload_at + kItemCountWord)) {
+        throw Error(function + ": the written view main block's header words are "
+                    "not the measured length/count rewrite");
+    }
+    if (!std::equal(
+            opened_var2.begin() + static_cast<std::ptrdiff_t>(block_header_end),
+            opened_var2.begin() + static_cast<std::ptrdiff_t>(insert_at),
+            after.var2.begin() +
+                static_cast<std::ptrdiff_t>(block_header_end))) {
+        throw Error(function + ": the written view block changed between its "
+                    "header and the appended item");
     }
     if (!std::equal(item.begin(), item.end(),
                     after.var2.begin() +
