@@ -176,4 +176,8 @@ COM call touched a calendar stream directly.
 4. **A fourth resource** to confirm the FixedData row and Fixed2Meta entry
    arithmetic beyond index 8.
 
-No dynamic trace this wave (W34-0.4 decision).
+No dynamic trace this wave (W34-0.4 decision). The open rules here are all
+pair-measurable (rename, delete, an odd-length name, a fourth resource). The
+save-time identity generator is not a shape question a file-write trace can
+settle — the GUIDs exist before serialisation — and the G3.2 blocker is the
+comparison's identity masking, not the decode.

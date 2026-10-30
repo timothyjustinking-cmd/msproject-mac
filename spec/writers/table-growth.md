@@ -159,4 +159,7 @@ table stream directly.
    change to alter only the first table; this pair would confirm the rule the
    refusal protects.
 
-No dynamic trace this wave (W34-0.4 decision).
+No dynamic trace this wave (W34-0.4 decision). The open rules are all
+pair-measurable (two inserts in one save, a task delete, a change on a
+non-first table); the static dispatch already names the container writers, so
+a trace would not decide a shape the pairs cannot.

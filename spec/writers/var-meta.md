@@ -206,3 +206,11 @@ Project's own serialisation of the model.
 
 Rule 1 note: the port may only enable a var-store write shape that one of
 these pairs covers; anything else is refused up front.
+
+No dynamic trace this wave (W34-0.4 decision). Every open rule here is
+pair-measurable: shrink, two removals, an existing orphan and a zero-payload
+block are all reachable through the editor. A live trace (a break on
+`WriteFile` at save, or on `FUN_1408b05ac`) could attribute the on-disk write
+to the in-memory store's incremental path rather than to the compacting
+serialiser the static model shows, but that identifies a route, not a shape,
+and no writer waits on it.
