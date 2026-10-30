@@ -83,6 +83,20 @@ neutral root `C:\w34\` exists.  Before every fixture commit run
 `python -I build/audit-w22/guard_names.py main..HEAD` and
 `python scripts/check_markers.py --range main..HEAD`.
 
+**Coordinator note (30 Oct 2026 12:15, after G0).**  W34-0.5 says "a path whose
+synthetic pair exposes a mismatch is refused (rule 1) and recorded".  G0 recorded the
+mismatches as 41 `KnownGap` entries (15 insert, 6 delete, 13 link-add, 2 field-set,
+5 field-clear) and kept all five paths enabled, citing A-6.  A-6 forbids disabling them
+as UNMEASURED; they are now measured and the port's save differs from Project's, which is
+rule 1's case.  So: G1-G3 close every `KnownGap` their writers can (a closed gap fails
+the test until its entry is removed, as designed).  **W34-4.0, the first item of G4,
+before 4.1:** for each of Insert Task, Delete Task, link ADD, custom-field SET and CLEAR
+that still carries a `KnownGap`, either refuse the mismatching shape up front in the edit
+model (decision-9 reason in the status line, one test per refusal, both shells) or show
+with the null save that the listed difference is per-save noise and move it out of
+`KnownGap` with that evidence.  A path with no remaining gap stays enabled.  Record the
+outcome per path in `wave34-complete.md`.
+
 ## 2. Groups
 
 ### G0 - the decoding lane: assess what Project actually does (coordinator-led; DeepSeek writes the notes and scripts)
