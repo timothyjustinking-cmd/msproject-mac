@@ -602,6 +602,41 @@ DOCUMENTED = {
         "19F03986C0076ED065DCDA5E4C63192D79DB0768797AC0A51148329C887A5D00",
     "tests/data/wave34-resource-add-third-control-null.mpp":
         "3FA4DDC99BBD9B093D7B964AF511098993906175BAFFD4C57141B397D11CF86F",
+    # Wave 34 (W34-0.5): the synthetic save pairs for the five paths whose
+    # Project evidence was corpus-only -- Insert Task, Delete Task, link ADD,
+    # custom-field SET and CLEAR -- with each control's Project no-edit save.
+    # Measured by scripts/oracle_w34_task_ops.py and
+    # scripts/oracle_w34_null_saves.py under C:/w34.
+    "tests/data/wave34-insert-task-control.mpp":
+        "C77B3F4ECBA2D33414BB259EFCFC6E75B0227C77EDF2F55AAB0BA25D267FC2F6",
+    "tests/data/wave34-insert-task.mpp":
+        "8A24408630A0573C3DD98EE8C9B07F8A07A7C5846D7479134E62974F9A7F13BD",
+    "tests/data/wave34-insert-task-control-null.mpp":
+        "9EE74F5DCA4717D4C60622B62AC04F8D95190559D031BB37957BB55E9A237F78",
+    "tests/data/wave34-delete-task-control.mpp":
+        "BF65481C2A51591EE55649FE64DC348880FD14E92B53DFF8FED77420DFA8A986",
+    "tests/data/wave34-delete-task.mpp":
+        "A255CE636B4BC021BE7E8A6FFDF4479E882D99D79F97A5280BE24D57817B9B96",
+    "tests/data/wave34-delete-task-control-null.mpp":
+        "E1E05382C0679BF80C30F749315CB5829668EE0EC67C5508A2C84BEACAF091C0",
+    "tests/data/wave34-link-add-control.mpp":
+        "247A57F1391A221D28E12BCC7F64E529859BB6437AD923B78DED2E8D30B1E88C",
+    "tests/data/wave34-link-add.mpp":
+        "F21BFA3BEDBED80F20E074709F71CEF34801E050E870AD5798BDD7E6BC493703",
+    "tests/data/wave34-link-add-control-null.mpp":
+        "DF5B85E8B83FB3F86B7D18DA3F9A0383FFC645ED572EED6373A42413244A2E88",
+    "tests/data/wave34-field-set-control.mpp":
+        "FD52CA1F9225F5107A00CFBABAF1B84BC98B24D10D725EF2BD05FEEDDF144974",
+    "tests/data/wave34-field-set.mpp":
+        "A48D824D0BCDEA68BE7B4EE6920DA565612C7AED1C1CB0AB39D8131A7B6B550A",
+    "tests/data/wave34-field-set-control-null.mpp":
+        "E2CBC929DE989F4E8CE1E362CC14C3A54C1F736F41A214F179C928C647C69C5C",
+    "tests/data/wave34-field-clear-control.mpp":
+        "502468FF805C37EB1959AEC3979CAA4C68728C6A20EBDA1A5E3E87A2962931F5",
+    "tests/data/wave34-field-clear.mpp":
+        "329C3B4EA8604AA42814C64EE27E5C49EFDC215AFD07AB199D00AF668469F54F",
+    "tests/data/wave34-field-clear-control-null.mpp":
+        "8A115D64F5E330D416E92BC44BC1BF46E95EEE4EA65BB53B1C9F69D70BA5D978",
     # Wave 31 (W31-4.1): numbers-only Project 2021 measurements of the Task
     # Usage and Resource Usage sheets -- stored details/tiers, the reopened
     # COM facts, daily TimeScaleData over 5-9 January 2026, the logical row

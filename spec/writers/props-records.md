@@ -131,6 +131,29 @@ Separator=".", CodeGenerate=True, VerifyUniqueness=True)` then
 edit changes are the WBS code-definition records; no COM call wrote
 `114/Props` directly.
 
+### W34-0.5: the custom-field SET and CLEAR pairs
+
+The synthetic field pairs ([set](evidence/wave34-field-set.md),
+[clear](evidence/wave34-field-clear.md)) answer the add/delete record
+questions below:
+
+- **SET** (`Task.Text1` on a task with no value): Project appends ONE 88-byte
+  registration record to BOTH `114/TBkndTask/Props` (86 -> 174) and
+  `114/TBkndAssn/Props` (88 -> 176), and 8 bytes to the directory-level
+  `114/Props` (record `0x02401392` payload 0 -> 1, record `0x024013c5` 8 -> 16
+  bytes, typed-property key `0x00010001` 530 -> 574). The top-level record
+  count is 161 on both sides: the registration is a record INSIDE an existing
+  Props record, not a new top-level record.
+- **CLEAR** (`Task.Text1 = ""`): both Props streams are BYTE-IDENTICAL to the
+  control. Clearing a value does not remove the registration, so there is no
+  measured "delete a custom field" record shape; the editor's clear is a
+  VarMeta removal (see [`var-meta.md`](var-meta.md)).
+
+The port's SET writes the 88-byte record to `114/Props` too, where Project
+writes 8 bytes (measured: 51662 mismatches from byte 0, port `0xa2` vs
+Project `0xaa`), and this pair's effects are recorded as a named expected
+failure in `tests/roundtrip_field_values.cpp`.
+
 ## Limits
 
 - The routine that emits the `length/id/kind/payload` record framing was not
@@ -143,19 +166,22 @@ edit changes are the WBS code-definition records; no COM call wrote
 - The typed-property prefix's other keys and the meaning of the field
   reference's four trailing words are undecoded. Only `0x00010001` is tied to
   a measured quantity (the Task Var2Data size).
-- Record insertion is unmeasured: the WBS edit grows four existing records and
-  inserts none. The count of top-level records was 161 on both sides.
+- Record insertion is measured (W34-0.5, SET): one 88-byte record appended to
+  each of the two per-table Props streams. The WBS edit grows four existing
+  records and inserts none. The count of top-level records was 161 on both
+  sides in every measured pair.
 - Whether a 28-byte tail field-reference entry and the 28-byte in-memory
   property map are the same record at different offsets is inferred from the
   shape, not proven.
 
 ## Pairs still needed
 
-1. **Add a custom field** through COM on the synthetic base: does Project
-   append a new record (and a field-reference entry), or extend an existing
-   one? One factor: insertion.
-2. **Delete a custom field**: does the record disappear, and does the
-   field-reference map lose its entry?
+1. ~~**Add a custom field**~~ measured by W34-0.5 (the SET pair): Project
+   appends one 88-byte record to each per-table Props stream.
+2. ~~**Delete a custom field**~~ the editor's "delete" is a value clear, and
+   the CLEAR pair shows both Props streams byte-identical. No measured
+   editor command removes a registration record; a file whose record another
+   tool removed is unmeasured.
 3. **A WBS scheme with a different separator and length** (e.g. Level=2,
    Length=3): confirms whether `0x0240138b` grows by (length + fixed) and
    whether `0x024013be` tracks it.

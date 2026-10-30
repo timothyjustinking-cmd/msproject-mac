@@ -136,6 +136,26 @@ PAIRS = {
         "wave34-calculate-second-control.mpp",
         "wave34-calculate-second-control-null.mpp",
         "wave34-calculate-second.mpp"),
+    "wave34-delete-task": (
+        "wave34-delete-task-control.mpp",
+        "wave34-delete-task-control-null.mpp",
+        "wave34-delete-task.mpp"),
+    "wave34-field-clear": (
+        "wave34-field-clear-control.mpp",
+        "wave34-field-clear-control-null.mpp",
+        "wave34-field-clear.mpp"),
+    "wave34-field-set": (
+        "wave34-field-set-control.mpp",
+        "wave34-field-set-control-null.mpp",
+        "wave34-field-set.mpp"),
+    "wave34-insert-task": (
+        "wave34-insert-task-control.mpp",
+        "wave34-insert-task-control-null.mpp",
+        "wave34-insert-task.mpp"),
+    "wave34-link-add": (
+        "wave34-link-add-control.mpp",
+        "wave34-link-add-control-null.mpp",
+        "wave34-link-add.mpp"),
     "wave34-note-clear": (
         "wave34-note-clear-control.mpp",
         "wave34-note-clear-control-null.mpp",

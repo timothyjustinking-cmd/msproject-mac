@@ -132,6 +132,30 @@ All insert/delete pairs are single editor commands through
 The fixtures are the same session's before/after saves; no COM call touched a
 table stream directly.
 
+### W34-0.5: the Insert Task and Delete Task pairs
+
+The synthetic pairs ([insert](evidence/wave34-insert-task.md),
+[delete](evidence/wave34-delete-task.md)) measure two task-level shapes the
+corpus never covered:
+
+- **Insert Task** (`Tasks.Add`): the Task table appends one 202-byte row
+  (FixedData 856 -> 1058 with 202 effect bytes, FixedMeta 345 -> 392, VarMeta
+  528 -> 672, Var2Data 530 -> 676) AND Project appends the new task's
+  PLACEHOLDER assignment row (Assn FixedData 330 -> 440, FixedMeta 118 -> 152,
+  VarMeta 132 -> 168, Var2Data 396 -> 500, Fixed2Data 144 -> 192, Fixed2Meta
+  175 -> 228), even though the reopened task reports no assignments. COM shows
+  one 480-minute manual task at uid 4, outline level 1, no links.
+- **Delete Task** (`Tasks(2).Delete()`): the row is TOMBSTONED, not removed --
+  Task FixedData stays 856 B with a 1-byte effect, FixedMeta 3 bytes, VarMeta
+  26 bytes in an unchanged stream, Var2Data 3 bytes; the assignment table
+  loses nothing but its FixedMeta (3) and VarMeta (7) carry the cascade.
+
+This answers the "delete a task: tombstone or remove the slot?" question
+below: tombstone, with the deleted row's VarMeta entries removed logically.
+The port's `add_task_row` clones the last live row and writes no placeholder
+assignment; `delete_task_row` shrinks VarMeta physically. Both are recorded
+as named expected failures in `tests/roundtrip_add_delete.cpp`.
+
 ## Limits
 
 - The in-memory row insert/delete and ID-renumber routines were not isolated
@@ -141,8 +165,9 @@ table stream directly.
   measured difference, not decoded.
 - Resource Fixed2Data `120 + 40·n` fits the two measured points (2 → 200,
   3 → 240) but the reader does not parse that stream; it is an inference.
-- Deletion is measured only for an assignment. Task/resource/calendar
-  deletion shapes are unmeasured.
+- Deletion is measured for an assignment and now for a TASK (W34-0.5: the
+  tombstone shape above). Resource and calendar deletion shapes are still
+  unmeasured.
 - The `+3` / `+4` slack is an occupancy rule inferred from sizes; no pair
   fills or empties the slack.
 - Multi-row inserts in one save are unmeasured.
@@ -151,9 +176,10 @@ table stream directly.
 
 1. **Insert two rows in one save** (two `InsertMilestoneTask` calls before
    saving): confirms consecutive uid allocation and that every delta doubles.
-2. **Delete a task**: does it tombstone like an assignment (append a
-   placeholder row) or remove the slot? One factor: deletion, different
-   table.
+2. ~~**Delete a task**~~ measured by W34-0.5 (the delete pair): the row is
+   tombstoned in place, the dead row's VarMeta entries are removed logically
+   and no placeholder row is appended. Still open: delete a RESOURCE or a
+   CALENDAR row (the assignment and task shapes are measured).
 3. **A change on a non-first table** (e.g. a Resource column edit while the
    Task table is the active table): the R33b-1 refusal expects the column
    change to alter only the first table; this pair would confirm the rule the

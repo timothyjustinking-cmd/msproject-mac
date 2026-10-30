@@ -126,6 +126,18 @@ Every pair is a Project 2021 editor save through `scripts/oracle_lock.py`
 (Calculate Project, Set Baseline, assignment add/delete, Level, Move,
 task-mode change, Inactivate, Fill). No COM call wrote a property set.
 
+### W34-0.5: the link-add pair
+
+The synthetic link pair ([evidence](evidence/wave34-link-add.md)) adds a
+measured DSI effect with no property change: after
+`Task.TaskDependencies.Add(1, Type:=1, Lag:=0)` Project reschedules the
+successor (start 2026-01-04 13:00 -> 2026-01-09 13:00, finish 2026-01-07
+12:00 -> 2026-01-14 12:00), and `DocumentSummaryInformation` grows 1100 ->
+1104 with 580 effect bytes -- the cached Scheduled Start/Finish strings now
+describe the moved task. The port's `add_task_link` writes no DSI, so the
+pair's comparison records a named expected failure (first of 584 at byte 64:
+port `0x24`, Project `0x28`) in `tests/roundtrip_links.cpp`.
+
 ## Limits
 
 - The writer routine is not statically isolated (opaque property-set API).

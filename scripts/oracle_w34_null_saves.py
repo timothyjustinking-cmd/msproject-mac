@@ -55,6 +55,13 @@ CONTROLS = [
     "wave34-calculate-second-control.mpp",
     # W34-0.3: a second resource calendar row (a third work resource).
     "wave34-resource-add-third-control.mpp",
+    # W34-0.5: the four corpus-only paths (Insert Task append, Delete Task,
+    # link ADD, custom-field SET and CLEAR).
+    "wave34-insert-task-control.mpp",
+    "wave34-delete-task-control.mpp",
+    "wave34-link-add-control.mpp",
+    "wave34-field-set-control.mpp",
+    "wave34-field-clear-control.mpp",
 ]
 
 

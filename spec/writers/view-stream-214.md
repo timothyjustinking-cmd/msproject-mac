@@ -113,6 +113,20 @@ The textstyle pair is a Project 2021 editor save after a cell text-style
 change on one view. The view stream bytes were not touched by the oracle
 script; the appended item is Project's own serialisation.
 
+### W34-0.5: the five task-op pairs
+
+All five synthetic task-op pairs change `214/CEdl/Var2Data` beyond the
+save-path record ([insert](evidence/wave34-insert-task.md) 600 -> 592 with
+118 effect bytes, [delete](evidence/wave34-delete-task.md) 600 -> 576 with
+125, [link-add](evidence/wave34-link-add.md) 594 -> 608 with 2 + 30 tail,
+[field-set](evidence/wave34-field-set.md) and
+[field-clear](evidence/wave34-field-clear.md) 596 -> 580 with none). The
+column is the CEdl view's cached task state: it follows any task edit, and
+the port copies the control's stream. The comparison therefore records a
+named expected failure per pair with the exact signature (e.g. insert: first
+of 126 at byte 166, port `0x18` vs Project `0x1c`); the port has no CEdl
+writer and none is written blind.
+
 ## Limits
 
 - The static model shows the container-level save ordering but not the

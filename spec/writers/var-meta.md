@@ -167,16 +167,46 @@ applied with `WBSCodeMaskEdit` + `WBSCodeRenumber`, a baseline set, and one
 cell text-style change. No COM call touched VarMeta directly; the entries are
 Project's own serialisation of the model.
 
+### W34-0.5: the five synthetic pairs
+
+The Insert Task, Delete Task, link ADD and custom-field SET/CLEAR pairs on
+`synthetic-base` add four more measured VarMeta shapes
+([evidence](evidence/wave34-insert-task.md), [delete](evidence/wave34-delete-task.md),
+[set](evidence/wave34-field-set.md), [clear](evidence/wave34-field-clear.md)):
+
+- **SET** (Text1 on a task with no value): 42 -> 43 entries, 528 -> 540 B,
+  entry [21] uid 2 key `0x0B400033` at Var2Data 530; Var2Data 530 -> 574 with
+  one 40-byte block. This is the ordinary append at the sorted position.
+- **CLEAR** (Text1 with a 19-character value): 43 -> 42 logical entries in an
+  UNCHANGED 540-byte stream -- the entry is removed, every later entry shifts
+  up one slot, the freed tail slot is a stale duplicate, and Var2Data stays
+  574 B (no empty block is written). A custom field's clear is the same
+  REMOVE shape the note-clear pair measured, not the W52 empty-value shape.
+- **Insert Task**: 528 -> 672 (+144), the new row's entries appended.
+- **Delete Task**: 26 effect bytes in an UNCHANGED 528-byte stream -- the
+  removed row's entries shift logically, the count drops and one stale tail
+  slot remains, exactly the single-entry remove shape applied to a row.
+
+The port's writers do not reproduce either remove: `delete_task_row` shrinks
+the array physically (measured 132 mismatches at VarMeta offset 396, port
+`0x00` vs Project `0x03`) and `clear_field_value` keeps the entry and appends
+an empty block (measured 52 mismatches at offset 8, port `0x2b` vs Project
+`0x2a`). Both are recorded as NAMED expected failures in
+`tests/roundtrip_add_delete.cpp` and `tests/roundtrip_field_values.cpp`; the
+clear shape contradicts the W52 decode and is queued for the writer groups
+rather than patched blind.
+
 ## Limits
 
 - The editor-save VarMeta/Var2Data writer is not statically isolated. The one
   compacting routine in the model (`FUN_1408b05ac`) contradicts the measured
   bytes, so its loop cannot be used as the rule; the in-memory store's
   insert/remove path lives behind vtable calls.
-- Removal is measured three times (wave31-fill, wave34-note-clear,
-  wave34-note-two, one entry each) and growth twice (wave31-fill and the
-  wave34-note-replace payload). Whether two removals in one save keep both
-  stale slots, and whether a *shrunk* value also appends, are unmeasured.
+- Removal is measured for one entry at a time (wave31-fill, wave34-note-clear,
+  wave34-note-two, wave34-field-clear) and per row (the W34-0.5 delete pair),
+  and growth twice (wave31-fill and the wave34-note-replace payload). Whether
+  two removals in one save keep both stale slots, and whether a *shrunk*
+  value also appends, are unmeasured.
 - The stale bytes are input-dependent: the port must reproduce them by
   starting from the opened streams and writing over them, not by rebuilding a
   minimal stream. A file that already contains orphan blocks (a second edit

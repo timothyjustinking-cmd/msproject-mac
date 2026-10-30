@@ -122,6 +122,19 @@ Calculate Project was invoked through `scripts/oracle_lock.py`; the Fill,
 Level, Move, task-mode and Inactivate pairs are single editor commands that
 trigger the same engine. No COM call set a computed value directly.
 
+### W34-0.5: the link-add pair
+
+The synthetic link pair ([evidence](evidence/wave34-link-add.md)) is a
+scheduler write-back with no explicit reschedule: adding one FS + 0 link from
+uid 1 to a 0 % successor moves task 2's start 2026-01-04 13:00 -> 2026-01-09
+13:00 and its finish 2026-01-07 12:00 -> 2026-01-14 12:00. The save's effect
+bytes are 34 in Task FixedData (the successor's calculated/effective dates
+and slack words), 6 in Task Fixed2Data, 3 in Task FixedMeta, 70 in Task
+VarMeta, 12 appended in Task Var2Data, and 580 in DSI. The port's
+`add_task_link` writes only the four TBkndCons streams, so the whole
+reschedule is a recorded named gap in `tests/roundtrip_links.cpp`, not a
+silent mismatch.
+
 ## Limits
 
 - The row-word mapping is not decoded: the offsets above are measured byte
