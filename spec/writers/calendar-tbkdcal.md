@@ -1,6 +1,7 @@
 # The `TBkndCal` resource-calendar row writer
 
-_W34-0.2 decode note, 30 October 2026. Companion to the pair reports under
+_W34-0.2 decode note, 30 October 2026; corrected and extended with the
+W34-0.3 measurements. Companion to the pair reports under
 [`evidence/`](evidence/). Static evidence is from the git-ignored Ghidra
 model. No dynamic trace this wave (W34-0.4 decision)._
 
@@ -10,52 +11,71 @@ model. No dynamic trace this wave (W34-0.4 decision)._
 `FixedData` = 64 + 12·n, `FixedMeta` = 16 + 10·(n+4), `Fixed2Data` =
 48·(n+4), `Fixed2Meta` = 16 + 10·(n+4), plus `VarMeta`/`Var2Data`. The `+4`
 is the same spare-slot allowance the other tables carry (see
-[`table-growth.md`](table-growth.md)).
+[`table-growth.md`](table-growth.md)). In the measured files the four spare
+Fixed2Data slots are at indices 0..3 and the live calendar records follow at
+4..4+n-1.
 
 Adding a calendar appends every part; nothing is spliced:
 
 - **FixedData**: one 12-byte row at `64 + 12·n`. Two producers write
   different rows — Set Baseline writes `00 00 00 00 ff ff ff ff 04 00 00 00`
-  and Add Resource writes `01 00 00 00 02 00 00 00 04 00 00 00`. The second
-  and third words track the owning resource and the new calendar's uid; the
-  field mapping is not decoded (see Limits), so the port copies the measured
+  and Add Resource writes `01 00 00 00 <resource uid> <calendar uid> 00 00 00`
+  (`01 00 00 00 02 00 00 00 04 00 00 00` for the first added resource,
+  `01 00 00 00 03 00 00 00 05 00 00 00` for the second). The field mapping of
+  the other words is not decoded (see Limits), so the port copies the measured
   rows only for the two measured producers.
 - **FixedMeta**: one 10-byte entry at `16 + 10·(n+4)`, count word +1. The
   measured baseline entry is `00 00 01 00 64 00 00 00 af 00`: a `0x0001`
   lead word, the row's FixedData offset (`0x64` = 100 = 64 + 3·12), and a
-  `0x00af` trailer.
+  `0x00af` trailer. Resource entries have a zero lead word and a `0x000e`
+  trailer: the first added resource is `00 00 00 00 4c 00 00 00 0e 00`, the
+  second is `00 00 00 00 58 00 00 00 0e 00`, and the third (measured in
+  `wave34-resource-add-third`) is `00 00 00 00 70 00 00 00 0e 00` — the
+  FixedData offset is `0x40 + 0x0c·index`.
 - **Fixed2Data**: one 48-byte slot at `48·(n+4)`, count in Fixed2Meta +1.
-  The baseline slot is a fresh 16-byte identity plus 32 zero bytes:
-  `8b ee 54 c4 d1 15 11 f1 9f 64 1c c1 0c 05 4c 03` then zeros. The same
-  save also rewrote the first dword of an existing slot's identity
-  (`a1 08 e0 e5` → `8b ee 54 c3`); the two new identities differ by one in
-  their first dword (`…54 c3`, `…54 c4`), so identities are generated per save
-  and the existing ones are part of the file's masked noise.
+  Three shapes are measured:
+  - Set Baseline's new slot is ONE 16-byte identity then 32 zero bytes:
+    `8b ee 54 c4 d1 15 11 f1 9f 64 1c c1 0c 05 4c 03` + zeros.
+  - An existing resource-calendar slot is THREE 16-byte GUIDs. The first is
+    stable across saves; the second and third are save-generated v1-style
+    GUIDs whose timestamps advance on every save (control-vs-null noise).
+  - Add Resource's new slot is also three 16-byte GUIDs: the first two are the
+    same fresh save-time identity and the third is the shared save-time GUID
+    also written into the other resource slots. Example, the third resource's
+    slot 8: `5e b1 4c 15 d3 f4 11 f1 9f 66 1c c1 0c 05 4c 03` twice, then
+    `5e b1 4c 12 d3 f4 11 f1 9f 66 1c c1 0c 05 4c 03`.
+  The new slot lies in the unmasked tail of the save-pair comparison, so a
+  port save can only match if the comparison normalises the identity or the
+  writer reproduces Project's time-based value (see Limits and the G3.2
+  hand-off in the brief).
 - **Fixed2Meta**: one 10-byte entry, measured
-  `00 00 00 00 50 01 00 00 0e 00` — the slot's Fixed2Data offset
-  (`0x150` = 336 = 48·7) and a `0x000e` trailer.
-- **VarMeta**: one 12-byte entry at its sorted `(uid, key)` position, key
-  `0x0d400001` (Calendar/Name), offset = the previous Var2Data length; count
-  word +1 and `var2_bytes` updated.
-- **Var2Data**: one appended block, `4 + payload`, whose payload is the
-  calendar name as UTF-16LE plus a NUL. Measured: the existing `Standard`
-  block is 18 B (`S\0t\0a\0n\0d\0a\0r\0d\0\0\0`); the baseline writer's new
-  calendar carries the 96-byte name `Used for Microsoft Project 98 Baseline
-  Calendar\0`; Add Resource's new block is also 96 B.
+  `00 00 00 00 50 01 00 00 0e 00` for the first added resource — the slot's
+  Fixed2Data offset (`0x150` = 336 = 48·7) and a `0x000e` trailer. The third
+  resource's entry is `00 00 00 00 80 01 00 00 0e 00` (offset 384 = 48·8).
+- **VarMeta**: Set Baseline adds one 12-byte entry at its sorted `(uid, key)`
+  position, key `0x0d400001` (Calendar/Name), offset = the previous Var2Data
+  length; count word +1 and `var2_bytes` updated. **Add Resource adds no
+  Cal VarMeta entry and no Var2Data block** — the new resource calendar has
+  no stored name block in the measured pairs (the calendar's display name
+  comes from the resource row).
+- **Var2Data**: Set Baseline appends one block, `4 + payload`, whose payload
+  is the calendar name as UTF-16LE plus a NUL: the 96-byte name
+  `Used for Microsoft Project 98 Baseline Calendar\0`. The existing
+  `Standard` block is 18 B (`S\0t\0a\0n\0d\0a\0r\0d\0\0\0`).
 
-Measured deltas, identical in both producer pairs:
+Measured deltas:
 
-| stream | delta |
-|---|---|
-| FixedData | +12 |
-| FixedMeta | +10 |
-| Fixed2Data | +48 |
-| Fixed2Meta | +10 |
-| VarMeta | +12 |
-| Var2Data | +4 + name payload |
+| stream | Set Baseline | Add Resource |
+|---|---|---|
+| FixedData | +12 | +12 |
+| FixedMeta | +10 | +10 |
+| Fixed2Data | +48 | +48 |
+| Fixed2Meta | +10 | +10 |
+| VarMeta | +12 | 0 |
+| Var2Data | +4 + name payload (100 B) | 0 |
 
-A no-edit save changes none of the calendar streams. A calendar deletion or
-change is unmeasured.
+A no-edit save changes none of the calendar streams; the only noise is the
+save-generated identity dwords inside the existing slots.
 
 ## Evidence
 
@@ -71,19 +91,30 @@ change is unmeasured.
   calendar stream has zero noise. The VarMeta header goes
   `(0xFADFADBA, 0, 1, 0, 0, 22)` → `(0xFADFADBA, 0, 2, 0, 0, 122)` and the
   new entry is `[1] uid 4 key 0x0d400001 off 22`.
-- `wave30-resource-add` (one work resource added) — the same six deltas:
-  FixedData 100 → 112 with the new row
-  `01 00 00 00 02 00 00 00 04 00 00 00`, FixedMeta 86 → 96, Fixed2Data
-  336 → 384, Fixed2Meta 86 → 96, VarMeta 36 → 48, Var2Data 22 → 122. The
-  `Fixed2Data` noise and effect pattern is identical to the baseline pair.
-  The same save also grows the Resource table and rewrites `114/Props` (see
-  [`table-growth.md`](table-growth.md)).
-- The FixedMeta and Fixed2Meta effect runs are `[8:9)` `07 → 08` (count) and
-  `[12:13)` `0x50 → 0x80` (the declared FixedData/Fixed2Data size), plus the
-  10 tail bytes that are the new entry. So both meta headers track the new
-  high-water mark, not the live row count alone.
+- `wave30-resource-add` (one work resource added) — FixedData 100 → 112 with
+  the new row `01 00 00 00 02 00 00 00 04 00 00 00`, FixedMeta 86 → 96,
+  Fixed2Data 336 → 384, Fixed2Meta 86 → 96. The new Fixed2Meta entry is
+  `00 00 00 00 50 01 00 00 0e 00`, and the new slot 7 is
+  `89 b9 c4 21 d1 0a 11 f1 9f 64 1c c1 0c 05 4c 03` twice then
+  `89 b9 c4 1f d1 0a 11 f1 9f 64 1c c1 0c 05 4c 03`. **Cal VarMeta and
+  Var2Data are byte-identical in this pair** (36 B / 22 B); the earlier
+  draft of this note wrongly attributed the baseline pair's name-block growth
+  to Add Resource. The same save also grows the Resource table and rewrites
+  `114/Props` (see [`table-growth.md`](table-growth.md)).
+- `wave34-resource-add-third` (a SECOND added resource, on top of
+  `wave30-resource-add.mpp`) — FixedData 112 → 124, FixedMeta 96 → 106,
+  Fixed2Data 384 → 432, Fixed2Meta 96 → 106; Cal VarMeta and Var2Data
+  unchanged (36 B / 22 B). COM: `Resources.Count` 2 → 3, new resource
+  ID/UniqueID 3, Work, MaxUnits 1.0. The new row is
+  `01 00 00 00 03 00 00 00 05 00 00 00` (uid 5, so the calendar uid allocation
+  is 4 → 5 as the wave-30 pair predicted), the new FixedMeta entry is
+  `00 00 00 00 70 00 00 00 0e 00`, the new Fixed2Meta entry is
+  `00 00 00 00 80 01 00 00 0e 00`, and the new slot 8 is the three-GUID
+  identity quoted above. The existing slots 6 and 7 keep their stable first
+  GUID and have their second and third GUIDs replaced by the save
+  (`…4b fd` → `…4b 13`, then `…4c 12`), which is the masked noise.
 - Control vs null: every calendar stream is byte-identical except the masked
-  identity dwords above, so the per-save noise is confined to those 12 bytes.
+  identity dwords, so the per-save noise is confined to those slots.
 
 ### Static (Ghidra model)
 
@@ -99,45 +130,50 @@ change is unmeasured.
   compacting table serialiser (see the mismatch recorded in
   [`var-meta.md`](var-meta.md)).
 - The calendar-row producer — the Set-Baseline and Add-Resource handlers that
-  create the 12-byte row, the 48-byte slot and the name block — was not
-  isolated within the two-hour box. The row's field words are read by the
-  table layer, not by a calendar-specific function in the decompiled model.
+  create the 12-byte row, the 48-byte slot and (for baseline) the name block —
+  was not isolated within the two-hour box. The row's field words are read by
+  the table layer, not by a calendar-specific function in the decompiled
+  model.
 
 ### COM facts
 
 The baseline pair uses `Application.BaselineSave` (baseline 0, entire
-project); the resource pair uses `Resources.Add` for one work resource. Both
-are single editor commands through `scripts/oracle_lock.py`; no COM call
-touched a calendar stream directly.
+project); the resource pairs use `Resources.Add` (one work resource, then a
+second). All are single editor commands through `scripts/oracle_lock.py`; no
+COM call touched a calendar stream directly.
 
 ## Limits
 
-- The 12-byte row's field mapping is not decoded. Only two producers are
-  measured and their rows differ in the first two words; the port must not
-  generalise a row from one sample.
+- The 12-byte row's field mapping is not decoded. Three producers are
+  measured; the Add Resource rows differ from the baseline row in the first
+  three words.
 - The new 16-byte identity is generated at save time and is not derivable
   from the input. Existing identity dwords are masked noise; the appended
   slot's identity falls in the unmasked tail, so the save-pair comparison
   will only match if the writer reproduces Project's value or the comparison
-  masks it. This must be settled before G3.2 enables Add Resources.
+  normalises it. This must be settled before G3.2 enables Add Resources.
 - Only calendar addition is measured. Deletion, rename, base-calendar change
-  and a second resource's calendar are unmeasured.
-- The name payload is measured for three names (18 B and two 96 B); the
-  length rule (2 × (len + 1)) is an inference, not tested with an odd-length
-  name.
+  and a second resource's calendar are still partly open: the second added
+  resource is measured (`wave34-resource-add-third`), the third is not.
+- The name payload is measured for two names (18 B and 96 B), both from the
+  baseline producer; the length rule (2 × (len + 1)) is an inference, not
+  tested with an odd-length name, and Add Resource writes no name block at
+  all.
 - The `+4` slack means a new slot can occupy an existing spare rather than
   extend the stream; no measured pair exercises the boundary.
+- Why the existing resource slot's second and third GUIDs change on every
+  save is not decoded (the values look like v1 UUID timestamps); the port
+  only knows they are masked noise.
 
 ## Pairs still needed
 
-1. **A second resource added after the first** (W34-3.2): confirms the uid
-   allocation (4 → 5) and whether the row's resource word tracks the new
-   resource.
-2. **Rename a resource's calendar** (Resource Information, calendar name):
-   does the name block grow in place (view-style) or append (table-style),
-   and does the VarMeta offset move?
-3. **Delete the resource**: does the calendar row/slot disappear or become a
+1. **Rename a resource's calendar** (Resource Information, calendar name):
+   does a name block appear or grow in place, and does a Cal VarMeta entry
+   move?
+2. **Delete the resource**: does the calendar row/slot disappear or become a
    tombstone, as assignments do?
-4. **A calendar name of odd length** to confirm the UTF-16 + NUL length rule.
+3. **A calendar name of odd length** to confirm the UTF-16 + NUL length rule.
+4. **A fourth resource** to confirm the FixedData row and Fixed2Meta entry
+   arithmetic beyond index 8.
 
 No dynamic trace this wave (W34-0.4 decision).

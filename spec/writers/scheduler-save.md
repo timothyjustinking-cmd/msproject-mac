@@ -29,6 +29,12 @@ and [`var-meta.md`](var-meta.md). The measured shape is:
   record, so it is a mask limitation rather than the edit's effect.
 - A no-edit save leaves every one of these streams byte-identical
   (control vs null noise is zero in all the relevant streams).
+- **A Calculate with nothing pending writes nothing back.** In
+  `wave34-calculate-second` (a second Calculate on an already-calculated
+  file), the edit save has zero effect bytes in every stream except the
+  universal one-byte Props14 edit marker (`0x3540000a` `0x0000 → 0x0001`).
+  VarMeta, Var2Data and DocumentSummaryInformation are byte-identical to the
+  control outside the mask, so the engine does not re-append the nine blocks.
 
 Measured on Calculate Project (`wave30-calculate`):
 
@@ -68,6 +74,13 @@ The same write-back shape is visible in the other scheduler-driven pairs:
 - `wave30-move-back` — DSI unchanged in size, 7 effect bytes (the date text
   keeps its width).
 - `wave30-inactivate-second` — DSI unchanged in size, 11 effect bytes.
+- `wave34-calculate-second` — base `wave30-calculate.mpp` (already
+  calculated: task 1 is 10 days, task 2 starts 19 January 2026), opened and
+  saved as the control, then `Application.CalculateProject()` and saved
+  again. COM shows every task start, finish, duration and percent identical
+  before and after. Every stream is unchanged outside the mask except
+  Props14's one-byte edit marker: Task VarMeta/Var2Data, DocumentSummary
+  Information and the 214 streams all have zero effects.
 
 So the scheduler's save shape is: mutate row words in place, append new var
 blocks, rewrite the summary strings, and change no stream size except
@@ -131,16 +144,17 @@ trigger the same engine. No COM call set a computed value directly.
 1. **Calculate Project on the synthetic base with 0, 1 and 2 assignments**
    (W34-5.x): does the nine-entry set vary with the number of assignments, or
    is it a fixed per-task set?
-2. **A second Calculate with no model change** (open, calculate, save twice):
-   does the engine append nothing on the second save, or re-append the same
-   nine blocks?
-3. **A duration change with an odd digit count** (e.g. 9 → 10 days): pairs
+2. **A duration change with an odd digit count** (e.g. 9 → 10 days): pairs
    with the DSI ±4 rule and shows which row word carries the duration.
-4. **Auto Schedule** on a manually scheduled task: does the same nine-entry
+3. **Auto Schedule** on a manually scheduled task: does the same nine-entry
    set appear, and does the row-word pattern match Calculate Project?
-5. **A recalculation that changes an assignment's work** (not just the task's
+4. **A recalculation that changes an assignment's work** (not just the task's
    dates): shows whether assignment rows and their var entries are rewritten
    by the same path.
+
+The second-Calculate question is settled by `wave34-calculate-second`: with
+nothing pending the engine writes nothing back (the nine-entry set appears
+only when a change is pending).
 
 No dynamic trace this wave (W34-0.4 decision). The engine's write-back is the
 strongest live-trace candidate for a future wave, because the static model

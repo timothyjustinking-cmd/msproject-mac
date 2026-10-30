@@ -132,6 +132,38 @@ PAIRS = {
         "wave31-fill-control.mpp",
         "wave31-fill-control-null.mpp",
         "wave31-fill.mpp"),
+    "wave34-calculate-second": (
+        "wave34-calculate-second-control.mpp",
+        "wave34-calculate-second-control-null.mpp",
+        "wave34-calculate-second.mpp"),
+    "wave34-note-clear": (
+        "wave34-note-clear-control.mpp",
+        "wave34-note-clear-control-null.mpp",
+        "wave34-note-clear.mpp"),
+    "wave34-note-escape": (
+        "wave34-note-escape-control.mpp",
+        "wave34-note-escape-control-null.mpp",
+        "wave34-note-escape.mpp"),
+    "wave34-note-multiline": (
+        "wave34-note-multiline-control.mpp",
+        "wave34-note-multiline-control-null.mpp",
+        "wave34-note-multiline.mpp"),
+    "wave34-note-nonascii": (
+        "wave34-note-nonascii-control.mpp",
+        "wave34-note-nonascii-control-null.mpp",
+        "wave34-note-nonascii.mpp"),
+    "wave34-note-replace": (
+        "wave34-note-replace-control.mpp",
+        "wave34-note-replace-control-null.mpp",
+        "wave34-note-replace.mpp"),
+    "wave34-note-two": (
+        "wave34-note-two-control.mpp",
+        "wave34-note-two-control-null.mpp",
+        "wave34-note-two.mpp"),
+    "wave34-resource-add-third": (
+        "wave34-resource-add-third-control.mpp",
+        "wave34-resource-add-third-control-null.mpp",
+        "wave34-resource-add-third.mpp"),
 }
 
 # ---- table geometry (core/mpp/reader.cpp).  Rows exclude FixedData header.

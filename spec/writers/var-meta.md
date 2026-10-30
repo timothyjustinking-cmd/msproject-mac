@@ -106,7 +106,26 @@ not sort it.
   uid 2 key `0x0b4004e5` block at 338 is also left orphaned. No other entry
   offset changes. This is the measured removal, the measured growth, and the
   proof that the streams are updated in place rather than compacted.
-- All 23 pairs: `noise (control -> null): entries 0 added, 0 removed,
+- `wave34-note-replace` (W34-0.3) — a second measurement of the changed-block
+  rule, on a text payload: the task-2 note entry [21] uid 2 key `0x0b40000f`
+  is re-pointed 524 → 725, its block grows 197 → 209 B and is appended at
+  725; `Var2Data` 725 → 938 B (+213 = 4 + 209); `VarMeta` stays 540 B with
+  the count unchanged; the old 197-byte block at 524 stays orphaned; the
+  header size word at +20 goes 725 → 938 and the entry offset is the only
+  entry byte that moves. FixedMeta is untouched.
+- `wave34-note-clear` (W34-0.3) — a second measurement of removal, on a text
+  field: header count 43 → 42, `VarMeta` stays 540 B, every later entry
+  shifts up one slot and the freed slot [42] is a byte-identical duplicate of
+  the new last entry; `Var2Data` stays 716 B and the 188-byte note block at
+  524 stays orphaned. The three FixedMeta bytes of the task row are the only
+  other effect.
+- `wave34-note-two` (W34-0.3) — the composition of one removal and one
+  changed block in a single save: header count 44 → 43, `VarMeta` stays
+  552 B, task 2's note entry is removed, task 3's entry is re-pointed
+  715 → 906, the new 195-byte block is appended at 906 and `Var2Data` grows
+  906 → 1105 B (+199); the stale tail slot [43] duplicates the new last
+  entry. Both effects compose append-only with no other entry moving.
+- All 31 pairs: `noise (control -> null): entries 0 added, 0 removed,
   0 re-pointed` in every report where the decoder prints it. A no-edit save
   by Project never re-frames the var store.
 
@@ -154,9 +173,10 @@ Project's own serialisation of the model.
   compacting routine in the model (`FUN_1408b05ac`) contradicts the measured
   bytes, so its loop cannot be used as the rule; the in-memory store's
   insert/remove path lives behind vtable calls.
-- Removal is measured once (wave31-fill, one entry) and growth once (the same
-  pair, +4 payload). Whether two removals in one save keep both stale slots,
-  and whether a *shrunk* value also appends, are unmeasured.
+- Removal is measured three times (wave31-fill, wave34-note-clear,
+  wave34-note-two, one entry each) and growth twice (wave31-fill and the
+  wave34-note-replace payload). Whether two removals in one save keep both
+  stale slots, and whether a *shrunk* value also appends, are unmeasured.
 - The stale bytes are input-dependent: the port must reproduce them by
   starting from the opened streams and writing over them, not by rebuilding a
   minimal stream. A file that already contains orphan blocks (a second edit
@@ -172,18 +192,16 @@ Project's own serialisation of the model.
 
 ## Pairs still needed
 
-1. **Delete a task note** (clear a `0x0b40000f` value) from the synthetic
-   base: does the block stay orphaned and the entry shift exactly as the Fill
-   pair shows for `0x0b4004e5`? One factor: a text-field removal.
-2. **Shrink a value** (replace a long note with a short one): is the shorter
+1. **Shrink a value** (replace a long note with a short one): is the shorter
    block appended at the high-water mark with the old one orphaned, or is it
-   rewritten in place? One factor: shrink.
-3. **Two changes in one save** (a note deleted and another added): do both
-   effects compose append-only, and does the stale VarMeta tail keep one slot?
-4. **A file with an existing orphan**: open the wave31-fill edit save and edit
+   rewritten in place? One factor: shrink. (The wave-34 replace pair grows
+   197 → 209 B; a shrink is still unmeasured.)
+2. **Two removals in one save** (clear two notes): do both entries vanish and
+   does the freed tail keep one or two stale slots?
+3. **A file with an existing orphan**: open the wave31-fill edit save and edit
    it again. Confirms the append point is the high-water mark and that orphan
    bytes persist across saves.
-5. **A block of zero payload** if any editor command produces one; this is the
+4. **A block of zero payload** if any editor command produces one; this is the
    only way to see a zero-length block's length word.
 
 Rule 1 note: the port may only enable a var-store write shape that one of

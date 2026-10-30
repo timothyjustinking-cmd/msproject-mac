@@ -546,6 +546,62 @@ DOCUMENTED = {
     # bytes to a copy; the committed fixture is never opened in place.
     "tests/data/wave33-fat-slack.mpp":
         "E3A7D6CBBB82EA35901D6C2CE8C7E4D40DE032D424785CBA6F6BED41B93A85C8",
+    # Wave 34 (W34-0.3): eight measured save pairs, each with its Project
+    # no-edit null save, from scripts/oracle_w34_notes.py,
+    # oracle_w34_calculate.py, oracle_w34_resource.py and
+    # oracle_w34_null_saves.py.  The six note pairs complete the RichEdit
+    # escaping/replace/clear rules; calculate-second shows a Calculate with
+    # nothing pending writes nothing back; resource-add-third measures a
+    # second added resource calendar.  All are synthetic-base descendants with
+    # synthetic text and neutral metadata.
+    "tests/data/wave34-note-escape-control.mpp":
+        "D3716B4A014E7AFBBCEB505BADB6FAF3B866B89400CE9CBFA935BED4219B2BCD",
+    "tests/data/wave34-note-escape.mpp":
+        "B4C046193F7945B8FFBEFA86EA7F75A8E2E7E7EF820B150FBD44D8DF4017A244",
+    "tests/data/wave34-note-escape-control-null.mpp":
+        "51BC76503AE665A37F2BB2C7ACF45BA1861F67D4AAA4BA14166099E7EF377282",
+    "tests/data/wave34-note-nonascii-control.mpp":
+        "83FB3E29EAED4A78F918C8F1504AC29E0C4DA2321511580144CD53934EA7B9CD",
+    "tests/data/wave34-note-nonascii.mpp":
+        "1DAA9DF7103BF759CC28AE04CE787EC79B006A94717419D17E428AC83AB48912",
+    "tests/data/wave34-note-nonascii-control-null.mpp":
+        "02B8D386FD58F8681D058A0518E3790D88E7F07D3E89571EB8932B9A57971ECF",
+    "tests/data/wave34-note-multiline-control.mpp":
+        "54F2F8EFE224E8CBD84DC4C233DDF0E32A7B8247EDB45BE3C123E19B213CAE9C",
+    "tests/data/wave34-note-multiline.mpp":
+        "C8BDB1CE13D05C79C5E8F0A264183F3359C8EF79F0E212C8D1956E18691E43C0",
+    "tests/data/wave34-note-multiline-control-null.mpp":
+        "F753D091781589F5E5AFB6596406EDCC69581B19537491D7369D01FC03DBEECF",
+    "tests/data/wave34-note-replace-control.mpp":
+        "C8138B42647778E397BFD1FD4DC0C66560D4F45028A12282E46171689F859445",
+    "tests/data/wave34-note-replace.mpp":
+        "46DD8D1025745F8A5C79029E2657BE82AC56CA62671D88F421DF56EB4BFFE8A9",
+    "tests/data/wave34-note-replace-control-null.mpp":
+        "E75F22B32AD59D95B3B6841C8555AF5498EF2AF2A247007F5A6A01D05BBD9BBE",
+    "tests/data/wave34-note-clear-control.mpp":
+        "B5413DBD8A1E3BA62E02FBEAA30D29F908F8E21701D57BEFF0B56C3FF66B378D",
+    "tests/data/wave34-note-clear.mpp":
+        "46FB6F4526557B46FDE28336280FACA916E577DD213AADA38054B8818C5653D0",
+    "tests/data/wave34-note-clear-control-null.mpp":
+        "8B30DD6D64AC063F9195E429AA161ABAB0513F97720376C9B9FD835C269675E6",
+    "tests/data/wave34-note-two-control.mpp":
+        "CED6627787ECF8C6200B8ED4C7E7AF772D5A1E32A17297385B913F6EB4518F48",
+    "tests/data/wave34-note-two.mpp":
+        "FC7D0B3E0F8A656C9334A0C7979AF0C4E2E1D96922A125C73346F9F975484C7A",
+    "tests/data/wave34-note-two-control-null.mpp":
+        "2ED165C9DFEEDC678A3785805C0B04797A3C9ED94094167945FDA1DBABD30FC0",
+    "tests/data/wave34-calculate-second-control.mpp":
+        "40D8D856AD43EDFDEE4C54EA11658F3DEFE198B12F55481F019939619E8790BC",
+    "tests/data/wave34-calculate-second.mpp":
+        "22F71DDF12D5823FDF99F7A47488A21FEA00CF578031EBFB3455F9C138864718",
+    "tests/data/wave34-calculate-second-control-null.mpp":
+        "9B3708A54DC6B3A31E9E491CEA24AF20B3C05F0D10141BB45613966EC62BE45F",
+    "tests/data/wave34-resource-add-third-control.mpp":
+        "F9DD625CFD94FD6A29B616F102EB005B637409662F0C2465C0ADEA4FCBC759F4",
+    "tests/data/wave34-resource-add-third.mpp":
+        "19F03986C0076ED065DCDA5E4C63192D79DB0768797AC0A51148329C887A5D00",
+    "tests/data/wave34-resource-add-third-control-null.mpp":
+        "3FA4DDC99BBD9B093D7B964AF511098993906175BAFFD4C57141B397D11CF86F",
     # Wave 31 (W31-4.1): numbers-only Project 2021 measurements of the Task
     # Usage and Resource Usage sheets -- stored details/tiers, the reopened
     # COM facts, daily TimeScaleData over 5-9 January 2026, the logical row
