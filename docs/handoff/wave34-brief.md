@@ -97,6 +97,16 @@ with the null save that the listed difference is per-save noise and move it out 
 `KnownGap` with that evidence.  A path with no remaining gap stays enabled.  Record the
 outcome per path in `wave34-complete.md`.
 
+**Coordinator note (30 Oct 2026 15:00, G2 restart).**  The operator paused all runs at
+about 14:00 and resumed at 15:00; the G2 session was killed mid-item, not finished.  G2
+has W34-2.1 (`6b2ba05`) and W34-2.2 (`46b49e0`) committed.  The working tree holds that
+session's UNCOMMITTED, unverified work in progress: `core/mppwrite/viewstream_edit.cpp`
+modified (+33/-6) and `tests/roundtrip_viewstream.cpp` new and untracked.  Start G2 by
+reading both: finish them, run the gates and commit them under their item id, or discard
+them (`git checkout -- core/mppwrite/viewstream_edit.cpp`, delete the test file) and
+redo the item.  Never commit them unread.  The 12-hour stop point moves by the
+pause: 23:15 on 30 Oct 2026.
+
 ## 2. Groups
 
 ### G0 - the decoding lane: assess what Project actually does (coordinator-led; DeepSeek writes the notes and scripts)
