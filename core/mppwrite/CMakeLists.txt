@@ -150,6 +150,8 @@ if(MPPWRITE_BUILD_TESTS)
                       roundtrip_assignment_growth.cpp)
     mppwrite_add_test(mppwrite_roundtrip_resource_growth
                       roundtrip_resource_growth.cpp)
+    mppwrite_add_test(mppwrite_roundtrip_summary_info
+                      roundtrip_summary_info.cpp)
     # W45/W48/W52/W54's tests also round-trip their own output through the
     # independent core/mpp reader when the top-level build provides it.  The
     # standalone core/mppwrite configure has no reader; the cross-check is then

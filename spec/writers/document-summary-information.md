@@ -141,6 +141,33 @@ describe the moved task. The port's `add_task_link` writes no DSI, so the
 pair's comparison records a named expected failure (first of 584 at byte 64:
 port `0x24`, Project `0x28`) in `tests/roundtrip_links.cpp`.
 
+### W34-3.3: the writer against Calculate, Move and three more saves
+
+`tests/roundtrip_summary_info.cpp` opens each pair's control, takes Project's
+edit save's task table as the edited table, runs `write_project_summary` and
+requires the stream to equal Project's edit save byte for byte (no noise, no
+mask). Seven pairs match: `wave30-calculate` (+4 B, 175 effect bytes),
+`wave30-move-back` (7 B, same length), `wave30-inactivate-second`,
+`wave31-fill` (-4 B), `wave30-task-mode-manual` (-4 B), and the two where
+Project leaves the stream alone, `wave30-move-forward` and
+`wave34-calculate-second` (the writer must derive the stored bytes, not
+merely skip them). Each pair's changed/unchanged flag is asserted against
+control vs edit.
+
+The property-set encoding is checked by a separate reader,
+`scripts/dsi_reader.py` (standard library plus olefile for the container; no
+code shared with the writer), driven by `scripts/check_dsi.py <test-out dir>`.
+It found three layout facts the prose above had slightly wrong, now stated
+here: (1) a simple LPSTR value stores a length already rounded up to four and
+NUL-padded; (2) a string that is an element of the TitlesOfParts vector, and
+every value inside the HeadingPairs variant vector, stores its exact length
+with NO padding, and nothing pads after the vector; (3) the pid 0 dictionary
+entries are unpadded, so the properties after it start at an unaligned
+offset (only the section as a whole is padded to four). The reader also
+checks ascending contiguous offsets, section sizes equal to the bytes used,
+and no trailing bytes, and `check_dsi.py` first proves it rejects five kinds
+of damaged stream.
+
 ## Limits
 
 - The writer routine is not statically isolated (opaque property-set API).

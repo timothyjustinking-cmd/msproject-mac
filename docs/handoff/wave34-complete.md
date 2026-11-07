@@ -543,7 +543,8 @@ Insufficient Balance stop) and resumes under Claude Sonnet 5.5 from
 |---|---|---|---|
 | W34-3.1 | brief W34-3.1: assignment table growth (append a row AND rewrite the existing rows' pointer words and the task's Work summary as `wave30-assign-add-*` shows; removal as `wave30-assign-delete-*` shows); one new pair each varying the task's existing assignment count (0, 1, 2) | **DONE** (record written by the Sonnet builder; the code and pairs are the DeepSeek session's) | commits `281ac54` (writer + first-assignment ADD and REMOVE tests), `07046d0` (the two new pairs and their anatomy), `73bc6e6` (the settled append); `core/mppwrite/assignment_growth.{h,cpp}`; `tests/roundtrip_assignment_growth.cpp`; `spec/writers/table-growth.md`; gates `build/w34/cedba33-W34-3.1-*.log` |
 | W34-B5 | brief W34-B5: drop the name column from `tests/data/project_a_golden.tsv` and the docs, readers and scripts that used it | **DONE** | commit `8b79c62` |
-| W34-3.2 | brief W34-3.2: the resource calendar row (Add Resources writes the `TBkndCal` streams and three `114/Props` counts, not only the six `TBkndRsc` streams) | **DONE** | commit titled `W34-3.2` (the next commit after `8b79c62`); `core/mppwrite/resource_growth.{h,cpp}`; `tests/roundtrip_resource_growth.cpp`; `spec/writers/calendar-tbkdcal.md`; gates `build/w34/8b79c62-W34-3.2-*.log` |
+| W34-3.2 | brief W34-3.2: the resource calendar row (Add Resources writes the `TBkndCal` streams and three `114/Props` counts, not only the six `TBkndRsc` streams) | **DONE** | commit `adfd358`; `core/mppwrite/resource_growth.{h,cpp}`; `tests/roundtrip_resource_growth.cpp`; `spec/writers/calendar-tbkdcal.md`; gates `build/w34/8b79c62-W34-3.2-*.log` |
+| W34-3.3 | brief W34-3.3: `DocumentSummaryInformation` writer for the strings and dates Project rewrites on Calculate Project and Move, property-set encoding verified against an independent reader | **DONE** | the `W34-3.3` commit after `adfd358`; `tests/roundtrip_summary_info.cpp`; `scripts/dsi_reader.py`, `scripts/check_dsi.py`; `spec/writers/document-summary-information.md`; gates `build/w34/adfd358-W34-3.3-*.log` |
 
 W34-3.1 detail:
 
@@ -639,3 +640,44 @@ W34-3.2 detail:
   absent (`CfbDocument` has no remove-stream operation).
 - **Deferred / found, not fixed.**  Counts 4 and beyond need a pair (named in
   `calendar-tbkdcal.md`, pairs still needed 4).
+
+W34-3.3 detail:
+
+- **What was there and what was added.**  The writer
+  (`write_project_summary`, `core/mppwrite/summary_info.{h,cpp}`) already
+  existed from wave 29 and is used by the actuals, outline and assignment
+  writers; no committed test ran it against the Calculate or Move pairs.
+  `tests/roundtrip_summary_info.cpp` now does, for seven pairs
+  (`wave30-calculate`, `wave30-move-back`, `wave30-move-forward`,
+  `wave34-calculate-second`, `wave30-inactivate-second`, `wave31-fill`,
+  `wave30-task-mode-manual`): the port rebuilds the stream from the control and
+  Project's edited task row and it equals Project's edit save byte for byte
+  (the stream has no per-save noise, so there is no mask), with every other
+  stream untouched.  The changed/unchanged flag for each pair is asserted
+  against control vs edit, so the test cannot pass vacuously.  Twelve
+  refusals: a short stream, byte order, section count, format identifier, a
+  trailing byte, a truncated stream, an unmeasured DurationFormat, an invalid
+  start, and a negative / non-finite / fractional / one-hour total work, each
+  with the document unchanged.
+- **Independent reader.**  `scripts/dsi_reader.py` parses the OLEPS layout
+  with no code shared with the C++ (olefile only opens the container);
+  `scripts/check_dsi.py <test-out dir>` compares the port's saved file with
+  Project's edit save property by property for the seven pairs (7 pairs, 0
+  failures), after proving the reader rejects five damaged streams.  Run
+  locally; olefile is not installed in CI, so the script is a manual gate
+  (listed in the commit's gates) rather than a CI step.  Writing it corrected
+  three claims in the decode note's layout prose (LPSTR padding, vector and
+  variant packing, the unpadded dictionary); the note is updated.
+- **Gates (this session).**  `build/vs-verify33b` Release build exit 0, full
+  ctest 62/62; `mppwrite_roundtrip_summary_info` 710 checks, 0 failures;
+  `check_dsi.py` 7/7; `check_fixtures.py` OK (185 hashes, 219 `.mpp`);
+  `check_markers.py --worktree` OK; client-name scan 0 hits.  Logs
+  `build/w34/adfd358-W34-3.3-*.log`.
+- **Guard seen red.**  Changing the percent-work suffix in the summary
+  rebuild (`"%"` -> `"p"`) failed `mppwrite_roundtrip_summary_info` plus the
+  outline and assignment-growth tests that share the writer (DSI differing
+  from Project's at byte 337); restored (`build/w34/mut-W34-3.3-ctest.log`).
+- **Limits.**  Unchanged from the note: DurationFormat only 21 and 53, a move
+  across a DST change, a total-work change outside whole hours and the
+  singular "1 hr" are refused or unmeasured.  No pair here needed a new
+  measurement.
