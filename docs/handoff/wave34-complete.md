@@ -531,3 +531,69 @@ the code tree this record commit follows; the marker commit is docs-only.
   writes it.
 
 WAVE-34-G2-COMPLETE
+
+## G3 - table growth with re-keying, the resource calendar row, DocumentSummaryInformation
+
+Builder note: G3 began under DeepSeek (W34-3.1 committed, then the 402
+Insufficient Balance stop) and resumes under Claude Sonnet 5.5 from
+`cedba33` (W34-BUILDER).  Builder commits from here carry the
+`Generated-By: Claude Sonnet 5.5 via Claude Code (wave 34)` trailer.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W34-3.1 | brief W34-3.1: assignment table growth (append a row AND rewrite the existing rows' pointer words and the task's Work summary as `wave30-assign-add-*` shows; removal as `wave30-assign-delete-*` shows); one new pair each varying the task's existing assignment count (0, 1, 2) | **DONE** (record written by the Sonnet builder; the code and pairs are the DeepSeek session's) | commits `281ac54` (writer + first-assignment ADD and REMOVE tests), `07046d0` (the two new pairs and their anatomy), `73bc6e6` (the settled append); `core/mppwrite/assignment_growth.{h,cpp}`; `tests/roundtrip_assignment_growth.cpp`; `spec/writers/table-growth.md`; gates `build/w34/cedba33-W34-3.1-*.log` |
+
+W34-3.1 detail:
+
+- **Measured shapes (rule 1).**  Four pairs, each against Project's own edit
+  save with its committed null save masking per-save noise, through
+  `save_pair::compare_all` with the wave-33 `effects` assertion and no
+  `KnownGap`:
+  `wave30-assign-add` (task count 0 -> 1: the placeholder row is tombstoned,
+  a row appended, VarMeta re-keyed, the four assignment `114/Props` scalars
+  and the Task/Resource work roll-ups moved; noise=154, effects=1012),
+  `wave30-assign-delete` (the REMOVE: appended real group with the 28-byte
+  contour record zeroed; noise=158, effects=905),
+  `wave34-assign-add-second` (count 1 -> 2; noise=191, effects=462) and
+  `wave34-assign-add-third` (count 2 -> 3; noise=205, effects=655).  The two
+  `wave34-*` pairs were measured in one Project 2021 session by
+  `scripts/oracle_w34_assign_counts.py` on a copy of
+  `wave34-resource-add-third.mpp` under `C:/w34`, `neutralise()` before each
+  save; their anatomy notes are `spec/writers/evidence/wave34-assign-add-{second,third}.md`.
+- **What the pairs show.**  The settled append is additive: old rows,
+  FixedMeta/Fixed2Meta entries and Var2Data blocks stay byte-identical; new
+  entries append (+110, +34, +48, +53, +48, +124); the task leaf array grows
+  and the `114/Props` Task size scalar follows (650 -> 666 -> 686).  The only
+  normalisation is the three identity counter dwords of the appended
+  `Fixed2Data` record (`TailNormalisation`; Project renumbers them on every
+  save).  Also in the commit: `summary_info` derives the work strings for a
+  whole non-negative hour count (still refusing negative, fractional,
+  one-hour and huge totals), `props_edit` admits the four `114/Props`
+  assignment scalar tags, and `save_pair_noise.h`/`save_pair_compare.h` treat
+  a position neither document stores as agreement (a stream the edit shrinks,
+  DocumentSummaryInformation 1104 -> 1100, could not otherwise match).
+- **Gates re-run on `cedba33` (this session).**  Incremental Release build of
+  `build/vs-verify33b`: exit 0, no error lines; full ctest 60/60 (49.83 s)
+  including `mppwrite_roundtrip_assignment_growth`; that test 1878 checks, 0
+  failures, 0 expected failures; `check_fixtures.py` 185 documented hashes,
+  219 tracked `.mpp`, 268 test-data files, property sets OK, provenance OK.
+- **Guard seen red.**  Mutating the Task Var2Data size scalar in the settled
+  append (`task_var2_base + 8 + ...` -> `+ 12 + ...`) made the test fail 4
+  checks (`Task size` actual 670 vs 666 and 690 vs 686, and `114/Props`
+  differing from Project's save at byte 3402 on both new pairs); the file was
+  restored byte for byte and the suite is back to 0 failures
+  (`build/w34/mut-W34-3.1-ctest.log`).
+- **Limits and refusals (rule 1).**  `assign_resource` accepts only the
+  first-assignment shape (every row an unassigned placeholder) and the
+  settled append for a task holding one or two real assignments plus one
+  free placeholder; counts 3 -> 4 and beyond have no measured file and are
+  refused, as is any other layout, row kind, leaf count, Task size scalar or
+  roll-up mismatch.  `unassign_resource` accepts only the measured last
+  real-row removal.  Every refusal leaves `doc` and the output path
+  untouched, and the refusal suite asserts that.
+- **Deferred / found, not fixed.**  Removal from a task that holds two or
+  three assignments has no pair (the delete pair is 1 -> 0 only); the
+  placeholder-row behaviour for the count-3 task is likewise unmeasured.  One
+  pair each would extend it.  The DeepSeek session was cut off before this
+  entry; the guard-red evidence above is the Sonnet builder's, not the
+  original session's.
