@@ -142,6 +142,19 @@ project); the resource pairs use `Resources.Add` (one work resource, then a
 second). All are single editor commands through `scripts/oracle_lock.py`; no
 COM call touched a calendar stream directly.
 
+## Writer (W34-3.2)
+
+`core/mppwrite/resource_growth.{h,cpp}` (`add_work_resource`) writes the Add
+Resources shape for the two measured counts (resource table rows 2 and 3) and
+refuses every other count: the Rsc FixedMeta `+13` and Fixed2Meta `+8` bytes
+are measured per count, not decoded. The identity question under Limits is
+settled by `save_pair::TailNormalisation`, which masks only the first dword of
+each identity in the appended Cal slot (three) and Rsc Fixed2Data record
+(two); every other appended byte is compared against Project's own save. The
+writer derives the family counter as the greatest counter in the family + 1,
+and both pairs agree with that outside the masked dwords. The test is
+`tests/roundtrip_resource_growth.cpp`.
+
 ## Limits
 
 - The 12-byte row's field mapping is not decoded. Three producers are
@@ -151,7 +164,8 @@ COM call touched a calendar stream directly.
   from the input. Existing identity dwords are masked noise; the appended
   slot's identity falls in the unmasked tail, so the save-pair comparison
   will only match if the writer reproduces Project's value or the comparison
-  normalises it. This must be settled before G3.2 enables Add Resources.
+  normalises it. Settled in W34-3.2 by normalising the appended identities'
+  first dwords (see Writer above).
 - Only calendar addition is measured. Deletion, rename, base-calendar change
   and a second resource's calendar are still partly open: the second added
   resource is measured (`wave34-resource-add-third`), the third is not.

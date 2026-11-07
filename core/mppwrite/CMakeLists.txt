@@ -43,6 +43,7 @@ add_library(core_mppwrite STATIC
     viewstream_edit.cpp
     props_edit.cpp
     assignment_growth.cpp
+    resource_growth.cpp
 )
 add_library(msproject::mppwrite ALIAS core_mppwrite)
 
@@ -147,6 +148,8 @@ if(MPPWRITE_BUILD_TESTS)
     mppwrite_add_test(mppwrite_roundtrip_outline roundtrip_outline.cpp)
     mppwrite_add_test(mppwrite_roundtrip_assignment_growth
                       roundtrip_assignment_growth.cpp)
+    mppwrite_add_test(mppwrite_roundtrip_resource_growth
+                      roundtrip_resource_growth.cpp)
     # W45/W48/W52/W54's tests also round-trip their own output through the
     # independent core/mpp reader when the top-level build provides it.  The
     # standalone core/mppwrite configure has no reader; the cross-check is then

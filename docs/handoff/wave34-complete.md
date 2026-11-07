@@ -542,6 +542,8 @@ Insufficient Balance stop) and resumes under Claude Sonnet 5.5 from
 | item | finding | status | evidence |
 |---|---|---|---|
 | W34-3.1 | brief W34-3.1: assignment table growth (append a row AND rewrite the existing rows' pointer words and the task's Work summary as `wave30-assign-add-*` shows; removal as `wave30-assign-delete-*` shows); one new pair each varying the task's existing assignment count (0, 1, 2) | **DONE** (record written by the Sonnet builder; the code and pairs are the DeepSeek session's) | commits `281ac54` (writer + first-assignment ADD and REMOVE tests), `07046d0` (the two new pairs and their anatomy), `73bc6e6` (the settled append); `core/mppwrite/assignment_growth.{h,cpp}`; `tests/roundtrip_assignment_growth.cpp`; `spec/writers/table-growth.md`; gates `build/w34/cedba33-W34-3.1-*.log` |
+| W34-B5 | brief W34-B5: drop the name column from `tests/data/project_a_golden.tsv` and the docs, readers and scripts that used it | **DONE** | commit `8b79c62` |
+| W34-3.2 | brief W34-3.2: the resource calendar row (Add Resources writes the `TBkndCal` streams and three `114/Props` counts, not only the six `TBkndRsc` streams) | **DONE** | commit titled `W34-3.2` (the next commit after `8b79c62`); `core/mppwrite/resource_growth.{h,cpp}`; `tests/roundtrip_resource_growth.cpp`; `spec/writers/calendar-tbkdcal.md`; gates `build/w34/8b79c62-W34-3.2-*.log` |
 
 W34-3.1 detail:
 
@@ -597,3 +599,43 @@ W34-3.1 detail:
   pair each would extend it.  The DeepSeek session was cut off before this
   entry; the guard-red evidence above is the Sonnet builder's, not the
   original session's.
+
+W34-3.2 detail:
+
+- **Measured shapes (rule 1).**  Two pairs, each against Project's own edit
+  save with its committed null save masking per-save noise, through
+  `save_pair::compare_all` with the wave-33 `effects` assertion, eleven
+  declared streams (six `TBkndRsc`, four `TBkndCal`, `114/Props`) plus
+  `Props14`, and no `KnownGap`: `wave30-resource-add` (table rows 2 -> 3;
+  noise=137, effects=509) and `wave34-resource-add-third` (rows 3 -> 4;
+  noise=147, effects=509).  The only normalisation is the first dword of each
+  identity in the appended records (three in the `Cal Fixed2Data` slot, two in
+  the `Rsc Fixed2Data` record).  Every other appended byte equals Project's.
+- **What the writer does.**  Appends the resource row (a clone of the last
+  row, with id, uid and the `+154` counter advanced), its FixedMeta and
+  Fixed2Meta entries, the Fixed2Data record, five Var2Data blocks with their
+  VarMeta entries, the calendar row, slot and entries, and moves the three
+  `114/Props` scalars.  Written through `save_props_edit` and proven from the
+  re-read file, with the exact changed-stream set asserted.
+- **Gates (this session).**  `build/vs-verify33b` Release build exit 0 with no
+  warning (the `CORE_WARNINGS_AS_ERRORS` build); full ctest 61/61;
+  `mppwrite_roundtrip_resource_growth` 869 checks, 0 failures, 0 expected
+  failures; `check_fixtures.py` 185 documented hashes, 219 tracked `.mpp`;
+  `check_markers.py --worktree` OK; client-name scans 0 hits.  Logs
+  `build/w34/8b79c62-W34-3.2-*.log`.
+- **Guard seen red.**  Changing the Rsc FixedMeta `+13` rule (`0x44 + rows` ->
+  `0x45 + rows`) made the test fail 4 checks (the entry check and the
+  `TBkndRsc/FixedMeta` pair comparison, on both pairs); restored, 0 failures
+  (`build/w34/red1-ctest.log`).
+- **Limits and refusals.**  Only row counts 2 and 3 are accepted (the
+  FixedMeta `+13` and Fixed2Meta `+8` bytes are per-count and undecoded);
+  anything else, a tombstoned row, a MaxUnits other than 100 %, an unmeasured
+  `0x55` / `0xe3` block, a calendar row count other than rows + 1, a Props
+  count disagreeing with its table, a damaged table header, an unrelated
+  third identity or a counter at `0xffff` is refused before `doc` or the
+  output path is touched.  Only a work resource with default rates; the
+  Created stamp is supplied by the caller.
+- **Not constructible.**  A document with the resource or calendar stream
+  absent (`CfbDocument` has no remove-stream operation).
+- **Deferred / found, not fixed.**  Counts 4 and beyond need a pair (named in
+  `calendar-tbkdcal.md`, pairs still needed 4).
