@@ -2,8 +2,9 @@
  * reader_dump -- print the tables of an .mpp file as TSV on stdout.
  *
  * DEFAULT OUTPUT is unchanged from reader v0: one row per live task, laid out
- * exactly like tests/data/project_a_golden.tsv so it can be diffed against MS
- * Project's own export:
+ * like the local COM export (corpus/probe/project_a_golden_full.tsv) so it can be
+ * diffed against MS Project's own export; the committed
+ * tests/data/project_a_golden.tsv has had its name column dropped (W34-B5):
  *
  *   uid  id  name  duration_min  start  finish  priority  pct
  *

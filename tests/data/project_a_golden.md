@@ -5,9 +5,14 @@ and reading the task list over COM: the ground truth the reader must match, not
 another parser's opinion of the file.
 
 - **83 live tasks.** `uid` is stable across relocations; `id` is display order.
-- Task names are **hashed** (`sha256:<16 hex>`), because the real names are a client's
-  construction programme and this repo is a code repository. The readable copy stays
-  local at `corpus/probe/project_a_golden_full.tsv`, which is git-ignored.
+- **There is no name column** (W34-B5, 8 Nov 2026).  The file had carried the first 64
+  bits of an unsalted SHA-256 of each task name, which a dictionary guess inverts, and
+  the real names are a client's construction programme.  `uid` is the key; the columns
+  are `uid id duration_min start finish priority pct`.  The readable copy stays local at
+  `corpus/probe/project_a_golden_full.tsv`, which is git-ignored.  The old hashes remain
+  in public git history; purging them is the operator's decision (audit B-1), not a
+  change this file can make.  The reader's task NAMES are still checked, by the
+  fixtures with neutral names (`tests/mpp_reader_tests.cpp`), not by this file.
 - `duration_min` is minutes as MS Project reports them (its internal unit is tenths of
   a minute; the reader works in those ticks, so expect `duration_min * 10`).
 - Dates are ISO-8601 with offset, as returned by COM.

@@ -11,7 +11,8 @@ Field sources in the 202-byte FixedData row (all verified by the fixtures):
     +78  u16 priority       +84  u32 duration ticks (4800/day), minutes = /10
     +92  u16 percent complete (the u32 there is pct | pct-work << 16)
     +96  u32 start          +100 u32 finish      (packed dates, mpp-records §3)
-    name: VarMeta key 0x0b40000e for the row uid (UTF-16LE)
+    name: VarMeta key 0x0b40000e for the row uid (UTF-16LE); the golden no longer
+    carries it (W34-B5), so the name is read but not compared
 
 The golden dates are ISO-8601 with a `+00:00` offset; the packed-date decoder
 yields the same wall-clock time, so the comparison ignores the offset (it is the
@@ -19,7 +20,6 @@ same on every golden row).
 """
 
 import datetime
-import hashlib
 import os
 import sys
 
@@ -37,10 +37,6 @@ def date_str(v):
     d = datetime.date(1983, 12, 31) + datetime.timedelta(days=day)
     return (f"{d.isoformat()} {secs // 3600:02d}:{secs % 3600 // 60:02d}:"
             f"{secs % 60:02d}+00:00")
-
-
-def name_hash(name):
-    return hashlib.sha256(name.encode("utf-8")).hexdigest()[:16]
 
 
 def read_golden():
@@ -88,31 +84,16 @@ def main():
     print(f"parser rows not in golden: {[(r['row'], r['uid']) for r in extra]}")
     print(f"golden uids not in parser: {missing}")
 
-    fields = ("id", "name", "duration_min", "start", "finish", "priority", "pct")
+    fields = ("id", "duration_min", "start", "finish", "priority", "pct")
     ok = {f: 0 for f in fields}
     all_ok = 0
     mismatches = []
-    name_raw = 0
-    name_strip = 0
     for uid, g in golden.items():
         p = by_uid.get(uid)
         if p is None:
             mismatches.append((uid, "row", "absent", "present"))
             continue
         bad = []
-        if p["name"] is None:
-            bad.append(("name", "<no VarMeta group>", g["name"]))
-        else:
-            h = "sha256:" + name_hash(p["name"])
-            if h == g["name"]:
-                name_raw += 1
-            else:
-                hs = "sha256:" + name_hash(p["name"].rstrip())
-                if hs == g["name"]:
-                    name_strip += 1
-                bad.append(("name", f"raw {h}", f"golden {g['name']}"
-                            f"; rstrip -> {hs}"
-                            + (" MATCH" if hs == g["name"] else "")))
         for f in ("id", "duration_min", "start", "finish", "priority", "pct"):
             pv = p[f]
             gv = g[f]
@@ -130,10 +111,9 @@ def main():
         else:
             all_ok += 1
 
-    print(f"\nall seven fields match: {all_ok}/{len(golden)}")
+    print(f"\nall six fields match: {all_ok}/{len(golden)}")
     for f in fields:
         print(f"  {f:12s} {ok[f]}/{len(golden)}")
-    print(f"name hashes exact {name_raw}, trailing-whitespace only {name_strip}")
     print(f"\nmismatches: {len(mismatches)}")
     for m in mismatches:
         print(" ", m)

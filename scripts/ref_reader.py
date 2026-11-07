@@ -25,7 +25,6 @@ Layout notes, all verified (see spec/mpp-records.md for the derivation):
 """
 
 import argparse
-import hashlib
 import os
 import struct
 import sys
@@ -114,23 +113,21 @@ def check(tasks, golden_path):
         fh.readline()
         for line in fh:
             p = line.rstrip("\n").split("\t")
-            if len(p) < 8:
+            if len(p) != 7:
                 continue
-            golden.append(dict(uid=int(p[0]), id=int(p[1]), name=p[2], dur=int(p[3]),
-                               start=p[4], finish=p[5], prio=int(p[6]), pct=int(p[7])))
+            golden.append(dict(uid=int(p[0]), id=int(p[1]), dur=int(p[2]),
+                               start=p[3], finish=p[4], prio=int(p[5]), pct=int(p[6])))
 
     by_uid = {t["uid"]: t for t in tasks}
-    counts = {k: 0 for k in ("id", "name", "duration", "start", "finish", "priority", "percent")}
+    counts = {k: 0 for k in ("id", "duration", "start", "finish", "priority", "percent")}
     fails = []
     for g in golden:
         t = by_uid.get(g["uid"])
         if not t:
             fails.append((g["uid"], "missing"))
             continue
-        name_hash = "sha256:" + hashlib.sha256(t["name"].encode()).hexdigest()[:16]
         pairs = {
             "id": (t["id"], g["id"]),
-            "name": (name_hash, g["name"]),
             "duration": (t["duration_ticks"] // 10, g["dur"]),
             "start": (t["start"].isoformat(sep=" ") + "+00:00" if t["start"] else "", g["start"]),
             "finish": (t["finish"].isoformat(sep=" ") + "+00:00" if t["finish"] else "", g["finish"]),

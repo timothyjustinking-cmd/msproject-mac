@@ -6,7 +6,7 @@ checkout. Nothing here is client data.
 | file | what it is |
 |---|---|
 | `synthetic-base.mpp` | **synthetic** MPP14 fixture, 237,568 bytes, 3 tasks + project row. Only synthetic `.mpp` files may be committed. |
-| `project_a_golden.tsv` | MS Project's own COM export of the PROJECT_A corpus file (83 live tasks), used as the oracle. See `project_a_golden.md`. |
+| `project_a_golden.tsv` | MS Project's own COM export of the PROJECT_A corpus file (83 live tasks; `uid id duration_min start finish priority pct`, no name column since W34-B5), used as the oracle. See `project_a_golden.md`. |
 | `project_a_golden.md` | how the golden TSV was produced and what its columns mean |
 | `wave23-outline.mpp` | **synthetic** MPP14 fixture built by Project 2021 for wave 23: 3-level outline, FS+2 d / SS+1 d / FF links, one resource. See its provenance below. |
 | `wave23-flags.mpp` | the same fixture after Project set Task.Flag10 (0x0b400051) True on ID 3; the measured byte for the SUMMARY column (W23-6). Re-derived under `C:/w28` by `scripts/oracle_w28_privacy.py` in W28-0.1 (the wave-23 save embedded the operator's local path); Task FixedData is byte-identical to `wave23-outline.mpp` and Task FixedMeta differs only at entry byte +25 bit 0x04. SHA256 `72ACC208…3E802A`. |
@@ -207,8 +207,8 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 
 | file | SHA-256 |
 |---|---|
-| `project_a_golden.md` | `03BA7AB54910BB8A766E69326A0C61ED9F14C18DDD5295C1EF1326B570A01DEC` |
-| `project_a_golden.tsv` | `A1B57D7E48E86B3A0536562521ED9962F34D3BDD2DE768FA86BEBD86830769B6` |
+| `project_a_golden.md` | `4107C5B5472D74A554D549CE8201CFEA2517872A0E75F4E707511E205C2B2516` |
+| `project_a_golden.tsv` | `BA3D69A665EE770AD60A052A1E1F5B0C2F3A1DE5AF51BCC2F94028C8140C3A30` |
 | `project_a_links_golden.tsv` | `8C38C4F09CEC09028DA61BBBFA24EA1FD47D29452CE77D3E5AD2E9828B60FAD6` |
 | `project_a_preds_golden.sha256` | `BF9A9E184830AD66E2C510F4EF91DC5CBA213EAD1024A2C326CA1F8827F7D820` |
 | `project_a_recalc_golden.tsv` | `36F156F618C94C92D70FBA6D754340D374DDE72E7D2FF136D1E22DBEE5400DB8` |

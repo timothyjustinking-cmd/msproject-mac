@@ -8,9 +8,10 @@ Inputs:
 
 * `corpus/project_a.mpp` — parsed with `scripts/fk_lib.py`.
 * `tests/data/project_a_golden.tsv` — 83 live tasks exported from **MS Project 16.0.20430
-  over COM** by opening the file read-only. Names are
-  `sha256:<first 16 hex of UTF-8 name>`; see `tests/data/project_a_golden.md` for why
-  it is 83 and not 84.
+  over COM** by opening the file read-only. The columns are `uid id
+  duration_min start finish priority pct` (the name-hash column was dropped in W34-B5, so
+  the name is no longer compared); see `tests/data/project_a_golden.md` for why it is 83
+  and not 84.
 
 Reproduce:
 
