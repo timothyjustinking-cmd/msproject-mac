@@ -3790,6 +3790,332 @@ void test_mpp12_container(TestContext& context) {
     }
 }
 
+/* ---- W34-3.4: reader gaps the enablements need.
+ *
+ * 1. Task.Active.  Bit 0x40 of the Task Fixed2Meta flags byte (+8), clear when
+ * the task is inactive.  COM facts, W30-1.2-project-inactivate*.json
+ * (Task.Active per unique id): wave30-inactivate-control is 1/2/3 all active and
+ * wave30-inactivate has uid 2 inactive only; wave30-inactivate-second-control
+ * already has uid 2 inactive and wave30-inactivate-second adds uid 1.  The
+ * null-save controls carry the same facts as their controls. */
+void test_w34_active(TestContext& context) {
+    struct Case {
+        const char* file;
+        bool active[3]; /* uid 1, 2, 3 */
+    };
+    const Case cases[] = {
+        {"wave30-inactivate-control.mpp", {true, true, true}},
+        {"wave30-inactivate-control-null.mpp", {true, true, true}},
+        {"wave30-inactivate.mpp", {true, false, true}},
+        {"wave30-inactivate-second-control.mpp", {true, false, true}},
+        {"wave30-inactivate-second-control-null.mpp", {true, false, true}},
+        {"wave30-inactivate-second.mpp", {false, false, true}},
+    };
+    for (const Case& item : cases) {
+        const std::string path = (test_data_dir() / item.file).string();
+        fixture::require_committed(path);
+        const mpp::Document document = mpp::load_file(path);
+        for (std::uint32_t uid = 1; uid <= 3; ++uid) {
+            const mpp::Task* task = find_task(document, uid);
+            context.check(task != nullptr, std::string(item.file) + " has uid " +
+                                               std::to_string(uid));
+            if (task != nullptr) {
+                context.equal(task->active, item.active[uid - 1],
+                              std::string(item.file) + " uid " + std::to_string(uid) +
+                                  " Active (COM)");
+            }
+        }
+        const mpp::Task* project = find_task(document, 0);
+        context.check(project == nullptr || project->active,
+                      std::string(item.file) + ": the project row stays active");
+    }
+    /* An untouched fixture and an MPP12 file keep every task active. */
+    const std::string synthetic = (test_data_dir() / "synthetic-base.mpp").string();
+    fixture::require_committed(synthetic);
+    const mpp::Document base = mpp::load_file(synthetic);
+    bool all_active = true;
+    for (const mpp::Task& task : base.tasks) {
+        all_active = all_active && task.active;
+    }
+    context.check(all_active, "synthetic-base: every task is active");
+}
+
+/* 2. The inserted summary and milestone.  COM facts, W30-1.1-project-insert.json
+ * (edited_facts) and W34-0.5-task-ops.json (insert-task edit_facts); the
+ * controls are the three-task chain uid 1/2/3 at ID 1/2/3.
+ *   wave30-insert-summary: uid 4 is the new summary at ID 2, level 1, "2", auto
+ *     scheduled, duration 1200 min, 2026-01-04 13:00 to 2026-01-07 12:00; uid 2
+ *     is reparented under it (ID 3, level 2, "2.1") and uid 3 moves to ID 4,
+ *     "3".
+ *   wave30-insert-milestone: uid 4 is the new milestone at ID 2, manual,
+ *     duration 0, 2026-01-04 13:00 both ends; uid 2 and 3 become ID 3 and 4,
+ *     "3" and "4", still level 1.
+ *   wave34-insert-task: Tasks.Add appends uid 4 at ID 4, level 1, 480 min.
+ * The Fixed2Data +16 ordinal is what the reader adds: the stored rows hold
+ * 2.0/3.0/4.0, the inserted row takes the midpoint 2.5 when it lands between
+ * uid 1 and uid 2, and an appended row takes the next whole number (5.0). */
+void test_w34_insert(TestContext& context) {
+    struct Expect {
+        std::uint32_t uid;
+        std::uint32_t row_id;
+        std::uint32_t level;
+        const char* number;
+        bool summary;
+        bool milestone;
+        bool manual;
+        std::uint32_t minutes;
+        double ordinal;
+    };
+    struct Case {
+        const char* file;
+        std::vector<Expect> tasks;
+    };
+    const std::vector<Case> cases = {
+        {"wave30-insert-summary-control.mpp",
+         {{1, 1, 1, "1", false, false, true, 2400, 2.0},
+          {2, 2, 1, "2", false, false, true, 1440, 3.0},
+          {3, 3, 1, "3", false, false, true, 960, 4.0}}},
+        {"wave30-insert-summary.mpp",
+         {{1, 1, 1, "1", false, false, true, 2400, 2.0},
+          {2, 3, 2, "2.1", false, false, true, 1440, 3.0},
+          {3, 4, 1, "3", false, false, true, 960, 4.0},
+          {4, 2, 1, "2", true, false, false, 1200, 2.5}}},
+        {"wave30-insert-milestone.mpp",
+         {{1, 1, 1, "1", false, false, true, 2400, 2.0},
+          {2, 3, 1, "3", false, false, true, 1440, 3.0},
+          {3, 4, 1, "4", false, false, true, 960, 4.0},
+          {4, 2, 1, "2", false, true, true, 0, 2.5}}},
+        {"wave34-insert-task-control.mpp",
+         {{1, 1, 1, "1", false, false, true, 2400, 2.0},
+          {2, 2, 1, "2", false, false, true, 1440, 3.0},
+          {3, 3, 1, "3", false, false, true, 960, 4.0}}},
+        {"wave34-insert-task.mpp",
+         {{1, 1, 1, "1", false, false, true, 2400, 2.0},
+          {2, 2, 1, "2", false, false, true, 1440, 3.0},
+          {3, 3, 1, "3", false, false, true, 960, 4.0},
+          {4, 4, 1, "4", false, false, true, 480, 5.0}}},
+    };
+    for (const Case& item : cases) {
+        const std::string path = (test_data_dir() / item.file).string();
+        fixture::require_committed(path);
+        const mpp::Document document = mpp::load_file(path);
+        context.equal(document.tasks.size(), item.tasks.size(),
+                      std::string(item.file) + " task count (COM)");
+        for (const Expect& want : item.tasks) {
+            const std::string label =
+                std::string(item.file) + " uid " + std::to_string(want.uid);
+            const mpp::Task* task = find_task(document, want.uid);
+            context.check(task != nullptr, label + " is present");
+            if (task == nullptr) {
+                continue;
+            }
+            context.equal(task->row_id, want.row_id, label + " ID (COM)");
+            context.equal(task->outline_level, want.level, label + " OutlineLevel (COM)");
+            context.equal(task->outline_number, std::string(want.number),
+                          label + " OutlineNumber (COM)");
+            context.equal(task->summary, want.summary, label + " Summary (COM)");
+            context.equal(task->milestone, want.milestone, label + " Milestone (COM)");
+            context.equal(task->manually_scheduled, want.manual, label + " Manual (COM)");
+            context.equal(task->duration_minutes(), want.minutes,
+                          label + " Duration in minutes (COM)");
+            context.equal(task->outline_ordinal, want.ordinal,
+                          label + " Fixed2Data ordinal (measured)");
+        }
+    }
+
+    /* The two start/finish pairs COM reports for the inserted rows. */
+    const std::string summary_path =
+        (test_data_dir() / "wave30-insert-summary.mpp").string();
+    const mpp::Document summary_doc = mpp::load_file(summary_path);
+    const mpp::Task* summary = find_task(summary_doc, 4);
+    if (summary != nullptr) {
+        context.equal(mpp::format_date_iso(summary->start),
+                      std::string("2026-01-04 13:00:00+00:00"),
+                      "inserted summary Start (COM)");
+        context.equal(mpp::format_date_iso(summary->finish),
+                      std::string("2026-01-07 12:00:00+00:00"),
+                      "inserted summary Finish (COM)");
+        context.equal(summary->child_count, std::uint32_t{1},
+                      "inserted summary holds exactly the reparented uid 2");
+    }
+    const std::string milestone_path =
+        (test_data_dir() / "wave30-insert-milestone.mpp").string();
+    const mpp::Document milestone_doc = mpp::load_file(milestone_path);
+    const mpp::Task* milestone = find_task(milestone_doc, 4);
+    if (milestone != nullptr) {
+        context.equal(mpp::format_date_iso(milestone->start),
+                      std::string("2026-01-04 13:00:00+00:00"),
+                      "inserted milestone Start (COM)");
+        context.equal(mpp::format_date_iso(milestone->finish),
+                      std::string("2026-01-04 13:00:00+00:00"),
+                      "inserted milestone Finish (COM)");
+    }
+}
+
+/* 3. Baseline 0 on task, assignment and resource rows.  COM facts,
+ * W30-G3-project-pairs.json (baseline_control_facts / baseline_edit_facts, the
+ * Task.Baseline* of uid 1..3): the control has every baseline NA / 0, Set
+ * Baseline writes start 2026-01-04 13:00 and finish 2026-01-09 12:00 / 07 12:00 /
+ * 06 12:00 with durations 2400 / 1440 / 960 minutes and work / cost 0.  COM facts
+ * exist for tasks only; the assignment and resource rows are asserted as measured
+ * on the same pair -- an assignment's baseline dates equal its task's, and the
+ * zero work / cost blocks are stored on the set file and absent on the control. */
+void test_w34_baseline(TestContext& context) {
+    struct Want {
+        std::uint32_t uid;
+        const char* finish;
+        std::uint32_t minutes;
+    };
+    const Want wants[] = {{1, "2026-01-09 12:00:00+00:00", 2400},
+                          {2, "2026-01-07 12:00:00+00:00", 1440},
+                          {3, "2026-01-06 12:00:00+00:00", 960}};
+    for (const char* name : {"wave30-baseline-control.mpp",
+                             "wave30-baseline-control-null.mpp"}) {
+        const std::string path = (test_data_dir() / name).string();
+        fixture::require_committed(path);
+        const mpp::Document document = mpp::load_file(path);
+        for (const Want& want : wants) {
+            const mpp::Task* task = find_task(document, want.uid);
+            context.check(task != nullptr, std::string(name) + " has the task");
+            if (task == nullptr) {
+                continue;
+            }
+            const std::string label = std::string(name) + " uid " + std::to_string(want.uid);
+            context.check(!task->baseline.stored, label + " stores no baseline (COM: NA)");
+            context.equal(task->baseline.start.raw, mpp::kDateNa,
+                          label + " BaselineStart NA (COM)");
+            context.equal(task->baseline.finish.raw, mpp::kDateNa,
+                          label + " BaselineFinish NA (COM)");
+            context.equal(task->baseline.duration_ticks, std::uint32_t{0},
+                          label + " BaselineDuration 0 (COM)");
+        }
+        for (const mpp::Assignment& assignment : document.assignments) {
+            context.check(!assignment.baseline.stored,
+                          std::string(name) + ": assignment stores no baseline");
+        }
+        for (const mpp::Resource& resource : document.resources) {
+            context.check(!resource.baseline.stored,
+                          std::string(name) + ": resource stores no baseline");
+        }
+    }
+
+    const std::string set_path = (test_data_dir() / "wave30-baseline-set.mpp").string();
+    fixture::require_committed(set_path);
+    const mpp::Document set = mpp::load_file(set_path);
+    for (const Want& want : wants) {
+        const mpp::Task* task = find_task(set, want.uid);
+        context.check(task != nullptr, "baseline-set has the task");
+        if (task == nullptr) {
+            continue;
+        }
+        const std::string label = "baseline-set uid " + std::to_string(want.uid);
+        context.check(task->baseline.stored, label + " stores a baseline");
+        context.equal(mpp::format_date_iso(task->baseline.start),
+                      std::string("2026-01-04 13:00:00+00:00"),
+                      label + " BaselineStart (COM)");
+        context.equal(mpp::format_date_iso(task->baseline.finish), std::string(want.finish),
+                      label + " BaselineFinish (COM)");
+        context.equal(task->baseline.duration_ticks / 10, want.minutes,
+                      label + " BaselineDuration in minutes (COM)");
+        context.equal(task->baseline.work_raw, 0.0, label + " BaselineWork 0 (COM)");
+        context.equal(task->baseline.cost_raw, 0.0, label + " BaselineCost 0 (COM)");
+    }
+    context.check(!set.assignments.empty(), "baseline-set has assignments");
+    for (const mpp::Assignment& assignment : set.assignments) {
+        const mpp::Task* task = find_task(set, assignment.task_uid);
+        context.check(assignment.baseline.stored,
+                      "baseline-set assignment stores a baseline");
+        if (task != nullptr) {
+            context.equal(assignment.baseline.start.raw, task->baseline.start.raw,
+                          "baseline-set assignment BaselineStart equals its task's");
+            context.equal(assignment.baseline.finish.raw, task->baseline.finish.raw,
+                          "baseline-set assignment BaselineFinish equals its task's");
+        }
+    }
+    for (const mpp::Resource& resource : set.resources) {
+        context.check(resource.baseline.stored, "baseline-set resource stores a baseline");
+        context.equal(resource.baseline.work_raw, 0.0, "baseline-set resource work 0");
+        context.equal(resource.baseline.cost_raw, 0.0, "baseline-set resource cost 0");
+    }
+}
+
+/* 4. LevelingDelay, Preleveled dates and PeakUnits.  COM facts, W30-2-level.json:
+ * wave30-level-control is three 1-resource tasks all starting 2026-10-26 08:00
+ * (finishes 2026-10-30 / 28 / 27 at 17:00) with resource 1 PeakUnits 3.0,
+ * Overallocated True, every LevelingDelay 0; wave30-level-all (Level All) moves
+ * uid 2 to 2026-11-02 and uid 3 to 2026-11-05, LevelingDelay 10080 and 14400
+ * minutes on them and 0 on uid 1, resource PeakUnits 1.0, Overallocated False.
+ * The reader's Task.start / finish are the leveled dates; the Preleveled pair
+ * keeps the control's. */
+void test_w34_leveling(TestContext& context) {
+    struct Want {
+        std::uint32_t uid;
+        std::uint32_t delay_minutes;
+        const char* preleveled_finish;
+    };
+    const Want wants[] = {{1, 0, "2026-10-30 17:00:00+00:00"},
+                          {2, 10080, "2026-10-28 17:00:00+00:00"},
+                          {3, 14400, "2026-10-27 17:00:00+00:00"}};
+
+    for (const char* name : {"wave30-level-control.mpp", "wave30-level-control-null.mpp"}) {
+        const std::string path = (test_data_dir() / name).string();
+        fixture::require_committed(path);
+        const mpp::Document document = mpp::load_file(path);
+        for (const Want& want : wants) {
+            const mpp::Task* task = find_task(document, want.uid);
+            context.check(task != nullptr, std::string(name) + " has the task");
+            if (task == nullptr) {
+                continue;
+            }
+            const std::string label = std::string(name) + " uid " + std::to_string(want.uid);
+            context.equal(task->leveling_delay_ticks, std::uint32_t{0},
+                          label + " LevelingDelay 0 (COM)");
+            context.equal(task->preleveled_start.raw, mpp::kDateNa,
+                          label + " never leveled: Preleveled NA");
+            context.equal(mpp::format_date_iso(task->start),
+                          std::string("2026-10-26 08:00:00+00:00"), label + " Start (COM)");
+        }
+        const mpp::Resource* resource = find_resource(document, 1);
+        context.check(resource != nullptr, std::string(name) + " has resource 1");
+        if (resource != nullptr) {
+            context.equal(resource->peak_units_x100 / 10000.0, 3.0,
+                          std::string(name) + " PeakUnits (COM)");
+            context.check(resource->overallocated(),
+                          std::string(name) + " Overallocated (COM)");
+        }
+    }
+
+    const std::string level_path = (test_data_dir() / "wave30-level-all.mpp").string();
+    fixture::require_committed(level_path);
+    const mpp::Document leveled = mpp::load_file(level_path);
+    for (const Want& want : wants) {
+        const mpp::Task* task = find_task(leveled, want.uid);
+        context.check(task != nullptr, "level-all has the task");
+        if (task == nullptr) {
+            continue;
+        }
+        const std::string label = "level-all uid " + std::to_string(want.uid);
+        context.equal(task->leveling_delay_ticks / 10, want.delay_minutes,
+                      label + " LevelingDelay in minutes (COM)");
+        context.equal(mpp::format_date_iso(task->preleveled_start),
+                      std::string("2026-10-26 08:00:00+00:00"),
+                      label + " PreleveledStart (control COM Start)");
+        context.equal(mpp::format_date_iso(task->preleveled_finish),
+                      std::string(want.preleveled_finish),
+                      label + " PreleveledFinish (control COM Finish)");
+    }
+    const mpp::Task* second = find_task(leveled, 2);
+    if (second != nullptr) {
+        context.equal(mpp::format_date_iso(second->start),
+                      std::string("2026-11-02 08:00:00+00:00"), "level-all uid 2 Start (COM)");
+    }
+    const mpp::Resource* resource = find_resource(leveled, 1);
+    context.check(resource != nullptr, "level-all has resource 1");
+    if (resource != nullptr) {
+        context.equal(resource->peak_units_x100 / 10000.0, 1.0, "level-all PeakUnits (COM)");
+        context.check(!resource->overallocated(), "level-all Overallocated False (COM)");
+    }
+}
 
 int run_tests() {
     TestContext context;
@@ -3814,6 +4140,10 @@ int run_tests() {
     test_assignments(context);
     test_mpp12(context);
     test_mpp12_container(context);
+    test_w34_active(context);
+    test_w34_insert(context);
+    test_w34_baseline(context);
+    test_w34_leveling(context);
 
     if (context.failures() != 0) {
         std::cerr << "FAIL: " << context.failures() << " failed of " << context.checks()

@@ -495,6 +495,7 @@ constexpr std::uint32_t kFieldRscMaterialLabel = 0x0C40012Bu;
 constexpr std::size_t kRscRowId = 0;
 constexpr std::size_t kRscRowUid = 4;
 constexpr std::size_t kRscRowMaxUnits = 8; /* double, x100: 5000.0 = 50 % */
+constexpr std::size_t kRscRowPeakUnits = 98; /* double, x100: PeakUnits (W34-3.4) */
 /* Rate and accrual words of the same 172-byte row, measured by the two byte
  * diffs in build/w31/g3-rate-probe*.json (W31-3.3): Project normalises
  * "$400.00/day" to "$50.00/hr" and stores 50.0 at +16; +24 is the overtime
@@ -557,6 +558,9 @@ constexpr std::size_t kRowConstraintDate = 66; /* u32: packed date, unaligned */
  * tell them apart.  +190 also resolves the old "ALAP divergence": schedin's ALAP
  * task stores 52800 ticks there = the engine's 5280 min. */
 constexpr std::size_t kRowFreeSlack = 74;   /* i32: FreeSlack, 6-second ticks */
+constexpr std::size_t kRowLevelingDelay = 70; /* u32: LevelingDelay, ticks (W34-3.4) */
+constexpr std::uint32_t kFieldTaskPreleveledStart = 0x0B400171u;
+constexpr std::uint32_t kFieldTaskPreleveledFinish = 0x0B400172u;
 constexpr std::size_t kRowStartSlack = 186; /* i32: StartSlack, 6-second ticks */
 constexpr std::size_t kRowTotalSlack = 190; /* i32: TotalSlack, 6-second ticks */
 constexpr std::size_t kRowPriority = 78; /* u16 */
@@ -608,6 +612,7 @@ constexpr std::uint16_t kConstraintFnlt = 7;
 constexpr std::size_t kFixed2RowSize = 64;
 constexpr std::size_t kFixed2MetaEntrySize = 96;
 constexpr std::size_t kF2RowId = 0;         /* 16 B: row identity */
+constexpr std::size_t kF2RowOrdinal = 16;   /* f64: display-order ordinal (W34-3.4) */
 constexpr std::size_t kF2RowParentId = 24;  /* 16 B: parent row identity */
 constexpr std::size_t kF2RowFlags = 42;     /* u8: bit 0x40 = has children */
 constexpr std::uint8_t kF2FlagHasChildren = 0x40;
@@ -616,6 +621,8 @@ constexpr std::uint8_t kF2FlagHasChildren = 0x40;
  * evidence in read_outline()); it is an INFERENCE, not a proved field. */
 constexpr std::size_t kF2MetaFlags = 8;
 constexpr std::uint8_t kF2MetaFlagManual = 0x80;
+/* Task.Active: bit 0x40 of the same byte, CLEAR when the task is inactive. */
+constexpr std::uint8_t kF2MetaFlagActive = 0x40;
 /* FixedMeta's 47-byte entry carries a 16-byte per-row blob at +8; its byte
  * +10 bit 0x02 is Project's stored Milestone flag.  Evidence (W31): PROJECT_B
  * sets it on exactly its 10 Milestone=1 rows -- 8 zero-day and 2 with a
@@ -1083,6 +1090,66 @@ bool read_text_field(const VarTable& table, const std::vector<std::uint8_t>& var
     return false;
 }
 
+/* Field ids of Baseline 0 per record type; 0 = the record has no such field.
+ * See Baseline in reader.h for the evidence. */
+struct BaselineKeys {
+    std::uint32_t work;
+    std::uint32_t cost;
+    std::uint32_t duration;
+    std::uint32_t start;
+    std::uint32_t finish;
+};
+constexpr BaselineKeys kTaskBaselineKeys = {0x0B400001u, 0x0B400006u, 0x0B40001Bu,
+                                            0x0B40002Bu, 0x0B40002Cu};
+constexpr BaselineKeys kRscBaselineKeys = {0x0C40000Fu, 0x0C400011u, 0u, 0u, 0u};
+constexpr BaselineKeys kAssnBaselineKeys = {0x0F400010u, 0x0F400020u, 0u, 0x0F400092u,
+                                            0x0F400093u};
+
+/* The payload of one (uid, key) block when it holds exactly `size` bytes. */
+bool read_sized_block(const VarTable& table, const std::vector<std::uint8_t>& var2,
+                      std::uint32_t uid, std::uint32_t key, std::size_t size,
+                      std::vector<std::uint8_t>& payload) {
+    if (key == 0) {
+        return false;
+    }
+    for (const std::uint32_t offset : offsets_for(table, uid, key)) {
+        if (read_block(var2, offset, payload) && payload.size() == size) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Baseline read_baseline(const VarTable& table, const std::vector<std::uint8_t>& var2,
+                       std::uint32_t uid, const BaselineKeys& keys) {
+    Baseline baseline;
+    if (!table.usable) {
+        return baseline;
+    }
+    std::vector<std::uint8_t> payload;
+    if (read_sized_block(table, var2, uid, keys.work, 8, payload)) {
+        baseline.work_raw = f64_at(payload, 0);
+        baseline.stored = true;
+    }
+    if (read_sized_block(table, var2, uid, keys.cost, 8, payload)) {
+        baseline.cost_raw = f64_at(payload, 0);
+        baseline.stored = true;
+    }
+    if (read_sized_block(table, var2, uid, keys.duration, 4, payload)) {
+        baseline.duration_ticks = u32_at(payload, 0);
+        baseline.stored = true;
+    }
+    if (read_sized_block(table, var2, uid, keys.start, 4, payload)) {
+        baseline.start.raw = u32_at(payload, 0);
+        baseline.stored = true;
+    }
+    if (read_sized_block(table, var2, uid, keys.finish, 4, payload)) {
+        baseline.finish.raw = u32_at(payload, 0);
+        baseline.stored = true;
+    }
+    return baseline;
+}
+
 /* ---- FixedMeta is per-row bookkeeping, not a field map (W1 §1.1).  It is
  * never indexed by row: its entries are a list of FixedData offsets, and PROJECT_A
  * both drops rows and repeats offsets.  The useful product is the set of rows
@@ -1423,6 +1490,17 @@ struct Outline {
     std::vector<std::string> number;         /* per row; "" for the project row */
     std::vector<std::uint32_t> child_count;  /* per row */
     std::vector<bool> manually_scheduled;    /* per row; see above */
+    /* Per row; true unless Fixed2Meta flags bit 0x40 is clear.  MEASURED
+     * (W34-3.4): wave30-inactivate clears it on uid 2 only (0xff -> 0xbf) and
+     * Project reports Active False for uid 2; wave30-inactivate-second, whose
+     * control already has uid 2 inactive, clears it on uid 1 as well. */
+    std::vector<bool> active;
+    /* Per row; the f64 at Fixed2Data +16.  MEASURED (W34-3.4): the project row
+     * is 1.0 and the other rows are 2.0, 3.0, ... in ID order, whatever their
+     * outline level (wave30-insert-summary: reparented uid 2 keeps 3.0); an
+     * inserted row takes the midpoint of its neighbours (2.5 between 2.0 and
+     * 3.0 in all three insert pairs).  0.0 where the row has no record. */
+    std::vector<double> ordinal;
     bool usable = false;
 };
 
@@ -1436,6 +1514,8 @@ Outline read_outline(const CompoundFile& cfb, std::string_view root, std::uint32
     outline.number.assign(rows, std::string());
     outline.child_count.assign(rows, 0);
     outline.manually_scheduled.assign(rows, false);
+    outline.active.assign(rows, true);
+    outline.ordinal.assign(rows, 0.0);
     if (rows == 0) {
         return outline;
     }
@@ -1496,6 +1576,7 @@ Outline read_outline(const CompoundFile& cfb, std::string_view root, std::uint32
             continue;
         }
         have_record[row] = true;
+        outline.ordinal[row] = f64_at(fixed2, record + kF2RowOrdinal);
         std::array<std::uint8_t, 16> parent_id = read_id(record, kF2RowParentId);
         has_parent[row] = parent_id != no_id;
         parent[row] = parent_id;
@@ -1505,6 +1586,10 @@ Outline read_outline(const CompoundFile& cfb, std::string_view root, std::uint32
             (fixed2_meta[kFixedMetaHeaderSize + i * kFixed2MetaEntrySize +
                          kF2MetaFlags] &
              kF2MetaFlagManual) != 0;
+        outline.active[row] =
+            (fixed2_meta[kFixedMetaHeaderSize + i * kFixed2MetaEntrySize +
+                         kF2MetaFlags] &
+             kF2MetaFlagActive) != 0;
     }
 
     std::map<RowId, std::uint32_t> row_by_id;
@@ -1944,6 +2029,8 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
         /* A manually scheduled task is never on Project's critical path, even
          * with zero slack (base.mpp's Task A: slack 0, COM Critical false). */
         task.manually_scheduled = outline.usable && outline.manually_scheduled[row];
+        task.active = !outline.usable || outline.active[row];
+        task.outline_ordinal = outline.usable ? outline.ordinal[row] : 0.0;
         task.critical = !task.manually_scheduled && task.total_slack_ticks <= 0;
         /* A file without a usable Fixed2Data is reported as a flat outline
          * (read_outline() warned); nothing in the fixed row carries a level. */
@@ -2052,6 +2139,19 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
             }
             task.flag10 = task.flags[9];
             task.flag10_stored = true;
+        }
+        task.baseline = read_baseline(table, var2, uid, kTaskBaselineKeys);
+        task.leveling_delay_ticks = u32_at(fixed, base + kRowLevelingDelay);
+        if (table.usable) {
+            std::vector<std::uint8_t> level_payload;
+            if (read_sized_block(table, var2, uid, kFieldTaskPreleveledStart, 4,
+                                 level_payload)) {
+                task.preleveled_start.raw = u32_at(level_payload, 0);
+            }
+            if (read_sized_block(table, var2, uid, kFieldTaskPreleveledFinish, 4,
+                                 level_payload)) {
+                task.preleveled_finish.raw = u32_at(level_payload, 0);
+            }
         }
         document.tasks.push_back(std::move(task));
     }
@@ -2207,6 +2307,7 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                 resource.row_id = u32_at(rsc_fixed, base + kRscRowId);
                 resource.uid = uid;
                 resource.max_units_x100 = f64_at(rsc_fixed, base + kRscRowMaxUnits);
+                resource.peak_units_x100 = f64_at(rsc_fixed, base + kRscRowPeakUnits);
                 const bool work_bit =
                     row < rsc_meta_type.size() &&
                     (rsc_meta_type[row] & kRscFixedMetaWorkFlag) != 0;
@@ -2267,6 +2368,8 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                     f64_at(rsc_fixed, base + kRscRowCostPerUse) / 100.0;
                 resource.accrue_at = u32_at(rsc_fixed, base + kRscRowAccrueAt);
                 resource.cost_fields_stored = true;
+                resource.baseline =
+                    read_baseline(rsc_table, rsc_var2, uid, kRscBaselineKeys);
                 document.resources.push_back(std::move(resource));
             }
         }
@@ -2413,6 +2516,16 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                                     kAssnRowSize, kAssnFixedMetaEntrySize, 0,
                                     assn_rows, assn_uid_by_row, document.warnings,
                                     nullptr, nullptr, &assn_state);
+            /* The Assignment VarMeta is read only for Baseline 0 (W34-3.4), so a
+             * missing or damaged one is not a document warning: the baseline
+             * simply reads as not stored. */
+            std::vector<std::string> assn_var_warnings;
+            const std::vector<std::uint8_t> assn_var_meta = read_optional_stream(
+                cfb, root, "TBkndAssn", "VarMeta", assn_var_warnings);
+            const std::vector<std::uint8_t> assn_var2 = read_optional_stream(
+                cfb, root, "TBkndAssn", "Var2Data", assn_var_warnings);
+            const VarTable assn_table = parse_var_meta(
+                assn_var_meta, assn_var2, "Assignment", assn_var_warnings);
             std::size_t assn_tombstoned = 0;
             for (std::uint32_t row = 0; row < assn_rows; ++row) {
                 const std::size_t base = row * kAssnRowSize;
@@ -2453,6 +2566,8 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                 assignment.start.raw = u32_at(assn_fixed, base + kAssnRowStart);
                 assignment.finish.raw = u32_at(assn_fixed, base + kAssnRowFinish);
                 assignment.resume.raw = u32_at(assn_fixed, base + kAssnRowResume);
+                assignment.baseline = read_baseline(assn_table, assn_var2,
+                                                    assignment.uid, kAssnBaselineKeys);
                 /* assign1.mpp keeps a FixedMeta entry for its two placeholder
                  * rows (uid 1 and 2 but task uid 0, no resource, no work); the
                  * task uid is what tells them apart from real assignments. */

@@ -423,6 +423,44 @@ struct PackedDate {
     std::uint32_t ticks_of_day() const { return (raw & 0xFFFFu); }
 };
 
+/*
+ * Baseline 0 (Project's plain "Baseline"; Baseline1..10 are not read), W34-3.4.
+ * The values are variable-data blocks keyed by Project's own field ids (named in
+ * core/model/field_table.gen.cpp):
+ *
+ *   Task       work 0x0b400001  cost 0x0b400006  duration 0x0b40001b
+ *              start 0x0b40002b  finish 0x0b40002c
+ *   Resource   work 0x0c40000f  cost 0x0c400011
+ *   Assignment work 0x0f400010  cost 0x0f400020
+ *              start 0x0f400092  finish 0x0f400093
+ *
+ * MEASURED against COM on tests/data/wave30-baseline-{control,set}.mpp
+ * (W30-G3-project-pairs.json, Task.BaselineStart/Finish/Duration/Work/Cost):
+ * the control stores none of these blocks and COM reports NA / 0 / 0 / 0; after
+ * Set Baseline the duration block is the task's duration in 6-second ticks
+ * (24000, 14400, 9600 = COM's 2400, 1440 and 960 minutes), start and finish are
+ * packed dates equal to COM's baseline dates, and work and cost are 8-byte
+ * zeros (COM 0.0).  Each assignment's start and finish equal its task's
+ * baseline dates.
+ *
+ * `stored` is true when at least one block exists for the row.  A block that is
+ * absent leaves its member at the default: dates kDateNa, the rest 0.  A stored
+ * date word of 0xffffffff is Project's NA and reads as an invalid PackedDate
+ * (wave30-level-control.mpp stores it for the baseline dates of assignments
+ * whose baseline was never set).  `work_raw` and `cost_raw` are the stored f64 as it is:
+ * no fixture with a non-zero baseline has COM facts, so the scale (minutes
+ * x1000 for work as in the assignment Work word, hundredths for cost) is NOT
+ * claimed here.
+ */
+struct Baseline {
+    bool stored = false;
+    PackedDate start{kDateNa};
+    PackedDate finish{kDateNa};
+    std::uint32_t duration_ticks = 0;
+    double work_raw = 0.0;
+    double cost_raw = 0.0;
+};
+
 struct Task {
     std::uint32_t row = 0;     /* FixedData row index, 0-based, INCLUDING the
                                 * project row (row 0): the first task row is 1 */
@@ -515,6 +553,26 @@ struct Task {
     /* Rows whose stored parent is this task.  summary == child_count > 0. */
     std::uint32_t child_count = 0;
     bool summary = false;
+    /* The Fixed2Data +16 display-order ordinal (W34-3.4): 1.0 for the project
+     * row, 2.0, 3.0, ... in ID order for the others, fractional where Insert
+     * Task / Summary / Milestone placed a row between two (2.5), and unchanged
+     * for a row an insert reparents.  0.0 when the row has no record. */
+    double outline_ordinal = 0.0;
+    Baseline baseline; /* Baseline 0, from the Task VarMeta (see Baseline) */
+    /* LevelingDelay, MEASURED (W34-3.4): u32 6-second ticks at MPP14 Task row
+     * +70.  wave30-level-all.mpp (Project's Level All) against its control: uid 2
+     * +70 goes 0 -> 0x000189c0 = 100800 ticks and uid 3 0 -> 0x00023280 = 144000
+     * ticks, and COM reads LevelingDelay 10080 and 14400 minutes on them (10
+     * ticks a minute); uid 1 stays 0 and COM reads 0. */
+    std::uint32_t leveling_delay_ticks = 0;
+    /* PreleveledStart / PreleveledFinish, MEASURED (W34-3.4): Task var blocks
+     * 0x0b400171 / 0x0b400172, 4 bytes, packed dates, written by Level All with
+     * the pre-leveling Start / Finish.  On wave30-level-all.mpp uid 1..3 hold
+     * 2026-10-26 08:00 with finishes 2026-10-30, 28 and 27 at 17:00 -- exactly
+     * COM's Start and Finish on wave30-level-control.mpp.  Not stored (NA) when
+     * the task was never leveled. */
+    PackedDate preleveled_start{kDateNa};
+    PackedDate preleveled_finish{kDateNa};
 
     /* ---- Status.  Three stored slack words, in 6-second ticks (4800 = one
      * working day); negative is possible in Project (an SNLT/FNLT clamp can give
@@ -534,6 +592,10 @@ struct Task {
     std::int32_t start_slack_ticks = 0; /* +186 */
     std::int32_t total_slack_ticks = 0; /* +190 */
     bool manually_scheduled = false;
+    /* Task.Active, MEASURED (W34-3.4): bit 0x40 of the same Fixed2Meta flags
+     * byte (+8), clear when the task is inactive.  True for MPP12 (Project 2007
+     * has no inactive tasks) and when the file has no usable Fixed2Meta. */
+    bool active = true;
     bool critical = false;
     /* Milestone, stored: bit 0x02 at byte +10 of the Task FixedMeta entry.
      * Project lets a milestone keep a duration (PROJECT_B uids 10735 10 d and
@@ -646,6 +708,13 @@ struct Resource {
     /* MaxUnits as stored: double at +8, x100 (10000.0 = 100 %, 5000.0 = 50 %;
      * the 50 % row is the wave-11 measurement of the scale). */
     double max_units_x100 = 0.0;
+    /* PeakUnits as stored: double at MPP14 Resource row +98, same x100 scale as
+     * MaxUnits (MEASURED, W34-3.4: wave30-level-control.mpp holds 30000.0 and COM
+     * PeakUnits 3.0; after Level All the only changed resource bytes are that
+     * double, now 10000.0, COM PeakUnits 1.0).  Overallocated is derived, since
+     * no other resource byte moved when COM's Overallocated went True -> False. */
+    double peak_units_x100 = 0.0;
+    bool overallocated() const { return peak_units_x100 > max_units_x100; }
     /* Group / Code: VarMeta text 0x0c400003 / 0x0c40000a, display form
      * trimmed and raw form verbatim.  Empty when the file stores no block
      * (MS Project omits an empty text field rather than storing ""). */
@@ -696,6 +765,10 @@ struct Resource {
      * Resource.BaseCalendar reads "Standard" -- calendar 1's stored name.
      * Empty when no calendar row matches or no name was stored. */
     std::string base_calendar;
+
+    /* Baseline 0 work and cost only (a resource has no baseline dates); see
+     * Baseline. */
+    Baseline baseline;
 
     double max_units() const { return max_units_x100 / 100.0; }
     /* The MSPDI spelling: a fraction, 1.0 == 100 %.  Project's exports write
@@ -775,6 +848,9 @@ struct Assignment {
      * is not stored (it is derivable from Resume + calendar, so not invented
      * here).  See "ASSIGNMENTS" in the file comment. */
     PackedDate resume{kDateNa};
+    /* Baseline 0 start, finish, work and cost (duration is not stored per
+     * assignment); see Baseline. */
+    Baseline baseline;
 
     /* Both the null sentinel and 0 occur in the corpus for "no resource";
      * real resource uids start at 1. */

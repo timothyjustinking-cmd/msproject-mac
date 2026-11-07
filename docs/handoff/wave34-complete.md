@@ -544,7 +544,8 @@ Insufficient Balance stop) and resumes under Claude Sonnet 5.5 from
 | W34-3.1 | brief W34-3.1: assignment table growth (append a row AND rewrite the existing rows' pointer words and the task's Work summary as `wave30-assign-add-*` shows; removal as `wave30-assign-delete-*` shows); one new pair each varying the task's existing assignment count (0, 1, 2) | **DONE** (record written by the Sonnet builder; the code and pairs are the DeepSeek session's) | commits `281ac54` (writer + first-assignment ADD and REMOVE tests), `07046d0` (the two new pairs and their anatomy), `73bc6e6` (the settled append); `core/mppwrite/assignment_growth.{h,cpp}`; `tests/roundtrip_assignment_growth.cpp`; `spec/writers/table-growth.md`; gates `build/w34/cedba33-W34-3.1-*.log` |
 | W34-B5 | brief W34-B5: drop the name column from `tests/data/project_a_golden.tsv` and the docs, readers and scripts that used it | **DONE** | commit `8b79c62` |
 | W34-3.2 | brief W34-3.2: the resource calendar row (Add Resources writes the `TBkndCal` streams and three `114/Props` counts, not only the six `TBkndRsc` streams) | **DONE** | commit `adfd358`; `core/mppwrite/resource_growth.{h,cpp}`; `tests/roundtrip_resource_growth.cpp`; `spec/writers/calendar-tbkdcal.md`; gates `build/w34/8b79c62-W34-3.2-*.log` |
-| W34-3.3 | brief W34-3.3: `DocumentSummaryInformation` writer for the strings and dates Project rewrites on Calculate Project and Move, property-set encoding verified against an independent reader | **DONE** | the `W34-3.3` commit after `adfd358`; `tests/roundtrip_summary_info.cpp`; `scripts/dsi_reader.py`, `scripts/check_dsi.py`; `spec/writers/document-summary-information.md`; gates `build/w34/adfd358-W34-3.3-*.log` |
+| W34-3.3 | brief W34-3.3: `DocumentSummaryInformation` writer for the strings and dates Project rewrites on Calculate Project and Move, property-set encoding verified against an independent reader | **DONE** | commit `a08a9ff`; `tests/roundtrip_summary_info.cpp`; `scripts/dsi_reader.py`, `scripts/check_dsi.py`; `spec/writers/document-summary-information.md`; gates `build/w34/adfd358-W34-3.3-*.log` |
+| W34-3.4 | brief W34-3.4: reader gaps the enablements need (`Task.Active`, the inserted summary and milestone result with its fractional Fixed2Data ordinal and reparenting, baseline fields on task, assignment and resource rows, LevelingDelay / Preleveled / Overallocated), each with reader tests against COM facts | **DONE** | the `W34-3.4` commit after `a08a9ff`; `core/mpp/reader.{h,cpp}`; `tests/mpp_reader_tests.cpp` (`test_w34_active`, `test_w34_insert`, `test_w34_baseline`, `test_w34_leveling`); gates `build/w34/a08a9ff-W34-3.4-*.log` |
 
 W34-3.1 detail:
 
@@ -681,3 +682,57 @@ W34-3.3 detail:
   across a DST change, a total-work change outside whole hours and the
   singular "1 hr" are refused or unmeasured.  No pair here needed a new
   measurement.
+
+W34-3.4 detail:
+
+- **Task.Active** (`Task::active`).  Bit 0x40 of the Task Fixed2Meta flags
+  byte (+8), clear exactly where COM reports Active=False
+  (`W30-1.2-project-inactivate{,-second}.json`: uid 2 on `wave30-inactivate`,
+  uid 1 and 2 on `wave30-inactivate-second`, the null saves agreeing with their
+  controls).  Defaults to true when the file has no Fixed2Meta entry (MPP12,
+  synthetic base).  `test_w34_active`: six files x uids 1..3, the project row,
+  and `synthetic-base`.
+- **Inserted summary and milestone.**  The reader already produced the right
+  ID, level, outline number, Summary / Milestone flags, reparenting and dates
+  for the five insert files (summary, milestone, Tasks.Add, and the controls);
+  the missing piece was the Fixed2Data +16 ordinal (`Task::outline_ordinal`:
+  2.0, 3.0, 4.0 stored, 2.5 for a row inserted between uid 1 and 2, 5.0 for an
+  appended row).  `test_w34_insert` asserts ID, level, outline number,
+  summary, milestone, manual, minutes and ordinal per uid, plus the inserted
+  summary's Start / Finish / child count and the milestone's dates, against
+  `W30-1.1-project-insert.json` and `W34-0.5-task-ops.json`.
+- **Baseline 0** (`Baseline` on Task, Resource, Assignment).  Var blocks
+  0x0b400001/06/1b/2b/2c on tasks (work, cost, duration, start, finish),
+  0x0c40000f/11 on resources, 0x0f400010/20/92/93 on assignments, named from
+  `field_table.gen.cpp` and sized from the baseline pair.  COM facts
+  (`W30-G3-project-pairs.json`) cover tasks only: control NA / 0, set start
+  2026-01-04 13:00, finishes 2026-01-09 / 07 / 06 12:00, durations 2400 / 1440 /
+  960 min, work and cost 0.  The assignment (dates equal its task's) and
+  resource (zero work / cost stored) rows are asserted as measured on that pair
+  and labelled so in the test.  Work and cost scale is deliberately not
+  claimed: only zeros have COM facts, so the reader exposes `work_raw` /
+  `cost_raw`.
+- **Leveling** (`W30-2-level.json`, `wave30-level-control` vs `-all`).
+  `Task::leveling_delay_ticks` is the u32 at Task row +70 (0x189c0 = 100800
+  ticks, COM 10080 min; 0x23280 = 144000, COM 14400 min).
+  `Task::preleveled_start` / `preleveled_finish` are the Task var blocks
+  0x0b400171 / 0x0b400172 (packed dates equal to the control's COM Start and
+  Finish; NA on the never-leveled files).  `Resource::peak_units_x100` is the
+  f64 at Resource row +98 (30000.0 -> 10000.0; COM PeakUnits 3.0 -> 1.0);
+  `overallocated()` is derived from it because no other resource byte moved
+  when COM's Overallocated went True -> False.  The "+70 RemainingDuration"
+  comment in `reader.cpp` is not stale: it sits in the MPP12 layout table
+  (264-byte rows), where +70 is a different field from the MPP14 row's.
+- **Not claimed.**  Assignment LevelingDelay (COM reads 0 on every assignment
+  in the pair, so no byte can be tied to it); baselines 1..10; the work /
+  cost scale of a nonzero baseline.
+- **Gates (this session).**  `build/vs-verify33b` Release build exit 0
+  (`CORE_WARNINGS_AS_ERRORS`), full ctest 62/62 (`mpp_reader` includes the
+  four new groups); `check_fixtures.py` OK (219 `.mpp`); `check_markers.py
+  --worktree` OK; client-name scan 0 hits; `guard_names.py main..HEAD` clean.
+  Logs `build/w34/a08a9ff-W34-3.4-*.log`.
+- **Guard seen red.**  Three reader constants changed together (the Active
+  bit 0x40 -> 0x20, the leveling-delay offset 70 -> 66, the peak-units offset
+  98 -> 106): `mpp_reader` failed with the Active, LevelingDelay and
+  PeakUnits checks naming the files and uids; restored
+  (`build/w34/red-W34-3.4.log`).
