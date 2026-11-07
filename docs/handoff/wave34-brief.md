@@ -116,6 +116,39 @@ off before writing it).  Resume only after the operator tops up the balance:
 `pwsh -NoProfile -ExecutionPolicy Bypass -File tools/deepseek/run-wave.ps1 -Wave 34 -Groups G3,G4`
 (detached).  Wave time used at the stop: about 7h15 of 12.
 
+**Coordinator note (8 Nov 2026, resume with Claude Sonnet as the builder).**  The operator's
+decision, Sun 8 Nov 2026: the DeepSeek balance is not topped up for this run; from G3 on
+the builder is Claude Sonnet 5.5 through the same CLI on the operator's own Claude login,
+launched by `tools/deepseek/sonnet-claude.cmd` and `run-wave.ps1 -Builder sonnet`.  Nothing
+else changes: fresh session per group, markers, one item id per commit, gates per commit,
+deferral only with evidence of an attempt.  The STOPPED note's resume line is superseded
+by `run-wave.ps1 -Wave 34 -Groups G3,G4 -Builder sonnet` (detached).
+
+1. **Commit trailer.**  Every builder commit from here ends with the line
+   `Generated-By: Claude Sonnet 5.5 via Claude Code (wave 34)`, in addition to whatever
+   co-author line the CLI adds.  Earlier wave 34 commits keep their DeepSeek trailers.
+2. **G3 starts with W34-3.1's record.**  The DeepSeek session was cut off before writing
+   W34-3.1's entry in `wave34-complete.md`.  First, read `281ac54`, `07046d0` and `73bc6e6`,
+   rerun W34-3.1's tests on the current tree, and write its entry (what is measured, the
+   pairs, guards seen red, deferred, found-not-fixed) with the gate numbers of that run.
+   Then W34-B5 (below), then W34-3.2, 3.3, 3.4 in order.
+3. **W34-B5 (decision 4, audit B-5; default matured).**  The operator was silent past
+   Fri 6 Nov 2026, so the default applies: drop the `name` column from
+   `tests/data/project_a_golden.tsv` (uid is the key; the other columns stay as they are,
+   dates are NOT coarsened in this item).  Update every reader of the file
+   (`core/mpp/CMakeLists.txt`'s golden path users, the reader tests, `scripts/ref_reader.py`,
+   `docs/analysis/fieldkeys/golden_crosscheck.md` where it describes the column), the
+   file's SHA-256 in `tests/data/README.md` and `scripts/check_fixtures.py`, and record in
+   the commit that the old hashes remain in public history (B-1's purge request is the
+   operator's).  Gates: core ctest and the reader lane with and without corpus.  It is
+   one commit, id `W34-B5`, in G3 before W34-3.2.
+4. **Plan quota.**  The builder draws on the operator's Claude plan.  A rate-limit or
+   usage-limit error is a pause the coordinator handles, never a deferral: do not defer an
+   item because a call failed on a limit.
+5. **Time.**  Builder time left before the 12-hour stop point: 4 h 45 min, counted from
+   this launch.  The stop rule is unchanged: G5, G6 and CLOSE only if G4's marker lands
+   inside it; otherwise CLOSE only, and G5 and G6 become wave 35.
+
 ## 2. Groups
 
 ### G0 - the decoding lane: assess what Project actually does (coordinator-led; DeepSeek writes the notes and scripts)
@@ -267,7 +300,7 @@ append `WAVE-34-COMPLETE`.
 | 1 | Run wave 34 G1-G3 alongside wave 33 in a separate worktree, or after it | after: the shared writers depend on wave 33's atomic-save helper and the `effects` assertion, and two writers on one tree cost more than they save | sequential; the coordinator starts G0 (notes and pairs only) alongside wave 33 since it edits only `spec/` and `tests/data` |
 | 2 | Order of enablements in G4 | as listed (Resource Information, Add Resources, Assign Resources, Insert Summary/Milestone, Bold, WBS, Set Baseline) | as listed |
 | 3 | A dynamic trace of `WINPROJ.EXE` (W34-0.4) | only if G0 leaves a rule open; on an isolated VM; coordinator only; never exoproc on the work box | no trace; open rules are recorded and the writer refuses those shapes |
-| 4 | B-5 from the audit: the SHA-256 name column in `tests/data/project_a_golden.tsv` | drop the column, coarsen dates | if silent by Fri 6 Nov 2026, dropped in this wave's G0 |
+| 4 | B-5 from the audit: the SHA-256 name column in `tests/data/project_a_golden.tsv` | drop the column, coarsen dates | if silent by Fri 6 Nov 2026, dropped in this wave's G0. **Applied Sun 8 Nov 2026 (operator silent past Fri 6 Nov 2026): column dropped as W34-B5 in G3, dates kept; the operator can reverse it in one word** |
 | 5 | Stop point | stop after G4 and report if the wave passes 12 hours; G5-G6 become wave 35 | stop after G4 |
 
 ## 4. Verification gate

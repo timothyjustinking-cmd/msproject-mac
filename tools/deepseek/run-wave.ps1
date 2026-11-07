@@ -8,14 +8,19 @@ param(
     # A string so a fix-only follow-up wave can be named "33b" (wave33b-brief.md, branch wave33b).
     [Parameter(Mandatory = $true)][string]$Wave,
     [string[]]$Groups = @("ALL"),
-    [int]$MaxIterationsPerGroup = 40
+    [int]$MaxIterationsPerGroup = 40,
+    # Which model codes: "deepseek" (deepseek-claude.cmd, the default) or "sonnet"
+    # (sonnet-claude.cmd: Claude Sonnet 5.5 on the operator's own Claude login, from
+    # wave 34 G3 on, 8 Nov 2026).  Everything else in the driver is the same for both.
+    [ValidateSet("deepseek", "sonnet")][string]$Builder = "deepseek"
 )
 # `pwsh -File ... -Groups G0,G1` passes ONE string "G0,G1" (comma lists are only
 # arrays inside PowerShell), so split it here; it must never reach a prompt whole.
 $Groups = @($Groups | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $root
-$launcher = Join-Path $PSScriptRoot "deepseek-claude.cmd"
+$launcher = Join-Path $PSScriptRoot $(if ($Builder -eq "sonnet") { "sonnet-claude.cmd" } else { "deepseek-claude.cmd" })
+Write-Host "builder: $Builder ($launcher)"
 $brief = "docs/handoff/wave$Wave-brief.md"
 $doneRel = "docs/handoff/wave$Wave-complete.md"
 $done = Join-Path $root $doneRel
