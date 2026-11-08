@@ -570,6 +570,8 @@ const EnabledWiring kEnabledWiring[] = {
     // W34-4.3: Assign Resources is enabled for the measured first assignment
     // and its removal only.
     {"Resource", "Assignments", "Assign Resources", "", "assign_resources"},
+    // W34-4.5: Font Bold is enabled for the one measured cell only.
+    {"Task", "Font", "B", "", "font_bold"},
     // W30-1.0: Manually Schedule and Mode are enabled on the measured
     // automatic -> manual task-mode writer.
     {"Task", "Tasks", "Manually Schedule", "", "manually_schedule"},
@@ -637,6 +639,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::resource_details: return "resource_details";
         case RibbonCommand::resource_information: return "resource_information";
         case RibbonCommand::assign_resources: return "assign_resources";
+        case RibbonCommand::font_bold: return "font_bold";
         case RibbonCommand::project_information: return "project_information";
         case RibbonCommand::change_working_time: return "change_working_time";
         case RibbonCommand::links_between_projects: return "links_between_projects";

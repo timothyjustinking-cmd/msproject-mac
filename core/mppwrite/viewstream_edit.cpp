@@ -461,9 +461,11 @@ std::size_t block_end(ViewState const& state, std::size_t offset) {
 
 ViewCellStyleWrite save_view_cell_style(
     CfbDocument& doc, std::vector<ViewCellStyleEdit> const& edits,
-    std::string const& path) {
+    std::string const& path, bool dry_run) {
     std::string const function = "view cell style write";
-    check_output_path(path, function);
+    if (!dry_run) {
+        check_output_path(path, function);
+    }
     if (edits.size() != 1) {
         throw Error(function + ": " + std::to_string(edits.size()) +
                     " items were requested; exactly one cell-format item per "
@@ -545,6 +547,27 @@ ViewCellStyleWrite save_view_cell_style(
         staged.cell_format_items != 1) {
         throw Error(function + ": the staged view does not hold the edit's "
                     "counts");
+    }
+
+    if (dry_run) {
+        /* Every refusal the load, the build and the staged check can raise has
+         * run; nothing is written and `doc` is not replaced. */
+        ViewCellStyleWrite planned;
+        planned.view_uid = edit.view_uid;
+        planned.uid = edit.uid;
+        planned.field_id = edit.field_id;
+        planned.block_offset = state.block_offset;
+        planned.block_payload_before = payload_before;
+        planned.block_payload_after = staged.payload_length;
+        planned.item_count_before = state.item_count;
+        planned.item_count_after = staged.item_count;
+        planned.appended_bytes = item.size();
+        planned.var2_bytes_before = var2_before;
+        planned.var2_bytes_after = staged.var2.size();
+        planned.repointed_entries = repointed;
+        planned.props_value_before = state.props_value;
+        planned.props_value_after = staged.props_value;
+        return planned;
     }
 
     Bytes const intended = work.to_bytes();

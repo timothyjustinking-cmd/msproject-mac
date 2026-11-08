@@ -181,10 +181,15 @@ struct ViewCellStyleWrite {
  * re-open it and prove every fact above from the bytes.  Throws Error on a
  * refusal or a mismatch; then neither `doc` nor a new output file has been
  * left behind.  `edits.size() != 1` is refused (one item per save measured).
+ *
+ * `dry_run` (W34-4.5) runs every check and builds and re-checks the staged
+ * streams, then returns the planned counts without writing `path` (which may be
+ * empty) or replacing `doc`.  The app shells use it to refuse a file whose view
+ * stream is not the measured shape before a Font Bold edit is queued.
  */
 ViewCellStyleWrite save_view_cell_style(
     CfbDocument& doc, std::vector<ViewCellStyleEdit> const& edits,
-    std::string const& path);
+    std::string const& path, bool dry_run = false);
 
 } /* namespace mppwrite */
 

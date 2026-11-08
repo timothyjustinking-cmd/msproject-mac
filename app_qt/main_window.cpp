@@ -2342,6 +2342,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::assign_resources:
             assign_resources();
             return;
+        case RibbonCommand::font_bold:
+            bold_selected_cell();
+            return;
         case RibbonCommand::scroll_to_task:
             // W30-1.7: scrolls the sheet and pans the chart; a view command,
             // never a file write.
@@ -3222,6 +3225,58 @@ void MainWindow::assign_resources() {
     set_message(std::string(assign ? "queued an assignment on task uid "
                                    : "queued the removal of the assignment on task uid ") +
                     std::to_string(task_uid) + "; File > Save writes it",
+                false);
+    update_status();
+}
+
+void MainWindow::bold_selected_cell() {
+    if (refuse_read_only()) {
+        return;
+    }
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr) {
+        set_message("Font Bold is available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    const core::sheet::SheetModel& sheet = *doc_.sheet();
+    const app::SelectedTask selected = app::selected_task(sheet, doc_.rows());
+    const app::TaskRow* task = selected.has_selection && selected.uid != 0
+                                   ? doc_.task_by_uid(selected.uid)
+                                   : nullptr;
+    if (task == nullptr) {
+        set_message("select a cell first", false);
+        update_status();
+        return;
+    }
+    // W34-4.5: one cell only.  The measured pair bolds a single Task Name cell,
+    // so a range is refused with the reason before anything is built.
+    if (!(sheet.anchor() == sheet.focus())) {
+        set_message("Font Bold: Font Bold on more than one cell is not implemented in this "
+                    "port: the measured Project pair bolds a single cell",
+                    true);
+        update_status();
+        return;
+    }
+    const std::uint32_t task_uid = task->uid;
+    // The sheet's field id for Task Name equals the stored one the writer is
+    // measured for; the builder names the refusal for any other column.
+    const std::uint32_t field_id = sheet.column(sheet.focus().column).field;
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_cell_bold_edit(doc_.plan(), doc_.path(), task_uid, field_id, edit, error)) {
+        set_message("Font Bold: " + error, true);
+        update_status();
+        return;
+    }
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
+        set_message("Font Bold: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(task_uid);
+    set_message("queued Font Bold on the Task Name cell of task uid " + std::to_string(task_uid) +
+                    "; File > Save writes it",
                 false);
     update_status();
 }

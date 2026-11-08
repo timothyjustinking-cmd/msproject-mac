@@ -471,6 +471,9 @@ class MainWindow final : public QMainWindow {
     // W34-4.3: Resource tab > Assign Resources (one work resource at 100 % on the
     // selected unstarted leaf, or the removal of that one assignment).
     void assign_resources();
+    // W34-4.5: Task tab > Font > Bold on the selected Task Name cell (the one
+    // measured cell); the builder owns every refusal.
+    void bold_selected_cell();
     // W30-1.0: the Mode button's menu.  "Automatically Scheduled" is Project's
     // other mode but has no measured save in this port, so it is disabled with
     // the exact decision-9 tooltip; "Manually Scheduled" runs the same handler

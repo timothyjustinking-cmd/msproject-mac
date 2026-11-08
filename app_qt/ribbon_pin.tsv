@@ -44,7 +44,7 @@ Task	0	Clipboard	button	Format Painter	0	clipboard.painter	0	-
 Task	0	Font	group	-	-	-	-	-
 Task	0	Font	combo	font name	0	-	0	file
 Task	0	Font	combo	font size	0	-	0	file
-Task	0	Font	small	B	0	font.bold	0	-
+Task	0	Font	small	B	1	font.bold	0	-
 Task	0	Font	small	I	0	font.italic	0	-
 Task	0	Font	small	U	0	font.underline	0	-
 Task	0	Font	split	highlight colour	0	font.highlight	1	-

@@ -111,6 +111,10 @@ enum class RibbonCommand : std::uint8_t {
     // resource (100 %) to the selected unstarted leaf, or removes that one
     // assignment; every other shape is refused with the reason.
     assign_resources,
+    // Wave 34 (W34-4.5): the Font group's Bold button bolds the selected Task
+    // Name cell of the task with UniqueID 1 (the one cell Project's pair
+    // measured); every other cell, and the other font controls, stay refused.
+    font_bold,
     // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
     // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
     // commands with no menu-bar item.

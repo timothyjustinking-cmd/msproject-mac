@@ -13,7 +13,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Task | Clipboard | Cut | implemented | session refusal: a range cut is refused while a sort or filter changes the row order; clear the sort and filter first (a single cell still cuts) |
 | Task | Clipboard | Copy | implemented | session refusal: a range copy is refused while a sort or filter changes the row order; clear the sort and filter first (a single cell still copies) |
 | Task | Clipboard | Format Painter | disabled | future: not implemented in this port |
-| Task | Font | B | disabled | future: not implemented in this port |
+| Task | Font | B | implemented | gap: the Task Name cell of the task with UniqueID 1 only (Project's wave30-textstyle pair), alone in the save; every other cell, a view that already stores a cell format, Bold off and the other font attributes are refused as not implemented in this port |
 | Task | Font | I | disabled | future: not implemented in this port |
 | Task | Font | U | disabled | future: not implemented in this port |
 | Task | Font | highlight colour | disabled | future: not implemented in this port |
@@ -189,8 +189,8 @@ Edits that are not command rows, with the reason the shell refuses them (operato
 
 ## Summary
 
-* ribbon commands: 114 (66 disabled)
-* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 50 enabled / 64 disabled command controls. The table above reports 66 disabled because it counts a split by its menu items; the pin counts the control.
+* ribbon commands: 114 (65 disabled)
+* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 51 enabled / 63 disabled command controls. The table above reports 65 disabled because it counts a split by its menu items; the pin counts the control.
 * the difference (2): 2 splits whose button is live while every menu item is disabled: Project > Properties > WBS, Project > Schedule > Set Baseline
 * menu commands: 51 (6 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

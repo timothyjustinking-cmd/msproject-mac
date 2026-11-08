@@ -621,6 +621,27 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_assignment COMMAND app_edits_assignment_tests)
     set_tests_properties(app_edits_assignment PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 34 (W34-4.5): Font Bold on one cell against Project's own pair
+    # (wave30-textstyle).  The display is unchanged (Bold lives in the view
+    # stream); the port's save is compared stream by stream with Project's under
+    # the null-save discipline, the four owned streams declared changed, and the
+    # app's view reader reads the cell format back.  Every refusal has its own
+    # check.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_cell_bold_tests app_edits_cell_bold_tests.cpp)
+    target_compile_features(app_edits_cell_bold_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_cell_bold_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
+    set_target_properties(app_edits_cell_bold_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_cell_bold_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_cell_bold_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_cell_bold_tests)
+
+    add_test(NAME app_edits_cell_bold COMMAND app_edits_cell_bold_tests)
+    set_tests_properties(app_edits_cell_bold PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 26 (W26-3.1): the file's Gantt style record -- the row -> Text Styles
     # category rule and the headless read seam.  The stock fixture is committed;
     # the PROJECT_A half skips when corpus/ is absent.

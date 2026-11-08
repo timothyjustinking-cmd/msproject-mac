@@ -163,6 +163,13 @@ enum class StructuralKind : std::uint8_t {
     // assignment are enabled; like the kinds above both are EXCLUSIVE.
     assign_resource = 15,
     unassign_resource = 16,
+    // Wave 34 (W34-4.5): Font Bold on ONE cell, written by mppwrite::
+    // save_view_cell_style (core/mppwrite/viewstream_edit.h) against Project's
+    // wave30-textstyle pair: one `0x2240000c` cell-format item appended to the
+    // applied view's main block.  `uid` is the formatted row and `field_id` the
+    // cell's stored field id.  Only the measured cell is enabled (row uid 1,
+    // Task Name, an unformatted view); like the kinds above it is EXCLUSIVE.
+    bold_cell = 17,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -530,6 +537,24 @@ bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
                           std::uint32_t task_uid, std::uint32_t resource_uid,
                           bool assign, StructuralEdit& out, std::string& error);
 
+// Builds a ready-to-push bold_cell edit for ONE cell (W34-4.5).  The plan-side
+// rule is the measured pair's own cell: Project's wave30-textstyle formats the
+// Task Name cell of the task with UniqueID 1, and one pair is one data point
+// (brief rule 2), so every other row and every other column is refused here with
+// the decision-9 "is not implemented in this port" text.  The FILE is the
+// authority for the view shape: the writer's dry run validates the three view
+// streams (the applied view, its main block, the absence of an existing cell
+// format item, the Props size tag) and its refusal text is returned as the
+// reason.  `out` is default-constructed on refusal.
+bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
+                         std::uint32_t task_uid, std::uint32_t field_id,
+                         StructuralEdit& out, std::string& error);
+
+// The one cell Font Bold is measured for: Task Name of the task with
+// UniqueID 1 (core/mppwrite/viewstream_edit.h, wave30-textstyle).
+inline constexpr std::uint32_t kBoldMeasuredTaskUid = 1;
+inline constexpr std::uint32_t kBoldMeasuredFieldId = 0x0B40000Eu;
+
 // The Created stamp Project writes for a resource added now: the local date
 // and time as a packed date (day 0 is 1983-12-31, then seconds / 6).
 std::uint32_t current_created_stamp();
@@ -819,6 +844,8 @@ struct StructuralSaveResult {
     std::size_t resources_added = 0;
     // Wave 34 (W34-4.3): 1 when an assignment was added or removed.
     std::size_t assignments_written = 0;
+    // Wave 34 (W34-4.5): 1 when a Font Bold cell-format item was appended.
+    std::size_t cell_styles_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the

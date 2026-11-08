@@ -771,6 +771,7 @@ Builder: Claude Sonnet 5.5 (W34-BUILDER), commits carry the
 | W34-4.2 | brief W34-4.2: Add Resources (one work resource, default rates) | **DONE** (enabled for a project with one or two resources; every other shape refused up front) | the `W34-4.2` commit after `726dcfd`; `core/mppwrite/resource_growth.{h,cpp}` (`dry_run`), `app/{edit_model,menu_model,main.mm}`; `app/app_edits_resource_add_tests.cpp`; Qt shell `app_qt/{ribbon_bar,dialogs,main_window,command_status}.*`, `app_qt/tests/resource_add_gate_test.cpp`; gates `build/w34/726dcfd-g42c-*.log` |
 | W34-4.3 | brief W34-4.3: Assign Resources (one work resource at 100 % to an unstarted leaf, and remove it) | **DONE** (enabled for the first assignment of a task and for removing a task's one assignment from a settled file; every other shape refused up front) | the `W34-4.3` commit after `399902d`; `core/mppwrite/assignment_growth.{h,cpp}` (`dry_run`), `app/edit_model.{h,cpp}`; `app/app_edits_assignment_tests.cpp`; Qt shell `app_qt/{ribbon_bar,dialogs,main_window}.*`, `app_qt/tests/assign_resources_gate_test.cpp`; gates `build/w34/399902d-g43f-*.log` |
 | W34-4.4 | brief W34-4.4: Insert Summary and Insert Milestone on a clean last row (W33-1.2's conditions) | **DEFERRED with evidence** (both stay disabled, "future: not implemented in this port"; no write path exists) | probe `build/w34/4.4-probe.diff`, log `build/w34/4.4-probe-insert-ctest.log` (15 failing streams per pair, summary and milestone); evidence `spec/writers/evidence/wave30-insert-summary.md`, `spec/writers/table-growth.md` Limits |
+| W34-4.5 | brief W34-4.5: Font Bold on one cell (G2.1); the other font controls stay disabled | **DONE** (enabled for the one measured cell, the Task Name cell of UniqueID 1 on an unformatted view, alone in the save; every other cell refused up front) | the `W34-4.5` commit after `f950a03`; `core/mppwrite/viewstream_edit.{h,cpp}` (`dry_run`), `app/edit_model.{h,cpp}`; `app/app_edits_cell_bold_tests.cpp`; Qt shell `app_qt/{ribbon_bar,main_window}.*`, `app_qt/tests/cell_bold_gate_test.cpp`; gates `build/w34/f950a03-b45all-*.log` |
 
 W34-4.0 detail:
 
@@ -1077,3 +1078,60 @@ W34-4.4 detail:
   rows, CEdl and the Props tail) from the two wave-30 pairs plus at least one
   insert pair with a non-trivial outline is the prerequisite; the pairs exist,
   the decode does not.
+
+W34-4.5 detail:
+
+- **Measured shape.**  One pair, with Project's own no-edit save of the control:
+  `wave30-textstyle-control.mpp` -> `wave30-textstyle.mpp`.  Project bolded the
+  Task Name cell of the task with UniqueID 1 and nothing else.  The port's save
+  (`mppwrite::save_view_cell_style`, W34-2.1, reached through the
+  `save_structural_edits` cascade) is compared stream by stream with Project's:
+  `app_edits_cell_bold` 373 checks, **effects 6607** bytes (null-save noise 131),
+  untouched streams byte-equal, the save passes the table check and reopens in
+  the independent core/mpp reader.  The writer appends one 56-byte cell-format
+  item (`0x2240000c`, row uid, field id, flags `0x01000003`, font word
+  `0x90000001`) to the applied view's main block and re-points the five later
+  VarMeta offsets, the VarMeta header, the view-size value and the Props marker.
+- **Enabled only for that cell (brief rule 2).**  One data point is one cell, so
+  the plan-side rule is the pair's own cell and nothing wider: a saved task, the
+  Task Name column, UniqueID 1.  Another row or another column is refused with
+  "... is not implemented in this port" and the reason (the row text says a
+  second pair has not been measured).  The builder `make_cell_bold_edit` (shared
+  by both shells) then runs the writer in a new `dry_run` mode against the FILE,
+  so a view that already stores a cell format, or any other unmeasured framing,
+  is refused as "Font Bold is not implemented in this port for this project:
+  <reason>".  The edit (`StructuralKind::bold_cell`) is exclusive; the cascade
+  repeats the dry run and refuses a start-date edit beside it.  `push()` is a
+  backstop.  The cascade's own "only edit in a save" check is unreachable
+  through `push()` (exclusivity refuses the second edit first), so no test can
+  turn it red; it stays as a defence.
+- **Shells.**  Qt: `RibbonCommand::font_bold` (Task > Font > B) is live; I and U
+  stay disabled.  Pin row, backlog row and the ribbon-inventory wiring row
+  regenerated (114 / 114 / 0; 65 disabled in the table; pin 51 enabled / 63
+  disabled).  `MainWindow::bold_selected_cell()` takes the selected cell; a
+  range is refused before anything is built.  The gate `qt_cell_bold_gate`
+  drives the real window: B is live and wired, I and U disabled; another row, another
+  column of the measured row and a two-cell range each queue nothing and name
+  the refusal; the measured cell queues one edit and dirties the document; a
+  second click keeps the queue at one; the real save differs from the control;
+  a reopen of the saved file refuses a second Bold (the view stores a format).
+  macOS: `app/main.mm` was not touched (there is no menu action for the
+  command).
+- **Guards seen red.**  Six mutations each turned a gate red and were restored
+  (sources touched and rebuilt afterwards): the UniqueID 1 restriction and the
+  Task Name restriction (`mut-b45-uid`, `mut-b45-field`), the start-date
+  refusal in the cascade (`mut-b45-startdate`), the ribbon enabled flag
+  (`mut-b45-ribbon`) and the Qt range refusal (`mut-b45-range`).  A first
+  field mutation that did not compile left a stale binary and was redone with a
+  compiling form; the "only edit in a save" mutation stayed green (unreachable
+  backstop, above).
+- **Gates (this session).**  core build exit 0, ctest `-E plan_recalc` 61/61;
+  app build exit 0, ctest 30/30; Qt build exit 0, ctest 46/46
+  (`f950a03-b45all-{core,app,qt}-ctest.log`); `check_command_backlog.py` 114 /
+  114 / 0; `check_fixtures.py` OK; `check_markers.py --worktree` OK.
+- **Found, not fixed (4.5).**  (1) Bold on any other cell, a range, a view that
+  already stores a cell format, Bold turned off, Italic, Underline, font name,
+  size and colour need further Project pairs, each varying one factor.  (2) The
+  Task Sheet does not paint the stored font word: a bolded cell reads back as
+  bold only in Project; the port's display and the plan do not render it.
+- **Not verified here.**  `app/main.mm` was not touched.

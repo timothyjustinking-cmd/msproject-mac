@@ -37,6 +37,7 @@
 #include "table.h"
 #include "task_mode.h"
 #include "varmeta_edit.h"
+#include "viewstream_edit.h"
 
 namespace app {
 namespace {
@@ -90,7 +91,8 @@ bool is_exclusive_kind(StructuralKind kind) noexcept {
            kind == StructuralKind::rename_resource ||
            kind == StructuralKind::add_resource ||
            kind == StructuralKind::assign_resource ||
-           kind == StructuralKind::unassign_resource;
+           kind == StructuralKind::unassign_resource ||
+           kind == StructuralKind::bold_cell;
 }
 
 const TaskRow* task_row_for_uid(const std::vector<TaskRow>& tasks,
@@ -2926,6 +2928,81 @@ bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
     return true;
 }
 
+namespace {
+
+// W34-4.5: the plan-side half of the Font Bold rule, shared by the builder and
+// push().  wave30-textstyle formats ONE cell (the Task Name of UniqueID 1), and
+// one pair is one data point, so every other row and column is a save no pair
+// measured.  Returns the reason, or an empty string.
+std::string cell_bold_plan_refusal(const PlanInput& plan, std::uint32_t task_uid,
+                                   std::uint32_t field_id) {
+    const TaskRow* task = task_row_for_uid(plan.tasks, task_uid);
+    if (task == nullptr || task->file_row == 0) {
+        return "the cell is not on a saved task of the open plan";
+    }
+    if (field_id != kBoldMeasuredFieldId) {
+        return "Font Bold on a cell outside the Task Name column is not "
+               "implemented in this port: the measured Project pair bolds a Task "
+               "Name cell";
+    }
+    if (task_uid != kBoldMeasuredTaskUid) {
+        return "Font Bold on this row is not implemented in this port: the "
+               "measured Project pair bolds the Task Name cell of the task with "
+               "UniqueID 1, and a second pair has not been measured";
+    }
+    return {};
+}
+
+mppwrite::ViewCellStyleEdit cell_bold_view_edit(std::uint32_t task_uid,
+                                                std::uint32_t field_id) {
+    mppwrite::ViewCellStyleEdit view_edit;
+    view_edit.view_uid = mppwrite::kMeasuredViewUid;
+    view_edit.uid = task_uid;
+    view_edit.field_id = field_id;
+    view_edit.attribute = mppwrite::ViewCellAttribute::bold;
+    view_edit.selection = mppwrite::ViewCellSelection::cell;
+    view_edit.enabled = true;
+    return view_edit;
+}
+
+}  // namespace
+
+bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
+                         std::uint32_t task_uid, std::uint32_t field_id,
+                         StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    if (std::string reason = cell_bold_plan_refusal(plan, task_uid, field_id);
+        !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    // The writer's dry run validates the applied view's streams against the FILE
+    // (the main block's framing, the VarMeta offsets, the absence of a cell
+    // format item, the Props size tag); nothing is written.
+    try {
+        (void)mppwrite::save_view_cell_style(
+            document, {cell_bold_view_edit(task_uid, field_id)}, std::string(), true);
+    } catch (const std::exception& refusal) {
+        error = std::string("Font Bold is not implemented in this port for this "
+                            "project: ") +
+                refusal.what();
+        return false;
+    }
+    out.kind = StructuralKind::bold_cell;
+    out.uid = task_uid;
+    out.field_id = field_id;
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                            const std::vector<std::uint32_t>& pending_start_uids) {
     // W33-1.7 (A-8 / D-7): a document opened from a container with FAT slack
@@ -3348,6 +3425,18 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                 if (assignment.uid == edit.assignment_uid) {
                     return false;
                 }
+            }
+            edit.anchor_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::bold_cell: {
+            // W34-4.5: the plan-side half.  The file-side half (the writer's dry
+            // run) ran in make_cell_bold_edit and runs again in the writer;
+            // applied_ is empty by the exclusivity check above.
+            if (plan == nullptr || edit.uid == 0 || edit.field_id == 0 ||
+                !cell_bold_plan_refusal(*plan, edit.uid, edit.field_id).empty()) {
+                return false;
             }
             edit.anchor_uid = 0;
             edit.dependants = 0;
@@ -4363,6 +4452,30 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // W34-4.5: Font Bold on one cell is exclusive the same way.
+    const StructuralEdit* bold_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::bold_cell) {
+            bold_edit = &edit;
+        }
+    }
+    if (bold_edit != nullptr) {
+        if (edits.applied().size() != 1) {
+            result.error =
+                "a Font Bold edit must be the only edit in a save; another edit "
+                "is queued with it, and the measured Project pair is one cell "
+                "bolded on an otherwise untouched save";
+            return result;
+        }
+        if (!writable.empty()) {
+            result.error =
+                "a Font Bold edit cannot be combined with a start-date edit; the "
+                "measured Project pair is one cell bolded on an otherwise "
+                "untouched save";
+            return result;
+        }
+    }
+
     // W31-0.1 (R30-1, High): a link add and a slack-carrying outline edit in
     // the same save would write the link at step 2 and the UNLINKED slack and
     // late dates at step 5b.  push() and validate_link_add refuse the order the
@@ -4578,6 +4691,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (assignment_edit != nullptr) {
         ++write_ops;  // the assignment, task, resource and Props streams, one file
+    }
+    if (bold_edit != nullptr) {
+        ++write_ops;  // the view's VarMeta, Var2Data, Props and Props14, one file
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -5169,6 +5285,26 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 std::to_string(written.rows_after) + " assignment rows)");
         }
 
+        // 5i (wave 34, W34-4.5).  The measured Font Bold save: one cell-format
+        // item in the applied view (core/mppwrite/viewstream_edit.h).  The edit
+        // is exclusive (checked above); a dry run first proves the file is still
+        // the view shape the edit was built from, then the writer re-validates
+        // and writes.  A refusal is an exception, reported as the save error.
+        if (bold_edit != nullptr) {
+            const std::vector<mppwrite::ViewCellStyleEdit> view_edits{
+                cell_bold_view_edit(bold_edit->uid, bold_edit->field_id)};
+            (void)mppwrite::save_view_cell_style(document, view_edits, std::string(),
+                                                 true);
+            const mppwrite::ViewCellStyleWrite written = mppwrite::save_view_cell_style(
+                document, view_edits, next_write_path());
+            result.cell_styles_written = 1;
+            result.notes.push_back(
+                "cell (task uid " + std::to_string(written.uid) + ", field " +
+                std::to_string(written.field_id) + ") set to bold (view block " +
+                std::to_string(written.block_payload_before) + " -> " +
+                std::to_string(written.block_payload_after) + " bytes)");
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -5244,6 +5380,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             result.api += assignment_edit->kind == StructuralKind::assign_resource
                               ? " assign_resource"
                               : " unassign_resource";
+        }
+        if (result.cell_styles_written != 0) {
+            result.api += " save_view_cell_style";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";

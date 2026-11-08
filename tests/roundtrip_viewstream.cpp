@@ -457,6 +457,76 @@ void test_edit_refusals(TestContext& t) {
     }
 }
 
+/* ---- the dry run (W34-4.5) ----------------------------------------------- */
+
+void test_dry_run(TestContext& t) {
+    CfbDocument const control = doc_from_data(kControl);
+    std::vector<ViewCellStyleEdit> const edits{measured_edit()};
+    std::string const target = out_path("w34-view-dry-run.mpp");
+    std::error_code ignored;
+    std::filesystem::remove(target, ignored);
+
+    /* The measured shape: the plan equals the real write's counts, nothing is
+     * written and the document is untouched; an empty path is allowed. */
+    CfbDocument doc = control;
+    std::vector<std::uint8_t> const before = doc.to_bytes();
+    ViewCellStyleWrite const planned =
+        mppwrite::save_view_cell_style(doc, edits, target, true);
+    t.check(doc.to_bytes() == before, "dry run: the document changed");
+    t.check(!file_exists(target), "dry run: an output file was written");
+    t.equal(planned.block_offset, kBlockOffset, "dry run: block offset");
+    t.equal(planned.block_payload_before, kPayloadBefore, "dry run: payload before");
+    t.equal(planned.block_payload_after, kPayloadAfter, "dry run: payload after");
+    t.equal(planned.item_count_before, 10, "dry run: item count before");
+    t.equal(planned.item_count_after, 11, "dry run: item count after");
+    t.equal(planned.appended_bytes, 56, "dry run: the item is 56 B");
+    t.equal(planned.var2_bytes_before, 100178, "dry run: Var2Data before");
+    t.equal(planned.var2_bytes_after, 100234, "dry run: Var2Data after");
+    t.equal(planned.repointed_entries, 5, "dry run: five later entries move");
+    t.equal(planned.props_value_before, kPropsValueBefore, "dry run: props before");
+    t.equal(planned.props_value_after, kPropsValueAfter, "dry run: props after");
+    ViewCellStyleWrite const empty_path =
+        mppwrite::save_view_cell_style(doc, edits, std::string(), true);
+    t.equal(empty_path.var2_bytes_after, 100234, "dry run: an empty path plans too");
+    t.check(doc.to_bytes() == before, "dry run (empty path): the document changed");
+
+    /* The real write agrees with the plan. */
+    ViewCellStyleWrite const written =
+        mppwrite::save_view_cell_style(doc, edits, out_path("w34-view-dry-real.mpp"));
+    t.equal(written.var2_bytes_after, planned.var2_bytes_after, "dry run: write agrees (Var2Data)");
+    t.equal(written.block_payload_after, planned.block_payload_after,
+            "dry run: write agrees (payload)");
+    t.equal(written.repointed_entries, planned.repointed_entries,
+            "dry run: write agrees (entries)");
+
+    /* A refusal is raised by the dry run too, and still leaves the document. */
+    auto refuses = [&](CfbDocument const& source,
+                       std::vector<ViewCellStyleEdit> const& bad,
+                       std::string_view needle, std::string const& what) {
+        CfbDocument copy = source;
+        std::vector<std::uint8_t> const copy_before = copy.to_bytes();
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_view_cell_style(copy, bad, std::string(), true);
+                     },
+                     needle, what);
+        t.check(copy.to_bytes() == copy_before, what + ": the document changed");
+    };
+    {
+        ViewCellStyleEdit edit = measured_edit();
+        edit.view_uid = 3;
+        refuses(control, {edit}, "is not the measured applied view", "dry run: view uid 3 refused");
+    }
+    {
+        ViewCellStyleEdit edit = measured_edit();
+        edit.attribute = ViewCellAttribute::italic;
+        refuses(control, {edit}, "only Bold is measured", "dry run: italic refused");
+    }
+    refuses(control, {}, "exactly one cell-format item", "dry run: zero edits refused");
+    /* A view that already carries a cell format item (Project's own save). */
+    refuses(doc_from_data(kEdit), edits, "already carries a cell", "dry run: a formatted view refused");
+}
+
 void test_path_refusals(TestContext& t) {
     std::vector<ViewCellStyleEdit> const edits{measured_edit()};
     CfbDocument const control = doc_from_data(kControl);
@@ -704,6 +774,7 @@ int main() {
         test_edit_refusals(t);
         test_path_refusals(t);
         test_damaged_streams(t);
+        test_dry_run(t);
         return t.report();
     } catch (std::exception const& error) {
         std::cerr << "FAIL: unhandled exception: " << error.what() << std::endl;

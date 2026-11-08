@@ -334,6 +334,20 @@ add_test(NAME qt_assign_resources_gate
                  "${QT_TEST_DATA_DIR_CMAKE}/wave30-assign-delete-control.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# W34-4.5: Task > Font > B is live for the one measured cell (the Task Name cell
+# of UniqueID 1) and refuses every other cell with the reason and an empty queue;
+# the measured cell queues one edit, a second click is refused, the real save
+# writes it, and a reopen refuses a second Bold (the view stores a format).
+add_executable(qt_cell_bold_gate_tests tests/cell_bold_gate_test.cpp)
+target_link_libraries(qt_cell_bold_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_cell_bold_gate_tests)
+
+add_test(NAME qt_cell_bold_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_cell_bold_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave30-textstyle-control.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # ===========================================================================
 # WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
 # the loaded Task Sheet's geometry; these gate the empty project, the chrome,

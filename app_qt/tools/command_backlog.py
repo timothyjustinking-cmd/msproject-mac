@@ -92,6 +92,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W34-4.3: the Resource tab's Assign Resources assigns one work resource to
     # an unstarted leaf and removes that one assignment (Project pairs measured).
     "assign_resources",
+    # W34-4.5: the Font group's Bold bolds the one Task Name cell Project's pair
+    # measured (the other font controls stay disabled).
+    "font_bold",
     # W30-1.7: Scroll to Task scrolls the sheet to the selected row and pans
     # the chart to the task's start; a view, never a file write.
     "scroll_to_task",
@@ -186,6 +189,12 @@ RIBBON_GAPS = {
         "that holds no assignment yet, and the removal of that one assignment, "
         "alone in the save; further assignments, units, work and the other "
         "dialog fields are refused as not implemented in this port",
+    # W34-4.5: Font Bold on the one measured cell.
+    "font_bold":
+        "gap: the Task Name cell of the task with UniqueID 1 only (Project's "
+        "wave30-textstyle pair), alone in the save; every other cell, a view "
+        "that already stores a cell format, Bold off and the other font "
+        "attributes are refused as not implemented in this port",
     # W31-C4: the command buttons the old parser did not reach.
     "project_information":
         "gap: only the project priority has a measured writer; every other "

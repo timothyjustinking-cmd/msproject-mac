@@ -244,7 +244,10 @@ const std::vector<TabSpec>& tab_specs() {
         combo(font, "font size", "11", 34, 0, 1);
         // W26-2.1: B/I/U are icon-only, like the letters Project shows: the
         // glyph is the letter, so the label is the accessible name only.
-        small(font, "B", app::MenuAction::none, 20, 0, 2, false, 1, true, "font.bold");
+        // W34-4.5: B is enabled for the one measured cell (wave30-textstyle: the
+        // Task Name cell of UniqueID 1); the handler refuses every other cell
+        // with the reason.  I and U stay disabled.
+        small_cmd(font, "B", RibbonCommand::font_bold, 20, 0, 2, true, true, "font.bold");
         small(font, "I", app::MenuAction::none, 20, 0, 3, false, 1, true, "font.italic");
         small(font, "U", app::MenuAction::none, 20, 0, 4, false, 1, true, "font.underline");
         split(font, "highlight colour", 26, 1, 0, 1, "font.highlight");
