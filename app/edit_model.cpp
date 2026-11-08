@@ -4609,6 +4609,17 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 "untouched save";
             return result;
         }
+        // W35-0.2 (R34b-6): the sixth exclusive kind.  The table-format and
+        // formula edits reach this save through the hook, not `edits`, so a
+        // pending one would share the save with the mode writer, a combination
+        // no pair measures (as for the five wave-34 kinds above).
+        if (document_edits.any()) {
+            result.error =
+                "a task-mode edit cannot be combined with a table format or "
+                "custom-field formula edit; the measured Project pair is one "
+                "mode change on an otherwise untouched save";
+            return result;
+        }
     }
 
     // W34-4.1: the resource rename is exclusive the same way.  The measured
