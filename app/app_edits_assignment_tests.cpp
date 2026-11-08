@@ -1020,12 +1020,32 @@ void check_refusals() {
     }
 }
 
+// W35-4.1: the lookup both shells use to choose between assigning and removing.
+void check_held_assignment_resource() {
+    app::PlanInput plan;
+    app::AssignmentRow placeholder;
+    placeholder.uid = 10;
+    placeholder.task_uid = 1;
+    placeholder.resource_uid = 0;  // Project's unassigned placeholder
+    app::AssignmentRow real;
+    real.uid = 11;
+    real.task_uid = 2;
+    real.resource_uid = 5;
+    plan.assignments = {placeholder, real};
+    check(app::held_assignment_resource(plan, 1) == 0,
+          "a task holding only the placeholder holds no real assignment");
+    check(app::held_assignment_resource(plan, 2) == 5,
+          "a task's one real assignment names its resource");
+    check(app::held_assignment_resource(plan, 3) == 0, "an unknown task holds none");
+}
+
 }  // namespace
 
 int main() {
     check_pair(kAdd);
     check_pair(kRemove);
     check_refusals();
+    check_held_assignment_resource();
     std::printf("app_edits_assignment_tests: %d checks passed\n", g_checks - g_failures);
     if (g_failures != 0) {
         std::printf("app_edits_assignment_tests: %d FAILURE(S)\n", g_failures);

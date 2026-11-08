@@ -104,6 +104,15 @@ std::vector<MenuSpec> build_menu_specs() {
         // custom-field commands, so it lives here.
         item(MenuAction::custom_field_formula, "Custom Field Formula...", "", false,
              false, true),
+        // Wave 35 (W35-4.1): the writer-backed commands of waves 34 and 35.  Each
+        // builds its edit through the shared builder the Qt shell uses and queues
+        // it; Save writes it.  Font Bold takes Project's Ctrl+B as Command+B.
+        item(MenuAction::resource_information, "Resource Information...", "", false,
+             false, true),
+        item(MenuAction::assign_resources, "Assign Resources..."),
+        item(MenuAction::font_bold, "Font Bold", "b"),
+        item(MenuAction::define_wbs_code, "Define WBS Code"),
+        item(MenuAction::calculate_project, "Calculate Project"),
     };
     menus.push_back(std::move(edit));
 
@@ -232,6 +241,11 @@ const std::vector<MenuAction>& all_menu_actions() {
         MenuAction::insert_resource,
         MenuAction::print,
         MenuAction::save_as_pdf,
+        MenuAction::resource_information,
+        MenuAction::assign_resources,
+        MenuAction::font_bold,
+        MenuAction::define_wbs_code,
+        MenuAction::calculate_project,
     };
     return actions;
 }
@@ -375,6 +389,20 @@ bool menu_item_enabled(MenuAction action, const MenuState& state) noexcept {
             // needs a document and no open cell edit; it is offered in every
             // view (the new row shows on the Resource Sheet).
             return state.has_document && !state.editing;
+        case MenuAction::resource_information:
+            // W35-4.1: a Resource Sheet command (as in the Qt shell); the resource
+            // is chosen in the dialog because this shell's resource grid has no
+            // cell selection.
+            return state.has_document && state.resource_sheet_view && !state.editing;
+        case MenuAction::assign_resources:
+        case MenuAction::font_bold:
+            // Task Sheet commands on the selected task (Font Bold: its one cell).
+            return state.has_document && state.task_view && state.has_selection &&
+                   !state.editing;
+        case MenuAction::define_wbs_code:
+        case MenuAction::calculate_project:
+            // Project-level: no selection; the builder owns every refusal.
+            return state.has_document && !state.editing;
         case MenuAction::cut:
             return false;
     }
@@ -430,6 +458,11 @@ const char* menu_action_name(MenuAction action) noexcept {
         case MenuAction::insert_resource: return "insert_resource";
         case MenuAction::print: return "print";
         case MenuAction::save_as_pdf: return "save_as_pdf";
+        case MenuAction::resource_information: return "resource_information";
+        case MenuAction::assign_resources: return "assign_resources";
+        case MenuAction::font_bold: return "font_bold";
+        case MenuAction::define_wbs_code: return "define_wbs_code";
+        case MenuAction::calculate_project: return "calculate_project";
     }
     return "none";
 }

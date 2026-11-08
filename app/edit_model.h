@@ -599,6 +599,29 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
                          std::uint32_t task_uid, std::uint32_t field_id,
                          StructuralEdit& out, std::string& error);
 
+// Wave 35 (W35-4.1): what both shells say, and look up, around the Font Bold and
+// Assign Resources builders, kept here so the Qt and macOS shells cannot drift.
+//
+// The refusal for a Font Bold request that spans more than one cell: the
+// measured pair bolds a single Task Name cell, so a range is refused before the
+// builder runs.  The shell prefixes it with "Font Bold: ".
+inline std::string_view bold_range_refusal() noexcept {
+    return "Font Bold on more than one cell is not implemented in this port: the measured "
+           "Project pair bolds a single cell";
+}
+
+// The resource of the task's one real assignment (resource_uid != 0), or 0 when
+// the task holds none.  Assign Resources removes that assignment when there is one
+// and otherwise assigns; make_assignment_edit owns every other refusal.
+inline std::uint32_t held_assignment_resource(const PlanInput& plan, std::uint32_t task_uid) {
+    for (const AssignmentRow& row : plan.assignments) {
+        if (row.task_uid == task_uid && row.resource_uid != 0) {
+            return row.resource_uid;
+        }
+    }
+    return 0;
+}
+
 // Builds a ready-to-push define_wbs_code edit (W34-4.6).  The plan-side rule is
 // the measured pair's own population: Project's wave30-wbs holds exactly three
 // saved tasks with UniqueIDs 1, 2 and 3, all top-level and none a summary, and
