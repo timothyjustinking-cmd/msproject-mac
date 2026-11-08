@@ -74,6 +74,15 @@ inline bool shell_implements(app::MenuAction action) noexcept {
         // cases above it as "implemented".
         case app::MenuAction::hide_app:        // no portable hide command
         case app::MenuAction::none:
+        // W35-4.1: the macOS shell's menu items.  The Qt shell reaches these five
+        // commands from its ribbon, not through handle_action(), so no Qt menu item
+        // for them is implemented; naming them keeps the switch exhaustive for
+        // -Wswitch (GCC, Clang and AppleClang reject a missing enumerator).
+        case app::MenuAction::resource_information:
+        case app::MenuAction::assign_resources:
+        case app::MenuAction::font_bold:
+        case app::MenuAction::define_wbs_code:
+        case app::MenuAction::calculate_project:
             return false;
     }
     return false;
