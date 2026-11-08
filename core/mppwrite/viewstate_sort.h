@@ -140,6 +140,13 @@ struct ViewSortWrite {
 std::uint64_t sort_block_digest(std::vector<std::uint8_t> const& var2,
                                 std::size_t block_offset);
 
+/* W35b-1.1: the uid-2 view-state block must be one of the two measured
+ * controls' (digest with both sort-spec copies zeroed) and carry the default
+ * spec in both copies.  Shared by the other view-state writers; `refused` names
+ * what is refused in the message ("this outline level").  Throws Error. */
+void require_measured_view_block(CfbDocument const& doc, std::string const& function,
+                                 std::string const& refused);
+
 /*
  * Apply `edit` to `doc`, write the package to `path`, re-open it and prove the
  * state from the bytes.  Throws Error on a refusal or a mismatch; then neither

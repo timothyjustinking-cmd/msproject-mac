@@ -23,6 +23,9 @@ using Bytes = std::vector<std::uint8_t>;
 
 constexpr std::size_t kMeasuredBlockPayload = 42692;
 constexpr std::uint64_t kMeasuredBlockDigest = 0xb2a54e044baa30a2ull;
+/* W35b-1.1: the six-task and flat controls (outline-deep-level2, sort-flat-name-
+ * desc) share a second text style; the Show Level pairs measure both. */
+constexpr std::uint64_t kMeasuredBlockDigestAlt = 0x6f6082994d512927ull;
 constexpr std::size_t kSlotBytes = 6;
 
 constexpr std::size_t kEdlHeaderSize = 20;
@@ -209,7 +212,8 @@ std::size_t spec_at(SortBlock const& block, std::size_t which) {
 }
 
 void require_default_spec(Bytes const& var2, SortBlock const& block,
-                          std::string const& function) {
+                          std::string const& function,
+                          std::string const& refused = "this sort") {
     Bytes const none = slot_bytes(kSortSlotNone, true);
     Bytes const first = slot_bytes(kSortFieldId, true);
     for (std::size_t const at : {kSortSpecFirst, kSortSpecSecond}) {
@@ -224,8 +228,8 @@ void require_default_spec(Bytes const& var2, SortBlock const& block,
         if (!ok) {
             throw Error(function + ": the file already carries a sort (the spec "
                         "at block + " + number(at) + " is not the default ID "
-                        "ascending), and replacing a sort is unmeasured, so "
-                        "this sort is refused");
+                        "ascending), and replacing a sort is unmeasured, so " +
+                        refused + " is refused");
         }
     }
 }
@@ -355,6 +359,21 @@ std::uint64_t sort_block_digest(Bytes const& var2, std::size_t block_offset) {
         hash = (hash ^ byte) * 0x100000001b3ull;
     }
     return hash;
+}
+
+void require_measured_view_block(CfbDocument const& doc, std::string const& function,
+                                 std::string const& refused) {
+    SortBlock const block = locate_block(doc, function);
+    Bytes const var2 = doc.read_stream(std::string(kViewTable) + "/Var2Data");
+    std::uint64_t const digest = sort_block_digest(var2, block.offset);
+    if (digest != kMeasuredBlockDigest && digest != kMeasuredBlockDigestAlt) {
+        throw Error(function + ": the view-state block is not one of the two "
+                    "measured controls' outside its sort spec (digest mismatch: "
+                    "a zoom, timescale or other view-state edit changed it), so "
+                    "the view it sits in is unmeasured and " + refused +
+                    " is refused");
+    }
+    require_default_spec(var2, block, function, refused);
 }
 
 ViewSortWrite save_view_sort(CfbDocument& doc, ViewSortEdit const& edit,
