@@ -413,6 +413,32 @@ void check_refusals() {
                        "equal durations", "equal sibling durations");
     }
 
+    /* W35b-1.4 (R35G2-4): Name in both directions and Duration descending are
+     * measured; Duration ascending is not, and the one ascending pair moves no row. */
+    {
+        expect_refused(plan, source, one_key(app::SortKeyKind::duration, true), true, false,
+                       "ascending Duration sorts are unmeasured", "Duration ascending");
+        app::PlanInput moved = plan;
+        task_by_uid(moved, 1)->name = "Task Z";
+        expect_refused(moved, source, one_key(app::SortKeyKind::name, true), true, false,
+                       "an ascending sort that reorders rows is unmeasured",
+                       "a Name ascending sort that would move rows");
+
+        app::StructuralEdits edits;
+        app::StructuralEdit duration_up = hand_edit(named);
+        duration_up.field_id = 0x0B400507u;
+        duration_up.ascending = true;
+        duration_up.sort_order = {3, 2, 1, 5, 4};
+        check(!edits.push(duration_up, &plan), "push() refuses Duration ascending");
+        app::StructuralEdit name_up = hand_edit(named);
+        name_up.ascending = true;
+        check(!edits.push(name_up, &plan),
+              "push() refuses an ascending Name sort that carries a reordered result");
+        name_up.sort_order = kBase;
+        check(edits.push(name_up, &plan),
+              "push() accepts Name ascending that moves no row (the measured pair)");
+    }
+
     /* W35b-1.2 (R35G2-2): a plan that is not the file's (an unsaved rename, or an
      * outline the file does not store) gives an order the file's own rows do not,
      * and the writer's dry run refuses it when the edit is built. */
