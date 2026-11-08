@@ -142,9 +142,9 @@ and 5 are what a measured writer must add; step 1 is the engine.
 ## 7. Limits and open questions
 
 - The decode is from one linked pair (A -> B, FS +0, one pending Duration change) and one
-  no-op pair. **The unlinked-leaf shape that W35-1.2 targets has no pair yet**; the
-  differences between it and the linked pair (rows 1 and 2 behave alike, the roll-up row
-  differs) are the first thing W35-1.2 measures.
+  no-op pair. _Corrected, 9 November 2026 (W35-1.3): the unlinked-leaf shape now has a
+  pair, `wave35-calculate-unlinked`, and a writer reproduces it byte for byte; see
+  section 8._
 - Whether the three calculation-record keys depend on the number of rows, the link, or the
   assignment placeholder is open (the "pairs still needed" 1 in `scheduler-save.md`).
 - The row-word to field mapping is positional: which engine output each of the date
@@ -153,3 +153,44 @@ and 5 are what a measured writer must add; step 1 is the engine.
   assignment's work are not measured.
 - Respect Links, Move, Auto Schedule and Level All are other commands with other effects;
   none is measured as a save here, and they stay disabled.
+
+## 8. Errata from the wave-35 pairs (W35-1.2, W35-1.3)
+
+The four pairs `wave35-calculate-unlinked`, `-linked`, `-lag` and `-snet` (reports under
+[`evidence/`](evidence/)) correct this note in five places. `core/mppwrite/calculate.h`
+is the writer for the first one; the other three are refused.
+
+- **Five overtime entries, not nine.** On an automatically built file the write-back
+  appends the five project-row overtime records (`0x0b4000a4`, `a5`, `a8`, `a9`, `aa`,
+  8 zero bytes each) and nothing else. The three `0x4e3`/`0x4e4`/`0x4e5` keys of section 4
+  are not appended by any of the four wave-35 pairs (each grows Task Var2Data by exactly
+  five 12-byte blocks, 60 bytes), so section 4's "nine" is the `wave30-calculate` file's
+  count; what decides the extra four there is still open.
+- **The row words are named.** `core/mppwrite/table.h` (`task_row`) names the FixedData
+  words: `kDuration` +84 and `kRemainingDuration` +88 (the project row takes the critical
+  leaf's duration), `kFinish` +100, `kFinish2` +108 and `kFinish3` +116 (the project row
+  takes the latest leaf Finish), `kStart3` +112 and `kFinish3` +116 on a leaf (late
+  Start and Finish), `kStartAnchor` +174 (cleared to `0xffffffff`), and the slack words
+  +74 (free), +186 (start) and +190 (total). `core/mppwrite/row_writer.h` (`fixed2_row`)
+  names the Fixed2Data record words.
+- **Fixed2Meta +95 does not change.** Section 2 and section 3 list `+95 0x00 -> 0x08, 0x10,
+  0x14`; none of the four wave-35 pairs changes Task Fixed2Meta at all (no report lists
+  it), so the byte is not part of the write-back the unlinked shape needs. The unlinked writer leaves Fixed2Meta untouched.
+- **Fixed2Data +46 is the Props project start.** Each leaf's record gets `+42 = 0x30` and
+  `+46 =` Props `0x02400002`, now verified by the byte match of the unlinked pair; record
+  0 +58 becomes 0. The stamp differs per row and per shape (the linked, lag and snet pairs
+  store other stamps, for example `0x28`), which is why those shapes are refused.
+  Props `0x02400003` is the project Finish and `0x02400024` is the "calculation pending"
+  flag (`01 00 -> 00 00`).
+- **The unlinked-leaf shape has its pair** (replacing section 7's first bullet). The
+  slack words follow the rule `build_outline_slack` (`app/edit_model.cpp`) already uses
+  for the automatic outline save:
+  slack is the working time between a leaf's Finish and the project Finish, free, start
+  and total slack are equal, the late Finish is the project Finish and the late Start is
+  that date less the leaf's duration. `app_edits_calculate` proves the engine's words equal
+  Project's own for this pair.
+
+What stays refused: any link (the linked, lag and snet pairs), a constraint, a manual
+row, a summary beyond the project row, progress, a task calendar, any row count other than
+the project row plus two leaves, and a file whose recalculation is not pending. Respect
+Links, Move, Auto Schedule and Level All are unchanged.
