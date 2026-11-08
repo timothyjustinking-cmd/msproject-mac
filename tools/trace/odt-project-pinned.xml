@@ -1,0 +1,16 @@
+<!-- Office Deployment Tool configuration for the TRACE VM only (trace-runbook.md section 3).
+     Installs Project Professional 2021 (Retail, x64) from the Current Channel at the build the
+     Ghidra model is believed to come from, with updates OFF so the build never moves.
+     Run inside the VM:  setup.exe /configure odt-project-pinned.xml
+     If the content network no longer serves this build, setup fails; then remove the
+     Version attribute, install the current build, keep updates off, and re-decompile
+     (runbook section 3, option 2). -->
+<Configuration>
+  <Add OfficeClientEdition="64" Channel="Current" Version="16.0.20430.20182">
+    <Product ID="ProjectPro2021Retail">
+      <Language ID="en-us" />
+    </Product>
+  </Add>
+  <Updates Enabled="FALSE" />
+  <Display Level="Full" />
+</Configuration>
