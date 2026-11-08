@@ -109,7 +109,7 @@ Counts: 0 Critical, 1 High, 6 Medium, 5 Low.
     a mutation that compares only the first 52 bytes of the item survives every test;
   - an already-unbolded item (flags 0x00000003, `wave35-g3-font-bold-off.mpp` as input) and
     Italic plus Bold (0x03000003).
-  
+
   All are refused today (the whole-item `std::equal`, the count check), so this is a test
   gap, not a hole.
 - Failure scenario: a refactor narrows the item comparison or drops the last-item check, and
