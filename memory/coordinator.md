@@ -1,9 +1,27 @@
-# memory — coordinator (2026-11-08, wave 34 complete on branch `wave34`)
+# memory — coordinator (2026-11-09, wave 35 complete on branch `wave35`)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
-`docs/handoff/wave34-complete.md` (G0-G4 and CLOSE appended;
-`WAVE-34-COMPLETE`); review `docs/handoff/wave34-verification/close-review.md`.
+`docs/handoff/wave35-complete.md` (G0-G4 and CLOSE appended; `WAVE-35-COMPLETE`); reviews in
+`docs/handoff/wave35-verification/`.
 History: `memory/archive/coordinator-through-wave20-full.md`.
+
+## Wave 35 state (closed on `wave35`, NOT merged, NOT pushed) — 9 November 2026
+
+`wave35` is cut from `wave34b`.  Built, each for its measured shape only: G0 carry-over
+fixes (resource calendar refusals, RC-W1/W2/W6..W8, CI-4 hook), G1 `mppwrite::save_calculate`
+and Calculate Project (unlinked two-leaf), G2 Sort (one Name or Duration key, five tasks) and
+Show Level 1 and 2, G3 Bold off (view writer), G4 macOS shell wiring (five commands).
+Deferred with evidence: linked, lag and constraint Calculate, applied table, zoom, Insert
+Summary and Milestone, Set Baseline 0, Notes, other font controls, Renumber, port-saved
+removal.  Fresh-tree gates at `4e3ba80` green (`build/w35/W35-CLOSE-fresh-gates.log`) except
+`guard_names`.  **Not mergeable:** open Highs R35G1-1..3, RW35-W2 (Calculate), R35G2-1..4,
+RW35-R2 (view state), R35G3-1, RW35-W1 (port-saved removal) go to a fix-only `wave35b`
+(`plan-waves27-30.md`, "Queued from wave 35").  RW35-R1 (`-Wswitch` in
+`app_qt/command_status.h`) closed at CLOSE by `513de29`.  **Not pushable:** `9fa599b` added two
+fixtures carrying the operator's real name (fixed forward in `9564ddd`); the rewrite is the
+operator's or the coordinator's.  Lesson: MSVC hides `-Wswitch`; add every new `MenuAction` to
+`app_qt/command_status.h`.  The shell hook blocks backslashes inside heredocs and inline
+Python, so scripts go through Write and run by path.
 
 ## Wave 34b state (fix-only; closed on `wave34b`, NOT merged) — 8 November 2026
 
