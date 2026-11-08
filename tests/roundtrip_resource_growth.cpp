@@ -369,6 +369,14 @@ std::string calendar_identity_problem(CfbDocument const& file,
     if (held != 1) {
         return "the shared identity (+32) is not the one held in 114/Props";
     }
+    /* W35-0.2 (R34b-4): the resource record holds its identity twice, +0 and +24
+     * (16 bytes each).  Project's save has them equal in every record (measured
+     * on wave30-resource-add: the re-issued 89b9c420 and the new 89b9c421 at both
+     * offsets), and the first dword of each is masked in the pair compare, so
+     * the equality is asserted here, on the appended record in both files. */
+    if (!same(rsc, rsc_at, rsc, rsc_at + 24)) {
+        return "the resource record's second identity (+24) is not its identity (+0)";
+    }
     return std::string();
 }
 
@@ -405,6 +413,20 @@ void check_calendar_identities(TestContext& t, std::string const& label,
                   << (problem.empty() ? "NOT DETECTED" : problem) << "\n";
         t.check(problem.find("resource reference (+16)") != std::string::npos,
                 label + ": a wrong resource reference (+16) is detected");
+    }
+    /* A wrong second identity (+24) on the appended resource record: the masked
+     * first dword off by one, the only difference the pair compare cannot see. */
+    {
+        CfbDocument scratch = port;
+        Bytes rsc = scratch.read_stream(kRscF2);
+        rsc[rsc_record * 40 + 24] = static_cast<std::uint8_t>(rsc[rsc_record * 40 + 24] ^ 1u);
+        scratch.replace_stream(kRscF2, rsc);
+        std::string const problem =
+            calendar_identity_problem(scratch, cal_record, rsc_record);
+        std::cout << "   " << label << " planted wrong resource identity copy -> "
+                  << (problem.empty() ? "NOT DETECTED" : problem) << "\n";
+        t.check(problem.find("second identity (+24)") != std::string::npos,
+                label + ": a wrong resource identity copy (+24) is detected");
     }
     /* A shared identity that is not the one in Props (first dword off by one). */
     {
