@@ -93,7 +93,13 @@
  *     view property family, an item that runs past the payload, a non-zero pad
  *     byte after an odd item, a block that already carries a 0x2240000c item
  *     (replace/un-bold/row-default precedence are unmeasured);
- *   - a 214/Props that has no CV_iew size tag or two of them.
+ *   - a 214/Props that has no CV_iew size tag or two of them;
+ *   - (R34G4-4) a file whose applied view is not uid 2: 214/CEdl names the
+ *     applied view (0x26400018) and the CV_iew row with that caption must be
+ *     uid 2 (the committed wave31-resource-sheet.mpp and wave31-usage.mpp apply
+ *     other views); and a uid-2 main block that is not the measured control's
+ *     outside its two size words and item count (an FNV-1a 64 digest of the
+ *     42,692 payload bytes), which pins the text style the Bold item sits on.
  *
  * ALL-OR-NOTHING AND PROVEN FROM DISK.  The edit is applied to a copy of the
  * document; the package is written to `path`, re-opened and required to hold
@@ -121,6 +127,9 @@ namespace mppwrite {
 /* The measured view stream and the item this writer appends. */
 inline constexpr char const* kViewTable = "214/CV_iew";
 inline constexpr char const* kViewProps = "214/Props";
+inline constexpr char const* kEdlTable = "214/CEdl";
+/* The CEdl record that names the applied view (UTF-16). */
+inline constexpr std::uint32_t kEdlViewNameId = 0x26400018u;
 inline constexpr std::uint32_t kViewStateKey = 0x20400006u;
 inline constexpr std::uint32_t kViewCellFormatItemId = 0x2240000Cu;
 inline constexpr std::uint32_t kViewCellFormatItemKind = 1u;

@@ -66,3 +66,25 @@ failures of 932 checks to 0 of 932 (`build/w34b/afb0aab-W34b-0.3-red.log`,
 (`-app-red.log`, `-app-green.log`).  Both measured pairs still write and match Project's
 pair field by field (the `resource-add-second` and `resource-add-third` pair tests are
 inside the 932).
+
+### W34b-0.4 (R34G4-4)
+
+Font Bold wrote into the view with UniqueID 2 whatever the file applied.  The writer
+(`save_view_cell_style`, so the dry run in `make_cell_bold_edit` too) now requires two
+things.  (1) The file's applied view is uid 2: `214/CEdl` names it (record
+`0x26400018`), the `214/CV_iew` FixedData row with that caption (ignoring `&`) must be
+exactly one and carry uid 2.  `wave31-resource-sheet.mpp` (uid 4) and
+`wave31-usage.mpp` (uid 5) are committed files that apply another view.  (2) The uid-2
+main block equals the measured control's outside the bytes the edit rewrites (the two
+size words and the item count): length 42,692 and an FNV-1a 64 digest
+(`0xc4a86de4acee2cfb`) that the wave30-textstyle control and its null save share with 67
+other committed fixtures saved in the same Project session; the fixtures' other digest
+groups (for example the `synthetic-base` family) are refused as
+unmeasured.  That pins the text style the Bold item sits on, the font table and every
+other item.
+
+RED then GREEN (fix reverted, tests kept): writer `mppwrite_roundtrip_viewstream` 13
+failures of 477 checks to 0 of 477 (`build/w34b/f8452b4-W34b-0.4-red.log`,
+`-green.log`); shell `app_edits_cell_bold_tests` 3 failures (373 passed), all UNEXPECTED
+ACCEPT, to 0 of 382 (`-app-red.log`, `-app-green.log`).  The measured cell still
+writes and matches Project's pair (the pair test is inside the 477 and the 382).

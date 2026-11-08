@@ -107,6 +107,8 @@ struct Context {
 const char* const kViewMeta = "214/CV_iew/VarMeta";
 const char* const kViewVar2 = "214/CV_iew/Var2Data";
 const char* const kViewProps = "214/Props";
+/* The applied view's main block in the control: 42,576 + its 4-byte length word. */
+constexpr std::size_t kViewMainBlockPayloadAt = 42576 + 4;
 const char* const kMarker = "Props14";
 
 /* The four streams the measured edit owns. */
@@ -402,6 +404,26 @@ void check_refusals() {
     /* The file decides the rest (the writer's dry run). */
     expect_refused(formatted_plan, formatted_path.string(), kTaskUid, kNameField, not_implemented,
                    "a view that already carries a cell format item");
+    /* R34G4-4: the writer edits view uid 2, so the file's applied view must be
+     * that view and its record the measured control's.  The two wave 31 files
+     * apply the Resource Sheet (uid 4) and Resource Usage (uid 5). */
+    expect_refused(plan, data_path("wave31-resource-sheet.mpp").string(), kTaskUid, kNameField,
+                   "(CV_iew uid 4), not the measured view uid 2",
+                   "a file whose applied view is the Resource Sheet");
+    expect_refused(plan, data_path("wave31-usage.mpp").string(), kTaskUid, kNameField,
+                   "(CV_iew uid 5), not the measured view uid 2",
+                   "a file whose applied view is Resource Usage");
+    {
+        mppwrite::CfbDocument changed = mppwrite::CfbDocument::from_file(source);
+        Bytes var2 = changed.read_stream(kViewVar2);
+        var2[kViewMainBlockPayloadAt + 20000] ^= 0x01;
+        changed.replace_stream(kViewVar2, var2);
+        const std::filesystem::path changed_path = out_path("app-cell-bold-changed-view.mpp");
+        changed.save(changed_path.string());
+        expect_refused(plan, changed_path.string(), kTaskUid, kNameField,
+                       "differs from the measured control's",
+                       "a file whose applied view record is not the measured control's");
+    }
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    kTaskUid, kNameField, "could not be read", "a missing project file");
     {

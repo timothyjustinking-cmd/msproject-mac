@@ -369,6 +369,176 @@ ViewState load_view(CfbDocument const& doc, std::uint32_t view_uid,
     return state;
 }
 
+/* R34G4-4: the applied view and the view record, tied to the pair.
+ *
+ * The applied view is the one `214/CEdl` names (record 0x26400018, UTF-16).  A
+ * CV_iew FixedData row is `[u32 uid][UTF-16 caption, NUL-terminated]`; the row
+ * whose caption matches (ignoring the '&' accelerators) is the applied view.
+ * The wave30-textstyle control applies "&Gantt Chart", uid 2.
+ *
+ * The edited record is that view's main block.  It must equal the measured
+ * control's block outside the bytes the edit changes (the two size words at +0
+ * and +4 and the item count at +12): its FNV-1a 64 digest below was taken over
+ * the 42,692 payload bytes of the wave30-textstyle control and its null save
+ * (which agree), and is shared by the 69 committed fixtures saved in the same
+ * Project session.  The text style the Bold item sits on, the font table and
+ * every other item are in that digest; the font word 0x90000001 is undecoded, so
+ * a view with any other style is not a shape the pair measured. */
+constexpr std::size_t kMeasuredViewBlockBytes = 42692;
+constexpr std::uint64_t kMeasuredViewBlockDigest = 0xc4a86de4acee2cfbULL;
+
+std::string strip_accelerators(std::string const& text) {
+    std::string out;
+    for (char const ch : text) {
+        if (ch != '&') out.push_back(ch);
+    }
+    return out;
+}
+
+std::string utf16_ascii_z(Bytes const& bytes, std::size_t at, std::size_t units,
+                          std::string const& what, std::string const& function) {
+    std::string out;
+    for (std::size_t i = 0; i < units; ++i) {
+        std::uint16_t const unit = get_u16(bytes, at + 2 * i);
+        if (unit == 0) return out;
+        if (unit >= 0x80) {
+            throw Error(function + ": " + what + " holds a non-ASCII character; "
+                        "only an ASCII view name is measured");
+        }
+        out.push_back(static_cast<char>(unit));
+    }
+    throw Error(function + ": " + what + " is not NUL-terminated");
+}
+
+/* The applied view's name from the one block of 214/CEdl. */
+std::string applied_view_name(CfbDocument const& doc, std::string const& function) {
+    std::string const var_meta_path = std::string(kEdlTable) + "/VarMeta";
+    std::string const var2_path = std::string(kEdlTable) + "/Var2Data";
+    require_stream(doc, var_meta_path, function);
+    require_stream(doc, var2_path, function);
+    Bytes const var_meta = doc.read_stream(var_meta_path);
+    Bytes const var2 = doc.read_stream(var2_path);
+    if (var_meta.size() != kVarMetaHeaderSize + kVarMetaEntrySize) {
+        throw Error(function + ": " + var_meta_path + " is " +
+                    std::to_string(var_meta.size()) + " bytes; the measured "
+                    "214/CEdl holds exactly one block, so the applied view "
+                    "cannot be resolved");
+    }
+    std::uint32_t const offset = get_u32(var_meta, kVarMetaHeaderSize + 4);
+    if (static_cast<std::size_t>(offset) + 4 > var2.size()) {
+        throw Error(function + ": the 214/CEdl block starts past the end of "
+                    "Var2Data");
+    }
+    std::size_t const length = get_u32(var2, offset);
+    if (length < 16 || static_cast<std::size_t>(offset) + 4 + length > var2.size()) {
+        throw Error(function + ": the 214/CEdl block does not fit Var2Data");
+    }
+    std::size_t const start = static_cast<std::size_t>(offset) + 4;
+    std::size_t const end = start + length;
+    std::string name;
+    bool found = false;
+    for (std::size_t pos = start + 16; pos + kViewItemHeaderSize <= end;) {
+        std::size_t const payload_length = get_u32(var2, pos);
+        std::uint32_t const id = get_u32(var2, pos + 4);
+        if ((id & 0x00FF0000u) != 0x00400000u ||
+            payload_length > end - pos - kViewItemHeaderSize) {
+            break;
+        }
+        if (id == kEdlViewNameId && get_u32(var2, pos + 8) == 1) {
+            if (found) {
+                throw Error(function + ": 214/CEdl holds two applied view names; "
+                            "refusing to choose");
+            }
+            found = true;
+            name = utf16_ascii_z(var2, pos + kViewItemHeaderSize, payload_length / 2,
+                                 "the 214/CEdl applied view name", function);
+        }
+        pos += kViewItemHeaderSize + payload_length;
+    }
+    if (!found || name.empty()) {
+        throw Error(function + ": 214/CEdl does not name an applied view, so it "
+                    "cannot be tied to the measured view");
+    }
+    return name;
+}
+
+/* The UniqueID of the CV_iew row whose caption is `name`. */
+std::uint32_t view_uid_for_caption(CfbDocument const& doc, std::string const& name,
+                                   std::string const& function) {
+    std::string const meta_path = std::string(kViewTable) + "/FixedMeta";
+    std::string const data_path = std::string(kViewTable) + "/FixedData";
+    require_stream(doc, meta_path, function);
+    require_stream(doc, data_path, function);
+    Bytes const meta = doc.read_stream(meta_path);
+    Bytes const data = doc.read_stream(data_path);
+    if (meta.size() < kBlockHeaderSize) {
+        throw Error(function + ": " + meta_path + " is shorter than its header");
+    }
+    std::size_t const rows = get_u32(meta, 8);
+    if (rows == 0 || data.size() % rows != 0 || data.size() / rows < 8) {
+        throw Error(function + ": " + data_path + " is not " +
+                    std::to_string(rows) + " whole view rows");
+    }
+    std::size_t const row_bytes = data.size() / rows;
+    std::size_t const units = std::min<std::size_t>(128, row_bytes - 4) / 2;
+    std::string const wanted = strip_accelerators(name);
+    std::size_t matches = 0;
+    std::uint32_t uid = 0;
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::string const caption = utf16_ascii_z(
+            data, row * row_bytes + 4, units,
+            "the caption of view row " + std::to_string(row), function);
+        if (strip_accelerators(caption) == wanted) {
+            ++matches;
+            uid = get_u32(data, row * row_bytes);
+        }
+    }
+    if (matches != 1) {
+        throw Error(function + ": the applied view \"" + name + "\" matches " +
+                    std::to_string(matches) + " CV_iew rows; exactly one is the "
+                    "measured shape");
+    }
+    return uid;
+}
+
+std::uint64_t masked_block_digest(Bytes const& var2, std::size_t block_offset,
+                                  std::size_t payload_length) {
+    std::uint64_t hash = 0xcbf29ce484222325ULL;
+    std::size_t const payload_at = block_offset + 4;
+    for (std::size_t i = 0; i < payload_length; ++i) {
+        bool const edited = i < kBlockFormatWord ||
+                            (i >= kBlockCountWord && i < kBlockCountWord + 2);
+        std::uint8_t const byte = edited ? 0 : var2[payload_at + i];
+        hash = (hash ^ byte) * 0x100000001b3ULL;
+    }
+    return hash;
+}
+
+/* The file's applied view must be the measured uid 2, and its main block must
+ * be the measured control's outside the bytes the edit rewrites. */
+void require_measured_view(CfbDocument const& doc, ViewState const& state,
+                           ViewCellStyleEdit const& edit,
+                           std::string const& function) {
+    std::string const name = applied_view_name(doc, function);
+    std::uint32_t const applied = view_uid_for_caption(doc, name, function);
+    if (applied != edit.view_uid) {
+        throw Error(function + ": the file's applied view is \"" + name +
+                    "\" (CV_iew uid " + std::to_string(applied) + "), not the "
+                    "measured view uid " + std::to_string(edit.view_uid) +
+                    "; a Bold item written into another view would format "
+                    "nothing the user sees");
+    }
+    if (state.payload_length != kMeasuredViewBlockBytes ||
+        masked_block_digest(state.var2, state.block_offset, state.payload_length) !=
+            kMeasuredViewBlockDigest) {
+        throw Error(function + ": the applied view's record (" +
+                    std::to_string(state.payload_length) + " bytes) differs from "
+                    "the measured control's outside the size words and item "
+                    "count; its text style and layout are not a shape the "
+                    "Project pair measured");
+    }
+}
+
 /* The measured 44-byte cell-format entry for the caller's cell, plus its item
  * header.  Every constant here is the one wave30-textstyle stores; the font
  * word is accepted only in the measured form. */
@@ -476,6 +646,7 @@ ViewCellStyleWrite save_view_cell_style(
 
     CfbDocument const opened = doc;
     ViewState state = load_view(doc, edit.view_uid, function);
+    require_measured_view(doc, state, edit, function);
 
     std::size_t const var2_before = state.var2.size();
     std::size_t const payload_at = state.block_offset + 4;

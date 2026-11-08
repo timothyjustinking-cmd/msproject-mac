@@ -95,6 +95,7 @@ char const* kEdit = "wave30-textstyle.mpp";
 char const* kViewMeta = "214/CV_iew/VarMeta";
 char const* kViewVar2 = "214/CV_iew/Var2Data";
 char const* kViewProps = "214/Props";
+char const* kEdlVar2 = "214/CEdl/Var2Data";
 
 /* The measured block and item. */
 constexpr std::size_t kBlockOffset = 42576;
@@ -455,6 +456,43 @@ void test_edit_refusals(TestContext& t) {
         refuses(control, {edit}, "whole-row selection",
                 "whole-row selection refused");
     }
+
+    /* R34G4-4: the view the writer edits must be the file's applied view, and
+     * its record must be the measured control's.  The two committed files that
+     * apply another view (the Resource Sheet, uid 4, and Resource Usage, uid 5)
+     * each hold a view with uid 2 and the measured shape of everything else. */
+    refuses(doc_from_data("wave31-resource-sheet.mpp"), {measured_edit()},
+            "(CV_iew uid 4), not the measured view uid 2",
+            "a file whose applied view is the Resource Sheet refused");
+    refuses(doc_from_data("wave31-usage.mpp"), {measured_edit()},
+            "(CV_iew uid 5), not the measured view uid 2",
+            "a file whose applied view is Resource Usage refused");
+    {
+        /* Same file, CEdl re-pointed at a caption no view has. */
+        std::vector<std::uint8_t> edl = control.read_stream(kEdlVar2);
+        std::string const name = "&Gantt Chart";
+        std::vector<std::uint8_t> needle;
+        for (char const ch : name) {
+            needle.push_back(static_cast<std::uint8_t>(ch));
+            needle.push_back(0);
+        }
+        auto const at = std::search(edl.begin(), edl.end(), needle.begin(), needle.end());
+        t.check(at != edl.end(), "the control's CEdl holds the applied view name");
+        if (at != edl.end()) {
+            *(at + 2 * 11) = static_cast<std::uint8_t>('2');
+            refuses(with_stream(kControl, kEdlVar2, edl), {measured_edit()},
+                    "matches 0 CV_iew rows", "an applied view no CV_iew row names refused");
+        }
+    }
+    {
+        /* One byte of the uid-2 record's text style differs from the measured
+         * control: the block still walks, so only the byte comparison can see it. */
+        std::vector<std::uint8_t> var2 = control.read_stream(kViewVar2);
+        var2[kBlockOffset + 4 + 20000] ^= 0x01;
+        refuses(with_stream(kControl, kViewVar2, var2), {measured_edit()},
+                "differs from the measured control's",
+                "a view record that is not the measured control's refused");
+    }
 }
 
 /* ---- the dry run (W34-4.5) ----------------------------------------------- */
@@ -523,6 +561,9 @@ void test_dry_run(TestContext& t) {
         refuses(control, {edit}, "only Bold is measured", "dry run: italic refused");
     }
     refuses(control, {}, "exactly one cell-format item", "dry run: zero edits refused");
+    refuses(doc_from_data("wave31-resource-sheet.mpp"), edits,
+            "(CV_iew uid 4), not the measured view uid 2",
+            "dry run: a file whose applied view is not uid 2 refused");
     /* A view that already carries a cell format item (Project's own save). */
     refuses(doc_from_data(kEdit), edits, "already carries a cell", "dry run: a formatted view refused");
 }
