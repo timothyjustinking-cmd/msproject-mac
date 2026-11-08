@@ -71,3 +71,56 @@ task that stores a type block (the reader flag added in 3003681).
 - No amend and no history rewrite.
 
 WAVE-35-G0-COMPLETE
+
+## Group G1
+
+The scheduler save path, stage 1.  One finding id per commit, in the brief's order.  Unlike G0,
+G1 did run COM: `scripts/oracle_w35_calculate.py` produced the four Calculate Project pairs
+(the Windows `gen_py` cache was found corrupt along the way).
+
+| Item | Commit(s) | State |
+|---|---|---|
+| W35-1.1 decode note | 18cfb08 | done (`spec/writers/calculate.md`) |
+| W35-1.2 fixtures | 15d8bb5 | done: four pairs and their null saves |
+| W35-1.2 evidence | 2f0ae13 | done: oracle script and four anatomy reports |
+| W35-1.2 writer | 82a7d92 | done: `mppwrite::save_calculate`, unlinked two-leaf shape |
+| W35-1.3 Calculate Project | 1d04674 | done for the measured shape only |
+| W35-1.3 spec errata | 1bd09ee | done (`spec/writers/calculate.md` section 8) |
+
+Gates for each code commit are in `build/w35/<parent>-W35-<item>-*` and quoted in its message.
+At 1d04674: core 63, app 32 and Qt 50 tests pass; fixtures, markers, guard_names and
+scan_client_names report 0.  `app_edits_calculate` runs 403 checks and `qt_calculate_gate`
+passes.
+
+### Deferred, with evidence of the attempt
+
+**Linked, lag and SNET Calculate Project.**  The pairs were measured
+(`spec/writers/evidence/wave35-calculate-{linked,lag,snet}.md`).  They differ from the
+unlinked pair beyond the slack rule: the Fixed2 leaf stamp is not the same constant (for
+example 0x28 against 0x30), and the pairs carry link rows the writer does not model.
+The writer therefore refuses them (`roundtrip_calculate`, each with a needle), and the edit
+model refuses them up front (`app_edits_calculate` runs the linked, lag and SNET pairs as
+refusals).  Respect Links, Move Project, Auto Schedule and Level All stay disabled or
+unchanged.
+
+### Findings
+
+- **Hash count.**  The `15d8bb5` message says "209 documented hashes".  The figure
+  `check_fixtures.py` reports is 197.  Corrected in `2f0ae13`; `15d8bb5` is not amended.
+- **Overtime appends.**  The decode note said nine; every wave-35 pair appends exactly five
+  12-byte uid 0 blocks (0x0B4000A4, A5, A8, A9, AA).  Section 8 of the spec records it.
+- **Scope of the rule.**  Only the project row plus two unlinked automatic leaves with a
+  pending recalculation is written.  The engine-derived slack and late dates equal Project's
+  own result words in the committed pair, which is the evidence for the rule.
+
+### Notes on tests and process
+
+- **Red runs for W35-1.3** (`build/w35/red13-*`): the link refusal off fails
+  `app_edits_calculate` ("a plan with a link"); leaf slack plus one tick fails the free, start
+  and total slack checks for both leaves; the cascade's exclusivity check off fails the
+  start-date edit refusal.  A first slack mutation on the builder's dry-run request copy stayed
+  green, correctly, because the save builds its request from `edit.slack`; it was redone on the
+  right line and is not counted as evidence.  Each run was restored and rebuilt green.
+- No amend and no history rewrite.  G0's commits on the same branch were left untouched.
+
+WAVE-35-G1-COMPLETE
