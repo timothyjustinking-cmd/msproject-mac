@@ -389,6 +389,26 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                "0x02400024 is not 01 00); there is nothing to "
                                "calculate");
         }
+        /* W35b-2.1 (R35G1-4): the two other Props records the save writes are
+         * checked here, before any write, so no append can land in a target that
+         * a later Props edit would then refuse. */
+        std::uint32_t finish_length = 0;
+        std::size_t const finish_at =
+            props_payload(props, kPropProjectFinish, finish_length);
+        if (finish_at == static_cast<std::size_t>(-1) || finish_length != 4 ||
+            get_u32(props, finish_at - 4) != kPropsRecordKindDate) {
+            return fail(error, "114/Props has no 4-byte date record for the "
+                               "project finish (0x02400003), so the save cannot "
+                               "move it");
+        }
+        std::uint32_t start_length = 0;
+        std::size_t const start_at =
+            props_payload(props, kPropProjectStart, start_length);
+        if (start_at == static_cast<std::size_t>(-1) || start_length != 4) {
+            return fail(error, "114/Props has no 4-byte project start "
+                               "(0x02400002), so the leaf Fixed2Data +46 cannot "
+                               "be set");
+        }
         /* W35b-0.3: the pair lengthens the project; no pair shortens it. */
         if (shape.project_finish < rows.u32(0, task_row::kFinish)) {
             return fail(error, "the recalculation would shorten the project (the "
@@ -587,50 +607,55 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
         {kTaskRemainingOvertimeCostFieldId, kMetaPresenceHigh, 0x10},
     };
     CalculateWrite result;
-    bool const existed = std::filesystem::exists(path);
+    /* W35b-2.1 (R35G1-4): save_var_record and save_props_edit each write the path they are
+     * given, so the chain runs against a private temporary file beside the target and the
+     * target is written once, atomically, after the whole result is proved.  A refusal
+     * anywhere leaves the target exactly as it was. */
+    std::string const scratch = path + ".calculate.tmp";
+    std::error_code ignored;
+    std::filesystem::remove(scratch, ignored);
     try {
-    for (Append const& append : kAppends) {
-        VarRecordEdit edit;
-        edit.uid = 0;
-        edit.field_id = append.field;
-        edit.shape = VarRecordShape::append;
-        edit.payload.assign(8, 0);
-        edit.presence.push_back({append.byte, append.bit, true});
-        if (result.var_records_appended == 0) {
-            edit.presence.push_back({kMetaPresenceLow, 0x40, true});
+        for (Append const& append : kAppends) {
+            VarRecordEdit edit;
+            edit.uid = 0;
+            edit.field_id = append.field;
+            edit.shape = VarRecordShape::append;
+            edit.payload.assign(8, 0);
+            edit.presence.push_back({append.byte, append.bit, true});
+            if (result.var_records_appended == 0) {
+                edit.presence.push_back({kMetaPresenceLow, 0x40, true});
+            }
+            save_var_record(work, kVarTaskTable, {edit}, scratch);
+            ++result.var_records_appended;
         }
-        save_var_record(work, kVarTaskTable, {edit}, path);
-        ++result.var_records_appended;
-    }
 
-    /* 114/Props: the project finish and the pending flag, in place. */
-    PropsEdit props_edit;
-    PropsRecordEdit finish;
-    finish.id = kPropProjectFinish;
-    finish.kind = kPropsRecordKindDate;
-    finish.payload.resize(4);
-    put_u32(finish.payload, 0, request.project_finish);
-    PropsRecordEdit pending;
-    pending.id = kPropCalculationPending;
-    pending.kind = kPropsRecordKindFlag;
-    pending.payload = {0, 0};
-    props_edit.records = {finish, pending};
-    save_props_edit(work, props_edit, path);
+        /* 114/Props: the project finish and the pending flag, in place. */
+        PropsEdit props_edit;
+        PropsRecordEdit finish;
+        finish.id = kPropProjectFinish;
+        finish.kind = kPropsRecordKindDate;
+        finish.payload.resize(4);
+        put_u32(finish.payload, 0, request.project_finish);
+        PropsRecordEdit pending;
+        pending.id = kPropCalculationPending;
+        pending.kind = kPropsRecordKindFlag;
+        pending.payload = {0, 0};
+        props_edit.records = {finish, pending};
+        save_props_edit(work, props_edit, scratch);
 
-    work.save(path);
-    CfbDocument const reread = CfbDocument::from_file(path);
-    if (reread.to_bytes() != work.to_bytes()) {
-        throw Error("calculate: the written file does not re-read to the "
-                    "bytes built");
-    }
-    doc = reread;
+        work.save(scratch);
+        CfbDocument const reread = CfbDocument::from_file(scratch);
+        if (reread.to_bytes() != work.to_bytes()) {
+            throw Error("calculate: the written file does not re-read to the "
+                        "bytes built");
+        }
+        reread.save(path);
+        doc = reread;
     } catch (...) {
-        std::error_code ignored;
-        if (!existed) {
-            std::filesystem::remove(path, ignored);
-        }
+        std::filesystem::remove(scratch, ignored);
         throw;
     }
+    std::filesystem::remove(scratch, ignored);
     result.leaves_written = request.leaves.size();
     return result;
 }
