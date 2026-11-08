@@ -61,7 +61,7 @@ olefile dumps of the committed fixtures and of the uncommitted COM JSON under
   control, null and edit saves.
 - Concrete mismatch the harness now accepts: a port save whose appended
   record names resource row 2 instead of row 1.  In
-  `wave34-assign-add-second.mpp`, rsc rec 5 is `a59c9c38 d42d11f1 9f661cc10c054c03`
+  `wave34-assign-add-second.mpp`, rsc rec 5 is `a59c9c38 d42d11f1 9f66[host node]`
   and rec 4 is `a59c9c37 d42d11f1 ...`, so the two identities differ only in
   the masked dword.  Another accepted mismatch: a remove that writes
   `00000000 8c2a6d43 ...ff` instead of the null identity.
