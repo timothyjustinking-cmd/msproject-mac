@@ -160,6 +160,13 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        " carries a constraint; the measured "
                                        "Calculate Project save has none");
             }
+            /* W35b-0.2 (R35G1-1): a Deadline limits the backward pass; the pair
+             * has none and the port's slack and late dates ignore it. */
+            if (is_date(rows.u32(row, task_row::kDeadline))) {
+                return fail(error, "task uid " + std::to_string(rows.uid(row)) +
+                                       " carries a deadline; the measured "
+                                       "Calculate Project save has none");
+            }
             shape.leaf_uids.push_back(rows.uid(row));
         }
         std::uint32_t latest = 0;

@@ -399,6 +399,15 @@ void check_refusals() {
         expect_refused(changed, source, "progress", "a progressed task");
     }
     {
+        /* W35b-0.2 (R35G1-1): the plan carries the deadline; the file layer is below. */
+        app::PlanInput changed = plan;
+        changed.tasks[1].deadline = changed.tasks[1].finish;
+        expect_refused(changed, source, "for a task with a deadline", "a task with a deadline");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(changed), &changed),
+              "push() refuses a Calculate edit over a plan with a deadline");
+    }
+    {
         app::PlanInput changed = plan;
         changed.tasks[1].calendar_uid = 3;
         expect_refused(changed, source, "its own calendar", "a task calendar");
@@ -430,6 +439,18 @@ void check_refusals() {
         broken.save(broken_path.string());
         expect_refused(plan, broken_path.string(), "not implemented in this port",
                        "a file whose Task table lost a row");
+    }
+    {
+        /* W35b-0.2 (R35G1-1): the plan has no deadline, the FILE does (the plan passed
+         * here is the clean control's), so the writer's own check names it. */
+        mppwrite::CfbDocument dated = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(dated);
+        rows.set_u32(2, mppwrite::task_row::kDeadline, 0x3BF212C0u);
+        rows.store_into(dated);
+        const std::filesystem::path dated_path = out_path("app-calculate-deadline-leaf.mpp");
+        dated.save(dated_path.string());
+        expect_refused(plan, dated_path.string(), "carries a deadline",
+                       "a file whose leaf carries a deadline");
     }
     {
         mppwrite::CfbDocument manual = mppwrite::CfbDocument::from_file(source);
