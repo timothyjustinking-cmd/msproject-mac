@@ -2160,6 +2160,9 @@ void test_measured_shape_refusals(TestContext& t) {
     cases.push_back({"a constrained task", kTaskFixed,
                      [&](Bytes& b) { put_u16_at(b, kTask1Row + 64, 2); },
                      "differs from the measured task row at byte 64"});
+    cases.push_back({"a task with another stamp word at +128", kTaskFixed,
+                     [&](Bytes& b) { put_u32_at(b, kTask1Row + 128, 0x3d182d28u); },
+                     "the task's stamp word at +128 differs from the measured 0x3d141482"});
     cases.push_back({"a task of another type or effort setting", kTaskMeta,
                      [](Bytes& b) { b[16 + 47 * 4 + 17] = 0x44; },
                      "FixedMeta entry differs from the measured entry at byte 17"});
