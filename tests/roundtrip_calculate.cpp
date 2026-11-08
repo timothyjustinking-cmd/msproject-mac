@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -121,6 +122,24 @@ CalculateRequest request_from(CfbDocument const& result) {
         request.leaves.push_back(leaf);
     }
     return request;
+}
+
+/* A leaf whose Duration changed also changes its placeholder assignment's planned work (an
+ * IEEE double at TBkndAssn +20 of 110-byte rows, ticks x 100), as Project saves it. */
+void set_planned_work(CfbDocument& doc, std::uint32_t task_uid, std::uint32_t ticks) {
+    std::string const stream = "114/TBkndAssn/FixedData";
+    Bytes assn = doc.read_stream(stream);
+    for (std::size_t base = 0; base + 110 <= assn.size(); base += 110) {
+        std::uint32_t const uid = static_cast<std::uint32_t>(assn[base + 4]) |
+                                  (static_cast<std::uint32_t>(assn[base + 5]) << 8) |
+                                  (static_cast<std::uint32_t>(assn[base + 6]) << 16) |
+                                  (static_cast<std::uint32_t>(assn[base + 7]) << 24);
+        if (uid == task_uid) {
+            double const work = static_cast<double>(ticks) * 100.0;
+            std::memcpy(&assn[base + 20], &work, sizeof work);
+        }
+    }
+    doc.replace_stream(stream, assn);
 }
 
 template <typename Fn>
@@ -300,6 +319,49 @@ void refused_requests() {
         rows.store_into(doc);
         refuses([&] { mppwrite::save_calculate(doc, good, path); },
                 "carries a deadline", "deadline");
+    }
+    {
+        /* W35b-0.3 (R35G1-2) case 2: the recalculation would shorten the project. */
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(0, mppwrite::task_row::kFinish, 0x3BFE27D8u);
+        rows.store_into(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "would shorten the project", "shortened project");
+    }
+    {
+        /* W35b-0.3 case 3: a leaf that does not start at the project start (the
+         * writer would stamp Fixed2Data +46 with the project start). */
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(2, mppwrite::task_row::kStart, 0x3BF312C0u);
+        rows.store_into(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "starts at a date other than the project start", "leaf start");
+    }
+    {
+        /* W35b-0.3 case 1: leaf 2 is lengthened past leaf 1, so the critical path
+         * moves from leaf 1 to leaf 2.  The request is consistent with the file (the
+         * latest finish, the critical duration, slack from the finishes), so only the
+         * critical-flag check can refuse it. */
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(2, mppwrite::task_row::kDuration, 72000);
+        rows.set_u32(2, mppwrite::task_row::kFinish, 0x3C0427D8u);
+        rows.store_into(doc);
+        set_planned_work(doc, 2, 72000);
+        CalculateRequest moved = good;
+        moved.project_finish = 0x3C0427D8u;
+        moved.project_duration = 72000;
+        moved.leaves[0].late_start = rows.u32(1, mppwrite::task_row::kStart);
+        moved.leaves[0].late_finish = 0x3C0427D8u;
+        moved.leaves[0].free_slack = moved.leaves[0].start_slack = moved.leaves[0].total_slack =
+            24000;
+        moved.leaves[1].late_start = rows.u32(2, mppwrite::task_row::kStart);
+        moved.leaves[1].late_finish = 0x3C0427D8u;
+        moved.leaves[1].free_slack = moved.leaves[1].start_slack = moved.leaves[1].total_slack = 0;
+        refuses([&] { mppwrite::save_calculate(doc, moved, path); },
+                "moves the critical path", "critical path moves");
     }
     {
         /* A leaf with its own calendar. */

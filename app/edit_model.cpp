@@ -3609,6 +3609,36 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
             return prefix + "for a task with its own calendar: the measured "
                             "Project pair uses the project calendar";
         }
+        // W35b-0.3 (R35G1-2): the pair's leaves all start at the project start.
+        if (task.start != plan.project_start) {
+            return prefix + "for a leaf that does not start at the project start: "
+                            "the measured Project pair has every leaf starting there";
+        }
+    }
+    // W35b-0.3 (R35G1-2): the pair lengthens the project and leaves both critical
+    // flags as they were.  The latest leaf finish is the project finish after F9.
+    date32 latest = kDateNa;
+    for (const TaskRow& task : plan.tasks) {
+        if (latest == kDateNa || (task.finish != kDateNa && task.finish > latest)) {
+            latest = task.finish;
+        }
+    }
+    if (latest != kDateNa && plan.project_finish != kDateNa && latest < plan.project_finish) {
+        return prefix + "for a recalculation that would shorten the project: the "
+                        "measured Project pair lengthens it";
+    }
+    // The stored project finish is the one before the change: a leaf finishing before it
+    // had slack, so the measured pair has one leaf past it and the other before it.  Any
+    // other leaf at or past it moves the critical path (the reader's critical flag is
+    // stale slack here, so it cannot be compared).
+    if (latest != kDateNa && plan.project_finish != kDateNa) {
+        for (const TaskRow& task : plan.tasks) {
+            if (task.finish != kDateNa && task.finish != latest && task.finish >= plan.project_finish) {
+                return prefix + "for a recalculation that moves the critical path: the "
+                                "measured Project pair leaves the critical flags as "
+                                "they were";
+            }
+        }
     }
     return {};
 }
