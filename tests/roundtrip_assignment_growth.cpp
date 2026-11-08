@@ -2460,16 +2460,50 @@ void test_remove_port_saved(TestContext& t) {
         check_unchanged(t, doc, before, "remove on the port-saved file");
     }
 
-    /* 2. The settle step is not the only gap.  Give the control the streams
-     * Project's null save rewrites (Assn FixedMeta and Fixed2Meta, Rsc FixedMeta,
-     * Props): the writer then accepts the file, and its output still differs from
-     * Project's edit save in four streams, each a named gap.  Project's save also
-     * carries a Props14 edit marker the harness cannot see as an effect for this
-     * pair (declared-effect check fails with effects = 0), so Props14 is not in
-     * the declared list below and this test does not vouch for it. */
-    CfbDocument settled = control;
+    /* 2. W35b-1.6 (R35G3-1, RW35-W1): the file Project resaved is refused too.
+     * Project's null save of the port's file settles Assn FixedMeta and
+     * Fixed2Meta, so the settled-shape gate passes; what it also sets is bit 0x40
+     * on the target resource's FixedMeta entry (byte 12, 0x1C to 0x5C), and
+     * Project's removal from that file clears Rsc Fixed2Meta byte 279 (0x2B to
+     * 0x0B), which the port never writes.  The writer refuses the file on the
+     * byte, so it does not write what Project would not. */
     CfbDocument const null_save = doc_from_data(kPortNull);
-    for (char const* path : {kAssnMeta, kAssnF2Meta, kRscMeta, kProps}) {
+    char const* const resaved_needle =
+        "the target resource's FixedMeta byte 12 is 0x5C, not the measured 0x1C";
+    {
+        CfbDocument doc = null_save;
+        Bytes const before = doc.to_bytes();
+        std::error_code ignored;
+        std::filesystem::remove(missing_path(), ignored);
+        expect_error(
+            t, [&] { (void)mppwrite::unassign_resource(doc, key(1, 2), missing_path()); },
+            resaved_needle, "remove on the file Project resaved (the null save)");
+        check_unchanged(t, doc, before, "remove on the file Project resaved");
+        t.check(!file_exists(missing_path()), "the refused removal writes no file");
+    }
+    {
+        CfbDocument doc = control;
+        for (char const* path : {kAssnMeta, kAssnF2Meta, kRscMeta, kProps}) {
+            doc.replace_stream(path, null_save.read_stream(path));
+        }
+        Bytes const before = doc.to_bytes();
+        expect_error(
+            t, [&] { (void)mppwrite::unassign_resource(doc, key(1, 2), missing_path()); },
+            resaved_needle, "remove on the port's file with Project's resaved Rsc FixedMeta");
+        check_unchanged(t, doc, before, "remove with Project's resaved Rsc FixedMeta");
+    }
+
+    /* 3. The settle step is not the only gap.  Give the control the streams
+     * Project's null save rewrites except the resource flag byte (Assn FixedMeta
+     * and Fixed2Meta, Props): the writer then accepts the file, and its output
+     * still differs from Project's edit save in four streams, each a named gap
+     * (the resource flag byte itself is the null save's session bit, masked by
+     * the harness, and is what 2. refuses).  Project's save also carries a
+     * Props14 edit marker the harness cannot see as an effect for this pair
+     * (declared-effect check fails with effects = 0), so Props14 is not in the
+     * declared list below and this test does not vouch for it. */
+    CfbDocument settled = control;
+    for (char const* path : {kAssnMeta, kAssnF2Meta, kProps}) {
         settled.replace_stream(path, null_save.read_stream(path));
     }
     std::string const out = out_path("w35-assign-remove-port-saved.mpp");

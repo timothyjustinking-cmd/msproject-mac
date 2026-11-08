@@ -769,6 +769,50 @@ void check_refusals() {
                        "in an order no pair measures",
                        "assign: a higher uid on the one assigned resource (stale plan)");
     }
+    /* W35b-1.6 (R35G3-1, RW35-W1): the file the port saved and Project resaved.
+     * Its null save settles the assignment tables, so only the save-session bit of
+     * the target resource's FixedMeta entry (0x1C to 0x5C) tells it from the
+     * measured control; Project's removal from it also clears a Rsc Fixed2Meta
+     * flag the port never writes. */
+    {
+        const std::filesystem::path resaved_path =
+            data_path("wave35-g3-assign-remove-port-saved-control-null.mpp");
+        app::PlanInput resaved_plan;
+        try {
+            resaved_plan = load_plan(resaved_path);
+        } catch (const std::exception&) {
+            check(false, "the resaved port file loads");
+            return;
+        }
+        const char* const needle =
+            "the target resource's FixedMeta byte 12 is 0x5C, not the measured 0x1C";
+        expect_refused(resaved_plan, resaved_path.string(), 1, 2, false, needle,
+                       "remove an assignment from a port-saved file Project resaved");
+
+        /* A hand-built edit passes push() (the plan shows the assignment) and the
+         * save's own writer refuses it before anything is written. */
+        bool shown = false;
+        std::uint32_t fresh_uid = 0;
+        for (const app::AssignmentRow& row : resaved_plan.assignments) {
+            shown = shown || (row.task_uid == 1 && row.resource_uid == 2);
+            fresh_uid = std::max(fresh_uid, row.uid);
+        }
+        ++fresh_uid;  // push() wants the uid the writer would append, not one in the plan
+        check(shown, "the resaved port file shows task 1's assignment to resource 2");
+        app::StructuralEdits hand_edits;
+        check(hand_edits.push(hand_edit(false, 1, 2, fresh_uid), &resaved_plan),
+              "push() accepts the hand-built removal (the plan shows the assignment)");
+        const std::filesystem::path out = out_path("app-assign-remove-resaved.mpp");
+        std::error_code remove_error;
+        std::filesystem::remove(out, remove_error);
+        const app::StructuralSaveResult saved =
+            app::save_structural_edits(hand_edits, {}, resaved_path.string(), out.string(), false);
+        check(!saved.ok, "the save refuses the removal from the resaved port file");
+        check(saved.error.find(needle) != std::string::npos,
+              std::string("the save's refusal names the resource flag byte (got \"") +
+                  saved.error + "\")");
+        check(!std::filesystem::exists(out), "the refused save writes no target file");
+    }
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    task, resource, true, "could not be read", "a missing project file");
     {

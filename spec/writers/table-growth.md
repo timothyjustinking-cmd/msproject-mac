@@ -377,3 +377,21 @@ it), (b) the identity-counter rule behind the Fixed2Data and Var2Data bytes,
 from one pair.  Pairs still needed: the same removal from a port-saved file with
 a different row count (two and three existing assignments) and with the add made
 on a different task, to separate the counter and flag rules from this file.
+
+**W35b-1.6 (R35G3-1, RW35-W1): the file Project resaved is refused too.**  The null
+save passes the settled-shape check (item 1 settles exactly what that check reads),
+so on its own the check proves the refusal for the raw port output only.  What tells
+a resaved file from the measured control is the save-session byte of the target
+resource's `114/TBkndRsc/FixedMeta` entry (payload byte 12, stream offsets 176 and
+213 for resources 1 and 2): 0x1C in the wave-30 controls and in the port's own file,
+0x5C once a Project session has saved it (the null save; every resource row of the
+wave-34 controls).  Project's removal from such a file also clears Rsc Fixed2Meta
+byte 279 (0x2B to 0x0B), which `unassign_resource` never writes.
+`unassign_resource` and, through its dry run, `make_assignment_edit` now refuse a
+target resource whose byte 12 is not 0x1C ("the target resource's FixedMeta byte 12
+is 0x5C, not the measured 0x1C").  `test_remove_port_saved` runs the removal on the
+null save and on the control with the null's Rsc FixedMeta; `app_edits_assignment_tests`
+builds the edit on the null save and saves a hand-built one.  The KnownGap
+comparison of item 3 now copies the other three streams only, so the resource byte
+stays 0x1C and the writer accepts the file.  No removal pair is measured from a file
+whose resources carry 0x5C, so any such removal stays refused.
