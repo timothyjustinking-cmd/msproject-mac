@@ -88,7 +88,7 @@ Task	0	Editing	small	Fill	0	editing.fill	2	-
 Resource	0	View	group	-	-	-	-	-
 Resource	0	View	button	Team Planner	0	view.team_planner	0	-
 Resource	0	Assignments	group	-	-	-	-	-
-Resource	0	Assignments	button	Assign Resources	0	assignments.assign	0	-
+Resource	0	Assignments	button	Assign Resources	1	assignments.assign	0	-
 Resource	0	Assignments	button	Resource Pool	0	assignments.pool	0	-
 Resource	0	Insert	group	-	-	-	-	-
 Resource	0	Insert	button	Add Resources	1	insert.add_resources	0	-

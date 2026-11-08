@@ -153,6 +153,16 @@ enum class StructuralKind : std::uint8_t {
     // already holds one or two resources (wave30-resource-add, wave34-resource-
     // add-third).  Like the two kinds above the edit is EXCLUSIVE.
     add_resource = 14,
+    // Wave 34 (W34-4.3): one work resource assigned at 100 % to an unstarted
+    // leaf task (`uid` = the task, `resource_uid` = the resource) and the same
+    // assignment removed, written by mppwrite::assign_resource /
+    // unassign_resource (core/mppwrite/assignment_growth.h) against Project's
+    // wave30-assign-add and wave30-assign-delete pairs.  `assignment_uid` is
+    // the appended row's UniqueID, taken from the writer's dry run.  Only the
+    // first-assignment shape (count 0 -> 1) and the removal of that one
+    // assignment are enabled; like the kinds above both are EXCLUSIVE.
+    assign_resource = 15,
+    unassign_resource = 16,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -209,6 +219,10 @@ struct StructuralEdit {
     // (day << 16 | seconds / 6; see current_created_stamp()).
     std::uint32_t resource_id = 0;
     std::uint32_t created = 0;
+    // assign_resource / unassign_resource (W34-4.3): the resource, and the
+    // UniqueID of the assignment row the writer appends.
+    std::uint32_t resource_uid = 0;
+    std::uint32_t assignment_uid = 0;
 
     // --- set_field / clear_field -------------------------------------------
     // One of the six measured ids (app::is_measured_task_field): Text1,
@@ -502,6 +516,20 @@ bool make_add_resource_edit(const PlanInput& plan, std::string_view source_path,
                             std::string_view name, std::uint32_t created,
                             StructuralEdit& out, std::string& error);
 
+// Builds a ready-to-push assign_resource or unassign_resource edit for ONE
+// task and ONE resource (W34-4.3).  The plan-side rules are the measured pair's:
+// the task is a saved, unstarted LEAF (0 % complete, no actual start or finish
+// or actual duration, not a summary), the resource a saved WORK resource; an
+// assign needs a task with no real assignment (the pair's task holds only
+// Project's unassigned placeholder), an unassign needs the task's one real
+// assignment of exactly that resource.  The FILE is the authority for the rest:
+// the writer's dry run validates every stream and its refusal text is returned
+// as the reason ("... is not implemented in this port for this project: ...").
+// `out` is default-constructed on refusal.
+bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
+                          std::uint32_t task_uid, std::uint32_t resource_uid,
+                          bool assign, StructuralEdit& out, std::string& error);
+
 // The Created stamp Project writes for a resource added now: the local date
 // and time as a packed date (day 0 is 1983-12-31, then seconds / 6).
 std::uint32_t current_created_stamp();
@@ -789,6 +817,8 @@ struct StructuralSaveResult {
     std::size_t resources_renamed = 0;
     // Wave 34 (W34-4.2): 1 when a work resource (and its calendar row) was added.
     std::size_t resources_added = 0;
+    // Wave 34 (W34-4.3): 1 when an assignment was added or removed.
+    std::size_t assignments_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the

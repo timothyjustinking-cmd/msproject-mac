@@ -356,8 +356,9 @@ const std::vector<TabSpec>& tab_specs() {
         large(resource_view, "Team\nPlanner", app::MenuAction::none, 55, 0, false,
               "view.team_planner");
         GroupSpec& assignments = add_group(resource, "Assignments", 129);
-        large(assignments, "Assign\nResources", app::MenuAction::none, 58, 0, false,
-              "assignments.assign");
+        // W34-4.3: enabled for the measured first assignment and its removal.
+        large(assignments, "Assign\nResources", app::MenuAction::none, 58, 0, true,
+              "assignments.assign", RibbonCommand::assign_resources);
         large(assignments, "Resource\nPool", app::MenuAction::none, 58, 1, false,
               "assignments.pool");
         GroupSpec& resource_insert = add_group(resource, "Insert", 85);

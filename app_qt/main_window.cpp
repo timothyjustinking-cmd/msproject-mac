@@ -2339,6 +2339,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::resource_information:
             rename_selected_resource();
             return;
+        case RibbonCommand::assign_resources:
+            assign_resources();
+            return;
         case RibbonCommand::scroll_to_task:
             // W30-1.7: scrolls the sheet and pans the chart; a view command,
             // never a file write.
@@ -3127,6 +3130,98 @@ void MainWindow::add_resource() {
     after_structural_change(0);
     set_message("queued a new resource (uid " + std::to_string(uid) +
                     "); File > Save writes it",
+                false);
+    update_status();
+}
+
+void MainWindow::assign_resources() {
+    if (refuse_read_only()) {
+        return;
+    }
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
+        doc_.sheet() == nullptr) {
+        set_message("Assign Resources is available in the Task Sheet view", false);
+        update_status();
+        return;
+    }
+    const app::SelectedTask selected = app::selected_task(*doc_.sheet(), doc_.rows());
+    const app::TaskRow* task = selected.has_selection && selected.uid != 0
+                                   ? doc_.task_by_uid(selected.uid)
+                                   : nullptr;
+    if (task == nullptr) {
+        set_message("select a task first", false);
+        update_status();
+        return;
+    }
+    const app::PlanInput& plan = doc_.plan();
+    const std::uint32_t task_uid = task->uid;
+    const QString task_name = to_q(task->name);
+    // The task's one real assignment, if it has one: the command then removes it.
+    const app::AssignmentRow* held = nullptr;
+    for (const app::AssignmentRow& row : plan.assignments) {
+        if (row.task_uid == task_uid && row.resource_uid != 0) {
+            held = &row;
+            break;
+        }
+    }
+    std::uint32_t resource_uid = 0;
+    bool assign = true;
+    if (held != nullptr) {
+        assign = false;
+        resource_uid = held->resource_uid;
+        QString resource_name = to_q(std::to_string(resource_uid));
+        for (const app::ResourceRow& resource : plan.resources) {
+            if (resource.uid == resource_uid) {
+                resource_name = to_q(resource.name);
+            }
+        }
+        if (!confirm_remove_assignment(this, task_name, resource_name)) {
+            set_message("assign resources cancelled", false);
+            update_status();
+            return;
+        }
+    } else {
+        QStringList names;
+        std::vector<std::uint32_t> uids;
+        for (const app::ResourceRow& resource : plan.resources) {
+            if (resource.uid != 0) {
+                names.push_back(to_q(resource.name));
+                uids.push_back(resource.uid);
+            }
+        }
+        if (names.isEmpty()) {
+            set_message("assign resources: the project has no resources", true);
+            update_status();
+            return;
+        }
+        int index = -1;
+        if (!ask_assignment_resource(this, task_name, names, &index) || index < 0 ||
+            static_cast<std::size_t>(index) >= uids.size()) {
+            set_message("assign resources cancelled", false);
+            update_status();
+            return;
+        }
+        resource_uid = uids[static_cast<std::size_t>(index)];
+    }
+    // W34-4.3: the builder owns every refusal (summary, started, material or
+    // part-time resource, a task that already holds an assignment, a stale file).
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_assignment_edit(plan, doc_.path(), task_uid, resource_uid, assign, edit,
+                                   error)) {
+        set_message("assign resources: " + error, true);
+        update_status();
+        return;
+    }
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
+        set_message("assign resources: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(task_uid);
+    set_message(std::string(assign ? "queued an assignment on task uid "
+                                   : "queued the removal of the assignment on task uid ") +
+                    std::to_string(task_uid) + "; File > Save writes it",
                 false);
     update_status();
 }

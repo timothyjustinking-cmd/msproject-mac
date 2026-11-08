@@ -49,7 +49,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Task | Editing | Clear | implemented |  |
 | Task | Editing | Fill | disabled | measurement: Project's Fill Down save rewrites the row's dates and slack, the project roll-up and the DSI strings; the port's start writer cannot reproduce it, so the control stays disabled |
 | Resource | View | Team Planner | disabled | future: not implemented in this port |
-| Resource | Assignments | Assign Resources | disabled | future: not implemented in this port |
+| Resource | Assignments | Assign Resources | implemented | gap: one work resource at 100 % Max. Units on an unstarted leaf task that holds no assignment yet, and the removal of that one assignment, alone in the save; further assignments, units, work and the other dialog fields are refused as not implemented in this port |
 | Resource | Assignments | Resource Pool | disabled | future: not implemented in this port |
 | Resource | Insert | Add Resources | implemented | session refusal: one work resource with default rates and a printable-ASCII name, on a project with exactly one or two resources, alone in the save (no other edit queued, no start-date edit); every other shape is refused as not implemented in this port |
 | Resource | Properties | Information | implemented | gap: the name only, and only to a longer printable-ASCII name of a resource with no assignments, alone in the save; every other field and shape is refused (Notes stays disabled: its payload embeds the saving machine's RichEdit generator string, which this port cannot reproduce) |
@@ -189,8 +189,8 @@ Edits that are not command rows, with the reason the shell refuses them (operato
 
 ## Summary
 
-* ribbon commands: 114 (67 disabled)
-* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 49 enabled / 65 disabled command controls. The table above reports 67 disabled because it counts a split by its menu items; the pin counts the control.
+* ribbon commands: 114 (66 disabled)
+* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 50 enabled / 64 disabled command controls. The table above reports 66 disabled because it counts a split by its menu items; the pin counts the control.
 * the difference (2): 2 splits whose button is live while every menu item is disabled: Project > Properties > WBS, Project > Schedule > Set Baseline
 * menu commands: 51 (6 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

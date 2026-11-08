@@ -850,7 +850,8 @@ struct Built {
  * task row, write the package through save_props_edit, re-read it and prove
  * every built stream, every scalar and the exact changed-stream set. */
 void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
-                    std::string const& path, std::string const& function) {
+                    std::string const& path, std::string const& function,
+                    bool dry_run) {
     work.replace_stream(kAssnFixedData, built.assn_fixed);
     work.replace_stream(kAssnFixedMeta, built.assn_meta);
     work.replace_stream(kAssnFixed2Meta, built.assn_f2_meta);
@@ -873,6 +874,11 @@ void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
     }
     Bytes const summary_built = work.read_stream(summary);
 
+    if (dry_run) {
+        /* Every refusal the build and the summary derivation can raise has run;
+         * nothing is written and `doc` is not replaced. */
+        return;
+    }
     (void)save_props_edit(work, built.props, path);
 
     /* The edit marker is the one stream whose change is conditional: the
@@ -931,9 +937,11 @@ void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
 
 AssignmentGrowthWrite assign_resource(CfbDocument& doc,
                                       AssignmentKey const& key,
-                                      std::string const& path) {
+                                      std::string const& path, bool dry_run) {
     std::string const function = "assignment add";
-    check_output_path(path, function);
+    if (!dry_run) {
+        check_output_path(path, function);
+    }
     if (key.task_uid == 0) {
         fail(function + ": UniqueID 0 is the project summary row, not a task");
     }
@@ -1333,7 +1341,7 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
             kEditMarkerStream};
 
         CfbDocument edited = doc;
-        save_and_prove(doc, edited, built, path, function);
+        save_and_prove(doc, edited, built, path, function, dry_run);
 
         AssignmentGrowthWrite written;
         written.task_uid = key.task_uid;
@@ -1663,7 +1671,7 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
         kDocumentSummaryStream, kEditMarkerStream};
 
     CfbDocument edited = doc;
-    save_and_prove(doc, edited, built, path, function);
+    save_and_prove(doc, edited, built, path, function, dry_run);
 
     AssignmentGrowthWrite written;
     written.task_uid = key.task_uid;
@@ -1691,9 +1699,11 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
 
 AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
                                         AssignmentKey const& key,
-                                        std::string const& path) {
+                                        std::string const& path, bool dry_run) {
     std::string const function = "assignment remove";
-    check_output_path(path, function);
+    if (!dry_run) {
+        check_output_path(path, function);
+    }
     if (key.task_uid == 0) {
         fail(function + ": UniqueID 0 is the project summary row, not a task");
     }
@@ -2093,7 +2103,7 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
         kEditMarkerStream};
 
     CfbDocument edited = doc;
-    save_and_prove(doc, edited, built, path, function);
+    save_and_prove(doc, edited, built, path, function, dry_run);
 
     AssignmentGrowthWrite written;
     written.task_uid = key.task_uid;

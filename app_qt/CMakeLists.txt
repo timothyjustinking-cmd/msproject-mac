@@ -318,6 +318,22 @@ add_test(NAME qt_resource_add_gate
                  "${QT_TEST_DATA_DIR_CMAKE}/wave30-resource-add-control.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# Wave 34 (W34-4.3): the real MainWindow's Assign Resources.  The control is
+# live and wired, no selection and Cancel queue nothing, choosing the resource
+# queues one edit the display shows, a second click while it is pending is
+# refused, the real save writes it and a reopen reads the assignment back, and
+# the same button then removes it (saved and read back again).
+add_executable(qt_assign_resources_gate_tests tests/assign_resources_gate_test.cpp)
+target_link_libraries(qt_assign_resources_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_assign_resources_gate_tests)
+
+add_test(NAME qt_assign_resources_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_assign_resources_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave30-assign-add-control.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave30-assign-delete-control.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # ===========================================================================
 # WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
 # the loaded Task Sheet's geometry; these gate the empty project, the chrome,

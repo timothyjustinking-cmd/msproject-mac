@@ -599,6 +599,28 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_resource_add COMMAND app_edits_resource_add_tests)
     set_tests_properties(app_edits_resource_add PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 34 (W34-4.3): Assign Resources (one work resource at 100 % to an
+    # unstarted leaf) and its removal, through the edit model and the save
+    # cascade against the committed wave30-assign-add / -delete Project pairs.
+    # Every stream is compared under the null-save discipline with the pair's
+    # owned streams declared changed; the display row is compared field by field
+    # with the row the reader reads from Project's own save.  Every refusal has
+    # its own check.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_assignment_tests app_edits_assignment_tests.cpp)
+    target_compile_features(app_edits_assignment_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_assignment_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
+    set_target_properties(app_edits_assignment_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_assignment_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_assignment_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_assignment_tests)
+
+    add_test(NAME app_edits_assignment COMMAND app_edits_assignment_tests)
+    set_tests_properties(app_edits_assignment PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 26 (W26-3.1): the file's Gantt style record -- the row -> Text Styles
     # category rule and the headless read seam.  The stock fixture is committed;
     # the PROJECT_A half skips when corpus/ is absent.

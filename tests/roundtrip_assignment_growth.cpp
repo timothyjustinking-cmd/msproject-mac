@@ -1865,6 +1865,65 @@ void test_remove_damaged(TestContext& t) {
             "remove: a document already dirty");
 }
 
+/* W34-4.3: dry_run validates and reports without writing.  The report equals
+ * the real write's, the document is untouched, the (empty) path is never
+ * examined, and every refusal the real call raises is raised here too. */
+void test_dry_run(TestContext& t) {
+    struct Case {
+        char const* control;
+        char const* label;
+        bool add;
+    };
+    for (Case const& c : {Case{kAddControl, "add", true},
+                          Case{kDeleteControl, "remove", false}}) {
+        std::string const what = std::string("dry run ") + c.label;
+        CfbDocument dry = doc_from_data(c.control);
+        Bytes const before = dry.to_bytes();
+        mppwrite::AssignmentGrowthWrite const planned =
+            c.add ? mppwrite::assign_resource(dry, key(1, 2), "", true)
+                  : mppwrite::unassign_resource(dry, key(1, 2), "", true);
+        t.check(dry.to_bytes() == before, what + ": the document changed");
+
+        CfbDocument real = doc_from_data(c.control);
+        std::string const path =
+            out_path(std::string("w34-dry-") + c.label + ".mpp");
+        mppwrite::AssignmentGrowthWrite const written =
+            c.add ? mppwrite::assign_resource(real, key(1, 2), path)
+                  : mppwrite::unassign_resource(real, key(1, 2), path);
+        t.equal(planned.assignment_uid, written.assignment_uid,
+                what + ": the report's assignment uid");
+        t.equal(planned.tombstoned_uid, written.tombstoned_uid,
+                what + ": the report's tombstoned uid");
+        t.equal(planned.rows_before, written.rows_before, what + ": rows before");
+        t.equal(planned.rows_after, written.rows_after, what + ": rows after");
+        t.check(planned.work == written.work, what + ": the report's work");
+        t.equal(planned.props_size_after, written.props_size_after,
+                what + ": the report's Props size");
+    }
+
+    /* A refusal is raised by the dry run too, and nothing is touched. */
+    {
+        CfbDocument doc = doc_from_data(kDeleteControl);
+        Bytes const before = doc.to_bytes();
+        expect_error(
+            t, [&] { (void)mppwrite::assign_resource(doc, key(1, 2), "", true); },
+            "measured", "dry run add: the settled removal shape is refused");
+        t.check(doc.to_bytes() == before,
+                "dry run add refusal: the document changed");
+    }
+    {
+        CfbDocument doc = doc_from_data(kAddControl);
+        Bytes const before = doc.to_bytes();
+        expect_error(
+            t,
+            [&] { (void)mppwrite::unassign_resource(doc, key(1, 2), "", true); },
+            "0x0B4004E5 leaf does not name the resource",
+            "dry run remove: the unassigned shape is refused");
+        t.check(doc.to_bytes() == before,
+                "dry run remove refusal: the document changed");
+    }
+}
+
 } /* namespace */
 
 int main() {
@@ -1879,6 +1938,7 @@ int main() {
         test_add_damaged(t);
         test_settled_damaged(t);
         test_remove_damaged(t);
+        test_dry_run(t);
         return t.report();
     } catch (std::exception const& error) {
         std::cerr << "FAIL: unhandled exception: " << error.what() << std::endl;

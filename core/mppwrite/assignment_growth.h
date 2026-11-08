@@ -192,19 +192,24 @@ struct AssignmentGrowthWrite {
  * Assign `key.resource_uid` to `key.task_uid` and save the package to `path`:
  * the measured first-assignment shape or the measured settled append shape.
  * Throws Error on a refusal (the document and `path` are untouched).
+ * `dry_run` (W34-4.3) runs every check and builds every stream and the
+ * summary, then returns the report WITHOUT writing: `path` is not examined and
+ * `doc` is not replaced.  The app builder uses it to refuse a shape up front.
  */
 AssignmentGrowthWrite assign_resource(CfbDocument& doc,
                                       AssignmentKey const& key,
-                                      std::string const& path);
+                                      std::string const& path,
+                                      bool dry_run = false);
 
 /*
  * Remove the one real assignment (task, resource) and save to `path`.  The
  * measured removal shape only: the assignment is the last row and the only
- * real row.  Throws Error on a refusal.
+ * real row.  Throws Error on a refusal.  `dry_run` is as for assign_resource.
  */
 AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
                                         AssignmentKey const& key,
-                                        std::string const& path);
+                                        std::string const& path,
+                                        bool dry_run = false);
 
 } /* namespace mppwrite */
 

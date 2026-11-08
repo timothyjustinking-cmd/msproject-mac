@@ -31,6 +31,7 @@
 #include "outline.h"
 #include "project_props.h"
 #include "reader.h"
+#include "assignment_growth.h"
 #include "resource_growth.h"
 #include "save.h"
 #include "table.h"
@@ -87,7 +88,9 @@ bool is_outline_edit(StructuralKind kind) noexcept {
 bool is_exclusive_kind(StructuralKind kind) noexcept {
     return kind == StructuralKind::set_task_mode ||
            kind == StructuralKind::rename_resource ||
-           kind == StructuralKind::add_resource;
+           kind == StructuralKind::add_resource ||
+           kind == StructuralKind::assign_resource ||
+           kind == StructuralKind::unassign_resource;
 }
 
 const TaskRow* task_row_for_uid(const std::vector<TaskRow>& tasks,
@@ -2796,6 +2799,133 @@ bool make_add_resource_edit(const PlanInput& plan, std::string_view source_path,
     return true;
 }
 
+namespace {
+
+// W34-4.3: the plan-side half of the Assign Resources rule, shared by the
+// builder and push().  The measured pairs (wave30-assign-add / -delete) assign
+// ONE saved work resource at 100 % to a saved, unstarted LEAF task that holds
+// only Project's unassigned placeholder, and remove that one assignment again;
+// every other shape (a summary, a started task, a task that already has a real
+// assignment, a material or cost resource, a resource under 100 % Max. Units)
+// is a save no pair measured.  Returns the reason, or an empty string.
+std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_uid,
+                                    std::uint32_t resource_uid, bool assign) {
+    const std::string what = assign ? "Assign Resources" : "Removing an assignment";
+    const TaskRow* task = task_row_for_uid(plan.tasks, task_uid);
+    if (task == nullptr || task->file_row == 0) {
+        return "the task is not a saved task of the open plan";
+    }
+    const ResourceRow* resource = resource_row_for_uid(plan.resources, resource_uid);
+    if (resource == nullptr || resource->uid == 0) {
+        return "the resource is not a saved resource of the open plan";
+    }
+    if (task->summary) {
+        return what + " on a summary task is not implemented in this port: the "
+                      "measured Project pairs use a leaf task";
+    }
+    if (task->percent_complete != 0 || task->actual_start != kDateNa ||
+        task->actual_finish != kDateNa || task->actual_duration_ticks != 0) {
+        return what + " on a task that has started is not implemented in this "
+                      "port: the measured Project pairs use an unstarted task";
+    }
+    if (resource->type != core::view::ResourceType::work) {
+        return what + " with a resource that is not a work resource is not "
+                      "implemented in this port: the measured Project pairs "
+                      "use a work resource";
+    }
+    if (resource->max_units_percent != 100.0) {
+        return what + " with a resource whose Max. Units is not 100% is not "
+                      "implemented in this port: the measured Project pairs use "
+                      "a 100% resource";
+    }
+    std::size_t real = 0;
+    bool names_resource = false;
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.task_uid != task_uid || assignment.resource_uid == 0) {
+            continue;
+        }
+        ++real;
+        names_resource = names_resource || assignment.resource_uid == resource_uid;
+    }
+    if (assign && real != 0) {
+        return "Assign Resources on a task that already has an assignment is not "
+               "implemented in this port: the measured Project pair assigns the "
+               "task's first resource";
+    }
+    if (!assign && (real != 1 || !names_resource)) {
+        return "Removing an assignment is not implemented in this port unless it "
+               "is the task's one assignment of that resource: the measured "
+               "Project pair removes a task's only assignment";
+    }
+    return {};
+}
+
+}  // namespace
+
+bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
+                          std::uint32_t task_uid, std::uint32_t resource_uid,
+                          bool assign, StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    if (std::string reason = assignment_plan_refusal(plan, task_uid, resource_uid, assign);
+        !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    // The writer's dry run validates every stream against the FILE (the row
+    // geometry, the meta entries, the roll-up words, the Props scalars) and
+    // reports the uid it would append; nothing is written.
+    mppwrite::AssignmentKey key;
+    key.task_uid = task_uid;
+    key.resource_uid = resource_uid;
+    mppwrite::AssignmentGrowthWrite planned;
+    try {
+        planned = assign ? mppwrite::assign_resource(document, key, std::string(), true)
+                         : mppwrite::unassign_resource(document, key, std::string(), true);
+    } catch (const std::exception& refusal) {
+        error = std::string(assign ? "Assign Resources" : "Removing an assignment") +
+                " is not implemented in this port for this project: " + refusal.what();
+        return false;
+    }
+    // The writer also accepts the settled-append shape (a task that already has
+    // real rows); the plan said there are none, so a tombstoned uid of 0 means
+    // the file disagrees with the plan.
+    if (planned.assignment_uid == 0 || planned.tombstoned_uid == 0) {
+        error = "the project file no longer matches the open plan (its assignment "
+                "rows for the task are not the ones the plan shows); reopen the "
+                "project";
+        return false;
+    }
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.uid == planned.assignment_uid) {
+            error = "the new assignment's uid is already used in the plan";
+            return false;
+        }
+        // Removal: the row the writer tombstones must be the plan's real row.
+        if (!assign && assignment.task_uid == task_uid &&
+            assignment.resource_uid == resource_uid &&
+            assignment.uid != planned.tombstoned_uid) {
+            error = "the project file no longer matches the open plan (the "
+                    "assignment it would remove is not the one the plan shows); "
+                    "reopen the project";
+            return false;
+        }
+    }
+    out.kind = assign ? StructuralKind::assign_resource : StructuralKind::unassign_resource;
+    out.uid = task_uid;
+    out.resource_uid = resource_uid;
+    out.assignment_uid = planned.assignment_uid;
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                            const std::vector<std::uint32_t>& pending_start_uids) {
     // W33-1.7 (A-8 / D-7): a document opened from a container with FAT slack
@@ -3197,6 +3327,27 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
             edit.name = trim_ascii(std::move(edit.name));
             if (!add_resource_name_refusal(edit.name).empty()) {
                 return false;
+            }
+            edit.anchor_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::assign_resource:
+        case StructuralKind::unassign_resource: {
+            // W34-4.3: the plan-side half.  The file-side half (the writer's
+            // dry run) ran in make_assignment_edit and runs again in the
+            // writer; applied_ is empty by the exclusivity check above.
+            if (plan == nullptr || edit.uid == 0 || edit.resource_uid == 0 ||
+                edit.assignment_uid == 0 ||
+                !assignment_plan_refusal(*plan, edit.uid, edit.resource_uid,
+                                         edit.kind == StructuralKind::assign_resource)
+                     .empty()) {
+                return false;
+            }
+            for (const AssignmentRow& assignment : plan->assignments) {
+                if (assignment.uid == edit.assignment_uid) {
+                    return false;
+                }
             }
             edit.anchor_uid = 0;
             edit.dependants = 0;
@@ -3674,6 +3825,40 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
         row.type = core::view::ResourceType::work;
         row.max_units_percent = 100.0;
         effective.resources.push_back(std::move(row));
+    }
+    // Wave 34 (W34-4.3): the measured first assignment turns the task's
+    // unassigned placeholder row into a real row for the resource (the writer
+    // tombstones the placeholder and appends the real one with the placeholder's
+    // work, units and dates); the removal turns the real row back into a
+    // placeholder.  Either way the task holds one more PHYSICAL row.
+    for (const StructuralEdit& edit : applied_) {
+        if (edit.kind != StructuralKind::assign_resource &&
+            edit.kind != StructuralKind::unassign_resource) {
+            continue;
+        }
+        const bool assign = edit.kind == StructuralKind::assign_resource;
+        // The writer appends the new row, so the displayed row goes last: the
+        // reader returns the rows in file order and the display matches it.
+        for (std::size_t index = 0; index < effective.assignments.size(); ++index) {
+            const AssignmentRow& row = effective.assignments[index];
+            if (row.task_uid != edit.uid ||
+                (assign ? row.resource_uid != 0 : row.resource_uid != edit.resource_uid)) {
+                continue;
+            }
+            AssignmentRow replaced = row;
+            replaced.uid = edit.assignment_uid;
+            replaced.resource_uid = assign ? edit.resource_uid : 0;
+            replaced.resource_uid_raw = assign ? edit.resource_uid : 0xFFFF0001u;
+            effective.assignments.erase(effective.assignments.begin() +
+                                        static_cast<std::ptrdiff_t>(index));
+            effective.assignments.push_back(std::move(replaced));
+            break;
+        }
+        for (TaskRow& task : tasks) {
+            if (task.uid == edit.uid && task.assignment_rows != kAssignmentRowsUnknown) {
+                ++task.assignment_rows;
+            }
+        }
     }
     // Wave 28 (W28-2.1): the indented/outdented outline, in edit order, then
     // the OutlineNumber pass.  This is what makes the sheet's indentation and
@@ -4153,6 +4338,31 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // W34-4.3: Assign Resources and its removal are exclusive the same way.
+    const StructuralEdit* assignment_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::assign_resource ||
+            edit.kind == StructuralKind::unassign_resource) {
+            assignment_edit = &edit;
+        }
+    }
+    if (assignment_edit != nullptr) {
+        if (edits.applied().size() != 1) {
+            result.error =
+                "an assignment edit must be the only edit in a save; another edit "
+                "is queued with it, and the measured Project pair is one "
+                "assignment changed on an otherwise untouched save";
+            return result;
+        }
+        if (!writable.empty()) {
+            result.error =
+                "an assignment edit cannot be combined with a start-date edit; "
+                "the measured Project pair is one assignment changed on an "
+                "otherwise untouched save";
+            return result;
+        }
+    }
+
     // W31-0.1 (R30-1, High): a link add and a slack-carrying outline edit in
     // the same save would write the link at step 2 and the UNLINKED slack and
     // late dates at step 5b.  push() and validate_link_add refuse the order the
@@ -4365,6 +4575,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (add_resource_edit != nullptr) {
         ++write_ops;  // the eleven resource/calendar/Props streams, one file
+    }
+    if (assignment_edit != nullptr) {
+        ++write_ops;  // the assignment, task, resource and Props streams, one file
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -4921,6 +5134,41 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 std::to_string(written.rows_after) + " resource rows)");
         }
 
+        // 5h (wave 34, W34-4.3).  The measured Assign Resources / remove-
+        // assignment save (core/mppwrite/assignment_growth.h).  The edit is
+        // exclusive (checked above); a dry run first proves the file is still
+        // the one the edit was built from, then the writer re-validates and
+        // writes.  A refusal is an exception, reported as the save error.
+        if (assignment_edit != nullptr) {
+            const bool assign = assignment_edit->kind == StructuralKind::assign_resource;
+            mppwrite::AssignmentKey key;
+            key.task_uid = assignment_edit->uid;
+            key.resource_uid = assignment_edit->resource_uid;
+            const mppwrite::AssignmentGrowthWrite planned =
+                assign ? mppwrite::assign_resource(document, key, std::string(), true)
+                       : mppwrite::unassign_resource(document, key, std::string(), true);
+            if (planned.assignment_uid != assignment_edit->assignment_uid) {
+                cleanup();
+                result.ok = false;
+                result.error =
+                    "the assignment the writer would append (uid " +
+                    std::to_string(planned.assignment_uid) +
+                    ") is not the one the edit queued; reopen the project";
+                return result;
+            }
+            const mppwrite::AssignmentGrowthWrite written =
+                assign ? mppwrite::assign_resource(document, key, next_write_path())
+                       : mppwrite::unassign_resource(document, key, next_write_path());
+            result.assignments_written = 1;
+            result.notes.push_back(
+                std::string(assign ? "resource uid " : "assignment of resource uid ") +
+                std::to_string(written.resource_uid) +
+                (assign ? " assigned to task uid " : " removed from task uid ") +
+                std::to_string(written.task_uid) + " (" +
+                std::to_string(written.rows_before) + " -> " +
+                std::to_string(written.rows_after) + " assignment rows)");
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -4991,6 +5239,11 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (result.resources_added != 0) {
             result.api += " add_work_resource";
+        }
+        if (result.assignments_written != 0) {
+            result.api += assignment_edit->kind == StructuralKind::assign_resource
+                              ? " assign_resource"
+                              : " unassign_resource";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";

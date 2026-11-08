@@ -107,6 +107,10 @@ enum class RibbonCommand : std::uint8_t {
     // (the only measured Resource Information edit); every other field of
     // Project's dialog stays unimplemented and Notes stays disabled.
     resource_information,
+    // Wave 34 (W34-4.3): the Resource tab's Assign Resources assigns one work
+    // resource (100 %) to the selected unstarted leaf, or removes that one
+    // assignment; every other shape is refused with the reason.
+    assign_resources,
     // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
     // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
     // commands with no menu-bar item.

@@ -546,4 +546,15 @@ bool ask_resource_name(QWidget* parent, const QString& current, QString* name);
 // shared builder (app::make_add_resource_edit) owns the trim and the refusals.
 bool ask_new_resource_name(QWidget* parent, QString* name);
 
+// Resource tab > Assign Resources (W34-4.3).  The resource to assign to the
+// selected task, chosen from `names` (the plan's resources, in order); *index is
+// the chosen position.  Returns false on Cancel.  The shared builder
+// (app::make_assignment_edit) owns every refusal.
+bool ask_assignment_resource(QWidget* parent, const QString& task_name,
+                             const QStringList& names, int* index);
+
+// The removal of the task's one assignment: a Yes / No question.
+bool confirm_remove_assignment(QWidget* parent, const QString& task_name,
+                               const QString& resource_name);
+
 }  // namespace msqt

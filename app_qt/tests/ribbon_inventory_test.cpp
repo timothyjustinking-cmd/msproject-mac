@@ -567,6 +567,9 @@ const EnabledWiring kEnabledWiring[] = {
     {"Resource", "Insert", "Add Resources", "insert_resource", ""},
     // W34-4.1: Information is enabled for the measured rename shape only.
     {"Resource", "Properties", "Information", "", "resource_information"},
+    // W34-4.3: Assign Resources is enabled for the measured first assignment
+    // and its removal only.
+    {"Resource", "Assignments", "Assign Resources", "", "assign_resources"},
     // W30-1.0: Manually Schedule and Mode are enabled on the measured
     // automatic -> manual task-mode writer.
     {"Task", "Tasks", "Manually Schedule", "", "manually_schedule"},
@@ -633,6 +636,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::spelling: return "spelling";
         case RibbonCommand::resource_details: return "resource_details";
         case RibbonCommand::resource_information: return "resource_information";
+        case RibbonCommand::assign_resources: return "assign_resources";
         case RibbonCommand::project_information: return "project_information";
         case RibbonCommand::change_working_time: return "change_working_time";
         case RibbonCommand::links_between_projects: return "links_between_projects";

@@ -89,6 +89,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W34-4.1: the Resource tab's Information renames one resource (Project
     # pair measured; the rest of Project's dialog is not built).
     "resource_information",
+    # W34-4.3: the Resource tab's Assign Resources assigns one work resource to
+    # an unstarted leaf and removes that one assignment (Project pairs measured).
+    "assign_resources",
     # W30-1.7: Scroll to Task scrolls the sheet to the selected row and pans
     # the chart to the task's start; a view, never a file write.
     "scroll_to_task",
@@ -177,6 +180,12 @@ RIBBON_GAPS = {
         "resource with no assignments, alone in the save; every other field and "
         "shape is refused (Notes stays disabled: its payload embeds the saving "
         "machine's RichEdit generator string, which this port cannot reproduce)",
+    # W34-4.3: the first assignment of one work resource and its removal.
+    "assign_resources":
+        "gap: one work resource at 100 % Max. Units on an unstarted leaf task "
+        "that holds no assignment yet, and the removal of that one assignment, "
+        "alone in the save; further assignments, units, work and the other "
+        "dialog fields are refused as not implemented in this port",
     # W31-C4: the command buttons the old parser did not reach.
     "project_information":
         "gap: only the project priority has a measured writer; every other "

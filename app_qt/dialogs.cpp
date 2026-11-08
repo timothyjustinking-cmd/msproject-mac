@@ -1062,6 +1062,32 @@ bool ask_new_resource_name(QWidget* parent, QString* name) {
     return true;
 }
 
+bool ask_assignment_resource(QWidget* parent, const QString& task_name,
+                             const QStringList& names, int* index) {
+    if (index == nullptr || names.isEmpty()) {
+        return false;
+    }
+    bool ok = false;
+    const QString chosen = QInputDialog::getItem(
+        parent, QStringLiteral("Assign Resources"),
+        QStringLiteral("Resource to assign to \"%1\":").arg(task_name), names, 0, false, &ok);
+    if (!ok) {
+        return false;
+    }
+    *index = static_cast<int>(names.indexOf(chosen));
+    return *index >= 0;
+}
+
+bool confirm_remove_assignment(QWidget* parent, const QString& task_name,
+                               const QString& resource_name) {
+    return QMessageBox::question(
+               parent, QStringLiteral("Assign Resources"),
+               QStringLiteral("Remove \"%1\" from \"%2\"?\n\nThis is a pending edit; "
+                              "File > Save writes it.")
+                   .arg(resource_name, task_name),
+               QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+}
+
 // ---------------------------------------------------------------------------
 // Task Information (wave 21)
 // ---------------------------------------------------------------------------

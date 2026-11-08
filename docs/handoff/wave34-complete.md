@@ -769,6 +769,7 @@ Builder: Claude Sonnet 5.5 (W34-BUILDER), commits carry the
 | W34-4.0 | brief W34-4.0: Insert Task, Delete Task, link ADD, custom-field SET and CLEAR differ from Project's own save (the W34-0.5 KnownGap tables); refuse or show as noise | **DONE** (all five refused up front) | the `W34-4.0` commit after `3a8a31c`; `app/edit_model.{h,cpp}`, `app/field_link_edits.cpp`; `app/app_unmeasured_paths_tests.cpp`, `app_qt/tests/unmeasured_paths_test.cpp`; gates `build/w34/3a8a31c-W34-4.0-*.log` |
 | W34-4.1 | brief W34-4.1: Resource Information rename (G1); Notes only if the RichEdit serialisation is decoded for plain single-line ASCII | **DONE for the rename; Notes DEFERRED with evidence** (stays disabled, exact tooltip) | the `W34-4.1` commit after `9c5f497`; `app/edit_model.{h,cpp}`; `app/app_edits_resource_rename_tests.cpp`; `app_qt/tests/resource_information_gate_test.cpp`; Qt shell `app_qt/{ribbon_bar,dialogs,main_window}.*`; gates `build/w34/9c5f497-W34-4.1-*.log` |
 | W34-4.2 | brief W34-4.2: Add Resources (one work resource, default rates) | **DONE** (enabled for a project with one or two resources; every other shape refused up front) | the `W34-4.2` commit after `726dcfd`; `core/mppwrite/resource_growth.{h,cpp}` (`dry_run`), `app/{edit_model,menu_model,main.mm}`; `app/app_edits_resource_add_tests.cpp`; Qt shell `app_qt/{ribbon_bar,dialogs,main_window,command_status}.*`, `app_qt/tests/resource_add_gate_test.cpp`; gates `build/w34/726dcfd-g42c-*.log` |
+| W34-4.3 | brief W34-4.3: Assign Resources (one work resource at 100 % to an unstarted leaf, and remove it) | **DONE** (enabled for the first assignment of a task and for removing a task's one assignment from a settled file; every other shape refused up front) | the `W34-4.3` commit after `399902d`; `core/mppwrite/assignment_growth.{h,cpp}` (`dry_run`), `app/edit_model.{h,cpp}`; `app/app_edits_assignment_tests.cpp`; Qt shell `app_qt/{ribbon_bar,dialogs,main_window}.*`, `app_qt/tests/assign_resources_gate_test.cpp`; gates `build/w34/399902d-g43f-*.log` |
 
 W34-4.0 detail:
 
@@ -962,3 +963,75 @@ W34-4.2 detail:
   main..HEAD` clean; client-name scan 0 hits.
 - **Not verified here.**  `app/main.mm` (`addResources:`) cannot be built on
   Windows.
+
+W34-4.3 detail:
+
+- **Measured shapes.**  Two pairs, each with Project's own no-edit save of the
+  control: `wave30-assign-add-control.mpp` -> `wave30-assign-add.mpp` (task 1
+  held only Project's unassigned placeholder; Project assigned resource 2, 100 %,
+  new assignment uid 4) and `wave30-assign-delete-control.mpp` ->
+  `wave30-assign-delete.mpp` (the same assignment removed; the placeholder
+  returns as uid 5).  The port's save (`mppwrite::assign_resource` /
+  `unassign_resource`, the W34-3.1 writers, reached through the
+  `save_structural_edits` cascade) is compared stream by stream with Project's
+  over the declared streams (14 for the add, 13 for the removal):
+  `app_edits_assignment` 784 checks, **effects 1012** bytes for the add and
+  **905** for the removal, the identity dwords of the appended Assn Fixed2Data
+  record compared under `TailNormalisation`; untouched streams byte-equal; the
+  save passes `check_table` and reopens in the independent core/mpp reader.
+  The displayed assignment row is compared field by field with the row the
+  reader reads from Project's own saved file (uid, task, resource, raw resource
+  word, work, units, start, finish) and the task's physical `assignment_rows`
+  follows Project's.  The display puts the new row last (the writer appends it
+  and the reader returns file order); the first run failed only on that order
+  and was fixed in `apply()`.
+- **Enabled only for those shapes.**  Two exclusive kinds,
+  `StructuralKind::assign_resource` and `unassign_resource`, built by
+  `make_assignment_edit` (shared by both shells).  The plan-side rules, in
+  order: the task is a saved task, the resource a saved resource; the task is
+  not a summary; the task is unstarted (0 %, no actual start or finish, no
+  actual duration); the resource is a work resource with Max. Units 100 %; an
+  assign needs a task with no real assignment; a removal needs the task's one
+  assignment, naming that resource.  The builder then runs the writer in a new
+  `dry_run` mode (validate, report, write nothing) against the FILE, so a writer
+  refusal reaches the operator as "Assign Resources is not implemented in this
+  port for this project: <reason>", and a plan that disagrees with the file is
+  refused as stale.  The cascade repeats the dry run and refuses an assignment
+  uid that is not the one the edit queued; a start-date edit beside an
+  assignment is refused before anything is written.  `push()` is a backstop.
+  The settled-append pairs (second and third assignment on a task,
+  `wave34-assign-add-second` / `-third`) are measured in core but are not
+  enabled here: the brief asks for one work resource, so a task that already
+  holds an assignment is refused.
+- **Shells.**  Qt: `RibbonCommand::assign_resources` (Resource > Assignments >
+  Assign Resources) is live; pin row, backlog row and the ribbon-inventory
+  wiring row regenerated (114 / 114 / 0; 66 disabled in the table; pin 50
+  enabled / 64 disabled).  `MainWindow::assign_resources()` takes the selected
+  task: an unassigned task is offered the resource list, an assigned task a
+  Yes / No removal question; the builder owns every refusal.  The gate
+  `qt_assign_resources_gate` drives the real window: the button is live and
+  wired; Cancel queues nothing; choosing the resource queues one edit, dirties
+  the document and shows the real assignment; a second click is refused and the
+  queue keeps one; the real save and reopen read the assignment back; the
+  removal on the port's own save is refused up front; the removal on Project's
+  own settled delete control queues, saves and reopens as the placeholder.
+  macOS: `app/main.mm` was not touched (there is no menu action for the
+  command, as for W34-4.1).
+- **Guards seen red.**  Four mutations each turned a gate red and were
+  restored: the summary-task refusal (`mut-m43a`: "a summary task"), the
+  actual-duration test (`mut-m43b`: "a task with an actual duration"), the
+  task's `assignment_rows` increment (`mut-m43c`: add 1 vs 2, remove 2 vs 3)
+  and the ribbon button's enabled flag (`mut-m43d`: the Qt gate and ribbon
+  inventory).  Sources were touched and rebuilt before the gate run below.
+- **Gates (this session).**  core build exit 0, ctest `-E plan_recalc` 61/61;
+  app build exit 0, ctest 29/29; Qt build exit 0, ctest 45/45
+  (`399902d-g43f-{core,app,qt}-ctest.log`); `check_command_backlog.py` 114 /
+  114 / 0; `check_fixtures.py` OK; `check_markers.py --worktree` OK;
+  `guard_names.py main..HEAD` clean; client-name scan 0 hits.
+- **Found, not fixed (4.3).**  A removal on a file the PORT saved after an
+  assignment is refused ("the assignment FixedMeta is not the measured
+  (rows - 1) / rows / flag 4 settled shape"): the removal pair starts from a
+  file Project saved, and the port's add leaves the freshly-appended state.
+  The refusal is correct under standing rule 1; enabling the sequence "assign,
+  save, remove" needs a Project pair that starts from the port's own output.
+- **Not verified here.**  `app/main.mm` was not touched.
