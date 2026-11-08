@@ -228,7 +228,11 @@ for _view_pair in ("outline-all", "outline-deep-level1",
 for _g3_pair in ("baseline-set-nested",
                  "insert-milestone-first", "insert-milestone-last",
                  "insert-milestone-nested", "insert-summary-nested",
-                 "notes-generator"):
+                 "notes-generator",
+                 "font-bold-row2", "font-bold-start", "font-bold-range",
+                 "font-bold-off", "font-italic", "font-underline",
+                 "font-size", "font-name", "font-colour",
+                 "wbs-renumber-defined"):
     PAIRS["wave35-g3-" + _g3_pair] = (
         "wave35-g3-%s-control.mpp" % _g3_pair,
         "wave35-g3-%s-control-null.mpp" % _g3_pair,

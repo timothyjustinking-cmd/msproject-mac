@@ -382,6 +382,124 @@ void test_textstyle_pair(TestContext& t) {
         declared.data(), declared.size());
 }
 
+/* ---- Bold off (W35-3.4) -------------------------------------------------- */
+
+/* The pair: wave30-textstyle's Bold save, resaved by Project, then Bold turned
+ * off on the same cell.  Project rewrites the item in place. */
+char const* kOffControl = "wave35-g3-font-bold-off-control.mpp";
+char const* kOffNull = "wave35-g3-font-bold-off-control-null.mpp";
+char const* kOffEdit = "wave35-g3-font-bold-off.mpp";
+
+ViewCellStyleEdit bold_off_edit() {
+    ViewCellStyleEdit edit = measured_edit();
+    edit.enabled = false;
+    return edit;
+}
+
+void test_bold_off_pair(TestContext& t) {
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, kOffControl));
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, kOffNull));
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, kOffEdit));
+
+    CfbDocument doc = doc_from_data(kOffControl);
+    CfbDocument const before = doc;
+    std::vector<std::uint8_t> const control_var2 = doc.read_stream(kViewVar2);
+    ViewCellStyleWrite const written = mppwrite::save_view_cell_style(
+        doc, {bold_off_edit()}, out_path("w35-view-bold-off.mpp"));
+    t.equal(written.appended_bytes, 0, "bold off: no bytes are appended");
+    t.equal(written.repointed_entries, 0, "bold off: no entry moves");
+    t.equal(written.var2_bytes_after, written.var2_bytes_before,
+            "bold off: Var2Data keeps its size");
+    t.equal(written.item_count_after, written.item_count_before,
+            "bold off: the item count is kept");
+
+    std::vector<std::uint8_t> const var2 = doc.read_stream(kViewVar2);
+    t.equal(var2.size(), control_var2.size(), "bold off: Var2Data is 100,234 B");
+    std::size_t differing = 0;
+    for (std::size_t i = 0; i < var2.size(); ++i) {
+        if (var2[i] != control_var2[i]) {
+            ++differing;
+        }
+    }
+    t.equal(differing, 2, "bold off: exactly two bytes of Var2Data change");
+    t.equal(u32_at(var2, kInsertAt + 12 + 8), 0x00000003u,
+            "bold off: the flags word is 0x00000003");
+    t.equal(u32_at(var2, kInsertAt + 12 + 40), 0x90000000u,
+            "bold off: the font word is 0x90000000");
+    check_only_owned_streams(t, before, doc, "bold off",
+                             {kViewVar2, "Props14"});
+
+    std::array<char const*, 2> const declared{{kViewVar2, "Props14"}};
+    save_pair::compare_all(
+        t, "view-bold-off", doc_from_data(kOffControl), doc_from_data(kOffNull),
+        doc_from_data(kOffEdit),
+        CfbDocument::from_file(out_path("w35-view-bold-off.mpp")), nullptr, 0,
+        declared.data(), declared.size());
+
+    /* A dry run builds and checks the same bytes and writes nothing. */
+    CfbDocument dry = doc_from_data(kOffControl);
+    std::vector<std::uint8_t> const dry_before = dry.to_bytes();
+    ViewCellStyleWrite const planned =
+        mppwrite::save_view_cell_style(dry, {bold_off_edit()}, std::string(), true);
+    t.equal(planned.appended_bytes, 0, "bold off dry run: nothing appended");
+    t.check(dry.to_bytes() == dry_before, "bold off dry run: the document changed");
+
+    /* The shapes the pair does not measure. */
+    std::string const missing = missing_path();
+    auto refuses = [&](CfbDocument const& source, std::string_view needle,
+                       std::string const& what) {
+        std::error_code ignored;
+        std::filesystem::remove(missing, ignored);
+        CfbDocument copy = source;
+        std::vector<std::uint8_t> const copy_before = copy.to_bytes();
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_view_cell_style(
+                             copy, {bold_off_edit()}, missing);
+                     },
+                     needle, what);
+        t.check(copy.to_bytes() == copy_before, what + ": the document changed");
+        t.check(!file_exists(missing), what + ": an output file was written");
+    };
+    refuses(doc_from_data(kControl), "exactly one cell format item",
+            "Bold off on a view that carries no Bold item refused");
+    {
+        /* The item formats another attribute: flags 0x02000003 is Italic. */
+        std::vector<std::uint8_t> var2_italic = control_var2;
+        put_u32_at(var2_italic, kInsertAt + 12 + 8, 0x02000003u);
+        refuses(with_stream(kOffControl, kViewVar2, var2_italic),
+                "is not the measured Bold item",
+                "Bold off on an Italic item refused");
+    }
+    {
+        /* The item is on another row. */
+        std::vector<std::uint8_t> var2_row = control_var2;
+        put_u32_at(var2_row, kInsertAt + 12, 2);
+        refuses(with_stream(kOffControl, kViewVar2, var2_row),
+                "is not the measured Bold item",
+                "Bold off on another row's item refused");
+    }
+    {
+        /* The block is not the measured control's outside the item. */
+        std::vector<std::uint8_t> var2_style = control_var2;
+        var2_style[kBlockOffset + 4 + 20000] ^= 0x01;
+        refuses(with_stream(kOffControl, kViewVar2, var2_style),
+                "differs from the measured control's",
+                "Bold off on a changed view record refused");
+    }
+    {
+        ViewCellStyleEdit edit = bold_off_edit();
+        edit.selection = ViewCellSelection::whole_row;
+        CfbDocument copy = doc_from_data(kOffControl);
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_view_cell_style(copy, {edit},
+                                                              std::string(), true);
+                     },
+                     "whole-row selection", "Bold off on a whole row refused");
+    }
+}
+
 /* ---- refusals ----------------------------------------------------------- */
 
 void test_edit_refusals(TestContext& t) {
@@ -463,7 +581,7 @@ void test_edit_refusals(TestContext& t) {
         ViewCellStyleEdit edit = measured_edit();
         edit.enabled = false;
         refuses(control, {edit}, "turning Bold off",
-                "Bold not set refused");
+                "Bold off on a block with no Bold item refused");
     }
     {
         ViewCellStyleEdit edit = measured_edit();
@@ -837,6 +955,7 @@ int main() {
         std::filesystem::create_directories(MPPWRITE_TEST_OUT);
         TestContext t;
         test_textstyle_pair(t);
+        test_bold_off_pair(t);
         test_edit_refusals(t);
         test_path_refusals(t);
         test_damaged_streams(t);
