@@ -151,6 +151,30 @@ void set_planned_work(mppwrite::CfbDocument& doc, std::uint32_t task_uid, std::u
     doc.replace_stream(stream, assn);
 }
 
+/* A VarMeta entry (uid, Var2Data offset 0, key) added to a table, as a stored variable
+ * record would be; the checks under test read the keys, not the blocks. */
+void add_var_key(mppwrite::CfbDocument& doc, const std::string& table, std::uint32_t uid,
+                 std::uint32_t key) {
+    const std::string stream = "114/" + table + "/VarMeta";
+    Bytes meta = doc.read_stream(stream);
+    const auto put = [&meta](std::size_t at, std::uint32_t value) {
+        for (std::size_t i = 0; i < 4; ++i) {
+            meta[at + i] = static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu);
+        }
+    };
+    const std::uint32_t count = static_cast<std::uint32_t>(meta[8]) |
+                                (static_cast<std::uint32_t>(meta[9]) << 8) |
+                                (static_cast<std::uint32_t>(meta[10]) << 16) |
+                                (static_cast<std::uint32_t>(meta[11]) << 24);
+    put(8, count + 1);
+    const std::size_t at = meta.size();
+    meta.resize(at + 12, 0);
+    put(at, uid);
+    put(at + 4, 0);
+    put(at + 8, key);
+    doc.replace_stream(stream, meta);
+}
+
 app::PlanInput load_plan(const std::filesystem::path& path) {
     fixture::require_committed(path);
     return app::plan_input_from_document(mpp::load_file(path.string()));
@@ -465,6 +489,71 @@ void check_refusals() {
         check(!edits.push(hand_edit(changed), &changed),
               "push() refuses a Calculate edit over a plan with a moved leaf start");
     }
+    /* W35b-0.5 (R35G1-3): the parameters a user can vary that no pair measured.  The pair
+     * has no resource on the Resource Sheet, only Project's placeholder assignments, the
+     * Standard calendar with no block of its own, active tasks and no baseline. */
+    {
+        app::PlanInput changed = plan;
+        changed.resources.push_back(app::ResourceRow{});
+        expect_refused(changed, source, "resources on the Resource Sheet",
+                       "a project with a resource (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(changed), &changed),
+              "push() refuses a Calculate edit over a plan with a resource");
+    }
+    {
+        app::PlanInput changed = plan;
+        changed.assignments[0].resource_uid_raw = 2;
+        changed.assignments[0].resource_uid = 2;
+        expect_refused(changed, source, "assignment to a resource",
+                       "an assignment to a resource (plan)");
+    }
+    {
+        app::PlanInput changed = plan;
+        changed.assignments[0].baseline_stored = true;
+        expect_refused(changed, source, "assignment with a baseline",
+                       "an assignment with a baseline (plan)");
+    }
+    {
+        app::PlanInput changed = plan;
+        changed.tasks[1].baseline_stored = true;
+        expect_refused(changed, source, "task with a baseline", "a task with a baseline (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(changed), &changed),
+              "push() refuses a Calculate edit over a plan with a baseline");
+    }
+    {
+        app::PlanInput changed = plan;
+        changed.tasks[1].active = false;
+        expect_refused(changed, source, "inactive task", "an inactive task (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(changed), &changed),
+              "push() refuses a Calculate edit over a plan with an inactive task");
+    }
+    {
+        app::PlanInput changed = plan;
+        changed.tasks[0].type_block_stored = true;
+        expect_refused(changed, source, "stored task type", "a stored task type (plan)");
+    }
+    {
+        /* Each calendar variant: a renamed calendar, one with a block of its own (working
+         * times or exceptions), an extra calendar, and none at all. */
+        app::PlanInput renamed = plan;
+        renamed.calendars[0].name = "24 Hours";
+        expect_refused(renamed, source, "is not the measured Standard calendar",
+                       "a project calendar with another name (plan)");
+        app::PlanInput edited = plan;
+        edited.calendars[0].stored_blocks += 1;
+        expect_refused(edited, source, "is not the measured Standard calendar",
+                       "a Standard calendar with a block of its own (plan)");
+        app::PlanInput extra = plan;
+        extra.calendars.push_back(app::CalendarRow{});
+        expect_refused(extra, source, "is not the measured Standard calendar",
+                       "an extra calendar (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(edited), &edited),
+              "push() refuses a Calculate edit over a plan with an edited calendar");
+    }
     /* W35b-0.4 (RW35-W2): the pending recalculation must have been caused by a Duration
      * change alone, so each leaf's Finish is its Start plus its Duration on the measured
      * calendar (Monday to Friday, 08:00 to 17:00, whole 8-hour days). */
@@ -606,6 +695,90 @@ void check_refusals() {
         shifted.save(shifted_path.string());
         expect_refused(plan, shifted_path.string(), "is not its start plus its duration",
                        "a file whose project and leaf starts were edited");
+    }
+    /* W35b-0.5: the FILE holds the unmeasured parameter, the plan is the clean control's,
+     * so the writer's own checks name it. */
+    {
+        mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+        Bytes rsc = doc.read_stream("114/TBkndRsc/FixedData");
+        rsc.resize(rsc.size() + 172, 0);
+        doc.replace_stream("114/TBkndRsc/FixedData", rsc);
+        const std::filesystem::path path = out_path("app-calculate-resource-row.mpp");
+        doc.save(path.string());
+        expect_refused(plan, path.string(), "resource table has",
+                       "a file with a resource row beyond the placeholder");
+    }
+    {
+        mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+        Bytes cal = doc.read_stream("114/TBkndCal/FixedData");
+        cal.resize(cal.size() + 12, 0);
+        doc.replace_stream("114/TBkndCal/FixedData", cal);
+        const std::filesystem::path path = out_path("app-calculate-calendar-row.mpp");
+        doc.save(path.string());
+        expect_refused(plan, path.string(), "is not the measured Standard calendar",
+                       "a file with an extra calendar row");
+    }
+    {
+        mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+        Bytes name = doc.read_stream("114/TBkndCal/Var2Data");
+        name[4] = 'X';
+        doc.replace_stream("114/TBkndCal/Var2Data", name);
+        const std::filesystem::path path = out_path("app-calculate-calendar-name.mpp");
+        doc.save(path.string());
+        expect_refused(plan, path.string(), "is not the measured Standard calendar",
+                       "a file whose calendar is not named Standard");
+    }
+    {
+        mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+        add_var_key(doc, "TBkndTask", 1, 0x0b40001bu);
+        const std::filesystem::path path = out_path("app-calculate-task-baseline.mpp");
+        doc.save(path.string());
+        expect_refused(plan, path.string(), "carries a baseline", "a file with a task baseline");
+    }
+    {
+        mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+        add_var_key(doc, "TBkndAssn", 1, 0x0f400010u);
+        const std::filesystem::path path = out_path("app-calculate-assignment-baseline.mpp");
+        doc.save(path.string());
+        expect_refused(plan, path.string(), "carries a baseline",
+                       "a file with an assignment baseline");
+    }
+    {
+        mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+        add_var_key(doc, "TBkndRsc", 0, 0x0c40000fu);
+        const std::filesystem::path path = out_path("app-calculate-resource-baseline.mpp");
+        doc.save(path.string());
+        expect_refused(plan, path.string(), "carries a baseline",
+                       "a file with a resource baseline");
+    }
+    {
+        mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+        add_var_key(doc, "TBkndTask", 2, 0x0b400080u);
+        const std::filesystem::path path = out_path("app-calculate-task-type.mpp");
+        doc.save(path.string());
+        expect_refused(plan, path.string(), "stores variable record",
+                       "a file whose task stores a type block");
+    }
+    {
+        mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+        Bytes meta = doc.read_stream(kTaskFixed2Meta);
+        meta[16 + 5 * 96 + 8] = static_cast<std::uint8_t>(meta[16 + 5 * 96 + 8] & ~0x40u);
+        doc.replace_stream(kTaskFixed2Meta, meta);
+        const std::filesystem::path path = out_path("app-calculate-inactive.mpp");
+        doc.save(path.string());
+        expect_refused(plan, path.string(), "is inactive", "a file whose task is inactive");
+    }
+    {
+        /* A flag byte of the task's FixedMeta entry (the summary, effort-driven and task
+         * type bits live there: assignment_growth.cpp compares them). */
+        mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+        Bytes meta = doc.read_stream("114/TBkndTask/FixedMeta");
+        meta[16 + 5 * 47 + 21] = 0x01;
+        doc.replace_stream("114/TBkndTask/FixedMeta", meta);
+        const std::filesystem::path path = out_path("app-calculate-flag-byte.mpp");
+        doc.save(path.string());
+        expect_refused(plan, path.string(), "metadata flags differ",
+                       "a file whose task metadata flag byte differs");
     }
     {
         mppwrite::CfbDocument manual = mppwrite::CfbDocument::from_file(source);

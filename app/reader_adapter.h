@@ -152,6 +152,7 @@ inline AssignmentRow assignment_row_from_mpp(const mpp::Assignment& assignment) 
     row.units_percent = assignment.units();
     row.start = date32_from_packed(assignment.start.raw);
     row.finish = date32_from_packed(assignment.finish.raw);
+    row.baseline_stored = assignment.baseline.stored;
     return row;
 }
 
@@ -190,6 +191,9 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     // the project calendar.
     row.calendar_uid = task.calendar_uid;
     row.type_block_stored = task.type_block_stored;
+    // W35b-0.5 (R35G1-3): Task.Active and the stored Baseline 0.
+    row.active = task.active;
+    row.baseline_stored = task.baseline.stored;
     // Wave 12: the stored custom fields (W48's measured decodings, in the
     // reader's order).  Absent values are absent here too; app::make_record_set
     // turns each into a RecordSet value.
@@ -286,6 +290,16 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     input.resources.reserve(document.resources.size());
     for (const mpp::Resource& resource : document.resources) {
         input.resources.push_back(resource_row_from_mpp(resource));
+    }
+    input.calendars.reserve(document.calendars.size());
+    for (const mpp::Calendar& calendar : document.calendars) {
+        CalendarRow row;
+        row.uid = calendar.uid;
+        row.base_uid = calendar.base_uid;
+        row.resource_uid = calendar.resource_uid;
+        row.name = calendar.name;
+        row.stored_blocks = calendar.stored_blocks;
+        input.calendars.push_back(std::move(row));
     }
     input.assignments.reserve(document.assignments.size());
     for (const mpp::Assignment& assignment : document.assignments) {

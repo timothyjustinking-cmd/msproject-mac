@@ -142,6 +142,30 @@ void set_planned_work(CfbDocument& doc, std::uint32_t task_uid, std::uint32_t ti
     doc.replace_stream(stream, assn);
 }
 
+/* A VarMeta entry (uid, Var2Data offset 0, key) added to a table, as a stored variable
+ * record would be; the checks under test read the keys, not the blocks. */
+void add_var_key(CfbDocument& doc, std::string const& table, std::uint32_t uid,
+                 std::uint32_t key) {
+    std::string const stream = "114/" + table + "/VarMeta";
+    Bytes meta = doc.read_stream(stream);
+    auto const put = [&meta](std::size_t at, std::uint32_t value) {
+        for (std::size_t i = 0; i < 4; ++i) {
+            meta[at + i] = static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu);
+        }
+    };
+    std::uint32_t const count = static_cast<std::uint32_t>(meta[8]) |
+                                (static_cast<std::uint32_t>(meta[9]) << 8) |
+                                (static_cast<std::uint32_t>(meta[10]) << 16) |
+                                (static_cast<std::uint32_t>(meta[11]) << 24);
+    put(8, count + 1);
+    std::size_t const at = meta.size();
+    meta.resize(at + 12, 0);
+    put(at, uid);
+    put(at + 4, 0);
+    put(at + 8, key);
+    doc.replace_stream(stream, meta);
+}
+
 template <typename Fn>
 void refuses(Fn&& fn, std::string_view needle, std::string const& what) {
     try {
@@ -362,6 +386,82 @@ void refused_requests() {
         moved.leaves[1].free_slack = moved.leaves[1].start_slack = moved.leaves[1].total_slack = 0;
         refuses([&] { mppwrite::save_calculate(doc, moved, path); },
                 "moves the critical path", "critical path moves");
+    }
+    /* W35b-0.5 (R35G1-3): the parameters a user can vary that no pair measured.  The pair has
+     * no resource row beyond Project's placeholder, the Standard calendar with no block of its
+     * own, active tasks with the measured metadata flags, and no baseline or other stored
+     * variable record. */
+    {
+        CfbDocument doc = control;
+        Bytes rsc = doc.read_stream("114/TBkndRsc/FixedData");
+        rsc.resize(rsc.size() + 172, 0);
+        doc.replace_stream("114/TBkndRsc/FixedData", rsc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); }, "resource table has",
+                "resource row beyond the placeholder");
+    }
+    {
+        CfbDocument doc = control;
+        Bytes cal = doc.read_stream("114/TBkndCal/FixedData");
+        cal.resize(cal.size() + 12, 0);
+        doc.replace_stream("114/TBkndCal/FixedData", cal);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "is not the measured Standard calendar", "extra calendar row");
+    }
+    {
+        CfbDocument doc = control;
+        Bytes name = doc.read_stream("114/TBkndCal/Var2Data");
+        name[4] = 'X';
+        doc.replace_stream("114/TBkndCal/Var2Data", name);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "is not the measured Standard calendar", "calendar name");
+    }
+    {
+        CfbDocument doc = control;
+        add_var_key(doc, "TBkndCal", 1, 0x0d400008u);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "is not the measured Standard calendar", "calendar working-times block");
+    }
+    {
+        CfbDocument doc = control;
+        add_var_key(doc, "TBkndTask", 1, 0x0b40001bu);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); }, "carries a baseline",
+                "task baseline");
+    }
+    {
+        CfbDocument doc = control;
+        add_var_key(doc, "TBkndAssn", 1, 0x0f400010u);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); }, "carries a baseline",
+                "assignment baseline");
+    }
+    {
+        CfbDocument doc = control;
+        add_var_key(doc, "TBkndRsc", 0, 0x0c40000fu);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); }, "carries a baseline",
+                "resource baseline");
+    }
+    {
+        CfbDocument doc = control;
+        add_var_key(doc, "TBkndTask", 2, 0x0b400080u);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); }, "stores variable record",
+                "task type block");
+    }
+    {
+        CfbDocument doc = control;
+        Bytes meta = doc.read_stream("114/TBkndTask/Fixed2Meta");
+        meta[16 + 5 * 96 + 8] = static_cast<std::uint8_t>(meta[16 + 5 * 96 + 8] & ~0x40u);
+        doc.replace_stream("114/TBkndTask/Fixed2Meta", meta);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); }, "is inactive",
+                "inactive task");
+    }
+    {
+        /* A flag byte of the task's FixedMeta entry: the summary, effort-driven and task-type
+         * bits live there (assignment_growth.cpp compares the entry for them). */
+        CfbDocument doc = control;
+        Bytes meta = doc.read_stream("114/TBkndTask/FixedMeta");
+        meta[16 + 5 * 47 + 21] = 0x01;
+        doc.replace_stream("114/TBkndTask/FixedMeta", meta);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); }, "metadata flags differ",
+                "task metadata flag byte");
     }
     {
         /* W35b-0.4 (RW35-W2): the pending recalculation must have been caused by a

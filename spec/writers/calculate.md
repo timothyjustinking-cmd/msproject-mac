@@ -194,3 +194,30 @@ What stays refused: any link (the linked, lag and snet pairs), a constraint, a m
 row, a summary beyond the project row, progress, a task calendar, any row count other than
 the project row plus two leaves, and a file whose recalculation is not pending. Respect
 Links, Move, Auto Schedule and Level All are unchanged.
+
+### Pinned parameters (W35b-0.5, R35G1-3)
+
+The pair varies one Duration. Everything else the unlinked save leaves untouched is pinned
+to the measured control (`wave35-calculate-unlinked-control.mpp`), in the writer
+(`check_unvaried_parameters`, `core/mppwrite/calculate.cpp`) and in the plan
+(`calculate_plan_refusal`, `app/edit_model.cpp`, shared by `make_calculate_edit` and
+`push()`). A file or plan that differs is refused, and the measured shape still writes and
+matches its pair.
+
+| Parameter | Measured value | Refusal needle |
+|---|---|---|
+| Resource table (`TBkndRsc/FixedData`) | 48 + 172 bytes: Project's null row only, no resource on the Resource Sheet | `resource table has` / `resources on the Resource Sheet` |
+| Assignments | Project's `0xffff0001` placeholder only (also refused in `task_mode.cpp`) | `assignment to a resource` |
+| Calendar table | 64 + 12 x 2 bytes: Standard (uid 1, one stored block, its name `0x0d400001`) and the calendar derived for the null resource (uid 2, based on 1, no block) | `is not the measured Standard calendar` |
+| Baseline 0 | no block: task `0x0b400001`, `06`, `1b`, `2b`, `2c`; resource `0x0c40000f`, `11`; assignment `0x0f400010`, `20`, `92`, `93` | `carries a baseline` / `with a baseline` |
+| Task variable records | project row `0x0b40000e`, `4e4`, `563`, `564`; each leaf `0x0b40000e`, `a4`, `a5`, `a8`, `a9`, `aa`, `4e5`, `563`, `564`; nothing else (no note, calendar, deadline or task-type `0x0b400080` block) | `stores variable record` / `stored task type` |
+| Assignment variable records | `0x0f400031`, `27a`, `299` for each of the two assignments | `stores variable record` |
+| Resource variable records | null row `0x0c4002d6`, `2e3` | `stores variable record` |
+| Task.Active | Fixed2Meta +8 bit `0x40` set on every leaf | `is inactive` |
+| Leaf FixedMeta entry | bytes 0-3 `00 00 09 00`; bytes 16-20 `07 48 ef 1f 10`; bytes 21-46 zero (bytes 4-15 are the row's offset and stamp) | `metadata flags differ` |
+
+Not measured, so not separable here: no pair varies Effort-driven or Task Type, so their
+FixedMeta bits (byte 16, `07` in the control) are pinned as one value rather than decoded
+(the only precedent, `assignment_growth.cpp`, compares the same entry for them and is
+inferred from its comment, not from a pair). A pair that varies either would let this table
+decode them.
