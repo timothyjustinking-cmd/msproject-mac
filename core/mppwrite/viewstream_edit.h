@@ -74,13 +74,14 @@
  * "Bold set" is the measured direction only: turning Bold OFF would be a
  * replace or a remove of the item, and no pair measures either (`wave30-textstyle`
  * starts from an unformatted control and appends).  The payload's row uid and
- * field id are the caller's cell: the pair measures uid 1 / field 0x0B40000E
- * (Task/Name), and the writer stores them verbatim.
+ * field id are pinned to the cell the pair measures, uid 1 / field 0x0B40000E
+ * (Task/Name); any other row or field is refused (W35-0.4, RC-W8).
  *
  * Refusals (all before `doc` or the output path is touched; every one has a
  * test in tests/roundtrip_viewstream.cpp):
- *   - a count other than one, an empty or unusable output path, uid 0, field
- *     id 0, an attribute other than Bold, Bold not set, a whole-row selection,
+ *   - a count other than one, an empty or unusable output path, uid 0, a uid
+ *     other than the measured 1, field id 0, a field id other than the
+ *     measured 0x0B40000E, an attribute other than Bold, Bold not set, a whole-row selection,
  *     a view uid other than the measured 2;
  *   - a missing 214/CV_iew/VarMeta, Var2Data or 214/Props stream; a VarMeta
  *     that is not 24 + 12*n, a magic or declared count that is not the physical
@@ -139,6 +140,10 @@ inline constexpr std::uint32_t kCellFormatFlags = 0x01000003u;
 inline constexpr std::uint32_t kMeasuredFontWord = 0x90000001u;
 /* The pair's applied view: the CV_iew row whose main block Project grew. */
 inline constexpr std::uint32_t kMeasuredViewUid = 2u;
+/* The pair's formatted cell: the Task Name cell (field id 0x0b40000e) of the
+ * row with UniqueID 1.  Every other row and field is unmeasured and refused. */
+inline constexpr std::uint32_t kMeasuredCellUid = 1u;
+inline constexpr std::uint32_t kMeasuredCellFieldId = 0x0B40000Eu;
 
 /* The Font group's attributes.  Only Bold is measured; the rest are refused. */
 enum class ViewCellAttribute : std::uint8_t {
@@ -156,8 +161,9 @@ enum class ViewCellSelection : std::uint8_t {
     whole_row = 1,
 };
 
-/* One measured cell-format append.  The cell itself (row uid + field id) is
- * the caller's; every other word is fixed by the pair. */
+/* One measured cell-format append.  The cell (row uid + field id) is pinned to
+ * the pair's (kMeasuredCellUid, kMeasuredCellFieldId); every other word is
+ * fixed by the pair. */
 struct ViewCellStyleEdit {
     std::uint32_t view_uid = 0;  /* the CV_iew row; measured 2 */
     std::uint32_t uid = 0;       /* the formatted row's UniqueID; not 0 */
