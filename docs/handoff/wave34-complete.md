@@ -1229,3 +1229,33 @@ W34-4.7 detail:
   19 streams, which standing rule 1 forbids.
 - **State left.**  Project > Schedule > Set Baseline stays disabled with the
   exact tooltip; no source file changed in this commit.
+
+## Found, not fixed (G4)
+
+- **G4: port-saved assignment removal (4.3).**  Removing an assignment is
+  enabled only from a settled, Project-saved file; a file the port itself
+  saved is refused until a pair measures it.
+- **G4: Resource Notes (4.1).**  Stays disabled: the payload embeds the saving
+  machine's RichEdit generator string, which this port cannot reproduce.
+- **G4: Insert Summary and Insert Milestone (4.4).**  Deferred; 15 streams per
+  pair fail with the retained insert writer (renumbering, reparenting, the 2.5
+  ordinal, assignment placeholder rows, CEdl and Props changes are undecoded).
+- **G4: Font Bold (4.5).**  One cell only; other cells, ranges, a view that
+  already stores a cell format, Bold off, Italic, Underline, font name, size and
+  colour need further pairs.  The Task Sheet does not paint the stored bold.
+- **G4: WBS code (4.6).**  Other task counts, outlines, prefixes, separators
+  and number lengths, redefining a code and Renumber... have no pair; the
+  Define Code dialog's fields are not built; the plan shows no WBS column.
+- **G4: Set Baseline 0 (4.7).**  Deferred; 94 new var blocks (26 undecoded),
+  a new calendar row, four tables' presence bits and the Props tail growth are
+  needed; Set Baseline stays disabled.
+
+G4 gates on the group head `4298770`, configured from scratch with
+`CORE_WARNINGS_AS_ERRORS=ON` (`build/w34/W34-G4-fresh-gates.log`): core build
+and ctest `-E plan_recalc` 62/62, plan_recalc with and without corpus, engine
+diff self-tests and suite, reader tests with and without corpus, M2 recalc
+compare, app build and ctest 31/31, Qt build and ctest 47/47, fixtures and
+oracle provenance, marker scans (worktree and messages), guard names and the
+client-name scan: every step exit 0.
+
+WAVE-34-G4-COMPLETE
