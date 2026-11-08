@@ -90,6 +90,46 @@ Clearing a note removes its VarMeta entry and does not shrink anything
   906 → 1105 (+199), VarMeta length unchanged at 552 B with the stale
   duplicate tail slot, and the same three FixedMeta bytes as the clear pair.
 
+## W35-3.3: the generator string comes from the saving machine
+
+Wave 35 measured where the generator version comes from
+(`scripts/oracle_w35_g3.py` pair `notes-generator`, log
+`build/w35/g3-run4.log`; anatomy
+[`evidence/wave35-g3-notes-generator.md`](evidence/wave35-g3-notes-generator.md)).
+The committed `wave30-notes.mpp` (task 2's note, `Riched20 16.0.20430`) was
+opened on a copy in Project 2021, saved, and reopened as the control, then task 3's
+Notes was set to a synthetic line and the edit saved.
+
+* The control and its null save keep the old note byte for byte
+  (`16.0.20430`, payload at 520, 198 bytes).
+* The edit appends a new 190-byte block at payload offset 722 whose generator
+  is `Riched20 16.0.20527`, the current build of the machine that saved it.  The
+  file's own note was not consulted.
+* Comparing the two 159-byte prefixes, the only bytes that differ are payload
+  offsets 124, 125 and 126, the last three digits of the build number; the font
+  table, `\deff0`, `\viewkind4\uc1`, `\pard\f0\fs20` and the 10-byte suffix are
+  identical.
+
+So the four things the brief names are settled as follows.  The RTF header, the
+font table (`Segoe UI`, one entry) and the escaping are closed by the eight
+measured pairs, and they are byte-identical across two RichEdit builds.  The
+generator string is not a property of the file: a port that copied the file's
+generator would have written `16.0.20430` on this pair and Project wrote
+`16.0.20527`.
+
+The bytes that depend on the saving machine are the 10-character version in the
+generator (`16.0.20527`, payload offsets 117 to 126; offsets 124 to 126 are the
+ones measured to change).  If a machine's version string has a different length,
+the payload length, the block's length word, `Var2Data`'s length, every later
+VarMeta offset and the `114/Props` size word move with it.  The font name is
+the same on both measured builds; whether it follows the machine's UI font is not
+measured.
+
+Under the W34-4.1 condition (reproduce or refuse the saving machine's
+generator) the port can do neither on every machine it runs on: it cannot read
+the version Project's RichEdit would write, and the file does not hold it.  Notes
+stays disabled.
+
 ## Evidence
 
 ### Measured (pairs)
