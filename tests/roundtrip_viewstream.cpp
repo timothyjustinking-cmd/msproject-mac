@@ -432,6 +432,21 @@ void test_edit_refusals(TestContext& t) {
         refuses(control, {edit}, "field id 0 is not a stored field",
                 "field id 0 refused");
     }
+    /* W35-0.4 RC-W8: the pair formats one cell, the Task Name cell of row uid
+     * 1; the writer stored any other row uid or field id verbatim. */
+    for (std::uint32_t const uid : {2u, 3u, 0xFFFFFFFFu}) {
+        ViewCellStyleEdit edit = measured_edit();
+        edit.uid = uid;
+        refuses(control, {edit}, "is not the measured row uid",
+                "row uid " + std::to_string(uid) + " refused");
+    }
+    for (std::uint32_t const field_id : {0x0B40000Fu, 0x0B400001u, 0x0B40000Du,
+                                         0x0C40000Eu, 1u}) {
+        ViewCellStyleEdit edit = measured_edit();
+        edit.field_id = field_id;
+        refuses(control, {edit}, "is not the measured field id",
+                "field id " + std::to_string(field_id) + " refused");
+    }
     std::array<std::pair<ViewCellAttribute, char const*>, 5> const siblings{{
         {ViewCellAttribute::italic, "italic"},
         {ViewCellAttribute::underline, "underline"},

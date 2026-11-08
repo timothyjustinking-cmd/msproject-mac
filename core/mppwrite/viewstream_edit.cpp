@@ -579,6 +579,20 @@ void validate_edit(ViewCellStyleEdit const& edit, std::string const& function) {
     if (edit.field_id == 0) {
         throw Error(function + ": field id 0 is not a stored field");
     }
+    if (edit.uid != kMeasuredCellUid) {
+        throw Error(function + ": row uid " + std::to_string(edit.uid) +
+                    " is not the measured row uid (" +
+                    std::to_string(kMeasuredCellUid) +
+                    "); the pair formats one cell and every other row is "
+                    "unmeasured and refused");
+    }
+    if (edit.field_id != kMeasuredCellFieldId) {
+        throw Error(function + ": field id " + std::to_string(edit.field_id) +
+                    " is not the measured field id (" +
+                    std::to_string(kMeasuredCellFieldId) +
+                    ", the Task Name cell); every other field is unmeasured "
+                    "and refused");
+    }
     if (edit.attribute != ViewCellAttribute::bold) {
         throw Error(function + ": only Bold is measured; italic, underline, "
                     "strikethrough and the two colours are unmeasured and "
