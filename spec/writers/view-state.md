@@ -98,6 +98,7 @@ The pairs fix the order for the measured names and durations only. The edit mode
 | Renumber = True | refused | both |
 | view uid other than 2, or a project whose applied view is not the measured block | refused | writer (digest, view uid) |
 | row count ≠ 5, pending task, unpinned names or durations | refused | edit model; writer for the count |
+| an outline other than levels 1, 2, 2, 1, 1 (a three-level, flat or re-nested one), from the plan and from the file's +172 words | refused ("sort one outline") | edit model and writer (`sorted_order_of`) |
 | a file that already carries a sort or a different order | refused ("already carries a sort") | writer |
 
 `wave35-viewstate-sort-flat-name-desc` (Outline = False) saves the same bytes as the

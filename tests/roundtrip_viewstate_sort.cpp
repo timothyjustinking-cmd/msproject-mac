@@ -391,14 +391,33 @@ void test_refusals(TestContext& t) {
                     mppwrite::read_task_name(control, 1) == "Task A",
                 "R35G2-2: the control's names are Task A to Task E");
 
-        /* The outline. */
+        /* The outline: only the pairs' (levels 1, 2, 2, 1, 1) is measured
+         * (W35b-1.3, R35G2-3); the flat-name-desc pair stores the same levels. */
         refuses(edited(control,
                        [](CfbDocument&, mppwrite::TaskTable& table) {
                            table.set_u16(3, 172, 1);
                        }),
-                measured_edit(),
-                "the sorted order does not match the order the file's own outline",
-                "R35G2-2: a file whose outline is not the request's order refused");
+                measured_edit(), "sort one outline (a summary with two children",
+                "R35G2-3: a file whose outline is not the measured one refused");
+        refuses(edited(control,
+                       [](CfbDocument&, mppwrite::TaskTable& table) {
+                           table.set_u16(3, 172, 3);
+                       }),
+                measured_edit(), "and this one has levels 1, 2, 3, 1, 1",
+                "R35G2-3: a three-level outline refused");
+        refuses(edited(control,
+                       [](CfbDocument&, mppwrite::TaskTable& table) {
+                           table.set_u16(2, 172, 1);
+                           table.set_u16(3, 172, 1);
+                       }),
+                measured_edit(), "and this one has levels 1, 1, 1, 1, 1",
+                "R35G2-3: a flat outline refused");
+        refuses(edited(control,
+                       [](CfbDocument&, mppwrite::TaskTable& table) {
+                           table.set_u16(4, 172, 2);
+                       }),
+                measured_edit(), "and this one has levels 1, 2, 2, 2, 1",
+                "R35G2-3: a third child under the summary refused");
         refuses(edited(control,
                        [](CfbDocument&, mppwrite::TaskTable& table) {
                            table.set_u16(1, 172, 0);
