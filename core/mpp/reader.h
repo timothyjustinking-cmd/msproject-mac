@@ -530,6 +530,12 @@ struct Task {
      * the task uses the project calendar.  holiday1.mpp's three tasks store 3
      * (SiteCal); every PROJECT_A/PROJECT_B row stores -1. */
     std::int32_t calendar_uid = -1;
+    /* W35-0.2 (R34b-2): the task owns a VarMeta block under the Type key
+     * 0x0b400080 (PjTaskFixedType, i16; spec/scheduling.md section 1).  The
+     * measured assignment fixtures store no such block, so a stored type is a
+     * task shape no pair measured.  The VALUE is not decoded: no corpus file pairs
+     * a stored type with its COM export, so only the block's presence is read. */
+    bool type_block_stored = false;
     /* +120/+124.  Unproven against COM (no oracle export); see the file
      * comment.  A 50 %-complete task has an actual start and no actual
      * finish. */

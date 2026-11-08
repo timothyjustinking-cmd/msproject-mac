@@ -625,6 +625,9 @@ void check_refusals() {
                  row.cost_fields_stored = true;
                  row.accrue_at = 1;
              }},
+            /* W35-0.2 (R34b-2): a task that stores a Type block. */
+            {"a task that stores a task type", "stores a task type",
+             [](app::TaskRow& row) { row.type_block_stored = true; }, nullptr},
             /* W35-0.1 (R34b-1): the resource's calendar row, one test per shape. */
             {"a resource calendar based on another calendar",
              "whose calendar is based on another calendar", nullptr,
@@ -662,6 +665,41 @@ void check_refusals() {
                           " on " + one.label);
                 check(edits.empty(), std::string("push(): nothing queued for ") + one.label);
             }
+        }
+    }
+    /* W35-0.2 (R34b-2): the removed assignment's own units and work, at the
+     * builder and in push().  The unchanged plan removes (the positive control
+     * is the measured removal pair above). */
+    {
+        struct AssignmentCase {
+            const char* label;
+            const char* needle;
+            std::function<void(app::AssignmentRow&)> change;
+        };
+        const std::vector<AssignmentCase> assignment_cases = {
+            {"a removed assignment at 50 % units", "units are not 100%",
+             [](app::AssignmentRow& row) { row.units_percent = 50.0; }},
+            {"a removed assignment of 24 hours", "not the measured 40 hours",
+             [](app::AssignmentRow& row) { row.work_ticks = 14400; }},
+        };
+        for (const AssignmentCase& one : assignment_cases) {
+            app::PlanInput changed = remove_plan;
+            bool touched = false;
+            for (app::AssignmentRow& row : changed.assignments) {
+                if (row.task_uid == kRemove.task_uid && row.resource_uid == kRemove.resource_uid) {
+                    one.change(row);
+                    touched = true;
+                }
+            }
+            check(touched, std::string("the removal fixture holds the assignment: ") + one.label);
+            expect_refused(changed, remove_path.string(), kRemove.task_uid, kRemove.resource_uid,
+                           false, one.needle, std::string("remove: ") + one.label);
+            app::StructuralEdits edits;
+            check(!edits.push(hand_edit(false, kRemove.task_uid, kRemove.resource_uid,
+                                        kAdd.task_uid + 100),
+                              &changed),
+                  std::string("push() refuses a removal of ") + one.label);
+            check(edits.empty(), std::string("push(): nothing queued for ") + one.label);
         }
     }
     /* The unmeasured counts: a task that already has a real assignment. */
