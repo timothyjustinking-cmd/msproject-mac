@@ -733,6 +733,34 @@ void test_refusals(TestContext& t) {
             "uid 0 is the project row", "the project row refused");
     refuses("wave30-notes-control.mpp", append_edit(2, 0, {1, 2}),
             "field key 0", "key 0 refused");
+
+    /* W35-0.4 (RC-W6): only the keys a pair measured for the shape are taken,
+     * whatever the payload; each case is refused before a stream is read. */
+    char const* const unmeasured = "is not one a committed pair measured";
+    refuses("wave30-notes-control.mpp", append_edit(2, 0x0B400034u, {1, 2}), unmeasured,
+            "a Task append of an unmeasured key (Text2)");
+    refuses("wave30-notes-control.mpp", append_edit(2, kText1Key, {1, 2}), unmeasured,
+            "a Task append of Text1 (measured only as a removal)");
+    refuses("wave30-notes-control.mpp", repoint_edit(2, kText1Key, {1, 2, 3}), unmeasured,
+            "a Task re-point of Text1 (measured only as a removal)");
+    refuses("wave30-notes-control.mpp", remove_edit(2, 0x0B40018Du), unmeasured,
+            "a Task removal of the stored WBS text");
+    refuses("wave30-notes-control.mpp", repoint_edit(2, 0x0C400001u, {1, 2, 3}), unmeasured,
+            "a Task re-point of the Resource name key");
+    {
+        CfbDocument doc = doc_from_data("wave30-resource-rename-control.mpp");
+        std::vector<std::uint8_t> const before = doc.to_bytes();
+        std::vector<VarRecordEdit> const edits = repoint_edit(2, 0x0C400002u, {1, 2, 3});
+        expect_error(t,
+                     [&] {
+                         (void)mppwrite::save_var_record(
+                             doc, mppwrite::kVarResourceTable, edits, missing);
+                     },
+                     unmeasured, "a Resource re-point of an unmeasured key");
+        t.check(doc.to_bytes() == before, "a Resource re-point of an unmeasured key: changed");
+        t.check(!file_exists(missing),
+                "a Resource re-point of an unmeasured key: an output file was written");
+    }
     refuses("wave30-notes-control.mpp", append_edit(99, kNotesKey, {1, 2}),
             "no row of", "an unknown uid refused");
 
@@ -884,22 +912,10 @@ void test_refusals(TestContext& t) {
          * carries the one-slot stale tail a removal leaves, and it is refused
          * as a SOURCE (no committed pair edits from that state). */
         CfbDocument doc = doc_from_data("wave34-field-clear.mpp");
-        std::vector<mppwrite::VarEntry> const entries = entries_of(doc, kTaskVarMeta);
-        std::uint32_t key = 0;
-        std::size_t old = 0;
-        for (mppwrite::VarEntry const& entry : entries) {
-            if (entry.mid == 2) {
-                key = entry.field_id;
-                old = entry.offset;
-                break;
-            }
-        }
-        t.check(key != 0, "stale tail: the edit file has a uid 2 entry");
-        std::vector<std::uint8_t> payload =
-            mppwrite::read_var_block(doc.read_stream(kTaskVar2),
-                                     static_cast<std::uint32_t>(old));
-        payload.insert(payload.end(), 8, 0);
-        std::vector<VarRecordEdit> const edits = repoint_edit(2, key, payload);
+        /* W35-0.4 (RC-W6): the re-point must name a measured key to get past the
+         * key check and reach the stale-tail check, so it is the Notes key. */
+        std::vector<VarRecordEdit> const edits =
+            repoint_edit(2, kNotesKey, std::vector<std::uint8_t>(300, 0x42));
         expect_error(t,
                      [&] {
                          (void)mppwrite::save_var_record(

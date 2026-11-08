@@ -98,6 +98,13 @@
  *   - remove: no entry, two entries, a family entry, a 0xFFFFFFFF offset, a
  *     zero-length block, a non-empty payload, or a table with no measured
  *     removal;
+ *   - a field key no pair measured for the table and shape (W35-0.4, RC-W6):
+ *     Task append 0x0B40000F (wave30-notes), 0x0B40018D and, on uid 0,
+ *     0x0B40019F (wave30-wbs-code); Task re-point 0x0B40000F
+ *     (wave34-note-replace); Task remove 0x0B40000F (wave34-note-clear) and
+ *     0x0B400033 (wave34-field-clear); Resource re-point 0x0C400001
+ *     (wave30-resource-rename).  Any other key is refused before a stream is
+ *     read, whatever the payload;
  *   - a presence operation outside the row's FixedMeta entry (byte < 8, or
  *     past the entry), a zero or multi-bit mask, or a duplicate operation;
  *   - a Fixed2Meta/Fixed2Data/Props stream the table needs to be intact.
@@ -138,6 +145,11 @@ inline constexpr std::uint32_t kResourceNameFieldId = 0x0C400001u;
  * var records. */
 inline constexpr std::uint32_t kTaskWbsFieldId = 0x0B40018Du;
 inline constexpr std::uint32_t kTaskProjectWbsFieldId = 0x0B40019Fu;
+
+/* Task/Notes (wave30-notes, wave34-note-replace, wave34-note-clear) and
+ * Task/Text1 (wave34-field-clear): the other Task keys a pair measured. */
+inline constexpr std::uint32_t kTaskNotesFieldId = 0x0B40000Fu;
+inline constexpr std::uint32_t kTaskText1FieldId = 0x0B400033u;
 
 /* The three measured shapes. */
 enum class VarRecordShape : std::uint8_t {
