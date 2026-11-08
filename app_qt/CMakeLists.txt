@@ -387,6 +387,21 @@ add_test(NAME qt_wbs_code_gate
                  "${QT_TEST_DATA_DIR_CMAKE}/wave30-insert-milestone.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# Wave 35 (W35-1.3): Calculate Project in the real MainWindow.  The button is
+# live; a linked project is refused up front and queues nothing; the measured
+# control queues one exclusive edit, the real save writes it, and a reopen of
+# the saved file refuses a second calculation (nothing is pending).
+add_executable(qt_calculate_gate_tests tests/calculate_gate_test.cpp)
+target_link_libraries(qt_calculate_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_calculate_gate_tests)
+
+add_test(NAME qt_calculate_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_calculate_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-calculate-unlinked-control.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-calculate-linked-control.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # ===========================================================================
 # WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
 # the loaded Task Sheet's geometry; these gate the empty project, the chrome,

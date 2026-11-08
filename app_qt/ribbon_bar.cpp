@@ -447,8 +447,8 @@ const std::vector<TabSpec>& tab_specs() {
             app::MenuAction::none, RibbonCommand::change_working_time, nullptr, 0, true,
             false, "properties.change_working_time");
         GroupSpec& project_schedule = add_group(project, "Schedule", 175);
-        large(project_schedule, "Calculate\nProject", app::MenuAction::none, 52, 0, false,
-              "schedule.calculate");
+        large(project_schedule, "Calculate\nProject", app::MenuAction::none, 52, 0, true,
+              "schedule.calculate", RibbonCommand::calculate_project);
         split(project_schedule, "Set\nBaseline", 48, 0, 1, 3, "schedule.set_baseline", true,
               RibbonCommand::set_baseline_menu);
         add(project_schedule, "Move\nProject", Kind::button, 46, 0, 2, 3, 1,

@@ -477,6 +477,9 @@ class MainWindow final : public QMainWindow {
     // W34-4.6: Project > Properties > WBS > Define Code... queues the one
     // measured code definition; the builder owns every refusal.
     void define_wbs_code();
+    // W35-1.3: Project > Schedule > Calculate Project queues the one measured
+    // recalculation; the builder owns every refusal.
+    void calculate_project();
     // W30-1.0: the Mode button's menu.  "Automatically Scheduled" is Project's
     // other mode but has no measured save in this port, so it is disabled with
     // the exact decision-9 tooltip; "Manually Scheduled" runs the same handler

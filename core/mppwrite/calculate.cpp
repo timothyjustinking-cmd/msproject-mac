@@ -259,11 +259,7 @@ void check_request(CalculateShape const& shape, TaskTable const& rows,
 
 } /* namespace */
 
-CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
-                              std::string const& path) {
-    if (path.empty() || std::filesystem::path(path).filename().empty()) {
-        throw Error("calculate: the output path is empty or names a directory");
-    }
+void validate_calculate(CfbDocument const& doc, CalculateRequest const& request) {
     CalculateShape shape;
     std::string reason;
     if (!read_calculate_shape(doc, shape, reason)) {
@@ -271,6 +267,15 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
     }
     TaskTable const before = TaskTable::from_document(doc, kTable);
     check_request(shape, before, request);
+}
+
+CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
+                              std::string const& path) {
+    if (path.empty() || std::filesystem::path(path).filename().empty()) {
+        throw Error("calculate: the output path is empty or names a directory");
+    }
+    validate_calculate(doc, request);
+    TaskTable const before = TaskTable::from_document(doc, kTable);
 
     CfbDocument work = doc;
     TaskTable after = before;

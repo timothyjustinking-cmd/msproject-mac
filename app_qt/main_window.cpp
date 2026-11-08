@@ -2424,6 +2424,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
         case RibbonCommand::move_project:
             show_move_project();
             return;
+        case RibbonCommand::calculate_project:
+            calculate_project();
+            return;
         case RibbonCommand::wbs_menu:
             set_message("WBS: choose Define Code... from the drop-down; Renumber is not "
                         "implemented in this port",
@@ -3311,6 +3314,36 @@ void MainWindow::define_wbs_code() {
     }
     after_structural_change(doc_.selected_uid());
     set_message("queued the WBS code W with ordered two-digit numbers; File > Save writes it",
+                false);
+    update_status();
+}
+
+void MainWindow::calculate_project() {
+    if (refuse_read_only()) {
+        return;
+    }
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    // W35-1.3: the builder owns every refusal (the task count and shape, a link,
+    // a file whose recalculation is not pending, a stale file).
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_calculate_edit(doc_.plan(), doc_.path(), edit, error)) {
+        set_message("Calculate Project: " + error, true);
+        update_status();
+        return;
+    }
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
+        set_message("Calculate Project: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(doc_.selected_uid());
+    set_message("queued Calculate Project (the project row, two tasks' slack and late "
+                "dates); File > Save writes it",
                 false);
     update_status();
 }
