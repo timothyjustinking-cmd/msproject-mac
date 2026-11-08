@@ -493,8 +493,8 @@ bool make_task_mode_edit(const PlanInput& plan, std::string_view source_path,
 // dialog's Resource name, written through mppwrite::rename_resource against
 // Project's committed pair (tests/data/wave30-resource-rename-control.mpp ->
 // wave30-resource-rename.mpp).  The name is trimmed (ASCII whitespace) and
-// must be non-empty and free of control characters (the writer adds its own
-// 65,535-byte cap).  The measured shape is a LARGER stored
+// must be non-empty, free of control characters and of , [ ], and at most 3
+// characters (the "R2b" the pair stores; the writer refuses the same).  The measured shape is a LARGER stored
 // payload, so a name that encodes to the same size or smaller than the file's
 // current block is refused with that reason: Project's shrink re-point is
 // unmeasured.  The FILE is the authority for the current block (it is read
@@ -518,8 +518,8 @@ bool make_rename_resource_edit(const PlanInput& plan, std::string_view source_pa
 // add_work_resource against Project's two committed pairs
 // (tests/data/wave30-resource-add-control.mpp -> wave30-resource-add.mpp, one
 // existing resource; wave34-resource-add-third-control.mpp -> ...-third.mpp, two).
-// The name is trimmed (ASCII whitespace) and must be 1..64 printable ASCII
-// characters; `created` is the packed Created stamp (current_created_stamp()
+// The name is trimmed (ASCII whitespace) and must be 1..2 printable ASCII
+// characters (the longest a committed pair adds), none of , [ ]; `created` is the packed Created stamp (current_created_stamp()
 // in a shell, the pair's own stamp in a test).  The FILE is the authority for
 // the shape: the writer's dry run validates every stream (the resource count,
 // the calendar table, the Props counts, the per-count flag bytes) and its
@@ -697,7 +697,7 @@ class StructuralEdits {
     // An add_resource edit (W34-4.2) REQUIRES `plan` and is EXCLUSIVE the same
     // way.  It refuses a uid or ID the plan already uses, a plan that does not
     // hold one or two saved resources (the two measured counts), a name that is
-    // not 1..64 printable ASCII characters and a Created stamp that is not a
+    // not 1..2 printable ASCII characters free of , [ ] and a Created stamp that is not a
     // packed date.  make_add_resource_edit performs the file-side checks.
     //
     // Pushing a delete_task also removes the set/clear field edits, percent

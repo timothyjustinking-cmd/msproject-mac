@@ -2570,6 +2570,20 @@ std::string rename_name_refusal(const std::string& name) {
                    "characters is not implemented in this port: the measured "
                    "Project pair stores a plain ASCII name";
         }
+        // W34b-1.4 (R34G4-6): the list and field delimiters Project's UI
+        // refuses in a resource name.
+        if (ch == ',' || ch == '[' || ch == ']') {
+            return "the resource name holds ',', '[' or ']', which Project's "
+                   "UI refuses in a resource name";
+        }
+    }
+    // W34b-1.4 (R34G4-6): the longest name a committed pair measures is the
+    // three characters of wave30-resource-rename.mpp ("R2" -> "R2b", an 8-byte
+    // block); any longer name is a Var2Data block no pair measured.
+    if (name.size() > 3) {
+        return "Resource Information rename to a name longer than 3 characters "
+               "is not implemented in this port: the longest name a measured "
+               "Project pair stores is \"R2b\"";
     }
     return {};
 }
@@ -2664,18 +2678,16 @@ bool make_rename_resource_edit(const PlanInput& plan, std::string_view source_pa
 namespace {
 
 // W34-4.2: the Add Resources name rule, shared by the builder and push().  The
-// writer measured a plain printable-ASCII name of 1..64 characters (the stored
-// form is UTF-16LE + NUL and the initials default to its first character), so
-// every other name is a shape no pair measured.  Returns the reason, or an
-// empty string when the (already trimmed) name is acceptable.
+// writer measured a plain printable-ASCII name (the stored form is UTF-16LE +
+// NUL and the initials default to its first character).  W34b-1.4 (R34G4-6):
+// the longest name a committed pair measures is two characters, "R2" in
+// wave30-resource-add.mpp and "R3" in wave34-resource-add-third.mpp, so every
+// longer name is a Var2Data block no pair measured; ',' '[' and ']' are the
+// delimiters Project's UI refuses in a resource name.  Returns the reason, or
+// an empty string when the (already trimmed) name is acceptable.
 std::string add_resource_name_refusal(const std::string& name) {
     if (name.empty()) {
         return "the resource name is empty";
-    }
-    if (name.size() > 64) {
-        return "Add Resources with a name longer than 64 characters is not "
-               "implemented in this port: the measured Project pairs add a short "
-               "ASCII name";
     }
     for (const char ch : name) {
         const unsigned char byte = static_cast<unsigned char>(ch);
@@ -2687,6 +2699,15 @@ std::string add_resource_name_refusal(const std::string& name) {
                    "not implemented in this port: the measured Project pairs add "
                    "a plain ASCII name";
         }
+        if (ch == ',' || ch == '[' || ch == ']') {
+            return "the resource name holds ',', '[' or ']', which Project's "
+                   "UI refuses in a resource name";
+        }
+    }
+    if (name.size() > 2) {
+        return "Add Resources with a name longer than 2 characters is not "
+               "implemented in this port: the longest name a measured Project "
+               "pair adds is \"R2\" or \"R3\"";
     }
     return {};
 }

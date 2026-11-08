@@ -503,14 +503,20 @@ void check_refusals() {
                    "a newline in the name");
     expect_refused(plan, source, "Caf\xC3\xA9 Crew", stamp, "a name that has non-ASCII characters",
                    "a non-ASCII name");
-    expect_refused(plan, source, std::string(65, 'x'), stamp, "a name longer than 64 characters",
+    /* W34b-1.4 (R34G4-6): the cap is the two characters of the pairs' "R2"/"R3",
+     * and the delimiters Project's UI refuses are refused. */
+    expect_refused(plan, source, std::string(65, 'x'), stamp, "a name longer than 2 characters",
                    "a 65-character name");
+    expect_refused(plan, source, "R22", stamp, "a name longer than 2 characters",
+                   "a three-character name");
+    expect_refused(plan, source, "R,", stamp, "holds ',', '[' or ']'", "a comma in the name");
+    expect_refused(plan, source, "[2", stamp, "holds ',', '[' or ']'", "an opening bracket");
+    expect_refused(plan, source, "R]", stamp, "holds ',', '[' or ']'", "a closing bracket");
     {
         app::StructuralEdit edit;
         std::string error;
-        check(app::make_add_resource_edit(plan, source, std::string(64, 'x'), stamp, edit,
-                                          error),
-              "a 64-character name is accepted");
+        check(app::make_add_resource_edit(plan, source, "xy", stamp, edit, error),
+              "a two-character name is accepted (" + error + ")");
     }
 
     /* The Created stamp. */
@@ -648,6 +654,14 @@ void check_refusals() {
               "push() refuses a non-ASCII name");
         check(!edits.push(hand_edit(new_uid, new_id, std::string(65, 'x'), stamp), &plan),
               "push() refuses a 65-character name");
+        check(!edits.push(hand_edit(new_uid, new_id, "R22", stamp), &plan),
+              "push() refuses a three-character name");
+        check(!edits.push(hand_edit(new_uid, new_id, "R,", stamp), &plan),
+              "push() refuses a comma");
+        check(!edits.push(hand_edit(new_uid, new_id, "[2", stamp), &plan),
+              "push() refuses an opening bracket");
+        check(!edits.push(hand_edit(new_uid, new_id, "R]", stamp), &plan),
+              "push() refuses a closing bracket");
         check(!edits.push(hand_edit(new_uid, new_id, "R2", 0), &plan),
               "push() refuses a zero Created stamp");
         check(!edits.push(hand_edit(new_uid, new_id, "R2", 0xFFFFFFFFu), &plan),
@@ -680,7 +694,7 @@ void check_refusals() {
         app::StructuralEdit rename;
         rename.kind = app::StructuralKind::rename_resource;
         rename.uid = 1;
-        rename.name = "A longer resource name";
+        rename.name = "R2b";
         check(!edits.push(std::move(rename), &plan), "push() refuses a rename over an add");
         app::StructuralEdit task_mode;
         task_mode.kind = app::StructuralKind::set_task_mode;

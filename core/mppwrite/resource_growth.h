@@ -88,7 +88,8 @@
 namespace mppwrite {
 
 struct ResourceGrowthSpec {
-    /* Required: 1..64 printable ASCII characters. */
+    /* Required: 1..2 printable ASCII characters (the longest name a committed
+     * pair measures), none of , [ ]. */
     std::string name;
     /* Empty = the first character of `name`; otherwise 1..8 printable ASCII. */
     std::string initials;

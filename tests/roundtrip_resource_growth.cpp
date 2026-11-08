@@ -621,6 +621,14 @@ void test_argument_refusals(TestContext& t) {
     refuses(t, control, spec, "name must be", "an empty name");
     spec.name = std::string(65, 'A');
     refuses(t, control, spec, "name must be", "a 65-character name");
+    /* W34b-1.4 (R34G4-6): the longest measured name is two characters. */
+    spec.name = "R33";
+    refuses(t, control, spec, "name must be 1..2", "a three-character name");
+    for (char const* delimited : {"A,", "[A", "A]"}) {
+        spec.name = delimited;
+        refuses(t, control, spec, "none of , [ ]",
+                std::string("a name holding a delimiter: ") + delimited);
+    }
     spec.name = "caf\xC3\xA9";
     refuses(t, control, spec, "name must be", "a non-ASCII name");
     spec.name = "A\tB";

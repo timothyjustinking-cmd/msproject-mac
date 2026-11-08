@@ -402,8 +402,8 @@ void check_refusals() {
     }
     const std::string old_name = row->name;
 
-    expect_refused(plan, source, 0, "Longer name", "not a saved row", "the project row (uid 0)");
-    expect_refused(plan, source, 999, "Longer name", "not a saved row", "an unknown resource");
+    expect_refused(plan, source, 0, "R2b", "not a saved row", "the project row (uid 0)");
+    expect_refused(plan, source, 999, "R2b", "not a saved row", "an unknown resource");
     expect_refused(plan, source, 2, "", "empty", "an empty name");
     expect_refused(plan, source, 2, " \t ", "empty", "a blank name");
     expect_refused(plan, source, 2, std::string("ab\0c", 4), "control character",
@@ -411,6 +411,15 @@ void check_refusals() {
     expect_refused(plan, source, 2, "line\none", "control character", "a newline in the name");
     expect_refused(plan, source, 2, "Caf\xC3\xA9 Crew", "a name with non-ASCII characters",
                    "a non-ASCII name");
+    /* W34b-1.4 (R34G4-6): the delimiters Project's UI refuses, and the cap at
+     * the three characters of the pair's "R2b". */
+    expect_refused(plan, source, 2, "R,b", "holds ',', '[' or ']'", "a comma in the name");
+    expect_refused(plan, source, 2, "[2b", "holds ',', '[' or ']'", "an opening bracket");
+    expect_refused(plan, source, 2, "R2]", "holds ',', '[' or ']'", "a closing bracket");
+    expect_refused(plan, source, 2, "R2bc", "a name longer than 3 characters",
+                   "a four-character name");
+    expect_refused(plan, source, 2, std::string(64, 'x'), "a name longer than 3 characters",
+                   "a 64-character name");
     expect_refused(plan, source, 2, old_name, "unchanged", "the unchanged name");
     expect_refused(plan, source, 2, "a", "a name that is not longer than the current one",
                    "a shorter name");
@@ -432,12 +441,12 @@ void check_refusals() {
         assignment.resource_uid = 2;
         assignment.resource_uid_raw = 2;
         assigned.assignments.push_back(assignment);
-        expect_refused(assigned, source, 2, "Longer name", "has assignments",
+        expect_refused(assigned, source, 2, "R2b", "has assignments",
                        "a resource that has an assignment");
         app::StructuralEdit hand;
         hand.kind = app::StructuralKind::rename_resource;
         hand.uid = 2;
-        hand.name = "Longer name";
+        hand.name = "R2b";
         app::StructuralEdits edits;
         check(!edits.push(std::move(hand), &assigned),
               "push() refuses the rename of an assigned resource");
@@ -487,15 +496,19 @@ void check_refusals() {
     };
     {
         app::StructuralEdits edits;
-        check(!edits.push(hand_edit(2, "Longer name"), nullptr),
+        check(!edits.push(hand_edit(2, "R2b"), nullptr),
               "push() refuses a rename with no plan");
-        check(!edits.push(hand_edit(0, "Longer name"), &plan), "push() refuses uid 0");
-        check(!edits.push(hand_edit(999, "Longer name"), &plan),
+        check(!edits.push(hand_edit(0, "R2b"), &plan), "push() refuses uid 0");
+        check(!edits.push(hand_edit(999, "R2b"), &plan),
               "push() refuses an unknown resource");
         check(!edits.push(hand_edit(2, "  "), &plan), "push() refuses a blank name");
         check(!edits.push(hand_edit(2, std::string("a\0b", 3)), &plan),
               "push() refuses an embedded NUL");
         check(!edits.push(hand_edit(2, "Caf\xC3\xA9"), &plan), "push() refuses a non-ASCII name");
+        check(!edits.push(hand_edit(2, "R,b"), &plan), "push() refuses a comma");
+        check(!edits.push(hand_edit(2, "[2b"), &plan), "push() refuses an opening bracket");
+        check(!edits.push(hand_edit(2, "R2]"), &plan), "push() refuses a closing bracket");
+        check(!edits.push(hand_edit(2, "R2bc"), &plan), "push() refuses a four-character name");
         check(edits.empty(), "no refused rename left anything in the queue");
     }
 
@@ -506,18 +519,18 @@ void check_refusals() {
         priority.priority = 500;
         app::StructuralEdits edits;
         check(edits.push(std::move(priority), &plan), "a priority edit queues on its own");
-        check(!edits.push(hand_edit(2, "Longer name"), &plan),
+        check(!edits.push(hand_edit(2, "R2b"), &plan),
               "push() refuses a rename over another edit");
     }
     {
         app::StructuralEdits edits;
-        check(edits.push(hand_edit(2, "Longer name"), &plan), "a rename queues on an empty list");
+        check(edits.push(hand_edit(2, "R2b"), &plan), "a rename queues on an empty list");
         app::StructuralEdit priority;
         priority.kind = app::StructuralKind::set_project_priority;
         priority.priority = 500;
         check(!edits.push(std::move(priority), &plan),
               "push() refuses another edit over a rename");
-        check(!edits.push(hand_edit(2, "Longer name again"), &plan),
+        check(!edits.push(hand_edit(2, "R2c"), &plan),
               "push() refuses a second rename");
         app::StructuralEdit task_mode;
         task_mode.kind = app::StructuralKind::set_task_mode;
@@ -530,7 +543,7 @@ void check_refusals() {
     {
         app::StructuralEdit edit;
         std::string error;
-        check(app::make_rename_resource_edit(plan, source, 2, "Longer name", edit, error),
+        check(app::make_rename_resource_edit(plan, source, 2, "R2b", edit, error),
               "the exclusivity fixture builds its rename");
         app::StructuralEdits edits;
         check(edits.push(std::move(edit), &plan), "the exclusivity fixture queues the rename");

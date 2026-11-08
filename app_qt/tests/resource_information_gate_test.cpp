@@ -301,9 +301,29 @@ int main(int argc, char** argv) {
         gate::check(window.pending_edits().empty(), "a non-ASCII name queues nothing");
         gate::check(!window.document_dirty(), "the refused non-ASCII name leaves the file clean");
     }
+    // W34b-1.4 (R34G4-6): a delimiter and a name past the pair's three characters.
+    {
+        Prompt prompt;
+        gate::check(click_information(window, &prompt, true,
+                                      QString::fromStdString(original) + QStringLiteral(",")),
+                    "Information clicks");
+        gate::check(window.pending_edits().empty(), "a name with a comma queues nothing");
+        gate::check(window.status_left_text().contains(QStringLiteral("holds ','")),
+                    "the status line names the delimiter refusal");
+    }
+    {
+        Prompt prompt;
+        gate::check(click_information(window, &prompt, true,
+                                      QString::fromStdString(original) + QStringLiteral("bc")),
+                    "Information clicks");
+        gate::check(window.pending_edits().empty(), "a four-character name queues nothing");
+        gate::check(window.status_left_text().contains(
+                        QStringLiteral("a name longer than 3 characters")),
+                    "the status line names the length refusal");
+    }
 
     // --- 4. the measured shape: a longer name -------------------------------
-    const QString renamed = QString::fromStdString(original) + QStringLiteral(" Renamed");
+    const QString renamed = QString::fromStdString(original) + QStringLiteral("b");
     {
         Prompt prompt;
         gate::check(click_information(window, &prompt, true, renamed), "Information clicks");

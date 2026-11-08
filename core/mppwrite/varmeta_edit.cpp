@@ -1092,9 +1092,19 @@ VarRecordWrite rename_resource(CfbDocument& doc, std::uint32_t uid,
     if (name.find('\0') != std::string_view::npos) {
         throw Error(function + ": the name holds an embedded NUL");
     }
-    if (name.size() > 65535) {
+    /* W34b-1.4 (R34G4-6): the longest name a committed pair measures is the
+     * three bytes of wave30-resource-rename.mpp ("R2" -> "R2b", an 8-byte
+     * UTF-16LE + NUL block); a longer name is a Var2Data block no pair
+     * measured.  ',' '[' and ']' are the list and field delimiters Project's
+     * UI refuses in a resource name. */
+    if (name.size() > 3) {
         throw Error(function + ": the name is " + std::to_string(name.size()) +
-                    " bytes, past the measured 65,535-byte cap");
+                    " bytes, past the 3 the measured wave30-resource-rename "
+                    "pair stores");
+    }
+    if (name.find_first_of(",[]") != std::string_view::npos) {
+        throw Error(function + ": the name holds ',', '[' or ']', which "
+                    "Project's UI refuses in a resource name");
     }
     VarRecordEdit edit;
     edit.uid = uid;

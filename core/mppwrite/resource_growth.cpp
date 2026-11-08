@@ -455,10 +455,16 @@ ResourceGrowthWrite add_work_resource(CfbDocument& doc,
     if (!spec.dry_run) {
         check_output_path(path, function);
     }
-    if (spec.name.empty() || spec.name.size() > 64 ||
-        !printable_ascii(spec.name)) {
-        fail(function + ": the name must be 1..64 printable ASCII characters "
-             "(no other name shape is measured)");
+    /* W34b-1.4 (R34G4-6): the longest name a committed pair measures is the two
+     * characters of wave30-resource-add.mpp ("R2") and
+     * wave34-resource-add-third.mpp ("R3"); a longer name stores a longer
+     * Var2Data block no pair measured.  ',' '[' and ']' are the list and
+     * field delimiters Project's UI refuses in a resource name. */
+    if (spec.name.empty() || spec.name.size() > 2 ||
+        !printable_ascii(spec.name) ||
+        spec.name.find_first_of(",[]") != std::string::npos) {
+        fail(function + ": the name must be 1..2 printable ASCII characters, "
+             "none of , [ ] (no other name shape is measured)");
     }
     std::string const initials =
         spec.initials.empty() ? spec.name.substr(0, 1) : spec.initials;

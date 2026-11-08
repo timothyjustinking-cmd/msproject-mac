@@ -214,8 +214,8 @@ VarRecordWrite save_var_record(CfbDocument& doc, std::string_view table,
  * except the Props14 marker).
  *
  * Refusals: everything save_var_record refuses for a Resource re-point, an
- * empty name, a name with an embedded NUL, or a name longer than 65,535
- * UTF-8 bytes.
+ * empty name, a name with an embedded NUL, a name longer than 3 bytes (the
+ * "R2b" the pair stores), or a name holding ',', '[' or ']'.
  */
 VarRecordWrite rename_resource(CfbDocument& doc, std::uint32_t uid,
                                std::string_view name, std::string const& path);

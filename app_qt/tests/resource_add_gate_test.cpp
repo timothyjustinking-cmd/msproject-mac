@@ -190,7 +190,8 @@ bool add_and_save(msqt::MainWindow& window, const QString& label, const QString&
     // A second Add while the first is pending is refused; the queue keeps one.
     {
         Prompt again;
-        checkq(click_add(window, &again, true, name + QStringLiteral("2")),
+        // Two characters, so the W34b-1.4 name cap is not the refusal under test.
+        checkq(click_add(window, &again, true, QStringLiteral("Z9")),
                     (label + ": a second Add clicks").toStdString());
         checkq(window.pending_edits().size() == 1,
                     (label + ": a second Add queues nothing").toStdString());

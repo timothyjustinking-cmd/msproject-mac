@@ -529,7 +529,7 @@ void check_refusals() {
         app::StructuralEdit rename;
         rename.kind = app::StructuralKind::rename_resource;
         rename.uid = 1;
-        rename.name = "A longer resource name";
+        rename.name = "R2b";
         check(!edits.push(std::move(rename), &plan), "push() refuses a rename over a WBS edit");
         check_size(edits.size(), 1, "only the WBS edit stays queued");
     }

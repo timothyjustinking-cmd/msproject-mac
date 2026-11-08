@@ -475,10 +475,18 @@ void test_rename_resource_contract(TestContext& t) {
                 "an embedded NUL refused");
     }
     {
+        /* W34b-1.4 (R34G4-6): past the three bytes of the pair's "R2b". */
         CfbDocument doc = doc_from_data(control);
         std::string const huge(65536, 'a');
-        refuses(doc, huge, "65,535-byte cap",
+        refuses(doc, huge, "past the 3 the measured",
                 "a name past 65,535 bytes refused");
+        refuses(doc, "R2bc", "past the 3 the measured",
+                "a four-byte name refused");
+    }
+    for (std::string_view const delimited : {"R,b", "[2b", "R2]"}) {
+        CfbDocument doc = doc_from_data(control);
+        refuses(doc, delimited, "holds ',', '[' or ']'",
+                std::string("a name holding a delimiter: ") + std::string(delimited));
     }
     {
         CfbDocument doc = doc_from_data(control);
