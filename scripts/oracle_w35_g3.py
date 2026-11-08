@@ -72,6 +72,13 @@ def set_baseline(app, project):
     return {"call": "BaselineSave(All=True, Copy=0, Into=0)"}
 
 
+def wbs_renumber(app, project):
+    app.WBSCodeRenumber(True)
+    return {"call": "WBSCodeRenumber(All=True)",
+            "wbs": {str(i): prop(project.Tasks(i), "WBS")
+                    for i in range(1, project.Tasks.Count + 1)}}
+
+
 def set_task_note(row, text):
     def edit(app, project):
         project.Tasks(row).Notes = text
@@ -81,8 +88,67 @@ def set_task_note(row, text):
     return edit
 
 
+def font_edit(row, column, label, call, extend_to=None):
+    """Select the Name (or another) cell, optionally extend the selection down to
+    `extend_to`, then apply one Font call."""
+    def edit(app, project):
+        app.SelectTaskField(Row=row, Column=column, RowRelative=False)
+        if extend_to is not None:
+            app.SelectTaskField(Row=extend_to, Column=column, RowRelative=False,
+                                Extend=True)
+        returned = call(app)
+        return {"call": f"SelectTaskField(Row={row}, Column={column!r})"
+                        + (f" extended to row {extend_to}" if extend_to else "")
+                        + f"; {label}",
+                "returned": val(returned)}
+    return edit
+
+
+# Font32Ex(Name, Size, Bold, Italic, Underline, Color, Strikethrough,
+#          CellColor, Pattern, Reserved) as build/w29/cellformat_probe.py calls it.
+def font32(name, size, color=0):
+    return lambda app: app.Font32Ex(name, size, False, False, False, color,
+                                    False, 0, 0, False)
+
+
 # pair -> (edit function, base kind)
 EDITS = {
+    # W35-3.4: one factor against the wave-30 Bold pair (the Name cell of row 1
+    # of tests/data/synthetic-base.mpp, FontBold(True)).
+    "font-bold-row2": (font_edit(2, "Name", "FontBold(True)",
+                                 lambda app: app.FontBold(True)),
+                       "file:synthetic-base.mpp"),
+    "font-bold-start": (font_edit(1, "Start", "FontBold(True)",
+                                  lambda app: app.FontBold(True)),
+                        "file:synthetic-base.mpp"),
+    "font-bold-range": (font_edit(1, "Name", "FontBold(True)",
+                                  lambda app: app.FontBold(True), extend_to=2),
+                        "file:synthetic-base.mpp"),
+    "font-bold-off": (font_edit(1, "Name", "FontBold(False)",
+                                lambda app: app.FontBold(False)),
+                      "file:wave30-textstyle.mpp"),
+    "font-italic": (font_edit(1, "Name", "FontItalic(True)",
+                              lambda app: app.FontItalic(True)),
+                    "file:synthetic-base.mpp"),
+    # FontUnderline is not callable through late binding (first run: "'bool'
+    # object is not callable"), so the underline pair uses Font32Ex.
+    "font-underline": (font_edit(1, "Name", "Font32Ex('Calibri', 11, Underline=True)",
+                                 lambda app: app.Font32Ex("Calibri", 11, False, False,
+                                                          True, 0, False, 0, 0, False)),
+                       "file:synthetic-base.mpp"),
+    "font-size": (font_edit(1, "Name", "Font32Ex('Calibri', 14)",
+                            font32("Calibri", 14)),
+                  "file:synthetic-base.mpp"),
+    "font-name": (font_edit(1, "Name", "Font32Ex('Arial', 11)",
+                            font32("Arial", 11)),
+                  "file:synthetic-base.mpp"),
+    "font-colour": (font_edit(1, "Name", "Font32Ex('Calibri', 11, Color=255)",
+                              font32("Calibri", 11, color=255)),
+                    "file:synthetic-base.mpp"),
+    # W35-3.4: Renumber on its own (Project > Properties > WBS > Renumber), on
+    # the wave-30 three-task file before a code is defined and after.
+    "wbs-renumber-default": (wbs_renumber, "file:wave30-wbs-control.mpp"),
+    "wbs-renumber-defined": (wbs_renumber, "file:wave30-wbs-code.mpp"),
     # W35-3.3: a note added on a file whose existing note was written by an
     # older RichEdit build (wave-30, Riched20 16.0.20430): does the new note's
     # generator string come from the machine or from the file?
