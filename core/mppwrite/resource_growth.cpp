@@ -687,6 +687,35 @@ ResourceGrowthWrite add_work_resource(CfbDocument& doc,
         }
     }
 
+    /* ---- the calendar word must name the calendar row being copied --------- */
+    /* W35-0.2 (R34b-5).  Row word 154 is the resource's calendar uid (resource
+     * uid + 2 in every measured pair) and is masked in the template compare
+     * above, because the writer rewrites it.  It is rewritten as old + 1 and the
+     * appended calendar row takes max_cal_uid + 1, so the two agree only if the
+     * template's word IS the highest calendar uid and that calendar row belongs
+     * to the template resource.  A file where it is not (a reissued calendar uid,
+     * a crafted file) would cross-link the new resource to another's calendar. */
+    {
+        std::uint32_t const word = get_u32(rsc_fixed, template_base + kRscRowCounter);
+        if (word != max_cal_uid) {
+            fail(function + ": the last resource's calendar word (row offset 154) "
+                 "is " + std::to_string(word) + ", not the highest calendar uid " +
+                 std::to_string(max_cal_uid) + "; the writer would link the new "
+                 "resource to a calendar that is not the one it appends");
+        }
+        bool owned = false;
+        for (std::size_t row = 0; row < cal_rows; ++row) {
+            std::size_t const at = kCalHeaderBytes + row * kCalRowBytes;
+            owned = owned || (get_u32(cal_fixed, at + 8) == word &&
+                              get_u32(cal_fixed, at + 4) == template_uid);
+        }
+        if (!owned) {
+            fail(function + ": the calendar row " + std::to_string(word) +
+                 " named by the last resource's calendar word does not belong to "
+                 "that resource (uid " + std::to_string(template_uid) + ")");
+        }
+    }
+
     /* ---- build ------------------------------------------------------------ */
     Built built;
     std::size_t const new_offset = rsc_fixed.size();
@@ -701,6 +730,11 @@ ResourceGrowthWrite add_work_resource(CfbDocument& doc,
             fail(function + ": the resource row counter would overflow");
         }
         put_u16(row, kRscRowCounter, static_cast<std::uint16_t>(old_counter + 1));
+        if (get_u32(row, kRscRowCounter) != cal_uid) {
+            fail(function + ": the new resource's calendar word (row offset 154) "
+                 "does not equal the calendar uid appended " +
+                 std::to_string(cal_uid));
+        }
         built.rsc_fixed.insert(built.rsc_fixed.end(), row.begin(), row.end());
     }
 

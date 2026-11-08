@@ -720,6 +720,34 @@ void test_template_refusals(TestContext& t) {
     row_byte(166, 0x05, "a changed type word on the last row");
     row_byte(168, 0x05, "a changed accrual word on the last row");
 
+    /* W35-0.2 (R34b-5): word 154 is masked in the template compare, so it is tied to
+     * the calendar table separately -- it must be the highest calendar uid, on a row
+     * that belongs to the last resource. */
+    refuses(t,
+            with_edit(control, kRscFixed,
+                      [&](Bytes& b) { b[last_row + 154] = static_cast<std::uint8_t>(b[last_row + 154] - 1); }),
+            spec, "not the highest calendar uid", "a calendar word that is not the highest uid");
+    refuses(t,
+            with_edit(control, kRscFixed,
+                      [&](Bytes& b) { b[last_row + 154] = static_cast<std::uint8_t>(b[last_row + 154] + 1); }),
+            spec, "not the highest calendar uid", "a calendar word beyond the highest uid");
+    refuses(t,
+            with_edit(control, kCalFixed,
+                      [](Bytes& b) {
+                          std::size_t const rows = (b.size() - 64) / 12;
+                          std::uint32_t top = 0;
+                          for (std::size_t r = 0; r < rows; ++r) {
+                              top = std::max(top, u32_at(b, 64 + 12 * r + 8));
+                          }
+                          for (std::size_t r = 0; r < rows; ++r) {
+                              if (u32_at(b, 64 + 12 * r + 8) == top) {
+                                  put_u32_at(b, 64 + 12 * r + 4, 99);
+                              }
+                          }
+                      }),
+            spec, "does not belong to that resource",
+            "the highest calendar row belonging to another resource");
+
     refuses(t,
             with_edit(control, kRscMeta,
                       [](Bytes& b) { b[16 + 37 * 5 + 2] ^= 0x01; }),
