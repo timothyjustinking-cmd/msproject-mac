@@ -199,6 +199,16 @@ enum class StructuralKind : std::uint8_t {
     // unchanged by the queued edit (the shell shows the sort for the session);
     // like the kinds above it is EXCLUSIVE.
     sort_view = 20,
+    // Wave 35 (W35-2.3): View > Outline > Show > Level 1 or 2 on the task sheet,
+    // written by mppwrite::save_view_outline (core/mppwrite/viewstate_outline.h)
+    // against Project's wave35-viewstate-outline-* pairs: the collapsed and
+    // hidden rows' flags in the task table's FixedMeta, the displayed rows in the
+    // edit list and the CEdl size words.  `show_level` is the 1-based level,
+    // `outline_uids` / `outline_levels` the file's tasks in file order with their
+    // 0-based outline levels (recomputed from the plan by push()).  The shell's
+    // own display is unchanged by the queued edit; like the kinds above it is
+    // EXCLUSIVE.
+    show_level = 21,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -264,6 +274,11 @@ struct StructuralEdit {
     bool ascending = true;
     std::vector<std::uint32_t> sort_base_order;
     std::vector<std::uint32_t> sort_order;
+    // show_level (W35-2.3): the 1-based Show Level and the file's tasks in file
+    // order with their 0-based outline levels.
+    int show_level = 0;
+    std::vector<std::uint32_t> outline_uids;
+    std::vector<std::uint32_t> outline_levels;
 
     // --- set_field / clear_field -------------------------------------------
     // One of the six measured ids (app::is_measured_task_field): Text1,
@@ -649,6 +664,18 @@ bool make_sort_edit(const PlanInput& plan, std::string_view source_path,
                     const std::vector<SortKeyRequest>& keys, bool outline, bool renumber,
                     StructuralEdit& out, std::string& error);
 
+// Builds a ready-to-push show_level edit (W35-2.3): View > Outline > Show > Level
+// `level` (1-based) on the task sheet.  Measured shape: the pairs' five-task
+// outline (levels 1,2,2,1,1) and six-task three-level outline (1,2,3,3,2,1),
+// every row shown in the file, Level 1 and Level 2 only.  Refused up front, each
+// with its own reason: a level other than 1 or 2 (the shell keeps it for the
+// session), a pending task, a file that already collapses or hides a row, a
+// level that hides nothing on this outline (there is nothing to persist), and an
+// outline of another shape.  The writer's dry run validates the file.  `out` is
+// default-constructed on refusal.
+bool make_show_level_edit(const PlanInput& plan, std::string_view source_path, int level,
+                          StructuralEdit& out, std::string& error);
+
 // The one cell Font Bold is measured for: Task Name of the task with
 // UniqueID 1 (core/mppwrite/viewstream_edit.h, wave30-textstyle).
 inline constexpr std::uint32_t kBoldMeasuredTaskUid = 1;
@@ -953,6 +980,8 @@ struct StructuralSaveResult {
     // Wave 35 (W35-2.1): 1 when a sort specification and displayed order were
     // written.
     std::size_t sorts_written = 0;
+    // Wave 35 (W35-2.3): 1 when an outline level was written.
+    std::size_t outlines_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the

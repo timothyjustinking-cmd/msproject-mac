@@ -661,6 +661,26 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_sort COMMAND app_edits_sort_tests)
     set_tests_properties(app_edits_sort PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 35 (W35-2.3): View > Outline > Show > Level 1 and 2 through the edit
+    # model and save cascade against Project's wave35-viewstate-outline pairs,
+    # each with a null save; the unmeasured levels and shapes, a level that
+    # hides nothing, exclusivity and a changed file each have their own needle.
+    # Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_show_level_tests app_edits_show_level_tests.cpp)
+    target_compile_features(app_edits_show_level_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_show_level_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
+    set_target_properties(app_edits_show_level_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_show_level_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_show_level_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_show_level_tests)
+
+    add_test(NAME app_edits_show_level COMMAND app_edits_show_level_tests)
+    set_tests_properties(app_edits_show_level PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 34 (W34-4.6): the WBS code definition through the app's edit model
     # and save cascade against Project's wave30-wbs pair -- every stream under
     # the null-save discipline in the edit's coordinates (114/Props grows by 24

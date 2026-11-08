@@ -274,6 +274,10 @@ class MainWindow final : public QMainWindow {
     // queued sort when `cleared`.
     void apply_sort_choice(core::view::SortDefinition definition, std::string description,
                            bool cleared);
+    // W35-2.3: the Outline menu's result (0 = All Subtasks).  Applies the session
+    // collapse and, where the shape is measured, queues the level as a show_level
+    // edit (replacing a queued one); All Subtasks withdraws a queued level.
+    void apply_outline_level(int level);
     void apply_session_filter(core::view::FilterDefinition definition, std::string description);
     // The dialogs' Clear paths, exposed for the same gates.
     void clear_session_sort();
@@ -537,10 +541,10 @@ class MainWindow final : public QMainWindow {
     // Wave 31 (W31-1.1): the View tab's Sort dialog.  Session-only: the display
     // order changes, the RecordSet and the file keep theirs.
     void show_sort_dialog();
-    // Wave 31 (W31-1.2): the View tab's Outline menu.  Session-only collapse
-    // state: Level 1..9 or All Subtasks; the file is never written.
+    // Wave 31 (W31-1.2): the View tab's Outline menu: Level 1..9 or All Subtasks.
+    // The collapse is session state; W35-2.3 also queues Level 1 and 2 on the
+    // measured outlines for File > Save (see apply_outline_level).
     void show_outline_menu();
-    void apply_outline_level(int level);
     // Wave 31 (W31-1.3): the View tab's Tables menu.  Lists the task tables the
     // file stores and applies one for the session only (the file's bytes and
     // its recorded applied table are untouched).

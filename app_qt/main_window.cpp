@@ -6015,6 +6015,12 @@ void MainWindow::clear_session_filter() {
 // visible and "All Subtasks" expands everything; both are session-only view
 // state (PlanDocument reuses the sheet's collapse state, so the file's rows and
 // bytes never change).  The Gantt follows the same visible row list.
+//
+// W35-2.3: Project saves the level.  Where the shape is one the Project pairs
+// measured (Level 1 or 2 on the measured outlines, nothing pending, the measured
+// file) the level is ALSO queued as a show_level edit and File > Save writes it
+// (core/mppwrite/viewstate_outline.h).  Every other level stays session only and
+// the message says why.  All Subtasks withdraws a queued level.
 void MainWindow::show_outline_menu() {
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("outline levels are available in the Task Sheet view", false);
@@ -6037,16 +6043,47 @@ void MainWindow::apply_outline_level(int level) {
     if (!doc_.has_document()) {
         return;
     }
+    // A queued persisted level is replaced (Show Level is an exclusive edit) or,
+    // for All Subtasks, withdrawn.
+    const bool had_queued_level = !structural_.applied().empty() &&
+                                  structural_.applied().back().kind ==
+                                      app::StructuralKind::show_level;
+    if (had_queued_level) {
+        structural_.undo();
+        after_structural_change(doc_.selected_uid());
+    }
     if (level == 0) {
         doc_.show_all_subtasks();
-        set_message("outline: all subtasks", false);
-    } else if (doc_.show_outline_level(level)) {
-        set_message("outline: level " + std::to_string(level), false);
-    } else {
+        set_message(had_queued_level ? "outline: all subtasks; the queued level was withdrawn"
+                                     : "outline: all subtasks",
+                    false);
+        after_model_change();
+        return;
+    }
+    if (!doc_.show_outline_level(level)) {
         set_message("outline: choose a level from 1 to 9", true);
         update_status();
         return;
     }
+    std::string persisted_note = "session only";
+    if (!read_only_reason_.empty()) {
+        persisted_note = "session only; " + read_only_reason_;
+    } else {
+        app::StructuralEdit edit;
+        std::string error;
+        if (!app::make_show_level_edit(doc_.plan(), doc_.path(), level, edit, error)) {
+            persisted_note = "session only; the file keeps its outline (" + error + ")";
+        } else if (!structural_.push(std::move(edit), &doc_.plan())) {
+            persisted_note =
+                "session only; the file keeps its outline (the level edit was refused)";
+        } else {
+            after_structural_change(doc_.selected_uid());
+            // after_structural_change() rebuilds the document; show the level again.
+            doc_.show_outline_level(level);
+            persisted_note = "queued; File > Save writes it";
+        }
+    }
+    set_message("outline: level " + std::to_string(level) + " (" + persisted_note + ")", false);
     after_model_change();
 }
 

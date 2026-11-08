@@ -162,3 +162,95 @@ that has not been measured.
 Pairs still needed to enable it: one pair per built-in table to be supported (the
 oracle `table-<name>` pairs are one call each), a second measured name length per table
 for the view-block re-layout, and the table-definition layout decoded to the field.
+
+## 3. Outline level (W35-2.3): enabled for Show Level 1 and 2 on two measured outlines
+
+Pairs (`Application.OutlineShowTasks`, each with a null save): `wave35-viewstate-outline-level1`
+and `-level2` and `-all` on the five-task base (levels 1, 2, 2, 1, 1 in Project's 1-based
+terms; 0, 1, 1, 0, 0 below), and `-deep-level1` and `-deep-level2` on a six-task three-level
+outline (0, 1, 2, 2, 1, 0). Reports: [`evidence/wave35-viewstate-outline-level1.md`](evidence/wave35-viewstate-outline-level1.md),
+[`-level2`](evidence/wave35-viewstate-outline-level2.md), [`-all`](evidence/wave35-viewstate-outline-all.md),
+[`-deep-level1`](evidence/wave35-viewstate-outline-deep-level1.md),
+[`-deep-level2`](evidence/wave35-viewstate-outline-deep-level2.md).
+
+### 3.1 What a Show Level changes
+
+Show Level L (1-based) collapses every summary at 0-based level L - 1 and hides every row
+at level L or deeper. Rows are the task rows 1..N in file order. The edit changes five
+places and nothing else (no task stream, UniqueID or ID moves):
+
+| stream | change |
+|---|---|
+| `114/TBkndTask/FixedMeta` | byte +15 of each row's 47-byte entry (entry index row + 3, after the 16-byte header): 0x01 shown (the control's value everywhere), 0x03 collapsed summary, 0x00 hidden row |
+| `214/CEdl/Var2Data` | the displayed rows (3.2) |
+| `214/CEdl/VarMeta` | the Var2Data size word at +0x14 |
+| `214/Props` | the same size, the u32 value of the scalar record whose big-endian tag is 0x07000100 (`u32 4, tag, u32 4, value`; offset 11,402 in the measured files) |
+| `Props14` | the edit marker |
+
+Measured sets: the five-task base at Level 1 hides UniqueIDs 2 and 3 and collapses 1; the
+deep outline at Level 1 hides 2 to 5 and collapses 1 (summary 2 sits under a collapsed row,
+so it is hidden, 0x00, not collapsed); at Level 2 it hides 3 and 4 and collapses 2. Level 2
+and Show All on the base hide nothing: Project's save differs from its control by the marker
+alone (the `-level2` and `-all` reports show no other effect).
+
+### 3.2 The displayed rows (`214/CEdl/Var2Data`)
+
+The stream is a 20-byte header (`u32 len-4`, two `u32 len-8`, format `0x00010000`, a `u32`
+item count at offset 16) then items `u32 length, u32 id, u32 kind = 1, payload` (a pad byte
+after an odd length); the item list ends exactly at the stream end. Four items depend on the
+displayed rows; every other item (including the save-path record `0x26400031`) is copied
+byte for byte.
+
+| item | content for N displayed rows, H hidden |
+|---|---|
+| `0x26400035` | the displayed UniqueIDs, then `0x000ffdc0 - H`, 0, 0 (4 (N + 3) bytes; 4 bytes shorter per hidden row) |
+| `0x26400036` | the first displayed UniqueID (4 bytes, unchanged) |
+| `0x26400024` | 64 bytes: the displayed UniqueIDs, then `0xffffffff` |
+| `0x2640003d` | optional (below): `[N][offsets 0, 22, ... 22 (N - 1)][22 N][0x16][2 zero bytes]`, 4 N + 14 bytes |
+
+**Finding: the optional row-layout record.** Four of the five controls (all but
+`-level1`) carry `0x2640003d`. Where it is present, a port that leaves it alone disagrees
+with Project by 4 bytes per hidden row (the deep pairs show it). It was verified at N = 6, 5, 4
+and 2. The writer rebuilds it where present and never adds it where absent; a layout that is
+not the measured one is refused.
+
+### 3.3 The size words, and the wave-33 open gap
+
+**Finding.** The CEdl size words (`214/CEdl/VarMeta` +0x14 and the `214/Props` value) equal
+the stream's own length, which includes the save-path record `0x26400031` (the full path of
+the saving file). Project's null save and edit save are written under different file names
+than the control, so their size words carry the path-length difference as noise. A difference
+that crosses a 256 boundary moves byte +21 (VarMeta) and +11,403 (Props) alone; that is the
+root cause of the wave-33 open gap recorded as `open_gap_state` in `tests/save_pair_noise.h`
+(port 0x02, Project 0x01). The port keeps the control's path record, so its size words are
+its own stream's length. The tests normalise Project's null and edit size words to "as if the
+control's path record" (`with_control_path_size`) rather than declaring a `KnownGap`; no gap
+is claimed for these pairs.
+
+### 3.4 Capability matrix
+
+| shape | state |
+|---|---|
+| Show Level 1 or 2 on the five-task base (levels 0, 1, 1, 0, 0) | Level 1 enabled; Level 2 **refused** by the edit model (nothing hidden, nothing to persist; the writer reproduces Project's marker-only save and is tested on it) |
+| Show Level 1 or 2 on the six-task outline (0, 1, 2, 2, 1, 0) | enabled |
+| Show Level 3 and deeper; Show Level 0 or negative | **refused** (unmeasured) |
+| Show All Subtasks | session only; withdraws a queued level (the control is already fully expanded; a file that already hides rows is refused) |
+| any other task count or level shape; a pending (unsaved) task; the view uid other than 2 | **refused** |
+| a file whose FixedMeta flags are not all 0x01 or whose CEdl is not rows 1..N in order | **refused** (replacing a state is unmeasured) |
+| combined with another edit, a start-date edit or a table format / formula edit | **refused** (exclusive, in the queue and in the cascade) |
+
+Every refusal is tested with its own needle in both layers (`mppwrite_roundtrip_viewstate_outline`,
+`app_edits_show_level`), and the shell queues the level only for these shapes
+(`qt_outline_persist`); every other level stays a session collapse with the reason on the
+status line.
+
+The reader does not yet restore a persisted collapse on open (the sheet opens fully
+expanded); that is a read-side gap, not a write-side one.
+
+### 3.5 Gates
+
+`mppwrite_roundtrip_viewstate_outline` (core: four effect pairs field by field through
+`compare_all`, structural checks of the flags, order, copy, layout and size words, the
+Show All comparison, dry run and every writer refusal), `app_edits_show_level` (edit model
+and cascade against the same pairs) and `qt_outline_persist` (the shell). Mutation checks
+and gate logs are recorded in `docs/handoff/wave35-complete.md`.
