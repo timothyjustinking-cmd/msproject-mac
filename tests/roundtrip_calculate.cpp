@@ -206,6 +206,7 @@ void refused_requests() {
     CfbDocument const control = open("wave35-calculate-unlinked-control.mpp");
     CfbDocument const project = open("wave35-calculate-unlinked.mpp");
     std::string const path = out_path("w35-calculate-request-refused.mpp");
+    std::filesystem::remove(path); /* a stale file from an earlier run is not this run's */
     CalculateRequest const good = request_from(project);
 
     {
@@ -290,6 +291,15 @@ void refused_requests() {
         rows.store_into(doc);
         refuses([&] { mppwrite::save_calculate(doc, good, path); },
                 "records progress", "progress");
+    }
+    {
+        /* W35b-0.2 (R35G1-1): a Deadline changes the backward pass Project writes. */
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(2, mppwrite::task_row::kDeadline, 0x3BF212C0u);
+        rows.store_into(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "carries a deadline", "deadline");
     }
     {
         /* A leaf with its own calendar. */

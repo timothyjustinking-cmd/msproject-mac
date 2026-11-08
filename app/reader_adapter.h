@@ -175,6 +175,7 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     row.actual_start = date32_from_packed(task.actual_start.raw);
     row.actual_finish = date32_from_packed(task.actual_finish.raw);
     row.constraint_type = task.constraint_type;
+    row.deadline = date32_from_packed(task.deadline.raw);
     row.outline_level = task.outline_level > 0 ? static_cast<int>(task.outline_level) - 1 : 0;
     row.summary = task.summary;
     row.milestone = task.is_milestone() && !task.summary;

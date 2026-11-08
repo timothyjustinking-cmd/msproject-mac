@@ -114,6 +114,10 @@ struct TaskRow {
     date32 actual_start = kDateNa;
     date32 actual_finish = kDateNa;
     std::uint16_t constraint_type = 0;  // PjConstraint: 0 = ASAP
+    // W35b-0.2 (R35G1-1): the task Deadline (FixedData +182, core/mpp Task::deadline);
+    // kDateNa when the task has none.  Calculate Project refuses a deadline, which
+    // moves the backward pass Project writes.
+    date32 deadline = kDateNa;
     int outline_level = 0;
     bool summary = false;
     bool milestone = false;

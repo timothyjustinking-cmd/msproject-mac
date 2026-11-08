@@ -6,7 +6,7 @@
  *
  * THE ONE SHAPE.  A file Project built automatically, holding the project row
  * and exactly two top-level, automatically scheduled, unlinked leaf tasks with
- * no constraint, no progress, no resource and no task calendar, in which one
+ * no constraint, no deadline, no progress, no resource and no task calendar, in which one
  * leaf's Duration was changed under manual calculation and the recalculation is
  * still pending (the project row's Finish does not yet equal the latest leaf
  * Finish, and 114/Props record 0x02400024 still holds 01 00).  Project's F9 then

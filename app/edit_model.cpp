@@ -3598,6 +3598,13 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
             return prefix + "for a task with progress: the measured Project pair "
                             "has none";
         }
+        // W35b-0.2 (R35G1-1): a deadline limits the late finish the backward pass
+        // writes; the pair has none (the outline save refuses it for the same reason).
+        if (task.deadline != kDateNa) {
+            return prefix + "for a task with a deadline: the measured Project pair "
+                            "has none, and a deadline changes the late dates and "
+                            "slack Project writes";
+        }
         if (task.calendar_uid != -1) {
             return prefix + "for a task with its own calendar: the measured "
                             "Project pair uses the project calendar";
