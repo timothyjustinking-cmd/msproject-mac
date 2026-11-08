@@ -33,5 +33,6 @@ measurements, with their null saves).
 | `writers/note-richtext.md` | Project's RichEdit note serialisation | rule decoded for plain ASCII; the writer is NOT built - the payload embeds the saving machine's generator string (W34-4.1); Notes stay disabled |
 | `writers/scheduler-save.md` | the scheduler SAVE path (recalculate, then write back) | decode only; G5 was not started in wave 34 and moves to wave 35 |
 | `writers/calculate.md` | Calculate Project (F9): what Project rewrites, and the rule a port writer needs | W35-1.1: decode only, consolidates `scheduler-save.md` with the engine entry points; the unlinked-leaf shape is measured in W35-1.2 |
+| `writers/view-state.md` | `core/mppwrite/viewstate_sort` - the persisted sort (specification in the view block, displayed order in the edit list); the applied table, outline level and zoom sections follow as W35-2.2 to W35-2.4 land | W35-2.1: built; Sort enabled for one Name or Duration key on the measured five-task shape, everything else refused |
 
 Open rules are listed at the foot of each note under "pairs still needed".

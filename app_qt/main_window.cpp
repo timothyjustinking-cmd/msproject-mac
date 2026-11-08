@@ -5897,10 +5897,15 @@ void MainWindow::clear_filter() {
 }
 
 // Wave 31 (W31-1.1): the View tab's Sort.  Project persists a sort (it reorders
-// the tasks in the file); this port applies it for the session only, as the
-// wave-31 brief allows, so the RecordSet and the file keep their order.  The
-// draft display order is app::sort_display_rows (outline-aware, project row
-// pinned); after_model_change() rebuilds the table and the Gantt from it.
+// the tasks in the file); the port always applies it for the session, so the
+// RecordSet keeps its order.  The draft display order is app::sort_display_rows
+// (outline-aware, project row pinned); after_model_change() rebuilds the table
+// and the Gantt from it.
+//
+// W35-2.1: where the shape is one the Project pairs measured (one Name key, no
+// pending edit, the measured file), the sort is ALSO queued as a sort_view edit
+// and File > Save writes it (core/mppwrite/viewstate_sort.h).  Every other shape
+// stays session only, and the message says why.
 void MainWindow::show_sort_dialog() {
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("sorting is available in the Task Sheet view", false);
@@ -5918,13 +5923,68 @@ void MainWindow::show_sort_dialog() {
         }
         return;
     }
+    apply_sort_choice(std::move(definition), std::move(description), cleared);
+}
+
+// W35-2.1: what the Sort dialog's result does, exposed for the offscreen gates.
+void MainWindow::apply_sort_choice(core::view::SortDefinition definition,
+                                   std::string description, bool cleared) {
+    if (!doc_.has_document()) {
+        return;
+    }
+    // A queued persisted sort is replaced (Sort is an exclusive edit) or, when the
+    // sort is cleared, withdrawn.
+    const bool had_queued_sort = !structural_.applied().empty() &&
+                                 structural_.applied().back().kind ==
+                                     app::StructuralKind::sort_view;
+    if (had_queued_sort) {
+        structural_.undo();
+        after_structural_change(doc_.selected_uid());
+    }
     if (cleared) {
         doc_.clear_sort();
-        set_message("sort cleared", false);
+        set_message(had_queued_sort ? "sort cleared; the queued sort was withdrawn"
+                                    : "sort cleared",
+                    false);
         after_model_change();
         return;
     }
-    set_message("sort: " + description + " (session only)", false);
+    std::string persisted_note = "session only";
+    if (!read_only_reason_.empty()) {
+        persisted_note = "session only; " + read_only_reason_;
+    } else if (definition.keys.size() != 1) {
+        persisted_note = "session only; the file keeps its order (Sort with " +
+                         std::to_string(definition.keys.size()) +
+                         " keys is not implemented in this port)";
+    } else {
+        // The dialog offers ID, Start, Finish, Priority and Name, each with
+        // Outline = True and Renumber = False; the builder refuses all but Name.
+        app::SortKeyRequest key;
+        key.ascending = definition.keys.front().ascending;
+        const core::view::FieldId field = definition.keys.front().field;
+        if (field == app::task_field_id("Name")) {
+            key.kind = app::SortKeyKind::name;
+        } else if (field == app::task_field_id("ID")) {
+            key.kind = app::SortKeyKind::id;
+        } else if (field == app::task_field_id("Start")) {
+            key.kind = app::SortKeyKind::start;
+        } else if (field == app::task_field_id("Finish")) {
+            key.kind = app::SortKeyKind::finish;
+        } else {
+            key.kind = app::SortKeyKind::other;
+        }
+        app::StructuralEdit edit;
+        std::string error;
+        if (!app::make_sort_edit(doc_.plan(), doc_.path(), {key}, true, false, edit, error)) {
+            persisted_note = "session only; the file keeps its order (" + error + ")";
+        } else if (!structural_.push(std::move(edit), &doc_.plan())) {
+            persisted_note = "session only; the file keeps its order (the sort edit was refused)";
+        } else {
+            after_structural_change(doc_.selected_uid());
+            persisted_note = "queued; File > Save writes it";
+        }
+    }
+    set_message("sort: " + description + " (" + persisted_note + ")", false);
     apply_session_sort(std::move(definition), std::move(description));
 }
 

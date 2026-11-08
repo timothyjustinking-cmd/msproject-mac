@@ -642,6 +642,25 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_cell_bold COMMAND app_edits_cell_bold_tests)
     set_tests_properties(app_edits_cell_bold PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 35 (W35-2.1): Project > Sort on one key (Name or Duration, Outline =
+    # True, Renumber = False) through the edit model and save cascade against
+    # Project's three wave35-viewstate-sort pairs, each with a null save; every
+    # refusal has its own needle.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_sort_tests app_edits_sort_tests.cpp)
+    target_compile_features(app_edits_sort_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_sort_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
+    set_target_properties(app_edits_sort_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_sort_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_sort_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_sort_tests)
+
+    add_test(NAME app_edits_sort COMMAND app_edits_sort_tests)
+    set_tests_properties(app_edits_sort PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 34 (W34-4.6): the WBS code definition through the app's edit model
     # and save cascade against Project's wave30-wbs pair -- every stream under
     # the null-save discipline in the edit's coordinates (114/Props grows by 24

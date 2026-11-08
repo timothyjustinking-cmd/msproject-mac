@@ -40,6 +40,7 @@
 #include "table.h"
 #include "task_mode.h"
 #include "varmeta_edit.h"
+#include "viewstate_sort.h"
 #include "viewstream_edit.h"
 #include "wbs_code.h"
 
@@ -98,7 +99,8 @@ bool is_exclusive_kind(StructuralKind kind) noexcept {
            kind == StructuralKind::unassign_resource ||
            kind == StructuralKind::bold_cell ||
            kind == StructuralKind::define_wbs_code ||
-           kind == StructuralKind::calculate_project;
+           kind == StructuralKind::calculate_project ||
+           kind == StructuralKind::sort_view;
 }
 
 const TaskRow* task_row_for_uid(const std::vector<TaskRow>& tasks,
@@ -3151,6 +3153,240 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
 
 namespace {
 
+// W35-2.1: the Name comparison the pairs support.  Project's collation of case,
+// punctuation, digits and accents is not measured, so two sibling names are
+// ordered only when the first position where they differ holds two ASCII
+// letters of the same case (so neither name is a prefix of the other).
+bool sort_ascii_letter(char c) noexcept {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+bool sort_name_pinned(const std::string& left, const std::string& right) {
+    const std::size_t shared = std::min(left.size(), right.size());
+    for (std::size_t at = 0; at < shared; ++at) {
+        if (left[at] == right[at]) {
+            continue;
+        }
+        const bool left_lower = left[at] >= 'a' && left[at] <= 'z';
+        const bool right_lower = right[at] >= 'a' && right[at] <= 'z';
+        return sort_ascii_letter(left[at]) && sort_ascii_letter(right[at]) &&
+               left_lower == right_lower;
+    }
+    return false;  // equal or one a prefix of the other
+}
+
+// The plan-side half of Sort, shared by make_sort_edit and push().  Fills the
+// task UniqueIDs in file order and in sorted order; returns the reason, or an
+// empty string.
+std::string sort_plan_order(const PlanInput& plan, std::uint32_t field_id, bool ascending,
+                            std::vector<std::uint32_t>& base,
+                            std::vector<std::uint32_t>& sorted) {
+    base.clear();
+    sorted.clear();
+    const bool by_name = field_id == mppwrite::kSortFieldName;
+    if (!by_name && field_id != mppwrite::kSortFieldDuration) {
+        return "Sort on this key is not implemented in this port: the measured "
+               "Project pairs sort by Name or by Duration";
+    }
+    std::vector<const TaskRow*> rows;
+    for (const TaskRow& task : plan.tasks) {
+        if (task.uid == 0 || task.outline_level < 0) {
+            continue;  // the project summary row is never sorted
+        }
+        if (task.file_row == 0) {
+            return "Sort is not implemented in this port while a task is pending: "
+                   "save the project first";
+        }
+        rows.push_back(&task);
+    }
+    if (rows.size() != mppwrite::kSortMeasuredRows) {
+        return "Sort is not implemented in this port for a project with " +
+               std::to_string(rows.size()) + " tasks: the measured Project pairs have " +
+               std::to_string(mppwrite::kSortMeasuredRows);
+    }
+    std::sort(rows.begin(), rows.end(), [](const TaskRow* a, const TaskRow* b) {
+        return a->file_row < b->file_row;
+    });
+    // Outline: the tree of the rows in file order, from the 0-based levels.
+    struct Node {
+        const TaskRow* row = nullptr;
+        std::vector<std::size_t> children;
+    };
+    std::vector<Node> nodes(rows.size());
+    std::vector<std::size_t> roots;
+    std::vector<std::size_t> stack;  // the open ancestors
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        nodes[index].row = rows[index];
+        const int level = rows[index]->outline_level;
+        if (level > 0 && static_cast<std::size_t>(level) > stack.size()) {
+            return "Sort is not implemented in this port for this outline: a row sits "
+                   "deeper than its parent allows";
+        }
+        stack.resize(static_cast<std::size_t>(level));
+        if (stack.empty()) {
+            roots.push_back(index);
+        } else {
+            nodes[stack.back()].children.push_back(index);
+        }
+        stack.push_back(index);
+    }
+    for (const TaskRow* row : rows) {
+        base.push_back(row->uid);
+    }
+    std::string refusal;
+    auto order_group = [&](std::vector<std::size_t>& group) {
+        for (std::size_t a = 0; a < group.size() && refusal.empty(); ++a) {
+            for (std::size_t b = a + 1; b < group.size() && refusal.empty(); ++b) {
+                const TaskRow& left = *nodes[group[a]].row;
+                const TaskRow& right = *nodes[group[b]].row;
+                if (by_name) {
+                    if (!sort_name_pinned(left.name, right.name)) {
+                        refusal =
+                            "Sort by Name is not implemented in this port for these "
+                            "names: the measured Project pairs order sibling names that "
+                            "differ at a letter of the same case, and \"" + left.name +
+                            "\" / \"" + right.name + "\" do not";
+                    }
+                } else if (left.duration_ticks == right.duration_ticks) {
+                    refusal =
+                        "Sort by Duration is not implemented in this port for equal "
+                        "durations: the measured Project pairs have distinct sibling "
+                        "durations";
+                }
+            }
+        }
+        std::stable_sort(group.begin(), group.end(), [&](std::size_t a, std::size_t b) {
+            const TaskRow& left = *nodes[a].row;
+            const TaskRow& right = *nodes[b].row;
+            const bool less = by_name ? left.name < right.name
+                                      : left.duration_ticks < right.duration_ticks;
+            const bool greater = by_name ? right.name < left.name
+                                         : right.duration_ticks < left.duration_ticks;
+            return ascending ? less : greater;
+        });
+    };
+    order_group(roots);
+    for (Node& node : nodes) {
+        order_group(node.children);
+    }
+    if (!refusal.empty()) {
+        return refusal;
+    }
+    std::vector<std::size_t> walk(roots.rbegin(), roots.rend());
+    while (!walk.empty()) {
+        const std::size_t at = walk.back();
+        walk.pop_back();
+        sorted.push_back(nodes[at].row->uid);
+        for (auto child = nodes[at].children.rbegin(); child != nodes[at].children.rend();
+             ++child) {
+            walk.push_back(*child);
+        }
+    }
+    return {};
+}
+
+mppwrite::ViewSortEdit sort_view_edit(std::uint32_t field_id, bool ascending,
+                                      const std::vector<std::uint32_t>& base,
+                                      const std::vector<std::uint32_t>& sorted) {
+    mppwrite::ViewSortEdit view_edit;
+    view_edit.view_uid = mppwrite::kMeasuredViewUid;
+    mppwrite::SortKey key;
+    key.field = field_id == mppwrite::kSortFieldName ? mppwrite::SortField::name
+                                                     : mppwrite::SortField::duration;
+    key.ascending = ascending;
+    view_edit.keys.push_back(key);
+    view_edit.outline = true;
+    view_edit.renumber = false;
+    view_edit.base_order = base;
+    view_edit.sorted_order = sorted;
+    return view_edit;
+}
+
+}  // namespace
+
+bool make_sort_edit(const PlanInput& plan, std::string_view source_path,
+                    const std::vector<SortKeyRequest>& keys, bool outline, bool renumber,
+                    StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    if (keys.size() != 1) {
+        error = "Sort with " + std::to_string(keys.size()) +
+                " keys is not implemented in this port: the measured Project pairs sort "
+                "by exactly one key";
+        return false;
+    }
+    std::uint32_t field_id = 0;
+    switch (keys[0].kind) {
+        case SortKeyKind::name:
+            field_id = mppwrite::kSortFieldName;
+            break;
+        case SortKeyKind::duration:
+            field_id = mppwrite::kSortFieldDuration;
+            break;
+        case SortKeyKind::id:
+            error = "Sort by ID is not implemented in this port: ID is Project's default "
+                    "order and no pair measures it as an explicit key";
+            return false;
+        case SortKeyKind::start:
+            error = "Sort by Start is not implemented in this port: no Project pair "
+                    "measures a Start sort key";
+            return false;
+        case SortKeyKind::finish:
+            error = "Sort by Finish is not implemented in this port: no Project pair "
+                    "measures a Finish sort key";
+            return false;
+        case SortKeyKind::other:
+            error = "Sort by this key is not implemented in this port: the measured "
+                    "Project pairs sort by Name or by Duration";
+            return false;
+    }
+    if (!outline) {
+        error = "Sort with Keep outline structure unchecked is not implemented in this "
+                "port: the measured Project pairs keep the outline";
+        return false;
+    }
+    if (renumber) {
+        error = "Sort with Permanently renumber tasks is not implemented in this port: "
+                "the measured Project pairs leave the IDs alone";
+        return false;
+    }
+    std::vector<std::uint32_t> base;
+    std::vector<std::uint32_t> sorted;
+    if (std::string reason = sort_plan_order(plan, field_id, keys[0].ascending, base, sorted);
+        !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") + open_error.what() +
+                ")";
+        return false;
+    }
+    // The writer's dry run validates the file: the applied view, the measured
+    // block, the default specification, the displayed-order records, and that the
+    // base order is the file's own.
+    try {
+        (void)mppwrite::save_view_sort(
+            document, sort_view_edit(field_id, keys[0].ascending, base, sorted),
+            std::string(), true);
+    } catch (const std::exception& refusal) {
+        error = std::string("Sort is not implemented in this port for this project: ") +
+                refusal.what();
+        return false;
+    }
+    out.kind = StructuralKind::sort_view;
+    out.field_id = field_id;
+    out.ascending = keys[0].ascending;
+    out.sort_base_order = std::move(base);
+    out.sort_order = std::move(sorted);
+    return true;
+}
+
+namespace {
+
 // W34-4.6: the plan-side half of the WBS code rule, shared by the builder and
 // push().  wave30-wbs holds the project row and exactly three saved, top-level,
 // non-summary tasks (UniqueIDs 1 to 3); the generated numbers of any other
@@ -3838,6 +4074,23 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
             if (plan == nullptr || edit.uid != 0 || !edit.name.empty() ||
                 !calculate_plan_refusal(*plan).empty() ||
                 edit.slack.size() != plan->tasks.size()) {
+                return false;
+            }
+            edit.anchor_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::sort_view: {
+            // W35-2.1: the plan-side half.  The file-side half (the writer's dry
+            // run) ran in make_sort_edit and runs again in the writer; applied_
+            // is empty by the exclusivity check above.  The order is recomputed
+            // from the plan, so a hand-built edit must carry exactly it.
+            std::vector<std::uint32_t> base;
+            std::vector<std::uint32_t> sorted;
+            if (plan == nullptr || edit.uid != 0 || !edit.name.empty() ||
+                !sort_plan_order(*plan, edit.field_id, edit.ascending, base, sorted)
+                     .empty() ||
+                base != edit.sort_base_order || sorted != edit.sort_order) {
                 return false;
             }
             edit.anchor_uid = 0;
@@ -4981,6 +5234,36 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // W35-2.1: Sort is exclusive the same way.
+    const StructuralEdit* sort_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::sort_view) {
+            sort_edit = &edit;
+        }
+    }
+    if (sort_edit != nullptr) {
+        if (edits.applied().size() != 1) {
+            result.error =
+                "a Sort edit must be the only edit in a save; another edit is queued "
+                "with it, and the measured Project pair is one sort on an otherwise "
+                "untouched save";
+            return result;
+        }
+        if (!writable.empty()) {
+            result.error =
+                "a Sort edit cannot be combined with a start-date edit; the measured "
+                "Project pair is one sort on an otherwise untouched save";
+            return result;
+        }
+        if (document_edits.any()) {
+            result.error =
+                "a Sort edit cannot be combined with a table format or custom-field "
+                "formula edit; the measured Project pair is one sort on an otherwise "
+                "untouched save";
+            return result;
+        }
+    }
+
     // W31-0.1 (R30-1, High): a link add and a slack-carrying outline edit in
     // the same save would write the link at step 2 and the UNLINKED slack and
     // late dates at step 5b.  push() and validate_link_add refuse the order the
@@ -5205,6 +5488,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (calculate_edit != nullptr) {
         ++write_ops;  // the recalculated rows, five records, Props and Props14
+    }
+    if (sort_edit != nullptr) {
+        ++write_ops;  // the view's Var2Data, the edit list, Props14, one file
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -5866,6 +6152,28 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 " project-row records appended)");
         }
 
+        // 5l (wave 35, W35-2.1).  The measured Sort save: the sort
+        // specification in the applied view and the displayed order in the edit
+        // list (core/mppwrite/viewstate_sort.h).  The edit is exclusive (checked
+        // above); a dry run first proves the file is still the one the edit was
+        // built from, then the writer re-validates and writes the target once.  A
+        // refusal is an exception, reported as the save error.
+        if (sort_edit != nullptr) {
+            const mppwrite::ViewSortEdit view_edit =
+                sort_view_edit(sort_edit->field_id, sort_edit->ascending,
+                               sort_edit->sort_base_order, sort_edit->sort_order);
+            (void)mppwrite::save_view_sort(document, view_edit, std::string(), true);
+            const mppwrite::ViewSortWrite written =
+                mppwrite::save_view_sort(document, view_edit, next_write_path());
+            result.sorts_written = 1;
+            result.notes.push_back(
+                "sort written (field " + std::to_string(written.field_id) +
+                (written.ascending ? " ascending" : " descending") + ", " +
+                std::to_string(written.order_rows) + " rows, first row uid " +
+                std::to_string(written.first_row_before) + " -> " +
+                std::to_string(written.first_row_after) + ")");
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -5950,6 +6258,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (result.calculations_written != 0) {
             result.api += " save_calculate";
+        }
+        if (result.sorts_written != 0) {
+            result.api += " save_view_sort";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";

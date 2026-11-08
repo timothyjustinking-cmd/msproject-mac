@@ -42,6 +42,7 @@ add_library(core_mppwrite STATIC
     edit_marker.cpp
     varmeta_edit.cpp
     viewstream_edit.cpp
+    viewstate_sort.cpp
     props_edit.cpp
     wbs_code.cpp
     assignment_growth.cpp
@@ -144,6 +145,7 @@ if(MPPWRITE_BUILD_TESTS)
     mppwrite_add_test(mppwrite_roundtrip_field_values roundtrip_field_values.cpp)
     mppwrite_add_test(mppwrite_roundtrip_varmeta roundtrip_varmeta.cpp)
     mppwrite_add_test(mppwrite_roundtrip_viewstream roundtrip_viewstream.cpp)
+    mppwrite_add_test(mppwrite_roundtrip_viewstate_sort roundtrip_viewstate_sort.cpp)
     mppwrite_add_test(mppwrite_roundtrip_props roundtrip_props.cpp)
     mppwrite_add_test(mppwrite_roundtrip_wbs roundtrip_wbs.cpp)
     mppwrite_add_test(mppwrite_roundtrip_links roundtrip_links.cpp)

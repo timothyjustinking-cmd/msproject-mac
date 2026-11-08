@@ -187,6 +187,18 @@ enum class StructuralKind : std::uint8_t {
     // pending recalculation of the project row plus two unlinked automatic
     // leaves.  Like the kinds above it is EXCLUSIVE.
     calculate_project = 19,
+    // Wave 35 (W35-2.1): Project > Sort (Outline = True, Renumber = False) on
+    // ONE key, written by mppwrite::save_view_sort (core/mppwrite/
+    // viewstate_sort.h) against Project's wave35-viewstate-sort-name-desc /
+    // -name-asc / -duration-desc pairs: the sort specification in the applied
+    // view and the displayed order in the edit list.  `field_id` is the stored
+    // field id of the key (Name 0x0B40000E or Duration 0x0B400507), `ascending`
+    // its direction, `sort_base_order` the file's task UniqueIDs in file order
+    // and `sort_order` the same tasks in the order the sort produces (computed
+    // by make_sort_edit under the pins listed there).  The display is
+    // unchanged by the queued edit (the shell shows the sort for the session);
+    // like the kinds above it is EXCLUSIVE.
+    sort_view = 20,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -247,6 +259,11 @@ struct StructuralEdit {
     // UniqueID of the assignment row the writer appends.
     std::uint32_t resource_uid = 0;
     std::uint32_t assignment_uid = 0;
+    // sort_view (W35-2.1): the key's direction and the file's task UniqueIDs in
+    // file order / in sorted order (the key's field is `field_id`).
+    bool ascending = true;
+    std::vector<std::uint32_t> sort_base_order;
+    std::vector<std::uint32_t> sort_order;
 
     // --- set_field / clear_field -------------------------------------------
     // One of the six measured ids (app::is_measured_task_field): Text1,
@@ -596,6 +613,42 @@ bool make_wbs_code_edit(const PlanInput& plan, std::string_view source_path,
 bool make_calculate_edit(const PlanInput& plan, std::string_view source_path,
                          StructuralEdit& out, std::string& error);
 
+// Wave 35 (W35-2.1): the sort keys make_sort_edit can be asked for.  Only Name
+// and Duration are measured as single keys with Outline = True and
+// Renumber = False; every other choice is refused with its own reason.
+enum class SortKeyKind : std::uint8_t {
+    name = 0,
+    duration = 1,
+    id = 2,
+    start = 3,
+    finish = 4,
+    other = 5,
+};
+
+struct SortKeyRequest {
+    SortKeyKind kind = SortKeyKind::name;
+    bool ascending = true;
+};
+
+// Builds a ready-to-push sort_view edit (W35-2.1).  The measured shape is Project
+// > Sort with ONE key (Name or Duration), "Keep outline structure" checked and
+// "Permanently renumber tasks" unchecked, on the three-level pair's five saved
+// tasks; two keys, an ID / Start / Finish / other key, Outline = False and
+// Renumber = True are each refused up front with their own reason.  The order
+// the edit queues is computed here under the pins the pairs support: siblings
+// (rows under one parent, from the outline level) are compared; Name only when
+// every sibling pair differs at a first position holding two ASCII letters of
+// the same case, neither name a prefix of the other (Project's collation of
+// case, punctuation and digits is not measured); Duration only when sibling
+// durations are pairwise distinct.  The FILE is the authority for the rest: the
+// writer's dry run validates the applied view, the default sort specification
+// in both copies, the displayed-order records and the measured block, and its
+// refusal text is returned as the reason.  `out` is default-constructed on
+// refusal.
+bool make_sort_edit(const PlanInput& plan, std::string_view source_path,
+                    const std::vector<SortKeyRequest>& keys, bool outline, bool renumber,
+                    StructuralEdit& out, std::string& error);
+
 // The one cell Font Bold is measured for: Task Name of the task with
 // UniqueID 1 (core/mppwrite/viewstream_edit.h, wave30-textstyle).
 inline constexpr std::uint32_t kBoldMeasuredTaskUid = 1;
@@ -897,6 +950,9 @@ struct StructuralSaveResult {
     // Wave 35 (W35-1.3): 1 when Calculate Project was written (the project row,
     // two leaves and five overtime records).
     std::size_t calculations_written = 0;
+    // Wave 35 (W35-2.1): 1 when a sort specification and displayed order were
+    // written.
+    std::size_t sorts_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the
