@@ -1639,6 +1639,39 @@ void test_add_damaged(TestContext& t) {
                       [](Bytes& b) { put_u32_at(b, 4, 9); }),
             target, "no assignment row names UniqueID 1",
             "add: no row naming the task");
+    /* W35-0.4 (RC-W1): the first-assignment add writes constants measured at
+     * three placeholder rows going to four, so another row count is refused.
+     * The FixedData, Fixed2Data and both size words are kept consistent, so
+     * only the row-count gate can give this wording. */
+    auto with_row_count = [&](bool grow) {
+        CfbDocument doc = doc_from_data(kAddControl);
+        Bytes fixed = doc.read_stream(kAssnFixed);
+        Bytes f2 = doc.read_stream(kAssnF2);
+        Bytes fixed_meta = doc.read_stream(kAssnMeta);
+        Bytes f2_meta = doc.read_stream(kAssnF2Meta);
+        if (grow) {
+            Bytes const row(fixed.begin(), fixed.begin() + 110);
+            fixed.insert(fixed.end(), row.begin(), row.end());
+            Bytes const record(f2.begin(), f2.begin() + 48);
+            f2.insert(f2.end(), record.begin(), record.end());
+        } else {
+            fixed.resize(fixed.size() - 110);
+            f2.resize(f2.size() - 48);
+        }
+        put_u32_at(fixed_meta, 12, static_cast<std::uint32_t>(fixed.size()));
+        put_u32_at(f2_meta, 12, static_cast<std::uint32_t>(f2.size()));
+        doc.replace_stream(kAssnFixed, fixed);
+        doc.replace_stream(kAssnF2, f2);
+        doc.replace_stream(kAssnMeta, fixed_meta);
+        doc.replace_stream(kAssnF2Meta, f2_meta);
+        return doc;
+    };
+    refuses(with_row_count(true), target,
+            "first-assignment add is measured only on a table of 3",
+            "add: a fourth placeholder row");
+    refuses(with_row_count(false), target,
+            "first-assignment add is measured only on a table of 3",
+            "add: only two placeholder rows");
     refuses(with_edit(kAddControl, kAssnMeta,
                       [](Bytes& b) { b[16 + 2] = 0x02; }),
             target, "not the measured placeholder entry",

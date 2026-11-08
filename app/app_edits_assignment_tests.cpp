@@ -804,6 +804,40 @@ void check_refusals() {
         }
     }
 
+    /* W35-0.4 (RC-W1): the first-assignment add is measured on a table of three
+     * placeholder rows only; a consistent four-row or two-row table is refused
+     * by the writer's dry run, and the shell relays its wording. */
+    for (const bool grow : {true, false}) {
+        mppwrite::CfbDocument scratch = mppwrite::CfbDocument::from_file(source);
+        Bytes fixed = scratch.read_stream(kAssnFixed);
+        Bytes f2 = scratch.read_stream(kAssnF2);
+        Bytes fixed_meta = scratch.read_stream(kAssnMeta);
+        Bytes f2_meta = scratch.read_stream(kAssnF2Meta);
+        if (grow) {
+            const Bytes row(fixed.begin(), fixed.begin() + 110);
+            fixed.insert(fixed.end(), row.begin(), row.end());
+            const Bytes record(f2.begin(), f2.begin() + 48);
+            f2.insert(f2.end(), record.begin(), record.end());
+        } else {
+            fixed.resize(fixed.size() - 110);
+            f2.resize(f2.size() - 48);
+        }
+        for (std::size_t k = 0; k < 4; ++k) {
+            fixed_meta[12 + k] = static_cast<std::uint8_t>((fixed.size() >> (8 * k)) & 0xFFu);
+            f2_meta[12 + k] = static_cast<std::uint8_t>((f2.size() >> (8 * k)) & 0xFFu);
+        }
+        scratch.replace_stream(kAssnFixed, fixed);
+        scratch.replace_stream(kAssnF2, f2);
+        scratch.replace_stream(kAssnMeta, fixed_meta);
+        scratch.replace_stream(kAssnF2Meta, f2_meta);
+        const std::filesystem::path scratch_path =
+            out_path(grow ? "app-assign-four-rows.mpp" : "app-assign-two-rows.mpp");
+        scratch.save(scratch_path.string());
+        expect_refused(plan, scratch_path.string(), kAdd.task_uid, kAdd.resource_uid, true,
+                       "first-assignment add is measured only on a table of 3",
+                       grow ? "assign: a fourth placeholder row" : "assign: only two placeholder rows");
+    }
+
     /* push(): the plan-side backstop for a hand-built queue. */
     const std::uint32_t new_uid = kAdd.task_uid + 100;  // not in the plan
     {
