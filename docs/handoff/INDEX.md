@@ -4,10 +4,16 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Now (30 October 2026)
+## Now (8 November 2026)
 
 | file | what |
 |---|---|
+| `wave34-brief.md` | **the wave-34 work order**: parity - decode Project's save shapes (G0), the shared writers (G1-G3), enable the measured commands (G4); G5 scheduler save and G6 view state are wave 35; its coordinator notes carry the run history (the DeepSeek 402 stop, the Sonnet builder) |
+| `wave34-complete.md` | **the wave-34 gate**: G0-G4 and CLOSE with per-commit and fresh-tree gates, the deferrals with their evidence, "Found, not fixed"; `WAVE-34-COMPLETE`; push, CI and the merge decision by the coordinator |
+| `wave34-verification/` | `gates-g3.md` + `review-g3.md` (the G3 verifier: R34G3-1..9) and `close-review.md` (the CLOSE review of `main..wave34`: **two High open** - the Assign Resources work amount and the identity-reference mask) - wave 34 is NOT mergeable until the fix-only `wave34b` closes them |
+| `HANDOFF-coordinator-2026-11-08-1625.md`, `PROMPT-opus-coordinator-wave34-resume-sonnet.md` | the coordinator handoff at the G4 boundary and the Sonnet-builder resume brief |
+| `../../spec/README.md` | the writer decode notes under `spec/writers/` and the per-pair reports under `spec/writers/evidence/` |
+| `plan-waves27-30.md` | now also "Queued from wave 34": wave 35 (G5, G6, the G4 deferrals) and the wave-34 review Mediums and Lows |
 | `standing-rules.md` | **binds every wave from 27**: save paths measured against Project, small context, gate cadence, CI every wave, one review per wave |
 | `assessment-2026-10-29.md` | **the 29 October progress assessment and adversarial audit**: sections 7-8 are wave 33's work order |
 | `wave33-brief.md` | **the wave-33 work order**: fix-only - G0 data safety (Critical), G1 refusals and disables (High/Medium), G2 robustness, G3 gates and CI, G4 records and privacy |

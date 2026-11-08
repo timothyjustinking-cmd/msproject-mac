@@ -1,120 +1,76 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-10-30, wave 33b complete on branch `wave33b` (cut from
-`wave33` = `da5f4da`, itself cut from `main` = `17f5782`;
-`WAVE-33b-COMPLETE` appended, not yet pushed -- the coordinator pushes and
-dispatches both CI workflows after CLOSE).  Keep this file current at every
-wave close; it is the only file a new session must read first._
+_Updated 2026-11-08, wave 34 complete on branch `wave34` (cut from `main` =
+`4fd9b90`; `WAVE-34-COMPLETE` appended after G4 and CLOSE, not pushed -- the
+coordinator pushes and dispatches both CI workflows, and a fix-only `wave34b`
+runs before any merge).  Keep this file current at every wave close; it is the
+only file a new session must read first._
 
 ## The 30-second state
 
-* **The merge state is the one fact the old entry records got wrong.**  Waves
-  23-32 were merged into `main` on 27 October 2026 as **`17f5782`** after an
-  operator-approved `git filter-branch` rewrite (the pre-push guard refused
-  the range: seven fixtures' original blobs carried the operator's save path
-  or name).  **GitHub holds `main`, `wave33` and `wave33b`**; the old
-  `origin/wave23`..`origin/wave32` branches were deleted after the merge.  The
-  local branches `wave23`..`wave31` still point at pre-rewrite commits and are
-  superseded history; `wave32` points at `17f5782`.
-* **Every commit id quoted in the wave 23-32 records is a PRE-rewrite id**,
-  including the CI run ids' commits and the "final code tree" ids.  To map
-  one, look its left-hand column up in
-  `docs/handoff/wave32-verification/rewrite-sha-map.txt` (329 pairs; left =
-  old, right = current):
-
-  ```
-  git show 17f5782:docs/handoff/wave32-verification/rewrite-sha-map.txt | grep <old-id>
-  git show <right-hand-id>
-  ```
-
-  For example the wave-32 tip `92baa32` is now `d7d0088`, and its final code
-  tree `7727760` is now `6a4dcc2`.
-* **Wave 32 is closed and merged.**  G0 (the wave-31 verifier's three Highs,
-  refuse-first) + CLOSE; the independent review's High and four required
-  Mediums fixed in W32-C4..W32-C8; record `docs/handoff/wave32-complete.md`.
-  Two verifier Mediums remained: **R32-1** (Task Information could leave a
-  custom-field edit queued behind a percent refusal) is **closed by wave 33
-  W33-1.5**; **R32-2** (the macOS shell's filter range path acts in file
-  order) is **still open**.
-* **Wave 33 is closed and pushed after the approved replay** (`wave33` =
-  `origin/wave33` = `da5f4da`; `WAVE-33-COMPLETE` in
-  `docs/handoff/wave33-complete.md`).  The 29 October audit's fix-only work
-  order: G0 atomic saves + save adoption; G1 the refusal set (summary delete,
-  Insert Task clone, formula SET field kinds, formula CLEAR disabled, trial
-  copies, shown-table edits, FAT-slack read-only, one pending formula); G2
-  DIFAT/Fixed2Meta bounds, CFB v4 refused, fuzz targets and an `ubuntu-asan`
-  job; G3 the `app/` suite in CI, the save-pair mask, fixture SKIPs, honest
-  numbers; G4 records and privacy; CLOSE two independent reviews, the final
-  gates and the START-HERE / INDEX / memory update.
-* **Its post-replay CI was red in three jobs, fixed in wave 33b.**
-  `ci` 40947728764 (da5f4da) failed ubuntu-gcc and ubuntu-asan; `app-macos`
-  40947715383 failed macos-appkit; `qt-shell` 40947723497 was green.  The
-  compile errors stopped each build at the first one, so 33b fixed them in
-  order and re-dispatched: **CI-1** `tests/fixture_guard.h`'s `/*` glob inside
-  a block comment; **CI-2** `tests/atomic_write.cpp`'s unused `join` (plus
-  four orphaned `file_exists` helpers and the CAL/MPP forced-absent switch);
-  **CI-3** `core/plan/plan.cpp`'s dead `manual_pin_failures` counter (found
-  from the CI run of the 33b G0 commit, `ci` 40958074116).
-* **Wave 33b is a fix-only follow-up** (`docs/handoff/wave33b-brief.md`;
-  record `docs/handoff/wave33b-complete.md`).  G0 and G1 are DONE:
-  * **W33b-0.1 (R33-1, High)** — W33-1.6 had carried the shown table index
-    into the `214/CTable` date-format save, so File > Save could write the
-    date-format byte of ANY table, while only table 0 has a Project save
-    pair.  The Qt shell now refuses Table / Date Format with the decision-9
-    reason before the dialog opens when the shown table is not the first;
-    `Document::request_view_state_edits` returns a bool and refuses before
-    queueing; `apply_view_state_edit` refuses the same as a save-hook
-    warning, leaving `214/` byte-identical.  The macOS shell checks the
-    request result (its view is always table 0).  The wave-33 record gains an
-    erratum: its "added no writer" sentence was false.
-  * **W33b-1.1 (R33-2, Medium)** — the formula-clear save hook refuses
-    `Operation::clear` with the decision-9 reason before reading `114/Props`;
-    the target is untouched and the save fails.  The unmeasured clear writer
-    stays beneath the refusal for a future Project pair.
-  * **W33b-1.2 (R33-3, Medium)** — the macOS Task Fields handler pushes onto
-    a trial copy and moves it into `plan.edits` only when every edit is
-    accepted, so a refused batch queues nothing (the Qt shell's rule).
-* **Fresh-tree gates at the final code tree** (`5efc8a5`; the CLOSE record
-  commit differs by documentation only; log
-  `build/w33b/W33b-CLOSE-fresh-gates.log`, all three trees configured from
-  scratch):
-* **Fresh-tree gates at the final code tree** (`5efc8a5`; the CLOSE record
-  commit differs by documentation only; log
-  `build/w33b/W33b-CLOSE-fresh-gates.log`, all three trees configured from
-  scratch): core `ctest -E plan_recalc` **55/55**; `plan_recalc`
-  **512 / 266** (with / without corpus); engine selftest 53 checks, suite 7
-  pass + `constraint-mso` expected, 0 unrecorded; reader **1136 / 456**; M2
-  **332/332**, **268/268**, **64/64**; app **25/25** and **25/25** with
-  `MPP_NO_CORPUS=1`; app_qt **41/41**; fixtures OK (**140** documented
-  hashes, **174** tracked `.mpp`), paths OK (223), provenance OK (8); markers
-  self-test 19 checks, worktree and range 0 hits over 1306 files; the
-  client-name scan 0 files/0 hits and 0 message commits; `guard_names` exit
-  0; backlog **114/114**, 0 mismatches; block-comment and unused-helper
-  sweeps 0; line endings 0 CRLF; `git diff --check` clean (`main..HEAD` shows
-  only the 13 known wave-33 CRLF-json hits, RW33-10).
-* **Privacy after the replay**: the replay replaced the FAT-slack fixture
-  blob and reworded the one commit message the marker guard named
-  (`964594d`); `guard_names.py main..HEAD` exits 0 and
-  `check_markers.py --range main..HEAD` is 0 hits over 1306 tracked files.
-  The 13 unsalted name hashes in older history and
-  `tests/data/project_a_golden.tsv` remain the operator's decision (Q3).
+* **Wave 34 (parity: decode Project's save shapes, build the shared writers, enable
+  the measured commands) is closed on branch `wave34`** (cut from `main` = `4fd9b90`,
+  the merge of waves 33 and 33b; `WAVE-34-COMPLETE` is in
+  `docs/handoff/wave34-complete.md`).  **It is NOT mergeable**: the CLOSE review
+  (`docs/handoff/wave34-verification/close-review.md`, with the G3 review
+  `review-g3.md`) found 0 Critical and **2 High** -- **R34G3-1 / RC-R1** (the
+  assignment writer and the Assign Resources UI accept any whole-hour work amount
+  although every pair is a 40-hour step) and **R34G3-2** (the assignment test masks
+  the task and resource identity references).  A fix-only **`wave34b`** closes them
+  before any merge.  Nothing on `wave34` is pushed; push and both CI dispatches are
+  the coordinator's.
+* **What wave 34 built** (decode notes indexed in `spec/README.md`; pairs in
+  `spec/writers/evidence/`): G0 the decoding lane (eight decode notes, 23 pair
+  reports, synthetic pairs for the five corpus-only paths); G1 the VarMeta entry
+  writer; G2 the `214` view-stream writer and Props record update; G3 the
+  assignment growth writer, the resource row and calendar row writer, the
+  DocumentSummaryInformation writer with an independent reader, reader gaps, and
+  W34-B5 (the `name` column dropped from `tests/data/project_a_golden.tsv`; the old
+  hashes remain in public history, the purge request is the operator's).
+* **What wave 34 enabled (G4)**, each for its measured shape only: Resource
+  Information rename, Add Resources (one work resource, default rates), Assign
+  Resources (first assignment and its removal from a Project-saved file), Font Bold
+  (one cell), WBS Define Code (prefix W, three flat tasks).  W34-4.0 refused up
+  front the five paths whose port save still differed from Project's (Insert Task,
+  Delete Task, link ADD, custom-field SET and CLEAR).  **Deferred with evidence:**
+  Insert Summary / Insert Milestone (15 streams differ), Set Baseline 0 (94 new var
+  blocks, 26 undecoded), Resource and Task Notes (the RichEdit generator string).
+  The backlog now lists 114 ribbon commands, 64 disabled counting split menu items
+  (the pin: 51 enabled / 63 disabled controls).
+* **Stopped after G4** by the brief's stop rule (the 12-hour point passed during
+  G4).  **G5 (scheduler save path) and G6 (view-state persistence) are wave 35**,
+  queued in `plan-waves27-30.md`.
+* **Builder**: G0-G2 DeepSeek (30 October); G3-CLOSE Claude Sonnet 5.5 through
+  `tools/deepseek/sonnet-claude.cmd` (`run-wave.ps1 -Builder sonnet`) after the
+  DeepSeek balance ran out.
+* **The merge state of waves 23-33b**: waves 23-32 were merged into `main` on
+  27 October 2026 as `17f5782` after an operator-approved `git filter-branch`
+  rewrite; every commit id quoted in the wave 23-32 records is a PRE-rewrite id
+  (map one through `docs/handoff/wave32-verification/rewrite-sha-map.txt`, left =
+  old, right = current).  Waves 33 and 33b are merged and green on all three
+  platforms (`main` = `origin/main` = `4fd9b90`).
+* **Fresh-tree gates at the final code tree** are in the CLOSE section of
+  `wave34-complete.md` (log `build/w34/W34-CLOSE-fresh-gates.log`, all three trees
+  configured from scratch with warnings as errors).  The asan job and the CI
+  dispatches have not run for wave 34.
+* **Privacy**: `python -I build/audit-w22/guard_names.py main..HEAD` and
+  `python scripts/check_markers.py --range main..HEAD` are 0 hits at CLOSE; the
+  unsalted name hashes in older public history (Q3 and B-1) remain the operator's.
   **Run BOTH name scans and the marker check.**
 * **Engine stays 7/8** (`constraint-mso` deliberately expected-failing;
-  `mppwrite::save_plan` is test-only).
-* **Branch state**: `main` = **`17f5782`** = `origin/main`; `wave33` =
-  **`da5f4da`** = `origin/wave33`; `wave33b` is this branch, closed with
-  `WAVE-33b-COMPLETE`.  `origin/wave33b` = **`6fdf3af`** (the coordinator's
-  single pre-CLOSE push at the G0 gates commit, whose CI run found CI-3);
-  the CI-3 fix and this record are local until the coordinator pushes after
-  CLOSE.  The unmerged pre-rewrite branches are local leftovers; their
-  content is on `main` under the mapped ids.
+  `mppwrite::save_plan` is still test-only -- it is G5).
 
 ## Still open
 
-* **R33-9** (the wave-33 record's three CI-dependent DONE items) closes only
-  when the coordinator's post-replay CI run is green; the asan job has not
-  run since CI-3 was fixed, so any further clang error or sanitizer report
-  behind it is still unknown.
+* **The wave-34 CLOSE review** (`docs/handoff/wave34-verification/close-review.md`):
+  the two Highs R34G3-1 / RC-R1 and R34G3-2 and the Mediums R34G3-3, R34G3-4,
+  RC-W5 and RC-R3 go to `wave34b`; the other Mediums and the Lows are queued in
+  `plan-waves27-30.md` ("Queued from wave 34") with G5 and G6 as wave 35.  Also
+  open before a merge: the brief section 4 (e) Project-reopens-the-port-save
+  check for the five enabled saves (COM, coordinator-only), and the first CI run
+  of wave 34 (including `ubuntu-asan`).
+* **The macOS shell** wires only Add Resources of the wave-34 items (RC-R4,
+  RC-R5): a feature gap, not a safety gap, since the builders are shared.
 * **Wave-33b CLOSE-review Lows**: RW33b-1 (the save-hook backstop covers a
   date format but not a hand-built column replacement on a non-zero table)
   and RW33b-2 (the retained clear/flag heuristic beneath the refusal is no
@@ -148,9 +104,12 @@ wave close; it is the only file a new session must read first._
 **Coordinator starting the next group or wave** (≈5 files):
 
 1. this file;
-2. `docs/handoff/wave33b-complete.md` — the current record: G0/G1 detail,
-   CI-3, the CLOSE review, the fresh-tree gates, "Found, not fixed";
-3. `docs/handoff/wave33b-brief.md` — the work order;
+2. `docs/handoff/wave34-complete.md` — the current record: G0-G4 and CLOSE,
+   the fresh-tree gates, "Found, not fixed"; with
+   `docs/handoff/wave34-verification/close-review.md` (the open Highs) and
+   `spec/README.md` (the writer decode notes);
+3. `docs/handoff/wave34-brief.md` — the work order (its coordinator notes carry
+   the run history);
 4. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
 5. `docs/ui-reference-set.md` — the local captures and palettes (git-ignored);
 6. `memory/coordinator.md` — the compact current memory.
@@ -229,7 +188,13 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
   33b fix-only erratum (W33b-0.1 / R33-1):** wave 33's W33-1.6 gave the
   date-format save the shown table index, so it could write a non-zero table's
   unmeasured byte; wave 33b refuses any table but the first at the request and
-  in the save hook, and adds no writer.
+  in the save hook, and adds no writer.  **Wave 34** added writers and enabled
+  five commands for their measured shapes only (Resource Information rename, Add
+  Resources, Assign Resources, Font Bold on one cell, WBS Define Code) and
+  refused up front the five paths whose port save differs from Project's
+  (Insert Task, Delete Task, link ADD, custom-field SET and CLEAR); see
+  `spec/README.md`.  Assign Resources is measured at 40 hours only and its
+  refusal of every other amount is a `wave34b` item.
 * **`plan_recalc`** never rewrites the golden by default; refreshing needs the
   exact value `PLAN_RECALC_UPDATE_GOLDEN=1`, and the local/CI gate runs
   `ctest -E plan_recalc` plus the corpus-free binary/step.
@@ -260,21 +225,18 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md and docs/handoff/wave33b-complete.md.  Waves 23-32 are
-merged into main as 17f5782 (27 Oct 2026, after a history rewrite); every id in
-the wave 23-32 records is pre-rewrite and maps through
-docs/handoff/wave32-verification/rewrite-sha-map.txt.  Wave 33 is COMPLETE and
-pushed after the approved replay (wave33 = origin/wave33 = da5f4da); its
-post-replay CI was red in ubuntu-gcc, ubuntu-asan and macos-appkit.  Wave 33b
-is the fix-only follow-up on branch wave33b, cut from wave33: it fixed the
-review's High (the unmeasured table date format), its two Mediums (the
-formula-clear save hook; the macOS Task Fields queue) and the CI compile
-errors CI-1..CI-3, and WAVE-33b-COMPLETE is appended.  origin/wave33b is
-6fdf3af (one pre-CLOSE push at the G0 gates commit, whose CI run found CI-3);
-the CI-3 fix and the CLOSE record are local.  The coordinator's next step is
-to push wave33b and dispatch both CI workflows, then record the run ids;
-R33-9 closes when that run is green.  The wave is not merged until CI is green
-and the review has no Critical/High (the CLOSE review has none).  Keep every
-gate in wave33b-complete green before each commit and run BOTH name scans and
-scripts/check_markers.py.
+Read docs/START-HERE.md, docs/handoff/wave34-complete.md and
+docs/handoff/wave34-verification/close-review.md.  Waves 23-32 are merged into
+main as 17f5782 (27 Oct 2026, after a history rewrite; ids in the wave 23-32
+records are pre-rewrite and map through
+docs/handoff/wave32-verification/rewrite-sha-map.txt); waves 33 and 33b are
+merged (main = 4fd9b90).  Wave 34 is COMPLETE on branch wave34 (G0-G4 and
+CLOSE; G5 and G6 are wave 35) and NOT mergeable: the CLOSE review found two
+Highs (R34G3-1 / RC-R1: the assignment writer and the Assign Resources UI accept
+any whole-hour work amount, only 40 h is measured; R34G3-2: the assignment test
+masks the identity references).  The next step is the coordinator's: push
+wave34, dispatch both CI workflows, then run the fix-only wave34b (Highs first)
+and re-run the brief-section-4(e) Project reopen check before any merge.  Keep
+every gate in wave34-complete green before each commit and run BOTH name scans
+and scripts/check_markers.py.
 ```

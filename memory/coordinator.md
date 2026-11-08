@@ -1,9 +1,40 @@
-# memory — coordinator (2026-10-30, wave 33b complete on branch `wave33b`)
+# memory — coordinator (2026-11-08, wave 34 complete on branch `wave34`)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
-`docs/handoff/wave33b-complete.md` (G0, G1 and CLOSE appended;
-`WAVE-33b-COMPLETE`).  History:
-`memory/archive/coordinator-through-wave20-full.md`.
+`docs/handoff/wave34-complete.md` (G0-G4 and CLOSE appended;
+`WAVE-34-COMPLETE`); review `docs/handoff/wave34-verification/close-review.md`.
+History: `memory/archive/coordinator-through-wave20-full.md`.
+
+## Wave 34 state (parity writers; closed, NOT mergeable) — 8 November 2026
+
+`main` = `origin/main` = **`4fd9b90`** (waves 33 and 33b merged, green on all three
+platforms).  `wave34` is cut from it and is local only; push, both CI dispatches
+and the merge decision are the coordinator's.  Work order
+`docs/handoff/wave34-brief.md` (its coordinator notes carry the run history);
+decode notes `spec/README.md`.
+
+* G0 decoding lane (eight notes, pair anatomy, synthetic pairs), G1 VarMeta
+  writer, G2 `214` view-stream + Props update writers: DeepSeek, 30 October 2026.
+  DeepSeek stopped at G3 on a 402 (balance); G3, G4 and CLOSE were built by Claude
+  Sonnet 5.5 (`tools/deepseek/sonnet-claude.cmd`, `run-wave.ps1 -Builder sonnet`).
+* G3: assignment growth, resource + calendar row, DocumentSummaryInformation (with
+  an independent reader), reader gaps, W34-B5 (golden `name` column dropped).
+* G4 enabled, each for its measured shape only: Resource Information rename,
+  Add Resources, Assign Resources, Font Bold (one cell), WBS Define Code; W34-4.0
+  refused Insert Task, Delete Task, link ADD, custom-field SET/CLEAR up front.
+  Deferred with evidence: Insert Summary/Milestone (4.4), Set Baseline 0 (4.7),
+  Notes (4.1).
+* **Open Highs (merge blocker): R34G3-1 / RC-R1** - the assignment writer and the
+  Assign Resources UI accept any whole-hour work, only 40 h is measured;
+  **R34G3-2** - the test masks the task/resource identity refs at +16/+32.  A
+  fix-only `wave34b` goes first (Highs; then R34G3-3/4, RC-W5, RC-R3).
+* G5 (scheduler save) and G6 (view state) are **wave 35**; queued in
+  `plan-waves27-30.md` with the other review Mediums and Lows.
+* Not yet done: the brief-4(e) Project-reopen check (COM, coordinator-only), the
+  first wave-34 CI run (incl. `ubuntu-asan`), the macOS wiring (only Add
+  Resources is wired).
+* Gotcha: the G3 handoff said `app/main.mm` was untouched in G4; it was touched in
+  4.2.  The inline-python backslash hook blocks heredoc scripts: Write a `.py`.
 
 ## Where the branches are (the truth)
 
