@@ -342,3 +342,34 @@ case; macOS launch and notarisation; the hashed task names in
 2. ~~Move builds out of Dropbox sync (Dropbox-ignore `build/`).~~ Done 24 Oct 2026.
 3. Approve this order, in particular: disable the % buttons in wave 27 and bring
    them back with the actuals writer in wave 28.
+
+## Queued from wave 35 (CLOSE): the fix-only `wave35b`
+
+Wave 35 closed on branch `wave35` (`WAVE-35-COMPLETE`) with High findings open, so a
+fix-only `wave35b` (no writer added, no refusal lifted, no Project pair needed unless a
+finding says so) comes before any merge.  Highs first, in this order:
+
+- **Calculate Project** (R35G1-1, R35G1-2, R35G1-3, RW35-W2): refuse a deadline; check
+  every leaf's Start and Finish against the project start and Start + Duration so only the
+  measured cause (the critical leaf's Duration lengthened) is accepted; write the rule 5 pin
+  record and refuse every unpinned parameter (task type, effort-driven, milestone, project
+  calendar, equal finishes) in the writer AND the edit model, with a test per refusal.
+- **View state** (R35G2-1..4, RW35-R2): pin the applied table, zoom and sort state a Show
+  Level save requires; read the outline, names and order from the file, not the caller;
+  refuse Sort on every shape but the measured one and Duration ascending without a pair;
+  build Sort and Show Level from the file's rows, or refuse while record edits are pending,
+  with a gate test.
+- **Removal from a port-saved file** (R35G3-1, RW35-W1): refuse any file whose origin is not
+  the raw port output (an origin check in the edit model and the writer's settled-shape gate
+  reading what Project's resave changes: Rsc Fixed2Meta, the Assn Fixed2Data counter, Assn
+  Var2Data, CEdl), with a test that runs the removal on the null save.
+- **The 9fa599b history defect** (operator or coordinator): rewrite the commit so the two
+  `wave35-g3-notes-generator*` blobs carry the neutral identity before any push.
+
+Mediums and Lows: RW35-W3..W7, RW35-R3..R5 (specific needles for the Calculate linked case and
+Level 3, 4 and 9), and the Lows in `wave35-verification/close-review-writers.md` and
+`close-review-shells.md`; R35G0-1..R35G0-13, R35G1-4..14, R35G2 and R35G3-2..12 in
+`review-g0.md`..`review-g3.md`.  Still queued as before: the wave-34 Lows, Respect Links, Move,
+Auto Schedule and Level All, the extra views, the `constraint-mso` engine case and macOS
+launch and notarisation.  RW35-R1 (the `-Wswitch` break in `app_qt/command_status.h`) is
+closed by `513de29`.

@@ -1,14 +1,38 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-11-08, wave 34b complete on branch `wave34b` (cut from `wave34`, which
-was cut from `main` = `4fd9b90`; `WAVE-34-COMPLETE` and `WAVE-34b-COMPLETE` are
-appended, nothing is pushed -- the coordinator pushes `wave34b`, dispatches both CI
-workflows and runs the brief section 4(e) Project-reopen check).  Waves 34 and 34b
-are NOT merged until CI is green and that check passes.  Keep this file current at
-every wave close; it is the only file a new session must read first._
+_Updated 2026-11-09, wave 35 closed on branch `wave35` (cut from `wave34b`, which was cut
+from `wave34`, which was cut from `main` = `4fd9b90`; `WAVE-35-G0..G4-COMPLETE` and
+`WAVE-35-COMPLETE` are appended, nothing is pushed -- the coordinator pushes `wave35`,
+dispatches both CI workflows and runs the brief section 4(e) Project-reopen check).  Waves 34,
+34b and 35 are NOT merged: wave 35 has open High findings (below), so a fix-only `wave35b`
+comes first, and `guard_names` is red for two blobs in `9fa599b`, so the branch cannot be
+pushed until that commit is rewritten.  Keep this file current at every wave close; it is the
+only file a new session must read first._
 
 ## The 30-second state
 
+* **Wave 35 (the scheduler save path, view-state persistence, the wave-34 deferrals, the macOS
+  shell) is closed on branch `wave35`** (`docs/handoff/wave35-complete.md`, builder Claude
+  Sonnet 5.5).  **Built and enabled, each for its measured shape only:** G0 the carry-over
+  fixes (resource calendar checks for Assign Resources, the writer-width refusals RC-W1,
+  RC-W2, RC-W6..W8, CI-4); G1 `mppwrite::save_calculate` and Calculate Project for the
+  unlinked two-leaf shape; G2 Sort (one Name or Duration key on the measured five-task shape)
+  and Show Level 1 and 2 on the two measured outlines; G3 Bold off (view writer only); G4 the
+  macOS shell wired to the shared builders for rename, Assign Resources, Bold, Define Code
+  and Calculate Project.  **Deferred with evidence:** linked, lag and constraint Calculate
+  Project, the applied table, zoom, Insert Summary / Milestone, Set Baseline 0, Notes, the
+  other font controls, Renumber, and removal from a port-saved file.  Fresh-tree gates at
+  `4e3ba80` (`build/w35/W35-CLOSE-fresh-gates.log`) are green except `guard_names`.
+* **Wave 35 is NOT mergeable.**  The per-group verifications and the two CLOSE reviews
+  (`docs/handoff/wave35-verification/`) leave **High** findings open: Calculate Project
+  (R35G1-1..3, RW35-W2: deadline, any pending recalculation, unpinned parameters, leaf dates
+  unchecked), view state (R35G2-1..4, RW35-R2: Show Level and Sort pin too little and trust the
+  caller's rows and unsaved renames) and removal from a port-saved file (R35G3-1, RW35-W1).
+  They are queued as the fix-only `wave35b` in `plan-waves27-30.md`.  The one CI-class break
+  the CLOSE review found, RW35-R1 (a `-Wswitch` hole in `app_qt/command_status.h`), is closed
+  by `513de29`.  Also open: `9fa599b` added two fixtures whose LastAuthor held the operator's
+  real name (fixed forward in `9564ddd`); `guard_names main..HEAD` reports those two blobs
+  until the commit is rewritten, which is the operator's or the coordinator's call.
 * **Wave 34b (fix-only: no writer added, no refusal lifted, no Project pair
   measured) is closed on branch `wave34b`** (`docs/handoff/wave34b-complete.md`).
   It closed both wave-34 Highs (R34G3-1 / RC-R1: Assign Resources and its removal
@@ -122,12 +146,12 @@ every wave close; it is the only file a new session must read first._
 **Coordinator starting the next group or wave** (≈5 files):
 
 1. this file;
-2. `docs/handoff/wave34-complete.md` — the current record: G0-G4 and CLOSE,
-   the fresh-tree gates, "Found, not fixed"; with
-   `docs/handoff/wave34-verification/close-review.md` (the open Highs) and
+2. `docs/handoff/wave35-complete.md` — the current record: G0-G4 and CLOSE,
+   the fresh-tree gates, the open Highs, "Found, not fixed"; with
+   `docs/handoff/wave35-verification/` (the per-group and CLOSE reviews) and
    `spec/README.md` (the writer decode notes);
-3. `docs/handoff/wave34-brief.md` — the work order (its coordinator notes carry
-   the run history);
+3. `docs/handoff/wave35-brief.md` — the work order (and `wave34-complete.md` /
+   `wave34b-complete.md` for the code it builds on);
 4. `docs/ui-parity-spec.md` — the binding 16-decision UI contract;
 5. `docs/ui-reference-set.md` — the local captures and palettes (git-ignored);
 6. `memory/coordinator.md` — the compact current memory.
@@ -243,21 +267,16 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md, docs/handoff/wave34b-complete.md,
-docs/handoff/wave34-complete.md and
-docs/handoff/wave34-verification/close-review.md.  Wave 34b (fix-only) is COMPLETE
-on branch wave34b and closes both Highs below; the next step is the coordinator's
-push, both CI dispatches and the brief-4(e) reopen check.  Waves 23-32 are merged into
-main as 17f5782 (27 Oct 2026, after a history rewrite; ids in the wave 23-32
-records are pre-rewrite and map through
-docs/handoff/wave32-verification/rewrite-sha-map.txt); waves 33 and 33b are
-merged (main = 4fd9b90).  Wave 34 is COMPLETE on branch wave34 (G0-G4 and
-CLOSE; G5 and G6 are wave 35) and NOT mergeable: the CLOSE review found two
-Highs (R34G3-1 / RC-R1: the assignment writer and the Assign Resources UI accept
-any whole-hour work amount, only 40 h is measured; R34G3-2: the assignment test
-masks the identity references).  The next step is the coordinator's: push
-wave34, dispatch both CI workflows, then run the fix-only wave34b (Highs first)
-and re-run the brief-section-4(e) Project reopen check before any merge.  Keep
-every gate in wave34-complete green before each commit and run BOTH name scans
+Read docs/START-HERE.md, docs/handoff/standing-rules.md, docs/handoff/wave35-complete.md
+and the files in docs/handoff/wave35-verification/.  Wave 35 is COMPLETE on branch wave35
+(WAVE-35-COMPLETE) and NOT mergeable: High findings are open (Calculate Project R35G1-1..3
+and RW35-W2; view state R35G2-1..4 and RW35-R2; removal from a port-saved file R35G3-1 and
+RW35-W1) and guard_names reports the two 9fa599b blobs, which need a history rewrite before
+any push.  Waves 23-32 are merged into main as 17f5782 (ids in the wave 23-32 records are
+pre-rewrite; map through docs/handoff/wave32-verification/rewrite-sha-map.txt); waves 33 and
+33b are merged (main = 4fd9b90); waves 34 and 34b are closed on their branches and need the
+coordinator's push, both CI dispatches and the brief-4(e) reopen check.  The next step is the
+fix-only wave35b (queued in docs/handoff/plan-waves27-30.md, "Queued from wave 35"), Highs
+first.  Keep every gate in wave35-complete green before each commit and run BOTH name scans
 and scripts/check_markers.py.
 ```

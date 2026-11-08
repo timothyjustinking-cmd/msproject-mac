@@ -4,10 +4,13 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Now (8 November 2026)
+## Now (9 November 2026)
 
 | file | what |
 |---|---|
+| `wave35-brief.md` | **the wave-35 work order**: G0 carry-over fixes, G1 the scheduler save path (Calculate Project), G2 view-state persistence, G3 the wave-34 deferrals, G4 the macOS shell, CLOSE |
+| `wave35-complete.md` | **the wave-35 gate**: G0-G4 and CLOSE with gates, the deferrals with their evidence, the open Highs; `WAVE-35-COMPLETE`; push, CI and the merge decision by the coordinator |
+| `wave35-verification/` | `gates-g0..g3.md` and `review-g0..g3.md` (the per-group verifier) and `close-review-writers.md` / `close-review-shells.md` (the CLOSE reviews of `wave34b..wave35`: **Highs open**, so a fix-only `wave35b` comes before any merge) |
 | `wave34-brief.md` | **the wave-34 work order**: parity - decode Project's save shapes (G0), the shared writers (G1-G3), enable the measured commands (G4); G5 scheduler save and G6 view state are wave 35; its coordinator notes carry the run history (the DeepSeek 402 stop, the Sonnet builder) |
 | `wave34-complete.md` | **the wave-34 gate**: G0-G4 and CLOSE with per-commit and fresh-tree gates, the deferrals with their evidence, "Found, not fixed"; `WAVE-34-COMPLETE`; push, CI and the merge decision by the coordinator |
 | `wave34-verification/` | `gates-g3.md` + `review-g3.md` (the G3 verifier: R34G3-1..9) and `close-review.md` (the CLOSE review of `main..wave34`: **two High open** - the Assign Resources work amount and the identity-reference mask) - wave 34 is NOT mergeable until the fix-only `wave34b` closes them |

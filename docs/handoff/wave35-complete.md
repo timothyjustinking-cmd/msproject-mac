@@ -369,3 +369,82 @@ Information needs the Resource Sheet view"; restored, 1150 checks pass.
 - No amend and no history rewrite.  Nothing is pushed.
 
 WAVE-35-G4-COMPLETE
+
+## CLOSE - fresh-tree gates, the two reviews, the record
+
+Wave 35 is NOT mergeable: the per-group verifications and the two CLOSE reviews leave **High
+findings open** (table below), so the fix-only `wave35b` comes first, and `guard_names` is red
+for the two 9fa599b blobs (G3 defect), so the branch cannot be pushed until the coordinator or
+operator rewrites that commit.  **Push and CI: by the coordinator** (brief section 0); CLOSE did
+neither, dispatched no workflow and ran no COM.  CLOSE changed code once, for a CI-class compile
+break (RW35-R1), and otherwise added records.
+
+| item | outcome | evidence |
+|---|---|---|
+| fresh-tree gates | DONE, every step exit 0 except the two rows below | `build/w35/W35-CLOSE-fresh-gates.log` (script `W35-CLOSE-fresh-gates.ps1`), core, app and app_qt configured from scratch with `CORE_WARNINGS_AS_ERRORS=ON`, tree `4e3ba80` |
+| review of the writers (rule 1, parameters pinned) | DONE | `wave35-verification/close-review-writers.md`: 0 Critical, 2 High, 5 Medium, 6 Low |
+| review of the refusals and shells | DONE | `wave35-verification/close-review-shells.md`: 0 Critical, 2 High (R1 closed by `513de29`), 3 Medium, 5 Low |
+| both name scans and the marker check | DONE | `scan_client_names` 0 hits and 0 commit messages; `check_markers` worktree and `--range main..HEAD` 0; `guard_names main..HEAD` **exit 1, the two 9fa599b blobs only** (G3 defect, unchanged) |
+| decode notes indexed from `spec/README.md` | DONE by the groups | `calculate.md`, `baseline.md`, `insert.md`, `view-state.md` and the W35 notes on `view-stream-214.md`, `table-growth.md` and `note-richtext.md` are indexed; no CLOSE change needed |
+| regenerated backlog | DONE | `python app_qt/tools/command_backlog.py` added five macOS menu rows (menu commands 51 to 56, 7 disabled), committed as its own commit; `check_command_backlog` 114 ribbon rows, 0 mismatches |
+| START-HERE, INDEX, `memory/coordinator.md`, plan queue | DONE | the four files |
+| `git diff --check main..HEAD` | exit 2 at the gate run (trailing spaces in `review-g3.md`, a coordinator record), fixed forward, now exit 0 | the whitespace commit |
+| push and CI dispatch | NOT DONE by design | by the coordinator |
+| brief section 4(e), Project reopens each newly enabled save | NOT RUN | COM, coordinator-only; the enabled saves are Calculate Project, Sort, Show Level and the G0 assignment changes |
+| `ubuntu-asan`, gcc, clang, AppleClang jobs; the macOS `main.mm` compile | NOT RUN locally | CI only |
+
+### Gates at the CLOSE code tree
+
+The log's tree id is `4e3ba80`.  Later commits: `d5626c8` (the coordinator's G3 record,
+documentation only), `513de29` (RW35-R1, `app_qt/command_status.h`, re-gated incrementally on
+the same fresh Qt tree: build exit 0, qt ctest 52 of 52, `build/w35/d5626c8-W35-R1-*`), a
+generated backlog file and a whitespace fix.  9 November 2026.
+
+| gate | result |
+|---|---|
+| core configure / build, warnings as errors | exit 0 / exit 0 |
+| core `ctest -E plan_recalc` | 65/65 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 / 266 checks, exit 0 |
+| engine `--selftest` / `engine_diff_tests` / suite | 53 checks, 0 failures / 265 checks, 0 failures / 8 scenarios, 7 pass, 1 fail (`constraint-mso`, expected), 0 unrecorded |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1469 / 789 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match |
+| app configure and build / ctest / ctest `MPP_NO_CORPUS=1` | exit 0 / 34/34 / 34/34 |
+| app_qt configure and build / ctest | exit 0 / 52/52 |
+| `check_fixtures.py` | fixtures OK (299 documented hashes, 333 tracked `.mpp`); paths OK (382 files); property sets OK; provenance OK (8 oracles) |
+| `check_markers.py` self-test / worktree / `--range main..HEAD` | 19 checks, 0 failures / exit 0 / 0 hits |
+| `scan_client_names.py` with `--messages main..HEAD` | 0 file hits, 0 commit messages |
+| `guard_names.py main..HEAD` | **exit 1**: the two 9fa599b blobs, nothing else |
+| `check_command_backlog.py` | 114 ribbon rows, 0 mismatches |
+| line endings | 0 CR in the LF-pinned types |
+
+The MSVC build is the only compiler run here.  Wave 34's first CI run failed on a class MSVC
+does not report; RW35-R1 is the same class and was found by review, not by a build.
+
+### The reviews, and the Highs still open
+
+No Critical anywhere.  Per the merge rule these go to the front of `wave35b`.
+
+| id | source | finding |
+|---|---|---|
+| R35G1-1, R35G1-2, R35G1-3 | G1 verification (`review-g1.md`) | Calculate Project: a deadline is not refused and slack and late dates are written wrong; any pending recalculation passes though only "critical leaf lengthened" was measured; no rule 5 pin record and several user-variable parameters unrefused in both layers |
+| R35G2-1 .. R35G2-4 | G2 verification (`review-g2.md`) | Show Level pins no view state; both view-state writers trust the caller's outline, names and order; Sort is enabled for every five-task outline shape and task data; Duration ascending is enabled without a pair |
+| R35G3-1 | G3 verification (`review-g3.md`) | removal from a port-saved file that Project has resaved is accepted by the enabled writer, though G3's own pair shows Project writes it differently |
+| RW35-W1 | CLOSE writers review | the same hole as R35G3-1, re-found: the settled-shape gate reads Assn FixedMeta and a Project-resaved port file can pass; no origin check in the edit model |
+| RW35-W2 | CLOSE writers review, re-read by the CLOSE coordinator | `read_calculate_shape` never checks leaf Start or Finish, so a file left pending by a non-Duration edit reaches a save with old early dates (overlaps R35G1-2) |
+| RW35-R2 | CLOSE shells review | Sort by Name in the Qt shell is built from the plan including unsaved renames; the writer checks only the base order; no pending-edit test.  Show Level has the same exposure |
+
+Closed at CLOSE: **RW35-R1** (`513de29`).  Mediums RW35-W3..W7 and RW35-R3..R5 and all Lows are
+in the two review files; the G0 to G3 Mediums and Lows are in `review-g0.md`..`review-g3.md`.
+
+### Found, not fixed (CLOSE)
+
+- Every open row above, and the Mediums and Lows in the five review files: queued in
+  `plan-waves27-30.md` ("Queued from wave 35").
+- The 9fa599b history defect (G3): a history rewrite is not mine to make.
+- The G4 deferrals recorded in each group stand: linked, lag and constraint Calculate Project,
+  the applied table, zoom, Insert Summary and Milestone, Set Baseline 0, Notes, the other font
+  controls and Renumber, and removal from a port-saved file.  Each deferral carries its evidence
+  in its group section.
+- Brief section 4(e), the first wave-35 CI run, and the macOS compile of `main.mm`.
+
+WAVE-35-COMPLETE
