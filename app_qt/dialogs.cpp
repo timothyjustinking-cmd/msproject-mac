@@ -1032,6 +1032,21 @@ bool ask_task_name(QWidget* parent, QString* name) {
     return true;
 }
 
+bool ask_resource_name(QWidget* parent, const QString& current, QString* name) {
+    if (name == nullptr) {
+        return false;
+    }
+    bool ok = false;
+    const QString text = QInputDialog::getText(
+        parent, QStringLiteral("Resource Information"), QStringLiteral("Resource name:"),
+        QLineEdit::Normal, current, &ok);
+    if (!ok) {
+        return false;
+    }
+    *name = text;
+    return true;
+}
+
 
 // ---------------------------------------------------------------------------
 // Task Information (wave 21)

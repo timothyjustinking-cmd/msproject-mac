@@ -535,4 +535,10 @@ class ZoomDialog final : public QDialog {
 // platform's), so it matches the rest of the shell.
 bool ask_task_name(QWidget* parent, QString* name);
 
+// Resource tab > Information (W34-4.1): the one editable field is the resource
+// name.  Returns false on Cancel; the text is returned as typed, because the
+// shared builder (app::make_rename_resource_edit) owns the trim and the
+// refusals.
+bool ask_resource_name(QWidget* parent, const QString& current, QString* name);
+
 }  // namespace msqt

@@ -287,6 +287,22 @@ add_test(NAME qt_unmeasured_paths
                  "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# Wave 34 (W34-4.1): Resource tab > Information renames one unassigned resource
+# to a longer printable-ASCII name (Project pair wave30-resource-rename-control
+# -> wave30-resource-rename).  The gate drives the real MainWindow: the control
+# is live and wired, Notes stays disabled with the exact tooltip, every other
+# shape is refused with its reason and queues nothing, the measured shape
+# queues, saves and reads back.
+add_executable(qt_resource_information_gate_tests tests/resource_information_gate_test.cpp)
+target_link_libraries(qt_resource_information_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_resource_information_gate_tests)
+
+add_test(NAME qt_resource_information_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_resource_information_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave30-resource-rename-control.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # ===========================================================================
 # WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
 # the loaded Task Sheet's geometry; these gate the empty project, the chrome,

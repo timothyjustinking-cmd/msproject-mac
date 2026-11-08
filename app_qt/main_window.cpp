@@ -2333,6 +2333,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             }
             set_details_visible(true);
             return;
+        case RibbonCommand::resource_information:
+            rename_selected_resource();
+            return;
         case RibbonCommand::scroll_to_task:
             // W30-1.7: scrolls the sheet and pans the chart; a view command,
             // never a file write.
@@ -3033,6 +3036,60 @@ void MainWindow::manually_schedule_selected() {
     update_status();
 }
 
+void MainWindow::rename_selected_resource() {
+    if (refuse_read_only()) {
+        return;
+    }
+    if (!doc_.has_document() || prefs_.view != app::ViewMode::resource_sheet ||
+        sheet_view_ == nullptr || view_sheet_ == nullptr) {
+        set_message("resource information is available in the Resource Sheet view", false);
+        update_status();
+        return;
+    }
+    const QModelIndex current = sheet_view_->currentIndex();
+    const std::size_t row =
+        current.isValid() ? sheet_model_.record_row(current.row()) : core::sheet::kNoIndex;
+    const std::uint32_t uid = row == core::sheet::kNoIndex ? 0 : view_sheet_->row_uid(row);
+    const app::ResourceRow* resource = nullptr;
+    for (const app::ResourceRow& candidate : doc_.plan().resources) {
+        if (uid != 0 && candidate.uid == uid) {
+            resource = &candidate;
+            break;
+        }
+    }
+    if (resource == nullptr) {
+        set_message("select a resource first", true);
+        update_status();
+        return;
+    }
+    // W34-4.1: only the name is editable (the measured shape); the builder
+    // owns every refusal (assigned, shorter / same-size, non-ASCII, empty).
+    QString name;
+    if (!ask_resource_name(this, to_q(resource->name), &name)) {
+        set_message("resource information cancelled", false);
+        update_status();
+        return;
+    }
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_rename_resource_edit(doc_.plan(), doc_.path(), uid, name.toStdString(),
+                                        edit, error)) {
+        set_message("resource information: " + error, true);
+        update_status();
+        return;
+    }
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
+        set_message("resource information: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(0);
+    set_message("queued rename of resource uid " + std::to_string(uid) +
+                    "; File > Save writes it",
+                false);
+    update_status();
+}
+
 void MainWindow::show_task_mode_menu() {
     if (refuse_read_only()) {
         return;
@@ -3184,6 +3241,19 @@ void MainWindow::after_structural_change(std::uint32_t keep_uid) {
     sheet_model_.set_sheet(nullptr);
     doc_.apply_structural_edits(structural_, prefs_.zoom, keep_uid);
     rebind_sheet();
+    if (prefs_.view != app::ViewMode::task_sheet && sheet_view_ != nullptr) {
+        // W34-4.1: the Resource Sheet and the usage grids are built from the
+        // displayed plan, so a queued (or undone) edit made from one of them
+        // rebuilds the view; the current cell is put back.
+        const QModelIndex before = sheet_view_->currentIndex();
+        const int row = before.isValid() ? before.row() : -1;
+        const int column = before.isValid() ? before.column() : 0;
+        show_view(prefs_.view);
+        if (row >= 0 && row < sheet_model_.rowCount() && column < sheet_model_.columnCount()) {
+            sheet_view_->setCurrentIndex(sheet_model_.index(row, column));
+            refresh_resource_form();
+        }
+    }
     sync_view_selection();
     gantt_canvas_->set_layout(doc_.gantt());
     gantt_canvas_->set_selected_uid(doc_.selected_uid());

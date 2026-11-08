@@ -136,6 +136,14 @@ enum class StructuralKind : std::uint8_t {
     // edit may be queued over it (the measured pair is one mode change on an
     // otherwise untouched save).
     set_task_mode = 12,
+    // Wave 34 (W34-4.1): one saved resource renamed from the Resource
+    // Information dialog, written by mppwrite::rename_resource (core/mppwrite/
+    // varmeta_edit.h).  `uid` is the resource; `name` is the new name.  Only
+    // the measured shape is enabled: a name whose stored UTF-16 payload is
+    // STRICTLY LARGER than the current one (wave30-resource-rename: uid 2,
+    // 6 -> 8 B).  Like set_task_mode the edit is EXCLUSIVE -- the measured pair
+    // is one rename on an otherwise untouched save.
+    rename_resource = 13,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -436,6 +444,29 @@ bool make_task_mode_edit(const PlanInput& plan, std::string_view source_path,
                          std::string& error);
 
 // ---------------------------------------------------------------------------
+// Wave 34 (W34-4.1): one resource's name
+// ---------------------------------------------------------------------------
+//
+// Builds a ready-to-push rename_resource edit: the Resource Information
+// dialog's Resource name, written through mppwrite::rename_resource against
+// Project's committed pair (tests/data/wave30-resource-rename-control.mpp ->
+// wave30-resource-rename.mpp).  The name is trimmed (ASCII whitespace) and
+// must be non-empty and free of control characters (the writer adds its own
+// 65,535-byte cap).  The measured shape is a LARGER stored
+// payload, so a name that encodes to the same size or smaller than the file's
+// current block is refused with that reason: Project's shrink re-point is
+// unmeasured.  The FILE is the authority for the current block (it is read
+// here, not taken from the display), and the plan must show the row as a saved,
+// live resource that NO assignment names: the pair renamed resource uid 2, which
+// has no assignment row, so an assigned resource's rename (which Project may
+// also reflect in task-side caches of the resource names) is refused.  `out` is
+// left default-constructed on refusal with `error` naming the reason (the
+// decision-9 "is not implemented in this port" text for the unmeasured shapes).
+bool make_rename_resource_edit(const PlanInput& plan, std::string_view source_path,
+                               std::uint32_t uid, std::string_view name,
+                               StructuralEdit& out, std::string& error);
+
+// ---------------------------------------------------------------------------
 // Wave 34 (W34-4.0): the five paths whose save does not match Project's
 // ---------------------------------------------------------------------------
 //
@@ -542,6 +573,13 @@ class StructuralEdits {
     // a non-saved, non-top-level, summary, already-manual, linked, progressed
     // or non-placeholder-assigned row.  make_task_mode_edit performs the
     // file-side checks when the edit is built.
+    //
+    // A rename_resource edit (W34-4.1) REQUIRES `plan` and is EXCLUSIVE in the
+    // same way (and with set_task_mode: neither may be queued over the other).
+    // It refuses uid 0, a name that is empty after trimming or holds a control
+    // character (or a non-ASCII one), a resource the plan does not show as a
+    // saved row, a resource an assignment names, and a second pending rename.  make_rename_resource_edit performs the file-side
+    // checks (the current block, the strictly-larger rule) when it is built.
     //
     // Pushing a delete_task also removes the set/clear field edits, percent
     // edits, update_actuals edits that name the task and add_link edits: those
@@ -701,6 +739,8 @@ struct StructuralSaveResult {
     std::size_t new_task_mode_written = 0;
     // Wave 30 (W30-1.0): 1 when a task's scheduling mode was written.
     std::size_t task_mode_written = 0;
+    // Wave 34 (W34-4.1): 1 when a resource's name was written.
+    std::size_t resources_renamed = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the

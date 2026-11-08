@@ -52,7 +52,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Resource | Assignments | Assign Resources | disabled | future: not implemented in this port |
 | Resource | Assignments | Resource Pool | disabled | future: not implemented in this port |
 | Resource | Insert | Add Resources | disabled | model: no resource writer; the resource sheet is read-only |
-| Resource | Properties | Information | disabled | future: not implemented in this port |
+| Resource | Properties | Information | implemented | gap: the name only, and only to a longer printable-ASCII name of a resource with no assignments, alone in the save; every other field and shape is refused (Notes stays disabled: its payload embeds the saving machine's RichEdit generator string, which this port cannot reproduce) |
 | Resource | Properties | Notes | disabled | future: not implemented in this port |
 | Resource | Properties | Details | implemented |  |
 | Resource | Level | Level Selection | disabled | future: not implemented in this port |
@@ -189,8 +189,8 @@ Edits that are not command rows, with the reason the shell refuses them (operato
 
 ## Summary
 
-* ribbon commands: 114 (69 disabled)
-* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 47 enabled / 67 disabled command controls. The table above reports 69 disabled because it counts a split by its menu items; the pin counts the control.
+* ribbon commands: 114 (68 disabled)
+* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 48 enabled / 66 disabled command controls. The table above reports 68 disabled because it counts a split by its menu items; the pin counts the control.
 * the difference (2): 2 splits whose button is live while every menu item is disabled: Project > Properties > WBS, Project > Schedule > Set Baseline
 * menu commands: 51 (7 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

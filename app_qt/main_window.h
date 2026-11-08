@@ -465,6 +465,7 @@ class MainWindow final : public QMainWindow {
     // Schedule stays disabled: the reverse pair shows Project also reschedules
     // the row, and this port has no scheduler.
     void manually_schedule_selected();
+    void rename_selected_resource();
     // W30-1.0: the Mode button's menu.  "Automatically Scheduled" is Project's
     // other mode but has no measured save in this port, so it is disabled with
     // the exact decision-9 tooltip; "Manually Scheduled" runs the same handler

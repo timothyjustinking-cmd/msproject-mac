@@ -551,6 +551,29 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_task_mode COMMAND app_edits_task_mode_tests)
     set_tests_properties(app_edits_task_mode PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 34 (W34-4.1): Resource Information's Resource name through the app
+    # model and save cascade.  One committed Project pair (resource uid 2
+    # renamed to a longer name) plus its null save; every stream is compared
+    # with Project's under the null-save mask, the four owned streams are
+    # declared changed (`effects_ok`) and the pair's 16 effect bytes are
+    # counted.  Every refusal (project row, unknown resource, empty / control /
+    # non-ASCII / unchanged / same-size / shorter name, exclusivity, a stale
+    # file) has its own check.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_resource_rename_tests app_edits_resource_rename_tests.cpp)
+    target_compile_features(app_edits_resource_rename_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_resource_rename_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
+    set_target_properties(app_edits_resource_rename_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_resource_rename_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_resource_rename_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_resource_rename_tests)
+
+    add_test(NAME app_edits_resource_rename COMMAND app_edits_resource_rename_tests)
+    set_tests_properties(app_edits_resource_rename PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 26 (W26-3.1): the file's Gantt style record -- the row -> Text Styles
     # category rule and the headless read seam.  The stock fixture is committed;
     # the PROJECT_A half skips when corpus/ is absent.

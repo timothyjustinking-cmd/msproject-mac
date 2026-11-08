@@ -33,6 +33,7 @@
 #include "save.h"
 #include "table.h"
 #include "task_mode.h"
+#include "varmeta_edit.h"
 
 namespace app {
 namespace {
@@ -77,6 +78,13 @@ bool is_link_edit(StructuralKind kind) noexcept {
 bool is_outline_edit(StructuralKind kind) noexcept {
     return kind == StructuralKind::outline_indent ||
            kind == StructuralKind::outline_outdent;
+}
+
+// Wave 30 / Wave 34: the kinds whose measured Project pair is one change on an
+// otherwise untouched save, so they may only be queued alone.
+bool is_exclusive_kind(StructuralKind kind) noexcept {
+    return kind == StructuralKind::set_task_mode ||
+           kind == StructuralKind::rename_resource;
 }
 
 const TaskRow* task_row_for_uid(const std::vector<TaskRow>& tasks,
@@ -2529,6 +2537,119 @@ bool make_task_mode_edit(const PlanInput& plan, std::string_view source_path,
     return true;
 }
 
+namespace {
+
+// W34-4.1: the rename's name rule, shared by the builder and push().  The
+// stored form is UTF-16LE + NUL, so an embedded NUL (or any other control
+// character) cannot be a name.  The committed pair stores a plain ASCII name,
+// so only printable ASCII is enabled; a non-ASCII name is a shape no pair
+// measured and is refused with the decision-9 text.  Returns the reason, or
+// an empty string when the (already trimmed) name is acceptable.
+std::string rename_name_refusal(const std::string& name) {
+    if (name.empty()) {
+        return "the resource name is empty";
+    }
+    for (const char ch : name) {
+        const unsigned char byte = static_cast<unsigned char>(ch);
+        if (byte < 0x20 || byte == 0x7F) {
+            return "the resource name holds a control character";
+        }
+        if (byte >= 0x80) {
+            return "Resource Information rename to a name with non-ASCII "
+                   "characters is not implemented in this port: the measured "
+                   "Project pair stores a plain ASCII name";
+        }
+    }
+    return {};
+}
+
+bool rename_name_ok(const std::string& name) {
+    return rename_name_refusal(name).empty();
+}
+
+// The measured pair renames a resource that no assignment names (resource uid
+// 2 of wave30-resource-rename-control.mpp has no assignment row), so the
+// Project save of an ASSIGNED resource's rename -- which may touch task-side
+// caches of the resource names -- is not measured.  Empty = acceptable.
+std::string rename_assigned_refusal(const PlanInput& plan, std::uint32_t uid) {
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.resource_uid == uid) {
+            return "Resource Information rename of a resource that has "
+                   "assignments is not implemented in this port: the measured "
+                   "Project pair renames an unassigned resource";
+        }
+    }
+    return {};
+}
+
+const ResourceRow* resource_row_for_uid(const std::vector<ResourceRow>& rows,
+                                        std::uint32_t uid) {
+    for (const ResourceRow& row : rows) {
+        if (row.uid == uid) {
+            return &row;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+bool make_rename_resource_edit(const PlanInput& plan, std::string_view source_path,
+                               std::uint32_t uid, std::string_view name,
+                               StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    const std::string trimmed = trim_ascii(std::string(name));
+    if (std::string reason = rename_name_refusal(trimmed); !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    if (uid == 0 || resource_row_for_uid(plan.resources, uid) == nullptr) {
+        error = "the resource is not a saved row in this plan";
+        return false;
+    }
+    if (std::string reason = rename_assigned_refusal(plan, uid); !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    const std::string meta_path = std::string(mppwrite::kVarResourceTable) + "/VarMeta";
+    const std::string data_path = std::string(mppwrite::kVarResourceTable) + "/Var2Data";
+    if (!document.has_stream(meta_path) || !document.has_stream(data_path)) {
+        error = "this file has no resource name store, so a rename cannot be saved";
+        return false;
+    }
+    const std::vector<std::uint32_t> offsets = mppwrite::find_var_offsets(
+        document.read_stream(meta_path), mppwrite::kResourceNameFieldId, uid);
+    if (offsets.size() != 1) {
+        error = "the resource has no single stored name block, so a rename cannot be saved";
+        return false;
+    }
+    const std::vector<std::uint8_t> stored =
+        mppwrite::read_var_block(document.read_stream(data_path), offsets.front());
+    if (mppwrite::decode_utf16z(stored) == trimmed) {
+        error = "the name is unchanged";
+        return false;
+    }
+    if (mppwrite::encode_utf16z(trimmed).size() <= stored.size()) {
+        error = "Resource Information rename to a name that is not longer than "
+                "the current one is not implemented in this port: Project's "
+                "save for a same-size or shorter name is not measured";
+        return false;
+    }
+    out.kind = StructuralKind::rename_resource;
+    out.uid = uid;
+    out.name = trimmed;
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                            const std::vector<std::uint32_t>& pending_start_uids) {
     // W33-1.7 (A-8 / D-7): a document opened from a container with FAT slack
@@ -2547,13 +2668,16 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
     // untouched save, so the edit is exclusive in both directions.  It may only
     // be queued into an empty list, and no other edit may be queued over it.
     // (The save cascade repeats the check for a hand-built queue.)
-    if (edit.kind == StructuralKind::set_task_mode) {
+    // W34-4.1: the resource rename is exclusive in the same way (one rename on
+    // an otherwise untouched save), and neither exclusive kind may share a save
+    // with the other.
+    if (is_exclusive_kind(edit.kind)) {
         if (!applied_.empty()) {
             return false;
         }
     } else {
         for (const StructuralEdit& existing : applied_) {
-            if (existing.kind == StructuralKind::set_task_mode) {
+            if (is_exclusive_kind(existing.kind)) {
                 return false;
             }
         }
@@ -2884,6 +3008,24 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
             }
             std::string plan_error;
             if (!check_task_mode_plan(*plan, edit.uid, nullptr, plan_error)) {
+                return false;
+            }
+            edit.anchor_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::rename_resource: {
+            // W34-4.1: the plan-side half.  The file-side half (the current
+            // block and the strictly-larger rule) ran in make_rename_resource_
+            // edit and runs again in the writer; applied_ is empty by the
+            // exclusivity check above, so no other edit can name the resource.
+            if (plan == nullptr || edit.uid == 0 ||
+                resource_row_for_uid(plan->resources, edit.uid) == nullptr ||
+                !rename_assigned_refusal(*plan, edit.uid).empty()) {
+                return false;
+            }
+            edit.name = trim_ascii(std::move(edit.name));
+            if (!rename_name_ok(edit.name)) {
                 return false;
             }
             edit.anchor_uid = 0;
@@ -3328,6 +3470,19 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
             }
         }
     }
+    // Wave 34 (W34-4.1): the measured rename changes exactly the resource's
+    // stored name (the pair leaves every other row, rate and assignment alone).
+    for (const StructuralEdit& edit : applied_) {
+        if (edit.kind != StructuralKind::rename_resource) {
+            continue;
+        }
+        for (ResourceRow& row : effective.resources) {
+            if (row.uid == edit.uid) {
+                row.name = edit.name;
+                break;
+            }
+        }
+    }
     // Wave 28 (W28-2.1): the indented/outdented outline, in edit order, then
     // the OutlineNumber pass.  This is what makes the sheet's indentation and
     // collapse triangles and the Gantt's summary bars follow the move on the
@@ -3755,6 +3910,32 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // W34-4.1: the resource rename is exclusive the same way.  The measured
+    // pair is one rename on an otherwise untouched save, so a hand-built queue
+    // that holds another edit beside it is refused before the first write.
+    const StructuralEdit* rename_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::rename_resource) {
+            rename_edit = &edit;
+        }
+    }
+    if (rename_edit != nullptr) {
+        if (edits.applied().size() != 1) {
+            result.error =
+                "a resource rename must be the only edit in a save; another "
+                "edit is queued with it, and the measured Project pair is one "
+                "rename on an otherwise untouched save";
+            return result;
+        }
+        if (!writable.empty()) {
+            result.error =
+                "a resource rename cannot be combined with a start-date edit; "
+                "the measured Project pair is one rename on an otherwise "
+                "untouched save";
+            return result;
+        }
+    }
+
     // W31-0.1 (R30-1, High): a link add and a slack-carrying outline edit in
     // the same save would write the link at step 2 and the UNLINKED slack and
     // late dates at step 5b.  push() and validate_link_add refuse the order the
@@ -3961,6 +4142,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (task_mode_edit != nullptr) {
         ++write_ops;  // the five task-mode streams plus the marker, one file
+    }
+    if (rename_edit != nullptr) {
+        ++write_ops;  // the name block, VarMeta, Props and Props14, one file
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -4467,6 +4651,22 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             document.save(next_write_path());
         }
 
+        // 5f (wave 34, W34-4.1).  The measured Resource Information rename:
+        // the re-pointed Name block, its VarMeta entry, the Props size word and
+        // the Props14 marker, one file (core/mppwrite/varmeta_edit.h).  The edit
+        // is exclusive (checked above); a refusal here means the file changed
+        // after the edit was queued, so fail rather than emit an unchanged file
+        // the shell would report as a successful save.
+        if (rename_edit != nullptr) {
+            const mppwrite::VarRecordWrite written = mppwrite::rename_resource(
+                document, rename_edit->uid, rename_edit->name, next_write_path());
+            result.resources_renamed = 1;
+            result.notes.push_back(
+                "resource uid " + std::to_string(rename_edit->uid) +
+                " renamed (name block " + std::to_string(written.old_payload_bytes) +
+                " -> " + std::to_string(written.new_payload_bytes) + " bytes)");
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -4531,6 +4731,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (result.task_mode_written != 0) {
             result.api += " write_task_mode";
+        }
+        if (result.resources_renamed != 0) {
+            result.api += " rename_resource";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";

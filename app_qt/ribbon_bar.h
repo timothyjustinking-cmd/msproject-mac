@@ -103,6 +103,10 @@ enum class RibbonCommand : std::uint8_t {
     // Details splitter and switches to the Resource Sheet so the pane has a
     // selection to follow.  A view command, never a file write.
     resource_details,
+    // Wave 34 (W34-4.1): the Resource tab's Information renames one resource
+    // (the only measured Resource Information edit); every other field of
+    // Project's dialog stays unimplemented and Notes stays disabled.
+    resource_information,
     // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
     // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
     // commands with no menu-bar item.

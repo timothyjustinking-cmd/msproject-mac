@@ -87,6 +87,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W30-2.2: the Resource tab's Details opens the read-only Resource Form in
     # the same shared details splitter; a view, never a file write.
     "resource_details",
+    # W34-4.1: the Resource tab's Information renames one resource (Project
+    # pair measured; the rest of Project's dialog is not built).
+    "resource_information",
     # W30-1.7: Scroll to Task scrolls the sheet to the selected row and pans
     # the chart to the task's start; a view, never a file write.
     "scroll_to_task",
@@ -168,6 +171,13 @@ RIBBON_GAPS = {
     "spelling":
         "gap: the port's own word list only; no Microsoft Project dictionary and "
         "no correction",
+    # W34-4.1: a rename only, for the measured shape; everything else refuses
+    # up front with the decision-9 text.
+    "resource_information":
+        "gap: the name only, and only to a longer printable-ASCII name of a "
+        "resource with no assignments, alone in the save; every other field and "
+        "shape is refused (Notes stays disabled: its payload embeds the saving "
+        "machine's RichEdit generator string, which this port cannot reproduce)",
     # W31-C4: the command buttons the old parser did not reach.
     "project_information":
         "gap: only the project priority has a measured writer; every other "

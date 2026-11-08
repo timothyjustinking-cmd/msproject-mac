@@ -767,6 +767,7 @@ Builder: Claude Sonnet 5.5 (W34-BUILDER), commits carry the
 | item | finding | status | evidence |
 |---|---|---|---|
 | W34-4.0 | brief W34-4.0: Insert Task, Delete Task, link ADD, custom-field SET and CLEAR differ from Project's own save (the W34-0.5 KnownGap tables); refuse or show as noise | **DONE** (all five refused up front) | the `W34-4.0` commit after `3a8a31c`; `app/edit_model.{h,cpp}`, `app/field_link_edits.cpp`; `app/app_unmeasured_paths_tests.cpp`, `app_qt/tests/unmeasured_paths_test.cpp`; gates `build/w34/3a8a31c-W34-4.0-*.log` |
+| W34-4.1 | brief W34-4.1: Resource Information rename (G1); Notes only if the RichEdit serialisation is decoded for plain single-line ASCII | **DONE for the rename; Notes DEFERRED with evidence** (stays disabled, exact tooltip) | the `W34-4.1` commit after `9c5f497`; `app/edit_model.{h,cpp}`; `app/app_edits_resource_rename_tests.cpp`; `app_qt/tests/resource_information_gate_test.cpp`; Qt shell `app_qt/{ribbon_bar,dialogs,main_window}.*`; gates `build/w34/9c5f497-W34-4.1-*.log` |
 
 W34-4.0 detail:
 
@@ -829,3 +830,72 @@ W34-4.0 detail:
 - **Not verified here.**  `app/main.mm` cannot be built on Windows; the macOS
   handlers were read, not run.  No macOS-side change was needed because the
   refusal is in the shared builders.
+
+W34-4.1 detail:
+
+- **Measured shape.**  The pair is `tests/data/wave30-resource-rename-control.mpp`
+  -> `wave30-resource-rename.mpp` (Project 2021 renamed resource UniqueID 2 to a
+  longer name and saved) plus Project's own no-edit save of the control.  The
+  port's save (`mppwrite::rename_resource`, the W34-1.3 writer, reached through
+  the `save_structural_edits` cascade) is compared stream by stream with
+  Project's: `app_edits_resource_rename` 304 checks, noise 154 bytes masked,
+  **effects 16** bytes, the four owned streams (114/Props, `TBkndRsc` VarMeta
+  and Var2Data, Props14) declared changed so a mask that swallowed the change
+  fails `effects_ok`; the port's save reopens in the independent core/mpp reader
+  with Project's name.
+- **Enabled only for that shape.**  A new exclusive `StructuralKind::
+  rename_resource` (`make_rename_resource_edit`, shared by both shells) takes a
+  strictly longer name than the stored one (the pair grew the name; the shrink
+  and same-size shapes are unmeasured), printable ASCII only, trimmed and
+  non-empty, a resource that exists, a resource with no assignment (the pair
+  renamed an unassigned resource), and it must be the only edit in the save (no
+  task-mode, start-date or other structural edit beside it).  Every other shape
+  is refused in the builder, in `push()` and in the save cascade with the
+  decision-9 text ("... is not implemented in this port: ...").  The project row
+  (uid 0), an unknown resource, empty / blank / control / non-ASCII names, an
+  unchanged, a same-size and a shorter name, an assigned resource, queue and
+  cascade exclusivity, and a stale file (Project's saved file as the source:
+  "not larger") each have a check.
+- **Shells.**  Qt: `RibbonCommand::resource_information` enables the Resource
+  tab's Information (pin and backlog row regenerated: `implemented`, with the
+  limits as its gap text; `check_command_backlog.py` 114 / 114 / 0
+  mismatches), an input dialog asks for the name, and `MainWindow::
+  rename_selected_resource()` refuses read-only, the wrong view and an empty
+  selection before it asks.  The gate `qt_resource_information_gate` drives the
+  real window: wiring, the Notes tooltip, the Task Sheet and no-selection
+  refusals (no prompt, nothing queued), Cancel, shorter / same-size / non-ASCII
+  refusals (status line, nothing queued, document clean), the longer name
+  queued, shown in the plan and the Resource Sheet, then the real save and a
+  reopen.  macOS: `app/main.mm` has no Resource Information handler and no
+  ribbon, so there is no shell to enable there; the rule lives in the shared
+  builder, which a future handler must call.  The Resource Sheet did not rebuild
+  after a queued edit (the first Qt run failed "the Resource Sheet cell shows
+  the new name"); `after_structural_change` now rebuilds a non-task view from
+  the displayed plan and restores the current cell, which also covers undo.
+- **Notes DEFERRED, with evidence.**  The brief enables Resource Notes and Task
+  Notes only if the RichEdit serialisation is decoded for plain single-line
+  ASCII.  The layout is decoded (`spec/writers/note-richtext.md`: 159-byte
+  prefix, escaped text, 10-byte suffix; wave30-notes, wave30-resource-notes,
+  wave34-note-*), but the prefix embeds the saving machine's RichEdit generator
+  string, `Riched20 16.0.20430` in every wave-30 fixture and `16.0.20527` in
+  every wave-34 fixture, both saved on this one machine: a Windows update
+  between the waves changed the bytes.  The note's own W34-4.1 condition is
+  that a writer must reproduce or refuse the saving machine's generator, and
+  the port (which also runs on macOS) cannot read what Project's RichEdit would
+  write, so a note save would be unmeasured on every machine but the one that
+  measured it.  Both Notes controls stay disabled with "not implemented in this
+  port"; the Resource tab's Notes row in `docs/ui-command-backlog.md` is
+  unchanged.
+- **Guard seen red.**  The app pair test with the push guard and the display
+  application broken failed five checks ("the display shows the new name",
+  redo x2, the assigned-resource refusal x2;
+  `build/w34/9c5f497-4.1-mutation-app-ctest.log`), then green restored
+  (`...-4.1-restored-app-ctest.log`).  The Qt gate failed its cell check before
+  the view rebuild (`...-4.1-qt-first-qt-ctest.log`) and passed after
+  (`...-4.1-qt-second-qt-ctest.log`).
+- **Gates (this session).**  core build exit 0, ctest `-E plan_recalc` 61/61;
+  app build exit 0, ctest 27/27; Qt build exit 0, ctest 43/43
+  (`9c5f497-W34-4.1-{core,app,qt}-ctest.log`); `check_fixtures.py` OK;
+  `check_markers.py --worktree` and `--range main..HEAD` OK;
+  `guard_names.py main..HEAD` clean; client-name scan 0 hits.
+- **Not verified here.**  `app/main.mm` was not touched (no handler to build).

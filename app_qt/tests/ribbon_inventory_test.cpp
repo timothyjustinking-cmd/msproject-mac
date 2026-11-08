@@ -563,6 +563,8 @@ const EnabledWiring kEnabledWiring[] = {
     // W30-2.2: the Resource tab's Details docks the read-only Resource Form
     // and switches to the Resource Sheet it follows.
     {"Resource", "Properties", "Details", "", "resource_details"},
+    // W34-4.1: Information is enabled for the measured rename shape only.
+    {"Resource", "Properties", "Information", "", "resource_information"},
     // W30-1.0: Manually Schedule and Mode are enabled on the measured
     // automatic -> manual task-mode writer.
     {"Task", "Tasks", "Manually Schedule", "", "manually_schedule"},
@@ -628,6 +630,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::inspect: return "inspect";
         case RibbonCommand::spelling: return "spelling";
         case RibbonCommand::resource_details: return "resource_details";
+        case RibbonCommand::resource_information: return "resource_information";
         case RibbonCommand::project_information: return "project_information";
         case RibbonCommand::change_working_time: return "change_working_time";
         case RibbonCommand::links_between_projects: return "links_between_projects";

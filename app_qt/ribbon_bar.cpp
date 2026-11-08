@@ -364,8 +364,10 @@ const std::vector<TabSpec>& tab_specs() {
         large(resource_insert, "Add\nResources", app::MenuAction::insert_resource, 74, 0, false,
               "insert.add_resources");
         GroupSpec& resource_properties = add_group(resource, "Properties", 172);
-        large(resource_properties, "Information", app::MenuAction::none, 58, 0, false,
-              "properties.resource_information");
+        // W34-4.1: Information is enabled for the one measured shape, a
+        // rename; the handler refuses every other shape with the reason.
+        large(resource_properties, "Information", app::MenuAction::none, 58, 0, true,
+              "properties.resource_information", RibbonCommand::resource_information);
         small(resource_properties, "Notes", app::MenuAction::none, 100, 0, 1, false, 1, false,
               "properties.notes");
         // W30-2.2: Details docks the read-only Resource Form in the Details
