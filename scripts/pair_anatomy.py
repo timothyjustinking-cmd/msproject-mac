@@ -210,6 +210,19 @@ PAIRS = {
         "wave35-calculate-unlinked.mpp"),
 }
 
+# W35-2: the view-state pairs (scripts/oracle_w35_viewstate.py).
+for _view_pair in ("outline-all", "outline-deep-level1",
+                   "outline-deep-level2", "outline-level1", "outline-level2",
+                   "sort-duration-desc", "sort-flat-name-desc",
+                   "sort-name-asc", "sort-name-desc", "sort-two-keys",
+                   "table-cost",
+                   "table-schedule", "zoom-custom", "zoom-custom-10d",
+                   "zoom-entire", "zoom-reset"):
+    PAIRS["wave35-viewstate-" + _view_pair] = (
+        "wave35-viewstate-%s-control.mpp" % _view_pair,
+        "wave35-viewstate-%s-control-null.mpp" % _view_pair,
+        "wave35-viewstate-%s.mpp" % _view_pair)
+
 # ---- table geometry (core/mpp/reader.cpp).  Rows exclude FixedData header.
 TABLES = {
     "TBkndTask": {"header": 48, "row": 202, "uid": 4,

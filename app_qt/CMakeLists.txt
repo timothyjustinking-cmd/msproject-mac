@@ -908,6 +908,21 @@ add_test(NAME qt_data_commands
                  "${QT_TEST_DATA_DIR_CMAKE}/wave31-tables.mpp")
 
 # ===========================================================================
+# WAVE 35 (W35-2.1): the Sort dialog's result through the shell.  A single Name
+# key (the shape Project's wave35-viewstate-sort pairs measured) is queued as a
+# sort_view edit for File > Save; every other shape stays a session sort with the
+# reason on the status line, and clearing the sort withdraws the queued edit.
+# ===========================================================================
+add_executable(qt_sort_persist_tests tests/sort_persist_test.cpp)
+target_link_libraries(qt_sort_persist_tests PRIVATE qt_shell)
+qt_set_warnings(qt_sort_persist_tests)
+
+add_test(NAME qt_sort_persist
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_sort_persist_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-sort-name-desc-control.mpp")
+
+# ===========================================================================
 # WAVE 31 (G2, W31-2.2): Entire Project and Selected Tasks are fitted to the
 # span Project 2021 shows.  The gate loads both fixtures, selects the same task
 # Project selected (ID 3), and compares the port's 85 % fit with the four
@@ -957,7 +972,7 @@ foreach(carlito_target
         qt_format_dialog_gate_tests qt_page_setup_gate_tests
         qt_report_dialog_gate_tests qt_spelling_gate_tests
         qt_task_information_apply_tests qt_table_date_format_tests
-        qt_fat_slack_tests)
+        qt_fat_slack_tests qt_sort_persist_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 

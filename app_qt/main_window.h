@@ -269,6 +269,11 @@ class MainWindow final : public QMainWindow {
     // result; the offscreen gates call them directly, which is how a test puts
     // the window into the sorted/filtered state the refusal policy is about.
     void apply_session_sort(core::view::SortDefinition definition, std::string description);
+    // W35-2.1: the Sort dialog's accepted result -- queues the persisted sort where
+    // the shape is measured, applies the session sort either way, and withdraws a
+    // queued sort when `cleared`.
+    void apply_sort_choice(core::view::SortDefinition definition, std::string description,
+                           bool cleared);
     void apply_session_filter(core::view::FilterDefinition definition, std::string description);
     // The dialogs' Clear paths, exposed for the same gates.
     void clear_session_sort();
