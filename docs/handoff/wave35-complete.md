@@ -314,3 +314,58 @@ the CEdl rebuild, none derivable from one pair.
 - No amend and no history rewrite.  Nothing is pushed.
 
 WAVE-35-G3-COMPLETE
+
+## Group G4
+
+The macOS shell (RC-R4, RC-R5).  No COM, no oracle script and no new writer: G4 only wires
+shared builders.  `app/main.mm` is Objective-C++ and cannot be compiled on this machine, so
+**CI's macos jobs are the only compile and run gate**; nothing in it was executed here.
+
+| Item | Commit | State |
+|---|---|---|
+| W35-4.1 | 1cd37a9 | done: Resource Information, Assign Resources (and its removal), Font Bold, Define WBS Code, Calculate Project |
+
+Each handler builds its edit through the same shared builder the Qt shell calls
+(`make_rename_resource_edit`, `make_assignment_edit`, `make_cell_bold_edit`,
+`make_wbs_code_edit`, `make_calculate_edit`) and queues it on `plan.edits`; every refusal
+lives in the builder, so none exists in one shell only.  Add Resources was already wired.
+The shell-side pieces the Qt shell had inline are now shared in `app/edit_model.h`
+(`bold_range_refusal`, `held_assignment_resource`) and the Qt shell uses them, with the same
+message text.  Five `MenuAction`s were added with Edit-menu items and enablement
+(`app/menu_model.cpp`); `menu_tests` covers each (offered once, disabled without a document
+and during a cell edit, the view and selection preconditions, Cmd-B).
+
+Differences from the Qt shell, none of them a refusal: Resource Information chooses the
+resource in the dialog (a pop-up) because the macOS resource grid has no cell selection; it
+stays a Resource Sheet command, as in Qt.
+
+Gates (`build/w35/2468736-W35-4.1-*`): core ctest 65 of 65, app 34 of 34, Qt 52 of 52; the
+app and Qt builds are warnings-as-errors clean; `check_fixtures`, `check_markers` and
+`scan_client_names` report 0; `guard_names` reports 1 for the two 9fa599b blobs only (the
+defect recorded under G3, still needing a coordinator history rewrite).  Red check: with the
+Resource Sheet requirement removed from the enablement, `menu_tests` fails "Resource
+Information needs the Resource Sheet view"; restored, 1150 checks pass.
+
+### Stays unwired, with the reason, per command
+
+- **Sort (W35-2.1) and Show Level (W35-2.3).**  The macOS shell has no Sort dialog and no
+  outline-level command, only Collapse All and Expand All.  In the Qt shell the persisted edit
+  is queued alongside the session sort or level; with no such command here there is nothing
+  to hang it on.  Adding the commands is new UI, not wiring.
+- **Bold off (W35-3.4).**  Built in the view writer only; it is wired to neither shell (G3
+  record).
+- **Pre-wave-34 Qt-only builders.**  `make_percent_edit`, `make_project_priority_edit`,
+  `make_task_mode_edit`, `make_new_task_mode_edit`, `make_update_actuals_edit` and
+  `make_link_delete_edit` are called by the Qt shell and not by `main.mm`.  They are outside
+  this brief's list and are recorded, not changed.
+- Insert Summary and Milestone, Set Baseline, Notes, the other font controls, Zoom, Applied
+  table and port-saved removal are deferred in G2 and G3, so there is nothing to wire.
+
+### Notes
+
+- Intermediate commits: W35-4.1 is one commit rather than one per command because each command
+  shares the new `MenuAction` enum, and a commit that added the enum without every dispatch
+  case would not compile under `-Wswitch` with warnings as errors on macOS.
+- No amend and no history rewrite.  Nothing is pushed.
+
+WAVE-35-G4-COMPLETE
