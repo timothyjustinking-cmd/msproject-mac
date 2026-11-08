@@ -146,6 +146,16 @@ inline constexpr std::uint32_t kResourceNameFieldId = 0x0C400001u;
 inline constexpr std::uint32_t kTaskWbsFieldId = 0x0B40018Du;
 inline constexpr std::uint32_t kTaskProjectWbsFieldId = 0x0B40019Fu;
 
+/* The five overtime-record keys Calculate Project appends on the project row
+ * (uid 0) of an automatically built file (wave35-calculate-unlinked, W35-1.2):
+ * ActualOvertimeWork, RemainingOvertimeWork, OvertimeCost, ActualOvertimeCost
+ * and RemainingOvertimeCost, each an 8-byte zero payload. */
+inline constexpr std::uint32_t kTaskActualOvertimeWorkFieldId = 0x0B4000A4u;
+inline constexpr std::uint32_t kTaskRemainingOvertimeWorkFieldId = 0x0B4000A5u;
+inline constexpr std::uint32_t kTaskOvertimeCostFieldId = 0x0B4000A8u;
+inline constexpr std::uint32_t kTaskActualOvertimeCostFieldId = 0x0B4000A9u;
+inline constexpr std::uint32_t kTaskRemainingOvertimeCostFieldId = 0x0B4000AAu;
+
 /* Task/Notes (wave30-notes, wave34-note-replace, wave34-note-clear) and
  * Task/Text1 (wave34-field-clear): the other Task keys a pair measured. */
 inline constexpr std::uint32_t kTaskNotesFieldId = 0x0B40000Fu;

@@ -245,6 +245,9 @@ struct State {
 
     bool validate(std::uint32_t uid, TaskModeShape& shape,
                   std::string& error) const;
+    /* The whole-file part of validate(): empty link table, every task row a
+     * live top-level unprogressed leaf, one placeholder assignment per task. */
+    bool validate_file(std::string& error) const;
 };
 
 State::State(CfbDocument const& document, std::string_view table)
@@ -329,6 +332,106 @@ State::State(CfbDocument const& document, std::string_view table)
                     " bytes, not 16 + 53*" + std::to_string(assn_row_count));
     }
     (void)read_var_entries(assn_var_meta);
+}
+
+bool check_task_row(State const& state, std::size_t row, std::string& reason);
+
+/* The whole-file shape every measured task-mode (and Calculate Project)
+ * control has.  `error` names the first difference. */
+bool State::validate_file(std::string& error) const {
+    /* The measured pair's link table is empty.  A linked file needs Project's
+     * CPM to decide whether the mode change reschedules anything, and this
+     * port has no scheduler (the reverse pair is the evidence). */
+    if (!link_table_is_empty(*doc, table_name)) {
+        error = "the file has link rows; the measured task-mode pair has an "
+                "empty link table";
+        return false;
+    }
+
+    for (std::size_t candidate = 1; candidate < row_count; ++candidate) {
+        std::string reason;
+        if (!check_task_row(*this, candidate, reason)) {
+            error = std::move(reason);
+            return false;
+        }
+    }
+
+    /* Exactly one live placeholder assignment per task, no tombstoned or extra
+     * rows, and no assignment-side actual work.  The same shape every measured
+     * control file has. */
+    if (assn_row_count != row_count - 1) {
+        error = "the assignment table has " + std::to_string(assn_row_count) +
+                " rows for " + std::to_string(row_count - 1) +
+                " tasks; the measured task-mode pair has exactly one "
+                "placeholder assignment per task";
+        return false;
+    }
+    std::vector<bool> task_has_assignment(row_count, false);
+    for (std::size_t assn_row = 0; assn_row < assn_row_count; ++assn_row) {
+        std::size_t const base = assn_row * kAssnStride;
+        std::uint32_t const assn_uid = get_u32(assn_fixed, base + kAssnUid);
+        std::uint32_t const task_uid = get_u32(assn_fixed, base + kAssnTask);
+        std::string const label =
+            "assignment uid " + std::to_string(assn_uid) + " (task uid " +
+            std::to_string(task_uid) + ")";
+        std::size_t const entry = assn_meta_entry_for_row(assn_meta, assn_row);
+        if (entry == kNoIndex) {
+            error = "TBkndAssn FixedMeta has no entry for " + label;
+            return false;
+        }
+        std::size_t const meta_at =
+            kAssnMetaHeader + entry * kAssnMetaEntry;
+        if (assn_meta[meta_at + kAssnMetaState] != kAssnMetaStateLive) {
+            error = label + " is deleted; the measured task-mode pair has only "
+                            "live placeholder assignments";
+            return false;
+        }
+        if (get_u32(assn_fixed, base + kAssnResource) != kNullResource) {
+            error = label + " does not name Project's 0xffff0001 placeholder "
+                            "resource";
+            return false;
+        }
+        std::size_t task_row = kNoIndex;
+        for (std::size_t candidate = 1; candidate < row_count; ++candidate) {
+            if (rows.uid(candidate) == task_uid) {
+                task_row = candidate;
+                break;
+            }
+        }
+        if (task_row == kNoIndex) {
+            error = label + " names no live task row";
+            return false;
+        }
+        if (get_f64(assn_fixed, base + kAssnPlannedWork) !=
+            static_cast<double>(rows.u32(task_row, kDuration)) * 100.0) {
+            error = label + " stores planned work that is not its task's "
+                            "duration; the measured task-mode pair's placeholder "
+                            "assignments carry exactly the task duration";
+            return false;
+        }
+        if (!find_var_offsets(assn_var_meta, kAssnActualWorkField, assn_uid)
+                 .empty()) {
+            error = label + " records actual work; the measured task-mode pair "
+                            "has no progress anywhere";
+            return false;
+        }
+        if (task_has_assignment[task_row]) {
+            error = "task uid " + std::to_string(task_uid) +
+                    " has more than one assignment row; the measured "
+                    "task-mode pair has exactly one per task";
+            return false;
+        }
+        task_has_assignment[task_row] = true;
+    }
+    for (std::size_t candidate = 1; candidate < row_count; ++candidate) {
+        if (!task_has_assignment[candidate]) {
+            error = "task uid " + std::to_string(rows.uid(candidate)) +
+                    " has no assignment row; the measured task-mode pair has "
+                    "one placeholder assignment per task";
+            return false;
+        }
+    }
+    return true;
 }
 
 /* One live task row must be the measured top-level, unlinked, unprogressed
@@ -427,97 +530,8 @@ bool State::validate(std::uint32_t uid, TaskModeShape& shape,
         return false;
     }
 
-    /* The measured pair's link table is empty.  A linked file needs Project's
-     * CPM to decide whether the mode change reschedules anything, and this
-     * port has no scheduler (the reverse pair is the evidence). */
-    if (!link_table_is_empty(*doc, table_name)) {
-        error = "the file has link rows; the measured task-mode pair has an "
-                "empty link table";
+    if (!validate_file(error)) {
         return false;
-    }
-
-    for (std::size_t candidate = 1; candidate < row_count; ++candidate) {
-        std::string reason;
-        if (!check_task_row(*this, candidate, reason)) {
-            error = std::move(reason);
-            return false;
-        }
-    }
-
-    /* Exactly one live placeholder assignment per task, no tombstoned or extra
-     * rows, and no assignment-side actual work.  The same shape every measured
-     * control file has. */
-    if (assn_row_count != row_count - 1) {
-        error = "the assignment table has " + std::to_string(assn_row_count) +
-                " rows for " + std::to_string(row_count - 1) +
-                " tasks; the measured task-mode pair has exactly one "
-                "placeholder assignment per task";
-        return false;
-    }
-    std::vector<bool> task_has_assignment(row_count, false);
-    for (std::size_t assn_row = 0; assn_row < assn_row_count; ++assn_row) {
-        std::size_t const base = assn_row * kAssnStride;
-        std::uint32_t const assn_uid = get_u32(assn_fixed, base + kAssnUid);
-        std::uint32_t const task_uid = get_u32(assn_fixed, base + kAssnTask);
-        std::string const label =
-            "assignment uid " + std::to_string(assn_uid) + " (task uid " +
-            std::to_string(task_uid) + ")";
-        std::size_t const entry = assn_meta_entry_for_row(assn_meta, assn_row);
-        if (entry == kNoIndex) {
-            error = "TBkndAssn FixedMeta has no entry for " + label;
-            return false;
-        }
-        std::size_t const meta_at =
-            kAssnMetaHeader + entry * kAssnMetaEntry;
-        if (assn_meta[meta_at + kAssnMetaState] != kAssnMetaStateLive) {
-            error = label + " is deleted; the measured task-mode pair has only "
-                            "live placeholder assignments";
-            return false;
-        }
-        if (get_u32(assn_fixed, base + kAssnResource) != kNullResource) {
-            error = label + " does not name Project's 0xffff0001 placeholder "
-                            "resource";
-            return false;
-        }
-        std::size_t task_row = kNoIndex;
-        for (std::size_t candidate = 1; candidate < row_count; ++candidate) {
-            if (rows.uid(candidate) == task_uid) {
-                task_row = candidate;
-                break;
-            }
-        }
-        if (task_row == kNoIndex) {
-            error = label + " names no live task row";
-            return false;
-        }
-        if (get_f64(assn_fixed, base + kAssnPlannedWork) !=
-            static_cast<double>(rows.u32(task_row, kDuration)) * 100.0) {
-            error = label + " stores planned work that is not its task's "
-                            "duration; the measured task-mode pair's placeholder "
-                            "assignments carry exactly the task duration";
-            return false;
-        }
-        if (!find_var_offsets(assn_var_meta, kAssnActualWorkField, assn_uid)
-                 .empty()) {
-            error = label + " records actual work; the measured task-mode pair "
-                            "has no progress anywhere";
-            return false;
-        }
-        if (task_has_assignment[task_row]) {
-            error = "task uid " + std::to_string(task_uid) +
-                    " has more than one assignment row; the measured "
-                    "task-mode pair has exactly one per task";
-            return false;
-        }
-        task_has_assignment[task_row] = true;
-    }
-    for (std::size_t candidate = 1; candidate < row_count; ++candidate) {
-        if (!task_has_assignment[candidate]) {
-            error = "task uid " + std::to_string(rows.uid(candidate)) +
-                    " has no assignment row; the measured task-mode pair has "
-                    "one placeholder assignment per task";
-            return false;
-        }
     }
 
     /* The edited row's measured precondition bytes. */
@@ -654,6 +668,18 @@ bool State::validate(std::uint32_t uid, TaskModeShape& shape,
 }
 
 } /* namespace */
+
+bool read_task_file_shape(CfbDocument const& doc, std::string& error,
+                          std::string_view table) {
+    error.clear();
+    try {
+        State state(doc, table);
+        return state.validate_file(error);
+    } catch (Error const& caught) {
+        error = caught.what();
+        return false;
+    }
+}
 
 bool read_task_mode_shape(CfbDocument const& doc, std::uint32_t uid,
                           TaskModeShape& shape, std::string& error,

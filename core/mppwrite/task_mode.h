@@ -115,6 +115,16 @@ struct TaskModeShape {
 };
 
 /*
+ * Validate only the whole-file shape above (empty link table, every task row a
+ * live top-level unprogressed leaf with the project calendar, one placeholder
+ * assignment per task), for a writer whose row-level precondition differs from
+ * the task-mode pair's.  Returns false with `error` naming the first
+ * difference.
+ */
+bool read_task_file_shape(CfbDocument const& doc, std::string& error,
+                          std::string_view table = "114/TBkndTask");
+
+/*
  * Validate the whole-file shape above and the row `uid`, filling `shape`.
  * Returns false with `error` naming the first difference.  A missing or damaged
  * table is also false (the writer would throw; the edit model turns this into

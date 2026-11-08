@@ -103,14 +103,15 @@ Bytes read_file_bytes(std::string const& path) {
     return bytes;
 }
 
-/* The four directory records a committed pair updated (W35-0.4, RC-W7):
+/* The six directory records a committed pair updated (W35-0.4, RC-W7):
  * wave30-wbs-code 0x0240138b (4 -> 24 B) and 0x024013be (2 -> 6 B),
- * wave34-field-set 0x02401392 (equal size) and 0x024013c5 (8 -> 16 B).  Any
- * other id that happens to exist would be rewritten at a position and size no
- * pair measured. */
+ * wave34-field-set 0x02401392 (equal size) and 0x024013c5 (8 -> 16 B),
+ * wave35-calculate-unlinked 0x02400003 (the project finish, 4 B in place) and
+ * 0x02400024 (a 2 B flag, in place).  Any other id that happens to exist would
+ * be rewritten at a position and size no pair measured. */
 bool record_measured(std::uint32_t id) {
     return id == 0x0240138Bu || id == 0x024013BEu || id == 0x02401392u ||
-           id == 0x024013C5u;
+           id == 0x024013C5u || id == 0x02400003u || id == 0x02400024u;
 }
 
 bool scalar_allowed(std::string const& stream, std::uint32_t tag) {
@@ -358,8 +359,10 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
             throw Error(function + ": record " + hex_u32(edit_record.id) +
                         " is not one a committed pair updated; the measured "
                         "ids are 0x0240138b and 0x024013be (wave30-wbs-code) "
-                        "and 0x02401392 and 0x024013c5 (wave34-field-set), so "
-                        "this update is refused");
+                        "and 0x02401392 and 0x024013c5 (wave34-field-set), "
+                        "and 0x02400003 and 0x02400024 "
+                        "(wave35-calculate-unlinked), so this update is "
+                        "refused");
         }
         Record const& record = state.records[found];
         if (record.kind != edit_record.kind) {
