@@ -59,6 +59,17 @@ namespace mppwrite {
 /* The measured Fixed2Data +42 stamp of an unlinked leaf after F9. */
 inline constexpr std::uint8_t kCalculateLeafStamp = 0x30;
 
+/*
+ * W35b-0.4 (RW35-W2): a leaf's Finish on the one calendar the pair measured
+ * (Standard: Monday to Friday, 08:00 to 12:00 and 13:00 to 17:00).  The shape
+ * is a leaf that starts at 08:00 on a working day and lasts a whole number of
+ * 8-hour days (4800 ticks each); then the Finish is 17:00 on the last of those
+ * working days.  Returns false for any other Start or Duration, so the caller
+ * cannot prove the leaf dates are final and refuses.
+ */
+bool calculate_measured_finish(std::uint32_t start, std::uint32_t duration,
+                               std::uint32_t& finish);
+
 /* What the pending file looks like, as the shape check read it. */
 struct CalculateShape {
     std::uint32_t critical_uid = 0;     /* the leaf that ends the project */

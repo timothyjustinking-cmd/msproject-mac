@@ -364,6 +364,39 @@ void refused_requests() {
                 "moves the critical path", "critical path moves");
     }
     {
+        /* W35b-0.4 (RW35-W2): the pending recalculation must have been caused by a
+         * Duration change alone.  Leaf 2's Duration is raised and its Finish is left
+         * where it was (a Duration edit Project has not yet moved the early dates for). */
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(2, mppwrite::task_row::kDuration, 19200);
+        rows.store_into(doc);
+        set_planned_work(doc, 2, 19200);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "is not its start plus its duration", "leaf duration without its finish");
+    }
+    {
+        /* A leaf Finish edit: the Finish moves a day, the Duration does not. */
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(2, mppwrite::task_row::kFinish, 0x3BF527D8u);
+        rows.store_into(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "is not its start plus its duration", "leaf finish edit");
+    }
+    {
+        /* A Start edit that moved the project start and both leaf starts to the next day
+         * (so the 0.3 start check passes) and left the Finish dates where they were. */
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        for (std::size_t row = 0; row < 3; ++row) {
+            rows.set_u32(row, mppwrite::task_row::kStart, 0x3BF312C0u);
+        }
+        rows.store_into(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "is not its start plus its duration", "leaf start edit");
+    }
+    {
         /* A leaf with its own calendar. */
         CfbDocument doc = control;
         TaskTable rows = TaskTable::from_document(doc);
