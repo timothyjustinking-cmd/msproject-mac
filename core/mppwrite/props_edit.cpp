@@ -242,11 +242,6 @@ bool record_payload_matches(PropsState const& state, Record const& record,
                           static_cast<std::ptrdiff_t>(record.offset + 12));
 }
 
-bool owned_stream(std::string const& path) {
-    return path == kPropsBackEnd || path == kPropsFrontEnd ||
-           path == kEditMarkerStream;
-}
-
 void prove_only_owned_streams_changed(CfbDocument const& opened,
                                       CfbDocument const& reread,
                                       std::string const& stream,

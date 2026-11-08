@@ -592,12 +592,6 @@ void test_pair(TestContext& t, Pair const& p) {
 
 /* ---- refusals ----------------------------------------------------------- */
 
-void check_unchanged(TestContext& t, CfbDocument const& doc, Bytes const& before,
-                     std::string const& what) {
-    t.check(doc.to_bytes() == before, what + ": the document changed");
-    t.check(!file_exists(refused_path()), what + ": an output file was written");
-}
-
 mppwrite::ResourceGrowthSpec good_spec() {
     mppwrite::ResourceGrowthSpec spec;
     spec.name = "R3";

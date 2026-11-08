@@ -170,11 +170,6 @@ std::string resource_name(const app::PlanInput& plan, std::uint32_t uid) {
     return std::string();
 }
 
-// gate::check takes a C string; the labelled checks below build std::string.
-void checkq(bool ok, const std::string& what) {
-    gate::check(ok, what.c_str());
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {

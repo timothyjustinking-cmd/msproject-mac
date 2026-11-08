@@ -111,3 +111,30 @@ nested file and the deleted state were refused before only by an unrelated downs
 VarMeta message; the new needles prove the refusal now comes from the numbering rule.
 The measured pair still writes and matches Project's pair field by field (the
 `wbs-code` pair totals, noise=149 effects=216, are unchanged and inside the 368).
+
+### W34b-0.6 (CI-1)
+
+`owned_stream` in `core/mppwrite/props_edit.cpp` (unused since `prove_only_owned_streams_changed`
+tests `path == stream || path == kEditMarkerStream` directly) is removed.
+
+Sweep.  No gcc or clang driver is installed on this machine, so the sweep ran the clang front
+end under `clang-tidy` (VS BuildTools LLVM, `--checks='clang-diagnostic-*'`, `-std=c++20 -Wall
+-Wextra -Wunused -Wunused-const-variable -Wcomment -Wstring-compare`, the macros the test
+targets define) over every `.cpp` that `git diff --name-only main..HEAD -- core app app_qt
+tests` lists (56 files, 72 with headers; `build/w34b/sweep06/all.log`).  The Qt sources, which
+need Qt headers, got a name-count pass over the `app_qt` `.cpp` files (`build/w34b/sweep_qt.py`,
+which flags `owned_stream` on the pre-fix file) and `static` in the changed headers was
+grepped (none).  Found and removed:
+
+| File | Item |
+|---|---|
+| `core/mppwrite/props_edit.cpp:245` | unused `owned_stream` (the CI-1 error) |
+| `core/mppwrite/assignment_growth.cpp:149` | unused `get_u16` |
+| `tests/roundtrip_resource_growth.cpp:595` | unused `check_unchanged` |
+| `app_qt/tests/assign_resources_gate_test.cpp:174` | unused `checkq` |
+
+No set-but-unused variable, no `/*` inside a block comment and no pointer compare of strings
+turned up.  Three clang-only notes are not defects: the `calendar.h` static assertions fail
+under clang's Windows layout, `mpp_reader_tests.cpp` needs its CMake macros (re-run with them
+defined, clean), and `app/smoke_tests.cpp` reports three helpers unused only when
+`APP_SMOKE_OUT_DIR` is undefined (re-run with it defined, clean).

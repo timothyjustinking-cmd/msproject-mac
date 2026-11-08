@@ -146,13 +146,6 @@ std::uint8_t get_u8(Bytes const& bytes, std::size_t offset) {
     return bytes[offset];
 }
 
-std::uint16_t get_u16(Bytes const& bytes, std::size_t offset) {
-    return static_cast<std::uint16_t>(
-        static_cast<std::uint16_t>(bytes[offset]) |
-        static_cast<std::uint16_t>(static_cast<std::uint16_t>(bytes[offset + 1])
-                                   << 8));
-}
-
 std::uint32_t get_u32(Bytes const& bytes, std::size_t offset) {
     return static_cast<std::uint32_t>(bytes[offset]) |
            (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
