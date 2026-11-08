@@ -728,6 +728,31 @@ DOCUMENTED = {
         "6A536AE817E7E30D7578B8F909387C58A08D4CD32EEE0F2033DFC029D2B9CC3A",
     "tests/data/wave35-viewstate-zoom-reset.mpp":
         "C69D367156042604246A83E3378B611A3F718D54AC7B018C7E6B3E0D67E9BFFF",
+    # Wave 35 (W35-3.1): the G3 pairs.
+    "tests/data/wave35-g3-insert-milestone-first-control-null.mpp":
+        "0CA96AA029332F36AA79CFFDFE0F6F424DBC16C124674E188A60D68A3FD04DFE",
+    "tests/data/wave35-g3-insert-milestone-first-control.mpp":
+        "D406A2F80F9E747C2FCA09825C123B46721CEEF266A4CE749C4078E4DB888F2D",
+    "tests/data/wave35-g3-insert-milestone-first.mpp":
+        "7500C66EC955BE893CE5209F608DD30E0E2803A3ED7F04F2E81BAFD1D079E601",
+    "tests/data/wave35-g3-insert-milestone-last-control-null.mpp":
+        "0CD83F6E7F618591151AF3CCD134F9F4FFE192297797674C9FCADDE35396B1F3",
+    "tests/data/wave35-g3-insert-milestone-last-control.mpp":
+        "85255060B45BB97F6760238808E9EB1472C9AA7AD5FFF3CC31FB4C4E4EB1B83A",
+    "tests/data/wave35-g3-insert-milestone-last.mpp":
+        "0CCADA1CC0886E05412CEAF926564E299AAB42D4FCD1B2EFAC33E5C01CC06CF3",
+    "tests/data/wave35-g3-insert-milestone-nested-control-null.mpp":
+        "7B447D7F66F1B5B2649305602E573532148ED9CEA03DDB888124541B23C6E339",
+    "tests/data/wave35-g3-insert-milestone-nested-control.mpp":
+        "DECE1C39399AC2CCD5C084AD77D62461EAD8CCF4A0EDF4493996147B8B9FDF43",
+    "tests/data/wave35-g3-insert-milestone-nested.mpp":
+        "06E7540B184EA4346FC80FADF39F3B84F40C8C9FCC772911B9146889418E5529",
+    "tests/data/wave35-g3-insert-summary-nested-control-null.mpp":
+        "F73C2C3252C733F468FC62982F3DE1D8EA407B7062A632B6EA78E7C4ED50212C",
+    "tests/data/wave35-g3-insert-summary-nested-control.mpp":
+        "5B799DADE3839596460F2352B1E4F47D27154B3325719BEA1EDEFFBB1B5ECB45",
+    "tests/data/wave35-g3-insert-summary-nested.mpp":
+        "4370DCD988F78AF6ECC195F5962012182627908D1FDC23DCCDB20CCEE6FB88E9",
     "tests/data/wave34-resource-add-third-control.mpp":
         "F9DD625CFD94FD6A29B616F102EB005B637409662F0C2465C0ADEA4FCBC759F4",
     "tests/data/wave34-resource-add-third.mpp":
