@@ -2194,6 +2194,7 @@ void check_refusals() {
 } /* namespace */
 
 int main() {
+    app::allow_unmeasured_paths_for_tests(true);  // W34-4.0: this test drives the retained cascade
     for (const PairCase& pair : kPairs) {
         check_pair(pair);
     }

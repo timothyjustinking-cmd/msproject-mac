@@ -1000,6 +1000,7 @@ void test_real_unlink_matches_project() {
 }  // namespace
 
 int main() {
+    app::allow_unmeasured_paths_for_tests(true);  // W34-4.0: this test drives the retained cascade
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     test_lag_syntax();
     test_predecessor_list();

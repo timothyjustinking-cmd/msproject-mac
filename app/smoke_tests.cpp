@@ -314,10 +314,11 @@ void test_real_plan() {
     check_named(report, "load", "the fixture's first task is stored as manually scheduled");
     check_named(report, "filter", "the filter matches two of the three tasks");
     check_named(report, "filter", "the displayed row list is restricted to the filter");
-    check_named(report, "task_fields", "the Task Fields form accepts a text value");
-    check_named(report, "task_fields", "the display plan shows the queued value");
-    check_named(report, "predecessors", "the dialog accepts the first -> second FS add");
-    check_named(report, "predecessors", "the display plan shows the linked row");
+    check_named(report, "task_fields",
+                "the Task Fields form refuses a text value (unmeasured save path)");
+    check_named(report, "task_fields", "the pending stack refuses a hand-built set_field");
+    check_named(report, "predecessors", "the dialog refuses the first -> second FS add");
+    check_named(report, "predecessors", "the pending stack refuses a hand-built link add");
     check_named(report, "start_edit", "the first task's Start cell is read-only");
     check_named(report, "start_edit", "no edit session opens on Start");
     check_named(report, "start_edit", "exactly one start edit is pending");

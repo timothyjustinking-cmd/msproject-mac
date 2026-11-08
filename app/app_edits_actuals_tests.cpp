@@ -2194,6 +2194,7 @@ void check_assign_delete_shape() {
 } /* namespace */
 
 int main() {
+    app::allow_unmeasured_paths_for_tests(true);  // W34-4.0: this test drives the retained cascade
     for (const Pair& pair : kPairs) {
         check_pair(pair);
     }

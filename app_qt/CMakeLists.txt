@@ -273,6 +273,20 @@ add_test(NAME qt_task_information_apply
                  "${QT_TEST_DATA_DIR_CMAKE}/wave29-outline-auto-indent-control.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# Wave 34 (W34-4.0): Insert Task, Delete Task, link ADD and the custom-field SET
+# and CLEAR are refused up front -- their saves differ from Project's own (the
+# W34-0.5 KnownGap tables).  The gate drives the real MainWindow and never lifts
+# the refusal: no prompt, nothing queued, the status line names the reason.
+add_executable(qt_unmeasured_paths_tests tests/unmeasured_paths_test.cpp)
+target_link_libraries(qt_unmeasured_paths_tests PRIVATE qt_shell)
+qt_set_warnings(qt_unmeasured_paths_tests)
+
+add_test(NAME qt_unmeasured_paths
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_unmeasured_paths_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/synthetic-base.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # ===========================================================================
 # WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
 # the loaded Task Sheet's geometry; these gate the empty project, the chrome,

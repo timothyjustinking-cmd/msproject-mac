@@ -9,6 +9,7 @@
 #include "edit_model.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -2537,6 +2538,11 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
     if (!read_only_reason_.empty()) {
         return false;
     }
+    // W34-4.0: the five paths whose save does not match Project's are refused
+    // here too, so a hand-built queue cannot bypass the shells' builders.
+    if (!unmeasured_path_refusal(edit.kind).empty()) {
+        return false;
+    }
     // W30-1.0: the measured task-mode pair is one mode change on an otherwise
     // untouched save, so the edit is exclusive in both directions.  It may only
     // be queued into an empty list, and no other edit may be queued over it.
@@ -3508,9 +3514,64 @@ PlanInput StructuralEdits::without_structural_edits(const PlanInput& shown,
     return edited;
 }
 
+namespace {
+std::atomic<bool> g_unmeasured_paths_allowed{false};
+}  // namespace
+
+std::string unmeasured_path_refusal(StructuralKind kind) {
+    if (g_unmeasured_paths_allowed.load()) {
+        return {};
+    }
+    const char* command = nullptr;
+    int streams = 0;
+    switch (kind) {
+        case StructuralKind::insert_task:
+            command = "Insert Task";
+            streams = 15;
+            break;
+        case StructuralKind::delete_task:
+            command = "Delete Task";
+            streams = 6;
+            break;
+        case StructuralKind::add_link:
+            command = "Adding a link";
+            streams = 13;
+            break;
+        case StructuralKind::set_field:
+            command = "Setting a custom field value";
+            streams = 2;
+            break;
+        case StructuralKind::clear_field:
+            command = "Clearing a custom field value";
+            streams = 5;
+            break;
+        default:
+            return {};
+    }
+    return std::string(command) +
+           " is not implemented in this port: its save differs from Project's "
+           "own save of the same edit in " +
+           std::to_string(streams) +
+           " stream(s) (measured on the synthetic base), so it is refused until "
+           "the writer matches";
+}
+
+void allow_unmeasured_paths_for_tests(bool allowed) noexcept {
+    g_unmeasured_paths_allowed.store(allowed);
+}
+
+bool unmeasured_paths_allowed_for_tests() noexcept {
+    return g_unmeasured_paths_allowed.load();
+}
+
 bool make_delete_edit(const PlanInput& plan, std::uint32_t uid, StructuralEdit& out,
                       std::string& error) {
     out = StructuralEdit{};
+    if (const std::string refusal = unmeasured_path_refusal(StructuralKind::delete_task);
+        !refusal.empty()) {
+        error = refusal;
+        return false;
+    }
     if (uid == 0) {
         error = "no task row is selected to delete";
         return false;
@@ -3541,6 +3602,11 @@ bool make_delete_edit(const PlanInput& plan, std::uint32_t uid, StructuralEdit& 
 bool check_insert_task(const PlanInput& plan, std::string_view source_path,
                        std::string& error) {
     error.clear();
+    if (const std::string refusal = unmeasured_path_refusal(StructuralKind::insert_task);
+        !refusal.empty()) {
+        error = refusal;
+        return false;
+    }
     const TaskRow* row = insert_clone_row(plan);
     if (row == nullptr) {
         error = "Insert Task needs a saved task row to clone, and the project has "
@@ -3616,6 +3682,15 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             "refusing to overwrite the opened file; save to a new name (the opened .mpp is "
             "never modified)";
         return result;
+    }
+
+    // W34-4.0: defence in depth for a hand-built queue; the five paths whose
+    // save does not match Project's are refused before the first write.
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (std::string refusal = unmeasured_path_refusal(edit.kind); !refusal.empty()) {
+            result.error = std::move(refusal);
+            return result;
+        }
     }
 
     // Wave 17: the document-edit seam.  A request with pending view-state/formula

@@ -273,6 +273,14 @@ bool make_task_field_edits(const TaskRow& row, const std::vector<TaskFieldInput>
         }
         pending.push_back(std::move(edit));
     }
+    // W34-4.0: a custom-field SET or CLEAR is one of the five paths whose save
+    // does not match Project's; refuse the whole form before anything is queued.
+    for (const StructuralEdit& edit : pending) {
+        if (std::string refusal = unmeasured_path_refusal(edit.kind); !refusal.empty()) {
+            error = std::move(refusal);
+            return false;
+        }
+    }
     out = std::move(pending);
     return true;
 }
@@ -405,6 +413,10 @@ std::string format_link_lag(std::int32_t ticks) {
 std::string validate_link_add(const PlanInput& plan, const StructuralEdits& edits,
                               std::uint32_t predecessor_uid, std::uint32_t successor_uid,
                               core::gantt::LinkType type) {
+    if (std::string refusal = unmeasured_path_refusal(StructuralKind::add_link);
+        !refusal.empty()) {
+        return refusal;
+    }
     if (predecessor_uid == 0 || successor_uid == 0) {
         return "a predecessor needs two task rows";
     }

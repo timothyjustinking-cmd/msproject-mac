@@ -107,6 +107,7 @@ void select_row(msqt::MainWindow& window, std::size_t record_row) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    app::allow_unmeasured_paths_for_tests(true);  // W34-4.0: this test drives the retained cascade
     QApplication app(argc, argv);
     msqt::configure_application();
     if (argc < 3) {

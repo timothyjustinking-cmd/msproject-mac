@@ -1800,6 +1800,7 @@ void test_cascade_delete_with_formula() {}
 }  // namespace
 
 int main() {
+    app::allow_unmeasured_paths_for_tests(true);  // W34-4.0: this test drives the retained cascade
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     test_default_save_name();
     test_collect_start_edits();

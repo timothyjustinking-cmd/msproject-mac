@@ -435,6 +435,32 @@ bool make_task_mode_edit(const PlanInput& plan, std::string_view source_path,
                          std::uint32_t uid, bool manual, StructuralEdit& out,
                          std::string& error);
 
+// ---------------------------------------------------------------------------
+// Wave 34 (W34-4.0): the five paths whose save does not match Project's
+// ---------------------------------------------------------------------------
+//
+// W34-0.5 measured Insert Task, Delete Task, link ADD and the custom-field SET
+// and CLEAR against Project on the synthetic base and found that the port's
+// save differs from Project's own save of the same edit in 15, 6, 13, 2 and 5
+// streams (the named `KnownGap` tables in tests/roundtrip_add_delete.cpp,
+// roundtrip_links.cpp and roundtrip_field_values.cpp).  None of those
+// differences is per-save noise (the null saves separate the noise first), so
+// standing rule 1 applies: the five edit kinds are refused up front, with the
+// decision-9 reason, until their writers match.  Every other kind is unaffected.
+//
+// `unmeasured_path_refusal` returns the reason for exactly those five kinds and
+// an empty string for every other kind.  The shared builders (check_insert_task,
+// make_delete_edit, app::validate_link_add, app::make_task_field_edits), the
+// queue (StructuralEdits::push) and the save cascade (save_structural_edits)
+// all consult it, so a hand-built edit cannot slip past a shell.
+//
+// `allow_unmeasured_paths_for_tests(true)` lifts the refusal.  Only test
+// programs call it (the retained writers and the cascade keep their own
+// round-trip and shape tests); no shell or library code does.
+[[nodiscard]] std::string unmeasured_path_refusal(StructuralKind kind);
+void allow_unmeasured_paths_for_tests(bool allowed) noexcept;
+[[nodiscard]] bool unmeasured_paths_allowed_for_tests() noexcept;
+
 // The pending edits, in application order, with an undo/redo cursor.
 class StructuralEdits {
   public:

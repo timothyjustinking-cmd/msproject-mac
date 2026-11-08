@@ -516,27 +516,25 @@ SmokeReport smoke_plan(const SmokeOptions& options) {
                            .empty(),
                        "the fixture stores no Text value on the first task");
 
+            // W34-4.0: a custom-field SET is one of the five paths whose save
+            // does not match Project's; the form is refused up front, queues
+            // nothing, and the hand-built edit is refused by the queue too.
             std::vector<app::TaskFieldInput> inputs;
             inputs.push_back(app::TaskFieldInput{text_field, "smoke-alpha"});
             std::vector<app::StructuralEdit> queued;
             std::string dialog_error;
-            step.check(app::make_task_field_edits(plan.loaded.tasks.front(), inputs,
-                                                  plan.format, queued, dialog_error),
-                       "the Task Fields form accepts a text value", dialog_error);
-            step.count(queued.size(), 1, "the form queues one field edit");
-            step.check(!queued.empty() && queued.front().kind == app::StructuralKind::set_field,
-                       "the queued edit is a set_field");
-            step.check(!queued.empty() &&
-                           queued.front().field_value.text == "smoke-alpha",
-                       "the queued edit carries the typed text");
-            for (const app::StructuralEdit& edit : queued) {
-                step.check(edits.push(edit), "the field edit is queued on the pending stack");
-            }
-            const app::PlanInput display = edits.apply(plan.loaded);
-            const mpp::CustomFieldValue* stored =
-                display.tasks.front().custom_field(text_field);
-            step.check(stored != nullptr && stored->text == "smoke-alpha",
-                       "the display plan shows the queued value");
+            step.check(!app::make_task_field_edits(plan.loaded.tasks.front(), inputs,
+                                                   plan.format, queued, dialog_error),
+                       "the Task Fields form refuses a text value (unmeasured save path)");
+            step.check(dialog_error.find("not implemented in this port") != std::string::npos,
+                       "the refusal carries the decision-9 text", dialog_error);
+            step.count(queued.size(), 0, "the refused form queues nothing");
+            app::StructuralEdit hand_built;
+            hand_built.kind = app::StructuralKind::set_field;
+            hand_built.uid = plan.loaded.tasks.front().uid;
+            hand_built.field_id = text_field;
+            step.check(!edits.push(hand_built), "the pending stack refuses a hand-built set_field");
+            step.check(edits.empty(), "nothing is queued");
         }
 
         if (date_index < specs.size()) {
@@ -561,49 +559,30 @@ SmokeReport smoke_plan(const SmokeOptions& options) {
             step.count(app::predecessors_of(plan.loaded, edits, second_uid).size(), 0,
                        "the second task has no incoming links in the fixture");
 
-            const std::string accepted =
+            // W34-4.0: a link ADD is one of the five paths whose save does not
+            // match Project's; every entry point refuses it with the decision-9
+            // text and queues nothing.
+            const std::string refused_reason =
                 app::validate_link_add(plan.loaded, edits, first_uid, second_uid,
                                        core::gantt::LinkType::finish_to_start);
-            step.text(accepted, "", "the dialog accepts the first -> second FS add");
+            step.check(refused_reason.find("not implemented in this port") != std::string::npos,
+                       "the dialog refuses the first -> second FS add", refused_reason);
 
             app::StructuralEdit link_edit;
             std::string link_error;
-            step.check(app::make_link_add(plan.loaded, edits, first_uid, second_uid,
-                                          core::gantt::LinkType::finish_to_start, "1d",
-                                          link_edit, link_error),
-                       "the link add parses a one-day lag", link_error);
-            step.check(link_edit.lag_ticks == 4800, "one day of lag is 4800 file ticks",
-                       "got " + std::to_string(link_edit.lag_ticks));
-            step.check(edits.push(link_edit), "the link add is queued on the same stack");
-            step.count(edits.link_edit_count(), 1, "one link edit is pending");
-
-            const app::PlanInput display = edits.apply(plan.loaded);
-            step.count(display.links.size(), 1, "the display plan shows the linked row");
-            const std::vector<app::PredecessorListItem> incoming =
-                app::predecessors_of(display, edits, second_uid);
-            step.count(incoming.size(), 1, "the dialog lists the pending predecessor");
-            if (!incoming.empty()) {
-                step.check(incoming.front().pending, "the listed row is marked pending");
-                step.check(incoming.front().type_name == std::string("FS"),
-                           "the listed row shows the FS type");
-                step.text(incoming.front().lag_text, "1d", "the listed row shows the lag");
-                app::StructuralEdit pending_delete;
-                std::string delete_error;
-                step.check(!app::make_link_delete(incoming.front(), second_uid, pending_delete,
-                                                  delete_error),
-                           "the dialog refuses to delete a row that is only pending");
-                step.check(!delete_error.empty(), "that refusal explains itself", delete_error);
-            }
-
-            step.check(edits.undo(), "the link add undoes");
-            step.count(edits.apply(plan.loaded).links.size(), 0,
-                       "the undone link leaves the display plan");
-            step.check(edits.undo(), "the field edit undoes");
-            step.check(edits.empty(), "the pending stack is empty again");
-            step.check(text_field == 0 ||
-                           edits.apply(plan.loaded).tasks.front().custom_field(text_field) ==
-                               nullptr,
-                       "the undone field edit leaves no value");
+            step.check(!app::make_link_add(plan.loaded, edits, first_uid, second_uid,
+                                           core::gantt::LinkType::finish_to_start, "1d",
+                                           link_edit, link_error),
+                       "the link add is refused");
+            step.check(link_error.find("not implemented in this port") != std::string::npos,
+                       "the link refusal carries the decision-9 text", link_error);
+            app::StructuralEdit hand_link;
+            hand_link.kind = app::StructuralKind::add_link;
+            hand_link.uid = second_uid;
+            hand_link.predecessor_uid = first_uid;
+            step.check(!edits.push(hand_link), "the pending stack refuses a hand-built link add");
+            step.count(edits.link_edit_count(), 0, "no link edit is pending");
+            step.check(edits.empty(), "the pending stack is empty");
         }
     }
 

@@ -509,6 +509,24 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_new_task_mode COMMAND app_edits_new_task_mode_tests)
     set_tests_properties(app_edits_new_task_mode PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 34 (W34-4.0): Insert Task, Delete Task, link ADD and the custom-field
+    # SET/CLEAR are refused up front -- their saves differ from Project's own
+    # (the W34-0.5 KnownGap tables).  This program never lifts the refusal.
+    add_executable(app_unmeasured_paths_tests app_unmeasured_paths_tests.cpp)
+    target_compile_features(app_unmeasured_paths_tests PRIVATE cxx_std_20)
+    target_include_directories(app_unmeasured_paths_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
+    set_target_properties(app_unmeasured_paths_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_unmeasured_paths_tests PRIVATE app_layout)
+    target_compile_definitions(app_unmeasured_paths_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_unmeasured_paths_tests)
+
+    add_test(NAME app_unmeasured_paths COMMAND app_unmeasured_paths_tests)
+    set_tests_properties(app_unmeasured_paths PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 30 (W30-1.0): the Task tab's Manually Schedule / Mode > Manually
     # Scheduled through the app model and save cascade.  One committed Project
     # pair (an automatic task switched to manual); the five owned streams and

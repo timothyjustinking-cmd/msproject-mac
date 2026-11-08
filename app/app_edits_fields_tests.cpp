@@ -653,6 +653,7 @@ void test_real_round_trip() {
 }  // namespace
 
 int main() {
+    app::allow_unmeasured_paths_for_tests(true);  // W34-4.0: this test drives the retained cascade
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     test_specs();
     test_initial_text();

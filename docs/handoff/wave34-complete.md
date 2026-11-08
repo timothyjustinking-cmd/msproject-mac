@@ -758,3 +758,74 @@ The run started 10:46 and finished 11:08 on 08 November 2026.  The numbers
 belong to `2735324`, the code tree this record commit follows.
 
 WAVE-34-G3-COMPLETE
+
+## G4 - enablements: refuse the unmeasured paths, then enable each measured shape
+
+Builder: Claude Sonnet 5.5 (W34-BUILDER), commits carry the
+`Generated-By: Claude Sonnet 5.5 via Claude Code (wave 34)` trailer.
+
+| item | finding | status | evidence |
+|---|---|---|---|
+| W34-4.0 | brief W34-4.0: Insert Task, Delete Task, link ADD, custom-field SET and CLEAR differ from Project's own save (the W34-0.5 KnownGap tables); refuse or show as noise | **DONE** (all five refused up front) | the `W34-4.0` commit after `3a8a31c`; `app/edit_model.{h,cpp}`, `app/field_link_edits.cpp`; `app/app_unmeasured_paths_tests.cpp`, `app_qt/tests/unmeasured_paths_test.cpp`; gates `build/w34/3a8a31c-W34-4.0-*.log` |
+
+W34-4.0 detail:
+
+- **Refuse, not show-as-noise.**  Every difference in the five KnownGap tables
+  is a real stream difference between the port's save and Project's own save
+  of the same edit (not per-save noise that the null save masks), so the
+  honest outcome is standing rule 1: no save-path edit is enabled until it is
+  measured.  Per path (stream counts are the named `KnownGap` entries):
+
+  | path | KnownGap table | differing streams | outcome |
+  |---|---|---|---|
+  | Insert Task | `tests/roundtrip_add_delete.cpp` | 15 | refused |
+  | Delete Task | `tests/roundtrip_add_delete.cpp` | 6 | refused |
+  | link ADD | `tests/roundtrip_links.cpp` | 13 | refused |
+  | custom-field SET | `tests/roundtrip_field_values.cpp` | 2 | refused |
+  | custom-field CLEAR | `tests/roundtrip_field_values.cpp` | 5 | refused |
+
+- **Where the refusal sits.**  `app::unmeasured_path_refusal(StructuralKind)`
+  returns the decision-9 text ("... is not implemented in this port: its save
+  differs from Project's in N stream(s)") and is called from the shared
+  builders both shells use (`check_insert_task`, `make_delete_edit`,
+  `validate_link_add` / `make_link_add`, `make_task_field_edits`), from
+  `StructuralEdits::push` (a hand-built queue cannot bypass the builders) and
+  from the `save_structural_edits` cascade before its first write (a queue
+  built under the test-only opt-in cannot be saved).  The Qt shell and the
+  macOS shell both inherit it: the Qt handlers put the builder's text in the
+  status line, the macOS handlers pass it to `note(plan, refusal, true)` or
+  `show_alert`.  The ribbon controls stay enabled, so `ribbon_pin.tsv` and the
+  command backlog still agree (`check_command_backlog.py`: 114 pin controls,
+  114 rows, 0 mismatches); the refusal is on invocation, with the reason.
+- **Measured kinds untouched.**  `delete_link`, `set_percent`,
+  `set_project_priority`, `update_actuals`, outline indent / outdent,
+  `set_new_task_mode` and `set_task_mode` are not refused
+  (`test_other_kinds_untouched`).
+- **Existing tests.**  The retained writers and the cascade are still
+  exercised by 7 app tests and 7 Qt tests through
+  `app::allow_unmeasured_paths_for_tests(true)`, called on the first line of
+  each `main`.  Two dedicated programs never call it and prove the shipped
+  default: `app_unmeasured_paths` (builder, queue and cascade for each of the
+  five paths; 43 checks) and `qt_unmeasured_paths` (the real MainWindow: Insert
+  Task opens no prompt and queues nothing, Delete Task shows no confirmation
+  and queues nothing, the Task Information custom-field SET queues nothing and
+  names the refusal).  The two smoke steps that used to queue a text value and
+  a link now assert the refusal.
+- **Guard seen red.**  With `g_unmeasured_paths_allowed` initialised to `true`
+  `app_unmeasured_paths` failed on every refusal check, from "the refusal is
+  on by default" through the cascade (`build/w34/3a8a31c-W34-4.0-mutation-app-ctest.log`);
+  restored before the gate run.
+- **Gates (this session).**  core build exit 0, ctest `-E plan_recalc` 61/61;
+  app build exit 0, ctest 26/26; Qt build exit 0, ctest 42/42
+  (`3a8a31c-W34-4.0-qtfinal-qt-ctest.log`); `check_fixtures.py` OK;
+  `check_markers.py --range main..HEAD` OK; client-name scan 0 hits;
+  `guard_names.py main..HEAD` clean.  The first all-tree Qt run showed
+  `qt_task_order` and `qt_task_order_corpus` failing with "unknown error":
+  running the executable directly gave "An Application Control policy has
+  blocked this file" (a machine policy on that one freshly linked binary; it
+  had run earlier in the same session).  A normal `--clean-first` rebuild of
+  the one target ran both tests green; the policy was not touched
+  (`3a8a31c-W34-4.0-qt-ctest.log` keeps the blocked run).
+- **Not verified here.**  `app/main.mm` cannot be built on Windows; the macOS
+  handlers were read, not run.  No macOS-side change was needed because the
+  refusal is in the shared builders.
