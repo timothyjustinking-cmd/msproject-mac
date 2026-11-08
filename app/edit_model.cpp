@@ -40,6 +40,7 @@
 #include "table.h"
 #include "task_mode.h"
 #include "varmeta_edit.h"
+#include "viewstate_outline.h"
 #include "viewstate_sort.h"
 #include "viewstream_edit.h"
 #include "wbs_code.h"
@@ -100,7 +101,8 @@ bool is_exclusive_kind(StructuralKind kind) noexcept {
            kind == StructuralKind::bold_cell ||
            kind == StructuralKind::define_wbs_code ||
            kind == StructuralKind::calculate_project ||
-           kind == StructuralKind::sort_view;
+           kind == StructuralKind::sort_view ||
+           kind == StructuralKind::show_level;
 }
 
 const TaskRow* task_row_for_uid(const std::vector<TaskRow>& tasks,
@@ -3302,7 +3304,99 @@ mppwrite::ViewSortEdit sort_view_edit(std::uint32_t field_id, bool ascending,
     return view_edit;
 }
 
+// The plan-side half of Show Level (W35-2.3), shared by make_show_level_edit and
+// push(): the file's tasks in file order with their 0-based outline levels.
+// Returns the reason, or an empty string.
+std::string outline_plan_rows(const PlanInput& plan, std::vector<std::uint32_t>& uids,
+                              std::vector<std::uint32_t>& levels) {
+    uids.clear();
+    levels.clear();
+    std::vector<const TaskRow*> rows;
+    for (const TaskRow& task : plan.tasks) {
+        if (task.uid == 0 || task.outline_level < 0) {
+            continue;  // the project summary row has no outline row of its own
+        }
+        if (task.file_row == 0) {
+            return "Show Level is not implemented in this port while a task is pending: "
+                   "save the project first";
+        }
+        rows.push_back(&task);
+    }
+    std::sort(rows.begin(), rows.end(), [](const TaskRow* a, const TaskRow* b) {
+        return a->file_row < b->file_row;
+    });
+    for (const TaskRow* row : rows) {
+        uids.push_back(row->uid);
+        levels.push_back(static_cast<std::uint32_t>(row->outline_level));
+    }
+    return {};
+}
+
+mppwrite::ViewOutlineEdit show_level_view_edit(int level,
+                                               const std::vector<std::uint32_t>& uids,
+                                               const std::vector<std::uint32_t>& levels) {
+    mppwrite::ViewOutlineEdit view_edit;
+    view_edit.view_uid = mppwrite::kMeasuredViewUid;
+    view_edit.show_level = level;
+    for (std::size_t index = 0; index < uids.size() && index < levels.size(); ++index) {
+        view_edit.rows.push_back(mppwrite::OutlineViewRow{uids[index], levels[index]});
+    }
+    return view_edit;
+}
+
 }  // namespace
+
+bool make_show_level_edit(const PlanInput& plan, std::string_view source_path, int level,
+                          StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    if (level < mppwrite::kOutlineMeasuredMinLevel ||
+        level > mppwrite::kOutlineMeasuredMaxLevel) {
+        error = "Show Level " + std::to_string(level) +
+                " is not implemented in this port: the measured Project pairs show Level " +
+                std::to_string(mppwrite::kOutlineMeasuredMinLevel) + " and Level " +
+                std::to_string(mppwrite::kOutlineMeasuredMaxLevel);
+        return false;
+    }
+    std::vector<std::uint32_t> uids;
+    std::vector<std::uint32_t> levels;
+    if (std::string reason = outline_plan_rows(plan, uids, levels); !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    const mppwrite::ViewOutlineEdit view_edit = show_level_view_edit(level, uids, levels);
+    std::vector<bool> hidden;
+    std::vector<bool> collapsed;
+    mppwrite::outline_show_level_sets(view_edit.rows, level, hidden, collapsed);
+    if (std::find(hidden.begin(), hidden.end(), true) == hidden.end()) {
+        error = "Show Level " + std::to_string(level) +
+                " hides nothing on this outline, so there is nothing to persist";
+        return false;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") + open_error.what() +
+                ")";
+        return false;
+    }
+    // The writer's dry run validates the file: the outline shape, the rows, that
+    // every row is shown, the edit list and the size words.
+    try {
+        (void)mppwrite::save_view_outline(document, view_edit, std::string(), true);
+    } catch (const std::exception& refusal) {
+        error = std::string("Show Level is not implemented in this port for this "
+                            "project: ") +
+                refusal.what();
+        return false;
+    }
+    out.kind = StructuralKind::show_level;
+    out.show_level = level;
+    out.outline_uids = std::move(uids);
+    out.outline_levels = std::move(levels);
+    return true;
+}
 
 bool make_sort_edit(const PlanInput& plan, std::string_view source_path,
                     const std::vector<SortKeyRequest>& keys, bool outline, bool renumber,
@@ -4091,6 +4185,33 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                 !sort_plan_order(*plan, edit.field_id, edit.ascending, base, sorted)
                      .empty() ||
                 base != edit.sort_base_order || sorted != edit.sort_order) {
+                return false;
+            }
+            edit.anchor_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::show_level: {
+            // W35-2.3: the plan-side half.  The file-side half (the writer's dry
+            // run) ran in make_show_level_edit and runs again in the writer;
+            // applied_ is empty by the exclusivity check above.  The rows are
+            // recomputed from the plan, so a hand-built edit must carry exactly
+            // them, and the level must hide something.
+            std::vector<std::uint32_t> uids;
+            std::vector<std::uint32_t> levels;
+            if (plan == nullptr || edit.uid != 0 || !edit.name.empty() ||
+                edit.show_level < mppwrite::kOutlineMeasuredMinLevel ||
+                edit.show_level > mppwrite::kOutlineMeasuredMaxLevel ||
+                !outline_plan_rows(*plan, uids, levels).empty() ||
+                uids != edit.outline_uids || levels != edit.outline_levels) {
+                return false;
+            }
+            std::vector<bool> hidden;
+            std::vector<bool> collapsed;
+            mppwrite::outline_show_level_sets(
+                show_level_view_edit(edit.show_level, uids, levels).rows, edit.show_level,
+                hidden, collapsed);
+            if (std::find(hidden.begin(), hidden.end(), true) == hidden.end()) {
                 return false;
             }
             edit.anchor_uid = 0;
@@ -5264,6 +5385,37 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // W35-2.3: Show Level is exclusive the same way.
+    const StructuralEdit* outline_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::show_level) {
+            outline_edit = &edit;
+        }
+    }
+    if (outline_edit != nullptr) {
+        if (edits.applied().size() != 1) {
+            result.error =
+                "a Show Level edit must be the only edit in a save; another edit is "
+                "queued with it, and the measured Project pair is one outline level on "
+                "an otherwise untouched save";
+            return result;
+        }
+        if (!writable.empty()) {
+            result.error =
+                "a Show Level edit cannot be combined with a start-date edit; the "
+                "measured Project pair is one outline level on an otherwise untouched "
+                "save";
+            return result;
+        }
+        if (document_edits.any()) {
+            result.error =
+                "a Show Level edit cannot be combined with a table format or "
+                "custom-field formula edit; the measured Project pair is one outline "
+                "level on an otherwise untouched save";
+            return result;
+        }
+    }
+
     // W31-0.1 (R30-1, High): a link add and a slack-carrying outline edit in
     // the same save would write the link at step 2 and the UNLINKED slack and
     // late dates at step 5b.  push() and validate_link_add refuse the order the
@@ -5491,6 +5643,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (sort_edit != nullptr) {
         ++write_ops;  // the view's Var2Data, the edit list, Props14, one file
+    }
+    if (outline_edit != nullptr) {
+        ++write_ops;  // the task table's FixedMeta, the edit list, Props and Props14
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -6174,6 +6329,27 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 std::to_string(written.first_row_after) + ")");
         }
 
+        // 5m (wave 35, W35-2.3).  The measured Show Level save: the collapsed and
+        // hidden rows' FixedMeta flags, the displayed rows in the edit list and
+        // its size words (core/mppwrite/viewstate_outline.h).  The edit is
+        // exclusive (checked above); a dry run first proves the file is still the
+        // one the edit was built from, then the writer re-validates and writes the
+        // target once.  A refusal is an exception, reported as the save error.
+        if (outline_edit != nullptr) {
+            const mppwrite::ViewOutlineEdit view_edit = show_level_view_edit(
+                outline_edit->show_level, outline_edit->outline_uids,
+                outline_edit->outline_levels);
+            (void)mppwrite::save_view_outline(document, view_edit, std::string(), true);
+            const mppwrite::ViewOutlineWrite written =
+                mppwrite::save_view_outline(document, view_edit, next_write_path());
+            result.outlines_written = 1;
+            result.notes.push_back("outline level written (Show Level " +
+                                   std::to_string(written.show_level) + ", " +
+                                   std::to_string(written.hidden_rows) + " rows hidden, " +
+                                   std::to_string(written.collapsed_rows) +
+                                   " summaries collapsed)");
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -6261,6 +6437,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (result.sorts_written != 0) {
             result.api += " save_view_sort";
+        }
+        if (result.outlines_written != 0) {
+            result.api += " save_view_outline";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";

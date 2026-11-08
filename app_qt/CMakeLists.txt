@@ -923,6 +923,22 @@ add_test(NAME qt_sort_persist
                  "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-sort-name-desc-control.mpp")
 
 # ===========================================================================
+# WAVE 35 (W35-2.3): the Outline menu's result through the shell.  Level 1 or 2
+# on an outline the wave35-viewstate-outline pairs measured is queued as a
+# show_level edit for File > Save; every other level stays a session collapse with
+# the reason on the status line, and All Subtasks withdraws the queued level.
+# ===========================================================================
+add_executable(qt_outline_persist_tests tests/outline_persist_test.cpp)
+target_link_libraries(qt_outline_persist_tests PRIVATE qt_shell)
+qt_set_warnings(qt_outline_persist_tests)
+
+add_test(NAME qt_outline_persist
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_outline_persist_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-level1-control.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-deep-level1-control.mpp")
+
+# ===========================================================================
 # WAVE 31 (G2, W31-2.2): Entire Project and Selected Tasks are fitted to the
 # span Project 2021 shows.  The gate loads both fixtures, selects the same task
 # Project selected (ID 3), and compares the port's 85 % fit with the four
@@ -972,7 +988,7 @@ foreach(carlito_target
         qt_format_dialog_gate_tests qt_page_setup_gate_tests
         qt_report_dialog_gate_tests qt_spelling_gate_tests
         qt_task_information_apply_tests qt_table_date_format_tests
-        qt_fat_slack_tests qt_sort_persist_tests)
+        qt_fat_slack_tests qt_sort_persist_tests qt_outline_persist_tests)
     qt_bundle_carlito(${carlito_target})
 endforeach()
 
