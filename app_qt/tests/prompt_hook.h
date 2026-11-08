@@ -14,6 +14,10 @@
 // stops it, so a click that opens no prompt cannot leave a timer that answers an
 // unrelated dialog later.
 //
+// A macOS QMessageBox carries no window title (see backstage_gate_test.cpp), so a
+// test identifies a message box by `text`, never by `title`; `title` is reliable
+// for an input dialog only.
+//
 // `found` lists the visible top-level widgets when the poll gave up, so a test
 // can print it and a CI failure names what the test saw.
 #pragma once
@@ -32,8 +36,9 @@ namespace gate {
 struct PromptResult {
     bool seen = false;
     bool question = false;  // the prompt was a QMessageBox (the removal question)
-    QString title;
-    QString initial;        // a QInputDialog's text when it opened
+    QString title;          // an input dialog's window title; a macOS QMessageBox has none
+    QString text;           // a QMessageBox's text, or a QInputDialog's label: assert on this
+    QString initial;       // a QInputDialog's text when it opened
     QString found;          // what was visible when the poll gave up
 };
 
@@ -59,6 +64,7 @@ private:
         if (auto* input = qobject_cast<QInputDialog*>(widget)) {
             result_->seen = true;
             result_->title = input->windowTitle();
+            result_->text = input->labelText();
             result_->initial = input->textValue();
             if (accept_) {
                 input->setTextValue(answer_);
@@ -72,6 +78,7 @@ private:
             result_->seen = true;
             result_->question = true;
             result_->title = box->windowTitle();
+            result_->text = box->text();
             QAbstractButton* button = box->button(accept_ ? QMessageBox::Yes : QMessageBox::No);
             if (button != nullptr) {
                 button->click();

@@ -46,8 +46,9 @@ int main(int argc, char** argv) {
             }
         }
         gate::check(result.seen && result.question, "a late QMessageBox is seen as a question");
-        gate::check(result.title == QStringLiteral("Late question"),
-                    "the late question's title is recorded");
+        // A macOS QMessageBox has no window title, so the box is identified by its text.
+        gate::check(result.text == QStringLiteral("Remove it?"),
+                    "the late question's text is recorded");
         gate::check(choice == (accept ? QMessageBox::Yes : QMessageBox::No),
                     accept ? "Yes answers the late question" : "No answers the late question");
     }
