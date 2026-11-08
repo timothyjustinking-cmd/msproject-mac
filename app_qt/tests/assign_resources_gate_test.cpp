@@ -103,11 +103,20 @@ bool click_assign(msqt::MainWindow& window, Prompt* prompt, bool accept, const Q
 // visible dialogs when the poll gave up, and the status line the click left.
 void report_prompt(const Prompt& prompt, msqt::MainWindow& window) {
     std::fprintf(stderr,
-                 "note: prompt seen=%d question=%d title='%s' initial='%s' visible='%s' "
-                 "status='%s'\n",
+                 "note: prompt seen=%d question=%d title='%s' text='%s' initial='%s' "
+                 "visible='%s' status='%s'\n",
                  prompt.seen ? 1 : 0, prompt.question ? 1 : 0, prompt.title.toUtf8().constData(),
-                 prompt.initial.toUtf8().constData(), prompt.found.toUtf8().constData(),
+                 prompt.text.toUtf8().constData(), prompt.initial.toUtf8().constData(), prompt.found.toUtf8().constData(),
                  window.status_left_text().toUtf8().constData());
+}
+
+// A prompt check that prints what the hook saw on ANY failure, so a CI log names the
+// prompt (kind, title, text, visible widgets) and not only the failed check.
+void check_prompt(bool ok, const char* what, const Prompt& prompt, msqt::MainWindow& window) {
+    gate::check(ok, what);
+    if (!ok) {
+        report_prompt(prompt, window);
+    }
 }
 
 void select_task(msqt::MainWindow& window, std::uint32_t uid) {
@@ -220,9 +229,10 @@ int main(int argc, char** argv) {
         {
             Prompt prompt;
             gate::check(click_assign(window, &prompt, false, QString()), "Assign Resources clicks");
-            gate::check(prompt.seen && prompt.title == QStringLiteral("Assign Resources"),
-                        "the click opens the Assign Resources prompt");
-            gate::check(!prompt.question, "an unassigned task is offered the resource list");
+            check_prompt(prompt.seen && prompt.title == QStringLiteral("Assign Resources"),
+                         "the click opens the Assign Resources prompt", prompt, window);
+            check_prompt(!prompt.question, "an unassigned task is offered the resource list",
+                         prompt, window);
             gate::check(window.pending_edits().empty(), "Cancel queues nothing");
             gate::check(!window.document_dirty(), "Cancel leaves the document clean");
         }
@@ -230,7 +240,7 @@ int main(int argc, char** argv) {
         Prompt prompt;
         gate::check(click_assign(window, &prompt, true, QString::fromStdString(name)),
                     "Assign Resources clicks");
-        gate::check(prompt.seen && !prompt.question, "the resource list opens");
+        check_prompt(prompt.seen && !prompt.question, "the resource list opens", prompt, window);
         gate::check(window.pending_edits().size() == 1, "choosing a resource queues one edit");
         gate::check(window.document_dirty(), "the queued assignment dirties the document");
         gate::check(window.status_left_text().contains(QStringLiteral("queued an assignment")),
@@ -246,7 +256,8 @@ int main(int argc, char** argv) {
         {
             Prompt again;
             gate::check(click_assign(window, &again, true, QString()), "a second click clicks");
-            gate::check(again.seen && again.question, "a held assignment offers the removal");
+            check_prompt(again.seen && again.question, "a held assignment offers the removal",
+                         again, window);
             gate::check(window.pending_edits().size() == 1, "a second click queues nothing");
             gate::check(window.status_left_text().contains(
                             QStringLiteral("assign resources: Removing an assignment is not implemented "
@@ -289,10 +300,9 @@ int main(int argc, char** argv) {
         select_task(window, task);
         Prompt prompt;
         gate::check(click_assign(window, &prompt, true, QString()), "the removal clicks");
-        gate::check(prompt.seen && prompt.question, "an assigned task is offered the removal");
-        if (!(prompt.seen && prompt.question)) {
-            report_prompt(prompt, window);
-        }
+        check_prompt(prompt.seen && prompt.question &&
+                         prompt.text.startsWith(QStringLiteral("Remove \"")),
+                     "an assigned task is offered the removal", prompt, window);
         gate::check(window.pending_edits().empty(),
                     "the removal on the port's own save queues nothing");
         gate::check(!window.document_dirty(), "the refused removal leaves the document clean");
@@ -323,17 +333,17 @@ int main(int argc, char** argv) {
         {
             Prompt prompt;
             gate::check(click_assign(window, &prompt, false, QString()), "the removal clicks");
-            gate::check(prompt.seen && prompt.question && prompt.title == QStringLiteral("Assign Resources"),
-                        "an assigned task is offered the removal");
-            if (!(prompt.seen && prompt.question)) {
-                report_prompt(prompt, window);
-            }
+            // The removal question is a QMessageBox, which has no title on macOS: assert its text.
+            check_prompt(prompt.seen && prompt.question &&
+                             prompt.text.startsWith(QStringLiteral("Remove \"")) &&
+                             prompt.text.contains(QStringLiteral("This is a pending edit")),
+                         "an assigned task is offered the removal", prompt, window);
             gate::check(window.pending_edits().empty(), "answering No queues nothing");
             gate::check(!window.document_dirty(), "answering No leaves the document clean");
         }
         Prompt prompt;
         gate::check(click_assign(window, &prompt, true, QString()), "the removal clicks");
-        gate::check(prompt.seen && prompt.question, "the removal is asked");
+        check_prompt(prompt.seen && prompt.question, "the removal is asked", prompt, window);
         gate::check(window.pending_edits().size() == 1, "answering Yes queues one edit");
         gate::check(window.document_dirty(), "the queued removal dirties the document");
         gate::check(window.status_left_text().contains(QStringLiteral("queued the removal")),
