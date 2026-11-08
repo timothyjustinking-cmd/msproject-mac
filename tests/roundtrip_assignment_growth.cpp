@@ -47,6 +47,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -1924,6 +1925,152 @@ void test_dry_run(TestContext& t) {
     }
 }
 
+/* ---- W34b-0.1: the unmeasured target shapes -------------------------------
+ * Every pair assigns a Work resource to a MANUAL, top-level, 0 % leaf of 24000
+ * ticks on the project calendar, 40 hours per assignment.  Each case below
+ * changes one fact of the task or the resource (or the work amount) in the add
+ * control, the removal control and, for the append shape, the second control,
+ * and the writer must refuse with a needle that names that gate. */
+void test_measured_shape_refusals(TestContext& t) {
+    std::string const missing = missing_path();
+    char const* const kTaskF2Meta = "114/TBkndTask/Fixed2Meta";
+    char const* const kRscVarMeta = "114/TBkndRsc/VarMeta";
+    mppwrite::AssignmentKey const target = key(1, 2);
+    constexpr std::size_t kTask1Row = 48 + 202;   /* task FixedData row 1 */
+    constexpr std::size_t kRsc2Row = 48 + 2 * 172; /* resource FixedData row 2 */
+
+    struct Case {
+        std::string label;
+        std::string stream;
+        std::function<void(Bytes&)> mutate;
+        std::string needle;
+    };
+    std::vector<Case> cases;
+    cases.push_back({"an automatically scheduled task", kTaskF2Meta,
+                     [](Bytes& b) { b[16 + 96 * 4 + 8] = 0x7F; },
+                     "is not manually scheduled"});
+    cases.push_back({"a task of another duration", kTaskFixed,
+                     [&](Bytes& b) { put_u32_at(b, kTask1Row + 84, 14400); },
+                     "duration is not the measured 24000 ticks"});
+    cases.push_back({"a task with its own calendar", kTaskFixed,
+                     [&](Bytes& b) { put_u32_at(b, kTask1Row + 178, 5); },
+                     "differs from the measured task row at byte 178"});
+    cases.push_back({"a constrained task", kTaskFixed,
+                     [&](Bytes& b) { put_u16_at(b, kTask1Row + 64, 2); },
+                     "differs from the measured task row at byte 64"});
+    cases.push_back({"a task of another type or effort setting", kTaskMeta,
+                     [](Bytes& b) { b[16 + 47 * 4 + 17] = 0x44; },
+                     "FixedMeta entry differs from the measured entry at byte 17"});
+    cases.push_back({"a task whose Fixed2Data differs", kTaskF2,
+                     [](Bytes& b) { b[64 * 4 + 40] = 0x02; },
+                     "Fixed2Data record differs from the measured record at byte 40"});
+    cases.push_back({"a task with an extra stored block", kTaskVarMeta,
+                     [](Bytes& b) {
+                         std::size_t const entries = (b.size() - 24) / 12;
+                         for (std::size_t i = 0; i < entries; ++i) {
+                             if (u32_at(b, 24 + 12 * i) == 1 &&
+                                 u32_at(b, 24 + 12 * i + 8) == 0x0B4000A4u) {
+                                 put_u32_at(b, 24 + 12 * i + 8, 0x0B400080u);
+                             }
+                         }
+                     },
+                     "VarMeta blocks are not the measured eleven keys"});
+    cases.push_back({"a resource with a standard rate", kRscFixed,
+                     [&](Bytes& b) { put_f64_at(b, kRsc2Row + 16, 5000.0); },
+                     "standard rate is not the measured one"});
+    cases.push_back({"a resource with an overtime rate", kRscFixed,
+                     [&](Bytes& b) { put_f64_at(b, kRsc2Row + 24, 7500.0); },
+                     "overtime rate is not the measured one"});
+    cases.push_back({"a resource with a cost per use", kRscFixed,
+                     [&](Bytes& b) { put_f64_at(b, kRsc2Row + 72, 2500.0); },
+                     "cost per use is not the measured one"});
+    cases.push_back({"a resource with another accrual", kRscFixed,
+                     [&](Bytes& b) { put_u32_at(b, kRsc2Row + 80, 1); },
+                     "accrual is not the measured one"});
+    cases.push_back({"a resource on the standard base calendar", kRscFixed,
+                     [&](Bytes& b) { put_u32_at(b, kRsc2Row + 154, 1); },
+                     "not on its own base calendar"});
+    cases.push_back({"a resource with a stored group", kRscVarMeta,
+                     [](Bytes& b) {
+                         std::size_t const entries = (b.size() - 24) / 12;
+                         for (std::size_t i = 0; i < entries; ++i) {
+                             if (u32_at(b, 24 + 12 * i) == 2 &&
+                                 u32_at(b, 24 + 12 * i + 8) == 0x0C4002E3u) {
+                                 put_u32_at(b, 24 + 12 * i + 8, 0x0C400003u);
+                             }
+                         }
+                     },
+                     "resource's VarMeta blocks are not the measured five keys"});
+
+    auto run = [&](char const* control, bool add, Case const& c) {
+        std::error_code ignored;
+        std::filesystem::remove(missing, ignored);
+        CfbDocument const source = with_edit(control, c.stream, c.mutate);
+        CfbDocument doc = source;
+        Bytes const before = doc.to_bytes();
+        std::string const what =
+            std::string(add ? "add: " : "remove: ") + c.label + " (" + control + ")";
+        if (add) {
+            expect_error(t,
+                         [&] { (void)mppwrite::assign_resource(doc, target, missing); },
+                         c.needle, what);
+        } else {
+            expect_error(
+                t, [&] { (void)mppwrite::unassign_resource(doc, target, missing); },
+                c.needle, what);
+        }
+        check_unchanged(t, doc, before, what);
+    };
+    for (Case const& c : cases) {
+        run(kAddControl, true, c);
+        run(kDeleteControl, false, c);
+    }
+
+    /* The work amount: every pair adds 40 hours (2400000.0 per assignment). */
+    {
+        auto set_row_work = [](Bytes& b, std::size_t row) {
+            put_f64_at(b, row * 110 + 20, 1800000.0);
+            put_f64_at(b, row * 110 + 36, 1800000.0);
+            put_f64_at(b, row * 110 + 44, 1800000.0);
+        };
+        std::error_code ignored;
+        std::filesystem::remove(missing, ignored);
+        CfbDocument add_doc =
+            with_edit(kAddControl, kAssnFixed, [&](Bytes& b) { set_row_work(b, 0); });
+        Bytes const add_before = add_doc.to_bytes();
+        expect_error(t,
+                     [&] { (void)mppwrite::assign_resource(add_doc, target, missing); },
+                     "work is not the measured 40 hours",
+                     "add: a 30-hour assignment on the placeholder row");
+        check_unchanged(t, add_doc, add_before, "add: a 30-hour assignment");
+
+        CfbDocument remove_doc = with_edit(
+            kDeleteControl, kAssnFixed, [&](Bytes& b) { set_row_work(b, (b.size() / 110) - 1); });
+        Bytes const remove_before = remove_doc.to_bytes();
+        expect_error(
+            t, [&] { (void)mppwrite::unassign_resource(remove_doc, target, missing); },
+            "work is not the measured 40 hours",
+            "remove: a 30-hour real assignment");
+        check_unchanged(t, remove_doc, remove_before, "remove: a 30-hour assignment");
+
+        CfbDocument second_doc = with_edit(
+            "wave34-assign-add-second-control.mpp", kAssnFixed, [&](Bytes& b) {
+                for (std::size_t r = 0; r < b.size() / 110; ++r) {
+                    if (u32_at(b, r * 110 + 4) == 1 && u32_at(b, r * 110 + 8) != 0xFFFF0001u) {
+                        set_row_work(b, r);
+                    }
+                }
+            });
+        Bytes const second_before = second_doc.to_bytes();
+        expect_error(
+            t,
+            [&] { (void)mppwrite::assign_resource(second_doc, key(1, 1), missing); },
+            "work is not the measured 40 hours",
+            "add (append shape): a 30-hour real assignment");
+        check_unchanged(t, second_doc, second_before, "add (append shape): 30 hours");
+    }
+}
+
 } /* namespace */
 
 int main() {
@@ -1936,6 +2083,7 @@ int main() {
         test_edit_refusals(t);
         test_path_refusals(t);
         test_add_damaged(t);
+        test_measured_shape_refusals(t);
         test_settled_damaged(t);
         test_remove_damaged(t);
         test_dry_run(t);

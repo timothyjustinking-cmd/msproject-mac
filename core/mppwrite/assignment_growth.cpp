@@ -622,6 +622,275 @@ TaskLeaf find_task_leaf(std::vector<VarEntryView> const& entries,
     return leaf;
 }
 
+/* ---- the measured target shape (W34b-0.1) --------------------------------
+ * Every assignment pair (wave30-assign-add / -delete, wave34-assign-add-second
+ * / -third) assigns a Work resource to task UniqueID 1 of one fixture family:
+ * a MANUAL, top-level, 0 % leaf of 24000 ticks (5 days) on the project
+ * calendar, ASAP, no constraint, and a Work resource at 100 % Max. Units with
+ * zero rates and cost per use, the default accrual and its own base calendar,
+ * each adding 40 hours (2400000.0 in the 60000-per-hour unit).  A task or
+ * resource that differs anywhere outside the words below is a save no pair
+ * measured, so the edit is refused rather than guessed.  The templates are the
+ * target task's and the resource's stored images in
+ * wave30-assign-add-control.mpp (the same bytes sit in the other three
+ * controls, bar the words masked here).
+ *
+ * Masked task FixedData words: row id and UniqueID (0..7), the two work words
+ * (8..15, 24..31; checked against the measured 40 h by check_measured_work),
+ * the free slack (74..77) and the start slack and total slack words
+ * (186..193) that depend on the other tasks, the six start/finish copies
+ * (96..119) and the start anchor (174..177).  Masked resource FixedData words:
+ * row id and UniqueID (0..7), the three work copies (48..55, 90..97,
+ * 106..113; the callers check them with check_resource_work) and the
+ * per-resource base calendar word (154..157, uid + 2 on every resource of
+ * every pair, checked below). */
+constexpr double kMeasuredAssignmentWork = 2400000.0;
+constexpr std::uint32_t kMeasuredTaskDuration = 24000;
+
+struct SkipRange {
+    std::size_t first;
+    std::size_t last; /* exclusive */
+};
+
+Bytes from_hex(std::string_view hex) {
+    auto nibble = [](char c) -> std::uint8_t {
+        return static_cast<std::uint8_t>(c <= '9' ? c - '0' : c - 'a' + 10);
+    };
+    Bytes out;
+    out.reserve(hex.size() / 2);
+    for (std::size_t i = 0; i + 1 < hex.size(); i += 2) {
+        out.push_back(static_cast<std::uint8_t>((nibble(hex[i]) << 4) |
+                                                nibble(hex[i + 1])));
+    }
+    return out;
+}
+
+Bytes const& measured_task_row() {
+    static const Bytes kRow = from_hex("0100000001000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000ffffffff0000000000000000f40100000000c05d0000c05d000000000000"
+        "c012f23bd827f63b781ef13b201cf63b781ef13b201cf63bffffffffffffffff"
+        "8214143dffffffffffffffff0000000000000000000000000000000000000000"
+        "0000080007000300800000000100781ef13bffffffffffffffff000000000000"
+        "00000000000000000000");
+    return kRow;
+}
+
+Bytes const& measured_task_fixed2() {
+    static const Bytes kRecord = from_hex("89b9c44ed10a11f19f641cc10c054c03000000000000004089b9c44dd10a11f1"
+        "9f641cc10c054c03030030000000781ef13b781ef13b201cf63bc05d00000700");
+    return kRecord;
+}
+
+Bytes const& measured_task_fixed2_meta() {
+    static const Bytes kEntry = from_hex("0000000000010000ff4f80010000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000c00000000000010");
+    return kEntry;
+}
+
+Bytes const& measured_task_fixed_meta() {
+    static const Bytes kEntry = from_hex("00000b00fa000000e3bffdfe71c16701074ccf1f100000000000000000000000"
+        "000000000000000000000000000000");
+    return kEntry;
+}
+
+Bytes const& measured_resource_row() {
+    static const Bytes kRow = from_hex("0100000001000000000000000088c34000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000003000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000003000000ffff"
+        "ffffffffffff020002000000");
+    return kRow;
+}
+
+Bytes const& measured_resource_fixed_meta() {
+    static const Bytes kEntry = from_hex("00000500dc000000e3fffd3f1c46000000000000000000000000000000000000"
+        "0000000000");
+    return kEntry;
+}
+
+/* The first byte of `actual` that differs from `want` outside `skip`, or -1. */
+long first_difference(Bytes const& actual, Bytes const& want,
+                      std::vector<SkipRange> const& skip) {
+    for (std::size_t at = 0; at < want.size() && at < actual.size(); ++at) {
+        bool skipped = false;
+        for (SkipRange const& range : skip) {
+            skipped = skipped || (at >= range.first && at < range.last);
+        }
+        if (!skipped && actual[at] != want[at]) {
+            return static_cast<long>(at);
+        }
+    }
+    return -1;
+}
+
+void check_measured_work(double work, std::string const& function) {
+    if (work != kMeasuredAssignmentWork) {
+        fail(function + ": the assignment's work is not the measured 40 hours "
+             "(2400000.0); every Project pair adds 40 hours per assignment, so "
+             "another amount is a save no pair measured");
+    }
+}
+
+/* The task's and the resource's stored images must be the measured ones. */
+void check_measured_shape(CfbDocument const& doc, Bytes const& task_fixed,
+                          Bytes const& task_meta, std::size_t task_row,
+                          std::vector<VarEntryView> const& task_entries,
+                          std::uint32_t task_uid, Bytes const& rsc_fixed,
+                          Bytes const& rsc_meta, std::size_t rsc_row,
+                          std::uint32_t resource_uid,
+                          std::string const& function) {
+    /* The task's FixedData row. */
+    Bytes const task_image =
+        slice(task_fixed, kTaskHeaderBytes + task_row * kTaskRowBytes,
+              kTaskRowBytes);
+    long at = first_difference(
+        task_image, measured_task_row(),
+        {{0, 32}, {74, 78}, {96, 120}, {174, 178}, {186, 194}});
+    if (at >= 0) {
+        std::string const detail =
+            at == 84 || at == 88
+                ? "the task's duration is not the measured 24000 ticks (5 days)"
+                : "a duration, constraint, calendar, percent or other word "
+                  "differs from the measured task";
+        fail(function + ": the target task's FixedData row differs from the "
+             "measured task row at byte " + std::to_string(at) + "; " + detail);
+    }
+    if (get_u32(task_image, task_row::kDuration) != kMeasuredTaskDuration) {
+        fail(function + ": the task's duration is not the measured 24000 ticks");
+    }
+
+    /* The task's Fixed2Meta entry carries the manual-scheduling byte. */
+    Bytes const f2m = doc.read_stream("114/TBkndTask/Fixed2Meta");
+    constexpr std::size_t kTaskF2mEntryBytes = 96;
+    std::size_t const f2m_at =
+        kMetaHeaderBytes + kTaskF2mEntryBytes * (task_row + kF2SpacerRecords);
+    if (f2m.size() < f2m_at + kTaskF2mEntryBytes) {
+        fail(function + ": the task Fixed2Meta has no entry for the target "
+             "task");
+    }
+    Bytes const f2m_image = slice(f2m, f2m_at, kTaskF2mEntryBytes);
+    if (f2m_image[8] != measured_task_fixed2_meta()[8]) {
+        fail(function + ": the target task is not manually scheduled (its "
+             "Fixed2Meta flags byte is not the measured 0xFF); the measured "
+             "Project pairs assign a manually scheduled task");
+    }
+    at = first_difference(f2m_image, measured_task_fixed2_meta(), {{4, 8}});
+    if (at >= 0) {
+        fail(function + ": the target task's Fixed2Meta entry differs from the "
+             "measured entry at byte " + std::to_string(at));
+    }
+
+    /* The task's FixedMeta entry (summary, effort-driven and type bits). */
+    Bytes const fm_image =
+        slice(task_meta,
+              kMetaHeaderBytes + kTaskFmEntryBytes * (task_row + kF2SpacerRecords),
+              kTaskFmEntryBytes);
+    at = first_difference(fm_image, measured_task_fixed_meta(),
+                          {{4, 8}, {16, 17}});
+    if (at >= 0) {
+        fail(function + ": the target task's FixedMeta entry differs from the "
+             "measured entry at byte " + std::to_string(at) + " (summary, "
+             "effort-driven and task-type bits are compared)");
+    }
+
+    /* The task's Fixed2Data record. */
+    Bytes const f2_image =
+        slice(doc.read_stream(kTaskFixed2Data),
+              kTaskF2RecordBytes * (task_row + kF2SpacerRecords),
+              kTaskF2RecordBytes);
+    at = first_difference(f2_image, measured_task_fixed2(),
+                          {{0, 16}, {22, 23}, {24, 40}, {46, 58}});
+    if (at >= 0) {
+        fail(function + ": the target task's Fixed2Data record differs from the "
+             "measured record at byte " + std::to_string(at));
+    }
+
+    /* The task's stored custom-value keys: the measured task holds these
+     * eleven blocks and no other (no note, calendar, deadline or type block). */
+    static const std::uint32_t kTaskKeys[] = {
+        0x0B40000Eu, 0x0B4000A4u, 0x0B4000A5u, 0x0B4000A8u, 0x0B4000A9u,
+        0x0B4000AAu, kTaskWorkLeafKey, 0x0B400505u, 0x0B400506u, 0x0B400563u,
+        0x0B400564u};
+    std::vector<std::uint32_t> task_keys;
+    for (VarEntryView const& entry : task_entries) {
+        if (entry.uid == task_uid) {
+            task_keys.push_back(entry.key);
+        }
+    }
+    std::sort(task_keys.begin(), task_keys.end());
+    std::vector<std::uint32_t> const want_task_keys(std::begin(kTaskKeys),
+                                                    std::end(kTaskKeys));
+    if (task_keys != want_task_keys) {
+        fail(function + ": the target task's VarMeta blocks are not the "
+             "measured eleven keys (a note, calendar, deadline or other stored "
+             "field changes the shape)");
+    }
+
+    /* The resource's FixedData row. */
+    Bytes const rsc_image =
+        slice(rsc_fixed, kRscHeaderBytes + rsc_row * kRscRowBytes, kRscRowBytes);
+    at = first_difference(rsc_image, measured_resource_row(),
+                          {{0, 8}, {48, 56}, {90, 98}, {106, 114}, {154, 158}});
+    if (at >= 0) {
+        auto const named = [](long byte) -> char const* {
+            if (byte >= 8 && byte < 16) return "Max. Units";
+            if (byte >= 16 && byte < 24) return "standard rate";
+            if (byte >= 24 && byte < 32) return "overtime rate";
+            if (byte >= 72 && byte < 80) return "cost per use";
+            if (byte >= 80 && byte < 84) return "accrual";
+            return "stored word";
+        };
+        fail(function + ": the resource's " + named(at) + " is not the "
+             "measured one (resource FixedData row byte " + std::to_string(at) +
+             "); the type, Max. Units, rates, cost per use and accrual words "
+             "are all compared with the measured resource row");
+    }
+    if (get_u32(rsc_image, 154) != resource_uid + 2) {
+        fail(function + ": the resource is not on its own base calendar (word "
+             "154 is not the measured resource UniqueID + 2)");
+    }
+    Bytes const rm_image =
+        slice(rsc_meta,
+              kMetaHeaderBytes + kRscFmEntryBytes * (rsc_row + kF2SpacerRecords),
+              kRscFmEntryBytes);
+    /* Byte 12 is 0x1C in the wave-30 controls and 0x5C once the session has
+     * saved the file (bit 0x40; every resource row of the wave-34 controls and
+     * of the null saves), so it is a save-session bit, not a resource fact. */
+    at = first_difference(rm_image, measured_resource_fixed_meta(),
+                          {{4, 8}, {12, 13}});
+    if (at >= 0) {
+        fail(function + ": the resource's FixedMeta entry differs from the "
+             "measured entry at byte " + std::to_string(at));
+    }
+
+    /* The resource's stored blocks: name, initials, calendar link and the two
+     * measured keys, and nothing else (no group, code, email or note). */
+    static const std::uint32_t kRscKeys[] = {0x0C400001u, 0x0C400002u,
+                                             0x0C400055u, 0x0C4002D6u,
+                                             0x0C4002E3u};
+    Bytes const rsc_var2 = doc.read_stream("114/TBkndRsc/Var2Data");
+    std::vector<VarEntryView> const rsc_entries = load_var_meta(
+        doc.read_stream("114/TBkndRsc/VarMeta"), rsc_var2,
+        "the resource VarMeta");
+    std::vector<std::uint32_t> rsc_keys;
+    for (VarEntryView const& entry : rsc_entries) {
+        if (entry.uid == resource_uid) {
+            rsc_keys.push_back(entry.key);
+        }
+    }
+    std::sort(rsc_keys.begin(), rsc_keys.end());
+    std::vector<std::uint32_t> const want_rsc_keys(std::begin(kRscKeys),
+                                                   std::end(kRscKeys));
+    if (rsc_keys != want_rsc_keys) {
+        fail(function + ": the resource's VarMeta blocks are not the measured "
+             "five keys (a group, code, label or other stored field changes the "
+             "shape)");
+    }
+}
+
 /* ---- identity ----------------------------------------------------------- */
 bool contains(Bytes const& haystack, Bytes const& needle) {
     return std::search(haystack.begin(), haystack.end(), needle.begin(),
@@ -867,6 +1136,18 @@ void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
 
     TaskTable const before = TaskTable::from_document(doc);
     TaskTable const after = TaskTable::from_document(work);
+    /* The project Work string is "<n> hrs"; every pair's n is a multiple of 40
+     * (0, 40, 80, 120), one 40-hour assignment at a time. */
+    {
+        double const total = get_f64(after.fixed_data(),
+                                     task_row_offset(0) + kTaskRowWork);
+        double const steps = total / kMeasuredAssignmentWork;
+        if (!std::isfinite(steps) || std::fabs(steps - std::round(steps)) > 1e-9) {
+            fail(function + ": the project's total work is not a whole number "
+                 "of the measured 40-hour steps, so its Work summary string "
+                 "would be a hand-made value no pair measured");
+        }
+    }
     write_project_summary(work, before, after);
     std::string const summary = summary_path(work);
     if (summary.empty()) {
@@ -970,6 +1251,9 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
     std::size_t const rsc_rows = check_resource_tables(doc, rsc_fixed, rsc_meta);
     std::size_t const rsc_row =
         find_resource_row(rsc_fixed, rsc_rows, key.resource_uid, function);
+    check_measured_shape(doc, task_fixed, task_meta, task_row, task_entries,
+                         key.task_uid, rsc_fixed, rsc_meta, rsc_row,
+                         key.resource_uid, function);
 
     Bytes const assn_fixed = doc.read_stream(kAssnFixedData);
     Bytes assn_meta = doc.read_stream(kAssnFixedMeta);
@@ -1149,6 +1433,7 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
         }
         std::sort(assigned.begin(), assigned.end());
         double const work = get_f64(model, kAssnRowWork);
+        check_measured_work(work, function);
         double const units = get_f64(model, kAssnRowUnits);
         std::uint32_t const ticks8 = contour_ticks8(work, function.c_str());
         std::size_t const leaf_count = real_rows.size();
@@ -1438,6 +1723,7 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
 
     double const work = get_f64(assn_fixed,
                                 target_row * kAssnRowBytes + kAssnRowWork);
+    check_measured_work(work, function);
     std::uint32_t const ticks8 = contour_ticks8(work, function.c_str());
     double const units = get_f64(
         assn_fixed, target_row * kAssnRowBytes + kAssnRowUnits);
@@ -1737,6 +2023,9 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
     std::size_t const rsc_rows = check_resource_tables(doc, rsc_fixed, rsc_meta);
     std::size_t const rsc_row =
         find_resource_row(rsc_fixed, rsc_rows, key.resource_uid, function);
+    check_measured_shape(doc, task_fixed, task_meta, task_row, task_entries,
+                         key.task_uid, rsc_fixed, rsc_meta, rsc_row,
+                         key.resource_uid, function);
 
     Bytes const assn_fixed = doc.read_stream(kAssnFixedData);
     Bytes assn_meta = doc.read_stream(kAssnFixedMeta);
@@ -1793,6 +2082,8 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
              "the caller named");
     }
     check_assn_row_work(assn_fixed, real_row, function.c_str());
+    check_measured_work(get_f64(assn_fixed, real_row * kAssnRowBytes + kAssnRowWork),
+                        function);
 
     for (std::size_t r = 0; r < rows; ++r) {
         Bytes expected;

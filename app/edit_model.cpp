@@ -2806,6 +2806,12 @@ bool make_add_resource_edit(const PlanInput& plan, std::string_view source_path,
 
 namespace {
 
+// W34b-0.1: the fixture shape every assignment pair measured (see
+// assignment_plan_refusal): the target task's duration in ticks (5 days) and the
+// resource's default PjAccrueAt (3, Prorated, stored at FixedData +80).
+constexpr std::int64_t kAssignMeasuredDurationTicks = 24000;
+constexpr std::uint32_t kAssignMeasuredAccrueAt = 3;
+
 // W34-4.3: the plan-side half of the Assign Resources rule, shared by the
 // builder and push().  The measured pairs (wave30-assign-add / -delete) assign
 // ONE saved work resource at 100 % to a saved, unstarted LEAF task that holds
@@ -2833,6 +2839,34 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
         return what + " on a task that has started is not implemented in this "
                       "port: the measured Project pairs use an unstarted task";
     }
+    // W34b-0.1 (R34G3-1 / RC-R1): every assignment pair is one fixture shape --
+    // a MANUAL, top-level leaf of 24000 ticks (5 days) on the project calendar
+    // with no constraint, and a Work resource at 100 % with zero rates and cost
+    // per use, the default accrual and 40 hours per assignment.
+    if (task->outline_level != 0) {
+        return what + " on a task that is not top-level is not implemented in "
+                      "this port: the measured Project pairs use a top-level task";
+    }
+    if (!task->manually_scheduled) {
+        return what + " on an automatically scheduled task is not implemented "
+                      "in this port: the measured Project pairs use a manually "
+                      "scheduled task";
+    }
+    if (task->duration_ticks != kAssignMeasuredDurationTicks) {
+        return what + " on a task whose duration is not the measured 5 days "
+                      "(24000 ticks) is not implemented in this port: every "
+                      "measured Project pair adds 40 hours of work to a 5-day task";
+    }
+    if (task->calendar_uid != -1) {
+        return what + " on a task with its own calendar is not implemented in "
+                      "this port: the measured Project pairs use the project "
+                      "calendar";
+    }
+    if (task->constraint_type != 0) {
+        return what + " on a task with a scheduling constraint is not "
+                      "implemented in this port: the measured Project pairs "
+                      "use an unconstrained task";
+    }
     if (resource->type != core::view::ResourceType::work) {
         return what + " with a resource that is not a work resource is not "
                       "implemented in this port: the measured Project pairs "
@@ -2842,6 +2876,22 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
         return what + " with a resource whose Max. Units is not 100% is not "
                       "implemented in this port: the measured Project pairs use "
                       "a 100% resource";
+    }
+    if (resource->standard_rate_per_hour != 0.0 ||
+        resource->overtime_rate_per_hour != 0.0) {
+        return what + " with a resource that has a standard or overtime rate is "
+                      "not implemented in this port: the measured Project pairs "
+                      "use a resource with zero rates";
+    }
+    if (resource->cost_per_use != 0.0) {
+        return what + " with a resource that has a cost per use is not "
+                      "implemented in this port: the measured Project pairs use "
+                      "a resource with no cost per use";
+    }
+    if (resource->cost_fields_stored && resource->accrue_at != kAssignMeasuredAccrueAt) {
+        return what + " with a resource whose cost accrual is not the default "
+                      "(Prorated) is not implemented in this port: the measured "
+                      "Project pairs use the default accrual";
     }
     std::size_t real = 0;
     bool names_resource = false;

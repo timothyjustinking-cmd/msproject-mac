@@ -50,6 +50,7 @@
 #include <cstdio>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -593,6 +594,67 @@ void check_refusals() {
         expect_refused(changed, source, task, resource, true, "Max. Units",
                        "a resource under 100 % Max. Units");
     }
+    /* W34b-0.1 (R34G3-1 / RC-R1): the rest of the measured fixture shape.  Each
+     * case changes one field of the plan, for the add and for the removal, and
+     * names the field in the reason (never the generic "not implemented" alone). */
+    {
+        struct ShapeCase {
+            const char* label;
+            const char* needle;
+            std::function<void(app::TaskRow&)> task_change;
+            std::function<void(app::ResourceRow&)> resource_change;
+        };
+        const std::vector<ShapeCase> cases = {
+            {"a task below the top level", "is not top-level",
+             [](app::TaskRow& row) { row.outline_level = 1; }, nullptr},
+            {"an automatically scheduled task", "automatically scheduled",
+             [](app::TaskRow& row) { row.manually_scheduled = false; }, nullptr},
+            {"a 3-day task", "not the measured 5 days",
+             [](app::TaskRow& row) { row.duration_ticks = 14400; }, nullptr},
+            {"a task with its own calendar", "with its own calendar",
+             [](app::TaskRow& row) { row.calendar_uid = 3; }, nullptr},
+            {"a constrained task", "with a scheduling constraint",
+             [](app::TaskRow& row) { row.constraint_type = 2; }, nullptr},
+            {"a resource with a standard rate", "standard or overtime rate", nullptr,
+             [](app::ResourceRow& row) { row.standard_rate_per_hour = 25.0; }},
+            {"a resource with an overtime rate", "standard or overtime rate", nullptr,
+             [](app::ResourceRow& row) { row.overtime_rate_per_hour = 37.5; }},
+            {"a resource with a cost per use", "has a cost per use", nullptr,
+             [](app::ResourceRow& row) { row.cost_per_use = 10.0; }},
+            {"a resource accruing at start", "cost accrual is not the default", nullptr,
+             [](app::ResourceRow& row) {
+                 row.cost_fields_stored = true;
+                 row.accrue_at = 1;
+             }},
+        };
+        for (const ShapeCase& one : cases) {
+            for (const bool assign : {true, false}) {
+                app::PlanInput changed = assign ? plan : remove_plan;
+                const std::uint32_t task_uid = assign ? kAdd.task_uid : kRemove.task_uid;
+                const std::uint32_t resource_uid = assign ? kAdd.resource_uid : kRemove.resource_uid;
+                for (app::TaskRow& row : changed.tasks) {
+                    if (row.uid == task_uid && one.task_change) {
+                        one.task_change(row);
+                    }
+                }
+                for (app::ResourceRow& row : changed.resources) {
+                    if (row.uid == resource_uid && one.resource_change) {
+                        one.resource_change(row);
+                    }
+                }
+                expect_refused(changed, assign ? source : remove_path.string(), task_uid,
+                               resource_uid, assign, one.needle,
+                               std::string(assign ? "assign: " : "remove: ") + one.label);
+                /* push() backstops a hand-built queue with the same rule. */
+                app::StructuralEdits edits;
+                check(!edits.push(hand_edit(assign, task_uid, resource_uid, kAdd.task_uid + 100),
+                                  &changed),
+                      std::string("push() refuses ") + (assign ? "an assign" : "a removal") +
+                          " on " + one.label);
+                check(edits.empty(), std::string("push(): nothing queued for ") + one.label);
+            }
+        }
+    }
     /* The unmeasured counts: a task that already has a real assignment. */
     expect_refused(assigned_plan, assigned_path.string(), task, resource, true,
                    "already has an assignment", "a task that already has an assignment");
@@ -657,6 +719,38 @@ void check_refusals() {
         broken.save(broken_path.string());
         expect_refused(plan, broken_path.string(), task, resource, true, not_implemented,
                        "a file whose 114/Props is not the measured shape");
+    }
+    /* W34b-0.1: a shape the plan cannot show (the task type, effort-driven flag,
+     * a resource's base calendar word) is still refused, by the writer's dry run
+     * through the builder, because the saved rows must equal the measured ones. */
+    for (const bool assign : {true, false}) {
+        const std::string path = assign ? source : remove_path.string();
+        const app::PlanInput& base_plan = assign ? plan : remove_plan;
+        const std::uint32_t task_uid = assign ? kAdd.task_uid : kRemove.task_uid;
+        const std::uint32_t resource_uid = assign ? kAdd.resource_uid : kRemove.resource_uid;
+        const std::string side = assign ? "assign: " : "remove: ";
+        {
+            mppwrite::CfbDocument scratch = mppwrite::CfbDocument::from_file(path);
+            Bytes fixed = scratch.read_stream(kTaskFixed);
+            fixed[48 + 202 * task_uid + 64] ^= 0x01;
+            scratch.replace_stream(kTaskFixed, fixed);
+            const std::filesystem::path scratch_path =
+                out_path(assign ? "app-assign-task-row-add.mpp" : "app-assign-task-row-remove.mpp");
+            scratch.save(scratch_path.string());
+            expect_refused(base_plan, scratch_path.string(), task_uid, resource_uid, assign,
+                           "differs from the measured task row", side + "a task row byte off the measured one");
+        }
+        {
+            mppwrite::CfbDocument scratch = mppwrite::CfbDocument::from_file(path);
+            Bytes fixed = scratch.read_stream(kRscFixed);
+            fixed[48 + 172 * resource_uid + 154] ^= 0x01;
+            scratch.replace_stream(kRscFixed, fixed);
+            const std::filesystem::path scratch_path =
+                out_path(assign ? "app-assign-rsc-row-add.mpp" : "app-assign-rsc-row-remove.mpp");
+            scratch.save(scratch_path.string());
+            expect_refused(base_plan, scratch_path.string(), task_uid, resource_uid, assign,
+                           "base calendar", side + "a resource calendar word off the measured one");
+        }
     }
 
     /* push(): the plan-side backstop for a hand-built queue. */
