@@ -1,0 +1,47 @@
+# Wave 34b: completion record
+
+Branch `wave34b`.  Push and CI: by the coordinator.  Logs are under `build/w34b/`
+(untracked, named for the parent commit and the item).
+
+## G0
+
+### W34b-0.1 (R34G3-1 = RC-R1, R34G4-1, R34G4-2)
+
+Assign Resources and its removal refuse every shape the four assignment pairs did not
+measure, in the shared edit-model builder, in `push()` and in the writer.  Commit
+`f08249e`.  RED then GREEN: writer 85 failures of 1983 checks to 0 of 1983; edit model
+54 failures (784 passed) to 0 of 886.
+
+### W34b-0.2 (R34G3-2, RC-W4)
+
+**Assignment Fixed2Data (R34G3-2).**  The appended record is `[own identity][task
+identity][resource identity]`, 16 bytes each.  The control and its null save differ on
+every existing record at +0, +16 and +32 (for example the task's own word `89b9c496` to
+`f958d0d0`), so the first dwords are per-save renumbering and stay masked as absolute
+values.  They are references, though: +16 is the first 16 bytes of the task's Task
+Fixed2Data record (record uid + 3) and +32 is the first 16 bytes of the resource's
+Resource Fixed2Data record (record uid + 3), or the placeholder identity for an
+unassigned row.  The harness now resolves them in Project's save and in the port's
+output in all four pairs (`identity_reference_problem`), and plants a wrong task and a
+wrong resource reference in scratch copies of the port's output; each is reported.
+
+**Calendar Fixed2Data +32 (RC-W4).**  A reference, not a counter.  The control and null
+save of the resource-add pairs differ at Cal Fixed2Data 272, 304 and 320 (record 5 +32,
+record 6 +16 and +32), Rsc Fixed2Data 160 and 184 (record 4 +0 and +24) and the 16-byte
+identity in `114/Props` (2834 in the wave 30 pair, 2854 in the third); the calendar
+records' own +0 (240, 288) is identical in both.  So +16 is the identity of the
+calendar's resource and +32 is the one identity every calendar record shares, held once
+in `114/Props`.  The harness (`calendar_identity_problem`) requires, in Project's save and
+in the port's output, that the appended record's +16 is the new resource's identity,
+its +0 equals its +16, and its +32 is the other calendars' and the single one in
+`114/Props`; it plants a wrong +16 and a wrong +32.
+
+**Red run.**  With the writer deliberately changed to put the previous resource's
+identity at the calendar record's +16 the pair comparison (`compare_all`) reported no
+failure, because the first dword is masked and the remaining twelve bytes are the same
+stable suffix; the new check failed (`build/w34b/f08249e-W34b-0.2-rsc-red.log`).  For
+the assignment record, the writer with the wrong resource identity fails the new
+Project-tied check in the first pair and both settled pairs
+(`build/w34b/f08249e-W34b-0.2-red.log`, 7 failures).  Both changes were reverted;
+GREEN: assignment growth 2007 checks, resource growth 899 checks, 0 failures
+(`build/w34b/f08249e-W34b-0.2-green.log`, `-rsc-green.log`).

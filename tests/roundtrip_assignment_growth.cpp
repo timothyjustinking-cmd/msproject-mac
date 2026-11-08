@@ -350,6 +350,118 @@ std::vector<save_pair::TailNormalisation> tail_normalisation(
     return {entry};
 }
 
+/* W34b-0.2 (R34G3-2): the appended record's +16 (task reference) and +32
+ * (resource reference) are 16-byte copies of the task row's and the resource
+ * row's own identity (Task Fixed2Data record uid+3, Resource Fixed2Data record
+ * uid+3; the placeholder constant for an unassigned row).  Their first dwords
+ * are masked in the pair comparison because Project renumbers every identity on
+ * each save: the control and the null save differ at exactly those dwords on
+ * every existing record (e.g. the task's own word 89b9c496 -> f958d0d0).  A mask
+ * hides a WRONG reference as well, so the reference is compared by what it
+ * names: this resolves the appended record in `file` and reports the first
+ * reference that is not the identity of the expected row, or "" when both are.
+ * It is run on Project's own save (the measured truth) and on the port's output,
+ * so the port's reference is tied to Project's, not only to the port's rows. */
+std::string identity_reference_problem(CfbDocument const& file,
+                                       std::size_t record_index,
+                                       std::uint32_t task_uid,
+                                       std::uint32_t resource_uid) {
+    Bytes const assn_f2 = file.read_stream(kAssnF2);
+    Bytes const task_f2 = file.read_stream(kTaskF2);
+    Bytes const rsc_f2 = file.read_stream(kRscF2);
+    std::size_t const at = record_index * kF2Record;
+    std::size_t const task_at = (task_uid + std::size_t{3}) * 64;
+    std::size_t const rsc_at = (resource_uid + std::size_t{3}) * 40;
+    if (assn_f2.size() < at + kF2Record || task_f2.size() < task_at + 16 ||
+        (resource_uid != 0 && rsc_f2.size() < rsc_at + 16)) {
+        return "the record or the row it references is missing";
+    }
+    if (!std::equal(task_f2.begin() + static_cast<std::ptrdiff_t>(task_at),
+                    task_f2.begin() + static_cast<std::ptrdiff_t>(task_at + 16),
+                    assn_f2.begin() + static_cast<std::ptrdiff_t>(at + 16))) {
+        return "the task reference (+16) is not task " + std::to_string(task_uid) +
+               "'s identity";
+    }
+    if (resource_uid == 0) {
+        if (!bytes_equal_at(assn_f2, at + 32, null_identity())) {
+            return "the resource reference (+32) is not the placeholder identity";
+        }
+    } else if (!std::equal(rsc_f2.begin() + static_cast<std::ptrdiff_t>(rsc_at),
+                           rsc_f2.begin() +
+                               static_cast<std::ptrdiff_t>(rsc_at + 16),
+                           assn_f2.begin() + static_cast<std::ptrdiff_t>(at + 32))) {
+        return "the resource reference (+32) is not resource " +
+               std::to_string(resource_uid) + "'s identity";
+    }
+    return std::string();
+}
+
+/* The pair's appended record is the first one past the null save's records.
+ * Checks Project's save and the port's output, and shows the check can fail by
+ * planting a wrong task and a wrong resource reference in scratch copies of the
+ * port's output. */
+void check_identity_references(TestContext& t, std::string const& label,
+                               CfbDocument const& null_save,
+                               CfbDocument const& project,
+                               CfbDocument const& port,
+                               std::uint32_t task_uid,
+                               std::uint32_t resource_uid,
+                               std::uint32_t other_task_uid,
+                               std::uint32_t other_resource_uid) {
+    std::size_t const record = null_save.read_stream(kAssnF2).size() / kF2Record;
+    t.equal(project.read_stream(kAssnF2).size(), (record + 1) * kF2Record,
+            label + ": Project's save appends exactly one Fixed2Data record");
+    t.equal(port.read_stream(kAssnF2).size(), (record + 1) * kF2Record,
+            label + ": the port appends exactly one Fixed2Data record");
+    std::string const project_problem =
+        identity_reference_problem(project, record, task_uid, resource_uid);
+    t.check(project_problem.empty(),
+            label + ": Project's appended record references the task and resource "
+                    "rows' identities (" + project_problem + ")");
+    std::string const port_problem =
+        identity_reference_problem(port, record, task_uid, resource_uid);
+    t.check(port_problem.empty(),
+            label + ": the port's appended record references the same rows "
+                    "(" + port_problem + ")");
+
+    /* A wrong resource reference in a scratch copy of the port's output. */
+    {
+        CfbDocument scratch = port;
+        Bytes assn_f2 = scratch.read_stream(kAssnF2);
+        Bytes const rsc_f2 = scratch.read_stream(kRscF2);
+        std::size_t const other = (other_resource_uid + std::size_t{3}) * 40;
+        std::copy(rsc_f2.begin() + static_cast<std::ptrdiff_t>(other),
+                  rsc_f2.begin() + static_cast<std::ptrdiff_t>(other + 16),
+                  assn_f2.begin() +
+                      static_cast<std::ptrdiff_t>(record * kF2Record + 32));
+        scratch.replace_stream(kAssnF2, assn_f2);
+        std::string const problem =
+            identity_reference_problem(scratch, record, task_uid, resource_uid);
+        std::cout << "   " << label << " planted wrong resource reference -> "
+                  << (problem.empty() ? "NOT DETECTED" : problem) << "\n";
+        t.check(problem.find("resource reference (+32)") != std::string::npos,
+                label + ": a wrong resource reference is detected");
+    }
+    /* A wrong task reference. */
+    {
+        CfbDocument scratch = port;
+        Bytes assn_f2 = scratch.read_stream(kAssnF2);
+        Bytes const task_f2 = scratch.read_stream(kTaskF2);
+        std::size_t const other = (other_task_uid + std::size_t{3}) * 64;
+        std::copy(task_f2.begin() + static_cast<std::ptrdiff_t>(other),
+                  task_f2.begin() + static_cast<std::ptrdiff_t>(other + 16),
+                  assn_f2.begin() +
+                      static_cast<std::ptrdiff_t>(record * kF2Record + 16));
+        scratch.replace_stream(kAssnF2, assn_f2);
+        std::string const problem =
+            identity_reference_problem(scratch, record, task_uid, resource_uid);
+        std::cout << "   " << label << " planted wrong task reference -> "
+                  << (problem.empty() ? "NOT DETECTED" : problem) << "\n";
+        t.check(problem.find("task reference (+16)") != std::string::npos,
+                label + ": a wrong task reference is detected");
+    }
+}
+
 /* Every stream not in `owned` must be byte-identical in `after`. */
 void check_only_owned_streams(TestContext& t, CfbDocument const& before,
                               CfbDocument const& after,
@@ -636,6 +748,9 @@ void test_add_pair(TestContext& t) {
         doc_from_data(kAddEdit), CfbDocument::from_file(out_path("w34-assign-add.mpp")),
         nullptr, 0, kAddDeclared.data(), kAddDeclared.size(),
         tail_normalisation(null_save));
+    check_identity_references(
+        t, "assign-add", null_save, doc_from_data(kAddEdit),
+        CfbDocument::from_file(out_path("w34-assign-add.mpp")), 1, 2, 2, 1);
 }
 
 /* ---- the REMOVE pair ---------------------------------------------------- */
@@ -821,6 +936,9 @@ void test_remove_pair(TestContext& t) {
         CfbDocument::from_file(out_path("w34-assign-remove.mpp")), nullptr, 0,
         kRemoveDeclared.data(), kRemoveDeclared.size(),
         tail_normalisation(null_save));
+    check_identity_references(
+        t, "assign-remove", null_save, doc_from_data(kDeleteEdit),
+        CfbDocument::from_file(out_path("w34-assign-remove.mpp")), 1, 0, 2, 1);
 }
 
 /* ---- the settled append pairs (count 1 -> 2 and 2 -> 3) ----------------- */
@@ -1231,6 +1349,10 @@ void test_append_pair(TestContext& t, AppendPair const& p) {
         p.marker_moves ? kAppendDeclared.data() : kAppendDeclaredNoMarker.data(),
         p.marker_moves ? kAppendDeclared.size() : kAppendDeclaredNoMarker.size(),
         tail_normalisation(null_save));
+    check_identity_references(
+        t, label, null_save, doc_from_data(p.edit),
+        CfbDocument::from_file(out_path("w34-append-" + label + ".mpp")), 1,
+        p.resource_uid, 2, p.resource_uid == 1 ? 2 : 1);
 }
 
 void test_append_pairs(TestContext& t) {

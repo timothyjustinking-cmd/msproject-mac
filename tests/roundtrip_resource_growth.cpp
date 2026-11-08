@@ -276,7 +276,25 @@ Pair const kThird{"wave34-resource-add-third-control.mpp",
                   5};
 
 /* The first dword of every identity in the appended records, which Project
- * renumbers on each save. */
+ * renumbers on each save.
+ *
+ * W34b-0.2 (RC-W4): which of these words are noise and which are references.
+ * The control and its null save (wave30-resource-add-control[-null], the third
+ * pair likewise) differ, on the EXISTING records, at exactly:
+ *   Cal Fixed2Data  +32 of record 5 and +16 / +32 of record 6 (offsets 272, 304,
+ *                   320: 89b9c40a -> f958d06f, 89b9c40b -> f958d070), and
+ *   Rsc Fixed2Data  +0 and +24 of the resource record (offsets 160, 184:
+ *                   89b9c40b -> f958d070), and
+ *   Props           the 16-byte identity at 2834 (89b9c40a -> f958d06f),
+ * while the calendar records' own +0 (offset 240 / 288: 7e8bcba0, bacb09b6) is
+ * identical in both.  So +16 and +32 are not counters: each is a REFERENCE that
+ * Project re-issues on every save (+16 = the identity of the resource the
+ * calendar belongs to, +32 = the one identity every calendar record shares, the
+ * 16 bytes held once in 114/Props), and the appended record's +0 is the fresh
+ * identity it is created with, equal to its +16 (it is also the new resource's).
+ * The first dwords are masked because their ABSOLUTE value is the save's; the
+ * references are compared by what they name in calendar_identity_problem, in
+ * Project's save and in the port's output. */
 std::vector<save_pair::TailNormalisation> tail_normalisation(
     CfbDocument const& null_save) {
     std::size_t const cal_base = null_save.read_stream(kCalF2).size();
@@ -309,6 +327,97 @@ void check_only_owned_streams(TestContext& t, CfbDocument const& before,
         t.check(after.has_stream(path) &&
                     after.read_stream(path) == before.read_stream(path),
                 label + ": unowned stream changed or vanished: " + path);
+    }
+}
+
+/* W34b-0.2 (RC-W4): the appended calendar record [fresh][fresh][shared] names
+ * the new resource (+16, and its own identity at +0) and the shared calendar
+ * identity (+32, held once in 114/Props and by every other calendar record).
+ * Returns the first reference that does not name what it should, or "". */
+std::string calendar_identity_problem(CfbDocument const& file,
+                                      std::size_t cal_record,
+                                      std::size_t rsc_record) {
+    Bytes const cal = file.read_stream(kCalF2);
+    Bytes const rsc = file.read_stream(kRscF2);
+    Bytes const props = file.read_stream(kProps);
+    std::size_t const at = cal_record * 48;
+    std::size_t const rsc_at = rsc_record * 40;
+    if (cal_record == 0 || cal.size() < at + 48 || rsc.size() < rsc_at + 16) {
+        return "the calendar or resource record is missing";
+    }
+    auto same = [](Bytes const& a, std::size_t ai, Bytes const& b, std::size_t bi) {
+        return std::equal(a.begin() + static_cast<std::ptrdiff_t>(ai),
+                          a.begin() + static_cast<std::ptrdiff_t>(ai + 16),
+                          b.begin() + static_cast<std::ptrdiff_t>(bi));
+    };
+    if (!same(cal, at + 16, rsc, rsc_at)) {
+        return "the resource reference (+16) is not the new resource's identity";
+    }
+    if (!same(cal, at, cal, at + 16)) {
+        return "the record's own identity (+0) is not its fresh identity (+16)";
+    }
+    if (!same(cal, at + 32, cal, at - 48 + 32)) {
+        return "the shared identity (+32) is not the other calendars'";
+    }
+    std::size_t held = 0;
+    Bytes const shared = slice_of(cal, at + 32, 16);
+    for (auto hit = std::search(props.begin(), props.end(), shared.begin(), shared.end());
+         hit != props.end();
+         hit = std::search(hit + 1, props.end(), shared.begin(), shared.end())) {
+        ++held;
+    }
+    if (held != 1) {
+        return "the shared identity (+32) is not the one held in 114/Props";
+    }
+    return std::string();
+}
+
+void check_calendar_identities(TestContext& t, std::string const& label,
+                               CfbDocument const& null_save,
+                               CfbDocument const& project,
+                               CfbDocument const& port) {
+    std::size_t const cal_record = null_save.read_stream(kCalF2).size() / 48;
+    std::size_t const rsc_record = null_save.read_stream(kRscF2).size() / 40;
+    std::string const project_problem =
+        calendar_identity_problem(project, cal_record, rsc_record);
+    t.check(project_problem.empty(),
+            label + ": Project's appended calendar record names the new resource "
+                    "and the shared identity (" + project_problem + ")");
+    std::string const port_problem =
+        calendar_identity_problem(port, cal_record, rsc_record);
+    t.check(port_problem.empty(),
+            label + ": the port's appended calendar record names the same "
+                    "(" + port_problem + ")");
+
+    /* A wrong resource reference (+16: the previous resource's identity). */
+    {
+        CfbDocument scratch = port;
+        Bytes cal = scratch.read_stream(kCalF2);
+        Bytes const rsc = scratch.read_stream(kRscF2);
+        std::size_t const other = (rsc_record - 1) * 40;
+        std::copy(rsc.begin() + static_cast<std::ptrdiff_t>(other),
+                  rsc.begin() + static_cast<std::ptrdiff_t>(other + 16),
+                  cal.begin() + static_cast<std::ptrdiff_t>(cal_record * 48 + 16));
+        scratch.replace_stream(kCalF2, cal);
+        std::string const problem =
+            calendar_identity_problem(scratch, cal_record, rsc_record);
+        std::cout << "   " << label << " planted wrong resource reference -> "
+                  << (problem.empty() ? "NOT DETECTED" : problem) << "\n";
+        t.check(problem.find("resource reference (+16)") != std::string::npos,
+                label + ": a wrong resource reference (+16) is detected");
+    }
+    /* A shared identity that is not the one in Props (first dword off by one). */
+    {
+        CfbDocument scratch = port;
+        Bytes cal = scratch.read_stream(kCalF2);
+        cal[cal_record * 48 + 32] = static_cast<std::uint8_t>(cal[cal_record * 48 + 32] ^ 1u);
+        scratch.replace_stream(kCalF2, cal);
+        std::string const problem =
+            calendar_identity_problem(scratch, cal_record, rsc_record);
+        std::cout << "   " << label << " planted wrong shared identity -> "
+                  << (problem.empty() ? "NOT DETECTED" : problem) << "\n";
+        t.check(problem.find("shared identity (+32)") != std::string::npos,
+                label + ": a wrong shared identity (+32) is detected");
     }
 }
 
@@ -477,6 +586,8 @@ void test_pair(TestContext& t, Pair const& p) {
                            doc_from_data(p.edit), CfbDocument::from_file(path),
                            nullptr, 0, kDeclared.data(), kDeclared.size(),
                            tail_normalisation(null_save));
+    check_calendar_identities(t, label, null_save, doc_from_data(p.edit),
+                              CfbDocument::from_file(path));
 }
 
 /* ---- refusals ----------------------------------------------------------- */
