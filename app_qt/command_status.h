@@ -69,20 +69,18 @@ inline bool shell_implements(app::MenuAction action) noexcept {
         case app::MenuAction::insert_task:
         // W34-4.2: Add Resources, for the two measured resource counts only.
         case app::MenuAction::insert_resource:
-            return true;
-        // UNIMPLEMENTED -- keep this marker: the backlog generator reads only the
-        // cases above it as "implemented".
-        case app::MenuAction::hide_app:        // no portable hide command
-        case app::MenuAction::none:
-        // W35-4.1: the macOS shell's menu items.  The Qt shell reaches these five
-        // commands from its ribbon, not through handle_action(), so no Qt menu item
-        // for them is implemented; naming them keeps the switch exhaustive for
-        // -Wswitch (GCC, Clang and AppleClang reject a missing enumerator).
+        // W35b-1.8 (R35G4-2): the five wave-35 menu items, which handle_action()
+        // sends to the same MainWindow handlers as their ribbon buttons.
         case app::MenuAction::resource_information:
         case app::MenuAction::assign_resources:
         case app::MenuAction::font_bold:
         case app::MenuAction::define_wbs_code:
         case app::MenuAction::calculate_project:
+            return true;
+        // UNIMPLEMENTED -- keep this marker: the backlog generator reads only the
+        // cases above it as "implemented".
+        case app::MenuAction::hide_app:        // no portable hide command
+        case app::MenuAction::none:
             return false;
     }
     return false;

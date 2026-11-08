@@ -1980,6 +1980,9 @@ void MainWindow::update_menu_state() {
         task_view && sheet != nullptr && sheet->selected_cells().size() > 1;
     const bool multi_row_paste = clipboard_.rows > 1;
     state.task_view = task_view;
+    // W35b-1.8 (R35G4-2): Resource Information is a Resource Sheet command, and the
+    // shared enablement rule reads this flag; it was never set here.
+    state.resource_sheet_view = prefs_.view == app::ViewMode::resource_sheet;
     if (task_view && sheet != nullptr) {
         for (std::size_t row = 0; row < sheet->row_count(); ++row) {
             if (!sheet->is_summary(row)) {
@@ -2076,6 +2079,24 @@ void MainWindow::handle_action(app::MenuAction action) {
             return;
         case app::MenuAction::insert_resource:
             add_resource();
+            return;
+        // W35b-1.8 (R35G4-2): the five wave-35 menu items run the handlers their
+        // ribbon buttons run (handle_ribbon_command), so a menu item, a shortcut and
+        // the ribbon reach one code path and one set of refusals.
+        case app::MenuAction::resource_information:
+            rename_selected_resource();
+            return;
+        case app::MenuAction::assign_resources:
+            assign_resources();
+            return;
+        case app::MenuAction::font_bold:
+            bold_selected_cell();
+            return;
+        case app::MenuAction::define_wbs_code:
+            define_wbs_code();
+            return;
+        case app::MenuAction::calculate_project:
+            calculate_project();
             return;
         case app::MenuAction::delete_task:
             delete_task();

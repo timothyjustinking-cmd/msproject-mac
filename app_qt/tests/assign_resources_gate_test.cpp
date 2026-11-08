@@ -232,6 +232,94 @@ int main(int argc, char** argv) {
     const std::uint32_t task = 1;
     const std::uint32_t resource = 2;
 
+    // --- 0. W35b-1.8 (R35G4-2): the five wave-35 MenuActions run from the menu ---
+    // They were listed as unimplemented Qt menu items (disabled, "not implemented
+    // in this port") while their ribbon buttons worked.  Each menu item now reaches
+    // the ribbon's handler, and Resource Information follows the Resource Sheet view.
+    // Nothing is saved; the window is dropped with its queued edits.
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        gate::check(window.open_file(copy, &error), "the control opens for the menu route");
+        window.show();
+        QApplication::processEvents();
+        QApplication::processEvents();
+        select_task(window, task);
+
+        const app::MenuAction five[] = {
+            app::MenuAction::resource_information, app::MenuAction::assign_resources,
+            app::MenuAction::font_bold, app::MenuAction::define_wbs_code,
+            app::MenuAction::calculate_project};
+        for (const app::MenuAction id : five) {
+            QAction* action = gate::find_action(window, id);
+            gate::check(action != nullptr, "the menu carries the wave-35 action");
+            gate::check(action != nullptr &&
+                            action->toolTip() != QStringLiteral("not implemented in this port"),
+                        "the wave-35 menu item does not carry the disabled tooltip");
+        }
+        const auto enabled = [&window](app::MenuAction id) {
+            QAction* action = gate::find_action(window, id);
+            return action != nullptr && action->isEnabled();
+        };
+        // The status line a triggered action leaves; "is not wired" is the
+        // handle_action() fall-through that these five used to reach.
+        const auto trigger = [&window](app::MenuAction id) {
+            QAction* action = gate::find_action(window, id);
+            if (action == nullptr || !action->isEnabled()) {
+                return false;
+            }
+            Prompt prompt;
+            {
+                gate::PromptAnswerer answerer(&prompt, false, QString());
+                action->trigger();
+                QApplication::processEvents();
+            }
+            return true;
+        };
+        const auto not_wired = [&window]() {
+            return window.status_left_text().contains(QStringLiteral("is not wired"));
+        };
+
+        gate::check(enabled(app::MenuAction::assign_resources),
+                    "Assign Resources is enabled in the menu with a task selected");
+        gate::check(enabled(app::MenuAction::font_bold),
+                    "Font Bold is enabled in the menu with a cell selected");
+        gate::check(enabled(app::MenuAction::define_wbs_code) &&
+                        enabled(app::MenuAction::calculate_project),
+                    "Define WBS Code and Calculate Project are enabled with a document");
+        gate::check(!enabled(app::MenuAction::resource_information),
+                    "Resource Information is disabled in the Task Sheet view");
+
+        gate::check(trigger(app::MenuAction::assign_resources),
+                    "the Assign Resources menu item triggers");
+        gate::check(!not_wired() && window.pending_edits().empty(),
+                    "the Assign Resources menu item opens the prompt (Cancel queues nothing)");
+        gate::check(trigger(app::MenuAction::font_bold), "the Font Bold menu item triggers");
+        gate::check(!not_wired(), "the Font Bold menu item reaches its handler");
+        gate::check(trigger(app::MenuAction::define_wbs_code),
+                    "the Define WBS Code menu item triggers");
+        gate::check(!not_wired(), "the Define WBS Code menu item reaches its handler");
+        gate::check(trigger(app::MenuAction::calculate_project),
+                    "the Calculate Project menu item triggers");
+        gate::check(!not_wired(), "the Calculate Project menu item reaches its handler");
+
+        QAction* resource_view = gate::find_action(window, app::MenuAction::view_resource_sheet);
+        gate::check(resource_view != nullptr, "the menu carries the Resource Sheet view");
+        if (resource_view != nullptr) {
+            resource_view->trigger();
+            QApplication::processEvents();
+        }
+        gate::check(enabled(app::MenuAction::resource_information),
+                    "Resource Information is enabled in the Resource Sheet view");
+        gate::check(!enabled(app::MenuAction::assign_resources) &&
+                        !enabled(app::MenuAction::font_bold),
+                    "Assign Resources and Font Bold are disabled in the Resource Sheet view");
+        gate::check(trigger(app::MenuAction::resource_information),
+                    "the Resource Information menu item triggers");
+        gate::check(!not_wired(), "the Resource Information menu item reaches its handler");
+    }
+
     // --- 1. the control, the refusals that queue nothing, the measured add ----
     std::string name;
     {
