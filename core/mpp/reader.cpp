@@ -2994,6 +2994,11 @@ void parse_calendars(const CompoundFile& cfb, std::string_view root, MppVersion 
                                 kFieldCalName, raw)) {
                 calendar.name = trim_ascii_spaces(raw);
             }
+            for (const VarEntry& entry : table.entries) {
+                if (entry.uid == static_cast<std::uint32_t>(calendar.uid)) {
+                    ++calendar.stored_blocks;
+                }
+            }
         }
         document.calendars.push_back(std::move(calendar));
     }
@@ -3927,6 +3932,9 @@ void resolve_resource_calendars(Document& document) {
     };
     for (Resource& resource : document.resources) {
         resource.calendar_uid = -1;
+        resource.calendar_base_uid = -1;
+        resource.calendar_stored_blocks = 0;
+        resource.calendar_base_extra_blocks = 0;
         resource.base_calendar.clear();
         for (Calendar const& calendar : document.calendars) {
             if (calendar.resource_uid != static_cast<std::int32_t>(resource.uid)) {
@@ -3942,6 +3950,16 @@ void resolve_resource_calendars(Document& document) {
                 break;
             }
             resource.calendar_uid = calendar.uid;
+            resource.calendar_base_uid = calendar.base_uid;
+            resource.calendar_stored_blocks = calendar.stored_blocks;
+            for (Calendar const& base_row : document.calendars) {
+                if (base_row.uid == calendar.base_uid) {
+                    const std::uint32_t named = base_row.name.empty() ? 0u : 1u;
+                    resource.calendar_base_extra_blocks =
+                        base_row.stored_blocks > named ? base_row.stored_blocks - named : 0u;
+                    break;
+                }
+            }
             /* A resource-calendar row is a copy of its base calendar; Project
              * prints the BASE calendar's name in the Resource Sheet's Base
              * Calendar column (W31-3.3: all three fixture rows have base_uid 1

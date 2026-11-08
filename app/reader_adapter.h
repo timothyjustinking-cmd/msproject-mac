@@ -132,6 +132,11 @@ inline ResourceRow resource_row_from_mpp(const mpp::Resource& resource) {
     // nothing for it rather than inventing "Start".
     row.accrue_at = resource.accrue_at;
     row.cost_fields_stored = resource.cost_fields_stored;
+    // W35-0.1: a resource with no calendar row keeps -1 and is refused by the
+    // assignment rule (the writer has no calendar to check).
+    row.calendar_base_uid = resource.calendar_base_uid;
+    row.calendar_stored_blocks = resource.calendar_stored_blocks;
+    row.calendar_base_extra_blocks = resource.calendar_base_extra_blocks;
     return row;
 }
 

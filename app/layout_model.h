@@ -207,6 +207,13 @@ struct ResourceRow {
     double cost_per_use = 0.0;
     std::uint32_t accrue_at = 1;        // PjAccrueAt: 1 Start, 2 End, 3 Prorated
     bool cost_fields_stored = false;
+    // W35-0.1: the resource's calendar row (core/mpp/reader.h Resource).  The
+    // defaults are the measured pairs' shape: derived from the Standard base
+    // calendar (uid 1), the resource calendar owning no block and the base
+    // owning nothing beyond its name.
+    std::int32_t calendar_base_uid = 1;
+    std::uint32_t calendar_stored_blocks = 0;
+    std::uint32_t calendar_base_extra_blocks = 0;
 };
 
 // One assignment, as the reader exposes it (wave 11).  Work is carried in

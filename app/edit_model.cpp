@@ -2939,6 +2939,24 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
                       "(Prorated) is not implemented in this port: the measured "
                       "Project pairs use the default accrual";
     }
+    // W35-0.1 (R34b-1): the resource's base calendar.  Every measured pair
+    // assigns a resource whose calendar row derives from Standard (uid 1) and
+    // owns no working-times or exception block, so the schedule the task keeps
+    // is the project calendar's.  A resource on another base calendar, or one
+    // with an exception or edited week (its own or the Standard calendar's),
+    // moves the work and finish Project would write, and no pair measured it.
+    if (resource->calendar_base_uid != 1) {
+        return what + " with a resource whose calendar is based on another "
+                      "calendar is not implemented in this port: the measured "
+                      "Project pairs use a resource on the Standard base calendar";
+    }
+    if (resource->calendar_stored_blocks != 0 ||
+        resource->calendar_base_extra_blocks != 0) {
+        return what + " with a resource whose calendar has working-time changes "
+                      "or exceptions is not implemented in this port: the "
+                      "measured Project pairs use a resource calendar that "
+                      "inherits the Standard calendar unchanged";
+    }
     std::size_t real = 0;
     bool names_resource = false;
     for (const AssignmentRow& assignment : plan.assignments) {

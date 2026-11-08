@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -729,6 +730,190 @@ void check_measured_work(double work, std::string const& function) {
     }
 }
 
+/* ---- the measured resource calendar (W35-0.1 / R34b-1) --------------------
+ * Resource row word 154 only names a calendar; Project schedules the assignment
+ * on that calendar's contents.  Every pair (wave30-assign-add / -delete,
+ * wave34-assign-add-second / -third, and their controls and null saves) has the
+ * same calendar table: the Standard base calendar (uid 1, row {0, -1, 1}, FixedMeta
+ * entry 00 00 01 00 <offset> 8f 00, and ONE stored block, its name) and, for each
+ * resource, a derived row {1, resource uid, resource uid + 2} whose FixedMeta
+ * entry is 00 00 00 00 <offset> 0e 00 and which owns NO block in the calendar's
+ * VarMeta -- no name, no working-times block (0x0D400008) and so no exception.  The
+ * project's default calendar is that Standard calendar (114/Props 0x0240000E
+ * names it) and its default week (0x02401388) is the stock Monday to Friday
+ * 08:00-12:00 + 13:00-17:00 week below, identical in all twelve files.  A resource
+ * calendar that is based on another calendar, carries a stored block, or sits on a
+ * different project calendar or week is a save no pair measured. */
+constexpr char const* kCalFixedData = "114/TBkndCal/FixedData";
+constexpr char const* kCalFixedMeta = "114/TBkndCal/FixedMeta";
+constexpr char const* kCalVarMeta = "114/TBkndCal/VarMeta";
+constexpr char const* kCalVar2Data = "114/TBkndCal/Var2Data";
+constexpr std::size_t kCalHeaderBytes = 64;
+constexpr std::size_t kCalRowBytes = 12;
+constexpr std::size_t kCalMetaEntryBytes = 10;
+constexpr std::size_t kCalSpareSlots = 4;
+constexpr std::uint32_t kStandardCalendarUid = 1;
+constexpr std::uint32_t kCalNameKey = 0x0D400001u;
+constexpr std::uint32_t kPropsDefaultCalendarName = 0x0240000Eu;
+constexpr std::uint32_t kPropsDefaultCalendarWeek = 0x02401388u;
+
+Bytes const& measured_default_week() {
+    static const Bytes kWeek = from_hex(
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000200"
+        "c0120000c012781e000000000000000060090000600900000000000000000000"
+        "0000000060090000c012000000000000000000000000000000000200c0120000"
+        "c012781e00000000000000006009000060090000000000000000000000000000"
+        "60090000c012000000000000000000000000000000000200c0120000c012781e"
+        "0000000000000000600900006009000000000000000000000000000060090000"
+        "c012000000000000000000000000000000000200c0120000c012781e00000000"
+        "00000000600900006009000000000000000000000000000060090000c0120000"
+        "00000000000000000000000000000200c0120000c012781e0000000000000000"
+        "600900006009000000000000000000000000000060090000c012000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "00000000");
+    return kWeek;
+}
+
+/* A name payload without its trailing UTF-16 NUL characters. */
+Bytes trimmed_name(Bytes name) {
+    while (name.size() >= 2 && name[name.size() - 1] == 0 &&
+           name[name.size() - 2] == 0) {
+        name.resize(name.size() - 2);
+    }
+    return name;
+}
+
+void check_resource_calendar(CfbDocument const& doc, std::uint32_t resource_uid,
+                             std::uint32_t calendar_uid,
+                             std::string const& function) {
+    Bytes const fixed = doc.read_stream(kCalFixedData);
+    if (fixed.size() < kCalHeaderBytes ||
+        (fixed.size() - kCalHeaderBytes) % kCalRowBytes != 0) {
+        fail(function + ": the calendar FixedData is not 64 + 12 * rows bytes");
+    }
+    std::size_t const rows = (fixed.size() - kCalHeaderBytes) / kCalRowBytes;
+    auto const cell = [&](std::size_t row, std::size_t word) {
+        return get_u32(fixed, kCalHeaderBytes + row * kCalRowBytes + 4 * word);
+    };
+    /* A row is {base calendar uid, resource uid, calendar uid}. */
+    std::size_t mine = rows;
+    std::size_t mine_count = 0;
+    std::size_t standard = rows;
+    std::size_t standard_count = 0;
+    for (std::size_t row = 0; row < rows; ++row) {
+        if (cell(row, 1) == resource_uid) {
+            mine = row;
+            ++mine_count;
+        }
+        if (cell(row, 2) == kStandardCalendarUid) {
+            standard = row;
+            ++standard_count;
+        }
+    }
+    if (mine_count != 1) {
+        fail(function + ": the calendar table has " + std::to_string(mine_count) +
+             " rows for the resource's calendar; the measured resource has one "
+             "derived calendar of its own");
+    }
+    if (cell(mine, 2) != calendar_uid) {
+        fail(function + ": the resource's calendar row is calendar " +
+             std::to_string(cell(mine, 2)) + ", not the calendar word 154 names (" +
+             std::to_string(calendar_uid) + ")");
+    }
+    if (cell(mine, 0) != kStandardCalendarUid) {
+        fail(function + ": the resource's calendar is based on calendar " +
+             std::to_string(cell(mine, 0)) + ", not the Standard base calendar "
+             "(uid 1) every measured Project pair uses");
+    }
+    if (standard_count != 1 || cell(standard, 0) != 0 ||
+        cell(standard, 1) != 0xFFFFFFFFu) {
+        fail(function + ": calendar 1 is not the measured Standard base calendar "
+             "row {0, -1, 1}");
+    }
+
+    /* The two rows' FixedMeta entries (flags the pairs measured as 8f / 0e). */
+    Bytes const meta = doc.read_stream(kCalFixedMeta);
+    if (check_meta(meta, kCalMetaEntryBytes, fixed.size(),
+                   "the calendar FixedMeta").entries != rows + kCalSpareSlots) {
+        fail(function + ": the calendar FixedMeta does not carry rows + 4 "
+             "entries");
+    }
+    auto const entry_at = [&](std::size_t row) {
+        return kMetaHeaderBytes + (row + kCalSpareSlots) * kCalMetaEntryBytes;
+    };
+    if (!(meta[entry_at(mine)] == 0 && meta[entry_at(mine) + 1] == 0 &&
+          meta[entry_at(mine) + 2] == 0 && meta[entry_at(mine) + 3] == 0 &&
+          meta[entry_at(mine) + 8] == 0x0E && meta[entry_at(mine) + 9] == 0)) {
+        fail(function + ": the resource calendar's FixedMeta entry is not the "
+             "measured 00 00 00 00 <offset> 0e 00 (it carries working times, "
+             "an exception or another flag)");
+    }
+    if (!(meta[entry_at(standard)] == 0 && meta[entry_at(standard) + 1] == 0 &&
+          meta[entry_at(standard) + 2] == 1 && meta[entry_at(standard) + 3] == 0 &&
+          meta[entry_at(standard) + 8] == 0x8F && meta[entry_at(standard) + 9] == 0)) {
+        fail(function + ": the Standard calendar's FixedMeta entry is not the "
+             "measured 00 00 01 00 <offset> 8f 00");
+    }
+
+    /* The calendar's stored blocks: the Standard name and nothing else. */
+    Bytes const var2 = doc.read_stream(kCalVar2Data);
+    std::vector<VarEntryView> const entries =
+        load_var_meta(doc.read_stream(kCalVarMeta), var2, "the calendar VarMeta");
+    std::optional<Bytes> standard_name;
+    for (VarEntryView const& entry : entries) {
+        if (entry.uid == calendar_uid) {
+            fail(function + ": the resource's calendar stores a block (key 0x" +
+                 [&] {
+                     char buffer[16];
+                     std::snprintf(buffer, sizeof buffer, "%08X", entry.key);
+                     return std::string(buffer);
+                 }() + ": a name, working times or an exception); the measured "
+                 "resource calendar stores none");
+        }
+        if (entry.uid == kStandardCalendarUid) {
+            if (entry.key != kCalNameKey || standard_name) {
+                fail(function + ": the Standard base calendar stores a block "
+                     "beyond its name (working times or an exception); the "
+                     "measured Standard calendar stores only its name");
+            }
+            standard_name = slice(var2, entry.offset + 4, block_length(var2, entry.offset));
+        }
+    }
+    if (!standard_name) {
+        fail(function + ": the Standard base calendar has no stored name");
+    }
+}
+
+/* The Props half of the same measured calendar: the project's default calendar
+ * is Standard and its week is the stock week.  Called after each path's own
+ * Props gates, so a damaged Props stream keeps reporting its own gate first. */
+void check_project_calendar(CfbDocument const& doc, Bytes const& props,
+                            std::string const& function) {
+    Bytes const var2 = doc.read_stream(kCalVar2Data);
+    Bytes standard_name;
+    for (VarEntryView const& entry :
+         load_var_meta(doc.read_stream(kCalVarMeta), var2, "the calendar VarMeta")) {
+        if (entry.uid == kStandardCalendarUid && entry.key == kCalNameKey) {
+            standard_name = slice(var2, entry.offset + 4, block_length(var2, entry.offset));
+        }
+    }
+    if (trimmed_name(props_record(props, kPropsDefaultCalendarName,
+                                  function.c_str())) !=
+        trimmed_name(standard_name)) {
+        fail(function + ": the project's default calendar is not the Standard "
+             "base calendar (114/Props 0x0240000E names another calendar); the "
+             "measured pairs schedule the task on Standard");
+    }
+    if (props_record(props, kPropsDefaultCalendarWeek, function.c_str()) !=
+        measured_default_week()) {
+        fail(function + ": the project's default working week differs from the "
+             "measured Monday to Friday 08:00-12:00 + 13:00-17:00 week "
+             "(114/Props 0x02401388)");
+    }
+}
+
 /* The task's and the resource's stored images must be the measured ones. */
 void check_measured_shape(CfbDocument const& doc, Bytes const& task_fixed,
                           Bytes const& task_meta, std::size_t task_row,
@@ -847,6 +1032,7 @@ void check_measured_shape(CfbDocument const& doc, Bytes const& task_fixed,
         fail(function + ": the resource is not on its own base calendar (word "
              "154 is not the measured resource UniqueID + 2)");
     }
+    check_resource_calendar(doc, resource_uid, get_u32(rsc_image, 154), function);
     Bytes const rm_image =
         slice(rsc_meta,
               kMetaHeaderBytes + kRscFmEntryBytes * (rsc_row + kF2SpacerRecords),
@@ -1475,6 +1661,7 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
             fail(function + ": the 114/Props record 0x02400007 is not the "
                  "measured four-byte session word");
         }
+        check_project_calendar(doc, props, function);
 
         /* ---- build ------------------------------------------------ */
         Built built;
@@ -1793,6 +1980,7 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
         fail(function + ": the 114/Props record 0x02400007 is not the "
              "measured four-byte session word");
     }
+    check_project_calendar(doc, props, function);
 
     /* ---- build ------------------------------------------------------ */
     Built built;
@@ -2244,6 +2432,7 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
         fail(function + ": the 114/Props assignment scalars do not agree with "
              "the measured control state");
     }
+    check_project_calendar(doc, props, function);
 
     /* ---- build ------------------------------------------------------ */
     Built built;
