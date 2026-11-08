@@ -2428,6 +2428,70 @@ void test_measured_shape_refusals(TestContext& t) {
     }
 }
 
+/* ---- W35-3.5: removing an assignment from a file the port itself saved --- */
+
+char const* kPortControl = "wave35-g3-assign-remove-port-saved-control.mpp";
+char const* kPortNull = "wave35-g3-assign-remove-port-saved-control-null.mpp";
+char const* kPortEdit = "wave35-g3-assign-remove-port-saved.mpp";
+
+/* The pair: the port's own Assign Resources output on the wave-30 add control
+ * (control), Project reopening and resaving it (null save), and Project
+ * deleting task 1's assignment to resource 2 from it (edit).  Measured in
+ * W35-3.5; the removal stays REFUSED (spec/writers/table-growth.md, "Removing an
+ * assignment from a port-saved file"). */
+void test_remove_port_saved(TestContext& t) {
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, kPortControl));
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, kPortNull));
+    fixture::require_committed(join(MPPWRITE_TEST_DATA, kPortEdit));
+
+    /* 1. The port's own file is refused, unchanged: Assn FixedMeta is the
+     * append shape (count == rows, a leading tombstoned entry), not the
+     * settled (rows - 1) / rows / flag 4 shape that Project's resave writes. */
+    CfbDocument const control = doc_from_data(kPortControl);
+    {
+        CfbDocument doc = control;
+        Bytes const before = doc.to_bytes();
+        std::error_code ignored;
+        std::filesystem::remove(missing_path(), ignored);
+        expect_error(
+            t, [&] { (void)mppwrite::unassign_resource(doc, key(1, 2), missing_path()); },
+            "FixedMeta is not the measured (rows - 1) / rows / flag 4 settled shape",
+            "remove on the port-saved file");
+        check_unchanged(t, doc, before, "remove on the port-saved file");
+    }
+
+    /* 2. The settle step is not the only gap.  Give the control the streams
+     * Project's null save rewrites (Assn FixedMeta and Fixed2Meta, Rsc FixedMeta,
+     * Props): the writer then accepts the file, and its output still differs from
+     * Project's edit save in four streams, each a named gap.  Project's save also
+     * carries a Props14 edit marker the harness cannot see as an effect for this
+     * pair (declared-effect check fails with effects = 0), so Props14 is not in
+     * the declared list below and this test does not vouch for it. */
+    CfbDocument settled = control;
+    CfbDocument const null_save = doc_from_data(kPortNull);
+    for (char const* path : {kAssnMeta, kAssnF2Meta, kRscMeta, kProps}) {
+        settled.replace_stream(path, null_save.read_stream(path));
+    }
+    std::string const out = out_path("w35-assign-remove-port-saved.mpp");
+    (void)mppwrite::unassign_resource(settled, key(1, 2), out);
+
+    std::array<char const*, 12> const declared{{
+        kAssnFixed, kAssnMeta, kAssnF2, kAssnF2Meta, kAssnVarMeta, kAssnVar2,
+        kTaskFixed, kTaskMeta, kTaskVar2, kRscFixed, kProps, kSummary}};
+    std::array<save_pair::KnownGap, 4> const gaps{{
+        /* The appended record's identity counter: Project's is 10 higher. */
+        {kAssnF2, 6, 196, 0xd1, 0xdb},
+        {kAssnVar2, 3, 524, 0x12, 0xba},
+        /* Project clears a resource flag the port-saved file still carries. */
+        {"114/TBkndRsc/Fixed2Meta", 1, 279, 0x2b, 0x0b},
+        /* The displayed-row list Project rebuilds (586 -> 540 B). */
+        {"214/CEdl/Var2Data", 64, 430, 0x00, 0x00}}};
+    save_pair::compare_all(t, "assign-remove-port-saved", control, null_save,
+                           doc_from_data(kPortEdit), CfbDocument::from_file(out),
+                           gaps.data(), gaps.size(), declared.data(),
+                           declared.size(), tail_normalisation(null_save));
+}
+
 } /* namespace */
 
 int main() {
@@ -2436,6 +2500,7 @@ int main() {
         TestContext t;
         test_add_pair(t);
         test_remove_pair(t);
+        test_remove_port_saved(t);
         test_append_pairs(t);
         test_edit_refusals(t);
         test_path_refusals(t);

@@ -320,3 +320,60 @@ No dynamic trace this wave (W34-0.4 decision). The open rules are all
 pair-measurable (two inserts in one save, a task delete, a change on a
 non-first table); the static dispatch already names the container writers, so
 a trace would not decide a shape the pairs cannot.
+
+## W35-3.5: removing an assignment from a file the port itself saved
+
+Question (wave-35 brief, G3 item 3.5): the writer's REMOVE needs the settled
+shape that Project's own save leaves, and the plan-side check refuses a file the
+port saved.  Does the port's removal match Project's when the control is the
+port's own Assign Resources output?  Until it matches, it stays refused.
+
+**Pair** (`scripts/oracle_w35_g3.py`, pair `assign-remove-port-saved`; fixtures
+`tests/data/wave35-g3-assign-remove-port-saved{-control,-control-null,}.mpp`;
+anatomy `evidence/wave35-g3-assign-remove-port-saved.md`).  Control = the port's
+output of the wave-34 add (task 1, resource uid 2) on
+`wave30-assign-add-control.mpp`, byte for byte; null = Project reopens and
+resaves it; edit = Project deletes that assignment.  A first generation of the
+edit used `neutralise()` in the edit session, which bumped the revision counter
+one past the null's (byte 155 of SummaryInformation, 472 of 114/Props, 490 of
+Task Var2Data).  The committed pair sets only `UserName`, as the null does, and
+the three bytes agree.
+
+**Measured.**
+
+1. Project's null save SETTLES the port's file: `114/TBkndAssn/FixedMeta`
+   (header +4 6 -> 4, +8 4 -> 3, the leading tombstoned entry dropped, entries
+   re-pointed), `Fixed2Meta`, two flag bytes of `114/TBkndRsc/FixedMeta` and the
+   114/Props scalars all change on a save that edits nothing.  The port's append
+   shape is therefore not the shape Project resaves, and the writer's existing
+   check ("the assignment FixedMeta is not the measured (rows - 1) / rows / flag 4
+   settled shape") refuses the raw file.  The test pins that refusal and that the
+   document is left unchanged.
+2. Project's edit of the port's file produces the same Assn streams as its edit
+   of the settled file (`wave30-assign-delete`): FixedData 440 -> 550, Var2Data
+   520 -> 644, FixedMeta and VarMeta at the same offsets.
+3. With the four streams Project's null rewrites (Assn FixedMeta and Fixed2Meta,
+   Rsc FixedMeta, 114/Props) copied from the null into the control, the writer
+   accepts the file.  Its output then matches Project's edit save in every
+   declared stream except four, now named KnownGaps in
+   `tests/roundtrip_assignment_growth.cpp` (`test_remove_port_saved`):
+   - `114/TBkndAssn/Fixed2Data`: 6 bytes from 196; the appended record's identity
+     counter, port 0xd1, Project 0xdb (Project's is 10 higher).
+   - `114/TBkndAssn/Var2Data`: 3 bytes from 524, port 0x12, Project 0xba.
+   - `114/TBkndRsc/Fixed2Meta`: byte 279, port 0x2b, Project 0x0b.  Project clears
+     a flag bit that the port-saved file still carries; in the settled file the
+     bit was already clear, which is why wave 30's pair never showed it.
+   - `214/CEdl/Var2Data`: 64 bytes from 430; Project rebuilds the displayed-row
+     list (586 -> 540 B).
+   - `Props14` carries Project's edit marker; the harness's declared-effect check
+     fails for this pair (effects = 0), so the test leaves it out of its declared
+     list and does not vouch for it.
+
+**Decision.** DEFERRED with evidence.  The removal stays refused for a file the
+port saved (both writer and plan).  Enabling needs (a) the settle transform
+derived as a rule rather than copied from a null (only this one pair measures
+it), (b) the identity-counter rule behind the Fixed2Data and Var2Data bytes,
+(c) the Rsc Fixed2Meta flag rule and (d) the CEdl rebuild; none can be derived
+from one pair.  Pairs still needed: the same removal from a port-saved file with
+a different row count (two and three existing assignments) and with the add made
+on a different task, to separate the counter and flag rules from this file.
