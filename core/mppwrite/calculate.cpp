@@ -167,6 +167,17 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        " carries a deadline; the measured "
                                        "Calculate Project save has none");
             }
+            /* W35b-0.3 (R35G1-2): the writer stamps Fixed2Data +46 with the Props
+             * project start, which is right only for a leaf that starts at the
+             * project start; the linked and lag pairs store the predecessor-finish
+             * bound there. */
+            if (rows.u32(row, task_row::kStart) != rows.u32(0, task_row::kStart)) {
+                return fail(error, "task uid " + std::to_string(rows.uid(row)) +
+                                       " starts at a date other than the project "
+                                       "start; the measured Calculate Project "
+                                       "save has every leaf starting at the "
+                                       "project start");
+            }
             shape.leaf_uids.push_back(rows.uid(row));
         }
         std::uint32_t latest = 0;
@@ -194,9 +205,35 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                "0x02400024 is not 01 00); there is nothing to "
                                "calculate");
         }
+        /* W35b-0.3: the pair lengthens the project; no pair shortens it. */
+        if (shape.project_finish < rows.u32(0, task_row::kFinish)) {
+            return fail(error, "the recalculation would shorten the project (the "
+                               "latest task finish is before the stored project "
+                               "finish); the measured Calculate Project save "
+                               "lengthens it");
+        }
         if (rows.u32(0, task_row::kFinish) == shape.project_finish) {
             return fail(error, "the project finish already equals the latest "
                                "task finish; there is nothing to calculate");
+        }
+        /* W35b-0.3: the stored project finish is the one before the change, so a
+         * leaf that finishes before it had slack and one that finishes at it ended
+         * the project.  The measured pair has one leaf past that finish and the
+         * other before it, so Project's critical flags do not change.  A second
+         * leaf at or past it (the lengthened leaf overtaken, or the old critical
+         * leaf left behind) moves the critical path, and the writer never writes a
+         * critical flag.  (The reader's flag is stored total slack <= 0, which is
+         * stale here, so it cannot be compared.) */
+        for (std::size_t row = 1; row < kRows; ++row) {
+            if (rows.uid(row) != shape.critical_uid &&
+                rows.u32(row, task_row::kFinish) >= rows.u32(0, task_row::kFinish)) {
+                return fail(error, "the recalculation moves the critical path (task "
+                                   "uid " + std::to_string(rows.uid(row)) +
+                                       " does not finish before the stored project "
+                                       "finish, as the other leaf must); the "
+                                       "measured Calculate Project save leaves the "
+                                       "critical flags as they were");
+            }
         }
         for (std::size_t row = 1; row < kRows; ++row) {
             if (rows.u32(row, task_row::kStartAnchor) == kNoDate) {

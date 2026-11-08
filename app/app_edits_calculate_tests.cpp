@@ -39,6 +39,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <string>
@@ -130,6 +131,24 @@ std::filesystem::path out_path(const std::string& name) {
     std::error_code error;
     std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR), error);
     return std::filesystem::path(APP_TEST_OUT_DIR) / name;
+}
+
+/* A leaf whose Duration changed also changes its placeholder assignment's planned work (an
+ * IEEE double at TBkndAssn +20 of 110-byte rows, ticks x 100), as Project saves it. */
+void set_planned_work(mppwrite::CfbDocument& doc, std::uint32_t task_uid, std::uint32_t ticks) {
+    const std::string stream = "114/TBkndAssn/FixedData";
+    Bytes assn = doc.read_stream(stream);
+    for (std::size_t base = 0; base + 110 <= assn.size(); base += 110) {
+        const std::uint32_t uid = static_cast<std::uint32_t>(assn[base + 4]) |
+                                  (static_cast<std::uint32_t>(assn[base + 5]) << 8) |
+                                  (static_cast<std::uint32_t>(assn[base + 6]) << 16) |
+                                  (static_cast<std::uint32_t>(assn[base + 7]) << 24);
+        if (uid == task_uid) {
+            const double work = static_cast<double>(ticks) * 100.0;
+            std::memcpy(&assn[base + 20], &work, sizeof work);
+        }
+    }
+    doc.replace_stream(stream, assn);
 }
 
 app::PlanInput load_plan(const std::filesystem::path& path) {
@@ -412,6 +431,39 @@ void check_refusals() {
         changed.tasks[1].calendar_uid = 3;
         expect_refused(changed, source, "its own calendar", "a task calendar");
     }
+    /* W35b-0.3 (R35G1-2): the three pending recalculations no pair measured.  The pair
+     * lengthens the critical leaf, leaves both critical flags as they were, and every
+     * leaf starts at the project start. */
+    {
+        /* The critical path moves: the plan says leaf 1 is critical, leaf 2 is longer. */
+        app::PlanInput changed = plan;
+        changed.tasks[1].finish = app::date32_from_packed(0x3C0427D8u);
+        expect_refused(changed, source, "moves the critical path",
+                       "a recalculation that moves the critical path (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(changed), &changed),
+              "push() refuses a Calculate edit over a plan that moves the critical path");
+    }
+    {
+        /* The project would shorten: the stored project finish is later than every leaf. */
+        app::PlanInput changed = plan;
+        changed.project_finish = app::date32_from_packed(0x3BFE27D8u);
+        expect_refused(changed, source, "would shorten the project",
+                       "a recalculation that shortens the project (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(changed), &changed),
+              "push() refuses a Calculate edit over a plan that shortens the project");
+    }
+    {
+        /* A leaf that does not start at the project start. */
+        app::PlanInput changed = plan;
+        changed.tasks[1].start = app::date32_from_packed(0x3BF312C0u);
+        expect_refused(changed, source, "does not start at the project start",
+                       "a leaf that does not start at the project start (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(changed), &changed),
+              "push() refuses a Calculate edit over a plan with a moved leaf start");
+    }
     {
         app::PlanInput changed = plan;
         app::LinkRow link;
@@ -451,6 +503,40 @@ void check_refusals() {
         dated.save(dated_path.string());
         expect_refused(plan, dated_path.string(), "carries a deadline",
                        "a file whose leaf carries a deadline");
+    }
+    {
+        /* W35b-0.3: the FILE holds the unmeasured recalculation, the plan is the clean
+         * control's, so the writer's own checks name it. */
+        mppwrite::CfbDocument moved = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(moved);
+        rows.set_u32(2, mppwrite::task_row::kDuration, 72000);
+        rows.set_u32(2, mppwrite::task_row::kFinish, 0x3C0427D8u);
+        rows.store_into(moved);
+        set_planned_work(moved, 2, 72000);
+        const std::filesystem::path moved_path = out_path("app-calculate-critical-moves.mpp");
+        moved.save(moved_path.string());
+        expect_refused(plan, moved_path.string(), "moves the critical path",
+                       "a file whose recalculation moves the critical path");
+    }
+    {
+        mppwrite::CfbDocument shorter = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(shorter);
+        rows.set_u32(0, mppwrite::task_row::kFinish, 0x3BFE27D8u);
+        rows.store_into(shorter);
+        const std::filesystem::path shorter_path = out_path("app-calculate-shortens.mpp");
+        shorter.save(shorter_path.string());
+        expect_refused(plan, shorter_path.string(), "would shorten the project",
+                       "a file whose recalculation shortens the project");
+    }
+    {
+        mppwrite::CfbDocument early = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(early);
+        rows.set_u32(2, mppwrite::task_row::kStart, 0x3BF312C0u);
+        rows.store_into(early);
+        const std::filesystem::path early_path = out_path("app-calculate-leaf-start.mpp");
+        early.save(early_path.string());
+        expect_refused(plan, early_path.string(), "starts at a date other than the project start",
+                       "a file whose leaf does not start at the project start");
     }
     {
         mppwrite::CfbDocument manual = mppwrite::CfbDocument::from_file(source);
