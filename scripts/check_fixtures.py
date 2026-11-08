@@ -728,6 +728,13 @@ DOCUMENTED = {
         "6A536AE817E7E30D7578B8F909387C58A08D4CD32EEE0F2033DFC029D2B9CC3A",
     "tests/data/wave35-viewstate-zoom-reset.mpp":
         "C69D367156042604246A83E3378B611A3F718D54AC7B018C7E6B3E0D67E9BFFF",
+    # Wave 35 (W35-3.2): the G3 pairs.
+    "tests/data/wave35-g3-baseline-set-nested-control-null.mpp":
+        "5C5A18EF317D487BE3823DDF09B02644D90948CA7BCE3C3B0330C59CE740E6B8",
+    "tests/data/wave35-g3-baseline-set-nested-control.mpp":
+        "C841BADC860A6F4D8038E9A1FB5B9B077F649628D629DED99F57624EC21535B2",
+    "tests/data/wave35-g3-baseline-set-nested.mpp":
+        "5B4E50A443F61B109041EEEC457E1965FB2011A30946083120EAA0205A44D8CF",
     # Wave 35 (W35-3.1): the G3 pairs.
     "tests/data/wave35-g3-insert-milestone-first-control-null.mpp":
         "0CA96AA029332F36AA79CFFDFE0F6F424DBC16C124674E188A60D68A3FD04DFE",
