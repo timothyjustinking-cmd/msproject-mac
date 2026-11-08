@@ -119,6 +119,12 @@ constexpr std::size_t kRscRowWork2 = 90;
 constexpr std::size_t kRscRowWork3 = 106;
 /* The resource FixedMeta entry's measured flag byte (payload +13). */
 constexpr std::size_t kRscFmFlag = 13;
+/* Payload +12 is the save-session byte: 0x1C until a Project session has saved
+ * the file, 0x5C after (bit 0x40).  Removal is measured from the 0x1C file only
+ * (W35b-1.6): Project's removal on a file it has resaved also clears Rsc
+ * Fixed2Meta byte 279 (0x2B to 0x0B), which this writer never does. */
+constexpr std::size_t kRscFmSession = 12;
+constexpr std::uint8_t kRscFmSessionUnsaved = 0x1c;
 
 /* The field keys this edit owns. */
 constexpr std::uint32_t kTaskWorkLeafKey = 0x0B4004E5u;
@@ -2257,6 +2263,24 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
     Bytes assn_var_meta = doc.read_stream(kAssnVarMeta);
     Bytes assn_var2 = doc.read_stream(kAssnVar2Data);
     Bytes const props = doc.read_stream(kPropsBackEnd);
+
+    {
+        std::uint8_t const session = get_u8(
+            rsc_meta, kMetaHeaderBytes +
+                          kRscFmEntryBytes * (rsc_row + kF2SpacerRecords) +
+                          kRscFmSession);
+        if (session != kRscFmSessionUnsaved) {
+            char buffer[96];
+            std::snprintf(buffer, sizeof buffer,
+                          "0x%02X, not the measured 0x%02X",
+                          static_cast<unsigned>(session),
+                          static_cast<unsigned>(kRscFmSessionUnsaved));
+            fail(function + ": the target resource's FixedMeta byte 12 is " +
+                 buffer + ": a Project session has already saved this file, "
+                 "and its removal also clears Rsc Fixed2Meta byte 279 (0x2B to "
+                 "0x0B), which this port does not write");
+        }
+    }
 
     std::size_t const rows = divided(assn_fixed.size(), 0, kAssnRowBytes,
                                      "the assignment FixedData");
