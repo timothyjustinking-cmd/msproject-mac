@@ -596,6 +596,31 @@ DOCUMENTED = {
         "22F71DDF12D5823FDF99F7A47488A21FEA00CF578031EBFB3455F9C138864718",
     "tests/data/wave34-calculate-second-control-null.mpp":
         "9B3708A54DC6B3A31E9E491CEA24AF20B3C05F0D10141BB45613966EC62BE45F",
+    # Wave 35 (W35-1.2): the Calculate Project pairs, one factor each.
+    "tests/data/wave35-calculate-lag-control-null.mpp":
+        "BC150637B9599E551B81698E2E8E976A7F40E1160DB59CD857A7E3A4412942F3",
+    "tests/data/wave35-calculate-lag-control.mpp":
+        "5FB86983C46E9E65F9A71912C863751D74082694D7F741D9F8814F76700F6927",
+    "tests/data/wave35-calculate-lag.mpp":
+        "4F7EC8BA54BF7B5DC51560E5DCA20706185C08975EBA47D2B60E0167592536D7",
+    "tests/data/wave35-calculate-linked-control-null.mpp":
+        "74135BE685CCE8AEEB783B884B3701681433B88B5E0A37D8BEF50B6A83C0E601",
+    "tests/data/wave35-calculate-linked-control.mpp":
+        "CCD4F0057DA2EE2EE7A06F5E44400EE0D294B883832ADE124ED8DCA5F2F02F25",
+    "tests/data/wave35-calculate-linked.mpp":
+        "F341C8D8B9DDD077D5EBE128926DC84478670EB82BFC092FF1B970559C1095BA",
+    "tests/data/wave35-calculate-snet-control-null.mpp":
+        "0702CF99FF66D8D39E5E5C573E5A0F2CF90695E48A79F0BB122EBB488D781058",
+    "tests/data/wave35-calculate-snet-control.mpp":
+        "E7E1963402B916FD7E3040EB2B16697BC0E9EEAE21941FDF4EA15238A848216B",
+    "tests/data/wave35-calculate-snet.mpp":
+        "D200621C54DBB560E8850BC1A3266D43A60BBA320702D78549FE1DD0312DD3B5",
+    "tests/data/wave35-calculate-unlinked-control-null.mpp":
+        "9F9DCECAE587F39280B42AF992E9347646FE54965B2564377E3A09AC9E5E2313",
+    "tests/data/wave35-calculate-unlinked-control.mpp":
+        "39FCBD668AE0B98D59AD6D15410512980CE98E8C2858C9A07D2296B14B8C83FD",
+    "tests/data/wave35-calculate-unlinked.mpp":
+        "61B9B02AEA0D8C7A125DB287DFD60EF06F8FBCF7A9F58F276E2DD764F776F7E1",
     "tests/data/wave34-resource-add-third-control.mpp":
         "F9DD625CFD94FD6A29B616F102EB005B637409662F0C2465C0ADEA4FCBC759F4",
     "tests/data/wave34-resource-add-third.mpp":
