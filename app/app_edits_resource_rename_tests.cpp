@@ -547,6 +547,50 @@ void check_refusals() {
               "the save's refusal names the start-date edit");
         check(!std::filesystem::exists(out), "the refused save writes no target file");
     }
+
+    /* W34b-1.3 (RC-R3, R34G4-8): a pending table-format or custom-field formula
+     * edit reaches the same save through the document-edit hook, so the cascade
+     * refuses the combination before the hook or any write; the queue is kept. */
+    {
+        app::StructuralEdit edit;
+        std::string error;
+        check(app::make_rename_resource_edit(plan, source, 2, "R2b", edit, error),
+              "the document-edit fixture builds its rename");
+        app::StructuralEdits edits;
+        check(edits.push(std::move(edit), &plan), "the document-edit fixture queues its rename");
+        const std::filesystem::path out = out_path("app-resource-rename-document-edit-refused.mpp");
+        const std::size_t queued = edits.applied().size();
+        int hook_calls = 0;
+        for (const bool as_formula : {false, true}) {
+            std::error_code fs_error;
+            std::filesystem::remove(out, fs_error);
+            app::StructuralDocumentEdits request;
+            if (as_formula) {
+                request.formula.operation = app::CustomFormulaEdit::Operation::set;
+                request.formula.field_id = 0x0b400033u;
+                request.formula.formula = "[Duration]/240";
+            } else {
+                request.view.set_date_format = true;
+                request.view.date_format = 0x05;
+            }
+            request.hook = [&hook_calls](mppwrite::CfbDocument&, const app::ViewStateEdits&,
+                                         const app::CustomFormulaEdit&) {
+                ++hook_calls;
+                return app::DocumentEditOutcome{};
+            };
+            const std::string what = std::string("its rename with a pending ") +
+                                     (as_formula ? "formula" : "table format") + " edit";
+            const app::StructuralSaveResult saved = app::save_structural_edits(
+                edits, {}, source, out.string(), false, request);
+            check(!saved.ok, "the save refuses " + what);
+            check(saved.error.find("a resource rename cannot be combined with a table format") != std::string::npos,
+                  "the save's refusal names the combination for " + what + " (got \"" +
+                      saved.error + "\")");
+            check(hook_calls == 0, "the hook never ran for " + what);
+            check(!std::filesystem::exists(out), "the refused save writes no target for " + what);
+            check(edits.applied().size() == queued, "the queue is unchanged after " + what);
+        }
+    }
 }
 
 }  // namespace

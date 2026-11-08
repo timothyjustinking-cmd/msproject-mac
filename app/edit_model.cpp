@@ -4570,6 +4570,15 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 "untouched save";
             return result;
         }
+        // W34b-1.3 (RC-R3, R34G4-8): the table-format and formula edits reach
+        // this save through the hook, not `edits`, so they are refused here too.
+        if (document_edits.any()) {
+            result.error =
+                "a resource rename cannot be combined with a table format or "
+                "custom-field formula edit; the measured Project pair is one "
+                "rename on an otherwise untouched save";
+            return result;
+        }
     }
 
     // W34-4.2: Add Resources is exclusive the same way (one resource added on
@@ -4593,6 +4602,13 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 "an Add Resources edit cannot be combined with a start-date "
                 "edit; the measured Project pair is one resource added on an "
                 "otherwise untouched save";
+            return result;
+        }
+        if (document_edits.any()) {  // W34b-1.3 (RC-R3, R34G4-8)
+            result.error =
+                "an Add Resources edit cannot be combined with a table format "
+                "or custom-field formula edit; the measured Project pair is "
+                "one resource added on an otherwise untouched save";
             return result;
         }
     }
@@ -4620,6 +4636,13 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 "otherwise untouched save";
             return result;
         }
+        if (document_edits.any()) {  // W34b-1.3 (RC-R3, R34G4-8)
+            result.error =
+                "an assignment edit cannot be combined with a table format or "
+                "custom-field formula edit; the measured Project pair is one "
+                "assignment changed on an otherwise untouched save";
+            return result;
+        }
     }
 
     // W34-4.5: Font Bold on one cell is exclusive the same way.
@@ -4644,6 +4667,13 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 "untouched save";
             return result;
         }
+        if (document_edits.any()) {  // W34b-1.3 (RC-R3, R34G4-8)
+            result.error =
+                "a Font Bold edit cannot be combined with a table format or "
+                "custom-field formula edit; the measured Project pair is one "
+                "cell bolded on an otherwise untouched save";
+            return result;
+        }
     }
 
     // W34-4.6: the WBS code definition is exclusive the same way.
@@ -4666,6 +4696,13 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 "a WBS code edit cannot be combined with a start-date edit; the "
                 "measured Project pair is one code defined on an otherwise "
                 "untouched save";
+            return result;
+        }
+        if (document_edits.any()) {  // W34b-1.3 (RC-R3, R34G4-8)
+            result.error =
+                "a WBS code edit cannot be combined with a table format or "
+                "custom-field formula edit; the measured Project pair is one "
+                "code defined on an otherwise untouched save";
             return result;
         }
     }
