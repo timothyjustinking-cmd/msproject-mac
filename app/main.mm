@@ -2716,6 +2716,7 @@ BOOL run_print_view(PlanState& plan, const app::PrintJob& job, NSURL* save_url) 
 - (void)selectAll:(id)sender;
 - (void)performMenuAction:(id)sender;
 - (void)insertTask:(id)sender;
+- (void)addResources:(id)sender;
 - (void)deleteTask:(id)sender;
 - (void)indentTask:(id)sender;
 - (void)outdentTask:(id)sender;
@@ -3134,11 +3135,63 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
             [self customFieldFormula:nil];
             return;
         case app::MenuAction::insert_resource:
-            show_alert(@"Insert Resource",
-                       to_ns(std::string(
-                           app::menu_disabled_reason(app::MenuAction::insert_resource))));
+            [self addResources:nil];
             return;
     }
+}
+
+// Add Resources (W34-4.2): ask for a name, build the edit through the shared
+// builder (which runs the writer's dry run against the file and refuses every
+// unmeasured shape with the decision-9 text) and queue it.  Nothing is written
+// until Save.  Resource tab > Add Resources / Insert > Resource.
+- (void)addResources:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.sheet != nullptr && plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    NSAlert* alert = [[NSAlert alloc] init];
+    [alert setMessageText:@"Add Resources"];
+    [alert setInformativeText:@"The resource is shown now and written to the .mpp when you "
+                              @"save."];
+    [alert addButtonWithTitle:@"Add"];
+    [alert addButtonWithTitle:@"Cancel"];
+    NSTextField* name_field =
+        [[NSTextField alloc] initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 24.0)];
+    [alert setAccessoryView:name_field];
+    if ([alert runModal] != NSAlertFirstButtonReturn) {
+        note(plan, "add resources cancelled", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_add_resource_edit(plan.base, plan.path, to_std([name_field stringValue]),
+                                     app::current_created_stamp(), edit, error)) {
+        note(plan, "add resources: " + error, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    const std::uint32_t uid = edit.uid;
+    if (!plan.edits.push(std::move(edit), &plan.base)) {
+        note(plan, "add resources: the edit was refused", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    apply_structural_change(plan);
+    note(plan, "queued a new resource (uid " + std::to_string(uid) +
+                   "; pending; Save writes it)",
+         false);
+    [g_view refreshAfterChange];
+    refresh_menu_bar();
 }
 
 // Insert Task (wave 12): ask for a name, record a pending insert anchored on the

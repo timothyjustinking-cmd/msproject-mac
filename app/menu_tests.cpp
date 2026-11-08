@@ -437,7 +437,7 @@ void test_documented_menu_contents() {
                    "an unimplemented View entry carries decision 9's exact tooltip");
     }
 
-    // Insert: Task (wave 12, Cmd-I) and Resource (still unsupported).
+    // Insert: Task (wave 12, Cmd-I) and Resource (W34-4.2: Add Resources).
     const MenuSpec& insert = menu_named("Insert");
     bool insert_task = false;
     bool insert_resource = false;
@@ -451,7 +451,7 @@ void test_documented_menu_contents() {
     }
     check(insert.items.size() == 2, "Insert has two items");
     check(insert_task, "Insert Task is Cmd-I");
-    check(insert_resource, "Insert Resource is still offered");
+    check(insert_resource, "Insert Resource is offered");
 
     // The application menu and Help.
     bool preferences = false;
@@ -488,11 +488,24 @@ void test_enablement() {
         }
     }
 
-    // The unsupported two, named: this is the brief's "grey out the rest rather
-    // than fake it".  Insert Task and Delete Task became real in wave 12.
+    // The unsupported one, named: this is the brief's "grey out the rest rather
+    // than fake it".  Insert Task and Delete Task became real in wave 12 and
+    // Insert Resource (Add Resources) in wave 34 (W34-4.2).
     check(!app::menu_item_supported(MenuAction::cut), "Cut is not supported");
-    check(!app::menu_item_supported(MenuAction::insert_resource),
-          "Insert Resource is not supported");
+    check(app::menu_item_supported(MenuAction::insert_resource),
+          "Insert Resource is supported");
+    {
+        // Needs a document and no open cell edit; offered in every view.
+        MenuState state = full;
+        state.task_view = false;
+        check(app::menu_item_enabled(MenuAction::insert_resource, state),
+              "Insert Resource is enabled outside the task view");
+        state.editing = true;
+        check(!app::menu_item_enabled(MenuAction::insert_resource, state),
+              "Insert Resource is disabled during a cell edit");
+        check(!app::menu_item_enabled(MenuAction::insert_resource, empty),
+              "Insert Resource is disabled without a document");
+    }
     check(app::menu_item_supported(MenuAction::insert_task), "Insert Task is supported");
     check(app::menu_item_supported(MenuAction::delete_task), "Delete Task is supported");
     check(app::menu_item_supported(MenuAction::task_fields), "Task Fields is supported");

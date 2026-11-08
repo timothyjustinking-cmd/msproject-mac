@@ -263,7 +263,6 @@ const MenuItemSpec* find_menu_item(MenuAction action) {
 bool menu_item_supported(MenuAction action) noexcept {
     switch (action) {
         case MenuAction::cut:
-        case MenuAction::insert_resource:
             return false;
         default:
             return action != MenuAction::none;
@@ -274,9 +273,6 @@ const char* menu_disabled_reason(MenuAction action) noexcept {
     switch (action) {
         case MenuAction::cut:
             return "the sheet model has no cut operation; Copy and Paste are wired";
-        case MenuAction::insert_resource:
-            return "adding a resource needs a resource writer; the resource sheet is read-only "
-                   "(wave 11), insert/delete is wave 12";
         // W26-6.1: Project's View drop-downs list views this port does not
         // build.  They are present and disabled with decision 9's exact text.
         case MenuAction::none:
@@ -374,8 +370,12 @@ bool menu_item_enabled(MenuAction action, const MenuState& state) noexcept {
             // no selected row is needed; an open cell edit and a non-task view still
             // disable it (the command edits Task custom-field formulas).
             return state.has_document && state.task_view && !state.editing;
-        case MenuAction::cut:
         case MenuAction::insert_resource:
+            // W34-4.2: Add Resources adds a row to the resource table, so it
+            // needs a document and no open cell edit; it is offered in every
+            // view (the new row shows on the Resource Sheet).
+            return state.has_document && !state.editing;
+        case MenuAction::cut:
             return false;
     }
     return false;

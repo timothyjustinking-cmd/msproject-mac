@@ -574,6 +574,31 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_resource_rename COMMAND app_edits_resource_rename_tests)
     set_tests_properties(app_edits_resource_rename PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 34 (W34-4.2): Add Resources through the app's edit model and save
+    # cascade.  Two committed Project pairs (the second resource "R2" on the
+    # wave30 control, the third "R3" on the wave34 control) plus their null
+    # saves; every stream is compared with Project's under the null-save mask,
+    # the eleven resource/calendar/Props streams plus Props14 are declared
+    # changed (`effects_ok`), the identity dwords are declared through
+    # TailNormalisation, and the display row is compared field by field with the
+    # row the reader reads from Project's own save.  Every refusal (name, Created
+    # stamp, unmeasured counts, stale plan or file, exclusivity) has its own
+    # check.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_resource_add_tests app_edits_resource_add_tests.cpp)
+    target_compile_features(app_edits_resource_add_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_resource_add_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
+    set_target_properties(app_edits_resource_add_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_resource_add_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_resource_add_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_resource_add_tests)
+
+    add_test(NAME app_edits_resource_add COMMAND app_edits_resource_add_tests)
+    set_tests_properties(app_edits_resource_add PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 26 (W26-3.1): the file's Gantt style record -- the row -> Text Styles
     # category rule and the headless read seam.  The stock fixture is committed;
     # the PROJECT_A half skips when corpus/ is absent.

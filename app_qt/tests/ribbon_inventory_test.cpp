@@ -563,6 +563,8 @@ const EnabledWiring kEnabledWiring[] = {
     // W30-2.2: the Resource tab's Details docks the read-only Resource Form
     // and switches to the Resource Sheet it follows.
     {"Resource", "Properties", "Details", "", "resource_details"},
+    // W34-4.2: Add Resources is enabled for the measured work-resource shape.
+    {"Resource", "Insert", "Add Resources", "insert_resource", ""},
     // W34-4.1: Information is enabled for the measured rename shape only.
     {"Resource", "Properties", "Information", "", "resource_information"},
     // W30-1.0: Manually Schedule and Mode are enabled on the measured

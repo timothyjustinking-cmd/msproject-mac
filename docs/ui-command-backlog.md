@@ -51,7 +51,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Resource | View | Team Planner | disabled | future: not implemented in this port |
 | Resource | Assignments | Assign Resources | disabled | future: not implemented in this port |
 | Resource | Assignments | Resource Pool | disabled | future: not implemented in this port |
-| Resource | Insert | Add Resources | disabled | model: no resource writer; the resource sheet is read-only |
+| Resource | Insert | Add Resources | implemented | session refusal: one work resource with default rates and a printable-ASCII name, on a project with exactly one or two resources, alone in the save (no other edit queued, no start-date edit); every other shape is refused as not implemented in this port |
 | Resource | Properties | Information | implemented | gap: the name only, and only to a longer printable-ASCII name of a resource with no assignments, alone in the save; every other field and shape is refused (Notes stays disabled: its payload embeds the saving machine's RichEdit generator string, which this port cannot reproduce) |
 | Resource | Properties | Notes | disabled | future: not implemented in this port |
 | Resource | Properties | Details | implemented |  |
@@ -175,7 +175,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | View | Expand All | implemented |  |
 | View | Table Date Format... | implemented | session refusal: refused while a table other than the first is shown; only table 0's date-format write is measured against Project |
 | Insert | Task... | implemented | session refusal: refused while a sort reorders the rows (clear the sort first) |
-| Insert | Resource... | disabled | model: no resource writer; the resource sheet is read-only |
+| Insert | Resource... | implemented | session refusal: one work resource with default rates and a printable-ASCII name, on a project with exactly one or two resources, alone in the save (no other edit queued, no start-date edit); every other shape is refused as not implemented in this port |
 | Help | Keyboard Shortcuts | implemented |  |
 | Help | About MS Project Shell | implemented |  |
 
@@ -189,8 +189,8 @@ Edits that are not command rows, with the reason the shell refuses them (operato
 
 ## Summary
 
-* ribbon commands: 114 (68 disabled)
-* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 48 enabled / 66 disabled command controls. The table above reports 68 disabled because it counts a split by its menu items; the pin counts the control.
+* ribbon commands: 114 (67 disabled)
+* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 49 enabled / 65 disabled command controls. The table above reports 67 disabled because it counts a split by its menu items; the pin counts the control.
 * the difference (2): 2 splits whose button is live while every menu item is disabled: Project > Properties > WBS, Project > Schedule > Set Baseline
-* menu commands: 51 (7 disabled)
+* menu commands: 51 (6 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

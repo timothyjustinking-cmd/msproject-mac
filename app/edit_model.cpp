@@ -19,6 +19,7 @@
 #include <set>
 #include <string>
 #include <system_error>
+#include <ctime>
 #include <utility>
 #include <vector>
 
@@ -30,6 +31,7 @@
 #include "outline.h"
 #include "project_props.h"
 #include "reader.h"
+#include "resource_growth.h"
 #include "save.h"
 #include "table.h"
 #include "task_mode.h"
@@ -84,7 +86,8 @@ bool is_outline_edit(StructuralKind kind) noexcept {
 // otherwise untouched save, so they may only be queued alone.
 bool is_exclusive_kind(StructuralKind kind) noexcept {
     return kind == StructuralKind::set_task_mode ||
-           kind == StructuralKind::rename_resource;
+           kind == StructuralKind::rename_resource ||
+           kind == StructuralKind::add_resource;
 }
 
 const TaskRow* task_row_for_uid(const std::vector<TaskRow>& tasks,
@@ -2650,6 +2653,149 @@ bool make_rename_resource_edit(const PlanInput& plan, std::string_view source_pa
     return true;
 }
 
+namespace {
+
+// W34-4.2: the Add Resources name rule, shared by the builder and push().  The
+// writer measured a plain printable-ASCII name of 1..64 characters (the stored
+// form is UTF-16LE + NUL and the initials default to its first character), so
+// every other name is a shape no pair measured.  Returns the reason, or an
+// empty string when the (already trimmed) name is acceptable.
+std::string add_resource_name_refusal(const std::string& name) {
+    if (name.empty()) {
+        return "the resource name is empty";
+    }
+    if (name.size() > 64) {
+        return "Add Resources with a name longer than 64 characters is not "
+               "implemented in this port: the measured Project pairs add a short "
+               "ASCII name";
+    }
+    for (const char ch : name) {
+        const unsigned char byte = static_cast<unsigned char>(ch);
+        if (byte < 0x20 || byte == 0x7F) {
+            return "the resource name holds a control character";
+        }
+        if (byte >= 0x80) {
+            return "Add Resources with a name that has non-ASCII characters is "
+                   "not implemented in this port: the measured Project pairs add "
+                   "a plain ASCII name";
+        }
+    }
+    return {};
+}
+
+bool created_stamp_ok(std::uint32_t created) {
+    return created != 0 && created != 0xFFFFFFFFu;
+}
+
+// The writer clones the last saved resource row (rates, type and accrual ride
+// along), while Project's Add Resources gives a work resource with default
+// rates.  Both measured pairs clone a default-rate work resource, so a template
+// that carries any other value would write a row Project would not, and is
+// refused.  Returns the reason, or an empty string when the template is a
+// default-rate work resource.
+std::string add_resource_template_refusal(const PlanInput& plan) {
+    if (plan.resources.empty()) {
+        return {};
+    }
+    const ResourceRow& last = plan.resources.back();
+    if (last.type != core::view::ResourceType::work ||
+        last.standard_rate_per_hour != 0.0 || last.overtime_rate_per_hour != 0.0 ||
+        last.cost_per_use != 0.0) {
+        return "Add Resources after a resource that is not a work resource with "
+               "default rates is not implemented in this port: the writer copies "
+               "the last resource's row, and the measured Project pairs copy a "
+               "default-rate work resource";
+    }
+    return {};
+}
+
+mppwrite::ResourceGrowthSpec add_resource_spec(const std::string& name,
+                                               std::uint32_t created) {
+    mppwrite::ResourceGrowthSpec spec;
+    spec.name = name;
+    spec.created = created;
+    return spec;
+}
+
+}  // namespace
+
+std::uint32_t current_created_stamp() {
+    const std::time_t now = std::time(nullptr);
+    std::tm local{};
+#ifdef _WIN32
+    localtime_s(&local, &now);
+#else
+    localtime_r(&now, &local);
+#endif
+    return mppwrite::pack_date_ymd(local.tm_year + 1900, local.tm_mon + 1,
+                                   local.tm_mday,
+                                   local.tm_hour * 3600 + local.tm_min * 60 +
+                                       local.tm_sec);
+}
+
+bool make_add_resource_edit(const PlanInput& plan, std::string_view source_path,
+                            std::string_view name, std::uint32_t created,
+                            StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    const std::string trimmed = trim_ascii(std::string(name));
+    if (std::string reason = add_resource_name_refusal(trimmed); !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    if (!created_stamp_ok(created)) {
+        error = "the Created stamp is not a packed date";
+        return false;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    if (std::string reason = add_resource_template_refusal(plan); !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    // The writer's dry run builds and validates every stream against the FILE
+    // (the resource count, the calendar table, the Props counts, the flag bytes)
+    // and reports the uid and ID it would allocate; nothing is written.
+    mppwrite::ResourceGrowthSpec spec = add_resource_spec(trimmed, created);
+    spec.dry_run = true;
+    mppwrite::ResourceGrowthWrite planned;
+    try {
+        planned = mppwrite::add_work_resource(document, spec, std::string());
+    } catch (const std::exception& refusal) {
+        error = std::string("Add Resources is not implemented in this port for "
+                            "this project: ") +
+                refusal.what();
+        return false;
+    }
+    // The table's rows include the uid-0 placeholder, so the plan must show one
+    // fewer: a plan that disagrees with the file is a stale file.
+    if (planned.rows_before == 0 || plan.resources.size() + 1 != planned.rows_before) {
+        error = "the project file no longer matches the open plan (it holds " +
+                std::to_string(planned.rows_before == 0 ? 0 : planned.rows_before - 1) +
+                " saved resources, the plan shows " +
+                std::to_string(plan.resources.size()) + "); reopen the project";
+        return false;
+    }
+    for (const ResourceRow& row : plan.resources) {
+        if (row.uid == planned.uid || row.id == planned.id) {
+            error = "the new resource's uid or ID is already used in the plan";
+            return false;
+        }
+    }
+    out.kind = StructuralKind::add_resource;
+    out.uid = planned.uid;
+    out.resource_id = planned.id;
+    out.name = trimmed;
+    out.created = created;
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                            const std::vector<std::uint32_t>& pending_start_uids) {
     // W33-1.7 (A-8 / D-7): a document opened from a container with FAT slack
@@ -3026,6 +3172,30 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
             }
             edit.name = trim_ascii(std::move(edit.name));
             if (!rename_name_ok(edit.name)) {
+                return false;
+            }
+            edit.anchor_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::add_resource: {
+            // W34-4.2: the plan-side half.  The file-side half (the writer's
+            // dry run) ran in make_add_resource_edit and runs again in the
+            // writer; applied_ is empty by the exclusivity check above.
+            if (plan == nullptr || edit.uid == 0 || edit.resource_id == 0 ||
+                (plan->resources.size() != 1 && plan->resources.size() != 2) ||
+                resource_row_for_uid(plan->resources, edit.uid) != nullptr ||
+                !created_stamp_ok(edit.created) ||
+                !add_resource_template_refusal(*plan).empty()) {
+                return false;
+            }
+            for (const ResourceRow& row : plan->resources) {
+                if (row.id == edit.resource_id) {
+                    return false;
+                }
+            }
+            edit.name = trim_ascii(std::move(edit.name));
+            if (!add_resource_name_refusal(edit.name).empty()) {
                 return false;
             }
             edit.anchor_uid = 0;
@@ -3483,6 +3653,28 @@ PlanInput StructuralEdits::apply(const PlanInput& loaded) const {
             }
         }
     }
+    // Wave 34 (W34-4.2): the measured Add Resources save appends one work
+    // resource with default rates; the initials default to the first character
+    // and every rate is zero (ResourceRow's own defaults), 100 % Max. Units.
+    for (const StructuralEdit& edit : applied_) {
+        if (edit.kind != StructuralKind::add_resource) {
+            continue;
+        }
+        // The writer clones the last saved row's fixed record, so the accrual
+        // and the resource calendar's base ride along from it.
+        ResourceRow row;
+        if (!effective.resources.empty()) {
+            row.accrue_at = effective.resources.back().accrue_at;
+            row.base_calendar = effective.resources.back().base_calendar;
+        }
+        row.uid = edit.uid;
+        row.id = edit.resource_id;
+        row.name = edit.name;
+        row.initials = edit.name.substr(0, 1);
+        row.type = core::view::ResourceType::work;
+        row.max_units_percent = 100.0;
+        effective.resources.push_back(std::move(row));
+    }
     // Wave 28 (W28-2.1): the indented/outdented outline, in edit order, then
     // the OutlineNumber pass.  This is what makes the sheet's indentation and
     // collapse triangles and the Gantt's summary bars follow the move on the
@@ -3936,6 +4128,31 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // W34-4.2: Add Resources is exclusive the same way (one resource added on
+    // an otherwise untouched save; the pair's eleven streams plus Props14).
+    const StructuralEdit* add_resource_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::add_resource) {
+            add_resource_edit = &edit;
+        }
+    }
+    if (add_resource_edit != nullptr) {
+        if (edits.applied().size() != 1) {
+            result.error =
+                "an Add Resources edit must be the only edit in a save; another "
+                "edit is queued with it, and the measured Project pair is one "
+                "resource added on an otherwise untouched save";
+            return result;
+        }
+        if (!writable.empty()) {
+            result.error =
+                "an Add Resources edit cannot be combined with a start-date "
+                "edit; the measured Project pair is one resource added on an "
+                "otherwise untouched save";
+            return result;
+        }
+    }
+
     // W31-0.1 (R30-1, High): a link add and a slack-carrying outline edit in
     // the same save would write the link at step 2 and the UNLINKED slack and
     // late dates at step 5b.  push() and validate_link_add refuse the order the
@@ -4145,6 +4362,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (rename_edit != nullptr) {
         ++write_ops;  // the name block, VarMeta, Props and Props14, one file
+    }
+    if (add_resource_edit != nullptr) {
+        ++write_ops;  // the eleven resource/calendar/Props streams, one file
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -4667,6 +4887,40 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 " -> " + std::to_string(written.new_payload_bytes) + " bytes)");
         }
 
+        // 5g (wave 34, W34-4.2).  The measured Add Resources save: one work
+        // resource and its calendar row (core/mppwrite/resource_growth.h).  The
+        // edit is exclusive (checked above); the writer re-validates the file,
+        // and refuses (an exception, reported as the save error) when it no
+        // longer holds a measured shape.
+        if (add_resource_edit != nullptr) {
+            mppwrite::ResourceGrowthSpec spec =
+                add_resource_spec(add_resource_edit->name, add_resource_edit->created);
+            // The uid and ID are the file's, so a dry run first proves the file
+            // is still the one the edit was built from before anything is written.
+            spec.dry_run = true;
+            const mppwrite::ResourceGrowthWrite planned =
+                mppwrite::add_work_resource(document, spec, std::string());
+            if (planned.uid != add_resource_edit->uid ||
+                planned.id != add_resource_edit->resource_id) {
+                cleanup();
+                result.ok = false;
+                result.error =
+                    "the resource the writer would add (uid " +
+                    std::to_string(planned.uid) + ", ID " +
+                    std::to_string(planned.id) +
+                    ") is not the one the edit queued; reopen the project";
+                return result;
+            }
+            spec.dry_run = false;
+            const mppwrite::ResourceGrowthWrite written =
+                mppwrite::add_work_resource(document, spec, next_write_path());
+            result.resources_added = 1;
+            result.notes.push_back(
+                "resource uid " + std::to_string(written.uid) + " added (" +
+                std::to_string(written.rows_before) + " -> " +
+                std::to_string(written.rows_after) + " resource rows)");
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -4734,6 +4988,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (result.resources_renamed != 0) {
             result.api += " rename_resource";
+        }
+        if (result.resources_added != 0) {
+            result.api += " add_work_resource";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";

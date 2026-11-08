@@ -22,7 +22,6 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "docs" / "ui-command-backlog.md"
 
 MISSING_REASON = {
-    "insert_resource": "model: no resource writer; the resource sheet is read-only",
     "hide_app": "chrome: Qt has no portable hide-application command",
     # W31-2.3: the View tab's Window group.  The shell is single-document (one
     # MainWindow, one PlanDocument), so each command names the capability the
@@ -217,6 +216,14 @@ RIBBON_GAPS = {
     "insert_task":
         "session refusal: refused while a sort reorders the rows (clear the sort "
         "first)",
+    # W34-4.2: Add Resources is one work resource with default rates, on a
+    # project that already holds one or two resources, alone in the save; every
+    # other shape refuses up front with the decision-9 text.
+    "insert_resource":
+        "session refusal: one work resource with default rates and a printable-"
+        "ASCII name, on a project with exactly one or two resources, alone in the "
+        "save (no other edit queued, no start-date edit); every other shape is "
+        "refused as not implemented in this port",
     # W33b-0.1 (R33-1): W33-1.6 carried the shown table index into the
     # `214/CTable` date-format write, but only the FIRST table's byte has a
     # Project save pair (standing rule 1), so a shown table other than index 0

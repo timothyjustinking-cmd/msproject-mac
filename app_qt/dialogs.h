@@ -541,4 +541,9 @@ bool ask_task_name(QWidget* parent, QString* name);
 // refusals.
 bool ask_resource_name(QWidget* parent, const QString& current, QString* name);
 
+// Resource tab > Add Resources (W34-4.2): the name of the one work resource to
+// add.  Returns false on Cancel; the text is returned as typed, because the
+// shared builder (app::make_add_resource_edit) owns the trim and the refusals.
+bool ask_new_resource_name(QWidget* parent, QString* name);
+
 }  // namespace msqt

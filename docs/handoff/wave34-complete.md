@@ -768,6 +768,7 @@ Builder: Claude Sonnet 5.5 (W34-BUILDER), commits carry the
 |---|---|---|---|
 | W34-4.0 | brief W34-4.0: Insert Task, Delete Task, link ADD, custom-field SET and CLEAR differ from Project's own save (the W34-0.5 KnownGap tables); refuse or show as noise | **DONE** (all five refused up front) | the `W34-4.0` commit after `3a8a31c`; `app/edit_model.{h,cpp}`, `app/field_link_edits.cpp`; `app/app_unmeasured_paths_tests.cpp`, `app_qt/tests/unmeasured_paths_test.cpp`; gates `build/w34/3a8a31c-W34-4.0-*.log` |
 | W34-4.1 | brief W34-4.1: Resource Information rename (G1); Notes only if the RichEdit serialisation is decoded for plain single-line ASCII | **DONE for the rename; Notes DEFERRED with evidence** (stays disabled, exact tooltip) | the `W34-4.1` commit after `9c5f497`; `app/edit_model.{h,cpp}`; `app/app_edits_resource_rename_tests.cpp`; `app_qt/tests/resource_information_gate_test.cpp`; Qt shell `app_qt/{ribbon_bar,dialogs,main_window}.*`; gates `build/w34/9c5f497-W34-4.1-*.log` |
+| W34-4.2 | brief W34-4.2: Add Resources (one work resource, default rates) | **DONE** (enabled for a project with one or two resources; every other shape refused up front) | the `W34-4.2` commit after `726dcfd`; `core/mppwrite/resource_growth.{h,cpp}` (`dry_run`), `app/{edit_model,menu_model,main.mm}`; `app/app_edits_resource_add_tests.cpp`; Qt shell `app_qt/{ribbon_bar,dialogs,main_window,command_status}.*`, `app_qt/tests/resource_add_gate_test.cpp`; gates `build/w34/726dcfd-g42c-*.log` |
 
 W34-4.0 detail:
 
@@ -899,3 +900,65 @@ W34-4.1 detail:
   `check_markers.py --worktree` and `--range main..HEAD` OK;
   `guard_names.py main..HEAD` clean; client-name scan 0 hits.
 - **Not verified here.**  `app/main.mm` was not touched (no handler to build).
+
+W34-4.2 detail:
+
+- **Measured shapes.**  Two pairs, each with Project's own no-edit save of the
+  control: `wave30-resource-add-control.mpp` -> `wave30-resource-add.mpp`
+  (one saved resource, "R2" added, new uid 2) and
+  `wave34-resource-add-third-control.mpp` -> `wave34-resource-add-third.mpp`
+  (two saved resources, "R3" added, new uid 3).  The port's save
+  (`mppwrite::add_work_resource`, the W34-1.4 writer, reached through the
+  `save_structural_edits` cascade) is compared stream by stream with Project's
+  over the 12 declared streams: `app_edits_resource_add` 815 checks, **effects
+  509** bytes per pair (the evidence docs' figure), the identity dwords compared
+  under `TailNormalisation`; untouched streams byte-equal; the save passes
+  `check_table` and reopens in the independent core/mpp reader.  The display
+  row is compared field by field with Project's own saved row (the first run
+  failed Accrue At and base calendar; both now come from the project's last
+  resource, the template the writer clones).
+- **Enabled only for those shapes.**  A new exclusive `StructuralKind::
+  add_resource` (`make_add_resource_edit`, shared by both shells) takes a
+  trimmed, non-empty, printable-ASCII name of at most 64 characters; a project
+  whose last resource is a work resource with zero standard, overtime and
+  cost-per-use rates (default rates); exactly one or two saved resources (the
+  writer accepts table rows 2 and 3 only); a file that still matches the open
+  plan; and it must be alone in the save.  The builder runs the writer in a new
+  `ResourceGrowthSpec::dry_run` mode, which validates and reports without
+  writing, so a writer refusal reaches the operator as "Add Resources is not
+  implemented in this port for this project: <reason>" and queues nothing.  The
+  save cascade repeats the dry run and refuses a uid or ID that is not the one
+  the edit queued.  `push()` is a backstop: plan present, uid and ID non-zero
+  and unused, one or two plan resources, Created stamp valid, template and
+  name valid.  Undo and redo re-apply the display row.
+- **Shells.**  Qt: Resource > Insert > Add Resources (`MenuAction::insert_resource`) is
+  live (pin row, `command_status.h` and the backlog regenerated, 114 / 114 / 0
+  mismatches; ribbon, menu and pin counts: 114 ribbon (67 disabled), 51 menu
+  (6 disabled), pin 49 enabled / 65 disabled); an input dialog asks for the name;
+  `MainWindow::add_resource()` refuses read-only and no document.  The gate
+  `qt_resource_add_gate` drives the real window: the button and Insert >
+  Resource are live; Cancel, blank and non-ASCII names queue nothing; a name
+  queues one edit, dirties the document and shows in the plan and the Resource
+  Sheet; a second Add while one is pending is refused; the real save and reopen,
+  twice (second, then third resource); a three-resource file refuses a fourth.
+  `ribbon_inventory_test` carries the wiring row.  macOS: `Insert > Resource`
+  now calls `-[AppDelegate addResources:]` (NSAlert name prompt, same builder).
+- **Guards seen red.**  `is_exclusive_kind`, the template refusal, the cascade
+  start-date refusal, the stale-uid dry-run check, the builder's plan-size
+  check, the Accrue At display copy and the menu `!editing` condition each
+  failed the app tests when broken (`build/w34/mut-*-ctest.log`); the Qt status
+  message broken failed "the status line reports the queued resource" in both
+  adds (`mut-qtmsg-ctest.log`).  Two checks are shadowed by design: push's
+  resource-count check (the uid check also refuses that case) and the cascade
+  `applied().size() != 1` check (push prevents a hand-built queue).
+- **Tooling trap.**  `build/w34/mutate.sh` restored the file with an older
+  mtime, so the next build kept the mutated object and the gate failed on a
+  clean source; the helper now preserves and touches the file on restore, and
+  the sources were touched and rebuilt before the gate run below.
+- **Gates (this session).**  core build exit 0, ctest `-E plan_recalc` 61/61;
+  app build exit 0, ctest 28/28; Qt build exit 0, ctest 44/44
+  (`726dcfd-g42c-{core,app,qt}-ctest.log`); `check_command_backlog.py` 114 / 114
+  / 0; `check_fixtures.py` OK; `check_markers.py --worktree` OK; `guard_names.py
+  main..HEAD` clean; client-name scan 0 hits.
+- **Not verified here.**  `app/main.mm` (`addResources:`) cannot be built on
+  Windows.

@@ -361,7 +361,9 @@ const std::vector<TabSpec>& tab_specs() {
         large(assignments, "Resource\nPool", app::MenuAction::none, 58, 1, false,
               "assignments.pool");
         GroupSpec& resource_insert = add_group(resource, "Insert", 85);
-        large(resource_insert, "Add\nResources", app::MenuAction::insert_resource, 74, 0, false,
+        // W34-4.2: enabled for the two measured resource counts; the handler
+        // refuses every other shape with the reason.
+        large(resource_insert, "Add\nResources", app::MenuAction::insert_resource, 74, 0, true,
               "insert.add_resources");
         GroupSpec& resource_properties = add_group(resource, "Properties", 172);
         // W34-4.1: Information is enabled for the one measured shape, a

@@ -655,6 +655,56 @@ void test_damaged(TestContext& t) {
     });
 }
 
+/* W34-4.2: a dry run builds and validates exactly what a write does, reports
+ * the same identities and counts, and touches neither the document nor any
+ * file -- the path is not even examined.  The app's edit builder uses it to
+ * refuse an unmeasured shape before anything is queued. */
+void test_dry_run(TestContext& t, Pair const& p) {
+    std::string const label = std::string("dry run ") + p.label;
+    CfbDocument const control = doc_from_data(p.control);
+    mppwrite::ResourceGrowthSpec spec;
+    spec.name = p.name;
+    spec.created = p.created;
+
+    std::string const real_path = out_path("w34-resource-dry-real-" + label + ".mpp");
+    std::error_code ignored;
+    std::filesystem::remove(real_path, ignored);
+    CfbDocument real = control;
+    mppwrite::ResourceGrowthWrite const expected =
+        mppwrite::add_work_resource(real, spec, real_path);
+
+    std::string const never = join(out_path("w34-no-such-dir"), "dry.mpp");
+    spec.dry_run = true;
+    CfbDocument dry = control;
+    Bytes const before = dry.to_bytes();
+    mppwrite::ResourceGrowthWrite const reported =
+        mppwrite::add_work_resource(dry, spec, never);
+    t.check(dry.to_bytes() == before, label + ": the document is untouched");
+    t.check(!file_exists(never), label + ": no file is written");
+    t.equal(reported.uid, expected.uid, label + ": the uid a write would use");
+    t.equal(reported.id, expected.id, label + ": the id a write would use");
+    t.equal(reported.calendar_uid, expected.calendar_uid,
+            label + ": the calendar uid a write would use");
+    t.equal(reported.rows_after, expected.rows_after, label + ": rows after");
+    t.equal(reported.resource_size_after, expected.resource_size_after,
+            label + ": Resource size after");
+    t.equal(reported.calendar_count_after, expected.calendar_count_after,
+            label + ": Calendar count after");
+
+    /* The same shape refusals apply to a dry run. */
+    CfbDocument fourth = doc_from_data(kThird.edit);
+    Bytes const fourth_before = fourth.to_bytes();
+    expect_error(t, [&] { (void)mppwrite::add_work_resource(fourth, spec, never); },
+                 "4 rows", label + ": an unmeasured count is refused");
+    t.check(fourth.to_bytes() == fourth_before,
+            label + ": the refused document is untouched");
+    mppwrite::ResourceGrowthSpec bad = spec;
+    bad.name = "caf\xC3\xA9";
+    CfbDocument again = control;
+    expect_error(t, [&] { (void)mppwrite::add_work_resource(again, bad, never); },
+                 "name must be", label + ": a non-ASCII name is refused");
+}
+
 } /* namespace */
 
 int main() {
@@ -663,6 +713,8 @@ int main() {
         TestContext t;
         test_pair(t, kSecond);
         test_pair(t, kThird);
+        test_dry_run(t, kSecond);
+        test_dry_run(t, kThird);
         test_argument_refusals(t);
         test_shape_refusals(t);
         test_damaged(t);

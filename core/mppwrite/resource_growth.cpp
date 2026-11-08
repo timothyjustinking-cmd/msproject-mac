@@ -400,7 +400,9 @@ ResourceGrowthWrite add_work_resource(CfbDocument& doc,
                                       ResourceGrowthSpec const& spec,
                                       std::string const& path) {
     std::string const function = "resource add";
-    check_output_path(path, function);
+    if (!spec.dry_run) {
+        check_output_path(path, function);
+    }
     if (spec.name.empty() || spec.name.size() > 64 ||
         !printable_ascii(spec.name)) {
         fail(function + ": the name must be 1..64 printable ASCII characters "
@@ -718,6 +720,25 @@ ResourceGrowthWrite add_work_resource(CfbDocument& doc,
         {kPropsCalendarCountTag, static_cast<std::uint32_t>(cal_entries + 1)},
     };
 
+    ResourceGrowthWrite written;
+    written.uid = uid;
+    written.id = id;
+    written.calendar_uid = cal_uid;
+    written.rows_before = rows;
+    written.rows_after = rows + 1;
+    written.resource_count_before = props_rsc_count;
+    written.resource_count_after = static_cast<std::uint32_t>(rsc_entries + 1);
+    written.resource_size_before = props_rsc_size;
+    written.resource_size_after = static_cast<std::uint32_t>(built.rsc_var2.size());
+    written.calendar_count_before = props_cal_count;
+    written.calendar_count_after = static_cast<std::uint32_t>(cal_entries + 1);
+
+    /* W34-4.2: a dry run has built and validated every stream; it writes
+     * nothing and leaves `doc` as it was. */
+    if (spec.dry_run) {
+        return written;
+    }
+
     /* ---- save and prove ---------------------------------------------------- */
     CfbDocument work = doc;
     work.replace_stream(kRscFixedData, built.rsc_fixed);
@@ -766,18 +787,6 @@ ResourceGrowthWrite add_work_resource(CfbDocument& doc,
     }
     check_changed_set(doc, work, expected, function);
 
-    ResourceGrowthWrite written;
-    written.uid = uid;
-    written.id = id;
-    written.calendar_uid = cal_uid;
-    written.rows_before = rows;
-    written.rows_after = rows + 1;
-    written.resource_count_before = props_rsc_count;
-    written.resource_count_after = static_cast<std::uint32_t>(rsc_entries + 1);
-    written.resource_size_before = props_rsc_size;
-    written.resource_size_after = static_cast<std::uint32_t>(built.rsc_var2.size());
-    written.calendar_count_before = props_cal_count;
-    written.calendar_count_after = static_cast<std::uint32_t>(cal_entries + 1);
     doc = std::move(work);
     return written;
 }

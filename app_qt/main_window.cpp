@@ -2074,6 +2074,9 @@ void MainWindow::handle_action(app::MenuAction action) {
         case app::MenuAction::insert_task:
             insert_task();
             return;
+        case app::MenuAction::insert_resource:
+            add_resource();
+            return;
         case app::MenuAction::delete_task:
             delete_task();
             return;
@@ -3086,6 +3089,44 @@ void MainWindow::rename_selected_resource() {
     after_structural_change(0);
     set_message("queued rename of resource uid " + std::to_string(uid) +
                     "; File > Save writes it",
+                false);
+    update_status();
+}
+
+void MainWindow::add_resource() {
+    if (refuse_read_only()) {
+        return;
+    }
+    if (!doc_.has_document()) {
+        set_message("Add Resources needs an open project", false);
+        update_status();
+        return;
+    }
+    // W34-4.2: the name is the only input; the builder owns every refusal
+    // (count, name, calendar table, stale file) with the decision-9 text.
+    QString name;
+    if (!ask_new_resource_name(this, &name)) {
+        set_message("add resources cancelled", false);
+        update_status();
+        return;
+    }
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_add_resource_edit(doc_.plan(), doc_.path(), name.toStdString(),
+                                     app::current_created_stamp(), edit, error)) {
+        set_message("add resources: " + error, true);
+        update_status();
+        return;
+    }
+    const std::uint32_t uid = edit.uid;
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
+        set_message("add resources: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(0);
+    set_message("queued a new resource (uid " + std::to_string(uid) +
+                    "); File > Save writes it",
                 false);
     update_status();
 }

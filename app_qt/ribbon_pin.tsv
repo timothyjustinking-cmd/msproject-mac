@@ -91,7 +91,7 @@ Resource	0	Assignments	group	-	-	-	-	-
 Resource	0	Assignments	button	Assign Resources	0	assignments.assign	0	-
 Resource	0	Assignments	button	Resource Pool	0	assignments.pool	0	-
 Resource	0	Insert	group	-	-	-	-	-
-Resource	0	Insert	button	Add Resources	0	insert.add_resources	0	-
+Resource	0	Insert	button	Add Resources	1	insert.add_resources	0	-
 Resource	0	Properties	group	-	-	-	-	-
 Resource	0	Properties	button	Information	1	properties.resource_information	0	-
 Resource	0	Properties	small	Notes	0	properties.notes	0	-

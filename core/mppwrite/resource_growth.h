@@ -94,6 +94,11 @@ struct ResourceGrowthSpec {
     std::string initials;
     /* The Created stamp (packed date), non-zero. */
     std::uint32_t created = 0;
+    /* W34-4.2: build and validate every stream exactly as a write does, then
+     * return what a write would report without touching `doc` or any file
+     * (`path` is not examined).  The app's edit builder uses it to refuse an
+     * unmeasured shape when the command is invoked, before anything is queued. */
+    bool dry_run = false;
 };
 
 /* What the write proved from the file on disk. */

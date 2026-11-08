@@ -67,11 +67,12 @@ inline bool shell_implements(app::MenuAction action) noexcept {
         case app::MenuAction::table_date_format:
         // Insert.
         case app::MenuAction::insert_task:
+        // W34-4.2: Add Resources, for the two measured resource counts only.
+        case app::MenuAction::insert_resource:
             return true;
         // UNIMPLEMENTED -- keep this marker: the backlog generator reads only the
         // cases above it as "implemented".
-        case app::MenuAction::insert_resource:  // no resource writer
-        case app::MenuAction::hide_app:         // no portable hide command
+        case app::MenuAction::hide_app:        // no portable hide command
         case app::MenuAction::none:
             return false;
     }
@@ -82,8 +83,6 @@ inline bool shell_implements(app::MenuAction action) noexcept {
 // generator maps these strings; two buckets are enough for the current cut.
 inline const char* shell_missing_reason(app::MenuAction action) noexcept {
     switch (action) {
-        case app::MenuAction::insert_resource:
-            return "model: no resource writer; the resource sheet is read-only";
         case app::MenuAction::hide_app:
             return "chrome: Qt has no hide-application command on this platform";
         case app::MenuAction::none:

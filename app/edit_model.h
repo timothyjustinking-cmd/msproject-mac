@@ -144,6 +144,15 @@ enum class StructuralKind : std::uint8_t {
     // 6 -> 8 B).  Like set_task_mode the edit is EXCLUSIVE -- the measured pair
     // is one rename on an otherwise untouched save.
     rename_resource = 13,
+    // Wave 34 (W34-4.2): one work resource with default rates, from Add
+    // Resources, written by mppwrite::add_work_resource (core/mppwrite/
+    // resource_growth.h; the eleven streams plus Props14).  `uid` and
+    // `resource_id` are what the writer will allocate (taken from its dry run
+    // when the edit is built), `name` is the typed name and `created` the
+    // Created stamp.  Only the measured counts are enabled: a project that
+    // already holds one or two resources (wave30-resource-add, wave34-resource-
+    // add-third).  Like the two kinds above the edit is EXCLUSIVE.
+    add_resource = 14,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -196,6 +205,10 @@ struct StructuralEdit {
     // (links naming the uid + assignments for it), counted when the edit was
     // made so the confirmation can name it.
     std::size_t dependants = 0;
+    // add_resource (W34-4.2): the new row's ID and the packed Created stamp
+    // (day << 16 | seconds / 6; see current_created_stamp()).
+    std::uint32_t resource_id = 0;
+    std::uint32_t created = 0;
 
     // --- set_field / clear_field -------------------------------------------
     // One of the six measured ids (app::is_measured_task_field): Text1,
@@ -467,6 +480,33 @@ bool make_rename_resource_edit(const PlanInput& plan, std::string_view source_pa
                                StructuralEdit& out, std::string& error);
 
 // ---------------------------------------------------------------------------
+// Wave 34 (W34-4.2): Add Resources
+// ---------------------------------------------------------------------------
+//
+// Builds a ready-to-push add_resource edit: one work resource with default
+// rates (Standard rate, Overtime rate and Cost/Use zero, 100 % Max. Units, the
+// Prorated-free default accrual), named `name`, written through mppwrite::
+// add_work_resource against Project's two committed pairs
+// (tests/data/wave30-resource-add-control.mpp -> wave30-resource-add.mpp, one
+// existing resource; wave34-resource-add-third-control.mpp -> ...-third.mpp, two).
+// The name is trimmed (ASCII whitespace) and must be 1..64 printable ASCII
+// characters; `created` is the packed Created stamp (current_created_stamp()
+// in a shell, the pair's own stamp in a test).  The FILE is the authority for
+// the shape: the writer's dry run validates every stream (the resource count,
+// the calendar table, the Props counts, the per-count flag bytes) and its
+// refusal text is returned as the reason; the plan must show the same number of
+// saved resources the file holds.  `out` is left default-constructed on refusal
+// with `error` naming the reason (the decision-9 "is not implemented in this
+// port" text for the unmeasured shapes).
+bool make_add_resource_edit(const PlanInput& plan, std::string_view source_path,
+                            std::string_view name, std::uint32_t created,
+                            StructuralEdit& out, std::string& error);
+
+// The Created stamp Project writes for a resource added now: the local date
+// and time as a packed date (day 0 is 1983-12-31, then seconds / 6).
+std::uint32_t current_created_stamp();
+
+// ---------------------------------------------------------------------------
 // Wave 34 (W34-4.0): the five paths whose save does not match Project's
 // ---------------------------------------------------------------------------
 //
@@ -580,6 +620,12 @@ class StructuralEdits {
     // character (or a non-ASCII one), a resource the plan does not show as a
     // saved row, a resource an assignment names, and a second pending rename.  make_rename_resource_edit performs the file-side
     // checks (the current block, the strictly-larger rule) when it is built.
+    //
+    // An add_resource edit (W34-4.2) REQUIRES `plan` and is EXCLUSIVE the same
+    // way.  It refuses a uid or ID the plan already uses, a plan that does not
+    // hold one or two saved resources (the two measured counts), a name that is
+    // not 1..64 printable ASCII characters and a Created stamp that is not a
+    // packed date.  make_add_resource_edit performs the file-side checks.
     //
     // Pushing a delete_task also removes the set/clear field edits, percent
     // edits, update_actuals edits that name the task and add_link edits: those
@@ -741,6 +787,8 @@ struct StructuralSaveResult {
     std::size_t task_mode_written = 0;
     // Wave 34 (W34-4.1): 1 when a resource's name was written.
     std::size_t resources_renamed = 0;
+    // Wave 34 (W34-4.2): 1 when a work resource (and its calendar row) was added.
+    std::size_t resources_added = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the
