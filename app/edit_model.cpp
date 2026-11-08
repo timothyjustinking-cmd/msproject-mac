@@ -33,6 +33,7 @@
 #include "outline.h"
 #include "project_props.h"
 #include "reader.h"
+#include "reader_adapter.h"
 #include "assignment_growth.h"
 #include "resource_growth.h"
 #include "row_writer.h"
@@ -3207,6 +3208,75 @@ std::string sort_plan_order(const PlanInput& plan, std::uint32_t field_id, bool 
     return {};
 }
 
+// W35b-1.5 (RW35-R2): the plan the shells hand the builders is the session plan,
+// which carries the grid edits that are not saved yet (a renamed task, a typed
+// Duration, a flipped Summary).  Sort and Show Level persist an order and a set of
+// collapsed rows computed from the plan, and the writer re-checks only the file's
+// own base order, so a rename of two siblings would save an order of names the
+// file does not store.  Compare the plan with the file's own rows, by UniqueID, on
+// every field a grid edit reaches; the reason names the first difference.
+std::string plan_unsaved_edits(const PlanInput& plan, std::string_view source_path,
+                               std::string_view what) {
+    PlanInput stored;
+    try {
+        stored = plan_input_from_document(mpp::load_file(std::string(source_path)));
+    } catch (const std::exception& open_error) {
+        return std::string("the project file could not be read (") + open_error.what() + ")";
+    }
+    const auto refuse = [&what](const std::string& detail) {
+        return std::string(what) + " is not implemented in this port while the plan carries "
+               "unsaved edits (" + detail + "): save or undo the grid edits first";
+    };
+    std::map<std::uint32_t, const TaskRow*> file_rows;
+    for (const TaskRow& task : stored.tasks) {
+        if (task.uid != 0 && task.outline_level >= 0) {
+            file_rows[task.uid] = &task;
+        }
+    }
+    std::size_t plan_rows = 0;
+    for (const TaskRow& task : plan.tasks) {
+        if (task.uid == 0 || task.outline_level < 0) {
+            continue;
+        }
+        ++plan_rows;
+        const auto found = file_rows.find(task.uid);
+        if (found == file_rows.end()) {
+            return refuse("UniqueID " + std::to_string(task.uid) + " is not a row of the file");
+        }
+        const TaskRow& file = *found->second;
+        const std::string row = "UniqueID " + std::to_string(task.uid);
+        if (task.name != file.name) {
+            return refuse(row + " Name differs from the file");
+        }
+        if (task.duration_ticks != file.duration_ticks) {
+            return refuse(row + " Duration differs from the file");
+        }
+        if (task.percent_complete != file.percent_complete) {
+            return refuse(row + " % Complete differs from the file");
+        }
+        if (task.outline_level != file.outline_level) {
+            return refuse(row + " Outline Level differs from the file");
+        }
+        if (task.summary != file.summary) {
+            return refuse(row + " Summary differs from the file");
+        }
+        if (task.milestone != file.milestone) {
+            return refuse(row + " Milestone differs from the file");
+        }
+        if (task.flag10 != file.flag10) {
+            return refuse(row + " Flag10 differs from the file");
+        }
+        if (task.start != file.start || task.finish != file.finish) {
+            return refuse(row + " Start or Finish differs from the file");
+        }
+    }
+    if (plan_rows != file_rows.size()) {
+        return refuse(std::to_string(plan_rows) + " task rows against the file's " +
+                      std::to_string(file_rows.size()));
+    }
+    return {};
+}
+
 mppwrite::ViewSortEdit sort_view_edit(std::uint32_t field_id, bool ascending,
                                       const std::vector<std::uint32_t>& base,
                                       const std::vector<std::uint32_t>& sorted) {
@@ -3311,6 +3381,14 @@ bool make_show_level_edit(const PlanInput& plan, std::string_view source_path, i
                 refusal.what();
         return false;
     }
+    // W35b-1.5: the file accepts the outline; the rest of the plan (names, durations,
+    // flags) must also be the file's, or the persisted view describes edits that are
+    // not saved.
+    if (std::string reason = plan_unsaved_edits(plan, source_path, "Show Level");
+        !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
     out.kind = StructuralKind::show_level;
     out.show_level = level;
     out.outline_uids = std::move(uids);
@@ -3368,6 +3446,10 @@ bool make_sort_edit(const PlanInput& plan, std::string_view source_path,
     std::vector<std::uint32_t> sorted;
     if (std::string reason = sort_plan_order(plan, field_id, keys[0].ascending, base, sorted);
         !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    if (std::string reason = plan_unsaved_edits(plan, source_path, "Sort"); !reason.empty()) {
         error = std::move(reason);
         return false;
     }

@@ -446,7 +446,7 @@ void check_refusals() {
         app::PlanInput renamed = plan;
         task_by_uid(renamed, 5)->name = "Task C";
         expect_refused(renamed, source, name_desc, true, false,
-                       "the sorted order does not match the order the file's own outline",
+                       "carries unsaved edits (UniqueID 5 Name differs from the file)",
                        "a plan whose names are not the file's");
         /* W35b-1.3 (R35G2-3): the pairs measure one outline (levels 0, 1, 1, 0, 0). */
         struct Shape {
@@ -478,8 +478,51 @@ void check_refusals() {
         task_by_uid(lengthened, 4)->duration_ticks = 200;
         task_by_uid(lengthened, 1)->duration_ticks = 300;
         expect_refused(lengthened, source, one_key(app::SortKeyKind::duration, false), true, false,
-                       "the sorted order does not match the order the file's own outline",
+                       "carries unsaved edits (UniqueID 1 Duration differs from the file)",
                        "a plan whose durations are not the file's");
+
+        /* W35b-1.5 (RW35-R2): a grid edit the plan carries and the file does not,
+         * on any field a grid edit reaches, is refused with the actionable reason;
+         * the measured plan (the file's own rows) still builds in the pair tests. */
+        struct Unsaved {
+            const char* needle;
+            const char* what;
+            std::uint32_t uid;
+            int field;
+        };
+        const std::vector<Unsaved> unsaved = {
+            {"UniqueID 2 Name differs from the file", "a renamed task", 2, 0},
+            {"UniqueID 3 Duration differs from the file", "a typed Duration", 3, 1},
+            {"UniqueID 4 % Complete differs from the file", "a typed % Complete", 4, 2},
+            {"UniqueID 1 Summary differs from the file", "a flipped Summary", 1, 3},
+            {"UniqueID 5 Milestone differs from the file", "a flipped Milestone", 5, 4},
+        };
+        for (const Unsaved& edit_case : unsaved) {
+            app::PlanInput edited = plan;
+            app::TaskRow* row = task_by_uid(edited, edit_case.uid);
+            switch (edit_case.field) {
+                case 0:
+                    row->name += "x";
+                    break;
+                case 1:
+                    row->duration_ticks += 480;
+                    break;
+                case 2:
+                    row->percent_complete = 50;
+                    break;
+                case 3:
+                    row->summary = !row->summary;
+                    break;
+                default:
+                    row->milestone = !row->milestone;
+                    break;
+            }
+            expect_refused(edited, source, name_desc, true, false, edit_case.needle,
+                           std::string("a sort with ") + edit_case.what);
+            expect_refused(edited, source, name_desc, true, false,
+                           "save or undo the grid edits first",
+                           std::string("a sort with ") + edit_case.what + " asks to save or undo");
+        }
 
         /* The same hand-built edit passes push() (the plan gives it) and the save
          * refuses it from the file before anything is written. */
@@ -508,8 +551,9 @@ void check_refusals() {
     expect_refused(plan, sorted_path.string(), name_desc, true, false, "already carries a sort",
                    "a file that already carries a sort");
     expect_refused(plan, data_path("wave31-resource-sheet.mpp").string(), name_desc, true, false,
-                   "not implemented in this port for this project",
-                   "a file whose applied view is the Resource Sheet");
+                   "carries unsaved edits (UniqueID 1 Summary differs from the file)",
+                   "a file whose tasks are not the plan's (W35b-1.5: the rows are compared "
+                   "before the applied view; the view pin is the writer test's)");
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    name_desc, true, false, "could not be read", "a missing project file");
 
