@@ -652,6 +652,19 @@ DOCUMENTED = {
         "2AB28E72F9C7DA7A31555275572EF1C798A7F9ED29DCEAB676F876E2C6745A68",
     "tests/data/wave35-viewstate-sort-two-keys.mpp":
         "79DCF0B490EEA25B0E5D13D260D2472D60597758EEDE1BEC9F11BB9A4B21CBE0",
+    # W35-2.2 table fixtures (Application.TableApply)
+    "tests/data/wave35-viewstate-table-cost-control-null.mpp":
+        "1A10CB0EE18430734D497B0F57B23E0E51CAC1283528BD2DC050389C6BEEC579",
+    "tests/data/wave35-viewstate-table-cost-control.mpp":
+        "23C950CED6E271CE84114378E2D03001960A39F76FB2A4C03F4FDF886497FF25",
+    "tests/data/wave35-viewstate-table-cost.mpp":
+        "F29B4384EB70C853390B7D01516440E9A20FD00E7E1B379115440B1A4A39EED4",
+    "tests/data/wave35-viewstate-table-schedule-control-null.mpp":
+        "256A0350430DF9064D72371228262685D97A869BA256729D9A27F0BC0A8A9878",
+    "tests/data/wave35-viewstate-table-schedule-control.mpp":
+        "1A4FABE7F10956530E5F9F38C28CD4975235D9A673BAB3A6EAB2D26AED4821E5",
+    "tests/data/wave35-viewstate-table-schedule.mpp":
+        "47DB52EBA9F99A556523EBC0F3B261FD0B87264C8E931B5588B8E2F5F0DE83DF",
     "tests/data/wave34-resource-add-third-control.mpp":
         "F9DD625CFD94FD6A29B616F102EB005B637409662F0C2465C0ADEA4FCBC759F4",
     "tests/data/wave34-resource-add-third.mpp":
