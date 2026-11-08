@@ -3,7 +3,7 @@
 
 Measures what Project 2021 writes to the file for the commands wave 34 deferred.
 This script holds the insert pairs of W35-3.1 (Insert Summary and Insert
-Milestone on a non-trivial outline) and the Set Baseline pair of W35-3.2; later
+Milestone on a non-trivial outline), the Set Baseline pair of W35-3.2 and the note-generator pair of W35-3.3; later
 G3 items add their own pair kinds here.
 
 The base is built through Project under automatic calculation: the three-level
@@ -72,8 +72,22 @@ def set_baseline(app, project):
     return {"call": "BaselineSave(All=True, Copy=0, Into=0)"}
 
 
+def set_task_note(row, text):
+    def edit(app, project):
+        project.Tasks(row).Notes = text
+        return {"call": f"Tasks({row}).Notes = {text!r}",
+                "notes": {str(i): prop(project.Tasks(i), "Notes")
+                          for i in range(1, project.Tasks.Count + 1)}}
+    return edit
+
+
 # pair -> (edit function, base kind)
 EDITS = {
+    # W35-3.3: a note added on a file whose existing note was written by an
+    # older RichEdit build (wave-30, Riched20 16.0.20430): does the new note's
+    # generator string come from the machine or from the file?
+    "notes-generator": (set_task_note(3, "Generator probe line."),
+                        "file:wave30-notes.mpp"),
     "baseline-set-nested": (set_baseline, "deep"),
     "insert-milestone-nested": (insert_milestone_at(4), "deep"),
     "insert-summary-nested": (insert_summary_at(4), "deep"),
@@ -152,10 +166,19 @@ def build(app):
 
 
 def measure(app, pair, entry):
-    edit_fn, _kind = EDITS[pair]
+    edit_fn, kind = EDITS[pair]
     seed = os.path.join(FIXTURE_DIR, f"wave35-g3-{pair}-seed.mpp")
-    project = build(app)
-    entry["pending_facts"] = facts(app, project)
+    if kind.startswith("file:"):
+        # An existing committed (synthetic, neutral) fixture, opened on a copy.
+        source = os.path.join(ROOT, "tests", "data", kind[len("file:"):])
+        copy = os.path.join(WORK, f"{pair}-base.mpp")
+        shutil.copyfile(source, copy)
+        app.FileOpen(copy)
+        entry["base"] = kind
+        entry["pending_facts"] = facts(app, app.ActiveProject)
+    else:
+        project = build(app)
+        entry["pending_facts"] = facts(app, project)
     app.FileSaveAs(seed)
     app.FileClose(0)
 
