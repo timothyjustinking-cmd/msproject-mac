@@ -175,3 +175,90 @@ scans are clean.  The gcc, clang and AppleClang jobs and the gcc 15 warning (0.6
 not run on this machine; the coordinator's CI run is their gate.
 
 WAVE-34b-G0-COMPLETE
+
+## G1
+
+All five G1 items are done; none is deferred.  One finding id per commit; per-commit
+gates (core, app, app_qt where touched, fixtures, markers, both name scans) are logged
+as `build/w34b/<parent>-W34b-<item>-gates.status` and the RED and GREEN runs beside them.
+
+### W34b-1.1 (R34G3-3)
+
+Commit `8ba24e5`.  The wave 34 var-block loaders checked `offset + 4 > size` in 32-bit
+arithmetic, which wraps for an offset near 0xFFFFFFFF.  Every loader now uses the
+overflow-free form (`offset > size || 4 > size - offset`, `length > size - offset - 4`):
+`assignment_growth` (`load_var_meta`), `viewstream_edit` (entry loop, the 214 and CEdl
+block start and length), `varmeta_edit` (entry loop) and `wbs_code` (`length >
+props.size() - at - 12`).  The sweep covered `resource_growth`, `props_edit` and
+`summary_info` too; what remains there is `size_t` scan indexes bounded by the buffer and
+checks already in the remainder form (`summary_info`), none driven by a file-supplied
+32-bit offset.  Tests: offsets 0xFFFFFFFC to 0xFFFFFFFE
+are refused cleanly ("is past the end of Var2Data").  RED: `assignment_growth` SEGFAULT
+(`build/w34b/39130c6-W34b-1.1-red-assignment_growth.log`), GREEN 0 failures.  The
+`varmeta` and `viewstream` wrap tests pass before the fix on a 64-bit build (they cast to
+`size_t` first, which still wraps in a 32-bit build), so they are recorded as 32-bit
+guards, not as RED evidence.
+
+### W34b-1.2 (R34G3-4, R34G4-9)
+
+Commit `9e0f1a2`.  The settled-append refusals now have tests: the 3-to-4 real-assignment
+refusal, the real-assignment count mismatch, "more than one free placeholder row" and
+"no free placeholder row".  The two placeholder messages were unreachable behind the
+row-count check, so the check was removed and the placeholder loop now carries the counts.
+The 3-to-4 tests passed before the change because the refusal already existed untested; a
+mutation of the refusal makes them fail.  Every wave 34 needle that matched any refusal
+("add resources:", "assign resources:", "measured", "not implemented in this port" alone)
+is now specific, in the core, app and app_qt tests.  RED:
+`build/w34b/8ba24e5-W34b-1.2-red-mppwrite_roundtrip_assignment_growth.log` (4 failures),
+GREEN 0.
+
+### W34b-1.3 (RC-R3, R34G4-8)
+
+Commit `d52a331`.  `save_structural_edits` refuses a rename, an Add Resources, an
+Assign or remove, a Font Bold and a Define Code edit when a table-format or custom-field
+formula edit is also pending, before the document-edit hook and before any write.  The
+queue is not touched.  One test per kind, each for a pending table format and a pending
+formula, asserting the specific needle, hook not called, no target file and an unchanged
+queue size.  RED: all five saved the file and ran the hook (`ctest=8` for each of the
+five `app_edits_*` targets, `build/w34b/9e0f1a2-W34b-1.3-red-*.log`); GREEN `ctest=0`
+for all five.
+
+### W34b-1.4 (R34G4-6)
+
+Commit `7b4c68b`.  `,` `[` and `]` are refused in a rename and in Add Resources, in the
+shared builder (and so in `push()`) and in both writers (`rename_resource`,
+`add_work_resource`).  The length caps are the longest name a committed pair measures:
+2 characters for Add Resources (`R2` in `wave30-resource-add.mpp`, `R3` in
+`wave34-resource-add-third.mpp`) and 3 for the rename (`R2` to `R2b` in
+`wave30-resource-rename.mpp`), each cited in the comment.  The character checks run
+before the length check, so their messages stay specific.  Existing tests that used longer
+names now use the pairs' names.  RED, with the source reverted: core `varmeta` and
+`resource_growth` `ctest=8`, app rename and add `ctest=8` with 7 failures each
+(`build/w34b/d52a331-W34b-1.4-red-*.log`); the assignment, bold and WBS targets only swap
+an unrelated long name and pass both ways.  GREEN: core, app and app_qt all 0, after one
+Qt gate probe name ("R22") was changed to two characters.
+
+### W34b-1.5 (R34G4-7)
+
+Commit `a5c35c3`.  Dated errata appended, nothing rewritten, to
+`docs/handoff/wave34-verification/close-review.md` and below the table holding the
+W34-4.3 row of `docs/handoff/wave34-complete.md`.  They record that the shell's "refuses
+every other shape" was wrong for Assign (0.1), Add Resources, Bold and Define Code
+(0.3 to 0.5), that no G4 entry carried Project-reopen evidence for brief section 4(e)
+(the coordinator's check, not run here), and that the 4.3 identity dwords were masked,
+not compared, until 0.2.  The erratum sits under the table, not inside the row, so the
+table stays well formed.
+
+### G1 gates
+
+Fresh trees `build/w34b-g1-fresh`, `-qt` and `-app` at `a5c35c3`, logs in
+`build/w34b/g1-gates/` (`run-g1-gates.cmd`), all with `CORE_WARNINGS_AS_ERRORS=ON`: core
+configure, build and ctest (`-E plan_recalc`) exit 0; `plan_recalc_tests` with
+`MPP_NO_CORPUS=1` 266 checks and with the corpus 512 checks; M2 332 of 332 fields; the
+engine suite 7 of 8 with the expected `constraint-mso` failure; `check_fixtures.py` and
+`check_markers.py --range main..HEAD` exit 0; app_qt build and ctest 47/47; app build
+and ctest 31/31.  Both name scans are clean.  The gcc, clang and AppleClang jobs cannot
+run on this machine; the coordinator's CI run is their gate.  The brief 4(e) Project
+reopen check is the coordinator's.  Nothing is pushed.
+
+WAVE-34b-G1-COMPLETE
