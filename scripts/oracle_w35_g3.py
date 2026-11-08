@@ -3,8 +3,8 @@
 
 Measures what Project 2021 writes to the file for the commands wave 34 deferred.
 This script holds the insert pairs of W35-3.1 (Insert Summary and Insert
-Milestone on a non-trivial outline); later G3 items add their own pair kinds
-here.
+Milestone on a non-trivial outline) and the Set Baseline pair of W35-3.2; later
+G3 items add their own pair kinds here.
 
 The base is built through Project under automatic calculation: the three-level
 outline of the wave-35 view-state script (Task A > Task B > Task C, Task D;
@@ -66,8 +66,15 @@ def insert_summary_at(row):
     return edit
 
 
+def set_baseline(app, project):
+    # The Set Baseline dialog's defaults: Baseline (0), Entire project.
+    app.BaselineSave(True, 0, 0)  # All=True, Copy=pjCopyCurrent, Into=pjIntoBaseline
+    return {"call": "BaselineSave(All=True, Copy=0, Into=0)"}
+
+
 # pair -> (edit function, base kind)
 EDITS = {
+    "baseline-set-nested": (set_baseline, "deep"),
     "insert-milestone-nested": (insert_milestone_at(4), "deep"),
     "insert-summary-nested": (insert_summary_at(4), "deep"),
     "insert-milestone-first": (insert_milestone_at(1), "deep"),
