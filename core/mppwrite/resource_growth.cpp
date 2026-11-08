@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <utility>
@@ -126,6 +127,57 @@ void append_f64(Bytes& bytes, double value) {
 Bytes slice(Bytes const& bytes, std::size_t offset, std::size_t length) {
     return Bytes(bytes.begin() + static_cast<std::ptrdiff_t>(offset),
                  bytes.begin() + static_cast<std::ptrdiff_t>(offset + length));
+}
+
+/* The template row, FixedMeta entry and Fixed2Meta entry of a resource the
+ * Add Resources pairs measured (the last resource of the wave30 and wave34
+ * controls: a work resource at 100 %, no work, no cost, no assignment, standard
+ * calendar).  Both controls agree byte for byte outside the masked bytes, which
+ * the writer rewrites for the new resource: the row's id and uid (0..7) and its
+ * counter (154..157); the entry's session bit (0), file offset (4..7) and
+ * state bytes (12..13); the Fixed2 entry's file offset and first state byte
+ * (4..8).  Anything else the writer would clone from a different last resource
+ * (work, cost, actual and remaining figures, accrual, type, calendar reference,
+ * flags) is a shape no pair measured. */
+constexpr char const* kTemplateRowHex =
+    "0000000000000000000000000088c34000000000000000000000000000000000"
+    "0000000000000000000000000000000000000000000000000000000000000000"
+    "0000000000000000000000000000000003000000000000000000000000000000"
+    "0000000000000000000000000000000000000000000000000000000000000000"
+    "000000000000000000000000000000000000000000000000000000000000ffff"
+    "ffffffffffff020002000000";
+
+constexpr char const* kTemplateFixedMetaHex =
+    "0000050000000000e3fffd3f0000000000000000000000000000000000000000"
+    "0000000000";
+
+constexpr char const* kTemplateFixed2MetaHex =
+    "0000000000000000000000000000000000000000000000000000000000000000"
+    "0000000000c000000000000000000000000000";
+
+Bytes from_hex(std::string const& hex) {
+    Bytes out;
+    out.reserve(hex.size() / 2);
+    for (std::size_t i = 0; i + 1 < hex.size(); i += 2) {
+        out.push_back(
+            static_cast<std::uint8_t>(std::stoi(hex.substr(i, 2), nullptr, 16)));
+    }
+    return out;
+}
+
+/* The first byte of `got` that differs from `want`, ignoring the masked ranges
+ * [lo, hi), or `want.size()` if none does. */
+std::size_t first_template_difference(
+    Bytes const& got, Bytes const& want,
+    std::initializer_list<std::pair<std::size_t, std::size_t>> masked) {
+    for (std::size_t i = 0; i < want.size(); ++i) {
+        bool skip = false;
+        for (auto const& range : masked) {
+            skip = skip || (i >= range.first && i < range.second);
+        }
+        if (!skip && got[i] != want[i]) return i;
+    }
+    return want.size();
 }
 
 std::string hex32(std::uint32_t value) {
@@ -591,6 +643,43 @@ ResourceGrowthWrite add_work_resource(CfbDocument& doc,
     Identity fresh = shared;
     fresh[2] = static_cast<std::uint8_t>((counter + 1) & 0xFFu);
     fresh[3] = static_cast<std::uint8_t>(((counter + 1) >> 8) & 0xFFu);
+
+    /* ---- the template resource must be the measured one ------------------- */
+    {
+        Bytes const want_row = from_hex(kTemplateRowHex);
+        Bytes const row = slice(rsc_fixed, template_base, kRscRowBytes);
+        std::size_t const at =
+            first_template_difference(row, want_row, {{0, 8}, {154, 158}});
+        if (at < want_row.size()) {
+            fail(function + ": the last resource's row differs from the measured "
+                 "template at row offset " + std::to_string(at) + " (the pairs "
+                 "measured a work resource with no work, cost, accrual, calendar "
+                 "or flag set); a resource that is not the measured shape is not "
+                 "cloned");
+        }
+        Bytes const want_fm = from_hex(kTemplateFixedMetaHex);
+        Bytes const fm = slice(
+            rsc_meta,
+            kMetaHeaderBytes + (template_row + kRscDescriptors) * kRscFmEntryBytes,
+            kRscFmEntryBytes);
+        std::size_t const fm_at =
+            first_template_difference(fm, want_fm, {{0, 1}, {4, 8}, {12, 14}});
+        if (fm_at < want_fm.size()) {
+            fail(function + ": the last resource's FixedMeta entry differs from "
+                 "the measured template at entry byte " + std::to_string(fm_at));
+        }
+        Bytes const want_f2m = from_hex(kTemplateFixed2MetaHex);
+        Bytes const f2m = slice(
+            rsc_f2_meta,
+            kMetaHeaderBytes + (template_row + kRscDescriptors) * kRscF2mEntryBytes,
+            kRscF2mEntryBytes);
+        std::size_t const f2m_at =
+            first_template_difference(f2m, want_f2m, {{4, 9}});
+        if (f2m_at < want_f2m.size()) {
+            fail(function + ": the last resource's Fixed2Meta entry differs from "
+                 "the measured template at entry byte " + std::to_string(f2m_at));
+        }
+    }
 
     /* ---- build ------------------------------------------------------------ */
     Built built;

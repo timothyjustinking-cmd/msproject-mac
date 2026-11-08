@@ -2695,6 +2695,8 @@ bool created_stamp_ok(std::uint32_t created) {
     return created != 0 && created != 0xFFFFFFFFu;
 }
 
+constexpr std::uint32_t kAddResourceMeasuredAccrueAt = 3;  // Prorated
+
 // The writer clones the last saved resource row (rates, type and accrual ride
 // along), while Project's Add Resources gives a work resource with default
 // rates.  Both measured pairs clone a default-rate work resource, so a template
@@ -2713,6 +2715,29 @@ std::string add_resource_template_refusal(const PlanInput& plan) {
                "default rates is not implemented in this port: the writer copies "
                "the last resource's row, and the measured Project pairs copy a "
                "default-rate work resource";
+    }
+    // R34G4-3: the row is cloned whole, so everything else on it must be the
+    // measured template's too: 100 % Max. Units, the default accrual, and no work
+    // or assignment (a clone would give the new resource the same work with no
+    // assignment behind it).
+    if (last.max_units_percent != 100.0) {
+        return "Add Resources after a resource whose Max. Units is not 100% is not "
+               "implemented in this port: the writer copies the last resource's "
+               "row, and the measured Project pairs copy a 100% resource";
+    }
+    if (last.cost_fields_stored && last.accrue_at != kAddResourceMeasuredAccrueAt) {
+        return "Add Resources after a resource whose cost accrual is not the "
+               "default is not implemented in this port: the writer copies the "
+               "last resource's row, and the measured Project pairs copy a "
+               "default-accrual resource";
+    }
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.resource_uid == last.uid) {
+            return "Add Resources after a resource that holds an assignment is not "
+                   "implemented in this port: the writer copies the last resource's "
+                   "row, including its work, and the measured Project pairs copy a "
+                   "resource with no work";
+        }
     }
     return {};
 }

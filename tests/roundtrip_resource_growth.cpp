@@ -664,6 +664,47 @@ void test_shape_refusals(TestContext& t) {
         grown.replace_stream(kRscFixed, fixed);
     }
     refuses(t, grown, spec, "", "a resource row without its meta entry");
+
+    /* R34G4-3: the last resource of wave30-assign-add.mpp carries 40 h of work.
+     * Cloning its row used to yield a new resource with 40 h of work and no
+     * assignment; the writer now refuses any template that is not the measured
+     * one, and names the offset (52 is the first work word). */
+    refuses(t, doc_from_data("wave30-assign-add.mpp"), spec, "row offset 52",
+            "a last resource that carries 40 h of work");
+}
+
+/* R34G4-3: every template-row field outside the ones the writer rewrites must
+ * equal the measured template.  Each case plants one byte on the last row (or its
+ * meta entries) of the third pair's control. */
+void test_template_refusals(TestContext& t) {
+    mppwrite::ResourceGrowthSpec const spec = good_spec();
+    std::string const control = kThird.control;
+    constexpr std::size_t last_row = 48 + 172 * 2;
+    auto row_byte = [&](std::size_t offset, std::uint8_t value,
+                        std::string const& what) {
+        refuses(t,
+                with_edit(control, kRscFixed,
+                          [&](Bytes& b) { b[last_row + offset] = value; }),
+                spec, "row offset " + std::to_string(offset), what);
+    };
+    row_byte(52, 0x80, "work on the last row");
+    row_byte(80, 0x07, "a changed flag word on the last row");
+    row_byte(94, 0x80, "actual work on the last row");
+    row_byte(110, 0x80, "remaining work on the last row");
+    row_byte(130, 0x01, "a cost figure on the last row");
+    row_byte(158, 0x00, "a changed calendar-reference word on the last row");
+    row_byte(166, 0x05, "a changed type word on the last row");
+    row_byte(168, 0x05, "a changed accrual word on the last row");
+
+    refuses(t,
+            with_edit(control, kRscMeta,
+                      [](Bytes& b) { b[16 + 37 * 5 + 2] ^= 0x01; }),
+            spec, "FixedMeta entry differs", "a changed last-resource FixedMeta entry");
+    refuses(t,
+            with_edit(control, kRscF2Meta,
+                      [](Bytes& b) { b[16 + 51 * 5 + 38] ^= 0x01; }),
+            spec, "Fixed2Meta entry differs",
+            "a changed last-resource Fixed2Meta entry");
 }
 
 void test_damaged(TestContext& t) {
@@ -828,6 +869,7 @@ int main() {
         test_dry_run(t, kThird);
         test_argument_refusals(t);
         test_shape_refusals(t);
+        test_template_refusals(t);
         test_damaged(t);
         return t.report();
     } catch (std::exception const& error) {

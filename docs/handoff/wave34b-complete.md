@@ -45,3 +45,24 @@ Project-tied check in the first pair and both settled pairs
 (`build/w34b/f08249e-W34b-0.2-red.log`, 7 failures).  Both changes were reverted;
 GREEN: assignment growth 2007 checks, resource growth 899 checks, 0 failures
 (`build/w34b/f08249e-W34b-0.2-green.log`, `-rsc-green.log`).
+
+### W34b-0.3 (R34G4-3, RC-W3)
+
+Add Resources clones the last resource's 172-byte row, its FixedMeta entry and its
+Fixed2Meta entry; it now writes only when those equal the template both pairs measured
+(a work resource at 100 %, no work, cost, accrual, calendar or flag set).  The writer
+(`add_work_resource`) compares every byte outside the ones it rewrites (row id, uid and
+counter 0..7 and 154..157; entry offset, session bit and state bytes) and names the
+first differing offset; the two controls agree on the template byte for byte.  The edit
+model (`add_resource_template_refusal`, shared by `make_add_resource_edit` and
+`push()`) also refuses a last resource whose Max. Units is not 100 %, whose stored
+accrual is not the default, or that holds an assignment.
+
+The reproduction, `wave30-assign-add.mpp` (last resource with 40 h of work), is refused
+at the writer ("row offset 52") and at the edit model ("holds an assignment", and the
+writer's dry run when the plan hides the assignment).  RED then GREEN: writer 33
+failures of 932 checks to 0 of 932 (`build/w34b/afb0aab-W34b-0.3-red.log`,
+`-green.log`); edit model 7 failures (815 passed) to 0 of 832
+(`-app-red.log`, `-app-green.log`).  Both measured pairs still write and match Project's
+pair field by field (the `resource-add-second` and `resource-add-third` pair tests are
+inside the 932).

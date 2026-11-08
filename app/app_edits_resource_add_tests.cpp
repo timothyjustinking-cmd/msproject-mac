@@ -572,6 +572,59 @@ void check_refusals() {
               "push() refuses an add after a template with a rate");
     }
 
+    /* R34G4-3: the writer clones the last resource's whole row, so the plan must
+     * show a template with the measured Max. Units, accrual and no work. */
+    {
+        app::PlanInput odd = plan;
+        odd.resources.back().max_units_percent = 50.0;
+        expect_refused(odd, source, "R2", stamp, "Max. Units is not 100%",
+                       "a template at 50% Max. Units");
+        odd = plan;
+        odd.resources.back().cost_fields_stored = true;
+        odd.resources.back().accrue_at = 1;
+        expect_refused(odd, source, "R2", stamp, "cost accrual is not the default",
+                       "a template with start accrual");
+        odd = plan;
+        app::AssignmentRow held;
+        held.uid = 1;
+        held.task_uid = 1;
+        held.resource_uid = odd.resources.back().uid;
+        held.work_ticks = 24000;
+        odd.assignments.push_back(held);
+        expect_refused(odd, source, "R2", stamp, "holds an assignment",
+                       "a template that holds an assignment");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(kSecond.new_uid, 2, "R2", stamp), &odd),
+              "push() refuses an add after a template that holds an assignment");
+        odd = plan;
+        odd.resources.back().max_units_percent = 50.0;
+        app::StructuralEdits more;
+        check(!more.push(hand_edit(kSecond.new_uid, 2, "R2", stamp), &odd),
+              "push() refuses an add after a template at 50% Max. Units");
+    }
+
+    /* The reproduction itself: the last resource of wave30-assign-add.mpp holds
+     * 40 h of work.  The plan read from the file shows its assignment (plan-side
+     * refusal); a plan that hides it still meets the writer's dry run, which
+     * compares the row with the measured template. */
+    {
+        const std::filesystem::path assign_path = data_path("wave30-assign-add.mpp");
+        fixture::require_committed(assign_path);
+        app::PlanInput assign_plan;
+        try {
+            assign_plan = app::plan_input_from_document(mpp::load_file(assign_path.string()));
+        } catch (const std::exception&) {
+            check(false, "wave30-assign-add.mpp loads");
+            return;
+        }
+        expect_refused(assign_plan, assign_path.string(), "R9", stamp, "holds an assignment",
+                       "a project whose last resource carries 40 h of work");
+        app::PlanInput hidden = assign_plan;
+        hidden.assignments.clear();
+        expect_refused(hidden, assign_path.string(), "R9", stamp, "row offset 52",
+                       "the same project with the assignment hidden from the plan");
+    }
+
     /* push(): the plan-side backstop for a hand-built queue. */
     const std::uint32_t new_uid = kSecond.new_uid;
     const std::uint32_t new_id = 2;
