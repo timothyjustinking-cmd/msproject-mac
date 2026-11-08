@@ -154,7 +154,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Edit | Resource Information... | implemented | gap: the name only, and only to a longer printable-ASCII name of a resource with no assignments, alone in the save; every other field and shape is refused (Notes stays disabled: its payload embeds the saving machine's RichEdit generator string, which this port cannot reproduce) |
 | Edit | Assign Resources... | implemented | gap: one work resource at 100 % Max. Units on an unstarted leaf task that holds no assignment yet, and the removal of that one assignment, alone in the save; further assignments, units, work and the other dialog fields are refused as not implemented in this port |
 | Edit | Font Bold | implemented | gap: the Task Name cell of the task with UniqueID 1 only (Project's wave30-textstyle pair), alone in the save; every other cell, a view that already stores a cell format, Bold off and the other font attributes are refused as not implemented in this port |
-| Edit | Define WBS Code | disabled | future: not implemented in this port |
+| Edit | Define WBS Code | implemented |  |
 | Edit | Calculate Project | implemented | gap: a pending recalculation of the project row and exactly two unlinked, automatically scheduled leaf tasks with no constraint, progress or task calendar, alone in the save; a link, a lag, a constraint, a summary, another task count and a file that is not pending are refused as not implemented in this port |
 | View | Gantt Chart | implemented |  |
 | View | Task Usage | implemented |  |
@@ -197,5 +197,5 @@ Edits that are not command rows, with the reason the shell refuses them (operato
 * ribbon commands: 114 (63 disabled)
 * pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 52 enabled / 62 disabled command controls. The table above reports 63 disabled because it counts a split by its menu items; the pin counts the control.
 * the difference (1): 1 split whose button is live while every menu item is disabled: Project > Schedule > Set Baseline
-* menu commands: 56 (7 disabled)
+* menu commands: 56 (6 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.
