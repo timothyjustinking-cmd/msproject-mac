@@ -26,11 +26,8 @@
 #include <QAbstractItemModel>
 #include <QAction>
 #include <QApplication>
-#include <QDialog>
-#include <QInputDialog>
 #include <QModelIndex>
 #include <QTableView>
-#include <QTimer>
 
 #include <cstddef>
 #include <cstdint>
@@ -43,6 +40,7 @@
 #include "gate_util.h"
 #include "main_window.h"
 #include "menu_model.h"
+#include "prompt_hook.h"
 #include "ribbon_bar.h"
 #include "shell_style.h"
 
@@ -79,49 +77,20 @@ QAbstractButton* resource_properties_button(msqt::MainWindow& window, const QStr
     return nullptr;
 }
 
-// What a click on Information opened: the prompt (if any) is answered with
-// `answer` (or cancelled when `accept` is false) so the test cannot hang.
-struct Prompt {
-    bool seen = false;
-    QString initial;
-};
+using Prompt = gate::PromptResult;
 
-void answer_prompt(Prompt* prompt, bool accept, const QString& answer) {
-    QTimer::singleShot(0, [prompt, accept, answer]() {
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            auto* input = qobject_cast<QInputDialog*>(widget);
-            if (input != nullptr && input->isVisible()) {
-                prompt->seen = true;
-                prompt->initial = input->textValue();
-                if (accept) {
-                    input->setTextValue(answer);
-                    input->accept();
-                } else {
-                    input->reject();
-                }
-                return;
-            }
-            auto* dialog = qobject_cast<QDialog*>(widget);
-            if (dialog != nullptr && dialog->isVisible()) {
-                prompt->seen = true;
-                dialog->reject();
-                return;
-            }
-        }
-    });
-}
-
-bool click_information(msqt::MainWindow& window, Prompt* prompt, bool accept,
-                       const QString& answer) {
-    QAbstractButton* button = resource_properties_button(window, QStringLiteral("Information"),
-                                                         nullptr);
+bool click_information(msqt::MainWindow& window, Prompt* prompt, bool accept, const QString& answer) {
+    QAbstractButton* button = resource_properties_button(window, QStringLiteral("Information"), nullptr);
     if (button == nullptr || !button->isEnabled()) {
         return false;
     }
-    answer_prompt(prompt, accept, answer);
-    button->click();
-    QApplication::processEvents();
-    QApplication::processEvents();
+    {
+        // Answers the prompt this click opens (W35-0.3); stops when the click returns.
+        gate::PromptAnswerer answerer(prompt, accept, answer);
+        button->click();
+        QApplication::processEvents();
+        QApplication::processEvents();
+    }
     return true;
 }
 

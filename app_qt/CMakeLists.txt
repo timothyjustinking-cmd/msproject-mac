@@ -157,6 +157,16 @@ add_test(NAME qt_shell_offscreen
                  "${QT_TEST_OUT_DIR_CMAKE}/qt-shell-window.png"
                  "${QT_TEST_DATA_DIR_CMAKE}/wave24-timeline-hidden.mpp")
 
+# W35-0.3 (CI-4): the prompt hook the gate tests answer a click's dialog with
+# (tests/prompt_hook.h) answers one that opens late, and stops with its owner.
+add_executable(qt_prompt_hook_tests tests/prompt_hook_test.cpp)
+target_link_libraries(qt_prompt_hook_tests PRIVATE qt_shell)
+qt_set_warnings(qt_prompt_hook_tests)
+
+add_test(NAME qt_prompt_hook
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_prompt_hook_tests>)
+
 # Wave 17 Q2 / wave 18 Q3: the numeric parity gate.  Asserts the reference-
 # measured geometry and typography (row/header heights, the frozen 60 px gutter,
 # the nine Entry column widths, the 0.459 splitter, 24 px/day, the two timescale

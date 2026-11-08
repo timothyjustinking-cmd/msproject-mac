@@ -30,9 +30,6 @@
 #include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
-#include <QInputDialog>
-#include <QMessageBox>
-#include <QTimer>
 
 #include <cstddef>
 #include <cstdint>
@@ -48,6 +45,7 @@
 #include "main_window.h"
 #include "menu_model.h"
 #include "mpp_mutate.h"
+#include "prompt_hook.h"
 #include "ribbon_bar.h"
 #include "shell_style.h"
 
@@ -83,58 +81,33 @@ QAbstractButton* assign_button(msqt::MainWindow& window, msqt::RibbonCommand* co
     return nullptr;
 }
 
-struct Prompt {
-    bool seen = false;
-    bool question = false;
-    QString title;
-};
-
-// Answers the next prompt: an item list takes `answer` (or Cancel), the removal
-// question takes Yes (`accept`) or No.
-void answer_prompt(Prompt* prompt, bool accept, const QString& answer) {
-    QTimer::singleShot(0, [prompt, accept, answer]() {
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            if (!widget->isVisible()) {
-                continue;
-            }
-            if (auto* input = qobject_cast<QInputDialog*>(widget)) {
-                prompt->seen = true;
-                prompt->title = input->windowTitle();
-                if (accept) {
-                    input->setTextValue(answer);
-                    input->accept();
-                } else {
-                    input->reject();
-                }
-                return;
-            }
-            if (auto* box = qobject_cast<QMessageBox*>(widget)) {
-                prompt->seen = true;
-                prompt->question = true;
-                prompt->title = box->windowTitle();
-                QAbstractButton* button =
-                    box->button(accept ? QMessageBox::Yes : QMessageBox::No);
-                if (button != nullptr) {
-                    button->click();
-                } else {
-                    box->reject();
-                }
-                return;
-            }
-        }
-    });
-}
+using Prompt = gate::PromptResult;
 
 bool click_assign(msqt::MainWindow& window, Prompt* prompt, bool accept, const QString& answer) {
     QAbstractButton* button = assign_button(window, nullptr);
     if (button == nullptr || !button->isEnabled()) {
         return false;
     }
-    answer_prompt(prompt, accept, answer);
-    button->click();
-    QApplication::processEvents();
-    QApplication::processEvents();
+    {
+        // Answers the prompt this click opens (W35-0.3); stops when the click returns.
+        gate::PromptAnswerer answerer(prompt, accept, answer);
+        button->click();
+        QApplication::processEvents();
+        QApplication::processEvents();
+    }
     return true;
+}
+
+// What the prompt hook saw, for a CI log that cannot be reproduced locally (the
+// macOS job is the only place CI-4 showed): the prompt's kind and title, the
+// visible dialogs when the poll gave up, and the status line the click left.
+void report_prompt(const Prompt& prompt, msqt::MainWindow& window) {
+    std::fprintf(stderr,
+                 "note: prompt seen=%d question=%d title='%s' initial='%s' visible='%s' "
+                 "status='%s'\n",
+                 prompt.seen ? 1 : 0, prompt.question ? 1 : 0, prompt.title.toUtf8().constData(),
+                 prompt.initial.toUtf8().constData(), prompt.found.toUtf8().constData(),
+                 window.status_left_text().toUtf8().constData());
 }
 
 void select_task(msqt::MainWindow& window, std::uint32_t uid) {
@@ -317,6 +290,9 @@ int main(int argc, char** argv) {
         Prompt prompt;
         gate::check(click_assign(window, &prompt, true, QString()), "the removal clicks");
         gate::check(prompt.seen && prompt.question, "an assigned task is offered the removal");
+        if (!(prompt.seen && prompt.question)) {
+            report_prompt(prompt, window);
+        }
         gate::check(window.pending_edits().empty(),
                     "the removal on the port's own save queues nothing");
         gate::check(!window.document_dirty(), "the refused removal leaves the document clean");
@@ -349,6 +325,9 @@ int main(int argc, char** argv) {
             gate::check(click_assign(window, &prompt, false, QString()), "the removal clicks");
             gate::check(prompt.seen && prompt.question && prompt.title == QStringLiteral("Assign Resources"),
                         "an assigned task is offered the removal");
+            if (!(prompt.seen && prompt.question)) {
+                report_prompt(prompt, window);
+            }
             gate::check(window.pending_edits().empty(), "answering No queues nothing");
             gate::check(!window.document_dirty(), "answering No leaves the document clean");
         }
