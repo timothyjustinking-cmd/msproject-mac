@@ -192,6 +192,22 @@ PAIRS = {
         "wave34-resource-add-third-control.mpp",
         "wave34-resource-add-third-control-null.mpp",
         "wave34-resource-add-third.mpp"),
+    "wave35-calculate-lag": (
+        "wave35-calculate-lag-control.mpp",
+        "wave35-calculate-lag-control-null.mpp",
+        "wave35-calculate-lag.mpp"),
+    "wave35-calculate-linked": (
+        "wave35-calculate-linked-control.mpp",
+        "wave35-calculate-linked-control-null.mpp",
+        "wave35-calculate-linked.mpp"),
+    "wave35-calculate-snet": (
+        "wave35-calculate-snet-control.mpp",
+        "wave35-calculate-snet-control-null.mpp",
+        "wave35-calculate-snet.mpp"),
+    "wave35-calculate-unlinked": (
+        "wave35-calculate-unlinked-control.mpp",
+        "wave35-calculate-unlinked-control-null.mpp",
+        "wave35-calculate-unlinked.mpp"),
 }
 
 # ---- table geometry (core/mpp/reader.cpp).  Rows exclude FixedData header.
