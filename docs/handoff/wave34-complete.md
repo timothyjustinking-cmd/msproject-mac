@@ -736,3 +736,25 @@ W34-3.4 detail:
   98 -> 106): `mpp_reader` failed with the Active, LevelingDelay and
   PeakUnits checks naming the files and uids; restored
   (`build/w34/red-W34-3.4.log`).
+
+G3 group gates (fresh trees configured from scratch on `2735324` under
+`build/w34-g3-fresh{,-app,-qt}`, log `build/w34/W34-G3-fresh-gates.log`):
+
+| gate | result |
+|---|---|
+| core configure/build with `CORE_WARNINGS_AS_ERRORS=ON` | exit 0 / exit 0 |
+| core ctest `-E plan_recalc` | 61/61 passed (55.60 s), including the four new `mpp_reader` groups and `mppwrite_roundtrip_summary_info` |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 checks / 266 checks, exit 0 |
+| engine self-test (bare exe / `engine_diff.py --selftest`) | 265 checks, 0 failures / 53 checks, 0 failures, exit 0 |
+| engine `--suite --expect-fail constraint-mso` | 8 scenarios, 7 pass, 1 fail, 0 unrecorded, expected set reached, exit 0 |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1469 checks / 789 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match, 83/83 rows, 0 unexplained, exit 0 |
+| app configure/build with `CORE_WARNINGS_AS_ERRORS=ON`; ctest | exit 0 / exit 0; 25/25 passed (23.62 s) |
+| app_qt configure/build with `CORE_WARNINGS_AS_ERRORS=ON`; ctest | exit 0 / exit 0; 41/41 passed (58.68 s) |
+| `check_fixtures.py` | 185 documented hashes, 219 tracked `.mpp`, 268 test-data files, property sets OK, provenance OK |
+| scans on `2735324` | check_markers 1,429 files, 0 hits; messages `main..HEAD` 0 hits; guard_names exit 0; client-name scan 0 files, 0 name hits, 0 commit messages |
+
+The run started 10:46 and finished 11:08 on 08 November 2026.  The numbers
+belong to `2735324`, the code tree this record commit follows.
+
+WAVE-34-G3-COMPLETE
