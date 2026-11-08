@@ -625,6 +625,16 @@ void check_refusals() {
                  row.cost_fields_stored = true;
                  row.accrue_at = 1;
              }},
+            /* W35-0.1 (R34b-1): the resource's calendar row, one test per shape. */
+            {"a resource calendar based on another calendar",
+             "whose calendar is based on another calendar", nullptr,
+             [](app::ResourceRow& row) { row.calendar_base_uid = 3; }},
+            {"a resource with no calendar row", "whose calendar is based on another calendar",
+             nullptr, [](app::ResourceRow& row) { row.calendar_base_uid = -1; }},
+            {"a resource calendar with an exception", "has working-time changes or exceptions",
+             nullptr, [](app::ResourceRow& row) { row.calendar_stored_blocks = 1; }},
+            {"a Standard calendar with an exception", "has working-time changes or exceptions",
+             nullptr, [](app::ResourceRow& row) { row.calendar_base_extra_blocks = 1; }},
         };
         for (const ShapeCase& one : cases) {
             for (const bool assign : {true, false}) {

@@ -757,6 +757,15 @@ struct Resource {
      * exist, so -1 is reported rather than guessed).  Resolved after both
      * tables are parsed; it is not a byte in the resource row. */
     std::int32_t calendar_uid = -1;
+    /* W35-0.1: the base calendar the resource's calendar row derives from (its
+     * base_uid column; -1 with no calendar row) and how many VarMeta blocks that
+     * calendar owns (a name, working times or exceptions).  Resolved with
+     * calendar_uid. */
+    std::int32_t calendar_base_uid = -1;
+    std::uint32_t calendar_stored_blocks = 0;
+    /* ... and how many blocks the BASE calendar owns beyond its name (working
+     * times or exceptions edited on the base calendar). */
+    std::uint32_t calendar_base_extra_blocks = 0;
     /* The Resource Sheet's Base Calendar text, resolved from TBkndCal the same
      * way: a resource-calendar row is a copy whose base_uid names the base
      * calendar, and Project prints that base calendar's name.  Measured on
@@ -1046,6 +1055,11 @@ struct Calendar {
     std::int32_t base_uid = 0;     /* the base calendar it derives from */
     std::int32_t resource_uid = 0; /* -1 for a base calendar */
     std::string name;              /* VarMeta 0x0d400001, trimmed */
+    /* W35-0.1: how many VarMeta blocks this calendar owns (the name, the
+     * working-times and exceptions block 0x0d400008, any other).  A derived
+     * resource calendar that inherits everything owns none; the writers measured
+     * only that shape. */
+    std::uint32_t stored_blocks = 0;
 };
 
 /*

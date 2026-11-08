@@ -97,6 +97,10 @@ char const* kTaskVar2 = "114/TBkndTask/Var2Data";
 char const* kRscFixed = "114/TBkndRsc/FixedData";
 char const* kRscMeta = "114/TBkndRsc/FixedMeta";
 char const* kRscF2 = "114/TBkndRsc/Fixed2Data";
+char const* kCalFixed = "114/TBkndCal/FixedData";
+char const* kCalMeta = "114/TBkndCal/FixedMeta";
+char const* kCalVarMeta = "114/TBkndCal/VarMeta";
+char const* kCalVar2 = "114/TBkndCal/Var2Data";
 char const* kProps = "114/Props";
 char const* kMarker = "Props14";
 /* The stored DocumentSummaryInformation path carries the OLE control prefix;
@@ -265,6 +269,39 @@ CfbDocument with_edit(std::string const& control_name, std::string const& path,
     mutate(bytes);
     doc.replace_stream(path, bytes);
     return doc;
+}
+
+/* Adds one stored block to the calendar table for `uid` (W35-0.1): `length`
+ * payload bytes appended to Var2Data, and a VarMeta entry at its (uid, key)
+ * position, with the entry count and the Var2Data size updated. */
+void add_cal_block(CfbDocument& doc, std::uint32_t uid, std::uint32_t key,
+                   std::size_t length) {
+    Bytes var2 = doc.read_stream(kCalVar2);
+    Bytes meta = doc.read_stream(kCalVarMeta);
+    std::uint32_t const offset = static_cast<std::uint32_t>(var2.size());
+    Bytes block(4 + length, 0);
+    put_u32_at(block, 0, static_cast<std::uint32_t>(length));
+    var2.insert(var2.end(), block.begin(), block.end());
+    std::size_t const count = (meta.size() - 24) / 12;
+    std::size_t at = count;
+    for (std::size_t i = 0; i < count; ++i) {
+        std::uint32_t const entry_uid = u32_at(meta, 24 + 12 * i);
+        std::uint32_t const entry_key = u32_at(meta, 24 + 12 * i + 8);
+        if (entry_uid > uid || (entry_uid == uid && entry_key > key)) {
+            at = i;
+            break;
+        }
+    }
+    Bytes entry(12, 0);
+    put_u32_at(entry, 0, uid);
+    put_u32_at(entry, 4, offset);
+    put_u32_at(entry, 8, key);
+    meta.insert(meta.begin() + static_cast<std::ptrdiff_t>(24 + 12 * at),
+                entry.begin(), entry.end());
+    put_u32_at(meta, 8, static_cast<std::uint32_t>(count + 1));
+    put_u32_at(meta, 0x14, static_cast<std::uint32_t>(var2.size()));
+    doc.replace_stream(kCalVar2, var2);
+    doc.replace_stream(kCalVarMeta, meta);
 }
 
 std::vector<VarEntry> entries_of(CfbDocument const& doc,
@@ -2107,6 +2144,8 @@ void test_measured_shape_refusals(TestContext& t) {
         std::string stream;
         std::function<void(Bytes&)> mutate;
         std::string needle;
+        /* When set, edits the whole document instead of one stream. */
+        std::function<void(CfbDocument&)> edit_doc = nullptr;
     };
     std::vector<Case> cases;
     cases.push_back({"an automatically scheduled task", kTaskF2Meta,
@@ -2165,10 +2204,68 @@ void test_measured_shape_refusals(TestContext& t) {
                      },
                      "resource's VarMeta blocks are not the measured five keys"});
 
+    /* W35-0.1 (R34b-1): the resource's calendar is read, not just named.  Every
+     * case keeps word 154 = uid + 2, so the identity gate passes and only the
+     * calendar's contents differ.  Resource 2's calendar is uid 4 (row 3). */
+    auto const cal_edit = [](std::uint32_t resource,
+                             std::function<void(Bytes&, std::size_t)> mutate) {
+        return [resource, mutate](Bytes& b) {
+            for (std::size_t row = 0; (64 + 12 * (row + 1)) <= b.size(); ++row) {
+                if (u32_at(b, 64 + 12 * row + 4) == resource) {
+                    mutate(b, 64 + 12 * row);
+                }
+            }
+        };
+    };
+    cases.push_back({"a resource calendar based on another calendar", kCalFixed,
+                     cal_edit(2, [](Bytes& b, std::size_t at) { put_u32_at(b, at, 3); }),
+                     "is based on calendar 3"});
+    cases.push_back({"a resource with no calendar row of its own", kCalFixed,
+                     cal_edit(2, [](Bytes& b, std::size_t at) { put_u32_at(b, at + 4, 9); }),
+                     "has 0 rows for the resource's calendar"});
+    cases.push_back({"a resource calendar row that names another calendar uid", kCalFixed,
+                     cal_edit(2, [](Bytes& b, std::size_t at) { put_u32_at(b, at + 8, 7); }),
+                     "not the calendar word 154 names"});
+    cases.push_back({"a Standard calendar row that is not a base calendar", kCalFixed,
+                     [](Bytes& b) { put_u32_at(b, 64, 5); },
+                     "calendar 1 is not the measured Standard base calendar"});
+    cases.push_back({"a resource calendar with other FixedMeta flags", kCalMeta,
+                     [](Bytes& b) { b[16 + 10 * (3 + 4) + 8] = 0x8F; },
+                     "resource calendar's FixedMeta entry is not the measured"});
+    cases.push_back({"a Standard calendar with other FixedMeta flags", kCalMeta,
+                     [](Bytes& b) { b[16 + 10 * 4 + 8] = 0x0E; },
+                     "Standard calendar's FixedMeta entry is not the measured"});
+    cases.push_back({"a resource calendar with a stored name", kCalVarMeta,
+                     [](Bytes&) {}, "the resource's calendar stores a block",
+                     [](CfbDocument& d) { add_cal_block(d, 4, 0x0D400001u, 20); }});
+    cases.push_back({"a resource calendar with an exception", kCalVarMeta,
+                     [](Bytes&) {}, "the resource's calendar stores a block",
+                     [](CfbDocument& d) { add_cal_block(d, 4, 0x0D400008u, 540); }});
+    cases.push_back({"a Standard calendar with an exception", kCalVarMeta,
+                     [](Bytes&) {},
+                     "Standard base calendar stores a block beyond its name",
+                     [](CfbDocument& d) { add_cal_block(d, 1, 0x0D400008u, 540); }});
+    cases.push_back({"another default project calendar", kProps,
+                     [](Bytes& b) {
+                         std::size_t const at = record_offset(b, 0x0240000Eu);
+                         b[at + 12] = 'N';
+                     },
+                     "default calendar is not the Standard base calendar"});
+    cases.push_back({"another default working week", kProps,
+                     [](Bytes& b) {
+                         std::size_t const at = record_offset(b, 0x02401388u);
+                         b[at + 12 + 60 + 4] ^= 0x01;
+                     },
+                     "default working week differs"});
+
     auto run = [&](char const* control, bool add, Case const& c) {
         std::error_code ignored;
         std::filesystem::remove(missing, ignored);
-        CfbDocument const source = with_edit(control, c.stream, c.mutate);
+        CfbDocument source = c.edit_doc ? doc_from_data(control)
+                                        : with_edit(control, c.stream, c.mutate);
+        if (c.edit_doc) {
+            c.edit_doc(source);
+        }
         CfbDocument doc = source;
         Bytes const before = doc.to_bytes();
         std::string const what =
@@ -2231,6 +2328,43 @@ void test_measured_shape_refusals(TestContext& t) {
             "work is not the measured 40 hours",
             "add (append shape): a 30-hour real assignment");
         check_unchanged(t, second_doc, second_before, "add (append shape): 30 hours");
+    }
+
+    /* The append shape (a task that already holds an assignment) reaches the
+     * same calendar gates through its own call sites (W35-0.1). */
+    {
+        char const* const second = "wave34-assign-add-second-control.mpp";
+        struct AppendCase {
+            char const* label;
+            char const* stream;
+            std::function<void(Bytes&)> mutate;
+            char const* needle;
+        };
+        std::vector<AppendCase> const append_cases = {
+            {"a resource calendar based on another calendar", kCalFixed,
+             [](Bytes& b) {
+                 for (std::size_t row = 0; 64 + 12 * (row + 1) <= b.size(); ++row) {
+                     if (u32_at(b, 64 + 12 * row + 4) == 1) {
+                         put_u32_at(b, 64 + 12 * row, 4);
+                     }
+                 }
+             },
+             "is based on calendar 4"},
+            {"another default project calendar", kProps,
+             [](Bytes& b) { b[record_offset(b, 0x0240000Eu) + 12] = 'N'; },
+             "default calendar is not the Standard base calendar"},
+        };
+        for (AppendCase const& c : append_cases) {
+            std::error_code ignored;
+            std::filesystem::remove(missing, ignored);
+            CfbDocument doc = with_edit(second, c.stream, c.mutate);
+            Bytes const before = doc.to_bytes();
+            std::string const what = std::string("add (append shape): ") + c.label;
+            expect_error(
+                t, [&] { (void)mppwrite::assign_resource(doc, key(1, 1), missing); },
+                c.needle, what);
+            check_unchanged(t, doc, before, what);
+        }
     }
 }
 
