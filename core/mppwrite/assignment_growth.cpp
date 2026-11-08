@@ -1306,13 +1306,10 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
                  std::to_string(real_rows.size()) +
                  " real assignments; the measured counts are 1 and 2");
         }
-        if (target_rows.size() != real_rows.size() + 1) {
-            fail(function + ": the task has " +
-                 std::to_string(target_rows.size()) + " assignment rows for " +
-                 std::to_string(real_rows.size()) +
-                 " real assignments; the measured append shape is one real row "
-                 "per assignment plus one free placeholder row");
-        }
+        /* One real row per assignment plus exactly one free placeholder row.
+         * Counting the placeholders states that shape directly: a row count
+         * check ahead of this loop would make both messages unreachable
+         * (R34G3-4), since target rows = real rows + placeholder rows. */
         std::size_t placeholder_row = static_cast<std::size_t>(-1);
         for (std::size_t r : target_rows) {
             if (get_u32(assn_fixed, r * kAssnRowBytes + kAssnRowResource) !=
@@ -1321,13 +1318,18 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
             }
             if (placeholder_row != static_cast<std::size_t>(-1)) {
                 fail(function + ": the task has more than one free placeholder "
-                     "row; the measured append shape has one");
+                     "row (" + std::to_string(target_rows.size()) +
+                     " assignment rows for " +
+                     std::to_string(real_rows.size()) +
+                     " real assignments); the measured append shape has one");
             }
             placeholder_row = r;
         }
         if (placeholder_row == static_cast<std::size_t>(-1)) {
-            fail(function + ": the task has no free placeholder row; the "
-                 "measured append shape has one");
+            fail(function + ": the task has no free placeholder row (" +
+                 std::to_string(target_rows.size()) + " assignment rows for " +
+                 std::to_string(real_rows.size()) +
+                 " real assignments); the measured append shape has one");
         }
         if (fm.count != rows || fm.entries != rows) {
             fail(function + ": the assignment FixedMeta is not the measured "

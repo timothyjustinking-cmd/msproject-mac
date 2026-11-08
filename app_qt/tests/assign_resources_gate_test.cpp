@@ -272,7 +272,10 @@ int main(int argc, char** argv) {
             gate::check(click_assign(window, &again, true, QString()), "a second click clicks");
             gate::check(again.seen && again.question, "a held assignment offers the removal");
             gate::check(window.pending_edits().size() == 1, "a second click queues nothing");
-            gate::check(window.status_left_text().contains(QStringLiteral("assign resources:")),
+            gate::check(window.status_left_text().contains(
+                            QStringLiteral("assign resources: Removing an assignment is not implemented "
+                                           "in this port for this project: assignment remove: the "
+                                           "task's 0x0B4004E5 leaf does not name the resource")),
                         "the status line names the refused second edit");
             gate::check(task_assignment(window.plan(), task, true) != nullptr,
                         "the refused second edit leaves the display alone");

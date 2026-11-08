@@ -527,7 +527,6 @@ void check_refusals() {
         return;
     }
     const std::string source = add_path.string();
-    const char* const not_implemented = "not implemented in this port";
     const std::uint32_t task = kAdd.task_uid;
     const std::uint32_t resource = kAdd.resource_uid;
 
@@ -658,7 +657,8 @@ void check_refusals() {
     /* The unmeasured counts: a task that already has a real assignment. */
     expect_refused(assigned_plan, assigned_path.string(), task, resource, true,
                    "already has an assignment", "a task that already has an assignment");
-    expect_refused(assigned_plan, assigned_path.string(), task, 1, true, "already has an assignment",
+    expect_refused(assigned_plan, assigned_path.string(), task, 1, true,
+                   "already has an assignment",
                    "a second resource on an assigned task");
     /* A removal must be the task's one assignment of that resource. */
     expect_refused(plan, source, task, resource, false, "one assignment",
@@ -677,9 +677,11 @@ void check_refusals() {
     }
 
     /* The file decides the rest (the writer's dry run). */
-    expect_refused(plan, remove_path.string(), task, resource, true, not_implemented,
+    expect_refused(plan, remove_path.string(), task, resource, true,
+                   "assignment add: the assignment FixedMeta is not the measured rows / rows shape",
                    "assign against a file whose assignment is already real");
-    expect_refused(remove_plan, source, task, resource, false, not_implemented,
+    expect_refused(remove_plan, source, task, resource, false,
+                   "assignment remove: the task's 0x0B4004E5 leaf does not name the resource",
                    "remove against a file whose assignment is only a placeholder");
     {
         /* The plan believes the task has no real assignment; the file (the
@@ -717,7 +719,8 @@ void check_refusals() {
         broken.replace_stream(kProps, Bytes(props.begin(), props.begin() + 40));
         const std::filesystem::path broken_path = out_path("app-assign-broken-props.mpp");
         broken.save(broken_path.string());
-        expect_refused(plan, broken_path.string(), task, resource, true, not_implemented,
+        expect_refused(plan, broken_path.string(), task, resource, true,
+                       "the Props stream has no 0x04000001 scalar",
                        "a file whose 114/Props is not the measured shape");
     }
     /* W34b-0.1: a shape the plan cannot show (the task type, effort-driven flag,

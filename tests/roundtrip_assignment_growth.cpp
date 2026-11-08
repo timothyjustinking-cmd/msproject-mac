@@ -1476,7 +1476,8 @@ void test_edit_refusals(TestContext& t) {
     }
 
     /* Each command demands its own measured input state. */
-    refuses_add(remove, key(1, 2), "measured",
+    refuses_add(remove, key(1, 2),
+                "the assignment FixedMeta is not the measured rows / rows shape",
                 "add: the settled removal shape");
     refuses_remove(add, key(1, 2),
                    "0x0B4004E5 leaf does not name the resource",
@@ -1801,6 +1802,30 @@ void test_settled_damaged(TestContext& t) {
                       [](Bytes& b) { put_f64_at(b, 3 * 110 + 20, 0.0); }),
             target, "no positive finite work",
             "settled add: a real row with no work");
+    /* R34G3-4: the placeholder-count guards.  Row 1 is another task's free
+     * placeholder; re-homing it onto task 1 gives the task two, and re-homing
+     * the task's own placeholder (row 0) onto task 2 leaves it none. */
+    refuses(with_edit(control, kAssnFixed,
+                      [](Bytes& b) { put_u32_at(b, 110 + 4, 1); }),
+            target, "the task has more than one free placeholder row",
+            "settled add: two free placeholder rows");
+    refuses(with_edit(control, kAssnFixed,
+                      [](Bytes& b) { put_u32_at(b, 0 * 110 + 4, 2); }),
+            target, "the task has no free placeholder row",
+            "settled add: no free placeholder row");
+    /* The count 3 -> 4 step: the third pair's output already holds three real
+     * assignments on task 1, and its resource 3 is one of them. */
+    {
+        char const* third = "wave34-assign-add-third.mpp";
+        refuses(doc_from_data(third), key(1, 3),
+                "the task already has 3 real assignments; the measured counts "
+                "are 1 and 2",
+                "settled add: a fourth assignment on a task with three");
+        refuses(doc_from_data(third), key(1, 1),
+                "the task already has 3 real assignments; the measured counts "
+                "are 1 and 2",
+                "settled add: a fourth assignment, another resource");
+    }
     refuses(with_edit(control, kTaskFixed,
                       [](Bytes& b) { put_f64_at(b, 48 + 202 + 8, 1.0); }),
             target, "task row 1's work words", "settled add: the task work");
@@ -2045,7 +2070,8 @@ void test_dry_run(TestContext& t) {
         Bytes const before = doc.to_bytes();
         expect_error(
             t, [&] { (void)mppwrite::assign_resource(doc, key(1, 2), "", true); },
-            "measured", "dry run add: the settled removal shape is refused");
+            "the assignment FixedMeta is not the measured rows / rows shape",
+            "dry run add: the settled removal shape is refused");
         t.check(doc.to_bytes() == before,
                 "dry run add refusal: the document changed");
     }

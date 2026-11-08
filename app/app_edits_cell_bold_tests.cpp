@@ -372,7 +372,6 @@ void check_refusals() {
         return;
     }
     const std::string source = control_path.string();
-    const char* const not_implemented = "not implemented in this port";
 
     /* The key and the measured cell (brief rule 2: one pair, one cell). */
     expect_refused(plan, source, 0, kNameField, "not on a saved task", "row uid 0 (the project row)");
@@ -402,7 +401,8 @@ void check_refusals() {
     }
 
     /* The file decides the rest (the writer's dry run). */
-    expect_refused(formatted_plan, formatted_path.string(), kTaskUid, kNameField, not_implemented,
+    expect_refused(formatted_plan, formatted_path.string(), kTaskUid, kNameField,
+                   "the view main block already carries a cell format item",
                    "a view that already carries a cell format item");
     /* R34G4-4: the writer edits view uid 2, so the file's applied view must be
      * that view and its record the measured control's.  The two wave 31 files
@@ -432,7 +432,8 @@ void check_refusals() {
         broken.replace_stream(kViewMeta, Bytes(meta.begin(), meta.begin() + 30));
         const std::filesystem::path broken_path = out_path("app-cell-bold-broken-meta.mpp");
         broken.save(broken_path.string());
-        expect_refused(plan, broken_path.string(), kTaskUid, kNameField, not_implemented,
+        expect_refused(plan, broken_path.string(), kTaskUid, kNameField,
+                       "214/CV_iew/VarMeta is 30 bytes, not 24 + 12*n",
                        "a file whose 214/CV_iew/VarMeta is damaged");
     }
     {
@@ -441,7 +442,8 @@ void check_refusals() {
         broken.replace_stream(kViewProps, Bytes(props.begin(), props.begin() + 40));
         const std::filesystem::path broken_path = out_path("app-cell-bold-broken-props.mpp");
         broken.save(broken_path.string());
-        expect_refused(plan, broken_path.string(), kTaskUid, kNameField, not_implemented,
+        expect_refused(plan, broken_path.string(), kTaskUid, kNameField,
+                       "214/Props has no scalar record for tag 0x01000100",
                        "a file whose 214/Props has no view size tag");
     }
 

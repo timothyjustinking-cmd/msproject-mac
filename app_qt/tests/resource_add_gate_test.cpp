@@ -196,7 +196,8 @@ bool add_and_save(msqt::MainWindow& window, const QString& label, const QString&
                     (label + ": a second Add queues nothing").toStdString());
         checkq(window.plan().resources.size() == expected_count + 1,
                     (label + ": the second Add leaves the display alone").toStdString());
-        checkq(window.status_left_text().contains(QStringLiteral("add resources:")),
+        checkq(window.status_left_text().contains(
+                   QStringLiteral("add resources: the project file no longer matches the open plan")),
                     (label + ": the status line names the refused second add").toStdString());
     }
 
@@ -273,7 +274,8 @@ int main(int argc, char** argv) {
             gate::check(click_add(window, &prompt, true, QStringLiteral("   ")), "Add clicks");
             gate::check(window.pending_edits().empty(), "a blank name queues nothing");
             gate::check(!window.document_dirty(), "the refused blank name leaves the file clean");
-            gate::check(window.status_left_text().contains(QStringLiteral("add resources:")),
+            gate::check(window.status_left_text().contains(
+                            QStringLiteral("add resources: the resource name is empty")),
                         "the status line names the blank-name refusal");
         }
         {

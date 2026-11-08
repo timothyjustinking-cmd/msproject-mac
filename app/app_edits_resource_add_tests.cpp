@@ -493,7 +493,6 @@ void check_refusals() {
     }
     const std::string source = control_path.string();
     const std::uint32_t stamp = kSecond.created;
-    const char* const not_implemented = "not implemented in this port";
 
     /* The name rule. */
     expect_refused(plan, source, "", stamp, "empty", "an empty name");
@@ -502,9 +501,9 @@ void check_refusals() {
                    "an embedded NUL");
     expect_refused(plan, source, "line\none", stamp, "control character",
                    "a newline in the name");
-    expect_refused(plan, source, "Caf\xC3\xA9 Crew", stamp, not_implemented,
+    expect_refused(plan, source, "Caf\xC3\xA9 Crew", stamp, "a name that has non-ASCII characters",
                    "a non-ASCII name");
-    expect_refused(plan, source, std::string(65, 'x'), stamp, not_implemented,
+    expect_refused(plan, source, std::string(65, 'x'), stamp, "a name longer than 64 characters",
                    "a 65-character name");
     {
         app::StructuralEdit edit;
@@ -520,9 +519,11 @@ void check_refusals() {
 
     /* The unmeasured resource counts: the file decides (the writer's dry run),
      * so a plan that agrees with the file is still refused for the count. */
-    expect_refused(full_plan, result_path.string(), "R4", stamp, not_implemented,
+    expect_refused(full_plan, result_path.string(), "R4", stamp,
+                   "resource add: the resource table has 4 rows",
                    "a project that already holds three resources");
-    expect_refused(plan, result_path.string(), "R4", stamp, not_implemented,
+    expect_refused(plan, result_path.string(), "R4", stamp,
+                   "resource add: the resource table has 4 rows",
                    "a plan for fewer resources than the file");
 
     /* A plan that disagrees with the file (stale): the control holds one
@@ -545,7 +546,8 @@ void check_refusals() {
         broken.replace_stream(kProps, Bytes(props.begin(), props.begin() + 40));
         const std::filesystem::path broken_path = out_path("app-resource-add-broken-props.mpp");
         broken.save(broken_path.string());
-        expect_refused(plan, broken_path.string(), "R2", stamp, not_implemented,
+        expect_refused(plan, broken_path.string(), "R2", stamp,
+                       "the Props stream has no 0x02000001 scalar",
                        "a file whose 114/Props is not the measured shape");
     }
 

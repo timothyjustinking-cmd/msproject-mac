@@ -377,7 +377,6 @@ void check_refusals() {
         return;
     }
     const std::string source = control_path.string();
-    const char* const not_implemented = "not implemented in this port";
 
     /* The population (brief rule 2: one pair, one project shape). */
     {
@@ -457,7 +456,7 @@ void check_refusals() {
         expect_refused(plan, reordered_path.string(), "has ID 2 but UniqueID 1",
                        "a file whose IDs are not its UniqueIDs");
     }
-    expect_refused(coded_plan, coded_path.string(), not_implemented,
+    expect_refused(coded_plan, coded_path.string(), "the file already stores WBS text",
                    "a file that already stores WBS text and a code definition");
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    "could not be read", "a missing project file");
@@ -468,7 +467,7 @@ void check_refusals() {
         broken.replace_stream(kTaskFixed, fixed);
         const std::filesystem::path broken_path = out_path("app-wbs-broken-fixed.mpp");
         broken.save(broken_path.string());
-        expect_refused(plan, broken_path.string(), not_implemented,
+        expect_refused(plan, broken_path.string(), "the file has 3 task rows",
                        "a file whose Task table lost a row");
     }
     {
@@ -486,7 +485,7 @@ void check_refusals() {
         broken.replace_stream(kProps, props);
         const std::filesystem::path broken_path = out_path("app-wbs-existing-mask.mpp");
         broken.save(broken_path.string());
-        expect_refused(plan, broken_path.string(), not_implemented,
+        expect_refused(plan, broken_path.string(), "a code definition already exists",
                        "a file with a non-empty code mask record");
     }
 

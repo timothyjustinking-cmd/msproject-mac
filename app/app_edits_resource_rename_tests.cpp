@@ -409,16 +409,17 @@ void check_refusals() {
     expect_refused(plan, source, 2, std::string("ab\0c", 4), "control character",
                    "an embedded NUL");
     expect_refused(plan, source, 2, "line\none", "control character", "a newline in the name");
-    expect_refused(plan, source, 2, "Caf\xC3\xA9 Crew", "not implemented in this port",
+    expect_refused(plan, source, 2, "Caf\xC3\xA9 Crew", "a name with non-ASCII characters",
                    "a non-ASCII name");
     expect_refused(plan, source, 2, old_name, "unchanged", "the unchanged name");
-    expect_refused(plan, source, 2, "a", "not implemented in this port", "a shorter name");
+    expect_refused(plan, source, 2, "a", "a name that is not longer than the current one",
+                   "a shorter name");
     {
         /* Same stored size, different text: the control's name is two
          * characters, so any other two-character name encodes to the same 6 B. */
         const std::string same_size = old_name == "zz" ? "yy" : "zz";
-        expect_refused(plan, source, 2, same_size, "not implemented in this port",
-                       "a same-size name");
+        expect_refused(plan, source, 2, same_size,
+                       "a name that is not longer than the current one", "a same-size name");
     }
 
     /* A resource an assignment names: the pair renamed an unassigned resource,
