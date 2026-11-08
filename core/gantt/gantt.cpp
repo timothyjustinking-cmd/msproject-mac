@@ -400,7 +400,18 @@ void append_calendar_day_spans(std::vector<NonworkingSpan>& spans, const Timesca
         }
         working[count++] = {start, std::min(start + length, kTenthsPerDay)};
     }
-    std::sort(working.begin(), working.begin() + static_cast<std::ptrdiff_t>(count));
+    // A bounded insertion sort (at most kMaxDayIntervals entries): gcc 15 cannot
+    // see that `count <= working.size()` after inlining and reports
+    // -Warray-bounds on a std::sort over a prefix of the array.
+    for (std::size_t i = 1; i < count && i < working.size(); ++i) {
+        const std::pair<std::int32_t, std::int32_t> moving = working[i];
+        std::size_t j = i;
+        while (j > 0 && moving < working[j - 1]) {
+            working[j] = working[j - 1];
+            --j;
+        }
+        working[j] = moving;
+    }
 
     auto emit = [&spans, &scale, day, x0](std::int32_t from, std::int32_t to) {
         if (to <= from) {

@@ -1118,6 +1118,28 @@ void test_calendar_shading(Context& context) {
     check_same_bars(context, short_layout, plain,
                     "a short Friday does not move bars");
 
+    // 3b. W34b-0.7: a stored day whose intervals are NOT in time order (the
+    //     afternoon listed first) yields the same ordered gaps, so the interval
+    //     sort in append_calendar_day_spans still sorts: 00:00-08:00,
+    //     12:00-13:00 and 17:00-24:00 in that order.
+    gantt::GanttSource split_source = fixed_source();
+    core::sched::Week split_week = standard_week();
+    split_week[5] = core::sched::day_pattern({{13 * 60, 17 * 60}, {8 * 60, 12 * 60}});
+    split_source.set_calendar(core::sched::Calendar(split_week));
+    const gantt::GanttLayout split_layout = build_gantt(split_source, style, scale);
+    const std::vector<gantt::NonworkingSpan> split_friday =
+        split_layout.nonworking_spans(440.0, 460.0);  // Friday 23 only
+    context.equal(split_friday.size(), std::size_t{3},
+                  "an out-of-order split Friday has three non-working stretches");
+    if (split_friday.size() == 3) {
+        context.near(split_friday[0].x, 440.0, "the split Friday's morning gap is first");
+        context.near(split_friday[0].width, 20.0 * 8.0 / 24.0, "00:00-08:00");
+        context.near(split_friday[1].x, 440.0 + 20.0 * 12.0 / 24.0, "the lunch gap is second");
+        context.near(split_friday[1].width, 20.0 * 1.0 / 24.0, "12:00-13:00");
+        context.near(split_friday[2].x, 440.0 + 20.0 * 17.0 / 24.0, "the evening gap is last");
+        context.near(split_friday[2].width, 20.0 * 7.0 / 24.0, "17:00-24:00");
+    }
+
     // 4. A special working Saturday (08:00-12:00) is partly working, so the
     // whole Saturday column disappears and only its gaps plus Sunday shade.
     gantt::GanttSource saturday_source = fixed_source();

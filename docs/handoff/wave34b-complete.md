@@ -138,3 +138,22 @@ turned up.  Three clang-only notes are not defects: the `calendar.h` static asse
 under clang's Windows layout, `mpp_reader_tests.cpp` needs its CMake macros (re-run with them
 defined, clean), and `app/smoke_tests.cpp` reports three helpers unused only when
 `APP_SMOKE_OUT_DIR` is undefined (re-run with it defined, clean).
+
+### W34b-0.7 (CI-2)
+
+`append_calendar_day_spans` (`core/gantt/gantt.cpp`) sorted the first `count` entries of
+the 8-element `working` array with `std::sort(begin, begin + count)`; gcc 15 cannot see
+that `count <= working.size()` after inlining and raised `-Werror=array-bounds`.  The sort
+is now a bounded insertion sort over at most `working.size()` (`kMaxDayIntervals`)
+entries, on the same pair ordering, so the result is identical; there is no
+`-Wno-array-bounds`.
+
+No gcc is installed here (`which gcc g++ clang` finds nothing; WSL is not installed), so the
+warning itself could not be reproduced on this machine and the proof is behavioural.  A new
+`gantt_tests` case (3b) feeds a Friday whose intervals are stored out of time order
+(13:00-17:00 before 08:00-12:00) and requires the three gaps in time order; it passes on the
+`std::sort` code (`build/w34b/6152d91-W34b-0.7-old.log`, 776 checks passed) and on the
+insertion sort (`-new.log`, 776 checks passed), so the sort still sorts.  Sweep of `core/`,
+`app` and `app_qt` for `std::sort`, `stable_sort` or `partial_sort` over `begin()/data() +
+count`: this is the only match (the other `begin() + n` uses are `std::vector` ranges, not a
+fixed array).
