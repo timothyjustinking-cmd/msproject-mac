@@ -21,7 +21,9 @@
 #include <vector>
 
 #include "edit_model.h"
+#include "entry_columns.h"
 #include "main_window.h"
+#include "sheet_table_model.h"
 #include "shell_style.h"
 
 #include "gate_util.h"
@@ -122,6 +124,31 @@ int main(int argc, char** argv) {
     const app::StructuralEdit* deep2 = queued_level(window);
     gate::check(deep2 != nullptr && deep2->show_level == 2,
                 "Level 2 replaces the queued Level 1 (Show Level is exclusive)");
+
+    // W35b-1.5 (RW35-R2): a grid edit that is not saved yet.  Show Level is built
+    // from the session plan, which carries the rename; the builder refuses it,
+    // nothing is queued, and the status line says to save or undo first.
+    {
+        gate::check(window.open_file(five, &error), "the five-task fixture reopens");
+        QApplication::processEvents();
+        const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+        gate::check(name_column >= 0, "the Entry table has a Name column");
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        gate::check(name_column >= 0 &&
+                        model->setData(model->index(1, name_column),
+                                       QStringLiteral("Renamed in the grid"), Qt::EditRole),
+                    "a Name cell edit commits through the shell's model path");
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty(), "unsaved rename: Level 1 queues nothing");
+        gate::check(status_contains(window, "Show Level is not implemented in this port while "
+                                            "the plan carries unsaved edits"),
+                    "unsaved rename: the status line names the unsaved edits");
+        gate::check(status_contains(window, "save or undo the grid edits first"),
+                    "unsaved rename: the status line says save or undo the grid edits first");
+        gate::check(status_contains(window, "session only"),
+                    "unsaved rename: the status line says session only");
+    }
 
     std::printf("qt_outline_persist: ");
     return gate::finish();

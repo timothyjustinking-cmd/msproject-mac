@@ -20,8 +20,10 @@
 #include <vector>
 
 #include "edit_model.h"
+#include "entry_columns.h"
 #include "layout_model.h"
 #include "main_window.h"
+#include "sheet_table_model.h"
 #include "shell_style.h"
 #include "sort.h"
 
@@ -130,6 +132,34 @@ int main(int argc, char** argv) {
         gate::check(window.pending_edits().empty(), "two keys: nothing is queued");
         gate::check(status_contains(window, "Sort with 2 keys is not implemented in this port"),
                     "two keys: the status line names the reason");
+    }
+
+    // W35b-1.5 (RW35-R2): a grid edit that is not saved yet.  The session plan
+    // carries the rename, so Sort would persist an order of names the file does
+    // not store; the builder refuses it, nothing is queued, and the status line
+    // says to save or undo the grid edits first.
+    {
+        gate::check(window.open_file(fixture, &error),
+                    "the fixture reopens for the unsaved-edit gate");
+        QApplication::processEvents();
+        const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+        gate::check(name_column >= 0, "the Entry table has a Name column");
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        gate::check(name_column >= 0 &&
+                        model->setData(model->index(1, name_column),
+                                       QStringLiteral("Renamed in the grid"), Qt::EditRole),
+                    "a Name cell edit commits through the shell's model path");
+        window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                 "Name descending", false);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty(), "unsaved rename: the sort queues nothing");
+        gate::check(status_contains(window, "Sort is not implemented in this port while the "
+                                            "plan carries unsaved edits"),
+                    "unsaved rename: the status line names the unsaved edits");
+        gate::check(status_contains(window, "save or undo the grid edits first"),
+                    "unsaved rename: the status line says save or undo the grid edits first");
+        gate::check(status_contains(window, "session only"),
+                    "unsaved rename: the status line says session only");
     }
 
     std::printf("qt_sort_persist: ");

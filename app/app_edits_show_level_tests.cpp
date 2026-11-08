@@ -433,6 +433,27 @@ void check_refusals() {
         expect_refused(deeper, source, 1, "is not one the pairs measure", "another outline shape");
     }
 
+    /* W35b-1.5 (RW35-R2): a grid edit the plan carries and the file does not.  The
+     * outline is the file's, so the writer's dry run accepts it; the builder still
+     * refuses, because the persisted view would describe an unsaved plan. */
+    {
+        app::PlanInput renamed = plan;
+        task_by_uid(renamed, 2)->name += "x";
+        expect_refused(renamed, source, 1,
+                       "carries unsaved edits (UniqueID 2 Name differs from the file)",
+                       "Show Level with a renamed task");
+        expect_refused(renamed, source, 1, "save or undo the grid edits first",
+                       "Show Level with a renamed task asks to save or undo");
+        app::PlanInput retimed = plan;
+        task_by_uid(retimed, 3)->duration_ticks += 480;
+        expect_refused(retimed, source, 1, "UniqueID 3 Duration differs from the file",
+                       "Show Level with a typed Duration");
+        app::PlanInput flipped = plan;
+        task_by_uid(flipped, 1)->summary = !task_by_uid(flipped, 1)->summary;
+        expect_refused(flipped, source, 1, "UniqueID 1 Summary differs from the file",
+                       "Show Level with a flipped Summary");
+    }
+
     /* The file decides the rest (the writer's dry run). */
     expect_refused(plan, collapsed_path.string(), 1, "already collapsed or hidden",
                    "a file that already hides rows");
