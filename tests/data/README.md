@@ -118,6 +118,10 @@ checkout. Nothing here is client data.
 | `wave34-note-clear-control-null.mpp` | the same no-edit save of the note-clear control (`scripts/oracle_w34_null_saves.py`, W34-0.3). |
 | `wave34-note-two-control-null.mpp` | the same no-edit save of the note-two control (`scripts/oracle_w34_null_saves.py`, W34-0.3). |
 | `wave34-calculate-second-control-null.mpp` | the same no-edit save of the second-Calculate control (`scripts/oracle_w34_null_saves.py`, W34-0.3). |
+| `wave35-calculate-unlinked-control.mpp` / `wave35-calculate-unlinked.mpp` | the SAME Project 2021 session's save before and after `Application.CalculateProject()` (`scripts/oracle_w35_calculate.py`, W35-1.2).  Shape: the shape W35-1.2 enables: two AUTOMATIC unassigned tasks, NOT linked; Task A's duration 2400 -> 4800 minutes while calculation is manual (pending), then F9.  Built under AUTOMATIC calculation from ProjectStart 2026-01-05 08:00, then calculation set to MANUAL and A's duration changed, so the only pending change is A's duration; the seed is saved and REOPENED before the control is saved (W30-2.4).  Neutral Author/Manager/Company/UserName/Title; rows are "Task A"/"Task B".  Its null save is `wave35-calculate-unlinked-control-null.mpp`. |
+| `wave35-calculate-linked-control.mpp` / `wave35-calculate-linked.mpp` | the SAME Project 2021 session's save before and after `Application.CalculateProject()` (`scripts/oracle_w35_calculate.py`, W35-1.2).  Shape: the wave-30 baseline rebuilt in the same session: A -> B linked FS+0; the same pending change.  Built under AUTOMATIC calculation from ProjectStart 2026-01-05 08:00, then calculation set to MANUAL and A's duration changed, so the only pending change is A's duration; the seed is saved and REOPENED before the control is saved (W30-2.4).  Neutral Author/Manager/Company/UserName/Title; rows are "Task A"/"Task B".  Its null save is `wave35-calculate-linked-control-null.mpp`. |
+| `wave35-calculate-lag-control.mpp` / `wave35-calculate-lag.mpp` | the SAME Project 2021 session's save before and after `Application.CalculateProject()` (`scripts/oracle_w35_calculate.py`, W35-1.2).  Shape: the baseline with a lag of 480 minutes (one day) on the link A -> B; the same pending change.  Built under AUTOMATIC calculation from ProjectStart 2026-01-05 08:00, then calculation set to MANUAL and A's duration changed, so the only pending change is A's duration; the seed is saved and REOPENED before the control is saved (W30-2.4).  Neutral Author/Manager/Company/UserName/Title; rows are "Task A"/"Task B".  Its null save is `wave35-calculate-lag-control-null.mpp`. |
+| `wave35-calculate-snet-control.mpp` / `wave35-calculate-snet.mpp` | the SAME Project 2021 session's save before and after `Application.CalculateProject()` (`scripts/oracle_w35_calculate.py`, W35-1.2).  Shape: the baseline with a Start No Earlier Than constraint on B (a Sunday 21:00 value that snaps to Monday 2026-01-26 08:00); the same pending change.  Built under AUTOMATIC calculation from ProjectStart 2026-01-05 08:00, then calculation set to MANUAL and A's duration changed, so the only pending change is A's duration; the seed is saved and REOPENED before the control is saved (W30-2.4).  Neutral Author/Manager/Company/UserName/Title; rows are "Task A"/"Task B".  Its null save is `wave35-calculate-snet-control-null.mpp`. |
 | `wave34-resource-add-third-control-null.mpp` | the same no-edit save of the third-resource control (`scripts/oracle_w34_null_saves.py`, W34-0.3). |
 | `wave34-assign-add-second-control-null.mpp` | Project 2021's no-edit save of the second assignment-count control, made from a COPY under `C:/w34/null` by `scripts/oracle_w34_null_saves.py` (the W29-1.0b baseline above; `<control-stem>-null.mpp`). |
 | `wave34-assign-add-third-control-null.mpp` | the same no-edit save of the third assignment-count control (`scripts/oracle_w34_null_saves.py`, W34-3.1). |
@@ -451,6 +455,18 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `wave34-resource-add-third-control-null.mpp` | `3FA4DDC99BBD9B093D7B964AF511098993906175BAFFD4C57141B397D11CF86F` |
 | `wave34-resource-add-third-control.mpp` | `F9DD625CFD94FD6A29B616F102EB005B637409662F0C2465C0ADEA4FCBC759F4` |
 | `wave34-resource-add-third.mpp` | `19F03986C0076ED065DCDA5E4C63192D79DB0768797AC0A51148329C887A5D00` |
+| `wave35-calculate-lag-control-null.mpp` | `BC150637B9599E551B81698E2E8E976A7F40E1160DB59CD857A7E3A4412942F3` |
+| `wave35-calculate-lag-control.mpp` | `5FB86983C46E9E65F9A71912C863751D74082694D7F741D9F8814F76700F6927` |
+| `wave35-calculate-lag.mpp` | `4F7EC8BA54BF7B5DC51560E5DCA20706185C08975EBA47D2B60E0167592536D7` |
+| `wave35-calculate-linked-control-null.mpp` | `74135BE685CCE8AEEB783B884B3701681433B88B5E0A37D8BEF50B6A83C0E601` |
+| `wave35-calculate-linked-control.mpp` | `CCD4F0057DA2EE2EE7A06F5E44400EE0D294B883832ADE124ED8DCA5F2F02F25` |
+| `wave35-calculate-linked.mpp` | `F341C8D8B9DDD077D5EBE128926DC84478670EB82BFC092FF1B970559C1095BA` |
+| `wave35-calculate-snet-control-null.mpp` | `0702CF99FF66D8D39E5E5C573E5A0F2CF90695E48A79F0BB122EBB488D781058` |
+| `wave35-calculate-snet-control.mpp` | `E7E1963402B916FD7E3040EB2B16697BC0E9EEAE21941FDF4EA15238A848216B` |
+| `wave35-calculate-snet.mpp` | `D200621C54DBB560E8850BC1A3266D43A60BBA320702D78549FE1DD0312DD3B5` |
+| `wave35-calculate-unlinked-control-null.mpp` | `9F9DCECAE587F39280B42AF992E9347646FE54965B2564377E3A09AC9E5E2313` |
+| `wave35-calculate-unlinked-control.mpp` | `39FCBD668AE0B98D59AD6D15410512980CE98E8C2858C9A07D2296B14B8C83FD` |
+| `wave35-calculate-unlinked.mpp` | `61B9B02AEA0D8C7A125DB287DFD60EF06F8FBCF7A9F58F276E2DD764F776F7E1` |
 
 ## `synthetic-base.mpp` — provenance
 
