@@ -697,6 +697,37 @@ DOCUMENTED = {
         "9C858EBF5BBD4796F34D3B16F165EB1996FF629E37FF0AAA4286D71171C80E57",
     "tests/data/wave35-viewstate-outline-deep-level2.mpp":
         "1353CAA790A5D92492F03E560187835167C204D1306FDA21DC980638DB8DA3B7",
+    # W35-2.4 zoom fixtures (Application.ZoomTimescale)
+    "tests/data/wave35-viewstate-zoom-custom-control-null.mpp":
+        "CFE5C279EBADCDC5E49C32F968A881066A5986EA3A9C3E49CCD6BA2F38CF4C72",
+    "tests/data/wave35-viewstate-zoom-custom-control.mpp":
+        "AAD57DD553F87856E3F6D10341EAD415ACD8FDD1FA515AA3B39D024CD60AE005",
+    "tests/data/wave35-viewstate-zoom-custom.mpp":
+        "02437C5F7F2FBADA339FAC92C9CAE1DD7B239669CAD467FB0F914C7699926A5E",
+    "tests/data/wave35-viewstate-zoom-custom-10d-control-null.mpp":
+        "68593B3F02D25A88B5251A64FEDECCAECA25A6C2DCE306122CD710492CAE5858",
+    "tests/data/wave35-viewstate-zoom-custom-10d-control.mpp":
+        "398840AD27ADE02FD508C565CFE2E6B9AD93AD7AD79C955CC5A58DB2BE95929B",
+    "tests/data/wave35-viewstate-zoom-custom-10d.mpp":
+        "8BB9731497EF55DD7F06507A5A55B3BCDE89185D6DD71CB646CB7C11FF07975A",
+    "tests/data/wave35-viewstate-zoom-custom-narrow-control-null.mpp":
+        "43090F7480F789716A4FDA148842358304D9302A04DE4CC4E33D59F033099A94",
+    "tests/data/wave35-viewstate-zoom-custom-narrow-control.mpp":
+        "36D57377A444EB96EE0F377C502C43ABAB7292F17EEAF9C72866E612C18E1AC2",
+    "tests/data/wave35-viewstate-zoom-custom-narrow.mpp":
+        "4B69F745C41EC4F202DDFD7BC2FAD265DAA67D8F0AF79D4E60EE534C2CC0CE42",
+    "tests/data/wave35-viewstate-zoom-entire-control-null.mpp":
+        "64F59D832F7796A3A492A5612C32135D4235D65204B57C77725F0DE572CC799C",
+    "tests/data/wave35-viewstate-zoom-entire-control.mpp":
+        "3DD9599B13149038CD9C81341CAC7516C7A695EEA4DF489574B43F80F9D794A2",
+    "tests/data/wave35-viewstate-zoom-entire.mpp":
+        "98A91E6DE7271B6B06AF7413FEFDDAE4F379A49A4B08ABED72AF8C52FCC4B5A4",
+    "tests/data/wave35-viewstate-zoom-reset-control-null.mpp":
+        "87DEB891C4FB3B2B564B4E5621F1B678D7B860A385D70915E5F84E5F5470F402",
+    "tests/data/wave35-viewstate-zoom-reset-control.mpp":
+        "6A536AE817E7E30D7578B8F909387C58A08D4CD32EEE0F2033DFC029D2B9CC3A",
+    "tests/data/wave35-viewstate-zoom-reset.mpp":
+        "C69D367156042604246A83E3378B611A3F718D54AC7B018C7E6B3E0D67E9BFFF",
     "tests/data/wave34-resource-add-third-control.mpp":
         "F9DD625CFD94FD6A29B616F102EB005B637409662F0C2465C0ADEA4FCBC759F4",
     "tests/data/wave34-resource-add-third.mpp":
