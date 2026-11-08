@@ -32,5 +32,6 @@ measurements, with their null saves).
 | `writers/document-summary-information.md` | `core/mppwrite/summary_info` - the summary strings and dates | built and read back by an independent reader (W34-3.3) |
 | `writers/note-richtext.md` | Project's RichEdit note serialisation | rule decoded for plain ASCII; the writer is NOT built - the payload embeds the saving machine's generator string (W34-4.1); Notes stay disabled |
 | `writers/scheduler-save.md` | the scheduler SAVE path (recalculate, then write back) | decode only; G5 was not started in wave 34 and moves to wave 35 |
+| `writers/calculate.md` | Calculate Project (F9): what Project rewrites, and the rule a port writer needs | W35-1.1: decode only, consolidates `scheduler-save.md` with the engine entry points; the unlinked-leaf shape is measured in W35-1.2 |
 
 Open rules are listed at the foot of each note under "pairs still needed".
